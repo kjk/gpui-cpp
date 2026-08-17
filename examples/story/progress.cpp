@@ -41,10 +41,11 @@ El* ProgressRender(StoryApp* app, Arena* a) {
     circBox->Child(
         component::ProgressCircle::New(a)->Value(68)->Size(80)->IntoEl());
     El* circText = Div(a)->FlexCol()->Gap(4);
-    circText->Child(StoryTxt(a, StrL("Analyzing workspace"), 14, th.foreground)
+    circText->Child(StoryTxt(a, StrL("Analyzing project"), 14, th.foreground)
                         ->Semibold());
-    circText
-        ->Child(StoryTxt(a, StrL("Indexing source files…"), 13, th.mutedFg));
+    circText->Child(
+        StoryTxt(a, StrL("Scanning components and dependencies."), 13,
+                 th.mutedFg));
     circBox->Child(circText);
     StorySectionAdd(circ, circBox);
     page->Child(circ);

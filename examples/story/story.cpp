@@ -386,16 +386,30 @@ static El* SidebarList(StoryApp* app, Arena* a) {
 
 static El* SearchBox(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
-    return Div(a)
-        ->H(36)
-        ->W(kFill)
-        ->PadX(14)
-        ->ItemsCenter()
-        ->Radius(18)
-        ->Bg(th.secondary)
-        ->Click(ClickSearch)
-        ->FocusId(ClickSearch)
-        ->Child(::Input::New(a, &app->search));
+    El* box = Div(a)
+                  ->H(36)
+                  ->W(kFill)
+                  ->PadX(14)
+                  ->FlexRow()
+                  ->ItemsCenter()
+                  ->JustifyBetween()
+                  ->Gap(8)
+                  ->Radius(18)
+                  ->Bg(th.secondary)
+                  ->Click(ClickSearch)
+                  ->FocusId(ClickSearch);
+    box->Child(::Input::New(a, &app->search)->Grow());
+    if (app->search.len > 0) {
+        box->Child(Div(a)
+                       ->W(16)
+                       ->H(16)
+                       ->ItemsCenter()
+                       ->JustifyCenter()
+                       ->Shrink0()
+                       ->Click(ClickSearchClear)
+                       ->Child(IconEl(a, IconName::X, 12)->Fg(th.mutedFg)));
+    }
+    return box;
 }
 
 static El* Sidebar(StoryApp* app, Arena* a) {
@@ -545,6 +559,14 @@ static void OnClick(AppHost* host, int id) {
         app->search.focused = true;
         host->input = &app->search;
         AppRequestAnim(host, true);
+        return;
+    }
+    if (id == ClickSearchClear) {
+        app->search.buf[0] = 0;
+        app->search.len = 0;
+        app->search.cursor = 0;
+        app->search.focused = false;
+        host->input = nullptr;
         return;
     }
     app->search.focused = false;
@@ -750,6 +772,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     char slug[64] = {};
     ParseSlug(cmd, slug, 64);
     app.story = StoryFromSlug(slug);
+    // Rust Gallery::set_active_story puts the launch name in the sidebar
+    // search box so the list filters to matching titles.
+    if (slug[0]) {
+        const StoryInfo* m = StoryMeta(app.story);
+        strncpy_s(app.search.buf, m->title, _TRUNCATE);
+        app.search.len = (int)strlen(app.search.buf);
+        app.search.cursor = app.search.len;
+    }
 
     AppHooks hooks = {};
     hooks.onInit = OnInit;

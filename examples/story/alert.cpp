@@ -9,18 +9,46 @@ static void HideBanner(StoryApp* app) {
 }
 static void AlertNoop(StoryApp*) {}
 
+static El* AlertLine(Arena* a, Str s, Rgba fg) {
+    return TextEl(a, s)->Font(14)->Fg(fg)->Wrap();
+}
+
+static El* AlertBullet(Arena* a, Rgba fg, El* text) {
+    El* row = Div(a)->FlexRow()->Gap(8)->ItemsStart();
+    row->Child(AlertLine(a, StrL("\xE2\x80\xA2"), fg)->Shrink0());
+    row->Child(text);
+    return row;
+}
+
+static El* AlertW(Arena* a, El* child) {
+    // Rust Alert sections use .w_2_3() on the inner pane (~640px).
+    return Div(a)->W(640)->Child(child);
+}
+
 El* AlertRender(StoryApp* app, Arena* a) {
+    const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
 
+    El* defBody = Div(a)->FlexCol()->Gap(4);
+    defBody->Child(AlertLine(a, StrL("Your workspace is ready for the team."),
+                             th.foreground));
+    El* members = Div(a)->FlexRow()->Gap(4)->Wrap();
+    members->Child(AlertLine(a, StrL("12 members"), th.foreground)->Semibold());
+    members->Child(AlertLine(a, StrL("have access"), th.foreground));
+    defBody->Child(AlertBullet(a, th.foreground, members));
+    defBody->Child(AlertBullet(
+        a, th.foreground,
+        AlertLine(a, StrL("Billing remains with the workspace owner"),
+                  th.foreground)));
+
     El* def = StorySection(a, "Default", "Title, icon, and rich text content.");
     StorySectionAdd(
-        def, component::Alert::New(a, StrL("alert-default"),
-                                   StrL("Your workspace is ready for the team. "
-                                        "12 members have access."))
-                 ->Title(StrL("Workspace settings saved"))
-                 ->WithSize(app->size)
-                 ->IntoEl());
+        def, AlertW(a, component::Alert::New(a, StrL("alert-default"), Str{})
+                           ->Title(StrL("Workspace settings saved"))
+                           ->Content(defBody)
+                           ->WithSize(app->size)
+                           ->IntoEl()));
     page->Child(def);
 
     El* vars = StorySection(a, "Variants",
@@ -40,24 +68,38 @@ El* AlertRender(StoryApp* app, Arena* a) {
             ->Title(StrL("Transfer submitted"))
             ->WithSize(app->size)
             ->IntoEl());
-    col->Child(
-        component::Alert::Warning(
-            a, StrL("warning-1"),
-            StrL("Two teammates still use recovery codes generated more than "
-                 "a year ago. Ask them to generate a fresh set in Security "
-                 "settings."))
-            ->WithSize(app->size)
-            ->IntoEl());
-    col->Child(
-        component::Alert::Error(
-            a, StrL("error-1"),
-            StrL("Please verify your billing information and try again. Check "
-                 "your card details, ensure sufficient funds, and verify the "
-                 "billing address."))
-            ->Title(StrL("Unable to process your payment."))
-            ->WithSize(app->size)
-            ->IntoEl());
-    StorySectionAdd(vars, col);
+
+    El* warnBody = Div(a)->FlexCol()->Gap(2);
+    warnBody->Child(AlertLine(
+        a,
+        StrL("Two teammates still use recovery codes generated more than a "
+             "year ago."),
+        th.warning));
+    warnBody->Child(AlertLine(
+        a, StrL("Ask them to generate a fresh set in Security settings."),
+        th.warning));
+    col->Child(component::Alert::Warning(a, StrL("warning-1"), Str{})
+                   ->Content(warnBody)
+                   ->WithSize(app->size)
+                   ->IntoEl());
+
+    El* errBody = Div(a)->FlexCol()->Gap(4);
+    errBody->Child(AlertLine(
+        a, StrL("Please verify your billing information and try again."),
+        th.danger));
+    const char* errItems[] = {"Check your card details",
+                              "Ensure sufficient funds",
+                              "Verify billing address"};
+    for (int i = 0; i < 3; i++) {
+        errBody->Child(AlertBullet(a, th.danger,
+                                   AlertLine(a, Str(errItems[i]), th.danger)));
+    }
+    col->Child(component::Alert::Error(a, StrL("error-1"), Str{})
+                   ->Title(StrL("Unable to process your payment."))
+                   ->Content(errBody)
+                   ->WithSize(app->size)
+                   ->IntoEl());
+    StorySectionAdd(vars, AlertW(a, col));
     page->Child(vars);
 
     El* ban = StorySection(a, "Banner", "Full-width and closable alerts.");
@@ -100,8 +142,23 @@ El* AlertRender(StoryApp* app, Arena* a) {
                     ->Banner()
                     ->WithSize(app->size)
                     ->IntoEl());
-    StorySectionAdd(ban, bcol);
+    StorySectionAdd(ban, AlertW(a, bcol));
     page->Child(ban);
+
+    El* custom =
+        StorySection(a, "Custom icon", "Custom icon and long content.");
+    StorySectionAdd(
+        custom,
+        AlertW(a, component::Alert::New(
+                      a, StrL("other-1"),
+                      StrL("The quarterly planning review overlaps with the "
+                           "APAC operations call. Move one event or invite "
+                           "another owner before sending the agenda."))
+                      ->Title(StrL("Two events overlap by 30 minutes"))
+                      ->Icon(IconName::Calendar)
+                      ->WithSize(app->size)
+                      ->IntoEl()));
+    page->Child(custom);
     return page;
 }
 

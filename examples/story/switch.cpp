@@ -43,7 +43,7 @@ El* SwitchRender(StoryApp* app, Arena* a) {
     El* def = StorySection(a, "Default",
                            "Switches work well in a compact settings list.");
     El* list =
-        Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Radius(th.radius);
+        Div(a)->FlexCol()->W(512)->Border(1, th.border)->Radius(th.radius);
     list->Child(SwitchRow(a, app, "Product updates",
                           "New features and release notes.", "switch1", 0,
                           MkFunc1(&SetSw0, app)));
@@ -56,46 +56,46 @@ El* SwitchRender(StoryApp* app, Arena* a) {
 
     El* dis = StorySection(
         a, "Disabled", "Unavailable switches preserve their current value.");
-    El* disCol = Div(a)->FlexCol()->Gap(12);
-    disCol->Child(component::Switch::New(a, StrL("switch3"))
+    El* disRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter()->Wrap();
+    disRow->Child(component::Switch::New(a, StrL("switch3"))
                       ->Checked(app->switches[2])
                       ->Disabled(true)
                       ->WithSize(app->size)
                       ->IntoEl());
-    disCol->Child(component::Switch::New(a, StrL("switch3_1"))
+    disRow->Child(component::Switch::New(a, StrL("switch3_1"))
                       ->Label(StrL("Airplane mode"))
                       ->Checked(true)
                       ->Disabled(true)
                       ->WithSize(app->size)
                       ->IntoEl());
-    StorySectionAdd(dis, disCol);
+    StorySectionAdd(dis, disRow);
     page->Child(dis);
 
     El* col = StorySection(a, "Color",
                            "Semantic colors can reinforce the setting state.");
-    El* colCol = Div(a)->FlexCol()->Gap(12);
-    colCol->Child(component::Switch::New(a, StrL("switch4"))
+    El* colRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter()->Wrap();
+    colRow->Child(component::Switch::New(a, StrL("switch4"))
                       ->Label(StrL("Success"))
                       ->Checked(app->switches[3])
                       ->Color(th.success)
                       ->WithSize(app->size)
                       ->OnClick(MkFunc1(&SetSw3, app))
                       ->IntoEl());
-    colCol->Child(component::Switch::New(a, StrL("switch5"))
+    colRow->Child(component::Switch::New(a, StrL("switch5"))
                       ->Label(StrL("Destructive"))
                       ->Checked(app->switches[4])
                       ->Color(th.danger)
                       ->WithSize(app->size)
                       ->OnClick(MkFunc1(&SetSw4, app))
                       ->IntoEl());
-    colCol->Child(component::Switch::New(a, StrL("switch4_disabled"))
+    colRow->Child(component::Switch::New(a, StrL("switch4_disabled"))
                       ->Label(StrL("Disabled"))
                       ->Checked(true)
                       ->Color(th.success)
                       ->Disabled(true)
                       ->WithSize(app->size)
                       ->IntoEl());
-    StorySectionAdd(col, colCol);
+    StorySectionAdd(col, colRow);
     page->Child(col);
     return page;
 }

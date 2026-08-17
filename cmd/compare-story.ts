@@ -132,6 +132,21 @@ function rustExe(debug: boolean): string {
   return join(rustDir(), "target", debug ? "debug" : "release", "gpui-component-story.exe");
 }
 
+// Rust Gallery::set_active_story matches Story::title(), not the kebab slug.
+// "alert-dialog" does not contain-match "AlertDialog" and blanks the page.
+function rustStoryArg(slug: string): string {
+  if (slug === "theme-colors") {
+    return "Theme Colors";
+  }
+  if (slug === "introduction") {
+    return "Introduction";
+  }
+  return slug
+    .split("-")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join("");
+}
+
 function cppExe(debug: boolean): string {
   return join(root, "out", debug ? "dbg" : "rel", "story.exe");
 }
@@ -185,7 +200,11 @@ for (const slug of pages) {
     die(`Unknown story slug: ${slug}`);
   }
   console.log(`\n=== ${slug} ===`);
-  const rustProc = Bun.spawn([rustExe(debug), slug], { cwd: rustDir(), stdout: "ignore", stderr: "ignore" });
+  const rustProc = Bun.spawn([rustExe(debug), rustStoryArg(slug)], {
+    cwd: rustDir(),
+    stdout: "ignore",
+    stderr: "ignore",
+  });
   const cppProc = Bun.spawn([cppExe(debug), slug], {
     cwd: join(root, "out", debug ? "dbg" : "rel"),
     stdout: "ignore",

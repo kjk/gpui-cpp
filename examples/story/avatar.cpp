@@ -30,24 +30,24 @@ static El* AvatarRow(Arena* a, StoryApp* app, const char** names, int n,
     float step = sz * 0.7f;
     int extra = (ellipsis && n > shown) ? 1 : 0;
     El* box = Div(a)->H(sz)->W(sz + (shown + extra - 1) * step);
-    int slot = 0;
-    if (extra) {
-        box->Child(component::Avatar::New(a)
-                       ->Initials(StrL("··"))
-                       ->Bg(ThemeNow().secondary)
-                       ->WithSize(app->size)
-                       ->IntoEl()
-                       ->Absolute()
-                       ->Left(0));
-        slot = 1;
-    }
     for (int i = 0; i < shown; i++) {
         box->Child(component::Avatar::New(a)
                        ->Initials(Str(names[i]))
                        ->WithSize(app->size)
                        ->IntoEl()
                        ->Absolute()
-                       ->Left((slot + i) * step));
+                       ->Left(i * step));
+    }
+    if (extra) {
+        // Rust AvatarGroup is flex_row_reverse, so the ⋯ chip sits on the
+        // right.
+        box->Child(component::Avatar::New(a)
+                       ->Initials(StrL("\xE2\x8B\xAF"))
+                       ->Bg(ThemeNow().secondary)
+                       ->WithSize(app->size)
+                       ->IntoEl()
+                       ->Absolute()
+                       ->Left(shown * step));
     }
     return box;
 }

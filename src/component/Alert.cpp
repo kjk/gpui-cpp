@@ -13,7 +13,10 @@ Alert* Alert::New(Arena* a, Str id, Str message) {
 }
 
 Alert* Alert::Info(Arena* a, Str id, Str message) {
-    return New(a, id, message)->Icon(IconName::Info);
+    Alert* al = New(a, id, message);
+    al->variant = AlertVariant::Info;
+    al->icon = IconName::Info;
+    return al;
 }
 Alert* Alert::Success(Arena* a, Str id, Str message) {
     Alert* al = New(a, id, message);
@@ -42,6 +45,10 @@ Alert* Alert::Icon(IconName n) {
     icon = n;
     return this;
 }
+Alert* Alert::Content(El* e) {
+    content = e;
+    return this;
+}
 Alert* Alert::Banner() {
     banner = true;
     return this;
@@ -68,23 +75,23 @@ El* Alert::IntoEl() {
     switch (variant) {
         case AlertVariant::Info:
             fg = th.info;
-            bg = RgbaOpacity(th.info, 0.08f);
-            bd = RgbaOpacity(th.info, 0.4f);
+            bg = RgbaOpacity(th.info, 0.04f);
+            bd = RgbaOpacity(th.info, 0.3f);
             break;
         case AlertVariant::Success:
             fg = th.success;
-            bg = RgbaOpacity(th.success, 0.08f);
-            bd = RgbaOpacity(th.success, 0.4f);
+            bg = RgbaOpacity(th.success, 0.04f);
+            bd = RgbaOpacity(th.success, 0.3f);
             break;
         case AlertVariant::Warning:
             fg = th.warning;
-            bg = RgbaOpacity(th.warning, 0.08f);
-            bd = RgbaOpacity(th.warning, 0.4f);
+            bg = RgbaOpacity(th.warning, 0.04f);
+            bd = RgbaOpacity(th.warning, 0.3f);
             break;
         case AlertVariant::Error:
             fg = th.danger;
-            bg = RgbaOpacity(th.danger, 0.08f);
-            bd = RgbaOpacity(th.danger, 0.4f);
+            bg = RgbaOpacity(th.danger, 0.04f);
+            bd = RgbaOpacity(th.danger, 0.3f);
             break;
         default:
             break;
@@ -103,7 +110,11 @@ El* Alert::IntoEl() {
     if (title.s && !banner) {
         col->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(fg));
     }
-    col->Child(TextEl(a, message)->Font(UiFontPx(size))->Fg(fg)->Wrap());
+    if (content) {
+        col->Child(content);
+    } else {
+        col->Child(TextEl(a, message)->Font(UiFontPx(size))->Fg(fg)->Wrap());
+    }
     row->Child(col);
     if (onClose.IsValid()) {
         El* x = Div(a)->W(20)->H(20)->ItemsCenter()->JustifyCenter()->Child(

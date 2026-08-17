@@ -21,6 +21,7 @@ struct Alert {
     IconName icon = IconName::Info;
     Str title = {};
     Str message = {};
+    El* content = nullptr;
     UiSize size = UiSize::Medium;
     bool banner = false;
     bool visible = true;
@@ -33,6 +34,7 @@ struct Alert {
     static Alert* Error(Arena* a, Str id, Str message);
     Alert* Title(Str s);
     Alert* Icon(IconName n);
+    Alert* Content(El* e);
     Alert* Banner();
     Alert* Visible(bool v);
     Alert* OnClose(Func0 fn);
