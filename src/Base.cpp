@@ -659,7 +659,7 @@ static char* MakeSpaceAt(StrBuilder* s, int idx, int count) {
         memmove(dst, src, (size_t)(s->len - idx));
     }
     s->len = newLen;
-    // ZeroMemory(res, count);
+    // memset(res, 0, count);
     return res;
 }
 

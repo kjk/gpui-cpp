@@ -44,13 +44,13 @@ struct Str {
     explicit operator bool() const { return len > 0 && s; }
 };
 
+void log(Str s);
+
 using TempStr = Str;
 
 #define StrL(lit) ::gpui::Str((char*)(lit), (int)(sizeof(lit) - 1))
 
 Str AllocStrTemp(int size);
-
-void log(Str s);
 
 void* AllocZero(int count, int size);
 
@@ -61,7 +61,7 @@ inline T* AllocArray(int n) {
 
 template <typename T>
 inline void ZeroStruct(T* s) {
-    ZeroMemory((void*)s, sizeof(T));
+    memset((void*)s, 0, sizeof(T));
 }
 
 struct Func0 {
