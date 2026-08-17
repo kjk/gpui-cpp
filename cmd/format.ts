@@ -1,6 +1,8 @@
 // Format this repo's C++ (clang-format) and TypeScript (prettier).
 //
 //   bun cmd/format.ts                  # all src/**/*.{cpp,h} and cmd/*.ts
+//   bun cmd/format.ts -ts              # prettier only (cmd/*.ts)
+//   bun cmd/format.ts -cpp             # clang-format only (src C++/headers)
 //   bun cmd/format.ts src/gpui/Gpui.cpp cmd/build.ts
 
 import { $, Glob } from "bun";
@@ -97,33 +99,65 @@ async function mapPool<T>(items: T[], limit: number, fn: (item: T) => Promise<vo
 }
 
 const argv = Bun.argv.slice(2);
-let cppFiles: string[];
-let tsFiles: string[];
-if (argv.length > 0) {
-  cppFiles = [];
-  tsFiles = [];
-  for (const raw of argv) {
+const paths: string[] = [];
+let wantCpp = false;
+let wantTs = false;
+for (const raw of argv) {
+  if (raw === "-ts" || raw === "--ts") {
+    wantTs = true;
+    continue;
+  }
+  if (raw === "-cpp" || raw === "--cpp") {
+    wantCpp = true;
+    continue;
+  }
+  if (raw.startsWith("-")) {
+    console.error(`unknown option: ${raw}`);
+    console.error("usage: bun cmd/format.ts [-ts] [-cpp] [paths...]");
+    process.exit(1);
+  }
+  paths.push(raw);
+}
+if (!wantCpp && !wantTs) {
+  wantCpp = true;
+  wantTs = true;
+}
+
+let cppFiles: string[] = [];
+let tsFiles: string[] = [];
+if (paths.length > 0) {
+  for (const raw of paths) {
     const ext = extname(raw).toLowerCase();
     const norm = raw.replaceAll("\\", "/");
     if (cppExt.has(ext)) {
-      cppFiles.push(norm);
+      if (wantCpp) {
+        cppFiles.push(norm);
+      }
     } else if (tsExt.has(ext)) {
-      tsFiles.push(norm);
+      if (wantTs) {
+        tsFiles.push(norm);
+      }
     } else {
       console.error(`skip (unknown type): ${raw}`);
     }
   }
 } else {
-  cppFiles = await globFiles(cppGlobs);
-  tsFiles = await globFiles(tsGlobs);
+  if (wantCpp) {
+    cppFiles = await globFiles(cppGlobs);
+  }
+  if (wantTs) {
+    tsFiles = await globFiles(tsGlobs);
+  }
 }
 
-const clangFormatPath = findClangFormat();
-console.log(`using '${clangFormatPath}'`);
-await mapPool(cppFiles, cpus().length, (p) => formatCpp(clangFormatPath, p));
-console.log(`formatted ${cppFiles.length} C++ files`);
+if (wantCpp) {
+  const clangFormatPath = findClangFormat();
+  console.log(`using '${clangFormatPath}'`);
+  await mapPool(cppFiles, cpus().length, (p) => formatCpp(clangFormatPath, p));
+  console.log(`formatted ${cppFiles.length} C++ files`);
+}
 
-if (tsFiles.length > 0) {
+if (wantTs && tsFiles.length > 0) {
   await formatTs(tsFiles);
   console.log(`formatted ${tsFiles.length} TS/JSON/MD files`);
 }
