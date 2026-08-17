@@ -74,7 +74,7 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(12)->W(kFill)->MaxW(760);
 
-    El* hero = Div(a)->FlexCol()->Gap(8)->ItemsCenter()->W(kFill);
+    El* hero = Div(a)->FlexCol()->Gap(8)->W(kFill);
     hero->Child(LogoMark(a));
     hero->Child(StoryTxt(a, StrL("GPUI Component"), 18, th.foreground)->Bold());
     col->Child(hero);

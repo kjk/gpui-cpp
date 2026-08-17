@@ -1142,7 +1142,9 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
             resized = true;
         }
     }
-    if (wrapH) {
+    // Scroll views keep the viewport height and let children overflow.
+    // Wrapping to contentH would make contentH == h and hide the thumb.
+    if (wrapH && e->style.overflowY != OverflowY::Scroll) {
         float needed = e->contentH + padY;
         float nh = Clamp(needed, e->style.minH, e->style.maxH);
         if (availH > 0 && nh > availH) {
@@ -1284,6 +1286,9 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     float crossAvail = row ? innerH : innerW;
     float gap = e->style.gap;
     float gaps = gap * (n - 1);
+    // Column scrollers measure children at their intrinsic height so
+    // contentH can exceed the viewport (needed for the thumb + scroll).
+    bool unconstrMain = !row && e->style.overflowY == OverflowY::Scroll;
 
     // First pass: layout with unconstrained main axis for non-grow, definite
     // for grow
@@ -1294,7 +1299,7 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
             continue;
         }
         growSum += c->style.flexGrow;
-        float childMainAvail = mainAvail;
+        float childMainAvail = unconstrMain ? 0.f : mainAvail;
         float childCross = crossAvail;
         if (c->style.flexGrow > 0) {
             // temporary: measure min
