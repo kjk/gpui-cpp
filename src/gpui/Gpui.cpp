@@ -603,7 +603,7 @@ struct TextMeasSlot {
 };
 
 static uint32_t TextMeasHash(Str s, float fontSize, float maxW, bool wrap,
-                             bool bold) {
+                             uint8_t weight) {
     uint32_t h = MurmurHash2(s);
     uint32_t fs = 0;
     uint32_t mw = 0;
@@ -614,22 +614,43 @@ static uint32_t TextMeasHash(Str s, float fontSize, float maxW, bool wrap,
     if (wrap) {
         h ^= 0x165667b1u;
     }
-    if (bold) {
-        h ^= 0x27d4eb2fu;
+    if (weight) {
+        h ^= 0x27d4eb2fu * (uint32_t)weight;
     }
     return h;
 }
 
 static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
-                          float fontSize, float maxW, bool wrap, bool bold) {
+                          float fontSize, float maxW, bool wrap,
+                          uint8_t weight) {
     if (!sl->occupied || sl->hash != hash || sl->len != s.len) {
         return false;
     }
     if (sl->fontSize != fontSize || sl->maxW != maxW ||
-        sl->wrap != (wrap ? 1 : 0) || sl->bold != (bold ? 1 : 0)) {
+        sl->wrap != (wrap ? 1 : 0) || sl->bold != weight) {
         return false;
     }
     return memeq(sl->text, s.s, s.len);
+}
+
+static uint8_t ElTextWeight(const El* e) {
+    if (e->style.fontBold) {
+        return 2;
+    }
+    if (e->style.fontSemibold) {
+        return 1;
+    }
+    return 0;
+}
+
+static DWRITE_FONT_WEIGHT DwriteWeight(uint8_t weight) {
+    if (weight >= 2) {
+        return DWRITE_FONT_WEIGHT_BOLD;
+    }
+    if (weight == 1) {
+        return DWRITE_FONT_WEIGHT_SEMI_BOLD;
+    }
+    return DWRITE_FONT_WEIGHT_NORMAL;
 }
 
 static void TextMeasFreeSlot(TextMeasSlot* sl) {
@@ -649,11 +670,11 @@ static void TextMeasFreeSlot(TextMeasSlot* sl) {
 }
 
 static TextMeasSlot* TextMeasFind(TextMeasCache* c, Str s, float fontSize,
-                                  float maxW, bool wrap, bool bold,
+                                  float maxW, bool wrap, uint8_t weight,
                                   uint32_t* outHash) {
     float keyFont = MeasKeyFont(fontSize);
     float keyMaxW = MeasKeyMaxW(maxW, wrap);
-    uint32_t hash = TextMeasHash(s, keyFont, keyMaxW, wrap, bold);
+    uint32_t hash = TextMeasHash(s, keyFont, keyMaxW, wrap, weight);
     if (outHash) {
         *outHash = hash;
     }
@@ -667,7 +688,7 @@ static TextMeasSlot* TextMeasFind(TextMeasCache* c, Str s, float fontSize,
         if (!sl->occupied) {
             return nullptr;
         }
-        if (TextMeasKeyEq(sl, hash, s, keyFont, keyMaxW, wrap, bold)) {
+        if (TextMeasKeyEq(sl, hash, s, keyFont, keyMaxW, wrap, weight)) {
             return sl;
         }
         i = (i + 1) & mask;
@@ -724,12 +745,13 @@ static void TextMeasInsertMove(TextMeasCache* c, TextMeasSlot* src) {
 }
 
 static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
-                                    float maxW, bool wrap, bool bold, float w,
-                                    float h, IDWriteTextLayout* layout) {
+                                    float maxW, bool wrap, uint8_t weight,
+                                    float w, float h,
+                                    IDWriteTextLayout* layout) {
     TextMeasCache* c = &ctx->textCache;
     float keyFont = MeasKeyFont(fontSize);
     float keyMaxW = MeasKeyMaxW(maxW, wrap);
-    uint32_t hash = TextMeasHash(s, keyFont, keyMaxW, wrap, bold);
+    uint32_t hash = TextMeasHash(s, keyFont, keyMaxW, wrap, weight);
     if (c->cap == 0 || (c->used + 1) * 10 > c->cap * 6) {
         TextMeasGrow(c, c->cap > 0 ? c->cap * 2 : 256);
     }
@@ -745,7 +767,7 @@ static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
             sl = cand;
             break;
         }
-        if (TextMeasKeyEq(cand, hash, s, keyFont, keyMaxW, wrap, bold)) {
+        if (TextMeasKeyEq(cand, hash, s, keyFont, keyMaxW, wrap, weight)) {
             sl = cand;
             break;
         }
@@ -765,7 +787,7 @@ static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
         sl->fontSize = keyFont;
         sl->maxW = keyMaxW;
         sl->wrap = wrap ? 1 : 0;
-        sl->bold = bold ? 1 : 0;
+        sl->bold = weight;
         sl->occupied = 1;
         c->used++;
     }
@@ -858,7 +880,7 @@ void TextMeasClear(PaintCtx* ctx) {
 
 // Create or reuse a cached IDWriteTextLayout. Caller must Release.
 static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
-                                         float maxW, bool wrap, bool bold,
+                                         float maxW, bool wrap, uint8_t weight,
                                          float* outW, float* outH) {
     if (outW) {
         *outW = 0;
@@ -870,7 +892,8 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
         return nullptr;
     }
     TextMeasCache* c = &ctx->textCache;
-    TextMeasSlot* hit = TextMeasFind(c, s, fontSize, maxW, wrap, bold, nullptr);
+    TextMeasSlot* hit =
+        TextMeasFind(c, s, fontSize, maxW, wrap, weight, nullptr);
     if (hit && hit->layout) {
         hit->lastUsed = c->frame;
         if (outW) {
@@ -903,8 +926,8 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     if (fontSize > 0) {
         layout->SetFontSize(fontSize, range);
     }
-    if (bold) {
-        layout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD, range);
+    if (weight) {
+        layout->SetFontWeight(DwriteWeight(weight), range);
     }
     layout->SetWordWrapping(wrap && maxW > 0 ? DWRITE_WORD_WRAPPING_WRAP
                                              : DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -916,17 +939,17 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     if (outH) {
         *outH = m.height;
     }
-    TextMeasInsert(ctx, s, fontSize, maxW, wrap, bold,
+    TextMeasInsert(ctx, s, fontSize, maxW, wrap, weight,
                    m.widthIncludingTrailingWhitespace, m.height, layout);
     return layout;
 }
 
 void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
-                 float* outH, bool wrap, bool bold) {
+                 float* outH, bool wrap, int weight) {
     *outW = 0;
     *outH = fontSize > 0 ? fontSize * 1.25f : 16.f;
-    IDWriteTextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, maxW, wrap, bold, outW, outH);
+    IDWriteTextLayout* layout = TextMeasLayout(ctx, s, fontSize, maxW, wrap,
+                                               (uint8_t)weight, outW, outH);
     if (layout) {
         layout->Release();
     }
@@ -1140,7 +1163,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         e->laidMaxW = measW;
         float tw = 0, th = 0;
         MeasureText(ctx, e->text, font, measW, &tw, &th, e->style.wrap,
-                    e->style.fontBold || e->style.fontSemibold);
+                    ElTextWeight(e));
         e->w = wSpec > 0 ? wSpec : Clamp(tw, e->style.minW, e->style.maxW);
         e->h = hSpec > 0 ? hSpec : Clamp(th, e->style.minH, e->style.maxH);
         return;
@@ -1600,7 +1623,7 @@ static void DrawLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
 
 static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
                        float fontSize, Rgba c, bool truncate, bool wrap = false,
-                       float measMaxW = -1.f, bool bold = false) {
+                       float measMaxW = -1.f, int weight = 0) {
     if (!s.s || s.len <= 0 || !ctx->dwrite) {
         return;
     }
@@ -1610,8 +1633,8 @@ static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
     D2D1_DRAW_TEXT_OPTIONS opt =
         truncate ? D2D1_DRAW_TEXT_OPTIONS_CLIP : D2D1_DRAW_TEXT_OPTIONS_NONE;
     float keyW = wrap ? (measMaxW >= 0 ? measMaxW : (w > 0 ? w : 0)) : 0;
-    IDWriteTextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, keyW, wrap, bold, nullptr, nullptr);
+    IDWriteTextLayout* layout = TextMeasLayout(
+        ctx, s, fontSize, keyW, wrap, (uint8_t)weight, nullptr, nullptr);
     if (layout) {
         ctx->rt->DrawTextLayout(D2D1::Point2F(x, y), layout, ctx->brush, opt);
         layout->Release();
@@ -2052,7 +2075,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         }
         DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
                    e->style.truncate, e->style.wrap, e->laidMaxW,
-                   e->style.fontBold || e->style.fontSemibold);
+                   ElTextWeight(e));
     } else if (e->kind == ElKind::Icon) {
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
         float s = e->w > 0 ? e->w : 16;

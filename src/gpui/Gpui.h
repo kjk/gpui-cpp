@@ -417,7 +417,7 @@ float PxToDip(PaintCtx* ctx, int px);
 int DipToPx(PaintCtx* ctx, float dip);
 
 void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
-                 float* outH, bool wrap = false, bool bold = false);
+                 float* outH, bool wrap = false, int weight = 0);
 void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);
