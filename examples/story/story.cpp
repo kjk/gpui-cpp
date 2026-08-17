@@ -448,8 +448,8 @@ static El* Header(StoryApp* app, Arena* a) {
         ->Gap(4)
         ->Shrink0()
         ->BorderB(1, th.border)
-        ->Child(StoryTxt(a, Str(m->title), 22, th.foreground)->Semibold())
-        ->Child(StoryTxt(a, Str(m->description), 13, th.mutedFg)->Wrap());
+        ->Child(StoryTxt(a, Str(m->title), 24, th.foreground)->Semibold())
+        ->Child(StoryTxt(a, Str(m->description), 16, th.mutedFg)->Wrap());
 }
 
 static El* Footer(StoryApp* app, Arena* a) {

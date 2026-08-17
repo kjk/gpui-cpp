@@ -858,8 +858,11 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     if (FAILED(hr) || !layout) {
         return nullptr;
     }
+    DWRITE_TEXT_RANGE range = {0, (UINT32)n};
+    if (fontSize > 0) {
+        layout->SetFontSize(fontSize, range);
+    }
     if (bold) {
-        DWRITE_TEXT_RANGE range = {0, (UINT32)n};
         layout->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD, range);
     }
     layout->SetWordWrapping(wrap && maxW > 0 ? DWRITE_WORD_WRAPPING_WRAP
