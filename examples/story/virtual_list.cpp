@@ -1,8 +1,8 @@
 #include "Story.h"
 
 El* VirtualListRender(StoryApp* app, Arena* a) {
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    page->Child(StoryToolbar(a, app));
     El* sec = StorySection(
         a, "Default",
         "A virtualized list for efficiently rendering large lists.");
@@ -12,7 +12,7 @@ El* VirtualListRender(StoryApp* app, Arena* a) {
                    ->H(192)
                    ->Border(1, ThemeNow().border)
                    ->ClipY();
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 24; i++) {
         list->Child(Div(a)
                         ->H(32)
                         ->PadX(8)

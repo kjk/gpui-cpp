@@ -12,19 +12,37 @@ El* ThemeColorsRender(StoryApp* app, Arena* a) {
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec =
-        StorySection(a, "Tokens", "Theme color tokens used by the components.");
-    El* row = Div(a)->FlexRow()->Gap(12);
-    row->Child(Swatch(a, "background", th.background));
-    row->Child(Swatch(a, "foreground", th.foreground));
-    row->Child(Swatch(a, "primary", th.primary));
-    row->Child(Swatch(a, "secondary", th.secondary));
-    row->Child(Swatch(a, "muted", th.muted));
-    row->Child(Swatch(a, "accent", th.accent));
-    row->Child(Swatch(a, "danger", th.danger));
-    row->Child(Swatch(a, "border", th.border));
-    StorySectionAdd(sec, row);
-    page->Child(sec);
+
+    El* base = StorySection(a, "Base", "Surface, text, and border tokens.");
+    El* baseRow = Div(a)->FlexRow()->Gap(12)->Wrap();
+    baseRow->Child(Swatch(a, "background", th.background));
+    baseRow->Child(Swatch(a, "foreground", th.foreground));
+    baseRow->Child(Swatch(a, "muted", th.muted));
+    baseRow->Child(Swatch(a, "mutedFg", th.mutedFg));
+    baseRow->Child(Swatch(a, "border", th.border));
+    StorySectionAdd(base, baseRow);
+    page->Child(base);
+
+    El* sem = StorySection(a, "Semantic", "Status and action colors.");
+    El* semRow = Div(a)->FlexRow()->Gap(12)->Wrap();
+    semRow->Child(Swatch(a, "primary", th.primary));
+    semRow->Child(Swatch(a, "secondary", th.secondary));
+    semRow->Child(Swatch(a, "accent", th.accent));
+    semRow->Child(Swatch(a, "info", th.info));
+    semRow->Child(Swatch(a, "success", th.success));
+    semRow->Child(Swatch(a, "warning", th.warning));
+    semRow->Child(Swatch(a, "danger", th.danger));
+    StorySectionAdd(sem, semRow);
+    page->Child(sem);
+
+    El* chrome = StorySection(a, "Chrome", "Window chrome and sidebar.");
+    El* chromeRow = Div(a)->FlexRow()->Gap(12)->Wrap();
+    chromeRow->Child(Swatch(a, "titleBar", th.titleBar));
+    chromeRow->Child(Swatch(a, "tabBar", th.tabBar));
+    chromeRow->Child(Swatch(a, "sidebar", th.sidebar));
+    chromeRow->Child(Swatch(a, "scrollbar", th.scrollbarThumb));
+    StorySectionAdd(chrome, chromeRow);
+    page->Child(chrome);
     return page;
 }
 

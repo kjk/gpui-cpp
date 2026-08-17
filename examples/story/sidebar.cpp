@@ -11,6 +11,7 @@ El* SidebarRender(StoryApp* app, Arena* a) {
                              ->Item(StrL("Inbox"))
                              ->Item(StrL("Calendar"))
                              ->Item(StrL("Settings"))
+                             ->Item(StrL("Search"))
                              ->Selected(0)
                              ->IntoEl());
     page->Child(sec);

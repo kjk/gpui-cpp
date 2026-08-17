@@ -28,6 +28,34 @@ El* ResizableRender(StoryApp* app, Arena* a) {
                   ->Child(main);
     StorySectionAdd(sec, box);
     page->Child(sec);
+
+    El* nested = StorySection(a, "Nested Panels", nullptr);
+    El* inner = Resizable::New(a, StrL("story-resizable-nested"))
+                    ->W(288)
+                    ->H(200)
+                    ->Border(1, th.border)
+                    ->FlexCol()
+                    ->Child(ResizablePanel::New(a)->H(80)->Pad(8)->Child(
+                        StoryTxt(a, StrL("Top"), 13, th.foreground)))
+                    ->Child(Div(a)->H(1)->W(kFill)->Bg(th.border))
+                    ->Child(ResizablePanel::New(a)->Grow()->Pad(8)->Child(
+                        StoryTxt(a, StrL("Bottom grows"), 13, th.foreground)));
+    StorySectionAdd(nested, inner);
+    page->Child(nested);
+
+    El* grow = StorySection(a, "Growing Panel", nullptr);
+    El* growBox = Resizable::New(a, StrL("story-resizable-grow"))
+                      ->W(288)
+                      ->H(120)
+                      ->Border(1, th.border)
+                      ->FlexRow()
+                      ->Child(ResizablePanel::New(a)->W(80)->Pad(8)->Child(
+                          StoryTxt(a, StrL("Fixed"), 13, th.mutedFg)))
+                      ->Child(Div(a)->W(1)->H(kFill)->Bg(th.border))
+                      ->Child(ResizablePanel::New(a)->Grow()->Pad(8)->Child(
+                          StoryTxt(a, StrL("Grows"), 13, th.foreground)));
+    StorySectionAdd(grow, growBox);
+    page->Child(grow);
     return page;
 }
 

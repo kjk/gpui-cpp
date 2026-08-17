@@ -15,6 +15,19 @@ El* SettingsRender(StoryApp* app, Arena* a) {
                             ->IntoEl())
                  ->IntoEl());
     page->Child(sec);
+
+    El* editor = StorySection(a, "Editor", nullptr);
+    StorySectionAdd(
+        editor,
+        component::Setting::New(a, StrL("Editor"))
+            ->Item(StrL("Tab size"), component::NumberInput::New(a, &app->field)
+                                         ->IntoEl())
+            ->Item(StrL("Word wrap"),
+                   component::Switch::New(a, StrL("set-wrap"))
+                       ->Checked(true)
+                       ->IntoEl())
+            ->IntoEl());
+    page->Child(editor);
     return page;
 }
 

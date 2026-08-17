@@ -13,6 +13,8 @@ El* ListRender(StoryApp* app, Arena* a) {
                              ->Item(StrL("Drafts"))
                              ->Item(StrL("Sent"))
                              ->Item(StrL("Archive"))
+                             ->Item(StrL("Spam"))
+                             ->Item(StrL("Trash"))
                              ->Selected(app->listSel)
                              ->OnSelect(MkFunc1(&PickList, app))
                              ->IntoEl());

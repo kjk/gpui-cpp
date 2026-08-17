@@ -12,7 +12,7 @@ El* ScrollbarRender(StoryApp* app, Arena* a) {
                   ->ClipY()
                   ->ScrollY(0);
     El* list = Div(a)->FlexCol();
-    for (int i = 1; i <= 20; i++) {
+    for (int i = 1; i <= 40; i++) {
         list->Child(Div(a)
                         ->H(28)
                         ->PadX(8)
