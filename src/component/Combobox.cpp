@@ -12,9 +12,11 @@ static void FireCb(CbBind* b) {
     b->fn.Call(b->index);
 }
 
-Combobox* Combobox::New(Arena* a, Str id) {
+Combobox* Combobox::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Combobox* c = ArenaNew<Combobox>(a);
     c->a = a;
+    c->cx = cx;
     c->id = id;
     return c;
 }
@@ -65,12 +67,12 @@ El* Combobox::IntoEl() {
             Div(a)->FlexCol()->Pad(4)->Border(1, th.border)->Bg(th.background);
         if (query) {
             pop->Child(
-                InputBase::New(a, StrL("cb-q"), HashClickId(StrL("cb-q")))
+                InputBase::New(cx, StrL("cb-q"), HashClickId(StrL("cb-q")))
                     ->H(28)
                     ->PadX(8)
                     ->ItemsCenter()
                     ->Border(1, th.border)
-                    ->Child(gpui::Input::New(a, query)));
+                    ->Child(gpui::Input::New(cx, query)));
         }
         for (int i = 0; i < n; i++) {
             El* row =
@@ -85,8 +87,8 @@ El* Combobox::IntoEl() {
             pop->Child(row);
         }
     }
-    El* root = gpui::Combobox::New(a, id)->W(224)->Child(trigger);
-    return Popup::New(a, StrL("combo-pop"), root)->Content(pop)->IntoEl();
+    El* root = gpui::Combobox::New(cx, id)->W(224)->Child(trigger);
+    return Popup::New(cx, StrL("combo-pop"), root)->Content(pop)->IntoEl();
 }
 
 } // namespace component

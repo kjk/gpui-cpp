@@ -1,6 +1,7 @@
 #include "Story.h"
 
-static El* PopCard(Arena* a, const char* title, const char* body) {
+static El* PopCard(Ctx* cx, const char* title, const char* body) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* content = Div(a)
                       ->W(220)
@@ -10,8 +11,8 @@ static El* PopCard(Arena* a, const char* title, const char* body) {
                       ->Border(1, th.border)
                       ->Bg(th.background)
                       ->Radius(th.radius);
-    content->Child(StoryTxt(a, Str(title), 14, th.foreground)->Semibold());
-    content->Child(StoryTxt(a, Str(body), 12, th.mutedFg)->Wrap()->MaxW(200));
+    content->Child(StoryTxt(cx, Str(title), 14, th.foreground)->Semibold());
+    content->Child(StoryTxt(cx, Str(body), 12, th.mutedFg)->Wrap()->MaxW(200));
     return content;
 }
 
@@ -20,16 +21,16 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(
-        a, "Default",
+        cx, "Default",
         "Displays rich content in a portal, triggered by a button.");
     StorySectionAdd(def,
-                    component::Popover::New(a)
-                        ->Trigger(component::Button::New(a, StrL("open-pop"))
+                    component::Popover::New(cx)
+                        ->Trigger(component::Button::New(cx, StrL("open-pop"))
                                       ->Label(StrL("Open popover"))
                                       ->Outline()
                                       ->IntoEl())
                         ->Content(app->selectOpen && app->selB == 0
-                                      ? PopCard(a, "Dimensions",
+                                      ? PopCard(cx, "Dimensions",
                                                 "Set the width and height "
                                                 "of the layer.")
                                       : nullptr)
@@ -37,29 +38,30 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
                         ->IntoEl());
     page->Child(def);
 
-    El* form = StorySection(a, "Form", nullptr);
+    El* form = StorySection(cx, "Form", nullptr);
     StorySectionAdd(
-        form, component::Popover::New(a)
-                  ->Trigger(component::Button::New(a, StrL("pop-form"))
-                                ->Label(StrL("Edit"))
-                                ->Outline()
-                                ->IntoEl())
-                  ->Content(app->selectOpen && app->selB == 1
-                                ? PopCard(a, "Name", "Update the display name.")
-                                : nullptr)
-                  ->Open(app->selectOpen && app->selB == 1)
-                  ->IntoEl());
+        form,
+        component::Popover::New(cx)
+            ->Trigger(component::Button::New(cx, StrL("pop-form"))
+                          ->Label(StrL("Edit"))
+                          ->Outline()
+                          ->IntoEl())
+            ->Content(app->selectOpen && app->selB == 1
+                          ? PopCard(cx, "Name", "Update the display name.")
+                          : nullptr)
+            ->Open(app->selectOpen && app->selB == 1)
+            ->IntoEl());
     page->Child(form);
 
-    El* list = StorySection(a, "List", nullptr);
+    El* list = StorySection(cx, "List", nullptr);
     StorySectionAdd(list,
-                    component::Popover::New(a)
-                        ->Trigger(component::Button::New(a, StrL("pop-list"))
+                    component::Popover::New(cx)
+                        ->Trigger(component::Button::New(cx, StrL("pop-list"))
                                       ->Label(StrL("Assign"))
                                       ->Outline()
                                       ->IntoEl())
                         ->Content(app->selectOpen && app->selB == 2
-                                      ? component::Menu::New(a)
+                                      ? component::Menu::New(cx)
                                             ->Item(StrL("Jason Lee"))
                                             ->Item(StrL("Ada Lovelace"))
                                             ->IntoEl()
@@ -68,8 +70,8 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
                         ->IntoEl());
     page->Child(list);
 
-    El* right = StorySection(a, "Right click", nullptr);
-    StorySectionAdd(right, component::Button::New(a, StrL("pop-right"))
+    El* right = StorySection(cx, "Right click", nullptr);
+    StorySectionAdd(right, component::Button::New(cx, StrL("pop-right"))
                                ->Label(StrL("Right click me"))
                                ->Ghost()
                                ->IntoEl());

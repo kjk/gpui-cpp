@@ -8,6 +8,7 @@ namespace component {
 
 struct DatePicker {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     int year = 2026;
     int month = 1;
     int day = 1;
@@ -15,7 +16,7 @@ struct DatePicker {
     Func0 onToggle;
     Func1<int> onDay;
 
-    static DatePicker* New(Arena* a);
+    static DatePicker* New(Ctx* cx);
     DatePicker* Year(int y);
     DatePicker* Month(int m);
     DatePicker* Day(int d);

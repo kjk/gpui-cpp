@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-TextView* TextView::New(Arena* a, Str source) {
+TextView* TextView::New(Ctx* cx, Str source) {
+    Arena* a = cx->a;
     TextView* t = ArenaNew<TextView>(a);
     t->a = a;
+    t->cx = cx;
     t->source = source;
     return t;
 }

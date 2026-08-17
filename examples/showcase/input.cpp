@@ -18,7 +18,7 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
             TextEl(a, StrL("Project name"))
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(a, StrL("example-input"), ClickInput)
+        ->Child(InputBase::New(cx, StrL("example-input"), ClickInput)
                     ->W(224)
                     ->H(28)
                     ->PadX(8)
@@ -26,7 +26,7 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
                     ->FocusId(0)
                     ->Border(1, app->input.focused ? Rgb(0x17, 0x17, 0x17)
                                                    : Rgb(0xd4, 0xd4, 0xd4))
-                    ->Child(Input::New(a, &app->input)));
+                    ->Child(Input::New(cx, &app->input)));
 }
 
 void ShowcaseInputClick(ShowcaseApp* app, int id) {

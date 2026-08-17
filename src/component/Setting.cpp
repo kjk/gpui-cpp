@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Setting* Setting::New(Arena* a, Str title) {
+Setting* Setting::New(Ctx* cx, Str title) {
+    Arena* a = cx->a;
     Setting* s = ArenaNew<Setting>(a);
     s->a = a;
+    s->cx = cx;
     s->title = title;
     return s;
 }

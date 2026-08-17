@@ -3,11 +3,13 @@
 
 namespace gpui {
 
-El* Radio::New(Arena* a, Str id, int clickId) {
+El* Radio::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 
-El* RadioGroup::New(Arena* a, Str id) {
+El* RadioGroup::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     return UiRoot(a, id, 0);
 }
 } // namespace gpui

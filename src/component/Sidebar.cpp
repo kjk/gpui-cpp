@@ -12,9 +12,11 @@ static void FireSide(SideBind* b) {
     b->fn.Call(b->index);
 }
 
-Sidebar* Sidebar::New(Arena* a) {
+Sidebar* Sidebar::New(Ctx* cx) {
+    Arena* a = cx->a;
     Sidebar* s = ArenaNew<Sidebar>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 Sidebar* Sidebar::Title(Str s) {

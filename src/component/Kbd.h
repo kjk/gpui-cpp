@@ -8,11 +8,12 @@ namespace component {
 
 struct Kbd {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str stroke = {};
     bool appearance = true;
     bool outline = false;
 
-    static Kbd* New(Arena* a, Str stroke);
+    static Kbd* New(Ctx* cx, Str stroke);
     Kbd* Appearance(bool v);
     Kbd* Outline();
     El* IntoEl();

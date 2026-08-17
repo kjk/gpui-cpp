@@ -5,9 +5,9 @@
 namespace gpui {
 
 struct Pagination {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct PaginationItem {
-    static El* New(Arena* a, Str id, int clickId = 0);
+    static El* New(Ctx* cx, Str id, int clickId = 0);
 };
 } // namespace gpui

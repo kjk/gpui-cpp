@@ -38,7 +38,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
     bool valid = ParseNum(app->input.buf, &dummy);
     El* controls = Div(a)->FlexCol()->W(24)->Shrink0();
     controls->Child(
-        Button::New(a, StrL("inc"), ClickNumInc)
+        Button::New(cx, StrL("inc"), ClickNumInc)
             ->Grow()
             ->W(24)
             ->ItemsCenter()
@@ -47,7 +47,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
             ->HoverBg(Rgb(0x40, 0x40, 0x40))
             ->Child(TextEl(a, StrL("+"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))));
     controls->Child(
-        Button::New(a, StrL("dec"), ClickNumDec)
+        Button::New(cx, StrL("dec"), ClickNumDec)
             ->Grow()
             ->W(24)
             ->ItemsCenter()
@@ -63,19 +63,19 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
         ->Child(
             TextEl(a, StrL("Quantity"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
         ->Child(
-            NumberInput::New(a)
+            NumberInput::New(cx)
                 ->FlexRow()
                 ->W(kFill)
                 ->H(28)
                 ->ItemsCenter()
                 ->Border(1,
                          valid ? Rgb(0x17, 0x17, 0x17) : Rgb(0x73, 0x73, 0x73))
-                ->Child(InputBase::New(a, StrL("number-field"), ClickNumField)
+                ->Child(InputBase::New(cx, StrL("number-field"), ClickNumField)
                             ->Grow()
                             ->H(28)
                             ->PadX(8)
                             ->ItemsCenter()
-                            ->Child(Input::New(a, &app->input)))
+                            ->Child(Input::New(cx, &app->input)))
                 ->Child(controls))
         ->Child(TextEl(a, valid ? StrL("Step: 1") : StrL("Enter a number"))
                     ->Font(12)

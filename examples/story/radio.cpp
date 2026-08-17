@@ -19,26 +19,26 @@ static void SetBill2(StoryApp* app, bool) {
 El* RadioRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
-    El* del = StorySection(a, "Delivery",
+    El* del = StorySection(cx, "Delivery",
                            "Choose one option from a clearly described set.");
     El* delCol = Div(a)->FlexCol()->Gap(12)->W(320);
-    delCol->Child(component::Radio::New(a, StrL("standard"))
+    delCol->Child(component::Radio::New(cx, StrL("standard"))
                       ->Label(StrL("Standard delivery"))
                       ->Hint(StrL("Arrives in 3–5 business days."))
                       ->Checked(app->radioSel == 0)
                       ->WithSize(app->size)
                       ->OnClick(MkFunc1(&SetDel0, app))
                       ->IntoEl());
-    delCol->Child(component::Radio::New(a, StrL("express"))
+    delCol->Child(component::Radio::New(cx, StrL("express"))
                       ->Label(StrL("Express delivery"))
                       ->Hint(StrL("Arrives the next business day."))
                       ->Checked(app->radioSel == 1)
                       ->WithSize(app->size)
                       ->OnClick(MkFunc1(&SetDel1, app))
                       ->IntoEl());
-    delCol->Child(component::Radio::New(a, StrL("pickup"))
+    delCol->Child(component::Radio::New(cx, StrL("pickup"))
                       ->Label(StrL("Store pickup"))
                       ->Hint(StrL("Unavailable for this order."))
                       ->Disabled(true)
@@ -48,22 +48,22 @@ El* RadioRender(StoryApp* app, Ctx* cx) {
     page->Child(del);
 
     El* bill =
-        StorySection(a, "Billing cycle",
+        StorySection(cx, "Billing cycle",
                      "Horizontal groups work for short, related choices.");
     El* billRow = Div(a)->FlexRow()->Gap(16)->W(320)->JustifyBetween();
-    billRow->Child(component::Radio::New(a, StrL("monthly"))
+    billRow->Child(component::Radio::New(cx, StrL("monthly"))
                        ->Label(StrL("Monthly"))
                        ->Checked(app->radioBilling == 0)
                        ->WithSize(app->size)
                        ->OnClick(MkFunc1(&SetBill0, app))
                        ->IntoEl());
-    billRow->Child(component::Radio::New(a, StrL("yearly"))
+    billRow->Child(component::Radio::New(cx, StrL("yearly"))
                        ->Label(StrL("Yearly"))
                        ->Checked(app->radioBilling == 1)
                        ->WithSize(app->size)
                        ->OnClick(MkFunc1(&SetBill1, app))
                        ->IntoEl());
-    billRow->Child(component::Radio::New(a, StrL("lifetime"))
+    billRow->Child(component::Radio::New(cx, StrL("lifetime"))
                        ->Label(StrL("Lifetime"))
                        ->Checked(app->radioBilling == 2)
                        ->WithSize(app->size)

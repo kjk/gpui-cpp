@@ -8,10 +8,11 @@ namespace component {
 
 struct Clipboard {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str value = {};
     Func1<Str> onCopy;
 
-    static Clipboard* New(Arena* a, Str value);
+    static Clipboard* New(Ctx* cx, Str value);
     Clipboard* OnCopy(Func1<Str> fn);
     El* IntoEl();
 };

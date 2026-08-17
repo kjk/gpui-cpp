@@ -1,22 +1,25 @@
 #include "Story.h"
 
-static El* Face(Arena* a, StoryApp* app, const char* initials) {
-    return component::Avatar::New(a)
+static El* Face(Ctx* cx, StoryApp* app, const char* initials) {
+    Arena* a = cx->a;
+    return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(app->size)
         ->IntoEl();
 }
 
-static El* FaceLarge(Arena* a, StoryApp* app, const char* initials) {
-    return component::Avatar::New(a)
+static El* FaceLarge(Ctx* cx, StoryApp* app, const char* initials) {
+    Arena* a = cx->a;
+    return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(UiSize::Large)
         ->IntoEl();
 }
 
-static El* FaceSmall(Arena* a, StoryApp* app, const char* initials) {
+static El* FaceSmall(Ctx* cx, StoryApp* app, const char* initials) {
+    Arena* a = cx->a;
     (void)app;
-    return component::Avatar::New(a)
+    return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(UiSize::Small)
         ->IntoEl();
@@ -26,16 +29,16 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
-    El* icons = StorySection(a, "Icon", nullptr);
+    El* icons = StorySection(cx, "Icon", nullptr);
     El* iconRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
-    iconRow->Child(component::Badge::New(a)
+    iconRow->Child(component::Badge::New(cx)
                        ->Count(3)
                        ->WithSize(app->size)
                        ->Child(IconEl(a, IconName::Bell, UiSizePx(app->size)))
                        ->IntoEl());
-    iconRow->Child(component::Badge::New(a)
+    iconRow->Child(component::Badge::New(cx)
                        ->Count(103)
                        ->WithSize(app->size)
                        ->Child(IconEl(a, IconName::Inbox, UiSizePx(app->size)))
@@ -43,107 +46,107 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     StorySectionAdd(icons, iconRow);
     page->Child(icons);
 
-    El* counts = StorySection(a, "Count", nullptr);
+    El* counts = StorySection(cx, "Count", nullptr);
     El* countRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
-    countRow->Child(component::Badge::New(a)
+    countRow->Child(component::Badge::New(cx)
                         ->Count(3)
                         ->WithSize(app->size)
-                        ->Child(Face(a, app, "JL"))
+                        ->Child(Face(cx, app, "JL"))
                         ->IntoEl());
-    countRow->Child(component::Badge::New(a)
+    countRow->Child(component::Badge::New(cx)
                         ->Count(103)
                         ->WithSize(app->size)
-                        ->Child(Face(a, app, "HU"))
+                        ->Child(Face(cx, app, "HU"))
                         ->IntoEl());
     StorySectionAdd(counts, countRow);
     page->Child(counts);
 
-    El* ic = StorySection(a, "Badge icon", nullptr);
+    El* ic = StorySection(cx, "Badge icon", nullptr);
     El* icRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
-    icRow->Child(component::Badge::New(a)
+    icRow->Child(component::Badge::New(cx)
                      ->Icon(IconName::Check)
                      ->Color(Rgb(0x22, 0xd3, 0xee))
                      ->WithSize(app->size)
-                     ->Child(Face(a, app, "JL"))
+                     ->Child(Face(cx, app, "JL"))
                      ->IntoEl());
-    icRow->Child(component::Badge::New(a)
+    icRow->Child(component::Badge::New(cx)
                      ->Icon(IconName::Star)
                      ->Color(th.yellow)
                      ->WithSize(app->size)
-                     ->Child(Face(a, app, "TW"))
+                     ->Child(Face(cx, app, "TW"))
                      ->IntoEl());
     StorySectionAdd(ic, icRow);
     page->Child(ic);
 
-    El* dots = StorySection(a, "Dot", nullptr);
-    StorySectionAdd(dots, component::Badge::New(a)
+    El* dots = StorySection(cx, "Dot", nullptr);
+    StorySectionAdd(dots, component::Badge::New(cx)
                               ->Dot()
                               ->Count(1)
                               ->WithSize(app->size)
-                              ->Child(Face(a, app, "JL"))
+                              ->Child(Face(cx, app, "JL"))
                               ->IntoEl());
     page->Child(dots);
 
-    El* color = StorySection(a, "Color", nullptr);
+    El* color = StorySection(cx, "Color", nullptr);
     El* colorRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
-    colorRow->Child(component::Badge::New(a)
+    colorRow->Child(component::Badge::New(cx)
                         ->Count(3)
                         ->Color(th.blue)
                         ->WithSize(app->size)
-                        ->Child(Face(a, app, "JL"))
+                        ->Child(Face(cx, app, "JL"))
                         ->IntoEl());
-    colorRow->Child(component::Badge::New(a)
+    colorRow->Child(component::Badge::New(cx)
                         ->Dot()
                         ->Color(th.green)
                         ->Count(1)
                         ->WithSize(app->size)
-                        ->Child(Face(a, app, "JL"))
+                        ->Child(Face(cx, app, "JL"))
                         ->IntoEl());
     StorySectionAdd(color, colorRow);
     page->Child(color);
 
-    El* nest = StorySection(a, "Nested", nullptr);
+    El* nest = StorySection(cx, "Nested", nullptr);
     El* nestRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
-    nestRow->Child(component::Badge::New(a)
+    nestRow->Child(component::Badge::New(cx)
                        ->Count(212)
                        ->WithSize(UiSize::Large)
-                       ->Child(component::Badge::New(a)
+                       ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Check)
                                    ->Color(Rgb(0x22, 0xd3, 0xee))
                                    ->WithSize(app->size)
-                                   ->Child(Face(a, app, "JL"))
+                                   ->Child(Face(cx, app, "JL"))
                                    ->IntoEl())
                        ->IntoEl());
-    nestRow->Child(component::Badge::New(a)
+    nestRow->Child(component::Badge::New(cx)
                        ->Count(2)
                        ->Color(th.green)
                        ->WithSize(UiSize::Large)
-                       ->Child(component::Badge::New(a)
+                       ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Star)
                                    ->Color(th.yellow)
                                    ->WithSize(app->size)
-                                   ->Child(FaceLarge(a, app, "TW"))
+                                   ->Child(FaceLarge(cx, app, "TW"))
                                    ->IntoEl())
                        ->IntoEl());
-    nestRow->Child(component::Badge::New(a)
+    nestRow->Child(component::Badge::New(cx)
                        ->Count(3)
                        ->Color(th.green)
                        ->WithSize(app->size)
-                       ->Child(component::Badge::New(a)
+                       ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Asterisk)
                                    ->Color(th.green)
                                    ->WithSize(app->size)
-                                   ->Child(Face(a, app, "AB"))
+                                   ->Child(Face(cx, app, "AB"))
                                    ->IntoEl())
                        ->IntoEl());
-    nestRow->Child(component::Badge::New(a)
+    nestRow->Child(component::Badge::New(cx)
                        ->Dot()
                        ->WithSize(app->size)
-                       ->Child(component::Badge::New(a)
+                       ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Sun)
                                    ->Color(th.red)
                                    ->WithSize(app->size)
-                                   ->Child(FaceSmall(a, app, "CD"))
+                                   ->Child(FaceSmall(cx, app, "CD"))
                                    ->IntoEl())
                        ->IntoEl());
     StorySectionAdd(nest, nestRow);

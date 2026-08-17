@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Label* Label::New(Arena* a, Str text) {
+Label* Label::New(Ctx* cx, Str text) {
+    Arena* a = cx->a;
     Label* l = ArenaNew<Label>(a);
     l->a = a;
+    l->cx = cx;
     l->text = text;
     return l;
 }

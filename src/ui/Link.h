@@ -7,6 +7,6 @@
 namespace gpui {
 
 struct Link {
-    static El* New(Arena* a, Str id, int clickId = 0);
+    static El* New(Ctx* cx, Str id, int clickId = 0);
 };
 } // namespace gpui

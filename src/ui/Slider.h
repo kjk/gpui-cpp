@@ -5,15 +5,15 @@
 namespace gpui {
 
 struct Slider {
-    static El* New(Arena* a, int clickId = 0);
+    static El* New(Ctx* cx, int clickId = 0);
 };
 struct SliderTrack {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct SliderIndicator {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct SliderThumb {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 } // namespace gpui

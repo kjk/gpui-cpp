@@ -13,14 +13,15 @@ enum class SeparatorStyle : uint8_t {
 
 struct Separator {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     bool vertical = false;
     SeparatorStyle line = SeparatorStyle::Solid;
     Str label = {};
     Rgba color = {};
     bool hasColor = false;
 
-    static Separator* Vertical(Arena* a);
-    static Separator* Horizontal(Arena* a);
+    static Separator* Vertical(Ctx* cx);
+    static Separator* Horizontal(Ctx* cx);
     Separator* Dashed();
     Separator* Label(Str s);
     Separator* Color(Rgba c);

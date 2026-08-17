@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* OtpInput::New(Arena* a, int clickId) {
+El* OtpInput::New(Ctx* cx, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("example-otp"), clickId);
 }
 } // namespace gpui

@@ -14,6 +14,7 @@ enum class BadgeKind : uint8_t {
 
 struct Badge {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     int count = 0;
     int max = 99;
     BadgeKind kind = BadgeKind::Number;
@@ -23,7 +24,7 @@ struct Badge {
     UiSize size = UiSize::Medium;
     El* child = nullptr;
 
-    static Badge* New(Arena* a);
+    static Badge* New(Ctx* cx);
     Badge* Count(int n);
     Badge* Max(int n);
     Badge* Dot();

@@ -56,7 +56,7 @@ El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
                         ->Font(14)
                         ->Fg(Rgb(0x73, 0x73, 0x73))));
     }
-    return HoverCard::New(a, StrL("example-hover-card"))
+    return HoverCard::New(cx, StrL("example-hover-card"))
         ->Trigger(trigger)
         ->Content(content)
         ->IntoEl();

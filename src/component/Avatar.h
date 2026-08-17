@@ -11,6 +11,7 @@ float AvatarSizePx(UiSize s);
 
 struct Avatar {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str initials = {};
     Rgba bg = {};
     bool hasBg = false;
@@ -24,7 +25,7 @@ struct Avatar {
     bool hasBorderC = false;
     IconName placeholder = IconName::User;
 
-    static Avatar* New(Arena* a);
+    static Avatar* New(Ctx* cx);
     Avatar* Initials(Str s);
     Avatar* Bg(Rgba c);
     Avatar* Size(float v);

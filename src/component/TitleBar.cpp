@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-TitleBar* TitleBar::New(Arena* a, Str title) {
+TitleBar* TitleBar::New(Ctx* cx, Str title) {
+    Arena* a = cx->a;
     TitleBar* t = ArenaNew<TitleBar>(a);
     t->a = a;
+    t->cx = cx;
     t->title = title;
     return t;
 }

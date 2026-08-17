@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-HoverCard* HoverCard::New(Arena* a, Str id) {
+HoverCard* HoverCard::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     HoverCard* h = ArenaNew<HoverCard>(a);
     h->root = UiRoot(a, id, 0);
     return h;

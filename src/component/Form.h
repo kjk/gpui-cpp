@@ -13,10 +13,11 @@ struct FormField {
 
 struct Form {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     FormField fields[8] = {};
     int n = 0;
 
-    static Form* New(Arena* a);
+    static Form* New(Ctx* cx);
     Form* Field(Str label, El* control);
     El* IntoEl();
 };

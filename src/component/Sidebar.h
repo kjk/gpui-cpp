@@ -8,6 +8,7 @@ namespace component {
 
 struct Sidebar {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str title = {};
     Str items[8] = {};
     int n = 0;
@@ -15,7 +16,7 @@ struct Sidebar {
     bool collapsed = false;
     Func1<int> onSelect;
 
-    static Sidebar* New(Arena* a);
+    static Sidebar* New(Ctx* cx);
     Sidebar* Title(Str s);
     Sidebar* Item(Str s);
     Sidebar* Selected(int i);

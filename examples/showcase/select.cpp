@@ -58,8 +58,8 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
             opts->Child(row);
         }
     }
-    El* root = Select::New(a, StrL("example-select"))->W(224)->Child(trigger);
-    return Popup::New(a, StrL("example-select-options"), root)
+    El* root = Select::New(cx, StrL("example-select"))->W(224)->Child(trigger);
+    return Popup::New(cx, StrL("example-select-options"), root)
         ->Content(opts)
         ->IntoEl();
 }

@@ -13,7 +13,7 @@ enum {
 El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
-    root->Child(Button::New(a, StrL("open-dialog"), ClickDlgOpen)
+    root->Child(Button::New(cx, StrL("open-dialog"), ClickDlgOpen)
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
@@ -32,11 +32,11 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->FlexCol()
             ->Bg(Rgb(0xff, 0xff, 0xff))
             ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-            ->Child(DialogTitle::New(a)->Child(TextEl(a, StrL("Edit profile"))
-                                                   ->Font(12)
-                                                   ->Fg(Rgb(0x17, 0x17, 0x17))
-                                                   ->Semibold()))
-            ->Child(DialogDescription::New(a)->Child(
+            ->Child(DialogTitle::New(cx)->Child(TextEl(a, StrL("Edit profile"))
+                                                    ->Font(12)
+                                                    ->Fg(Rgb(0x17, 0x17, 0x17))
+                                                    ->Semibold()))
+            ->Child(DialogDescription::New(cx)->Child(
                 TextEl(a,
                        StrL("Update the public details shown on your profile."))
                     ->Font(12)
@@ -46,21 +46,21 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->Child(Div(a)->PadT(12)->Child(TextEl(a, StrL("Display name"))
                                                 ->Font(14)
                                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-            ->Child(InputBase::New(a, StrL("dialog-name"), ClickDlgField)
+            ->Child(InputBase::New(cx, StrL("dialog-name"), ClickDlgField)
                         ->W(264)
                         ->H(28)
                         ->PadX(8)
                         ->ItemsCenter()
                         ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                        ->Child(Input::New(a, &app->input)))
+                        ->Child(Input::New(cx, &app->input)))
             ->Child(
                 Div(a)
                     ->PadT(12)
                     ->FlexRow()
                     ->JustifyEnd()
                     ->Gap(8)
-                    ->Child(DialogClose::New(a, ClickDlgCancel)
-                                ->Child(Button::New(a, StrL("dialog-cancel"),
+                    ->Child(DialogClose::New(cx, ClickDlgCancel)
+                                ->Child(Button::New(cx, StrL("dialog-cancel"),
                                                     ClickDlgCancel)
                                             ->H(28)
                                             ->PadX(12)
@@ -70,7 +70,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                                                         ->Font(12)
                                                         ->Fg(Rgb(0x17, 0x17,
                                                                  0x17)))))
-                    ->Child(Button::New(a, StrL("dialog-save"), ClickDlgSave)
+                    ->Child(Button::New(cx, StrL("dialog-save"), ClickDlgSave)
                                 ->H(28)
                                 ->PadX(12)
                                 ->ItemsCenter()
@@ -78,7 +78,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                                 ->Child(TextEl(a, StrL("Save changes"))
                                             ->Font(12)
                                             ->Fg(Rgb(0xff, 0xff, 0xff)))));
-    El* backdrop = DialogBackdrop::New(a)
+    El* backdrop = DialogBackdrop::New(cx)
                        ->Absolute()
                        ->Top(0)
                        ->Left(0)
@@ -86,7 +86,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                        ->H(kFill)
                        ->Bg(Rgba8(0, 0, 0, 51))
                        ->Click(ClickDlgCancel);
-    El* popup = DialogPopup::New(a)
+    El* popup = DialogPopup::New(cx)
                     ->Absolute()
                     ->Top(0)
                     ->Left(0)
@@ -95,7 +95,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Child(panel);
-    root->Child(Dialog::New(a)->Backdrop(backdrop)->Popup(popup)->IntoEl());
+    root->Child(Dialog::New(cx)->Backdrop(backdrop)->Popup(popup)->IntoEl());
     return root;
 }
 

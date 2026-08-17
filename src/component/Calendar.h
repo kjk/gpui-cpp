@@ -8,6 +8,7 @@ namespace component {
 
 struct Calendar {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     int year = 2026;
     int month = 1;
     int day = 1;
@@ -15,7 +16,7 @@ struct Calendar {
     Func0 onPrev;
     Func0 onNext;
 
-    static Calendar* New(Arena* a);
+    static Calendar* New(Ctx* cx);
     Calendar* Year(int y);
     Calendar* Month(int m);
     Calendar* Day(int d);

@@ -32,7 +32,7 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsStart();
-    page->Child(StoryToolbar(a, app, true));
+    page->Child(StoryToolbar(cx, app, true));
 
     const char* titles[] = {"Is it accessible?", "Can it hold any content?",
                             "Is it animated?"};
@@ -46,7 +46,7 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
         "the chevron rotates to follow. Items below move along with it.",
     };
 
-    component::Accordion* acc = component::Accordion::New(a, StrL("test"))
+    component::Accordion* acc = component::Accordion::New(cx, StrL("test"))
                                     ->Multiple(app->accordionMultiple)
                                     ->Bordered(app->accordionBordered)
                                     ->Disabled(app->accordionDisabled)
@@ -56,12 +56,12 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
         acc->Item(Str(titles[i]), Str(bodies[i]), app->accordionOpen[i]);
     }
     El* def =
-        StorySection(a, "Default", "Expand one item at a time by default.");
+        StorySection(cx, "Default", "Expand one item at a time by default.");
     StorySectionAdd(def, Div(a)->W(480)->Child(acc->IntoEl()));
     page->Child(def);
 
     component::Accordion* styled =
-        component::Accordion::New(a, StrL("custom-style"))
+        component::Accordion::New(cx, StrL("custom-style"))
             ->Multiple(app->accordionMultiple)
             ->Bordered(true)
             ->Disabled(app->accordionDisabled)
@@ -82,7 +82,7 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
         StrL(
             "Browse the documentation, or get in touch with the support team."),
         app->accordionStyledOpen[2], IconName::Info, Str{});
-    El* custom = StorySection(a, "Custom style", nullptr);
+    El* custom = StorySection(cx, "Custom style", nullptr);
     El* frame = Div(a)
                     ->W(480)
                     ->Pad(4)

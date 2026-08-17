@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-Popup* Popup::New(Arena* a, Str id, El* trigger) {
+Popup* Popup::New(Ctx* cx, Str id, El* trigger) {
+    Arena* a = cx->a;
     Popup* p = ArenaNew<Popup>(a);
     // Root sizes to the trigger only. Content is an overlay (Rust Positioner).
     p->root = UiRoot(a, id, 0);

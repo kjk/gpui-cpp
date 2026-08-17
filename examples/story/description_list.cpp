@@ -5,8 +5,8 @@ El* DescriptionListRender(StoryApp* app, Ctx* cx) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
-        a, "Default", "A list of terms and their corresponding descriptions.");
-    StorySectionAdd(sec, component::DescriptionList::New(a)
+        cx, "Default", "A list of terms and their corresponding descriptions.");
+    StorySectionAdd(sec, component::DescriptionList::New(cx)
                              ->Item(StrL("Status"), StrL("Published"))
                              ->Item(StrL("License"), StrL("Apache-2.0"))
                              ->Item(StrL("Version"), StrL("0.5.0"))

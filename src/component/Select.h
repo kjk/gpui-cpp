@@ -8,6 +8,7 @@ namespace component {
 
 struct Select {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str options[8] = {};
     int n = 0;
@@ -16,7 +17,7 @@ struct Select {
     Func1<int> onChange;
     Func0 onToggle;
 
-    static Select* New(Arena* a, Str id);
+    static Select* New(Ctx* cx, Str id);
     Select* Option(Str s);
     Select* Selected(int i);
     Select* Open(bool v);

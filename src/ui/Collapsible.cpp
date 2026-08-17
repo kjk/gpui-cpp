@@ -2,7 +2,8 @@
 
 namespace gpui {
 
-Collapsible* Collapsible::New(Arena* a) {
+Collapsible* Collapsible::New(Ctx* cx) {
+    Arena* a = cx->a;
     Collapsible* c = ArenaNew<Collapsible>(a);
     c->root = Div(a)->FlexCol();
     return c;

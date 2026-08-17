@@ -24,24 +24,25 @@ El* NumberInputRender(StoryApp* app, Ctx* cx) {
     }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
-        a, "Default", "Numeric input with increment and decrement controls.");
-    StorySectionAdd(sec, component::NumberInput::New(a, &app->field)
+        cx, "Default", "Numeric input with increment and decrement controls.");
+    StorySectionAdd(sec, component::NumberInput::New(cx, &app->field)
                              ->OnInc(MkFunc0(&IncNum, app))
                              ->OnDec(MkFunc0(&DecNum, app))
                              ->IntoEl());
     page->Child(sec);
 
-    El* dis = StorySection(a, "Disabled", nullptr);
-    StorySectionAdd(dis, component::NumberInput::New(a, &app->field)->IntoEl());
+    El* dis = StorySection(cx, "Disabled", nullptr);
+    StorySectionAdd(dis, component::NumberInput::New(cx, &app->field)
+                             ->IntoEl());
     page->Child(dis);
 
-    El* suf = StorySection(a, "Suffix", nullptr);
+    El* suf = StorySection(cx, "Suffix", nullptr);
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
-    row->Child(component::NumberInput::New(a, &app->field)
+    row->Child(component::NumberInput::New(cx, &app->field)
                    ->OnInc(MkFunc0(&IncNum, app))
                    ->OnDec(MkFunc0(&DecNum, app))
                    ->IntoEl());
-    row->Child(StoryTxt(a, StrL("px"), 13, ThemeNow().mutedFg));
+    row->Child(StoryTxt(cx, StrL("px"), 13, ThemeNow().mutedFg));
     StorySectionAdd(suf, row);
     page->Child(suf);
     return page;

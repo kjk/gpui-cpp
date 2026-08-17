@@ -16,6 +16,7 @@ enum class AlertVariant : uint8_t {
 
 struct Alert {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     AlertVariant variant = AlertVariant::Default;
     IconName icon = IconName::Info;
@@ -27,11 +28,11 @@ struct Alert {
     bool visible = true;
     Func0 onClose;
 
-    static Alert* New(Arena* a, Str id, Str message);
-    static Alert* Info(Arena* a, Str id, Str message);
-    static Alert* Success(Arena* a, Str id, Str message);
-    static Alert* Warning(Arena* a, Str id, Str message);
-    static Alert* Error(Arena* a, Str id, Str message);
+    static Alert* New(Ctx* cx, Str id, Str message);
+    static Alert* Info(Ctx* cx, Str id, Str message);
+    static Alert* Success(Ctx* cx, Str id, Str message);
+    static Alert* Warning(Ctx* cx, Str id, Str message);
+    static Alert* Error(Ctx* cx, Str id, Str message);
     Alert* Title(Str s);
     Alert* Icon(IconName n);
     Alert* Content(El* e);

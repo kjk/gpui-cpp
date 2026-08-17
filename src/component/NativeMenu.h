@@ -8,7 +8,7 @@ namespace gpui {
 namespace component {
 
 struct NativeMenu {
-    static El* New(Arena* a, Menu* menu);
+    static El* New(Ctx* cx, Menu* menu);
 };
 
 } // namespace component

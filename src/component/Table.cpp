@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Table* Table::New(Arena* a) {
+Table* Table::New(Ctx* cx) {
+    Arena* a = cx->a;
     Table* t = ArenaNew<Table>(a);
     t->a = a;
+    t->cx = cx;
     return t;
 }
 Table* Table::Heads(const char** h, int n) {
@@ -22,25 +24,26 @@ Table* Table::Rows(const char*** r, int n) {
 
 El* Table::IntoEl() {
     const Theme& th = ThemeNow();
-    El* t = gpui::Table::New(a, StrL("table"))->FlexCol()->Border(1, th.border);
+    El* t =
+        gpui::Table::New(cx, StrL("table"))->FlexCol()->Border(1, th.border);
     El* head =
-        TableHeader::New(a, StrL("th"))
-            ->Child(TableRow::New(a, StrL("hr"))->FlexRow()->Bg(th.muted));
+        TableHeader::New(cx, StrL("th"))
+            ->Child(TableRow::New(cx, StrL("hr"))->FlexRow()->Bg(th.muted));
     for (int i = 0; i < nHeads; i++) {
         head->first->Child(
-            TableHead::New(a, Str(heads[i]))
+            TableHead::New(cx, Str(heads[i]))
                 ->Pad(8)
                 ->Grow()
                 ->Child(TextEl(a, Str(heads[i]))->Font(12)->Fg(th.mutedFg)));
     }
     t->Child(head);
-    El* body = TableBody::New(a, StrL("tb"))->FlexCol();
+    El* body = TableBody::New(cx, StrL("tb"))->FlexCol();
     for (int r = 0; r < nRows; r++) {
-        El* row = TableRow::New(a, StrDup(a, fmt("r%d", r)))
+        El* row = TableRow::New(cx, StrDup(a, fmt("r%d", r)))
                       ->FlexRow()
                       ->BorderT(1, th.border);
         for (int c = 0; c < nHeads; c++) {
-            row->Child(TableCell::New(a, StrDup(a, fmt("c%d", c)))
+            row->Child(TableCell::New(cx, StrDup(a, fmt("c%d", c)))
                            ->Pad(8)
                            ->Grow()
                            ->Child(TextEl(a, Str(rows[r][c]))

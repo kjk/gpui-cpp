@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Skeleton* Skeleton::New(Arena* a) {
+Skeleton* Skeleton::New(Ctx* cx) {
+    Arena* a = cx->a;
     Skeleton* s = ArenaNew<Skeleton>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 

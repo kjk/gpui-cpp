@@ -8,6 +8,7 @@ namespace component {
 
 struct Checkbox {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
     Str hint = {};
@@ -18,7 +19,7 @@ struct Checkbox {
     float w = 0;
     Func1<bool> onClick;
 
-    static Checkbox* New(Arena* a, Str id);
+    static Checkbox* New(Ctx* cx, Str id);
     Checkbox* Label(Str s);
     Checkbox* Hint(Str s);
     Checkbox* Checked(bool v);

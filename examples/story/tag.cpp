@@ -1,6 +1,7 @@
 #include "Story.h"
 
-static El* TagRow(Arena* a, StoryApp* app, bool outline, float radius) {
+static El* TagRow(Ctx* cx, StoryApp* app, bool outline, float radius) {
+    Arena* a = cx->a;
     Rgba indigo = Rgb(0x63, 0x66, 0xf1);
     Rgba indigoBg = Rgb(0xee, 0xf2, 0xff);
     const char* labels[] = {"Tag",     "Secondary", "Danger",
@@ -16,7 +17,7 @@ static El* TagRow(Arena* a, StoryApp* app, bool outline, float radius) {
     };
     El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
     for (int i = 0; i < 6; i++) {
-        component::Tag* t = component::Tag::New(a, Str(labels[i]))
+        component::Tag* t = component::Tag::New(cx, Str(labels[i]))
                                 ->WithSize(app->size);
         fns[i](t);
         if (outline) {
@@ -29,7 +30,7 @@ static El* TagRow(Arena* a, StoryApp* app, bool outline, float radius) {
     }
     if (radius < 0) {
         component::Tag* c =
-            component::Tag::New(a, StrL("Custom"))
+            component::Tag::New(cx, StrL("Custom"))
                 ->Custom(outline ? ThemeNow().background : indigoBg, indigo)
                 ->WithSize(app->size);
         if (outline) {
@@ -43,25 +44,25 @@ static El* TagRow(Arena* a, StoryApp* app, bool outline, float radius) {
 El* TagRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
-    El* def = StorySection(a, "Default", nullptr);
-    StorySectionAdd(def, TagRow(a, app, false, -1));
+    El* def = StorySection(cx, "Default", nullptr);
+    StorySectionAdd(def, TagRow(cx, app, false, -1));
     page->Child(def);
 
-    El* out = StorySection(a, "Outline", nullptr);
-    StorySectionAdd(out, TagRow(a, app, true, -1));
+    El* out = StorySection(cx, "Outline", nullptr);
+    StorySectionAdd(out, TagRow(cx, app, true, -1));
     page->Child(out);
 
-    El* rnd = StorySection(a, "Rounded", nullptr);
-    StorySectionAdd(rnd, TagRow(a, app, false, 99));
+    El* rnd = StorySection(cx, "Rounded", nullptr);
+    StorySectionAdd(rnd, TagRow(cx, app, false, 99));
     page->Child(rnd);
 
-    El* sq = StorySection(a, "Square", nullptr);
-    StorySectionAdd(sq, TagRow(a, app, false, 0));
+    El* sq = StorySection(cx, "Square", nullptr);
+    StorySectionAdd(sq, TagRow(cx, app, false, 0));
     page->Child(sq);
 
-    El* colors = StorySection(a, "Colors", nullptr);
+    El* colors = StorySection(cx, "Colors", nullptr);
     El* crow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
     struct Named {
         const char* name;
@@ -73,7 +74,7 @@ El* TagRender(StoryApp* app, Ctx* cx) {
                      {"Info", th.info},       {"Success", th.success},
                      {"Warning", th.warning}, {"Danger", th.danger}};
     for (int i = 0; i < 8; i++) {
-        crow->Child(component::Tag::New(a, Str(named[i].name))
+        crow->Child(component::Tag::New(cx, Str(named[i].name))
                         ->Custom(RgbaOpacity(named[i].c, 0.15f), named[i].c)
                         ->WithSize(app->size)
                         ->IntoEl());

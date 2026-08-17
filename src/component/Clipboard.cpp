@@ -13,9 +13,11 @@ static void FireClip(ClipBind* b) {
     b->fn.Call(b->value);
 }
 
-Clipboard* Clipboard::New(Arena* a, Str value) {
+Clipboard* Clipboard::New(Ctx* cx, Str value) {
+    Arena* a = cx->a;
     Clipboard* c = ArenaNew<Clipboard>(a);
     c->a = a;
+    c->cx = cx;
     c->value = value;
     return c;
 }
@@ -26,7 +28,7 @@ Clipboard* Clipboard::OnCopy(Func1<Str> fn) {
 
 El* Clipboard::IntoEl() {
     const Theme& th = ThemeNow();
-    Button* btn = Button::New(a, StrL("clipboard"))
+    Button* btn = Button::New(cx, StrL("clipboard"))
                       ->Icon(IconName::Copy)
                       ->Ghost()
                       ->Tooltip(StrL("Copy"));

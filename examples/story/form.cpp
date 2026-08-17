@@ -7,18 +7,19 @@ static void SetFormSwitch(StoryApp* app, bool v) {
 El* FormRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
-    El* sec = StorySection(a, "Default", "Building forms with labeled fields.");
+    page->Child(StoryToolbar(cx, app));
+    El* sec =
+        StorySection(cx, "Default", "Building forms with labeled fields.");
     StorySectionAdd(
         sec,
-        component::Form::New(a)
+        component::Form::New(cx)
             ->Field(StrL("Name"),
-                    component::Input::New(a, StrL("form-name"), &app->field)
+                    component::Input::New(cx, StrL("form-name"), &app->field)
                         ->IntoEl())
             ->Field(StrL("Email"),
-                    component::Input::New(a, StrL("form-email"), &app->field)
+                    component::Input::New(cx, StrL("form-email"), &app->field)
                         ->IntoEl())
-            ->Field(StrL("Notify"), component::Switch::New(a, StrL("form-sw"))
+            ->Field(StrL("Notify"), component::Switch::New(cx, StrL("form-sw"))
                                         ->Checked(app->switchOn)
                                         ->OnClick(MkFunc1(&SetFormSwitch, app))
                                         ->IntoEl())

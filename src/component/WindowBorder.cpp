@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-WindowBorder* WindowBorder::New(Arena* a) {
+WindowBorder* WindowBorder::New(Ctx* cx) {
+    Arena* a = cx->a;
     WindowBorder* w = ArenaNew<WindowBorder>(a);
     w->a = a;
+    w->cx = cx;
     return w;
 }
 WindowBorder* WindowBorder::Child(El* e) {

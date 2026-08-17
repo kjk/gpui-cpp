@@ -13,9 +13,11 @@ static void FireRadio(RadioBind* b) {
     b->fn.Call(b->next);
 }
 
-Radio* Radio::New(Arena* a, Str id) {
+Radio* Radio::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Radio* r = ArenaNew<Radio>(a);
     r->a = a;
+    r->cx = cx;
     r->id = id;
     return r;
 }
@@ -58,7 +60,7 @@ El* Radio::IntoEl() {
     if (checked) {
         dot->Child(Div(a)->W(6)->H(6)->Radius(3)->Bg(th.primary));
     }
-    El* row = gpui::Radio::New(a, id, disabled ? 0 : HashClickId(id))
+    El* row = gpui::Radio::New(cx, id, disabled ? 0 : HashClickId(id))
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);

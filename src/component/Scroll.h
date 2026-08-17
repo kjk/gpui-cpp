@@ -8,11 +8,12 @@ namespace component {
 
 struct Scrollable {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* child = nullptr;
     float scrollY = 0;
     float h = 200;
 
-    static Scrollable* New(Arena* a);
+    static Scrollable* New(Ctx* cx);
     Scrollable* Child(El* e);
     Scrollable* ScrollY(float v);
     Scrollable* H(float v);

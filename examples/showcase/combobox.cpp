@@ -51,13 +51,13 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                   ->Pad(4)
                   ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                   ->Bg(Rgb(0xff, 0xff, 0xff));
-        pop->Child(InputBase::New(a, StrL("combobox-search"), ClickComboQ)
+        pop->Child(InputBase::New(cx, StrL("combobox-search"), ClickComboQ)
                        ->W(kFill)
                        ->H(28)
                        ->PadX(8)
                        ->ItemsCenter()
                        ->Border(1, Rgb(0xe5, 0xe5, 0xe5))
-                       ->Child(Input::New(a, &app->comboQuery)));
+                       ->Child(Input::New(cx, &app->comboQuery)));
         El* list = Div(a)->FlexCol()->W(kFill)->PadT(4);
         for (int i = 0; i < 4; i++) {
             if (!Matches(kFwCombo[i], app->comboQuery.buf)) {
@@ -77,8 +77,8 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
         pop->Child(list);
     }
     El* combo =
-        Combobox::New(a, StrL("example-combobox"))->W(224)->Child(trigger);
-    return Popup::New(a, StrL("example-combobox-popup"), combo)
+        Combobox::New(cx, StrL("example-combobox"))->W(224)->Child(trigger);
+    return Popup::New(cx, StrL("example-combobox-popup"), combo)
         ->Content(pop)
         ->IntoEl();
 }

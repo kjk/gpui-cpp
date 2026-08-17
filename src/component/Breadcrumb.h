@@ -8,12 +8,13 @@ namespace component {
 
 struct Breadcrumb {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str items[8] = {};
     int n = 0;
     int clickBase = 0;
     Func1<int> onClick;
 
-    static Breadcrumb* New(Arena* a);
+    static Breadcrumb* New(Ctx* cx);
     Breadcrumb* Item(Str s);
     Breadcrumb* OnClick(Func1<int> fn);
     El* IntoEl();

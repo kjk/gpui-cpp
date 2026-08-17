@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-DescriptionList* DescriptionList::New(Arena* a) {
+DescriptionList* DescriptionList::New(Ctx* cx) {
+    Arena* a = cx->a;
     DescriptionList* d = ArenaNew<DescriptionList>(a);
     d->a = a;
+    d->cx = cx;
     return d;
 }
 DescriptionList* DescriptionList::Item(Str key, Str val) {

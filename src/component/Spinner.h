@@ -8,13 +8,14 @@ namespace component {
 
 struct Spinner {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     UiSize size = UiSize::Medium;
     float px = 0;
     IconName icon = IconName::Loader;
     Rgba color = {};
     bool hasColor = false;
 
-    static Spinner* New(Arena* a);
+    static Spinner* New(Ctx* cx);
     Spinner* WithSize(UiSize s);
     Spinner* Size(float v);
     Spinner* Icon(IconName n);

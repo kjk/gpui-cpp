@@ -48,20 +48,20 @@ El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx) {
                         ->FlexRow()
                         ->ItemsCenter()
                         ->Gap(8)
-                        ->Child(
-                            Div(a)
-                                ->W(18)
-                                ->H(18)
-                                ->ItemsCenter()
-                                ->JustifyCenter()
-                                ->Border(1, Rgb(0x17, 0x17, 0x17))
-                                ->Child(TextEl(a, DupFmt(a, "%d", (ix % 9) + 1))
-                                            ->Font(11)
-                                            ->Fg(Rgb(0x17, 0x17, 0x17))))
-                        ->Child(TextEl(a, DupFmt(a, "Customer %06d", ix + 1))
+                        ->Child(Div(a)
+                                    ->W(18)
+                                    ->H(18)
+                                    ->ItemsCenter()
+                                    ->JustifyCenter()
+                                    ->Border(1, Rgb(0x17, 0x17, 0x17))
+                                    ->Child(TextEl(a, DupFmt(cx, "%d",
+                                                             (ix % 9) + 1))
+                                                ->Font(11)
+                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                        ->Child(TextEl(a, DupFmt(cx, "Customer %06d", ix + 1))
                                     ->Font(12)
                                     ->Fg(Rgb(0x17, 0x17, 0x17))))
-                ->Child(TextEl(a, DupFmt(a, "ID-%06d", 100000 + ix))
+                ->Child(TextEl(a, DupFmt(cx, "ID-%06d", 100000 + ix))
                             ->Font(12)
                             ->Fg(Rgb(0x17, 0x17, 0x17))));
     }
@@ -71,7 +71,7 @@ El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx) {
     }
     float thumbY =
         maxS > 0 ? (app->virtualScroll / maxS) * (viewH - thumbH) : 0;
-    El* box = VirtualList::New(a, StrL("example-virtual-list"))
+    El* box = VirtualList::New(cx, StrL("example-virtual-list"))
                   ->W(288)
                   ->H(viewH)
                   ->Border(1, Rgb(0x17, 0x17, 0x17))

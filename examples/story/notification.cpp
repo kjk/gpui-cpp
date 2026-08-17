@@ -8,35 +8,35 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
-    El* def = StorySection(a, "Default", "Show a short message.");
-    StorySectionAdd(def, component::Button::New(a, StrL("show-notify-0"))
+    El* def = StorySection(cx, "Default", "Show a short message.");
+    StorySectionAdd(def, component::Button::New(cx, StrL("show-notify-0"))
                              ->Outline()
                              ->Label(StrL("Show Notification"))
                              ->IntoEl());
     if (app->notifyOn && app->selA == 0) {
         StorySectionAdd(def, component::Notification::New(
-                                 a, {}, StrL("This is a notification."))
+                                 cx, {}, StrL("This is a notification."))
                                  ->OnClose(MkFunc0(&HideNote, app))
                                  ->IntoEl());
     }
     page->Child(def);
 
-    El* types = StorySection(a, "Types",
+    El* types = StorySection(cx, "Types",
                              "Use semantic treatments for common outcomes.");
     El* typeRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    typeRow->Child(component::Button::New(a, StrL("show-notify-info"))
+    typeRow->Child(component::Button::New(cx, StrL("show-notify-info"))
                        ->Info()
                        ->Label(StrL("Info"))
                        ->IntoEl());
-    typeRow->Child(component::Button::New(a, StrL("show-notify-success"))
+    typeRow->Child(component::Button::New(cx, StrL("show-notify-success"))
                        ->Success()
                        ->Label(StrL("Success"))
                        ->IntoEl());
-    typeRow->Child(component::Button::New(a, StrL("show-notify-warning"))
+    typeRow->Child(component::Button::New(cx, StrL("show-notify-warning"))
                        ->Warning()
                        ->Label(StrL("Warning"))
                        ->IntoEl());
-    typeRow->Child(component::Button::New(a, StrL("show-notify-error"))
+    typeRow->Child(component::Button::New(cx, StrL("show-notify-error"))
                        ->Danger()
                        ->Label(StrL("Error"))
                        ->IntoEl());
@@ -54,16 +54,16 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
             "The network is not stable, please check your connection.",
             "There have some error occurred. Please try again later."};
         StorySectionAdd(
-            types, component::Notification::New(a, {}, Str(kMsgs[app->selA]))
+            types, component::Notification::New(cx, {}, Str(kMsgs[app->selA]))
                        ->Kind(kKinds[app->selA])
                        ->OnClose(MkFunc0(&HideNote, app))
                        ->IntoEl());
     }
     page->Child(types);
 
-    El* titled = StorySection(a, "Title and description",
+    El* titled = StorySection(cx, "Title and description",
                               "Pair a concise title with supporting detail.");
-    StorySectionAdd(titled, component::Button::New(a, StrL("show-typed-info"))
+    StorySectionAdd(titled, component::Button::New(cx, StrL("show-typed-info"))
                                 ->Info()
                                 ->Label(StrL("Info"))
                                 ->IntoEl());
@@ -71,7 +71,7 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
         StorySectionAdd(
             titled,
             component::Notification::New(
-                a, StrL("All changes saved"),
+                cx, StrL("All changes saved"),
                 StrL("Your changes have been saved to the cloud and will sync "
                      "across all of your devices."))
                 ->Kind(component::NotificationKind::Info)

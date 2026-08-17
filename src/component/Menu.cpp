@@ -12,9 +12,11 @@ static void FireMenu(MenuBind* b) {
     b->fn.Call(b->index);
 }
 
-Menu* Menu::New(Arena* a) {
+Menu* Menu::New(Ctx* cx) {
+    Arena* a = cx->a;
     Menu* m = ArenaNew<Menu>(a);
     m->a = a;
+    m->cx = cx;
     return m;
 }
 Menu* Menu::Item(Str s) {

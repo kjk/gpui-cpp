@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Spinner* Spinner::New(Arena* a) {
+Spinner* Spinner::New(Ctx* cx) {
+    Arena* a = cx->a;
     Spinner* s = ArenaNew<Spinner>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 

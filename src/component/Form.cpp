@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Form* Form::New(Arena* a) {
+Form* Form::New(Ctx* cx) {
+    Arena* a = cx->a;
     Form* f = ArenaNew<Form>(a);
     f->a = a;
+    f->cx = cx;
     return f;
 }
 Form* Form::Field(Str label, El* control) {

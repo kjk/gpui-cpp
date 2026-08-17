@@ -7,7 +7,7 @@ namespace gpui {
 struct Popover {
     El* root = nullptr;
 
-    static Popover* New(Arena* a, Str id);
+    static Popover* New(Ctx* cx, Str id);
     Popover* Trigger(El* trigger);
     Popover* Content(El* content);
     El* IntoEl();

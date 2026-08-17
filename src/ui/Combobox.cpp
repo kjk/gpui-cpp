@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* Combobox::New(Arena* a, Str id) {
+El* Combobox::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     return UiRoot(a, id, 0);
 }
 } // namespace gpui

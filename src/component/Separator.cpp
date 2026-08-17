@@ -4,16 +4,20 @@ namespace gpui {
 
 namespace component {
 
-Separator* Separator::Vertical(Arena* a) {
+Separator* Separator::Vertical(Ctx* cx) {
+    Arena* a = cx->a;
     Separator* s = ArenaNew<Separator>(a);
     s->a = a;
+    s->cx = cx;
     s->vertical = true;
     return s;
 }
 
-Separator* Separator::Horizontal(Arena* a) {
+Separator* Separator::Horizontal(Ctx* cx) {
+    Arena* a = cx->a;
     Separator* s = ArenaNew<Separator>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 

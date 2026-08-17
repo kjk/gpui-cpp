@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Kbd* Kbd::New(Arena* a, Str stroke) {
+Kbd* Kbd::New(Ctx* cx, Str stroke) {
+    Arena* a = cx->a;
     Kbd* k = ArenaNew<Kbd>(a);
     k->a = a;
+    k->cx = cx;
     k->stroke = stroke;
     return k;
 }

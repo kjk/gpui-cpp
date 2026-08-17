@@ -11,9 +11,9 @@ static void PickDate(StoryApp* app, int d) {
 El* DatePickerRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default",
+    El* sec = StorySection(cx, "Default",
                            "A date picker component with range and presets.");
-    StorySectionAdd(sec, component::DatePicker::New(a)
+    StorySectionAdd(sec, component::DatePicker::New(cx)
                              ->Year(app->calYear)
                              ->Month(app->calMonth)
                              ->Day(app->calDay)
@@ -23,40 +23,40 @@ El* DatePickerRender(StoryApp* app, Ctx* cx) {
                              ->IntoEl());
     page->Child(sec);
 
-    El* dis = StorySection(a, "Disabled dates", nullptr);
-    StorySectionAdd(dis, component::DatePicker::New(a)
+    El* dis = StorySection(cx, "Disabled dates", nullptr);
+    StorySectionAdd(dis, component::DatePicker::New(cx)
                              ->Year(app->calYear)
                              ->Month(app->calMonth)
                              ->Day(app->calDay)
                              ->IntoEl());
     page->Child(dis);
 
-    El* range = StorySection(a, "Date range", nullptr);
-    StorySectionAdd(range, component::DatePicker::New(a)
+    El* range = StorySection(cx, "Date range", nullptr);
+    StorySectionAdd(range, component::DatePicker::New(cx)
                                ->Year(app->calYear)
                                ->Month(app->calMonth)
                                ->Day(app->calDay)
                                ->IntoEl());
     page->Child(range);
 
-    El* empty = StorySection(a, "Empty range", nullptr);
-    StorySectionAdd(empty, component::DatePicker::New(a)
+    El* empty = StorySection(cx, "Empty range", nullptr);
+    StorySectionAdd(empty, component::DatePicker::New(cx)
                                ->Year(app->calYear)
                                ->Month(app->calMonth)
                                ->Day(0)
                                ->IntoEl());
     page->Child(empty);
 
-    El* year = StorySection(a, "Year range", nullptr);
-    StorySectionAdd(year, component::DatePicker::New(a)
+    El* year = StorySection(cx, "Year range", nullptr);
+    StorySectionAdd(year, component::DatePicker::New(cx)
                               ->Year(app->calYear)
                               ->Month(app->calMonth)
                               ->Day(app->calDay)
                               ->IntoEl());
     page->Child(year);
 
-    El* style = StorySection(a, "Custom style", nullptr);
-    StorySectionAdd(style, component::DatePicker::New(a)
+    El* style = StorySection(cx, "Custom style", nullptr);
+    StorySectionAdd(style, component::DatePicker::New(cx)
                                ->Year(app->calYear)
                                ->Month(app->calMonth)
                                ->Day(app->calDay)

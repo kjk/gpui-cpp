@@ -21,9 +21,9 @@ El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size) {
         return gRender[c](app, cx, size);
     }
     if (c == CompOverview) {
-        return ShowcaseOverview(app, cx->a);
+        return ShowcaseOverview(app, cx);
     }
-    return ScComingSoon(cx->a, CompSlug(c));
+    return ScComingSoon(cx, CompSlug(c));
 }
 
 void ShowcaseClickRegistered(ShowcaseApp* app, int id) {
@@ -65,11 +65,13 @@ int CompFromSlug(const char* slug) {
     return CompOverview;
 }
 
-Str DupA(Arena* a, const char* s) {
+Str DupA(Ctx* cx, const char* s) {
+    Arena* a = cx->a;
     return StrDup(a, Str(s));
 }
 
-Str DupFmt(Arena* a, const char* f, ...) {
+Str DupFmt(Ctx* cx, const char* f, ...) {
+    Arena* a = cx->a;
     char buf[512];
     va_list args;
     va_start(args, f);
@@ -78,11 +80,13 @@ Str DupFmt(Arena* a, const char* f, ...) {
     return StrDup(a, Str(buf));
 }
 
-El* ScTxt(Arena* a, Str s, float px, Rgba c) {
+El* ScTxt(Ctx* cx, Str s, float px, Rgba c) {
+    Arena* a = cx->a;
     return TextEl(a, s)->Font(px)->Fg(c);
 }
 
-El* ScBtnInk(Arena* a, int id, Str label) {
+El* ScBtnInk(Ctx* cx, int id, Str label) {
+    Arena* a = cx->a;
     return Div(a)
         ->H(28)
         ->PadX(12)
@@ -92,10 +96,11 @@ El* ScBtnInk(Arena* a, int id, Str label) {
         ->HoverBg(Rgb(0x40, 0x40, 0x40))
         ->Click(id)
         ->FocusId(id)
-        ->Child(ScTxt(a, label, 12, ScWhite()));
+        ->Child(ScTxt(cx, label, 12, ScWhite()));
 }
 
-El* ScBtnGhost(Arena* a, int id, Str label) {
+El* ScBtnGhost(Ctx* cx, int id, Str label) {
+    Arena* a = cx->a;
     return Div(a)
         ->H(28)
         ->PadX(8)
@@ -106,10 +111,11 @@ El* ScBtnGhost(Arena* a, int id, Str label) {
         ->HoverBg(ScHover())
         ->Click(id)
         ->FocusId(id)
-        ->Child(ScTxt(a, label, 12, ScInk()));
+        ->Child(ScTxt(cx, label, 12, ScInk()));
 }
 
-El* ScBtnLine(Arena* a, int id, Str label) {
+El* ScBtnLine(Ctx* cx, int id, Str label) {
+    Arena* a = cx->a;
     return Div(a)
         ->H(28)
         ->PadX(12)
@@ -120,10 +126,11 @@ El* ScBtnLine(Arena* a, int id, Str label) {
         ->HoverBg(ScHover())
         ->Click(id)
         ->FocusId(id)
-        ->Child(ScTxt(a, label, 12, ScInk()));
+        ->Child(ScTxt(cx, label, 12, ScInk()));
 }
 
-El* ScField(Arena* a, LineInput* in, int clickId, float w, bool valid) {
+El* ScField(Ctx* cx, LineInput* in, int clickId, float w, bool valid) {
+    Arena* a = cx->a;
     Str shown = in->len > 0 ? Str(in->buf, in->len) : Str(in->placeholder);
     Rgba fg = in->len > 0 ? ScInk() : ScMutedC();
     Rgba border = ScBorder();
@@ -141,29 +148,31 @@ El* ScField(Arena* a, LineInput* in, int clickId, float w, bool valid) {
         ->Bg(ScWhite())
         ->Click(clickId)
         ->FocusId(clickId)
-        ->Child(ScTxt(a, shown, 12, fg));
+        ->Child(ScTxt(cx, shown, 12, fg));
 }
 
-El* ScComingSoon(Arena* a, const char* name) {
+El* ScComingSoon(Ctx* cx, const char* name) {
+    Arena* a = cx->a;
     return Div(a)
         ->FlexCol()
         ->Gap(8)
         ->W(280)
-        ->Child(ScTxt(a, DupA(a, name), 16, ScInk())->Semibold())
-        ->Child(ScTxt(a, StrL("This component page is not ported yet."), 12,
+        ->Child(ScTxt(cx, DupA(cx, name), 16, ScInk())->Semibold())
+        ->Child(ScTxt(cx, StrL("This component page is not ported yet."), 12,
                       ScMutedC()));
 }
 
-El* ShowcaseOverview(ShowcaseApp* app, Arena* a) {
+El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* col = Div(a)->FlexCol()->Gap(16)->W(720)->MaxW(720);
     col->Child(
         Div(a)
             ->FlexCol()
             ->Gap(4)
-            ->Child(ScTxt(a, StrL("GPUI Base"), 18, ScInk())->Semibold())
+            ->Child(ScTxt(cx, StrL("GPUI Base"), 18, ScInk())->Semibold())
             ->Child(ScTxt(
-                a, StrL("Choose a component to open its interactive example."),
+                cx, StrL("Choose a component to open its interactive example."),
                 12, ScMutedC())));
 
     El* grid = Div(a)->FlexCol()->Gap(4)->W(kFill);
@@ -186,7 +195,7 @@ El* ShowcaseOverview(ShowcaseApp* app, Arena* a) {
                          ->HoverBg(ScHover())
                          ->Click(ClickOverview + i)
                          ->FocusId(ClickOverview + i)
-                         ->Child(ScTxt(a, Str(kSlugs[i]), 12, ScInk())));
+                         ->Child(ScTxt(cx, Str(kSlugs[i]), 12, ScInk())));
         }
         grid->Child(r);
     }
@@ -236,7 +245,7 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
                 ->ItemsCenter()
                 ->Shrink0()
                 ->BorderB(1, ScLine())
-                ->Child(ScBtnGhost(frame, ClickBack, StrL("All components"))));
+                ->Child(ScBtnGhost(cx, ClickBack, StrL("All components"))));
     }
 
     El* content = RenderComp(app, cx, size);

@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* Tooltip::New(Arena* a, Str id) {
+El* Tooltip::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     return UiRoot(a, id, 0);
 }
 } // namespace gpui

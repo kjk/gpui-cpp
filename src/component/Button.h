@@ -21,6 +21,7 @@ enum class ButtonVariant : uint8_t {
 
 struct Button {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
     IconName icon = IconName::None;
@@ -38,7 +39,7 @@ struct Button {
     El* extra = nullptr;
     Func0 onClick;
 
-    static Button* New(Arena* a, Str id);
+    static Button* New(Ctx* cx, Str id);
     Button* Label(Str s);
     Button* Icon(IconName n);
     Button* Primary();

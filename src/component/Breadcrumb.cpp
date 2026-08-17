@@ -12,9 +12,11 @@ static void FireCrumb(CrumbBind* b) {
     b->fn.Call(b->index);
 }
 
-Breadcrumb* Breadcrumb::New(Arena* a) {
+Breadcrumb* Breadcrumb::New(Ctx* cx) {
+    Arena* a = cx->a;
     Breadcrumb* b = ArenaNew<Breadcrumb>(a);
     b->a = a;
+    b->cx = cx;
     return b;
 }
 Breadcrumb* Breadcrumb::Item(Str s) {

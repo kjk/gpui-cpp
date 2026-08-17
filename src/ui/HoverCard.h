@@ -7,7 +7,7 @@ namespace gpui {
 struct HoverCard {
     El* root = nullptr;
 
-    static HoverCard* New(Arena* a, Str id);
+    static HoverCard* New(Ctx* cx, Str id);
     HoverCard* Trigger(El* trigger);
     HoverCard* Content(El* content);
     El* IntoEl();

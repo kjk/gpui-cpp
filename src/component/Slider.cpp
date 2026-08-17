@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Slider* Slider::New(Arena* a) {
+Slider* Slider::New(Ctx* cx) {
+    Arena* a = cx->a;
     Slider* s = ArenaNew<Slider>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 Slider* Slider::Value(float v) {
@@ -28,17 +30,17 @@ El* Slider::IntoEl() {
         p = 1;
     }
     float w = 224;
-    El* track = SliderTrack::New(a)->W(w)->H(28);
+    El* track = SliderTrack::New(cx)->W(w)->H(28);
     track->Child(
         Div(a)->Absolute()->Top(13)->Left(0)->W(w)->H(2)->Bg(th.secondary));
-    track->Child(SliderIndicator::New(a)
+    track->Child(SliderIndicator::New(cx)
                      ->Absolute()
                      ->Top(13)
                      ->Left(0)
                      ->W(w * p)
                      ->H(2)
                      ->Bg(th.primary));
-    track->Child(SliderThumb::New(a)
+    track->Child(SliderThumb::New(cx)
                      ->Absolute()
                      ->Top(7)
                      ->Left(w * p - 7)
@@ -47,7 +49,7 @@ El* Slider::IntoEl() {
                      ->Radius(7)
                      ->Bg(th.background)
                      ->Border(1, th.primary));
-    return gpui::Slider::New(a, HashClickId(StrL("slider")))
+    return gpui::Slider::New(cx, HashClickId(StrL("slider")))
         ->W(w)
         ->H(28)
         ->Child(track);

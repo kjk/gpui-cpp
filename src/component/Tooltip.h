@@ -8,9 +8,10 @@ namespace component {
 
 struct Tooltip {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str text = {};
 
-    static Tooltip* New(Arena* a, Str text);
+    static Tooltip* New(Ctx* cx, Str text);
     El* IntoEl();
 };
 

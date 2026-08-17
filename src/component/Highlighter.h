@@ -9,9 +9,10 @@ namespace component {
 
 struct Highlighter {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     const char* text = nullptr;
 
-    static Highlighter* New(Arena* a, const char* text);
+    static Highlighter* New(Ctx* cx, const char* text);
     El* IntoEl();
 };
 

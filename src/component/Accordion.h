@@ -17,6 +17,7 @@ struct AccordionItem {
 
 struct Accordion {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     bool multiple = false;
     bool bordered = true;
@@ -26,7 +27,7 @@ struct Accordion {
     int nItems = 0;
     Func1<int> onToggle;
 
-    static Accordion* New(Arena* a, Str id);
+    static Accordion* New(Ctx* cx, Str id);
     Accordion* Multiple(bool v);
     Accordion* Bordered(bool v);
     Accordion* Disabled(bool v);

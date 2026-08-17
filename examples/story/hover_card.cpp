@@ -1,6 +1,7 @@
 #include "Story.h"
 
-static El* Card(Arena* a, const char* title, const char* body) {
+static El* Card(Ctx* cx, const char* title, const char* body) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* card = Div(a)
                    ->W(280)
@@ -10,8 +11,8 @@ static El* Card(Arena* a, const char* title, const char* body) {
                    ->Border(1, th.border)
                    ->Bg(th.background)
                    ->Radius(th.radius);
-    card->Child(StoryTxt(a, Str(title), 14, th.foreground)->Semibold());
-    card->Child(StoryTxt(a, Str(body), 12, th.mutedFg)->Wrap()->MaxW(260));
+    card->Child(StoryTxt(cx, Str(title), 14, th.foreground)->Semibold());
+    card->Child(StoryTxt(cx, Str(body), 12, th.mutedFg)->Wrap()->MaxW(260));
     return card;
 }
 
@@ -21,15 +22,15 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(
-        a, "Default",
+        cx, "Default",
         "Shows supporting information without changing the current view.");
-    El* defTrig = StoryTxt(a, StrL("Hover over me"), 13, th.primary);
+    El* defTrig = StoryTxt(cx, StrL("Hover over me"), 13, th.primary);
     defTrig->Click(1);
     StorySectionAdd(
         def,
-        component::HoverCard::New(a)
+        component::HoverCard::New(cx)
             ->Trigger(defTrig)
-            ->Content(app->hoverId == 1 ? Card(a, "This is a hover card",
+            ->Content(app->hoverId == 1 ? Card(cx, "This is a hover card",
                                                "You can display rich content "
                                                "when hovering over a "
                                                "trigger element.")
@@ -39,11 +40,11 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
     page->Child(def);
 
     El* rich = StorySection(
-        a, "Rich Content",
+        cx, "Rich Content",
         "Cards can contain avatars, typography, and structured details.");
     El* richRow = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
-    richRow->Child(StoryTxt(a, StrL("Hover over"), 13, th.foreground));
-    El* link = StoryTxt(a, StrL("@huacnlee"), 13, th.blue);
+    richRow->Child(StoryTxt(cx, StrL("Hover over"), 13, th.foreground));
+    El* link = StoryTxt(cx, StrL("@huacnlee"), 13, th.blue);
     link->Click(2);
     El* profile = nullptr;
     if (app->hoverId == 2) {
@@ -55,51 +56,51 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
                       ->Border(1, th.border)
                       ->Bg(th.background)
                       ->Radius(th.radius);
-        profile->Child(component::Avatar::New(a)
+        profile->Child(component::Avatar::New(cx)
                            ->Initials(StrL("JL"))
                            ->Size(40)
                            ->IntoEl());
         El* info = Div(a)->FlexCol()->Gap(2);
-        info->Child(StoryTxt(a, StrL("Jason Lee"), 14, th.foreground)
+        info->Child(StoryTxt(cx, StrL("Jason Lee"), 14, th.foreground)
                         ->Semibold());
-        info->Child(StoryTxt(a, StrL("@huacnlee"), 13, th.blue));
-        info->Child(
-            StoryTxt(a, StrL("The author of GPUI Component."), 12, th.mutedFg));
+        info->Child(StoryTxt(cx, StrL("@huacnlee"), 13, th.blue));
+        info->Child(StoryTxt(cx, StrL("The author of GPUI Component."), 12,
+                             th.mutedFg));
         profile->Child(info);
     }
-    richRow->Child(component::HoverCard::New(a)
+    richRow->Child(component::HoverCard::New(cx)
                        ->Trigger(link)
                        ->Content(profile)
                        ->Open(app->hoverId == 2)
                        ->IntoEl());
     richRow
-        ->Child(StoryTxt(a, StrL("to see their profile"), 13, th.foreground));
+        ->Child(StoryTxt(cx, StrL("to see their profile"), 13, th.foreground));
     StorySectionAdd(rich, richRow);
     page->Child(rich);
 
     El* timing = StorySection(
-        a, "Timing",
+        cx, "Timing",
         "Open and close delays can match the interaction context.");
-    StorySectionAdd(timing, component::Button::New(a, StrL("fast"))
+    StorySectionAdd(timing, component::Button::New(cx, StrL("fast"))
                                 ->Label(StrL("Fast Open (200ms)"))
                                 ->Outline()
                                 ->IntoEl()
                                 ->Click(3));
     if (app->hoverId == 3) {
-        StorySectionAdd(
-            timing, Card(a, "Fast open", "This hover card opens after 200ms."));
+        StorySectionAdd(timing, Card(cx, "Fast open",
+                                     "This hover card opens after 200ms."));
     }
     page->Child(timing);
 
-    El* pos = StorySection(a, "Position", nullptr);
-    StorySectionAdd(pos, component::Button::New(a, StrL("pos"))
+    El* pos = StorySection(cx, "Position", nullptr);
+    StorySectionAdd(pos, component::Button::New(cx, StrL("pos"))
                              ->Label(StrL("Hover for position"))
                              ->Outline()
                              ->IntoEl()
                              ->Click(4));
     if (app->hoverId == 4) {
         StorySectionAdd(
-            pos, Card(a, "Positioned card", "Shown relative to the trigger."));
+            pos, Card(cx, "Positioned card", "Shown relative to the trigger."));
     }
     page->Child(pos);
     return page;

@@ -7,10 +7,10 @@ static void SetStep(StoryApp* app, int i) {
 El* StepperRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
-    El* h = StorySection(a, "Horizontal Stepper", nullptr);
-    StorySectionAdd(h, component::Stepper::New(a)
+    El* h = StorySection(cx, "Horizontal Stepper", nullptr);
+    StorySectionAdd(h, component::Stepper::New(cx)
                            ->Step(StrL("Step 1"))
                            ->Step(StrL("Step 2"))
                            ->Step(StrL("Step 3"))
@@ -19,8 +19,8 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
                            ->IntoEl());
     page->Child(h);
 
-    El* ic = StorySection(a, "Icon Stepper", nullptr);
-    StorySectionAdd(ic, component::Stepper::New(a)
+    El* ic = StorySection(cx, "Icon Stepper", nullptr);
+    StorySectionAdd(ic, component::Stepper::New(cx)
                             ->Step(StrL("Order Details"))
                             ->Step(StrL("Shipping"))
                             ->Step(StrL("Preview"))
@@ -30,7 +30,7 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
                             ->IntoEl());
     page->Child(ic);
 
-    El* v = StorySection(a, "Vertical Stepper", nullptr);
+    El* v = StorySection(cx, "Vertical Stepper", nullptr);
     El* vCol = Div(a)->FlexCol()->Gap(16);
     const char* titles[] = {"Step 1", "Step 2", "Step 3", "Step 4"};
     const char* descs[] = {"Description for step 1.", "Description for step 2.",
@@ -48,12 +48,12 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
                       ->ItemsCenter()
                       ->JustifyCenter()
                       ->Bg(on || done ? th.primary : th.secondary);
-        dot->Child(TextEl(a, StoryFmt(a, "%d", i + 1))
+        dot->Child(TextEl(a, StoryFmt(cx, "%d", i + 1))
                        ->Font(11)
                        ->Fg(on || done ? th.primaryFg : th.secondaryFg));
         El* text = Div(a)->FlexCol()->Gap(2);
-        text->Child(StoryTxt(a, Str(titles[i]), 13, th.foreground));
-        text->Child(StoryTxt(a, Str(descs[i]), 12, th.mutedFg));
+        text->Child(StoryTxt(cx, Str(titles[i]), 13, th.foreground));
+        text->Child(StoryTxt(cx, Str(descs[i]), 12, th.mutedFg));
         row->Child(dot);
         row->Child(text);
         vCol->Child(row);
@@ -61,8 +61,8 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
     StorySectionAdd(v, vCol);
     page->Child(v);
 
-    El* tc = StorySection(a, "Text Center", nullptr);
-    StorySectionAdd(tc, component::Stepper::New(a)
+    El* tc = StorySection(cx, "Text Center", nullptr);
+    StorySectionAdd(tc, component::Stepper::New(cx)
                             ->Step(StrL("Step 1"))
                             ->Step(StrL("Step 2"))
                             ->Step(StrL("Step 3"))

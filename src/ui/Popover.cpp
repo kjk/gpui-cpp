@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-Popover* Popover::New(Arena* a, Str id) {
+Popover* Popover::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Popover* p = ArenaNew<Popover>(a);
     p->root = UiRoot(a, id, 0);
     return p;

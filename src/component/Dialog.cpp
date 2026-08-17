@@ -5,9 +5,11 @@ namespace gpui {
 
 namespace component {
 
-Dialog* Dialog::New(Arena* a) {
+Dialog* Dialog::New(Ctx* cx) {
+    Arena* a = cx->a;
     Dialog* d = ArenaNew<Dialog>(a);
     d->a = a;
+    d->cx = cx;
     return d;
 }
 Dialog* Dialog::Title(Str s) {
@@ -48,27 +50,27 @@ El* Dialog::IntoEl(WinSize size) {
                     ->Bg(th.background)
                     ->Border(1, th.border)
                     ->Radius(th.radius);
-    panel->Child(DialogTitle::New(a)->Child(
+    panel->Child(DialogTitle::New(cx)->Child(
         TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground)));
     if (description.s) {
-        panel->Child(DialogDescription::New(a)->Child(
+        panel->Child(DialogDescription::New(cx)->Child(
             TextEl(a, description)->Font(13)->Fg(th.mutedFg)->Wrap()));
     }
     if (body) {
         panel->Child(body);
     }
     El* actions = Div(a)->FlexRow()->JustifyEnd()->Gap(8);
-    actions->Child(Button::New(a, StrL("dialog-cancel"))
+    actions->Child(Button::New(cx, StrL("dialog-cancel"))
                        ->Label(StrL("Cancel"))
                        ->OnClick(onClose)
                        ->IntoEl());
-    actions->Child(Button::New(a, StrL("dialog-ok"))
+    actions->Child(Button::New(cx, StrL("dialog-ok"))
                        ->Label(StrL("OK"))
                        ->Primary()
                        ->OnClick(onOk)
                        ->IntoEl());
     panel->Child(actions);
-    El* backdrop = DialogBackdrop::New(a)
+    El* backdrop = DialogBackdrop::New(cx)
                        ->Absolute()
                        ->Top(0)
                        ->Left(0)
@@ -78,7 +80,7 @@ El* Dialog::IntoEl(WinSize size) {
     if (onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
     }
-    El* popup = DialogPopup::New(a)
+    El* popup = DialogPopup::New(cx)
                     ->Absolute()
                     ->Top(0)
                     ->Left(0)
@@ -87,7 +89,7 @@ El* Dialog::IntoEl(WinSize size) {
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Child(panel);
-    return gpui::Dialog::New(a)->Backdrop(backdrop)->Popup(popup)->IntoEl();
+    return gpui::Dialog::New(cx)->Backdrop(backdrop)->Popup(popup)->IntoEl();
 }
 
 } // namespace component

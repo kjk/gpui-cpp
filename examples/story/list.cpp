@@ -8,8 +8,8 @@ El* ListRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec =
-        StorySection(a, "Default", "A list of items that can be selected.");
-    StorySectionAdd(sec, component::List::New(a)
+        StorySection(cx, "Default", "A list of items that can be selected.");
+    StorySectionAdd(sec, component::List::New(cx)
                              ->Item(StrL("Inbox"))
                              ->Item(StrL("Drafts"))
                              ->Item(StrL("Sent"))

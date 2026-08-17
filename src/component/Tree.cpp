@@ -12,9 +12,11 @@ static void FireTree(TreeBind* b) {
     b->fn.Call(b->index);
 }
 
-Tree* Tree::New(Arena* a) {
+Tree* Tree::New(Ctx* cx) {
+    Arena* a = cx->a;
     Tree* t = ArenaNew<Tree>(a);
     t->a = a;
+    t->cx = cx;
     return t;
 }
 Tree* Tree::Node(Str label, int parent, bool folder, bool open) {
@@ -64,7 +66,7 @@ El* Tree::IntoEl() {
         if (!Visible(this, i)) {
             continue;
         }
-        El* row = TreeItem::New(a, HashClickId(nodes[i].label))
+        El* row = TreeItem::New(cx, HashClickId(nodes[i].label))
                       ->H(28)
                       ->PadX(8)
                       ->ItemsCenter()
@@ -94,7 +96,7 @@ El* Tree::IntoEl() {
         }
         list->Child(row);
     }
-    return gpui::Tree::New(a)
+    return gpui::Tree::New(cx)
         ->W(256)
         ->H(192)
         ->Border(1, th.border)

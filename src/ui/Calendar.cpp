@@ -3,10 +3,12 @@
 
 namespace gpui {
 
-El* Calendar::New(Arena* a, Str id) {
+El* Calendar::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     return UiRoot(a, id, 0);
 }
-El* CalendarItem::New(Arena* a, int clickId) {
+El* CalendarItem::New(Ctx* cx, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("calendar-item"), clickId);
 }
 } // namespace gpui

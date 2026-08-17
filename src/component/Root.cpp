@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Root* Root::New(Arena* a) {
+Root* Root::New(Ctx* cx) {
+    Arena* a = cx->a;
     Root* r = ArenaNew<Root>(a);
     r->a = a;
+    r->cx = cx;
     return r;
 }
 Root* Root::Bordered(bool v) {

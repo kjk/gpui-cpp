@@ -18,7 +18,7 @@ El* ShowcaseAvatar(ShowcaseApp* app, Ctx* cx) {
     };
     El* row = Div(a)->FlexRow()->ItemsStart()->Gap(8);
     for (int i = 0; i < 4; i++) {
-        El* fb = AvatarFallback::New(a)
+        El* fb = AvatarFallback::New(cx)
                      ->W(32)
                      ->H(32)
                      ->ItemsCenter()
@@ -27,7 +27,7 @@ El* ShowcaseAvatar(ShowcaseApp* app, Ctx* cx) {
                      ->Child(TextEl(a, Str(items[i].initials))
                                  ->Font(12)
                                  ->Fg(Rgb(0x26, 0x26, 0x26)));
-        row->Child(Avatar::New(a)
+        row->Child(Avatar::New(cx)
                        ->Size(34)
                        ->Fallback(fb)
                        ->IntoEl()

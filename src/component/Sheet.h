@@ -8,12 +8,13 @@ namespace component {
 
 struct Sheet {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str title = {};
     bool open = false;
     El* body = nullptr;
     Func0 onClose;
 
-    static Sheet* New(Arena* a);
+    static Sheet* New(Ctx* cx);
     Sheet* Title(Str s);
     Sheet* Open(bool v);
     Sheet* Body(El* e);

@@ -7,7 +7,8 @@ enum {
     ClickCollapsible = 290
 };
 
-static El* RepoRow(Arena* a, const char* name) {
+static El* RepoRow(Ctx* cx, const char* name) {
+    Arena* a = cx->a;
     return Div(a)
         ->W(kFill)
         ->H(28)
@@ -20,7 +21,7 @@ static El* RepoRow(Arena* a, const char* name) {
 El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool open = app->collapsibleOpen;
-    return Collapsible::New(a)
+    return Collapsible::New(cx)
         ->Open(open)
         ->Child(Div(a)
                     ->W(256)
@@ -30,7 +31,7 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("@gpui/base · 3 repositories"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17)))
-                    ->Child(Button::New(a, StrL("collapsible-trigger"),
+                    ->Child(Button::New(cx, StrL("collapsible-trigger"),
                                         ClickCollapsible)
                                 ->W(28)
                                 ->H(28)
@@ -41,14 +42,14 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
                                 ->Child(TextEl(a, open ? StrL("−") : StrL("+"))
                                             ->Font(12)
                                             ->Fg(Rgb(0x17, 0x17, 0x17)))))
-        ->Child(Div(a)->PadT(8)->W(256)->Child(RepoRow(a, "gpui-component")))
+        ->Child(Div(a)->PadT(8)->W(256)->Child(RepoRow(cx, "gpui-component")))
         ->Content(Div(a)
                       ->PadT(8)
                       ->W(256)
                       ->FlexCol()
                       ->Gap(8)
-                      ->Child(RepoRow(a, "gpui-base"))
-                      ->Child(RepoRow(a, "gpui-storybook")))
+                      ->Child(RepoRow(cx, "gpui-base"))
+                      ->Child(RepoRow(cx, "gpui-storybook")))
         ->IntoEl()
         ->W(256);
 }

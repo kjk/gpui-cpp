@@ -4,7 +4,8 @@ static void SetTab(StoryApp* app, int i) {
     app->tab = i;
 }
 
-static El* TabPanel(Arena* a, StoryApp* app, El* bar) {
+static El* TabPanel(Ctx* cx, StoryApp* app, El* bar) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     const char* bodies[] = {"Workspace overview", "Recent activity",
                             "Workspace settings"};
@@ -13,18 +14,18 @@ static El* TabPanel(Arena* a, StoryApp* app, El* bar) {
         i = 0;
     }
     return Div(a)->FlexCol()->W(400)->Child(bar)->Child(
-        Div(a)->Pad(12)->Child(StoryTxt(a, Str(bodies[i]), 13, th.mutedFg)));
+        Div(a)->Pad(12)->Child(StoryTxt(cx, Str(bodies[i]), 13, th.mutedFg)));
 }
 
 El* TabsRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
-    El* tabs = StorySection(a, "Tabs", nullptr);
-    StorySectionAdd(tabs, TabPanel(a, app,
-                                   component::Tabs::New(a)
+    El* tabs = StorySection(cx, "Tabs", nullptr);
+    StorySectionAdd(tabs, TabPanel(cx, app,
+                                   component::Tabs::New(cx)
                                        ->Tab(StrL("Overview"))
                                        ->Tab(StrL("Activity"))
                                        ->Tab(StrL("Settings"))
@@ -33,9 +34,9 @@ El* TabsRender(StoryApp* app, Ctx* cx) {
                                        ->IntoEl()));
     page->Child(tabs);
 
-    El* under = StorySection(a, "Underline Tabs", nullptr);
-    StorySectionAdd(under, TabPanel(a, app,
-                                    component::Tabs::New(a)
+    El* under = StorySection(cx, "Underline Tabs", nullptr);
+    StorySectionAdd(under, TabPanel(cx, app,
+                                    component::Tabs::New(cx)
                                         ->Tab(StrL("Overview"))
                                         ->Tab(StrL("Activity"))
                                         ->Tab(StrL("Settings"))
@@ -44,7 +45,7 @@ El* TabsRender(StoryApp* app, Ctx* cx) {
                                         ->IntoEl()));
     page->Child(under);
 
-    El* pill = StorySection(a, "Pill Tabs", nullptr);
+    El* pill = StorySection(cx, "Pill Tabs", nullptr);
     El* pillBar = Div(a)->FlexRow()->Gap(4);
     const char* names[] = {"Overview", "Activity", "Settings"};
     for (int i = 0; i < 3; i++) {
@@ -55,7 +56,7 @@ El* TabsRender(StoryApp* app, Ctx* cx) {
                 ->ItemsCenter()
                 ->Radius(14)
                 ->Click(HashClickId(Str(names[i])))
-                ->Child(StoryTxt(a, Str(names[i]), 13,
+                ->Child(StoryTxt(cx, Str(names[i]), 13,
                                  i == app->tab ? th.primaryFg : th.foreground));
         if (i == app->tab) {
             t->Bg(th.primary);
@@ -64,10 +65,10 @@ El* TabsRender(StoryApp* app, Ctx* cx) {
         }
         pillBar->Child(t);
     }
-    StorySectionAdd(pill, TabPanel(a, app, pillBar));
+    StorySectionAdd(pill, TabPanel(cx, app, pillBar));
     page->Child(pill);
 
-    El* outline = StorySection(a, "Outline Tabs", nullptr);
+    El* outline = StorySection(cx, "Outline Tabs", nullptr);
     El* outBar = Div(a)->FlexRow()->Gap(4);
     for (int i = 0; i < 3; i++) {
         El* t = Div(a)
@@ -77,16 +78,16 @@ El* TabsRender(StoryApp* app, Ctx* cx) {
                     ->Radius(th.radius)
                     ->Border(1, th.border)
                     ->Click(HashClickId(Str(names[i])))
-                    ->Child(StoryTxt(a, Str(names[i]), 13, th.foreground));
+                    ->Child(StoryTxt(cx, Str(names[i]), 13, th.foreground));
         if (i == app->tab) {
             t->Bg(th.muted);
         }
         outBar->Child(t);
     }
-    StorySectionAdd(outline, TabPanel(a, app, outBar));
+    StorySectionAdd(outline, TabPanel(cx, app, outBar));
     page->Child(outline);
 
-    El* seg = StorySection(a, "Segmented Tabs", nullptr);
+    El* seg = StorySection(cx, "Segmented Tabs", nullptr);
     El* segBar =
         Div(a)->FlexRow()->Pad(2)->Gap(2)->Bg(th.muted)->Radius(th.radius);
     for (int i = 0; i < 3; i++) {
@@ -96,13 +97,13 @@ El* TabsRender(StoryApp* app, Ctx* cx) {
                     ->ItemsCenter()
                     ->Radius(th.radius)
                     ->Click(HashClickId(Str(names[i])))
-                    ->Child(StoryTxt(a, Str(names[i]), 13, th.foreground));
+                    ->Child(StoryTxt(cx, Str(names[i]), 13, th.foreground));
         if (i == app->tab) {
             t->Bg(th.background);
         }
         segBar->Child(t);
     }
-    StorySectionAdd(seg, TabPanel(a, app, segBar));
+    StorySectionAdd(seg, TabPanel(cx, app, segBar));
     page->Child(seg);
     return page;
 }

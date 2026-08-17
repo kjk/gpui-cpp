@@ -3,23 +3,29 @@
 
 namespace gpui {
 
-El* DialogBackdrop::New(Arena* a) {
+El* DialogBackdrop::New(Ctx* cx) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("dialog-backdrop"), 0);
 }
-El* DialogPopup::New(Arena* a) {
+El* DialogPopup::New(Ctx* cx) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("dialog-popup"), 0);
 }
-El* DialogTitle::New(Arena* a) {
+El* DialogTitle::New(Ctx* cx) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("dialog-title"), 0);
 }
-El* DialogDescription::New(Arena* a) {
+El* DialogDescription::New(Ctx* cx) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("dialog-description"), 0);
 }
-El* DialogClose::New(Arena* a, int clickId) {
+El* DialogClose::New(Ctx* cx, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("dialog-close"), clickId);
 }
 
-Dialog* Dialog::New(Arena* a) {
+Dialog* Dialog::New(Ctx* cx) {
+    Arena* a = cx->a;
     Dialog* d = ArenaNew<Dialog>(a);
     d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     return d;

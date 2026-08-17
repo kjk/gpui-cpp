@@ -158,15 +158,15 @@ struct StoryInfo {
 const StoryInfo* StoryMeta(int i);
 int StoryFromSlug(const char* slug);
 
-Str StoryDup(Arena* a, const char* s);
-Str StoryFmt(Arena* a, const char* f, ...);
+Str StoryDup(Ctx* cx, const char* s);
+Str StoryFmt(Ctx* cx, const char* f, ...);
 
-El* StoryTxt(Arena* a, Str s, float px, Rgba c);
-El* StorySection(Arena* a, const char* title, const char* desc);
+El* StoryTxt(Ctx* cx, Str s, float px, Rgba c);
+El* StorySection(Ctx* cx, const char* title, const char* desc);
 El* StorySectionAdd(El* section, El* child);
-El* StoryToolbar(Arena* a, StoryApp* app);
-El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions);
-El* StoryComingSoon(Arena* a, int story);
+El* StoryToolbar(Ctx* cx, StoryApp* app);
+El* StoryToolbar(Ctx* cx, StoryApp* app, bool withOptions);
+El* StoryComingSoon(Ctx* cx, int story);
 
 typedef El* (*StoryRenderFn)(StoryApp* app, Ctx* cx, WinSize size);
 typedef void (*StoryClickFn)(StoryApp* app, int id);

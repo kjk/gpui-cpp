@@ -50,7 +50,7 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         }
         int depth = Depth(i);
         bool sel = app->treeSel == i;
-        El* row = TreeItem::New(a, ClickTree + i)
+        El* row = TreeItem::New(cx, ClickTree + i)
                       ->H(32)
                       ->PadX(8)
                       ->ItemsCenter()
@@ -64,14 +64,14 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         }
         El* icon = Div(a)->W(12)->H(12)->ItemsCenter()->JustifyCenter();
         if (kTree[i].folder) {
-            icon->Child(ScTxt(a, app->treeOpen[i] ? StrL("v") : StrL(">"), 11,
+            icon->Child(ScTxt(cx, app->treeOpen[i] ? StrL("v") : StrL(">"), 11,
                               ScInk()));
         }
         row->Child(icon);
-        row->Child(ScTxt(a, Str(kTree[i].label), 14, ScInk()));
+        row->Child(ScTxt(cx, Str(kTree[i].label), 14, ScInk()));
         list->Child(row);
     }
-    return Tree::New(a)
+    return Tree::New(cx)
         ->W(256)
         ->H(192)
         ->Border(1, Rgb(0xd4, 0xd4, 0xd4))

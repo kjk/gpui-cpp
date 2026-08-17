@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Scrollable* Scrollable::New(Arena* a) {
+Scrollable* Scrollable::New(Ctx* cx) {
+    Arena* a = cx->a;
     Scrollable* s = ArenaNew<Scrollable>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 Scrollable* Scrollable::Child(El* e) {
@@ -23,7 +25,7 @@ Scrollable* Scrollable::H(float v) {
 }
 
 El* Scrollable::IntoEl() {
-    El* box = Scrollbar::New(a)->H(h)->ClipY()->ScrollY(scrollY)->W(kFill);
+    El* box = Scrollbar::New(cx)->H(h)->ClipY()->ScrollY(scrollY)->W(kFill);
     if (child) {
         box->Child(child);
     }

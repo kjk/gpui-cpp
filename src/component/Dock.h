@@ -8,11 +8,12 @@ namespace component {
 
 struct Dock {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* left = nullptr;
     El* center = nullptr;
     El* right = nullptr;
 
-    static Dock* New(Arena* a);
+    static Dock* New(Ctx* cx);
     Dock* Left(El* e);
     Dock* Center(El* e);
     Dock* Right(El* e);

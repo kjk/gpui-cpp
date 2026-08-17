@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-GroupBox* GroupBox::New(Arena* a, Str title) {
+GroupBox* GroupBox::New(Ctx* cx, Str title) {
+    Arena* a = cx->a;
     GroupBox* g = ArenaNew<GroupBox>(a);
     g->a = a;
+    g->cx = cx;
     g->title = title;
     return g;
 }

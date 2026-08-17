@@ -5,8 +5,8 @@ El* MenuRender(StoryApp* app, Ctx* cx) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
-    El* popup = StorySection(a, "Popup Menu", nullptr);
-    StorySectionAdd(popup, component::Menu::New(a)
+    El* popup = StorySection(cx, "Popup Menu", nullptr);
+    StorySectionAdd(popup, component::Menu::New(cx)
                                ->Item(StrL("New File"))
                                ->Item(StrL("Open…"))
                                ->Item(StrL("Save"))
@@ -14,18 +14,18 @@ El* MenuRender(StoryApp* app, Ctx* cx) {
                                ->IntoEl());
     page->Child(popup);
 
-    El* ctx = StorySection(a, "Context Menu", nullptr);
-    StorySectionAdd(ctx, component::Menu::New(a)
+    El* ctx = StorySection(cx, "Context Menu", nullptr);
+    StorySectionAdd(ctx, component::Menu::New(cx)
                              ->Item(StrL("Cut"))
                              ->Item(StrL("Copy"))
                              ->Item(StrL("Paste"))
                              ->IntoEl());
     page->Child(ctx);
 
-    El* scroll = StorySection(a, "Scrollable", nullptr);
-    component::Menu* m = component::Menu::New(a);
+    El* scroll = StorySection(cx, "Scrollable", nullptr);
+    component::Menu* m = component::Menu::New(cx);
     for (int i = 1; i <= 8; i++) {
-        m->Item(StoryFmt(a, "Item %d", i));
+        m->Item(StoryFmt(cx, "Item %d", i));
     }
     StorySectionAdd(scroll, m->IntoEl());
     page->Child(scroll);

@@ -11,7 +11,7 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     // Rust wraps the button in a hover target; the button itself has no hover
     // fill.
-    El* btn = Button::New(a, StrL("tooltip-anchor"), 0)
+    El* btn = Button::New(cx, StrL("tooltip-anchor"), 0)
                   ->H(28)
                   ->PadX(8)
                   ->ItemsCenter()
@@ -25,7 +25,7 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
         Div(a)->Id(StrL("tooltip-trigger"))->Click(ClickTooltip)->Child(btn);
     El* tip = nullptr;
     if (app->hoverId == ClickTooltip) {
-        tip = Tooltip::New(a, StrL("example-tooltip"))
+        tip = Tooltip::New(cx, StrL("example-tooltip"))
                   ->AnchorBelow(0)
                   ->Left(0)
                   ->Click(ClickTooltip)
@@ -39,7 +39,7 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
                               ->Font(12)
                               ->Fg(Rgb(0xff, 0xff, 0xff)));
     }
-    return Popup::New(a, StrL("example-tooltip-popup"), trigger)
+    return Popup::New(cx, StrL("example-tooltip-popup"), trigger)
         ->Content(tip)
         ->IntoEl();
 }

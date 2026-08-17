@@ -22,7 +22,7 @@ El* StoryRenderRegistered(StoryApp* app, Ctx* cx, WinSize size) {
     if (s >= 0 && s < StoryCount && gRender[s]) {
         return gRender[s](app, cx, size);
     }
-    return StoryComingSoon(cx->a, s);
+    return StoryComingSoon(cx, s);
 }
 
 void StoryClickRegistered(StoryApp* app, int id) {
@@ -167,11 +167,13 @@ int StoryFromSlug(const char* slug) {
     return StoryWelcome;
 }
 
-Str StoryDup(Arena* a, const char* s) {
+Str StoryDup(Ctx* cx, const char* s) {
+    Arena* a = cx->a;
     return StrDup(a, Str(s));
 }
 
-Str StoryFmt(Arena* a, const char* f, ...) {
+Str StoryFmt(Ctx* cx, const char* f, ...) {
+    Arena* a = cx->a;
     char buf[512];
     va_list args;
     va_start(args, f);
@@ -180,19 +182,21 @@ Str StoryFmt(Arena* a, const char* f, ...) {
     return StrDup(a, Str(buf));
 }
 
-El* StoryTxt(Arena* a, Str s, float px, Rgba c) {
+El* StoryTxt(Ctx* cx, Str s, float px, Rgba c) {
+    Arena* a = cx->a;
     return TextEl(a, s)->Font(px)->Fg(c);
 }
 
-El* StorySection(Arena* a, const char* title, const char* desc) {
+El* StorySection(Ctx* cx, const char* title, const char* desc) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     // Rust StorySection is an outline GroupBox: title sits above a bordered
     // content pane that centers its children (crates/story/src/lib.rs).
     El* wrap = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* head = Div(a)->FlexCol()->Gap(4)->W(kFill);
-    head->Child(StoryTxt(a, StoryDup(a, title), 14, th.mutedFg)->Semibold());
+    head->Child(StoryTxt(cx, StoryDup(cx, title), 14, th.mutedFg)->Semibold());
     if (desc && desc[0]) {
-        head->Child(StoryTxt(a, StoryDup(a, desc), 12, th.mutedFg)->Wrap());
+        head->Child(StoryTxt(cx, StoryDup(cx, desc), 12, th.mutedFg)->Wrap());
     }
     El* body = Div(a)
                    ->FlexCol()
@@ -238,7 +242,8 @@ static const char* StorySizeName(UiSize s) {
 // StoryToolbar::render joins its buttons into one segmented control: the
 // group draws the outline, and the buttons after the first sit on their
 // neighbour's border instead of drawing a second one.
-static El* ToolbarGroup(Arena* a) {
+static El* ToolbarGroup(Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)
         ->FlexRow()
@@ -248,14 +253,16 @@ static El* ToolbarGroup(Arena* a) {
         ->Radius(th.radius);
 }
 
-static El* ToolbarSep(Arena* a) {
+static El* ToolbarSep(Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)->W(1)->H(24)->Shrink0()->Bg(th.border);
 }
 
 // No Bg on the button: the group paints its background and border first, and
 // an opaque child would cover the stroke that straddles the group's edge.
-static El* ToolbarDropBtn(Arena* a, int id, Str label) {
+static El* ToolbarDropBtn(Ctx* cx, int id, Str label) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)
         ->H(24)
@@ -264,10 +271,11 @@ static El* ToolbarDropBtn(Arena* a, int id, Str label) {
         ->JustifyCenter()
         ->HoverBg(th.muted)
         ->Click(id)
-        ->Child(StoryTxt(a, label, 12, th.foreground));
+        ->Child(StoryTxt(cx, label, 12, th.foreground));
 }
 
-static El* ToolbarCheckRow(Arena* a, int id, const char* label, bool on) {
+static El* ToolbarCheckRow(Ctx* cx, int id, const char* label, bool on) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)
         ->H(28)
@@ -278,13 +286,14 @@ static El* ToolbarCheckRow(Arena* a, int id, const char* label, bool on) {
         ->ItemsCenter()
         ->HoverBg(th.muted)
         ->Click(id)
-        ->Child(StoryTxt(a, on ? StrL("\xE2\x9C\x93") : StrL(" "), 12,
+        ->Child(StoryTxt(cx, on ? StrL("\xE2\x9C\x93") : StrL(" "), 12,
                          th.foreground)
                     ->W(14))
-        ->Child(StoryTxt(a, Str(label), 12, th.foreground));
+        ->Child(StoryTxt(cx, Str(label), 12, th.foreground));
 }
 
-static El* ToolbarMenu(Arena* a) {
+static El* ToolbarMenu(Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)
         ->FlexCol()
@@ -294,65 +303,68 @@ static El* ToolbarMenu(Arena* a) {
         ->Radius(th.radius);
 }
 
-El* StoryToolbar(Arena* a, StoryApp* app) {
-    return StoryToolbar(a, app, false);
+El* StoryToolbar(Ctx* cx, StoryApp* app) {
+    Arena* a = cx->a;
+    return StoryToolbar(cx, app, false);
 }
 
-El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions) {
+El* StoryToolbar(Ctx* cx, StoryApp* app, bool withOptions) {
+    Arena* a = cx->a;
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
-    El* group = ToolbarGroup(a);
+    El* group = ToolbarGroup(cx);
     row->Child(group);
 
     El* sizeTrig = ToolbarDropBtn(
-        a, ClickSizeMenu, StoryFmt(a, "Size: %s", StorySizeName(app->size)));
+        cx, ClickSizeMenu, StoryFmt(cx, "Size: %s", StorySizeName(app->size)));
     El* sizeMenu = nullptr;
     if (app->sizeMenuOpen) {
-        sizeMenu = ToolbarMenu(a);
-        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeXs, "XSmall",
+        sizeMenu = ToolbarMenu(cx);
+        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeXs, "XSmall",
                                         app->size == UiSize::XSmall));
-        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeSm, "Small",
+        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeSm, "Small",
                                         app->size == UiSize::Small));
-        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeMd, "Medium",
+        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeMd, "Medium",
                                         app->size == UiSize::Medium));
-        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeLg, "Large",
+        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeLg, "Large",
                                         app->size == UiSize::Large));
     }
-    group->Child(Popup::New(a, StrL("story-size-menu"), sizeTrig)
+    group->Child(Popup::New(cx, StrL("story-size-menu"), sizeTrig)
                      ->Content(sizeMenu)
                      ->IntoEl());
 
     if (withOptions) {
-        group->Child(ToolbarSep(a));
-        El* optTrig = ToolbarDropBtn(a, ClickOptsMenu, StrL("Options"));
+        group->Child(ToolbarSep(cx));
+        El* optTrig = ToolbarDropBtn(cx, ClickOptsMenu, StrL("Options"));
         El* optMenu = nullptr;
         if (app->accOptsOpen) {
-            optMenu = ToolbarMenu(a);
-            optMenu->Child(ToolbarCheckRow(a, ClickAccMultiple, "Multiple",
+            optMenu = ToolbarMenu(cx);
+            optMenu->Child(ToolbarCheckRow(cx, ClickAccMultiple, "Multiple",
                                            app->accordionMultiple));
             optMenu->Child(
-                ToolbarCheckRow(a, ClickAccIcon, "Icons", app->accordionIcon));
-            optMenu->Child(ToolbarCheckRow(a, ClickAccDisabled, "Disabled",
+                ToolbarCheckRow(cx, ClickAccIcon, "Icons", app->accordionIcon));
+            optMenu->Child(ToolbarCheckRow(cx, ClickAccDisabled, "Disabled",
                                            app->accordionDisabled));
-            optMenu->Child(ToolbarCheckRow(a, ClickAccBordered, "Bordered",
+            optMenu->Child(ToolbarCheckRow(cx, ClickAccBordered, "Bordered",
                                            app->accordionBordered));
         }
-        group->Child(Popup::New(a, StrL("story-opts-menu"), optTrig)
+        group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
                          ->Content(optMenu)
                          ->IntoEl());
     }
     return row;
 }
 
-El* StoryComingSoon(Arena* a, int story) {
+El* StoryComingSoon(Ctx* cx, int story) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     const StoryInfo* m = StoryMeta(story);
     return Div(a)
         ->FlexCol()
         ->Gap(8)
         ->Pad(8)
-        ->Child(StoryTxt(a, StoryDup(a, m->title), 16, th.foreground)
+        ->Child(StoryTxt(cx, StoryDup(cx, m->title), 16, th.foreground)
                     ->Semibold())
-        ->Child(StoryTxt(a, StoryDup(a, "This story is not ported yet."), 13,
+        ->Child(StoryTxt(cx, StoryDup(cx, "This story is not ported yet."), 13,
                          th.mutedFg));
 }
 
@@ -364,7 +376,8 @@ static bool StoryMatches(const StoryInfo* m, const char* q) {
            StrContainsI(Str(m->slug), Str(q));
 }
 
-static El* SidebarList(StoryApp* app, Arena* a) {
+static El* SidebarList(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* list = Div(a)->FlexCol()->Gap(2)->Pad(8);
     const char* q = app->search.buf;
@@ -382,7 +395,7 @@ static El* SidebarList(StoryApp* app, Arena* a) {
                       ->Radius(6)
                       ->Click(ClickStory + i)
                       ->FocusId(ClickStory + i);
-        El* label = StoryTxt(a, Str(m->title), 13, th.sidebarFg);
+        El* label = StoryTxt(cx, Str(m->title), 13, th.sidebarFg);
         if (on) {
             label->Semibold();
             row->Bg(th.secondary);
@@ -395,7 +408,8 @@ static El* SidebarList(StoryApp* app, Arena* a) {
     return list;
 }
 
-static El* SearchBox(StoryApp* app, Arena* a) {
+static El* SearchBox(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* box = Div(a)
                   ->H(36)
@@ -409,7 +423,7 @@ static El* SearchBox(StoryApp* app, Arena* a) {
                   ->Bg(th.secondary)
                   ->Click(ClickSearch)
                   ->FocusId(ClickSearch);
-    box->Child(::Input::New(a, &app->search)->Grow());
+    box->Child(::Input::New(cx, &app->search)->Grow());
     if (app->search.len > 0) {
         box->Child(Div(a)
                        ->W(16)
@@ -423,7 +437,8 @@ static El* SearchBox(StoryApp* app, Arena* a) {
     return box;
 }
 
-static El* Sidebar(StoryApp* app, Arena* a) {
+static El* Sidebar(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     float w = app->collapsed ? 56.f : 255.f;
     El* side =
@@ -443,14 +458,14 @@ static El* Sidebar(StoryApp* app, Arena* a) {
     brand->Child(logo);
     if (!app->collapsed) {
         El* names = Div(a)->FlexCol();
-        names->Child(StoryTxt(a, StrL("GPUI Component"), 14, th.sidebarFg)
+        names->Child(StoryTxt(cx, StrL("GPUI Component"), 14, th.sidebarFg)
                          ->Semibold());
-        names->Child(StoryTxt(a, StrL("Component showcase"), 12, th.mutedFg));
+        names->Child(StoryTxt(cx, StrL("Component showcase"), 12, th.mutedFg));
         brand->Child(names);
     }
     header->Child(brand);
     if (!app->collapsed) {
-        header->Child(SearchBox(app, a));
+        header->Child(SearchBox(app, cx));
     }
     side->Child(header);
     El* scroller = Div(a)
@@ -462,13 +477,14 @@ static El* Sidebar(StoryApp* app, Arena* a) {
                        ->ScrollId(2)
                        ->W(kFill);
     if (!app->collapsed) {
-        scroller->Child(SidebarList(app, a));
+        scroller->Child(SidebarList(app, cx));
     }
     side->Child(scroller);
     return side;
 }
 
-static El* Header(StoryApp* app, Arena* a) {
+static El* Header(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
@@ -478,11 +494,12 @@ static El* Header(StoryApp* app, Arena* a) {
         ->Gap(4)
         ->Shrink0()
         ->BorderB(1, th.border)
-        ->Child(StoryTxt(a, Str(m->title), 24, th.foreground)->Semibold())
-        ->Child(StoryTxt(a, Str(m->description), 16, th.mutedFg)->Wrap());
+        ->Child(StoryTxt(cx, Str(m->title), 24, th.foreground)->Semibold())
+        ->Child(StoryTxt(cx, Str(m->description), 16, th.mutedFg)->Wrap());
 }
 
-static El* Footer(StoryApp* app, Arena* a) {
+static El* Footer(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
@@ -501,20 +518,20 @@ static El* Footer(StoryApp* app, Arena* a) {
                 ->ItemsCenter()
                 ->Child(IconEl(a, IconName::GalleryVerticalEnd, 12)
                             ->Fg(th.mutedFg))
-                ->Child(StoryTxt(a, StoryFmt(a, "%d components", StoryCount),
+                ->Child(StoryTxt(cx, StoryFmt(cx, "%d components", StoryCount),
                                  12, th.mutedFg))
                 ->Child(Div(a)->W(1)->H(12)->Bg(th.border))
-                ->Child(StoryTxt(a, Str(m->title), 12, th.mutedFg)))
+                ->Child(StoryTxt(cx, Str(m->title), 12, th.mutedFg)))
         ->Child(Div(a)
                     ->FlexRow()
                     ->Gap(12)
                     ->ItemsCenter()
-                    ->Child(StoryTxt(a,
+                    ->Child(StoryTxt(cx,
                                      ThemeGet() == ThemeMode::Dark
                                          ? StrL("Default Dark")
                                          : StrL("Default Light"),
                                      12, th.mutedFg))
-                    ->Child(StoryTxt(a, StrL("v0.5.1"), 12, th.mutedFg)));
+                    ->Child(StoryTxt(cx, StrL("v0.5.1"), 12, th.mutedFg)));
 }
 
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {
@@ -535,9 +552,9 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     const Theme& th = ThemeNow();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
-    body->Child(Sidebar(app, frame));
+    body->Child(Sidebar(app, cx));
     El* main = Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0);
-    main->Child(Header(app, frame));
+    main->Child(Header(app, cx));
     El* scroller = Div(frame)
                        ->FlexCol()
                        ->Grow()
@@ -551,7 +568,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     main->Child(scroller);
     body->Child(main);
     root->Child(body);
-    root->Child(Footer(app, frame));
+    root->Child(Footer(app, cx));
     return root;
 }
 

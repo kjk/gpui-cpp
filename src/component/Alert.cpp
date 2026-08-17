@@ -4,34 +4,40 @@ namespace gpui {
 
 namespace component {
 
-Alert* Alert::New(Arena* a, Str id, Str message) {
+Alert* Alert::New(Ctx* cx, Str id, Str message) {
+    Arena* a = cx->a;
     Alert* al = ArenaNew<Alert>(a);
     al->a = a;
+    al->cx = cx;
     al->id = id;
     al->message = message;
     return al;
 }
 
-Alert* Alert::Info(Arena* a, Str id, Str message) {
-    Alert* al = New(a, id, message);
+Alert* Alert::Info(Ctx* cx, Str id, Str message) {
+    Arena* a = cx->a;
+    Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Info;
     al->icon = IconName::Info;
     return al;
 }
-Alert* Alert::Success(Arena* a, Str id, Str message) {
-    Alert* al = New(a, id, message);
+Alert* Alert::Success(Ctx* cx, Str id, Str message) {
+    Arena* a = cx->a;
+    Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Success;
     al->icon = IconName::CircleCheck;
     return al;
 }
-Alert* Alert::Warning(Arena* a, Str id, Str message) {
-    Alert* al = New(a, id, message);
+Alert* Alert::Warning(Ctx* cx, Str id, Str message) {
+    Arena* a = cx->a;
+    Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Warning;
     al->icon = IconName::TriangleAlert;
     return al;
 }
-Alert* Alert::Error(Arena* a, Str id, Str message) {
-    Alert* al = New(a, id, message);
+Alert* Alert::Error(Ctx* cx, Str id, Str message) {
+    Arena* a = cx->a;
+    Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Error;
     al->icon = IconName::CircleX;
     return al;

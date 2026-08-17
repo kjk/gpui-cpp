@@ -10,19 +10,19 @@ El* ClipboardRender(StoryApp* app, Ctx* cx) {
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
-    El* def = StorySection(a, "Default",
+    El* def = StorySection(cx, "Default",
                            "Copies a value supplied by the application.");
     El* defRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    defRow
-        ->Child(component::Label::New(a, StrL("A clipboard button"))->IntoEl());
-    defRow->Child(component::Clipboard::New(a, StrL("masked :false"))
+    defRow->Child(component::Label::New(cx, StrL("A clipboard button"))
+                      ->IntoEl());
+    defRow->Child(component::Clipboard::New(cx, StrL("masked :false"))
                       ->OnCopy(MkFunc1(&OnCopy, app))
                       ->IntoEl());
     StorySectionAdd(def, defRow);
     page->Child(def);
 
     El* input =
-        StorySection(a, "With Input", "Copies the field's current value.");
+        StorySection(cx, "With Input", "Copies the field's current value.");
     El* field = Div(a)
                     ->FlexRow()
                     ->ItemsCenter()
@@ -33,9 +33,9 @@ El* ClipboardRender(StoryApp* app, Ctx* cx) {
                     ->Border(1, th.border)
                     ->Radius(th.radius)
                     ->Bg(th.background);
-    field->Child(StoryTxt(a, StrL("https://github.com"), 13, th.foreground)
+    field->Child(StoryTxt(cx, StrL("https://github.com"), 13, th.foreground)
                      ->Grow());
-    field->Child(component::Button::New(a, StrL("clipboard2"))
+    field->Child(component::Button::New(cx, StrL("clipboard2"))
                      ->Icon(IconName::Copy)
                      ->Ghost()
                      ->Tooltip(StrL("Copy"))

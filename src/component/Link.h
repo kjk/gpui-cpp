@@ -8,13 +8,14 @@ namespace component {
 
 struct Link {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str href = {};
     Str text = {};
     bool disabled = false;
     Func1<Str> onOpen;
 
-    static Link* New(Arena* a, Str id);
+    static Link* New(Ctx* cx, Str id);
     Link* Href(Str s);
     Link* Text(Str s);
     Link* Disabled(bool v);

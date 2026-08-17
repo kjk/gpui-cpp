@@ -9,9 +9,9 @@ El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
-    El* def = StorySection(a, "Default",
+    El* def = StorySection(cx, "Default",
                            "Shows the current location in a hierarchy.");
-    StorySectionAdd(def, component::Breadcrumb::New(a)
+    StorySectionAdd(def, component::Breadcrumb::New(cx)
                              ->Item(StrL("Home"))
                              ->Item(StrL("Documents"))
                              ->Item(StrL("Projects"))
@@ -19,9 +19,9 @@ El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
     page->Child(def);
 
     El* inter = StorySection(
-        a, "Interactive", "Earlier levels can respond to navigation clicks.");
+        cx, "Interactive", "Earlier levels can respond to navigation clicks.");
     El* col = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    col->Child(component::Breadcrumb::New(a)
+    col->Child(component::Breadcrumb::New(cx)
                    ->Item(StrL("Home"))
                    ->Item(StrL("Documents"))
                    ->Item(StrL("Projects"))
@@ -35,7 +35,7 @@ El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
         if (i > 3) {
             i = 3;
         }
-        col->Child(StoryTxt(a, StoryFmt(a, "Selected: %s", kNames[i]), 13,
+        col->Child(StoryTxt(cx, StoryFmt(cx, "Selected: %s", kNames[i]), 13,
                             th.foreground));
     }
     StorySectionAdd(inter, col);

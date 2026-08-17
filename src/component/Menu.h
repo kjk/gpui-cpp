@@ -8,11 +8,12 @@ namespace component {
 
 struct Menu {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str items[8] = {};
     int n = 0;
     Func1<int> onClick;
 
-    static Menu* New(Arena* a);
+    static Menu* New(Ctx* cx);
     Menu* Item(Str s);
     Menu* OnClick(Func1<int> fn);
     El* IntoEl();

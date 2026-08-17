@@ -13,9 +13,11 @@ static void FireCheck(CheckBind* b) {
     b->fn.Call(b->next);
 }
 
-Checkbox* Checkbox::New(Arena* a, Str id) {
+Checkbox* Checkbox::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Checkbox* c = ArenaNew<Checkbox>(a);
     c->a = a;
+    c->cx = cx;
     c->id = id;
     return c;
 }
@@ -56,7 +58,7 @@ Checkbox* Checkbox::OnClick(Func1<bool> fn) {
 El* Checkbox::IntoEl() {
     const Theme& th = ThemeNow();
     float box = size == UiSize::Small ? 14.f : 16.f;
-    El* ind = CheckboxIndicator::New(a)
+    El* ind = CheckboxIndicator::New(cx)
                   ->W(box)
                   ->H(box)
                   ->Shrink0()
@@ -68,7 +70,7 @@ El* Checkbox::IntoEl() {
         ind->Bg(th.primary)
             ->Child(IconEl(a, IconName::Check, box - 4)->Fg(th.primaryFg));
     }
-    El* row = gpui::Checkbox::New(a, id, disabled ? 0 : HashClickId(id))
+    El* row = gpui::Checkbox::New(cx, id, disabled ? 0 : HashClickId(id))
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);

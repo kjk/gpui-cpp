@@ -9,29 +9,29 @@ El* DialogRender(StoryApp* app, Ctx* cx, WinSize size) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def =
-        StorySection(a, "Default", "A window overlaid on the primary window.");
-    StorySectionAdd(def, component::Button::New(a, StrL("open-dlg"))
+        StorySection(cx, "Default", "A window overlaid on the primary window.");
+    StorySectionAdd(def, component::Button::New(cx, StrL("open-dlg"))
                              ->Label(StrL("Edit profile"))
                              ->Primary()
                              ->IntoEl());
     page->Child(def);
 
-    El* none = StorySection(a, "Without title", nullptr);
-    StorySectionAdd(none, component::Button::New(a, StrL("open-dlg-notitle"))
+    El* none = StorySection(cx, "Without title", nullptr);
+    StorySectionAdd(none, component::Button::New(cx, StrL("open-dlg-notitle"))
                               ->Label(StrL("Open"))
                               ->Outline()
                               ->IntoEl());
     page->Child(none);
 
-    El* acts = StorySection(a, "Custom actions", nullptr);
-    StorySectionAdd(acts, component::Button::New(a, StrL("open-dlg-custom"))
+    El* acts = StorySection(cx, "Custom actions", nullptr);
+    StorySectionAdd(acts, component::Button::New(cx, StrL("open-dlg-custom"))
                               ->Label(StrL("Share"))
                               ->Secondary()
                               ->IntoEl());
     page->Child(acts);
 
     if (app->dialogOpen) {
-        component::Dialog* d = component::Dialog::New(a)
+        component::Dialog* d = component::Dialog::New(cx)
                                    ->Open(true)
                                    ->OnClose(MkFunc0(&CloseDlg, app))
                                    ->OnOk(MkFunc0(&CloseDlg, app));

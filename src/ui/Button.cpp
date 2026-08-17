@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* Button::New(Arena* a, Str id, int clickId) {
+El* Button::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 } // namespace gpui

@@ -3,10 +3,12 @@
 
 namespace gpui {
 
-El* Tabs::New(Arena* a, Str id) {
+El* Tabs::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     return UiRoot(a, id, 0);
 }
-El* Tab::New(Arena* a, Str id, int clickId) {
+El* Tab::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 } // namespace gpui

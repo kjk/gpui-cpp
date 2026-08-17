@@ -12,9 +12,11 @@ static void FireRate(RateBind* b) {
     b->fn.Call(b->value);
 }
 
-Rating* Rating::New(Arena* a) {
+Rating* Rating::New(Ctx* cx) {
+    Arena* a = cx->a;
     Rating* r = ArenaNew<Rating>(a);
     r->a = a;
+    r->cx = cx;
     return r;
 }
 Rating* Rating::Value(int v) {

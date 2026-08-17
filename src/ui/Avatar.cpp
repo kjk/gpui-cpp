@@ -2,7 +2,8 @@
 
 namespace gpui {
 
-Avatar* Avatar::New(Arena* a) {
+Avatar* Avatar::New(Ctx* cx) {
+    Arena* a = cx->a;
     Avatar* v = ArenaNew<Avatar>(a);
     v->root = Div(a);
     return v;
@@ -25,7 +26,8 @@ El* Avatar::IntoEl() {
     return root;
 }
 
-El* AvatarFallback::New(Arena* a) {
+El* AvatarFallback::New(Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a);
 }
 } // namespace gpui

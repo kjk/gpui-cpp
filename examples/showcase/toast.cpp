@@ -10,7 +10,7 @@ enum {
 
 El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* btn = Button::New(a, StrL("show-toast"), ClickToastShow)
+    El* btn = Button::New(cx, StrL("show-toast"), ClickToastShow)
                   ->H(28)
                   ->PadX(8)
                   ->Shrink0()
@@ -25,7 +25,7 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
         Div(a)->W(kFill)->H(kFill)->ItemsCenter()->JustifyCenter()->Child(btn));
     if (app->toastOn) {
         box->Child(
-            Toast::New(a, StrL("example-toast"))
+            Toast::New(cx, StrL("example-toast"))
                 ->Absolute()
                 ->Right(0)
                 ->Bottom(0)
@@ -43,7 +43,7 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                                     ->Font(12)
                                     ->Fg(Rgb(0x17, 0x17, 0x17))
                                     ->Semibold())
-                        ->Child(Button::New(a, StrL("dismiss-toast"),
+                        ->Child(Button::New(cx, StrL("dismiss-toast"),
                                             ClickToastDismiss)
                                     ->W(24)
                                     ->H(24)

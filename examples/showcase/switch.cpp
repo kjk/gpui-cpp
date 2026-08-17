@@ -10,13 +10,13 @@ enum {
 El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool on = app->switchOn;
-    El* track = SwitchTrack::New(a, StrL("example-switch-track"))
+    El* track = SwitchTrack::New(cx, StrL("example-switch-track"))
                     ->W(36)
                     ->H(20)
                     ->Pad(2)
                     ->Bg(on ? Rgb(0x17, 0x17, 0x17) : Rgb(0xd4, 0xd4, 0xd4))
                     ->ItemsCenter()
-                    ->Child(SwitchThumb::New(a)->W(16)->H(16)->Bg(
+                    ->Child(SwitchThumb::New(cx)->W(16)->H(16)->Bg(
                         Rgb(0xff, 0xff, 0xff)));
     if (on) {
         track->JustifyEnd();
@@ -38,7 +38,7 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
                     TextEl(a, StrL("Install stable releases automatically."))
                         ->Font(12)
                         ->Fg(Rgb(0x73, 0x73, 0x73)))))
-        ->Child(Switch::New(a, StrL("example-switch"), ClickSwitch)
+        ->Child(Switch::New(cx, StrL("example-switch"), ClickSwitch)
                     ->Child(track));
 }
 

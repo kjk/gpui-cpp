@@ -15,12 +15,13 @@ struct TreeNode {
 
 struct Tree {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     TreeNode nodes[16] = {};
     int n = 0;
     int selected = -1;
     Func1<int> onSelect;
 
-    static Tree* New(Arena* a);
+    static Tree* New(Ctx* cx);
     Tree* Node(Str label, int parent, bool folder, bool open);
     Tree* Selected(int i);
     Tree* OnSelect(Func1<int> fn);

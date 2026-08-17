@@ -5,9 +5,9 @@
 namespace gpui {
 
 struct Calendar {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct CalendarItem {
-    static El* New(Arena* a, int clickId = 0);
+    static El* New(Ctx* cx, int clickId = 0);
 };
 } // namespace gpui

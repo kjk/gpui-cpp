@@ -5,9 +5,9 @@ El* SidebarRender(StoryApp* app, Ctx* cx) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
-        a, "Default",
+        cx, "Default",
         "A composable, themeable and customizable sidebar component.");
-    StorySectionAdd(sec, component::Sidebar::New(a)
+    StorySectionAdd(sec, component::Sidebar::New(cx)
                              ->Title(StrL("Workspace"))
                              ->Item(StrL("Inbox"))
                              ->Item(StrL("Calendar"))

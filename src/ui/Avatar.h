@@ -8,13 +8,13 @@ struct Avatar {
     El* root = nullptr;
     El* fallback = nullptr;
 
-    static Avatar* New(Arena* a);
+    static Avatar* New(Ctx* cx);
     Avatar* Size(float px);
     Avatar* Fallback(El* fallback);
     El* IntoEl();
 };
 
 struct AvatarFallback {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 } // namespace gpui

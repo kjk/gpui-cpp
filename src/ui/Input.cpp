@@ -3,11 +3,13 @@
 
 namespace gpui {
 
-El* InputBase::New(Arena* a, Str id, int clickId) {
+El* InputBase::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 
-El* Input::New(Arena* a, LineInput* state) {
+El* Input::New(Ctx* cx, LineInput* state) {
+    Arena* a = cx->a;
     if (!state) {
         return TextEl(a, Str{});
     }
@@ -44,7 +46,8 @@ El* Input::New(Arena* a, LineInput* state) {
     return row;
 }
 
-El* Textarea::New(Arena* a, const char* text, bool caret) {
+El* Textarea::New(Ctx* cx, const char* text, bool caret) {
+    Arena* a = cx->a;
     El* col = Div(a)->FlexCol();
     if (!text) {
         text = "";
@@ -214,11 +217,13 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n,
     }
 }
 
-El* Editor::New(Arena* a, const char* text) {
-    return New(a, text, -1, false);
+El* Editor::New(Ctx* cx, const char* text) {
+    Arena* a = cx->a;
+    return New(cx, text, -1, false);
 }
 
-El* Editor::New(Arena* a, const char* text, int cursor, bool caret) {
+El* Editor::New(Ctx* cx, const char* text, int cursor, bool caret) {
+    Arena* a = cx->a;
     El* col = Div(a)->FlexCol();
     if (!text) {
         text = "";

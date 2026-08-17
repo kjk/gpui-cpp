@@ -5,6 +5,6 @@
 namespace gpui {
 
 struct OtpInput {
-    static El* New(Arena* a, int clickId = 0);
+    static El* New(Ctx* cx, int clickId = 0);
 };
 } // namespace gpui

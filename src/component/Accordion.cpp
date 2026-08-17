@@ -14,9 +14,11 @@ static void FireAcc(AccBind* b) {
     b->fn.Call(b->index);
 }
 
-Accordion* Accordion::New(Arena* a, Str id) {
+Accordion* Accordion::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Accordion* acc = ArenaNew<Accordion>(a);
     acc->a = a;
+    acc->cx = cx;
     acc->id = id;
     return acc;
 }
@@ -69,14 +71,14 @@ El* Accordion::IntoEl() {
     // Items paint tokens.accordion (= background); bordered turns the group
     // into one rounded card instead of a stack of separators.
     El* root =
-        gpui::Accordion::New(a, id)->FlexCol()->W(kFill)->Bg(th.background);
+        gpui::Accordion::New(cx, id)->FlexCol()->W(kFill)->Bg(th.background);
     if (bordered) {
         root->Border(1, th.border)->Radius(th.radiusLg)->ClipY();
     }
     for (int i = 0; i < nItems; i++) {
         float font = UiFontPx(size);
         El* trig = AccordionTrigger::New(
-            a, items[i].title, disabled ? 0 : HashClickId(items[i].title));
+            cx, items[i].title, disabled ? 0 : HashClickId(items[i].title));
         // AccordionTrigger: py_2 px_3 at Medium, font_medium.
         trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(12)->PadY(8)->W(
             kFill);
@@ -99,7 +101,7 @@ El* Accordion::IntoEl() {
                             ->Fg(th.foreground)
                             ->Semibold());
             if (items[i].tag.s) {
-                left->Child(Tag::New(a, items[i].tag)
+                left->Child(Tag::New(cx, items[i].tag)
                                 ->Success()
                                 ->Outline()
                                 ->WithSize(UiSize::Small)
@@ -124,10 +126,10 @@ El* Accordion::IntoEl() {
             trig->OnClick(MkFunc0(&FireAcc, b));
         }
         gpui::AccordionItem* it =
-            gpui::AccordionItem::New(a)
+            gpui::AccordionItem::New(cx)
                 ->Open(items[i].open)
-                ->Header(gpui::AccordionHeader::New(a, trig));
-        El* panel = gpui::AccordionPanel::New(a);
+                ->Header(gpui::AccordionHeader::New(cx, trig));
+        El* panel = gpui::AccordionPanel::New(cx);
         if (items[i].settings) {
             panel->PadL(52)->PadR(8)->PadT(0)->PadB(12);
         } else {

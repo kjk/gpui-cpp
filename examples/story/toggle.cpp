@@ -14,10 +14,11 @@ enum {
     ClickToggleCode
 };
 
-static El* ToggleChip(Arena* a, int id, const char* label, IconName icon,
+static El* ToggleChip(Ctx* cx, int id, const char* label, IconName icon,
                       bool on, bool outline) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
-    El* t = Toggle::New(a, StrDup(a, fmt("tog-%d", id)), id)
+    El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", id)), id)
                 ->H(28)
                 ->PadX(label ? 10.f : 8.f)
                 ->ItemsCenter()
@@ -36,7 +37,7 @@ static El* ToggleChip(Arena* a, int id, const char* label, IconName icon,
         t->Child(IconEl(a, icon, 14)->Fg(th.foreground));
     }
     if (label) {
-        t->Child(StoryTxt(a, Str(label), 13, th.foreground));
+        t->Child(StoryTxt(cx, Str(label), 13, th.foreground));
     }
     return t;
 }
@@ -45,50 +46,51 @@ El* ToggleRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
-    El* def = StorySection(a, "Default",
+    El* def = StorySection(cx, "Default",
                            "Text and icon toggles with clear selected states.");
     El* defRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    defRow->Child(ToggleChip(a, ClickTogglePreview, "Preview", IconName::None,
+    defRow->Child(ToggleChip(cx, ClickTogglePreview, "Preview", IconName::None,
                              app->toggleSel == 1, true));
-    defRow->Child(ToggleChip(a, ClickToggleStar, nullptr, IconName::Star,
+    defRow->Child(ToggleChip(cx, ClickToggleStar, nullptr, IconName::Star,
                              app->toggles[0], true));
     StorySectionAdd(def, defRow);
     page->Child(def);
 
     El* vars = StorySection(
-        a, "Variants", "Ghost and outline treatments for different surfaces.");
+        cx, "Variants", "Ghost and outline treatments for different surfaces.");
     El* varsCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    varsCol->Child(StoryTxt(a, StrL("Ghost"), 13, th.foreground)->Semibold());
+    varsCol->Child(StoryTxt(cx, StrL("Ghost"), 13, th.foreground)->Semibold());
     El* ghost = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    ghost->Child(ToggleChip(a, ClickToggleBell, nullptr, IconName::Bell,
+    ghost->Child(ToggleChip(cx, ClickToggleBell, nullptr, IconName::Bell,
                             app->toggles[1], false));
-    ghost->Child(ToggleChip(a, ClickToggleInbox, nullptr, IconName::Inbox,
+    ghost->Child(ToggleChip(cx, ClickToggleInbox, nullptr, IconName::Inbox,
                             app->toggles[2], false));
-    ghost->Child(ToggleChip(a, ClickToggleCheck, nullptr, IconName::Check,
+    ghost->Child(ToggleChip(cx, ClickToggleCheck, nullptr, IconName::Check,
                             app->toggles[3], false));
     varsCol->Child(ghost);
-    varsCol->Child(StoryTxt(a, StrL("Outline"), 13, th.foreground)->Semibold());
+    varsCol
+        ->Child(StoryTxt(cx, StrL("Outline"), 13, th.foreground)->Semibold());
     El* outline = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    outline->Child(ToggleChip(a, ClickToggleBell2, nullptr, IconName::Bell,
+    outline->Child(ToggleChip(cx, ClickToggleBell2, nullptr, IconName::Bell,
                               app->toggles[4], true));
-    outline->Child(ToggleChip(a, ClickToggleInbox2, nullptr, IconName::Inbox,
+    outline->Child(ToggleChip(cx, ClickToggleInbox2, nullptr, IconName::Inbox,
                               app->toggles[5], true));
-    outline->Child(ToggleChip(a, ClickToggleCheck2, nullptr, IconName::Check,
+    outline->Child(ToggleChip(cx, ClickToggleCheck2, nullptr, IconName::Check,
                               app->toggles[6], true));
     varsCol->Child(outline);
     StorySectionAdd(vars, varsCol);
     page->Child(vars);
 
-    El* grp = StorySection(a, "Group",
+    El* grp = StorySection(cx, "Group",
                            "Connected toggles keep related choices together.");
     El* g = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
-    g->Child(ToggleChip(a, ClickToggleBold, "Bold", IconName::None,
+    g->Child(ToggleChip(cx, ClickToggleBold, "Bold", IconName::None,
                         app->toggles[7], false));
-    g->Child(ToggleChip(a, ClickToggleItalic, "Italic", IconName::None,
+    g->Child(ToggleChip(cx, ClickToggleItalic, "Italic", IconName::None,
                         app->toggles[8], false));
-    g->Child(ToggleChip(a, ClickToggleCode, "Code", IconName::None,
+    g->Child(ToggleChip(cx, ClickToggleCode, "Code", IconName::None,
                         app->toggles[9], false));
     StorySectionAdd(grp, g);
     page->Child(grp);

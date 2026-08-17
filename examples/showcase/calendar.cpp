@@ -47,7 +47,7 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
     GetLocalTime(&today);
     int y = app->calYear;
     int m = app->calMonth;
-    El* root = Calendar::New(a, StrL("example-calendar"))
+    El* root = Calendar::New(cx, StrL("example-calendar"))
                    ->FlexCol()
                    ->W(250)
                    ->Pad(12)
@@ -62,10 +62,10 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
                    ->HoverBg(ScHover())
                    ->Click(ClickCalPrev)
                    ->FocusId(ClickCalPrev)
-                   ->Child(ScTxt(a, StrL("‹"), 14, ScInk())));
+                   ->Child(ScTxt(cx, StrL("‹"), 14, ScInk())));
     El* title = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    title->Child(ScTxt(a, Str(kMon[m]), 12, ScInk()));
-    title->Child(ScTxt(a, DupFmt(a, "%d", y), 12, ScInk()));
+    title->Child(ScTxt(cx, Str(kMon[m]), 12, ScInk()));
+    title->Child(ScTxt(cx, DupFmt(cx, "%d", y), 12, ScInk()));
     nav->Child(title);
     nav->Child(Div(a)
                    ->W(28)
@@ -75,13 +75,13 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
                    ->HoverBg(ScHover())
                    ->Click(ClickCalNext)
                    ->FocusId(ClickCalNext)
-                   ->Child(ScTxt(a, StrL("›"), 14, ScInk())));
+                   ->Child(ScTxt(cx, StrL("›"), 14, ScInk())));
     root->Child(nav);
 
     El* wd = Div(a)->FlexRow();
     for (int i = 0; i < 7; i++) {
         wd->Child(Div(a)->W(32)->H(32)->ItemsCenter()->JustifyCenter()->Child(
-            ScTxt(a, Str(kWd[i]), 12, ScMutedC())));
+            ScTxt(cx, Str(kWd[i]), 12, ScMutedC())));
     }
     root->Child(wd);
 
@@ -118,13 +118,14 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
                         ->FocusId(ClickCalDay + cell);
             if (active) {
                 d->Bg(ScInk())
-                    ->Child(ScTxt(a, DupFmt(a, "%d", day), 12, ScWhite()));
+                    ->Child(ScTxt(cx, DupFmt(cx, "%d", day), 12, ScWhite()));
             } else {
                 if (isToday) {
                     d->Border(1, ScBorder());
                 }
-                d->HoverBg(ScHover())->Child(ScTxt(
-                    a, DupFmt(a, "%d", day), 12, muted ? ScSilver() : ScInk()));
+                d->HoverBg(ScHover())
+                    ->Child(ScTxt(cx, DupFmt(cx, "%d", day), 12,
+                                  muted ? ScSilver() : ScInk()));
             }
             row->Child(d);
         }

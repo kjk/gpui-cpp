@@ -5,9 +5,9 @@
 namespace gpui {
 
 struct Tree {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct TreeItem {
-    static El* New(Arena* a, int clickId = 0);
+    static El* New(Ctx* cx, int clickId = 0);
 };
 } // namespace gpui

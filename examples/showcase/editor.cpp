@@ -61,18 +61,18 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
             TextEl(a, StrL("Rust Editor"))
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(
-            InputBase::New(a, StrL("example-editor"), ClickEditor)
-                ->W(320)
-                ->H(128)
-                ->PadX(8)
-                ->PadY(8)
-                ->ClipY()
-                ->FlexCol()
-                ->FocusId(0)
-                ->Border(1, app->editorOn ? Rgb(0x17, 0x17, 0x17)
-                                          : Rgb(0xd4, 0xd4, 0xd4))
-                ->Child(Editor::New(a, app->editor, app->editorCursor, blink)));
+        ->Child(InputBase::New(cx, StrL("example-editor"), ClickEditor)
+                    ->W(320)
+                    ->H(128)
+                    ->PadX(8)
+                    ->PadY(8)
+                    ->ClipY()
+                    ->FlexCol()
+                    ->FocusId(0)
+                    ->Border(1, app->editorOn ? Rgb(0x17, 0x17, 0x17)
+                                              : Rgb(0xd4, 0xd4, 0xd4))
+                    ->Child(Editor::New(cx, app->editor, app->editorCursor,
+                                        blink)));
 }
 
 void ShowcaseEditorClick(ShowcaseApp* app, int id) {

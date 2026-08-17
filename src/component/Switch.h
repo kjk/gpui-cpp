@@ -8,6 +8,7 @@ namespace component {
 
 struct Switch {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
     bool checked = false;
@@ -17,7 +18,7 @@ struct Switch {
     bool hasColor = false;
     Func1<bool> onClick;
 
-    static Switch* New(Arena* a, Str id);
+    static Switch* New(Ctx* cx, Str id);
     Switch* Label(Str s);
     Switch* Checked(bool v);
     Switch* Disabled(bool v);

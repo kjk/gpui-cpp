@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* TextSelection::New(Arena* a, Str id, int clickId) {
+El* TextSelection::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 } // namespace gpui

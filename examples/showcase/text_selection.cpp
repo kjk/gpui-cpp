@@ -87,9 +87,9 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
     int pos = 0;
     for (int i = 0; i < 4; i++) {
         int plen = ParaLen(i);
-        El* p = TextSelection::New(a, DupFmt(a, "para-%d", i), 0)->W(kFill);
+        El* p = TextSelection::New(cx, DupFmt(cx, "para-%d", i), 0)->W(kFill);
         float size = i == 0 ? 18.f : 14.f;
-        El* t = ScTxt(a, Str(kParas[i]), size, i == 0 ? ScInk() : ScGray())
+        El* t = ScTxt(cx, Str(kParas[i]), size, i == 0 ? ScInk() : ScGray())
                     ->Wrap()
                     ->MaxW(560)
                     ->Click(ClickPara + i);
@@ -114,12 +114,12 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
     if (active) {
         char picked[1024];
         CopySelected(app, picked, (int)sizeof(picked));
-        preview
-            ->Child(ScTxt(a, DupA(a, picked), 12, ScGray())->Wrap()->MaxW(560));
+        preview->Child(
+            ScTxt(cx, DupA(cx, picked), 12, ScGray())->Wrap()->MaxW(560));
     } else {
-        preview
-            ->Child(ScTxt(a, StrL("Drag across any paragraphs to select text."),
-                          12, ScGray()));
+        preview->Child(ScTxt(cx,
+                             StrL("Drag across any paragraphs to select text."),
+                             12, ScGray()));
     }
 
     El* footer =
@@ -133,12 +133,12 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
             ->Bg(ScHover())
             ->Border(1, ScLine())
             ->Child(
-                ScTxt(a,
+                ScTxt(cx,
                       active ? StrL("Selection active") : StrL("No selection"),
                       12, ScInk())
                     ->Semibold())
             ->Child(preview)
-            ->Child(Button::New(a, StrL("clear-text-selection"), ClickSelClear)
+            ->Child(Button::New(cx, StrL("clear-text-selection"), ClickSelClear)
                         ->H(28)
                         ->PadX(8)
                         ->Shrink0()

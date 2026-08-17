@@ -5,9 +5,9 @@
 namespace gpui {
 
 struct Resizable {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct ResizablePanel {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 } // namespace gpui

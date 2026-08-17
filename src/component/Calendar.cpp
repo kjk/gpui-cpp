@@ -12,9 +12,11 @@ static void FireDay(DayBind* b) {
     b->fn.Call(b->day);
 }
 
-Calendar* Calendar::New(Arena* a) {
+Calendar* Calendar::New(Ctx* cx) {
+    Arena* a = cx->a;
     Calendar* c = ArenaNew<Calendar>(a);
     c->a = a;
+    c->cx = cx;
     return c;
 }
 Calendar* Calendar::Year(int y) {
@@ -54,7 +56,7 @@ El* Calendar::IntoEl() {
     const Theme& th = ThemeNow();
     static const char* mon[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    El* root = gpui::Calendar::New(a, StrL("calendar"))
+    El* root = gpui::Calendar::New(cx, StrL("calendar"))
                    ->FlexCol()
                    ->W(250)
                    ->Pad(12)
@@ -84,7 +86,7 @@ El* Calendar::IntoEl() {
             grid->Child(row);
         }
         bool on = d == day;
-        El* cell = CalendarItem::New(a, HashClickId(StrDup(a, fmt("d%d", d))))
+        El* cell = CalendarItem::New(cx, HashClickId(StrDup(a, fmt("d%d", d))))
                        ->W(32)
                        ->H(32)
                        ->ItemsCenter()

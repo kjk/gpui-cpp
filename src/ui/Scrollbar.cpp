@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* Scrollbar::New(Arena* a) {
+El* Scrollbar::New(Ctx* cx) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("example-scroll-region"), 0);
 }
 } // namespace gpui

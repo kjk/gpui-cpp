@@ -10,10 +10,10 @@ El* DataTableRender(StoryApp* app, Ctx* cx) {
     static const char* r3[] = {"Donald Knuth", "don@example.com", "Editor"};
     static const char** rows[] = {r0, r1, r2, r3};
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "Powerful table and datagrids.");
+    El* sec = StorySection(cx, "Default", "Powerful table and datagrids.");
     StorySectionAdd(
         sec,
-        component::Table::New(a)->Heads(heads, 3)->Rows(rows, 4)->IntoEl());
+        component::Table::New(cx)->Heads(heads, 3)->Rows(rows, 4)->IntoEl());
     page->Child(sec);
     return page;
 }

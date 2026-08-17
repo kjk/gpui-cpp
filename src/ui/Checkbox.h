@@ -5,10 +5,10 @@
 namespace gpui {
 
 struct Checkbox {
-    static El* New(Arena* a, Str id, int clickId = 0);
+    static El* New(Ctx* cx, Str id, int clickId = 0);
 };
 
 struct CheckboxIndicator {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 } // namespace gpui

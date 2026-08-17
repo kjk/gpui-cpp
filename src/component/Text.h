@@ -8,9 +8,10 @@ namespace component {
 
 struct TextView {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str source = {};
 
-    static TextView* New(Arena* a, Str source);
+    static TextView* New(Ctx* cx, Str source);
     El* IntoEl();
 };
 

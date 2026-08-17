@@ -16,7 +16,7 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
     if (left > 210) {
         left = 210;
     }
-    El* nav = ResizablePanel::New(a)
+    El* nav = ResizablePanel::New(cx)
                   ->W(left)
                   ->H(kFill)
                   ->Pad(8)
@@ -34,7 +34,7 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
         Div(a)->W(4)->H(kFill)->Click(ClickResize)->FocusId(ClickResize);
     split->Child(Div(a)->W(1)->H(kFill)->Bg(Rgb(0x17, 0x17, 0x17)));
     El* main =
-        ResizablePanel::New(a)
+        ResizablePanel::New(cx)
             ->Grow()
             ->H(kFill)
             ->Pad(8)
@@ -48,7 +48,7 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
                         ->Fg(Rgb(0x73, 0x73, 0x73))
                         ->Wrap()
                         ->MaxW(140));
-    return Resizable::New(a, StrL("example-resizable"))
+    return Resizable::New(cx, StrL("example-resizable"))
         ->W(288)
         ->H(160)
         ->Border(1, Rgb(0x17, 0x17, 0x17))

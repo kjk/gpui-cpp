@@ -9,30 +9,30 @@ El* AlertDialogRender(StoryApp* app, Ctx* cx, WinSize size) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(
-        a, "Default",
+        cx, "Default",
         "A modal dialog that interrupts the user with important content.");
-    StorySectionAdd(def, component::Button::New(a, StrL("open-alert"))
+    StorySectionAdd(def, component::Button::New(cx, StrL("open-alert"))
                              ->Label(StrL("Show Dialog"))
                              ->Outline()
                              ->IntoEl());
     page->Child(def);
 
-    El* dest = StorySection(a, "Destructive", nullptr);
-    StorySectionAdd(dest, component::Button::New(a, StrL("open-alert-danger"))
+    El* dest = StorySection(cx, "Destructive", nullptr);
+    StorySectionAdd(dest, component::Button::New(cx, StrL("open-alert-danger"))
                               ->Label(StrL("Delete project"))
                               ->Danger()
                               ->IntoEl());
     page->Child(dest);
 
-    El* none = StorySection(a, "Without title", nullptr);
-    StorySectionAdd(none, component::Button::New(a, StrL("open-alert-notitle"))
+    El* none = StorySection(cx, "Without title", nullptr);
+    StorySectionAdd(none, component::Button::New(cx, StrL("open-alert-notitle"))
                               ->Label(StrL("Confirm"))
                               ->Outline()
                               ->IntoEl());
     page->Child(none);
 
     if (app->alertOpen) {
-        component::Dialog* d = component::Dialog::New(a)
+        component::Dialog* d = component::Dialog::New(cx)
                                    ->Open(true)
                                    ->OnClose(MkFunc0(&CloseAlert, app))
                                    ->OnOk(MkFunc0(&CloseAlert, app));

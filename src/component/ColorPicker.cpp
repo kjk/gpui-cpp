@@ -12,9 +12,11 @@ static void FireCol(ColBind* b) {
     b->fn.Call(b->hex);
 }
 
-ColorPicker* ColorPicker::New(Arena* a) {
+ColorPicker* ColorPicker::New(Ctx* cx) {
+    Arena* a = cx->a;
     ColorPicker* c = ArenaNew<ColorPicker>(a);
     c->a = a;
+    c->cx = cx;
     return c;
 }
 ColorPicker* ColorPicker::Hex(uint32_t h) {
@@ -64,7 +66,7 @@ El* ColorPicker::IntoEl() {
             Rgba sc =
                 Rgb((uint8_t)((sw[i] >> 16) & 0xff),
                     (uint8_t)((sw[i] >> 8) & 0xff), (uint8_t)(sw[i] & 0xff));
-            El* cell = ColorSwatch::New(a, StrDup(a, fmt("sw%d", i)))
+            El* cell = ColorSwatch::New(cx, StrDup(a, fmt("sw%d", i)))
                            ->W(24)
                            ->H(24)
                            ->Bg(sc);
@@ -78,8 +80,8 @@ El* ColorPicker::IntoEl() {
             pop->Child(cell);
         }
     }
-    El* root = gpui::ColorPicker::New(a, StrL("color-picker"))->Child(trigger);
-    return Popup::New(a, StrL("color-pop"), root)->Content(pop)->IntoEl();
+    El* root = gpui::ColorPicker::New(cx, StrL("color-picker"))->Child(trigger);
+    return Popup::New(cx, StrL("color-pop"), root)->Content(pop)->IntoEl();
 }
 
 } // namespace component

@@ -8,12 +8,13 @@ namespace component {
 
 struct GroupBox {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str title = {};
     El* child = nullptr;
     bool outline = false;
     bool filled = true;
 
-    static GroupBox* New(Arena* a, Str title);
+    static GroupBox* New(Ctx* cx, Str title);
     GroupBox* Child(El* e);
     GroupBox* Outline();
     GroupBox* Filled(bool v);

@@ -9,17 +9,17 @@ El* TableRender(StoryApp* app, Ctx* cx) {
     static const char* r2[] = {"story-web", "Preview", "0.2.8"};
     static const char** rows[] = {r0, r1, r2};
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A responsive table component.");
+    El* sec = StorySection(cx, "Default", "A responsive table component.");
     StorySectionAdd(
         sec,
-        component::Table::New(a)->Heads(heads, 3)->Rows(rows, 3)->IntoEl());
+        component::Table::New(cx)->Heads(heads, 3)->Rows(rows, 3)->IntoEl());
     page->Child(sec);
 
-    El* bordered = StorySection(a, "Bordered", nullptr);
+    El* bordered = StorySection(cx, "Bordered", nullptr);
     StorySectionAdd(bordered, Div(a)
                                   ->Border(1, ThemeNow().border)
                                   ->Radius(ThemeNow().radius)
-                                  ->Child(component::Table::New(a)
+                                  ->Child(component::Table::New(cx)
                                               ->Heads(heads, 3)
                                               ->Rows(rows, 3)
                                               ->IntoEl()));

@@ -8,9 +8,10 @@ static void PickCombo(StoryApp* app, int i) {
     app->comboOpen = false;
 }
 
-static El* Combo(Arena* a, StoryApp* app, const char* id) {
+static El* Combo(Ctx* cx, StoryApp* app, const char* id) {
+    Arena* a = cx->a;
     const char* opts[] = {"GPUI", "React", "SwiftUI", "Vue"};
-    component::Combobox* cb = component::Combobox::New(a, Str(id))
+    component::Combobox* cb = component::Combobox::New(cx, Str(id))
                                   ->Selected(Str(opts[app->selectIx]))
                                   ->Open(app->comboOpen)
                                   ->Query(&app->search)
@@ -28,25 +29,25 @@ El* ComboboxRender(StoryApp* app, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(
-        a, "Default",
+        cx, "Default",
         "Autocomplete input and command palette with a list of suggestions.");
-    StorySectionAdd(def, Combo(a, app, "frameworks"));
+    StorySectionAdd(def, Combo(cx, app, "frameworks"));
     page->Child(def);
 
-    El* multi = StorySection(a, "Multiple", nullptr);
-    StorySectionAdd(multi, Combo(a, app, "multi"));
+    El* multi = StorySection(cx, "Multiple", nullptr);
+    StorySectionAdd(multi, Combo(cx, app, "multi"));
     page->Child(multi);
 
-    El* groups = StorySection(a, "Groups", nullptr);
-    StorySectionAdd(groups, Combo(a, app, "groups"));
+    El* groups = StorySection(cx, "Groups", nullptr);
+    StorySectionAdd(groups, Combo(cx, app, "groups"));
     page->Child(groups);
 
-    El* icons = StorySection(a, "Icons", nullptr);
-    StorySectionAdd(icons, Combo(a, app, "icons"));
+    El* icons = StorySection(cx, "Icons", nullptr);
+    StorySectionAdd(icons, Combo(cx, app, "icons"));
     page->Child(icons);
 
-    El* footer = StorySection(a, "Footer", nullptr);
-    StorySectionAdd(footer, Combo(a, app, "footer"));
+    El* footer = StorySection(cx, "Footer", nullptr);
+    StorySectionAdd(footer, Combo(cx, app, "footer"));
     page->Child(footer);
     return page;
 }

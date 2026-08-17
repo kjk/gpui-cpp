@@ -3,7 +3,8 @@
 
 namespace gpui {
 
-El* Link::New(Arena* a, Str id, int clickId) {
+El* Link::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 } // namespace gpui

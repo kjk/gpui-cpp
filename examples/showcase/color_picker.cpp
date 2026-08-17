@@ -74,27 +74,27 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
         El* sw = Div(a)->FlexRow()->Gap(4);
         for (int i = 0; i < 5; i++) {
             bool on = (app->colorHex & 0xffffff) == kSwatches[i];
-            sw->Child(
-                ColorSwatch::New(a, DupFmt(a, "swatch-%d", i), ClickSwatch + i)
-                    ->W(24)
-                    ->H(24)
-                    ->Bg(FromHex(kSwatches[i]))
-                    ->Border(
-                        1, on ? Rgb(0x17, 0x17, 0x17) : Rgb(0xff, 0xff, 0xff)));
+            sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i),
+                                       ClickSwatch + i)
+                          ->W(24)
+                          ->H(24)
+                          ->Bg(FromHex(kSwatches[i]))
+                          ->Border(1, on ? Rgb(0x17, 0x17, 0x17)
+                                         : Rgb(0xff, 0xff, 0xff)));
         }
         pop->Child(sw);
-        pop->Child(InputBase::New(a, StrL("color-hex-input"), ClickHex)
+        pop->Child(InputBase::New(cx, StrL("color-hex-input"), ClickHex)
                        ->W(204)
                        ->H(28)
                        ->PadX(8)
                        ->ItemsCenter()
                        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                       ->Child(Input::New(a, &app->hexIn)));
+                       ->Child(Input::New(cx, &app->hexIn)));
     }
-    El* root = ColorPicker::New(a, StrL("example-color-picker"))
+    El* root = ColorPicker::New(cx, StrL("example-color-picker"))
                    ->W(220)
                    ->Child(trigger);
-    return Popup::New(a, StrL("example-color-picker-popup"), root)
+    return Popup::New(cx, StrL("example-color-picker-popup"), root)
         ->Content(pop)
         ->IntoEl();
 }

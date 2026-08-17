@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-StatusBar* StatusBar::New(Arena* a) {
+StatusBar* StatusBar::New(Ctx* cx) {
+    Arena* a = cx->a;
     StatusBar* s = ArenaNew<StatusBar>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 StatusBar* StatusBar::Left(Str s) {

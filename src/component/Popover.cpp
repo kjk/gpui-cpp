@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Popover* Popover::New(Arena* a) {
+Popover* Popover::New(Ctx* cx) {
+    Arena* a = cx->a;
     Popover* p = ArenaNew<Popover>(a);
     p->a = a;
+    p->cx = cx;
     return p;
 }
 Popover* Popover::Trigger(El* e) {
@@ -23,7 +25,7 @@ Popover* Popover::Open(bool v) {
 }
 
 El* Popover::IntoEl() {
-    return gpui::Popover::New(a, StrL("popover"))
+    return gpui::Popover::New(cx, StrL("popover"))
         ->Trigger(trigger)
         ->Content(open ? content : nullptr)
         ->IntoEl();

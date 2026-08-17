@@ -8,11 +8,12 @@ namespace component {
 
 struct HoverCard {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* trigger = nullptr;
     El* content = nullptr;
     bool open = false;
 
-    static HoverCard* New(Arena* a);
+    static HoverCard* New(Ctx* cx);
     HoverCard* Trigger(El* e);
     HoverCard* Content(El* e);
     HoverCard* Open(bool v);

@@ -10,7 +10,7 @@ enum {
 El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool on = app->checkboxOn;
-    El* indicator = CheckboxIndicator::New(a)
+    El* indicator = CheckboxIndicator::New(cx)
                         ->W(16)
                         ->H(16)
                         ->Shrink0()
@@ -21,7 +21,7 @@ El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
         indicator->Bg(Rgb(0x17, 0x17, 0x17))
             ->Child(TextEl(a, StrL("✓"))->Font(11)->Fg(Rgb(0xff, 0xff, 0xff)));
     }
-    return Checkbox::New(a, StrL("example-checkbox"), ClickCheckbox)
+    return Checkbox::New(cx, StrL("example-checkbox"), ClickCheckbox)
         ->FlexRow()
         ->ItemsCenter()
         ->Gap(8)

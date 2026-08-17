@@ -12,9 +12,11 @@ static void FireStep(StepBind* b) {
     b->fn.Call(b->index);
 }
 
-Stepper* Stepper::New(Arena* a) {
+Stepper* Stepper::New(Ctx* cx) {
+    Arena* a = cx->a;
     Stepper* s = ArenaNew<Stepper>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 Stepper* Stepper::Step(Str s) {

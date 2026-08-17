@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Icon* Icon::New(Arena* a, IconName name) {
+Icon* Icon::New(Ctx* cx, IconName name) {
+    Arena* a = cx->a;
     Icon* i = ArenaNew<Icon>(a);
     i->a = a;
+    i->cx = cx;
     i->name = name;
     return i;
 }

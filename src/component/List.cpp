@@ -12,9 +12,11 @@ static void FireList(ListBind* b) {
     b->fn.Call(b->index);
 }
 
-List* List::New(Arena* a) {
+List* List::New(Ctx* cx) {
+    Arena* a = cx->a;
     List* l = ArenaNew<List>(a);
     l->a = a;
+    l->cx = cx;
     return l;
 }
 List* List::Item(Str s) {

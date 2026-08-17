@@ -7,7 +7,7 @@ El* IconRender(StoryApp* app, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* icons = StorySection(
-        a, "Icons", "Common interface symbols from the bundled icon set.");
+        cx, "Icons", "Common interface symbols from the bundled icon set.");
     IconName names[] = {IconName::Info,     IconName::Search,
                         IconName::Bot,      IconName::Settings,
                         IconName::Calendar, IconName::Folder,
@@ -20,25 +20,25 @@ El* IconRender(StoryApp* app, Ctx* cx) {
     page->Child(icons);
 
     El* color =
-        StorySection(a, "Color", "Icons inherit semantic foreground colors.");
+        StorySection(cx, "Color", "Icons inherit semantic foreground colors.");
     El* colorRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     colorRow->Child(IconEl(a, IconName::Maximize, 24)->Fg(th.green));
     colorRow->Child(IconEl(a, IconName::Minus, 24)->Fg(th.red));
     StorySectionAdd(color, colorRow);
     page->Child(color);
 
-    El* btns = StorySection(a, "Icon Buttons",
+    El* btns = StorySection(cx, "Icon Buttons",
                             "Icons can be used as compact button content.");
     El* btnRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    btnRow->Child(component::Button::New(a, StrL("like1"))
+    btnRow->Child(component::Button::New(cx, StrL("like1"))
                       ->Icon(IconName::Heart)
                       ->Ghost()
                       ->IntoEl());
-    btnRow->Child(component::Button::New(a, StrL("like2"))
+    btnRow->Child(component::Button::New(cx, StrL("like2"))
                       ->Icon(IconName::Heart)
                       ->Ghost()
                       ->IntoEl());
-    btnRow->Child(component::Button::New(a, StrL("like3"))
+    btnRow->Child(component::Button::New(cx, StrL("like3"))
                       ->Icon(IconName::Heart)
                       ->Ghost()
                       ->IntoEl());
@@ -46,9 +46,9 @@ El* IconRender(StoryApp* app, Ctx* cx) {
     page->Child(btns);
 
     El* csz = StorySection(
-        a, "Custom Size",
+        cx, "Custom Size",
         "Explicit dimensions support dense controls and counters.");
-    StorySectionAdd(csz, component::Button::New(a, StrL("button-with-size"))
+    StorySectionAdd(csz, component::Button::New(cx, StrL("button-with-size"))
                              ->Outline()
                              ->Label(StrL("10"))
                              ->Compact()

@@ -8,12 +8,13 @@ namespace component {
 
 struct Tabs {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str labels[8] = {};
     int n = 0;
     int selected = 0;
     Func1<int> onChange;
 
-    static Tabs* New(Arena* a);
+    static Tabs* New(Ctx* cx);
     Tabs* Tab(Str label);
     Tabs* Selected(int i);
     Tabs* OnChange(Func1<int> fn);

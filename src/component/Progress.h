@@ -8,11 +8,12 @@ namespace component {
 
 struct Progress {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     float value = 0;
     float w = 200;
     float h = 8;
 
-    static Progress* New(Arena* a);
+    static Progress* New(Ctx* cx);
     Progress* Value(float v);
     Progress* W(float v);
     Progress* H(float v);
@@ -21,13 +22,14 @@ struct Progress {
 
 struct ProgressCircle {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     float value = 0;
     float size = 48;
     Rgba color = {};
     bool hasColor = false;
     bool showLabel = true;
 
-    static ProgressCircle* New(Arena* a);
+    static ProgressCircle* New(Ctx* cx);
     ProgressCircle* Value(float v);
     ProgressCircle* Size(float v);
     ProgressCircle* Color(Rgba c);

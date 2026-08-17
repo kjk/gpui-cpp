@@ -1,17 +1,18 @@
 #include "Story.h"
 
-static El* BoxBody(Arena* a) {
+static El* BoxBody(Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(8);
-    col->Child(component::Checkbox::New(a, StrL("gb-dark"))
+    col->Child(component::Checkbox::New(cx, StrL("gb-dark"))
                    ->Label(StrL("Dark mode"))
                    ->Checked(true)
                    ->IntoEl());
-    col->Child(component::Switch::New(a, StrL("gb-compact"))
+    col->Child(component::Switch::New(cx, StrL("gb-compact"))
                    ->Label(StrL("Compact density"))
                    ->Checked(false)
                    ->IntoEl());
-    col->Child(StoryTxt(a, StrL("Theme, radius, and density live together."),
+    col->Child(StoryTxt(cx, StrL("Theme, radius, and density live together."),
                         13, th.mutedFg));
     return col;
 }
@@ -21,37 +22,37 @@ El* GroupBoxRender(StoryApp* app, Ctx* cx) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
-    El* def = StorySection(a, "Default", nullptr);
-    StorySectionAdd(def, component::GroupBox::New(a, StrL("Appearance"))
-                             ->Child(BoxBody(a))
+    El* def = StorySection(cx, "Default", nullptr);
+    StorySectionAdd(def, component::GroupBox::New(cx, StrL("Appearance"))
+                             ->Child(BoxBody(cx))
                              ->IntoEl());
     page->Child(def);
 
-    El* filled = StorySection(a, "Filled", nullptr);
-    StorySectionAdd(filled, component::GroupBox::New(a, StrL("Appearance"))
+    El* filled = StorySection(cx, "Filled", nullptr);
+    StorySectionAdd(filled, component::GroupBox::New(cx, StrL("Appearance"))
                                 ->Filled(true)
-                                ->Child(BoxBody(a))
+                                ->Child(BoxBody(cx))
                                 ->IntoEl());
     page->Child(filled);
 
-    El* out = StorySection(a, "Outlined", nullptr);
-    StorySectionAdd(out, component::GroupBox::New(a, StrL("Appearance"))
+    El* out = StorySection(cx, "Outlined", nullptr);
+    StorySectionAdd(out, component::GroupBox::New(cx, StrL("Appearance"))
                              ->Outline()
-                             ->Child(BoxBody(a))
+                             ->Child(BoxBody(cx))
                              ->IntoEl());
     page->Child(out);
 
-    El* none = StorySection(a, "Without Title", nullptr);
-    StorySectionAdd(none, component::GroupBox::New(a, {})
+    El* none = StorySection(cx, "Without Title", nullptr);
+    StorySectionAdd(none, component::GroupBox::New(cx, {})
                               ->Outline()
-                              ->Child(BoxBody(a))
+                              ->Child(BoxBody(cx))
                               ->IntoEl());
     page->Child(none);
 
-    El* custom = StorySection(a, "Custom Style", nullptr);
-    StorySectionAdd(custom, component::GroupBox::New(a, StrL("Appearance"))
+    El* custom = StorySection(cx, "Custom Style", nullptr);
+    StorySectionAdd(custom, component::GroupBox::New(cx, StrL("Appearance"))
                                 ->Outline()
-                                ->Child(BoxBody(a))
+                                ->Child(BoxBody(cx))
                                 ->IntoEl());
     page->Child(custom);
     return page;

@@ -4,16 +4,16 @@ El* NativeMenuRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* builder = StorySection(a, "Builder API", nullptr);
-    StorySectionAdd(builder, component::Menu::New(a)
+    El* builder = StorySection(cx, "Builder API", nullptr);
+    StorySectionAdd(builder, component::Menu::New(cx)
                                  ->Item(StrL("File"))
                                  ->Item(StrL("Edit"))
                                  ->Item(StrL("View"))
                                  ->IntoEl());
     page->Child(builder);
 
-    El* items = StorySection(a, "Menu Items", nullptr);
-    StorySectionAdd(items, component::Menu::New(a)
+    El* items = StorySection(cx, "Menu Items", nullptr);
+    StorySectionAdd(items, component::Menu::New(cx)
                                ->Item(StrL("New"))
                                ->Item(StrL("Open…"))
                                ->Item(StrL("Save"))
@@ -21,9 +21,9 @@ El* NativeMenuRender(StoryApp* app, Ctx* cx) {
                                ->IntoEl());
     page->Child(items);
 
-    El* drop = StorySection(a, "Dropdown", nullptr);
+    El* drop = StorySection(cx, "Dropdown", nullptr);
     StorySectionAdd(
-        drop, StoryTxt(a,
+        drop, StoryTxt(cx,
                        StrL("Native application menus are not wired on this "
                             "Win32 port. Use the in-window Menu story."),
                        13, ThemeNow().mutedFg)

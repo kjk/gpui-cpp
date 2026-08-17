@@ -3,23 +3,28 @@
 
 namespace gpui {
 
-El* Accordion::New(Arena* a, Str id) {
+El* Accordion::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     return UiRoot(a, id, 0);
 }
 
-El* AccordionTrigger::New(Arena* a, Str id, int clickId) {
+El* AccordionTrigger::New(Ctx* cx, Str id, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, id, clickId);
 }
 
-El* AccordionHeader::New(Arena* a, El* trigger) {
+El* AccordionHeader::New(Ctx* cx, El* trigger) {
+    Arena* a = cx->a;
     return Div(a)->Child(trigger);
 }
 
-El* AccordionPanel::New(Arena* a) {
+El* AccordionPanel::New(Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a);
 }
 
-AccordionItem* AccordionItem::New(Arena* a) {
+AccordionItem* AccordionItem::New(Ctx* cx) {
+    Arena* a = cx->a;
     AccordionItem* item = ArenaNew<AccordionItem>(a);
     item->root = Div(a)->FlexCol();
     return item;

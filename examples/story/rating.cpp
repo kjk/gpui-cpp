@@ -8,11 +8,11 @@ El* RatingRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
     El* def =
-        StorySection(a, "Default", "Select a value directly from the rating.");
-    StorySectionAdd(def, component::Rating::New(a)
+        StorySection(cx, "Default", "Select a value directly from the rating.");
+    StorySectionAdd(def, component::Rating::New(cx)
                              ->Value(app->rating)
                              ->Max(5)
                              ->WithSize(app->size)
@@ -20,8 +20,8 @@ El* RatingRender(StoryApp* app, Ctx* cx) {
                              ->IntoEl());
     page->Child(def);
 
-    El* dis = StorySection(a, "Disabled", nullptr);
-    StorySectionAdd(dis, component::Rating::New(a)
+    El* dis = StorySection(cx, "Disabled", nullptr);
+    StorySectionAdd(dis, component::Rating::New(cx)
                              ->Value(2)
                              ->Max(5)
                              ->Color(th.green)
@@ -30,8 +30,8 @@ El* RatingRender(StoryApp* app, Ctx* cx) {
                              ->IntoEl());
     page->Child(dis);
 
-    El* col = StorySection(a, "Color", nullptr);
-    StorySectionAdd(col, component::Rating::New(a)
+    El* col = StorySection(cx, "Color", nullptr);
+    StorySectionAdd(col, component::Rating::New(cx)
                              ->Value(app->rating)
                              ->Max(5)
                              ->Color(th.green)

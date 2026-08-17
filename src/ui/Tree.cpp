@@ -3,10 +3,12 @@
 
 namespace gpui {
 
-El* Tree::New(Arena* a) {
+El* Tree::New(Ctx* cx) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("example-tree"), 0);
 }
-El* TreeItem::New(Arena* a, int clickId) {
+El* TreeItem::New(Ctx* cx, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("tree-item"), clickId);
 }
 } // namespace gpui

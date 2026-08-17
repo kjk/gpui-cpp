@@ -8,8 +8,9 @@ static void PickSel(StoryApp* app, int i) {
     app->selectOpen = false;
 }
 
-static component::Select* Framework(Arena* a, StoryApp* app, const char* id) {
-    return component::Select::New(a, Str(id))
+static component::Select* Framework(Ctx* cx, StoryApp* app, const char* id) {
+    Arena* a = cx->a;
+    return component::Select::New(cx, Str(id))
         ->Option(StrL("GPUI"))
         ->Option(StrL("React"))
         ->Option(StrL("SwiftUI"))
@@ -24,25 +25,26 @@ El* SelectRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
-    El* search = StorySection(a, "Search and clear", nullptr);
-    StorySectionAdd(search, Framework(a, app, "framework")->IntoEl());
+    El* search = StorySection(cx, "Search and clear", nullptr);
+    StorySectionAdd(search, Framework(cx, app, "framework")->IntoEl());
     page->Child(search);
 
-    El* width = StorySection(a, "Menu width", nullptr);
-    StorySectionAdd(width, Framework(a, app, "width")->IntoEl());
+    El* width = StorySection(cx, "Menu width", nullptr);
+    StorySectionAdd(width, Framework(cx, app, "width")->IntoEl());
     page->Child(width);
 
-    El* dis = StorySection(a, "Disabled", nullptr);
-    StorySectionAdd(dis, Framework(a, app, "disabled")->IntoEl());
+    El* dis = StorySection(cx, "Disabled", nullptr);
+    StorySectionAdd(dis, Framework(cx, app, "disabled")->IntoEl());
     page->Child(dis);
 
-    El* prefix = StorySection(a, "Title prefix", nullptr);
-    StorySectionAdd(prefix, Framework(a, app, "prefix")->IntoEl());
+    El* prefix = StorySection(cx, "Title prefix", nullptr);
+    StorySectionAdd(prefix, Framework(cx, app, "prefix")->IntoEl());
     page->Child(prefix);
 
-    El* empty = StorySection(a, "Empty", nullptr);
-    StorySectionAdd(
-        empty, component::Select::New(a, StrL("empty"))->Open(false)->IntoEl());
+    El* empty = StorySection(cx, "Empty", nullptr);
+    StorySectionAdd(empty, component::Select::New(cx, StrL("empty"))
+                               ->Open(false)
+                               ->IntoEl());
     page->Child(empty);
     return page;
 }

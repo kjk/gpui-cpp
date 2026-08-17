@@ -8,12 +8,13 @@ namespace component {
 
 struct Icon {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     IconName name = IconName::None;
     float size = 16;
     Rgba color = {};
     bool hasColor = false;
 
-    static Icon* New(Arena* a, IconName name);
+    static Icon* New(Ctx* cx, IconName name);
     Icon* Size(float v);
     Icon* Color(Rgba c);
     El* IntoEl();

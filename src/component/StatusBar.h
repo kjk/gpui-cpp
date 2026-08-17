@@ -8,10 +8,11 @@ namespace component {
 
 struct StatusBar {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str left = {};
     Str right = {};
 
-    static StatusBar* New(Arena* a);
+    static StatusBar* New(Ctx* cx);
     StatusBar* Left(Str s);
     StatusBar* Right(Str s);
     El* IntoEl();

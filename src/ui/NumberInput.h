@@ -5,6 +5,6 @@
 namespace gpui {
 
 struct NumberInput {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 } // namespace gpui

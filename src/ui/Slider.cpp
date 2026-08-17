@@ -3,16 +3,20 @@
 
 namespace gpui {
 
-El* Slider::New(Arena* a, int clickId) {
+El* Slider::New(Ctx* cx, int clickId) {
+    Arena* a = cx->a;
     return UiRoot(a, StrL("example-slider"), clickId);
 }
-El* SliderTrack::New(Arena* a) {
+El* SliderTrack::New(Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a);
 }
-El* SliderIndicator::New(Arena* a) {
+El* SliderIndicator::New(Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a);
 }
-El* SliderThumb::New(Arena* a) {
+El* SliderThumb::New(Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a);
 }
 } // namespace gpui

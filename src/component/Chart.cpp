@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-AreaChart* AreaChart::New(Arena* a, const float* ys, int n) {
+AreaChart* AreaChart::New(Ctx* cx, const float* ys, int n) {
+    Arena* a = cx->a;
     AreaChart* c = ArenaNew<AreaChart>(a);
     c->a = a;
+    c->cx = cx;
     c->ys = ys;
     c->n = n;
     c->stroke = ThemeNow().blue;

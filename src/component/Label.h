@@ -8,13 +8,14 @@ namespace component {
 
 struct Label {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str text = {};
     Str secondary = {};
     bool masked = false;
     bool semibold = false;
     float font = 14;
 
-    static Label* New(Arena* a, Str text);
+    static Label* New(Ctx* cx, Str text);
     Label* Secondary(Str s);
     Label* Masked(bool v);
     Label* Semibold();

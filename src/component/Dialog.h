@@ -8,6 +8,7 @@ namespace component {
 
 struct Dialog {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str title = {};
     Str description = {};
     bool open = false;
@@ -15,7 +16,7 @@ struct Dialog {
     Func0 onClose;
     Func0 onOk;
 
-    static Dialog* New(Arena* a);
+    static Dialog* New(Ctx* cx);
     Dialog* Title(Str s);
     Dialog* Description(Str s);
     Dialog* Open(bool v);

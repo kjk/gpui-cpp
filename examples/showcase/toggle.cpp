@@ -9,9 +9,10 @@ enum {
     ClickToggleU = 562
 };
 
-static El* ToggleCell(Arena* a, Str id, int clickId, const char* label,
+static El* ToggleCell(Ctx* cx, Str id, int clickId, const char* label,
                       bool on) {
-    El* b = Toggle::New(a, id, clickId)
+    Arena* a = cx->a;
+    El* b = Toggle::New(cx, id, clickId)
                 ->W(28)
                 ->H(28)
                 ->ItemsCenter()
@@ -36,7 +37,7 @@ static El* ToggleCell(Arena* a, Str id, int clickId, const char* label,
 
 El* ShowcaseToggle(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    return ToggleCell(a, StrL("example-toggle"), ClickToggleB, "B",
+    return ToggleCell(cx, StrL("example-toggle"), ClickToggleB, "B",
                       app->toggleOn);
 }
 
@@ -50,12 +51,13 @@ El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool italic = (app->toggleGroup & 1) != 0;
     bool under = (app->toggleGroup & 2) != 0;
-    return ToggleGroup::New(a, StrL("example-toggle-group"))
+    return ToggleGroup::New(cx, StrL("example-toggle-group"))
         ->FlexRow()
         ->Child(ShowcaseToggle(app, cx))
-        ->Child(ToggleCell(a, StrL("italic-toggle"), ClickToggleI, "I", italic))
         ->Child(
-            ToggleCell(a, StrL("underline-toggle"), ClickToggleU, "U", under));
+            ToggleCell(cx, StrL("italic-toggle"), ClickToggleI, "I", italic))
+        ->Child(
+            ToggleCell(cx, StrL("underline-toggle"), ClickToggleU, "U", under));
 }
 
 void ShowcaseToggleGroupClick(ShowcaseApp* app, int id) {

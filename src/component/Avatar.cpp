@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Avatar* Avatar::New(Arena* a) {
+Avatar* Avatar::New(Ctx* cx) {
+    Arena* a = cx->a;
     Avatar* v = ArenaNew<Avatar>(a);
     v->a = a;
+    v->cx = cx;
     return v;
 }
 
@@ -102,7 +104,7 @@ El* Avatar::IntoEl() {
     float txt = textPx > 0 ? textPx : size * 0.35f;
     El* inner = named ? TextEl(a, initials)->Font(txt)->Fg(fg)->Semibold()
                       : IconEl(a, placeholder, size * 0.6f)->Fg(fg);
-    El* fb = AvatarFallback::New(a)
+    El* fb = AvatarFallback::New(cx)
                  ->W(size)
                  ->H(size)
                  ->ItemsCenter()
@@ -112,9 +114,12 @@ El* Avatar::IntoEl() {
                  ->Child(inner);
     // The base is opaque (bg tokens.secondary) and the fallback tint sits on
     // top, so overlapping group avatars do not show through each other.
-    El* el =
-        gpui::Avatar::New(a)->Size(size)->Fallback(fb)->IntoEl()->Radius(r)->Bg(
-            th.secondary);
+    El* el = gpui::Avatar::New(cx)
+                 ->Size(size)
+                 ->Fallback(fb)
+                 ->IntoEl()
+                 ->Radius(r)
+                 ->Bg(th.secondary);
     Rgba bd = hasBorderC ? borderC : th.border;
     if (borderW > 0) {
         el->Border(borderW, bd);

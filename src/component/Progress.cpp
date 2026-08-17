@@ -6,9 +6,11 @@ namespace gpui {
 
 namespace component {
 
-Progress* Progress::New(Arena* a) {
+Progress* Progress::New(Ctx* cx) {
+    Arena* a = cx->a;
     Progress* p = ArenaNew<Progress>(a);
     p->a = a;
+    p->cx = cx;
     return p;
 }
 
@@ -33,23 +35,25 @@ Progress* Progress::H(float v) {
 
 El* Progress::IntoEl() {
     const Theme& th = ThemeNow();
-    return gpui::Progress::New(a, StrL("progress"))
+    return gpui::Progress::New(cx, StrL("progress"))
         ->W(w)
-        ->Child(gpui::ProgressTrack::New(a)
+        ->Child(gpui::ProgressTrack::New(cx)
                     ->W(w)
                     ->H(h)
                     ->Radius(h * 0.5f)
                     ->Bg(RgbaOpacity(th.progress, 0.2f))
-                    ->Child(gpui::ProgressIndicator::New(a)
+                    ->Child(gpui::ProgressIndicator::New(cx)
                                 ->W(w * (value / 100.f))
                                 ->H(h)
                                 ->Radius(h * 0.5f)
                                 ->Bg(th.progress)));
 }
 
-ProgressCircle* ProgressCircle::New(Arena* a) {
+ProgressCircle* ProgressCircle::New(Ctx* cx) {
+    Arena* a = cx->a;
     ProgressCircle* p = ArenaNew<ProgressCircle>(a);
     p->a = a;
+    p->cx = cx;
     return p;
 }
 ProgressCircle* ProgressCircle::Value(float v) {

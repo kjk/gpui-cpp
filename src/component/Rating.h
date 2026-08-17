@@ -8,6 +8,7 @@ namespace component {
 
 struct Rating {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     int value = 0;
     int max = 5;
     bool disabled = false;
@@ -16,7 +17,7 @@ struct Rating {
     UiSize size = UiSize::Medium;
     Func1<int> onChange;
 
-    static Rating* New(Arena* a);
+    static Rating* New(Ctx* cx);
     Rating* Value(int v);
     Rating* Max(int v);
     Rating* Disabled(bool v);

@@ -8,6 +8,7 @@ namespace component {
 
 struct Radio {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str label = {};
     Str hint = {};
@@ -16,7 +17,7 @@ struct Radio {
     UiSize size = UiSize::Medium;
     Func1<bool> onClick;
 
-    static Radio* New(Arena* a, Str id);
+    static Radio* New(Ctx* cx, Str id);
     Radio* Label(Str s);
     Radio* Hint(Str s);
     Radio* Checked(bool v);

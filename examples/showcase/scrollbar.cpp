@@ -13,7 +13,7 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
                         ->ItemsCenter()
                         ->JustifyBetween()
                         ->BorderB(1, Rgb(0xe5, 0xe7, 0xeb))
-                        ->Child(TextEl(a, DupFmt(a, "Activity %d", i))
+                        ->Child(TextEl(a, DupFmt(cx, "Activity %d", i))
                                     ->Font(12)
                                     ->Fg(Rgb(0x17, 0x17, 0x17)))
                         ->Child(TextEl(a, i % 3 == 0 ? StrL("Completed")
@@ -41,7 +41,7 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
     if (thumbY < 0) {
         thumbY = 0;
     }
-    El* box = Scrollbar::New(a)
+    El* box = Scrollbar::New(cx)
                   ->W(288)
                   ->H(viewH)
                   ->Border(1, Rgb(0x17, 0x17, 0x17))

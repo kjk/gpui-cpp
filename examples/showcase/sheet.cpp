@@ -14,7 +14,7 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
     // overlay mounts and the trigger jumps.
     El* root =
         Div(a)->FlexCol()->W(kFill)->MinH(256)->ItemsCenter()->JustifyCenter();
-    El* trigger = Button::New(a, StrL("open-sheet"), ClickSheetOpen)
+    El* trigger = Button::New(cx, StrL("open-sheet"), ClickSheetOpen)
                       ->H(28)
                       ->PadX(8)
                       ->ItemsCenter()
@@ -39,9 +39,9 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
             ->FlexCol()
             ->Bg(ScWhite())
             ->Border(1, ScInk())
-            ->Child(ScTxt(a, StrL("Settings"), 12, ScInk())->Semibold())
+            ->Child(ScTxt(cx, StrL("Settings"), 12, ScInk())->Semibold())
             ->Child(Div(a)->PadT(16)->W(kFill)->Child(
-                ScTxt(a, StrL("Workspace name"), 12, ScInk())))
+                ScTxt(cx, StrL("Workspace name"), 12, ScInk())))
             ->Child(Div(a)->PadT(4)->W(kFill)->Child(
                 Div(a)
                     ->W(kFill)
@@ -49,9 +49,9 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                     ->PadX(8)
                     ->ItemsCenter()
                     ->Border(1, ScSilver())
-                    ->Child(ScTxt(a, StrL("Acme Studio"), 12, ScInk()))))
+                    ->Child(ScTxt(cx, StrL("Acme Studio"), 12, ScInk()))))
             ->Child(Div(a)->PadT(8)->W(kFill)->Child(
-                ScTxt(a,
+                ScTxt(cx,
                       StrL("Update the workspace preferences for your team."),
                       12, ScGray())
                     ->Wrap()))
@@ -60,10 +60,10 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                         ->PadY(4)
                         ->W(kFill)
                         ->BorderT(1, ScBorder())
-                        ->Child(ScTxt(a, StrL("Notifications  ·  Enabled"), 12,
+                        ->Child(ScTxt(cx, StrL("Notifications  ·  Enabled"), 12,
                                       ScInk())))
             ->Child(Div(a)->PadT(12)->W(kFill)->FlexRow()->JustifyEnd()->Child(
-                Button::New(a, StrL("close-sheet"), ClickSheetDone)
+                Button::New(cx, StrL("close-sheet"), ClickSheetDone)
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
@@ -81,7 +81,7 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                       ->H(kFill)
                       ->Bg(Rgba8(0, 0, 0, 38))
                       ->Click(ClickSheetDone);
-    root->Child(Sheet::New(a)->Overlay(overlay)->Surface(surface)->IntoEl());
+    root->Child(Sheet::New(cx)->Overlay(overlay)->Surface(surface)->IntoEl());
     return root;
 }
 

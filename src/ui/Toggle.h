@@ -5,10 +5,10 @@
 namespace gpui {
 
 struct Toggle {
-    static El* New(Arena* a, Str id, int clickId = 0);
+    static El* New(Ctx* cx, Str id, int clickId = 0);
 };
 
 struct ToggleGroup {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui

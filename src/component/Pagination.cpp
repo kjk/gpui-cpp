@@ -13,9 +13,11 @@ static void FirePage(PageBind* b) {
     b->fn.Call(b->page);
 }
 
-Pagination* Pagination::New(Arena* a, int page, int total) {
+Pagination* Pagination::New(Ctx* cx, int page, int total) {
+    Arena* a = cx->a;
     Pagination* p = ArenaNew<Pagination>(a);
     p->a = a;
+    p->cx = cx;
     p->page = page;
     p->total = total;
     return p;
@@ -26,7 +28,7 @@ Pagination* Pagination::OnChange(Func1<int> fn) {
 }
 
 El* Pagination::IntoEl() {
-    El* row = gpui::Pagination::New(a, StrL("pagination"))
+    El* row = gpui::Pagination::New(cx, StrL("pagination"))
                   ->FlexRow()
                   ->Gap(8)
                   ->ItemsCenter();
@@ -35,7 +37,7 @@ El* Pagination::IntoEl() {
         n = 1;
     }
     for (int i = 1; i <= n; i++) {
-        Button* b = Button::New(a, StrDup(a, fmt("page-%d", i)))
+        Button* b = Button::New(cx, StrDup(a, fmt("page-%d", i)))
                         ->Label(StrDup(a, fmt("%d", i)))
                         ->Compact();
         if (i == page) {

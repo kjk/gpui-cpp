@@ -17,6 +17,7 @@ enum class TagVariant : uint8_t {
 
 struct Tag {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     TagVariant variant = TagVariant::Secondary;
     bool outline = false;
     UiSize size = UiSize::Medium;
@@ -26,7 +27,7 @@ struct Tag {
     Rgba customFg = {};
     bool hasCustom = false;
 
-    static Tag* New(Arena* a, Str text);
+    static Tag* New(Ctx* cx, Str text);
     Tag* Primary();
     Tag* Secondary();
     Tag* Danger();

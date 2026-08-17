@@ -5,21 +5,21 @@
 namespace gpui {
 
 struct Table {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct TableHeader {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct TableBody {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct TableRow {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct TableHead {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct TableCell {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui

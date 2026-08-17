@@ -8,7 +8,7 @@ struct Collapsible {
     El* root = nullptr;
     bool open = false;
 
-    static Collapsible* New(Arena* a);
+    static Collapsible* New(Ctx* cx);
     Collapsible* Open(bool v);
     Collapsible* Child(El* e);
     Collapsible* Content(El* e);

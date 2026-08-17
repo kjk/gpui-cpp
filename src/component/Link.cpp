@@ -13,9 +13,11 @@ static void FireLink(LinkBind* b) {
     b->fn.Call(b->href);
 }
 
-Link* Link::New(Arena* a, Str id) {
+Link* Link::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Link* l = ArenaNew<Link>(a);
     l->a = a;
+    l->cx = cx;
     l->id = id;
     return l;
 }
@@ -39,7 +41,7 @@ Link* Link::OnOpen(Func1<Str> fn) {
 
 El* Link::IntoEl() {
     const Theme& th = ThemeNow();
-    El* e = gpui::Link::New(a, id, disabled ? 0 : HashClickId(id));
+    El* e = gpui::Link::New(cx, id, disabled ? 0 : HashClickId(id));
     if (onOpen.IsValid() && !disabled) {
         LinkBind* b = ArenaNew<LinkBind>(a);
         b->fn = onOpen;

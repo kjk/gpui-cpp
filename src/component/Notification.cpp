@@ -5,9 +5,11 @@ namespace gpui {
 
 namespace component {
 
-Notification* Notification::New(Arena* a, Str title, Str message) {
+Notification* Notification::New(Ctx* cx, Str title, Str message) {
+    Arena* a = cx->a;
     Notification* n = ArenaNew<Notification>(a);
     n->a = a;
+    n->cx = cx;
     n->title = title;
     n->message = message;
     return n;
@@ -30,7 +32,7 @@ El* Notification::IntoEl() {
     } else if (kind == NotificationKind::Error) {
         v = AlertVariant::Error;
     }
-    Alert* al = Alert::New(a, StrL("notification"), message)
+    Alert* al = Alert::New(cx, StrL("notification"), message)
                     ->Title(title)
                     ->OnClose(onClose);
     al->variant = v;

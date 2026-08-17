@@ -27,17 +27,17 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
         thumbX = trackW - thumb;
     }
 
-    El* track = SliderTrack::New(a)->W(trackW)->H(28);
+    El* track = SliderTrack::New(cx)->W(trackW)->H(28);
     track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(trackW)->H(2)->Bg(
         Rgb(0xd4, 0xd4, 0xd4)));
-    track->Child(SliderIndicator::New(a)
+    track->Child(SliderIndicator::New(cx)
                      ->Absolute()
                      ->Top(13)
                      ->Left(0)
                      ->W(fillW)
                      ->H(2)
                      ->Bg(Rgb(0x17, 0x17, 0x17)));
-    track->Child(SliderThumb::New(a)
+    track->Child(SliderThumb::New(cx)
                      ->Absolute()
                      ->Top(7)
                      ->Left(thumbX)
@@ -60,7 +60,7 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("Drag to adjust"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(Slider::New(a, ClickSlider)->W(trackW)->H(28)->Child(track));
+        ->Child(Slider::New(cx, ClickSlider)->W(trackW)->H(28)->Child(track));
 }
 
 void ShowcaseSliderClick(ShowcaseApp* app, int id) {

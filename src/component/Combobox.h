@@ -8,6 +8,7 @@ namespace component {
 
 struct Combobox {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str id = {};
     Str options[8] = {};
     int n = 0;
@@ -17,7 +18,7 @@ struct Combobox {
     Func1<int> onChange;
     Func0 onToggle;
 
-    static Combobox* New(Arena* a, Str id);
+    static Combobox* New(Ctx* cx, Str id);
     Combobox* Option(Str s);
     Combobox* Selected(Str s);
     Combobox* Open(bool v);

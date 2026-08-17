@@ -13,9 +13,11 @@ static void FireSwitch(SwitchBind* b) {
     b->fn.Call(b->next);
 }
 
-Switch* Switch::New(Arena* a, Str id) {
+Switch* Switch::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Switch* s = ArenaNew<Switch>(a);
     s->a = a;
+    s->cx = cx;
     s->id = id;
     return s;
 }
@@ -61,7 +63,7 @@ El* Switch::IntoEl() {
         trackH = 24;
         thumb = 20;
     }
-    El* track = SwitchTrack::New(a, id)
+    El* track = SwitchTrack::New(cx, id)
                     ->W(trackW)
                     ->H(trackH)
                     ->Pad(2)
@@ -73,12 +75,12 @@ El* Switch::IntoEl() {
     } else {
         track->JustifyStart();
     }
-    track->Child(SwitchThumb::New(a)
+    track->Child(SwitchThumb::New(cx)
                      ->W(thumb)
                      ->H(thumb)
                      ->Radius(thumb * 0.5f)
                      ->Bg(th.background));
-    El* root = gpui::Switch::New(a, id, disabled ? 0 : HashClickId(id))
+    El* root = gpui::Switch::New(cx, id, disabled ? 0 : HashClickId(id))
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8);

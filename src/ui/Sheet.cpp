@@ -2,7 +2,8 @@
 
 namespace gpui {
 
-Sheet* Sheet::New(Arena* a) {
+Sheet* Sheet::New(Ctx* cx) {
+    Arena* a = cx->a;
     Sheet* s = ArenaNew<Sheet>(a);
     s->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     return s;

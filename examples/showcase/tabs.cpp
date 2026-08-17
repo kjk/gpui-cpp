@@ -12,7 +12,7 @@ enum {
 El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const char* labels[] = {"Overview", "Activity", "Settings"};
-    El* bar = Tabs::New(a, StrL("example-tabs"))
+    El* bar = Tabs::New(cx, StrL("example-tabs"))
                   ->FlexRow()
                   ->PadX(8)
                   ->PadT(4)
@@ -20,7 +20,7 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
     for (int i = 0; i < 3; i++) {
         bool on = app->tab == i;
         El* tab =
-            Tab::New(a, DupFmt(a, "tab-%d", i), ClickTab0 + i)
+            Tab::New(cx, DupFmt(cx, "tab-%d", i), ClickTab0 + i)
                 ->H(28)
                 ->PadX(8)
                 ->ItemsCenter()

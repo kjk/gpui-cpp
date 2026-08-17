@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-HoverCard* HoverCard::New(Arena* a) {
+HoverCard* HoverCard::New(Ctx* cx) {
+    Arena* a = cx->a;
     HoverCard* h = ArenaNew<HoverCard>(a);
     h->a = a;
+    h->cx = cx;
     return h;
 }
 HoverCard* HoverCard::Trigger(El* e) {
@@ -23,7 +25,7 @@ HoverCard* HoverCard::Open(bool v) {
 }
 
 El* HoverCard::IntoEl() {
-    return gpui::HoverCard::New(a, StrL("hover-card"))
+    return gpui::HoverCard::New(cx, StrL("hover-card"))
         ->Trigger(trigger)
         ->Content(open ? content : nullptr)
         ->IntoEl();

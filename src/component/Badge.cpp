@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Badge* Badge::New(Arena* a) {
+Badge* Badge::New(Ctx* cx) {
+    Arena* a = cx->a;
     Badge* b = ArenaNew<Badge>(a);
     b->a = a;
+    b->cx = cx;
     return b;
 }
 

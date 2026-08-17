@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Dock* Dock::New(Arena* a) {
+Dock* Dock::New(Ctx* cx) {
+    Arena* a = cx->a;
     Dock* d = ArenaNew<Dock>(a);
     d->a = a;
+    d->cx = cx;
     return d;
 }
 Dock* Dock::Left(El* e) {

@@ -5,9 +5,11 @@ namespace gpui {
 
 namespace component {
 
-Sheet* Sheet::New(Arena* a) {
+Sheet* Sheet::New(Ctx* cx) {
+    Arena* a = cx->a;
     Sheet* s = ArenaNew<Sheet>(a);
     s->a = a;
+    s->cx = cx;
     return s;
 }
 Sheet* Sheet::Title(Str s) {
@@ -47,7 +49,7 @@ El* Sheet::IntoEl(WinSize size) {
     if (body) {
         surface->Child(body);
     }
-    surface->Child(Button::New(a, StrL("sheet-done"))
+    surface->Child(Button::New(cx, StrL("sheet-done"))
                        ->Label(StrL("Done"))
                        ->Primary()
                        ->OnClick(onClose)
@@ -58,7 +60,7 @@ El* Sheet::IntoEl(WinSize size) {
     if (onClose.IsValid()) {
         overlay->OnClick(onClose)->Click(HashClickId(StrL("sheet-overlay")));
     }
-    return gpui::Sheet::New(a)->Overlay(overlay)->Surface(surface)->IntoEl();
+    return gpui::Sheet::New(cx)->Overlay(overlay)->Surface(surface)->IntoEl();
 }
 
 } // namespace component

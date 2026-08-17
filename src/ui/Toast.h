@@ -5,6 +5,6 @@
 namespace gpui {
 
 struct Toast {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui

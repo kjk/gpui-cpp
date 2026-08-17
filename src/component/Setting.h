@@ -13,11 +13,12 @@ struct SettingItem {
 
 struct Setting {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str title = {};
     SettingItem items[12] = {};
     int n = 0;
 
-    static Setting* New(Arena* a, Str title);
+    static Setting* New(Ctx* cx, Str title);
     Setting* Item(Str label, El* control);
     El* IntoEl();
 };

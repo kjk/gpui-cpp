@@ -8,10 +8,11 @@ namespace component {
 
 struct TitleBar {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     Str title = {};
     El* right = nullptr;
 
-    static TitleBar* New(Arena* a, Str title);
+    static TitleBar* New(Ctx* cx, Str title);
     TitleBar* Right(El* e);
     El* IntoEl();
 };

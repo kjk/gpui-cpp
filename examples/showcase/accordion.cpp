@@ -22,14 +22,14 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
         "Focus, activation, and semantic state are built into the primitives.",
     };
 
-    El* root = Accordion::New(a, StrL("example-accordion"))
+    El* root = Accordion::New(cx, StrL("example-accordion"))
                    ->W(270)
                    ->BorderT(1, Rgb(0xd4, 0xd4, 0xd4))
                    ->FlexCol();
     for (int i = 0; i < 3; i++) {
         bool open = app->accordionOpen[i];
         El* trigger =
-            AccordionTrigger::New(a, DupFmt(a, "accordion-trigger-%d", i),
+            AccordionTrigger::New(cx, DupFmt(cx, "accordion-trigger-%d", i),
                                   ClickAcc0 + i)
                 ->FlexRow()
                 ->W(kFill)
@@ -43,10 +43,10 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
                 ->Child(TextEl(a, open ? StrL("−") : StrL("+"))
                             ->Font(12)
                             ->Fg(Rgb(0x73, 0x73, 0x73)));
-        AccordionItem* item = AccordionItem::New(a)
+        AccordionItem* item = AccordionItem::New(cx)
                                   ->Open(open)
-                                  ->Header(AccordionHeader::New(a, trigger));
-        item->Panel(AccordionPanel::New(a)
+                                  ->Header(AccordionHeader::New(cx, trigger));
+        item->Panel(AccordionPanel::New(cx)
                         ->PadX(4)
                         ->PadY(4)
                         ->W(kFill)

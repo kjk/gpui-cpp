@@ -9,7 +9,7 @@ enum {
 
 El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* trigger = Button::New(a, StrL("popup-trigger"), ClickPopup)
+    El* trigger = Button::New(cx, StrL("popup-trigger"), ClickPopup)
                       ->H(28)
                       ->PadX(12)
                       ->ItemsCenter()
@@ -41,7 +41,7 @@ El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
                         ->Wrap()
                         ->MaxW(240)));
     }
-    return Popup::New(a, StrL("example-popup"), trigger)
+    return Popup::New(cx, StrL("example-popup"), trigger)
         ->Content(content)
         ->IntoEl();
 }

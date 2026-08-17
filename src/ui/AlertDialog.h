@@ -5,28 +5,28 @@
 namespace gpui {
 
 struct AlertDialogBackdrop {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct AlertDialogPopup {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct AlertDialogTitle {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct AlertDialogDescription {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct AlertDialogCancel {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 struct AlertDialogAction {
-    static El* New(Arena* a);
+    static El* New(Ctx* cx);
 };
 
 struct AlertDialog {
     El* root = nullptr;
 
-    static AlertDialog* New(Arena* a);
+    static AlertDialog* New(Ctx* cx);
     AlertDialog* Backdrop(El* backdrop);
     AlertDialog* Popup(El* popup);
     El* IntoEl();

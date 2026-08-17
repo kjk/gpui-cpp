@@ -5,9 +5,9 @@
 namespace gpui {
 
 struct Tabs {
-    static El* New(Arena* a, Str id);
+    static El* New(Ctx* cx, Str id);
 };
 struct Tab {
-    static El* New(Arena* a, Str id, int clickId = 0);
+    static El* New(Ctx* cx, Str id, int clickId = 0);
 };
 } // namespace gpui

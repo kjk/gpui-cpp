@@ -12,9 +12,11 @@ static void FireSel(SelBind* b) {
     b->fn.Call(b->index);
 }
 
-Select* Select::New(Arena* a, Str id) {
+Select* Select::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
     Select* s = ArenaNew<Select>(a);
     s->a = a;
+    s->cx = cx;
     s->id = id;
     return s;
 }
@@ -78,8 +80,8 @@ El* Select::IntoEl() {
             opts->Child(row);
         }
     }
-    El* root = gpui::Select::New(a, id)->W(224)->Child(trigger);
-    return Popup::New(a, StrL("select-popup"), root)->Content(opts)->IntoEl();
+    El* root = gpui::Select::New(cx, id)->W(224)->Child(trigger);
+    return Popup::New(cx, StrL("select-popup"), root)->Content(opts)->IntoEl();
 }
 
 } // namespace component

@@ -15,12 +15,13 @@ enum class NotificationKind : uint8_t {
 
 struct Notification {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     NotificationKind kind = NotificationKind::Info;
     Str title = {};
     Str message = {};
     Func0 onClose;
 
-    static Notification* New(Arena* a, Str title, Str message);
+    static Notification* New(Ctx* cx, Str title, Str message);
     Notification* Kind(NotificationKind k);
     Notification* OnClose(Func0 fn);
     El* IntoEl();

@@ -21,8 +21,8 @@ static void CalDay(StoryApp* app, int d) {
 El* CalendarRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* single = StorySection(a, "Single month", "Single-date selection.");
-    StorySectionAdd(single, component::Calendar::New(a)
+    El* single = StorySection(cx, "Single month", "Single-date selection.");
+    StorySectionAdd(single, component::Calendar::New(cx)
                                 ->Year(app->calYear)
                                 ->Month(app->calMonth)
                                 ->Day(app->calDay)
@@ -33,7 +33,7 @@ El* CalendarRender(StoryApp* app, Ctx* cx) {
     page->Child(single);
 
     El* multi =
-        StorySection(a, "Multiple months", "Three months shown together.");
+        StorySection(cx, "Multiple months", "Three months shown together.");
     El* months = Div(a)->FlexRow()->Gap(16)->Wrap();
     for (int i = 0; i < 3; i++) {
         int m = app->calMonth + i;
@@ -42,7 +42,7 @@ El* CalendarRender(StoryApp* app, Ctx* cx) {
             m -= 12;
             y++;
         }
-        months->Child(component::Calendar::New(a)
+        months->Child(component::Calendar::New(cx)
                           ->Year(y)
                           ->Month(m)
                           ->Day(i == 0 ? app->calDay : 0)
@@ -55,8 +55,8 @@ El* CalendarRender(StoryApp* app, Ctx* cx) {
     page->Child(multi);
 
     El* dis =
-        StorySection(a, "Disabled dates", "Recurring unavailable weekdays.");
-    StorySectionAdd(dis, component::Calendar::New(a)
+        StorySection(cx, "Disabled dates", "Recurring unavailable weekdays.");
+    StorySectionAdd(dis, component::Calendar::New(cx)
                              ->Year(app->calYear)
                              ->Month(app->calMonth)
                              ->Day(app->calDay)

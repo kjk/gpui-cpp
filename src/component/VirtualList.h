@@ -8,6 +8,7 @@ namespace component {
 
 struct VirtualList {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     int count = 0;
     float rowH = 32;
     float viewH = 192;
@@ -15,7 +16,7 @@ struct VirtualList {
     Func1<int> onRenderRow; // not used; rows built here
     El* (*row)(Arena* a, int ix) = nullptr;
 
-    static VirtualList* New(Arena* a, int count);
+    static VirtualList* New(Ctx* cx, int count);
     VirtualList* RowH(float v);
     VirtualList* ViewH(float v);
     VirtualList* ScrollY(float v);

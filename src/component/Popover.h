@@ -8,11 +8,12 @@ namespace component {
 
 struct Popover {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* trigger = nullptr;
     El* content = nullptr;
     bool open = false;
 
-    static Popover* New(Arena* a);
+    static Popover* New(Ctx* cx);
     Popover* Trigger(El* e);
     Popover* Content(El* e);
     Popover* Open(bool v);

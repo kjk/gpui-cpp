@@ -4,8 +4,9 @@ enum {
     ClickStoryField = 2600
 };
 
-static El* FieldBox(Arena* a, const char* text, const char* prefix,
+static El* FieldBox(Ctx* cx, const char* text, const char* prefix,
                     const char* suffix, bool disabled) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* field = Div(a)
                     ->FlexRow()
@@ -18,13 +19,13 @@ static El* FieldBox(Arena* a, const char* text, const char* prefix,
                     ->Radius(th.radius)
                     ->Bg(disabled ? th.muted : th.background);
     if (prefix) {
-        field->Child(StoryTxt(a, Str(prefix), 13, th.mutedFg));
+        field->Child(StoryTxt(cx, Str(prefix), 13, th.mutedFg));
     }
     field->Child(
-        StoryTxt(a, Str(text), 13, disabled ? th.mutedFg : th.foreground)
+        StoryTxt(cx, Str(text), 13, disabled ? th.mutedFg : th.foreground)
             ->Grow());
     if (suffix) {
-        field->Child(StoryTxt(a, Str(suffix), 13, th.mutedFg));
+        field->Child(StoryTxt(cx, Str(suffix), 13, th.mutedFg));
     }
     return field;
 }
@@ -32,34 +33,34 @@ static El* FieldBox(Arena* a, const char* text, const char* prefix,
 El* InputRender(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(a, app));
+    page->Child(StoryToolbar(cx, app));
 
     El* def =
-        StorySection(a, "Default", "Capture and validate short-form text.");
-    StorySectionAdd(def, component::Input::New(a, StrL("name"), &app->field)
+        StorySection(cx, "Default", "Capture and validate short-form text.");
+    StorySectionAdd(def, component::Input::New(cx, StrL("name"), &app->field)
                              ->Label(StrL("Display name"))
                              ->IntoEl());
     page->Child(def);
 
-    El* states = StorySection(a, "States", nullptr);
+    El* states = StorySection(cx, "States", nullptr);
     El* stateCol = Div(a)->FlexCol()->Gap(8);
-    stateCol->Child(FieldBox(a, "Read-only value", nullptr, nullptr, false));
-    stateCol->Child(FieldBox(a, "Disabled value", nullptr, nullptr, true));
+    stateCol->Child(FieldBox(cx, "Read-only value", nullptr, nullptr, false));
+    stateCol->Child(FieldBox(cx, "Disabled value", nullptr, nullptr, true));
     StorySectionAdd(states, stateCol);
     page->Child(states);
 
-    El* align = StorySection(a, "Alignment", nullptr);
+    El* align = StorySection(cx, "Alignment", nullptr);
     El* alignCol = Div(a)->FlexCol()->Gap(8);
-    alignCol->Child(FieldBox(a, "Start aligned", nullptr, nullptr, false));
-    alignCol->Child(FieldBox(a, "Center aligned", nullptr, nullptr, false));
-    alignCol->Child(FieldBox(a, "End aligned", nullptr, nullptr, false));
+    alignCol->Child(FieldBox(cx, "Start aligned", nullptr, nullptr, false));
+    alignCol->Child(FieldBox(cx, "Center aligned", nullptr, nullptr, false));
+    alignCol->Child(FieldBox(cx, "End aligned", nullptr, nullptr, false));
     StorySectionAdd(align, alignCol);
     page->Child(align);
 
-    El* affix = StorySection(a, "Prefix and suffix", nullptr);
+    El* affix = StorySection(cx, "Prefix and suffix", nullptr);
     El* affixCol = Div(a)->FlexCol()->Gap(8);
-    affixCol->Child(FieldBox(a, "gpui-component", "https://", nullptr, false));
-    affixCol->Child(FieldBox(a, "42", nullptr, "px", false));
+    affixCol->Child(FieldBox(cx, "gpui-component", "https://", nullptr, false));
+    affixCol->Child(FieldBox(cx, "42", nullptr, "px", false));
     StorySectionAdd(affix, affixCol);
     page->Child(affix);
     return page;

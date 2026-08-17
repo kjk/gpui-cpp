@@ -8,10 +8,11 @@ namespace component {
 
 struct Root {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* child = nullptr;
     bool bordered = true;
 
-    static Root* New(Arena* a);
+    static Root* New(Ctx* cx);
     Root* Bordered(bool v);
     Root* Child(El* e);
     El* IntoEl();

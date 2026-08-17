@@ -4,9 +4,11 @@ namespace gpui {
 
 namespace component {
 
-Tag* Tag::New(Arena* a, Str text) {
+Tag* Tag::New(Ctx* cx, Str text) {
+    Arena* a = cx->a;
     Tag* t = ArenaNew<Tag>(a);
     t->a = a;
+    t->cx = cx;
     t->text = text;
     return t;
 }

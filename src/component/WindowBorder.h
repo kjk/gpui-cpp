@@ -8,9 +8,10 @@ namespace component {
 
 struct WindowBorder {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* child = nullptr;
 
-    static WindowBorder* New(Arena* a);
+    static WindowBorder* New(Ctx* cx);
     WindowBorder* Child(El* e);
     El* IntoEl();
 };
