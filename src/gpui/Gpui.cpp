@@ -406,6 +406,10 @@ El* El::OnClick(Func0 fn) {
     onClick = fn;
     return this;
 }
+El* El::OnClick(Listener l) {
+    listener = l;
+    return this;
+}
 
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
@@ -2049,7 +2053,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
     if (skipFixed && e->style.fixed) {
         return;
     }
-    if (e->clickId || e->onClick.IsValid()) {
+    if (e->clickId || e->onClick.IsValid() || e->listener.IsValid()) {
         HitRect hr;
         hr.id = e->clickId;
         hr.x = e->x;
@@ -2057,6 +2061,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         hr.w = e->w;
         hr.h = e->h;
         hr.onClick = e->onClick;
+        hr.listener = e->listener;
         ctx->hits.Append(hr);
     }
     if (e->style.overflowY == OverflowY::Scroll) {

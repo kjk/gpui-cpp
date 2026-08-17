@@ -35,7 +35,7 @@ static float HostDpi(HWND hwnd) {
     return (float)dpi;
 }
 
-static void UpdateDipSize(AppHost* host) {
+static void UpdateDipSize(Window* host) {
     RECT rc = {};
     GetClientRect(host->hwnd, &rc);
     host->paint.dpi = HostDpi(host->hwnd);
@@ -46,7 +46,7 @@ static void UpdateDipSize(AppHost* host) {
     (void)pxH;
 }
 
-static HRESULT CreateDeviceResources(AppHost* host) {
+static HRESULT CreateDeviceResources(Window* host) {
     if (host->paint.dcRt) {
         host->paint.rt = host->paint.dcRt;
         return S_OK;
@@ -67,13 +67,13 @@ static HRESULT CreateDeviceResources(AppHost* host) {
     return hr;
 }
 
-static void DiscardDeviceResources(AppHost* host) {
+static void DiscardDeviceResources(Window* host) {
     Rel(&host->paint.brush);
     Rel(&host->paint.dcRt);
     host->paint.rt = nullptr;
 }
 
-static void RenderFrame(AppHost* host, HDC hdc) {
+static void RenderFrame(Window* host, HDC hdc) {
     if (FAILED(CreateDeviceResources(host))) {
         return;
     }
@@ -118,7 +118,9 @@ static void RenderFrame(AppHost* host, HDC hdc) {
     ws.pxH = rc.bottom - rc.top;
 
     El* root = nullptr;
-    if (host->hooks.onRender) {
+    if (host->root.IsValid()) {
+        root = EntityRender(host->app, host, host->frameArena, host->root);
+    } else if (host->hooks.onRender) {
         root = host->hooks.onRender(host, host->frameArena, ws);
     }
 
@@ -146,10 +148,10 @@ static int BorderPx() {
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam) {
-    AppHost* host = (AppHost*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    Window* host = (Window*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (msg == WM_NCCREATE) {
         auto* cs = (CREATESTRUCTW*)lParam;
-        host = (AppHost*)cs->lpCreateParams;
+        host = (Window*)cs->lpCreateParams;
         host->hwnd = hwnd;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)host);
     }
@@ -320,6 +322,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (host->hooks.onMouseDown) {
                 host->hooks.onMouseDown(host, x, y, 1);
             }
+            if (hit && hit->listener.IsValid()) {
+                ClickEvent ev = {x, y, 1};
+                ListenerCall(host->app, host, hit->listener, &ev);
+            }
             if (hit && hit->onClick.IsValid()) {
                 hit->onClick.Call();
             }
@@ -376,34 +382,50 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         }
         case WM_ERASEBKGND:
             return 1;
-        case WM_DESTROY:
+        case WM_DESTROY: {
             KillTimer(hwnd, 1);
             if (host->hooks.onShutdown) {
                 host->hooks.onShutdown(host);
             }
             DiscardDeviceResources(host);
-            PostQuitMessage(0);
+            host->hwnd = nullptr;
+            host->running = false;
+            // The message loop ends when the last window closes.
+            App* app = host->app;
+            bool anyLeft = false;
+            if (app) {
+                for (int i = 0; i < app->windows.len; i++) {
+                    if (app->windows[i]->hwnd) {
+                        anyLeft = true;
+                        break;
+                    }
+                }
+            }
+            if (!anyLeft) {
+                PostQuitMessage(0);
+            }
             return 0;
+        }
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-void AppQuit(AppHost* host) {
+void AppQuit(Window* host) {
     if (host && host->hwnd) {
         DestroyWindow(host->hwnd);
     }
 }
-void AppInvalidate(AppHost* host) {
+void AppInvalidate(Window* host) {
     if (host && host->hwnd) {
         InvalidateRect(host->hwnd, nullptr, FALSE);
     }
 }
-void AppMinimize(AppHost* host) {
+void AppMinimize(Window* host) {
     if (host && host->hwnd) {
         ShowWindow(host->hwnd, SW_MINIMIZE);
     }
 }
-void AppToggleMaximize(AppHost* host) {
+void AppToggleMaximize(Window* host) {
     if (!host || !host->hwnd) {
         return;
     }
@@ -412,26 +434,26 @@ void AppToggleMaximize(AppHost* host) {
     ShowWindow(host->hwnd,
                wp.showCmd == SW_SHOWMAXIMIZED ? SW_RESTORE : SW_MAXIMIZE);
 }
-void AppClose(AppHost* host) {
+void AppClose(Window* host) {
     AppQuit(host);
 }
-void AppDrag(AppHost* host) {
+void AppDrag(Window* host) {
     if (host && host->hwnd) {
         ReleaseCapture();
         SendMessageW(host->hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
     }
 }
-bool AppIsMaximized(AppHost* host) {
+bool AppIsMaximized(Window* host) {
     return host && host->maximized;
 }
 
-void AppSetTitle(AppHost* host, const wchar_t* title) {
+void AppSetTitle(Window* host, const wchar_t* title) {
     if (host && host->hwnd && title) {
         SetWindowTextW(host->hwnd, title);
     }
 }
 
-void AppRequestAnim(AppHost* host, bool on) {
+void AppRequestAnim(Window* host, bool on) {
     if (host) {
         host->anim = on;
         host->winOpts.anim = on;
@@ -450,16 +472,39 @@ void AppRequestAnim(AppHost* host, bool on) {
     }
 }
 
-int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
-           void* user) {
-    AppWinOpts opts = {};
-    return RunAppEx(title, dipW, dipH, hooks, user, opts);
+// ─── app lifecycle ────────────────────────────────────────────────────────
+
+static bool gClassRegistered = false;
+
+static void RegisterWndClass() {
+    if (gClassRegistered) {
+        return;
+    }
+    WNDCLASSEXW wc = {sizeof(wc)};
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wc.lpszClassName = kWndClass;
+    RegisterClassExW(&wc);
+    gClassRegistered = true;
 }
 
-int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
-             void* user, AppWinOpts opts) {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    (void)hrCo;
+static void MakeFont(App* app, float px, int weight, bool wrap,
+                     IDWriteTextFormat** out) {
+    DWRITE_FONT_WEIGHT w =
+        weight ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
+    app->dwrite
+        ->CreateTextFormat(L"Segoe UI", nullptr, w, DWRITE_FONT_STYLE_NORMAL,
+                           DWRITE_FONT_STRETCH_NORMAL, px, L"en-us", out);
+    if (*out && !wrap) {
+        (*out)->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    }
+}
+
+App* AppNew() {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (user32) {
@@ -471,67 +516,87 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
         }
     }
 
-    AppHost host = {};
-    host.hooks = hooks;
-    host.user = user;
-    host.winOpts = opts;
-    host.anim = opts.anim;
-    if (host.hooks.onInit) {
-        host.hooks.onInit(&host);
-    }
-
+    App* app = new App();
     HRESULT hr =
-        D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &host.paint.d2d);
+        D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &app->d2d);
     if (FAILED(hr)) {
-        return 1;
+        delete app;
+        return nullptr;
     }
-    hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                             __uuidof(IDWriteFactory),
-                             (IUnknown**)&host.paint.dwrite);
+    hr =
+        DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                            __uuidof(IDWriteFactory), (IUnknown**)&app->dwrite);
     if (FAILED(hr)) {
-        Rel(&host.paint.d2d);
-        return 1;
+        Rel(&app->d2d);
+        delete app;
+        return nullptr;
     }
+    MakeFont(app, 16.f, 0, false, &app->font16);
+    MakeFont(app, 14.f, 0, false, &app->font14);
+    MakeFont(app, 12.f, 0, false, &app->font12);
+    MakeFont(app, 20.f, 1, false, &app->font20);
+    MakeFont(app, 24.f, 1, true, &app->font24);
+    MakeFont(app, 16.f, 1, true, &app->font16b);
+    if (app->font24) {
+        app->font24->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    }
+    RegisterWndClass();
+    return app;
+}
 
-    auto makeFont = [&](float px, IDWriteTextFormat** out) {
-        host.paint.dwrite
-            ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
-                               DWRITE_FONT_STYLE_NORMAL,
-                               DWRITE_FONT_STRETCH_NORMAL, px, L"en-us", out);
-        if (*out) {
-            (*out)->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+void AppFree(App* app) {
+    if (!app) {
+        return;
+    }
+    EntityDropAll(app);
+    for (int i = 0; i < app->windows.len; i++) {
+        Window* w = app->windows[i];
+        if (w->frameArena) {
+            ArenaDelete(w->frameArena);
         }
-    };
-    makeFont(16.f, &host.paint.font16);
-    makeFont(14.f, &host.paint.font14);
-    makeFont(12.f, &host.paint.font12);
-    host.paint.dwrite
-        ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                           20.f, L"en-us", &host.paint.font20);
-    host.paint.dwrite
-        ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                           24.f, L"en-us", &host.paint.font24);
-    host.paint.dwrite
-        ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                           16.f, L"en-us", &host.paint.font16b);
-    if (host.paint.font20) {
-        host.paint.font20->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        TextMeasClear(&w->paint);
+        WindowKeyedFree(w);
+        delete w;
     }
-    if (host.paint.font24) {
-        host.paint.font24->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-    }
+    app->windows.Reset();
+    Rel(&app->font12);
+    Rel(&app->font14);
+    Rel(&app->font16);
+    Rel(&app->font20);
+    Rel(&app->font24);
+    Rel(&app->font16b);
+    Rel(&app->dwrite);
+    Rel(&app->d2d);
+    delete app;
+    DestroyTempArena();
+    CoUninitialize();
+}
 
-    WNDCLASSEXW wc = {sizeof(wc)};
-    wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    wc.lpszClassName = kWndClass;
-    RegisterClassExW(&wc);
+Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
+                   AppHooks hooks, void* user, AppWinOpts opts) {
+    if (!app) {
+        return nullptr;
+    }
+    Window* win = new Window();
+    win->app = app;
+    win->hooks = hooks;
+    win->user = user;
+    win->winOpts = opts;
+    win->anim = opts.anim;
+    // The factories and the font cache live on App; each window borrows them.
+    win->paint.d2d = app->d2d;
+    win->paint.dwrite = app->dwrite;
+    win->paint.font16 = app->font16;
+    win->paint.font14 = app->font14;
+    win->paint.font12 = app->font12;
+    win->paint.font20 = app->font20;
+    win->paint.font24 = app->font24;
+    win->paint.font16b = app->font16b;
+    app->windows.Append(win);
+
+    if (win->hooks.onInit) {
+        win->hooks.onInit(win);
+    }
 
     DWORD style = WS_OVERLAPPEDWINDOW;
     if (opts.borderless) {
@@ -547,39 +612,73 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
     int x = (sx - pxW) / 2;
     int y = (sy - pxH) / 2;
 
-    HWND hwnd = CreateWindowExW(0, kWndClass, title, style, x, y, pxW, pxH,
-                                nullptr, nullptr, wc.hInstance, &host);
+    HWND hwnd =
+        CreateWindowExW(0, kWndClass, title, style, x, y, pxW, pxH, nullptr,
+                        nullptr, GetModuleHandleW(nullptr), win);
     if (!hwnd) {
-        return 1;
+        return nullptr;
     }
 
     BOOL dark = TRUE;
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark,
                           sizeof(dark));
-
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
+    return win;
+}
 
-    MSG msg;
+Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
+                       EntityId root, AppWinOpts opts) {
+    AppHooks hooks = {};
+    Window* win = WindowOpen(app, title, dipW, dipH, hooks, nullptr, opts);
+    if (win) {
+        win->root = root;
+        AppInvalidate(win);
+    }
+    return win;
+}
+
+int AppRun(App* app) {
+    MSG msg = {};
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
-
-    Rel(&host.paint.font12);
-    Rel(&host.paint.font14);
-    Rel(&host.paint.font16);
-    Rel(&host.paint.font20);
-    Rel(&host.paint.font24);
-    Rel(&host.paint.font16b);
-    TextMeasClear(&host.paint);
-    Rel(&host.paint.dwrite);
-    Rel(&host.paint.d2d);
-    if (host.frameArena) {
-        ArenaDelete(host.frameArena);
+    if (app) {
+        app->exitCode = (int)msg.wParam;
     }
-    DestroyTempArena();
-    CoUninitialize();
     return (int)msg.wParam;
 }
+
+int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
+               App* app, AppWinOpts opts) {
+    if (!WindowOpenView(app, title, dipW, dipH, root, opts)) {
+        return 1;
+    }
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
+}
+
+int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
+           void* user) {
+    AppWinOpts opts = {};
+    return RunAppEx(title, dipW, dipH, hooks, user, opts);
+}
+
+int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
+             void* user, AppWinOpts opts) {
+    App* app = AppNew();
+    if (!app) {
+        return 1;
+    }
+    if (!WindowOpen(app, title, dipW, dipH, hooks, user, opts)) {
+        AppFree(app);
+        return 1;
+    }
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
+}
+
 } // namespace gpui

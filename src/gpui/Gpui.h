@@ -97,6 +97,69 @@ const Theme& ThemeNow();
 void ThemeSet(ThemeMode mode);
 ThemeMode ThemeGet();
 
+// ─── entities ─────────────────────────────────────────────────────────────
+//
+// GPUI keeps view state in `App` and hands out `Entity<T>` handles; a view
+// implements `Render` and mutates itself through `Context<T>`. The same shape
+// here, minus the refcounting: `App` owns the state, `Entity<T>` is a POD
+// generational handle, and `Ctx` is the one context type (GPUI splits it into
+// `&mut App` / `&mut Window` / `&mut Context<T>` only to satisfy the borrow
+// checker).
+
+struct App;
+struct Window;
+struct Ctx;
+struct El;
+
+struct EntityId {
+    int32_t index = -1;
+    uint32_t gen = 0; // 0 == null handle
+
+    bool IsValid() const { return index >= 0 && gen != 0; }
+};
+
+inline bool operator==(EntityId a, EntityId b) {
+    return a.index == b.index && a.gen == b.gen;
+}
+inline bool operator!=(EntityId a, EntityId b) {
+    return !(a == b);
+}
+
+using RenderFn = El* (*)(void* self, Ctx* cx);
+using DropFn = void (*)(void* self);
+
+struct EntitySlot {
+    void* ptr = nullptr;
+    uint32_t gen = 0;
+    RenderFn render = nullptr;
+    DropFn drop = nullptr;
+};
+
+// window.use_keyed_state: per-window state owned by a RenderOnce element that
+// has nowhere else to keep it.
+struct KeyedSlot {
+    uint32_t key = 0;
+    void* ptr = nullptr;
+    DropFn drop = nullptr;
+};
+
+struct ClickEvent {
+    float x = 0;
+    float y = 0;
+    int button = 1;
+};
+
+// cx.listener(...): a handler plus the entity it runs against. Dispatch looks
+// the entity up and drops the event if the handle went stale.
+using ListenerFn = void (*)(void* self, Ctx* cx, const ClickEvent* ev);
+
+struct Listener {
+    ListenerFn fn = nullptr;
+    EntityId view = {};
+
+    bool IsValid() const { return fn != nullptr; }
+};
+
 // ─── style / element ──────────────────────────────────────────────────────
 
 enum class ElKind : uint8_t {
@@ -241,6 +304,7 @@ struct El {
     float progress = 0; // 0..100
     int clickId = 0;
     Func0 onClick;
+    Listener listener;
     void (*customPaint)(PaintCtx* ctx, El* e, void* user) = nullptr;
     void* customUser = nullptr;
     El* first = nullptr;
@@ -295,6 +359,7 @@ struct El {
     El* ScrollId(int id);
     El* Click(int id);
     El* OnClick(Func0 fn);
+    El* OnClick(Listener l);
     El* Child(El* c);
     El* Bold();
     El* Semibold();
@@ -338,6 +403,7 @@ struct HitRect {
     int id = 0;
     float x = 0, y = 0, w = 0, h = 0;
     Func0 onClick;
+    Listener listener;
 };
 
 struct ScrollRect {
@@ -458,21 +524,23 @@ enum {
     ClickWinCaption = -4,
 };
 
-struct AppHost;
+struct App;
+struct Window;
 
-// Filled in by the example.
+// Legacy hook table. New code gives the Window a root entity instead; see
+// `Ctx` and `WindowOpenView` below.
 struct AppHooks {
-    void (*onInit)(AppHost* host);
-    void (*onTick)(AppHost* host);
-    El* (*onRender)(AppHost* host, Arena* frame, WinSize size);
-    void (*onClick)(AppHost* host, int clickId);
-    void (*onWheel)(AppHost* host, float x, float y, float delta);
-    void (*onKey)(AppHost* host, int vk, bool down);
-    void (*onChar)(AppHost* host, uint32_t cp);
-    void (*onMouseMove)(AppHost* host, float x, float y);
-    void (*onMouseDown)(AppHost* host, float x, float y, int button);
-    void (*onMouseUp)(AppHost* host, float x, float y, int button);
-    void (*onShutdown)(AppHost* host);
+    void (*onInit)(Window* win);
+    void (*onTick)(Window* win);
+    El* (*onRender)(Window* win, Arena* frame, WinSize size);
+    void (*onClick)(Window* win, int clickId);
+    void (*onWheel)(Window* win, float x, float y, float delta);
+    void (*onKey)(Window* win, int vk, bool down);
+    void (*onChar)(Window* win, uint32_t cp);
+    void (*onMouseMove)(Window* win, float x, float y);
+    void (*onMouseDown)(Window* win, float x, float y, int button);
+    void (*onMouseUp)(Window* win, float x, float y, int button);
+    void (*onShutdown)(Window* win);
 };
 
 struct AppWinOpts {
@@ -481,12 +549,38 @@ struct AppWinOpts {
     int timerMs = 500;
 };
 
-struct AppHost {
+// Process-wide state: the Direct2D / DirectWrite factories, the shared font
+// cache, the entity store and the open windows. GPUI's `App`.
+struct App {
+    ID2D1Factory* d2d = nullptr;
+    IDWriteFactory* dwrite = nullptr;
+    IDWriteTextFormat* font16 = nullptr;
+    IDWriteTextFormat* font14 = nullptr;
+    IDWriteTextFormat* font12 = nullptr;
+    IDWriteTextFormat* font20 = nullptr;
+    IDWriteTextFormat* font24 = nullptr;
+    IDWriteTextFormat* font16b = nullptr;
+    Vec<Window*> windows;
+    // Entity store; see Entity.h. Slots are recycled, so a handle carries a
+    // generation and goes stale instead of dangling.
+    Vec<EntitySlot> entities;
+    Vec<int32_t> freeSlots;
+    int exitCode = 0;
+
+    App() = default;
+};
+
+// One platform window: its render target, frame arena, hover / focus state
+// and the view it renders. GPUI's `Window`.
+struct Window {
+    App* app = nullptr;
     HWND hwnd = nullptr;
     PaintCtx paint = {};
     Arena* frameArena = nullptr;
     AppHooks hooks = {};
     void* user = nullptr;
+    // Root view entity. When set it renders instead of hooks.onRender.
+    EntityId root = {};
     int hoverId = 0;
     int focusId = 0;
     float mouseX = 0;
@@ -500,26 +594,132 @@ struct AppHost {
     Overlay overlay = {};
     MenuState menu = {};
     Vec<FocusRect> focusEls;
+    Vec<KeyedSlot> keyed;
     AppWinOpts winOpts = {};
 
-    AppHost() = default;
+    Window() = default;
 };
+
+// AppHost was the two fused together. Kept so un-migrated examples build.
+using AppHost = Window;
+
+// ─── context ──────────────────────────────────────────────────────────────
+
+// GPUI's Context<T>. `win` is null outside a window callback, `a` is the frame
+// arena during render, `self` is the entity currently rendering or updating.
+struct Ctx {
+    App* app = nullptr;
+    Window* win = nullptr;
+    Arena* a = nullptr;
+    EntityId self = {};
+};
+
+EntityId EntityNewRaw(App* app, void* ptr, RenderFn render, DropFn drop);
+void* EntityGet(App* app, EntityId id);
+void EntityDrop(App* app, EntityId id);
+void EntityDropAll(App* app);
+
+// A typed handle. Stale handles read back as null instead of dangling.
+template <typename T>
+struct Entity {
+    EntityId id = {};
+
+    bool IsValid() const { return id.IsValid(); }
+    T* Get(App* app) const { return (T*)EntityGet(app, id); }
+    T* Get(Ctx* cx) const { return (T*)EntityGet(cx->app, id); }
+};
+
+template <typename T>
+void EntityDropT(void* p) {
+    delete (T*)p;
+}
+
+// cx.new(|cx| T::default()). T must expose `static El* Render(T*, Ctx*)`.
+template <typename T>
+Entity<T> EntityNew(App* app) {
+    Entity<T> e;
+    e.id = EntityNewRaw(app, new T(), (RenderFn)&T::Render, &EntityDropT<T>);
+    return e;
+}
+
+template <typename T>
+Entity<T> EntityNew(Ctx* cx) {
+    return EntityNew<T>(cx->app);
+}
+
+// State with no Render, e.g. a model the views read.
+template <typename T>
+Entity<T> EntityNewState(App* app) {
+    Entity<T> e;
+    e.id = EntityNewRaw(app, new T(), nullptr, &EntityDropT<T>);
+    return e;
+}
+
+// cx.listener(|this, ev, window, cx| ...). The cast mirrors MkFunc0/MkFunc1.
+template <typename T>
+Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const ClickEvent*)) {
+    Listener l;
+    l.fn = (ListenerFn)fn;
+    l.view = cx->self;
+    return l;
+}
+
+// Same, but bound to another entity instead of the one that is rendering.
+template <typename T>
+Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const ClickEvent*)) {
+    Listener l;
+    l.fn = (ListenerFn)fn;
+    l.view = e.id;
+    return l;
+}
+
+// cx.notify(): the frame tree is rebuilt from scratch, so this just schedules
+// a repaint of every window. GPUI tracks which views observe the entity.
+void Notify(Ctx* cx);
+void NotifyApp(App* app);
+void ListenerCall(App* app, Window* win, const Listener& l,
+                  const ClickEvent* ev);
+
+// Render an entity into `a`, building the Ctx for it.
+El* EntityRender(App* app, Window* win, Arena* a, EntityId id);
+
+// window.use_keyed_state(key, cx, init)
+void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop);
+void WindowKeyedFree(Window* win);
+
+template <typename T>
+T* KeyedState(Ctx* cx, uint32_t key) {
+    void* p = WindowKeyedState(cx->win, key, (int)sizeof(T), &EntityDropT<T>);
+    return (T*)p;
+}
+
+// Open a window whose root is a view entity, the WindowOpen + cx.new pair.
+Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
+                       EntityId root, AppWinOpts opts);
+int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
+               App* app, AppWinOpts opts);
+
+App* AppNew();
+void AppFree(App* app);
+int AppRun(App* app);
+Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
+                   AppHooks hooks, void* user, AppWinOpts opts);
 
 int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
            void* user);
 int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
              void* user, AppWinOpts opts);
-void AppSetTitle(AppHost* host, const wchar_t* title);
-void AppRequestAnim(AppHost* host, bool on);
+void AppSetTitle(Window* win, const wchar_t* title);
+void AppRequestAnim(Window* win, bool on);
 
 // Collect focusable click targets from last paint for Tab cycling.
-void FocusCollect(AppHost* host, El* root);
-int FocusNext(AppHost* host, int trapId, bool backward);
-void AppQuit(AppHost* host);
-void AppInvalidate(AppHost* host);
-void AppMinimize(AppHost* host);
-void AppToggleMaximize(AppHost* host);
-void AppClose(AppHost* host);
-void AppDrag(AppHost* host);
-bool AppIsMaximized(AppHost* host);
+void FocusCollect(Window* win, El* root);
+int FocusNext(Window* win, int trapId, bool backward);
+void AppQuit(Window* win);
+void AppInvalidate(Window* win);
+void AppMinimize(Window* win);
+void AppToggleMaximize(Window* win);
+void AppClose(Window* win);
+void AppDrag(Window* win);
+bool AppIsMaximized(Window* win);
 } // namespace gpui
