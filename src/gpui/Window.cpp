@@ -550,7 +550,6 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* use
         ArenaDelete(host.frameArena);
     }
     DestroyTempArena();
-    DestroyPermArena();
     CoUninitialize();
     return (int)msg.wParam;
 }
