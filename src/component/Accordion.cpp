@@ -51,15 +51,16 @@ El* Accordion::IntoEl() {
         root->BorderT(1, th.border);
     }
     for (int i = 0; i < nItems; i++) {
-        El* trig = AccordionTrigger::New(a, items[i].title, disabled ? 0 : HashClickId(items[i].title))
-                       ->FlexRow()
-                       ->H(36)
-                       ->ItemsCenter()
-                       ->JustifyBetween()
-                       ->PadX(8)
-                       ->BorderB(1, th.border)
-                       ->Child(TextEl(a, items[i].title)->Font(14)->Fg(th.foreground))
-                       ->Child(IconEl(a, items[i].open ? IconName::ChevronDown : IconName::ChevronRight, 14)->Fg(th.mutedFg));
+        El* trig =
+            AccordionTrigger::New(a, items[i].title, disabled ? 0 : HashClickId(items[i].title))
+                ->FlexRow()
+                ->H(36)
+                ->ItemsCenter()
+                ->JustifyBetween()
+                ->PadX(8)
+                ->BorderB(1, th.border)
+                ->Child(TextEl(a, items[i].title)->Font(14)->Fg(th.foreground))
+                ->Child(IconEl(a, items[i].open ? IconName::ChevronDown : IconName::ChevronRight, 14)->Fg(th.mutedFg));
         if (onToggle.IsValid() && !disabled) {
             AccBind* b = ::New<AccBind>(a);
             b->fn = onToggle;

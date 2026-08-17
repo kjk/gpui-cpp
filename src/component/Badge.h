@@ -6,7 +6,11 @@
 
 namespace component {
 
-enum class BadgeKind : u8 { Number, Dot, Icon };
+enum class BadgeKind : u8 {
+    Number,
+    Dot,
+    Icon
+};
 
 struct Badge {
     Arena* a = nullptr;

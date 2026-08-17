@@ -31,7 +31,12 @@ El* Clipboard::IntoEl() {
         b->value = value;
         btn->OnClick(MkFunc0(&FireClip, b));
     }
-    return Div(a)->FlexRow()->ItemsCenter()->Gap(8)->Child(TextEl(a, value)->Font(13)->Fg(th.foreground))->Child(btn->IntoEl());
+    return Div(a)
+        ->FlexRow()
+        ->ItemsCenter()
+        ->Gap(8)
+        ->Child(TextEl(a, value)->Font(13)->Fg(th.foreground))
+        ->Child(btn->IntoEl());
 }
 
 } // namespace component

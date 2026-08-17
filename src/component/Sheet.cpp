@@ -30,7 +30,17 @@ El* Sheet::IntoEl(WinSize size) {
         return Div(a);
     }
     const Theme& th = ThemeNow();
-    El* surface = Div(a)->Absolute()->Top(0)->Right(0)->H(size.dipH)->W(280)->Pad(16)->FlexCol()->Gap(12)->Bg(th.background)->Border(1, th.border);
+    El* surface = Div(a)
+                      ->Absolute()
+                      ->Top(0)
+                      ->Right(0)
+                      ->H(size.dipH)
+                      ->W(280)
+                      ->Pad(16)
+                      ->FlexCol()
+                      ->Gap(12)
+                      ->Bg(th.background)
+                      ->Border(1, th.border);
     surface->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
     if (body) {
         surface->Child(body);

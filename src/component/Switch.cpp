@@ -43,13 +43,8 @@ Switch* Switch::OnClick(Func1<bool> fn) {
 El* Switch::IntoEl() {
     const Theme& th = ThemeNow();
     Rgba on = hasColor ? color : th.primary;
-    El* track = SwitchTrack::New(a, id)
-                    ->W(36)
-                    ->H(20)
-                    ->Pad(2)
-                    ->Radius(10)
-                    ->Bg(checked ? on : th.secondary)
-                    ->ItemsCenter();
+    El* track =
+        SwitchTrack::New(a, id)->W(36)->H(20)->Pad(2)->Radius(10)->Bg(checked ? on : th.secondary)->ItemsCenter();
     if (checked) {
         track->JustifyEnd();
     } else {

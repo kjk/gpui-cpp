@@ -56,7 +56,12 @@ void SysStateInit(SysState* s);
 void SysStateFree(SysState* s);
 void SysRefresh(SysState* s);
 
-enum class ProcessSort : i32 { Pid = 0, Name = 1, Cpu = 2, Memory = 3 };
+enum class ProcessSort : i32 {
+    Pid = 0,
+    Name = 1,
+    Cpu = 2,
+    Memory = 3
+};
 void SysSortProcesses(SysState* s, ProcessSort field, bool descending, int keepTop);
 
 TempStr FormatBytes(u64 bytes);

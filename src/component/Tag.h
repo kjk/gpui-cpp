@@ -6,7 +6,14 @@
 
 namespace component {
 
-enum class TagVariant : u8 { Primary, Secondary, Danger, Success, Warning, Info };
+enum class TagVariant : u8 {
+    Primary,
+    Secondary,
+    Danger,
+    Success,
+    Warning,
+    Info
+};
 
 struct Tag {
     Arena* a = nullptr;

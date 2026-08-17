@@ -6,7 +6,12 @@
 
 namespace component {
 
-enum class NotificationKind : u8 { Info, Success, Warning, Error };
+enum class NotificationKind : u8 {
+    Info,
+    Success,
+    Warning,
+    Error
+};
 
 struct Notification {
     Arena* a = nullptr;

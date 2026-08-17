@@ -35,7 +35,14 @@ ColorPicker* ColorPicker::OnToggle(Func0 fn) {
 El* ColorPicker::IntoEl() {
     const Theme& th = ThemeNow();
     Rgba c = Rgb((u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff), (u8)(hex & 0xff));
-    El* trigger = Div(a)->H(28)->PadX(8)->ItemsCenter()->Gap(8)->Border(1, th.foreground)->Child(Div(a)->W(14)->H(14)->Bg(c)->Border(1, th.foreground))->Child(TextEl(a, str::Dup(a, fmt("#%06x", hex & 0xffffff)))->Font(12)->Fg(th.foreground));
+    El* trigger = Div(a)
+                      ->H(28)
+                      ->PadX(8)
+                      ->ItemsCenter()
+                      ->Gap(8)
+                      ->Border(1, th.foreground)
+                      ->Child(Div(a)->W(14)->H(14)->Bg(c)->Border(1, th.foreground))
+                      ->Child(TextEl(a, str::Dup(a, fmt("#%06x", hex & 0xffffff)))->Font(12)->Fg(th.foreground));
     BindClick(trigger, StrL("color-trigger"), onToggle);
     El* pop = nullptr;
     if (open) {

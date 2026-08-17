@@ -6,7 +6,13 @@
 
 namespace component {
 
-enum class AlertVariant : u8 { Default, Info, Success, Warning, Error };
+enum class AlertVariant : u8 {
+    Default,
+    Info,
+    Success,
+    Warning,
+    Error
+};
 
 struct Alert {
     Arena* a = nullptr;

@@ -362,9 +362,7 @@ struct Func1 {
     }
     ~Func1() = default;
 
-    void SetData(void* d, bool dropsArg) {
-        userData = (uintptr_t)d | (dropsArg ? kDropsArgBit : 0);
-    }
+    void SetData(void* d, bool dropsArg) { userData = (uintptr_t)d | (dropsArg ? kDropsArgBit : 0); }
     bool IsValid() const { return fn != nullptr; }
     void Call(T arg) const {
         if (!fn) {
@@ -570,9 +568,7 @@ struct Vec {
 
     ~Vec() { FreeEls(); }
 
-    T& operator[](int idx) const {
-        return els[idx];
-    }
+    T& operator[](int idx) const { return els[idx]; }
 
     bool InsertAt(int idx, const T& el) {
         T* p = VecInsertSpace(*this, idx, 1);

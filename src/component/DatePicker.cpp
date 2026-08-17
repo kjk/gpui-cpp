@@ -35,12 +35,16 @@ DatePicker* DatePicker::OnDay(Func1<int> fn) {
 
 El* DatePicker::IntoEl() {
     static const char* mon[] = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    El* trigger = Button::New(a, StrL("date"))->Label(str::Dup(a, fmt("%s %d, %d", Str(mon[month]), day, year)))->OnClick(onToggle)->IntoEl();
+    El* trigger = Button::New(a, StrL("date"))
+                      ->Label(str::Dup(a, fmt("%s %d, %d", Str(mon[month]), day, year)))
+                      ->OnClick(onToggle)
+                      ->IntoEl();
     El* cal = nullptr;
     if (open) {
         cal = Calendar::New(a)->Year(year)->Month(month)->Day(day)->OnDay(onDay)->IntoEl();
     }
-    return ::DatePicker::New(a, StrL("date-picker"))->Child(Popup::New(a, StrL("date-pop"), trigger)->Content(cal)->IntoEl());
+    return ::DatePicker::New(a, StrL("date-picker"))
+        ->Child(Popup::New(a, StrL("date-pop"), trigger)->Content(cal)->IntoEl());
 }
 
 } // namespace component

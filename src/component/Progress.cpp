@@ -31,8 +31,13 @@ El* Progress::IntoEl() {
     const Theme& th = ThemeNow();
     return ::Progress::New(a, StrL("progress"))
         ->W(w)
-        ->Child(::ProgressTrack::New(a)->W(w)->H(h)->Radius(h * 0.5f)->Bg(RgbaOpacity(th.progress, 0.2f))->Child(
-            ::ProgressIndicator::New(a)->W(w * (value / 100.f))->H(h)->Radius(h * 0.5f)->Bg(th.progress)));
+        ->Child(
+            ::ProgressTrack::New(a)
+                ->W(w)
+                ->H(h)
+                ->Radius(h * 0.5f)
+                ->Bg(RgbaOpacity(th.progress, 0.2f))
+                ->Child(::ProgressIndicator::New(a)->W(w * (value / 100.f))->H(h)->Radius(h * 0.5f)->Bg(th.progress)));
 }
 
 ProgressCircle* ProgressCircle::New(Arena* a) {
@@ -50,12 +55,8 @@ ProgressCircle* ProgressCircle::Size(float v) {
 }
 
 El* ProgressCircle::IntoEl() {
-    return Div(a)
-        ->W(size)
-        ->H(size)
-        ->ItemsCenter()
-        ->JustifyCenter()
-        ->Child(TextEl(a, str::Dup(a, fmt("%.0f%%", value)))->Font(12)->Fg(ThemeNow().foreground));
+    return Div(a)->W(size)->H(size)->ItemsCenter()->JustifyCenter()->Child(
+        TextEl(a, str::Dup(a, fmt("%.0f%%", value)))->Font(12)->Fg(ThemeNow().foreground));
 }
 
 } // namespace component

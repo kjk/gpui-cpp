@@ -86,15 +86,15 @@ static bool TokEq(const char* s, int n, const char* kw) {
 }
 
 static Rgba EditorTokColor(const char* s, int n) {
-    static const char* kws[] = {"use",  "struct", "fn",   "impl",  "let",   "mut",  "pub",
-                                "self", "Self",   "as",   "in",    "for",   "if",   "else",
-                                "return", "true", "false", "crate", "super", nullptr};
+    static const char* kws[] = {"use", "struct", "fn", "impl", "let",    "mut",  "pub",   "self",  "Self",  "as",
+                                "in",  "for",    "if", "else", "return", "true", "false", "crate", "super", nullptr};
     for (int i = 0; kws[i]; i++) {
         if (TokEq(s, n, kws[i])) {
             return Rgb(0x25, 0x63, 0xeb);
         }
     }
-    static const char* tys[] = {"usize", "isize", "i32", "u32", "u64", "i64", "str", "String", "bool", "HashMap", nullptr};
+    static const char* tys[] = {"usize", "isize",  "i32",  "u32",     "u64",  "i64",
+                                "str",   "String", "bool", "HashMap", nullptr};
     for (int i = 0; tys[i]; i++) {
         if (TokEq(s, n, tys[i])) {
             return Rgb(0x25, 0x63, 0xeb);
@@ -222,7 +222,8 @@ El* Editor::New(Arena* a, const char* text, int cursor, bool caret) {
             caretCol = cursor - pos;
         }
         El* row = Div(a)->FlexRow()->H(20)->Gap(8)->ItemsCenter();
-        row->Child(Div(a)->W(20)->JustifyEnd()->Child(TextEl(a, str::Dup(a, fmt("%d", lineNo)))->Font(11)->Fg(Rgb(0xa3, 0xa3, 0xa3))));
+        row->Child(Div(a)->W(20)->JustifyEnd()->Child(
+            TextEl(a, str::Dup(a, fmt("%d", lineNo)))->Font(11)->Fg(Rgb(0xa3, 0xa3, 0xa3))));
         El* code = Div(a)->FlexRow()->ItemsCenter();
         HighlightEditorLine(a, code, text + start, n, caretCol, blink);
         row->Child(code);

@@ -8,7 +8,12 @@ static const float kPi = 3.14159265f;
 static const int kMaxOps = 128;
 static const int kMaxCache = 24;
 
-enum SvgCmd : u8 { kMove = 0, kLine = 1, kCubic = 2, kClose = 3 };
+enum SvgCmd : u8 {
+    kMove = 0,
+    kLine = 1,
+    kCubic = 2,
+    kClose = 3
+};
 
 struct SvgOp {
     u8 cmd = kMove;
@@ -721,8 +726,8 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size, Rgba co
     float sy = size / (ic->vbH > 0 ? ic->vbH : 24.f);
     D2D1_MATRIX_3X2_F old;
     ctx->rt->GetTransform(&old);
-    D2D1_MATRIX_3X2_F xf =
-        D2D1::Matrix3x2F::Translation(-ic->vbX, -ic->vbY) * D2D1::Matrix3x2F::Scale(sx, sy) * D2D1::Matrix3x2F::Translation(x, y);
+    D2D1_MATRIX_3X2_F xf = D2D1::Matrix3x2F::Translation(-ic->vbX, -ic->vbY) * D2D1::Matrix3x2F::Scale(sx, sy) *
+                           D2D1::Matrix3x2F::Translation(x, y);
     ctx->rt->SetTransform(xf * old);
 
     ID2D1StrokeStyle* ss = nullptr;

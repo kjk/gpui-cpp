@@ -53,9 +53,9 @@ static HRESULT CreateDeviceResources(AppHost* host) {
         return S_OK;
     }
     host->paint.dpi = 96;
-    D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_DEFAULT,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96.f, 96.f);
+    D2D1_RENDER_TARGET_PROPERTIES rtp =
+        D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                                     D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96.f, 96.f);
     HRESULT hr = host->paint.d2d->CreateDCRenderTarget(&rtp, &host->paint.dcRt);
     if (FAILED(hr)) {
         logf("CreateDCRenderTarget failed %08x", (unsigned)hr);

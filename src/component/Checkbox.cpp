@@ -46,7 +46,14 @@ Checkbox* Checkbox::OnClick(Func1<bool> fn) {
 El* Checkbox::IntoEl() {
     const Theme& th = ThemeNow();
     float box = size == UiSize::Small ? 14.f : 16.f;
-    El* ind = CheckboxIndicator::New(a)->W(box)->H(box)->Shrink0()->ItemsCenter()->JustifyCenter()->Border(1, th.foreground)->Radius(3);
+    El* ind = CheckboxIndicator::New(a)
+                  ->W(box)
+                  ->H(box)
+                  ->Shrink0()
+                  ->ItemsCenter()
+                  ->JustifyCenter()
+                  ->Border(1, th.foreground)
+                  ->Radius(3);
     if (checked) {
         ind->Bg(th.primary)->Child(IconEl(a, IconName::Check, box - 4)->Fg(th.primaryFg));
     }

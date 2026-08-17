@@ -145,7 +145,13 @@ El* Button::IntoEl() {
         padX = 0;
         h = 0;
     }
-    El* e = ::Button::New(a, id, disabled ? 0 : HashClickId(id))->H(h > 0 ? h : kAuto)->PadX(padX)->ItemsCenter()->JustifyCenter()->Gap(6)->Radius(th.radius);
+    El* e = ::Button::New(a, id, disabled ? 0 : HashClickId(id))
+                ->H(h > 0 ? h : kAuto)
+                ->PadX(padX)
+                ->ItemsCenter()
+                ->JustifyCenter()
+                ->Gap(6)
+                ->Radius(th.radius);
     if (bd.a) {
         e->Border(1, bd);
     }

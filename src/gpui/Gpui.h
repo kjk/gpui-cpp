@@ -87,7 +87,10 @@ struct Theme {
     float radius;
 };
 
-enum class ThemeMode : u8 { Light, Dark };
+enum class ThemeMode : u8 {
+    Light,
+    Dark
+};
 
 const Theme& ThemeDark();
 const Theme& ThemeLight();
@@ -97,12 +100,35 @@ ThemeMode ThemeGet();
 
 // ─── style / element ──────────────────────────────────────────────────────
 
-enum class ElKind : u8 { Div, Text, Chart, Progress, Icon };
+enum class ElKind : u8 {
+    Div,
+    Text,
+    Chart,
+    Progress,
+    Icon
+};
 
-enum class FlexDir : u8 { Row, Col };
-enum class Align : u8 { Start, Center, End, Stretch };
-enum class Justify : u8 { Start, Center, End, SpaceBetween };
-enum class OverflowY : u8 { Visible, Hidden, Scroll };
+enum class FlexDir : u8 {
+    Row,
+    Col
+};
+enum class Align : u8 {
+    Start,
+    Center,
+    End,
+    Stretch
+};
+enum class Justify : u8 {
+    Start,
+    Center,
+    End,
+    SpaceBetween
+};
+enum class OverflowY : u8 {
+    Visible,
+    Hidden,
+    Scroll
+};
 
 enum class IconName : u8 {
     None = 0,
@@ -184,7 +210,7 @@ struct Style {
     bool fontSemibold = false;
     bool borderDashed = false;
     bool absolute = false;
-    bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
+    bool fixed = false;       // out-of-flow in window coords (Rust deferred overlay)
     bool anchorBelow = false; // absolute, just under the parent box
     float anchorGap = 0;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
@@ -217,8 +243,8 @@ struct El {
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
     int selHi = -1;
-    float laidFont = 0;  // resolved font size from last LayoutEl
-    float laidMaxW = 0;  // MeasureText maxW used (0 = unconstrained)
+    float laidFont = 0; // resolved font size from last LayoutEl
+    float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
 
     El* FlexRow();
     El* FlexCol();
@@ -276,7 +302,11 @@ struct El {
     El* Id(Str s);
 };
 
-enum class BtnKind : u8 { Default, Primary, Outline };
+enum class BtnKind : u8 {
+    Default,
+    Primary,
+    Outline
+};
 
 El* ButtonEl(Arena* a, int clickId, Str label, BtnKind kind = BtnKind::Default);
 El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected);
@@ -376,7 +406,8 @@ void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap, float relX, float relY);
-void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap, float x, float y, int u8a, int u8b, Rgba color);
+void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap, float x, float y, int u8a, int u8b,
+                    Rgba color);
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW, float availH, float inheritFont, Rgba inheritFg);
 void PaintEl(PaintCtx* ctx, El* e);
 int HitTest(PaintCtx* ctx, float x, float y);

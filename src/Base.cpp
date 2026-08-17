@@ -106,7 +106,6 @@ static void ArenaRelease(Arena* arena) {
     ArenaReleaseMemory(arena, arena->reserved);
 }
 
-
 static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
     if (!arena) {
         return nullptr;

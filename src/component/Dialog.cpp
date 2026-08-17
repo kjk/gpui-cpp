@@ -50,11 +50,20 @@ El* Dialog::IntoEl(WinSize size) {
     actions->Child(Button::New(a, StrL("dialog-cancel"))->Label(StrL("Cancel"))->OnClick(onClose)->IntoEl());
     actions->Child(Button::New(a, StrL("dialog-ok"))->Label(StrL("OK"))->Primary()->OnClick(onOk)->IntoEl());
     panel->Child(actions);
-    El* backdrop = DialogBackdrop::New(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->Bg(Rgba8(0, 0, 0, 51));
+    El* backdrop =
+        DialogBackdrop::New(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->Bg(Rgba8(0, 0, 0, 51));
     if (onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
     }
-    El* popup = DialogPopup::New(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->ItemsCenter()->JustifyCenter()->Child(panel);
+    El* popup = DialogPopup::New(a)
+                    ->Absolute()
+                    ->Top(0)
+                    ->Left(0)
+                    ->W(size.dipW)
+                    ->H(size.dipH)
+                    ->ItemsCenter()
+                    ->JustifyCenter()
+                    ->Child(panel);
     return ::Dialog::New(a)->Backdrop(backdrop)->Popup(popup)->IntoEl();
 }
 

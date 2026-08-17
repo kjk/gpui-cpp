@@ -1728,7 +1728,8 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         ctx->rt->DrawLine(D2D1::Point2F(x, Yat(ys[0])), D2D1::Point2F(x + w, Yat(ys[0])), ctx->brush, 2.f);
     }
     for (int i = 1; i < n; i++) {
-        ctx->rt->DrawLine(D2D1::Point2F(Xat(i - 1), Yat(ys[i - 1])), D2D1::Point2F(Xat(i), Yat(ys[i])), ctx->brush, 2.f);
+        ctx->rt->DrawLine(D2D1::Point2F(Xat(i - 1), Yat(ys[i - 1])), D2D1::Point2F(Xat(i), Yat(ys[i])), ctx->brush,
+                          2.f);
     }
 
     // x labels every tickMargin
@@ -1780,7 +1781,8 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         ctx->hits.Append(hr);
     }
 
-    if (e->style.hasHoverBg && ((e->clickId && e->clickId == ctx->hoverId) || (e->onClick.IsValid() && e->clickId == ctx->hoverId))) {
+    if (e->style.hasHoverBg &&
+        ((e->clickId && e->clickId == ctx->hoverId) || (e->onClick.IsValid() && e->clickId == ctx->hoverId))) {
         FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius, e->style.hoverBg);
     } else if (e->style.hasBg) {
         FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius, e->style.bg);
@@ -1813,7 +1815,8 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
 
     bool clip = e->style.overflowY != OverflowY::Visible;
     if (clip) {
-        ctx->rt->PushAxisAlignedClip(D2D1::RectF(e->x, e->y, e->x + e->w, e->y + e->h), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        ctx->rt->PushAxisAlignedClip(D2D1::RectF(e->x, e->y, e->x + e->w, e->y + e->h),
+                                     D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     }
 
     if (e->kind == ElKind::Text) {

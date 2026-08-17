@@ -137,7 +137,8 @@ static void RefreshProcesses(SysState* s) {
             }
             ProcessInfo pi;
             pi.pid = pe.th32ProcessID;
-            int n = WideCharToMultiByte(CP_UTF8, 0, pe.szExeFile, -1, pi.name, (int)sizeof(pi.name) - 1, nullptr, nullptr);
+            int n =
+                WideCharToMultiByte(CP_UTF8, 0, pe.szExeFile, -1, pi.name, (int)sizeof(pi.name) - 1, nullptr, nullptr);
             if (n <= 0) {
                 pi.name[0] = 0;
             }

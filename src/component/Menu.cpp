@@ -30,7 +30,8 @@ El* Menu::IntoEl() {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->W(180)->Border(1, th.border)->Bg(th.background)->Radius(th.radius);
     for (int i = 0; i < n; i++) {
-        El* row = Div(a)->H(28)->PadX(10)->ItemsCenter()->HoverBg(th.muted)->Child(TextEl(a, items[i])->Font(13)->Fg(th.foreground));
+        El* row = Div(a)->H(28)->PadX(10)->ItemsCenter()->HoverBg(th.muted)->Child(
+            TextEl(a, items[i])->Font(13)->Fg(th.foreground));
         if (onClick.IsValid()) {
             MenuBind* b = ::New<MenuBind>(a);
             b->fn = onClick;

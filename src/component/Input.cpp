@@ -51,7 +51,12 @@ Textarea* Textarea::OnFocus(Func0 fn) {
 }
 El* Textarea::IntoEl() {
     const Theme& th = ThemeNow();
-    El* box = InputBase::New(a, id, HashClickId(id))->H(64)->Pad(8)->ClipY()->Border(1, th.border)->Child(::Textarea::New(a, text));
+    El* box = InputBase::New(a, id, HashClickId(id))
+                  ->H(64)
+                  ->Pad(8)
+                  ->ClipY()
+                  ->Border(1, th.border)
+                  ->Child(::Textarea::New(a, text));
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);
     }
@@ -77,7 +82,11 @@ El* NumberInput::IntoEl() {
         ->FlexRow()
         ->H(28)
         ->Border(1, ThemeNow().border)
-        ->Child(InputBase::New(a, StrL("number"), HashClickId(StrL("number")))->Grow()->PadX(8)->ItemsCenter()->Child(::Input::New(a, state)))
+        ->Child(InputBase::New(a, StrL("number"), HashClickId(StrL("number")))
+                    ->Grow()
+                    ->PadX(8)
+                    ->ItemsCenter()
+                    ->Child(::Input::New(a, state)))
         ->Child(Button::New(a, StrL("inc"))->Label(StrL("+"))->Compact()->OnClick(onInc)->IntoEl())
         ->Child(Button::New(a, StrL("dec"))->Label(StrL("−"))->Compact()->OnClick(onDec)->IntoEl());
 }

@@ -5,7 +5,12 @@
 #include "gpui/Gpui.h"
 #include "ui/Ui.h"
 
-enum class UiSize : u8 { XSmall, Small, Medium, Large };
+enum class UiSize : u8 {
+    XSmall,
+    Small,
+    Medium,
+    Large
+};
 
 inline float UiSizePx(UiSize s) {
     switch (s) {

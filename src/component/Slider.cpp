@@ -29,7 +29,15 @@ El* Slider::IntoEl() {
     El* track = SliderTrack::New(a)->W(w)->H(28);
     track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(w)->H(2)->Bg(th.secondary));
     track->Child(SliderIndicator::New(a)->Absolute()->Top(13)->Left(0)->W(w * p)->H(2)->Bg(th.primary));
-    track->Child(SliderThumb::New(a)->Absolute()->Top(7)->Left(w * p - 7)->W(14)->H(14)->Radius(7)->Bg(th.background)->Border(1, th.primary));
+    track->Child(SliderThumb::New(a)
+                     ->Absolute()
+                     ->Top(7)
+                     ->Left(w * p - 7)
+                     ->W(14)
+                     ->H(14)
+                     ->Radius(7)
+                     ->Bg(th.background)
+                     ->Border(1, th.primary));
     return ::Slider::New(a, HashClickId(StrL("slider")))->W(w)->H(28)->Child(track);
 }
 

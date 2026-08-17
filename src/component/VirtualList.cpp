@@ -44,7 +44,8 @@ El* VirtualList::IntoEl() {
         if (row) {
             list->Child(row(a, ix));
         } else {
-            list->Child(Div(a)->H(rowH)->PadX(8)->ItemsCenter()->Child(TextEl(a, str::Dup(a, fmt("Item %d", ix)))->Font(12)->Fg(th.foreground)));
+            list->Child(Div(a)->H(rowH)->PadX(8)->ItemsCenter()->Child(
+                TextEl(a, str::Dup(a, fmt("Item %d", ix)))->Font(12)->Fg(th.foreground)));
         }
     }
     return ::VirtualList::New(a, StrL("vlist"))->H(viewH)->ClipY()->Child(list);

@@ -45,13 +45,21 @@ El* Select::IntoEl() {
     if (sel < 0 || sel >= n) {
         sel = 0;
     }
-    El* trigger = Div(a)->H(28)->PadX(8)->ItemsCenter()->JustifyBetween()->Border(1, th.foreground)->Child(TextEl(a, n ? options[sel] : StrL("Select"))->Font(13)->Fg(th.foreground))->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.mutedFg));
+    El* trigger = Div(a)
+                      ->H(28)
+                      ->PadX(8)
+                      ->ItemsCenter()
+                      ->JustifyBetween()
+                      ->Border(1, th.foreground)
+                      ->Child(TextEl(a, n ? options[sel] : StrL("Select"))->Font(13)->Fg(th.foreground))
+                      ->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.mutedFg));
     BindClick(trigger, id, onToggle);
     El* opts = nullptr;
     if (open) {
         opts = Div(a)->FlexCol()->Pad(4)->Border(1, th.foreground)->Bg(th.background);
         for (int i = 0; i < n; i++) {
-            El* row = Div(a)->PadX(8)->PadY(4)->HoverBg(th.muted)->Child(TextEl(a, options[i])->Font(13)->Fg(th.foreground));
+            El* row =
+                Div(a)->PadX(8)->PadY(4)->HoverBg(th.muted)->Child(TextEl(a, options[i])->Font(13)->Fg(th.foreground));
             if (onChange.IsValid()) {
                 SelBind* b = ::New<SelBind>(a);
                 b->fn = onChange;

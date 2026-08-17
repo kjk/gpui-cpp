@@ -6,7 +6,10 @@
 
 namespace component {
 
-enum class SeparatorStyle : u8 { Solid, Dashed };
+enum class SeparatorStyle : u8 {
+    Solid,
+    Dashed
+};
 
 struct Separator {
     Arena* a = nullptr;
