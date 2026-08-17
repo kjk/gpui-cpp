@@ -154,29 +154,29 @@ const libs = [
 
 function sourcesFor(name: string): string[] | null {
   if (name === "system_monitor") {
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), "src/sys/SysInfo.cpp", "src/examples/system_monitor.cpp"];
+    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), "src/sys/SysInfo.cpp", "examples/system_monitor.cpp"];
   }
   if (name === "app_assets") {
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), "src/examples/app_assets.cpp"];
+    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), "examples/app_assets.cpp"];
   }
   if (name === "showcase") {
-    const dir = join(root, "src/examples/showcase");
+    const dir = join(root, "examples/showcase");
     const files = readdirSync(dir)
       .filter((f) => f.endsWith(".cpp"))
-      .map((f) => `src/examples/showcase/${f}`)
+      .map((f) => `examples/showcase/${f}`)
       .sort();
     return [...gpuiSrc, ...uiSrc(), ...componentSrc(), ...files];
   }
   if (name === "story") {
-    const dir = join(root, "src/examples/story");
+    const dir = join(root, "examples/story");
     const files = readdirSync(dir)
       .filter((f) => f.endsWith(".cpp"))
-      .map((f) => `src/examples/story/${f}`)
+      .map((f) => `examples/story/${f}`)
       .sort();
     return [...gpuiSrc, ...uiSrc(), ...componentSrc(), ...files];
   }
   if (simpleExamples.includes(name)) {
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), `src/examples/${name}.cpp`];
+    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), `examples/${name}.cpp`];
   }
   return null;
 }
@@ -293,7 +293,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   // do not both write button.obj.
   const objs: string[] = [];
   // AppLog.cpp implements Base.h log() / loga() / _uploadDebugReport for every example.
-  for (const g of groupSources(["src/examples/AppLog.cpp", ...src, ...baseSrc])) {
+  for (const g of groupSources(["examples/AppLog.cpp", ...src, ...baseSrc])) {
     const objDir = join(outDir, "obj", g.key);
     mkdirSync(join(root, objDir), { recursive: true });
     runCl([...cflags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...g.files]);

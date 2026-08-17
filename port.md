@@ -8,7 +8,7 @@
 
 | Layer | Rust | C++ we build |
 | --- | --- | --- |
-| App | `examples/system_monitor/src/main.rs` | `src/examples/system_monitor.cpp` |
+| App | `examples/system_monitor/src/main.rs` | `examples/system_monitor.cpp` |
 | Components | Theme, Root, TitleBar, TabBar(segmented), Tab, AreaChart, Progress, Icon, DataTable | `src/ui/*` |
 | Runtime | gpui window, flex `div`/`h_flex`/`v_flex`, text, gradient, path, timer, input | `src/gpui/*` (Win32 + Direct2D + DirectWrite + custom flex) |
 | Metrics | `sysinfo`, `battery` | `src/sys/*` (Win32) |
@@ -215,7 +215,7 @@ C++:
 
 ### Simple examples (ported 2026-08-16)
 
-Each has a matching `src/examples/<name>.cpp` and `bun cmd/build.ts <name>` target:
+Each has a matching `examples/<name>.cpp` and `bun cmd/build.ts <name>` target:
 
 | Example | What landed |
 | --- | --- |
@@ -236,7 +236,7 @@ Each has a matching `src/examples/<name>.cpp` and `bun cmd/build.ts <name>` targ
 
 Rust: `.work/gpui-component/crates/base/examples/showcase` via `cargo run -p gpui-base --example base_components -- [slug]`.
 
-C++: `src/examples/showcase/` — `bun cmd/build.ts showcase`, window 840×640, light `#ffffff` / `#171717`. No slug opens the 3-column overview; `showcase.exe button` jumps to that page without the back bar.
+C++: `examples/showcase/` — `bun cmd/build.ts showcase`, window 840×640, light `#ffffff` / `#171717`. No slug opens the 3-column overview; `showcase.exe button` jumps to that page without the back bar.
 
 Each component is a `SHOWCASE_PAGE` translation unit committed on its own. Shared helpers live in `showcase.cpp` / `Showcase.h`.
 
@@ -244,7 +244,7 @@ Each component is a `SHOWCASE_PAGE` translation unit committed on its own. Share
 
 Rust: `.work/gpui-component/crates/story` via `cargo run -p gpui-component-story -- [slug]`.
 
-C++: `src/examples/story/` — `bun cmd/build.ts story`, window 1280×800, light theme, sidebar + 62 stories matching the Rust gallery list.
+C++: `examples/story/` — `bun cmd/build.ts story`, window 1280×800, light theme, sidebar + 62 stories matching the Rust gallery list.
 
 ### Next
 

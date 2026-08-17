@@ -78,7 +78,7 @@ sysinfo + battery      (process/CPU/mem/disk + battery)
 C++ stack we implement:
 
 ```
-src/examples/system_monitor.cpp
+examples/system_monitor.cpp
         │
         ▼
 src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root
@@ -195,7 +195,7 @@ port.md                phased porting plan
 port-progress.md       what is done / what is next
 port-upstream.md       how to ingest later checkins (pins live in cmd/versions.ts)
 cmd/versions.ts        exact gpui-component + zed gpui SHAs we are porting
-cmd/format.ts          clang-format src/**/*.{cpp,h} and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
+cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
 cmd/build.ts           MSVC compile/link via bun; also clones the pinned Rust spec
 cmd/run.ts             build then run; same flags as build.ts plus -windbg / -compare
 src/Base.h/.cpp        vendored SumatraPDF subset
@@ -203,7 +203,7 @@ src/gpui/              window, layout, paint, assets, SVG, element tree
 src/sys/               Windows system metrics
 src/ui/                gpui-base unstyled primitives (Button, …)
 src/component/         themed crates/ui façade (component::Button, Func0/Func1 callbacks)
-src/examples/          AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/
+examples/              AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/
 assets/app_assets/     Lucide SVGs for the app_assets example
 assets/icons/          Lucide SVGs for sidebar
 assets/markdown_table/ report.md for the markdown_table example
@@ -229,4 +229,4 @@ When a primitive needs a GPUI capability we do not have (text input, overlay), a
 
 ## Updating the vendored base
 
-If `src/Base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/Base.h` / `src/Base.cpp`. Provide `log` / `loga` in `src/examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.
+If `src/Base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/Base.h` / `src/Base.cpp`. Provide `log` / `loga` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.

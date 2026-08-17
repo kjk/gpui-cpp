@@ -20,9 +20,9 @@ Trees we actually translate:
 
 - `crates/base` → `src/ui/`
 - `crates/ui` → `src/component/`
-- `crates/story` → `src/examples/story/`
-- `crates/base/examples/showcase` → `src/examples/showcase/`
-- `examples/*` → `src/examples/*.cpp`
+- `crates/story` → `examples/story/`
+- `crates/base/examples/showcase` → `examples/showcase/`
+- `examples/*` → `examples/*.cpp`
 
 Ingest a newer checkin:
 

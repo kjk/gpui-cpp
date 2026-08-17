@@ -1,8 +1,8 @@
 // Format this repo's C++ (clang-format) and TypeScript (prettier).
 //
-//   bun cmd/format.ts                  # all src/**/*.{cpp,h} and cmd/*.ts
+//   bun cmd/format.ts                  # all src/**/*.{cpp,h}, examples, and cmd/*.ts
 //   bun cmd/format.ts -ts              # prettier only (cmd/*.ts)
-//   bun cmd/format.ts -cpp             # clang-format only (src C++/headers)
+//   bun cmd/format.ts -cpp             # clang-format only (src + examples)
 //   bun cmd/format.ts src/gpui/Gpui.cpp cmd/build.ts
 
 import { $, Glob } from "bun";
@@ -23,9 +23,9 @@ const cppGlobs = [
   "src/ui/*.{cpp,h}",
   "src/component/*.{cpp,h}",
   "src/sys/*.{cpp,h}",
-  "src/examples/*.cpp",
-  "src/examples/showcase/*.{cpp,h}",
-  "src/examples/story/*.{cpp,h}",
+  "examples/*.cpp",
+  "examples/showcase/*.{cpp,h}",
+  "examples/story/*.{cpp,h}",
 ];
 
 const tsGlobs = ["cmd/*.ts"];
