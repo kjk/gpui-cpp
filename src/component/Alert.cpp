@@ -101,10 +101,9 @@ El* Alert::IntoEl() {
     row->Child(IconEl(a, icon, 16)->Fg(fg)->Shrink0());
     El* col = Div(a)->FlexCol()->Gap(4)->Grow();
     if (title.s && !banner) {
-        col->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(th.foreground));
+        col->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(fg));
     }
-    col->Child(
-        TextEl(a, message)->Font(UiFontPx(size))->Fg(th.foreground)->Wrap());
+    col->Child(TextEl(a, message)->Font(UiFontPx(size))->Fg(fg)->Wrap());
     row->Child(col);
     if (onClose.IsValid()) {
         El* x = Div(a)->W(20)->H(20)->ItemsCenter()->JustifyCenter()->Child(

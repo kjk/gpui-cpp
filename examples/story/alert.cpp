@@ -7,6 +7,7 @@ enum {
 static void HideBanner(StoryApp* app) {
     app->alertBanner = false;
 }
+static void AlertNoop(StoryApp*) {}
 
 El* AlertRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -29,6 +30,7 @@ El* AlertRender(StoryApp* app, Arena* a) {
         component::Alert::Info(a, StrL("info1"),
                                StrL("Maintenance starts Friday at 22:00 UTC."))
             ->Title(StrL("Scheduled maintenance"))
+            ->OnClose(MkFunc0(&AlertNoop, app))
             ->WithSize(app->size)
             ->IntoEl());
     col->Child(
@@ -39,15 +41,19 @@ El* AlertRender(StoryApp* app, Arena* a) {
             ->WithSize(app->size)
             ->IntoEl());
     col->Child(
-        component::Alert::Warning(a, StrL("warning-1"),
-                                  StrL("Two teammates still use recovery codes "
-                                       "generated more than a year ago."))
+        component::Alert::Warning(
+            a, StrL("warning-1"),
+            StrL("Two teammates still use recovery codes generated more than "
+                 "a year ago. Ask them to generate a fresh set in Security "
+                 "settings."))
             ->WithSize(app->size)
             ->IntoEl());
     col->Child(
         component::Alert::Error(
             a, StrL("error-1"),
-            StrL("Please verify your billing information and try again."))
+            StrL("Please verify your billing information and try again. Check "
+                 "your card details, ensure sufficient funds, and verify the "
+                 "billing address."))
             ->Title(StrL("Unable to process your payment."))
             ->WithSize(app->size)
             ->IntoEl());
@@ -74,8 +80,23 @@ El* AlertRender(StoryApp* app, Arena* a) {
             ->Banner()
             ->WithSize(app->size)
             ->IntoEl());
-    bcol->Child(component::Alert::Success(a, StrL("banner-success"),
-                                          StrL("All checks passed."))
+    bcol->Child(
+        component::Alert::Success(a, StrL("banner-success"),
+                                  StrL("All 1,284 records finished importing."))
+            ->Banner()
+            ->WithSize(app->size)
+            ->IntoEl());
+    bcol->Child(component::Alert::Warning(
+                    a, StrL("banner-warning"),
+                    StrL("Your API key expires in 6 days. Rotate it before "
+                         "August 19."))
+                    ->Banner()
+                    ->WithSize(app->size)
+                    ->IntoEl());
+    bcol->Child(component::Alert::Error(
+                    a, StrL("banner-error"),
+                    StrL("Live updates are disconnected. Changes may be "
+                         "delayed."))
                     ->Banner()
                     ->WithSize(app->size)
                     ->IntoEl());
