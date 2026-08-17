@@ -474,14 +474,22 @@ function formatHumanBytes(n: number): string {
   return `${n} b`;
 }
 
-function printFileSize(relPath: string) {
-  const abs = join(root, relPath);
-  if (!existsSync(abs)) {
-    console.log(`${relPath}  (not generated)`);
-    return;
+function printExeTable(outDir: string, names: string[]) {
+  const rows = names.map((n) => {
+    const relPath = join(outDir, `${n}.exe`).replaceAll("/", "\\");
+    const abs = join(root, outDir, `${n}.exe`);
+    if (!existsSync(abs)) {
+      return { name: relPath, bytes: "(not generated)", human: "" };
+    }
+    const size = statSync(abs).size;
+    return { name: relPath, bytes: formatExactBytes(size), human: formatHumanBytes(size) };
+  });
+  const nameW = Math.max(...rows.map((r) => r.name.length));
+  const bytesW = Math.max(...rows.map((r) => r.bytes.length));
+  const humanW = Math.max(...rows.map((r) => r.human.length));
+  for (const r of rows) {
+    console.log(`${r.name.padEnd(nameW)}  ${r.bytes.padStart(bytesW)}  ${r.human.padStart(humanW)}`);
   }
-  const n = statSync(abs).size;
-  console.log(`${relPath}  ${formatExactBytes(n)}  ${formatHumanBytes(n)}`);
 }
 
 const started = performance.now();
@@ -515,8 +523,5 @@ for (const n of built) {
 }
 
 console.log("");
-for (const n of built) {
-  printFileSize(join(outDir, `${n}.exe`));
-  printFileSize(join(outDir, `${n}.pdb`));
-}
+printExeTable(outDir, built);
 console.log(`elapsed ${formatElapsed(performance.now() - started)}`);
