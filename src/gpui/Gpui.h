@@ -163,6 +163,15 @@ enum class IconName : uint8_t {
     Minus,
     Plus,
     Copy,
+    Bell,
+    Star,
+    Eye,
+    Heart,
+    ArrowLeft,
+    Building2,
+    Asterisk,
+    Sun,
+    Maximize,
 };
 
 struct PaintCtx;

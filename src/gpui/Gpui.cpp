@@ -1815,6 +1815,79 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             DrawRoundStroke(ctx, x + s * 0.18f, y + s * 0.32f, s * 0.42f,
                             s * 0.50f, 2, sw, c);
             break;
+        case IconName::Bell:
+            line(12, 4, 12, 5);
+            DrawRoundStroke(ctx, x + s * 0.29f, y + s * 0.25f, s * 0.42f,
+                            s * 0.42f, s * 0.18f, sw, c);
+            line(7, 16, 17, 16);
+            ctx->rt
+                ->FillEllipse(D2D1::Ellipse(P(12, 19), 1.2f, 1.2f), ctx->brush);
+            break;
+        case IconName::Star:
+            line(12, 4, 14, 10);
+            line(14, 10, 20, 10);
+            line(20, 10, 15, 14);
+            line(15, 14, 17, 20);
+            line(17, 20, 12, 16);
+            line(12, 16, 7, 20);
+            line(7, 20, 9, 14);
+            line(9, 14, 4, 10);
+            line(4, 10, 10, 10);
+            line(10, 10, 12, 4);
+            break;
+        case IconName::Eye:
+            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.22f),
+                                 ctx->brush, sw);
+            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.12f, s * 0.12f),
+                                 ctx->brush, sw);
+            break;
+        case IconName::Heart:
+            ctx->rt
+                ->DrawEllipse(D2D1::Ellipse(P(8.5f, 9), s * 0.16f, s * 0.16f),
+                              ctx->brush, sw);
+            ctx->rt
+                ->DrawEllipse(D2D1::Ellipse(P(15.5f, 9), s * 0.16f, s * 0.16f),
+                              ctx->brush, sw);
+            line(5, 11, 12, 20);
+            line(19, 11, 12, 20);
+            break;
+        case IconName::ArrowLeft:
+            line(18, 12, 6, 12);
+            line(10, 7, 6, 12);
+            line(10, 17, 6, 12);
+            break;
+        case IconName::Building2:
+            DrawRoundStroke(ctx, x + s * 0.18f, y + s * 0.18f, s * 0.38f,
+                            s * 0.64f, 1, sw, c);
+            DrawRoundStroke(ctx, x + s * 0.48f, y + s * 0.32f, s * 0.32f,
+                            s * 0.50f, 1, sw, c);
+            line(10, 22, 10, 18);
+            line(8, 10, 10, 10);
+            line(8, 14, 10, 14);
+            line(16, 14, 18, 14);
+            line(16, 18, 18, 18);
+            break;
+        case IconName::Asterisk:
+            line(12, 5, 12, 19);
+            line(6, 8, 18, 16);
+            line(18, 8, 6, 16);
+            break;
+        case IconName::Sun:
+            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.16f, s * 0.16f),
+                                 ctx->brush, sw);
+            line(12, 3, 12, 6);
+            line(12, 18, 12, 21);
+            line(3, 12, 6, 12);
+            line(18, 12, 21, 12);
+            line(6, 6, 8, 8);
+            line(16, 16, 18, 18);
+            line(18, 6, 16, 8);
+            line(8, 16, 6, 18);
+            break;
+        case IconName::Maximize:
+            DrawRoundStroke(ctx, x + s * 0.22f, y + s * 0.22f, s * 0.56f,
+                            s * 0.56f, 1, sw, c);
+            break;
         default:
             break;
     }
