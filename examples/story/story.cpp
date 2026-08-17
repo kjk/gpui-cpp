@@ -36,8 +36,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"introduction", "Introduction",
      "UI components for building fantastic desktop application by using GPUI."},
     {"accordion", "Accordion",
-     "A vertically stacked set of interactive headings that each reveal a "
-     "section of content."},
+     "The accordion uses collapse internally to make it collapsible."},
     {"alert", "Alert",
      "Communicate important status changes without interrupting the user's "
      "workflow."},
@@ -188,22 +187,26 @@ El* StoryTxt(Arena* a, Str s, float px, Rgba c) {
 
 El* StorySection(Arena* a, const char* title, const char* desc) {
     const Theme& th = ThemeNow();
+    // Rust StorySection is an outline GroupBox: title sits above a bordered
+    // content pane that centers its children (crates/story/src/lib.rs).
+    El* wrap = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* head = Div(a)->FlexCol()->Gap(4)->W(kFill);
-    head->Child(StoryTxt(a, StoryDup(a, title), 14, th.foreground)->Semibold());
+    head->Child(StoryTxt(a, StoryDup(a, title), 14, th.mutedFg)->Semibold());
     if (desc && desc[0]) {
         head->Child(StoryTxt(a, StoryDup(a, desc), 12, th.mutedFg)->Wrap());
     }
-    El* box = Div(a)
-                  ->FlexCol()
-                  ->Gap(12)
-                  ->Pad(16)
-                  ->W(kFill)
-                  ->Border(1, th.border)
-                  ->Radius(th.radius);
-    box->Child(head);
-    El* body = Div(a)->FlexCol()->Gap(16)->W(kFill)->ItemsStart();
-    box->Child(body);
-    return box;
+    El* body = Div(a)
+                   ->FlexCol()
+                   ->Gap(16)
+                   ->Pad(16)
+                   ->W(kFill)
+                   ->Border(1, th.border)
+                   ->Radius(th.radius)
+                   ->ItemsCenter()
+                   ->JustifyCenter();
+    wrap->Child(head);
+    wrap->Child(body);
+    return wrap;
 }
 
 El* StorySectionAdd(El* section, El* child) {
