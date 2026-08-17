@@ -14,22 +14,30 @@ static El* Shield(Arena* a, const char* left, const char* right, Rgba rightBg) {
     return row;
 }
 
-static El* LogoPiece(Arena* a, float x, float y, float w, float h, Rgba c) {
-    const float s = 112.f / 32.f;
-    return Div(a)->W(w * s)->H(h * s)->Bg(c)->Absolute()->Left(x * s)->Top(y *
-                                                                           s);
+static void FillLogoBox(PaintCtx* ctx, float x, float y, float w, float h,
+                        Rgba c) {
+    if (!ctx || !ctx->rt || !ctx->brush || w <= 0 || h <= 0) {
+        return;
+    }
+    ctx->brush->SetColor(RgbaToD2D(c));
+    ctx->rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), ctx->brush);
+}
+
+static void PaintLogoMark(PaintCtx* ctx, El* e, void*) {
+    // website/public/logo.svg — 32 viewBox, README shows it at 112px.
+    float s = e->w / 32.f;
+    Rgba dark = Rgb(0x1f, 0x20, 0x23);
+    Rgba blue = Rgb(0x3b, 0x82, 0xf6);
+    FillLogoBox(ctx, e->x + 4 * s, e->y + 4 * s, 24 * s, 5 * s, dark);
+    FillLogoBox(ctx, e->x + 4 * s, e->y + 4 * s, 6 * s, 24 * s, dark);
+    FillLogoBox(ctx, e->x + 4 * s, e->y + 23 * s, 24 * s, 5 * s, dark);
+    FillLogoBox(ctx, e->x + 16 * s, e->y + 13 * s, 12 * s, 5 * s, blue);
+    FillLogoBox(ctx, e->x + 23 * s, e->y + 13 * s, 5 * s, 10 * s, blue);
 }
 
 static El* LogoMark(Arena* a) {
-    // website/public/logo.svg — 32 viewBox, README shows it at 112px.
-    Rgba dark = Rgb(0x1f, 0x20, 0x23);
-    Rgba blue = Rgb(0x3b, 0x82, 0xf6);
     El* mark = Div(a)->W(112)->H(112)->Shrink0();
-    mark->Child(LogoPiece(a, 4, 4, 24, 5, dark));
-    mark->Child(LogoPiece(a, 4, 4, 6, 24, dark));
-    mark->Child(LogoPiece(a, 4, 23, 24, 5, dark));
-    mark->Child(LogoPiece(a, 16, 13, 12, 5, blue));
-    mark->Child(LogoPiece(a, 23, 13, 5, 10, blue));
+    mark->customPaint = PaintLogoMark;
     return mark;
 }
 
@@ -130,7 +138,8 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(0)->W(kFill);
 
-    El* hero = Div(a)->FlexCol()->Gap(8)->W(kFill)->PadB(16);
+    // README: <p align="center"> logo + <strong>GPUI Component</strong>
+    El* hero = Div(a)->FlexCol()->Gap(8)->W(kFill)->ItemsCenter()->PadB(16);
     hero->Child(LogoMark(a));
     hero->Child(MdTxt(a, StrL("GPUI Component"), kMd, th.foreground)->Bold());
     col->Child(hero);
@@ -140,22 +149,25 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     langs->Child(MdTxt(a, StrL("|"), kMd, th.mutedFg));
     langs->Child(MdTxt(a,
                        StrL("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"),
-                       kMd, th.blue));
+                       kMd, th.blue)
+                     ->BorderB(1, th.blue));
     col->Child(langs->PadB(16));
 
     El* badges = Div(a)->FlexRow()->Gap(6)->ItemsCenter();
-    badges->Child(Shield(a, "CI", "passing", Rgb(0x4c, 0xc7, 0x1f)));
-    badges->Child(Shield(a, "docs", "passing", Rgb(0x4c, 0xc7, 0x1f)));
+    badges->Child(Shield(a, "CI", "failing", Rgb(0xe0, 0x5d, 0x44)));
+    badges->Child(Shield(a, "docs", "passing", Rgb(0x44, 0xcc, 0x11)));
     badges->Child(Shield(a, "crates.io", "v0.5.1", Rgb(0xfe, 0x7d, 0x37)));
     col->Child(badges->PadB(16));
 
-    col->Child(MdTxt(a,
-                     StrL("UI components for building fantastic desktop "
-                          "applications using GPUI."),
-                     kMd, th.foreground)
-                   ->Wrap()
-                   ->W(kFill)
-                   ->PadB(16));
+    El* blurb = Div(a)->FlexRow()->W(kFill)->Wrap()->PadB(16);
+    blurb->Child(
+        MdTxt(a,
+              StrL("UI components for building fantastic desktop applications "
+                   "using "),
+              kMd, th.foreground));
+    blurb->Child(MdTxt(a, StrL("GPUI"), kMd, th.blue)->BorderB(1, th.blue));
+    blurb->Child(MdTxt(a, StrL("."), kMd, th.foreground));
+    col->Child(blurb);
 
     col->Child(H2(a, "Features"));
     El* feats = Div(a)->FlexCol()->Gap(2)->W(kFill)->PadB(16);
@@ -216,23 +228,65 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
             th.muted);
     static const char* kDiagram[] = {
         "                             APPLICATION",
-        "                                  |",
-        "                +-----------------+-----------------+",
-        "                |                                   |",
-        "                v                                   v",
-        "       +------------------+               +------------------+",
-        "       |  gpui-component  |               | Your Design      |",
-        "       |    Styled UI     |               | System           |",
-        "       +--------+---------+               +--------+---------+",
-        "                |                                  |",
-        "                +----------------+-----------------+",
-        "                                 v",
-        "                       +------------------+",
-        "                       |    gpui-base     |",
-        "                       | Behavior . State |",
-        "                       | Infrastructure   |",
-        "                       +--------+---------+",
-        "                                v",
+        "                                  \xE2\x94\x82",
+        "                \xE2\x94\x8C\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\xB4"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x90",
+        "                \xE2\x94\x82                                   "
+        "\xE2\x94\x82",
+        "                \xE2\x96\xBC                                   "
+        "\xE2\x96\xBC",
+        "       \xE2\x94\x8C\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x90               "
+        "\xE2\x94\x8C\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x90",
+        "       \xE2\x94\x82  gpui-component  \xE2\x94\x82               "
+        "\xE2\x94\x82 Your Design      \xE2\x94\x82",
+        "       \xE2\x94\x82    Styled UI     \xE2\x94\x82               "
+        "\xE2\x94\x82 System           \xE2\x94\x82",
+        "       \xE2\x94\x94\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\xAC"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x98"
+        "               \xE2\x94\x94\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\xAC\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x98",
+        "                \xE2\x94\x82                                  "
+        "\xE2\x94\x82",
+        "                \xE2\x94\x94\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\xAC\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x98",
+        "                                 \xE2\x96\xBC",
+        "                       \xE2\x94\x8C\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x90",
+        "                       \xE2\x94\x82    gpui-base     \xE2\x94\x82",
+        "                       \xE2\x94\x82 Behavior \xC2\xB7 State "
+        "\xE2\x94\x82",
+        "                       \xE2\x94\x82 Infrastructure   \xE2\x94\x82",
+        "                       \xE2\x94\x94\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\xAC\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80\xE2\x94\x80"
+        "\xE2\x94\x80\xE2\x94\x98",
+        "                                \xE2\x96\xBC",
         "                              GPUI",
     };
     for (int i = 0; i < (int)(sizeof(kDiagram) / sizeof(kDiagram[0])); i++) {
