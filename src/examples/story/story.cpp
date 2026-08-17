@@ -1,4 +1,5 @@
 #include "Story.h"
+#include "gpui/Assets.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -33,7 +34,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"introduction", "Introduction", "UI components for building fantastic desktop application by using GPUI."},
     {"accordion", "Accordion", "A vertically stacked set of interactive headings that each reveal a section of content."},
     {"alert", "Alert", "Communicate important status changes without interrupting the user's workflow."},
-    {"alert-dialog", "Alert Dialog", "A modal dialog that interrupts the user with important content and expects a response."},
+    {"alert-dialog", "AlertDialog", "A modal dialog that interrupts the user with important content and expects a response."},
     {"avatar", "Avatar", "An image element with a fallback for representing the user."},
     {"badge", "Badge", "A red dot that indicates the number of unread messages."},
     {"breadcrumb", "Breadcrumb", "Displays the path to the current resource using a hierarchy of links."},
@@ -43,17 +44,17 @@ static const StoryInfo kMeta[StoryCount] = {
     {"checkbox", "Checkbox", "A control that allows the user to toggle between checked and not checked."},
     {"clipboard", "Clipboard", "A button that copies text to the clipboard."},
     {"collapsible", "Collapsible", "An interactive component which expands/collapses a panel."},
-    {"color-picker", "Color Picker", "A color picker that allows users to select a color."},
+    {"color-picker", "ColorPicker", "A color picker that allows users to select a color."},
     {"combobox", "Combobox", "Autocomplete input and command palette with a list of suggestions."},
-    {"data-table", "Data Table", "Powerful table and datagrids built."},
-    {"date-picker", "Date Picker", "A date picker component with range and presets."},
-    {"description-list", "Description List", "A list of terms and their corresponding descriptions."},
+    {"data-table", "DataTable", "Powerful table and datagrids built."},
+    {"date-picker", "DatePicker", "A date picker component with range and presets."},
+    {"description-list", "DescriptionList", "A list of terms and their corresponding descriptions."},
     {"dialog", "Dialog", "A window overlaid on either the primary window or another dialog window."},
-    {"dropdown-button", "Dropdown Button", "A button that opens a dropdown menu of actions."},
+    {"dropdown-button", "DropdownButton", "A button that opens a dropdown menu of actions."},
     {"editor", "Editor", "A code editor with syntax highlighting, line numbers, and folding."},
     {"form", "Form", "Building forms with validation and various input types."},
-    {"group-box", "Group Box", "A container that groups related content with a title."},
-    {"hover-card", "Hover Card", "For sighted users to preview content available behind a link."},
+    {"group-box", "GroupBox", "A container that groups related content with a title."},
+    {"hover-card", "HoverCard", "For sighted users to preview content available behind a link."},
     {"icon", "Icon", "Icon display component."},
     {"image", "Image", "Image display with fallbacks."},
     {"input", "Input", "Displays a form input field or a component that looks like an input field."},
@@ -61,10 +62,10 @@ static const StoryInfo kMeta[StoryCount] = {
     {"label", "Label", "Renders an accessible label associated with controls."},
     {"list", "List", "A list of items that can be selected."},
     {"menu", "Menu", "Displays a menu to the user — such as a set of actions or functions."},
-    {"native-menu", "Native Menu", "Native application menu bar."},
+    {"native-menu", "NativeMenu", "Native application menu bar."},
     {"notification", "Notification", "A brief message that appears temporarily."},
-    {"number-input", "Number Input", "An input for numeric values with increment and decrement controls."},
-    {"otp-input", "OTP Input", "A one-time password input component."},
+    {"number-input", "NumberInput", "An input for numeric values with increment and decrement controls."},
+    {"otp-input", "OtpInput", "A one-time password input component."},
     {"pagination", "Pagination", "Pagination with page navigation, next and previous controls."},
     {"popover", "Popover", "Displays rich content in a portal, triggered by a button."},
     {"progress", "Progress", "Displays an indicator showing the completion progress of a task."},
@@ -80,7 +81,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"skeleton", "Skeleton", "Use to show a placeholder while content is loading."},
     {"slider", "Slider", "An input where the user selects a value from within a given range."},
     {"spinner", "Spinner", "A loading spinner."},
-    {"status-bar", "Status Bar", "A status bar that typically sits at the bottom of the window."},
+    {"status-bar", "StatusBar", "A status bar that typically sits at the bottom of the window."},
     {"stepper", "Stepper", "A stepper component to display progress through a sequence of steps."},
     {"switch", "Switch", "A control that allows the user to toggle between checked and not checked."},
     {"table", "Table", "A responsive table component."},
@@ -91,7 +92,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"toggle", "Toggle", "A two-state button that can be either on or off."},
     {"tooltip", "Tooltip", "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it."},
     {"tree", "Tree", "A tree view component for hierarchical data."},
-    {"virtual-list", "Virtual List", "A virtualized list for efficiently rendering large lists."},
+    {"virtual-list", "VirtualList", "A virtualized list for efficiently rendering large lists."},
 };
 
 const StoryInfo* StoryMeta(int i) {
@@ -214,6 +215,7 @@ static El* SidebarList(StoryApp* app, Arena* a) {
         bool on = app->story == i;
         El* row = Div(a)
                       ->H(32)
+                      ->W(kFill)
                       ->PadX(10)
                       ->ItemsCenter()
                       ->Radius(6)
@@ -222,9 +224,9 @@ static El* SidebarList(StoryApp* app, Arena* a) {
         El* label = StoryTxt(a, Str(m->title), 13, th.sidebarFg);
         if (on) {
             label->Semibold();
-            row->Bg(th.muted);
+            row->Bg(th.secondary);
         } else {
-            row->HoverBg(th.muted);
+            row->HoverBg(th.secondary);
         }
         row->Child(label);
         list->Child(row);
@@ -234,18 +236,17 @@ static El* SidebarList(StoryApp* app, Arena* a) {
 
 static El* SearchBox(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
-    Str shown = app->search.len > 0 ? Str(app->search.buf, app->search.len) : StrL("Search…");
+    Str shown = app->search.len > 0 ? Str(app->search.buf, app->search.len) : StrL("Search\xE2\x80\xA6");
     Rgba fg = app->search.len > 0 ? th.foreground : th.mutedFg;
     return Div(a)
-        ->H(32)
-        ->PadX(10)
+        ->H(36)
+        ->W(kFill)
+        ->PadX(14)
         ->ItemsCenter()
-        ->Gap(8)
-        ->Radius(16)
-        ->Bg(th.muted)
+        ->Radius(18)
+        ->Bg(th.secondary)
         ->Click(ClickSearch)
         ->FocusId(ClickSearch)
-        ->Child(IconEl(a, IconName::Search, 14)->Fg(th.mutedFg))
         ->Child(StoryTxt(a, shown, 13, fg));
 }
 
@@ -253,7 +254,7 @@ static El* Sidebar(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     float w = app->collapsed ? 56.f : 255.f;
     El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar)->Border(0, th.border);
-    El* header = Div(a)->FlexCol()->Pad(12)->Gap(12);
+    El* header = Div(a)->FlexCol()->Pad(12)->Gap(16);
     El* brand = Div(a)->FlexRow()->Gap(10)->ItemsCenter();
     El* logo = Div(a)
                    ->W(32)
@@ -262,7 +263,8 @@ static El* Sidebar(StoryApp* app, Arena* a) {
                    ->Bg(th.primary)
                    ->ItemsCenter()
                    ->JustifyCenter()
-                   ->Child(StoryTxt(a, StrL("G"), 16, th.primaryFg)->Semibold());
+                   ->Shrink0()
+                   ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)->Fg(th.primaryFg));
     brand->Child(logo);
     if (!app->collapsed) {
         El* names = Div(a)->FlexCol();
@@ -320,8 +322,9 @@ static El* Footer(StoryApp* app, Arena* a) {
                     ->FlexRow()
                     ->Gap(12)
                     ->ItemsCenter()
-                    ->Child(StoryTxt(a, StrL("Default"), 12, th.mutedFg))
-                    ->Child(StoryTxt(a, StrL("v0.5.0"), 12, th.mutedFg)));
+                    ->Child(StoryTxt(a, ThemeGet() == ThemeMode::Dark ? StrL("Default Dark") : StrL("Default Light"), 12,
+                                     th.mutedFg))
+                    ->Child(StoryTxt(a, StrL("v0.5.1"), 12, th.mutedFg)));
 }
 
 static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
@@ -351,6 +354,9 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 
 static void OnInit(AppHost* host) {
     ThemeSet(ThemeMode::Light);
+    AssetsClear();
+    AssetsAddDefaultRoots(Str{});
+    AssetsAddRoot(StrL("assets"));
     auto* app = (StoryApp*)host->user;
     strncpy_s(app->search.placeholder, "Search…", _TRUNCATE);
     strncpy_s(app->field.placeholder, "Type something…", _TRUNCATE);
@@ -461,5 +467,5 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     hooks.onChar = OnChar;
     hooks.onKey = OnKey;
     hooks.onWheel = OnWheel;
-    return RunApp(L"GPUI Component", 1280, 800, hooks, &app);
+    return RunApp(L"GPUI Component", 1280, 960, hooks, &app);
 }

@@ -1083,8 +1083,12 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW, float availH
     e->h = hSpec > 0 ? hSpec : availH;
     LayoutChildren(ctx, e, font, fg);
 
+    // Grow() is a main-axis hint. The parent overwrites the grown size after
+    // this call, so skip wrap on an auto width (typical row grow). Always
+    // wrap auto height so a grow cell in a row cannot inherit the leftover
+    // viewport height and swallow siblings (welcome table, feature rows).
     bool wrapW = (wSpec < 0 && e->style.flexGrow <= 0);
-    bool wrapH = (hSpec < 0 && e->style.flexGrow <= 0);
+    bool wrapH = (hSpec < 0);
     bool resized = false;
     if (wrapW) {
         float needed = e->contentW + padX;
