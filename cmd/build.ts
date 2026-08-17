@@ -5,7 +5,7 @@
 //   bun cmd/build.ts -rel -asan system_monitor
 //   bun cmd/build.ts -rel -clean showcase
 
-import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { ensureRustTree } from "./versions.ts";
 
@@ -253,6 +253,67 @@ function runCl(args: string[]) {
   }
 }
 
+function mtimeMs(rel: string): number {
+  try {
+    return statSync(join(root, rel)).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+const includeRe = /^\s*#\s*include\s+"([^"]+)"/gm;
+
+function quotedIncludes(rel: string, memo: Map<string, string[]>): string[] {
+  const hit = memo.get(rel);
+  if (hit) {
+    return hit;
+  }
+  memo.set(rel, []);
+  const abs = join(root, rel);
+  if (!existsSync(abs)) {
+    return [];
+  }
+  const text = readFileSync(abs, "utf8");
+  const dir = dirname(rel).replaceAll("\\", "/");
+  const deps: string[] = [];
+  includeRe.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = includeRe.exec(text))) {
+    const inc = m[1]!.replaceAll("\\", "/");
+    const candidates = [`${dir}/${inc}`, `src/${inc}`];
+    for (const raw of candidates) {
+      const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
+      if (!existsSync(join(root, norm))) {
+        continue;
+      }
+      deps.push(norm);
+      for (const d of quotedIncludes(norm, memo)) {
+        deps.push(d);
+      }
+      break;
+    }
+  }
+  const uniq = [...new Set(deps)];
+  memo.set(rel, uniq);
+  return uniq;
+}
+
+function needsCompile(src: string, obj: string, includes: string[]): boolean {
+  const ot = mtimeMs(obj);
+  if (ot === 0) {
+    return true;
+  }
+  if (mtimeMs(src) > ot) {
+    return true;
+  }
+  for (const h of includes) {
+    if (mtimeMs(h) > ot) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function buildOne(name: string, debug: boolean, asan: boolean) {
   const src = sourcesFor(name);
   if (!src) {
@@ -289,44 +350,81 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   const cfg = `${debug ? "dbg" : "rel"}${asan ? "+asan" : ""}`;
   console.log(`Building ${name} (${cfg}) -> ${outDir}\\${name}.exe`);
 
+  const stampPath = join(outDir, "obj", "cflags.txt");
+  const flagsKey = cflags.join(" ");
+  let flagsChanged = true;
+  if (existsSync(join(root, stampPath))) {
+    flagsChanged = readFileSync(join(root, stampPath), "utf8") !== flagsKey;
+  }
+
   // Separate /Fo dirs so src/ui/Button.cpp and examples/showcase/button.cpp
   // do not both write button.obj.
   const objs: string[] = [];
-  // AppLog.cpp implements Base.h log() / loga() / _uploadDebugReport for every example.
+  const includeMemo = new Map<string, string[]>();
+  let compiled = 0;
+  let skipped = 0;
+  // AppLog.cpp implements Base.h log() / loga() for every example.
   for (const g of groupSources(["examples/AppLog.cpp", ...src, ...baseSrc])) {
     const objDir = join(outDir, "obj", g.key);
     mkdirSync(join(root, objDir), { recursive: true });
-    runCl([...cflags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...g.files]);
-    // Only this compile's objs — leftover example .obj from another target
-    // (e.g. system_monitor.obj after a showcase build) must not be linked.
+    const dirty: string[] = [];
     for (const srcFile of g.files) {
-      objs.push(join(objDir, basename(srcFile).replace(/\.cpp$/i, ".obj")));
+      const obj = join(objDir, basename(srcFile).replace(/\.cpp$/i, ".obj"));
+      objs.push(obj);
+      const deps = quotedIncludes(srcFile, includeMemo);
+      if (flagsChanged || needsCompile(srcFile, obj, deps)) {
+        dirty.push(srcFile);
+      } else {
+        skipped++;
+      }
+    }
+    if (dirty.length > 0) {
+      runCl([...cflags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...dirty]);
+      compiled += dirty.length;
+    }
+  }
+  mkdirSync(join(root, outDir, "obj"), { recursive: true });
+  writeFileSync(join(root, stampPath), flagsKey);
+
+  const exe = join(outDir, `${name}.exe`);
+  const exeTime = mtimeMs(exe);
+  let linkNeeded = compiled > 0 || exeTime === 0;
+  if (!linkNeeded) {
+    for (const obj of objs) {
+      if (mtimeMs(obj) > exeTime) {
+        linkNeeded = true;
+        break;
+      }
     }
   }
 
-  const link = [
-    "/link",
-    "/SUBSYSTEM:WINDOWS",
-    "/ENTRY:wWinMainCRTStartup",
-    "/NODEFAULTLIB:msvcrt.lib",
-    "/NODEFAULTLIB:msvcrtd.lib",
-    "/NODEFAULTLIB:ucrt.lib",
-    "/NODEFAULTLIB:ucrtd.lib",
-    "/NODEFAULTLIB:vcruntime.lib",
-    "/NODEFAULTLIB:vcruntimed.lib",
-    ...libs,
-  ];
-  if (asan) {
-    link.push("/INCREMENTAL:NO");
+  console.log(`compile ${compiled}, skip ${skipped}${linkNeeded ? "" : ", link skipped"}`);
+
+  if (linkNeeded) {
+    const link = [
+      "/link",
+      "/SUBSYSTEM:WINDOWS",
+      "/ENTRY:wWinMainCRTStartup",
+      "/NODEFAULTLIB:msvcrt.lib",
+      "/NODEFAULTLIB:msvcrtd.lib",
+      "/NODEFAULTLIB:ucrt.lib",
+      "/NODEFAULTLIB:ucrtd.lib",
+      "/NODEFAULTLIB:vcruntime.lib",
+      "/NODEFAULTLIB:vcruntimed.lib",
+      ...libs,
+    ];
+    if (asan) {
+      link.push("/INCREMENTAL:NO");
+    }
+    link.push("/DEBUG", `/PDB:${outDir}\\${name}.pdb`);
+    runCl(["/nologo", `/Fe${exe}`, `/Fd${outDir}\\`, ...objs, ...link]);
   }
-  link.push("/DEBUG", `/PDB:${outDir}\\${name}.pdb`);
-  runCl(["/nologo", `/Fe${outDir}\\${name}.exe`, `/Fd${outDir}\\`, ...objs, ...link]);
 
   if (asan) {
     copyAsanDll(outDir);
   }
   copyAssets(outDir);
-  console.log(`Built ${outDir}\\${name}.exe`);
+  console.log(`Built ${exe.replaceAll("/", "\\")}`);
 }
 
 function formatElapsed(ms: number): string {
