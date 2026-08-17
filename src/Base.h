@@ -12,16 +12,10 @@
 #endif
 
 // C/C++ standard headers we use often
-#include <cctype>
-#include <climits>
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
-#include <cwchar>
-#include <cwctype>
 #include <new>       // for placement new
 #include <algorithm> // for std::min, std::max
 #include <utility>   // for std::forward
@@ -33,15 +27,11 @@
 #include <dwrite.h>
 #include <dwmapi.h>
 
-using i8 = int8_t;
 using u8 = uint8_t;
-using i16 = int16_t;
-using u16 = uint16_t;
 using i32 = int32_t;
 using u32 = uint32_t;
 using i64 = int64_t;
 using u64 = uint64_t;
-using uint = unsigned int;
 
 struct Arena;
 
@@ -66,37 +56,6 @@ using TempStr = Str;
 
 Str AllocStrTemp(int size);
 
-struct WStr {
-    wchar_t* s;
-    int len;
-
-    WStr() : s(nullptr), len(0) {}
-    WStr(const wchar_t* s_) : s((wchar_t*)s_), len(0) {
-        while (s_ && s_[len]) len++;
-    }
-    explicit WStr(const wchar_t* s_, int len_) : s((wchar_t*)s_), len(len_) {}
-    explicit WStr(wchar_t* s_) : s(s_), len(0) {
-        while (s && s[len]) len++;
-    }
-    explicit WStr(wchar_t* s_, int len_) : s((wchar_t*)s_), len(len_) {}
-
-    explicit operator bool() const { return len > 0 && s; }
-};
-
-inline int len(Str s) {
-    return s.len;
-}
-inline int len(WStr s) {
-    return s.len;
-}
-
-#define GPUI_NO_INLINE __declspec(noinline)
-#define GPUI_FORCEINLINE __forceinline
-
-template <typename T, size_t N>
-char (&DimofSizeHelper(T (&array)[N]))[N];
-#define dimof(array) (sizeof(DimofSizeHelper(array)))
-
 void log(Str s);
 
 void* AllocZero(int count, int size);
@@ -111,41 +70,18 @@ inline void ZeroStruct(T* s) {
     ZeroMemory((void*)s, sizeof(T));
 }
 
-using func0Ptr = void (*)(uintptr_t);
-using funcVoidPtr = void (*)();
-
 struct Func0 {
-    static constexpr uintptr_t kFuncNoArg = ~(uintptr_t)1;
-
     void* fn = nullptr;
     uintptr_t userData = 0;
 
     Func0() = default;
-    Func0(const Func0& that) {
-        this->fn = that.fn;
-        this->userData = that.userData;
-    }
-    Func0& operator=(const Func0& that) {
-        if (this != &that) {
-            this->fn = that.fn;
-            this->userData = that.userData;
-        }
-        return *this;
-    }
-    ~Func0() = default;
 
-    bool IsEmpty() const { return fn == nullptr; }
     bool IsValid() const { return fn != nullptr; }
     void Call() const {
         if (!fn) {
             return;
         }
-        if (userData == kFuncNoArg) {
-            auto func = (funcVoidPtr)fn;
-            func();
-            return;
-        }
-        auto func = (func0Ptr)fn;
+        auto func = (void (*)(uintptr_t))fn;
         func(userData);
     }
 };
@@ -160,56 +96,17 @@ Func0 MkFunc0(void (*fn)(T*), T* d) {
 
 template <typename T>
 struct Func1 {
-    static constexpr uintptr_t kDropsArgBit = 1;
-    static constexpr uintptr_t kFuncNoArg = ~(uintptr_t)1;
-
     void (*fn)(uintptr_t, T) = nullptr;
     uintptr_t userData = 0;
 
     Func1() = default;
-    Func1(const Func0& that) {
-        this->fn = (void (*)(uintptr_t, T))that.fn;
-        this->SetData(that.userData, true);
-    }
-    Func1(const Func1& that) {
-        this->fn = that.fn;
-        this->userData = that.userData;
-    }
-    Func1& operator=(const Func1& that) {
-        if (this != &that) {
-            this->fn = that.fn;
-            this->userData = that.userData;
-        }
-        return *this;
-    }
-    ~Func1() = default;
 
-    void SetData(uintptr_t d, bool dropsArg) {
-        userData = d | (dropsArg ? kDropsArgBit : 0);
-    }
     bool IsValid() const { return fn != nullptr; }
     void Call(T arg) const {
         if (!fn) {
             return;
         }
-        uintptr_t d = userData & ~kDropsArgBit;
-        if (userData & kDropsArgBit) {
-            if (d == kFuncNoArg) {
-                auto func = (funcVoidPtr)fn;
-                func();
-            } else {
-                auto func = (func0Ptr)fn;
-                func(d);
-            }
-            return;
-        }
-        if (d == kFuncNoArg) {
-            using fptr = void (*)(T);
-            auto func = (fptr)fn;
-            func(arg);
-            return;
-        }
-        fn(d, arg);
+        fn(userData, arg);
     }
 };
 
@@ -218,7 +115,7 @@ Func1<T2> MkFunc1(void (*fn)(T1*, T2), T1* d) {
     auto res = Func1<T2>{};
     using fptr = void (*)(uintptr_t, T2);
     res.fn = (fptr)fn;
-    res.SetData((uintptr_t)d, false);
+    res.userData = (uintptr_t)d;
     return res;
 }
 
@@ -230,34 +127,12 @@ struct Mutex {
     void Unlock() { ReleaseSRWLockExclusive(&lock); }
 };
 
-struct ScopedMutex {
-    Mutex* mutex;
-    explicit ScopedMutex(Mutex* mutex) : mutex(mutex) { mutex->Lock(); }
-    ~ScopedMutex() { mutex->Unlock(); }
-};
-
 static const u64 kArenaHeaderSize = 256;
-
-typedef u64 ArenaFlags;
-enum : ArenaFlags {
-    ArenaFlagNoChain = 1ull << 0,
-    ArenaFlagLargePages = 1ull << 1,
-};
-
-struct ArenaParams {
-    ArenaFlags flags = 0;
-    u64 reserveSize = 0;
-    u64 commitSize = 0;
-    void* optionalBackingBuffer = nullptr;
-    const char* allocationSiteFile = nullptr;
-    int allocationSiteLine = 0;
-    const char* name = nullptr;
-};
 
 struct Arena {
     Arena* prev;
     Arena* current;
-    ArenaFlags flags;
+    u64 flags;
     u64 commitChunkSize;
     u64 reserveChunkSize;
     u64 basePos;
@@ -286,31 +161,14 @@ struct Arena {
 static_assert(sizeof(Arena) <= kArenaHeaderSize,
               "Arena header must fit in reserved header bytes");
 
-extern u64 gArenaDefaultReserveSize;
-extern u64 gArenaDefaultCommitSize;
-extern ArenaFlags gArenaDefaultFlags;
-
-ArenaParams ArenaDefaultParams();
-Arena* ArenaNew(const ArenaParams& params = ArenaDefaultParams());
+Arena* ArenaNew();
 void ArenaDelete(Arena* arena);
 
-extern thread_local Arena* gTempArena;
-Arena* GetTempArena();
 void ResetTempArena();
 void DestroyTempArena();
 
 void* Alloc(struct Arena* arena, int size);
 void Free(struct Arena* arena, void* mem);
-void* Alloc(struct Arena* arena, size_t size);
-void* AllocZero(struct Arena* arena, size_t size);
-void* Realloc(struct Arena* arena, void* mem, size_t newSize, size_t copySize);
-void* MemDup(struct Arena* arena, const void* mem, size_t size,
-             size_t extraBytes = 0);
-
-template <typename T>
-inline T* AllocArray(struct Arena* arena, int n = 1) {
-    return (T*)AllocZero(arena, (size_t)n * sizeof(T));
-}
 
 template <typename T, typename... Args>
 T* New(Arena* arena, Args&&... args) {
@@ -400,19 +258,7 @@ struct Vec {
     bool Append(const T& el) { return InsertAt(len, el); }
 
     T* AppendBlanks(int count) { return VecInsertSpace(*this, len, count); }
-
-    using iterator = T*;
-    using const_iterator = const T*;
-    iterator begin() { return els; }
-    const_iterator begin() const { return els; }
-    iterator end() { return els ? els + len : nullptr; }
-    const_iterator end() const { return els ? els + len : nullptr; }
 };
-
-template <typename T>
-inline int len(const Vec<T>& v) {
-    return v.len;
-}
 
 template <typename T>
 bool VecReserve(Arena* arena, T& v, int wantedSize) {
@@ -456,15 +302,8 @@ void StrFree(const char*) = delete;
 Str StrDup(Arena*, Str str);
 Str StrDup(Str s);
 
-bool StrEq(Str s1, Str s2);
 bool StrEqI(Str s1, Str s2);
-bool StrEqNI(Str s1, Str s2, int n);
 bool StrContainsI(Str s, Str sub);
-bool IsDigit(char c);
-
-inline bool StrIsNull(const Str& s) {
-    return !s.s;
-}
 
 struct StrBuilder {
     Arena* a = nullptr;
@@ -472,16 +311,13 @@ struct StrBuilder {
     int len = 0;
     int cap = 0;
     Str buf;
-    int nReallocs = 0;
 
     explicit StrBuilder(Str externalBuf = {});
-    explicit StrBuilder(int capHint);
     StrBuilder(const StrBuilder&) = delete;
     StrBuilder& operator=(const StrBuilder&) = delete;
     ~StrBuilder();
 
     void Reset(Str s = {});
-    char& operator[](int idx) const;
     bool InsertAt(int idx, char el);
     bool AppendChar(char c);
     bool Append(Str src);
@@ -496,7 +332,6 @@ struct FmtArg {
         Float,
         Double,
         Str,
-        WStr,
         RawStr,
         Any,
         None,
@@ -505,7 +340,6 @@ struct FmtArg {
     Kind t{Kind::None};
     union {
         Str str;
-        WStr wstr;
         char c;
         i64 i;
         float f;
@@ -524,7 +358,6 @@ struct FmtArg {
     explicit FmtArg(float f_) : t{Kind::Float}, f{f_} {}
     explicit FmtArg(double d_) : t{Kind::Double}, d{d_} {}
     explicit FmtArg(Str arg) : t{Kind::Str}, str{arg} {}
-    explicit FmtArg(WStr arg) : t{Kind::WStr}, wstr{arg} {}
     explicit FmtArg(const void* p) : t{Kind::Ptr}, ptr{p} {}
     FmtArg(char*) = delete;
     FmtArg(const char*) = delete;
@@ -548,8 +381,6 @@ TempStr FormatTemp(const char* fmt, const TArgs&... args) {
     }
     return FormatTempArgs(fmt, argp, n);
 }
-
-int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
 
 template <typename... TArgs>
 inline TempStr fmt(const char* format, const TArgs&... args) {

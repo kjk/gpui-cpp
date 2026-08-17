@@ -3,15 +3,42 @@
 
 #include "Base.h"
 
+#include <cctype>
+#include <climits>
+#include <cstdarg>
+
+template <typename T, size_t N>
+char (&DimofSizeHelper(T (&array)[N]))[N];
+#define dimof(array) (sizeof(DimofSizeHelper(array)))
+
+static bool StrEqNI(Str s1, Str s2, int n);
+static int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
+
 void* AllocZero(int count, int size) {
     return calloc(count, size);
 }
 
 // ─── Arena.cpp ───────────────────────────────────────────────────────────────
 
-u64 gArenaDefaultReserveSize = 64ull * 1024ull * 1024ull;
-u64 gArenaDefaultCommitSize = 64ull * 1024ull;
-ArenaFlags gArenaDefaultFlags = 0;
+using ArenaFlags = u64;
+enum : ArenaFlags {
+    ArenaFlagNoChain = 1ull << 0,
+    ArenaFlagLargePages = 1ull << 1,
+};
+
+struct ArenaParams {
+    ArenaFlags flags = 0;
+    u64 reserveSize = 0;
+    u64 commitSize = 0;
+    void* optionalBackingBuffer = nullptr;
+    const char* allocationSiteFile = nullptr;
+    int allocationSiteLine = 0;
+    const char* name = nullptr;
+};
+
+static u64 gArenaDefaultReserveSize = 64ull * 1024ull * 1024ull;
+static u64 gArenaDefaultCommitSize = 64ull * 1024ull;
+static ArenaFlags gArenaDefaultFlags = 0;
 
 static u64 ArenaAlignPow2(u64 value, u64 align) {
     if (align <= 1) {
@@ -36,12 +63,13 @@ static u64 ArenaClampBot(u64 minValue, u64 value) {
     return (value > minValue) ? value : minValue;
 }
 
-u64 ArenaPageSize();
-u64 ArenaLargePageSize();
-bool ArenaCommit(void* base, u64 size, bool largePages);
-void* ArenaReserve(u64 size);
-void* ArenaReserveAndCommit(u64 size, bool largePages);
-void ArenaReleaseMemory(void* base, u64 size);
+static u64 ArenaPageSize();
+static u64 ArenaLargePageSize();
+static bool ArenaCommit(void* base, u64 size, bool largePages);
+static void* ArenaReserve(u64 size);
+static void* ArenaReserveAndCommit(u64 size, bool largePages);
+static void ArenaReleaseMemory(void* base, u64 size);
+static Arena* ArenaAlloc(const ArenaParams& params);
 
 static void ArenaRelease(Arena* arena) {
     ArenaReleaseMemory(arena, arena->reserved);
@@ -81,7 +109,7 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
         newParams.allocationSiteLine = current->allocationSiteLine;
         newParams.name = current->name;
 
-        Arena* newBlock = ArenaNew(newParams);
+        Arena* newBlock = ArenaAlloc(newParams);
         if (!newBlock) {
             return nullptr;
         }
@@ -131,7 +159,7 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
     return result;
 }
 
-ArenaParams ArenaDefaultParams() {
+static ArenaParams ArenaDefaultParams() {
     ArenaParams params = {};
     params.flags = gArenaDefaultFlags;
     params.reserveSize = gArenaDefaultReserveSize;
@@ -139,7 +167,11 @@ ArenaParams ArenaDefaultParams() {
     return params;
 }
 
-Arena* ArenaNew(const ArenaParams& srcParams) {
+Arena* ArenaNew() {
+    return ArenaAlloc(ArenaDefaultParams());
+}
+
+static Arena* ArenaAlloc(const ArenaParams& srcParams) {
     ArenaParams params = srcParams;
     if (params.reserveSize == 0) {
         params.reserveSize = gArenaDefaultReserveSize;
@@ -299,7 +331,7 @@ void Free(Arena* arena, void* mem) {
 
 // size_t overloads that match the legacy Allocator::* static helper API
 // and fall back to malloc/free when arena is nullptr.
-void* Alloc(Arena* arena, size_t size) {
+static void* Alloc(Arena* arena, size_t size) {
     if (size == 0) {
         return nullptr;
     }
@@ -309,21 +341,7 @@ void* Alloc(Arena* arena, size_t size) {
     return arena->Push((u64)size, 8, false);
 }
 
-void* AllocZero(Arena* arena, size_t size) {
-    if (size == 0) {
-        return nullptr;
-    }
-    if (!arena) {
-        void* mem = malloc(size);
-        if (mem) {
-            memset(mem, 0, size);
-        }
-        return mem;
-    }
-    return arena->Push((u64)size, 8, true);
-}
-
-void* Realloc(Arena* arena, void* mem, size_t newSize, size_t copySize) {
+static void* Realloc(Arena* arena, void* mem, size_t newSize, size_t copySize) {
     if (!arena) {
         return realloc(mem, newSize);
     }
@@ -343,7 +361,8 @@ void* Realloc(Arena* arena, void* mem, size_t newSize, size_t copySize) {
     return newMem;
 }
 
-void* MemDup(Arena* arena, const void* mem, size_t size, size_t extraBytes) {
+static void* MemDup(Arena* arena, const void* mem, size_t size,
+                    size_t extraBytes = 0) {
     void* newMem = Alloc(arena, size + extraBytes);
     if (!newMem) {
         return nullptr;
@@ -361,9 +380,9 @@ void* MemDup(Arena* arena, const void* mem, size_t size, size_t extraBytes) {
     return newMem;
 }
 
-thread_local Arena* gTempArena = nullptr;
+static thread_local Arena* gTempArena = nullptr;
 
-Arena* GetTempArena() {
+static Arena* GetTempArena() {
     if (!gTempArena) {
         gTempArena = ArenaNew();
     }
@@ -398,8 +417,8 @@ Str AllocStrTemp(int size) {
 // Updates *els and *cap. len is not modified (caller owns logical length).
 // Grow/shrink vec-like storage to newCap elements (+1 trailing zero pad).
 // Updates *els and *cap; keeps min(len, newCap) elements.
-GPUI_NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
-                               int newCap, int elSize) {
+__declspec(noinline) bool VecRealloc(Arena* a, void** els, int len, int* cap,
+                                     int newCap, int elSize) {
     // newCap+1 must fit in int; newElCount * elSize must not overflow.
     if (elSize <= 0 || newCap < 0 || newCap > INT_MAX - 1) {
         return false;
@@ -433,7 +452,7 @@ GPUI_NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
 // ─── Arena_win.cpp
 // ───────────────────────────────────────────────────────────────
 
-u64 ArenaPageSize() {
+static u64 ArenaPageSize() {
     static u64 pageSize = 0;
     if (pageSize == 0) {
         SYSTEM_INFO info = {};
@@ -443,7 +462,7 @@ u64 ArenaPageSize() {
     return pageSize;
 }
 
-u64 ArenaLargePageSize() {
+static u64 ArenaLargePageSize() {
     static u64 largePageSize = 0;
     if (largePageSize == 0) {
         SIZE_T size = GetLargePageMinimum();
@@ -452,7 +471,7 @@ u64 ArenaLargePageSize() {
     return largePageSize;
 }
 
-bool ArenaCommit(void* base, u64 size, bool largePages) {
+static bool ArenaCommit(void* base, u64 size, bool largePages) {
     if (size == 0) {
         return true;
     }
@@ -463,11 +482,11 @@ bool ArenaCommit(void* base, u64 size, bool largePages) {
     return VirtualAlloc(base, (SIZE_T)size, flags, PAGE_READWRITE) != nullptr;
 }
 
-void* ArenaReserve(u64 size) {
+static void* ArenaReserve(u64 size) {
     return VirtualAlloc(nullptr, (SIZE_T)size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-void* ArenaReserveAndCommit(u64 size, bool largePages) {
+static void* ArenaReserveAndCommit(u64 size, bool largePages) {
     DWORD flags = MEM_RESERVE | MEM_COMMIT;
     if (largePages) {
         flags |= MEM_LARGE_PAGES;
@@ -475,9 +494,13 @@ void* ArenaReserveAndCommit(u64 size, bool largePages) {
     return VirtualAlloc(nullptr, (SIZE_T)size, flags, PAGE_READWRITE);
 }
 
-void ArenaReleaseMemory(void* base, u64 size) {
+static void ArenaReleaseMemory(void* base, u64 size) {
     (void)size;
     VirtualFree(base, 0, MEM_RELEASE);
+}
+
+static bool StrIsNull(const Str& s) {
+    return !s.s;
 }
 
 static Str WrapAllocated(char* s, int cch = -1) {
@@ -507,31 +530,6 @@ void StrFree(Str s) {
     free(s.s);
 }
 
-bool StrEq(Str s1, Str s2) {
-    if (s1.s == s2.s) {
-        return true;
-    }
-    int len1 = 0;
-    while (!StrIsNull(s1) && len1 < s1.len && s1.s[len1]) {
-        len1++;
-    }
-    int len2 = 0;
-    while (!StrIsNull(s2) && len2 < s2.len && s2.s[len2]) {
-        len2++;
-    }
-    if (len1 != len2) {
-        return false;
-    }
-    if (len1 == 0) {
-        return true;
-    }
-    if (StrIsNull(s1) || StrIsNull(s2)) {
-        return false;
-    }
-    return 0 == memcmp(s1.s, s2.s, (size_t)len1);
-}
-
-// return true if s1 == s2, case insensitive
 bool StrEqI(Str s1, Str s2) {
     if (s1.s == s2.s) {
         return true;
@@ -560,7 +558,7 @@ bool StrContainsI(Str s, Str sub) {
     return false;
 }
 
-bool StrEqNI(Str s1, Str s2, int n) {
+static bool StrEqNI(Str s1, Str s2, int n) {
     if (s1.s == s2.s) {
         return true;
     }
@@ -578,7 +576,7 @@ bool StrEqNI(Str s1, Str s2, int n) {
     return true;
 }
 
-bool IsDigit(char c) {
+static bool IsDigit(char c) {
     return ('0' <= c) && (c <= '9');
 }
 
@@ -616,8 +614,6 @@ static char* EnsureCap(StrBuilder* s, int needed) {
     newCap = std::max(newCap, capacityHint);
 
     int newElCount = newCap + kPadding;
-
-    s->nReallocs++;
 
     int allocSize = newElCount;
     char* newEls;
@@ -689,30 +685,13 @@ void StrBuilder::Reset(Str s) {
 }
 
 // arena is not owned by Builder; set .a after construction if needed
-// capHint: preferred capacity after first grow
-// capHint: preferred capacity after first grow
 StrBuilder::StrBuilder(Str externalBuf) {
     this->buf = externalBuf;
     Reset();
 }
 
-// capHint: preferred capacity after first grow
-// capHint: preferred capacity after first grow
-StrBuilder::StrBuilder(int capHint) {
-    Reset();
-    cap = capHint + kPadding; // + kPadding for terminating 0
-}
-
 StrBuilder::~StrBuilder() {
     StrBuilderFree(this);
-}
-
-char& StrBuilder::operator[](int idx) const {
-    return els[idx];
-}
-
-int len(const StrBuilder& b) {
-    return b.len;
 }
 
 bool StrBuilder::InsertAt(int idx, char el) {
@@ -1031,7 +1010,7 @@ static bool validArgTypes(FmtArg::Kind instType, FmtArg::Kind argType) {
                argType == FmtArg::Kind::Double;
     }
     if (instType == FmtArg::Kind::Str) {
-        return argType == FmtArg::Kind::Str || argType == FmtArg::Kind::WStr;
+        return argType == FmtArg::Kind::Str;
     }
     return false;
 }
@@ -1130,8 +1109,6 @@ static void evalDefault(Fmt& fmt, const FmtArg& arg) {
             break;
         case FmtArg::Kind::Str:
             fmt.res.Append(arg.str);
-            break;
-        case FmtArg::Kind::WStr:
             break;
         default:
             break;
@@ -1297,7 +1274,8 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
 // allocator's scope, or on paths that must not touch the temp allocator / heap
 // at all (e.g. the crash handler, which pre-allocates its arena).
 // FormatTempArgs() is just this with GetTempArena().
-Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args, int nArgs) {
+static Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args,
+                      int nArgs) {
     // trailing arguments could be empty (unused defaults from the variadic
     // call)
     while (nArgs > 0 && args[nArgs - 1]->t == FmtArg::Kind::None) {
@@ -1362,7 +1340,7 @@ static _locale_t GetUtf8FormatLocale() {
 
 // The format string is a plain const char* because this is a thin wrapper
 // around vsnprintf and is almost always called with a string literal.
-int VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
+static int VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
 #if defined(_MSC_VER)
     _locale_t loc = GetUtf8FormatLocale();
     if (loc) {

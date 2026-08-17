@@ -47,7 +47,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 ## Hard rules
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
-2. **Use SumatraPDF base types.** `Str`, `WStr`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `i32`/`u32`/`u64`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout.
+2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `u8`/`i32`/`u32`/`i64`/`u64`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout.
 3. **Windows + MSVC.** `cl.exe` is on PATH. Build with `bun cmd/build.ts`. Static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Do not add CMake, vcpkg, or extra third-party C++ libraries.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
