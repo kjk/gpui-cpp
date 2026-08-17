@@ -21,21 +21,15 @@ enum {
 };
 
 struct SidebarApp {
+    static El* Render(SidebarApp* self, Ctx* cx);
     int mode = CollIcon;
     bool collapsed = false;
     bool projOpen = true;
 };
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Light);
-    AssetsClear();
-    AssetsAddDefaultRoots(Str{});
-    AssetsAddRoot(StrL("assets"));
-    (void)host;
-}
-
-static void OnClick(AppHost* host, int id) {
-    auto* app = (SidebarApp*)host->user;
+static void OnClick(SidebarApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)cx;
+    int id = ev->id;
     if (id == ClickToggle) {
         app->collapsed = !app->collapsed;
     } else if (id == ClickModeIcon) {
@@ -87,9 +81,12 @@ static El* MenuItem(Arena* a, int id, IconName icon, const char* label,
     return row;
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)size;
-    auto* app = (SidebarApp*)host->user;
+El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
+
     const Theme& th = ThemeNow();
     bool iconCollapsed = app->collapsed && app->mode == CollIcon;
     bool hide = app->collapsed && app->mode == CollOffcanvas;
@@ -211,10 +208,18 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static SidebarApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    return RunApp(L"Sidebar", 900, 620, hooks, &app);
+    App* app = AppNew();
+    Entity<SidebarApp> view = EntityNew<SidebarApp>(app);
+    SidebarApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Light);
+    AssetsClear();
+    AssetsAddDefaultRoots(Str{});
+    AssetsAddRoot(StrL("assets"));
+    AppWinOpts opts = {};
+    Window* win = WindowOpenView(app, L"Sidebar", 900, 620, view.id, opts);
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

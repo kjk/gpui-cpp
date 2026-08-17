@@ -231,6 +231,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_RBUTTONDOWN: {
             float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
+            if (host->onMouse.IsValid()) {
+                ClickEvent ev = {x, y, 2, 0};
+                ListenerCall(host->app, host, host->onMouse, &ev);
+            }
             if (host->hooks.onMouseDown) {
                 host->hooks.onMouseDown(host, x, y, 2);
             }
@@ -337,9 +341,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (host->hooks.onMouseDown) {
                 host->hooks.onMouseDown(host, x, y, 1);
             }
+            if (host->onMouse.IsValid()) {
+                ClickEvent ev = {x, y, 1, id};
+                ListenerCall(host->app, host, host->onMouse, &ev);
+            }
             if (hit && hit->listener.IsValid()) {
-                ClickEvent ev = {x, y, 1};
+                ClickEvent ev = {x, y, 1, id};
                 ListenerCall(host->app, host, hit->listener, &ev);
+            } else if (host->onClick.IsValid()) {
+                ClickEvent ev = {x, y, 1, id};
+                ListenerCall(host->app, host, host->onClick, &ev);
             }
             if (hit && hit->onClick.IsValid()) {
                 hit->onClick.Call();

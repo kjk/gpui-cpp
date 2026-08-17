@@ -2,25 +2,27 @@
 
 using namespace gpui;
 
-static void OnInit(AppHost* host) {
-    (void)host;
-    ThemeSet(ThemeMode::Light);
-}
+// examples/focus_trap — two Tab traps plus buttons outside them.
+struct Example {
+    static void OnBtn(Example*, Ctx*, const ClickEvent* ev) {
+        logf("button %d clicked", ev->id);
+    }
 
-static void OnClick(AppHost* host, int id) {
-    (void)host;
-    logf("button %d clicked", id);
-}
+    static El* Render(Example*, Ctx* cx);
+};
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)host;
-    (void)size;
+El* Example::Render(Example*, Ctx* cx) {
+    Arena* frame = cx->a;
     const Theme& th = ThemeNow();
+    Listener onBtn = Listen(cx, &Example::OnBtn);
 
+    // The click id doubles as the focus id, so buttons keep theirs.
+    auto btn = [&](int id, const char* label) {
+        return ButtonEl(frame, id, Str(label), BtnKind::Default)
+            ->OnClick(onBtn);
+    };
     auto trapBtn = [&](int id, const char* label, int trap) {
-        El* b = ButtonEl(frame, id, Str(label), BtnKind::Default);
-        b->TrapId(trap);
-        return b;
+        return btn(id, label)->TrapId(trap);
     };
 
     El* trap1 = Div(frame)
@@ -69,9 +71,9 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
         ->Child(Div(frame)
                     ->FlexRow()
                     ->Gap(8)
-                    ->Child(ButtonEl(frame, 1, StrL("Outside Button 1")))
-                    ->Child(ButtonEl(frame, 2, StrL("Outside Button 2")))
-                    ->Child(ButtonEl(frame, 3, StrL("Outside Button 3"))))
+                    ->Child(btn(1, "Outside Button 1"))
+                    ->Child(btn(2, "Outside Button 2"))
+                    ->Child(btn(3, "Outside Button 3")))
         ->Child(TextEl(frame, StrL("Focus Trap Area 1"))
                     ->Font(16)
                     ->Semibold()
@@ -88,8 +90,8 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
         ->Child(Div(frame)
                     ->FlexRow()
                     ->Gap(8)
-                    ->Child(ButtonEl(frame, 4, StrL("Outside Button 4")))
-                    ->Child(ButtonEl(frame, 5, StrL("Outside Button 5"))))
+                    ->Child(btn(4, "Outside Button 4"))
+                    ->Child(btn(5, "Outside Button 5")))
         ->Child(TextEl(frame, StrL("Focus Trap Area 2"))
                     ->Font(16)
                     ->Semibold()
@@ -102,9 +104,8 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    return RunApp(L"Focus Trap", 800, 600, hooks, nullptr);
+    App* app = AppNew();
+    ThemeSet(ThemeMode::Light);
+    return AppRunView(L"Focus Trap", 800, 600, EntityNew<Example>(app).id, app,
+                      AppWinOpts{});
 }

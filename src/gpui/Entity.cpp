@@ -146,6 +146,30 @@ void WindowOnWheel(Window* win, Listener l) {
     }
 }
 
+WinSize WindowSize(Window* win) {
+    WinSize ws = {};
+    if (!win) {
+        return ws;
+    }
+    ws.dipW = win->paint.viewW;
+    ws.dipH = win->paint.viewH;
+    ws.pxW = DipToPx(&win->paint, ws.dipW);
+    ws.pxH = DipToPx(&win->paint, ws.dipH);
+    return ws;
+}
+
+void WindowOnClick(Window* win, Listener l) {
+    if (win) {
+        win->onClick = l;
+    }
+}
+
+void WindowOnMouse(Window* win, Listener l) {
+    if (win) {
+        win->onMouse = l;
+    }
+}
+
 void WindowSetInterval(Window* win, int ms, Listener l) {
     if (!win) {
         return;

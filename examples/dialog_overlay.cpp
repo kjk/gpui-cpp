@@ -14,43 +14,40 @@ enum {
 };
 
 struct DialogApp {
+    static El* Render(DialogApp* self, Ctx* cx);
     int overlay = 0; // 1 dialog, 2 sheet
 };
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Light);
-    host->menu.nItems = 4;
-    strncpy_s(host->menu.items[0], "Open", _TRUNCATE);
-    strncpy_s(host->menu.items[1], "Delete", _TRUNCATE);
-    strncpy_s(host->menu.items[2], "Export", _TRUNCATE);
-    strncpy_s(host->menu.items[3], "Info", _TRUNCATE);
-    host->menu.clickBase = ClickMenuOpen;
-}
-
-static void OnClick(AppHost* host, int id) {
-    auto* app = (DialogApp*)host->user;
+static void OnClick(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)cx;
+    int id = ev->id;
     if (id == ClickOpenDialog) {
         app->overlay = 1;
-        host->menu.open = false;
+        cx->win->menu.open = false;
     } else if (id == ClickOpenSheet) {
         app->overlay = 2;
-        host->menu.open = false;
+        cx->win->menu.open = false;
     } else if (id == ClickDismiss || id == ClickCtx) {
         if (app->overlay) {
             app->overlay = 0;
         }
-        host->menu.open = false;
+        cx->win->menu.open = false;
     } else if (id >= ClickMenuOpen && id <= ClickMenuInfo) {
         logf("menu %d", id);
-        host->menu.open = false;
+        cx->win->menu.open = false;
     }
 }
 
-static void OnMouseDown(AppHost* host, float x, float y, int button) {
+static void OnMouse(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)app;
+    Window* host = cx->win;
+    float x = ev->x;
+    float y = ev->y;
+    int button = ev->button;
     if (button == 2) {
-        host->menu.open = true;
-        host->menu.x = x;
-        host->menu.y = y;
+        cx->win->menu.open = true;
+        cx->win->menu.x = x;
+        cx->win->menu.y = y;
     }
 }
 
@@ -58,8 +55,11 @@ static El* MdLine(Arena* a, Str s, Rgba c) {
     return TextEl(a, s)->Font(14)->Fg(c)->Wrap();
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    auto* app = (DialogApp*)host->user;
+El* DialogApp::Render(DialogApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
     const Theme& th = ThemeNow();
 
     El* bar = Div(frame)
@@ -162,11 +162,11 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
         root->Child(backdrop);
     }
 
-    if (host->menu.open) {
+    if (cx->win->menu.open) {
         El* menu = Div(frame)
                        ->Absolute()
-                       ->Left(host->menu.x)
-                       ->Top(host->menu.y)
+                       ->Left(cx->win->menu.x)
+                       ->Top(cx->win->menu.y)
                        ->W(140)
                        ->FlexCol()
                        ->Bg(th.background)
@@ -184,11 +184,23 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static DialogApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onMouseDown = OnMouseDown;
-    return RunApp(L"Dialog Overlay", 800, 600, hooks, &app);
+    App* app = AppNew();
+    Entity<DialogApp> view = EntityNew<DialogApp>(app);
+    DialogApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Light);
+    AppWinOpts opts = {};
+    Window* win =
+        WindowOpenView(app, L"Dialog Overlay", 800, 600, view.id, opts);
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    win->menu.nItems = 4;
+    strncpy_s(win->menu.items[0], "Open", _TRUNCATE);
+    strncpy_s(win->menu.items[1], "Delete", _TRUNCATE);
+    strncpy_s(win->menu.items[2], "Export", _TRUNCATE);
+    strncpy_s(win->menu.items[3], "Info", _TRUNCATE);
+    win->menu.clickBase = ClickMenuOpen;
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

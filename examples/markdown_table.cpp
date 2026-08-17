@@ -9,40 +9,27 @@ enum TableMode : int {
 };
 
 struct MdApp {
+    static El* Render(MdApp* self, Ctx* cx);
     int mode = ModeAdaptive;
     float scroll = 0;
     char source[16000];
 };
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Light);
-    AssetsClear();
-    AssetsAddDefaultRoots(StrL("markdown_table"));
-    AssetsAddRoot(StrL("assets/markdown_table"));
-    auto* app = (MdApp*)host->user;
-    app->mode = ModeAdaptive;
-    app->source[0] = 0;
-    Vec<uint8_t> buf;
-    if (AssetsLoad(StrL("report.md"), &buf) && buf.len > 0) {
-        int n = buf.len < 15999 ? buf.len : 15999;
-        memcpy(app->source, buf.els, (size_t)n);
-        app->source[n] = 0;
-    } else {
-        strncpy_s(app->source, "# Missing report.md", _TRUNCATE);
-    }
-}
-
-static void OnClick(AppHost* host, int id) {
-    auto* app = (MdApp*)host->user;
+static void OnClick(MdApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)cx;
+    int id = ev->id;
     if (id == 1) {
         app->mode = (app->mode + 1) % 3;
     }
 }
 
-static void OnWheel(AppHost* host, float x, float y, float delta) {
+static void OnWheel(MdApp* app, Ctx* cx, const WheelEvent* ev) {
+    (void)cx;
+    float x = ev->x;
+    float y = ev->y;
+    float delta = ev->delta;
     (void)x;
     (void)y;
-    auto* app = (MdApp*)host->user;
     app->scroll -= delta;
     if (app->scroll < 0) {
         app->scroll = 0;
@@ -186,9 +173,12 @@ static const char* ModeLabel(int mode) {
     return "Table: scroll (adaptive)";
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)size;
-    auto* app = (MdApp*)host->user;
+El* MdApp::Render(MdApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
+
     const Theme& th = ThemeNow();
     El* bar = Div(frame)
                   ->FlexRow()
@@ -211,11 +201,30 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static MdApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onWheel = OnWheel;
-    return RunApp(L"Markdown Table", 900, 700, hooks, &app);
+    App* app = AppNew();
+    Entity<MdApp> view = EntityNew<MdApp>(app);
+    MdApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Light);
+    AssetsClear();
+    AssetsAddDefaultRoots(StrL("markdown_table"));
+    AssetsAddRoot(StrL("assets/markdown_table"));
+    self->mode = ModeAdaptive;
+    self->source[0] = 0;
+    Vec<uint8_t> buf;
+    if (AssetsLoad(StrL("report.md"), &buf) && buf.len > 0) {
+        int n = buf.len < 15999 ? buf.len : 15999;
+        memcpy(self->source, buf.els, (size_t)n);
+        self->source[n] = 0;
+    } else {
+        strncpy_s(self->source, "# Missing report.md", _TRUNCATE);
+    }
+    AppWinOpts opts = {};
+    Window* win =
+        WindowOpenView(app, L"Markdown Table", 900, 700, view.id, opts);
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

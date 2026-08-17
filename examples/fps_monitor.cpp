@@ -21,6 +21,7 @@ struct V3 {
 };
 
 struct FpsApp {
+    static El* Render(FpsApp* self, Ctx* cx);
     V3 pts[kMaxPts];
     int nPts = 0;
     Rgba pal[3][kMaxPts];
@@ -251,19 +252,9 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
     }
 }
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Dark);
-    auto* app = (FpsApp*)host->user;
-    *app = FpsApp{};
-    app->curves = 6;
-    app->start = GetTickCount64();
-    app->lastTick = app->start;
-    BuildGeom(app);
-    AppRequestAnim(host, true);
-}
+static void OnTick(FpsApp* app, Ctx* cx, const TickEvent*) {
+    Window* host = cx->win;
 
-static void OnTick(AppHost* host) {
-    auto* app = (FpsApp*)host->user;
     ULONGLONG now = GetTickCount64();
     float dt = (float)(now - app->lastTick);
     app->lastTick = now;
@@ -281,8 +272,9 @@ static void OnTick(AppHost* host) {
     app->tiltY += (app->cursorY - app->tiltY) * kEase;
 }
 
-static void OnClick(AppHost* host, int id) {
-    auto* app = (FpsApp*)host->user;
+static void OnClick(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)cx;
+    int id = ev->id;
     if (id == 1 && app->curves > 1) {
         app->curves--;
     }
@@ -291,10 +283,13 @@ static void OnClick(AppHost* host, int id) {
     }
 }
 
-static void OnMouseMove(AppHost* host, float x, float y) {
-    auto* app = (FpsApp*)host->user;
+static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
+    Window* host = cx->win;
+
+    float x = ev->x;
+    float y = ev->y;
     RECT rc = {};
-    GetClientRect(host->hwnd, &rc);
+    GetClientRect(cx->win->hwnd, &rc);
     float w = (float)(rc.right - rc.left);
     float h = (float)(rc.bottom - rc.top);
     if (w <= 0 || h <= 0) {
@@ -304,9 +299,12 @@ static void OnMouseMove(AppHost* host, float x, float y) {
     app->cursorY = (y / h - 0.5f) * 1.2f;
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)size;
-    auto* app = (FpsApp*)host->user;
+El* FpsApp::Render(FpsApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
+
     El* canvas = Div(frame)->SizeFull();
     canvas->customPaint = PaintCurves;
     canvas->customUser = app;
@@ -346,15 +344,23 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static FpsApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onTick = OnTick;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onMouseMove = OnMouseMove;
+    App* app = AppNew();
+    Entity<FpsApp> view = EntityNew<FpsApp>(app);
+    FpsApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Dark);
+    self->curves = 6;
+    self->start = GetTickCount64();
+    self->lastTick = self->start;
+    BuildGeom(self);
     AppWinOpts opts = {};
     opts.anim = true;
     opts.timerMs = 16;
-    return RunAppEx(L"FPS Monitor", 800, 600, hooks, &app, opts);
+    Window* win = WindowOpenView(app, L"FPS Monitor", 800, 600, view.id, opts);
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    WindowSetInterval(win, 16, ListenTo(view, &OnTick));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

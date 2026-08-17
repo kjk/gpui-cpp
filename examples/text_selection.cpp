@@ -3,6 +3,7 @@
 using namespace gpui;
 
 struct SelApp {
+    static El* Render(SelApp* self, Ctx* cx);
     LineInput in;
     char copied[2048];
     bool selecting;
@@ -20,19 +21,9 @@ static const char* kMsgs[] = {
 static const int kNMsgs = 4;
 static const bool kMine[] = {false, true, false, true};
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Light);
-    auto* app = (SelApp*)host->user;
-    strncpy_s(app->in.placeholder,
-              "Type here (selection must NOT start from here)", _TRUNCATE);
-    host->input = &app->in;
-    app->copied[0] = 0;
-    app->selFrom = -1;
-    app->selTo = -1;
-}
-
-static void OnClick(AppHost* host, int id) {
-    auto* app = (SelApp*)host->user;
+static void OnClick(SelApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)cx;
+    int id = ev->id;
     if (id == 1) {
         // button: must not start selection
         app->selFrom = -1;
@@ -51,11 +42,14 @@ static void OnClick(AppHost* host, int id) {
     }
 }
 
-static void OnKey(AppHost* host, int vk, bool down) {
+static void OnKey(SelApp* app, Ctx* cx, const KeyEvent* ev) {
+    (void)cx;
+    (void)app;
+    int vk = ev->vk;
+    bool down = ev->down;
     if (!down) {
         return;
     }
-    auto* app = (SelApp*)host->user;
     if (vk == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
         StrBuilder b;
         int a = app->selFrom, c = app->selTo;
@@ -73,7 +67,7 @@ static void OnKey(AppHost* host, int vk, bool down) {
             }
         }
         Str s = b.TakeStr();
-        if (s.s && OpenClipboard(host->hwnd)) {
+        if (s.s && OpenClipboard(cx->win->hwnd)) {
             EmptyClipboard();
             HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)s.len + 1);
             if (h) {
@@ -108,9 +102,12 @@ static El* Bubble(Arena* a, int ix, const Theme& th) {
     return row;
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)size;
-    auto* app = (SelApp*)host->user;
+El* SelApp::Render(SelApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
+
     const Theme& th = ThemeNow();
     El* col =
         Div(frame)->FlexCol()->SizeFull()->Pad(16)->Gap(12)->Bg(th.background);
@@ -137,11 +134,23 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static SelApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onKey = OnKey;
-    return RunApp(L"Text Selection", 800, 600, hooks, &app);
+    App* app = AppNew();
+    Entity<SelApp> view = EntityNew<SelApp>(app);
+    SelApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Light);
+    strncpy_s(self->in.placeholder,
+              "Type here (selection must NOT start from here)", _TRUNCATE);
+    self->copied[0] = 0;
+    self->selFrom = -1;
+    self->selTo = -1;
+    AppWinOpts opts = {};
+    Window* win =
+        WindowOpenView(app, L"Text Selection", 800, 600, view.id, opts);
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnKey(win, ListenTo(view, &OnKey));
+    win->input = &self->in;
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

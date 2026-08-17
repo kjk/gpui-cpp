@@ -17,6 +17,7 @@ static const float kPagePad = 16;
 static const float kPageGap = 16;
 
 struct TableApp {
+    static El* Render(TableApp* self, Ctx* cx);
     float pageScroll = 0;
     float tableScroll = 0;
     float viewH = 700;
@@ -50,14 +51,12 @@ static El* Thumb(Arena* a, float top, float h, Rgba c) {
     return Div(a)->Absolute()->Right(2)->Top(top)->W(6)->H(h)->Radius(3)->Bg(c);
 }
 
-static void OnInit(AppHost* host) {
-    (void)host;
-    ThemeSet(ThemeMode::Light);
-}
-
-static void OnWheel(AppHost* host, float x, float y, float delta) {
+static void OnWheel(TableApp* app, Ctx* cx, const WheelEvent* ev) {
+    (void)cx;
+    float x = ev->x;
+    float y = ev->y;
+    float delta = ev->delta;
     (void)x;
-    auto* app = (TableApp*)host->user;
     float tableTop = app->tableTopPage - app->pageScroll;
     float tableBot = tableTop + kTableH;
     bool overTable = y >= tableTop && y <= tableBot;
@@ -100,8 +99,11 @@ static El* Filler(Arena* a, Str label, float h, const Theme& th) {
         ->Child(TextEl(a, label)->Font(14)->Fg(th.mutedFg));
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    auto* app = (TableApp*)host->user;
+El* TableApp::Render(TableApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
     const Theme& th = ThemeNow();
     app->viewH = size.dipH;
     app->tableTopPage = kPagePad + kAboveH + kPageGap;
@@ -201,10 +203,16 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static TableApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onWheel = OnWheel;
-    return RunApp(L"Table in Scrollable", 700, 700, hooks, &app);
+    App* app = AppNew();
+    Entity<TableApp> view = EntityNew<TableApp>(app);
+    TableApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Light);
+    AppWinOpts opts = {};
+    Window* win =
+        WindowOpenView(app, L"Table in Scrollable", 700, 700, view.id, opts);
+    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

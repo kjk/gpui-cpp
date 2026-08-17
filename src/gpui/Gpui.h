@@ -147,6 +147,8 @@ struct ClickEvent {
     float x = 0;
     float y = 0;
     int button = 1;
+    // The element's click id, when it has one. Lets one handler serve a list.
+    int id = 0;
 };
 
 struct KeyEvent {
@@ -617,6 +619,8 @@ struct Window {
     Listener onKey = {};
     Listener onWheel = {};
     Listener onTick = {};
+    Listener onClick = {};
+    Listener onMouse = {};
     int tickMs = 0;
 
     Window() = default;
@@ -719,6 +723,11 @@ T* KeyedState(Ctx* cx, uint32_t key) {
 // cx.spawn + Timer::after; here each one is a Listener bound to a view.
 void WindowOnKey(Window* win, Listener l);
 void WindowOnWheel(Window* win, Listener l);
+// View-level click dispatch: fires with ClickEvent::id for any hit that has a
+// click id but no listener of its own. Elements should carry their own
+// listener; this is the bridge for code still written against click ids.
+void WindowOnClick(Window* win, Listener l);
+void WindowOnMouse(Window* win, Listener l);
 // Repeating timer. ms <= 0 stops it. GPUI's system_monitor does the same with
 // a spawned task that sleeps and calls cx.notify().
 void WindowSetInterval(Window* win, int ms, Listener l);
@@ -734,6 +743,9 @@ template <typename T>
 T* WindowRoot(Window* win) {
     return win ? (T*)EntityGet(win->app, win->root) : nullptr;
 }
+
+// Client size in DIPs; what onRender used to receive as WinSize.
+WinSize WindowSize(Window* win);
 
 App* AppNew();
 void AppFree(App* app);

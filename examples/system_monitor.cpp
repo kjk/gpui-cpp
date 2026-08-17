@@ -19,6 +19,10 @@ enum ClickId : int {
 };
 
 struct MonitorApp {
+    static El* Render(MonitorApp* self, Ctx* cx);
+    // Dropped with the entity; this is what onShutdown used to do.
+    ~MonitorApp() { SysStateFree(&sys); }
+
     SysState sys;
     float cpuHist[kMaxHist] = {};
     float memHist[kMaxHist] = {};
@@ -50,25 +54,15 @@ static void Collect(MonitorApp* app) {
     PushHist(app, app->sys.cpu, app->sys.mem);
 }
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Dark);
-    auto* app = (MonitorApp*)host->user;
-    SysStateInit(&app->sys);
+static void OnTick(MonitorApp* app, Ctx* cx, const TickEvent*) {
+    Window* host = cx->win;
+
     Collect(app);
 }
 
-static void OnTick(AppHost* host) {
-    auto* app = (MonitorApp*)host->user;
-    Collect(app);
-}
-
-static void OnShutdown(AppHost* host) {
-    auto* app = (MonitorApp*)host->user;
-    SysStateFree(&app->sys);
-}
-
-static void OnClick(AppHost* host, int id) {
-    auto* app = (MonitorApp*)host->user;
+static void OnClick(MonitorApp* app, Ctx* cx, const ClickEvent* ev) {
+    Window* host = cx->win;
+    int id = ev->id;
     if (id == ClickTabSystem) {
         app->tab = 0;
         return;
@@ -118,9 +112,12 @@ static void OnClick(AppHost* host, int id) {
     }
 }
 
-static void OnWheel(AppHost* host, float x, float y, float delta) {
+static void OnWheel(MonitorApp* app, Ctx* cx, const WheelEvent* ev) {
+    (void)cx;
+    float x = ev->x;
+    float y = ev->y;
+    float delta = ev->delta;
     (void)x;
-    auto* app = (MonitorApp*)host->user;
     if (app->tab != 1) {
         return;
     }
@@ -384,9 +381,12 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
         ->Child(right);
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)size;
-    auto* app = (MonitorApp*)host->user;
+El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+
+    WinSize size = WindowSize(cx->win);
+
     const Theme& th = ThemeDark();
 
     El* content = Div(frame)->FlexCol()->Grow()->ClipY();
@@ -406,13 +406,20 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    static MonitorApp app;
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onTick = OnTick;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onWheel = OnWheel;
-    hooks.onShutdown = OnShutdown;
-    return RunApp(L"System Monitor", 680, 600, hooks, &app);
+    App* app = AppNew();
+    Entity<MonitorApp> view = EntityNew<MonitorApp>(app);
+    MonitorApp* self = view.Get(app);
+    (void)self;
+    ThemeSet(ThemeMode::Dark);
+    SysStateInit(&self->sys);
+    Collect(self);
+    AppWinOpts opts = {};
+    Window* win =
+        WindowOpenView(app, L"System Monitor", 680, 600, view.id, opts);
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    WindowSetInterval(win, 500, ListenTo(view, &OnTick));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }
