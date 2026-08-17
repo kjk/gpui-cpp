@@ -10,14 +10,18 @@ struct Radio {
     Arena* a = nullptr;
     Str id = {};
     Str label = {};
+    Str hint = {};
     bool checked = false;
     bool disabled = false;
+    UiSize size = UiSize::Medium;
     Func1<bool> onClick;
 
     static Radio* New(Arena* a, Str id);
     Radio* Label(Str s);
+    Radio* Hint(Str s);
     Radio* Checked(bool v);
     Radio* Disabled(bool v);
+    Radio* WithSize(UiSize s);
     Radio* OnClick(Func1<bool> fn);
     El* IntoEl();
 };

@@ -63,6 +63,23 @@ Button* Button::Compact() {
     compact = true;
     return this;
 }
+Button* Button::Selected(bool v) {
+    selected = v;
+    return this;
+}
+Button* Button::DropdownCaret(bool v) {
+    dropdown = v;
+    return this;
+}
+Button* Button::Custom(Rgba c) {
+    custom = c;
+    hasCustom = true;
+    return this;
+}
+Button* Button::Extra(El* e) {
+    extra = e;
+    return this;
+}
 Button* Button::Loading(bool v) {
     loading = v;
     return this;
@@ -135,9 +152,19 @@ El* Button::IntoEl() {
         default:
             break;
     }
-    if (outline) {
+    if (hasCustom) {
+        fg = custom;
+        bd = custom;
+        bg = outline ? th.background : RgbaOpacity(custom, 0.12f);
+        hover = RgbaOpacity(custom, 0.2f);
+    }
+    if (outline && !hasCustom) {
         bg = th.background;
         hover = th.muted;
+    }
+    if (selected) {
+        bg = th.secondaryActive;
+        hover = th.secondaryHover;
     }
     if (disabled) {
         fg = th.mutedFg;
@@ -170,13 +197,18 @@ El* Button::IntoEl() {
     if (tooltip.s) {
         e->Tip(tooltip);
     }
-    if (loading) {
+    if (extra) {
+        e->Child(extra);
+    } else if (loading) {
         e->Child(IconEl(a, IconName::Loader, 14)->Fg(fg));
     } else if (icon != IconName::None) {
         e->Child(IconEl(a, icon, 14)->Fg(fg));
     }
     if (label.s) {
         e->Child(TextEl(a, label)->Font(UiFontPx(size))->Fg(fg));
+    }
+    if (dropdown) {
+        e->Child(IconEl(a, IconName::ChevronDown, 12)->Fg(fg));
     }
     return e;
 }

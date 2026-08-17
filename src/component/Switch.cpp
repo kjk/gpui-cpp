@@ -32,6 +32,10 @@ Switch* Switch::Disabled(bool v) {
     disabled = v;
     return this;
 }
+Switch* Switch::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
 Switch* Switch::Color(Rgba c) {
     color = c;
     hasColor = true;
@@ -45,11 +49,23 @@ Switch* Switch::OnClick(Func1<bool> fn) {
 El* Switch::IntoEl() {
     const Theme& th = ThemeNow();
     Rgba on = hasColor ? color : th.primary;
+    float trackW = 36;
+    float trackH = 20;
+    float thumb = 16;
+    if (size == UiSize::Small || size == UiSize::XSmall) {
+        trackW = 28;
+        trackH = 16;
+        thumb = 12;
+    } else if (size == UiSize::Large) {
+        trackW = 44;
+        trackH = 24;
+        thumb = 20;
+    }
     El* track = SwitchTrack::New(a, id)
-                    ->W(36)
-                    ->H(20)
+                    ->W(trackW)
+                    ->H(trackH)
                     ->Pad(2)
-                    ->Radius(10)
+                    ->Radius(trackH * 0.5f)
                     ->Bg(checked ? on : th.secondary)
                     ->ItemsCenter();
     if (checked) {
@@ -57,8 +73,11 @@ El* Switch::IntoEl() {
     } else {
         track->JustifyStart();
     }
-    track->Child(
-        SwitchThumb::New(a)->W(16)->H(16)->Radius(8)->Bg(th.background));
+    track->Child(SwitchThumb::New(a)
+                     ->W(thumb)
+                     ->H(thumb)
+                     ->Radius(thumb * 0.5f)
+                     ->Bg(th.background));
     El* root = gpui::Switch::New(a, id, disabled ? 0 : HashClickId(id))
                    ->FlexRow()
                    ->ItemsCenter()

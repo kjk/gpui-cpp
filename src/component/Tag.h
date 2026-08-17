@@ -20,7 +20,11 @@ struct Tag {
     TagVariant variant = TagVariant::Secondary;
     bool outline = false;
     UiSize size = UiSize::Medium;
+    float radius = -1;
     Str text = {};
+    Rgba customBg = {};
+    Rgba customFg = {};
+    bool hasCustom = false;
 
     static Tag* New(Arena* a, Str text);
     Tag* Primary();
@@ -31,6 +35,8 @@ struct Tag {
     Tag* Info();
     Tag* Outline();
     Tag* WithSize(UiSize s);
+    Tag* Radius(float v);
+    Tag* Custom(Rgba bg, Rgba fg);
     El* IntoEl();
 };
 

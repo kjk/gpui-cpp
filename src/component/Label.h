@@ -11,10 +11,14 @@ struct Label {
     Str text = {};
     Str secondary = {};
     bool masked = false;
+    bool semibold = false;
+    float font = 14;
 
     static Label* New(Arena* a, Str text);
     Label* Secondary(Str s);
     Label* Masked(bool v);
+    Label* Semibold();
+    Label* Font(float px);
     El* IntoEl();
 };
 

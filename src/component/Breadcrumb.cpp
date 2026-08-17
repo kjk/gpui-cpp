@@ -33,13 +33,13 @@ El* Breadcrumb::IntoEl() {
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
     for (int i = 0; i < n; i++) {
         if (i) {
-            row->Child(TextEl(a, StrL("/"))->Font(12)->Fg(th.mutedFg));
+            row->Child(IconEl(a, IconName::ChevronRight, 12)->Fg(th.mutedFg));
         }
         bool last = i == n - 1;
         El* t = TextEl(a, items[i])
                     ->Font(13)
                     ->Fg(last ? th.foreground : th.mutedFg);
-        if (!last && onClick.IsValid()) {
+        if (onClick.IsValid()) {
             El* hit = Div(a)->Child(t);
             CrumbBind* b = ArenaNew<CrumbBind>(a);
             b->fn = onClick;

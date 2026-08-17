@@ -23,10 +23,15 @@ struct ProgressCircle {
     Arena* a = nullptr;
     float value = 0;
     float size = 48;
+    Rgba color = {};
+    bool hasColor = false;
+    bool showLabel = true;
 
     static ProgressCircle* New(Arena* a);
     ProgressCircle* Value(float v);
     ProgressCircle* Size(float v);
+    ProgressCircle* Color(Rgba c);
+    ProgressCircle* Label(bool v);
     El* IntoEl();
 };
 

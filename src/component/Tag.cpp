@@ -43,6 +43,16 @@ Tag* Tag::WithSize(UiSize s) {
     size = s;
     return this;
 }
+Tag* Tag::Radius(float v) {
+    radius = v;
+    return this;
+}
+Tag* Tag::Custom(Rgba bg, Rgba fg) {
+    customBg = bg;
+    customFg = fg;
+    hasCustom = true;
+    return this;
+}
 
 El* Tag::IntoEl() {
     const Theme& th = ThemeNow();
@@ -76,14 +86,20 @@ El* Tag::IntoEl() {
         default:
             break;
     }
+    if (hasCustom) {
+        bg = customBg;
+        fg = customFg;
+        bd = customFg;
+    }
     if (outline) {
         fg = bd;
         bg = th.background;
     }
+    float r = radius >= 0 ? radius : th.radius * 0.5f;
     return Div(a)
         ->PadX(size == UiSize::Small ? 6.f : 8.f)
         ->PadY(2)
-        ->Radius(th.radius * 0.5f)
+        ->Radius(r)
         ->Bg(bg)
         ->Border(1, bd)
         ->ItemsCenter()

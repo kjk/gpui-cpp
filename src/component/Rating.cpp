@@ -25,6 +25,19 @@ Rating* Rating::Max(int v) {
     max = v;
     return this;
 }
+Rating* Rating::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+Rating* Rating::Color(Rgba c) {
+    color = c;
+    hasColor = true;
+    return this;
+}
+Rating* Rating::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
 Rating* Rating::OnChange(Func1<int> fn) {
     onChange = fn;
     return this;
@@ -36,10 +49,12 @@ El* Rating::IntoEl() {
     int n = max > 8 ? 8 : max;
     for (int i = 1; i <= n; i++) {
         bool on = i <= value;
-        El* star =
-            TextEl(a, StrL("★"))->Font(18)->Fg(on ? th.warning : th.border);
+        Rgba onC = hasColor ? color : th.warning;
+        El* star = TextEl(a, StrL("★"))
+                       ->Font(UiFontPx(size) + 4)
+                       ->Fg(on ? onC : th.border);
         El* hit = Div(a)->Child(star);
-        if (onChange.IsValid()) {
+        if (onChange.IsValid() && !disabled) {
             RateBind* b = ArenaNew<RateBind>(a);
             b->fn = onChange;
             b->value = i;

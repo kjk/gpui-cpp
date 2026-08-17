@@ -20,6 +20,14 @@ Label* Label::Masked(bool v) {
     masked = v;
     return this;
 }
+Label* Label::Semibold() {
+    semibold = true;
+    return this;
+}
+Label* Label::Font(float px) {
+    font = px;
+    return this;
+}
 
 El* Label::IntoEl() {
     const Theme& th = ThemeNow();
@@ -38,7 +46,11 @@ El* Label::IntoEl() {
         shown = StrDup(a, Str(buf, n));
     }
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
-    row->Child(TextEl(a, shown)->Font(14)->Fg(th.foreground));
+    El* primary = TextEl(a, shown)->Font(font)->Fg(th.foreground);
+    if (semibold) {
+        primary->Semibold();
+    }
+    row->Child(primary);
     if (secondary.s) {
         row->Child(TextEl(a, secondary)->Font(14)->Fg(th.mutedFg));
     }

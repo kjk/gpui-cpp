@@ -10,9 +10,13 @@ struct GroupBox {
     Arena* a = nullptr;
     Str title = {};
     El* child = nullptr;
+    bool outline = false;
+    bool filled = true;
 
     static GroupBox* New(Arena* a, Str title);
     GroupBox* Child(El* e);
+    GroupBox* Outline();
+    GroupBox* Filled(bool v);
     El* IntoEl();
 };
 

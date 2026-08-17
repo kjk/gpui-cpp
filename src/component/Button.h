@@ -30,7 +30,12 @@ struct Button {
     bool disabled = false;
     bool loading = false;
     bool compact = false;
+    bool selected = false;
+    bool dropdown = false;
+    bool hasCustom = false;
+    Rgba custom = {};
     Str tooltip = {};
+    El* extra = nullptr;
     Func0 onClick;
 
     static Button* New(Arena* a, Str id);
@@ -47,6 +52,10 @@ struct Button {
     Button* Text();
     Button* Outline();
     Button* Compact();
+    Button* Selected(bool v);
+    Button* DropdownCaret(bool v = true);
+    Button* Custom(Rgba c);
+    Button* Extra(El* e);
     Button* Loading(bool v);
     Button* Disabled(bool v);
     Button* WithSize(UiSize s);

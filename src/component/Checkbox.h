@@ -10,17 +10,21 @@ struct Checkbox {
     Arena* a = nullptr;
     Str id = {};
     Str label = {};
+    Str hint = {};
     bool checked = false;
     bool disabled = false;
     UiSize size = UiSize::Medium;
     Str tooltip = {};
+    float w = 0;
     Func1<bool> onClick;
 
     static Checkbox* New(Arena* a, Str id);
     Checkbox* Label(Str s);
+    Checkbox* Hint(Str s);
     Checkbox* Checked(bool v);
     Checkbox* Disabled(bool v);
     Checkbox* WithSize(UiSize s);
+    Checkbox* W(float v);
     Checkbox* Tooltip(Str s);
     Checkbox* OnClick(Func1<bool> fn);
     El* IntoEl();

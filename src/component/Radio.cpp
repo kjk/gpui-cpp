@@ -24,12 +24,20 @@ Radio* Radio::Label(Str s) {
     label = s;
     return this;
 }
+Radio* Radio::Hint(Str s) {
+    hint = s;
+    return this;
+}
 Radio* Radio::Checked(bool v) {
     checked = v;
     return this;
 }
 Radio* Radio::Disabled(bool v) {
     disabled = v;
+    return this;
+}
+Radio* Radio::WithSize(UiSize s) {
+    size = s;
     return this;
 }
 Radio* Radio::OnClick(Func1<bool> fn) {
@@ -60,9 +68,17 @@ El* Radio::IntoEl() {
         row->OnClick(MkFunc0(&FireRadio, b));
     }
     row->Child(dot);
-    if (label.s) {
-        row->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg
-                                                           : th.foreground));
+    if (label.s || hint.s) {
+        El* col = Div(a)->FlexCol()->Gap(2);
+        if (label.s) {
+            col->Child(TextEl(a, label)
+                           ->Font(UiFontPx(size))
+                           ->Fg(disabled ? th.mutedFg : th.foreground));
+        }
+        if (hint.s) {
+            col->Child(TextEl(a, hint)->Font(12)->Fg(th.mutedFg)->Wrap());
+        }
+        row->Child(col);
     }
     return row;
 }

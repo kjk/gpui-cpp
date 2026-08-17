@@ -14,6 +14,10 @@ Spinner* Spinner::WithSize(UiSize s) {
     size = s;
     return this;
 }
+Spinner* Spinner::Size(float v) {
+    px = v;
+    return this;
+}
 
 Spinner* Spinner::Icon(IconName n) {
     icon = n;
@@ -28,14 +32,14 @@ Spinner* Spinner::Color(Rgba c) {
 
 El* Spinner::IntoEl() {
     const Theme& th = ThemeNow();
-    float px = UiSizePx(size);
-    El* ic = IconEl(a, icon, px);
+    float dim = px > 0 ? px : UiSizePx(size);
+    El* ic = IconEl(a, icon, dim);
     if (hasColor) {
         ic->Fg(color);
     } else {
         ic->Fg(th.mutedFg);
     }
-    return Div(a)->W(px)->H(px)->ItemsCenter()->JustifyCenter()->Child(ic);
+    return Div(a)->W(dim)->H(dim)->ItemsCenter()->JustifyCenter()->Child(ic);
 }
 
 } // namespace component

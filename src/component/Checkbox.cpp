@@ -24,6 +24,10 @@ Checkbox* Checkbox::Label(Str s) {
     label = s;
     return this;
 }
+Checkbox* Checkbox::Hint(Str s) {
+    hint = s;
+    return this;
+}
 Checkbox* Checkbox::Checked(bool v) {
     checked = v;
     return this;
@@ -34,6 +38,10 @@ Checkbox* Checkbox::Disabled(bool v) {
 }
 Checkbox* Checkbox::WithSize(UiSize s) {
     size = s;
+    return this;
+}
+Checkbox* Checkbox::W(float v) {
+    w = v;
     return this;
 }
 Checkbox* Checkbox::Tooltip(Str s) {
@@ -74,10 +82,21 @@ El* Checkbox::IntoEl() {
         row->Tip(tooltip);
     }
     row->Child(ind);
-    if (label.s) {
-        row->Child(TextEl(a, label)
-                       ->Font(UiFontPx(size))
-                       ->Fg(disabled ? th.mutedFg : th.foreground));
+    if (w > 0) {
+        row->W(w);
+    }
+    if (label.s || hint.s) {
+        El* col = Div(a)->FlexCol()->Gap(2);
+        if (label.s) {
+            col->Child(TextEl(a, label)
+                           ->Font(UiFontPx(size))
+                           ->Fg(disabled ? th.mutedFg : th.foreground)
+                           ->Wrap());
+        }
+        if (hint.s) {
+            col->Child(TextEl(a, hint)->Font(12)->Fg(th.mutedFg)->Wrap());
+        }
+        row->Child(col);
     }
     return row;
 }
