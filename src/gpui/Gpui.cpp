@@ -546,6 +546,47 @@ static float MeasKeyFont(float fontSize) {
     return floorf(fontSize * 4.f + 0.5f) / 4.f;
 }
 
+static bool memeq(const void* s1, const void* s2, int n) {
+    return 0 == memcmp(s1, s2, (size_t)n);
+}
+
+static u32 MurmurHash2(const void* key, int n) {
+    if (n <= 0) {
+        return 0;
+    }
+    const u32 m = 0x5bd1e995;
+    const int r = 24;
+    u32 h = 5381u ^ (u32)n;
+    const u8* data = (const u8*)key;
+    while (n >= 4) {
+        u32 k = *(u32*)data;
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+        h *= m;
+        h ^= k;
+        data += 4;
+        n -= 4;
+    }
+    switch (n) {
+        case 3:
+            h ^= data[2] << 16;
+        case 2:
+            h ^= data[1] << 8;
+        case 1:
+            h ^= data[0];
+            h *= m;
+    }
+    h ^= h >> 13;
+    h *= m;
+    h ^= h >> 15;
+    return h;
+}
+
+static u32 MurmurHash2(Str s) {
+    return MurmurHash2(s.s, s.len);
+}
+
 struct TextMeasSlot {
     char* text = nullptr;
     int len = 0;

@@ -7,65 +7,6 @@ void* AllocZero(int count, int size) {
     return calloc(count, size);
 }
 
-bool memeq(const void* s1, const void* s2, int n) {
-    return 0 == memcmp(s1, s2, n);
-}
-
-static u32 hash_function_seed = 5381;
-
-u32 MurmurHash2(const void* key, int n) {
-    if (n <= 0) {
-        return 0;
-    }
-    /* 'm' and 'r' are mixing constants generated offline.
-     They're not really 'magic', they just happen to work well.  */
-    const u32 m = 0x5bd1e995;
-    const int r = 24;
-
-    /* Initialize the hash to a 'random' value */
-    u32 h = hash_function_seed ^ (u32)n;
-
-    /* Mix 4 bytes at a time into the hash */
-    const u8* data = (const u8*)key;
-
-    while (n >= 4) {
-        u32 k = *(u32*)data;
-
-        k *= m;
-        k ^= k >> r;
-        k *= m;
-
-        h *= m;
-        h ^= k;
-
-        data += 4;
-        n -= 4;
-    }
-
-    /* Handle the last few bytes of the input array  */
-    switch (n) {
-        case 3:
-            h ^= data[2] << 16;
-        case 2:
-            h ^= data[1] << 8;
-        case 1:
-            h ^= data[0];
-            h *= m;
-    }
-
-    /* Do a few final mixes of the hash to ensure the last few
-     * bytes are well-incorporated. */
-    h ^= h >> 13;
-    h *= m;
-    h ^= h >> 15;
-
-    return h;
-}
-
-u32 MurmurHash2(Str s) {
-    return MurmurHash2(s.s, s.len);
-}
-
 // ─── Arena.cpp ───────────────────────────────────────────────────────────────
 
 u64 gArenaDefaultReserveSize = 64ull * 1024ull * 1024ull;
@@ -593,7 +534,7 @@ bool Eq(Str s1, Str s2) {
     if (str::IsNull(s1) || str::IsNull(s2)) {
         return false;
     }
-    return memeq(s1.s, s2.s, len1);
+    return 0 == memcmp(s1.s, s2.s, (size_t)len1);
 }
 
 // return true if s1 == s2, case insensitive

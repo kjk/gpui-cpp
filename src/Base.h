@@ -121,10 +121,6 @@ inline void ZeroStruct(T* s) {
     ZeroMemory((void*)s, sizeof(T));
 }
 
-bool memeq(const void* s1, const void* s2, int n);
-u32 MurmurHash2(const void* key, int n);
-u32 MurmurHash2(Str s);
-
 using func0Ptr = void (*)(uintptr_t);
 using funcVoidPtr = void (*)();
 
