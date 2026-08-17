@@ -3,10 +3,6 @@
 enum {
     ClickAccItem = 2100,
     ClickAccStyled = 2110,
-    ClickAccMultiple = 2120,
-    ClickAccIcon,
-    ClickAccDisabled,
-    ClickAccBordered,
 };
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple);
@@ -32,39 +28,10 @@ static void ToggleOpen(bool* flags, int n, int i, bool multiple) {
     flags[i] = next;
 }
 
-static El* Opt(Arena* a, int id, const char* label, bool on) {
-    const Theme& th = ThemeNow();
-    El* box = Div(a)
-                  ->W(16)
-                  ->H(16)
-                  ->Border(1, th.border)
-                  ->Radius(3)
-                  ->ItemsCenter()
-                  ->JustifyCenter();
-    if (on) {
-        box->Bg(th.primary)->Child(StoryTxt(a, StrL("✓"), 11, th.primaryFg));
-    }
-    return Div(a)
-        ->FlexRow()
-        ->Gap(6)
-        ->ItemsCenter()
-        ->H(24)
-        ->Click(id)
-        ->Child(box)
-        ->Child(StoryTxt(a, Str(label), 12, th.foreground));
-}
-
 El* AccordionRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsStart();
-    page->Child(StoryToolbar(a, app));
-
-    El* opts = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    opts->Child(Opt(a, ClickAccMultiple, "Multiple", app->accordionMultiple));
-    opts->Child(Opt(a, ClickAccIcon, "Icons", app->accordionIcon));
-    opts->Child(Opt(a, ClickAccDisabled, "Disabled", app->accordionDisabled));
-    opts->Child(Opt(a, ClickAccBordered, "Bordered", app->accordionBordered));
-    page->Child(opts);
+    page->Child(StoryToolbar(a, app, true));
 
     const char* titles[] = {"Is it accessible?", "Can it hold any content?",
                             "Is it animated?"};
@@ -82,6 +49,7 @@ El* AccordionRender(StoryApp* app, Arena* a) {
                                     ->Multiple(app->accordionMultiple)
                                     ->Bordered(app->accordionBordered)
                                     ->Disabled(app->accordionDisabled)
+                                    ->WithSize(app->size)
                                     ->OnToggle(MkFunc1(&OnAccDefault, app));
     for (int i = 0; i < 3; i++) {
         acc->Item(Str(titles[i]), Str(bodies[i]), app->accordionOpen[i]);
@@ -96,6 +64,7 @@ El* AccordionRender(StoryApp* app, Arena* a) {
             ->Multiple(app->accordionMultiple)
             ->Bordered(false)
             ->Disabled(app->accordionDisabled)
+            ->WithSize(app->size)
             ->OnToggle(MkFunc1(&OnAccStyled, app));
     styled->Item(StrL("Account Settings"),
                  StrL("Manage your account preferences, security settings, and "

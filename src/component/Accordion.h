@@ -18,6 +18,7 @@ struct Accordion {
     bool multiple = false;
     bool bordered = true;
     bool disabled = false;
+    UiSize size = UiSize::Medium;
     AccordionItem items[8] = {};
     int nItems = 0;
     Func1<int> onToggle;
@@ -26,6 +27,7 @@ struct Accordion {
     Accordion* Multiple(bool v);
     Accordion* Bordered(bool v);
     Accordion* Disabled(bool v);
+    Accordion* WithSize(UiSize s);
     Accordion* Item(Str title, Str body, bool open);
     Accordion* OnToggle(Func1<int> fn);
     El* IntoEl();

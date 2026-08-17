@@ -218,30 +218,112 @@ El* StorySectionAdd(El* section, El* child) {
     return section;
 }
 
-El* StoryToolbar(Arena* a, StoryApp* app) {
+static const char* StorySizeName(UiSize s) {
+    switch (s) {
+        case UiSize::XSmall:
+            return "XSmall";
+        case UiSize::Small:
+            return "Small";
+        case UiSize::Large:
+            return "Large";
+        default:
+            return "Medium";
+    }
+}
+
+static El* ToolbarDropBtn(Arena* a, int id, Str label, bool first, bool last) {
     const Theme& th = ThemeNow();
-    const char* labels[] = {"XS", "SM", "MD", "LG"};
-    UiSize sizes[] = {UiSize::XSmall, UiSize::Small, UiSize::Medium,
-                      UiSize::Large};
-    int clicks[] = {ClickSizeXs, ClickSizeSm, ClickSizeMd, ClickSizeLg};
-    El* row = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    for (int i = 0; i < 4; i++) {
-        bool on = app->size == sizes[i];
-        El* b = Div(a)
-                    ->H(24)
-                    ->PadX(8)
-                    ->ItemsCenter()
-                    ->JustifyCenter()
-                    ->Radius(4)
-                    ->Click(clicks[i])
-                    ->Child(StoryTxt(a, Str(labels[i]), 11,
-                                     on ? th.primaryFg : th.foreground));
-        if (on) {
-            b->Bg(th.primary);
-        } else {
-            b->Border(1, th.border)->HoverBg(th.muted);
+    El* b = Div(a)
+                ->H(24)
+                ->PadX(10)
+                ->ItemsCenter()
+                ->JustifyCenter()
+                ->Border(1, th.border)
+                ->Bg(th.background)
+                ->HoverBg(th.muted)
+                ->Click(id)
+                ->Child(StoryTxt(a, label, 12, th.foreground));
+    if (first && last) {
+        b->Radius(th.radius);
+    } else if (first) {
+        b->Radius(th.radius);
+    } else if (last) {
+        b->Radius(th.radius);
+    }
+    return b;
+}
+
+static El* ToolbarCheckRow(Arena* a, int id, const char* label, bool on) {
+    const Theme& th = ThemeNow();
+    return Div(a)
+        ->H(28)
+        ->W(160)
+        ->PadX(10)
+        ->FlexRow()
+        ->Gap(8)
+        ->ItemsCenter()
+        ->HoverBg(th.muted)
+        ->Click(id)
+        ->Child(StoryTxt(a, on ? StrL("\xE2\x9C\x93") : StrL(" "), 12,
+                         th.foreground)
+                    ->W(14))
+        ->Child(StoryTxt(a, Str(label), 12, th.foreground));
+}
+
+static El* ToolbarMenu(Arena* a) {
+    const Theme& th = ThemeNow();
+    return Div(a)
+        ->FlexCol()
+        ->PadY(4)
+        ->Bg(th.background)
+        ->Border(1, th.border)
+        ->Radius(th.radius);
+}
+
+El* StoryToolbar(Arena* a, StoryApp* app) {
+    return StoryToolbar(a, app, false);
+}
+
+El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions) {
+    El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+
+    El* sizeTrig = ToolbarDropBtn(
+        a, ClickSizeMenu, StoryFmt(a, "Size: %s", StorySizeName(app->size)),
+        true, !withOptions);
+    El* sizeMenu = nullptr;
+    if (app->sizeMenuOpen) {
+        sizeMenu = ToolbarMenu(a);
+        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeXs, "XSmall",
+                                        app->size == UiSize::XSmall));
+        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeSm, "Small",
+                                        app->size == UiSize::Small));
+        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeMd, "Medium",
+                                        app->size == UiSize::Medium));
+        sizeMenu->Child(ToolbarCheckRow(a, ClickSizeLg, "Large",
+                                        app->size == UiSize::Large));
+    }
+    row->Child(Popup::New(a, StrL("story-size-menu"), sizeTrig)
+                   ->Content(sizeMenu)
+                   ->IntoEl());
+
+    if (withOptions) {
+        El* optTrig =
+            ToolbarDropBtn(a, ClickOptsMenu, StrL("Options"), false, true);
+        El* optMenu = nullptr;
+        if (app->accOptsOpen) {
+            optMenu = ToolbarMenu(a);
+            optMenu->Child(ToolbarCheckRow(a, ClickAccMultiple, "Multiple",
+                                           app->accordionMultiple));
+            optMenu->Child(
+                ToolbarCheckRow(a, ClickAccIcon, "Icons", app->accordionIcon));
+            optMenu->Child(ToolbarCheckRow(a, ClickAccDisabled, "Disabled",
+                                           app->accordionDisabled));
+            optMenu->Child(ToolbarCheckRow(a, ClickAccBordered, "Bordered",
+                                           app->accordionBordered));
         }
-        row->Child(b);
+        row->Child(Popup::New(a, StrL("story-opts-menu"), optTrig)
+                       ->Content(optMenu)
+                       ->IntoEl());
     }
     return row;
 }
@@ -454,31 +536,57 @@ static void OnClick(AppHost* host, int id) {
     }
     app->search.focused = false;
     host->input = nullptr;
+    if (id == ClickSizeMenu) {
+        app->sizeMenuOpen = !app->sizeMenuOpen;
+        app->accOptsOpen = false;
+        return;
+    }
+    if (id == ClickOptsMenu) {
+        app->accOptsOpen = !app->accOptsOpen;
+        app->sizeMenuOpen = false;
+        return;
+    }
     if (id == ClickCollapse) {
         app->collapsed = !app->collapsed;
+        app->sizeMenuOpen = false;
+        app->accOptsOpen = false;
         return;
     }
     if (id == ClickSizeXs) {
         app->size = UiSize::XSmall;
+        app->sizeMenuOpen = false;
         return;
     }
     if (id == ClickSizeSm) {
         app->size = UiSize::Small;
+        app->sizeMenuOpen = false;
         return;
     }
     if (id == ClickSizeMd) {
         app->size = UiSize::Medium;
+        app->sizeMenuOpen = false;
         return;
     }
     if (id == ClickSizeLg) {
         app->size = UiSize::Large;
+        app->sizeMenuOpen = false;
         return;
     }
     if (id >= ClickStory && id < ClickStory + StoryCount) {
         app->story = id - ClickStory;
         app->scrollY = 0;
+        app->sizeMenuOpen = false;
+        app->accOptsOpen = false;
         return;
     }
+    if (id == ClickAccMultiple || id == ClickAccIcon ||
+        id == ClickAccDisabled || id == ClickAccBordered) {
+        app->accOptsOpen = false;
+        StoryClickRegistered(app, id);
+        return;
+    }
+    app->sizeMenuOpen = false;
+    app->accOptsOpen = false;
     StoryClickRegistered(app, id);
 }
 
@@ -500,6 +608,8 @@ static void OnKey(AppHost* host, int vk, bool down) {
         app->dialogOpen = false;
         app->sheetOpen = false;
         app->alertOpen = false;
+        app->sizeMenuOpen = false;
+        app->accOptsOpen = false;
     }
 }
 

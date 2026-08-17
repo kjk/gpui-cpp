@@ -79,6 +79,12 @@ enum {
     ClickSizeSm = 981,
     ClickSizeMd = 982,
     ClickSizeLg = 983,
+    ClickSizeMenu = 984,
+    ClickOptsMenu = 985,
+    ClickAccMultiple = 2120,
+    ClickAccIcon = 2121,
+    ClickAccDisabled = 2122,
+    ClickAccBordered = 2123,
 };
 
 struct StoryApp {
@@ -87,6 +93,8 @@ struct StoryApp {
     bool collapsed = false;
     LineInput search = {};
     UiSize size = UiSize::Medium;
+    bool sizeMenuOpen = false;
+    bool accOptsOpen = false;
 
     bool accordionOpen[3] = {true, false, false};
     bool accordionStyledOpen[3] = {true, false, false};
@@ -141,6 +149,7 @@ El* StoryTxt(Arena* a, Str s, float px, Rgba c);
 El* StorySection(Arena* a, const char* title, const char* desc);
 El* StorySectionAdd(El* section, El* child);
 El* StoryToolbar(Arena* a, StoryApp* app);
+El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions);
 El* StoryComingSoon(Arena* a, int story);
 
 typedef El* (*StoryRenderFn)(StoryApp* app, Arena* a, WinSize size);

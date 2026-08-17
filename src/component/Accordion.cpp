@@ -30,6 +30,10 @@ Accordion* Accordion::Disabled(bool v) {
     disabled = v;
     return this;
 }
+Accordion* Accordion::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
 Accordion* Accordion::Item(Str title, Str body, bool open) {
     if (nItems < 8) {
         items[nItems].title = title;
@@ -51,16 +55,19 @@ El* Accordion::IntoEl() {
         root->BorderT(1, th.border);
     }
     for (int i = 0; i < nItems; i++) {
+        float h = UiSizePx(size) + 8.f;
+        float font = UiFontPx(size);
         El* trig =
             AccordionTrigger::New(a, items[i].title,
                                   disabled ? 0 : HashClickId(items[i].title))
                 ->FlexRow()
-                ->H(36)
+                ->H(h)
                 ->ItemsCenter()
                 ->JustifyBetween()
                 ->PadX(8)
                 ->BorderB(1, th.border)
-                ->Child(TextEl(a, items[i].title)->Font(14)->Fg(th.foreground))
+                ->Child(
+                    TextEl(a, items[i].title)->Font(font)->Fg(th.foreground))
                 ->Child(IconEl(a,
                                items[i].open ? IconName::ChevronDown
                                              : IconName::ChevronRight,
