@@ -457,8 +457,8 @@ Str AllocStrTemp(int size) {
 // Updates *els and *cap. len is not modified (caller owns logical length).
 // Grow/shrink vec-like storage to newCap elements (+1 trailing zero pad).
 // Updates *els and *cap; keeps min(len, newCap) elements.
-NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap, int newCap,
-                          int elSize) {
+GPUI_NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
+                               int newCap, int elSize) {
     // newCap+1 must fit in int; newElCount * elSize must not overflow.
     if (elSize <= 0 || newCap < 0 || newCap > INT_MAX - 1) {
         return false;
@@ -834,10 +834,6 @@ Str str::Builder::TakeStr() {
 // ─── StrFormatParse.cpp
 // ───────────────────────────────────────────────────────────────
 
-#if OS_POSIX
-#include <locale.h>
-#endif
-
 /*
 str::Fmt is type-safe printf()-like system. Every directive starts with '%':
 the usual %d / %s / %f etc., plus two that take an argument of any type:
@@ -947,7 +943,7 @@ static int parseArgDefBrace(Fmt& fmt, int off) {
         fmt.isOk = false;
         return off;
     }
-    if (fmt.nInst >= dimofi(fmt.instructions)) {
+    if (fmt.nInst >= (int)dimof(fmt.instructions)) {
         fmt.isOk = false;
         return off;
     }
@@ -1179,7 +1175,7 @@ static void bufFmt(Str buf, const char* fmt, ...) {
 // type
 static void evalDefault(Fmt& fmt, const FmtArg& arg) {
     TempStr s;
-    Str buf(fmt.buf, dimofi(fmt.buf));
+    Str buf(fmt.buf, (int)dimof(fmt.buf));
     switch (arg.t) {
         case FmtArg::Kind::Char:
             fmt.res.AppendChar(arg.c);
@@ -1230,7 +1226,7 @@ static i64 argToI64(const FmtArg& arg) {
 // to avoid relying on the Str being NUL-terminated.
 static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     char* buf = fmt.buf;
-    Str bufS(fmt.buf, dimofi(fmt.buf));
+    Str bufS(fmt.buf, (int)dimof(fmt.buf));
 
     if (inst.conv == 's' || inst.conv == 'S') {
         Str sv = arg.str;
@@ -1258,7 +1254,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     char fbuf[64];
     int k = 0;
     fbuf[k++] = '%';
-    for (int j = 0; j < inst.fwpLen && k < dimofi(fbuf) - 5; j++) {
+    for (int j = 0; j < inst.fwpLen && k < (int)dimof(fbuf) - 5; j++) {
         fbuf[k++] = fmt.format.s[inst.fwpOff + j];
     }
     char conv = inst.conv;
@@ -1366,10 +1362,10 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
 }
 
 // Format into an explicit arena; the returned Str lives in `a`. Use this
-// instead of fmt()/FormatTemp when the result must outlive the temp allocator's
-// scope, or on paths that must not touch the temp allocator / heap at all (e.g.
-// the crash handler, which pre-allocates its arena). FormatTempArgs() is just
-// this with GetTempArena().
+// instead of fmt()/FormatTemp when the result must outlive the temp
+// allocator's scope, or on paths that must not touch the temp allocator / heap
+// at all (e.g. the crash handler, which pre-allocates its arena).
+// FormatTempArgs() is just this with GetTempArena().
 Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args, int nArgs) {
     // trailing arguments could be empty (unused defaults from the variadic
     // call)

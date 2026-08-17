@@ -3,75 +3,6 @@
 
 #pragma once
 
-/* OS_DARWIN - Any Darwin-based OS, including Mac OS X and iPhone OS */
-#ifdef __APPLE__
-#define OS_DARWIN 1
-#else
-#define OS_DARWIN 0
-#endif
-
-/* OS_LINUX - Linux */
-#ifdef __linux__
-#define OS_LINUX 1
-#else
-#define OS_LINUX 0
-#endif
-
-#if defined(_WIN32)
-#define OS_WIN 1
-#else
-#define OS_WIN 0
-#endif
-
-// https://learn.microsoft.com/en-us/cpp/preprocessor/predefined-macros
-#if defined(_M_IX86) || defined(__i386__)
-#define IS_INTEL_32 1
-#define IS_INTEL_64 0
-#define IS_ARM_64 0
-#elif defined(_M_X64) || defined(__x86_64__)
-#define IS_INTEL_64 1
-#define IS_INTEL_32 0
-#define IS_ARM_64 0
-#elif defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
-#define IS_INTEL_64 0
-#define IS_INTEL_32 0
-#define IS_ARM_64 1
-#else
-#error "unsupported arch"
-#endif
-
-/* OS_POSIX - Any POSIX-like system */
-#if OS_DARWIN || OS_LINUX || defined(unix) || defined(__unix) || \
-    defined(__unix__)
-#define OS_POSIX 1
-#else
-#define OS_POSIX 0
-#endif
-
-#if defined(_MSC_VER)
-#define COMPILER_MSVC 1
-#else
-#define COMPILER_MSVC 0
-#endif
-
-#if defined(__GNUC__)
-#define COMPILER_GCC 1
-#else
-#define COMPILER_GCC 0
-#endif
-
-#if defined(__clang__)
-#define COMPILER_CLANG 1
-#else
-#define COMPILER_CLANG 0
-#endif
-
-#if defined(__MINGW32__)
-#define COMPILER_MINGW 1
-#else
-#define COMPILER_MINGW 0
-#endif
-
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -80,7 +11,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-// C/C++ standard headers  we use often
+// C/C++ standard headers we use often
 #include <cctype>
 #include <climits>
 #include <cstdarg>
@@ -94,19 +25,7 @@
 #include <new>       // for placement new
 #include <algorithm> // for std::min, std::max
 #include <utility>   // for std::forward
-#if OS_POSIX
-// pthread.h first: glibc mutex structs have a field named __unused
-#include <pthread.h>
-#include <strings.h>
-#endif
 
-// after system headers so we don't rewrite pthread's __unused field
-#define __unused [[maybe_unused]]
-
-#define _USE_MATH_DEFINES
-#include <math.h>
-
-#if OS_WIN
 #define NOMINMAX
 #include <winsock2.h> // must include before <windows.h>
 #include <windows.h>
@@ -128,11 +47,6 @@
 #if defined(min) || defined(max)
 #error "min or max defined"
 #endif
-// mingw's gdiplus.h includes <math.h> which in C++ pulls in <cmath>/<limits>
-// that use min/max as identifiers; pre-include them before defining macros
-#ifdef __GNUC__
-#include <cmath>
-#endif
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #define max(x, y) ((x) > (y) ? (x) : (y))
 // /analyze flags a bogus C6385 (invalid read) inside GdiplusFontCollection.h;
@@ -144,58 +58,6 @@
 #undef NOMINMAX
 #undef min
 #undef max
-
-#else
-using BYTE = uint8_t;
-using WORD = uint16_t;
-using DWORD = uint32_t;
-using DWORD64 = uint64_t;
-using UINT = unsigned int;
-using UINT_PTR = uintptr_t;
-using LONG = int32_t;
-using BOOL = int;
-using WCHAR = wchar_t;
-using WPARAM = uintptr_t;
-using LPARAM = intptr_t;
-using LRESULT = intptr_t;
-using LCID = uint32_t;
-
-struct HWND__;
-using HWND = HWND__*;
-struct HDC__;
-using HDC = HDC__*;
-struct HFONT__;
-using HFONT = HFONT__*;
-struct HIMAGELIST__;
-using HIMAGELIST = HIMAGELIST__*;
-struct HTREEITEM__;
-using HTREEITEM = HTREEITEM__*;
-struct HBITMAP__;
-using HBITMAP = HBITMAP__*;
-struct HBRUSH__;
-using HBRUSH = HBRUSH__*;
-using LPWSTR = WCHAR*;
-
-struct EXCEPTION_POINTERS;
-struct MINIDUMP_EXCEPTION_INFORMATION;
-
-struct FILETIME {
-    DWORD dwLowDateTime;
-    DWORD dwHighDateTime;
-};
-
-#define CP_ACP 0
-#define CP_UTF8 65001
-#define LOCALE_USER_DEFAULT 0
-#define LOCALE_INVARIANT 0
-#define __TEXT(s) L##s
-#define TEXT(s) __TEXT(s)
-constexpr int MAX_PATH = 4096;
-constexpr int URLZONE_INVALID = -1;
-constexpr int URLZONE_INTERNET = 3;
-
-#define ZeroMemory(Destination, Length) memset((Destination), 0, (Length))
-#endif
 
 using i8 = int8_t;
 using u8 = uint8_t;
@@ -254,34 +116,21 @@ inline int len(WStr s) {
     return s.len;
 }
 
-#if COMPILER_MSVC
-#define NO_INLINE __declspec(noinline)
-#define FORCEINLINE __forceinline
-#else
-#define NO_INLINE __attribute__((noinline))
-#define FORCEINLINE inline __attribute__((always_inline))
-#endif
+#define GPUI_NO_INLINE __declspec(noinline)
+#define GPUI_FORCEINLINE __forceinline
 
 template <typename T, size_t N>
 char (&DimofSizeHelper(T (&array)[N]))[N];
 #define dimof(array) (sizeof(DimofSizeHelper(array)))
-#define dimofi(array) (int)(sizeof(DimofSizeHelper(array)))
-#define sizeofi(x) ((int)sizeof(x))
 
 void log(Str s);
 void loga(Str s);
 
-#define logf(...)                     \
-    do {                              \
-        Str s__ = ::fmt(__VA_ARGS__); \
-        ::log(s__);                   \
-    } while (0)
-
 void* AllocZero(int count, int size);
 
 template <typename T>
-FORCEINLINE T* AllocArray(int n) {
-    return (T*)AllocZero(n, sizeofi(T));
+GPUI_FORCEINLINE T* AllocArray(int n) {
+    return (T*)AllocZero(n, (int)sizeof(T));
 }
 
 template <typename T>
@@ -293,14 +142,14 @@ bool memeq(const void* s1, const void* s2, int n);
 u32 MurmurHash2(const void* key, int n);
 u32 MurmurHash2(Str s);
 
-using func0Ptr = void (*)(void*);
+using func0Ptr = void (*)(uintptr_t);
 using funcVoidPtr = void (*)();
 
-#define kFuncNoArg ((void*)~(uintptr_t)1)
-
 struct Func0 {
+    static constexpr uintptr_t kFuncNoArg = ~(uintptr_t)1;
+
     void* fn = nullptr;
-    void* userData = nullptr;
+    uintptr_t userData = 0;
 
     Func0() = default;
     Func0(const Func0& that) {
@@ -336,20 +185,21 @@ template <typename T>
 Func0 MkFunc0(void (*fn)(T*), T* d) {
     auto res = Func0{};
     res.fn = (void*)fn;
-    res.userData = (void*)d;
+    res.userData = (uintptr_t)d;
     return res;
 }
 
 template <typename T>
 struct Func1 {
     static constexpr uintptr_t kDropsArgBit = 1;
+    static constexpr uintptr_t kFuncNoArg = ~(uintptr_t)1;
 
-    void (*fn)(void*, T) = nullptr;
+    void (*fn)(uintptr_t, T) = nullptr;
     uintptr_t userData = 0;
 
     Func1() = default;
     Func1(const Func0& that) {
-        this->fn = (void (*)(void*, T))that.fn;
+        this->fn = (void (*)(uintptr_t, T))that.fn;
         this->SetData(that.userData, true);
     }
     Func1(const Func1& that) {
@@ -365,15 +215,15 @@ struct Func1 {
     }
     ~Func1() = default;
 
-    void SetData(void* d, bool dropsArg) {
-        userData = (uintptr_t)d | (dropsArg ? kDropsArgBit : 0);
+    void SetData(uintptr_t d, bool dropsArg) {
+        userData = d | (dropsArg ? kDropsArgBit : 0);
     }
     bool IsValid() const { return fn != nullptr; }
     void Call(T arg) const {
         if (!fn) {
             return;
         }
-        void* d = (void*)(userData & ~kDropsArgBit);
+        uintptr_t d = userData & ~kDropsArgBit;
         if (userData & kDropsArgBit) {
             if (d == kFuncNoArg) {
                 auto func = (funcVoidPtr)fn;
@@ -397,13 +247,12 @@ struct Func1 {
 template <typename T1, typename T2>
 Func1<T2> MkFunc1(void (*fn)(T1*, T2), T1* d) {
     auto res = Func1<T2>{};
-    using fptr = void (*)(void*, T2);
+    using fptr = void (*)(uintptr_t, T2);
     res.fn = (fptr)fn;
-    res.SetData((void*)d, false);
+    res.SetData((uintptr_t)d, false);
     return res;
 }
 
-#if OS_WIN
 struct Mutex {
     SRWLOCK lock = SRWLOCK_INIT;
     Mutex() = default;
@@ -411,15 +260,6 @@ struct Mutex {
     void Lock() { AcquireSRWLockExclusive(&lock); }
     void Unlock() { ReleaseSRWLockExclusive(&lock); }
 };
-#else
-struct Mutex {
-    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-    Mutex() = default;
-    ~Mutex() = default;
-    void Lock() { pthread_mutex_lock(&lock); }
-    void Unlock() { pthread_mutex_unlock(&lock); }
-};
-#endif
 
 struct ScopedMutex {
     Mutex* mutex;
@@ -505,7 +345,7 @@ inline T* AllocArray(struct Arena* arena, int n = 1) {
 
 template <typename T, typename... Args>
 T* New(Arena* arena, Args&&... args) {
-    void* mem = Alloc(arena, sizeofi(T));
+    void* mem = Alloc(arena, (int)sizeof(T));
     return new (mem) T(std::forward<Args>(args)...);
 }
 
@@ -745,4 +585,12 @@ TempStr FormatTemp(const char* fmt, const TArgs&... args) {
 int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
 } // namespace str
 
-#define fmt(...) str::FormatTemp(__VA_ARGS__)
+template <typename... TArgs>
+inline TempStr fmt(const char* format, const TArgs&... args) {
+    return str::FormatTemp(format, args...);
+}
+
+template <typename... TArgs>
+inline void logf(const char* format, const TArgs&... args) {
+    log(str::FormatTemp(format, args...));
+}
