@@ -2,11 +2,6 @@
 
 using namespace gpui;
 
-static void OnInit(AppHost* host) {
-    (void)host;
-    ThemeSet(ThemeMode::Light);
-}
-
 static El* Chip(Arena* a, Str s) {
     const Theme& th = ThemeNow();
     return Div(a)
@@ -17,9 +12,13 @@ static El* Chip(Arena* a, Str s) {
         ->Child(TextEl(a, s)->Font(14)->Fg(th.foreground));
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)host;
-    (void)size;
+// examples/root_borderless — Root::bordered(false) with client decorations.
+struct Example {
+    static El* Render(Example*, Ctx* cx);
+};
+
+El* Example::Render(Example*, Ctx* cx) {
+    Arena* frame = cx->a;
     const Theme& th = ThemeNow();
     return Div(frame)
         ->FlexCol()
@@ -46,10 +45,10 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
+    App* app = AppNew();
+    ThemeSet(ThemeMode::Light);
     AppWinOpts opts = {};
     opts.borderless = true;
-    return RunAppEx(L"Root Borderless", 640, 320, hooks, nullptr, opts);
+    return AppRunView(L"Root Borderless", 640, 320, EntityNew<Example>(app).id,
+                      app, opts);
 }
