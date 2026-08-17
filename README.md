@@ -1,4 +1,4 @@
-# gpui2
+# gpui for C++
 
 A **C++ / Windows** port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed).
 
