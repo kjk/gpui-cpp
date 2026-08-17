@@ -660,10 +660,6 @@ static const SvgIcon* GetIcon(Str assetPath) {
     return e->ok ? &e->icon : nullptr;
 }
 
-static D2D1_COLOR_F ToD2D(Rgba c) {
-    return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
-}
-
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
              Rgba color) {
     if (!ctx || !ctx->rt || !ctx->d2d || size <= 0) {
@@ -757,7 +753,7 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
     ctx->d2d->CreateStrokeStyle(sp, nullptr, 0, &ss);
 
     if (ctx->brush) {
-        ctx->brush->SetColor(ToD2D(color));
+        ctx->brush->SetColor(RgbaToD2D(color));
         ctx->rt->DrawGeometry(geom, ctx->brush,
                               ic->strokeW > 0 ? ic->strokeW : 2.f, ss);
     }

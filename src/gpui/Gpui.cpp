@@ -33,10 +33,6 @@ Rgba RgbaMix(Rgba a, Rgba b, float t) {
     return o;
 }
 
-static D2D1_COLOR_F ToD2D(Rgba c) {
-    return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
-}
-
 const Theme& ThemeDark() {
     static Theme t;
     static bool init = false;
@@ -1523,7 +1519,7 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
 
 static void SetBrush(PaintCtx* ctx, Rgba c) {
     if (ctx->brush) {
-        ctx->brush->SetColor(ToD2D(c));
+        ctx->brush->SetColor(RgbaToD2D(c));
     }
 }
 
@@ -1831,9 +1827,9 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         ID2D1GradientStopCollection* stops = nullptr;
         D2D1_GRADIENT_STOP gs[2];
         gs[0].position = 0.f;
-        gs[0].color = ToD2D(e->chart.fillTop);
+        gs[0].color = RgbaToD2D(e->chart.fillTop);
         gs[1].position = 1.f;
-        gs[1].color = ToD2D(e->chart.fillBot);
+        gs[1].color = RgbaToD2D(e->chart.fillBot);
         ctx->rt->CreateGradientStopCollection(gs, 2, &stops);
         bool filled = false;
         if (stops) {

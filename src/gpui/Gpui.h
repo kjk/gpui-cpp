@@ -4,11 +4,8 @@
 
 #include "Base.h"
 
-struct ID2D1Factory;
-struct ID2D1RenderTarget;
-struct ID2D1DCRenderTarget;
-struct ID2D1SolidColorBrush;
-struct ID2D1PathGeometry;
+#include <d2d1.h>
+
 struct IDWriteFactory;
 struct IDWriteTextFormat;
 struct IDWriteTextLayout;
@@ -39,6 +36,9 @@ inline Rgba RgbaHex(u32 hex) {
 }
 Rgba RgbaOpacity(Rgba c, float a01);
 Rgba RgbaMix(Rgba a, Rgba b, float t);
+inline D2D1_COLOR_F RgbaToD2D(Rgba c) {
+    return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
+}
 
 constexpr float kAuto = -1.f;
 constexpr float kFill = -2.f;

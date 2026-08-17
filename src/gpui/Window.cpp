@@ -126,9 +126,7 @@ static void RenderFrame(AppHost* host, HDC hdc) {
     host->paint.rt->BeginDraw();
     host->paint.rt->SetTransform(D2D1::Matrix3x2F::Identity());
     const Theme& th = ThemeNow();
-    host->paint.rt
-        ->Clear(D2D1::ColorF(th.background.r / 255.f, th.background.g / 255.f,
-                             th.background.b / 255.f, 1));
+    host->paint.rt->Clear(RgbaToD2D(th.background));
 
     if (root) {
         LayoutEl(&host->paint, root, 0, 0, dipW, dipH, 16.f, th.foreground);

@@ -238,9 +238,7 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
             }
             Rgba col = pal[(start + end) / 2];
             if (ctx->brush) {
-                ctx->brush
-                    ->SetColor(D2D1::ColorF(col.r / 255.f, col.g / 255.f,
-                                            col.b / 255.f, col.a / 255.f));
+                ctx->brush->SetColor(RgbaToD2D(col));
             }
             for (int i = start + 1; i <= end; i++) {
                 ctx->rt->DrawLine(D2D1::Point2F(px[i - 1], py[i - 1]),
