@@ -62,7 +62,7 @@ El* AccordionRender(StoryApp* app, Arena* a) {
     component::Accordion* styled =
         component::Accordion::New(a, StrL("custom-style"))
             ->Multiple(app->accordionMultiple)
-            ->Bordered(false)
+            ->Bordered(true)
             ->Disabled(app->accordionDisabled)
             ->WithSize(app->size)
             ->OnToggle(MkFunc1(&OnAccStyled, app));
@@ -75,7 +75,7 @@ El* AccordionRender(StoryApp* app, Arena* a) {
     styled->SettingsItem(
         StrL("Privacy & Security"),
         StrL("Control who can see your profile and how your data is used."),
-        app->accordionStyledOpen[1], IconName::CircleUser, Str{});
+        app->accordionStyledOpen[1], IconName::Eye, Str{});
     styled->SettingsItem(
         StrL("Help & Support"),
         StrL(

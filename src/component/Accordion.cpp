@@ -66,21 +66,21 @@ Accordion* Accordion::OnToggle(Func1<int> fn) {
 
 El* Accordion::IntoEl() {
     const Theme& th = ThemeNow();
-    El* root = gpui::Accordion::New(a, id)->FlexCol()->W(kFill);
+    // Items paint tokens.accordion (= background); bordered turns the group
+    // into one rounded card instead of a stack of separators.
+    El* root =
+        gpui::Accordion::New(a, id)->FlexCol()->W(kFill)->Bg(th.background);
     if (bordered) {
-        root->BorderT(1, th.border);
+        root->Border(1, th.border)->Radius(th.radiusLg)->ClipY();
     }
     for (int i = 0; i < nItems; i++) {
-        float h = UiSizePx(size) + 8.f;
         float font = UiFontPx(size);
         El* trig = AccordionTrigger::New(
             a, items[i].title, disabled ? 0 : HashClickId(items[i].title));
-        trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(8)->W(kFill);
-        if (i + 1 < nItems) {
-            trig->BorderB(1, th.border);
-        }
+        // AccordionTrigger: py_2 px_3 at Medium, font_medium.
+        trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(12)->PadY(8)->W(
+            kFill);
         if (items[i].settings) {
-            trig->PadY(8);
             El* left = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Grow();
             if (items[i].icon != IconName::None) {
                 left->Child(
@@ -97,7 +97,7 @@ El* Accordion::IntoEl() {
             left->Child(TextEl(a, items[i].title)
                             ->Font(font)
                             ->Fg(th.foreground)
-                            ->Bold());
+                            ->Semibold());
             if (items[i].tag.s) {
                 left->Child(Tag::New(a, items[i].tag)
                                 ->Success()
@@ -107,8 +107,10 @@ El* Accordion::IntoEl() {
             }
             trig->Child(left);
         } else {
-            trig->H(h)->W(kFill)->Child(
-                TextEl(a, items[i].title)->Font(font)->Fg(th.foreground));
+            trig->Child(TextEl(a, items[i].title)
+                            ->Font(font)
+                            ->Fg(th.foreground)
+                            ->Semibold());
         }
         trig->Child(
             IconEl(a,
@@ -129,11 +131,18 @@ El* Accordion::IntoEl() {
         if (items[i].settings) {
             panel->PadL(52)->PadR(8)->PadT(0)->PadB(12);
         } else {
-            panel->Pad(8);
+            // AccordionPanel: pb_2 px_3 at Medium.
+            panel->PadX(12)->PadT(0)->PadB(8);
         }
         it->Panel(panel->Child(
-            TextEl(a, items[i].body)->Font(13)->Fg(th.mutedFg)->Wrap()));
-        root->Child(it->IntoEl());
+            TextEl(a, items[i].body)->Font(font)->Fg(th.mutedFg)->Wrap()));
+        // The separator belongs to the item, so it lands under the panel and
+        // not between the trigger and its body.
+        El* itEl = it->IntoEl();
+        if (i + 1 < nItems) {
+            itEl->BorderB(1, th.border);
+        }
+        root->Child(itEl);
     }
     return root;
 }
