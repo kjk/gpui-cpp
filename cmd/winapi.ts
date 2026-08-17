@@ -152,7 +152,8 @@ export function showWindow(hwnd: number, cmd: number): boolean {
 
 export type WorkAreaHalf = "left" | "right";
 
-// Fill the left or right half of the primary monitor work area (taskbar excluded).
+// Place on the left or right half of the primary work area (taskbar excluded).
+// Height is 80% of the work area; the window stays top-aligned.
 export function placeOnWorkAreaHalf(hwnd: number, side: WorkAreaHalf): boolean {
   if (!hwnd) {
     return false;
@@ -162,7 +163,7 @@ export function placeOnWorkAreaHalf(hwnd: number, side: WorkAreaHalf): boolean {
   const mid = wa.left + Math.floor((wa.right - wa.left) / 2);
   const x = side === "left" ? wa.left : mid;
   const w = side === "left" ? mid - wa.left : wa.right - mid;
-  const h = wa.bottom - wa.top;
+  const h = Math.floor((wa.bottom - wa.top) * 0.8);
   return moveWindow(hwnd, x, wa.top, w, h);
 }
 
