@@ -1,4 +1,4 @@
-/* Shared example implementation of Base.h log() / loga() / _uploadDebugReport. */
+/* Shared example implementation of Base.h log() / loga(). */
 
 #include "Base.h"
 
@@ -34,23 +34,4 @@ void log(Str s) {
 
 void loga(Str s) {
     log(s);
-}
-
-void _uploadDebugReport(Str condStr, Str fileLine, bool isCrash, bool captureCallstack) {
-    (void)captureCallstack;
-    char buf[1024];
-    int n = 0;
-    const char* cond = condStr.s ? condStr.s : "(null)";
-    const char* loc = fileLine.s ? fileLine.s : "(unknown)";
-    n = _snprintf_s(buf, sizeof(buf), _TRUNCATE, "ReportIf: %s at %s%s\n", cond, loc, isCrash ? " (crash)" : "");
-    if (n > 0) {
-        OutputDebugStringA(buf);
-    }
-#ifdef DEBUG
-    if (isCrash) {
-        DebugBreak();
-    }
-#else
-    (void)isCrash;
-#endif
 }

@@ -265,26 +265,6 @@ char (&DimofSizeHelper(T (&array)[N]))[N];
 #define dimofi(array) (int)(sizeof(DimofSizeHelper(array)))
 #define sizeofi(x) ((int)sizeof(x))
 
-#if !defined(__analysis_assume)
-#define __analysis_assume(x)
-#endif
-
-extern void _uploadDebugReport(Str, Str, bool, bool);
-
-#define STRINGIZE_(x) #x
-#define STRINGIZE(x) STRINGIZE_(x)
-#define FILE_LINE __FILE__ ":" STRINGIZE(__LINE__)
-
-#define ReportIfCond(cond, condStr, fileLine, isCrash, captureCallstack)      \
-    __analysis_assume(!(cond));                                               \
-    do {                                                                      \
-        if (cond) {                                                           \
-            _uploadDebugReport(condStr, fileLine, isCrash, captureCallstack); \
-        }                                                                     \
-    } while (0)
-
-#define ReportIf(cond) ReportIfCond(cond, #cond, FILE_LINE, false, true)
-
 void log(Str s);
 void loga(Str s);
 
@@ -383,7 +363,6 @@ struct Func1 {
     ~Func1() = default;
 
     void SetData(void* d, bool dropsArg) {
-        ReportIf(((uintptr_t)d & kDropsArgBit) != 0);
         userData = (uintptr_t)d | (dropsArg ? kDropsArgBit : 0);
     }
     bool IsValid() const { return fn != nullptr; }
@@ -592,8 +571,6 @@ struct Vec {
     ~Vec() { FreeEls(); }
 
     T& operator[](int idx) const {
-        ReportIf(idx < 0);
-        ReportIf(idx >= len);
         return els[idx];
     }
 

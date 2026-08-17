@@ -76,7 +76,6 @@ static u64 ArenaAlignPow2(u64 value, u64 align) {
     if (align <= 1) {
         return value;
     }
-    ReportIf((align & (align - 1)) != 0);
     return (value + align - 1) & ~(align - 1);
 }
 
@@ -320,7 +319,6 @@ void Arena::PopTo(u64 pos) {
 
     arena->current = current;
     u64 newPos = bigPos - current->basePos;
-    ReportIf(newPos > current->pos);
     current->pos = newPos;
     lock.Unlock();
 }
@@ -476,7 +474,6 @@ NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap, int newCap, i
     // Realloc(a, nullptr, n, 0) is malloc-like; single path for first alloc and grow.
     void* newEls = Realloc(a, *els, (size_t)allocSize, (size_t)oldSize);
     if (!newEls) {
-        ReportIf(true);
         return false;
     }
     int tail = allocSize - oldSize;
@@ -696,7 +693,6 @@ static char* EnsureCap(str::Builder* s, int needed) {
         newEls = (char*)Realloc(s->a, s->els, (size_t)allocSize, (size_t)s->len + kPadding);
     }
     if (!newEls) {
-        ReportIf(true);
         return nullptr;
     }
     s->els = newEls;
@@ -705,7 +701,6 @@ static char* EnsureCap(str::Builder* s, int needed) {
 }
 
 static char* MakeSpaceAt(str::Builder* s, int idx, int count) {
-    ReportIf(count == 0);
     int newLen = std::max(s->len, idx) + count;
     char* buf = EnsureCap(s, newLen);
     if (!buf) {
@@ -773,7 +768,6 @@ str::Builder::~Builder() {
 }
 
 char& str::Builder::operator[](int idx) const {
-    ReportIf(idx < 0 || idx >= len);
     return els[idx];
 }
 
@@ -914,7 +908,6 @@ static void addRawStr(Fmt& fmt, int off, size_t n) {
     if (n == 0) {
         return;
     }
-    ReportIf(fmt.nInst >= dimof(fmt.instructions));
     auto& i = fmt.instructions[fmt.nInst++];
     i.t = FmtArg::Kind::RawStr;
     i.rawOff = off;
@@ -925,7 +918,6 @@ static void addRawStr(Fmt& fmt, int off, size_t n) {
 // parse: %{} (the next argument) or %{$n} (positional). off points at the '{',
 // the '%' has already been consumed. Both take an argument of any type.
 static int parseArgDefBrace(Fmt& fmt, int off) {
-    ReportIf(fmt.format.s[off] != '{');
     off++;
     int n = 0;
     bool positional = false;
@@ -1002,7 +994,6 @@ static bool startsWith(Str s, int off, const char* prefix) {
 // length modifier into an explicit 32/64-bit width so output matches printf.
 static int parseArgDefPerc(Fmt& fmt, int off) {
     Str f = fmt.format;
-    ReportIf(f.s[off] != '%');
     off++; // past '%'
     int fwpStart = off;
     bool leftJust = false;
@@ -1149,7 +1140,6 @@ static bool ParseFormat(Fmt& o, Str fmtStr) {
     // but must cover all space from 0..nArgsExpected
     for (int i = 0; i <= maxArgNo; i++) {
         bool isOk = hasInstructionWithArgNo(o.instructions, o.nInst, i);
-        ReportIf(!isOk);
         if (!isOk) {
             return false;
         }
@@ -1196,10 +1186,8 @@ static void evalDefault(Fmt& fmt, const FmtArg& arg) {
             fmt.res.Append(arg.str);
             break;
         case FmtArg::Kind::WStr:
-            ReportIf(true);
             break;
         default:
-            ReportIf(true);
             break;
     }
 }
@@ -1316,7 +1304,6 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             fmt.res.Append(buf);
         } break;
         default:
-            ReportIf(true);
             break;
     }
 }
@@ -1328,8 +1315,6 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
     }
 
     for (int n = 0; n < nInst; n++) {
-        ReportIf(n >= dimof(instructions));
-
         auto& inst = instructions[n];
 
         if (inst.t == FmtArg::Kind::RawStr) {
@@ -1338,7 +1323,6 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
         }
 
         int argNo = inst.argNo;
-        ReportIf(argNo < 0 || argNo >= nArgs);
         if (argNo < 0 || argNo >= nArgs) {
             isOk = false;
             return false;
@@ -1346,7 +1330,6 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
 
         const FmtArg& arg = *args[argNo];
         isOk = validArgTypes(inst.t, arg.t);
-        ReportIf(!isOk);
         if (!isOk) {
             return false;
         }
