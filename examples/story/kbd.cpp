@@ -17,9 +17,9 @@ El* KbdRender(StoryApp* app, Arena* a) {
         StorySection(a, "Outlined",
                      "An outlined treatment adds emphasis on dense surfaces.");
     El* row2 = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    for (int i = 0; i < 8; i++) {
-        row2->Child(component::Kbd::New(a, Str(keys[i]))->Outline()->IntoEl());
-    }
+    row2->Child(component::Kbd::New(a, StrL("⌘⇧P"))->Outline()->IntoEl());
+    row2->Child(component::Kbd::New(a, StrL("⌘⌃T"))->Outline()->IntoEl());
+    row2->Child(component::Kbd::New(a, StrL("Enter"))->Outline()->IntoEl());
     StorySectionAdd(out, row2);
     page->Child(out);
     return page;

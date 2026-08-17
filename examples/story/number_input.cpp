@@ -29,6 +29,20 @@ El* NumberInputRender(StoryApp* app, Arena* a) {
                              ->OnDec(MkFunc0(&DecNum, app))
                              ->IntoEl());
     page->Child(sec);
+
+    El* dis = StorySection(a, "Disabled", nullptr);
+    StorySectionAdd(dis, component::NumberInput::New(a, &app->field)->IntoEl());
+    page->Child(dis);
+
+    El* suf = StorySection(a, "Suffix", nullptr);
+    El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
+    row->Child(component::NumberInput::New(a, &app->field)
+                   ->OnInc(MkFunc0(&IncNum, app))
+                   ->OnDec(MkFunc0(&DecNum, app))
+                   ->IntoEl());
+    row->Child(StoryTxt(a, StrL("px"), 13, ThemeNow().mutedFg));
+    StorySectionAdd(suf, row);
+    page->Child(suf);
     return page;
 }
 

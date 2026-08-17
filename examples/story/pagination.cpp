@@ -3,14 +3,37 @@
 static void SetPage(StoryApp* app, int p) {
     app->page = p;
 }
+static void SetPageMany(StoryApp* app, int p) {
+    app->pageMany = p;
+}
 
 El* PaginationRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "Pagination with page navigation.");
-    StorySectionAdd(sec, component::Pagination::New(a, app->page, 8)
+    page->Child(StoryToolbar(a, app));
+
+    El* def = StorySection(a, "Default", nullptr);
+    StorySectionAdd(def, component::Pagination::New(a, app->page, 10)
                              ->OnChange(MkFunc1(&SetPage, app))
                              ->IntoEl());
-    page->Child(sec);
+    page->Child(def);
+
+    El* many = StorySection(
+        a, "Visible Pages",
+        "Control how many page links remain visible in a larger result set.");
+    StorySectionAdd(many, component::Pagination::New(a, app->pageMany, 50)
+                              ->OnChange(MkFunc1(&SetPageMany, app))
+                              ->IntoEl());
+    page->Child(many);
+
+    El* compact = StorySection(a, "Compact Style", nullptr);
+    StorySectionAdd(compact, component::Pagination::New(a, app->page, 10)
+                                 ->OnChange(MkFunc1(&SetPage, app))
+                                 ->IntoEl());
+    page->Child(compact);
+
+    El* dis = StorySection(a, "Disabled", nullptr);
+    StorySectionAdd(dis, component::Pagination::New(a, 4, 10)->IntoEl());
+    page->Child(dis);
     return page;
 }
 

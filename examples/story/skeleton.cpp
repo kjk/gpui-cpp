@@ -3,27 +3,27 @@
 El* SkeletonRender(StoryApp* app, Arena* a) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec =
-        StorySection(a, "Default", "Placeholder blocks while content loads.");
-    El* col = Div(a)->FlexCol()->Gap(8)->W(320);
-    col->Child(component::Skeleton::New(a)->W(48)->H(48)->IntoEl());
-    col->Child(component::Skeleton::New(a)->W(280)->H(14)->IntoEl());
-    col->Child(
-        component::Skeleton::New(a)->W(200)->H(14)->Secondary()->IntoEl());
-    StorySectionAdd(sec, col);
-    page->Child(sec);
 
-    El* card = StorySection(a, "Card", "A typical loading card.");
-    El* row = Div(a)->FlexRow()->Gap(12)->W(360);
-    row->Child(component::Skeleton::New(a)->W(56)->H(56)->IntoEl());
+    El* text = StorySection(
+        a, "Text",
+        "Represents an avatar and text while profile content loads.");
+    El* textRow = Div(a)->FlexRow()->Gap(12)->W(360)->ItemsCenter();
+    textRow->Child(
+        component::Skeleton::New(a)->W(48)->H(48)->IntoEl()->Radius(24));
     El* lines = Div(a)->FlexCol()->Gap(8)->Grow();
-    lines->Child(component::Skeleton::New(a)->W(kFill)->H(14)->IntoEl());
-    lines->Child(
-        component::Skeleton::New(a)->W(180)->H(14)->Secondary()->IntoEl());
-    lines->Child(
-        component::Skeleton::New(a)->W(140)->H(14)->Secondary()->IntoEl());
-    row->Child(lines);
-    StorySectionAdd(card, row);
+    lines->Child(component::Skeleton::New(a)->W(kFill)->H(16)->IntoEl());
+    lines->Child(component::Skeleton::New(a)->W(200)->H(16)->IntoEl());
+    textRow->Child(lines);
+    StorySectionAdd(text, textRow);
+    page->Child(text);
+
+    El* card = StorySection(
+        a, "Card", "Combines media and text placeholders in a content card.");
+    El* cardCol = Div(a)->FlexCol()->Gap(8)->W(360);
+    cardCol->Child(component::Skeleton::New(a)->W(kFill)->H(180)->IntoEl());
+    cardCol->Child(component::Skeleton::New(a)->W(kFill)->H(16)->IntoEl());
+    cardCol->Child(component::Skeleton::New(a)->W(240)->H(16)->IntoEl());
+    StorySectionAdd(card, cardCol);
     page->Child(card);
     return page;
 }

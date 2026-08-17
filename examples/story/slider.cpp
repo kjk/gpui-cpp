@@ -18,6 +18,17 @@ El* SliderRender(StoryApp* app, Arena* a) {
                    ->IntoEl());
     StorySectionAdd(sec, col);
     page->Child(sec);
+
+    El* range = StorySection(a, "Range", nullptr);
+    El* rangeCol = Div(a)->FlexCol()->Gap(8)->W(280);
+    rangeCol->Child(component::Slider::New(a)->Value(0.25f)->IntoEl());
+    rangeCol->Child(component::Slider::New(a)->Value(0.75f)->IntoEl());
+    StorySectionAdd(range, rangeCol);
+    page->Child(range);
+
+    El* rev = StorySection(a, "Reverse", nullptr);
+    StorySectionAdd(rev, component::Slider::New(a)->Value(0.35f)->IntoEl());
+    page->Child(rev);
     return page;
 }
 

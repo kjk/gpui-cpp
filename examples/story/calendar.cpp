@@ -20,9 +20,42 @@ static void CalDay(StoryApp* app, int d) {
 
 El* CalendarRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec =
-        StorySection(a, "Default", "A calendar of days displayed in a grid.");
-    StorySectionAdd(sec, component::Calendar::New(a)
+    El* single = StorySection(a, "Single month", "Single-date selection.");
+    StorySectionAdd(single, component::Calendar::New(a)
+                                ->Year(app->calYear)
+                                ->Month(app->calMonth)
+                                ->Day(app->calDay)
+                                ->OnPrev(MkFunc0(&CalPrev, app))
+                                ->OnNext(MkFunc0(&CalNext, app))
+                                ->OnDay(MkFunc1(&CalDay, app))
+                                ->IntoEl());
+    page->Child(single);
+
+    El* multi =
+        StorySection(a, "Multiple months", "Three months shown together.");
+    El* months = Div(a)->FlexRow()->Gap(16)->Wrap();
+    for (int i = 0; i < 3; i++) {
+        int m = app->calMonth + i;
+        int y = app->calYear;
+        while (m > 12) {
+            m -= 12;
+            y++;
+        }
+        months->Child(component::Calendar::New(a)
+                          ->Year(y)
+                          ->Month(m)
+                          ->Day(i == 0 ? app->calDay : 0)
+                          ->OnPrev(MkFunc0(&CalPrev, app))
+                          ->OnNext(MkFunc0(&CalNext, app))
+                          ->OnDay(MkFunc1(&CalDay, app))
+                          ->IntoEl());
+    }
+    StorySectionAdd(multi, months);
+    page->Child(multi);
+
+    El* dis =
+        StorySection(a, "Disabled dates", "Recurring unavailable weekdays.");
+    StorySectionAdd(dis, component::Calendar::New(a)
                              ->Year(app->calYear)
                              ->Month(app->calMonth)
                              ->Day(app->calDay)
@@ -30,7 +63,7 @@ El* CalendarRender(StoryApp* app, Arena* a) {
                              ->OnNext(MkFunc0(&CalNext, app))
                              ->OnDay(MkFunc1(&CalDay, app))
                              ->IntoEl());
-    page->Child(sec);
+    page->Child(dis);
     return page;
 }
 

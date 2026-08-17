@@ -13,6 +13,16 @@ El* TableRender(StoryApp* app, Arena* a) {
         sec,
         component::Table::New(a)->Heads(heads, 3)->Rows(rows, 3)->IntoEl());
     page->Child(sec);
+
+    El* bordered = StorySection(a, "Bordered", nullptr);
+    StorySectionAdd(bordered, Div(a)
+                                  ->Border(1, ThemeNow().border)
+                                  ->Radius(ThemeNow().radius)
+                                  ->Child(component::Table::New(a)
+                                              ->Heads(heads, 3)
+                                              ->Rows(rows, 3)
+                                              ->IntoEl()));
+    page->Child(bordered);
     return page;
 }
 

@@ -7,6 +7,21 @@ El* OtpInputRender(StoryApp* app, Arena* a) {
     StorySectionAdd(sec, component::OtpInput::New(a, app->otpBuf, app->otpLen)
                              ->IntoEl());
     page->Child(sec);
+
+    El* group = StorySection(a, "Grouping", nullptr);
+    StorySectionAdd(group, component::OtpInput::New(a, app->otpBuf, app->otpLen)
+                               ->IntoEl());
+    page->Child(group);
+
+    El* csz = StorySection(a, "Custom size", nullptr);
+    StorySectionAdd(csz, component::OtpInput::New(a, app->otpBuf, app->otpLen)
+                             ->IntoEl());
+    page->Child(csz);
+
+    El* dis = StorySection(a, "Disabled", nullptr);
+    StorySectionAdd(dis, component::OtpInput::New(a, app->otpBuf, app->otpLen)
+                             ->IntoEl());
+    page->Child(dis);
     return page;
 }
 

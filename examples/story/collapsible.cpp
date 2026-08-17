@@ -1,49 +1,166 @@
 #include "Story.h"
 
 enum {
-    ClickCollTrigger = 2400
+    ClickColl0 = 2400
 };
+
+static void ToggleColl(StoryApp* app, int i) {
+    if (i >= 0 && i < 8) {
+        app->collOpen[i] = !app->collOpen[i];
+    }
+}
+
+static El* Chevron(Arena* a, bool open) {
+    return IconEl(a, open ? IconName::ChevronDown : IconName::ChevronRight, 14)
+        ->Fg(ThemeNow().mutedFg);
+}
 
 El* CollapsibleRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(
-        a, "Default",
-        "An interactive component which expands/collapses a panel.");
-    El* trigger =
-        Div(a)
-            ->FlexRow()
-            ->W(320)
-            ->H(32)
-            ->ItemsCenter()
-            ->JustifyBetween()
-            ->Click(ClickCollTrigger)
-            ->Child(StoryTxt(a, StrL("@longbridge/gpui-component"), 13,
-                             th.foreground))
-            ->Child(IconEl(a,
-                           app->collapsibleOpen ? IconName::ChevronDown
-                                                : IconName::ChevronRight,
-                           14)
-                        ->Fg(th.mutedFg));
-    El* body = Div(a)->Pad(8)->W(320)->Child(
+
+    El* basic = StorySection(
+        a, "Basic",
+        "A trigger beside the title, with a summary that stays visible.");
+    El* orderHead =
+        Div(a)->FlexRow()->W(360)->ItemsCenter()->JustifyBetween()->PadX(4);
+    orderHead->Child(StoryTxt(a, StrL("Order #4189"), 13, th.foreground)
+                         ->Semibold());
+    orderHead->Child(component::Button::New(a, StrL("order-toggle"))
+                         ->Ghost()
+                         ->Icon(IconName::ChevronDown)
+                         ->Tooltip(StrL("Toggle details"))
+                         ->IntoEl()
+                         ->Click(ClickColl0 + 0));
+    El* status = Div(a)
+                     ->FlexRow()
+                     ->W(360)
+                     ->PadX(12)
+                     ->PadY(8)
+                     ->JustifyBetween()
+                     ->ItemsCenter()
+                     ->Border(1, th.border)
+                     ->Radius(th.radius)
+                     ->Bg(RgbaOpacity(th.muted, 0.3f));
+    status->Child(StoryTxt(a, StrL("Status"), 13, th.mutedFg));
+    status->Child(component::Tag::New(a, StrL("Shipped"))
+                      ->Success()
+                      ->WithSize(UiSize::Small)
+                      ->IntoEl());
+    El* orderBody = Div(a)->FlexCol()->Gap(8)->W(360);
+    orderBody->Child(StoryTxt(a, StrL("Shipping address"), 13, th.foreground)
+                         ->Semibold());
+    orderBody->Child(
+        StoryTxt(a, StrL("100 Market St, San Francisco"), 13, th.mutedFg));
+    orderBody->Child(StoryTxt(a, StrL("Items"), 13, th.foreground)->Semibold());
+    orderBody->Child(StoryTxt(a, StrL("2x Studio Headphones"), 13, th.mutedFg));
+    StorySectionAdd(
+        basic, component::Collapsible::New(a)
+                   ->Open(app->collOpen[0])
+                   ->Trigger(Div(a)->FlexCol()->Gap(8)->Child(orderHead)->Child(
+                       status))
+                   ->Content(orderBody)
+                   ->IntoEl());
+    page->Child(basic);
+
+    El* row =
+        StorySection(a, "Row trigger",
+                     "The whole row is the trigger, as used by FAQ entries.");
+    El* faqTrig = Div(a)
+                      ->FlexRow()
+                      ->W(360)
+                      ->ItemsCenter()
+                      ->JustifyBetween()
+                      ->Click(ClickColl0 + 1)
+                      ->Child(StoryTxt(a, StrL("How do I reset my password?"),
+                                       13, th.foreground))
+                      ->Child(Chevron(a, app->collOpen[1]));
+    El* faqBody = Div(a)->PadT(12)->W(360)->Child(
         StoryTxt(a,
-                 StrL("A collection of UI components for building fantastic "
-                      "desktop applications."),
+                 StrL("Click the Forgot Password link on the sign in page, "
+                      "and we will send you an email with instructions to "
+                      "create a new one."),
                  13, th.mutedFg)
             ->Wrap()
-            ->MaxW(300));
-    StorySectionAdd(sec, component::Collapsible::New(a)
-                             ->Open(app->collapsibleOpen)
-                             ->Trigger(trigger)
-                             ->Content(body)
+            ->MaxW(340));
+    StorySectionAdd(row, component::Collapsible::New(a)
+                             ->Open(app->collOpen[1])
+                             ->Trigger(faqTrig)
+                             ->Content(faqBody)
                              ->IntoEl());
-    page->Child(sec);
+    page->Child(row);
+
+    El* settings = StorySection(
+        a, "Settings",
+        "Holds optional controls, keeping the default view short.");
+    El* setTrig = component::Button::New(a, StrL("settings"))
+                      ->Outline()
+                      ->Icon(app->collOpen[3] ? IconName::ChevronDown
+                                              : IconName::ChevronRight)
+                      ->Label(StrL("Notification settings"))
+                      ->IntoEl()
+                      ->W(360)
+                      ->Click(ClickColl0 + 3);
+    El* setBody =
+        Div(a)->FlexCol()->W(360)->Border(1, th.border)->Radius(th.radius);
+    const char* notes[] = {"Push notifications", "Email notifications",
+                           "SMS notifications"};
+    for (int i = 0; i < 3; i++) {
+        setBody->Child(Div(a)->PadX(12)->PadY(8)->Child(
+            component::Checkbox::New(a, StrDup(a, fmt("note-%d", i)))
+                ->Label(Str(notes[i]))
+                ->Checked(i == 0)
+                ->IntoEl()));
+    }
+    StorySectionAdd(settings, component::Collapsible::New(a)
+                                  ->Open(app->collOpen[3])
+                                  ->Trigger(setTrig)
+                                  ->Content(setBody)
+                                  ->IntoEl());
+    page->Child(settings);
+
+    El* profile = StorySection(
+        a, "Profile",
+        "Shows who someone is, and their details only on request.");
+    El* profTrig =
+        Div(a)->FlexRow()->W(360)->ItemsCenter()->JustifyBetween()->Click(
+            ClickColl0 + 7);
+    El* who = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    who->Child(component::Avatar::New(a)
+                   ->Initials(StrL("JL"))
+                   ->WithSize(UiSize::Small)
+                   ->IntoEl());
+    who->Child(StoryTxt(a, StrL("@huacnlee"), 13, th.foreground)->Semibold());
+    profTrig->Child(who)->Child(Chevron(a, app->collOpen[7]));
+    El* profBody = Div(a)->FlexCol()->Gap(8)->W(360);
+    struct Field {
+        IconName icon;
+        const char* label;
+        const char* value;
+    };
+    Field fields[] = {{IconName::Inbox, "Last activity", "2 hours ago"},
+                      {IconName::Calendar, "Online since", "Today, 9:00 AM"},
+                      {IconName::Search, "Location", "Hong Kong"}};
+    for (int i = 0; i < 3; i++) {
+        El* f = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+        f->Child(IconEl(a, fields[i].icon, 12)->Fg(th.mutedFg));
+        f->Child(StoryTxt(a, Str(fields[i].label), 12, th.mutedFg));
+        f->Child(StoryTxt(a, Str(fields[i].value), 12, th.foreground)
+                     ->Semibold());
+        profBody->Child(f);
+    }
+    StorySectionAdd(profile, component::Collapsible::New(a)
+                                 ->Open(app->collOpen[7])
+                                 ->Trigger(profTrig)
+                                 ->Content(profBody)
+                                 ->IntoEl());
+    page->Child(profile);
     return page;
 }
 
 void CollapsibleClick(StoryApp* app, int id) {
-    if (id == ClickCollTrigger) {
-        app->collapsibleOpen = !app->collapsibleOpen;
+    if (id >= ClickColl0 && id < ClickColl0 + 8) {
+        ToggleColl(app, id - ClickColl0);
     }
 }
 
