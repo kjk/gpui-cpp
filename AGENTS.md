@@ -2,12 +2,9 @@
 
 This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows only**. The north-star deliverable is the `system_monitor` example: a dark-theme desktop window with live CPU/memory area charts, a sortable process table, a custom title bar with segmented tabs, and a status bar.
 
-The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification.
+The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
-**Upstream pins** (see `port-upstream.md` for how to ingest later checkins):
-
-- **gpui-component** `da4f93696dc2b2b4d91bcc42412b9053a3d24de8` (2026-08-16, `gpui-base`/`gpui-component` 0.5.2) — this is the spec we port.
-- **zed gpui** `cc053a4a6fa2fd0e8793201ed9099466af1be0b1` (from that tree’s `Cargo.lock`) — reference for runtime behavior only, not a crate we port.
+**Upstream pins** — source of truth: [`cmd/versions.ts`](cmd/versions.ts) (`gpuiComponent`, `zedGpui`). How to ingest a later checkin: `port-upstream.md`.
 
 ## Goal
 
@@ -54,7 +51,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 3. **Windows + MSVC.** `cl.exe` is on PATH. Build with `bun cmd/build.ts`. Static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Do not add CMake, vcpkg, or extra third-party C++ libraries.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `str::Dup` / `str::Free` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
-6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
+6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
 
 ## What we are actually porting
 
@@ -183,9 +180,10 @@ Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan:
 
 After editing files on Windows, normalize line endings: `bun cmd/crlf-to-lf.ts`. `.gitattributes` forces `eol=lf`.
 
-The Rust reference (optional, slow first build because it pulls Zed):
+The Rust reference (optional, slow first build because it pulls Zed). `bun cmd/build.ts` / `bun cmd/versions.ts` installs `.work/gpui-component` at the SHA in `cmd/versions.ts`:
 
 ```
+bun cmd/versions.ts
 cd .work\gpui-component
 cargo run -p system_monitor
 ```
@@ -196,9 +194,10 @@ cargo run -p system_monitor
 AGENTS.md              this file
 port.md                phased porting plan
 port-progress.md       what is done / what is next
-port-upstream.md       pinned gpui-component + zed gpui SHAs for future diffs
-cmd/build.ts           MSVC compile/link via bun (system_monitor, app_assets, showcase, 12 examples, all)
-cmd/run.ts             build then run; same flags as build.ts plus -windbg
+port-upstream.md       how to ingest later checkins (pins live in cmd/versions.ts)
+cmd/versions.ts        exact gpui-component + zed gpui SHAs we are porting
+cmd/build.ts           MSVC compile/link via bun; also clones the pinned Rust spec
+cmd/run.ts             build then run; same flags as build.ts plus -windbg / -compare
 src/base/              vendored SumatraPDF subset
 src/gpui/              window, layout, paint, assets, SVG, element tree
 src/sys/               Windows system metrics

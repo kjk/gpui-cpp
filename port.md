@@ -20,7 +20,7 @@ An earlier STL-based sketch exists in `../gpui/`. Ignore it for implementation. 
 
 Workspace crates: `gpui-component` (`crates/ui`), `gpui-base`, `gpui-component-assets`, `gpui-component-macros`, `story`, `fps`, `webview`.
 
-Pinned GPUI from `zed-industries/zed` (`gpui`, `gpui_platform`, `gpui_macros`). That pull brings Taffy, Blade, font-kit, cosmic-text/rustybuzz, and a huge Windows crate surface. Exact SHAs: `port-upstream.md`.
+Pinned GPUI from `zed-industries/zed` (`gpui`, `gpui_platform`, `gpui_macros`). That pull brings Taffy, Blade, font-kit, cosmic-text/rustybuzz, and a huge Windows crate surface. Exact SHAs: [`cmd/versions.ts`](cmd/versions.ts).
 
 `system_monitor` extra crates: `sysinfo 0.37`, `battery 0.7`, `smol` (500 ms timer). The `windows` GPU features in its `Cargo.toml` are unused by the example source.
 

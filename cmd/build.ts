@@ -7,6 +7,7 @@
 
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { ensureRustTree } from "./versions.ts";
 
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);
@@ -382,6 +383,12 @@ function printFileSize(relPath: string) {
 
 const started = performance.now();
 const { target, debug, asan, clean } = parseArgs(Bun.argv.slice(2));
+try {
+    ensureRustTree(root);
+} catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exit(1);
+}
 const outDir = join("out", outDirName(debug, asan));
 if (clean) {
     const abs = join(root, outDir);

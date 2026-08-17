@@ -9,7 +9,7 @@ Original project:
 
 This tree reimplements the component examples and a small Win32 + Direct2D + DirectWrite runtime. It is not a binding to the Rust crates and does not use Taffy, Blade, or Zed’s entity system.
 
-The Rust sources used as the spec live in a gitignored clone at `.work/gpui-component/`. Pinned checkins are in [port-upstream.md](port-upstream.md).
+The Rust sources used as the spec live in a gitignored clone at `.work/gpui-component/`. Exact checkins we are porting are in [`cmd/versions.ts`](cmd/versions.ts); `bun cmd/build.ts` installs that tree. Ingest playbook: [port-upstream.md](port-upstream.md).
 
 ## Build
 

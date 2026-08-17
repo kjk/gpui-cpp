@@ -85,9 +85,10 @@ out\rel\story.exe Alert
 
 `all` builds `system_monitor`, `app_assets`, `showcase`, and every name in `simpleExamples` in `cmd/build.ts`.
 
-Rust reference (slow first build; pulls Zed GPUI):
+Rust reference (slow first build; pulls Zed GPUI). Pins: [`cmd/versions.ts`](cmd/versions.ts). `bun cmd/build.ts` clones `.work/gpui-component` at that SHA if missing.
 
 ```
+bun cmd/versions.ts
 cd .work\gpui-component
 cargo run -p system_monitor
 ```
@@ -114,3 +115,4 @@ cargo run -p system_monitor
 - 2026-08-17: Closed remaining showcase content diffs (calendar weekday, resizable divider, tree chevrons, thumbs, shrink-wrapped buttons, click coverage).
 - 2026-08-17: Ported `crates/story` as `bun cmd/build.ts story`. Sidebar gallery plus one commit per story (62 pages).
 - 2026-08-17: Recorded upstream pins in `port-upstream.md`: gpui-component `da4f93696dc2`, zed gpui `cc053a4a6fa2`.
+- 2026-08-17: Moved pins to `cmd/versions.ts` (source of truth). `build.ts` / `run.ts` clone `.work/gpui-component` at that SHA.

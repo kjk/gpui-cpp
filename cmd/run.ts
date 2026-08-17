@@ -17,6 +17,7 @@ import {
     waitForNewClassWindow,
     waitForPidWindow,
 } from "./winapi.ts";
+import { ensureRustTree, rustTreeDir } from "./versions.ts";
 
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);
@@ -47,6 +48,7 @@ const usage = `Usage: bun cmd/run.ts [-rel|-dbg] [-asan] [-clean] [-windbg] [-co
   -clean    delete out/<dir>/ before building
   -windbg   run the C++ exe under windbgx.exe (-G, ignore first-chance C++ EH)
   -compare  also cargo-build and launch the Rust example from .work/gpui-component
+            (cloned at the SHA in cmd/versions.ts if missing)
             rust on the left half of the screen, ours on the right
 
 Builds with cmd/build.ts, then launches out/<dir>/<target>.exe and exits.
@@ -314,7 +316,7 @@ async function placeLaunched(proc: ReturnType<typeof Bun.spawn>, side: "left" | 
 }
 
 function rustDir(): string {
-    return join(root, ".work", "gpui-component");
+    return rustTreeDir(root);
 }
 
 function findCargo(): string | null {
@@ -402,9 +404,11 @@ function cppCmd(): { cmd: string[]; cwd: string } {
 
 let rustExe: string | null = null;
 if (compare) {
-    const rustRoot = rustDir();
-    if (!existsSync(join(rustRoot, "Cargo.toml"))) {
-        die("Rust tree not found at .work/gpui-component. Clone https://github.com/longbridge/gpui-component there.");
+    let rustRoot: string;
+    try {
+        rustRoot = ensureRustTree(root);
+    } catch (e) {
+        die(e instanceof Error ? e.message : String(e));
     }
     const cargo = findCargo();
     if (!cargo) {

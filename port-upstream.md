@@ -1,19 +1,20 @@
 # Upstream pins
 
-Baseline for porting **future** `gpui-component` changes. Diff Rust from these SHAs, not `HEAD`.
+**Source of truth for which checkin we are porting: [`cmd/versions.ts`](cmd/versions.ts)** (`gpuiComponent.sha`, `zedGpui.sha`). `bun cmd/build.ts`, `bun cmd/run.ts`, and `bun cmd/versions.ts` clone or reset `.work/gpui-component` to that SHA.
 
-When bumping a pin: `git fetch` in `.work/gpui-component`, `git log OLD..NEW` on the crates we ported, apply the C++ equivalent, then update this file.
+This file is the ingest playbook. Diff Rust from the SHA in `cmd/versions.ts`, not `HEAD`.
+
+When bumping a pin: change `gpuiComponent.sha` (and `zedGpui` if `Cargo.lock` moved) in `cmd/versions.ts`, run `bun cmd/versions.ts`, `git log OLD..NEW` on the crates we ported, apply the C++ equivalent.
 
 ## gpui-component (what we port)
 
+See `gpuiComponent` in `cmd/versions.ts` for repo, SHA, date, subject, and crate versions.
+
 | | |
 | --- | --- |
-| Repo | https://github.com/longbridge/gpui-component |
-| Local clone | `.work/gpui-component/` (gitignored) |
-| Commit | `da4f93696dc2b2b4d91bcc42412b9053a3d24de8` |
-| Date | 2026-08-16 |
-| Subject | docs: Fix EditorState::new() API usage in editor documentation (#2739) |
-| Crate versions | `gpui-base` 0.5.2, `gpui-component` 0.5.2 |
+| Repo | `gpuiComponent.repo` |
+| Local clone | `gpuiComponent.dir` (gitignored) |
+| Commit | `gpuiComponent.sha` |
 
 Trees we actually translate:
 
@@ -26,25 +27,18 @@ Trees we actually translate:
 Ingest a newer checkin:
 
 ```
+bun cmd/versions.ts
 cd .work/gpui-component
 git fetch origin
-git log --oneline da4f93696dc2..origin/main -- crates/base crates/ui crates/story crates/base/examples/showcase examples
-git diff da4f93696dc2b2b4d91bcc42412b9053a3d24de8 origin/main -- <path>
+git log --oneline <gpuiComponent.sha>..origin/main -- crates/base crates/ui crates/story crates/base/examples/showcase examples
+git diff <gpuiComponent.sha> origin/main -- <path>
 ```
 
 ## Zed GPUI (reference only — not a crate we port)
 
-`Cargo.lock` pins GPUI from Zed. Read that snapshot when matching runtime behavior (text measure cache, DirectWrite shaping, window). Do **not** treat later Zed `main` as the spec.
+`Cargo.lock` pins GPUI from Zed. Fields live in `zedGpui` in `cmd/versions.ts`. Read that snapshot when matching runtime behavior (text measure cache, DirectWrite shaping, window). Do **not** treat later Zed `main` as the spec.
 
-| | |
-| --- | --- |
-| Repo | https://github.com/zed-industries/zed |
-| Commit | `cc053a4a6fa2fd0e8793201ed9099466af1be0b1` |
-| Date | 2026-08-07 |
-| Subject | gpui: Expose accessibility identifiers to platform clients (#61926) |
-| Crates | `gpui` 0.2.2, `gpui_platform`, `gpui_macros` |
-| Lock line | `git+https://github.com/zed-industries/zed#cc053a4a6fa2fd0e8793201ed9099466af1be0b1` |
-| Local checkout | `%USERPROFILE%\.cargo\git\checkouts\zed-a70e2ad075855582\cc053a4\` |
+Local cargo checkout (after a rust build): `%USERPROFILE%\.cargo\git\checkouts\zed-*\<zedGpui.sha prefix>\`
 
 We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Taffy, Blade, entity/observer, cosmic-text, font-kit.
 

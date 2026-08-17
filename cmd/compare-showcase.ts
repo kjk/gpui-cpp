@@ -24,6 +24,7 @@ import {
     sleep,
     waitForPidWindow,
 } from "./winapi.ts";
+import { ensureRustTree, rustTreeDir } from "./versions.ts";
 
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);
@@ -122,7 +123,7 @@ function parseArgs(argv: string[]): { debug: boolean; keep: boolean; nobuild: bo
 }
 
 function rustDir(): string {
-    return join(root, ".work", "gpui-component");
+    return rustTreeDir(root);
 }
 
 function rustExe(debug: boolean): string {
@@ -198,9 +199,11 @@ async function closePair(p: Pair) {
 const { debug, keep, nobuild, pages } = parseArgs(Bun.argv.slice(2));
 setProcessDpiAware();
 
-const rustRoot = rustDir();
-if (!existsSync(join(rustRoot, "Cargo.toml"))) {
-    die("Rust tree not found at .work/gpui-component");
+let rustRoot: string;
+try {
+    rustRoot = ensureRustTree(root);
+} catch (e) {
+    die(e instanceof Error ? e.message : String(e));
 }
 
 if (!nobuild) {
