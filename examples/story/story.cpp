@@ -461,6 +461,7 @@ static El* Header(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
+        ->W(kFill)
         ->Pad(16)
         ->FlexCol()
         ->Gap(4)

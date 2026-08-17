@@ -5,7 +5,7 @@ static El* MdTxt(Arena* a, Str s, float px, Rgba c) {
 }
 
 static El* Shield(Arena* a, const char* left, const char* right, Rgba rightBg) {
-    Rgba leftBg = Rgb(0x4b, 0x55, 0x63);
+    Rgba leftBg = Rgb(0x55, 0x55, 0x55);
     El* row = Div(a)->FlexRow()->H(20)->Radius(3);
     row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(leftBg)->Child(
         MdTxt(a, Str(left), 11, Rgb(0xff, 0xff, 0xff))));
@@ -96,7 +96,10 @@ static El* Body(Arena* a, const char* s) {
 
 static El* LinkBody(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return MdTxt(a, StoryDup(a, s), kMd, th.blue)->Wrap()->W(kFill)->PadB(16);
+    return MdTxt(a, StoryDup(a, s), kMd, th.primary)
+        ->Wrap()
+        ->W(kFill)
+        ->PadB(16);
 }
 
 static El* H2(Arena* a, const char* s) {
@@ -144,17 +147,20 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     hero->Child(MdTxt(a, StrL("GPUI Component"), kMd, th.foreground)->Bold());
     col->Child(hero);
 
-    El* langs = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    langs->Child(MdTxt(a, StrL("English"), kMd, th.foreground));
-    langs->Child(MdTxt(a, StrL("|"), kMd, th.mutedFg));
+    // TextView links use theme.link, which falls back to theme.primary.
+    El* langs = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
+    langs->Child(MdTxt(a, StrL("English"), kMd, th.primary)
+                     ->BorderB(1, th.primary));
+    langs->Child(MdTxt(a, StrL("|"), kMd, th.foreground));
     langs->Child(MdTxt(a,
                        StrL("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"),
-                       kMd, th.blue)
-                     ->BorderB(1, th.blue));
+                       kMd, th.primary)
+                     ->BorderB(1, th.primary));
     col->Child(langs->PadB(16));
 
     El* badges = Div(a)->FlexRow()->Gap(6)->ItemsCenter();
-    badges->Child(Shield(a, "CI", "failing", Rgb(0xe0, 0x5d, 0x44)));
+    // The CI badge SVG never loads in the Rust app; it leaves a 20px hole.
+    badges->Child(Div(a)->W(19)->H(20)->Shrink0());
     badges->Child(Shield(a, "docs", "passing", Rgb(0x44, 0xcc, 0x11)));
     badges->Child(Shield(a, "crates.io", "v0.5.1", Rgb(0xfe, 0x7d, 0x37)));
     col->Child(badges->PadB(16));
@@ -165,7 +171,8 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
               StrL("UI components for building fantastic desktop applications "
                    "using "),
               kMd, th.foreground));
-    blurb->Child(MdTxt(a, StrL("GPUI"), kMd, th.blue)->BorderB(1, th.blue));
+    blurb->Child(MdTxt(a, StrL("GPUI"), kMd, th.primary)
+                     ->BorderB(1, th.primary));
     blurb->Child(MdTxt(a, StrL("."), kMd, th.foreground));
     col->Child(blurb);
 
