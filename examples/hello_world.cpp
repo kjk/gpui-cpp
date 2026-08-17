@@ -2,38 +2,32 @@
 
 using namespace gpui;
 
-static void OnInit(AppHost* host) {
-    (void)host;
-    ThemeSet(ThemeMode::Light);
-}
-
-static void OnClick(AppHost* host, int id) {
-    (void)host;
-    if (id == 1) {
-        log("Clicked!");
+// examples/hello_world/src/main.rs — a stateless view with a click listener.
+struct Example {
+    static void OnGo(Example*, Ctx*, const ClickEvent*) {
+        log(StrL("Clicked!"));
     }
-}
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    (void)host;
-    (void)size;
-    const Theme& th = ThemeNow();
-    return Div(frame)
-        ->FlexCol()
-        ->SizeFull()
-        ->Gap(8)
-        ->ItemsCenter()
-        ->JustifyCenter()
-        ->Bg(th.background)
-        ->Child(
-            TextEl(frame, StrL("Hello, World!"))->Font(16)->Fg(th.foreground))
-        ->Child(ButtonEl(frame, 1, StrL("Let's Go!"), BtnKind::Primary));
-}
+    static El* Render(Example*, Ctx* cx) {
+        const Theme& th = ThemeNow();
+        return Div(cx->a)
+            ->FlexCol()
+            ->SizeFull()
+            ->Gap(8)
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Bg(th.background)
+            ->Child(TextEl(cx->a, StrL("Hello, World!"))
+                        ->Font(16)
+                        ->Fg(th.foreground))
+            ->Child(ButtonEl(cx->a, 0, StrL("Let's Go!"), BtnKind::Primary)
+                        ->OnClick(Listen(cx, &Example::OnGo)));
+    }
+};
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    return RunApp(L"Hello World", 800, 600, hooks, nullptr);
+    App* app = AppNew();
+    ThemeSet(ThemeMode::Light);
+    return AppRunView(L"Hello World", 800, 600, EntityNew<Example>(app).id, app,
+                      AppWinOpts{});
 }

@@ -117,14 +117,13 @@ void Notify(Ctx* cx) {
     NotifyApp(cx->app);
 }
 
-void ListenerCall(App* app, Window* win, const Listener& l,
-                  const ClickEvent* ev) {
+void ListenerCall(App* app, Window* win, const Listener& l, const void* ev) {
     if (!l.fn) {
         return;
     }
     void* self = EntityGet(app, l.view);
     if (!self) {
-        // The view went away between paint and click; GPUI drops it too.
+        // The view went away between paint and dispatch; GPUI drops it too.
         return;
     }
     Ctx cx;
@@ -132,8 +131,35 @@ void ListenerCall(App* app, Window* win, const Listener& l,
     cx.win = win;
     cx.a = win ? win->frameArena : nullptr;
     cx.self = l.view;
-    ClickEvent empty = {};
-    l.fn(self, &cx, ev ? ev : &empty);
+    l.fn(self, &cx, ev);
+}
+
+void WindowOnKey(Window* win, Listener l) {
+    if (win) {
+        win->onKey = l;
+    }
+}
+
+void WindowOnWheel(Window* win, Listener l) {
+    if (win) {
+        win->onWheel = l;
+    }
+}
+
+void WindowSetInterval(Window* win, int ms, Listener l) {
+    if (!win) {
+        return;
+    }
+    win->onTick = l;
+    win->tickMs = ms;
+    if (!win->hwnd) {
+        return;
+    }
+    if (ms > 0) {
+        SetTimer(win->hwnd, 1, (UINT)ms, nullptr);
+    } else {
+        KillTimer(win->hwnd, 1);
+    }
 }
 
 void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop) {

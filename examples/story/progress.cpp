@@ -43,9 +43,8 @@ El* ProgressRender(StoryApp* app, Arena* a) {
     El* circText = Div(a)->FlexCol()->Gap(4);
     circText->Child(StoryTxt(a, StrL("Analyzing project"), 14, th.foreground)
                         ->Semibold());
-    circText->Child(
-        StoryTxt(a, StrL("Scanning components and dependencies."), 13,
-                 th.mutedFg));
+    circText->Child(StoryTxt(a, StrL("Scanning components and dependencies."),
+                             13, th.mutedFg));
     circBox->Child(circText);
     StorySectionAdd(circ, circBox);
     page->Child(circ);

@@ -161,9 +161,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
     switch (msg) {
         case WM_CREATE: {
-            if (host->winOpts.anim || host->hooks.onTick) {
+            if (host->winOpts.anim || host->hooks.onTick || host->tickMs > 0) {
                 int ms =
                     host->winOpts.timerMs > 0 ? host->winOpts.timerMs : kTickMs;
+                if (host->tickMs > 0) {
+                    ms = host->tickMs;
+                }
                 if (host->winOpts.anim) {
                     ms = 16;
                 }
@@ -185,6 +188,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
             }
+            if (host->onKey.IsValid()) {
+                KeyEvent ev = {(int)wParam, 0, true};
+                ListenerCall(host->app, host, host->onKey, &ev);
+            }
             if (host->hooks.onKey) {
                 host->hooks.onKey(host, (int)wParam, true);
             }
@@ -197,6 +204,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_CHAR: {
+            if (host->onKey.IsValid() && wParam >= 32) {
+                KeyEvent ev = {0, (uint32_t)wParam, true};
+                ListenerCall(host->app, host, host->onKey, &ev);
+            }
             if (host->hooks.onChar && wParam >= 32) {
                 host->hooks.onChar(host, (uint32_t)wParam);
             }
@@ -270,10 +281,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_TIMER:
+            if (host->onTick.IsValid()) {
+                TickEvent ev = {host->tickMs};
+                ListenerCall(host->app, host, host->onTick, &ev);
+            }
             if (host->hooks.onTick) {
                 host->hooks.onTick(host);
             }
-            if (host->anim || host->hooks.onTick) {
+            if (host->anim || host->hooks.onTick || host->onTick.IsValid()) {
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -374,6 +389,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             float y = PxToDip(&host->paint, pt.y);
             float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) /
                           (float)WHEEL_DELTA * 48.f;
+            if (host->onWheel.IsValid()) {
+                WheelEvent ev = {x, y, delta};
+                ListenerCall(host->app, host, host->onWheel, &ev);
+            }
             if (host->hooks.onWheel) {
                 host->hooks.onWheel(host, x, y, delta);
             }

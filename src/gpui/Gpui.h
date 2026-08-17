@@ -149,9 +149,26 @@ struct ClickEvent {
     int button = 1;
 };
 
+struct KeyEvent {
+    int vk = 0;
+    uint32_t ch = 0; // WM_CHAR codepoint, 0 for key down/up
+    bool down = false;
+};
+
+struct WheelEvent {
+    float x = 0;
+    float y = 0;
+    float delta = 0;
+};
+
+// Fired by the window timer; GPUI does this with cx.spawn + Timer::after.
+struct TickEvent {
+    int ms = 0;
+};
+
 // cx.listener(...): a handler plus the entity it runs against. Dispatch looks
 // the entity up and drops the event if the handle went stale.
-using ListenerFn = void (*)(void* self, Ctx* cx, const ClickEvent* ev);
+using ListenerFn = void (*)(void* self, Ctx* cx, const void* ev);
 
 struct Listener {
     ListenerFn fn = nullptr;
@@ -596,6 +613,11 @@ struct Window {
     Vec<FocusRect> focusEls;
     Vec<KeyedSlot> keyed;
     AppWinOpts winOpts = {};
+    // Window-level subscriptions bound to view entities.
+    Listener onKey = {};
+    Listener onWheel = {};
+    Listener onTick = {};
+    int tickMs = 0;
 
     Window() = default;
 };
@@ -656,8 +678,9 @@ Entity<T> EntityNewState(App* app) {
 }
 
 // cx.listener(|this, ev, window, cx| ...). The cast mirrors MkFunc0/MkFunc1.
-template <typename T>
-Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const ClickEvent*)) {
+// E is whichever event struct the handler takes: ClickEvent, KeyEvent, ...
+template <typename T, typename E>
+Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
     l.fn = (ListenerFn)fn;
     l.view = cx->self;
@@ -665,8 +688,8 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const ClickEvent*)) {
 }
 
 // Same, but bound to another entity instead of the one that is rendering.
-template <typename T>
-Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const ClickEvent*)) {
+template <typename T, typename E>
+Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
     l.fn = (ListenerFn)fn;
     l.view = e.id;
@@ -677,8 +700,7 @@ Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const ClickEvent*)) {
 // a repaint of every window. GPUI tracks which views observe the entity.
 void Notify(Ctx* cx);
 void NotifyApp(App* app);
-void ListenerCall(App* app, Window* win, const Listener& l,
-                  const ClickEvent* ev);
+void ListenerCall(App* app, Window* win, const Listener& l, const void* ev);
 
 // Render an entity into `a`, building the Ctx for it.
 El* EntityRender(App* app, Window* win, Arena* a, EntityId id);
@@ -693,11 +715,25 @@ T* KeyedState(Ctx* cx, uint32_t key) {
     return (T*)p;
 }
 
+// Window-level subscriptions. GPUI spells these window.on_key_down and
+// cx.spawn + Timer::after; here each one is a Listener bound to a view.
+void WindowOnKey(Window* win, Listener l);
+void WindowOnWheel(Window* win, Listener l);
+// Repeating timer. ms <= 0 stops it. GPUI's system_monitor does the same with
+// a spawned task that sleeps and calls cx.notify().
+void WindowSetInterval(Window* win, int ms, Listener l);
+
 // Open a window whose root is a view entity, the WindowOpen + cx.new pair.
 Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
                        EntityId root, AppWinOpts opts);
 int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
                App* app, AppWinOpts opts);
+
+// The view a window renders, typed.
+template <typename T>
+T* WindowRoot(Window* win) {
+    return win ? (T*)EntityGet(win->app, win->root) : nullptr;
+}
 
 App* AppNew();
 void AppFree(App* app);
