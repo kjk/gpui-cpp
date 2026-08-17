@@ -1,0 +1,129 @@
+// Format this repo's C++ (clang-format) and TypeScript (prettier).
+//
+//   bun cmd/format.ts                  # all src/**/*.{cpp,h} and cmd/*.ts
+//   bun cmd/format.ts src/gpui/Gpui.cpp cmd/build.ts
+
+import { $, Glob } from "bun";
+import { existsSync } from "node:fs";
+import { cpus } from "node:os";
+import { dirname, extname, join, resolve } from "node:path";
+
+const root = resolve(dirname(Bun.main), "..");
+process.chdir(root);
+
+const cppExt = new Set([".cpp", ".h", ".c", ".hpp"]);
+const tsExt = new Set([".ts", ".js", ".json", ".md"]);
+
+const cppGlobs = [
+  "src/*.cpp",
+  "src/*.h",
+  "src/gpui/*.{cpp,h}",
+  "src/ui/*.{cpp,h}",
+  "src/component/*.{cpp,h}",
+  "src/sys/*.{cpp,h}",
+  "src/examples/*.cpp",
+  "src/examples/showcase/*.{cpp,h}",
+  "src/examples/story/*.{cpp,h}",
+];
+
+const tsGlobs = ["cmd/*.ts"];
+
+async function globFiles(patterns: string[]): Promise<string[]> {
+  const files: string[] = [];
+  for (const pattern of patterns) {
+    const glob = new Glob(pattern);
+    for await (const file of glob.scan({ cwd: root, dot: false })) {
+      files.push(file.replaceAll("\\", "/"));
+    }
+  }
+  return files;
+}
+
+function ensureLf(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function findClangFormat(): string {
+  const rels = [String.raw`VC\Tools\Llvm\bin\clang-format.exe`, String.raw`VC\Tools\Llvm\x64\bin\clang-format.exe`];
+  const editions = ["Community", "Professional", "Enterprise"];
+  const programFiles = process.env["ProgramFiles"] ?? String.raw`C:\Program Files`;
+  for (const ver of ["2022", "18"]) {
+    for (const edition of editions) {
+      const vsRoot = join(programFiles, "Microsoft Visual Studio", ver, edition);
+      for (const rel of rels) {
+        const p = join(vsRoot, rel);
+        if (existsSync(p)) {
+          return p;
+        }
+      }
+    }
+  }
+  return "clang-format.exe";
+}
+
+async function formatCpp(clangFormatPath: string, path: string): Promise<void> {
+  await $`${clangFormatPath} -i -style=file ${path}`.quiet();
+  const text = await Bun.file(path).text();
+  const lf = ensureLf(text);
+  if (lf !== text) {
+    await Bun.write(path, lf);
+  }
+}
+
+async function formatTs(paths: string[]): Promise<void> {
+  if (paths.length === 0) {
+    return;
+  }
+  const r = Bun.spawnSync(["bunx", "prettier", "--write", ...paths], {
+    cwd: root,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  if ((r.exitCode ?? 1) !== 0) {
+    throw new Error("prettier failed");
+  }
+}
+
+async function mapPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let i = 0;
+  async function next(): Promise<void> {
+    while (i < items.length) {
+      const idx = i++;
+      await fn(items[idx]!);
+    }
+  }
+  const n = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: n }, () => next()));
+}
+
+const argv = Bun.argv.slice(2);
+let cppFiles: string[];
+let tsFiles: string[];
+if (argv.length > 0) {
+  cppFiles = [];
+  tsFiles = [];
+  for (const raw of argv) {
+    const ext = extname(raw).toLowerCase();
+    const norm = raw.replaceAll("\\", "/");
+    if (cppExt.has(ext)) {
+      cppFiles.push(norm);
+    } else if (tsExt.has(ext)) {
+      tsFiles.push(norm);
+    } else {
+      console.error(`skip (unknown type): ${raw}`);
+    }
+  }
+} else {
+  cppFiles = await globFiles(cppGlobs);
+  tsFiles = await globFiles(tsGlobs);
+}
+
+const clangFormatPath = findClangFormat();
+console.log(`using '${clangFormatPath}'`);
+await mapPool(cppFiles, cpus().length, (p) => formatCpp(clangFormatPath, p));
+console.log(`formatted ${cppFiles.length} C++ files`);
+
+if (tsFiles.length > 0) {
+  await formatTs(tsFiles);
+  console.log(`formatted ${tsFiles.length} TS/JSON/MD files`);
+}
