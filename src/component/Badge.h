@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 enum class BadgeKind : u8 {
@@ -35,3 +37,4 @@ struct Badge {
 };
 
 } // namespace component
+} // namespace gpui

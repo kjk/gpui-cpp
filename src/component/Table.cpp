@@ -1,9 +1,11 @@
 #include "component/Table.h"
 
+namespace gpui {
+
 namespace component {
 
 Table* Table::New(Arena* a) {
-    Table* t = ::New<Table>(a);
+    Table* t = ArenaNew<Table>(a);
     t->a = a;
     return t;
 }
@@ -20,7 +22,7 @@ Table* Table::Rows(const char*** r, int n) {
 
 El* Table::IntoEl() {
     const Theme& th = ThemeNow();
-    El* t = ::Table::New(a, StrL("table"))->FlexCol()->Border(1, th.border);
+    El* t = gpui::Table::New(a, StrL("table"))->FlexCol()->Border(1, th.border);
     El* head =
         TableHeader::New(a, StrL("th"))
             ->Child(TableRow::New(a, StrL("hr"))->FlexRow()->Bg(th.muted));
@@ -52,3 +54,4 @@ El* Table::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

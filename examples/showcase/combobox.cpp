@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     ClickCombo = 320,
     ClickComboQ = 321,

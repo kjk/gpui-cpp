@@ -1,9 +1,11 @@
 #include "component/Icon.h"
 
+namespace gpui {
+
 namespace component {
 
 Icon* Icon::New(Arena* a, IconName name) {
-    Icon* i = ::New<Icon>(a);
+    Icon* i = ArenaNew<Icon>(a);
     i->a = a;
     i->name = name;
     return i;
@@ -27,3 +29,4 @@ El* Icon::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

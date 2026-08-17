@@ -5,6 +5,8 @@
 
 // ─── color / theme ────────────────────────────────────────────────────────
 
+namespace gpui {
+
 Rgba RgbaOpacity(Rgba c, float a01) {
     if (a01 < 0) {
         a01 = 0;
@@ -148,7 +150,7 @@ const Theme& ThemeNow() {
 // ─── element builders ─────────────────────────────────────────────────────
 
 static El* NewEl(Arena* a, ElKind k) {
-    El* e = New<El>(a);
+    El* e = ArenaNew<El>(a);
     e->kind = k;
     return e;
 }
@@ -2315,3 +2317,4 @@ int FocusNext(AppHost* host, int trapId, bool backward) {
     }
     return host->focusId;
 }
+} // namespace gpui

@@ -1,9 +1,11 @@
 #include "component/StatusBar.h"
 
+namespace gpui {
+
 namespace component {
 
 StatusBar* StatusBar::New(Arena* a) {
-    StatusBar* s = ::New<StatusBar>(a);
+    StatusBar* s = ArenaNew<StatusBar>(a);
     s->a = a;
     return s;
 }
@@ -31,3 +33,4 @@ El* StatusBar::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

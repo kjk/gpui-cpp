@@ -1,8 +1,10 @@
 #include "ui/Popup.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 Popup* Popup::New(Arena* a, Str id, El* trigger) {
-    Popup* p = ::New<Popup>(a);
+    Popup* p = ArenaNew<Popup>(a);
     // Root sizes to the trigger only. Content is an overlay (Rust Positioner).
     p->root = UiRoot(a, id, 0);
     if (trigger) {
@@ -27,3 +29,4 @@ Popup* Popup::Content(El* content) {
 El* Popup::IntoEl() {
     return root;
 }
+} // namespace gpui

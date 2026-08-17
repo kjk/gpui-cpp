@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Pagination {
@@ -18,3 +20,4 @@ struct Pagination {
 };
 
 } // namespace component
+} // namespace gpui

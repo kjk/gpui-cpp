@@ -4,6 +4,8 @@
 
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     StoryWelcome = 0,
     StoryAccordion,

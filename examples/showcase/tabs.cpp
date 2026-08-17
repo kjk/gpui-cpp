@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     ClickTab0 = 520,
     ClickTab1 = 521,

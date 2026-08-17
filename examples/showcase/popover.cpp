@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     ClickPopover = 440,
     ClickPopoverDone = 441

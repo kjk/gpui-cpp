@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Input {
@@ -55,3 +57,4 @@ struct OtpInput {
 };
 
 } // namespace component
+} // namespace gpui

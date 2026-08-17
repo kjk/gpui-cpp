@@ -5,6 +5,8 @@
 #include "gpui/Gpui.h"
 #include "ui/Ui.h"
 
+namespace gpui {
+
 enum class UiSize : u8 {
     XSmall,
     Small,
@@ -50,3 +52,4 @@ inline El* BindClick(El* e, Str id, Func0 onClick) {
 }
 
 } // namespace component
+} // namespace gpui

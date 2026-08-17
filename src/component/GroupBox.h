@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct GroupBox {
@@ -17,3 +19,4 @@ struct GroupBox {
 };
 
 } // namespace component
+} // namespace gpui

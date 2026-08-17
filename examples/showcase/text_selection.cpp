@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     ClickSelClear = 530,
     ClickPara = 531

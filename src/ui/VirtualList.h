@@ -4,6 +4,9 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct VirtualList {
     static El* New(Arena* a, Str id);
 };
+} // namespace gpui

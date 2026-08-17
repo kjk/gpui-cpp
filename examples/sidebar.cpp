@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 enum CollapseMode : int {
     CollIcon = 0,
     CollOffcanvas = 1,

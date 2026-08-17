@@ -1,10 +1,12 @@
 #include "component/DatePicker.h"
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 DatePicker* DatePicker::New(Arena* a) {
-    DatePicker* d = ::New<DatePicker>(a);
+    DatePicker* d = ArenaNew<DatePicker>(a);
     d->a = a;
     return d;
 }
@@ -50,9 +52,10 @@ El* DatePicker::IntoEl() {
                   ->OnDay(onDay)
                   ->IntoEl();
     }
-    return ::DatePicker::New(a, StrL("date-picker"))
+    return gpui::DatePicker::New(a, StrL("date-picker"))
         ->Child(
             Popup::New(a, StrL("date-pop"), trigger)->Content(cal)->IntoEl());
 }
 
 } // namespace component
+} // namespace gpui

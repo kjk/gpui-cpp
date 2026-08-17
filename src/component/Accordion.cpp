@@ -1,6 +1,8 @@
 #include "component/Accordion.h"
 #include "component/Tag.h"
 
+namespace gpui {
+
 namespace component {
 
 struct AccBind {
@@ -13,7 +15,7 @@ static void FireAcc(AccBind* b) {
 }
 
 Accordion* Accordion::New(Arena* a, Str id) {
-    Accordion* acc = ::New<Accordion>(a);
+    Accordion* acc = ArenaNew<Accordion>(a);
     acc->a = a;
     acc->id = id;
     return acc;
@@ -64,7 +66,7 @@ Accordion* Accordion::OnToggle(Func1<int> fn) {
 
 El* Accordion::IntoEl() {
     const Theme& th = ThemeNow();
-    El* root = ::Accordion::New(a, id)->FlexCol()->W(kFill);
+    El* root = gpui::Accordion::New(a, id)->FlexCol()->W(kFill);
     if (bordered) {
         root->BorderT(1, th.border);
     }
@@ -114,15 +116,16 @@ El* Accordion::IntoEl() {
                            14)
                         ->Fg(th.mutedFg));
         if (onToggle.IsValid() && !disabled) {
-            AccBind* b = ::New<AccBind>(a);
+            AccBind* b = ArenaNew<AccBind>(a);
             b->fn = onToggle;
             b->index = i;
             trig->OnClick(MkFunc0(&FireAcc, b));
         }
-        ::AccordionItem* it = ::AccordionItem::New(a)
-                                  ->Open(items[i].open)
-                                  ->Header(::AccordionHeader::New(a, trig));
-        El* panel = ::AccordionPanel::New(a);
+        gpui::AccordionItem* it =
+            gpui::AccordionItem::New(a)
+                ->Open(items[i].open)
+                ->Header(gpui::AccordionHeader::New(a, trig));
+        El* panel = gpui::AccordionPanel::New(a);
         if (items[i].settings) {
             panel->PadL(52)->PadR(8)->PadT(0)->PadB(12);
         } else {
@@ -136,3 +139,4 @@ El* Accordion::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

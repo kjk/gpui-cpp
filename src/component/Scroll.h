@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Scrollable {
@@ -20,3 +22,4 @@ struct Scrollable {
 };
 
 } // namespace component
+} // namespace gpui

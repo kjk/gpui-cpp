@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Progress {
@@ -31,3 +33,4 @@ struct ProgressCircle {
 };
 
 } // namespace component
+} // namespace gpui

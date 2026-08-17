@@ -2,6 +2,8 @@
 
 #include "gpui.h"
 
+using namespace gpui;
+
 static void LogToFile(Str s) {
     static HANDLE h = INVALID_HANDLE_VALUE;
     if (h == INVALID_HANDLE_VALUE) {
@@ -20,7 +22,7 @@ static void LogToFile(Str s) {
     }
 }
 
-void log(Str s) {
+void gpui::log(Str s) {
     if (s.s && s.len > 0) {
         OutputDebugStringA(s.s);
         if (s.s[s.len - 1] != '\n') {

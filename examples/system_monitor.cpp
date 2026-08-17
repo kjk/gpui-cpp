@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 static const int kMaxHist = 120;
 static const int kKeepProcs = 200;
 
@@ -244,7 +246,7 @@ static Str SortMark(ProcessSort field, ProcessSort cur, bool desc) {
     return desc ? StrL(" ↓") : StrL(" ↑");
 }
 
-static El* TableHeader(Arena* a, MonitorApp* app) {
+static El* ProcTableHeader(Arena* a, MonitorApp* app) {
     const Theme& th = ThemeDark();
     const char* names[4] = {"PID", "Name", "CPU %", "Memory"};
     ProcessSort fields[4] = {ProcessSort::Pid, ProcessSort::Name,
@@ -275,7 +277,7 @@ static Rgba CpuColor(const Theme& th, float cpu) {
     return th.blue;
 }
 
-static El* TableRow(Arena* a, const ProcessInfo* p, int ix) {
+static El* ProcTableRow(Arena* a, const ProcessInfo* p, int ix) {
     const Theme& th = ThemeDark();
     El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter();
     if (ix % 2 == 1) {
@@ -312,7 +314,7 @@ static El* ProcessesTab(Arena* a, MonitorApp* app) {
         last = n;
     }
     for (int i = first; i < last; i++) {
-        body->Child(TableRow(a, &app->sys.procs[i], i));
+        body->Child(ProcTableRow(a, &app->sys.procs[i], i));
     }
     if (last < n) {
         body->Child(Div(a)->H((float)(n - last) * 28.f)->Shrink0());
@@ -321,7 +323,7 @@ static El* ProcessesTab(Arena* a, MonitorApp* app) {
     return Div(a)
         ->FlexCol()
         ->SizeFull()
-        ->Child(TableHeader(a, app))
+        ->Child(ProcTableHeader(a, app))
         ->Child(body);
 }
 

@@ -1,9 +1,11 @@
 #include "component/Badge.h"
 
+namespace gpui {
+
 namespace component {
 
 Badge* Badge::New(Arena* a) {
-    Badge* b = ::New<Badge>(a);
+    Badge* b = ArenaNew<Badge>(a);
     b->a = a;
     return b;
 }
@@ -89,3 +91,4 @@ El* Badge::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

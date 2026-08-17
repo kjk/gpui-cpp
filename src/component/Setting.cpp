@@ -1,9 +1,11 @@
 #include "component/Setting.h"
 
+namespace gpui {
+
 namespace component {
 
 Setting* Setting::New(Arena* a, Str title) {
-    Setting* s = ::New<Setting>(a);
+    Setting* s = ArenaNew<Setting>(a);
     s->a = a;
     s->title = title;
     return s;
@@ -34,3 +36,4 @@ El* Setting::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

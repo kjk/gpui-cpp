@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Stepper {
@@ -21,3 +23,4 @@ struct Stepper {
 };
 
 } // namespace component
+} // namespace gpui

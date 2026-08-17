@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     ClickRadioStd = 460,
     ClickRadioExpress = 461

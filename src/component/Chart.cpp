@@ -1,9 +1,11 @@
 #include "component/Chart.h"
 
+namespace gpui {
+
 namespace component {
 
 AreaChart* AreaChart::New(Arena* a, const float* ys, int n) {
-    AreaChart* c = ::New<AreaChart>(a);
+    AreaChart* c = ArenaNew<AreaChart>(a);
     c->a = a;
     c->ys = ys;
     c->n = n;
@@ -25,3 +27,4 @@ El* AreaChart::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

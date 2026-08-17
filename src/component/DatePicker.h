@@ -4,6 +4,8 @@
 
 #include "component/Calendar.h"
 
+namespace gpui {
+
 namespace component {
 
 struct DatePicker {
@@ -26,3 +28,4 @@ struct DatePicker {
 };
 
 } // namespace component
+} // namespace gpui

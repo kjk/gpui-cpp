@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Popup {
     El* root = nullptr;
 
@@ -11,3 +13,4 @@ struct Popup {
     Popup* Content(El* content);
     El* IntoEl();
 };
+} // namespace gpui

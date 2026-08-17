@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Dialog {
@@ -26,3 +28,4 @@ struct Dialog {
 };
 
 } // namespace component
+} // namespace gpui

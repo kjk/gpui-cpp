@@ -1,6 +1,8 @@
 #include "ui/Accordion.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 El* Accordion::New(Arena* a, Str id) {
     return UiRoot(a, id, 0);
 }
@@ -18,7 +20,7 @@ El* AccordionPanel::New(Arena* a) {
 }
 
 AccordionItem* AccordionItem::New(Arena* a) {
-    AccordionItem* item = ::New<AccordionItem>(a);
+    AccordionItem* item = ArenaNew<AccordionItem>(a);
     item->root = Div(a)->FlexCol();
     return item;
 }
@@ -43,3 +45,4 @@ AccordionItem* AccordionItem::Panel(El* panel) {
 El* AccordionItem::IntoEl() {
     return root;
 }
+} // namespace gpui

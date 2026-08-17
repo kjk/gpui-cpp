@@ -1,10 +1,12 @@
 #include "component/Dialog.h"
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 Dialog* Dialog::New(Arena* a) {
-    Dialog* d = ::New<Dialog>(a);
+    Dialog* d = ArenaNew<Dialog>(a);
     d->a = a;
     return d;
 }
@@ -85,7 +87,8 @@ El* Dialog::IntoEl(WinSize size) {
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Child(panel);
-    return ::Dialog::New(a)->Backdrop(backdrop)->Popup(popup)->IntoEl();
+    return gpui::Dialog::New(a)->Backdrop(backdrop)->Popup(popup)->IntoEl();
 }
 
 } // namespace component
+} // namespace gpui

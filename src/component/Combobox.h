@@ -4,6 +4,8 @@
 
 #include "component/Select.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Combobox {
@@ -28,3 +30,4 @@ struct Combobox {
 };
 
 } // namespace component
+} // namespace gpui

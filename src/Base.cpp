@@ -6,6 +6,9 @@
 #include <cctype>
 #include <climits>
 #include <cstdarg>
+#include <locale.h>
+
+namespace gpui {
 
 template <typename T, size_t N>
 char (&DimofSizeHelper(T (&array)[N]))[N];
@@ -1317,8 +1320,6 @@ TempStr FormatTempArgs(const char* fmt, const FmtArg** args, int nArgs) {
     return FormatArgs(GetTempArena(), fmt, args, nArgs);
 }
 
-#include <locale.h>
-
 #if defined(_MSC_VER)
 static _locale_t GetUtf8FormatLocale() {
     // wrapped in a struct so the locale is freed at exit (keeps leak
@@ -1349,3 +1350,4 @@ static int VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
 #endif
     return vsnprintf(buf.s, (size_t)buf.len, fmt, args);
 }
+} // namespace gpui

@@ -1,6 +1,8 @@
 #include "component/Clipboard.h"
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 struct ClipBind {
@@ -12,7 +14,7 @@ static void FireClip(ClipBind* b) {
 }
 
 Clipboard* Clipboard::New(Arena* a, Str value) {
-    Clipboard* c = ::New<Clipboard>(a);
+    Clipboard* c = ArenaNew<Clipboard>(a);
     c->a = a;
     c->value = value;
     return c;
@@ -29,7 +31,7 @@ El* Clipboard::IntoEl() {
                       ->Ghost()
                       ->Tooltip(StrL("Copy"));
     if (onCopy.IsValid()) {
-        ClipBind* b = ::New<ClipBind>(a);
+        ClipBind* b = ArenaNew<ClipBind>(a);
         b->fn = onCopy;
         b->value = value;
         btn->OnClick(MkFunc0(&FireClip, b));
@@ -43,3 +45,4 @@ El* Clipboard::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

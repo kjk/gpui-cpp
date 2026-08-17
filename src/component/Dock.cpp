@@ -1,9 +1,11 @@
 #include "component/Dock.h"
 
+namespace gpui {
+
 namespace component {
 
 Dock* Dock::New(Arena* a) {
-    Dock* d = ::New<Dock>(a);
+    Dock* d = ArenaNew<Dock>(a);
     d->a = a;
     return d;
 }
@@ -35,3 +37,4 @@ El* Dock::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

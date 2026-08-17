@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 enum class NotificationKind : u8 {
@@ -27,3 +29,4 @@ struct Notification {
 };
 
 } // namespace component
+} // namespace gpui

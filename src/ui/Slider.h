@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Slider {
     static El* New(Arena* a, int clickId = 0);
 };
@@ -16,3 +18,4 @@ struct SliderIndicator {
 struct SliderThumb {
     static El* New(Arena* a);
 };
+} // namespace gpui

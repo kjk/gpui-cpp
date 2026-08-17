@@ -5,6 +5,8 @@
 
 #include "component/Chart.h"
 
+namespace gpui {
+
 namespace component {
 
 struct PlotScale {
@@ -14,3 +16,4 @@ struct PlotScale {
 };
 
 } // namespace component
+} // namespace gpui

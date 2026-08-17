@@ -1,9 +1,11 @@
 #include "component/WindowBorder.h"
 
+namespace gpui {
+
 namespace component {
 
 WindowBorder* WindowBorder::New(Arena* a) {
-    WindowBorder* w = ::New<WindowBorder>(a);
+    WindowBorder* w = ArenaNew<WindowBorder>(a);
     w->a = a;
     return w;
 }
@@ -21,3 +23,4 @@ El* WindowBorder::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

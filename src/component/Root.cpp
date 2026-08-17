@@ -1,9 +1,11 @@
 #include "component/Root.h"
 
+namespace gpui {
+
 namespace component {
 
 Root* Root::New(Arena* a) {
-    Root* r = ::New<Root>(a);
+    Root* r = ArenaNew<Root>(a);
     r->a = a;
     return r;
 }
@@ -29,3 +31,4 @@ El* Root::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

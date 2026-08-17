@@ -1,9 +1,11 @@
 #include "component/Text.h"
 
+namespace gpui {
+
 namespace component {
 
 TextView* TextView::New(Arena* a, Str source) {
-    TextView* t = ::New<TextView>(a);
+    TextView* t = ArenaNew<TextView>(a);
     t->a = a;
     t->source = source;
     return t;
@@ -48,3 +50,4 @@ El* TextView::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

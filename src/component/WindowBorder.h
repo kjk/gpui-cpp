@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct WindowBorder {
@@ -16,3 +18,4 @@ struct WindowBorder {
 };
 
 } // namespace component
+} // namespace gpui

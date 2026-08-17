@@ -1,5 +1,7 @@
 #include "component/Tree.h"
 
+namespace gpui {
+
 namespace component {
 
 struct TreeBind {
@@ -11,7 +13,7 @@ static void FireTree(TreeBind* b) {
 }
 
 Tree* Tree::New(Arena* a) {
-    Tree* t = ::New<Tree>(a);
+    Tree* t = ArenaNew<Tree>(a);
     t->a = a;
     return t;
 }
@@ -85,14 +87,14 @@ El* Tree::IntoEl() {
         }
         row->Child(TextEl(a, nodes[i].label)->Font(13)->Fg(th.foreground));
         if (onSelect.IsValid()) {
-            TreeBind* b = ::New<TreeBind>(a);
+            TreeBind* b = ArenaNew<TreeBind>(a);
             b->fn = onSelect;
             b->index = i;
             row->OnClick(MkFunc0(&FireTree, b));
         }
         list->Child(row);
     }
-    return ::Tree::New(a)
+    return gpui::Tree::New(a)
         ->W(256)
         ->H(192)
         ->Border(1, th.border)
@@ -101,3 +103,4 @@ El* Tree::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

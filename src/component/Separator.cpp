@@ -1,16 +1,18 @@
 #include "component/Separator.h"
 
+namespace gpui {
+
 namespace component {
 
 Separator* Separator::Vertical(Arena* a) {
-    Separator* s = ::New<Separator>(a);
+    Separator* s = ArenaNew<Separator>(a);
     s->a = a;
     s->vertical = true;
     return s;
 }
 
 Separator* Separator::Horizontal(Arena* a) {
-    Separator* s = ::New<Separator>(a);
+    Separator* s = ArenaNew<Separator>(a);
     s->a = a;
     return s;
 }
@@ -61,3 +63,4 @@ El* Separator::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

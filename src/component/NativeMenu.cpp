@@ -1,5 +1,7 @@
 #include "component/NativeMenu.h"
 
+namespace gpui {
+
 namespace component {
 
 El* NativeMenu::New(Arena* a, Menu* menu) {
@@ -7,3 +9,4 @@ El* NativeMenu::New(Arena* a, Menu* menu) {
 }
 
 } // namespace component
+} // namespace gpui

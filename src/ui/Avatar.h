@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Avatar {
     El* root = nullptr;
     El* fallback = nullptr;
@@ -17,3 +19,4 @@ struct Avatar {
 struct AvatarFallback {
     static El* New(Arena* a);
 };
+} // namespace gpui

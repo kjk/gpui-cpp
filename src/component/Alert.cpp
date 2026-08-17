@@ -1,9 +1,11 @@
 #include "component/Alert.h"
 
+namespace gpui {
+
 namespace component {
 
 Alert* Alert::New(Arena* a, Str id, Str message) {
-    Alert* al = ::New<Alert>(a);
+    Alert* al = ArenaNew<Alert>(a);
     al->a = a;
     al->id = id;
     al->message = message;
@@ -114,3 +116,4 @@ El* Alert::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

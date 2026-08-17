@@ -1,9 +1,11 @@
 #include "component/Skeleton.h"
 
+namespace gpui {
+
 namespace component {
 
 Skeleton* Skeleton::New(Arena* a) {
-    Skeleton* s = ::New<Skeleton>(a);
+    Skeleton* s = ArenaNew<Skeleton>(a);
     s->a = a;
     return s;
 }
@@ -33,3 +35,4 @@ El* Skeleton::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

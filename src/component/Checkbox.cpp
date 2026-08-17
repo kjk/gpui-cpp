@@ -1,5 +1,7 @@
 #include "component/Checkbox.h"
 
+namespace gpui {
+
 namespace component {
 
 struct CheckBind {
@@ -12,7 +14,7 @@ static void FireCheck(CheckBind* b) {
 }
 
 Checkbox* Checkbox::New(Arena* a, Str id) {
-    Checkbox* c = ::New<Checkbox>(a);
+    Checkbox* c = ArenaNew<Checkbox>(a);
     c->a = a;
     c->id = id;
     return c;
@@ -58,12 +60,12 @@ El* Checkbox::IntoEl() {
         ind->Bg(th.primary)
             ->Child(IconEl(a, IconName::Check, box - 4)->Fg(th.primaryFg));
     }
-    El* row = ::Checkbox::New(a, id, disabled ? 0 : HashClickId(id))
+    El* row = gpui::Checkbox::New(a, id, disabled ? 0 : HashClickId(id))
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);
     if (onClick.IsValid() && !disabled) {
-        CheckBind* b = ::New<CheckBind>(a);
+        CheckBind* b = ArenaNew<CheckBind>(a);
         b->fn = onClick;
         b->next = !checked;
         row->OnClick(MkFunc0(&FireCheck, b));
@@ -81,3 +83,4 @@ El* Checkbox::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

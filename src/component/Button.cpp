@@ -1,9 +1,11 @@
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 Button* Button::New(Arena* a, Str id) {
-    Button* b = ::New<Button>(a);
+    Button* b = ArenaNew<Button>(a);
     b->a = a;
     b->id = id;
     return b;
@@ -146,7 +148,7 @@ El* Button::IntoEl() {
         padX = 0;
         h = 0;
     }
-    El* e = ::Button::New(a, id, disabled ? 0 : HashClickId(id))
+    El* e = gpui::Button::New(a, id, disabled ? 0 : HashClickId(id))
                 ->H(h > 0 ? h : kAuto)
                 ->PadX(padX)
                 ->ItemsCenter()
@@ -180,3 +182,4 @@ El* Button::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

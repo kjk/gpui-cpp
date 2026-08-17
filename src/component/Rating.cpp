@@ -1,5 +1,7 @@
 #include "component/Rating.h"
 
+namespace gpui {
+
 namespace component {
 
 struct RateBind {
@@ -11,7 +13,7 @@ static void FireRate(RateBind* b) {
 }
 
 Rating* Rating::New(Arena* a) {
-    Rating* r = ::New<Rating>(a);
+    Rating* r = ArenaNew<Rating>(a);
     r->a = a;
     return r;
 }
@@ -38,7 +40,7 @@ El* Rating::IntoEl() {
             TextEl(a, StrL("★"))->Font(18)->Fg(on ? th.warning : th.border);
         El* hit = Div(a)->Child(star);
         if (onChange.IsValid()) {
-            RateBind* b = ::New<RateBind>(a);
+            RateBind* b = ArenaNew<RateBind>(a);
             b->fn = onChange;
             b->value = i;
             BindClick(hit, StrDup(a, fmt("star-%d", i)), MkFunc0(&FireRate, b));
@@ -49,3 +51,4 @@ El* Rating::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

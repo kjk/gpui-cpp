@@ -1,9 +1,11 @@
 #include "component/Kbd.h"
 
+namespace gpui {
+
 namespace component {
 
 Kbd* Kbd::New(Arena* a, Str stroke) {
-    Kbd* k = ::New<Kbd>(a);
+    Kbd* k = ArenaNew<Kbd>(a);
     k->a = a;
     k->stroke = stroke;
     return k;
@@ -35,3 +37,4 @@ El* Kbd::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

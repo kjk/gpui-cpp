@@ -1,9 +1,11 @@
 #include "component/Label.h"
 
+namespace gpui {
+
 namespace component {
 
 Label* Label::New(Arena* a, Str text) {
-    Label* l = ::New<Label>(a);
+    Label* l = ArenaNew<Label>(a);
     l->a = a;
     l->text = text;
     return l;
@@ -44,3 +46,4 @@ El* Label::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

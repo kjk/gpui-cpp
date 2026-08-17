@@ -1,9 +1,11 @@
 #include "component/Popover.h"
 
+namespace gpui {
+
 namespace component {
 
 Popover* Popover::New(Arena* a) {
-    Popover* p = ::New<Popover>(a);
+    Popover* p = ArenaNew<Popover>(a);
     p->a = a;
     return p;
 }
@@ -21,10 +23,11 @@ Popover* Popover::Open(bool v) {
 }
 
 El* Popover::IntoEl() {
-    return ::Popover::New(a, StrL("popover"))
+    return gpui::Popover::New(a, StrL("popover"))
         ->Trigger(trigger)
         ->Content(open ? content : nullptr)
         ->IntoEl();
 }
 
 } // namespace component
+} // namespace gpui

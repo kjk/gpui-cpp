@@ -2,6 +2,8 @@
 
 #include "Base.h"
 
+namespace gpui {
+
 static const int kMaxRoots = 12;
 static char gRoots[kMaxRoots][MAX_PATH];
 static int gRootN = 0;
@@ -193,3 +195,4 @@ bool AssetsExists(Str relPath) {
     Vec<u8> buf;
     return AssetsLoad(relPath, &buf);
 }
+} // namespace gpui

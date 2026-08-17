@@ -1,5 +1,7 @@
 #include "component/Menu.h"
 
+namespace gpui {
+
 namespace component {
 
 struct MenuBind {
@@ -11,7 +13,7 @@ static void FireMenu(MenuBind* b) {
 }
 
 Menu* Menu::New(Arena* a) {
-    Menu* m = ::New<Menu>(a);
+    Menu* m = ArenaNew<Menu>(a);
     m->a = a;
     return m;
 }
@@ -39,7 +41,7 @@ El* Menu::IntoEl() {
             Div(a)->H(28)->PadX(10)->ItemsCenter()->HoverBg(th.muted)->Child(
                 TextEl(a, items[i])->Font(13)->Fg(th.foreground));
         if (onClick.IsValid()) {
-            MenuBind* b = ::New<MenuBind>(a);
+            MenuBind* b = ArenaNew<MenuBind>(a);
             b->fn = onClick;
             b->index = i;
             BindClick(row, items[i], MkFunc0(&FireMenu, b));
@@ -50,3 +52,4 @@ El* Menu::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

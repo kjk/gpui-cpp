@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct TreeNode {
@@ -28,3 +30,4 @@ struct Tree {
 };
 
 } // namespace component
+} // namespace gpui

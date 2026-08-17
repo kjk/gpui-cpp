@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Avatar {
@@ -20,3 +22,4 @@ struct Avatar {
 };
 
 } // namespace component
+} // namespace gpui

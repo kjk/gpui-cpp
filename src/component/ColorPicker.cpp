@@ -1,5 +1,7 @@
 #include "component/ColorPicker.h"
 
+namespace gpui {
+
 namespace component {
 
 struct ColBind {
@@ -11,7 +13,7 @@ static void FireCol(ColBind* b) {
 }
 
 ColorPicker* ColorPicker::New(Arena* a) {
-    ColorPicker* c = ::New<ColorPicker>(a);
+    ColorPicker* c = ArenaNew<ColorPicker>(a);
     c->a = a;
     return c;
 }
@@ -66,7 +68,7 @@ El* ColorPicker::IntoEl() {
                            ->H(24)
                            ->Bg(sc);
             if (onChange.IsValid()) {
-                ColBind* b = ::New<ColBind>(a);
+                ColBind* b = ArenaNew<ColBind>(a);
                 b->fn = onChange;
                 b->hex = sw[i];
                 BindClick(cell, StrDup(a, fmt("sw%d", i)),
@@ -75,8 +77,9 @@ El* ColorPicker::IntoEl() {
             pop->Child(cell);
         }
     }
-    El* root = ::ColorPicker::New(a, StrL("color-picker"))->Child(trigger);
+    El* root = gpui::ColorPicker::New(a, StrL("color-picker"))->Child(trigger);
     return Popup::New(a, StrL("color-pop"), root)->Content(pop)->IntoEl();
 }
 
 } // namespace component
+} // namespace gpui

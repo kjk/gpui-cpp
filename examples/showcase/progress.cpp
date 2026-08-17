@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 El* ShowcaseProgress(ShowcaseApp* app, Arena* a) {
     (void)app;
     return Div(a)

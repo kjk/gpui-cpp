@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Rating {
@@ -20,3 +22,4 @@ struct Rating {
 };
 
 } // namespace component
+} // namespace gpui

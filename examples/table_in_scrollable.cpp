@@ -5,6 +5,8 @@
 
 #include "gpui.h"
 
+using namespace gpui;
+
 static const int kRows = 30;
 static const float kRowH = 28;
 static const float kHeadH = 28;

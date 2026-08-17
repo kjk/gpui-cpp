@@ -1,5 +1,7 @@
 #include "component/Sidebar.h"
 
+namespace gpui {
+
 namespace component {
 
 struct SideBind {
@@ -11,7 +13,7 @@ static void FireSide(SideBind* b) {
 }
 
 Sidebar* Sidebar::New(Arena* a) {
-    Sidebar* s = ::New<Sidebar>(a);
+    Sidebar* s = ArenaNew<Sidebar>(a);
     s->a = a;
     return s;
 }
@@ -60,7 +62,7 @@ El* Sidebar::IntoEl() {
                        ->Font(13)
                        ->Fg(th.sidebarFg));
         if (onSelect.IsValid()) {
-            SideBind* b = ::New<SideBind>(a);
+            SideBind* b = ArenaNew<SideBind>(a);
             b->fn = onSelect;
             b->index = i;
             BindClick(row, items[i], MkFunc0(&FireSide, b));
@@ -71,3 +73,4 @@ El* Sidebar::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

@@ -1,9 +1,11 @@
 #include "component/TitleBar.h"
 
+namespace gpui {
+
 namespace component {
 
 TitleBar* TitleBar::New(Arena* a, Str title) {
-    TitleBar* t = ::New<TitleBar>(a);
+    TitleBar* t = ArenaNew<TitleBar>(a);
     t->a = a;
     t->title = title;
     return t;
@@ -31,3 +33,4 @@ El* TitleBar::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

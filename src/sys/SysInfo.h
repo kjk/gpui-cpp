@@ -2,6 +2,8 @@
 
 #include "Base.h"
 
+namespace gpui {
+
 struct ProcessInfo {
     u32 pid = 0;
     char name[260] = {};
@@ -67,3 +69,4 @@ void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
 
 TempStr FormatBytes(u64 bytes);
 TempStr FormatPct(float v, int decimals);
+} // namespace gpui

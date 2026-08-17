@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct DialogBackdrop {
     static El* New(Arena* a);
 };
@@ -28,3 +30,4 @@ struct Dialog {
     Dialog* Popup(El* popup);
     El* IntoEl();
 };
+} // namespace gpui

@@ -1,5 +1,7 @@
 #include "component/Select.h"
 
+namespace gpui {
+
 namespace component {
 
 struct SelBind {
@@ -11,7 +13,7 @@ static void FireSel(SelBind* b) {
 }
 
 Select* Select::New(Arena* a, Str id) {
-    Select* s = ::New<Select>(a);
+    Select* s = ArenaNew<Select>(a);
     s->a = a;
     s->id = id;
     return s;
@@ -68,7 +70,7 @@ El* Select::IntoEl() {
             El* row = Div(a)->PadX(8)->PadY(4)->HoverBg(th.muted)->Child(
                 TextEl(a, options[i])->Font(13)->Fg(th.foreground));
             if (onChange.IsValid()) {
-                SelBind* b = ::New<SelBind>(a);
+                SelBind* b = ArenaNew<SelBind>(a);
                 b->fn = onChange;
                 b->index = i;
                 BindClick(row, options[i], MkFunc0(&FireSel, b));
@@ -76,8 +78,9 @@ El* Select::IntoEl() {
             opts->Child(row);
         }
     }
-    El* root = ::Select::New(a, id)->W(224)->Child(trigger);
+    El* root = gpui::Select::New(a, id)->W(224)->Child(trigger);
     return Popup::New(a, StrL("select-popup"), root)->Content(opts)->IntoEl();
 }
 
 } // namespace component
+} // namespace gpui

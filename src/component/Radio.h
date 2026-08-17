@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Radio {
@@ -23,3 +25,4 @@ struct Radio {
 };
 
 } // namespace component
+} // namespace gpui

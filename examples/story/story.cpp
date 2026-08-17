@@ -1,6 +1,8 @@
 #include "Story.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 #include <stdarg.h>
 #include <stdio.h>
 

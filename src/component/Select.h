@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Select {
@@ -26,3 +28,4 @@ struct Select {
 };
 
 } // namespace component
+} // namespace gpui

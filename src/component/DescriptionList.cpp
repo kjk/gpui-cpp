@@ -1,9 +1,11 @@
 #include "component/DescriptionList.h"
 
+namespace gpui {
+
 namespace component {
 
 DescriptionList* DescriptionList::New(Arena* a) {
-    DescriptionList* d = ::New<DescriptionList>(a);
+    DescriptionList* d = ArenaNew<DescriptionList>(a);
     d->a = a;
     return d;
 }
@@ -32,3 +34,4 @@ El* DescriptionList::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

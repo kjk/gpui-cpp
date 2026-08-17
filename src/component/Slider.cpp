@@ -1,9 +1,11 @@
 #include "component/Slider.h"
 
+namespace gpui {
+
 namespace component {
 
 Slider* Slider::New(Arena* a) {
-    Slider* s = ::New<Slider>(a);
+    Slider* s = ArenaNew<Slider>(a);
     s->a = a;
     return s;
 }
@@ -45,10 +47,11 @@ El* Slider::IntoEl() {
                      ->Radius(7)
                      ->Bg(th.background)
                      ->Border(1, th.primary));
-    return ::Slider::New(a, HashClickId(StrL("slider")))
+    return gpui::Slider::New(a, HashClickId(StrL("slider")))
         ->W(w)
         ->H(28)
         ->Child(track);
 }
 
 } // namespace component
+} // namespace gpui

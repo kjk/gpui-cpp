@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 enum class AlertVariant : u8 {
@@ -41,3 +43,4 @@ struct Alert {
 };
 
 } // namespace component
+} // namespace gpui

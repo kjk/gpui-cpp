@@ -1,5 +1,7 @@
 #include "component/List.h"
 
+namespace gpui {
+
 namespace component {
 
 struct ListBind {
@@ -11,7 +13,7 @@ static void FireList(ListBind* b) {
 }
 
 List* List::New(Arena* a) {
-    List* l = ::New<List>(a);
+    List* l = ArenaNew<List>(a);
     l->a = a;
     return l;
 }
@@ -40,7 +42,7 @@ El* List::IntoEl() {
         }
         row->Child(TextEl(a, items[i])->Font(13)->Fg(th.foreground));
         if (onSelect.IsValid()) {
-            ListBind* b = ::New<ListBind>(a);
+            ListBind* b = ArenaNew<ListBind>(a);
             b->fn = onSelect;
             b->index = i;
             BindClick(row, items[i], MkFunc0(&FireList, b));
@@ -51,3 +53,4 @@ El* List::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

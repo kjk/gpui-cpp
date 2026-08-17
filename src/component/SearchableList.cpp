@@ -1,10 +1,12 @@
 #include "component/SearchableList.h"
 #include "component/Input.h"
 
+namespace gpui {
+
 namespace component {
 
 SearchableList* SearchableList::New(Arena* a, LineInput* query) {
-    SearchableList* s = ::New<SearchableList>(a);
+    SearchableList* s = ArenaNew<SearchableList>(a);
     s->a = a;
     s->query = query;
     return s;
@@ -38,3 +40,4 @@ El* SearchableList::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

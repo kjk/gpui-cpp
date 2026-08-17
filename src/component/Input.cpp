@@ -1,10 +1,12 @@
 #include "component/Input.h"
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 Input* Input::New(Arena* a, Str id, LineInput* state) {
-    Input* i = ::New<Input>(a);
+    Input* i = ArenaNew<Input>(a);
     i->a = a;
     i->id = id;
     i->state = state;
@@ -31,7 +33,7 @@ El* Input::IntoEl() {
             ->PadX(8)
             ->ItemsCenter()
             ->Border(1, state && state->focused ? th.foreground : th.border)
-            ->Child(::Input::New(a, state));
+            ->Child(gpui::Input::New(a, state));
     if (onChange.IsValid()) {
         field->OnClick(onChange);
     }
@@ -40,7 +42,7 @@ El* Input::IntoEl() {
 }
 
 Textarea* Textarea::New(Arena* a, Str id, const char* text) {
-    Textarea* t = ::New<Textarea>(a);
+    Textarea* t = ArenaNew<Textarea>(a);
     t->a = a;
     t->id = id;
     t->text = text;
@@ -57,7 +59,7 @@ El* Textarea::IntoEl() {
                   ->Pad(8)
                   ->ClipY()
                   ->Border(1, th.border)
-                  ->Child(::Textarea::New(a, text));
+                  ->Child(gpui::Textarea::New(a, text));
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);
     }
@@ -65,7 +67,7 @@ El* Textarea::IntoEl() {
 }
 
 NumberInput* NumberInput::New(Arena* a, LineInput* state) {
-    NumberInput* n = ::New<NumberInput>(a);
+    NumberInput* n = ArenaNew<NumberInput>(a);
     n->a = a;
     n->state = state;
     return n;
@@ -79,7 +81,7 @@ NumberInput* NumberInput::OnDec(Func0 fn) {
     return this;
 }
 El* NumberInput::IntoEl() {
-    return ::NumberInput::New(a)
+    return gpui::NumberInput::New(a)
         ->FlexRow()
         ->H(28)
         ->Border(1, ThemeNow().border)
@@ -87,7 +89,7 @@ El* NumberInput::IntoEl() {
                     ->Grow()
                     ->PadX(8)
                     ->ItemsCenter()
-                    ->Child(::Input::New(a, state)))
+                    ->Child(gpui::Input::New(a, state)))
         ->Child(Button::New(a, StrL("inc"))
                     ->Label(StrL("+"))
                     ->Compact()
@@ -101,7 +103,7 @@ El* NumberInput::IntoEl() {
 }
 
 OtpInput* OtpInput::New(Arena* a, const char* value, int len) {
-    OtpInput* o = ::New<OtpInput>(a);
+    OtpInput* o = ArenaNew<OtpInput>(a);
     o->a = a;
     o->value = value;
     o->len = len;
@@ -113,7 +115,8 @@ OtpInput* OtpInput::OnFocus(Func0 fn) {
 }
 El* OtpInput::IntoEl() {
     const Theme& th = ThemeNow();
-    El* row = ::OtpInput::New(a, HashClickId(StrL("otp")))->FlexRow()->Gap(4);
+    El* row =
+        gpui::OtpInput::New(a, HashClickId(StrL("otp")))->FlexRow()->Gap(4);
     if (onFocus.IsValid()) {
         row->OnClick(onFocus);
     }
@@ -136,3 +139,4 @@ El* OtpInput::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

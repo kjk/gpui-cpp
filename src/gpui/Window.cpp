@@ -2,6 +2,8 @@
 
 #include <ole2.h>
 
+namespace gpui {
+
 static const wchar_t* kWndClass = L"Gpui2SystemMonitor";
 static const UINT kTickMs = 500;
 
@@ -580,3 +582,4 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
     CoUninitialize();
     return (int)msg.wParam;
 }
+} // namespace gpui

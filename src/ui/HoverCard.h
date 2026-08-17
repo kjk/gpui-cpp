@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct HoverCard {
     El* root = nullptr;
 
@@ -12,3 +14,4 @@ struct HoverCard {
     HoverCard* Content(El* content);
     El* IntoEl();
 };
+} // namespace gpui

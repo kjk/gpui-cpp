@@ -1,9 +1,11 @@
 #include "component/Avatar.h"
 
+namespace gpui {
+
 namespace component {
 
 Avatar* Avatar::New(Arena* a) {
-    Avatar* v = ::New<Avatar>(a);
+    Avatar* v = ArenaNew<Avatar>(a);
     v->a = a;
     v->bg = ThemeNow().muted;
     return v;
@@ -32,7 +34,7 @@ El* Avatar::IntoEl() {
             ->JustifyCenter()
             ->Bg(bg)
             ->Child(TextEl(a, initials)->Font(size * 0.35f)->Fg(th.foreground));
-    return ::Avatar::New(a)
+    return gpui::Avatar::New(a)
         ->Size(size)
         ->Fallback(fb)
         ->IntoEl()
@@ -42,3 +44,4 @@ El* Avatar::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

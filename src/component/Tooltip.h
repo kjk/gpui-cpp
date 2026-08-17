@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Tooltip {
@@ -15,3 +17,4 @@ struct Tooltip {
 };
 
 } // namespace component
+} // namespace gpui

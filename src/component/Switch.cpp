@@ -1,5 +1,7 @@
 #include "component/Switch.h"
 
+namespace gpui {
+
 namespace component {
 
 struct SwitchBind {
@@ -12,7 +14,7 @@ static void FireSwitch(SwitchBind* b) {
 }
 
 Switch* Switch::New(Arena* a, Str id) {
-    Switch* s = ::New<Switch>(a);
+    Switch* s = ArenaNew<Switch>(a);
     s->a = a;
     s->id = id;
     return s;
@@ -57,12 +59,12 @@ El* Switch::IntoEl() {
     }
     track->Child(
         SwitchThumb::New(a)->W(16)->H(16)->Radius(8)->Bg(th.background));
-    El* root = ::Switch::New(a, id, disabled ? 0 : HashClickId(id))
+    El* root = gpui::Switch::New(a, id, disabled ? 0 : HashClickId(id))
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8);
     if (onClick.IsValid() && !disabled) {
-        SwitchBind* b = ::New<SwitchBind>(a);
+        SwitchBind* b = ArenaNew<SwitchBind>(a);
         b->fn = onClick;
         b->next = !checked;
         root->OnClick(MkFunc0(&FireSwitch, b));
@@ -76,3 +78,4 @@ El* Switch::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

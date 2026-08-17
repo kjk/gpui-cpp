@@ -1,10 +1,12 @@
 #include "component/Notification.h"
 #include "component/Alert.h"
 
+namespace gpui {
+
 namespace component {
 
 Notification* Notification::New(Arena* a, Str title, Str message) {
-    Notification* n = ::New<Notification>(a);
+    Notification* n = ArenaNew<Notification>(a);
     n->a = a;
     n->title = title;
     n->message = message;
@@ -36,3 +38,4 @@ El* Notification::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

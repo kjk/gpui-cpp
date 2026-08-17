@@ -1,5 +1,7 @@
 #include "component/Plot.h"
 
+namespace gpui {
+
 namespace component {
 
 float PlotScale::Map(float v) const {
@@ -11,3 +13,4 @@ float PlotScale::Map(float v) const {
 }
 
 } // namespace component
+} // namespace gpui

@@ -5,6 +5,8 @@
 
 #include "component/Menu.h"
 
+namespace gpui {
+
 namespace component {
 
 struct NativeMenu {
@@ -12,3 +14,4 @@ struct NativeMenu {
 };
 
 } // namespace component
+} // namespace gpui

@@ -1,6 +1,8 @@
 #include "ui/Input.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 El* InputBase::New(Arena* a, Str id, int clickId) {
     return UiRoot(a, id, clickId);
 }
@@ -256,3 +258,4 @@ El* Editor::New(Arena* a, const char* text, int cursor, bool caret) {
     }
     return col;
 }
+} // namespace gpui

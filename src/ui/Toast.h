@@ -4,6 +4,9 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Toast {
     static El* New(Arena* a, Str id);
 };
+} // namespace gpui

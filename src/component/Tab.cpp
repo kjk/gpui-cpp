@@ -1,5 +1,7 @@
 #include "component/Tab.h"
 
+namespace gpui {
+
 namespace component {
 
 struct TabBind {
@@ -11,7 +13,7 @@ static void FireTab(TabBind* b) {
 }
 
 Tabs* Tabs::New(Arena* a) {
-    Tabs* t = ::New<Tabs>(a);
+    Tabs* t = ArenaNew<Tabs>(a);
     t->a = a;
     return t;
 }
@@ -32,12 +34,14 @@ Tabs* Tabs::OnChange(Func1<int> fn) {
 
 El* Tabs::IntoEl() {
     const Theme& th = ThemeNow();
-    El* bar =
-        ::Tabs::New(a, StrL("tabs"))->FlexRow()->Gap(4)->BorderB(1, th.border);
+    El* bar = gpui::Tabs::New(a, StrL("tabs"))
+                  ->FlexRow()
+                  ->Gap(4)
+                  ->BorderB(1, th.border);
     for (int i = 0; i < n; i++) {
         bool on = i == selected;
         El* tab =
-            ::Tab::New(a, labels[i], HashClickId(labels[i]))
+            gpui::Tab::New(a, labels[i], HashClickId(labels[i]))
                 ->H(28)
                 ->PadX(8)
                 ->ItemsCenter()
@@ -47,7 +51,7 @@ El* Tabs::IntoEl() {
             tab->first->style.fontSemibold = true;
         }
         if (onChange.IsValid()) {
-            TabBind* b = ::New<TabBind>(a);
+            TabBind* b = ArenaNew<TabBind>(a);
             b->fn = onChange;
             b->index = i;
             tab->OnClick(MkFunc0(&FireTab, b));
@@ -58,3 +62,4 @@ El* Tabs::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

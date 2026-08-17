@@ -1,5 +1,7 @@
 #include "component/Link.h"
 
+namespace gpui {
+
 namespace component {
 
 struct LinkBind {
@@ -12,7 +14,7 @@ static void FireLink(LinkBind* b) {
 }
 
 Link* Link::New(Arena* a, Str id) {
-    Link* l = ::New<Link>(a);
+    Link* l = ArenaNew<Link>(a);
     l->a = a;
     l->id = id;
     return l;
@@ -37,9 +39,9 @@ Link* Link::OnOpen(Func1<Str> fn) {
 
 El* Link::IntoEl() {
     const Theme& th = ThemeNow();
-    El* e = ::Link::New(a, id, disabled ? 0 : HashClickId(id));
+    El* e = gpui::Link::New(a, id, disabled ? 0 : HashClickId(id));
     if (onOpen.IsValid() && !disabled) {
-        LinkBind* b = ::New<LinkBind>(a);
+        LinkBind* b = ArenaNew<LinkBind>(a);
         b->fn = onOpen;
         b->href = href;
         e->OnClick(MkFunc0(&FireLink, b));
@@ -51,3 +53,4 @@ El* Link::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

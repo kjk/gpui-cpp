@@ -1,9 +1,11 @@
 #include "component/VirtualList.h"
 
+namespace gpui {
+
 namespace component {
 
 VirtualList* VirtualList::New(Arena* a, int count) {
-    VirtualList* v = ::New<VirtualList>(a);
+    VirtualList* v = ArenaNew<VirtualList>(a);
     v->a = a;
     v->count = count;
     return v;
@@ -50,7 +52,11 @@ El* VirtualList::IntoEl() {
                     ->Fg(th.foreground)));
         }
     }
-    return ::VirtualList::New(a, StrL("vlist"))->H(viewH)->ClipY()->Child(list);
+    return gpui::VirtualList::New(a, StrL("vlist"))
+        ->H(viewH)
+        ->ClipY()
+        ->Child(list);
 }
 
 } // namespace component
+} // namespace gpui

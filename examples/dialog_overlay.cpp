@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     ClickOpenDialog = 1,
     ClickOpenSheet = 2,

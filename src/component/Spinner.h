@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Spinner {
@@ -21,3 +23,4 @@ struct Spinner {
 };
 
 } // namespace component
+} // namespace gpui

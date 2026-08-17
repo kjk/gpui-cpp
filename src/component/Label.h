@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Label {
@@ -19,3 +21,4 @@ struct Label {
 };
 
 } // namespace component
+} // namespace gpui

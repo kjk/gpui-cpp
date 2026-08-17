@@ -1,9 +1,11 @@
 #include "component/Scroll.h"
 
+namespace gpui {
+
 namespace component {
 
 Scrollable* Scrollable::New(Arena* a) {
-    Scrollable* s = ::New<Scrollable>(a);
+    Scrollable* s = ArenaNew<Scrollable>(a);
     s->a = a;
     return s;
 }
@@ -29,3 +31,4 @@ El* Scrollable::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 static void OnInit(AppHost* host) {
     (void)host;
     ThemeSet(ThemeMode::Light);

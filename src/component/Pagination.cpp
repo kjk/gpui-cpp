@@ -1,6 +1,8 @@
 #include "component/Pagination.h"
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 struct PageBind {
@@ -12,7 +14,7 @@ static void FirePage(PageBind* b) {
 }
 
 Pagination* Pagination::New(Arena* a, int page, int total) {
-    Pagination* p = ::New<Pagination>(a);
+    Pagination* p = ArenaNew<Pagination>(a);
     p->a = a;
     p->page = page;
     p->total = total;
@@ -24,7 +26,7 @@ Pagination* Pagination::OnChange(Func1<int> fn) {
 }
 
 El* Pagination::IntoEl() {
-    El* row = ::Pagination::New(a, StrL("pagination"))
+    El* row = gpui::Pagination::New(a, StrL("pagination"))
                   ->FlexRow()
                   ->Gap(8)
                   ->ItemsCenter();
@@ -40,7 +42,7 @@ El* Pagination::IntoEl() {
             b->Primary();
         }
         if (onChange.IsValid()) {
-            PageBind* bind = ::New<PageBind>(a);
+            PageBind* bind = ArenaNew<PageBind>(a);
             bind->fn = onChange;
             bind->page = i;
             b->OnClick(MkFunc0(&FirePage, bind));
@@ -51,3 +53,4 @@ El* Pagination::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

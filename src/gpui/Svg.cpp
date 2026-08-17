@@ -3,6 +3,8 @@
 
 #include <math.h>
 
+namespace gpui {
+
 static const float kPi = 3.14159265f;
 static const int kMaxOps = 128;
 static const int kMaxCache = 24;
@@ -838,3 +840,4 @@ Str IconNamePath(IconName name) {
             return {};
     }
 }
+} // namespace gpui

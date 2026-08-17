@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 enum TableMode : int {
     ModeWrap = 0,
     ModeAdaptive = 1,

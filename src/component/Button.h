@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 enum class ButtonVariant : u8 {
@@ -56,3 +58,4 @@ struct Button {
 };
 
 } // namespace component
+} // namespace gpui

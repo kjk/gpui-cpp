@@ -1,9 +1,11 @@
 #include "component/Form.h"
 
+namespace gpui {
+
 namespace component {
 
 Form* Form::New(Arena* a) {
-    Form* f = ::New<Form>(a);
+    Form* f = ArenaNew<Form>(a);
     f->a = a;
     return f;
 }
@@ -31,3 +33,4 @@ El* Form::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

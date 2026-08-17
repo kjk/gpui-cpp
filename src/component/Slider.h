@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Slider {
@@ -18,3 +20,4 @@ struct Slider {
 };
 
 } // namespace component
+} // namespace gpui

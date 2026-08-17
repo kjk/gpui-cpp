@@ -1,6 +1,8 @@
 #include "ui/AlertDialog.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 El* AlertDialogBackdrop::New(Arena* a) {
     return UiRoot(a, StrL("alert-dialog-backdrop"), 0);
 }
@@ -21,7 +23,7 @@ El* AlertDialogAction::New(Arena* a) {
 }
 
 AlertDialog* AlertDialog::New(Arena* a) {
-    AlertDialog* d = ::New<AlertDialog>(a);
+    AlertDialog* d = ArenaNew<AlertDialog>(a);
     // Viewport host, like Rust Dialog's deferred+anchored overlay.
     d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill)->FlexCol();
     return d;
@@ -44,3 +46,4 @@ AlertDialog* AlertDialog::Popup(El* popup) {
 El* AlertDialog::IntoEl() {
     return root;
 }
+} // namespace gpui

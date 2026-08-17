@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Popover {
@@ -20,3 +22,4 @@ struct Popover {
 };
 
 } // namespace component
+} // namespace gpui

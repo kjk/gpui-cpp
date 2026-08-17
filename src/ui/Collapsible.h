@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Collapsible {
     El* root = nullptr;
     bool open = false;
@@ -14,3 +16,4 @@ struct Collapsible {
     Collapsible* Content(El* e);
     El* IntoEl();
 };
+} // namespace gpui

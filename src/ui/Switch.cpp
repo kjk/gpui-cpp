@@ -1,6 +1,8 @@
 #include "ui/Switch.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 El* Switch::New(Arena* a, Str id, int clickId) {
     return UiRoot(a, id, clickId);
 }
@@ -12,3 +14,4 @@ El* SwitchTrack::New(Arena* a, Str id) {
 El* SwitchThumb::New(Arena* a) {
     return Div(a);
 }
+} // namespace gpui

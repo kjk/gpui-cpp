@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Dock {
@@ -20,3 +22,4 @@ struct Dock {
 };
 
 } // namespace component
+} // namespace gpui

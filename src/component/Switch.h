@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Switch {
@@ -26,3 +28,4 @@ struct Switch {
 };
 
 } // namespace component
+} // namespace gpui

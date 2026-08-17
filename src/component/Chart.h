@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct AreaChart {
@@ -20,3 +22,4 @@ struct AreaChart {
 };
 
 } // namespace component
+} // namespace gpui

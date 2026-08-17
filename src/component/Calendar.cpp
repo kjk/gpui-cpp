@@ -1,5 +1,7 @@
 #include "component/Calendar.h"
 
+namespace gpui {
+
 namespace component {
 
 struct DayBind {
@@ -11,7 +13,7 @@ static void FireDay(DayBind* b) {
 }
 
 Calendar* Calendar::New(Arena* a) {
-    Calendar* c = ::New<Calendar>(a);
+    Calendar* c = ArenaNew<Calendar>(a);
     c->a = a;
     return c;
 }
@@ -52,7 +54,7 @@ El* Calendar::IntoEl() {
     const Theme& th = ThemeNow();
     static const char* mon[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    El* root = ::Calendar::New(a, StrL("calendar"))
+    El* root = gpui::Calendar::New(a, StrL("calendar"))
                    ->FlexCol()
                    ->W(250)
                    ->Pad(12)
@@ -98,7 +100,7 @@ El* Calendar::IntoEl() {
                             ->Fg(th.foreground));
         }
         if (onDay.IsValid()) {
-            DayBind* b = ::New<DayBind>(a);
+            DayBind* b = ArenaNew<DayBind>(a);
             b->fn = onDay;
             b->day = d;
             cell->OnClick(MkFunc0(&FireDay, b));
@@ -110,3 +112,4 @@ El* Calendar::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

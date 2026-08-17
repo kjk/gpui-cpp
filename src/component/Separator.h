@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 enum class SeparatorStyle : u8 {
@@ -28,3 +30,4 @@ struct Separator {
 };
 
 } // namespace component
+} // namespace gpui

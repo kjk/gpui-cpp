@@ -27,6 +27,8 @@
 #include <dwrite.h>
 #include <dwmapi.h>
 
+namespace gpui {
+
 using u8 = uint8_t;
 using i32 = int32_t;
 using u32 = uint32_t;
@@ -52,7 +54,7 @@ struct Str {
 
 using TempStr = Str;
 
-#define StrL(lit) Str((char*)(lit), (int)(sizeof(lit) - 1))
+#define StrL(lit) ::gpui::Str((char*)(lit), (int)(sizeof(lit) - 1))
 
 Str AllocStrTemp(int size);
 
@@ -171,7 +173,7 @@ void* Alloc(struct Arena* arena, int size);
 void Free(struct Arena* arena, void* mem);
 
 template <typename T, typename... Args>
-T* New(Arena* arena, Args&&... args) {
+T* ArenaNew(Arena* arena, Args&&... args) {
     void* mem = Alloc(arena, (int)sizeof(T));
     return new (mem) T(std::forward<Args>(args)...);
 }
@@ -391,3 +393,4 @@ template <typename... TArgs>
 inline void logf(const char* format, const TArgs&... args) {
     log(FormatTemp(format, args...));
 }
+} // namespace gpui

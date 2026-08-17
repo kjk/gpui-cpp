@@ -1,7 +1,9 @@
 #include "ui/Sheet.h"
 
+namespace gpui {
+
 Sheet* Sheet::New(Arena* a) {
-    Sheet* s = ::New<Sheet>(a);
+    Sheet* s = ArenaNew<Sheet>(a);
     s->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     return s;
 }
@@ -23,3 +25,4 @@ Sheet* Sheet::Surface(El* surface) {
 El* Sheet::IntoEl() {
     return root;
 }
+} // namespace gpui

@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Table {
     static El* New(Arena* a, Str id);
 };
@@ -22,3 +24,4 @@ struct TableHead {
 struct TableCell {
     static El* New(Arena* a, Str id);
 };
+} // namespace gpui

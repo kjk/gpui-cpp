@@ -1,5 +1,7 @@
 #include "component/Combobox.h"
 
+namespace gpui {
+
 namespace component {
 
 struct CbBind {
@@ -11,7 +13,7 @@ static void FireCb(CbBind* b) {
 }
 
 Combobox* Combobox::New(Arena* a, Str id) {
-    Combobox* c = ::New<Combobox>(a);
+    Combobox* c = ArenaNew<Combobox>(a);
     c->a = a;
     c->id = id;
     return c;
@@ -68,14 +70,14 @@ El* Combobox::IntoEl() {
                     ->PadX(8)
                     ->ItemsCenter()
                     ->Border(1, th.border)
-                    ->Child(::Input::New(a, query)));
+                    ->Child(gpui::Input::New(a, query)));
         }
         for (int i = 0; i < n; i++) {
             El* row =
                 Div(a)->H(28)->PadX(8)->ItemsCenter()->HoverBg(th.muted)->Child(
                     TextEl(a, options[i])->Font(13)->Fg(th.foreground));
             if (onChange.IsValid()) {
-                CbBind* b = ::New<CbBind>(a);
+                CbBind* b = ArenaNew<CbBind>(a);
                 b->fn = onChange;
                 b->index = i;
                 BindClick(row, options[i], MkFunc0(&FireCb, b));
@@ -83,8 +85,9 @@ El* Combobox::IntoEl() {
             pop->Child(row);
         }
     }
-    El* root = ::Combobox::New(a, id)->W(224)->Child(trigger);
+    El* root = gpui::Combobox::New(a, id)->W(224)->Child(trigger);
     return Popup::New(a, StrL("combo-pop"), root)->Content(pop)->IntoEl();
 }
 
 } // namespace component
+} // namespace gpui

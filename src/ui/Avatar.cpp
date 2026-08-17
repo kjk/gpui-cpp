@@ -1,7 +1,9 @@
 #include "ui/Avatar.h"
 
+namespace gpui {
+
 Avatar* Avatar::New(Arena* a) {
-    Avatar* v = ::New<Avatar>(a);
+    Avatar* v = ArenaNew<Avatar>(a);
     v->root = Div(a);
     return v;
 }
@@ -26,3 +28,4 @@ El* Avatar::IntoEl() {
 El* AvatarFallback::New(Arena* a) {
     return Div(a);
 }
+} // namespace gpui

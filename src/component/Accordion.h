@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct AccordionItem {
@@ -39,3 +41,4 @@ struct Accordion {
 };
 
 } // namespace component
+} // namespace gpui

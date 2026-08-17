@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 struct SelApp {
     LineInput in;
     char copied[2048];

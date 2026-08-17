@@ -4,6 +4,8 @@
 
 #include "gpui.h"
 
+using namespace gpui;
+
 enum {
     CompOverview = -1,
     CompAccordion = 0,

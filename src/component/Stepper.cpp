@@ -1,5 +1,7 @@
 #include "component/Stepper.h"
 
+namespace gpui {
+
 namespace component {
 
 struct StepBind {
@@ -11,7 +13,7 @@ static void FireStep(StepBind* b) {
 }
 
 Stepper* Stepper::New(Arena* a) {
-    Stepper* s = ::New<Stepper>(a);
+    Stepper* s = ArenaNew<Stepper>(a);
     s->a = a;
     return s;
 }
@@ -49,7 +51,7 @@ El* Stepper::IntoEl() {
         El* cell = Div(a)->FlexRow()->ItemsCenter()->Gap(6)->Child(dot)->Child(
             TextEl(a, steps[i])->Font(13)->Fg(th.foreground));
         if (onChange.IsValid()) {
-            StepBind* b = ::New<StepBind>(a);
+            StepBind* b = ArenaNew<StepBind>(a);
             b->fn = onChange;
             b->index = i;
             BindClick(cell, steps[i], MkFunc0(&FireStep, b));
@@ -63,3 +65,4 @@ El* Stepper::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

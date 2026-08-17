@@ -1,10 +1,12 @@
 #include "component/Sheet.h"
 #include "component/Button.h"
 
+namespace gpui {
+
 namespace component {
 
 Sheet* Sheet::New(Arena* a) {
-    Sheet* s = ::New<Sheet>(a);
+    Sheet* s = ArenaNew<Sheet>(a);
     s->a = a;
     return s;
 }
@@ -56,7 +58,8 @@ El* Sheet::IntoEl(WinSize size) {
     if (onClose.IsValid()) {
         overlay->OnClick(onClose)->Click(HashClickId(StrL("sheet-overlay")));
     }
-    return ::Sheet::New(a)->Overlay(overlay)->Surface(surface)->IntoEl();
+    return gpui::Sheet::New(a)->Overlay(overlay)->Surface(surface)->IntoEl();
 }
 
 } // namespace component
+} // namespace gpui

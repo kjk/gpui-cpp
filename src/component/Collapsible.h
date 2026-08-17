@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Collapsible {
@@ -20,3 +22,4 @@ struct Collapsible {
 };
 
 } // namespace component
+} // namespace gpui

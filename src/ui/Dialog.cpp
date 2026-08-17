@@ -1,6 +1,8 @@
 #include "ui/Dialog.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 El* DialogBackdrop::New(Arena* a) {
     return UiRoot(a, StrL("dialog-backdrop"), 0);
 }
@@ -18,7 +20,7 @@ El* DialogClose::New(Arena* a, int clickId) {
 }
 
 Dialog* Dialog::New(Arena* a) {
-    Dialog* d = ::New<Dialog>(a);
+    Dialog* d = ArenaNew<Dialog>(a);
     d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     return d;
 }
@@ -40,3 +42,4 @@ Dialog* Dialog::Popup(El* popup) {
 El* Dialog::IntoEl() {
     return root;
 }
+} // namespace gpui

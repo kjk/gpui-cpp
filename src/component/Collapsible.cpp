@@ -1,9 +1,11 @@
 #include "component/Collapsible.h"
 
+namespace gpui {
+
 namespace component {
 
 Collapsible* Collapsible::New(Arena* a) {
-    Collapsible* c = ::New<Collapsible>(a);
+    Collapsible* c = ArenaNew<Collapsible>(a);
     c->a = a;
     return c;
 }
@@ -22,7 +24,7 @@ Collapsible* Collapsible::Content(El* e) {
 }
 
 El* Collapsible::IntoEl() {
-    return ::Collapsible::New(a)
+    return gpui::Collapsible::New(a)
         ->Open(open)
         ->Child(trigger)
         ->Content(content)
@@ -30,3 +32,4 @@ El* Collapsible::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

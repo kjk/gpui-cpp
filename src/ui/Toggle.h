@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Toggle {
     static El* New(Arena* a, Str id, int clickId = 0);
 };
@@ -11,3 +13,4 @@ struct Toggle {
 struct ToggleGroup {
     static El* New(Arena* a, Str id);
 };
+} // namespace gpui

@@ -1,5 +1,7 @@
 #include "gpui.h"
 
+using namespace gpui;
+
 struct InputApp {
     LineInput in;
     char display[256];

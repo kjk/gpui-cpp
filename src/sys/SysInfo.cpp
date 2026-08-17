@@ -3,6 +3,8 @@
 #include <psapi.h>
 #include <tlhelp32.h>
 
+namespace gpui {
+
 static u64 FtToU64(FILETIME ft) {
     ULARGE_INTEGER u;
     u.LowPart = ft.dwLowDateTime;
@@ -265,3 +267,4 @@ TempStr FormatPct(float v, int decimals) {
     }
     return fmt("%.1f%%", v);
 }
+} // namespace gpui

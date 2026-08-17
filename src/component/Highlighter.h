@@ -5,6 +5,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct Highlighter {
@@ -16,3 +18,4 @@ struct Highlighter {
 };
 
 } // namespace component
+} // namespace gpui

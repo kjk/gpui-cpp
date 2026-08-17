@@ -1,5 +1,7 @@
 #include "component/History.h"
 
+namespace gpui {
+
 namespace component {
 
 void History::Push(Str s) {
@@ -29,3 +31,4 @@ Str History::Redo() {
 }
 
 } // namespace component
+} // namespace gpui

@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct HoverCard {
@@ -20,3 +22,4 @@ struct HoverCard {
 };
 
 } // namespace component
+} // namespace gpui

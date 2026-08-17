@@ -1,6 +1,8 @@
 #include "ui/Table.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 El* Table::New(Arena* a, Str id) {
     return UiRoot(a, id, 0);
 }
@@ -19,3 +21,4 @@ El* TableHead::New(Arena* a, Str id) {
 El* TableCell::New(Arena* a, Str id) {
     return UiRoot(a, id, 0);
 }
+} // namespace gpui

@@ -1,6 +1,8 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+using namespace gpui;
+
 El* ShowcaseAvatar(ShowcaseApp* app, Arena* a) {
     (void)app;
     struct Item {

@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct FormField {
@@ -22,3 +24,4 @@ struct Form {
 };
 
 } // namespace component
+} // namespace gpui

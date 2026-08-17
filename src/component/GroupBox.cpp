@@ -1,9 +1,11 @@
 #include "component/GroupBox.h"
 
+namespace gpui {
+
 namespace component {
 
 GroupBox* GroupBox::New(Arena* a, Str title) {
-    GroupBox* g = ::New<GroupBox>(a);
+    GroupBox* g = ArenaNew<GroupBox>(a);
     g->a = a;
     g->title = title;
     return g;
@@ -32,3 +34,4 @@ El* GroupBox::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

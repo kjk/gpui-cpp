@@ -4,6 +4,8 @@
 
 #include "component/Common.h"
 
+namespace gpui {
+
 namespace component {
 
 struct StatusBar {
@@ -18,3 +20,4 @@ struct StatusBar {
 };
 
 } // namespace component
+} // namespace gpui

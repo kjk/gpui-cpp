@@ -1,9 +1,11 @@
 #include "component/Tooltip.h"
 
+namespace gpui {
+
 namespace component {
 
 Tooltip* Tooltip::New(Arena* a, Str text) {
-    Tooltip* t = ::New<Tooltip>(a);
+    Tooltip* t = ArenaNew<Tooltip>(a);
     t->a = a;
     t->text = text;
     return t;
@@ -11,7 +13,7 @@ Tooltip* Tooltip::New(Arena* a, Str text) {
 
 El* Tooltip::IntoEl() {
     const Theme& th = ThemeNow();
-    return ::Tooltip::New(a, StrL("tooltip"))
+    return gpui::Tooltip::New(a, StrL("tooltip"))
         ->PadX(8)
         ->H(28)
         ->ItemsCenter()
@@ -21,3 +23,4 @@ El* Tooltip::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

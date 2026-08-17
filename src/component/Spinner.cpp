@@ -1,9 +1,11 @@
 #include "component/Spinner.h"
 
+namespace gpui {
+
 namespace component {
 
 Spinner* Spinner::New(Arena* a) {
-    Spinner* s = ::New<Spinner>(a);
+    Spinner* s = ArenaNew<Spinner>(a);
     s->a = a;
     return s;
 }
@@ -37,3 +39,4 @@ El* Spinner::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

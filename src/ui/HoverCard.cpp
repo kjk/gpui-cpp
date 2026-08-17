@@ -1,8 +1,10 @@
 #include "ui/HoverCard.h"
 #include "ui/Primitive.h"
 
+namespace gpui {
+
 HoverCard* HoverCard::New(Arena* a, Str id) {
-    HoverCard* h = ::New<HoverCard>(a);
+    HoverCard* h = ArenaNew<HoverCard>(a);
     h->root = UiRoot(a, id, 0);
     return h;
 }
@@ -25,3 +27,4 @@ HoverCard* HoverCard::Content(El* content) {
 El* HoverCard::IntoEl() {
     return root;
 }
+} // namespace gpui

@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Accordion {
     static El* New(Arena* a, Str id);
 };
@@ -30,3 +32,4 @@ struct AccordionItem {
     AccordionItem* Panel(El* panel);
     El* IntoEl();
 };
+} // namespace gpui

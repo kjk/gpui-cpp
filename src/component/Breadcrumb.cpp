@@ -1,5 +1,7 @@
 #include "component/Breadcrumb.h"
 
+namespace gpui {
+
 namespace component {
 
 struct CrumbBind {
@@ -11,7 +13,7 @@ static void FireCrumb(CrumbBind* b) {
 }
 
 Breadcrumb* Breadcrumb::New(Arena* a) {
-    Breadcrumb* b = ::New<Breadcrumb>(a);
+    Breadcrumb* b = ArenaNew<Breadcrumb>(a);
     b->a = a;
     return b;
 }
@@ -39,7 +41,7 @@ El* Breadcrumb::IntoEl() {
                     ->Fg(last ? th.foreground : th.mutedFg);
         if (!last && onClick.IsValid()) {
             El* hit = Div(a)->Child(t);
-            CrumbBind* b = ::New<CrumbBind>(a);
+            CrumbBind* b = ArenaNew<CrumbBind>(a);
             b->fn = onClick;
             b->index = i;
             BindClick(hit, items[i], MkFunc0(&FireCrumb, b));
@@ -52,3 +54,4 @@ El* Breadcrumb::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

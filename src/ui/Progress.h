@@ -4,6 +4,8 @@
 
 #include "gpui/Gpui.h"
 
+namespace gpui {
+
 struct Progress {
     static El* New(Arena* a, Str id);
 };
@@ -15,3 +17,4 @@ struct ProgressTrack {
 struct ProgressIndicator {
     static El* New(Arena* a);
 };
+} // namespace gpui

@@ -6,6 +6,8 @@
 
 // ─── color ────────────────────────────────────────────────────────────────
 
+namespace gpui {
+
 struct Rgba {
     u8 r = 0;
     u8 g = 0;
@@ -509,3 +511,4 @@ void AppToggleMaximize(AppHost* host);
 void AppClose(AppHost* host);
 void AppDrag(AppHost* host);
 bool AppIsMaximized(AppHost* host);
+} // namespace gpui

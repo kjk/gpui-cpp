@@ -1,9 +1,11 @@
 #include "component/Tag.h"
 
+namespace gpui {
+
 namespace component {
 
 Tag* Tag::New(Arena* a, Str text) {
-    Tag* t = ::New<Tag>(a);
+    Tag* t = ArenaNew<Tag>(a);
     t->a = a;
     t->text = text;
     return t;
@@ -89,3 +91,4 @@ El* Tag::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui

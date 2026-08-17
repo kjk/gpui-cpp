@@ -1,5 +1,7 @@
 #include "component/Radio.h"
 
+namespace gpui {
+
 namespace component {
 
 struct RadioBind {
@@ -12,7 +14,7 @@ static void FireRadio(RadioBind* b) {
 }
 
 Radio* Radio::New(Arena* a, Str id) {
-    Radio* r = ::New<Radio>(a);
+    Radio* r = ArenaNew<Radio>(a);
     r->a = a;
     r->id = id;
     return r;
@@ -48,12 +50,12 @@ El* Radio::IntoEl() {
     if (checked) {
         dot->Child(Div(a)->W(6)->H(6)->Radius(3)->Bg(th.primary));
     }
-    El* row = ::Radio::New(a, id, disabled ? 0 : HashClickId(id))
+    El* row = gpui::Radio::New(a, id, disabled ? 0 : HashClickId(id))
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);
     if (onClick.IsValid() && !disabled) {
-        RadioBind* b = ::New<RadioBind>(a);
+        RadioBind* b = ArenaNew<RadioBind>(a);
         b->fn = onClick;
         row->OnClick(MkFunc0(&FireRadio, b));
     }
@@ -66,3 +68,4 @@ El* Radio::IntoEl() {
 }
 
 } // namespace component
+} // namespace gpui
