@@ -22,32 +22,35 @@ static El* FacePx(Arena* a, const char* initials, float px, float radius,
 
 static El* AvatarRow(Arena* a, StoryApp* app, const char** names, int n,
                      int limit, bool ellipsis) {
-    float sz = UiSizePx(app->size);
+    float sz = component::AvatarSizePx(app->size);
     int shown = n;
     if (limit > 0 && n > limit) {
         shown = limit;
     }
+    // AvatarGroup: item_ml = -avatar_size * 0.3, and the ⋯ chip adds ml_1.
     float step = sz * 0.7f;
     int extra = (ellipsis && n > shown) ? 1 : 0;
-    El* box = Div(a)->H(sz)->W(sz + (shown + extra - 1) * step);
-    for (int i = 0; i < shown; i++) {
-        box->Child(component::Avatar::New(a)
-                       ->Initials(Str(names[i]))
-                       ->WithSize(app->size)
-                       ->IntoEl()
-                       ->Absolute()
-                       ->Left(i * step));
-    }
+    float extraLeft = shown * step + 4;
+    El* box =
+        Div(a)->H(sz)->W(extra ? extraLeft + sz : sz + (shown - 1) * step);
+    // flex_row_reverse lays the row right to left, so the leftmost avatar
+    // paints last and sits on top.
     if (extra) {
-        // Rust AvatarGroup is flex_row_reverse, so the ⋯ chip sits on the
-        // right.
         box->Child(component::Avatar::New(a)
                        ->Initials(StrL("\xE2\x8B\xAF"))
                        ->Bg(ThemeNow().secondary)
                        ->WithSize(app->size)
                        ->IntoEl()
                        ->Absolute()
-                       ->Left(shown * step));
+                       ->Left(extraLeft));
+    }
+    for (int i = shown - 1; i >= 0; i--) {
+        box->Child(component::Avatar::New(a)
+                       ->Initials(Str(names[i]))
+                       ->WithSize(app->size)
+                       ->IntoEl()
+                       ->Absolute()
+                       ->Left(i * step));
     }
     return box;
 }

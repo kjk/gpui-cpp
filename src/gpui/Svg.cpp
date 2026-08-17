@@ -806,6 +806,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/gallery-vertical-end.svg");
         case IconName::CircleUser:
             return StrL("icons/circle-user.svg");
+        case IconName::User:
+            return StrL("icons/user.svg");
         case IconName::PanelLeft:
             return StrL("icons/panel-left.svg");
         case IconName::Info:

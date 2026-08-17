@@ -23,8 +23,37 @@ Avatar* Avatar::Size(float v) {
     size = v;
     return this;
 }
+// crates/ui/src/avatar/mod.rs: avatar_size + avatar_text_size. Avatars do not
+// use the generic control heights.
+float AvatarSizePx(UiSize s) {
+    switch (s) {
+        case UiSize::XSmall:
+            return 16;
+        case UiSize::Small:
+            return 24;
+        case UiSize::Large:
+            return 80;
+        default:
+            return 48;
+    }
+}
+
+static float AvatarTextPx(UiSize s) {
+    switch (s) {
+        case UiSize::XSmall:
+            return 10.4f; // rems(0.65)
+        case UiSize::Small:
+            return 12; // text_xs
+        case UiSize::Large:
+            return 30; // text_3xl
+        default:
+            return 14; // text_sm
+    }
+}
+
 Avatar* Avatar::WithSize(UiSize s) {
-    size = UiSizePx(s);
+    size = AvatarSizePx(s);
+    textPx = AvatarTextPx(s);
     return this;
 }
 Avatar* Avatar::Radius(float v) {
@@ -70,9 +99,9 @@ El* Avatar::IntoEl() {
         fill = RgbaOpacity(hue, 0.2f);
         fg = hue;
     }
-    El* inner =
-        named ? TextEl(a, initials)->Font(size * 0.35f)->Fg(fg)->Semibold()
-              : IconEl(a, placeholder, size * 0.5f)->Fg(fg);
+    float txt = textPx > 0 ? textPx : size * 0.35f;
+    El* inner = named ? TextEl(a, initials)->Font(txt)->Fg(fg)->Semibold()
+                      : IconEl(a, placeholder, size * 0.6f)->Fg(fg);
     El* fb = AvatarFallback::New(a)
                  ->W(size)
                  ->H(size)
@@ -81,8 +110,11 @@ El* Avatar::IntoEl() {
                  ->Bg(fill)
                  ->Radius(r)
                  ->Child(inner);
+    // The base is opaque (bg tokens.secondary) and the fallback tint sits on
+    // top, so overlapping group avatars do not show through each other.
     El* el =
-        gpui::Avatar::New(a)->Size(size)->Fallback(fb)->IntoEl()->Radius(r);
+        gpui::Avatar::New(a)->Size(size)->Fallback(fb)->IntoEl()->Radius(r)->Bg(
+            th.secondary);
     Rgba bd = hasBorderC ? borderC : th.border;
     if (borderW > 0) {
         el->Border(borderW, bd);

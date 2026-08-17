@@ -150,6 +150,7 @@ enum class IconName : uint8_t {
     Settings,
     GalleryVerticalEnd,
     CircleUser,
+    User,
     PanelLeft,
     Info,
     X,
