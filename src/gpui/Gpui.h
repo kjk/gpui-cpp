@@ -157,6 +157,20 @@ struct KeyEvent {
     bool down = false;
 };
 
+enum class MouseKind : uint8_t {
+    Down,
+    Up,
+    Move
+};
+
+struct MouseEvent {
+    MouseKind kind = MouseKind::Down;
+    float x = 0;
+    float y = 0;
+    int button = 1; // 1 left, 2 right, 0 for moves
+    int id = 0;     // click id under the cursor, when there is one
+};
+
 struct WheelEvent {
     float x = 0;
     float y = 0;

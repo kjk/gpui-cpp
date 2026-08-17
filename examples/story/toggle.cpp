@@ -41,7 +41,8 @@ static El* ToggleChip(Arena* a, int id, const char* label, IconName icon,
     return t;
 }
 
-El* ToggleRender(StoryApp* app, Arena* a) {
+El* ToggleRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));

@@ -16,7 +16,8 @@ static El* BoxBody(Arena* a) {
     return col;
 }
 
-El* GroupBoxRender(StoryApp* app, Arena* a) {
+El* GroupBoxRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

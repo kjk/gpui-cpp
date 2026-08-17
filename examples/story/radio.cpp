@@ -16,7 +16,8 @@ static void SetBill2(StoryApp* app, bool) {
     app->radioBilling = 2;
 }
 
-El* RadioRender(StoryApp* app, Arena* a) {
+El* RadioRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
 

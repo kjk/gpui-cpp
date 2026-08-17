@@ -7,7 +7,8 @@ static void SetPageMany(StoryApp* app, int p) {
     app->pageMany = p;
 }
 
-El* PaginationRender(StoryApp* app, Arena* a) {
+El* PaginationRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
 

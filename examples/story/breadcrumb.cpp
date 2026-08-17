@@ -4,7 +4,8 @@ static void OnCrumb(StoryApp* app, int i) {
     app->crumbClicked = i;
 }
 
-El* BreadcrumbRender(StoryApp* app, Arena* a) {
+El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

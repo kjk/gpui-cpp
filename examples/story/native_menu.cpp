@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* NativeMenuRender(StoryApp* app, Arena* a) {
+El* NativeMenuRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* builder = StorySection(a, "Builder API", nullptr);

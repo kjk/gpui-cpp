@@ -232,7 +232,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
             if (host->onMouse.IsValid()) {
-                ClickEvent ev = {x, y, 2, 0};
+                MouseEvent ev = {MouseKind::Down, x, y, 2, 0};
                 ListenerCall(host->app, host, host->onMouse, &ev);
             }
             if (host->hooks.onMouseDown) {
@@ -312,6 +312,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 host->hoverId = id;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
+            if (host->onMouse.IsValid()) {
+                MouseEvent ev = {MouseKind::Move, host->mouseX, host->mouseY, 0,
+                                 id};
+                ListenerCall(host->app, host, host->onMouse, &ev);
+            }
             if (host->hooks.onMouseMove) {
                 host->hooks.onMouseMove(host, host->mouseX, host->mouseY);
             }
@@ -342,7 +347,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 host->hooks.onMouseDown(host, x, y, 1);
             }
             if (host->onMouse.IsValid()) {
-                ClickEvent ev = {x, y, 1, id};
+                MouseEvent ev = {MouseKind::Down, x, y, 1, id};
                 ListenerCall(host->app, host, host->onMouse, &ev);
             }
             if (hit && hit->listener.IsValid()) {
@@ -365,6 +370,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
             host->mouseDown = false;
+            if (host->onMouse.IsValid()) {
+                MouseEvent ev = {MouseKind::Up, x, y, 1, 0};
+                ListenerCall(host->app, host, host->onMouse, &ev);
+            }
             if (host->hooks.onMouseUp) {
                 host->hooks.onMouseUp(host, x, y, 1);
             }

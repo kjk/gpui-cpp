@@ -7,7 +7,8 @@ enum {
     ClickResize = 470
 };
 
-El* ShowcaseResizable(ShowcaseApp* app, Arena* a) {
+El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     float left = app->resizeW;
     if (left < 116) {
         left = 116;

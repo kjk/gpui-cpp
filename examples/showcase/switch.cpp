@@ -7,7 +7,8 @@ enum {
     ClickSwitch = 510
 };
 
-El* ShowcaseSwitch(ShowcaseApp* app, Arena* a) {
+El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     bool on = app->switchOn;
     El* track = SwitchTrack::New(a, StrL("example-switch-track"))
                     ->W(36)

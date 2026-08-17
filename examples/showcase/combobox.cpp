@@ -24,7 +24,8 @@ static bool Matches(const char* label, const char* q) {
     return strstr(a, b) != nullptr;
 }
 
-El* ShowcaseCombobox(ShowcaseApp* app, Arena* a) {
+El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* trigger =
         Div(a)
             ->Id(StrL("combobox-trigger"))

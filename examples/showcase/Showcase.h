@@ -79,6 +79,8 @@ inline Rgba ScSilver() {
 }
 
 struct ShowcaseApp {
+    static El* Render(ShowcaseApp* self, Ctx* cx);
+
     int component = CompOverview;
     bool navigationEnabled = true;
     float scrollY = 0;
@@ -150,7 +152,7 @@ El* ScBtnLine(Arena* a, int id, Str label);
 El* ScComingSoon(Arena* a, const char* name);
 
 El* ShowcaseOverview(ShowcaseApp* app, Arena* a);
-El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a);
+El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseAccordion(ShowcaseApp* app, Arena* a);
 El* ShowcaseAlertDialog(ShowcaseApp* app, Arena* a);
 El* ShowcaseAvatar(ShowcaseApp* app, Arena* a);
@@ -185,7 +187,7 @@ El* ShowcaseTabs(ShowcaseApp* app, Arena* a);
 El* ShowcaseTextSelection(ShowcaseApp* app, Arena* a);
 El* ShowcaseTextarea(ShowcaseApp* app, Arena* a);
 El* ShowcaseToast(ShowcaseApp* app, Arena* a);
-El* ShowcaseToggle(ShowcaseApp* app, Arena* a);
+El* ShowcaseToggle(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseToggleGroup(ShowcaseApp* app, Arena* a);
 El* ShowcaseTooltip(ShowcaseApp* app, Arena* a);
 El* ShowcaseTree(ShowcaseApp* app, Arena* a);
@@ -234,17 +236,17 @@ void ShowcaseVirtualListClick(ShowcaseApp* app, int id);
 void ShowcaseSliderDrag(ShowcaseApp* app, AppHost* host, float x, float y);
 void ShowcaseResizeDrag(ShowcaseApp* app, AppHost* host, float x, float y);
 
-typedef El* (*ShowcaseRenderFn)(ShowcaseApp* app, Arena* a, WinSize size);
+typedef El* (*ShowcaseRenderFn)(ShowcaseApp* app, Ctx* cx, WinSize size);
 typedef void (*ShowcaseClickFn)(ShowcaseApp* app, int id);
 void ShowcaseRegister(int comp, ShowcaseRenderFn render, ShowcaseClickFn click);
-El* ShowcaseRenderRegistered(ShowcaseApp* app, Arena* a, WinSize size);
+El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size);
 void ShowcaseClickRegistered(ShowcaseApp* app, int id);
 
 #define SHOWCASE_PAGE(COMP, RENDER, CLICK)                                    \
     namespace {                                                               \
-    static El* _sc_render_##COMP(ShowcaseApp* app, Arena* a, WinSize size) {  \
+    static El* _sc_render_##COMP(ShowcaseApp* app, Ctx* cx, WinSize size) {   \
         (void)size;                                                           \
-        return RENDER(app, a);                                                \
+        return RENDER(app, cx);                                               \
     }                                                                         \
     struct _ScReg_##COMP {                                                    \
         _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP, CLICK); } \
@@ -253,8 +255,8 @@ void ShowcaseClickRegistered(ShowcaseApp* app, int id);
 
 #define SHOWCASE_PAGE_SZ(COMP, RENDER, CLICK)                                 \
     namespace {                                                               \
-    static El* _sc_render_##COMP(ShowcaseApp* app, Arena* a, WinSize size) {  \
-        return RENDER(app, a, size);                                          \
+    static El* _sc_render_##COMP(ShowcaseApp* app, Ctx* cx, WinSize size) {   \
+        return RENDER(app, cx, size);                                         \
     }                                                                         \
     struct _ScReg_##COMP {                                                    \
         _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP, CLICK); } \

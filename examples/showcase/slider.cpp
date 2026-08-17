@@ -7,7 +7,8 @@ enum {
     ClickSlider = 500
 };
 
-El* ShowcaseSlider(ShowcaseApp* app, Arena* a) {
+El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     float p = app->slider;
     if (p < 0) {
         p = 0;

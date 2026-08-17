@@ -15,15 +15,15 @@ void ShowcaseRegister(int comp, ShowcaseRenderFn render,
     gClick[comp] = click;
 }
 
-El* ShowcaseRenderRegistered(ShowcaseApp* app, Arena* a, WinSize size) {
+El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size) {
     int c = app->component;
     if (c >= 0 && c < CompCount && gRender[c]) {
-        return gRender[c](app, a, size);
+        return gRender[c](app, cx, size);
     }
     if (c == CompOverview) {
-        return ShowcaseOverview(app, a);
+        return ShowcaseOverview(app, cx->a);
     }
-    return ScComingSoon(a, CompSlug(c));
+    return ScComingSoon(cx->a, CompSlug(c));
 }
 
 void ShowcaseClickRegistered(ShowcaseApp* app, int id) {
@@ -194,8 +194,8 @@ El* ShowcaseOverview(ShowcaseApp* app, Arena* a) {
     return col;
 }
 
-static El* RenderComp(ShowcaseApp* app, Arena* a, WinSize size) {
-    return ShowcaseRenderRegistered(app, a, size);
+static El* RenderComp(ShowcaseApp* app, Ctx* cx, WinSize size) {
+    return ShowcaseRenderRegistered(app, cx, size);
 }
 
 static void BindInput(ShowcaseApp* app, AppHost* host) {
@@ -218,8 +218,11 @@ static void BindInput(ShowcaseApp* app, AppHost* host) {
     }
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    auto* app = (ShowcaseApp*)host->user;
+El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+    (void)host;
+    WinSize size = WindowSize(host);
     app->hoverId = host->hoverId;
     BindInput(app, host);
     bool showBack = app->navigationEnabled && app->component != CompOverview;
@@ -236,7 +239,7 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
                 ->Child(ScBtnGhost(frame, ClickBack, StrL("All components"))));
     }
 
-    El* content = RenderComp(app, frame, size);
+    El* content = RenderComp(app, cx, size);
     El* scroller = Div(frame)
                        ->Grow()
                        ->ClipY()
@@ -606,56 +609,35 @@ void ShowcaseMouseUp(ShowcaseApp* app, AppHost* host, float x, float y,
     app->draggingResize = false;
 }
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Light);
-    auto* app = (ShowcaseApp*)host->user;
-    strncpy_s(app->input.placeholder, "Type something…", _TRUNCATE);
-    if (app->component == CompNumberInput) {
-        strncpy_s(app->input.buf, "12", _TRUNCATE);
-    } else {
-        strncpy_s(app->input.buf, "Hello GPUI", _TRUNCATE);
+static void OnClick(ShowcaseApp* app, Ctx* cx, const ClickEvent* ev) {
+    ShowcaseClick(app, cx->win, ev->id);
+}
+
+static void OnKey(ShowcaseApp* app, Ctx* cx, const KeyEvent* ev) {
+    if (ev->ch != 0) {
+        ShowcaseChar(app, cx->win, ev->ch);
+        return;
     }
-    app->input.len = (int)strlen(app->input.buf);
-    if (app->component == CompInput || app->component == CompNumberInput) {
-        app->input.focused = true;
-    } else if (app->component == CompEditor) {
-        app->editorOn = true;
-    } else if (app->component == CompOtpInput) {
-        app->otpOn = true;
+    ShowcaseKey(app, cx->win, ev->vk, ev->down);
+}
+
+static void OnWheel(ShowcaseApp* app, Ctx* cx, const WheelEvent* ev) {
+    (void)cx;
+    ShowcaseWheel(app, ev->x, ev->y, ev->delta);
+}
+
+static void OnMouse(ShowcaseApp* app, Ctx* cx, const MouseEvent* ev) {
+    switch (ev->kind) {
+        case MouseKind::Move:
+            ShowcaseMouseMove(app, cx->win, ev->x, ev->y);
+            break;
+        case MouseKind::Down:
+            ShowcaseMouseDown(app, cx->win, ev->x, ev->y, ev->button);
+            break;
+        case MouseKind::Up:
+            ShowcaseMouseUp(app, cx->win, ev->x, ev->y, ev->button);
+            break;
     }
-    strncpy_s(app->comboQuery.placeholder, "Search frameworks…", _TRUNCATE);
-    strncpy_s(app->hexIn.placeholder, "#2563EB", _TRUNCATE);
-    strncpy_s(app->hexIn.buf, "#2563EB", _TRUNCATE);
-    app->hexIn.len = 7;
-    app->textareaLen = (int)strlen(app->textarea);
-}
-
-static void OnClick(AppHost* host, int id) {
-    ShowcaseClick((ShowcaseApp*)host->user, host, id);
-}
-
-static void OnChar(AppHost* host, uint32_t cp) {
-    ShowcaseChar((ShowcaseApp*)host->user, host, cp);
-}
-
-static void OnKey(AppHost* host, int vk, bool down) {
-    ShowcaseKey((ShowcaseApp*)host->user, host, vk, down);
-}
-
-static void OnWheel(AppHost* host, float x, float y, float delta) {
-    ShowcaseWheel((ShowcaseApp*)host->user, x, y, delta);
-}
-
-static void OnMove(AppHost* host, float x, float y) {
-    ShowcaseMouseMove((ShowcaseApp*)host->user, host, x, y);
-}
-
-static void OnDown(AppHost* host, float x, float y, int button) {
-    ShowcaseMouseDown((ShowcaseApp*)host->user, host, x, y, button);
-}
-
-static void OnUp(AppHost* host, float x, float y, int button) {
-    ShowcaseMouseUp((ShowcaseApp*)host->user, host, x, y, button);
 }
 
 static void ParseSlug(PWSTR cmd, char* out, int cap) {
@@ -678,21 +660,43 @@ static void ParseSlug(PWSTR cmd, char* out, int cap) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
-    static ShowcaseApp app;
+    App* app = AppNew();
+    ThemeSet(ThemeMode::Light);
+
+    Entity<ShowcaseApp> view = EntityNew<ShowcaseApp>(app);
+    ShowcaseApp* self = view.Get(app);
     char slug[64] = {};
     ParseSlug(cmd, slug, 64);
-    app.component = CompFromSlug(slug);
-    app.navigationEnabled = (app.component == CompOverview);
+    self->component = CompFromSlug(slug);
+    self->navigationEnabled = (self->component == CompOverview);
 
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onChar = OnChar;
-    hooks.onKey = OnKey;
-    hooks.onWheel = OnWheel;
-    hooks.onMouseMove = OnMove;
-    hooks.onMouseDown = OnDown;
-    hooks.onMouseUp = OnUp;
-    return RunApp(L"GPUI Base", 840, 640, hooks, &app);
+    strncpy_s(self->input.placeholder, "Type something…", _TRUNCATE);
+    if (self->component == CompNumberInput) {
+        strncpy_s(self->input.buf, "12", _TRUNCATE);
+    } else {
+        strncpy_s(self->input.buf, "Hello GPUI", _TRUNCATE);
+    }
+    self->input.len = (int)strlen(self->input.buf);
+    if (self->component == CompInput || self->component == CompNumberInput) {
+        self->input.focused = true;
+    } else if (self->component == CompEditor) {
+        self->editorOn = true;
+    } else if (self->component == CompOtpInput) {
+        self->otpOn = true;
+    }
+    strncpy_s(self->comboQuery.placeholder, "Search frameworks…", _TRUNCATE);
+    strncpy_s(self->hexIn.placeholder, "#2563EB", _TRUNCATE);
+    strncpy_s(self->hexIn.buf, "#2563EB", _TRUNCATE);
+    self->hexIn.len = 7;
+    self->textareaLen = (int)strlen(self->textarea);
+
+    Window* win =
+        WindowOpenView(app, L"GPUI Base", 840, 640, view.id, AppWinOpts{});
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnKey(win, ListenTo(view, &OnKey));
+    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

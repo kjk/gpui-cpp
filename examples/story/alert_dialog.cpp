@@ -4,7 +4,8 @@ static void CloseAlert(StoryApp* app) {
     app->alertOpen = false;
 }
 
-El* AlertDialogRender(StoryApp* app, Arena* a, WinSize size) {
+El* AlertDialogRender(StoryApp* app, Ctx* cx, WinSize size) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(

@@ -8,7 +8,8 @@ enum {
     ClickToastDismiss = 551
 };
 
-El* ShowcaseToast(ShowcaseApp* app, Arena* a) {
+El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* btn = Button::New(a, StrL("show-toast"), ClickToastShow)
                   ->H(28)
                   ->PadX(8)

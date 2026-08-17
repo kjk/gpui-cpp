@@ -8,7 +8,8 @@ enum {
 };
 static const float kVirtRowH = 32;
 
-El* ShowcaseVirtualList(ShowcaseApp* app, Arena* a) {
+El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const float viewH = 192;
     const float contentH = (float)kVirtCount * kVirtRowH;
     if (app->virtualScroll < 0) {

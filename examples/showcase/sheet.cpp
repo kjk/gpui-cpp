@@ -8,7 +8,8 @@ enum {
     ClickSheetDone = 491
 };
 
-El* ShowcaseSheet(ShowcaseApp* app, Arena* a) {
+El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     // Rust is size_full + min_h_64. A wrap-sized page recenters when the
     // overlay mounts and the trigger jumps.
     El* root =

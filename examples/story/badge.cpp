@@ -22,7 +22,8 @@ static El* FaceSmall(Arena* a, StoryApp* app, const char* initials) {
         ->IntoEl();
 }
 
-El* BadgeRender(StoryApp* app, Arena* a) {
+El* BadgeRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));

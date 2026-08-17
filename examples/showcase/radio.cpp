@@ -34,7 +34,8 @@ static El* RadioRow(Arena* a, Str id, int clickId, bool on, const char* title,
     return row;
 }
 
-El* ShowcaseRadio(ShowcaseApp* app, Arena* a) {
+El* ShowcaseRadio(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     return RadioRow(a, StrL("example-radio"), ClickRadioStd, app->radioSel == 0,
                     "Standard", "3–5 business days", false);
 }
@@ -45,7 +46,8 @@ void ShowcaseRadioClick(ShowcaseApp* app, int id) {
     }
 }
 
-El* ShowcaseRadioGroup(ShowcaseApp* app, Arena* a) {
+El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     return RadioGroup::New(a, StrL("example-radio-group"))
         ->W(224)
         ->FlexCol()

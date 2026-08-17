@@ -10,7 +10,8 @@ enum {
     ClickDlgField = 353
 };
 
-El* ShowcaseDialog(ShowcaseApp* app, Arena* a) {
+El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
     root->Child(Button::New(a, StrL("open-dialog"), ClickDlgOpen)
                     ->H(28)

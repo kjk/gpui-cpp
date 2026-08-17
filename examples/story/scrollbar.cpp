@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* ScrollbarRender(StoryApp* app, Arena* a) {
+El* ScrollbarRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(a, "Default",

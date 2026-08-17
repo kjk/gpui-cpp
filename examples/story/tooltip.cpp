@@ -4,7 +4,8 @@ enum {
     ClickTipRemove = 2600
 };
 
-El* TooltipRender(StoryApp* app, Arena* a) {
+El* TooltipRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* btn = StorySection(a, "Button",

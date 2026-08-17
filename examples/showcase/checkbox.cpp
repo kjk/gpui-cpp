@@ -7,7 +7,8 @@ enum {
     ClickCheckbox = 280
 };
 
-El* ShowcaseCheckbox(ShowcaseApp* app, Arena* a) {
+El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     bool on = app->checkboxOn;
     El* indicator = CheckboxIndicator::New(a)
                         ->W(16)

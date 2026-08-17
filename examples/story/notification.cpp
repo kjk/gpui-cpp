@@ -4,7 +4,8 @@ static void HideNote(StoryApp* app) {
     app->notifyOn = false;
 }
 
-El* NotificationRender(StoryApp* app, Arena* a) {
+El* NotificationRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(a, "Default", "Show a short message.");

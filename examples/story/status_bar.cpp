@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* StatusBarRender(StoryApp* app, Arena* a) {
+El* StatusBarRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

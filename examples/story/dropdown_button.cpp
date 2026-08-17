@@ -25,7 +25,8 @@ static El* DropBlock(Arena* a, StoryApp* app, int which,
     return col;
 }
 
-El* DropdownButtonRender(StoryApp* app, Arena* a) {
+El* DropdownButtonRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
 

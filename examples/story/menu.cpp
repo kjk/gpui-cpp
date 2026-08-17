@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* MenuRender(StoryApp* app, Arena* a) {
+El* MenuRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

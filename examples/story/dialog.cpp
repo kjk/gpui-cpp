@@ -4,7 +4,8 @@ static void CloseDlg(StoryApp* app) {
     app->dialogOpen = false;
 }
 
-El* DialogRender(StoryApp* app, Arena* a, WinSize size) {
+El* DialogRender(StoryApp* app, Ctx* cx, WinSize size) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def =

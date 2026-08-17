@@ -35,7 +35,8 @@ static El* SwitchRow(Arena* a, StoryApp* app, const char* title,
                     ->IntoEl());
 }
 
-El* SwitchRender(StoryApp* app, Arena* a) {
+El* SwitchRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));

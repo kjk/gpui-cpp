@@ -7,7 +7,8 @@ enum {
     ClickTextarea = 540
 };
 
-El* ShowcaseTextarea(ShowcaseApp* app, Arena* a) {
+El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a)
         ->FlexCol()
         ->W(224)

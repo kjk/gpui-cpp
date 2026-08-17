@@ -7,7 +7,8 @@ enum {
     ClickPopup = 450
 };
 
-El* ShowcasePopup(ShowcaseApp* app, Arena* a) {
+El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* trigger = Button::New(a, StrL("popup-trigger"), ClickPopup)
                       ->H(28)
                       ->PadX(12)

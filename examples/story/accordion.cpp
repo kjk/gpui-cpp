@@ -28,7 +28,8 @@ static void ToggleOpen(bool* flags, int n, int i, bool multiple) {
     flags[i] = next;
 }
 
-El* AccordionRender(StoryApp* app, Arena* a) {
+El* AccordionRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsStart();
     page->Child(StoryToolbar(a, app, true));

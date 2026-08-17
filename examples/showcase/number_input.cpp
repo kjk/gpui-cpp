@@ -32,7 +32,8 @@ static bool ParseNum(const char* s, int* out) {
     return true;
 }
 
-El* ShowcaseNumberInput(ShowcaseApp* app, Arena* a) {
+El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     int dummy = 0;
     bool valid = ParseNum(app->input.buf, &dummy);
     El* controls = Div(a)->FlexCol()->W(24)->Shrink0();

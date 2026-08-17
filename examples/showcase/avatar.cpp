@@ -3,7 +3,8 @@
 
 using namespace gpui;
 
-El* ShowcaseAvatar(ShowcaseApp* app, Arena* a) {
+El* ShowcaseAvatar(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     struct Item {
         const char* initials;

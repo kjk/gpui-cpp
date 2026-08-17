@@ -18,7 +18,8 @@ static void CalDay(StoryApp* app, int d) {
     app->calDay = d;
 }
 
-El* CalendarRender(StoryApp* app, Arena* a) {
+El* CalendarRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* single = StorySection(a, "Single month", "Single-date selection.");
     StorySectionAdd(single, component::Calendar::New(a)

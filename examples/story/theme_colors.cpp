@@ -8,7 +8,8 @@ static El* Swatch(Arena* a, const char* name, Rgba c) {
     return col;
 }
 
-El* ThemeColorsRender(StoryApp* app, Arena* a) {
+El* ThemeColorsRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

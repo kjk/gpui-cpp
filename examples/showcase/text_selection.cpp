@@ -74,7 +74,8 @@ static void CopySelected(ShowcaseApp* app, char* out, int cap) {
     out[n] = 0;
 }
 
-El* ShowcaseTextSelection(ShowcaseApp* app, Arena* a) {
+El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     int a0 = app->selA;
     int b0 = app->selB;
     if (a0 > b0) {

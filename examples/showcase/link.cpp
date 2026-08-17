@@ -7,7 +7,8 @@ enum {
     ClickLink = 390
 };
 
-El* ShowcaseLink(ShowcaseApp* app, Arena* a) {
+El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     return Div(a)
         ->FlexCol()

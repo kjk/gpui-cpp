@@ -7,7 +7,8 @@ enum {
     ClickDate = 340
 };
 
-El* ShowcaseDatePicker(ShowcaseApp* app, Arena* a) {
+El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* trigger =
         Button::New(a, StrL("date-trigger"), ClickDate)
             ->W(250)
@@ -22,7 +23,7 @@ El* ShowcaseDatePicker(ShowcaseApp* app, Arena* a) {
                         ->Font(12)
                         ->Fg(Rgb(0x17, 0x17, 0x17)))
             ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
-    El* cal = app->dateOpen ? ShowcaseCalendarGrid(app, a) : nullptr;
+    El* cal = app->dateOpen ? ShowcaseCalendarGrid(app, cx) : nullptr;
     return DatePicker::New(a, StrL("example-date-picker"))
         ->W(250)
         ->Child(Popup::New(a, StrL("date-picker-popup"), trigger)

@@ -8,7 +8,8 @@ enum {
     ClickPopoverDone = 441
 };
 
-El* ShowcasePopover(ShowcaseApp* app, Arena* a) {
+El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* trigger = Button::New(a, StrL("popover-trigger"), ClickPopover)
                       ->H(28)
                       ->PadX(12)

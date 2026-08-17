@@ -4,7 +4,8 @@ static void SetFormSwitch(StoryApp* app, bool v) {
     app->switchOn = v;
 }
 
-El* FormRender(StoryApp* app, Arena* a) {
+El* FormRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
     El* sec = StorySection(a, "Default", "Building forms with labeled fields.");

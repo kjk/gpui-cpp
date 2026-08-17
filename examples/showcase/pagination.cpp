@@ -28,7 +28,8 @@ static El* PageBtn(Arena* a, int p, bool on) {
     return b;
 }
 
-El* ShowcasePagination(ShowcaseApp* app, Arena* a) {
+El* ShowcasePagination(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const int n = 8;
     const int maxVis = 5;
     int cur = app->page;

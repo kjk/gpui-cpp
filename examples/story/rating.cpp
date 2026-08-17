@@ -4,7 +4,8 @@ static void SetRating(StoryApp* app, int v) {
     app->rating = v;
 }
 
-El* RatingRender(StoryApp* app, Arena* a) {
+El* RatingRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));

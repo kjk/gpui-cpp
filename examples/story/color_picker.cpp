@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* ColorPickerRender(StoryApp* app, Arena* a) {
+El* ColorPickerRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(a, "Theme Color", nullptr);

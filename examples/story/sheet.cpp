@@ -4,7 +4,8 @@ static void CloseSheet(StoryApp* app) {
     app->sheetOpen = false;
 }
 
-El* SheetRender(StoryApp* app, Arena* a, WinSize size) {
+El* SheetRender(StoryApp* app, Ctx* cx, WinSize size) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* place = StorySection(a, "Placement", nullptr);

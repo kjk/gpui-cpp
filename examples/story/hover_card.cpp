@@ -15,7 +15,8 @@ static El* Card(Arena* a, const char* title, const char* body) {
     return card;
 }
 
-El* HoverCardRender(StoryApp* app, Arena* a) {
+El* HoverCardRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

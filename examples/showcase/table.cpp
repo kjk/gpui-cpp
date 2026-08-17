@@ -3,7 +3,8 @@
 
 using namespace gpui;
 
-El* ShowcaseTable(ShowcaseApp* app, Arena* a) {
+El* ShowcaseTable(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     struct Row {
         const char* name;

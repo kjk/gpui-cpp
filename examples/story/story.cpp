@@ -17,12 +17,12 @@ void StoryRegister(int story, StoryRenderFn render, StoryClickFn click) {
     gClick[story] = click;
 }
 
-El* StoryRenderRegistered(StoryApp* app, Arena* a, WinSize size) {
+El* StoryRenderRegistered(StoryApp* app, Ctx* cx, WinSize size) {
     int s = app->story;
     if (s >= 0 && s < StoryCount && gRender[s]) {
-        return gRender[s](app, a, size);
+        return gRender[s](app, cx, size);
     }
-    return StoryComingSoon(a, s);
+    return StoryComingSoon(cx->a, s);
 }
 
 void StoryClickRegistered(StoryApp* app, int id) {
@@ -517,17 +517,19 @@ static El* Footer(StoryApp* app, Arena* a) {
                     ->Child(StoryTxt(a, StrL("v0.5.1"), 12, th.mutedFg)));
 }
 
-static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
-    auto* app = (StoryApp*)host->user;
-    host->paint.selA = app->selA;
-    host->paint.selB = app->selB;
-    app->hoverId = host->hoverId;
+El* StoryApp::Render(StoryApp* app, Ctx* cx) {
+    Arena* frame = cx->a;
+    Window* host = cx->win;
+    WinSize size = WindowSize(host);
+    cx->win->paint.selA = app->selA;
+    cx->win->paint.selB = app->selB;
+    app->hoverId = cx->win->hoverId;
     if (app->search.focused) {
-        host->input = &app->search;
+        cx->win->input = &app->search;
     } else if (app->field.focused) {
-        host->input = &app->field;
+        cx->win->input = &app->field;
     } else {
-        host->input = nullptr;
+        cx->win->input = nullptr;
     }
     AppRequestAnim(host, app->search.focused || app->field.focused);
     const Theme& th = ThemeNow();
@@ -545,7 +547,7 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
                        ->ScrollId(1)
                        ->W(kFill);
     scroller->Child(Div(frame)->Pad(16)->W(kFill)->Child(
-        StoryRenderRegistered(app, frame, size)));
+        StoryRenderRegistered(app, cx, size)));
     main->Child(scroller);
     body->Child(main);
     root->Child(body);
@@ -553,23 +555,13 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     return root;
 }
 
-static void OnInit(AppHost* host) {
-    ThemeSet(ThemeMode::Light);
-    AssetsClear();
-    AssetsAddDefaultRoots(Str{});
-    AssetsAddRoot(StrL("assets"));
-    auto* app = (StoryApp*)host->user;
-    strncpy_s(app->search.placeholder, "Search…", _TRUNCATE);
-    strncpy_s(app->field.placeholder, "Type something…", _TRUNCATE);
-    strncpy_s(app->field.buf, "Hello GPUI", _TRUNCATE);
-    app->field.len = (int)strlen(app->field.buf);
-}
-
-static void OnClick(AppHost* host, int id) {
-    auto* app = (StoryApp*)host->user;
+static void OnClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
+    Window* host = cx->win;
+    (void)host;
+    int id = ev->id;
     if (id == ClickSearch) {
         app->search.focused = true;
-        host->input = &app->search;
+        cx->win->input = &app->search;
         AppRequestAnim(host, true);
         return;
     }
@@ -578,11 +570,11 @@ static void OnClick(AppHost* host, int id) {
         app->search.len = 0;
         app->search.cursor = 0;
         app->search.focused = false;
-        host->input = nullptr;
+        cx->win->input = nullptr;
         return;
     }
     app->search.focused = false;
-    host->input = nullptr;
+    cx->win->input = nullptr;
     if (id == ClickSizeMenu) {
         app->sizeMenuOpen = !app->sizeMenuOpen;
         app->accOptsOpen = false;
@@ -640,8 +632,9 @@ static void OnClick(AppHost* host, int id) {
     StoryClickRegistered(app, id);
 }
 
-static void OnChar(AppHost* host, uint32_t cp) {
-    auto* app = (StoryApp*)host->user;
+static void OnChar(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
+    (void)cx;
+    uint32_t cp = ev->ch;
     if (app->search.focused) {
         (void)cp;
     }
@@ -672,24 +665,30 @@ static void CopyUtf8(HWND hwnd, const char* s, int n) {
     CloseClipboard();
 }
 
-static void OnKey(AppHost* host, int vk, bool down) {
-    auto* app = (StoryApp*)host->user;
+static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
+    Window* host = cx->win;
+    int vk = ev->vk;
+    bool down = ev->down;
+    if (ev->ch != 0) {
+        OnChar(app, cx, ev);
+        return;
+    }
     if (!down) {
         return;
     }
     if (vk == 'C' && (GetKeyState(VK_CONTROL) & 0x8000) && app->selA >= 0 &&
         app->selA != app->selB) {
         char buf[8192];
-        int n = CopyTextHits(&host->paint, app->selA, app->selB, buf,
+        int n = CopyTextHits(&cx->win->paint, app->selA, app->selB, buf,
                              (int)sizeof(buf));
         if (n > 0) {
-            CopyUtf8(host->hwnd, buf, n);
+            CopyUtf8(cx->win->hwnd, buf, n);
         }
         return;
     }
     if (vk == VK_ESCAPE) {
         app->search.focused = false;
-        host->input = nullptr;
+        cx->win->input = nullptr;
         app->dialogOpen = false;
         app->sheetOpen = false;
         app->alertOpen = false;
@@ -701,9 +700,12 @@ static void OnKey(AppHost* host, int vk, bool down) {
     }
 }
 
-static void OnWheel(AppHost* host, float x, float y, float delta) {
-    auto* app = (StoryApp*)host->user;
-    const ScrollRect* pane = HitScrollRect(&host->paint, x, y);
+static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
+    Window* host = cx->win;
+    float x = ev->x;
+    float y = ev->y;
+    float delta = ev->delta;
+    const ScrollRect* pane = HitScrollRect(&cx->win->paint, x, y);
     float* off = &app->scrollY;
     float maxS = 8000.f;
     if (pane) {
@@ -724,12 +726,29 @@ static void OnWheel(AppHost* host, float x, float y, float delta) {
     }
 }
 
-static void OnMouseDown(AppHost* host, float x, float y, int button) {
-    auto* app = (StoryApp*)host->user;
+static void OnMouse(StoryApp* app, Ctx* cx, const MouseEvent* ev) {
+    Window* host = cx->win;
+    float x = ev->x;
+    float y = ev->y;
+    int button = ev->button;
+    if (ev->kind == MouseKind::Up) {
+        app->selecting = false;
+        return;
+    }
+    if (ev->kind == MouseKind::Move) {
+        if (!app->selecting) {
+            return;
+        }
+        int moveOff = TextHitOffsetAt(&cx->win->paint, x, y, true);
+        if (moveOff >= 0) {
+            app->selB = moveOff;
+        }
+        return;
+    }
     if (button != 1) {
         return;
     }
-    int off = TextHitOffsetAt(&host->paint, x, y, false);
+    int off = TextHitOffsetAt(&cx->win->paint, x, y, false);
     if (off >= 0) {
         app->selA = off;
         app->selB = off;
@@ -738,25 +757,6 @@ static void OnMouseDown(AppHost* host, float x, float y, int button) {
     }
     app->selA = -1;
     app->selB = -1;
-    app->selecting = false;
-}
-
-static void OnMouseMove(AppHost* host, float x, float y) {
-    auto* app = (StoryApp*)host->user;
-    if (!app->selecting) {
-        return;
-    }
-    int off = TextHitOffsetAt(&host->paint, x, y, true);
-    if (off >= 0) {
-        app->selB = off;
-    }
-}
-
-static void OnMouseUp(AppHost* host, float x, float y, int button) {
-    (void)x;
-    (void)y;
-    (void)button;
-    auto* app = (StoryApp*)host->user;
     app->selecting = false;
 }
 
@@ -780,28 +780,37 @@ static void ParseSlug(PWSTR cmd, char* out, int cap) {
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
-    static StoryApp app;
+    App* app = AppNew();
+    ThemeSet(ThemeMode::Light);
+    AssetsClear();
+    AssetsAddDefaultRoots(Str{});
+    AssetsAddRoot(StrL("assets"));
+
+    Entity<StoryApp> view = EntityNew<StoryApp>(app);
+    StoryApp* self = view.Get(app);
     char slug[64] = {};
     ParseSlug(cmd, slug, 64);
-    app.story = StoryFromSlug(slug);
+    self->story = StoryFromSlug(slug);
     // Rust Gallery::set_active_story puts the launch name in the sidebar
     // search box so the list filters to matching titles.
     if (slug[0]) {
-        const StoryInfo* m = StoryMeta(app.story);
-        strncpy_s(app.search.buf, m->title, _TRUNCATE);
-        app.search.len = (int)strlen(app.search.buf);
-        app.search.cursor = app.search.len;
+        const StoryInfo* m = StoryMeta(self->story);
+        strncpy_s(self->search.buf, m->title, _TRUNCATE);
+        self->search.len = (int)strlen(self->search.buf);
+        self->search.cursor = self->search.len;
     }
+    strncpy_s(self->search.placeholder, "Search…", _TRUNCATE);
+    strncpy_s(self->field.placeholder, "Type something…", _TRUNCATE);
+    strncpy_s(self->field.buf, "Hello GPUI", _TRUNCATE);
+    self->field.len = (int)strlen(self->field.buf);
 
-    AppHooks hooks = {};
-    hooks.onInit = OnInit;
-    hooks.onRender = OnRender;
-    hooks.onClick = OnClick;
-    hooks.onChar = OnChar;
-    hooks.onKey = OnKey;
-    hooks.onWheel = OnWheel;
-    hooks.onMouseDown = OnMouseDown;
-    hooks.onMouseMove = OnMouseMove;
-    hooks.onMouseUp = OnMouseUp;
-    return RunApp(L"GPUI Component", 1280, 960, hooks, &app);
+    Window* win = WindowOpenView(app, L"GPUI Component", 1280, 960, view.id,
+                                 AppWinOpts{});
+    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnKey(win, ListenTo(view, &OnKey));
+    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    int rc = AppRun(app);
+    AppFree(app);
+    return rc;
 }

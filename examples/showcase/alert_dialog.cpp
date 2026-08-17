@@ -9,7 +9,8 @@ enum {
     ClickAlertOk = 212
 };
 
-El* ShowcaseAlertDialog(ShowcaseApp* app, Arena* a) {
+El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
     root->Child(Button::New(a, StrL("open-alert-dialog"), ClickAlertOpen)
                     ->H(28)

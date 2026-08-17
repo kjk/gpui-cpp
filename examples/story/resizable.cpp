@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* ResizableRender(StoryApp* app, Arena* a) {
+El* ResizableRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* SpinnerRender(StoryApp* app, Arena* a) {
+El* SpinnerRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));

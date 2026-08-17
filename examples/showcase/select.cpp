@@ -10,7 +10,8 @@ enum {
 
 static const char* kFw[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
-El* ShowcaseSelect(ShowcaseApp* app, Arena* a) {
+El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     int sel = app->selectIx;
     if (sel < 0 || sel > 3) {
         sel = 0;

@@ -88,6 +88,8 @@ enum {
 };
 
 struct StoryApp {
+    static El* Render(StoryApp* self, Ctx* cx);
+
     int story = StoryWelcome;
     float scrollY = 0;
     float sideScrollY = 0;
@@ -166,29 +168,29 @@ El* StoryToolbar(Arena* a, StoryApp* app);
 El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions);
 El* StoryComingSoon(Arena* a, int story);
 
-typedef El* (*StoryRenderFn)(StoryApp* app, Arena* a, WinSize size);
+typedef El* (*StoryRenderFn)(StoryApp* app, Ctx* cx, WinSize size);
 typedef void (*StoryClickFn)(StoryApp* app, int id);
 void StoryRegister(int story, StoryRenderFn render, StoryClickFn click);
-El* StoryRenderRegistered(StoryApp* app, Arena* a, WinSize size);
+El* StoryRenderRegistered(StoryApp* app, Ctx* cx, WinSize size);
 void StoryClickRegistered(StoryApp* app, int id);
 
-#define STORY_PAGE(ID, RENDER, CLICK)                                   \
-    namespace {                                                         \
-    static El* _st_render_##ID(StoryApp* app, Arena* a, WinSize size) { \
-        (void)size;                                                     \
-        return RENDER(app, a);                                          \
-    }                                                                   \
-    struct _StReg_##ID {                                                \
-        _StReg_##ID() { StoryRegister(ID, _st_render_##ID, CLICK); }    \
-    } _st_reg_##ID;                                                     \
+#define STORY_PAGE(ID, RENDER, CLICK)                                  \
+    namespace {                                                        \
+    static El* _st_render_##ID(StoryApp* app, Ctx* cx, WinSize size) { \
+        (void)size;                                                    \
+        return RENDER(app, cx);                                        \
+    }                                                                  \
+    struct _StReg_##ID {                                               \
+        _StReg_##ID() { StoryRegister(ID, _st_render_##ID, CLICK); }   \
+    } _st_reg_##ID;                                                    \
     }
 
-#define STORY_PAGE_SZ(ID, RENDER, CLICK)                                \
-    namespace {                                                         \
-    static El* _st_render_##ID(StoryApp* app, Arena* a, WinSize size) { \
-        return RENDER(app, a, size);                                    \
-    }                                                                   \
-    struct _StReg_##ID {                                                \
-        _StReg_##ID() { StoryRegister(ID, _st_render_##ID, CLICK); }    \
-    } _st_reg_##ID;                                                     \
+#define STORY_PAGE_SZ(ID, RENDER, CLICK)                               \
+    namespace {                                                        \
+    static El* _st_render_##ID(StoryApp* app, Ctx* cx, WinSize size) { \
+        return RENDER(app, cx, size);                                  \
+    }                                                                  \
+    struct _StReg_##ID {                                               \
+        _StReg_##ID() { StoryRegister(ID, _st_render_##ID, CLICK); }   \
+    } _st_reg_##ID;                                                    \
     }

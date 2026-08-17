@@ -15,7 +15,8 @@ static void DecNum(StoryApp* app) {
     app->field.len = (int)strlen(app->field.buf);
 }
 
-El* NumberInputRender(StoryApp* app, Arena* a) {
+El* NumberInputRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     if (app->field.len == 0 || app->field.buf[0] < '0' ||
         app->field.buf[0] > '9') {
         strncpy_s(app->field.buf, "12", _TRUNCATE);

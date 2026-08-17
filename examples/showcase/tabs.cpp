@@ -9,7 +9,8 @@ enum {
     ClickTab2 = 522
 };
 
-El* ShowcaseTabs(ShowcaseApp* app, Arena* a) {
+El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const char* labels[] = {"Overview", "Activity", "Settings"};
     El* bar = Tabs::New(a, StrL("example-tabs"))
                   ->FlexRow()

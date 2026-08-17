@@ -40,7 +40,8 @@ static El* TagRow(Arena* a, StoryApp* app, bool outline, float radius) {
     return row;
 }
 
-El* TagRender(StoryApp* app, Arena* a) {
+El* TagRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
 

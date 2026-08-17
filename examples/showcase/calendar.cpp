@@ -40,7 +40,8 @@ static void EnsureCalendarDate(ShowcaseApp* app) {
     app->calMonth = st.wMonth;
 }
 
-El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a) {
+El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     EnsureCalendarDate(app);
     SYSTEMTIME today = {};
     GetLocalTime(&today);
@@ -132,8 +133,9 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a) {
     return root;
 }
 
-El* ShowcaseCalendar(ShowcaseApp* app, Arena* a) {
-    return ShowcaseCalendarGrid(app, a);
+El* ShowcaseCalendar(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
+    return ShowcaseCalendarGrid(app, cx);
 }
 
 void ShowcaseCalendarClick(ShowcaseApp* app, int id) {

@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* SkeletonRender(StoryApp* app, Arena* a) {
+El* SkeletonRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

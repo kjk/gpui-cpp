@@ -38,9 +38,12 @@ static void OnClick(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
     }
 }
 
-static void OnMouse(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
+static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
     (void)app;
     Window* host = cx->win;
+    if (ev->kind != MouseKind::Down) {
+        return;
+    }
     float x = ev->x;
     float y = ev->y;
     int button = ev->button;

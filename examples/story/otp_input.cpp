@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* OtpInputRender(StoryApp* app, Arena* a) {
+El* OtpInputRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec =
         StorySection(a, "Default", "A one-time password input component.");

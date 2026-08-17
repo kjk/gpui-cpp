@@ -8,7 +8,8 @@ enum {
     ClickBtnCancel = 221
 };
 
-El* ShowcaseButton(ShowcaseApp* app, Arena* a) {
+El* ShowcaseButton(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     return Div(a)
         ->FlexRow()

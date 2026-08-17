@@ -43,7 +43,8 @@ static const char* kEditorDefault =
     "    println!(\"{}\", workspace.summary());\n"
     "}\n";
 
-El* ShowcaseEditor(ShowcaseApp* app, Arena* a) {
+El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     if (!app->editorInited) {
         strncpy_s(app->editor, kEditorDefault, _TRUNCATE);
         app->editorLen = (int)strlen(app->editor);

@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* SeparatorRender(StoryApp* app, Arena* a) {
+El* SeparatorRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

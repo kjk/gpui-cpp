@@ -3,7 +3,8 @@
 
 using namespace gpui;
 
-El* ShowcaseProgress(ShowcaseApp* app, Arena* a) {
+El* ShowcaseProgress(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     return Div(a)
         ->FlexCol()

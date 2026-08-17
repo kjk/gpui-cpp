@@ -5,7 +5,8 @@ static void SetSlider(StoryApp* app, float v) {
     (void)v;
 }
 
-El* SliderRender(StoryApp* app, Arena* a) {
+El* SliderRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(

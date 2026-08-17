@@ -7,7 +7,8 @@ enum {
     ClickTooltip = 570
 };
 
-El* ShowcaseTooltip(ShowcaseApp* app, Arena* a) {
+El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     // Rust wraps the button in a hover target; the button itself has no hover
     // fill.
     El* btn = Button::New(a, StrL("tooltip-anchor"), 0)

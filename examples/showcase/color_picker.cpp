@@ -34,7 +34,8 @@ static uint32_t DisplayedColor(ShowcaseApp* app) {
     return app->colorHex & 0xffffff;
 }
 
-El* ShowcaseColorPicker(ShowcaseApp* app, Arena* a) {
+El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     uint32_t shown = DisplayedColor(app);
     if (!app->hexIn.focused) {
         WriteHex(app, shown);

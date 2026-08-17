@@ -5,7 +5,8 @@ static void OnCopy(StoryApp* app, Str v) {
     (void)v;
 }
 
-El* ClipboardRender(StoryApp* app, Arena* a) {
+El* ClipboardRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

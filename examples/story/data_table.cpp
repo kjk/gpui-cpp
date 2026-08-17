@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* DataTableRender(StoryApp* app, Arena* a) {
+El* DataTableRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     static const char* heads[] = {"Name", "Email", "Role"};
     static const char* r0[] = {"Ada Lovelace", "ada@example.com", "Admin"};

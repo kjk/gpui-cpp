@@ -7,7 +7,8 @@ enum {
     ClickOtp = 410
 };
 
-El* ShowcaseOtpInput(ShowcaseApp* app, Arena* a) {
+El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     int active = app->otpLen;
     if (active > 5) {
         active = 5;

@@ -16,7 +16,8 @@ static El* TabPanel(Arena* a, StoryApp* app, El* bar) {
         Div(a)->Pad(12)->Child(StoryTxt(a, Str(bodies[i]), 13, th.mutedFg)));
 }
 
-El* TabsRender(StoryApp* app, Arena* a) {
+El* TabsRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));

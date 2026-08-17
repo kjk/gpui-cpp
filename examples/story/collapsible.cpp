@@ -15,7 +15,8 @@ static El* Chevron(Arena* a, bool open) {
         ->Fg(ThemeNow().mutedFg);
 }
 
-El* CollapsibleRender(StoryApp* app, Arena* a) {
+El* CollapsibleRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

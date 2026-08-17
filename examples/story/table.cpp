@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* TableRender(StoryApp* app, Arena* a) {
+El* TableRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     static const char* heads[] = {"Component", "Status", "Version"};
     static const char* r0[] = {"gpui-base", "Stable", "0.4.1"};

@@ -15,7 +15,8 @@ static El* PopCard(Arena* a, const char* title, const char* body) {
     return content;
 }
 
-El* PopoverRender(StoryApp* app, Arena* a) {
+El* PopoverRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(

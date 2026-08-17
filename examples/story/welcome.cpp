@@ -136,7 +136,8 @@ static El* Bullet(Arena* a, const char* s) {
         ->W(kFill);
 }
 
-El* WelcomeRender(StoryApp* app, Arena* a) {
+El* WelcomeRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     (void)app;
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(0)->W(kFill);

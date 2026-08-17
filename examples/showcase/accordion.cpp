@@ -9,7 +9,8 @@ enum {
     ClickAcc2 = 202
 };
 
-El* ShowcaseAccordion(ShowcaseApp* app, Arena* a) {
+El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     static const char* qs[] = {
         "What is GPUI Base?",
         "Can I bring my own theme?",

@@ -17,7 +17,8 @@ static El* RepoRow(Arena* a, const char* name) {
         ->Child(TextEl(a, Str(name))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
 }
 
-El* ShowcaseCollapsible(ShowcaseApp* app, Arena* a) {
+El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     bool open = app->collapsibleOpen;
     return Collapsible::New(a)
         ->Open(open)

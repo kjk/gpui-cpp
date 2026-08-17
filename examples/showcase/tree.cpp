@@ -41,7 +41,8 @@ static int Depth(int i) {
     return d;
 }
 
-El* ShowcaseTree(ShowcaseApp* app, Arena* a) {
+El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* list = Div(a)->FlexCol()->PadY(4);
     for (int i = 0; i < 8; i++) {
         if (!Visible(app, i)) {

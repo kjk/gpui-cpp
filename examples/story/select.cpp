@@ -20,7 +20,8 @@ static component::Select* Framework(Arena* a, StoryApp* app, const char* id) {
         ->OnChange(MkFunc1(&PickSel, app));
 }
 
-El* SelectRender(StoryApp* app, Arena* a) {
+El* SelectRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* search = StorySection(a, "Search and clear", nullptr);

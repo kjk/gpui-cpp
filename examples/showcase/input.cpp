@@ -7,7 +7,8 @@ enum {
     ClickInput = 380
 };
 
-El* ShowcaseInput(ShowcaseApp* app, Arena* a) {
+El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     return Div(a)
         ->FlexCol()
         ->W(224)

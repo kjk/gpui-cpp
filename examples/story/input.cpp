@@ -29,7 +29,8 @@ static El* FieldBox(Arena* a, const char* text, const char* prefix,
     return field;
 }
 
-El* InputRender(StoryApp* app, Arena* a) {
+El* InputRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
 

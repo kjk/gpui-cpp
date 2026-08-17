@@ -3,7 +3,8 @@
 
 using namespace gpui;
 
-El* ShowcaseScrollbar(ShowcaseApp* app, Arena* a) {
+El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* list = Div(a)->FlexCol();
     for (int i = 1; i <= 20; i++) {
         list->Child(Div(a)

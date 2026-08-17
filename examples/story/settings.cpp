@@ -1,6 +1,7 @@
 #include "Story.h"
 
-El* SettingsRender(StoryApp* app, Arena* a) {
+El* SettingsRender(StoryApp* app, Ctx* cx) {
+    Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(a, "Default",
                            "A settings page with groups and typed fields.");
