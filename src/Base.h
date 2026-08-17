@@ -27,21 +27,11 @@
 #include <utility>   // for std::forward
 
 #define NOMINMAX
-#include <winsock2.h> // must include before <windows.h>
 #include <windows.h>
-#include <ws2def.h>
-#include <unknwn.h>
-#include <shlwapi.h>
-#include <shlobj.h>
-#include <commctrl.h>
 #include <windowsx.h>
-#include <winsafer.h>
-#include <wininet.h>
-#include <versionhelpers.h>
-#include <tlhelp32.h>
-#include <shellapi.h>
-#include <ole2.h>
-#include <uxtheme.h>
+#include <d2d1.h>
+#include <dwrite.h>
+#include <dwmapi.h>
 
 using i8 = int8_t;
 using u8 = uint8_t;

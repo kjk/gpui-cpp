@@ -1,6 +1,7 @@
 #include "sys/SysInfo.h"
 
 #include <psapi.h>
+#include <tlhelp32.h>
 
 static u64 FtToU64(FILETIME ft) {
     ULARGE_INTEGER u;

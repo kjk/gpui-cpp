@@ -4,12 +4,6 @@
 
 #include "Base.h"
 
-#include <d2d1.h>
-
-struct IDWriteFactory;
-struct IDWriteTextFormat;
-struct IDWriteTextLayout;
-
 // ─── color ────────────────────────────────────────────────────────────────
 
 struct Rgba {

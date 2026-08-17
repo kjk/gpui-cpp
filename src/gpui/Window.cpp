@@ -1,9 +1,6 @@
 #include "gpui/Gpui.h"
 
-#include <d2d1.h>
-#include <dwrite.h>
-#include <dwmapi.h>
-#include <windowsx.h>
+#include <ole2.h>
 
 static const wchar_t* kWndClass = L"Gpui2SystemMonitor";
 static const UINT kTickMs = 500;

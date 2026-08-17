@@ -1,8 +1,6 @@
 #include "gpui/Gpui.h"
 #include "gpui/Svg.h"
 
-#include <d2d1.h>
-#include <dwrite.h>
 #include <math.h>
 
 // ─── color / theme ────────────────────────────────────────────────────────

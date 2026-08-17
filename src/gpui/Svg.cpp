@@ -1,7 +1,6 @@
 #include "gpui/Svg.h"
 #include "gpui/Assets.h"
 
-#include <d2d1.h>
 #include <math.h>
 
 static const float kPi = 3.14159265f;

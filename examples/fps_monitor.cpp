@@ -1,6 +1,5 @@
 #include "gpui/Gpui.h"
 
-#include <d2d1.h>
 #include <math.h>
 
 static const float kHilbertSize = 200.f;
