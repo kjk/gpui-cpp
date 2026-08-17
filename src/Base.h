@@ -160,9 +160,6 @@ struct Arena {
     ~Arena() = delete;
 };
 
-static_assert(sizeof(Arena) <= kArenaHeaderSize,
-              "Arena header must fit in reserved header bytes");
-
 Arena* ArenaNew();
 void ArenaDelete(Arena* arena);
 

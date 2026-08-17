@@ -21,6 +21,9 @@ void* AllocZero(int count, int size) {
     return calloc(count, size);
 }
 
+static_assert(sizeof(Arena) <= kArenaHeaderSize,
+              "Arena header must fit in reserved header bytes");
+
 // ─── Arena.cpp ───────────────────────────────────────────────────────────────
 
 using ArenaFlags = u64;
