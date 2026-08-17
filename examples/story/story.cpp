@@ -235,26 +235,36 @@ static const char* StorySizeName(UiSize s) {
     }
 }
 
-static El* ToolbarDropBtn(Arena* a, int id, Str label, bool first, bool last) {
+// StoryToolbar::render joins its buttons into one segmented control: the
+// group draws the outline, and the buttons after the first sit on their
+// neighbour's border instead of drawing a second one.
+static El* ToolbarGroup(Arena* a) {
     const Theme& th = ThemeNow();
-    El* b = Div(a)
-                ->H(24)
-                ->PadX(10)
-                ->ItemsCenter()
-                ->JustifyCenter()
-                ->Border(1, th.border)
-                ->Bg(th.background)
-                ->HoverBg(th.muted)
-                ->Click(id)
-                ->Child(StoryTxt(a, label, 12, th.foreground));
-    if (first && last) {
-        b->Radius(th.radius);
-    } else if (first) {
-        b->Radius(th.radius);
-    } else if (last) {
-        b->Radius(th.radius);
-    }
-    return b;
+    return Div(a)
+        ->FlexRow()
+        ->ItemsStart()
+        ->Bg(th.background)
+        ->Border(1, th.border)
+        ->Radius(th.radius);
+}
+
+static El* ToolbarSep(Arena* a) {
+    const Theme& th = ThemeNow();
+    return Div(a)->W(1)->H(24)->Shrink0()->Bg(th.border);
+}
+
+// No Bg on the button: the group paints its background and border first, and
+// an opaque child would cover the stroke that straddles the group's edge.
+static El* ToolbarDropBtn(Arena* a, int id, Str label) {
+    const Theme& th = ThemeNow();
+    return Div(a)
+        ->H(24)
+        ->PadX(10)
+        ->ItemsCenter()
+        ->JustifyCenter()
+        ->HoverBg(th.muted)
+        ->Click(id)
+        ->Child(StoryTxt(a, label, 12, th.foreground));
 }
 
 static El* ToolbarCheckRow(Arena* a, int id, const char* label, bool on) {
@@ -290,10 +300,11 @@ El* StoryToolbar(Arena* a, StoryApp* app) {
 
 El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions) {
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+    El* group = ToolbarGroup(a);
+    row->Child(group);
 
     El* sizeTrig = ToolbarDropBtn(
-        a, ClickSizeMenu, StoryFmt(a, "Size: %s", StorySizeName(app->size)),
-        true, !withOptions);
+        a, ClickSizeMenu, StoryFmt(a, "Size: %s", StorySizeName(app->size)));
     El* sizeMenu = nullptr;
     if (app->sizeMenuOpen) {
         sizeMenu = ToolbarMenu(a);
@@ -306,13 +317,13 @@ El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions) {
         sizeMenu->Child(ToolbarCheckRow(a, ClickSizeLg, "Large",
                                         app->size == UiSize::Large));
     }
-    row->Child(Popup::New(a, StrL("story-size-menu"), sizeTrig)
-                   ->Content(sizeMenu)
-                   ->IntoEl());
+    group->Child(Popup::New(a, StrL("story-size-menu"), sizeTrig)
+                     ->Content(sizeMenu)
+                     ->IntoEl());
 
     if (withOptions) {
-        El* optTrig =
-            ToolbarDropBtn(a, ClickOptsMenu, StrL("Options"), false, true);
+        group->Child(ToolbarSep(a));
+        El* optTrig = ToolbarDropBtn(a, ClickOptsMenu, StrL("Options"));
         El* optMenu = nullptr;
         if (app->accOptsOpen) {
             optMenu = ToolbarMenu(a);
@@ -325,9 +336,9 @@ El* StoryToolbar(Arena* a, StoryApp* app, bool withOptions) {
             optMenu->Child(ToolbarCheckRow(a, ClickAccBordered, "Bordered",
                                            app->accordionBordered));
         }
-        row->Child(Popup::New(a, StrL("story-opts-menu"), optTrig)
-                       ->Content(optMenu)
-                       ->IntoEl());
+        group->Child(Popup::New(a, StrL("story-opts-menu"), optTrig)
+                         ->Content(optMenu)
+                         ->IntoEl());
     }
     return row;
 }

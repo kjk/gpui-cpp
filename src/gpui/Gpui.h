@@ -81,7 +81,9 @@ struct Theme {
     Rgba warning;
     Rgba warningFg;
     Rgba skeleton;
+    // crates/ui/src/theme/mod.rs: radius 6, radius_lg 8 (Dialog, Notification).
     float radius;
+    float radiusLg;
 };
 
 enum class ThemeMode : uint8_t {
