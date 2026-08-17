@@ -31,68 +31,120 @@ void StoryClickRegistered(StoryApp* app, int id) {
 }
 
 static const StoryInfo kMeta[StoryCount] = {
-    {"introduction", "Introduction", "UI components for building fantastic desktop application by using GPUI."},
-    {"accordion", "Accordion", "A vertically stacked set of interactive headings that each reveal a section of content."},
-    {"alert", "Alert", "Communicate important status changes without interrupting the user's workflow."},
-    {"alert-dialog", "AlertDialog", "A modal dialog that interrupts the user with important content and expects a response."},
-    {"avatar", "Avatar", "An image element with a fallback for representing the user."},
-    {"badge", "Badge", "A red dot that indicates the number of unread messages."},
-    {"breadcrumb", "Breadcrumb", "Displays the path to the current resource using a hierarchy of links."},
-    {"button", "Button", "Displays a button or a component that looks like a button."},
+    {"introduction", "Introduction",
+     "UI components for building fantastic desktop application by using GPUI."},
+    {"accordion", "Accordion",
+     "A vertically stacked set of interactive headings that each reveal a "
+     "section of content."},
+    {"alert", "Alert",
+     "Communicate important status changes without interrupting the user's "
+     "workflow."},
+    {"alert-dialog", "AlertDialog",
+     "A modal dialog that interrupts the user with important content and "
+     "expects a response."},
+    {"avatar", "Avatar",
+     "An image element with a fallback for representing the user."},
+    {"badge", "Badge",
+     "A red dot that indicates the number of unread messages."},
+    {"breadcrumb", "Breadcrumb",
+     "Displays the path to the current resource using a hierarchy of links."},
+    {"button", "Button",
+     "Displays a button or a component that looks like a button."},
     {"calendar", "Calendar", "A calendar of days displayed in a grid."},
     {"chart", "Chart", "Beautiful charts. Built using GPUI components."},
-    {"checkbox", "Checkbox", "A control that allows the user to toggle between checked and not checked."},
+    {"checkbox", "Checkbox",
+     "A control that allows the user to toggle between checked and not "
+     "checked."},
     {"clipboard", "Clipboard", "A button that copies text to the clipboard."},
-    {"collapsible", "Collapsible", "An interactive component which expands/collapses a panel."},
-    {"color-picker", "ColorPicker", "A color picker that allows users to select a color."},
-    {"combobox", "Combobox", "Autocomplete input and command palette with a list of suggestions."},
+    {"collapsible", "Collapsible",
+     "An interactive component which expands/collapses a panel."},
+    {"color-picker", "ColorPicker",
+     "A color picker that allows users to select a color."},
+    {"combobox", "Combobox",
+     "Autocomplete input and command palette with a list of suggestions."},
     {"data-table", "DataTable", "Powerful table and datagrids built."},
-    {"date-picker", "DatePicker", "A date picker component with range and presets."},
-    {"description-list", "DescriptionList", "A list of terms and their corresponding descriptions."},
-    {"dialog", "Dialog", "A window overlaid on either the primary window or another dialog window."},
-    {"dropdown-button", "DropdownButton", "A button that opens a dropdown menu of actions."},
-    {"editor", "Editor", "A code editor with syntax highlighting, line numbers, and folding."},
+    {"date-picker", "DatePicker",
+     "A date picker component with range and presets."},
+    {"description-list", "DescriptionList",
+     "A list of terms and their corresponding descriptions."},
+    {"dialog", "Dialog",
+     "A window overlaid on either the primary window or another dialog "
+     "window."},
+    {"dropdown-button", "DropdownButton",
+     "A button that opens a dropdown menu of actions."},
+    {"editor", "Editor",
+     "A code editor with syntax highlighting, line numbers, and folding."},
     {"form", "Form", "Building forms with validation and various input types."},
-    {"group-box", "GroupBox", "A container that groups related content with a title."},
-    {"hover-card", "HoverCard", "For sighted users to preview content available behind a link."},
+    {"group-box", "GroupBox",
+     "A container that groups related content with a title."},
+    {"hover-card", "HoverCard",
+     "For sighted users to preview content available behind a link."},
     {"icon", "Icon", "Icon display component."},
     {"image", "Image", "Image display with fallbacks."},
-    {"input", "Input", "Displays a form input field or a component that looks like an input field."},
+    {"input", "Input",
+     "Displays a form input field or a component that looks like an input "
+     "field."},
     {"kbd", "Kbd", "A component to display keyboard shortcuts."},
     {"label", "Label", "Renders an accessible label associated with controls."},
     {"list", "List", "A list of items that can be selected."},
-    {"menu", "Menu", "Displays a menu to the user — such as a set of actions or functions."},
+    {"menu", "Menu",
+     "Displays a menu to the user — such as a set of actions or functions."},
     {"native-menu", "NativeMenu", "Native application menu bar."},
-    {"notification", "Notification", "A brief message that appears temporarily."},
-    {"number-input", "NumberInput", "An input for numeric values with increment and decrement controls."},
+    {"notification", "Notification",
+     "A brief message that appears temporarily."},
+    {"number-input", "NumberInput",
+     "An input for numeric values with increment and decrement controls."},
     {"otp-input", "OtpInput", "A one-time password input component."},
-    {"pagination", "Pagination", "Pagination with page navigation, next and previous controls."},
-    {"popover", "Popover", "Displays rich content in a portal, triggered by a button."},
-    {"progress", "Progress", "Displays an indicator showing the completion progress of a task."},
-    {"radio", "Radio", "A set of checkable buttons where only one can be checked at a time."},
+    {"pagination", "Pagination",
+     "Pagination with page navigation, next and previous controls."},
+    {"popover", "Popover",
+     "Displays rich content in a portal, triggered by a button."},
+    {"progress", "Progress",
+     "Displays an indicator showing the completion progress of a task."},
+    {"radio", "Radio",
+     "A set of checkable buttons where only one can be checked at a time."},
     {"rating", "Rating", "A rating component that allows users to rate items."},
-    {"resizable", "Resizable", "Accessible resizable panel groups and layouts."},
-    {"scrollbar", "Scrollbar", "A scrollbar that allows users to scroll content."},
-    {"select", "Select", "Displays a list of options for the user to pick from."},
+    {"resizable", "Resizable",
+     "Accessible resizable panel groups and layouts."},
+    {"scrollbar", "Scrollbar",
+     "A scrollbar that allows users to scroll content."},
+    {"select", "Select",
+     "Displays a list of options for the user to pick from."},
     {"separator", "Separator", "Visually or semantically separates content."},
     {"settings", "Settings", "A settings page with groups and typed fields."},
-    {"sheet", "Sheet", "Extends the Dialog component to display content that complements the main content."},
-    {"sidebar", "Sidebar", "A composable, themeable and customizable sidebar component."},
-    {"skeleton", "Skeleton", "Use to show a placeholder while content is loading."},
-    {"slider", "Slider", "An input where the user selects a value from within a given range."},
+    {"sheet", "Sheet",
+     "Extends the Dialog component to display content that complements the "
+     "main content."},
+    {"sidebar", "Sidebar",
+     "A composable, themeable and customizable sidebar component."},
+    {"skeleton", "Skeleton",
+     "Use to show a placeholder while content is loading."},
+    {"slider", "Slider",
+     "An input where the user selects a value from within a given range."},
     {"spinner", "Spinner", "A loading spinner."},
-    {"status-bar", "StatusBar", "A status bar that typically sits at the bottom of the window."},
-    {"stepper", "Stepper", "A stepper component to display progress through a sequence of steps."},
-    {"switch", "Switch", "A control that allows the user to toggle between checked and not checked."},
+    {"status-bar", "StatusBar",
+     "A status bar that typically sits at the bottom of the window."},
+    {"stepper", "Stepper",
+     "A stepper component to display progress through a sequence of steps."},
+    {"switch", "Switch",
+     "A control that allows the user to toggle between checked and not "
+     "checked."},
     {"table", "Table", "A responsive table component."},
-    {"tabs", "Tabs", "A set of layered sections of content—known as tab panels—that are displayed one at a time."},
+    {"tabs", "Tabs",
+     "A set of layered sections of content—known as tab panels—that are "
+     "displayed one at a time."},
     {"tag", "Tag", "A tag component to categorize or organize items."},
-    {"textarea", "Textarea", "Displays a form textarea or a component that looks like a textarea."},
-    {"theme-colors", "Theme Colors", "Theme color tokens used by the components."},
+    {"textarea", "Textarea",
+     "Displays a form textarea or a component that looks like a textarea."},
+    {"theme-colors", "Theme Colors",
+     "Theme color tokens used by the components."},
     {"toggle", "Toggle", "A two-state button that can be either on or off."},
-    {"tooltip", "Tooltip", "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it."},
+    {"tooltip", "Tooltip",
+     "A popup that displays information related to an element when the element "
+     "receives keyboard focus or the mouse hovers over it."},
     {"tree", "Tree", "A tree view component for hierarchical data."},
-    {"virtual-list", "VirtualList", "A virtualized list for efficiently rendering large lists."},
+    {"virtual-list", "VirtualList",
+     "A virtualized list for efficiently rendering large lists."},
 };
 
 const StoryInfo* StoryMeta(int i) {
@@ -107,7 +159,8 @@ int StoryFromSlug(const char* slug) {
         return StoryWelcome;
     }
     for (int i = 0; i < StoryCount; i++) {
-        if (str::EqI(Str(slug), Str(kMeta[i].slug)) || str::EqI(Str(slug), Str(kMeta[i].title))) {
+        if (str::EqI(Str(slug), Str(kMeta[i].slug)) ||
+            str::EqI(Str(slug), Str(kMeta[i].title))) {
             return i;
         }
     }
@@ -138,7 +191,13 @@ El* StorySection(Arena* a, const char* title, const char* desc) {
     if (desc && desc[0]) {
         head->Child(StoryTxt(a, StoryDup(a, desc), 12, th.mutedFg)->Wrap());
     }
-    El* box = Div(a)->FlexCol()->Gap(12)->Pad(16)->W(kFill)->Border(1, th.border)->Radius(th.radius);
+    El* box = Div(a)
+                  ->FlexCol()
+                  ->Gap(12)
+                  ->Pad(16)
+                  ->W(kFill)
+                  ->Border(1, th.border)
+                  ->Radius(th.radius);
     box->Child(head);
     El* body = Div(a)->FlexCol()->Gap(16)->W(kFill)->ItemsStart();
     box->Child(body);
@@ -162,7 +221,8 @@ El* StorySectionAdd(El* section, El* child) {
 El* StoryToolbar(Arena* a, StoryApp* app) {
     const Theme& th = ThemeNow();
     const char* labels[] = {"XS", "SM", "MD", "LG"};
-    UiSize sizes[] = {UiSize::XSmall, UiSize::Small, UiSize::Medium, UiSize::Large};
+    UiSize sizes[] = {UiSize::XSmall, UiSize::Small, UiSize::Medium,
+                      UiSize::Large};
     int clicks[] = {ClickSizeXs, ClickSizeSm, ClickSizeMd, ClickSizeLg};
     El* row = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
     for (int i = 0; i < 4; i++) {
@@ -174,7 +234,8 @@ El* StoryToolbar(Arena* a, StoryApp* app) {
                     ->JustifyCenter()
                     ->Radius(4)
                     ->Click(clicks[i])
-                    ->Child(StoryTxt(a, Str(labels[i]), 11, on ? th.primaryFg : th.foreground));
+                    ->Child(StoryTxt(a, Str(labels[i]), 11,
+                                     on ? th.primaryFg : th.foreground));
         if (on) {
             b->Bg(th.primary);
         } else {
@@ -192,15 +253,18 @@ El* StoryComingSoon(Arena* a, int story) {
         ->FlexCol()
         ->Gap(8)
         ->Pad(8)
-        ->Child(StoryTxt(a, StoryDup(a, m->title), 16, th.foreground)->Semibold())
-        ->Child(StoryTxt(a, StoryDup(a, "This story is not ported yet."), 13, th.mutedFg));
+        ->Child(StoryTxt(a, StoryDup(a, m->title), 16, th.foreground)
+                    ->Semibold())
+        ->Child(StoryTxt(a, StoryDup(a, "This story is not ported yet."), 13,
+                         th.mutedFg));
 }
 
 static bool StoryMatches(const StoryInfo* m, const char* q) {
     if (!q || !q[0]) {
         return true;
     }
-    return str::ContainsI(Str(m->title), Str(q)) || str::ContainsI(Str(m->slug), Str(q));
+    return str::ContainsI(Str(m->title), Str(q)) ||
+           str::ContainsI(Str(m->slug), Str(q));
 }
 
 static El* SidebarList(StoryApp* app, Arena* a) {
@@ -236,7 +300,8 @@ static El* SidebarList(StoryApp* app, Arena* a) {
 
 static El* SearchBox(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
-    Str shown = app->search.len > 0 ? Str(app->search.buf, app->search.len) : StrL("Search\xE2\x80\xA6");
+    Str shown = app->search.len > 0 ? Str(app->search.buf, app->search.len)
+                                    : StrL("Search\xE2\x80\xA6");
     Rgba fg = app->search.len > 0 ? th.foreground : th.mutedFg;
     return Div(a)
         ->H(36)
@@ -253,7 +318,8 @@ static El* SearchBox(StoryApp* app, Arena* a) {
 static El* Sidebar(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     float w = app->collapsed ? 56.f : 255.f;
-    El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar)->Border(0, th.border);
+    El* side =
+        Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar)->Border(0, th.border);
     El* header = Div(a)->FlexCol()->Pad(12)->Gap(16);
     El* brand = Div(a)->FlexRow()->Gap(10)->ItemsCenter();
     El* logo = Div(a)
@@ -264,11 +330,13 @@ static El* Sidebar(StoryApp* app, Arena* a) {
                    ->ItemsCenter()
                    ->JustifyCenter()
                    ->Shrink0()
-                   ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)->Fg(th.primaryFg));
+                   ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)
+                               ->Fg(th.primaryFg));
     brand->Child(logo);
     if (!app->collapsed) {
         El* names = Div(a)->FlexCol();
-        names->Child(StoryTxt(a, StrL("GPUI Component"), 14, th.sidebarFg)->Semibold());
+        names->Child(StoryTxt(a, StrL("GPUI Component"), 14, th.sidebarFg)
+                         ->Semibold());
         names->Child(StoryTxt(a, StrL("Component showcase"), 12, th.mutedFg));
         brand->Child(names);
     }
@@ -310,20 +378,26 @@ static El* Footer(StoryApp* app, Arena* a) {
         ->Shrink0()
         ->Bg(th.titleBar)
         ->BorderT(1, th.border)
-        ->Child(Div(a)
-                    ->FlexRow()
-                    ->Gap(8)
-                    ->ItemsCenter()
-                    ->Child(IconEl(a, IconName::GalleryVerticalEnd, 12)->Fg(th.mutedFg))
-                    ->Child(StoryTxt(a, StoryFmt(a, "%d components", StoryCount), 12, th.mutedFg))
-                    ->Child(Div(a)->W(1)->H(12)->Bg(th.border))
-                    ->Child(StoryTxt(a, Str(m->title), 12, th.mutedFg)))
+        ->Child(
+            Div(a)
+                ->FlexRow()
+                ->Gap(8)
+                ->ItemsCenter()
+                ->Child(IconEl(a, IconName::GalleryVerticalEnd, 12)
+                            ->Fg(th.mutedFg))
+                ->Child(StoryTxt(a, StoryFmt(a, "%d components", StoryCount),
+                                 12, th.mutedFg))
+                ->Child(Div(a)->W(1)->H(12)->Bg(th.border))
+                ->Child(StoryTxt(a, Str(m->title), 12, th.mutedFg)))
         ->Child(Div(a)
                     ->FlexRow()
                     ->Gap(12)
                     ->ItemsCenter()
-                    ->Child(StoryTxt(a, ThemeGet() == ThemeMode::Dark ? StrL("Default Dark") : StrL("Default Light"), 12,
-                                     th.mutedFg))
+                    ->Child(StoryTxt(a,
+                                     ThemeGet() == ThemeMode::Dark
+                                         ? StrL("Default Dark")
+                                         : StrL("Default Light"),
+                                     12, th.mutedFg))
                     ->Child(StoryTxt(a, StrL("v0.5.1"), 12, th.mutedFg)));
 }
 
@@ -344,7 +418,8 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     El* main = Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0);
     main->Child(Header(app, frame));
     El* scroller = Div(frame)->Grow()->ClipY()->ScrollY(app->scrollY)->W(kFill);
-    scroller->Child(Div(frame)->Pad(16)->W(kFill)->Child(StoryRenderRegistered(app, frame, size)));
+    scroller->Child(Div(frame)->Pad(16)->W(kFill)->Child(
+        StoryRenderRegistered(app, frame, size)));
     main->Child(scroller);
     body->Child(main);
     root->Child(body);

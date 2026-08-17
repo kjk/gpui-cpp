@@ -32,10 +32,18 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     (void)size;
     auto* app = (InputApp*)host->user;
     const Theme& th = ThemeNow();
-    El* col = Div(frame)->FlexCol()->SizeFull()->Pad(20)->Gap(8)->ItemsCenter()->JustifyCenter()->Bg(th.background);
+    El* col = Div(frame)
+                  ->FlexCol()
+                  ->SizeFull()
+                  ->Pad(20)
+                  ->Gap(8)
+                  ->ItemsCenter()
+                  ->JustifyCenter()
+                  ->Bg(th.background);
     col->Child(InputBox(frame, &app->in, th));
     if (app->display[0]) {
-        col->Child(TextEl(frame, Str(app->display))->Font(16)->Fg(th.foreground));
+        col->Child(
+            TextEl(frame, Str(app->display))->Font(16)->Fg(th.foreground));
     }
     return col;
 }

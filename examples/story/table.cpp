@@ -9,7 +9,9 @@ El* TableRender(StoryApp* app, Arena* a) {
     static const char** rows[] = {r0, r1, r2};
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(a, "Default", "A responsive table component.");
-    StorySectionAdd(sec, component::Table::New(a)->Heads(heads, 3)->Rows(rows, 3)->IntoEl());
+    StorySectionAdd(
+        sec,
+        component::Table::New(a)->Heads(heads, 3)->Rows(rows, 3)->IntoEl());
     page->Child(sec);
     return page;
 }

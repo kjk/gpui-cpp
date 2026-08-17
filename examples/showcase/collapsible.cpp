@@ -2,7 +2,9 @@
 #include "ui/Button.h"
 #include "ui/Collapsible.h"
 
-enum { ClickCollapsible = 290 };
+enum {
+    ClickCollapsible = 290
+};
 
 static El* RepoRow(Arena* a, const char* name) {
     return Div(a)
@@ -23,17 +25,28 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Arena* a) {
                     ->FlexRow()
                     ->ItemsCenter()
                     ->JustifyBetween()
-                    ->Child(TextEl(a, StrL("@gpui/base · 3 repositories"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-                    ->Child(Button::New(a, StrL("collapsible-trigger"), ClickCollapsible)
+                    ->Child(TextEl(a, StrL("@gpui/base · 3 repositories"))
+                                ->Font(12)
+                                ->Fg(Rgb(0x17, 0x17, 0x17)))
+                    ->Child(Button::New(a, StrL("collapsible-trigger"),
+                                        ClickCollapsible)
                                 ->W(28)
                                 ->H(28)
                                 ->ItemsCenter()
                                 ->JustifyCenter()
                                 ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                                 ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                                ->Child(TextEl(a, open ? StrL("−") : StrL("+"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))))
+                                ->Child(TextEl(a, open ? StrL("−") : StrL("+"))
+                                            ->Font(12)
+                                            ->Fg(Rgb(0x17, 0x17, 0x17)))))
         ->Child(Div(a)->PadT(8)->W(256)->Child(RepoRow(a, "gpui-component")))
-        ->Content(Div(a)->PadT(8)->W(256)->FlexCol()->Gap(8)->Child(RepoRow(a, "gpui-base"))->Child(RepoRow(a, "gpui-storybook")))
+        ->Content(Div(a)
+                      ->PadT(8)
+                      ->W(256)
+                      ->FlexCol()
+                      ->Gap(8)
+                      ->Child(RepoRow(a, "gpui-base"))
+                      ->Child(RepoRow(a, "gpui-storybook")))
         ->IntoEl()
         ->W(256);
 }
@@ -45,4 +58,3 @@ void ShowcaseCollapsibleClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompCollapsible, ShowcaseCollapsible, ShowcaseCollapsibleClick);
-

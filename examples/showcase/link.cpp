@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/Link.h"
 
-enum { ClickLink = 390 };
+enum {
+    ClickLink = 390
+};
 
 El* ShowcaseLink(ShowcaseApp* app, Arena* a) {
     (void)app;
@@ -9,7 +11,9 @@ El* ShowcaseLink(ShowcaseApp* app, Arena* a) {
         ->FlexCol()
         ->W(224)
         ->Gap(8)
-        ->Child(TextEl(a, StrL("Navigation is application-owned"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
+        ->Child(TextEl(a, StrL("Navigation is application-owned"))
+                    ->Font(12)
+                    ->Fg(Rgb(0x17, 0x17, 0x17)))
         ->Child(Link::New(a, StrL("example-link"), ClickLink)
                     ->W(kFill)
                     ->H(28)
@@ -17,14 +21,18 @@ El* ShowcaseLink(ShowcaseApp* app, Arena* a) {
                     ->ItemsCenter()
                     ->Border(1, Rgb(0x17, 0x17, 0x17))
                     ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                    ->Child(TextEl(a, StrL("Open Link documentation  →"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
+                    ->Child(TextEl(a, StrL("Open Link documentation  →"))
+                                ->Font(12)
+                                ->Fg(Rgb(0x17, 0x17, 0x17))))
         ->Child(Link::New(a, StrL("disabled-link"))
                     ->W(kFill)
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
                     ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                    ->Child(TextEl(a, StrL("Disabled destination"))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73))));
+                    ->Child(TextEl(a, StrL("Disabled destination"))
+                                ->Font(12)
+                                ->Fg(Rgb(0x73, 0x73, 0x73))));
 }
 
 void ShowcaseLinkClick(ShowcaseApp* app, int id) {
@@ -35,4 +43,3 @@ void ShowcaseLinkClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompLink, ShowcaseLink, ShowcaseLinkClick);
-

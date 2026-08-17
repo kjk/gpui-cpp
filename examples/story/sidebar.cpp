@@ -3,7 +3,9 @@
 El* SidebarRender(StoryApp* app, Arena* a) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A composable, themeable and customizable sidebar component.");
+    El* sec = StorySection(
+        a, "Default",
+        "A composable, themeable and customizable sidebar component.");
     StorySectionAdd(sec, component::Sidebar::New(a)
                              ->Title(StrL("Workspace"))
                              ->Item(StrL("Inbox"))

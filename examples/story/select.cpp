@@ -10,7 +10,8 @@ static void PickSel(StoryApp* app, int i) {
 
 El* SelectRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "Displays a list of options for the user to pick from.");
+    El* sec = StorySection(
+        a, "Default", "Displays a list of options for the user to pick from.");
     StorySectionAdd(sec, component::Select::New(a, StrL("framework"))
                              ->Option(StrL("GPUI"))
                              ->Option(StrL("React"))

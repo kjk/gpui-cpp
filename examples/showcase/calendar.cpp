@@ -7,7 +7,7 @@ enum {
     ClickCalDay = 232, // + 0..41
 };
 
-static const char* kMon[] = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+static const char* kMon[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 static const char* kWd[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
 
@@ -44,7 +44,11 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a) {
     GetLocalTime(&today);
     int y = app->calYear;
     int m = app->calMonth;
-    El* root = Calendar::New(a, StrL("example-calendar"))->FlexCol()->W(250)->Pad(12)->Border(1, Rgb(0xd4, 0xd4, 0xd4));
+    El* root = Calendar::New(a, StrL("example-calendar"))
+                   ->FlexCol()
+                   ->W(250)
+                   ->Pad(12)
+                   ->Border(1, Rgb(0xd4, 0xd4, 0xd4));
 
     El* nav = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
     nav->Child(Div(a)
@@ -73,7 +77,8 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a) {
 
     El* wd = Div(a)->FlexRow();
     for (int i = 0; i < 7; i++) {
-        wd->Child(Div(a)->W(32)->H(32)->ItemsCenter()->JustifyCenter()->Child(ScTxt(a, Str(kWd[i]), 12, ScMutedC())));
+        wd->Child(Div(a)->W(32)->H(32)->ItemsCenter()->JustifyCenter()->Child(
+            ScTxt(a, Str(kWd[i]), 12, ScMutedC())));
     }
     root->Child(wd);
 
@@ -97,8 +102,10 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a) {
             } else {
                 day = cell - first + 1;
             }
-            bool active = !muted && app->calDay > 0 && day == app->calDay && m == app->calMonth && y == app->calYear;
-            bool isToday = !muted && day == (int)today.wDay && m == (int)today.wMonth && y == (int)today.wYear;
+            bool active = !muted && app->calDay > 0 && day == app->calDay &&
+                          m == app->calMonth && y == app->calYear;
+            bool isToday = !muted && day == (int)today.wDay &&
+                           m == (int)today.wMonth && y == (int)today.wYear;
             El* d = Div(a)
                         ->W(32)
                         ->H(32)
@@ -107,12 +114,14 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Arena* a) {
                         ->Click(ClickCalDay + cell)
                         ->FocusId(ClickCalDay + cell);
             if (active) {
-                d->Bg(ScInk())->Child(ScTxt(a, DupFmt(a, "%d", day), 12, ScWhite()));
+                d->Bg(ScInk())
+                    ->Child(ScTxt(a, DupFmt(a, "%d", day), 12, ScWhite()));
             } else {
                 if (isToday) {
                     d->Border(1, ScBorder());
                 }
-                d->HoverBg(ScHover())->Child(ScTxt(a, DupFmt(a, "%d", day), 12, muted ? ScSilver() : ScInk()));
+                d->HoverBg(ScHover())->Child(ScTxt(
+                    a, DupFmt(a, "%d", day), 12, muted ? ScSilver() : ScInk()));
             }
             row->Child(d);
         }
@@ -157,4 +166,3 @@ void ShowcaseCalendarClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompCalendar, ShowcaseCalendar, ShowcaseCalendarClick);
-

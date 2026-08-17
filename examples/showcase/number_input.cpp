@@ -3,7 +3,11 @@
 #include "ui/Input.h"
 #include "ui/NumberInput.h"
 
-enum { ClickNumField = 400, ClickNumDec = 401, ClickNumInc = 402 };
+enum {
+    ClickNumField = 400,
+    ClickNumDec = 401,
+    ClickNumInc = 402
+};
 
 static bool ParseNum(const char* s, int* out) {
     if (!s || !s[0]) {
@@ -32,42 +36,49 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Arena* a) {
     int dummy = 0;
     bool valid = ParseNum(app->input.buf, &dummy);
     El* controls = Div(a)->FlexCol()->W(24)->Shrink0();
-    controls->Child(Button::New(a, StrL("inc"), ClickNumInc)
-                        ->Grow()
-                        ->W(24)
-                        ->ItemsCenter()
-                        ->JustifyCenter()
-                        ->Bg(Rgb(0, 0, 0))
-                        ->HoverBg(Rgb(0x40, 0x40, 0x40))
-                        ->Child(TextEl(a, StrL("+"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))));
-    controls->Child(Button::New(a, StrL("dec"), ClickNumDec)
-                        ->Grow()
-                        ->W(24)
-                        ->ItemsCenter()
-                        ->JustifyCenter()
-                        ->Bg(Rgb(0, 0, 0))
-                        ->HoverBg(Rgb(0x40, 0x40, 0x40))
-                        ->Child(TextEl(a, StrL("−"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))));
+    controls->Child(
+        Button::New(a, StrL("inc"), ClickNumInc)
+            ->Grow()
+            ->W(24)
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Bg(Rgb(0, 0, 0))
+            ->HoverBg(Rgb(0x40, 0x40, 0x40))
+            ->Child(TextEl(a, StrL("+"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))));
+    controls->Child(
+        Button::New(a, StrL("dec"), ClickNumDec)
+            ->Grow()
+            ->W(24)
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Bg(Rgb(0, 0, 0))
+            ->HoverBg(Rgb(0x40, 0x40, 0x40))
+            ->Child(TextEl(a, StrL("−"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))));
 
     return Div(a)
         ->FlexCol()
         ->W(200)
         ->Gap(4)
-        ->Child(TextEl(a, StrL("Quantity"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-        ->Child(NumberInput::New(a)
-                    ->FlexRow()
-                    ->W(kFill)
-                    ->H(28)
-                    ->ItemsCenter()
-                    ->Border(1, valid ? Rgb(0x17, 0x17, 0x17) : Rgb(0x73, 0x73, 0x73))
-                    ->Child(InputBase::New(a, StrL("number-field"), ClickNumField)
-                                ->Grow()
-                                ->H(28)
-                                ->PadX(8)
-                                ->ItemsCenter()
-                                ->Child(Input::New(a, &app->input)))
-                    ->Child(controls))
-        ->Child(TextEl(a, valid ? StrL("Step: 1") : StrL("Enter a number"))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73)));
+        ->Child(
+            TextEl(a, StrL("Quantity"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
+        ->Child(
+            NumberInput::New(a)
+                ->FlexRow()
+                ->W(kFill)
+                ->H(28)
+                ->ItemsCenter()
+                ->Border(1,
+                         valid ? Rgb(0x17, 0x17, 0x17) : Rgb(0x73, 0x73, 0x73))
+                ->Child(InputBase::New(a, StrL("number-field"), ClickNumField)
+                            ->Grow()
+                            ->H(28)
+                            ->PadX(8)
+                            ->ItemsCenter()
+                            ->Child(Input::New(a, &app->input)))
+                ->Child(controls))
+        ->Child(TextEl(a, valid ? StrL("Step: 1") : StrL("Enter a number"))
+                    ->Font(12)
+                    ->Fg(Rgb(0x73, 0x73, 0x73)));
 }
 
 void ShowcaseNumberInputClick(ShowcaseApp* app, int id) {
@@ -92,4 +103,3 @@ void ShowcaseNumberInputClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompNumberInput, ShowcaseNumberInput, ShowcaseNumberInputClick);
-

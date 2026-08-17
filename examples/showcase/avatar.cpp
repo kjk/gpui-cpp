@@ -21,7 +21,9 @@ El* ShowcaseAvatar(ShowcaseApp* app, Arena* a) {
                      ->ItemsCenter()
                      ->JustifyCenter()
                      ->Bg(items[i].bg)
-                     ->Child(TextEl(a, Str(items[i].initials))->Font(12)->Fg(Rgb(0x26, 0x26, 0x26)));
+                     ->Child(TextEl(a, Str(items[i].initials))
+                                 ->Font(12)
+                                 ->Fg(Rgb(0x26, 0x26, 0x26)));
         row->Child(Avatar::New(a)
                        ->Size(34)
                        ->Fallback(fb)
@@ -40,4 +42,3 @@ void ShowcaseAvatarClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompAvatar, ShowcaseAvatar, ShowcaseAvatarClick);
-

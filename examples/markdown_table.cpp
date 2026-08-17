@@ -1,7 +1,11 @@
 #include "gpui/Assets.h"
 #include "gpui/Gpui.h"
 
-enum TableMode : int { ModeWrap = 0, ModeAdaptive = 1, ModeNowrap = 2 };
+enum TableMode : int {
+    ModeWrap = 0,
+    ModeAdaptive = 1,
+    ModeNowrap = 2
+};
 
 struct MdApp {
     int mode = ModeAdaptive;
@@ -131,12 +135,14 @@ static El* RenderMd(Arena* a, const char* src, int mode, const Theme& th) {
                         while (cl > 0 && cell[cl - 1] == ' ') {
                             cl--;
                         }
-                        float cw = mode == ModeNowrap ? 180.f : (mode == ModeAdaptive ? 140.f : 110.f);
-                        row->Child(Div(a)
-                                       ->W(cw)
-                                       ->PadX(8)
-                                       ->PadY(6)
-                                       ->Child(TextEl(a, Str((char*)cell, cl))->Font(12)->Fg(th.foreground)->Wrap()));
+                        float cw = mode == ModeNowrap
+                                       ? 180.f
+                                       : (mode == ModeAdaptive ? 140.f : 110.f);
+                        row->Child(Div(a)->W(cw)->PadX(8)->PadY(6)->Child(
+                            TextEl(a, Str((char*)cell, cl))
+                                ->Font(12)
+                                ->Fg(th.foreground)
+                                ->Wrap()));
                         cols++;
                         if (bar >= e) {
                             break;
@@ -160,7 +166,10 @@ static El* RenderMd(Arena* a, const char* src, int mode, const Theme& th) {
             continue;
         }
         if (llen > 0) {
-            col->Child(TextEl(a, Str((char*)line, llen))->Font(14)->Fg(th.foreground)->Wrap());
+            col->Child(TextEl(a, Str((char*)line, llen))
+                           ->Font(14)
+                           ->Fg(th.foreground)
+                           ->Wrap());
         }
     }
     return col;
@@ -186,8 +195,18 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
                   ->Gap(8)
                   ->BorderT(0, th.border)
                   ->Child(ButtonEl(frame, 1, Str(ModeLabel(app->mode))));
-    El* body = Div(frame)->Grow()->ClipY()->ScrollY(app->scroll)->Child(RenderMd(frame, app->source, app->mode, th));
-    return Div(frame)->FlexCol()->SizeFull()->Bg(th.background)->Child(bar)->Child(Div(frame)->H(1)->Bg(th.border))->Child(body);
+    El* body = Div(frame)
+                   ->Grow()
+                   ->ClipY()
+                   ->ScrollY(app->scroll)
+                   ->Child(RenderMd(frame, app->source, app->mode, th));
+    return Div(frame)
+        ->FlexCol()
+        ->SizeFull()
+        ->Bg(th.background)
+        ->Child(bar)
+        ->Child(Div(frame)->H(1)->Bg(th.border))
+        ->Child(body);
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {

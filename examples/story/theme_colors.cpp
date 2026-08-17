@@ -12,7 +12,8 @@ El* ThemeColorsRender(StoryApp* app, Arena* a) {
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Tokens", "Theme color tokens used by the components.");
+    El* sec =
+        StorySection(a, "Tokens", "Theme color tokens used by the components.");
     El* row = Div(a)->FlexRow()->Gap(12);
     row->Child(Swatch(a, "background", th.background));
     row->Child(Swatch(a, "foreground", th.foreground));

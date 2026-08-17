@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/OtpInput.h"
 
-enum { ClickOtp = 410 };
+enum {
+    ClickOtp = 410
+};
 
 El* ShowcaseOtpInput(ShowcaseApp* app, Arena* a) {
     int active = app->otpLen;
@@ -40,4 +42,3 @@ void ShowcaseOtpInputClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompOtpInput, ShowcaseOtpInput, ShowcaseOtpInputClick);
-

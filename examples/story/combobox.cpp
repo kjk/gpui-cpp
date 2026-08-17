@@ -10,7 +10,9 @@ static void PickCombo(StoryApp* app, int i) {
 
 El* ComboboxRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "Autocomplete input and command palette with a list of suggestions.");
+    El* sec = StorySection(
+        a, "Default",
+        "Autocomplete input and command palette with a list of suggestions.");
     const char* opts[] = {"GPUI", "React", "SwiftUI", "Vue"};
     component::Combobox* cb = component::Combobox::New(a, StrL("frameworks"))
                                   ->Selected(Str(opts[app->selectIx]))
@@ -18,7 +20,10 @@ El* ComboboxRender(StoryApp* app, Arena* a) {
                                   ->Query(&app->search)
                                   ->OnToggle(MkFunc0(&ToggleCombo, app))
                                   ->OnChange(MkFunc1(&PickCombo, app));
-    cb->Option(StrL("GPUI"))->Option(StrL("React"))->Option(StrL("SwiftUI"))->Option(StrL("Vue"));
+    cb->Option(StrL("GPUI"))
+        ->Option(StrL("React"))
+        ->Option(StrL("SwiftUI"))
+        ->Option(StrL("Vue"));
     StorySectionAdd(sec, cb->IntoEl());
     page->Child(sec);
     return page;

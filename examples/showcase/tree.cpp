@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/Tree.h"
 
-enum { ClickTree = 580 };
+enum {
+    ClickTree = 580
+};
 
 struct TreeNode {
     const char* label;
@@ -10,14 +12,10 @@ struct TreeNode {
 };
 
 static const TreeNode kTree[] = {
-    {"src", -1, true},
-    {"components", 0, true},
-    {"button.rs", 1, false},
-    {"tree.rs", 1, false},
-    {"lib.rs", 0, false},
-    {"examples", -1, true},
-    {"showcase.rs", 5, false},
-    {"Cargo.toml", -1, false},
+    {"src", -1, true},         {"components", 0, true},
+    {"button.rs", 1, false},   {"tree.rs", 1, false},
+    {"lib.rs", 0, false},      {"examples", -1, true},
+    {"showcase.rs", 5, false}, {"Cargo.toml", -1, false},
 };
 
 static bool Visible(ShowcaseApp* app, int i) {
@@ -63,13 +61,19 @@ El* ShowcaseTree(ShowcaseApp* app, Arena* a) {
         }
         El* icon = Div(a)->W(12)->H(12)->ItemsCenter()->JustifyCenter();
         if (kTree[i].folder) {
-            icon->Child(ScTxt(a, app->treeOpen[i] ? StrL("v") : StrL(">"), 11, ScInk()));
+            icon->Child(ScTxt(a, app->treeOpen[i] ? StrL("v") : StrL(">"), 11,
+                              ScInk()));
         }
         row->Child(icon);
         row->Child(ScTxt(a, Str(kTree[i].label), 14, ScInk()));
         list->Child(row);
     }
-    return Tree::New(a)->W(256)->H(192)->Border(1, Rgb(0xd4, 0xd4, 0xd4))->ClipY()->Child(list);
+    return Tree::New(a)
+        ->W(256)
+        ->H(192)
+        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+        ->ClipY()
+        ->Child(list);
 }
 
 void ShowcaseTreeClick(ShowcaseApp* app, int id) {
@@ -84,4 +88,3 @@ void ShowcaseTreeClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompTree, ShowcaseTree, ShowcaseTreeClick);
-

@@ -66,11 +66,16 @@ El* AccordionRender(StoryApp* app, Arena* a) {
     opts->Child(Opt(a, ClickAccBordered, "Bordered", app->accordionBordered));
     page->Child(opts);
 
-    const char* titles[] = {"Is it accessible?", "Can it hold any content?", "Is it animated?"};
+    const char* titles[] = {"Is it accessible?", "Can it hold any content?",
+                            "Is it animated?"};
     const char* bodies[] = {
-        "Yes. Each item is a button with an aria-expanded state, so screen readers announce whether the section is open, and the whole group can be reached with the keyboard.",
-        "An item takes any element as its content, not just text. The height animation measures whatever you put in it.",
-        "Yes. Expanding and collapsing animates the height of the content, and the chevron rotates to follow. Items below move along with it.",
+        "Yes. Each item is a button with an aria-expanded state, so screen "
+        "readers announce whether the section is open, and the whole group can "
+        "be reached with the keyboard.",
+        "An item takes any element as its content, not just text. The height "
+        "animation measures whatever you put in it.",
+        "Yes. Expanding and collapsing animates the height of the content, and "
+        "the chevron rotates to follow. Items below move along with it.",
     };
 
     component::Accordion* acc = component::Accordion::New(a, StrL("test"))
@@ -81,22 +86,30 @@ El* AccordionRender(StoryApp* app, Arena* a) {
     for (int i = 0; i < 3; i++) {
         acc->Item(Str(titles[i]), Str(bodies[i]), app->accordionOpen[i]);
     }
-    El* def = StorySection(a, "Default", "Expand one item at a time by default.");
+    El* def =
+        StorySection(a, "Default", "Expand one item at a time by default.");
     StorySectionAdd(def, Div(a)->W(480)->Child(acc->IntoEl()));
     page->Child(def);
 
-    component::Accordion* styled = component::Accordion::New(a, StrL("custom-style"))
-                                       ->Multiple(app->accordionMultiple)
-                                       ->Bordered(false)
-                                       ->Disabled(app->accordionDisabled)
-                                       ->OnToggle(MkFunc1(&OnAccStyled, app));
+    component::Accordion* styled =
+        component::Accordion::New(a, StrL("custom-style"))
+            ->Multiple(app->accordionMultiple)
+            ->Bordered(false)
+            ->Disabled(app->accordionDisabled)
+            ->OnToggle(MkFunc1(&OnAccStyled, app));
     styled->Item(StrL("Account Settings"),
-                 StrL("Manage your account preferences, security settings, and personal information."),
+                 StrL("Manage your account preferences, security settings, and "
+                      "personal information."),
                  app->accordionStyledOpen[0]);
-    styled->Item(StrL("Privacy & Security"), StrL("Control who can see your profile and how your data is used."),
-                 app->accordionStyledOpen[1]);
-    styled->Item(StrL("Help & Support"), StrL("Browse the documentation, or get in touch with the support team."),
-                 app->accordionStyledOpen[2]);
+    styled->Item(
+        StrL("Privacy & Security"),
+        StrL("Control who can see your profile and how your data is used."),
+        app->accordionStyledOpen[1]);
+    styled->Item(
+        StrL("Help & Support"),
+        StrL(
+            "Browse the documentation, or get in touch with the support team."),
+        app->accordionStyledOpen[2]);
     El* custom = StorySection(a, "Custom style", nullptr);
     El* frame = Div(a)
                     ->W(480)
@@ -129,11 +142,13 @@ void AccordionClick(StoryApp* app, int id) {
         return;
     }
     if (id >= ClickAccItem && id < ClickAccItem + 3) {
-        ToggleOpen(app->accordionOpen, 3, id - ClickAccItem, app->accordionMultiple);
+        ToggleOpen(app->accordionOpen, 3, id - ClickAccItem,
+                   app->accordionMultiple);
         return;
     }
     if (id >= ClickAccStyled && id < ClickAccStyled + 3) {
-        ToggleOpen(app->accordionStyledOpen, 3, id - ClickAccStyled, app->accordionMultiple);
+        ToggleOpen(app->accordionStyledOpen, 3, id - ClickAccStyled,
+                   app->accordionMultiple);
     }
 }
 

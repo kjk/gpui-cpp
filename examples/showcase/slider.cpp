@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/Slider.h"
 
-enum { ClickSlider = 500 };
+enum {
+    ClickSlider = 500
+};
 
 El* ShowcaseSlider(ShowcaseApp* app, Arena* a) {
     float p = app->slider;
@@ -23,8 +25,15 @@ El* ShowcaseSlider(ShowcaseApp* app, Arena* a) {
     }
 
     El* track = SliderTrack::New(a)->W(trackW)->H(28);
-    track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(trackW)->H(2)->Bg(Rgb(0xd4, 0xd4, 0xd4)));
-    track->Child(SliderIndicator::New(a)->Absolute()->Top(13)->Left(0)->W(fillW)->H(2)->Bg(Rgb(0x17, 0x17, 0x17)));
+    track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(trackW)->H(2)->Bg(
+        Rgb(0xd4, 0xd4, 0xd4)));
+    track->Child(SliderIndicator::New(a)
+                     ->Absolute()
+                     ->Top(13)
+                     ->Left(0)
+                     ->W(fillW)
+                     ->H(2)
+                     ->Bg(Rgb(0x17, 0x17, 0x17)));
     track->Child(SliderThumb::New(a)
                      ->Absolute()
                      ->Top(7)
@@ -42,8 +51,12 @@ El* ShowcaseSlider(ShowcaseApp* app, Arena* a) {
                     ->JustifyBetween()
                     ->W(kFill)
                     ->PadB(8)
-                    ->Child(TextEl(a, StrL("Volume"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-                    ->Child(TextEl(a, StrL("Drag to adjust"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
+                    ->Child(TextEl(a, StrL("Volume"))
+                                ->Font(12)
+                                ->Fg(Rgb(0x17, 0x17, 0x17)))
+                    ->Child(TextEl(a, StrL("Drag to adjust"))
+                                ->Font(12)
+                                ->Fg(Rgb(0x17, 0x17, 0x17))))
         ->Child(Slider::New(a, ClickSlider)->W(trackW)->H(28)->Child(track));
 }
 
@@ -61,9 +74,9 @@ void ShowcaseSliderDrag(ShowcaseApp* app, AppHost* host, float x, float y) {
     if (!app->draggingSlider) {
         return;
     }
-    // track is centered; approximate using last painted hit? use mouse vs window.
-    // Host mouse is absolute. We store track by using a simple mapping: content is centered.
-    // Use the slider hit rect from last paint.
+    // track is centered; approximate using last painted hit? use mouse vs
+    // window. Host mouse is absolute. We store track by using a simple mapping:
+    // content is centered. Use the slider hit rect from last paint.
     for (int i = 0; i < host->paint.hits.len; i++) {
         HitRect h = host->paint.hits[i];
         if (h.id == ClickSlider) {
@@ -81,4 +94,3 @@ void ShowcaseSliderDrag(ShowcaseApp* app, AppHost* host, float x, float y) {
 }
 
 SHOWCASE_PAGE(CompSlider, ShowcaseSlider, ShowcaseSliderClick);
-

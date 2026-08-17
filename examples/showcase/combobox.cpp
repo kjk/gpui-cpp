@@ -3,7 +3,11 @@
 #include "ui/Input.h"
 #include "ui/Popup.h"
 
-enum { ClickCombo = 320, ClickComboQ = 321, ClickCombo0 = 322 };
+enum {
+    ClickCombo = 320,
+    ClickComboQ = 321,
+    ClickCombo0 = 322
+};
 
 static const char* kFwCombo[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
@@ -21,23 +25,31 @@ static bool Matches(const char* label, const char* q) {
 }
 
 El* ShowcaseCombobox(ShowcaseApp* app, Arena* a) {
-    El* trigger = Div(a)
-                      ->Id(StrL("combobox-trigger"))
-                      ->W(224)
-                      ->H(28)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                      ->Bg(Rgb(0xff, 0xff, 0xff))
-                      ->Click(ClickCombo)
-                      ->FocusId(ClickCombo)
-                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                      ->Child(TextEl(a, Str(app->comboboxSel))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-                      ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73)));
+    El* trigger =
+        Div(a)
+            ->Id(StrL("combobox-trigger"))
+            ->W(224)
+            ->H(28)
+            ->PadX(8)
+            ->ItemsCenter()
+            ->JustifyBetween()
+            ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+            ->Bg(Rgb(0xff, 0xff, 0xff))
+            ->Click(ClickCombo)
+            ->FocusId(ClickCombo)
+            ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+            ->Child(TextEl(a, Str(app->comboboxSel))
+                        ->Font(12)
+                        ->Fg(Rgb(0x17, 0x17, 0x17)))
+            ->Child(TextEl(a, StrL("⌄"))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73)));
     El* pop = nullptr;
     if (app->comboboxOpen) {
-        pop = Div(a)->FlexCol()->W(224)->Pad(4)->Border(1, Rgb(0xd4, 0xd4, 0xd4))->Bg(Rgb(0xff, 0xff, 0xff));
+        pop = Div(a)
+                  ->FlexCol()
+                  ->W(224)
+                  ->Pad(4)
+                  ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                  ->Bg(Rgb(0xff, 0xff, 0xff));
         pop->Child(InputBase::New(a, StrL("combobox-search"), ClickComboQ)
                        ->W(kFill)
                        ->H(28)
@@ -57,12 +69,17 @@ El* ShowcaseCombobox(ShowcaseApp* app, Arena* a) {
                             ->ItemsCenter()
                             ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
                             ->Click(ClickCombo0 + i)
-                            ->Child(TextEl(a, Str(kFwCombo[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+                            ->Child(TextEl(a, Str(kFwCombo[i]))
+                                        ->Font(12)
+                                        ->Fg(Rgb(0x17, 0x17, 0x17))));
         }
         pop->Child(list);
     }
-    El* combo = Combobox::New(a, StrL("example-combobox"))->W(224)->Child(trigger);
-    return Popup::New(a, StrL("example-combobox-popup"), combo)->Content(pop)->IntoEl();
+    El* combo =
+        Combobox::New(a, StrL("example-combobox"))->W(224)->Child(trigger);
+    return Popup::New(a, StrL("example-combobox-popup"), combo)
+        ->Content(pop)
+        ->IntoEl();
 }
 
 void ShowcaseComboboxClick(ShowcaseApp* app, int id) {
@@ -81,4 +98,3 @@ void ShowcaseComboboxClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompCombobox, ShowcaseCombobox, ShowcaseComboboxClick);
-

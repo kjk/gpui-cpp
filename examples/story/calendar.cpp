@@ -20,7 +20,8 @@ static void CalDay(StoryApp* app, int d) {
 
 El* CalendarRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A calendar of days displayed in a grid.");
+    El* sec =
+        StorySection(a, "Default", "A calendar of days displayed in a grid.");
     StorySectionAdd(sec, component::Calendar::New(a)
                              ->Year(app->calYear)
                              ->Month(app->calMonth)

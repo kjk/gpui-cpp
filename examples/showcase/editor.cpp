@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/Input.h"
 
-enum { ClickEditor = 360 };
+enum {
+    ClickEditor = 360
+};
 
 static const char* kEditorDefault =
     "use std::collections::HashMap;\n"
@@ -27,7 +29,8 @@ static const char* kEditorDefault =
     "\n"
     "    fn summary(&self) -> String {\n"
     "        let total: usize = self.files.values().sum();\n"
-    "        format!(\"{}: {} files, {total} lines\", self.name, self.files.len())\n"
+    "        format!(\"{}: {} files, {total} lines\", self.name, "
+    "self.files.len())\n"
     "    }\n"
     "}\n"
     "\n"
@@ -51,17 +54,22 @@ El* ShowcaseEditor(ShowcaseApp* app, Arena* a) {
         ->W(320)
         ->Gap(4)
         ->ItemsStart()
-        ->Child(Div(a)->H(16)->ItemsCenter()->Child(TextEl(a, StrL("Rust Editor"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(a, StrL("example-editor"), ClickEditor)
-                    ->W(320)
-                    ->H(128)
-                    ->PadX(8)
-                    ->PadY(8)
-                    ->ClipY()
-                    ->FlexCol()
-                    ->FocusId(0)
-                    ->Border(1, app->editorOn ? Rgb(0x17, 0x17, 0x17) : Rgb(0xd4, 0xd4, 0xd4))
-                    ->Child(Editor::New(a, app->editor, app->editorCursor, blink)));
+        ->Child(Div(a)->H(16)->ItemsCenter()->Child(
+            TextEl(a, StrL("Rust Editor"))
+                ->Font(12)
+                ->Fg(Rgb(0x17, 0x17, 0x17))))
+        ->Child(
+            InputBase::New(a, StrL("example-editor"), ClickEditor)
+                ->W(320)
+                ->H(128)
+                ->PadX(8)
+                ->PadY(8)
+                ->ClipY()
+                ->FlexCol()
+                ->FocusId(0)
+                ->Border(1, app->editorOn ? Rgb(0x17, 0x17, 0x17)
+                                          : Rgb(0xd4, 0xd4, 0xd4))
+                ->Child(Editor::New(a, app->editor, app->editorCursor, blink)));
 }
 
 void ShowcaseEditorClick(ShowcaseApp* app, int id) {
@@ -73,4 +81,3 @@ void ShowcaseEditorClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompEditor, ShowcaseEditor, ShowcaseEditorClick);
-

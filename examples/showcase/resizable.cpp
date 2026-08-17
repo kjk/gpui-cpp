@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/Resizable.h"
 
-enum { ClickResize = 470 };
+enum {
+    ClickResize = 470
+};
 
 El* ShowcaseResizable(ShowcaseApp* app, Arena* a) {
     float left = app->resizeW;
@@ -17,21 +19,32 @@ El* ShowcaseResizable(ShowcaseApp* app, Arena* a) {
                   ->Pad(8)
                   ->FlexCol()
                   ->Gap(4)
-                  ->Child(TextEl(a, StrL("PROJECT"))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73)));
+                  ->Child(TextEl(a, StrL("PROJECT"))
+                              ->Font(12)
+                              ->Fg(Rgb(0x73, 0x73, 0x73)));
     const char* items[] = {"Overview", "Components", "Settings"};
     for (int i = 0; i < 3; i++) {
-        nav->Child(Div(a)->H(26)->PadX(8)->ItemsCenter()->Child(TextEl(a, Str(items[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+        nav->Child(Div(a)->H(26)->PadX(8)->ItemsCenter()->Child(
+            TextEl(a, Str(items[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
     }
-    El* split = Div(a)->W(4)->H(kFill)->Click(ClickResize)->FocusId(ClickResize);
+    El* split =
+        Div(a)->W(4)->H(kFill)->Click(ClickResize)->FocusId(ClickResize);
     split->Child(Div(a)->W(1)->H(kFill)->Bg(Rgb(0x17, 0x17, 0x17)));
-    El* main = ResizablePanel::New(a)
-                   ->Grow()
-                   ->H(kFill)
-                   ->Pad(8)
-                   ->FlexCol()
-                   ->Gap(8)
-                   ->Child(TextEl(a, StrL("Workspace"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-                   ->Child(TextEl(a, StrL("Drag the divider to resize navigation."))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73))->Wrap()->MaxW(140));
+    El* main =
+        ResizablePanel::New(a)
+            ->Grow()
+            ->H(kFill)
+            ->Pad(8)
+            ->FlexCol()
+            ->Gap(8)
+            ->Child(TextEl(a, StrL("Workspace"))
+                        ->Font(12)
+                        ->Fg(Rgb(0x17, 0x17, 0x17)))
+            ->Child(TextEl(a, StrL("Drag the divider to resize navigation."))
+                        ->Font(12)
+                        ->Fg(Rgb(0x73, 0x73, 0x73))
+                        ->Wrap()
+                        ->MaxW(140));
     return Resizable::New(a, StrL("example-resizable"))
         ->W(288)
         ->H(160)
@@ -73,4 +86,3 @@ void ShowcaseResizeDrag(ShowcaseApp* app, AppHost* host, float x, float y) {
 }
 
 SHOWCASE_PAGE(CompResizable, ShowcaseResizable, ShowcaseResizableClick);
-

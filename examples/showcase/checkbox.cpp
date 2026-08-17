@@ -1,7 +1,9 @@
 #include "Showcase.h"
 #include "ui/Checkbox.h"
 
-enum { ClickCheckbox = 280 };
+enum {
+    ClickCheckbox = 280
+};
 
 El* ShowcaseCheckbox(ShowcaseApp* app, Arena* a) {
     bool on = app->checkboxOn;
@@ -13,14 +15,17 @@ El* ShowcaseCheckbox(ShowcaseApp* app, Arena* a) {
                         ->JustifyCenter()
                         ->Border(1, Rgb(0x17, 0x17, 0x17));
     if (on) {
-        indicator->Bg(Rgb(0x17, 0x17, 0x17))->Child(TextEl(a, StrL("✓"))->Font(11)->Fg(Rgb(0xff, 0xff, 0xff)));
+        indicator->Bg(Rgb(0x17, 0x17, 0x17))
+            ->Child(TextEl(a, StrL("✓"))->Font(11)->Fg(Rgb(0xff, 0xff, 0xff)));
     }
     return Checkbox::New(a, StrL("example-checkbox"), ClickCheckbox)
         ->FlexRow()
         ->ItemsCenter()
         ->Gap(8)
         ->Child(indicator)
-        ->Child(TextEl(a, StrL("Enable product updates"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+        ->Child(TextEl(a, StrL("Enable product updates"))
+                    ->Font(12)
+                    ->Fg(Rgb(0x17, 0x17, 0x17)));
 }
 
 void ShowcaseCheckboxClick(ShowcaseApp* app, int id) {
@@ -30,4 +35,3 @@ void ShowcaseCheckboxClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompCheckbox, ShowcaseCheckbox, ShowcaseCheckboxClick);
-

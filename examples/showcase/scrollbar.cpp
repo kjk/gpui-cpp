@@ -10,8 +10,13 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Arena* a) {
                         ->ItemsCenter()
                         ->JustifyBetween()
                         ->BorderB(1, Rgb(0xe5, 0xe7, 0xeb))
-                        ->Child(TextEl(a, DupFmt(a, "Activity %d", i))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-                        ->Child(TextEl(a, i % 3 == 0 ? StrL("Completed") : StrL("Pending"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+                        ->Child(TextEl(a, DupFmt(a, "Activity %d", i))
+                                    ->Font(12)
+                                    ->Fg(Rgb(0x17, 0x17, 0x17)))
+                        ->Child(TextEl(a, i % 3 == 0 ? StrL("Completed")
+                                                     : StrL("Pending"))
+                                    ->Font(12)
+                                    ->Fg(Rgb(0x17, 0x17, 0x17))));
     }
     const float viewH = 192;
     const float contentH = 20.f * 28.f;
@@ -40,7 +45,8 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Arena* a) {
                   ->ClipY()
                   ->ScrollY(app->exampleScroll)
                   ->Child(list);
-    box->Child(Div(a)->Absolute()->Right(4)->Top(thumbY)->W(8)->H(thumbH)->Bg(Rgb(0xa3, 0xa3, 0xa3)));
+    box->Child(Div(a)->Absolute()->Right(4)->Top(thumbY)->W(8)->H(thumbH)->Bg(
+        Rgb(0xa3, 0xa3, 0xa3)));
     return box;
 }
 
@@ -50,4 +56,3 @@ void ShowcaseScrollbarClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompScrollbar, ShowcaseScrollbar, ShowcaseScrollbarClick);
-

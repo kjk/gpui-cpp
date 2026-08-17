@@ -19,33 +19,64 @@ El* ShowcaseTable(ShowcaseApp* app, Arena* a) {
                 ->W(288)
                 ->Border(1, Rgb(0xe5, 0xe7, 0xeb))
                 ->ClipY();
-    El* head = TableHeader::New(a, StrL("header"))
-                   ->Child(TableRow::New(a, StrL("header-row"))
-                               ->FlexRow()
-                               ->Bg(Rgb(0xf5, 0xf5, 0xf5))
-                               ->Child(TableHead::New(a, StrL("name-head"))->W(124)->PadX(8)->PadY(4)->Child(
-                                   TextEl(a, StrL("Component"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
-                               ->Child(TableHead::New(a, StrL("status-head"))->W(84)->PadX(8)->PadY(4)->Child(
-                                   TextEl(a, StrL("Status"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
-                               ->Child(TableHead::New(a, StrL("version-head"))->W(92)->PadX(8)->PadY(4)->Child(
-                                   TextEl(a, StrL("Version"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))));
+    El* head =
+        TableHeader::New(a, StrL("header"))
+            ->Child(TableRow::New(a, StrL("header-row"))
+                        ->FlexRow()
+                        ->Bg(Rgb(0xf5, 0xf5, 0xf5))
+                        ->Child(TableHead::New(a, StrL("name-head"))
+                                    ->W(124)
+                                    ->PadX(8)
+                                    ->PadY(4)
+                                    ->Child(TextEl(a, StrL("Component"))
+                                                ->Font(12)
+                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                        ->Child(TableHead::New(a, StrL("status-head"))
+                                    ->W(84)
+                                    ->PadX(8)
+                                    ->PadY(4)
+                                    ->Child(TextEl(a, StrL("Status"))
+                                                ->Font(12)
+                                                ->Fg(Rgb(0x17, 0x17, 0x17))))
+                        ->Child(TableHead::New(a, StrL("version-head"))
+                                    ->W(92)
+                                    ->PadX(8)
+                                    ->PadY(4)
+                                    ->Child(TextEl(a, StrL("Version"))
+                                                ->Font(12)
+                                                ->Fg(Rgb(0x17, 0x17, 0x17)))));
     t->Child(head);
     El* body = TableBody::New(a, StrL("body"))->FlexCol();
     for (int i = 0; i < 4; i++) {
-        El* r = TableRow::New(a, DupFmt(a, "body-row-%d", i))->FlexRow()->BorderT(1, Rgb(0xe5, 0xe7, 0xeb));
-        r->Child(TableCell::New(a, StrL("name"))->W(124)->PadX(8)->PadY(4)->Child(
-            TextEl(a, Str(rows[i].name))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+        El* r = TableRow::New(a, DupFmt(a, "body-row-%d", i))
+                    ->FlexRow()
+                    ->BorderT(1, Rgb(0xe5, 0xe7, 0xeb));
+        r->Child(TableCell::New(a, StrL("name"))
+                     ->W(124)
+                     ->PadX(8)
+                     ->PadY(4)
+                     ->Child(TextEl(a, Str(rows[i].name))
+                                 ->Font(12)
+                                 ->Fg(Rgb(0x17, 0x17, 0x17))));
         r->Child(TableCell::New(a, DupFmt(a, "status-%d", i))
                      ->W(84)
                      ->PadX(8)
                      ->PadY(4)
-                     ->Child(Div(a)->PadX(4)->PadY(1)->MinW(52)->Border(1, Rgb(0xd4, 0xd4, 0xd4))->Child(
-                         TextEl(a, Str(rows[i].status))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))));
+                     ->Child(Div(a)
+                                 ->PadX(4)
+                                 ->PadY(1)
+                                 ->MinW(52)
+                                 ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                                 ->Child(TextEl(a, Str(rows[i].status))
+                                             ->Font(12)
+                                             ->Fg(Rgb(0x17, 0x17, 0x17)))));
         r->Child(TableCell::New(a, DupFmt(a, "version-%d", i))
                      ->W(92)
                      ->PadX(8)
                      ->PadY(4)
-                     ->Child(TextEl(a, Str(rows[i].ver))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73))));
+                     ->Child(TextEl(a, Str(rows[i].ver))
+                                 ->Font(12)
+                                 ->Fg(Rgb(0x73, 0x73, 0x73))));
         body->Child(r);
     }
     t->Child(body);
@@ -58,4 +89,3 @@ void ShowcaseTableClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompTable, ShowcaseTable, ShowcaseTableClick);
-

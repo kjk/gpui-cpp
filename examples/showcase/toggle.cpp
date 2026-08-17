@@ -1,22 +1,40 @@
 #include "Showcase.h"
 #include "ui/Toggle.h"
 
-enum { ClickToggleB = 560, ClickToggleI = 561, ClickToggleU = 562 };
+enum {
+    ClickToggleB = 560,
+    ClickToggleI = 561,
+    ClickToggleU = 562
+};
 
-static El* ToggleCell(Arena* a, Str id, int clickId, const char* label, bool on) {
-    El* b = Toggle::New(a, id, clickId)->W(28)->H(28)->ItemsCenter()->JustifyCenter()->Border(1, Rgb(0x17, 0x17, 0x17));
+static El* ToggleCell(Arena* a, Str id, int clickId, const char* label,
+                      bool on) {
+    El* b = Toggle::New(a, id, clickId)
+                ->W(28)
+                ->H(28)
+                ->ItemsCenter()
+                ->JustifyCenter()
+                ->Border(1, Rgb(0x17, 0x17, 0x17));
     if (on) {
-        b->Bg(Rgb(0x17, 0x17, 0x17))->Child(TextEl(a, Str(label))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))->Bold());
+        b->Bg(Rgb(0x17, 0x17, 0x17))
+            ->Child(TextEl(a, Str(label))
+                        ->Font(12)
+                        ->Fg(Rgb(0xff, 0xff, 0xff))
+                        ->Bold());
     } else {
         b->Bg(Rgb(0xff, 0xff, 0xff))
             ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-            ->Child(TextEl(a, Str(label))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))->Bold());
+            ->Child(TextEl(a, Str(label))
+                        ->Font(12)
+                        ->Fg(Rgb(0x17, 0x17, 0x17))
+                        ->Bold());
     }
     return b;
 }
 
 El* ShowcaseToggle(ShowcaseApp* app, Arena* a) {
-    return ToggleCell(a, StrL("example-toggle"), ClickToggleB, "B", app->toggleOn);
+    return ToggleCell(a, StrL("example-toggle"), ClickToggleB, "B",
+                      app->toggleOn);
 }
 
 void ShowcaseToggleClick(ShowcaseApp* app, int id) {
@@ -32,7 +50,8 @@ El* ShowcaseToggleGroup(ShowcaseApp* app, Arena* a) {
         ->FlexRow()
         ->Child(ShowcaseToggle(app, a))
         ->Child(ToggleCell(a, StrL("italic-toggle"), ClickToggleI, "I", italic))
-        ->Child(ToggleCell(a, StrL("underline-toggle"), ClickToggleU, "U", under));
+        ->Child(
+            ToggleCell(a, StrL("underline-toggle"), ClickToggleU, "U", under));
 }
 
 void ShowcaseToggleGroupClick(ShowcaseApp* app, int id) {
@@ -46,4 +65,3 @@ void ShowcaseToggleGroupClick(ShowcaseApp* app, int id) {
 
 SHOWCASE_PAGE(CompToggle, ShowcaseToggle, ShowcaseToggleClick);
 SHOWCASE_PAGE(CompToggleGroup, ShowcaseToggleGroup, ShowcaseToggleGroupClick);
-

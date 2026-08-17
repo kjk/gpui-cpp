@@ -38,16 +38,22 @@ static float Dist(V3 a, V3 b) {
 }
 
 static V3 Lerp(V3 a, V3 b, float t) {
-    return V3{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t};
+    return V3{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+              a.z + (b.z - a.z) * t};
 }
 
-static void Hilbert(V3 center, float size, u32 iter, int v[8], V3* out, int* n) {
+static void Hilbert(V3 center, float size, u32 iter, int v[8], V3* out,
+                    int* n) {
     float half = size / 2.f;
     V3 corners[8] = {
-        {center.x - half, center.y + half, center.z - half}, {center.x - half, center.y + half, center.z + half},
-        {center.x - half, center.y - half, center.z + half}, {center.x - half, center.y - half, center.z - half},
-        {center.x + half, center.y - half, center.z - half}, {center.x + half, center.y - half, center.z + half},
-        {center.x + half, center.y + half, center.z + half}, {center.x + half, center.y + half, center.z - half},
+        {center.x - half, center.y + half, center.z - half},
+        {center.x - half, center.y + half, center.z + half},
+        {center.x - half, center.y - half, center.z + half},
+        {center.x - half, center.y - half, center.z - half},
+        {center.x + half, center.y - half, center.z - half},
+        {center.x + half, center.y - half, center.z + half},
+        {center.x + half, center.y + half, center.z + half},
+        {center.x + half, center.y + half, center.z - half},
     };
     V3 vec[8];
     for (int i = 0; i < 8; i++) {
@@ -60,10 +66,14 @@ static void Hilbert(V3 center, float size, u32 iter, int v[8], V3* out, int* n) 
         return;
     }
     int children[8][8] = {
-        {v[0], v[3], v[4], v[7], v[6], v[5], v[2], v[1]}, {v[0], v[7], v[6], v[1], v[2], v[5], v[4], v[3]},
-        {v[0], v[7], v[6], v[1], v[2], v[5], v[4], v[3]}, {v[2], v[3], v[0], v[1], v[6], v[7], v[4], v[5]},
-        {v[2], v[3], v[0], v[1], v[6], v[7], v[4], v[5]}, {v[4], v[3], v[2], v[5], v[6], v[1], v[0], v[7]},
-        {v[4], v[3], v[2], v[5], v[6], v[1], v[0], v[7]}, {v[6], v[5], v[2], v[1], v[0], v[3], v[4], v[7]},
+        {v[0], v[3], v[4], v[7], v[6], v[5], v[2], v[1]},
+        {v[0], v[7], v[6], v[1], v[2], v[5], v[4], v[3]},
+        {v[0], v[7], v[6], v[1], v[2], v[5], v[4], v[3]},
+        {v[2], v[3], v[0], v[1], v[6], v[7], v[4], v[5]},
+        {v[2], v[3], v[0], v[1], v[6], v[7], v[4], v[5]},
+        {v[4], v[3], v[2], v[5], v[6], v[1], v[0], v[7]},
+        {v[4], v[3], v[2], v[5], v[6], v[1], v[0], v[7]},
+        {v[6], v[5], v[2], v[1], v[0], v[3], v[4], v[7]},
     };
     for (int i = 0; i < 8; i++) {
         Hilbert(vec[i], half, iter - 1, children[i], out, n);
@@ -104,7 +114,8 @@ static V3 Catmull(V3* ctrl, int nCtrl, float t) {
         float d = sqrtf(Dist(a, b));
         return d < 1e-3f ? 1e-3f : d;
     };
-    float t0 = 0, t1 = t0 + knot(p0, p1), t2 = t1 + knot(p1, p2), t3 = t2 + knot(p2, p3);
+    float t0 = 0, t1 = t0 + knot(p0, p1), t2 = t1 + knot(p1, p2),
+          t3 = t2 + knot(p2, p3);
     float tt = t1 + (t2 - t1) * local;
     V3 a1 = Lerp(p0, p1, (tt - t0) / (t1 - t0));
     V3 a2 = Lerp(p1, p2, (tt - t1) / (t2 - t1));
@@ -173,7 +184,8 @@ static void BuildGeom(FpsApp* app) {
     }
 }
 
-static void Project(V3 v, float yaw, float pitch, float cx, float cy, float scale, float* ox, float* oy) {
+static void Project(V3 v, float yaw, float pitch, float cx, float cy,
+                    float scale, float* ox, float* oy) {
     float sy = sinf(yaw), cyw = cosf(yaw);
     float x = v.x * cyw + v.z * sy;
     float z = v.z * cyw - v.x * sy;
@@ -200,7 +212,8 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
     int rows = (curves + columns - 1) / columns;
     float cellW = w / (float)columns;
     float cellH = h / (float)rows;
-    float scale = (cellW < cellH ? cellW : cellH) / (kHilbertExtent * 2.f) * kCellFill;
+    float scale =
+        (cellW < cellH ? cellW : cellH) / (kHilbertExtent * 2.f) * kCellFill;
     ULONGLONG now = GetTickCount64();
     float spin = (float)(now - app->start) / 1000.f * 0.35f;
 
@@ -225,11 +238,13 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
             }
             Rgba col = pal[(start + end) / 2];
             if (ctx->brush) {
-                ctx->brush->SetColor(
-                    D2D1::ColorF(col.r / 255.f, col.g / 255.f, col.b / 255.f, col.a / 255.f));
+                ctx->brush
+                    ->SetColor(D2D1::ColorF(col.r / 255.f, col.g / 255.f,
+                                            col.b / 255.f, col.a / 255.f));
             }
             for (int i = start + 1; i <= end; i++) {
-                ctx->rt->DrawLine(D2D1::Point2F(px[i - 1], py[i - 1]), D2D1::Point2F(px[i], py[i]), ctx->brush, 1.f);
+                ctx->rt->DrawLine(D2D1::Point2F(px[i - 1], py[i - 1]),
+                                  D2D1::Point2F(px[i], py[i]), ctx->brush, 1.f);
             }
             start = end;
         }
@@ -305,7 +320,9 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
                   ->PadY(6)
                   ->Radius(6)
                   ->Bg(Rgba8(0, 0, 0, 160))
-                  ->Child(TextEl(frame, fmt("%.0f FPS", fps))->Font(12)->Fg(Rgb(200, 200, 200)));
+                  ->Child(TextEl(frame, fmt("%.0f FPS", fps))
+                              ->Font(12)
+                              ->Fg(Rgb(200, 200, 200)));
 
     El* ctrl = Div(frame)
                    ->Absolute()
@@ -315,10 +332,17 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
                    ->ItemsCenter()
                    ->Gap(8)
                    ->Child(ButtonEl(frame, 1, StrL("- load")))
-                   ->Child(TextEl(frame, fmt("%d curves", app->curves))->Font(12)->Fg(Rgb(190, 190, 190)))
+                   ->Child(TextEl(frame, fmt("%d curves", app->curves))
+                               ->Font(12)
+                               ->Fg(Rgb(190, 190, 190)))
                    ->Child(ButtonEl(frame, 2, StrL("+ load")));
 
-    return Div(frame)->SizeFull()->Bg(Rgb(0, 0, 0))->Child(canvas)->Child(hud)->Child(ctrl);
+    return Div(frame)
+        ->SizeFull()
+        ->Bg(Rgb(0, 0, 0))
+        ->Child(canvas)
+        ->Child(hud)
+        ->Child(ctrl);
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {

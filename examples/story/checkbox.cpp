@@ -7,7 +7,9 @@ static void SetChecked(StoryApp* app, bool v) {
 El* CheckboxRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(a, app));
-    El* sec = StorySection(a, "Default", "A control that toggles between checked and not checked.");
+    El* sec =
+        StorySection(a, "Default",
+                     "A control that toggles between checked and not checked.");
     El* col = Div(a)->FlexCol()->Gap(8);
     col->Child(component::Checkbox::New(a, StrL("terms"))
                    ->Label(StrL("Accept terms and conditions"))

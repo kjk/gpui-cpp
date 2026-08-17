@@ -1,11 +1,14 @@
 #include "Story.h"
 
-enum { ClickToggleStory = 2300 };
+enum {
+    ClickToggleStory = 2300
+};
 
 El* ToggleRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A two-state button that can be either on or off.");
+    El* sec = StorySection(a, "Default",
+                           "A two-state button that can be either on or off.");
     El* t = Toggle::New(a, StrL("italic"), ClickToggleStory)
                 ->H(32)
                 ->PadX(12)

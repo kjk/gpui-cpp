@@ -7,7 +7,10 @@ El* SpinnerRender(StoryApp* app, Arena* a) {
     El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     row->Child(component::Spinner::New(a)->WithSize(app->size)->IntoEl());
     row->Child(component::Spinner::New(a)->WithSize(UiSize::Small)->IntoEl());
-    row->Child(component::Spinner::New(a)->WithSize(UiSize::Large)->Color(ThemeNow().primary)->IntoEl());
+    row->Child(component::Spinner::New(a)
+                   ->WithSize(UiSize::Large)
+                   ->Color(ThemeNow().primary)
+                   ->IntoEl());
     StorySectionAdd(sec, row);
     page->Child(sec);
     return page;

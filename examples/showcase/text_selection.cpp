@@ -2,13 +2,25 @@
 #include "ui/Button.h"
 #include "ui/TextSelection.h"
 
-enum { ClickSelClear = 530, ClickPara = 531 };
+enum {
+    ClickSelClear = 530,
+    ClickPara = 531
+};
 
 static const char* kParas[] = {
     "Text selection across renderers",
-    "Selection should feel like a natural part of reading a product brief. Start in this paragraph, continue into the next renderer, and GPUI preserves the document order while every frame supplies fresh geometry for the same stable selection handle.",
-    "This second paragraph is deliberately long enough to wrap in the showcase. Drag across the boundary to see one continuous highlight, then use the platform copy shortcut to confirm that the copied result follows the visible reading order rather than renderer ownership.",
-    "International text should remain predictable when a line mixes café, déjà vu, Kraków, naïve, and résumé. Resize the window or drag across several wrapped lines; UTF-8 byte ranges still map back to the correct glyphs without splitting a character.",
+    "Selection should feel like a natural part of reading a product brief. "
+    "Start in this paragraph, continue into the next renderer, and GPUI "
+    "preserves the document order while every frame supplies fresh geometry "
+    "for the same stable selection handle.",
+    "This second paragraph is deliberately long enough to wrap in the "
+    "showcase. Drag across the boundary to see one continuous highlight, then "
+    "use the platform copy shortcut to confirm that the copied result follows "
+    "the visible reading order rather than renderer ownership.",
+    "International text should remain predictable when a line mixes café, déjà "
+    "vu, Kraków, naïve, and résumé. Resize the window or drag across several "
+    "wrapped lines; UTF-8 byte ranges still map back to the correct glyphs "
+    "without splitting a character.",
 };
 
 static int ParaLen(int i) {
@@ -75,7 +87,10 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Arena* a) {
         int plen = ParaLen(i);
         El* p = TextSelection::New(a, DupFmt(a, "para-%d", i), 0)->W(kFill);
         float size = i == 0 ? 18.f : 14.f;
-        El* t = ScTxt(a, Str(kParas[i]), size, i == 0 ? ScInk() : ScGray())->Wrap()->MaxW(560)->Click(ClickPara + i);
+        El* t = ScTxt(a, Str(kParas[i]), size, i == 0 ? ScInk() : ScGray())
+                    ->Wrap()
+                    ->MaxW(560)
+                    ->Click(ClickPara + i);
         if (i == 0) {
             t->Semibold();
         }
@@ -97,30 +112,40 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Arena* a) {
     if (active) {
         char picked[1024];
         CopySelected(app, picked, (int)sizeof(picked));
-        preview->Child(ScTxt(a, DupA(a, picked), 12, ScGray())->Wrap()->MaxW(560));
+        preview
+            ->Child(ScTxt(a, DupA(a, picked), 12, ScGray())->Wrap()->MaxW(560));
     } else {
-        preview->Child(ScTxt(a, StrL("Drag across any paragraphs to select text."), 12, ScGray()));
+        preview
+            ->Child(ScTxt(a, StrL("Drag across any paragraphs to select text."),
+                          12, ScGray()));
     }
 
-    El* footer = Div(a)
-                     ->H(150)
-                     ->Shrink0()
-                     ->Pad(12)
-                     ->FlexCol()
-                     ->Gap(8)
-                     ->ItemsStart()
-                     ->Bg(ScHover())
-                     ->Border(1, ScLine())
-                     ->Child(ScTxt(a, active ? StrL("Selection active") : StrL("No selection"), 12, ScInk())->Semibold())
-                     ->Child(preview)
-                     ->Child(Button::New(a, StrL("clear-text-selection"), ClickSelClear)
-                                 ->H(28)
-                                 ->PadX(8)
-                                 ->Shrink0()
-                                 ->ItemsCenter()
-                                 ->JustifyCenter()
-                                 ->Border(1, Rgb(0x17, 0x17, 0x17))
-                                 ->Child(TextEl(a, StrL("Clear selection"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+    El* footer =
+        Div(a)
+            ->H(150)
+            ->Shrink0()
+            ->Pad(12)
+            ->FlexCol()
+            ->Gap(8)
+            ->ItemsStart()
+            ->Bg(ScHover())
+            ->Border(1, ScLine())
+            ->Child(
+                ScTxt(a,
+                      active ? StrL("Selection active") : StrL("No selection"),
+                      12, ScInk())
+                    ->Semibold())
+            ->Child(preview)
+            ->Child(Button::New(a, StrL("clear-text-selection"), ClickSelClear)
+                        ->H(28)
+                        ->PadX(8)
+                        ->Shrink0()
+                        ->ItemsCenter()
+                        ->JustifyCenter()
+                        ->Border(1, Rgb(0x17, 0x17, 0x17))
+                        ->Child(TextEl(a, StrL("Clear selection"))
+                                    ->Font(12)
+                                    ->Fg(Rgb(0x17, 0x17, 0x17))));
 
     return Div(a)
         ->FlexCol()
@@ -140,5 +165,5 @@ void ShowcaseTextSelectionClick(ShowcaseApp* app, int id) {
     }
 }
 
-SHOWCASE_PAGE(CompTextSelection, ShowcaseTextSelection, ShowcaseTextSelectionClick);
-
+SHOWCASE_PAGE(CompTextSelection, ShowcaseTextSelection,
+              ShowcaseTextSelectionClick);

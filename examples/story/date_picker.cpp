@@ -10,7 +10,8 @@ static void PickDate(StoryApp* app, int d) {
 
 El* DatePickerRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A date picker component with range and presets.");
+    El* sec = StorySection(a, "Default",
+                           "A date picker component with range and presets.");
     StorySectionAdd(sec, component::DatePicker::New(a)
                              ->Year(app->calYear)
                              ->Month(app->calMonth)

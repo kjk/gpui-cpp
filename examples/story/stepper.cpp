@@ -6,7 +6,9 @@ static void SetStep(StoryApp* app, int i) {
 
 El* StepperRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A stepper component to display progress through a sequence of steps.");
+    El* sec = StorySection(
+        a, "Default",
+        "A stepper component to display progress through a sequence of steps.");
     StorySectionAdd(sec, component::Stepper::New(a)
                              ->Step(StrL("Account"))
                              ->Step(StrL("Profile"))

@@ -93,7 +93,7 @@ struct ShowcaseApp {
     char comboboxSel[32] = "Select framework";
     LineInput comboQuery = {};
     bool dateOpen = false;
-    int calYear = 0;  // 0 = fill from local date on first calendar render
+    int calYear = 0; // 0 = fill from local date on first calendar render
     int calMonth = 0;
     int calDay = 0; // 0 = no selection; today is outlined like Rust
     bool dialogOpen = false;
@@ -103,7 +103,8 @@ struct ShowcaseApp {
     float slider = 0.64f;
     LineInput input = {};
     LineInput hexIn = {};
-    char textarea[2048] = "Build focused interfaces.\nKeep behavior composable.";
+    char textarea[2048] =
+        "Build focused interfaces.\nKeep behavior composable.";
     int textareaLen = 0;
     bool textareaOn = false;
     char editor[4096] = {};
@@ -239,29 +240,25 @@ void ShowcaseRegister(int comp, ShowcaseRenderFn render, ShowcaseClickFn click);
 El* ShowcaseRenderRegistered(ShowcaseApp* app, Arena* a, WinSize size);
 void ShowcaseClickRegistered(ShowcaseApp* app, int id);
 
-#define SHOWCASE_PAGE(COMP, RENDER, CLICK)                                 \
-    namespace {                                                           \
-    static El* _sc_render_##COMP(ShowcaseApp* app, Arena* a, WinSize size) { \
-        (void)size;                                                       \
-        return RENDER(app, a);                                            \
-    }                                                                     \
-    struct _ScReg_##COMP {                                                \
-        _ScReg_##COMP() {                                                 \
-            ShowcaseRegister(COMP, _sc_render_##COMP, CLICK);             \
-        }                                                                 \
-    } _sc_reg_##COMP;                                                     \
+#define SHOWCASE_PAGE(COMP, RENDER, CLICK)                                    \
+    namespace {                                                               \
+    static El* _sc_render_##COMP(ShowcaseApp* app, Arena* a, WinSize size) {  \
+        (void)size;                                                           \
+        return RENDER(app, a);                                                \
+    }                                                                         \
+    struct _ScReg_##COMP {                                                    \
+        _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP, CLICK); } \
+    } _sc_reg_##COMP;                                                         \
     }
 
-#define SHOWCASE_PAGE_SZ(COMP, RENDER, CLICK)                              \
-    namespace {                                                           \
-    static El* _sc_render_##COMP(ShowcaseApp* app, Arena* a, WinSize size) { \
-        return RENDER(app, a, size);                                      \
-    }                                                                     \
-    struct _ScReg_##COMP {                                                \
-        _ScReg_##COMP() {                                                 \
-            ShowcaseRegister(COMP, _sc_render_##COMP, CLICK);             \
-        }                                                                 \
-    } _sc_reg_##COMP;                                                     \
+#define SHOWCASE_PAGE_SZ(COMP, RENDER, CLICK)                                 \
+    namespace {                                                               \
+    static El* _sc_render_##COMP(ShowcaseApp* app, Arena* a, WinSize size) {  \
+        return RENDER(app, a, size);                                          \
+    }                                                                         \
+    struct _ScReg_##COMP {                                                    \
+        _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP, CLICK); } \
+    } _sc_reg_##COMP;                                                         \
     }
 
 void ShowcaseClick(ShowcaseApp* app, AppHost* host, int id);
@@ -269,5 +266,7 @@ void ShowcaseChar(ShowcaseApp* app, AppHost* host, u32 cp);
 void ShowcaseKey(ShowcaseApp* app, AppHost* host, int vk, bool down);
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta);
 void ShowcaseMouseMove(ShowcaseApp* app, AppHost* host, float x, float y);
-void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y, int button);
-void ShowcaseMouseUp(ShowcaseApp* app, AppHost* host, float x, float y, int button);
+void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y,
+                       int button);
+void ShowcaseMouseUp(ShowcaseApp* app, AppHost* host, float x, float y,
+                     int button);

@@ -3,7 +3,8 @@
 El* TooltipRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A popup that displays information on hover.");
+    El* sec = StorySection(a, "Default",
+                           "A popup that displays information on hover.");
     StorySectionAdd(sec, component::Button::New(a, StrL("tip-btn"))
                              ->Label(StrL("Hover me"))
                              ->Outline()

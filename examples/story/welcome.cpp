@@ -3,24 +3,19 @@
 static El* Shield(Arena* a, const char* left, const char* right, Rgba rightBg) {
     Rgba leftBg = Rgb(0x4b, 0x55, 0x63);
     El* row = Div(a)->FlexRow()->H(20)->Radius(3);
-    row->Child(Div(a)
-                   ->H(20)
-                   ->PadX(6)
-                   ->ItemsCenter()
-                   ->Bg(leftBg)
-                   ->Child(StoryTxt(a, Str(left), 11, Rgb(0xff, 0xff, 0xff))));
-    row->Child(Div(a)
-                   ->H(20)
-                   ->PadX(6)
-                   ->ItemsCenter()
-                   ->Bg(rightBg)
-                   ->Child(StoryTxt(a, Str(right), 11, Rgb(0xff, 0xff, 0xff))));
+    row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(leftBg)->Child(
+        StoryTxt(a, Str(left), 11, Rgb(0xff, 0xff, 0xff))));
+    row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(rightBg)->Child(
+        StoryTxt(a, Str(right), 11, Rgb(0xff, 0xff, 0xff))));
     return row;
 }
 
 static El* FeatureLine(Arena* a, const char* label, const char* rest) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s: %s", label, rest), 14, th.foreground)->Wrap()->W(kFill);
+    return StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s: %s", label, rest), 14,
+                    th.foreground)
+        ->Wrap()
+        ->W(kFill);
 }
 
 static El* MdTableCell(Arena* a, const char* s, bool header) {
@@ -32,14 +27,17 @@ static El* MdTableCell(Arena* a, const char* s, bool header) {
     return Div(a)->Grow()->PadX(12)->PadY(8)->ItemsCenter()->Child(txt);
 }
 
-static El* MdTableRow(Arena* a, const char* left, const char* right, bool header) {
+static El* MdTableRow(Arena* a, const char* left, const char* right,
+                      bool header) {
     const Theme& th = ThemeNow();
     El* row = Div(a)->FlexRow()->W(kFill)->Shrink0();
     if (!header) {
         row->BorderT(1, th.border);
     }
     El* mid = Div(a)->W(1)->Bg(th.border)->Shrink0();
-    row->Child(MdTableCell(a, left, header))->Child(mid)->Child(MdTableCell(a, right, header));
+    row->Child(MdTableCell(a, left, header))
+        ->Child(mid)
+        ->Child(MdTableCell(a, right, header));
     return row;
 }
 
@@ -53,12 +51,15 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(12)->W(kFill)->MaxW(760);
 
-    col->Child(StoryTxt(a, StrL("GPUI Component"), 18, th.foreground)->Semibold());
+    col->Child(StoryTxt(a, StrL("GPUI Component"), 18, th.foreground)
+                   ->Semibold());
 
     El* langs = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     langs->Child(StoryTxt(a, StrL("English"), 14, th.foreground));
     langs->Child(StoryTxt(a, StrL("|"), 14, th.mutedFg));
-    langs->Child(StoryTxt(a, StrL("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"), 14, th.blue));
+    langs->Child(
+        StoryTxt(a, StrL("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"),
+                 14, th.blue));
     col->Child(langs);
 
     El* badges = Div(a)->FlexRow()->Gap(6)->ItemsCenter();
@@ -67,45 +68,69 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     badges->Child(Shield(a, "crates.io", "v0.5.1", Rgb(0xfe, 0x7d, 0x37)));
     col->Child(badges);
 
-    col->Child(StoryTxt(a, StrL("UI components for building fantastic desktop applications using GPUI."), 14,
-                        th.foreground)
+    col->Child(StoryTxt(a,
+                        StrL("UI components for building fantastic desktop "
+                             "applications using GPUI."),
+                        14, th.foreground)
                    ->Wrap());
 
     col->Child(StoryTxt(a, StrL("Features"), 18, th.foreground)->Semibold());
     El* feats = Div(a)->FlexCol()->Gap(4)->W(kFill);
-    feats->Child(FeatureLine(a, "Richness", "60+ cross-platform desktop UI components."));
+    feats->Child(FeatureLine(a, "Richness",
+                             "60+ cross-platform desktop UI components."));
     feats->Child(FeatureLine(a, "Native",
-                             "Inspired by macOS and Windows controls, combined with shadcn/ui design for a modern "
+                             "Inspired by macOS and Windows controls, combined "
+                             "with shadcn/ui design for a modern "
                              "experience."));
-    feats->Child(FeatureLine(a, "Ease of Use", "Stateless RenderOnce components, simple and user-friendly."));
-    feats->Child(FeatureLine(a, "Customizable",
-                             "Built-in Theme and ThemeColor, supporting multi-theme and variable-based configurations."));
-    feats->Child(FeatureLine(a, "Versatile", "Supports sizes like xs, sm, md, and lg."));
-    feats->Child(FeatureLine(a, "Flexible Layout",
-                             "Dock layout for panel arrangements, resizing, and freeform (Tiles) layouts."));
-    feats->Child(FeatureLine(a, "High Performance",
-                             "Virtualized Table and List components for smooth large-data rendering."));
-    feats->Child(FeatureLine(a, "Content Rendering", "Native support for Markdown and simple HTML."));
-    feats->Child(FeatureLine(a, "Charting", "Built-in charts for visualizing your data."));
     feats->Child(FeatureLine(
-        a, "Editor", "High performance code editor (Up to 200K lines for stable performance) with LSP (diagnostics, completion, hover, etc)."));
+        a, "Ease of Use",
+        "Stateless RenderOnce components, simple and user-friendly."));
+    feats->Child(FeatureLine(a, "Customizable",
+                             "Built-in Theme and ThemeColor, supporting "
+                             "multi-theme and variable-based configurations."));
+    feats->Child(
+        FeatureLine(a, "Versatile", "Supports sizes like xs, sm, md, and lg."));
+    feats->Child(FeatureLine(a, "Flexible Layout",
+                             "Dock layout for panel arrangements, resizing, "
+                             "and freeform (Tiles) layouts."));
+    feats->Child(FeatureLine(a, "High Performance",
+                             "Virtualized Table and List components for smooth "
+                             "large-data rendering."));
+    feats->Child(FeatureLine(a, "Content Rendering",
+                             "Native support for Markdown and simple HTML."));
+    feats->Child(FeatureLine(a, "Charting",
+                             "Built-in charts for visualizing your data."));
+    feats->Child(FeatureLine(
+        a, "Editor",
+        "High performance code editor (Up to 200K lines for stable "
+        "performance) with LSP (diagnostics, completion, hover, etc)."));
     feats->Child(FeatureLine(a, "Syntax Highlighting",
-                             "Syntax highlighting for editor and markdown components using Tree Sitter."));
+                             "Syntax highlighting for editor and markdown "
+                             "components using Tree Sitter."));
     col->Child(feats);
 
     El* eco = Div(a)->FlexCol()->Gap(6)->W(kFill);
-    eco->Child(StoryTxt(a, StrL("Ecosystem Architecture"), 18, th.foreground)->Semibold());
-    eco->Child(StoryTxt(a, StrL("Two layers. One ecosystem."), 16, th.foreground)->Semibold());
-    eco->Child(StoryTxt(a, StrL("Choose the layer that matches how much of the interface you want to own."), 14,
-                        th.foreground)
+    eco->Child(StoryTxt(a, StrL("Ecosystem Architecture"), 18, th.foreground)
+                   ->Semibold());
+    eco->Child(
+        StoryTxt(a, StrL("Two layers. One ecosystem."), 16, th.foreground)
+            ->Semibold());
+    eco->Child(StoryTxt(a,
+                        StrL("Choose the layer that matches how much of the "
+                             "interface you want to own."),
+                        14, th.foreground)
                    ->Wrap());
     col->Child(eco);
 
     El* table = Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Shrink0();
     table->Child(MdTableRow(a, "GPUI Component", "gpui-base", true));
-    table->Child(MdTableRow(a, "Complete, styled components", "Unstyled behavior and infrastructure", false));
-    table->Child(MdTableRow(a, "Productive defaults with theming", "Full control over structure and visual design", false));
-    table->Child(MdTableRow(a, "Best for building applications", "Best for building design systems", false));
+    table->Child(MdTableRow(a, "Complete, styled components",
+                            "Unstyled behavior and infrastructure", false));
+    table->Child(MdTableRow(a, "Productive defaults with theming",
+                            "Full control over structure and visual design",
+                            false));
+    table->Child(MdTableRow(a, "Best for building applications",
+                            "Best for building design systems", false));
     col->Child(table);
 
     El* diagram = Div(a)->FlexCol()->Gap(1)->W(kFill)->Pad(16)->Bg(th.muted);

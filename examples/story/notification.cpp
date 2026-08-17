@@ -1,6 +1,8 @@
 #include "Story.h"
 
-enum { ClickStoryNotify = 2730 };
+enum {
+    ClickStoryNotify = 2730
+};
 
 static void HideNote(StoryApp* app) {
     app->notifyOn = false;
@@ -8,10 +10,16 @@ static void HideNote(StoryApp* app) {
 
 El* NotificationRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A brief message that appears temporarily.");
-    StorySectionAdd(sec, component::Button::New(a, StrL("show-note"))->Label(StrL("Show notification"))->Outline()->IntoEl());
+    El* sec =
+        StorySection(a, "Default", "A brief message that appears temporarily.");
+    StorySectionAdd(sec, component::Button::New(a, StrL("show-note"))
+                             ->Label(StrL("Show notification"))
+                             ->Outline()
+                             ->IntoEl());
     if (app->notifyOn) {
-        StorySectionAdd(sec, component::Notification::New(a, StrL("Changes saved"), StrL("Your preferences are now up to date."))
+        StorySectionAdd(sec, component::Notification::New(
+                                 a, StrL("Changes saved"),
+                                 StrL("Your preferences are now up to date."))
                                  ->Kind(component::NotificationKind::Success)
                                  ->OnClose(MkFunc0(&HideNote, app))
                                  ->IntoEl());

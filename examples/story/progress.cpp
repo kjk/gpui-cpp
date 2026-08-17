@@ -12,8 +12,10 @@ El* ProgressRender(StoryApp* app, Arena* a) {
 
     El* circ = StorySection(a, "Circle", "Circular progress.");
     El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    row->Child(component::ProgressCircle::New(a)->Value(68)->Size(56)->IntoEl());
-    row->Child(component::ProgressCircle::New(a)->Value(32)->Size(56)->IntoEl());
+    row->Child(
+        component::ProgressCircle::New(a)->Value(68)->Size(56)->IntoEl());
+    row->Child(
+        component::ProgressCircle::New(a)->Value(32)->Size(56)->IntoEl());
     StorySectionAdd(circ, row);
     page->Child(circ);
     return page;

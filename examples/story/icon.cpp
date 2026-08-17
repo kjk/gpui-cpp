@@ -4,10 +4,13 @@ El* IconRender(StoryApp* app, Arena* a) {
     (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Lucide subset", "Icons used by the Windows port.");
-    IconName names[] = {IconName::Inbox,     IconName::Settings, IconName::Calendar, IconName::Folder,
-                        IconName::Search,    IconName::Info,     IconName::Check,    IconName::Plus,
-                        IconName::Minus,     IconName::Copy,     IconName::ChevronDown, IconName::CircleCheck};
+    El* sec =
+        StorySection(a, "Lucide subset", "Icons used by the Windows port.");
+    IconName names[] = {
+        IconName::Inbox,  IconName::Settings,    IconName::Calendar,
+        IconName::Folder, IconName::Search,      IconName::Info,
+        IconName::Check,  IconName::Plus,        IconName::Minus,
+        IconName::Copy,   IconName::ChevronDown, IconName::CircleCheck};
     El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     for (int i = 0; i < 12; i++) {
         row->Child(Div(a)

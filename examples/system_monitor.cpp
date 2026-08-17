@@ -110,7 +110,8 @@ static void OnClick(AppHost* host, int id) {
             app->sortDesc = !app->sortDesc;
         } else {
             app->sort = field;
-            app->sortDesc = field != ProcessSort::Name && field != ProcessSort::Pid;
+            app->sortDesc =
+                field != ProcessSort::Name && field != ProcessSort::Pid;
         }
         SysSortProcesses(&app->sys, app->sort, app->sortDesc, kKeepProcs);
     }
@@ -144,7 +145,8 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, int id) {
                 ->JustifyCenter()
                 ->Radius(6)
                 ->Click(id)
-                ->Child(TextEl(a, label)->Font(13)->Fg(selected ? th.tabActiveFg : th.tabFg));
+                ->Child(TextEl(a, label)->Font(13)->Fg(selected ? th.tabActiveFg
+                                                                : th.tabFg));
     if (selected) {
         t->Bg(th.tabActiveBg);
     }
@@ -162,8 +164,10 @@ static El* TitleBar(Arena* a, AppHost* host, MonitorApp* app) {
                    ->Pad(2)
                    ->Radius(8)
                    ->Bg(th.tabBar)
-                   ->Child(SegmentedTab(a, StrL("System"), app->tab == 0, ClickTabSystem))
-                   ->Child(SegmentedTab(a, StrL("Processes"), app->tab == 1, ClickTabProcesses));
+                   ->Child(SegmentedTab(a, StrL("System"), app->tab == 0,
+                                        ClickTabSystem))
+                   ->Child(SegmentedTab(a, StrL("Processes"), app->tab == 1,
+                                        ClickTabProcesses));
 
     double gb = (double)app->sys.memTotal / (1024.0 * 1024.0 * 1024.0);
     El* memLabel = TextEl(a, fmt("%.1f GB", gb))->Font(12)->Fg(th.mutedFg);
@@ -182,21 +186,24 @@ static El* TitleBar(Arena* a, AppHost* host, MonitorApp* app) {
                   ->Child(memLabel);
 
     // bottom border under title bar
-    El* wrap = Div(a)->FlexCol()->Shrink0()->W(kFill)->Child(bar)->Child(Div(a)->H(1)->W(kFill)->Bg(th.titleBarBorder));
+    El* wrap = Div(a)->FlexCol()->Shrink0()->W(kFill)->Child(bar)->Child(
+        Div(a)->H(1)->W(kFill)->Bg(th.titleBarBorder));
     return wrap;
 }
 
-static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current, Rgba color) {
+static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current,
+                     Rgba color) {
     const Theme& th = ThemeDark();
-    El* header = Div(a)
-                     ->FlexRow()
-                     ->JustifyBetween()
-                     ->ItemsCenter()
-                     ->Shrink0()
-                     ->PadX(12)
-                     ->PadY(4)
-                     ->Child(TextEl(a, title)->Font(14)->Fg(th.foreground))
-                     ->Child(TextEl(a, FormatPct(current, 1))->Font(14)->Fg(color));
+    El* header =
+        Div(a)
+            ->FlexRow()
+            ->JustifyBetween()
+            ->ItemsCenter()
+            ->Shrink0()
+            ->PadX(12)
+            ->PadY(4)
+            ->Child(TextEl(a, title)->Font(14)->Fg(th.foreground))
+            ->Child(TextEl(a, FormatPct(current, 1))->Font(14)->Fg(color));
 
     Rgba fillTop = RgbaOpacity(color, 0.4f);
     Rgba fillBot = RgbaOpacity(th.background, 0.1f);
@@ -221,12 +228,15 @@ static El* SystemTab(Arena* a, MonitorApp* app) {
         ->Grow()
         ->Pad(12)
         ->Gap(16)
-        ->Child(ChartCard(a, StrL("CPU Usage"), app->cpuHist, app->histN, cpu, th.red))
-        ->Child(ChartCard(a, StrL("Memory Usage"), app->memHist, app->histN, mem, th.blue));
+        ->Child(ChartCard(a, StrL("CPU Usage"), app->cpuHist, app->histN, cpu,
+                          th.red))
+        ->Child(ChartCard(a, StrL("Memory Usage"), app->memHist, app->histN,
+                          mem, th.blue));
 }
 
 static const float kColW[4] = {70, 380, 80, 100};
-static const int kSortClick[4] = {ClickSortPid, ClickSortName, ClickSortCpu, ClickSortMem};
+static const int kSortClick[4] = {ClickSortPid, ClickSortName, ClickSortCpu,
+                                  ClickSortMem};
 
 static Str SortMark(ProcessSort field, ProcessSort cur, bool desc) {
     if (field != cur) {
@@ -238,10 +248,13 @@ static Str SortMark(ProcessSort field, ProcessSort cur, bool desc) {
 static El* TableHeader(Arena* a, MonitorApp* app) {
     const Theme& th = ThemeDark();
     const char* names[4] = {"PID", "Name", "CPU %", "Memory"};
-    ProcessSort fields[4] = {ProcessSort::Pid, ProcessSort::Name, ProcessSort::Cpu, ProcessSort::Memory};
-    El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(Rgba8(0x17, 0x17, 0x17, 0x66));
+    ProcessSort fields[4] = {ProcessSort::Pid, ProcessSort::Name,
+                             ProcessSort::Cpu, ProcessSort::Memory};
+    El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(
+        Rgba8(0x17, 0x17, 0x17, 0x66));
     for (int i = 0; i < 4; i++) {
-        TempStr lab = fmt("%s%s", Str(names[i]), SortMark(fields[i], app->sort, app->sortDesc));
+        TempStr lab = fmt("%s%s", Str(names[i]),
+                          SortMark(fields[i], app->sort, app->sortDesc));
         row->Child(Div(a)
                        ->W(kColW[i])
                        ->H(28)
@@ -269,25 +282,18 @@ static El* TableRow(Arena* a, const ProcessInfo* p, int ix) {
     if (ix % 2 == 1) {
         row->Bg(th.tableEven);
     }
-    row->Child(Div(a)->W(kColW[0])->H(28)->PadX(8)->ItemsCenter()->Child(TextEl(a, fmt("%d", (int)p->pid))->Font(12)->Fg(th.mutedFg)));
-    row->Child(Div(a)
-                   ->W(kColW[1])
-                   ->H(28)
-                   ->PadX(8)
-                   ->ItemsCenter()
-                   ->Child(TextEl(a, Str(p->name))->Font(14)->Fg(th.foreground)->Truncate()->W(kColW[1] - 16)));
-    row->Child(Div(a)
-                   ->W(kColW[2])
-                   ->H(28)
-                   ->PadX(8)
-                   ->ItemsCenter()
-                   ->Child(TextEl(a, FormatPct(p->cpu, 1))->Font(12)->Fg(CpuColor(th, p->cpu))));
-    row->Child(Div(a)
-                   ->W(kColW[3])
-                   ->H(28)
-                   ->PadX(8)
-                   ->ItemsCenter()
-                   ->Child(TextEl(a, FormatBytes(p->memory))->Font(12)->Fg(th.green)));
+    row->Child(Div(a)->W(kColW[0])->H(28)->PadX(8)->ItemsCenter()->Child(
+        TextEl(a, fmt("%d", (int)p->pid))->Font(12)->Fg(th.mutedFg)));
+    row->Child(Div(a)->W(kColW[1])->H(28)->PadX(8)->ItemsCenter()->Child(
+        TextEl(a, Str(p->name))
+            ->Font(14)
+            ->Fg(th.foreground)
+            ->Truncate()
+            ->W(kColW[1] - 16)));
+    row->Child(Div(a)->W(kColW[2])->H(28)->PadX(8)->ItemsCenter()->Child(
+        TextEl(a, FormatPct(p->cpu, 1))->Font(12)->Fg(CpuColor(th, p->cpu))));
+    row->Child(Div(a)->W(kColW[3])->H(28)->PadX(8)->ItemsCenter()->Child(
+        TextEl(a, FormatBytes(p->memory))->Font(12)->Fg(th.green)));
     return row;
 }
 
@@ -313,7 +319,11 @@ static El* ProcessesTab(Arena* a, MonitorApp* app) {
         body->Child(Div(a)->H((float)(n - last) * 28.f)->Shrink0());
     }
 
-    return Div(a)->FlexCol()->SizeFull()->Child(TableHeader(a, app))->Child(body);
+    return Div(a)
+        ->FlexCol()
+        ->SizeFull()
+        ->Child(TableHeader(a, app))
+        ->Child(body);
 }
 
 static El* StatusChip(Arena* a, IconName icon, float pct) {
@@ -333,13 +343,14 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
     float cpu = app->histN ? app->cpuHist[app->histN - 1] : 0;
     float mem = app->histN ? app->memHist[app->histN - 1] : 0;
 
-    El* left = Div(a)
-                   ->FlexRow()
-                   ->Gap(16)
-                   ->ItemsCenter()
-                   ->Child(StatusChip(a, IconName::HardDrive, app->sys.disk.usedPct))
-                   ->Child(StatusChip(a, IconName::MemoryStick, mem))
-                   ->Child(StatusChip(a, IconName::Cpu, cpu));
+    El* left =
+        Div(a)
+            ->FlexRow()
+            ->Gap(16)
+            ->ItemsCenter()
+            ->Child(StatusChip(a, IconName::HardDrive, app->sys.disk.usedPct))
+            ->Child(StatusChip(a, IconName::MemoryStick, mem))
+            ->Child(StatusChip(a, IconName::Cpu, cpu));
 
     El* right = Div(a);
     if (app->sys.battery.present) {
@@ -351,7 +362,13 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
         } else if (app->sys.battery.pct >= 30) {
             bi = IconName::BatteryMedium;
         }
-        right->FlexRow()->Gap(8)->ItemsCenter()->Child(IconEl(a, bi)->Fg(th.mutedFg))->Child(TextEl(a, FormatPct(app->sys.battery.pct, 0))->Font(14)->Fg(th.mutedFg));
+        right->FlexRow()
+            ->Gap(8)
+            ->ItemsCenter()
+            ->Child(IconEl(a, bi)->Fg(th.mutedFg))
+            ->Child(TextEl(a, FormatPct(app->sys.battery.pct, 0))
+                        ->Font(14)
+                        ->Fg(th.mutedFg));
     }
 
     return Div(a)

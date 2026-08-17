@@ -1,7 +1,10 @@
 #include "Showcase.h"
 #include "ui/Button.h"
 
-enum { ClickBtnSave = 220, ClickBtnCancel = 221 };
+enum {
+    ClickBtnSave = 220,
+    ClickBtnCancel = 221
+};
 
 El* ShowcaseButton(ShowcaseApp* app, Arena* a) {
     (void)app;
@@ -17,7 +20,9 @@ El* ShowcaseButton(ShowcaseApp* app, Arena* a) {
                     ->Border(1, Rgb(0x17, 0x17, 0x17))
                     ->Bg(Rgb(0x17, 0x17, 0x17))
                     ->HoverBg(Rgb(0x40, 0x40, 0x40))
-                    ->Child(TextEl(a, StrL("Save changes"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))))
+                    ->Child(TextEl(a, StrL("Save changes"))
+                                ->Font(12)
+                                ->Fg(Rgb(0xff, 0xff, 0xff))))
         ->Child(Button::New(a, StrL("secondary-button"), ClickBtnCancel)
                     ->PadX(12)
                     ->H(28)
@@ -26,7 +31,9 @@ El* ShowcaseButton(ShowcaseApp* app, Arena* a) {
                     ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                     ->Bg(Rgb(0xff, 0xff, 0xff))
                     ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                    ->Child(TextEl(a, StrL("Cancel"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+                    ->Child(TextEl(a, StrL("Cancel"))
+                                ->Font(12)
+                                ->Fg(Rgb(0x17, 0x17, 0x17))));
 }
 
 void ShowcaseButtonClick(ShowcaseApp* app, int id) {
@@ -39,4 +46,3 @@ void ShowcaseButtonClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompButton, ShowcaseButton, ShowcaseButtonClick);
-

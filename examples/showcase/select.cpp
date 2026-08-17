@@ -2,7 +2,10 @@
 #include "ui/Popup.h"
 #include "ui/Select.h"
 
-enum { ClickSelect = 480, ClickSel0 = 481 };
+enum {
+    ClickSelect = 480,
+    ClickSel0 = 481
+};
 
 static const char* kFw[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
@@ -22,11 +25,19 @@ El* ShowcaseSelect(ShowcaseApp* app, Arena* a) {
                       ->Click(ClickSelect)
                       ->FocusId(0)
                       ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                      ->Child(TextEl(a, Str(kFw[sel]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-                      ->Child(TextEl(a, app->selectOpen ? StrL("⌃") : StrL("⌄"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+                      ->Child(TextEl(a, Str(kFw[sel]))
+                                  ->Font(12)
+                                  ->Fg(Rgb(0x17, 0x17, 0x17)))
+                      ->Child(TextEl(a, app->selectOpen ? StrL("⌃") : StrL("⌄"))
+                                  ->Font(12)
+                                  ->Fg(Rgb(0x17, 0x17, 0x17)));
     El* opts = nullptr;
     if (app->selectOpen) {
-        opts = Div(a)->FlexCol()->Pad(4)->Border(1, Rgb(0x17, 0x17, 0x17))->Bg(Rgb(0xff, 0xff, 0xff));
+        opts = Div(a)
+                   ->FlexCol()
+                   ->Pad(4)
+                   ->Border(1, Rgb(0x17, 0x17, 0x17))
+                   ->Bg(Rgb(0xff, 0xff, 0xff));
         for (int i = 0; i < 4; i++) {
             El* row = Div(a)
                           ->PadX(8)
@@ -35,15 +46,20 @@ El* ShowcaseSelect(ShowcaseApp* app, Arena* a) {
                           ->JustifyBetween()
                           ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
                           ->Click(ClickSel0 + i)
-                          ->Child(TextEl(a, Str(kFw[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+                          ->Child(TextEl(a, Str(kFw[i]))
+                                      ->Font(12)
+                                      ->Fg(Rgb(0x17, 0x17, 0x17)));
             if (i == sel) {
-                row->Child(TextEl(a, StrL("✓"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
+                row->Child(
+                    TextEl(a, StrL("✓"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)));
             }
             opts->Child(row);
         }
     }
     El* root = Select::New(a, StrL("example-select"))->W(224)->Child(trigger);
-    return Popup::New(a, StrL("example-select-options"), root)->Content(opts)->IntoEl();
+    return Popup::New(a, StrL("example-select-options"), root)
+        ->Content(opts)
+        ->IntoEl();
 }
 
 void ShowcaseSelectClick(ShowcaseApp* app, int id) {
@@ -56,4 +72,3 @@ void ShowcaseSelectClick(ShowcaseApp* app, int id) {
 }
 
 SHOWCASE_PAGE(CompSelect, ShowcaseSelect, ShowcaseSelectClick);
-

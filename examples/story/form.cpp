@@ -3,10 +3,16 @@
 El* FormRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(a, "Default", "Building forms with labeled fields.");
-    StorySectionAdd(sec, component::Form::New(a)
-                             ->Field(StrL("Name"), component::Input::New(a, StrL("form-name"), &app->field)->IntoEl())
-                             ->Field(StrL("Notify"), component::Switch::New(a, StrL("form-sw"))->Checked(app->switchOn)->IntoEl())
-                             ->IntoEl());
+    StorySectionAdd(
+        sec,
+        component::Form::New(a)
+            ->Field(StrL("Name"),
+                    component::Input::New(a, StrL("form-name"), &app->field)
+                        ->IntoEl())
+            ->Field(StrL("Notify"), component::Switch::New(a, StrL("form-sw"))
+                                        ->Checked(app->switchOn)
+                                        ->IntoEl())
+            ->IntoEl());
     page->Child(sec);
     return page;
 }

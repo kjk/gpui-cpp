@@ -3,7 +3,8 @@
 El* TreeRender(StoryApp* app, Arena* a) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A tree view component for hierarchical data.");
+    El* sec = StorySection(a, "Default",
+                           "A tree view component for hierarchical data.");
     StorySectionAdd(sec, component::Tree::New(a)
                              ->Node(StrL("src"), -1, true, true)
                              ->Node(StrL("lib.rs"), 0, false, false)

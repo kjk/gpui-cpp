@@ -25,8 +25,12 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
         ->Gap(16)
         ->Pad(32)
         ->Bg(th.background)
-        ->Child(TextEl(frame, StrL("Root::bordered(false)"))->Font(24)->Semibold()->Fg(th.foreground))
-        ->Child(TextEl(frame, StrL("This window requests client-side decorations, while Root disables "
+        ->Child(TextEl(frame, StrL("Root::bordered(false)"))
+                    ->Font(24)
+                    ->Semibold()
+                    ->Fg(th.foreground))
+        ->Child(TextEl(frame, StrL("This window requests client-side "
+                                   "decorations, while Root disables "
                                    "GPUI Component's window border wrapper."))
                     ->Font(14)
                     ->Fg(th.mutedFg)

@@ -12,7 +12,9 @@ static void SetRadio2(StoryApp* app, bool) {
 
 El* RadioRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "A set of checkable buttons where only one can be checked at a time.");
+    El* sec = StorySection(
+        a, "Default",
+        "A set of checkable buttons where only one can be checked at a time.");
     El* col = Div(a)->FlexCol()->Gap(8);
     col->Child(component::Radio::New(a, StrL("r-default"))
                    ->Label(StrL("Default"))

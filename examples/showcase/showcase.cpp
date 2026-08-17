@@ -6,7 +6,8 @@
 static ShowcaseRenderFn gRender[CompCount] = {};
 static ShowcaseClickFn gClick[CompCount] = {};
 
-void ShowcaseRegister(int comp, ShowcaseRenderFn render, ShowcaseClickFn click) {
+void ShowcaseRegister(int comp, ShowcaseRenderFn render,
+                      ShowcaseClickFn click) {
     if (comp < 0 || comp >= CompCount) {
         return;
     }
@@ -33,14 +34,16 @@ void ShowcaseClickRegistered(ShowcaseApp* app, int id) {
 }
 
 static const char* kSlugs[CompCount] = {
-    "accordion",      "alert-dialog", "avatar",        "button",        "calendar",
-    "checkbox",       "collapsible",  "color-picker",  "combobox",      "date-picker",
-    "dialog",         "editor",       "hover-card",    "input",         "link",
-    "number-input",   "otp-input",    "pagination",    "popover",       "popup",
-    "progress",       "radio",        "radio-group",   "resizable",     "scrollbar",
-    "select",         "sheet",        "slider",        "switch",        "table",
-    "tabs",           "text-selection","textarea",     "toast",         "toggle",
-    "toggle-group",   "tooltip",      "tree",          "virtual-list",
+    "accordion",  "alert-dialog", "avatar",       "button",
+    "calendar",   "checkbox",     "collapsible",  "color-picker",
+    "combobox",   "date-picker",  "dialog",       "editor",
+    "hover-card", "input",        "link",         "number-input",
+    "otp-input",  "pagination",   "popover",      "popup",
+    "progress",   "radio",        "radio-group",  "resizable",
+    "scrollbar",  "select",       "sheet",        "slider",
+    "switch",     "table",        "tabs",         "text-selection",
+    "textarea",   "toast",        "toggle",       "toggle-group",
+    "tooltip",    "tree",         "virtual-list",
 };
 
 const char* CompSlug(int i) {
@@ -147,17 +150,21 @@ El* ScComingSoon(Arena* a, const char* name) {
         ->Gap(8)
         ->W(280)
         ->Child(ScTxt(a, DupA(a, name), 16, ScInk())->Semibold())
-        ->Child(ScTxt(a, StrL("This component page is not ported yet."), 12, ScMutedC()));
+        ->Child(ScTxt(a, StrL("This component page is not ported yet."), 12,
+                      ScMutedC()));
 }
 
 El* ShowcaseOverview(ShowcaseApp* app, Arena* a) {
     (void)app;
     El* col = Div(a)->FlexCol()->Gap(16)->W(720)->MaxW(720);
-    col->Child(Div(a)
-                   ->FlexCol()
-                   ->Gap(4)
-                   ->Child(ScTxt(a, StrL("GPUI Base"), 18, ScInk())->Semibold())
-                   ->Child(ScTxt(a, StrL("Choose a component to open its interactive example."), 12, ScMutedC())));
+    col->Child(
+        Div(a)
+            ->FlexCol()
+            ->Gap(4)
+            ->Child(ScTxt(a, StrL("GPUI Base"), 18, ScInk())->Semibold())
+            ->Child(ScTxt(
+                a, StrL("Choose a component to open its interactive example."),
+                12, ScMutedC())));
 
     El* grid = Div(a)->FlexCol()->Gap(4)->W(kFill);
     for (int row = 0; row < CompCount; row += 3) {
@@ -193,11 +200,15 @@ static El* RenderComp(ShowcaseApp* app, Arena* a, WinSize size) {
 
 static void BindInput(ShowcaseApp* app, AppHost* host) {
     host->input = nullptr;
-    app->input.focused = app->input.focused &&
-                         (app->component == CompInput || app->component == CompNumberInput ||
-                          (app->component == CompDialog && app->dialogOpen));
-    app->comboQuery.focused = app->comboQuery.focused && app->component == CompCombobox && app->comboboxOpen;
-    app->hexIn.focused = app->hexIn.focused && app->component == CompColorPicker && app->colorOpen;
+    app->input.focused =
+        app->input.focused &&
+        (app->component == CompInput || app->component == CompNumberInput ||
+         (app->component == CompDialog && app->dialogOpen));
+    app->comboQuery.focused = app->comboQuery.focused &&
+                              app->component == CompCombobox &&
+                              app->comboboxOpen;
+    app->hexIn.focused = app->hexIn.focused &&
+                         app->component == CompColorPicker && app->colorOpen;
     if (app->comboQuery.focused) {
         host->input = &app->comboQuery;
     } else if (app->hexIn.focused) {
@@ -215,13 +226,14 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
 
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
     if (showBack) {
-        root->Child(Div(frame)
-                        ->H(40)
-                        ->PadX(12)
-                        ->ItemsCenter()
-                        ->Shrink0()
-                        ->BorderB(1, ScLine())
-                        ->Child(ScBtnGhost(frame, ClickBack, StrL("All components"))));
+        root->Child(
+            Div(frame)
+                ->H(40)
+                ->PadX(12)
+                ->ItemsCenter()
+                ->Shrink0()
+                ->BorderB(1, ScLine())
+                ->Child(ScBtnGhost(frame, ClickBack, StrL("All components"))));
     }
 
     El* content = RenderComp(app, frame, size);
@@ -349,11 +361,13 @@ void ShowcaseChar(ShowcaseApp* app, AppHost* host, u32 cp) {
         return;
     }
     if (app->component == CompTextarea && app->textareaOn) {
-        InsertBuf(app->textarea, &app->textareaLen, (int)sizeof(app->textarea), cp);
+        InsertBuf(app->textarea, &app->textareaLen, (int)sizeof(app->textarea),
+                  cp);
         return;
     }
     if (app->component == CompEditor && app->editorOn) {
-        InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor), &app->editorCursor, cp);
+        InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor),
+                 &app->editorCursor, cp);
         return;
     }
     if (app->component == CompColorPicker && app->hexIn.focused) {
@@ -446,10 +460,12 @@ void ShowcaseKey(ShowcaseApp* app, AppHost* host, int vk, bool down) {
             return;
         }
         if (app->component == CompTextarea && app->textareaOn) {
-            InsertBuf(app->textarea, &app->textareaLen, (int)sizeof(app->textarea), '\n');
+            InsertBuf(app->textarea, &app->textareaLen,
+                      (int)sizeof(app->textarea), '\n');
             host->eatReturn = true;
         } else if (app->component == CompEditor && app->editorOn) {
-            InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor), &app->editorCursor, '\n');
+            InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor),
+                     &app->editorCursor, '\n');
             host->eatReturn = true;
         }
     }
@@ -487,9 +503,18 @@ void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta) {
 static int TextSelOffsetAt(AppHost* host, float x, float y, bool nearest) {
     static const char* paras[] = {
         "Text selection across renderers",
-        "Selection should feel like a natural part of reading a product brief. Start in this paragraph, continue into the next renderer, and GPUI preserves the document order while every frame supplies fresh geometry for the same stable selection handle.",
-        "This second paragraph is deliberately long enough to wrap in the showcase. Drag across the boundary to see one continuous highlight, then use the platform copy shortcut to confirm that the copied result follows the visible reading order rather than renderer ownership.",
-        "International text should remain predictable when a line mixes café, déjà vu, Kraków, naïve, and résumé. Resize the window or drag across several wrapped lines; UTF-8 byte ranges still map back to the correct glyphs without splitting a character.",
+        "Selection should feel like a natural part of reading a product brief. "
+        "Start in this paragraph, continue into the next renderer, and GPUI "
+        "preserves the document order while every frame supplies fresh "
+        "geometry for the same stable selection handle.",
+        "This second paragraph is deliberately long enough to wrap in the "
+        "showcase. Drag across the boundary to see one continuous highlight, "
+        "then use the platform copy shortcut to confirm that the copied result "
+        "follows the visible reading order rather than renderer ownership.",
+        "International text should remain predictable when a line mixes café, "
+        "déjà vu, Kraków, naïve, and résumé. Resize the window or drag across "
+        "several wrapped lines; UTF-8 byte ranges still map back to the "
+        "correct glyphs without splitting a character.",
     };
     const HitRect* best = nullptr;
     float bestDist = 1e9f;
@@ -525,7 +550,8 @@ static int TextSelOffsetAt(AppHost* host, float x, float y, bool nearest) {
     }
     int para = best->id - 531;
     float font = para == 0 ? 18.f : 14.f;
-    int local = TextIndexAt(&host->paint, Str(paras[para]), font, best->w > 0 ? best->w : 560.f, true, x - best->x,
+    int local = TextIndexAt(&host->paint, Str(paras[para]), font,
+                            best->w > 0 ? best->w : 560.f, true, x - best->x,
                             y - best->y);
     int off = 0;
     for (int i = 0; i < para; i++) {
@@ -554,7 +580,8 @@ void ShowcaseMouseMove(ShowcaseApp* app, AppHost* host, float x, float y) {
     }
 }
 
-void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y, int button) {
+void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y,
+                       int button) {
     (void)button;
     if (app->component == CompSlider) {
         ShowcaseSliderDrag(app, host, x, y);
@@ -569,7 +596,8 @@ void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y, int bu
     }
 }
 
-void ShowcaseMouseUp(ShowcaseApp* app, AppHost* host, float x, float y, int button) {
+void ShowcaseMouseUp(ShowcaseApp* app, AppHost* host, float x, float y,
+                     int button) {
     (void)host;
     (void)x;
     (void)y;

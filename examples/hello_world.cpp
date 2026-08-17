@@ -23,7 +23,8 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
         ->ItemsCenter()
         ->JustifyCenter()
         ->Bg(th.background)
-        ->Child(TextEl(frame, StrL("Hello, World!"))->Font(16)->Fg(th.foreground))
+        ->Child(
+            TextEl(frame, StrL("Hello, World!"))->Font(16)->Fg(th.foreground))
         ->Child(ButtonEl(frame, 1, StrL("Let's Go!"), BtnKind::Primary));
 }
 
