@@ -300,9 +300,6 @@ static El* SidebarList(StoryApp* app, Arena* a) {
 
 static El* SearchBox(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
-    Str shown = app->search.len > 0 ? Str(app->search.buf, app->search.len)
-                                    : StrL("Search\xE2\x80\xA6");
-    Rgba fg = app->search.len > 0 ? th.foreground : th.mutedFg;
     return Div(a)
         ->H(36)
         ->W(kFill)
@@ -312,7 +309,7 @@ static El* SearchBox(StoryApp* app, Arena* a) {
         ->Bg(th.secondary)
         ->Click(ClickSearch)
         ->FocusId(ClickSearch)
-        ->Child(StoryTxt(a, shown, 13, fg));
+        ->Child(::Input::New(a, &app->search));
 }
 
 static El* Sidebar(StoryApp* app, Arena* a) {
@@ -411,6 +408,7 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     } else {
         host->input = nullptr;
     }
+    AppRequestAnim(host, app->search.focused || app->field.focused);
     const Theme& th = ThemeNow();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
@@ -444,6 +442,7 @@ static void OnClick(AppHost* host, int id) {
     if (id == ClickSearch) {
         app->search.focused = true;
         host->input = &app->search;
+        AppRequestAnim(host, true);
         return;
     }
     app->search.focused = false;

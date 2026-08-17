@@ -10,12 +10,35 @@ static El* Shield(Arena* a, const char* left, const char* right, Rgba rightBg) {
     return row;
 }
 
+static El* LogoPiece(Arena* a, float x, float y, float w, float h, Rgba c) {
+    const float s = 112.f / 32.f;
+    return Div(a)->W(w * s)->H(h * s)->Bg(c)->Absolute()->Left(x * s)->Top(y *
+                                                                           s);
+}
+
+static El* LogoMark(Arena* a) {
+    // website/public/logo.svg — 32 viewBox, README shows it at 112px.
+    Rgba dark = Rgb(0x1f, 0x20, 0x23);
+    Rgba blue = Rgb(0x3b, 0x82, 0xf6);
+    El* mark = Div(a)->W(112)->H(112)->Shrink0();
+    mark->Child(LogoPiece(a, 4, 4, 24, 5, dark));
+    mark->Child(LogoPiece(a, 4, 4, 6, 24, dark));
+    mark->Child(LogoPiece(a, 4, 23, 24, 5, dark));
+    mark->Child(LogoPiece(a, 16, 13, 12, 5, blue));
+    mark->Child(LogoPiece(a, 23, 13, 5, 10, blue));
+    return mark;
+}
+
 static El* FeatureLine(Arena* a, const char* label, const char* rest) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s: %s", label, rest), 14,
-                    th.foreground)
-        ->Wrap()
-        ->W(kFill);
+    El* row = Div(a)->FlexRow()->Gap(4)->W(kFill)->ItemsStart();
+    row->Child(
+        StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s:", label), 14, th.foreground)
+            ->Bold()
+            ->Shrink0());
+    row->Child(
+        StoryTxt(a, StoryDup(a, rest), 14, th.foreground)->Wrap()->Grow());
+    return row;
 }
 
 static El* MdTableCell(Arena* a, const char* s, bool header) {
@@ -51,8 +74,10 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(12)->W(kFill)->MaxW(760);
 
-    col->Child(StoryTxt(a, StrL("GPUI Component"), 18, th.foreground)
-                   ->Semibold());
+    El* hero = Div(a)->FlexCol()->Gap(8)->ItemsCenter()->W(kFill);
+    hero->Child(LogoMark(a));
+    hero->Child(StoryTxt(a, StrL("GPUI Component"), 18, th.foreground)->Bold());
+    col->Child(hero);
 
     El* langs = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     langs->Child(StoryTxt(a, StrL("English"), 14, th.foreground));
@@ -74,7 +99,7 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
                         14, th.foreground)
                    ->Wrap());
 
-    col->Child(StoryTxt(a, StrL("Features"), 18, th.foreground)->Semibold());
+    col->Child(StoryTxt(a, StrL("Features"), 18, th.foreground)->Bold());
     El* feats = Div(a)->FlexCol()->Gap(4)->W(kFill);
     feats->Child(FeatureLine(a, "Richness",
                              "60+ cross-platform desktop UI components."));
@@ -111,10 +136,10 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
 
     El* eco = Div(a)->FlexCol()->Gap(6)->W(kFill);
     eco->Child(StoryTxt(a, StrL("Ecosystem Architecture"), 18, th.foreground)
-                   ->Semibold());
+                   ->Bold());
     eco->Child(
         StoryTxt(a, StrL("Two layers. One ecosystem."), 16, th.foreground)
-            ->Semibold());
+            ->Bold());
     eco->Child(StoryTxt(a,
                         StrL("Choose the layer that matches how much of the "
                              "interface you want to own."),
