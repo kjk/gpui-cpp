@@ -5,8 +5,12 @@ El* ButtonRender(StoryApp* app, Arena* a) {
     page->Child(StoryToolbar(a, app));
 
     El* vars = StorySection(a, "Variants",
-                            "Primary, secondary, danger, ghost, and link.");
-    El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+                            "Visual treatments communicate action priority.");
+    El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
+    row->Child(component::Button::New(a, StrL("btn-default"))
+                   ->Label(StrL("Default"))
+                   ->WithSize(app->size)
+                   ->IntoEl());
     row->Child(component::Button::New(a, StrL("btn-primary"))
                    ->Label(StrL("Primary"))
                    ->Primary()
@@ -22,6 +26,21 @@ El* ButtonRender(StoryApp* app, Arena* a) {
                    ->Danger()
                    ->WithSize(app->size)
                    ->IntoEl());
+    row->Child(component::Button::New(a, StrL("btn-warning"))
+                   ->Label(StrL("Warning"))
+                   ->Warning()
+                   ->WithSize(app->size)
+                   ->IntoEl());
+    row->Child(component::Button::New(a, StrL("btn-success"))
+                   ->Label(StrL("Success"))
+                   ->Success()
+                   ->WithSize(app->size)
+                   ->IntoEl());
+    row->Child(component::Button::New(a, StrL("btn-info"))
+                   ->Label(StrL("Info"))
+                   ->Info()
+                   ->WithSize(app->size)
+                   ->IntoEl());
     row->Child(component::Button::New(a, StrL("btn-ghost"))
                    ->Label(StrL("Ghost"))
                    ->Ghost()
@@ -32,10 +51,16 @@ El* ButtonRender(StoryApp* app, Arena* a) {
                    ->Link()
                    ->WithSize(app->size)
                    ->IntoEl());
+    row->Child(component::Button::New(a, StrL("btn-text"))
+                   ->Label(StrL("Text"))
+                   ->Text()
+                   ->WithSize(app->size)
+                   ->IntoEl());
     StorySectionAdd(vars, row);
     page->Child(vars);
 
-    El* out = StorySection(a, "Outline", "Bordered buttons.");
+    El* out = StorySection(a, "Outline",
+                           "Outlined treatments keep actions visually quiet.");
     El* row2 = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     row2->Child(component::Button::New(a, StrL("btn-out"))
                     ->Label(StrL("Outline"))

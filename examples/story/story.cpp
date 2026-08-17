@@ -44,7 +44,7 @@ static const StoryInfo kMeta[StoryCount] = {
      "A modal dialog that interrupts the user with important content and "
      "expects a response."},
     {"avatar", "Avatar",
-     "An image element with a fallback for representing the user."},
+     "Represent a person or organization with an image or fallback."},
     {"badge", "Badge",
      "A red dot that indicates the number of unread messages."},
     {"breadcrumb", "Breadcrumb",

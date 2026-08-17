@@ -26,21 +26,20 @@ Avatar* Avatar::Size(float v) {
 
 El* Avatar::IntoEl() {
     const Theme& th = ThemeNow();
-    El* fb =
-        AvatarFallback::New(a)
-            ->W(size - 2)
-            ->H(size - 2)
-            ->ItemsCenter()
-            ->JustifyCenter()
-            ->Bg(bg)
-            ->Child(TextEl(a, initials)->Font(size * 0.35f)->Fg(th.foreground));
-    return gpui::Avatar::New(a)
-        ->Size(size)
-        ->Fallback(fb)
-        ->IntoEl()
-        ->Border(1, th.border)
-        ->Radius(size * 0.5f)
-        ->ClipY();
+    float r = size * 0.5f;
+    El* inner = (initials.s && initials.len > 0)
+                    ? TextEl(a, initials)->Font(size * 0.35f)->Fg(th.foreground)
+                    : IconEl(a, IconName::CircleUser, size * 0.45f)
+                          ->Fg(th.mutedFg);
+    El* fb = AvatarFallback::New(a)
+                 ->W(size)
+                 ->H(size)
+                 ->ItemsCenter()
+                 ->JustifyCenter()
+                 ->Bg(bg)
+                 ->Radius(r)
+                 ->Child(inner);
+    return gpui::Avatar::New(a)->Size(size)->Fallback(fb)->IntoEl()->Radius(r);
 }
 
 } // namespace component
