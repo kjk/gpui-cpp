@@ -1,0 +1,12 @@
+/* Unstyled tree — crates/base/src/tree.rs */
+
+#pragma once
+
+#include "gpui/Gpui.h"
+
+struct Tree {
+    static El* New(Arena* a);
+};
+struct TreeItem {
+    static El* New(Arena* a, int clickId = 0);
+};

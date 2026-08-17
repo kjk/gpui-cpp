@@ -1,0 +1,251 @@
+# Porting plan: gpui-component → C++ / Windows
+
+## 1. Why this plan is a subset
+
+[gpui-component](https://github.com/longbridge/gpui-component) is 60+ widgets on top of Zed's GPUI. GPUI is a GPU scene graph + Taffy flex/grid + entity/observer runtime + Metal/Vulkan/DX backends. A faithful engine port is a multi-year project.
+
+`system_monitor` only needs:
+
+| Layer | Rust | C++ we build |
+| --- | --- | --- |
+| App | `examples/system_monitor/src/main.rs` | `src/examples/system_monitor.cpp` |
+| Components | Theme, Root, TitleBar, TabBar(segmented), Tab, AreaChart, Progress, Icon, DataTable | `src/ui/*` |
+| Runtime | gpui window, flex `div`/`h_flex`/`v_flex`, text, gradient, path, timer, input | `src/gpui/*` (Win32 + Direct2D + DirectWrite + custom flex) |
+| Metrics | `sysinfo`, `battery` | `src/sys/*` (Win32) |
+| Strings/arrays | `String`, `Vec` | `Str`, `Vec` from SumatraPDF |
+
+An earlier STL-based sketch exists in `../gpui/`. Ignore it for implementation. Type names there can be used as a glossary for GPUI vocabulary only.
+
+## 2. Rust dependency graph (what we are *not* porting)
+
+Workspace crates: `gpui-component` (`crates/ui`), `gpui-base`, `gpui-component-assets`, `gpui-component-macros`, `story`, `fps`, `webview`.
+
+Pinned GPUI from `zed-industries/zed` (`gpui`, `gpui_platform`, `gpui_macros`). That pull brings Taffy, Blade, font-kit, cosmic-text/rustybuzz, and a huge Windows crate surface. Exact SHAs: `port-upstream.md`.
+
+`system_monitor` extra crates: `sysinfo 0.37`, `battery 0.7`, `smol` (500 ms timer). The `windows` GPU features in its `Cargo.toml` are unused by the example source.
+
+`gpui-component` also depends on ropey, tree-sitter, markdown, html5ever, chrono, lsp-types, resvg (Windows native menu). None of that is on the system_monitor path.
+
+## 3. system_monitor surface (authoritative)
+
+From `.work/gpui-component/examples/system_monitor/src/main.rs`:
+
+**Window**
+
+- `TitleBar::window_options()` — transparent / client-drawn title bar
+- Bounds `680×600`, centered
+- Title `"System Monitor"`
+- `ThemeMode::Dark`
+- Quit: Alt+F4
+
+**Title bar**
+
+- Height 34, gradient mix of title_bar and background
+- Left: segmented `TabBar` with "System" / "Processes"
+- Right: total RAM as `"X.X GB"`
+- Windows caption buttons: minimize, maximize/restore, close (34×34 hit targets)
+- Drag region; double-click maximize
+
+**System tab**
+
+- Two `AreaChart`s stacked (`flex_1`, `min_h 160`, `gap_4`, `p_3`)
+- Header row: title + current `"X.X%"`
+- CPU = theme red, Memory = theme blue
+- Fill: vertical linear gradient, series color @ 0.4 → background @ 0.1
+- X labels every 15 samples, dashed horizontal grid (4 lines), 18 px axis gutter
+
+**Processes tab**
+
+- `DataTable`, not bordered, striped, small
+- Columns: PID, Name, CPU %, Memory — all sortable
+- Default sort CPU descending
+- Name truncated; CPU color by threshold (>50 red, >20 yellow, else blue); memory green, human bytes
+- Top 200 after sort
+
+**Status bar**
+
+- Height 28, top border, tab_bar background
+- Left: disk / memory / CPU chips (icon + 48×8 progress + percent), width 135 each
+- Right: battery icon + percent (if a battery exists)
+
+**Loop**
+
+- `sys.refresh_all()` + disks + battery every 500 ms
+- Ring buffer of 120 `MetricPoint`s
+
+## 4. C++ architecture
+
+### 4.1 Frame loop
+
+```
+WM_TIMER 500ms → SysRefresh() → InvalidateRect
+WM_PAINT / D2D →
+    ArenaReset(frame)
+    El* tree = AppRender(frame)
+    Layout(tree, windowSize)
+    Paint(tree, d2d)
+    HitTest cache for next input
+```
+
+The tree is rebuilt every frame from app state (GPUI `Render` / `RenderOnce`). No retained widget objects except app state and table sort state.
+
+### 4.2 Element (`src/gpui/El.h`)
+
+Arena-allocated node, sibling linked list (not `Vec<El*>` — `Vec` would heap-allocate per node):
+
+- `kind`: Div, Text, Chart, Progress, Icon, Hit
+- `style`: flex direction, grow/shrink, sizes, min/max, pad/margin, gap, align, justify, overflow, bg, border, radius, font size, color, truncate
+- `text`, `id`
+- `clickId` + `user` for hit-testing
+- layout output: `x,y,w,h`
+
+Fluent methods return `El*` so call sites read like the Rust builder.
+
+### 4.3 Layout
+
+Custom flex subset (Taffy is not vendored):
+
+- row / column
+- `flex-grow` / `flex-shrink` / definite px sizes / percent of parent / `auto`
+- `min-width` / `min-height` / `max-*`
+- padding, margin, gap
+- `justify-content`: start, end, center, space-between
+- `align-items`: start, end, center, stretch
+- overflow clip + vertical scroll offset
+- text measure via DirectWrite
+
+Good enough for this example. No grid, no wrap, no absolute except progress fill.
+
+### 4.4 Paint
+
+Direct2D + DirectWrite (GPU, no extra deps):
+
+- filled / stroked rounded rects
+- clip
+- linear gradient (title bar, chart fill)
+- path (area series + stroke)
+- dashed lines (grid)
+- text
+- simple lucide-like icon paths (cpu, memory, disk, battery, window chrome)
+
+GDI+ is pulled in only because `Base.h` includes it. Do not paint the UI with GDI+.
+
+### 4.5 Window
+
+Win32 + DWM:
+
+- `WS_OVERLAPPEDWINDOW` without the default caption (handle `WM_NCCALCSIZE`)
+- `DwmExtendFrameIntoClientArea` so Win11 rounded corners stay
+- Caption buttons are our hit targets (or `WM_NCHITTEST` HTCLOSE / HTMINBUTTON / HTMAXBUTTON)
+- Title-bar drag = `HTCAPTION`
+- Alt+F4 / `WM_CLOSE` quits
+
+### 4.6 System metrics (`src/sys`)
+
+| Metric | API |
+| --- | --- |
+| CPU total | `GetSystemTimes` delta |
+| Memory | `GlobalMemoryStatusEx` |
+| Processes | `CreateToolhelp32Snapshot` + `GetProcessMemoryInfo` + `GetProcessTimes` |
+| Per-process CPU | kernel+user delta / (elapsed × ncpu) |
+| Disks | `GetLogicalDriveStringsW` + `GetDiskFreeSpaceExW` (first fixed drive) |
+| Battery | `GetSystemPowerStatus` (`ACLineStatus`, `BatteryLifePercent`) |
+
+First CPU sample is 0 (same as sysinfo). Keep previous process times in a `Vec<ProcSample>` keyed by pid.
+
+### 4.7 Components (`src/ui`)
+
+Implement only what the example calls, with Rust names:
+
+- `ThemeDark()` — the table in AGENTS.md
+- `TitleBar(...)`
+- `TabBar` segmented + `Tab`
+- `AreaChart(points, ySelector, color)`
+- `Progress(id, value)`
+- `Icon(IconName)`
+- `DataTable` + `Column` + sort
+- `Root` — just a full-size background wrapper (no dialog/sheet/toast)
+
+## 5. Phases and commits
+
+| Phase | Commit | Done when |
+| --- | --- | --- |
+| 0 | docs: AGENTS.md, port.md, port-progress.md | Plan exists |
+| 1 | vendor `src/base` + `cmd/build.ts` | A console or empty Win32 exe links Str/Vec |
+| 2 | D2D window + dark fill + title text | Empty 680×600 dark window, custom chrome |
+| 3 | flex layout + text + TitleBar + tabs | Can switch System/Processes |
+| 4 | AreaChart | Two live-looking (or dummy) charts |
+| 5 | SysInfo + 500 ms loop | Charts show real CPU/memory |
+| 6 | Table + sort + scroll | Process list matches Rust columns |
+| 7 | Status bar + icons + battery | Full chrome |
+| 8 | Visual pass vs Rust | Spacing, colors, fonts, caption buttons |
+
+Each phase updates `port-progress.md` and is committed.
+
+## 6. Verification
+
+1. `bun cmd/build.ts` succeeds with `cl.exe`.
+2. `out\rel\system_monitor.exe` starts, paints, updates every 500 ms.
+3. Side-by-side with `cargo run -p system_monitor` when the Rust tree has been built.
+4. Click tabs, sort columns, scroll the table, min/max/close, Alt+F4.
+5. If Rust is not built yet, verify against the constants in this file and screenshots in `port-progress.md`.
+
+## 7. Risks
+
+- **Flex edge cases.** Charts must share leftover height (`flex_1` + `min_h 160`). Test at 600 px and after maximize.
+- **Process CPU %.** Need two samples; values will not be bit-identical to sysinfo but should be in the same ballpark.
+- **Name encoding.** Process names are UTF-16 from the Toolhelp API; convert with `strconv` / `WideCharToMultiByte` into `Str`.
+- **Direct2D resize.** Recreate the HWND render target on `WM_SIZE`.
+- **Base.h GDI+ include.** Link `gdiplus.lib` even though we do not paint with it.
+
+## 8. After system_monitor
+
+### app_assets (ported)
+
+Rust: `.work/gpui-component/examples/app_assets` — rust-embed `Assets` implementing GPUI `AssetSource`, then `IconName::Inbox` and `IconName::Bot` centered in a light `v_flex`.
+
+C++:
+
+- `src/gpui/Assets.cpp` — search roots for `icons/<name>.svg` (cwd, exe dir, parents, `assets/<example>`, rust `examples/<example>/assets`)
+- `src/gpui/Svg.cpp` — Lucide subset (path including arcs, rect, polyline, line, circle, polygon) stroked with `currentColor`
+- `IconNamePath` maps `Inbox` → `icons/inbox.svg` (same as `icon_named!`)
+- `ThemeSet(Light)` — rust `gpui_component::init` defaults to light
+- Window `800×600`, title `App Assets`
+- Assets live in `assets/app_assets/icons/` and are copied next to the exe (`out/rel/assets`, …) by `cmd/build.ts`
+
+### Simple examples (ported 2026-08-16)
+
+Each has a matching `src/examples/<name>.cpp` and `bun cmd/build.ts <name>` target:
+
+| Example | What landed |
+| --- | --- |
+| `hello_world` | Primary Button, hover, light theme |
+| `window_title` | In-client 34 px title strip + Hello World body |
+| `root_borderless` | Documents `Root::bordered(false)`; Win32 chrome kept |
+| `tooltip_top_edge` | Absolute top-edge trigger; tooltip flips below |
+| `input` | `LineInput` + `WM_CHAR`; `Hello, {name}!` |
+| `focus_trap` | Two Tab traps plus buttons outside |
+| `dialog_overlay` | Center dialog, bottom sheet, right-click menu |
+| `sidebar` | Collapsible icon/offcanvas/none + Lucide nav |
+| `table_in_scrollable` | Nested scroll; inner table uses a y-band heuristic |
+| `text_selection` | Selectable text block |
+| `markdown_table` | Heading / hr / paragraph / pipe-table parser + `report.md` |
+| `fps_monitor` | Hilbert + Catmull-Rom + HSL `customPaint`, 16 ms timer |
+
+### gpui-base showcase (ported 2026-08-16)
+
+Rust: `.work/gpui-component/crates/base/examples/showcase` via `cargo run -p gpui-base --example base_components -- [slug]`.
+
+C++: `src/examples/showcase/` — `bun cmd/build.ts showcase`, window 840×640, light `#ffffff` / `#171717`. No slug opens the 3-column overview; `showcase.exe button` jumps to that page without the back bar.
+
+Each component is a `SHOWCASE_PAGE` translation unit committed on its own. Shared helpers live in `showcase.cpp` / `Showcase.h`.
+
+### gpui-component story gallery (ported 2026-08-17)
+
+Rust: `.work/gpui-component/crates/story` via `cargo run -p gpui-component-story -- [slug]`.
+
+C++: `src/examples/story/` — `bun cmd/build.ts story`, window 1280×800, light theme, sidebar + 62 stories matching the Rust gallery list.
+
+### Next
+
+Fidelity on story pages vs Rust (`crates/story/src/stories`), then optional heavy surfaces (full editor, TextView, dock/tiles, webview).

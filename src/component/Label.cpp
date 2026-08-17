@@ -1,0 +1,46 @@
+#include "component/Label.h"
+
+namespace component {
+
+Label* Label::New(Arena* a, Str text) {
+    Label* l = ::New<Label>(a);
+    l->a = a;
+    l->text = text;
+    return l;
+}
+
+Label* Label::Secondary(Str s) {
+    secondary = s;
+    return this;
+}
+
+Label* Label::Masked(bool v) {
+    masked = v;
+    return this;
+}
+
+El* Label::IntoEl() {
+    const Theme& th = ThemeNow();
+    Str shown = text;
+    if (masked && text.len > 0) {
+        char buf[64];
+        int n = text.len < 63 ? text.len : 63;
+        for (int i = 0; i < n; i++) {
+            buf[i] = (char)0xE2; // we'll just use '*'
+        }
+        // ASCII bullets
+        for (int i = 0; i < n; i++) {
+            buf[i] = '*';
+        }
+        buf[n] = 0;
+        shown = str::Dup(a, Str(buf, n));
+    }
+    El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
+    row->Child(TextEl(a, shown)->Font(14)->Fg(th.foreground));
+    if (secondary.s) {
+        row->Child(TextEl(a, secondary)->Font(14)->Fg(th.mutedFg));
+    }
+    return row;
+}
+
+} // namespace component

@@ -1,0 +1,12 @@
+/* Unstyled calendar — crates/base/src/calendar.rs */
+
+#pragma once
+
+#include "gpui/Gpui.h"
+
+struct Calendar {
+    static El* New(Arena* a, Str id);
+};
+struct CalendarItem {
+    static El* New(Arena* a, int clickId = 0);
+};

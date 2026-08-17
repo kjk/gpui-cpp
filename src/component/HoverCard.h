@@ -1,0 +1,22 @@
+/* Themed hover card — crates/ui/src/hover_card.rs */
+
+#pragma once
+
+#include "component/Common.h"
+
+namespace component {
+
+struct HoverCard {
+    Arena* a = nullptr;
+    El* trigger = nullptr;
+    El* content = nullptr;
+    bool open = false;
+
+    static HoverCard* New(Arena* a);
+    HoverCard* Trigger(El* e);
+    HoverCard* Content(El* e);
+    HoverCard* Open(bool v);
+    El* IntoEl();
+};
+
+} // namespace component

@@ -1,0 +1,17 @@
+/* Unstyled switch — crates/base/src/switch.rs */
+
+#pragma once
+
+#include "gpui/Gpui.h"
+
+struct Switch {
+    static El* New(Arena* a, Str id, int clickId = 0);
+};
+
+struct SwitchTrack {
+    static El* New(Arena* a, Str id);
+};
+
+struct SwitchThumb {
+    static El* New(Arena* a);
+};

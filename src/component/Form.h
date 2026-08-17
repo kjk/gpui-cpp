@@ -1,0 +1,24 @@
+/* Themed form — crates/ui/src/form */
+
+#pragma once
+
+#include "component/Common.h"
+
+namespace component {
+
+struct FormField {
+    Str label = {};
+    El* control = nullptr;
+};
+
+struct Form {
+    Arena* a = nullptr;
+    FormField fields[8] = {};
+    int n = 0;
+
+    static Form* New(Arena* a);
+    Form* Field(Str label, El* control);
+    El* IntoEl();
+};
+
+} // namespace component
