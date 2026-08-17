@@ -1,6 +1,6 @@
 /* Shared example implementation of Base.h log() / loga() / _uploadDebugReport. */
 
-#include "base/Base.h"
+#include "Base.h"
 
 static void LogToFile(Str s) {
     static HANDLE h = INVALID_HANDLE_VALUE;

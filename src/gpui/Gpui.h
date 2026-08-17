@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "base/Base.h"
+#include "Base.h"
 
 struct ID2D1Factory;
 struct ID2D1RenderTarget;

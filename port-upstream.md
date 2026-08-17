@@ -46,4 +46,4 @@ We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Taffy, 
 
 `sysinfo`, `battery`, `smol`, `reqwest` (zed fork), ropey, tree-sitter, syntect, html5ever, resvg — C++ uses Win32 / our own code instead.
 
-`src/base/` is SumatraPDF, not gpui-component.
+`src/Base.h` / `src/Base.cpp` are SumatraPDF, not gpui-component.

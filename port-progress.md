@@ -15,7 +15,7 @@ out\rel\showcase.exe
 | Phase | Status | Notes |
 | --- | --- | --- |
 | 0. Plan + AGENTS.md | done | `AGENTS.md`, `port.md` |
-| 1. Vendored base + build | done | `src/base` from SumatraPDF + `cmd/build.ts` |
+| 1. Vendored base + build | done | `src/Base.h` / `src/Base.cpp` from SumatraPDF + `cmd/build.ts` |
 | 2. D2D window + chrome | done | Win32 + `ID2D1DCRenderTarget` (HWND target did not present) |
 | 3. Flex + TitleBar + tabs | done | Segmented System / Processes tabs |
 | 4. AreaChart | done | Grid, stroke, gradient fill, 120-sample history |
@@ -96,7 +96,7 @@ cargo run -p system_monitor
 ## Decisions locked
 
 - Windows only, MSVC `cl.exe`, `bun cmd/build.ts`
-- No STL containers; `Str` / `Vec` / `Arena` from SumatraPDF `src/base`
+- No STL containers; `Str` / `Vec` / `Arena` from SumatraPDF (`src/Base.h`)
 - Direct2D DC render target + DirectWrite
 - Frame-rebuilt element tree on a frame arena
 - Win32 APIs instead of `sysinfo` / `battery`

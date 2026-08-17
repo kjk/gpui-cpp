@@ -113,16 +113,7 @@ function outDirName(debug: boolean, asan: boolean): string {
     return asan ? `${base}_asan` : base;
 }
 
-const baseSrc = [
-    "src/base/Arena.cpp",
-    "src/base/Arena_win.cpp",
-    "src/base/Base.cpp",
-    "src/base/Base_win.cpp",
-    "src/base/Str.cpp",
-    "src/base/Strconv.cpp",
-    "src/base/StrFormatParse.cpp",
-    "src/base/StrUtf8.cpp",
-];
+const baseSrc = ["src/Base.cpp"];
 
 const gpuiSrc = [
     "src/gpui/Gpui.cpp",
@@ -234,7 +225,7 @@ function copyAsanDll(outDir: string) {
 function groupSources(files: string[]): { key: string; files: string[] }[] {
     const buckets: Record<string, string[]> = { base: [], gpui: [], ui: [], component: [], sys: [], ex: [] };
     for (const f of files) {
-        if (f.startsWith("src/base/")) {
+        if (f === "src/Base.cpp" || f.startsWith("src/base/")) {
             buckets.base.push(f);
         } else if (f.startsWith("src/gpui/")) {
             buckets.gpui.push(f);

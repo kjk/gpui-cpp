@@ -1,6 +1,6 @@
 #include "gpui/Assets.h"
 
-#include "base/Base.h"
+#include "Base.h"
 
 static const int kMaxRoots = 12;
 static char gRoots[kMaxRoots][MAX_PATH];

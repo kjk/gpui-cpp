@@ -1,6 +1,6 @@
 #pragma once
 
-#include "base/Base.h"
+#include "Base.h"
 
 // Asset roots searched for rust-embed-style paths such as "icons/inbox.svg".
 void AssetsClear();

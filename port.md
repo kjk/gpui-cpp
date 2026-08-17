@@ -171,7 +171,7 @@ Implement only what the example calls, with Rust names:
 | Phase | Commit | Done when |
 | --- | --- | --- |
 | 0 | docs: AGENTS.md, port.md, port-progress.md | Plan exists |
-| 1 | vendor `src/base` + `cmd/build.ts` | A console or empty Win32 exe links Str/Vec |
+| 1 | vendor `src/Base.h` + `cmd/build.ts` | A console or empty Win32 exe links Str/Vec |
 | 2 | D2D window + dark fill + title text | Empty 680×600 dark window, custom chrome |
 | 3 | flex layout + text + TitleBar + tabs | Can switch System/Processes |
 | 4 | AreaChart | Two live-looking (or dummy) charts |

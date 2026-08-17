@@ -47,7 +47,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 ## Hard rules
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
-2. **Use SumatraPDF base types.** `Str`, `WStr`, `Vec<T>`, `Arena`, `str::Builder`, `fmt()`, `ReportIf`, `i32`/`u32`/`u64`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base/` so this tree builds without that checkout.
+2. **Use SumatraPDF base types.** `Str`, `WStr`, `Vec<T>`, `Arena`, `str::Builder`, `fmt()`, `ReportIf`, `i32`/`u32`/`u64`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout.
 3. **Windows + MSVC.** `cl.exe` is on PATH. Build with `bun cmd/build.ts`. Static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Do not add CMake, vcpkg, or extra third-party C++ libraries.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `str::Dup` / `str::Free` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
@@ -91,7 +91,7 @@ src/gpui/   Win32 window, flex layout, Direct2D/DirectWrite paint,
 src/sys/    Win32 process/CPU/memory/disk/battery
         │
         ▼
-src/base/   Str, Vec, Arena, Geom, Color helpers
+src/Base.h  Str, Vec, Arena, Geom, Color helpers
 ```
 
 ## Source of truth for visuals
@@ -143,7 +143,7 @@ Typography: Segoe UI, 16 px base. `text_sm` = 14, `text_xs` = 12. Spacing uses a
 ## Code style (match SumatraPDF `src/base`)
 
 ```cpp
-#include "base/Base.h"
+#include "Base.h"
 
 struct MetricPoint {
     float cpu = 0;
@@ -153,7 +153,7 @@ struct MetricPoint {
 void FormatBytes(u64 bytes, str::Builder& out);
 ```
 
-- Include `"base/Base.h"` first. It pulls Windows headers, `Str`, `Vec`, `Arena`, `Geom`.
+- Include `"Base.h"` first. It pulls Windows headers, `Str`, `Vec`, `Arena`, `Geom`.
 - `Str s = fmt("%.1f%%", cpu);` for formatting (temp-arena string; do not `free` it).
 - Own a heap `Str` only if it must survive a frame: `str::Dup` / `str::Free`.
 - `Vec<T>` for arrays of POD. Not for `Str` graphs — use `Vec<ProcessInfo>` where `ProcessInfo` holds a `char name[kMax]` or an arena `Str`.
@@ -198,7 +198,7 @@ port-upstream.md       how to ingest later checkins (pins live in cmd/versions.t
 cmd/versions.ts        exact gpui-component + zed gpui SHAs we are porting
 cmd/build.ts           MSVC compile/link via bun; also clones the pinned Rust spec
 cmd/run.ts             build then run; same flags as build.ts plus -windbg / -compare
-src/base/              vendored SumatraPDF subset
+src/Base.h/.cpp        vendored SumatraPDF subset
 src/gpui/              window, layout, paint, assets, SVG, element tree
 src/sys/               Windows system metrics
 src/ui/                gpui-base unstyled primitives (Button, …)
@@ -229,4 +229,4 @@ When a primitive needs a GPUI capability we do not have (text input, overlay), a
 
 ## Updating the vendored base
 
-If `src/base` is missing an API you need, copy the corresponding file from `C:\Users\kjk\src\sumatrapdf\src\base` and keep `#include "base/..."` paths. Provide `log` / `loga` / `_uploadDebugReport` in `src/examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.
+If `src/Base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/Base.h` / `src/Base.cpp`. Provide `log` / `loga` / `_uploadDebugReport` in `src/examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.
