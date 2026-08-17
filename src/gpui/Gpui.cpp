@@ -70,6 +70,7 @@ const Theme& ThemeDark() {
         t.sidebarFg = Rgb(0xf5, 0xf5, 0xf5);
         t.sidebarPrimary = Rgb(0xf5, 0xf5, 0xf5);
         t.sidebarPrimaryFg = Rgb(0x0a, 0x0a, 0x0a);
+        t.scrollbarThumb = Rgba8(0x52, 0x52, 0x52, 0xe6);
         t.info = Rgb(0x22, 0xd3, 0xee);
         t.infoFg = Rgb(0xfa, 0xfa, 0xfa);
         t.success = Rgb(0x4a, 0xde, 0x80);
@@ -120,6 +121,7 @@ const Theme& ThemeLight() {
         t.sidebarFg = Rgb(0x17, 0x17, 0x17);
         t.sidebarPrimary = Rgb(0x17, 0x17, 0x17);
         t.sidebarPrimaryFg = Rgb(0xfa, 0xfa, 0xfa);
+        t.scrollbarThumb = Rgba8(0xa3, 0xa3, 0xa3, 0xe6);
         t.info = Rgb(0x06, 0xb6, 0xd4);
         t.infoFg = Rgb(0xfa, 0xfa, 0xfa);
         t.success = Rgb(0x22, 0xc5, 0x5e);
@@ -2132,7 +2134,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         float thumbX = e->x + e->w - thumbW - 4.f;
         float thumbY = e->y + t * (view - thumbH);
         FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
-                  Rgba8(0x17, 0x17, 0x17, 160));
+                  ThemeNow().scrollbarThumb);
     }
 
     if (e->style.trapId && e->style.focusId &&

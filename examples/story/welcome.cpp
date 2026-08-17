@@ -138,8 +138,8 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(0)->W(kFill);
 
-    // README: <p align="center"> logo + <strong>GPUI Component</strong>
-    El* hero = Div(a)->FlexCol()->Gap(8)->W(kFill)->ItemsCenter()->PadB(16);
+    // Rust TextView does not honor README <p align="center">; logo stays left.
+    El* hero = Div(a)->FlexCol()->Gap(8)->W(kFill)->ItemsStart()->PadB(16);
     hero->Child(LogoMark(a));
     hero->Child(MdTxt(a, StrL("GPUI Component"), kMd, th.foreground)->Bold());
     col->Child(hero);

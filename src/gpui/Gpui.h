@@ -73,6 +73,7 @@ struct Theme {
     Rgba sidebarFg;
     Rgba sidebarPrimary;
     Rgba sidebarPrimaryFg;
+    Rgba scrollbarThumb;
     Rgba info;
     Rgba infoFg;
     Rgba success;
