@@ -246,6 +246,7 @@ struct El {
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
     int selHi = -1;
+    bool selectable = false;
     float laidFont = 0; // resolved font size from last LayoutEl
     float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
 
@@ -290,6 +291,7 @@ struct El {
     El* Child(El* c);
     El* Bold();
     El* Semibold();
+    El* Selectable();
     El* Wrap();
     El* Dashed();
     El* Absolute();
@@ -337,6 +339,15 @@ struct ScrollRect {
     float contentH = 0;
 };
 
+struct TextHit {
+    float x = 0, y = 0, w = 0, h = 0;
+    Str text;
+    float font = 14;
+    float maxW = 0;
+    bool wrap = false;
+    int docOff = 0;
+};
+
 // Two-generation shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots.
 struct TextMeasCache {
     void* slots = nullptr;
@@ -364,6 +375,10 @@ struct PaintCtx {
     int focusId = 0;
     Vec<HitRect> hits;
     Vec<ScrollRect> scrolls;
+    Vec<TextHit> texts;
+    int textDocLen = 0;
+    int selA = -1;
+    int selB = -1;
     TextMeasCache textCache;
 
     PaintCtx() = default;
@@ -422,6 +437,8 @@ void PaintEl(PaintCtx* ctx, El* e);
 int HitTest(PaintCtx* ctx, float x, float y);
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
 const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y);
+int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest);
+int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
 int HashClickId(Str s);
 
 // Reserved click ids for custom window chrome (WM_NCHITTEST).

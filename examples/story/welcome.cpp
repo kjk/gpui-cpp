@@ -1,12 +1,16 @@
 #include "Story.h"
 
+static El* MdTxt(Arena* a, Str s, float px, Rgba c) {
+    return StoryTxt(a, s, px, c)->Selectable();
+}
+
 static El* Shield(Arena* a, const char* left, const char* right, Rgba rightBg) {
     Rgba leftBg = Rgb(0x4b, 0x55, 0x63);
     El* row = Div(a)->FlexRow()->H(20)->Radius(3);
     row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(leftBg)->Child(
-        StoryTxt(a, Str(left), 11, Rgb(0xff, 0xff, 0xff))));
+        MdTxt(a, Str(left), 11, Rgb(0xff, 0xff, 0xff))));
     row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(rightBg)->Child(
-        StoryTxt(a, Str(right), 11, Rgb(0xff, 0xff, 0xff))));
+        MdTxt(a, Str(right), 11, Rgb(0xff, 0xff, 0xff))));
     return row;
 }
 
@@ -39,17 +43,16 @@ static El* FeatureLine(Arena* a, const char* label, const char* rest) {
     const Theme& th = ThemeNow();
     El* row = Div(a)->FlexRow()->Gap(6)->W(kFill)->ItemsStart();
     row->Child(
-        StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s:", label), kMd, th.foreground)
+        MdTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s:", label), kMd, th.foreground)
             ->Bold()
             ->Shrink0());
-    row->Child(
-        StoryTxt(a, StoryDup(a, rest), kMd, th.foreground)->Wrap()->Grow());
+    row->Child(MdTxt(a, StoryDup(a, rest), kMd, th.foreground)->Wrap()->Grow());
     return row;
 }
 
 static El* MdTableCell(Arena* a, const char* s, bool header) {
     const Theme& th = ThemeNow();
-    El* txt = StoryTxt(a, StoryDup(a, s), kMd, th.foreground);
+    El* txt = MdTxt(a, StoryDup(a, s), kMd, th.foreground);
     if (header) {
         txt->Bold();
     }
@@ -72,12 +75,12 @@ static El* MdTableRow(Arena* a, const char* left, const char* right,
 
 static El* AsciiLine(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryDup(a, s), kMdCode, th.foreground);
+    return MdTxt(a, StoryDup(a, s), kMdCode, th.foreground);
 }
 
 static El* Body(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryDup(a, s), kMd, th.foreground)
+    return MdTxt(a, StoryDup(a, s), kMd, th.foreground)
         ->Wrap()
         ->W(kFill)
         ->PadB(16);
@@ -85,24 +88,17 @@ static El* Body(Arena* a, const char* s) {
 
 static El* LinkBody(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryDup(a, s), kMd, th.blue)
-        ->Wrap()
-        ->W(kFill)
-        ->PadB(16);
+    return MdTxt(a, StoryDup(a, s), kMd, th.blue)->Wrap()->W(kFill)->PadB(16);
 }
 
 static El* H2(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryDup(a, s), kMdH2, th.foreground)
-        ->Semibold()
-        ->PadB(5);
+    return MdTxt(a, StoryDup(a, s), kMdH2, th.foreground)->Semibold()->PadB(5);
 }
 
 static El* H3(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryDup(a, s), kMdH3, th.foreground)
-        ->Semibold()
-        ->PadB(5);
+    return MdTxt(a, StoryDup(a, s), kMdH3, th.foreground)->Semibold()->PadB(5);
 }
 
 static El* Quote(Arena* a, const char* s) {
@@ -111,20 +107,20 @@ static El* Quote(Arena* a, const char* s) {
     row->Child(
         Div(a)->W(3)->H(kFill)->MinH(20)->Bg(th.secondaryActive)->Shrink0());
     row->Child(Div(a)->PadX(16)->Grow()->Child(
-        StoryTxt(a, StoryDup(a, s), kMd, th.mutedFg)->Wrap()->W(kFill)));
+        MdTxt(a, StoryDup(a, s), kMd, th.mutedFg)->Wrap()->W(kFill)));
     return row;
 }
 
 static El* CodeBlock(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
     El* box = Div(a)->W(kFill)->Pad(12)->Radius(th.radius)->Bg(th.muted)->Child(
-        StoryTxt(a, StoryDup(a, s), kMdCode, th.foreground)->Wrap()->W(kFill));
+        MdTxt(a, StoryDup(a, s), kMdCode, th.foreground)->Wrap()->W(kFill));
     return Div(a)->W(kFill)->PadB(16)->Child(box);
 }
 
 static El* Bullet(Arena* a, const char* s) {
     const Theme& th = ThemeNow();
-    return StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s", s), kMd, th.foreground)
+    return MdTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s", s), kMd, th.foreground)
         ->Wrap()
         ->W(kFill);
 }
@@ -136,16 +132,15 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
 
     El* hero = Div(a)->FlexCol()->Gap(8)->W(kFill)->PadB(16);
     hero->Child(LogoMark(a));
-    hero->Child(StoryTxt(a, StrL("GPUI Component"), kMd, th.foreground)
-                    ->Bold());
+    hero->Child(MdTxt(a, StrL("GPUI Component"), kMd, th.foreground)->Bold());
     col->Child(hero);
 
     El* langs = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    langs->Child(StoryTxt(a, StrL("English"), kMd, th.foreground));
-    langs->Child(StoryTxt(a, StrL("|"), kMd, th.mutedFg));
-    langs->Child(
-        StoryTxt(a, StrL("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"),
-                 kMd, th.blue));
+    langs->Child(MdTxt(a, StrL("English"), kMd, th.foreground));
+    langs->Child(MdTxt(a, StrL("|"), kMd, th.mutedFg));
+    langs->Child(MdTxt(a,
+                       StrL("\xE7\xAE\x80\xE4\xBD\x93\xE4\xB8\xAD\xE6\x96\x87"),
+                       kMd, th.blue));
     col->Child(langs->PadB(16));
 
     El* badges = Div(a)->FlexRow()->Gap(6)->ItemsCenter();
@@ -154,10 +149,10 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
     badges->Child(Shield(a, "crates.io", "v0.5.1", Rgb(0xfe, 0x7d, 0x37)));
     col->Child(badges->PadB(16));
 
-    col->Child(StoryTxt(a,
-                        StrL("UI components for building fantastic desktop "
-                             "applications using GPUI."),
-                        kMd, th.foreground)
+    col->Child(MdTxt(a,
+                     StrL("UI components for building fantastic desktop "
+                          "applications using GPUI."),
+                     kMd, th.foreground)
                    ->Wrap()
                    ->W(kFill)
                    ->PadB(16));

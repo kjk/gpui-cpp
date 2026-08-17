@@ -489,6 +489,8 @@ static El* Footer(StoryApp* app, Arena* a) {
 
 static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     auto* app = (StoryApp*)host->user;
+    host->paint.selA = app->selA;
+    host->paint.selB = app->selB;
     app->hoverId = host->hoverId;
     if (app->search.focused) {
         host->input = &app->search;
@@ -584,6 +586,9 @@ static void OnClick(AppHost* host, int id) {
         app->scrollY = 0;
         app->sizeMenuOpen = false;
         app->accOptsOpen = false;
+        app->selA = -1;
+        app->selB = -1;
+        app->selecting = false;
         return;
     }
     if (id == ClickAccMultiple || id == ClickAccIcon ||
@@ -604,9 +609,44 @@ static void OnChar(AppHost* host, u32 cp) {
     }
 }
 
+static void CopyUtf8(HWND hwnd, const char* s, int n) {
+    if (!hwnd || !s || n <= 0) {
+        return;
+    }
+    int wn = MultiByteToWideChar(CP_UTF8, 0, s, n, nullptr, 0);
+    if (wn <= 0) {
+        return;
+    }
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)(wn + 1) * sizeof(WCHAR));
+    if (!h) {
+        return;
+    }
+    auto* w = (WCHAR*)GlobalLock(h);
+    MultiByteToWideChar(CP_UTF8, 0, s, n, w, wn);
+    w[wn] = 0;
+    GlobalUnlock(h);
+    if (!OpenClipboard(hwnd)) {
+        GlobalFree(h);
+        return;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_UNICODETEXT, h);
+    CloseClipboard();
+}
+
 static void OnKey(AppHost* host, int vk, bool down) {
     auto* app = (StoryApp*)host->user;
     if (!down) {
+        return;
+    }
+    if (vk == 'C' && (GetKeyState(VK_CONTROL) & 0x8000) && app->selA >= 0 &&
+        app->selA != app->selB) {
+        char buf[8192];
+        int n = CopyTextHits(&host->paint, app->selA, app->selB, buf,
+                             (int)sizeof(buf));
+        if (n > 0) {
+            CopyUtf8(host->hwnd, buf, n);
+        }
         return;
     }
     if (vk == VK_ESCAPE) {
@@ -617,6 +657,9 @@ static void OnKey(AppHost* host, int vk, bool down) {
         app->alertOpen = false;
         app->sizeMenuOpen = false;
         app->accOptsOpen = false;
+        app->selA = -1;
+        app->selB = -1;
+        app->selecting = false;
     }
 }
 
@@ -641,6 +684,42 @@ static void OnWheel(AppHost* host, float x, float y, float delta) {
     if (*off > maxS) {
         *off = maxS;
     }
+}
+
+static void OnMouseDown(AppHost* host, float x, float y, int button) {
+    auto* app = (StoryApp*)host->user;
+    if (button != 1) {
+        return;
+    }
+    int off = TextHitOffsetAt(&host->paint, x, y, false);
+    if (off >= 0) {
+        app->selA = off;
+        app->selB = off;
+        app->selecting = true;
+        return;
+    }
+    app->selA = -1;
+    app->selB = -1;
+    app->selecting = false;
+}
+
+static void OnMouseMove(AppHost* host, float x, float y) {
+    auto* app = (StoryApp*)host->user;
+    if (!app->selecting) {
+        return;
+    }
+    int off = TextHitOffsetAt(&host->paint, x, y, true);
+    if (off >= 0) {
+        app->selB = off;
+    }
+}
+
+static void OnMouseUp(AppHost* host, float x, float y, int button) {
+    (void)x;
+    (void)y;
+    (void)button;
+    auto* app = (StoryApp*)host->user;
+    app->selecting = false;
 }
 
 static void ParseSlug(PWSTR cmd, char* out, int cap) {
@@ -675,5 +754,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     hooks.onChar = OnChar;
     hooks.onKey = OnKey;
     hooks.onWheel = OnWheel;
+    hooks.onMouseDown = OnMouseDown;
+    hooks.onMouseMove = OnMouseMove;
+    hooks.onMouseUp = OnMouseUp;
     return RunApp(L"GPUI Component", 1280, 960, hooks, &app);
 }

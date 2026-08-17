@@ -429,6 +429,10 @@ El* El::Semibold() {
     style.fontSemibold = true;
     return this;
 }
+El* El::Selectable() {
+    selectable = true;
+    return this;
+}
 El* El::Wrap() {
     style.wrap = true;
     return this;
@@ -1295,7 +1299,13 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     float gaps = gap * (n - 1);
     // Overflow-y scroll: measure children with unconstrained height so
     // contentH can exceed the viewport (needed for the thumb + scroll).
-    bool unconstrH = e->style.overflowY == OverflowY::Scroll;
+    // Shrink-wrap (height:auto, no grow) must also stay unconstrained:
+    // after wrap, a second LayoutChildren would otherwise pass the used
+    // content height as a definite block, and H(kFill) kids (blockquote
+    // bar) would expand to the whole page and hide later siblings.
+    bool shrinkWrapH = e->style.height == kAuto && e->style.flexGrow <= 0 &&
+                       e->style.overflowY != OverflowY::Scroll;
+    bool unconstrH = e->style.overflowY == OverflowY::Scroll || shrinkWrapH;
     float childCross0 = (unconstrH && row) ? 0.f : crossAvail;
     float childMain0 = (unconstrH && !row) ? 0.f : mainAvail;
 
@@ -1467,6 +1477,22 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
         float cr = row ? c->h : c->w;
         if (cr > maxCross) {
             maxCross = cr;
+        }
+    }
+
+    // Stretch kFill / align-stretch items to the line cross size without
+    // re-LayoutEl (that would treat the used height as a definite block).
+    if (row && maxCross > 0) {
+        for (El* c = e->first; c; c = c->next) {
+            if (c->style.absolute) {
+                continue;
+            }
+            bool fillCross =
+                c->style.height == kFill ||
+                (e->style.align == Align::Stretch && c->style.height == kAuto);
+            if (fillCross && maxCross > c->h) {
+                c->h = maxCross;
+            }
         }
     }
 
@@ -1950,11 +1976,42 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
                          ? e->laidFont
                          : (e->style.fontSize > 0 ? e->style.fontSize : 14.f);
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
-        if (e->selLo >= 0 && e->selHi > e->selLo) {
+        int lo = e->selLo;
+        int hi = e->selHi;
+        if (e->selectable && e->text.s) {
+            int docOff = ctx->textDocLen;
+            TextHit th;
+            th.x = e->x;
+            th.y = e->y;
+            th.w = e->w;
+            th.h = e->h;
+            th.text = e->text;
+            th.font = font;
+            th.maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
+            th.wrap = e->style.wrap;
+            th.docOff = docOff;
+            ctx->texts.Append(th);
+            ctx->textDocLen += e->text.len + 1;
+            int a = ctx->selA;
+            int b = ctx->selB;
+            if (a >= 0 && b >= 0 && a != b) {
+                if (a > b) {
+                    int t = a;
+                    a = b;
+                    b = t;
+                }
+                int tlo = a > docOff ? a : docOff;
+                int thi = b < docOff + e->text.len ? b : docOff + e->text.len;
+                if (tlo < thi) {
+                    lo = tlo - docOff;
+                    hi = thi - docOff;
+                }
+            }
+        }
+        if (lo >= 0 && hi > lo) {
             PaintTextRange(ctx, e->text, font,
                            e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
-                           e->x, e->y, e->selLo, e->selHi,
-                           Rgba8(0x6b, 0xb3, 0xf0, 90));
+                           e->x, e->y, lo, hi, Rgba8(0x6b, 0xb3, 0xf0, 90));
         }
         DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
                    e->style.truncate, e->style.wrap, e->laidMaxW,
@@ -2062,6 +2119,108 @@ const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y) {
         }
     }
     return nullptr;
+}
+
+static float DistToInterval(float v, float lo, float hi) {
+    if (v < lo) {
+        return lo - v;
+    }
+    if (v > hi) {
+        return v - hi;
+    }
+    return 0.f;
+}
+
+int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
+    if (!ctx) {
+        return -1;
+    }
+    const TextHit* best = nullptr;
+    float bestScore = 1e9f;
+    for (int i = ctx->texts.len - 1; i >= 0; i--) {
+        const TextHit& h = ctx->texts[i];
+        if (x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h) {
+            best = &h;
+            nearest = false;
+            break;
+        }
+        if (!nearest) {
+            continue;
+        }
+        float dy = DistToInterval(y, h.y, h.y + h.h);
+        float dx = DistToInterval(x, h.x, h.x + h.w);
+        float score = dy * 1000.f + dx;
+        if (score < bestScore) {
+            bestScore = score;
+            best = &h;
+        }
+    }
+    if (!best || !best->text.s) {
+        return -1;
+    }
+    float relX = x - best->x;
+    float relY = y - best->y;
+    if (nearest) {
+        if (relX < 0) {
+            relX = 0;
+        }
+        if (relY < 0) {
+            relY = 0;
+        }
+        if (relX > best->w) {
+            relX = best->w;
+        }
+        if (relY > best->h) {
+            relY = best->h;
+        }
+    }
+    int local = TextIndexAt(ctx, best->text, best->font,
+                            best->maxW > 0 ? best->maxW : best->w, best->wrap,
+                            relX, relY);
+    if (local < 0) {
+        local = 0;
+    }
+    if (local > best->text.len) {
+        local = best->text.len;
+    }
+    return best->docOff + local;
+}
+
+int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
+    if (!out || cap <= 0) {
+        return 0;
+    }
+    out[0] = 0;
+    if (!ctx || a < 0 || b < 0 || a == b) {
+        return 0;
+    }
+    if (a > b) {
+        int t = a;
+        a = b;
+        b = t;
+    }
+    int n = 0;
+    for (int i = 0; i < ctx->texts.len && n < cap - 1; i++) {
+        const TextHit& t = ctx->texts[i];
+        int pos = t.docOff;
+        int plen = t.text.len;
+        int lo = a > pos ? a : pos;
+        int hi = b < pos + plen ? b : pos + plen;
+        if (lo < hi && t.text.s) {
+            int take = hi - lo;
+            if (n + take > cap - 1) {
+                take = cap - 1 - n;
+            }
+            memcpy(out + n, t.text.s + (lo - pos), (size_t)take);
+            n += take;
+        }
+        int gap = pos + plen;
+        if (i + 1 < ctx->texts.len && a <= gap && b > gap && n < cap - 1) {
+            out[n++] = '\n';
+        }
+    }
+    out[n] = 0;
+    return n;
 }
 
 static void CollectFocus(El* e, AppHost* host) {

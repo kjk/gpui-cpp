@@ -102,6 +102,10 @@ static void RenderFrame(AppHost* host, HDC hdc) {
     ResetTempArena();
     host->paint.hits.Clear();
     host->paint.scrolls.Clear();
+    host->paint.texts.Clear();
+    host->paint.textDocLen = 0;
+    host->paint.selA = -1;
+    host->paint.selB = -1;
     host->paint.hoverId = host->hoverId;
     host->paint.focusId = host->focusId;
     host->paint.viewW = dipW;
