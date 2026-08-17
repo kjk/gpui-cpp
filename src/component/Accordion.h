@@ -10,6 +10,9 @@ struct AccordionItem {
     Str title = {};
     Str body = {};
     bool open = false;
+    IconName icon = IconName::None;
+    Str tag = {};
+    bool settings = false;
 };
 
 struct Accordion {
@@ -29,6 +32,8 @@ struct Accordion {
     Accordion* Disabled(bool v);
     Accordion* WithSize(UiSize s);
     Accordion* Item(Str title, Str body, bool open);
+    Accordion* SettingsItem(Str title, Str body, bool open, IconName icon,
+                            Str tag);
     Accordion* OnToggle(Func1<int> fn);
     El* IntoEl();
 };

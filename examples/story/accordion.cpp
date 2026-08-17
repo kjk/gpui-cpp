@@ -66,19 +66,21 @@ El* AccordionRender(StoryApp* app, Arena* a) {
             ->Disabled(app->accordionDisabled)
             ->WithSize(app->size)
             ->OnToggle(MkFunc1(&OnAccStyled, app));
-    styled->Item(StrL("Account Settings"),
-                 StrL("Manage your account preferences, security settings, and "
-                      "personal information."),
-                 app->accordionStyledOpen[0]);
-    styled->Item(
+    styled->SettingsItem(
+        StrL("Account Settings"),
+        StrL("Manage your account preferences, security settings, and "
+             "personal information. You can also configure two-factor "
+             "authentication here."),
+        app->accordionStyledOpen[0], IconName::Settings, StrL("New"));
+    styled->SettingsItem(
         StrL("Privacy & Security"),
         StrL("Control who can see your profile and how your data is used."),
-        app->accordionStyledOpen[1]);
-    styled->Item(
+        app->accordionStyledOpen[1], IconName::CircleUser, Str{});
+    styled->SettingsItem(
         StrL("Help & Support"),
         StrL(
             "Browse the documentation, or get in touch with the support team."),
-        app->accordionStyledOpen[2]);
+        app->accordionStyledOpen[2], IconName::Info, Str{});
     El* custom = StorySection(a, "Custom style", nullptr);
     El* frame = Div(a)
                     ->W(480)
