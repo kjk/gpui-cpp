@@ -1,4 +1,5 @@
 .work/
+dist/
 out/
 *.bmp
 *.log
