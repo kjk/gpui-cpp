@@ -1756,8 +1756,15 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
                     D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.38f), ctx->brush,
                     sw);
             }
-            line(8, 8, 16, 16);
-            line(16, 8, 8, 16);
+            // lucide x.svg spans 6..18 of the 24 viewBox; CircleX keeps its
+            // stroke inside the ring.
+            if (name == IconName::CircleX) {
+                line(9, 9, 15, 15);
+                line(15, 9, 9, 15);
+            } else {
+                line(6, 6, 18, 18);
+                line(18, 6, 6, 18);
+            }
             break;
         case IconName::CircleCheck:
             ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.38f),

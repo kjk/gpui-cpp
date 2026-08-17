@@ -117,8 +117,14 @@ El* Alert::IntoEl() {
     }
     row->Child(col);
     if (onClose.IsValid()) {
-        El* x = Div(a)->W(20)->H(20)->ItemsCenter()->JustifyCenter()->Child(
-            IconEl(a, IconName::X, 14)->Fg(th.mutedFg));
+        // p_0p5 + rounded, icon at max(size, Medium) in the alert's color.
+        El* x = Div(a)
+                    ->Pad(2)
+                    ->Radius(th.radius)
+                    ->ItemsCenter()
+                    ->JustifyCenter()
+                    ->Shrink0()
+                    ->Child(IconEl(a, IconName::X, 16)->Fg(fg));
         BindClick(x, StrL("alert-close"), onClose);
         row->Child(x);
     }
