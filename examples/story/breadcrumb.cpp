@@ -1,16 +1,44 @@
 #include "Story.h"
 
+static void OnCrumb(StoryApp* app, int i) {
+    app->crumbClicked = i;
+}
+
 El* BreadcrumbRender(StoryApp* app, Arena* a) {
-    (void)app;
+    const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default",
-                           "Displays the path to the current resource.");
-    StorySectionAdd(sec, component::Breadcrumb::New(a)
+
+    El* def = StorySection(a, "Default",
+                           "Shows the current location in a hierarchy.");
+    StorySectionAdd(def, component::Breadcrumb::New(a)
                              ->Item(StrL("Home"))
-                             ->Item(StrL("Components"))
-                             ->Item(StrL("Breadcrumb"))
+                             ->Item(StrL("Documents"))
+                             ->Item(StrL("Projects"))
                              ->IntoEl());
-    page->Child(sec);
+    page->Child(def);
+
+    El* inter = StorySection(
+        a, "Interactive", "Earlier levels can respond to navigation clicks.");
+    El* col = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
+    col->Child(component::Breadcrumb::New(a)
+                   ->Item(StrL("Home"))
+                   ->Item(StrL("Documents"))
+                   ->Item(StrL("Projects"))
+                   ->Item(StrL("Current"))
+                   ->OnClick(MkFunc1(&OnCrumb, app))
+                   ->IntoEl());
+    if (app->crumbClicked >= 0) {
+        static const char* kNames[] = {"Home", "Documents", "Projects",
+                                       "Current"};
+        int i = app->crumbClicked;
+        if (i > 3) {
+            i = 3;
+        }
+        col->Child(StoryTxt(a, StoryFmt(a, "Selected: %s", kNames[i]), 13,
+                            th.foreground));
+    }
+    StorySectionAdd(inter, col);
+    page->Child(inter);
     return page;
 }
 
