@@ -75,7 +75,7 @@ El* Accordion::IntoEl() {
         float font = UiFontPx(size);
         El* trig = AccordionTrigger::New(
             a, items[i].title, disabled ? 0 : HashClickId(items[i].title));
-        trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(8);
+        trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(8)->W(kFill);
         if (i + 1 < nItems) {
             trig->BorderB(1, th.border);
         }
@@ -107,14 +107,14 @@ El* Accordion::IntoEl() {
             }
             trig->Child(left);
         } else {
-            trig->H(h)->Child(
+            trig->H(h)->W(kFill)->Child(
                 TextEl(a, items[i].title)->Font(font)->Fg(th.foreground));
         }
-        trig->Child(IconEl(a,
-                           items[i].open ? IconName::ChevronDown
-                                         : IconName::ChevronRight,
-                           14)
-                        ->Fg(th.mutedFg));
+        trig->Child(
+            IconEl(a,
+                   items[i].open ? IconName::ChevronUp : IconName::ChevronDown,
+                   14)
+                ->Fg(th.mutedFg));
         if (onToggle.IsValid() && !disabled) {
             AccBind* b = ArenaNew<AccBind>(a);
             b->fn = onToggle;
