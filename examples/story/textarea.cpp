@@ -2,11 +2,36 @@
 
 El* TextareaRender(StoryApp* app, Arena* a) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(a, "Default", "Displays a form textarea.");
-    StorySectionAdd(sec,
+
+    El* def = StorySection(a, "Textarea", nullptr);
+    StorySectionAdd(def,
                     component::Textarea::New(a, StrL("notes"), app->areaBuf)
                         ->IntoEl());
-    page->Child(sec);
+    page->Child(def);
+
+    El* nowrap = StorySection(a, "No Wrap", nullptr);
+    StorySectionAdd(nowrap,
+                    component::Textarea::New(a, StrL("notes-nw"), app->areaBuf)
+                        ->IntoEl());
+    page->Child(nowrap);
+
+    El* grow = StorySection(a, "Auto Grow", nullptr);
+    StorySectionAdd(
+        grow, component::Textarea::New(a, StrL("notes-grow"), app->areaBuf)
+                  ->IntoEl());
+    page->Child(grow);
+
+    El* both = StorySection(a, "Auto Grow with No Wrap", nullptr);
+    StorySectionAdd(
+        both, component::Textarea::New(a, StrL("notes-both"), app->areaBuf)
+                  ->IntoEl());
+    page->Child(both);
+
+    El* chat = StorySection(a, "Submit on Enter (Chat)", nullptr);
+    StorySectionAdd(chat,
+                    component::Textarea::New(a, StrL("chat"), app->areaBuf)
+                        ->IntoEl());
+    page->Child(chat);
     return page;
 }
 

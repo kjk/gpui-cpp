@@ -9,6 +9,8 @@ El* DescriptionListRender(StoryApp* app, Arena* a) {
                              ->Item(StrL("Status"), StrL("Published"))
                              ->Item(StrL("License"), StrL("Apache-2.0"))
                              ->Item(StrL("Version"), StrL("0.5.0"))
+                             ->Item(StrL("Owner"), StrL("Jason Lee"))
+                             ->Item(StrL("Updated"), StrL("Today"))
                              ->IntoEl());
     page->Child(sec);
     return page;

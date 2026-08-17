@@ -21,6 +21,46 @@ El* DatePickerRender(StoryApp* app, Arena* a) {
                              ->OnDay(MkFunc1(&PickDate, app))
                              ->IntoEl());
     page->Child(sec);
+
+    El* dis = StorySection(a, "Disabled dates", nullptr);
+    StorySectionAdd(dis, component::DatePicker::New(a)
+                             ->Year(app->calYear)
+                             ->Month(app->calMonth)
+                             ->Day(app->calDay)
+                             ->IntoEl());
+    page->Child(dis);
+
+    El* range = StorySection(a, "Date range", nullptr);
+    StorySectionAdd(range, component::DatePicker::New(a)
+                               ->Year(app->calYear)
+                               ->Month(app->calMonth)
+                               ->Day(app->calDay)
+                               ->IntoEl());
+    page->Child(range);
+
+    El* empty = StorySection(a, "Empty range", nullptr);
+    StorySectionAdd(empty, component::DatePicker::New(a)
+                               ->Year(app->calYear)
+                               ->Month(app->calMonth)
+                               ->Day(0)
+                               ->IntoEl());
+    page->Child(empty);
+
+    El* year = StorySection(a, "Year range", nullptr);
+    StorySectionAdd(year, component::DatePicker::New(a)
+                              ->Year(app->calYear)
+                              ->Month(app->calMonth)
+                              ->Day(app->calDay)
+                              ->IntoEl());
+    page->Child(year);
+
+    El* style = StorySection(a, "Custom style", nullptr);
+    StorySectionAdd(style, component::DatePicker::New(a)
+                               ->Year(app->calYear)
+                               ->Month(app->calMonth)
+                               ->Day(app->calDay)
+                               ->IntoEl());
+    page->Child(style);
     return page;
 }
 

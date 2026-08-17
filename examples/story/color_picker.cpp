@@ -3,9 +3,11 @@
 El* ColorPickerRender(StoryApp* app, Arena* a) {
     (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* sec = StorySection(
-        a, "Default", "A color picker that allows users to select a color.");
-    StorySectionAdd(sec, component::ColorPicker::New(a)->IntoEl());
+    El* sec = StorySection(a, "Theme Color", nullptr);
+    StorySectionAdd(sec, component::ColorPicker::New(a)
+                             ->Hex(app->colorHex)
+                             ->Open(app->colorOpen)
+                             ->IntoEl());
     page->Child(sec);
     return page;
 }
