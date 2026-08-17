@@ -1,4 +1,4 @@
-/* Shared example implementation of Base.h log() / loga(). */
+/* Shared example implementation of Base.h log(). */
 
 #include "Base.h"
 
@@ -30,8 +30,4 @@ void log(Str s) {
         OutputDebugStringA("\n");
     }
     LogToFile(s);
-}
-
-void loga(Str s) {
-    log(s);
 }

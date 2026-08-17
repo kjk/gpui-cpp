@@ -229,4 +229,4 @@ When a primitive needs a GPUI capability we do not have (text input, overlay), a
 
 ## Updating the vendored base
 
-If `src/Base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/Base.h` / `src/Base.cpp`. Provide `log` / `loga` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.
+If `src/Base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/Base.h` / `src/Base.cpp`. Provide `log` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.

@@ -43,22 +43,6 @@
 #include <ole2.h>
 #include <uxtheme.h>
 
-// nasty but necessary
-#if defined(min) || defined(max)
-#error "min or max defined"
-#endif
-#define min(x, y) ((x) < (y) ? (x) : (y))
-#define max(x, y) ((x) > (y) ? (x) : (y))
-// /analyze flags a bogus C6385 (invalid read) inside GdiplusFontCollection.h;
-// it's a false positive in the SDK header, so silence it at the include site.
-#pragma warning(push)
-#pragma warning(disable : 6385)
-#include <gdiplus.h>
-#pragma warning(pop)
-#undef NOMINMAX
-#undef min
-#undef max
-
 using i8 = int8_t;
 using u8 = uint8_t;
 using i16 = int16_t;
@@ -124,12 +108,11 @@ char (&DimofSizeHelper(T (&array)[N]))[N];
 #define dimof(array) (sizeof(DimofSizeHelper(array)))
 
 void log(Str s);
-void loga(Str s);
 
 void* AllocZero(int count, int size);
 
 template <typename T>
-GPUI_FORCEINLINE T* AllocArray(int n) {
+inline T* AllocArray(int n) {
     return (T*)AllocZero(n, (int)sizeof(T));
 }
 

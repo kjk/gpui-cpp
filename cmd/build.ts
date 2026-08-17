@@ -363,7 +363,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   const includeMemo = new Map<string, string[]>();
   let compiled = 0;
   let skipped = 0;
-  // AppLog.cpp implements Base.h log() / loga() for every example.
+  // AppLog.cpp implements Base.h log() for every example.
   for (const g of groupSources(["examples/AppLog.cpp", ...src, ...baseSrc])) {
     const objDir = join(outDir, "obj", g.key);
     mkdirSync(join(root, objDir), { recursive: true });
