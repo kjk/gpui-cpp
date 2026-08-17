@@ -1,12 +1,13 @@
 // MSVC build for gpui2 examples. Requires cl.exe on PATH.
 //   bun cmd/build.ts                         # print example list
 //   bun cmd/build.ts app_assets
-//   bun cmd/build.ts -dbg all
+//   bun cmd/build.ts -dbg -all
 //   bun cmd/build.ts -rel -asan system_monitor
 //   bun cmd/build.ts -rel -clean showcase
 
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { buildDist } from "./build-dist.ts";
 import { ensureRustTree } from "./versions.ts";
 
 const root = resolve(dirname(Bun.main), "..");
@@ -27,15 +28,19 @@ const simpleExamples = [
   "markdown_table",
 ];
 
-const knownTargets = ["system_monitor", "app_assets", "showcase", "story", "all", ...simpleExamples] as const;
+const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;
 type Target = (typeof knownTargets)[number];
 
-const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] <example>
+const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<example>]
 
   -rel    release (default)
   -dbg    debug
   -asan   AddressSanitizer; combines with -rel or -dbg
   -clean  delete out/<dir>/ before building
+  -all    build every example (amalgamation + compile); print total elapsed
+
+Always writes .work/gpui.h and .work/gpui.cpp, then compiles examples
+against that pair.
 
 Outputs:
   out/rel/          release
@@ -65,22 +70,20 @@ function die(msg?: string): never {
   process.exit(1);
 }
 
-function parseArgs(argv: string[]): { target: Target; debug: boolean; asan: boolean; clean: boolean } {
-  if (argv.length === 0 || argv[argv.length - 1].startsWith("-")) {
-    printExamples();
-  }
-  const last = argv[argv.length - 1];
-  const name = last.toLowerCase();
-  if (!(knownTargets as readonly string[]).includes(name)) {
-    printExamples(`Unknown example: ${last}`);
-  }
-  const target = name as Target;
-
+function parseArgs(argv: string[]): {
+  target: Target | null;
+  all: boolean;
+  debug: boolean;
+  asan: boolean;
+  clean: boolean;
+} {
   let sawRel = false;
   let sawDbg = false;
   let asan = false;
   let clean = false;
-  for (const raw of argv.slice(0, -1)) {
+  let all = false;
+  const names: string[] = [];
+  for (const raw of argv) {
     if (raw === "-rel") {
       sawRel = true;
       continue;
@@ -97,15 +100,42 @@ function parseArgs(argv: string[]): { target: Target; debug: boolean; asan: bool
       clean = true;
       continue;
     }
+    if (raw === "-all") {
+      all = true;
+      continue;
+    }
     if (raw.startsWith("-")) {
       die(`Unknown flag: ${raw}`);
     }
-    die(`Unknown argument: ${raw}`);
+    names.push(raw.toLowerCase());
+  }
+  if (names.includes("all")) {
+    all = true;
+    const rest = names.filter((n) => n !== "all");
+    if (rest.length > 0) {
+      die("Cannot combine -all with an example name");
+    }
   }
   if (sawRel && sawDbg) {
     die("Cannot combine -rel and -dbg");
   }
-  return { target, debug: sawDbg, asan, clean };
+  if (all) {
+    if (names.length > 0 && !names.every((n) => n === "all")) {
+      die("Cannot combine -all with an example name");
+    }
+    return { target: null, all: true, debug: sawDbg, asan, clean };
+  }
+  if (names.length === 0) {
+    printExamples();
+  }
+  if (names.length !== 1) {
+    die("Pass one example name, or -all");
+  }
+  const name = names[0]!;
+  if (!(knownTargets as readonly string[]).includes(name)) {
+    printExamples(`Unknown example: ${name}`);
+  }
+  return { target: name as Target, all: false, debug: sawDbg, asan, clean };
 }
 
 function outDirName(debug: boolean, asan: boolean): string {
@@ -113,9 +143,7 @@ function outDirName(debug: boolean, asan: boolean): string {
   return asan ? `${base}_asan` : base;
 }
 
-const baseSrc = ["src/Base.cpp"];
-
-const gpuiSrc = ["src/gpui/Gpui.cpp", "src/gpui/Window.cpp", "src/gpui/Assets.cpp", "src/gpui/Svg.cpp"];
+const amalgamSrc = [".work/gpui.cpp"];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -126,14 +154,6 @@ function cppDir(rel: string): string[] {
     .filter((f) => f.endsWith(".cpp"))
     .map((f) => `${rel}/${f}`)
     .sort();
-}
-
-function uiSrc(): string[] {
-  return cppDir("src/ui");
-}
-
-function componentSrc(): string[] {
-  return cppDir("src/component");
 }
 
 const libs = [
@@ -154,29 +174,19 @@ const libs = [
 
 function sourcesFor(name: string): string[] | null {
   if (name === "system_monitor") {
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), "src/sys/SysInfo.cpp", "examples/system_monitor.cpp"];
+    return [...amalgamSrc, "examples/system_monitor.cpp"];
   }
   if (name === "app_assets") {
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), "examples/app_assets.cpp"];
+    return [...amalgamSrc, "examples/app_assets.cpp"];
   }
   if (name === "showcase") {
-    const dir = join(root, "examples/showcase");
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".cpp"))
-      .map((f) => `examples/showcase/${f}`)
-      .sort();
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), ...files];
+    return [...amalgamSrc, ...cppDir("examples/showcase")];
   }
   if (name === "story") {
-    const dir = join(root, "examples/story");
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".cpp"))
-      .map((f) => `examples/story/${f}`)
-      .sort();
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), ...files];
+    return [...amalgamSrc, ...cppDir("examples/story")];
   }
   if (simpleExamples.includes(name)) {
-    return [...gpuiSrc, ...uiSrc(), ...componentSrc(), `examples/${name}.cpp`];
+    return [...amalgamSrc, `examples/${name}.cpp`];
   }
   return null;
 }
@@ -221,18 +231,19 @@ function copyAsanDll(outDir: string) {
 }
 
 function groupSources(files: string[]): { key: string; files: string[] }[] {
-  const buckets: Record<string, string[]> = { base: [], gpui: [], ui: [], component: [], sys: [], ex: [] };
+  const buckets: Record<string, string[]> = {
+    gpui: [],
+    showcase: [],
+    story: [],
+    ex: [],
+  };
   for (const f of files) {
-    if (f === "src/Base.cpp" || f.startsWith("src/base/")) {
-      buckets.base.push(f);
-    } else if (f.startsWith("src/gpui/")) {
+    if (f === ".work/gpui.cpp" || f.startsWith("src/gpui/")) {
       buckets.gpui.push(f);
-    } else if (f.startsWith("src/ui/")) {
-      buckets.ui.push(f);
-    } else if (f.startsWith("src/component/")) {
-      buckets.component.push(f);
-    } else if (f.startsWith("src/sys/")) {
-      buckets.sys.push(f);
+    } else if (f.startsWith("examples/showcase/")) {
+      buckets.showcase.push(f);
+    } else if (f.startsWith("examples/story/")) {
+      buckets.story.push(f);
     } else {
       buckets.ex.push(f);
     }
@@ -280,7 +291,7 @@ function quotedIncludes(rel: string, memo: Map<string, string[]>): string[] {
   let m: RegExpExecArray | null;
   while ((m = includeRe.exec(text))) {
     const inc = m[1]!.replaceAll("\\", "/");
-    const candidates = [`${dir}/${inc}`, `src/${inc}`];
+    const candidates = [`${dir}/${inc}`, `.work/${inc}`, `src/${inc}`];
     for (const raw of candidates) {
       const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
       if (!existsSync(join(root, norm))) {
@@ -330,7 +341,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "/EHsc",
     "/utf-8",
     "/I",
-    "src",
+    ".work",
     "/DUNICODE",
     "/D_UNICODE",
     "/W3",
@@ -363,8 +374,8 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   const includeMemo = new Map<string, string[]>();
   let compiled = 0;
   let skipped = 0;
-  // AppLog.cpp implements Base.h log() for every example.
-  for (const g of groupSources(["examples/AppLog.cpp", ...src, ...baseSrc])) {
+  // AppLog.cpp implements log() for every example.
+  for (const g of groupSources(["examples/AppLog.cpp", ...src])) {
     const objDir = join(outDir, "obj", g.key);
     mkdirSync(join(root, objDir), { recursive: true });
     const dirty: string[] = [];
@@ -428,17 +439,17 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
 }
 
 function formatElapsed(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) {
-    return `${h}h ${m}m ${s}s`;
-  }
+  const total = Math.max(0, Math.round(ms));
+  const m = Math.floor(total / 60000);
+  const s = Math.floor((total % 60000) / 1000);
+  const milli = total % 1000;
   if (m > 0) {
-    return `${m}m ${s}s`;
+    return `${m}m ${s}s ${milli}ms`;
   }
-  return `${s}s`;
+  if (s > 0) {
+    return `${s}s ${milli}ms`;
+  }
+  return `${milli}ms`;
 }
 
 function formatExactBytes(n: number): string {
@@ -469,13 +480,17 @@ function printFileSize(relPath: string) {
 }
 
 const started = performance.now();
-const { target, debug, asan, clean } = parseArgs(Bun.argv.slice(2));
+const { target, all, debug, asan, clean } = parseArgs(Bun.argv.slice(2));
 try {
   ensureRustTree(root);
 } catch (e) {
   console.error(e instanceof Error ? e.message : e);
   process.exit(1);
 }
+const amalgam = buildDist({ outDir: ".work" });
+console.log(
+  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} (${amalgam.headerCount} headers, ${amalgam.sourceCount} sources)`,
+);
 const outDir = join("out", outDirName(debug, asan));
 if (clean) {
   const abs = join(root, outDir);
@@ -485,9 +500,9 @@ if (clean) {
   }
 }
 const built: string[] = [];
-if (target === "all") {
-  built.push("system_monitor", "app_assets", "showcase", ...simpleExamples);
-} else {
+if (all) {
+  built.push("system_monitor", "app_assets", "showcase", "story", ...simpleExamples);
+} else if (target) {
   built.push(target);
 }
 for (const n of built) {

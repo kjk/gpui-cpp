@@ -1,7 +1,5 @@
 #include "Showcase.h"
-#include "ui/Combobox.h"
-#include "ui/Input.h"
-#include "ui/Popup.h"
+#include "gpui.h"
 
 enum {
     ClickCombo = 320,

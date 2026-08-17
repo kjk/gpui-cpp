@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Table.h"
+#include "gpui.h"
 
 El* ShowcaseTable(ShowcaseApp* app, Arena* a) {
     (void)app;

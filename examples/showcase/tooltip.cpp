@@ -1,7 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Popup.h"
-#include "ui/Tooltip.h"
+#include "gpui.h"
 
 enum {
     ClickTooltip = 570

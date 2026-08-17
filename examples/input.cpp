@@ -1,4 +1,4 @@
-#include "gpui/Gpui.h"
+#include "gpui.h"
 
 struct InputApp {
     LineInput in;

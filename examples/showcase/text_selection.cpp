@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/TextSelection.h"
+#include "gpui.h"
 
 enum {
     ClickSelClear = 530,

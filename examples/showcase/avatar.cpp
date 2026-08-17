@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Avatar.h"
+#include "gpui.h"
 
 El* ShowcaseAvatar(ShowcaseApp* app, Arena* a) {
     (void)app;

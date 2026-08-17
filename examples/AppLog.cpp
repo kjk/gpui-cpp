@@ -1,6 +1,6 @@
 /* Shared example implementation of Base.h log(). */
 
-#include "Base.h"
+#include "gpui.h"
 
 static void LogToFile(Str s) {
     static HANDLE h = INVALID_HANDLE_VALUE;

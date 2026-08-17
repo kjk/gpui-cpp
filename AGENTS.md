@@ -14,7 +14,7 @@ Ship the gpui-component examples as C++ Windows apps, starting with `system_moni
 bun cmd/build.ts system_monitor
 bun cmd/build.ts -rel hello_world
 bun cmd/build.ts -rel showcase
-bun cmd/build.ts -dbg all
+bun cmd/build.ts -dbg -all
 bun cmd/build.ts -rel -asan system_monitor
 ```
 
@@ -175,7 +175,7 @@ No example name (or a flag last) prints the valid example list. The example is t
 
 Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/`). Clean rebuild of that dir: add `-clean`.
 
-`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` (launch under `windbgx.exe -g -G`). It does not accept `all` — pick one binary.
+`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` (launch under `windbgx.exe -g -G`). It does not accept `-all` — pick one binary.
 
 After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for the whole tree) before finishing. It runs clang-format on C++ in `src/` and `examples/` (`/.clang-format`, Chromium-based, 80 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
 

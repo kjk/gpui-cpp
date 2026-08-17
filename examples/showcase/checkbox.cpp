@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Checkbox.h"
+#include "gpui.h"
 
 enum {
     ClickCheckbox = 280

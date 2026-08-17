@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/VirtualList.h"
+#include "gpui.h"
 
 enum {
     kVirtCount = 100000

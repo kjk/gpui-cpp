@@ -1,5 +1,4 @@
-#include "gpui/Gpui.h"
-#include "sys/SysInfo.h"
+#include "gpui.h"
 
 static const int kMaxHist = 120;
 static const int kKeepProcs = 200;

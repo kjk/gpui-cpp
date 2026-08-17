@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Resizable.h"
+#include "gpui.h"
 
 enum {
     ClickResize = 470

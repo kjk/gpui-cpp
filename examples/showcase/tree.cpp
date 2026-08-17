@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Tree.h"
+#include "gpui.h"
 
 enum {
     ClickTree = 580

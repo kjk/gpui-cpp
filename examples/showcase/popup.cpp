@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Popup.h"
+#include "gpui.h"
 
 enum {
     ClickPopup = 450

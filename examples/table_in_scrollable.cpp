@@ -3,7 +3,7 @@
    the page; wheel outside the table always scrolls the page.
    Rust: examples/table_in_scrollable */
 
-#include "gpui/Gpui.h"
+#include "gpui.h"
 
 static const int kRows = 30;
 static const float kRowH = 28;

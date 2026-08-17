@@ -2,8 +2,7 @@
 
 #pragma once
 
-#include "component/Component.h"
-#include "gpui/Gpui.h"
+#include "gpui.h"
 
 enum {
     StoryWelcome = 0,

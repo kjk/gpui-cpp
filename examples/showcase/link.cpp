@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Link.h"
+#include "gpui.h"
 
 enum {
     ClickLink = 390

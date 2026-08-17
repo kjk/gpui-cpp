@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Slider.h"
+#include "gpui.h"
 
 enum {
     ClickSlider = 500

@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Scrollbar.h"
+#include "gpui.h"
 
 El* ShowcaseScrollbar(ShowcaseApp* app, Arena* a) {
     El* list = Div(a)->FlexCol();

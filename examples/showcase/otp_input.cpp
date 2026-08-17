@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/OtpInput.h"
+#include "gpui.h"
 
 enum {
     ClickOtp = 410

@@ -1,7 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Input.h"
-#include "ui/NumberInput.h"
+#include "gpui.h"
 
 enum {
     ClickNumField = 400,

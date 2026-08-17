@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/HoverCard.h"
+#include "gpui.h"
 
 enum {
     ClickHover = 370

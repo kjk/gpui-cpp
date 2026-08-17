@@ -1,4 +1,4 @@
-#include "gpui/Gpui.h"
+#include "gpui.h"
 
 static void OnInit(AppHost* host) {
     (void)host;

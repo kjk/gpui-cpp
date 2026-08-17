@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Toggle.h"
+#include "gpui.h"
 
 enum {
     ClickToggleB = 560,

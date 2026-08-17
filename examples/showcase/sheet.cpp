@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Sheet.h"
+#include "gpui.h"
 
 enum {
     ClickSheetOpen = 490,

@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Pagination.h"
+#include "gpui.h"
 
 enum {
     ClickPageBase = 420

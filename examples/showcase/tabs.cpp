@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Tabs.h"
+#include "gpui.h"
 
 enum {
     ClickTab0 = 520,

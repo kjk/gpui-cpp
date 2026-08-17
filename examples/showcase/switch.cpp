@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Switch.h"
+#include "gpui.h"
 
 enum {
     ClickSwitch = 510

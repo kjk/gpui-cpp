@@ -1,7 +1,5 @@
 #include "Showcase.h"
-#include "ui/ColorPicker.h"
-#include "ui/Input.h"
-#include "ui/Popup.h"
+#include "gpui.h"
 
 enum {
     ClickColor = 300,

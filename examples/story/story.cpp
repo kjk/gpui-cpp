@@ -1,5 +1,5 @@
 #include "Story.h"
-#include "gpui/Assets.h"
+#include "gpui.h"
 
 #include <stdarg.h>
 #include <stdio.h>

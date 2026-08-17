@@ -356,8 +356,14 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   mkdirSync(absOut, { recursive: true });
   const headerPath = join(absOut, "gpui.h");
   const sourcePath = join(absOut, "gpui.cpp");
-  writeFileSync(headerPath, headerText, "utf8");
-  writeFileSync(sourcePath, sourceText, "utf8");
+  const writeIfChanged = (path: string, text: string) => {
+    if (existsSync(path) && readFileSync(path, "utf8") === text) {
+      return;
+    }
+    writeFileSync(path, text, "utf8");
+  };
+  writeIfChanged(headerPath, headerText);
+  writeIfChanged(sourcePath, sourceText);
 
   return {
     outDir,

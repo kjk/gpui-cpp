@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Collapsible.h"
+#include "gpui.h"
 
 enum {
     ClickCollapsible = 290

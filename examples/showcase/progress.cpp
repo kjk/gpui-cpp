@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Progress.h"
+#include "gpui.h"
 
 El* ShowcaseProgress(ShowcaseApp* app, Arena* a) {
     (void)app;

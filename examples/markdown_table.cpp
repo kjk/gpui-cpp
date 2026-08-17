@@ -1,5 +1,4 @@
-#include "gpui/Assets.h"
-#include "gpui/Gpui.h"
+#include "gpui.h"
 
 enum TableMode : int {
     ModeWrap = 0,

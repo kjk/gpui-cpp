@@ -1,6 +1,4 @@
-#include "gpui/Gpui.h"
-#include "gpui/Assets.h"
-#include "gpui/Svg.h"
+#include "gpui.h"
 
 // Port of examples/app_assets: load IconName SVGs from an assets folder
 // (rust-embed + AssetSource) and show Inbox + Bot centered in a light window.

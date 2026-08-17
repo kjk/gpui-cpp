@@ -1,7 +1,6 @@
-#include "gpui/Gpui.h"
-#include "gpui/Assets.h"
+#include "gpui.h"
 
-enum Collapsible : int {
+enum CollapseMode : int {
     CollIcon = 0,
     CollOffcanvas = 1,
     CollNone = 2

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "gpui/Gpui.h"
+#include "gpui.h"
 
 enum {
     CompOverview = -1,

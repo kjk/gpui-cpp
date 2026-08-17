@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/AlertDialog.h"
-#include "ui/Button.h"
+#include "gpui.h"
 
 enum {
     ClickAlertOpen = 210,

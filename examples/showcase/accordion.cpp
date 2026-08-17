@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Accordion.h"
+#include "gpui.h"
 
 enum {
     ClickAcc0 = 200,

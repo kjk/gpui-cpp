@@ -1,7 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/Dialog.h"
-#include "ui/Input.h"
+#include "gpui.h"
 
 enum {
     ClickDlgOpen = 350,

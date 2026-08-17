@@ -1,5 +1,5 @@
 #include "Showcase.h"
-#include "ui/Input.h"
+#include "gpui.h"
 
 enum {
     ClickEditor = 360

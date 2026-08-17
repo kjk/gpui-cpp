@@ -1,6 +1,5 @@
 #include "Showcase.h"
-#include "ui/Popup.h"
-#include "ui/Select.h"
+#include "gpui.h"
 
 enum {
     ClickSelect = 480,

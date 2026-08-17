@@ -1,5 +1,6 @@
 // Build then launch a gpui2 example as a detached Windows process (does not wait).
-// Same flags as build.ts, plus -windbg / -compare.
+// Same flags as build.ts (always amalgamates .work/gpui.h + .work/gpui.cpp),
+// plus -windbg / -compare.
 //   bun cmd/run.ts                         # print example list
 //   bun cmd/run.ts app_assets
 //   bun cmd/run.ts -dbg hello_world

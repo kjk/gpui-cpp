@@ -1,7 +1,5 @@
 #include "Showcase.h"
-#include "ui/Button.h"
-#include "ui/DatePicker.h"
-#include "ui/Popup.h"
+#include "gpui.h"
 
 enum {
     ClickDate = 340
