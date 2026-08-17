@@ -47,7 +47,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 ## Hard rules
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
-2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `u8`/`i32`/`u32`/`i64`/`u64`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
+2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
 3. **Windows + MSVC.** `cl.exe` is on PATH. Build with `bun cmd/build.ts`. Static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Do not add CMake, vcpkg, or extra third-party C++ libraries.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
@@ -150,7 +150,7 @@ struct MetricPoint {
     float memory = 0;
 };
 
-void FormatBytes(u64 bytes, StrBuilder& out);
+void FormatBytes(uint64_t bytes, StrBuilder& out);
 ```
 
 - Include `"Base.h"` first. It pulls Windows headers, `Str`, `Vec`, `Arena`, `Geom`.
@@ -158,7 +158,7 @@ void FormatBytes(u64 bytes, StrBuilder& out);
 - Own a heap `Str` only if it must survive a frame: `StrDup` / `StrFree`.
 - `Vec<T>` for arrays of POD. Not for `Str` graphs — use `Vec<ProcessInfo>` where `ProcessInfo` holds a `char name[kMax]` or an arena `Str`.
 - `logf("...")` for debug prints.
-- Prefer `i32` indexes. `int` is fine when matching existing base APIs (`Vec::len` is `int`).
+- Prefer `int32_t` indexes. `int` is fine when matching existing base APIs (`Vec::len` is `int`).
 - COM interfaces: pair every successful `Create` with `Release`. No `CComPtr`.
 
 ## Build

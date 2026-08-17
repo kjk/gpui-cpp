@@ -50,7 +50,7 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     return col;
 }
 
-static void OnChar(AppHost* host, u32 cp) {
+static void OnChar(AppHost* host, uint32_t cp) {
     (void)cp;
     auto* app = (InputApp*)host->user;
     if (app->in.len > 0) {

@@ -5,7 +5,7 @@ using namespace gpui;
 #include <math.h>
 
 static const float kHilbertSize = 200.f;
-static const u32 kHilbertIter = 1;
+static const uint32_t kHilbertIter = 1;
 static const int kSubdiv = 6;
 static const float kHilbertExtent = kHilbertSize / 2.f * 1.5f;
 static const float kCellFill = 0.68f;
@@ -43,7 +43,7 @@ static V3 Lerp(V3 a, V3 b, float t) {
               a.z + (b.z - a.z) * t};
 }
 
-static void Hilbert(V3 center, float size, u32 iter, int v[8], V3* out,
+static void Hilbert(V3 center, float size, uint32_t iter, int v[8], V3* out,
                     int* n) {
     float half = size / 2.f;
     V3 corners[8] = {
@@ -153,7 +153,8 @@ static Rgba Hsla(float h, float s, float l) {
         b = x;
     }
     float m = l - c * 0.5f;
-    return Rgb((u8)((r + m) * 255), (u8)((g + m) * 255), (u8)((b + m) * 255));
+    return Rgb((uint8_t)((r + m) * 255), (uint8_t)((g + m) * 255),
+               (uint8_t)((b + m) * 255));
 }
 
 static void BuildGeom(FpsApp* app) {

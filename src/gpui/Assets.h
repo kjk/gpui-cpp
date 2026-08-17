@@ -9,7 +9,7 @@ void AssetsClear();
 void AssetsAddRoot(Str dir);
 // Walk cwd and the exe directory looking for assets/<exampleName>.
 void AssetsAddDefaultRoots(Str exampleName);
-bool AssetsLoad(Str relPath, Vec<u8>* out);
+bool AssetsLoad(Str relPath, Vec<uint8_t>* out);
 TempStr AssetsLoadTextTemp(Str relPath);
 bool AssetsExists(Str relPath);
 } // namespace gpui

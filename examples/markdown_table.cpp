@@ -22,7 +22,7 @@ static void OnInit(AppHost* host) {
     auto* app = (MdApp*)host->user;
     app->mode = ModeAdaptive;
     app->source[0] = 0;
-    Vec<u8> buf;
+    Vec<uint8_t> buf;
     if (AssetsLoad(StrL("report.md"), &buf) && buf.len > 0) {
         int n = buf.len < 15999 ? buf.len : 15999;
         memcpy(app->source, buf.els, (size_t)n);

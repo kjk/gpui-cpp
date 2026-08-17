@@ -26,7 +26,7 @@ static_assert(sizeof(Arena) <= kArenaHeaderSize,
 
 // ─── Arena.cpp ───────────────────────────────────────────────────────────────
 
-using ArenaFlags = u64;
+using ArenaFlags = uint64_t;
 enum : ArenaFlags {
     ArenaFlagNoChain = 1ull << 0,
     ArenaFlagLargePages = 1ull << 1,
@@ -34,54 +34,55 @@ enum : ArenaFlags {
 
 struct ArenaParams {
     ArenaFlags flags = 0;
-    u64 reserveSize = 0;
-    u64 commitSize = 0;
+    uint64_t reserveSize = 0;
+    uint64_t commitSize = 0;
     void* optionalBackingBuffer = nullptr;
     const char* allocationSiteFile = nullptr;
     int allocationSiteLine = 0;
     const char* name = nullptr;
 };
 
-static u64 gArenaDefaultReserveSize = 64ull * 1024ull * 1024ull;
-static u64 gArenaDefaultCommitSize = 64ull * 1024ull;
+static uint64_t gArenaDefaultReserveSize = 64ull * 1024ull * 1024ull;
+static uint64_t gArenaDefaultCommitSize = 64ull * 1024ull;
 static ArenaFlags gArenaDefaultFlags = 0;
 
-static u64 ArenaAlignPow2(u64 value, u64 align) {
+static uint64_t ArenaAlignPow2(uint64_t value, uint64_t align) {
     if (align <= 1) {
         return value;
     }
     return (value + align - 1) & ~(align - 1);
 }
 
-static u64 ArenaMin(u64 a, u64 b) {
+static uint64_t ArenaMin(uint64_t a, uint64_t b) {
     return (a < b) ? a : b;
 }
 
-static u64 ArenaMax(u64 a, u64 b) {
+static uint64_t ArenaMax(uint64_t a, uint64_t b) {
     return (a > b) ? a : b;
 }
 
-static u64 ArenaClampTop(u64 value, u64 maxValue) {
+static uint64_t ArenaClampTop(uint64_t value, uint64_t maxValue) {
     return (value < maxValue) ? value : maxValue;
 }
 
-static u64 ArenaClampBot(u64 minValue, u64 value) {
+static uint64_t ArenaClampBot(uint64_t minValue, uint64_t value) {
     return (value > minValue) ? value : minValue;
 }
 
-static u64 ArenaPageSize();
-static u64 ArenaLargePageSize();
-static bool ArenaCommit(void* base, u64 size, bool largePages);
-static void* ArenaReserve(u64 size);
-static void* ArenaReserveAndCommit(u64 size, bool largePages);
-static void ArenaReleaseMemory(void* base, u64 size);
+static uint64_t ArenaPageSize();
+static uint64_t ArenaLargePageSize();
+static bool ArenaCommit(void* base, uint64_t size, bool largePages);
+static void* ArenaReserve(uint64_t size);
+static void* ArenaReserveAndCommit(uint64_t size, bool largePages);
+static void ArenaReleaseMemory(void* base, uint64_t size);
 static Arena* ArenaAlloc(const ArenaParams& params);
 
 static void ArenaRelease(Arena* arena) {
     ArenaReleaseMemory(arena, arena->reserved);
 }
 
-static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
+static void* ArenaPushLocked(Arena* arena, uint64_t size, uint64_t align,
+                             bool zero) {
     if (!arena) {
         return nullptr;
     }
@@ -90,17 +91,17 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
     }
 
     Arena* current = arena->current;
-    u64 posPre = ArenaAlignPow2(current->pos, align);
-    u64 posPost = posPre + size;
+    uint64_t posPre = ArenaAlignPow2(current->pos, align);
+    uint64_t posPost = posPre + size;
 
-    u64 sizeToZero = 0;
+    uint64_t sizeToZero = 0;
     if (zero && current->committed > posPre) {
         sizeToZero = ArenaMin(current->committed, posPost) - posPre;
     }
 
     if (current->reserved < posPost && !(arena->flags & ArenaFlagNoChain)) {
-        u64 reserveChunkSize = current->reserveChunkSize;
-        u64 commitChunkSize = current->commitChunkSize;
+        uint64_t reserveChunkSize = current->reserveChunkSize;
+        uint64_t commitChunkSize = current->commitChunkSize;
         if (size + kArenaHeaderSize > reserveChunkSize) {
             reserveChunkSize = ArenaAlignPow2(size + kArenaHeaderSize,
                                               ArenaMax(align, ArenaPageSize()));
@@ -134,9 +135,9 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
             return nullptr;
         }
 
-        u64 commitEnd = ArenaAlignPow2(posPost, current->commitChunkSize);
-        u64 commitClamped = ArenaClampTop(commitEnd, current->reserved);
-        u64 commitSize = commitClamped - current->committed;
+        uint64_t commitEnd = ArenaAlignPow2(posPost, current->commitChunkSize);
+        uint64_t commitClamped = ArenaClampTop(commitEnd, current->reserved);
+        uint64_t commitSize = commitClamped - current->committed;
         void* commitPtr = (char*)current + current->committed;
         if (!ArenaCommit(commitPtr, commitSize, false)) {
             return nullptr;
@@ -155,7 +156,7 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
     // chained blocks). peak is the high-water mark of total bytes used.
     arena->nAllocsLifetime++;
     arena->nAllocsSinceReset++;
-    u64 used = current->basePos + posPost;
+    uint64_t used = current->basePos + posPost;
     arena->peakBytesLifetime = std::max(used, arena->peakBytesLifetime);
     arena->peakBytesSinceReset = std::max(used, arena->peakBytesSinceReset);
 
@@ -187,10 +188,11 @@ static Arena* ArenaAlloc(const ArenaParams& srcParams) {
     }
 
     bool useLargePages = (params.flags & ArenaFlagLargePages) != 0;
-    const u64 pageSize = useLargePages ? ArenaLargePageSize() : ArenaPageSize();
-    u64 reserveSize = ArenaAlignPow2(
+    const uint64_t pageSize =
+        useLargePages ? ArenaLargePageSize() : ArenaPageSize();
+    uint64_t reserveSize = ArenaAlignPow2(
         ArenaMax(params.reserveSize, kArenaHeaderSize), pageSize);
-    u64 commitSize =
+    uint64_t commitSize =
         ArenaAlignPow2(ArenaMax(params.commitSize, kArenaHeaderSize), pageSize);
     commitSize = ArenaClampTop(commitSize, reserveSize);
 
@@ -226,7 +228,7 @@ static Arena* ArenaAlloc(const ArenaParams& srcParams) {
         return nullptr;
     }
 
-    memset(base, 0, (size_t)std::min<u64>(commitSize, kArenaHeaderSize));
+    memset(base, 0, (size_t)std::min<uint64_t>(commitSize, kArenaHeaderSize));
     Arena* arena = (Arena*)base;
     arena->prev = nullptr;
     arena->current = arena;
@@ -263,7 +265,7 @@ void ArenaDelete(Arena* arena) {
     }
 }
 
-void* Arena::Push(u64 size, u64 align, bool zero) {
+void* Arena::Push(uint64_t size, uint64_t align, bool zero) {
     if (!this) {
         return nullptr;
     }
@@ -273,7 +275,7 @@ void* Arena::Push(u64 size, u64 align, bool zero) {
     return mem;
 }
 
-void Arena::PopTo(u64 pos) {
+void Arena::PopTo(uint64_t pos) {
     Arena* arena = this;
     if (!arena) {
         return;
@@ -281,7 +283,7 @@ void Arena::PopTo(u64 pos) {
 
     lock.Lock();
 
-    u64 bigPos = ArenaClampBot(kArenaHeaderSize, pos);
+    uint64_t bigPos = ArenaClampBot(kArenaHeaderSize, pos);
     Arena* current = arena->current;
     while (current && current->basePos >= bigPos) {
         Arena* prev = current->prev;
@@ -299,7 +301,7 @@ void Arena::PopTo(u64 pos) {
     }
 
     arena->current = current;
-    u64 newPos = bigPos - current->basePos;
+    uint64_t newPos = bigPos - current->basePos;
     current->pos = newPos;
     lock.Unlock();
 }
@@ -308,7 +310,7 @@ void* Arena::Alloc(int size) {
     if (size <= 0) {
         return nullptr;
     }
-    return Push((u64)size, 8, false);
+    return Push((uint64_t)size, 8, false);
 }
 
 void Arena::Reset() {
@@ -344,7 +346,7 @@ static void* Alloc(Arena* arena, size_t size) {
     if (!arena) {
         return malloc(size);
     }
-    return arena->Push((u64)size, 8, false);
+    return arena->Push((uint64_t)size, 8, false);
 }
 
 static void* Realloc(Arena* arena, void* mem, size_t newSize, size_t copySize) {
@@ -356,7 +358,7 @@ static void* Realloc(Arena* arena, void* mem, size_t newSize, size_t copySize) {
     if (newSize == 0) {
         return nullptr;
     }
-    void* newMem = arena->Push((u64)newSize, 8, false);
+    void* newMem = arena->Push((uint64_t)newSize, 8, false);
     if (newMem && mem && copySize > 0) {
         // Arena bump allocations can end up adjacent to (and overlapping) the
         // old block; memmove handles that. copySize is the caller's used bytes.
@@ -412,7 +414,7 @@ Str AllocStrTemp(int size) {
         return {};
     }
     Arena* arena = GetTempArena();
-    char* res = (char*)arena->Push((u64)size + 1, 1, false);
+    char* res = (char*)arena->Push((uint64_t)size + 1, 1, false);
     res[size] = 0;
     return Str(res, size);
 }
@@ -458,8 +460,8 @@ __declspec(noinline) bool VecRealloc(Arena* a, void** els, int len, int* cap,
 // ─── Arena_win.cpp
 // ───────────────────────────────────────────────────────────────
 
-static u64 ArenaPageSize() {
-    static u64 pageSize = 0;
+static uint64_t ArenaPageSize() {
+    static uint64_t pageSize = 0;
     if (pageSize == 0) {
         SYSTEM_INFO info = {};
         GetSystemInfo(&info);
@@ -468,16 +470,16 @@ static u64 ArenaPageSize() {
     return pageSize;
 }
 
-static u64 ArenaLargePageSize() {
-    static u64 largePageSize = 0;
+static uint64_t ArenaLargePageSize() {
+    static uint64_t largePageSize = 0;
     if (largePageSize == 0) {
         SIZE_T size = GetLargePageMinimum();
-        largePageSize = size ? (u64)size : ArenaPageSize();
+        largePageSize = size ? (uint64_t)size : ArenaPageSize();
     }
     return largePageSize;
 }
 
-static bool ArenaCommit(void* base, u64 size, bool largePages) {
+static bool ArenaCommit(void* base, uint64_t size, bool largePages) {
     if (size == 0) {
         return true;
     }
@@ -488,11 +490,11 @@ static bool ArenaCommit(void* base, u64 size, bool largePages) {
     return VirtualAlloc(base, (SIZE_T)size, flags, PAGE_READWRITE) != nullptr;
 }
 
-static void* ArenaReserve(u64 size) {
+static void* ArenaReserve(uint64_t size) {
     return VirtualAlloc(nullptr, (SIZE_T)size, MEM_RESERVE, PAGE_READWRITE);
 }
 
-static void* ArenaReserveAndCommit(u64 size, bool largePages) {
+static void* ArenaReserveAndCommit(uint64_t size, bool largePages) {
     DWORD flags = MEM_RESERVE | MEM_COMMIT;
     if (largePages) {
         flags |= MEM_LARGE_PAGES;
@@ -500,7 +502,7 @@ static void* ArenaReserveAndCommit(u64 size, bool largePages) {
     return VirtualAlloc(nullptr, (SIZE_T)size, flags, PAGE_READWRITE);
 }
 
-static void ArenaReleaseMemory(void* base, u64 size) {
+static void ArenaReleaseMemory(void* base, uint64_t size) {
     (void)size;
     VirtualFree(base, 0, MEM_RELEASE);
 }
@@ -1123,12 +1125,12 @@ static void evalDefault(Fmt& fmt, const FmtArg& arg) {
 
 // extract an integer value from any integer-like arg (char / int / pointer) so
 // %d/%x/%c/%p work with any of them, like printf.
-static i64 argToI64(const FmtArg& arg) {
+static int64_t argToI64(const FmtArg& arg) {
     switch (arg.t) {
         case FmtArg::Kind::Char:
-            return (i64)arg.c;
+            return (int64_t)arg.c;
         case FmtArg::Kind::Ptr:
-            return (i64)(intptr_t)arg.ptr;
+            return (int64_t)(intptr_t)arg.ptr;
         default:
             return arg.i;
     }
@@ -1172,7 +1174,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
         fbuf[k++] = fmt.format.s[inst.fwpOff + j];
     }
     char conv = inst.conv;
-    i64 ival = argToI64(arg);
+    int64_t ival = argToI64(arg);
     switch (conv) {
         case 'd':
         case 'i':

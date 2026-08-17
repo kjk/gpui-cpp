@@ -6,7 +6,7 @@ namespace gpui {
 
 namespace component {
 
-enum class SeparatorStyle : u8 {
+enum class SeparatorStyle : uint8_t {
     Solid,
     Dashed
 };

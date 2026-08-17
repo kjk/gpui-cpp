@@ -124,7 +124,7 @@ void AssetsAddDefaultRoots(Str exampleName) {
     }
 }
 
-static bool ReadFileAll(const char* path, Vec<u8>* out) {
+static bool ReadFileAll(const char* path, Vec<uint8_t>* out) {
     HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
@@ -139,7 +139,7 @@ static bool ReadFileAll(const char* path, Vec<u8>* out) {
     int n = (int)sz.QuadPart;
     out->Reset();
     if (n > 0) {
-        u8* buf = out->AppendBlanks(n);
+        uint8_t* buf = out->AppendBlanks(n);
         if (!buf) {
             CloseHandle(h);
             return false;
@@ -157,7 +157,7 @@ static bool ReadFileAll(const char* path, Vec<u8>* out) {
     return true;
 }
 
-bool AssetsLoad(Str relPath, Vec<u8>* out) {
+bool AssetsLoad(Str relPath, Vec<uint8_t>* out) {
     if (!relPath.s || relPath.len <= 0 || !out) {
         return false;
     }
@@ -178,7 +178,7 @@ bool AssetsLoad(Str relPath, Vec<u8>* out) {
 }
 
 TempStr AssetsLoadTextTemp(Str relPath) {
-    Vec<u8> buf;
+    Vec<uint8_t> buf;
     if (!AssetsLoad(relPath, &buf) || buf.len <= 0) {
         return {};
     }
@@ -192,7 +192,7 @@ TempStr AssetsLoadTextTemp(Str relPath) {
 }
 
 bool AssetsExists(Str relPath) {
-    Vec<u8> buf;
+    Vec<uint8_t> buf;
     return AssetsLoad(relPath, &buf);
 }
 } // namespace gpui

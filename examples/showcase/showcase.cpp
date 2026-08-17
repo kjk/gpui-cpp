@@ -280,7 +280,7 @@ void ShowcaseClick(ShowcaseApp* app, AppHost* host, int id) {
     ShowcaseClickRegistered(app, id);
 }
 
-static void InsertBuf(char* buf, int* len, int cap, u32 cp) {
+static void InsertBuf(char* buf, int* len, int cap, uint32_t cp) {
     if (cp != '\n' && (cp < 32 || cp > 126)) {
         return;
     }
@@ -291,7 +291,7 @@ static void InsertBuf(char* buf, int* len, int cap, u32 cp) {
     buf[*len] = 0;
 }
 
-static void InsertAt(char* buf, int* len, int cap, int* cur, u32 cp) {
+static void InsertAt(char* buf, int* len, int cap, int* cur, uint32_t cp) {
     if (cp != '\n' && (cp < 32 || cp > 126)) {
         return;
     }
@@ -351,7 +351,7 @@ static void ParseHexIn(ShowcaseApp* app) {
     }
 }
 
-void ShowcaseChar(ShowcaseApp* app, AppHost* host, u32 cp) {
+void ShowcaseChar(ShowcaseApp* app, AppHost* host, uint32_t cp) {
     (void)host;
     if (app->component == CompOtpInput && app->otpOn) {
         if (cp >= '0' && cp <= '9' && app->otpLen < 6) {
@@ -634,7 +634,7 @@ static void OnClick(AppHost* host, int id) {
     ShowcaseClick((ShowcaseApp*)host->user, host, id);
 }
 
-static void OnChar(AppHost* host, u32 cp) {
+static void OnChar(AppHost* host, uint32_t cp) {
     ShowcaseChar((ShowcaseApp*)host->user, host, cp);
 }
 

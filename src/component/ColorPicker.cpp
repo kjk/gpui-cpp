@@ -5,8 +5,8 @@ namespace gpui {
 namespace component {
 
 struct ColBind {
-    Func1<u32> fn;
-    u32 hex = 0;
+    Func1<uint32_t> fn;
+    uint32_t hex = 0;
 };
 static void FireCol(ColBind* b) {
     b->fn.Call(b->hex);
@@ -17,7 +17,7 @@ ColorPicker* ColorPicker::New(Arena* a) {
     c->a = a;
     return c;
 }
-ColorPicker* ColorPicker::Hex(u32 h) {
+ColorPicker* ColorPicker::Hex(uint32_t h) {
     hex = h;
     return this;
 }
@@ -25,7 +25,7 @@ ColorPicker* ColorPicker::Open(bool v) {
     open = v;
     return this;
 }
-ColorPicker* ColorPicker::OnChange(Func1<u32> fn) {
+ColorPicker* ColorPicker::OnChange(Func1<uint32_t> fn) {
     onChange = fn;
     return this;
 }
@@ -36,8 +36,8 @@ ColorPicker* ColorPicker::OnToggle(Func0 fn) {
 
 El* ColorPicker::IntoEl() {
     const Theme& th = ThemeNow();
-    Rgba c = Rgb((u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff),
-                 (u8)(hex & 0xff));
+    Rgba c = Rgb((uint8_t)((hex >> 16) & 0xff), (uint8_t)((hex >> 8) & 0xff),
+                 (uint8_t)(hex & 0xff));
     El* trigger =
         Div(a)
             ->H(28)
@@ -52,8 +52,8 @@ El* ColorPicker::IntoEl() {
     BindClick(trigger, StrL("color-trigger"), onToggle);
     El* pop = nullptr;
     if (open) {
-        static const u32 sw[] = {0xdc2626, 0xd97706, 0x16a34a, 0x2563eb,
-                                 0x7c3aed};
+        static const uint32_t sw[] = {0xdc2626, 0xd97706, 0x16a34a, 0x2563eb,
+                                      0x7c3aed};
         pop = Div(a)
                   ->FlexRow()
                   ->Gap(4)
@@ -61,8 +61,9 @@ El* ColorPicker::IntoEl() {
                   ->Border(1, th.foreground)
                   ->Bg(th.background);
         for (int i = 0; i < 5; i++) {
-            Rgba sc = Rgb((u8)((sw[i] >> 16) & 0xff), (u8)((sw[i] >> 8) & 0xff),
-                          (u8)(sw[i] & 0xff));
+            Rgba sc =
+                Rgb((uint8_t)((sw[i] >> 16) & 0xff),
+                    (uint8_t)((sw[i] >> 8) & 0xff), (uint8_t)(sw[i] & 0xff));
             El* cell = ColorSwatch::New(a, StrDup(a, fmt("sw%d", i)))
                            ->W(24)
                            ->H(24)

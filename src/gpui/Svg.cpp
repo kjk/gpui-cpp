@@ -9,7 +9,7 @@ static const float kPi = 3.14159265f;
 static const int kMaxOps = 128;
 static const int kMaxCache = 24;
 
-enum SvgCmd : u8 {
+enum SvgCmd : uint8_t {
     kMove = 0,
     kLine = 1,
     kCubic = 2,
@@ -17,7 +17,7 @@ enum SvgCmd : u8 {
 };
 
 struct SvgOp {
-    u8 cmd = kMove;
+    uint8_t cmd = kMove;
     float x = 0, y = 0;
     float x1 = 0, y1 = 0;
     float x2 = 0, y2 = 0;

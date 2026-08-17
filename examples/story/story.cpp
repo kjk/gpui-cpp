@@ -604,7 +604,7 @@ static void OnClick(AppHost* host, int id) {
     StoryClickRegistered(app, id);
 }
 
-static void OnChar(AppHost* host, u32 cp) {
+static void OnChar(AppHost* host, uint32_t cp) {
     auto* app = (StoryApp*)host->user;
     if (app->search.focused) {
         (void)cp;

@@ -196,7 +196,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         }
         case WM_CHAR: {
             if (host->hooks.onChar && wParam >= 32) {
-                host->hooks.onChar(host, (u32)wParam);
+                host->hooks.onChar(host, (uint32_t)wParam);
             }
             if (host->input && host->input->focused) {
                 LineInput* in = host->input;

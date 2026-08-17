@@ -128,7 +128,7 @@ struct StoryApp {
     bool dateOpen = false;
     bool colorOpen = false;
     bool comboOpen = false;
-    u32 colorHex = 0x2563eb;
+    uint32_t colorHex = 0x2563eb;
     bool collapsibleOpen = false;
     int hoverId = 0;
     int selA = -1;

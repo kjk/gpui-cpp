@@ -4,21 +4,21 @@
 namespace gpui {
 
 struct ProcessInfo {
-    u32 pid = 0;
+    uint32_t pid = 0;
     char name[260] = {};
     float cpu = 0;
-    u64 memory = 0;
+    uint64_t memory = 0;
 };
 
 struct ProcSample {
-    u32 pid = 0;
-    u64 cpu100ns = 0;
+    uint32_t pid = 0;
+    uint64_t cpu100ns = 0;
 };
 
 struct DiskInfo {
     float usedPct = 0;
-    u64 total = 0;
-    u64 used = 0;
+    uint64_t total = 0;
+    uint64_t used = 0;
 };
 
 struct BatteryInfo {
@@ -28,9 +28,9 @@ struct BatteryInfo {
 };
 
 struct SysTimes {
-    u64 idle = 0;
-    u64 kernel = 0;
-    u64 user = 0;
+    uint64_t idle = 0;
+    uint64_t kernel = 0;
+    uint64_t user = 0;
     bool valid = false;
 };
 
@@ -39,8 +39,8 @@ struct SysState {
     Vec<ProcSample> prevProcs;
     float cpu;
     float mem;
-    u64 memTotal;
-    u64 memUsed;
+    uint64_t memTotal;
+    uint64_t memUsed;
     DiskInfo disk;
     BatteryInfo battery;
     Vec<ProcessInfo> procs;
@@ -57,7 +57,7 @@ void SysStateInit(SysState* s);
 void SysStateFree(SysState* s);
 void SysRefresh(SysState* s);
 
-enum class ProcessSort : i32 {
+enum class ProcessSort : int32_t {
     Pid = 0,
     Name = 1,
     Cpu = 2,
@@ -66,6 +66,6 @@ enum class ProcessSort : i32 {
 void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
                       int keepTop);
 
-TempStr FormatBytes(u64 bytes);
+TempStr FormatBytes(uint64_t bytes);
 TempStr FormatPct(float v, int decimals);
 } // namespace gpui

@@ -6,7 +6,7 @@ namespace gpui {
 
 namespace component {
 
-enum class BadgeKind : u8 {
+enum class BadgeKind : uint8_t {
     Number,
     Dot,
     Icon

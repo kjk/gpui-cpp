@@ -8,15 +8,15 @@ namespace component {
 
 struct ColorPicker {
     Arena* a = nullptr;
-    u32 hex = 0x2563eb;
+    uint32_t hex = 0x2563eb;
     bool open = false;
-    Func1<u32> onChange;
+    Func1<uint32_t> onChange;
     Func0 onToggle;
 
     static ColorPicker* New(Arena* a);
-    ColorPicker* Hex(u32 h);
+    ColorPicker* Hex(uint32_t h);
     ColorPicker* Open(bool v);
-    ColorPicker* OnChange(Func1<u32> fn);
+    ColorPicker* OnChange(Func1<uint32_t> fn);
     ColorPicker* OnToggle(Func0 fn);
     El* IntoEl();
 };

@@ -6,7 +6,7 @@ namespace gpui {
 
 namespace component {
 
-enum class AlertVariant : u8 {
+enum class AlertVariant : uint8_t {
     Default,
     Info,
     Success,

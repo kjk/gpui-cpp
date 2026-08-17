@@ -7,26 +7,26 @@
 namespace gpui {
 
 struct Rgba {
-    u8 r = 0;
-    u8 g = 0;
-    u8 b = 0;
-    u8 a = 255;
+    uint8_t r = 0;
+    uint8_t g = 0;
+    uint8_t b = 0;
+    uint8_t a = 255;
 };
 
-inline Rgba Rgb(u8 r, u8 g, u8 b) {
+inline Rgba Rgb(uint8_t r, uint8_t g, uint8_t b) {
     return Rgba{r, g, b, 255};
 }
-inline Rgba Rgba8(u8 r, u8 g, u8 b, u8 a) {
+inline Rgba Rgba8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return Rgba{r, g, b, a};
 }
-inline Rgba RgbaHex(u32 hex) {
+inline Rgba RgbaHex(uint32_t hex) {
     // 0xRRGGBB or 0xAARRGGBB if top byte set
     if (hex > 0xFFFFFFu) {
-        return Rgba{(u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff),
-                    (u8)(hex & 0xff), (u8)((hex >> 24) & 0xff)};
+        return Rgba{(uint8_t)((hex >> 16) & 0xff), (uint8_t)((hex >> 8) & 0xff),
+                    (uint8_t)(hex & 0xff), (uint8_t)((hex >> 24) & 0xff)};
     }
-    return Rgba{(u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff),
-                (u8)(hex & 0xff), 255};
+    return Rgba{(uint8_t)((hex >> 16) & 0xff), (uint8_t)((hex >> 8) & 0xff),
+                (uint8_t)(hex & 0xff), 255};
 }
 Rgba RgbaOpacity(Rgba c, float a01);
 Rgba RgbaMix(Rgba a, Rgba b, float t);
@@ -83,7 +83,7 @@ struct Theme {
     float radius;
 };
 
-enum class ThemeMode : u8 {
+enum class ThemeMode : uint8_t {
     Light,
     Dark
 };
@@ -96,7 +96,7 @@ ThemeMode ThemeGet();
 
 // ─── style / element ──────────────────────────────────────────────────────
 
-enum class ElKind : u8 {
+enum class ElKind : uint8_t {
     Div,
     Text,
     Chart,
@@ -104,29 +104,29 @@ enum class ElKind : u8 {
     Icon
 };
 
-enum class FlexDir : u8 {
+enum class FlexDir : uint8_t {
     Row,
     Col
 };
-enum class Align : u8 {
+enum class Align : uint8_t {
     Start,
     Center,
     End,
     Stretch
 };
-enum class Justify : u8 {
+enum class Justify : uint8_t {
     Start,
     Center,
     End,
     SpaceBetween
 };
-enum class OverflowY : u8 {
+enum class OverflowY : uint8_t {
     Visible,
     Hidden,
     Scroll
 };
 
-enum class IconName : u8 {
+enum class IconName : uint8_t {
     None = 0,
     Inbox,
     Bot,
@@ -302,7 +302,7 @@ struct El {
     El* Id(Str s);
 };
 
-enum class BtnKind : u8 {
+enum class BtnKind : uint8_t {
     Default,
     Primary,
     Outline
@@ -347,7 +347,7 @@ struct TextMeasCache {
     void* slots = nullptr;
     int cap = 0;
     int used = 0;
-    u32 frame = 0;
+    uint32_t frame = 0;
 };
 
 struct PaintCtx {
@@ -455,7 +455,7 @@ struct AppHooks {
     void (*onClick)(AppHost* host, int clickId);
     void (*onWheel)(AppHost* host, float x, float y, float delta);
     void (*onKey)(AppHost* host, int vk, bool down);
-    void (*onChar)(AppHost* host, u32 cp);
+    void (*onChar)(AppHost* host, uint32_t cp);
     void (*onMouseMove)(AppHost* host, float x, float y);
     void (*onMouseDown)(AppHost* host, float x, float y, int button);
     void (*onMouseUp)(AppHost* host, float x, float y, int button);

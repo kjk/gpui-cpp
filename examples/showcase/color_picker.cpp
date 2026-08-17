@@ -9,14 +9,15 @@ enum {
     ClickSwatch = 302
 };
 
-static const u32 kSwatches[] = {0xdc2626, 0xd97706, 0x16a34a, 0x2563eb,
-                                0x7c3aed};
+static const uint32_t kSwatches[] = {0xdc2626, 0xd97706, 0x16a34a, 0x2563eb,
+                                     0x7c3aed};
 
-static Rgba FromHex(u32 h) {
-    return Rgb((u8)((h >> 16) & 0xff), (u8)((h >> 8) & 0xff), (u8)(h & 0xff));
+static Rgba FromHex(uint32_t h) {
+    return Rgb((uint8_t)((h >> 16) & 0xff), (uint8_t)((h >> 8) & 0xff),
+               (uint8_t)(h & 0xff));
 }
 
-static void WriteHex(ShowcaseApp* app, u32 hex) {
+static void WriteHex(ShowcaseApp* app, uint32_t hex) {
     _snprintf_s(app->hexIn.buf, _TRUNCATE, "#%06X", hex & 0xffffff);
     app->hexIn.len = (int)strlen(app->hexIn.buf);
 }
@@ -25,7 +26,7 @@ static void SetHexBuf(ShowcaseApp* app) {
     WriteHex(app, app->colorHex);
 }
 
-static u32 DisplayedColor(ShowcaseApp* app) {
+static uint32_t DisplayedColor(ShowcaseApp* app) {
     if (app->colorOpen && app->hoverId >= ClickSwatch &&
         app->hoverId < ClickSwatch + 5) {
         return kSwatches[app->hoverId - ClickSwatch] & 0xffffff;
@@ -34,7 +35,7 @@ static u32 DisplayedColor(ShowcaseApp* app) {
 }
 
 El* ShowcaseColorPicker(ShowcaseApp* app, Arena* a) {
-    u32 shown = DisplayedColor(app);
+    uint32_t shown = DisplayedColor(app);
     if (!app->hexIn.focused) {
         WriteHex(app, shown);
     }

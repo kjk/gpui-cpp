@@ -27,12 +27,6 @@
 
 namespace gpui {
 
-using u8 = uint8_t;
-using i32 = int32_t;
-using u32 = uint32_t;
-using i64 = int64_t;
-using u64 = uint64_t;
-
 struct Arena;
 
 struct Str {
@@ -127,32 +121,32 @@ struct Mutex {
     void Unlock() { ReleaseSRWLockExclusive(&lock); }
 };
 
-static const u64 kArenaHeaderSize = 256;
+static const uint64_t kArenaHeaderSize = 256;
 
 struct Arena {
     Arena* prev;
     Arena* current;
-    u64 flags;
-    u64 commitChunkSize;
-    u64 reserveChunkSize;
-    u64 basePos;
-    u64 pos;
-    u64 committed;
-    u64 reserved;
+    uint64_t flags;
+    uint64_t commitChunkSize;
+    uint64_t reserveChunkSize;
+    uint64_t basePos;
+    uint64_t pos;
+    uint64_t committed;
+    uint64_t reserved;
     const char* allocationSiteFile;
     int allocationSiteLine;
     const char* name;
     bool usesExternalBuffer;
     Mutex lock;
-    u64 nAllocsLifetime;
-    u64 peakBytesLifetime;
-    u64 nAllocsSinceReset;
-    u64 peakBytesSinceReset;
+    uint64_t nAllocsLifetime;
+    uint64_t peakBytesLifetime;
+    uint64_t nAllocsSinceReset;
+    uint64_t peakBytesSinceReset;
 
     void* Alloc(int size);
     void Reset();
-    void* Push(u64 size, u64 align = 8, bool zero = true);
-    void PopTo(u64 pos);
+    void* Push(uint64_t size, uint64_t align = 8, bool zero = true);
+    void PopTo(uint64_t pos);
 
     Arena() = delete;
     ~Arena() = delete;
@@ -338,7 +332,7 @@ struct FmtArg {
     union {
         Str str;
         char c;
-        i64 i;
+        int64_t i;
         float f;
         double d;
         const void* ptr;
@@ -346,12 +340,12 @@ struct FmtArg {
 
     FmtArg() : i{0} {}
     explicit FmtArg(char c_) : t{Kind::Char}, c{c_} {}
-    explicit FmtArg(int arg) : t{Kind::Int}, i{(i64)arg} {}
-    explicit FmtArg(unsigned int arg) : t{Kind::Int}, i{(i64)arg} {}
-    explicit FmtArg(long arg) : t{Kind::Int}, i{(i64)arg} {}
-    explicit FmtArg(unsigned long arg) : t{Kind::Int}, i{(i64)arg} {}
-    explicit FmtArg(long long arg) : t{Kind::Int}, i{(i64)arg} {}
-    explicit FmtArg(unsigned long long arg) : t{Kind::Int}, i{(i64)arg} {}
+    explicit FmtArg(int arg) : t{Kind::Int}, i{(int64_t)arg} {}
+    explicit FmtArg(unsigned int arg) : t{Kind::Int}, i{(int64_t)arg} {}
+    explicit FmtArg(long arg) : t{Kind::Int}, i{(int64_t)arg} {}
+    explicit FmtArg(unsigned long arg) : t{Kind::Int}, i{(int64_t)arg} {}
+    explicit FmtArg(long long arg) : t{Kind::Int}, i{(int64_t)arg} {}
+    explicit FmtArg(unsigned long long arg) : t{Kind::Int}, i{(int64_t)arg} {}
     explicit FmtArg(float f_) : t{Kind::Float}, f{f_} {}
     explicit FmtArg(double d_) : t{Kind::Double}, d{d_} {}
     explicit FmtArg(Str arg) : t{Kind::Str}, str{arg} {}

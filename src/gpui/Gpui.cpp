@@ -14,7 +14,7 @@ Rgba RgbaOpacity(Rgba c, float a01) {
     if (a01 > 1) {
         a01 = 1;
     }
-    c.a = (u8)(c.a * a01 + 0.5f);
+    c.a = (uint8_t)(c.a * a01 + 0.5f);
     return c;
 }
 
@@ -26,10 +26,10 @@ Rgba RgbaMix(Rgba a, Rgba b, float t) {
         t = 1;
     }
     Rgba o;
-    o.r = (u8)(a.r * t + b.r * (1 - t) + 0.5f);
-    o.g = (u8)(a.g * t + b.g * (1 - t) + 0.5f);
-    o.b = (u8)(a.b * t + b.b * (1 - t) + 0.5f);
-    o.a = (u8)(a.a * t + b.a * (1 - t) + 0.5f);
+    o.r = (uint8_t)(a.r * t + b.r * (1 - t) + 0.5f);
+    o.g = (uint8_t)(a.g * t + b.g * (1 - t) + 0.5f);
+    o.b = (uint8_t)(a.b * t + b.b * (1 - t) + 0.5f);
+    o.a = (uint8_t)(a.a * t + b.a * (1 - t) + 0.5f);
     return o;
 }
 
@@ -404,10 +404,10 @@ El* El::OnClick(Func0 fn) {
 }
 
 int HashClickId(Str s) {
-    u32 h = 2166136261u;
+    uint32_t h = 2166136261u;
     if (s.s) {
         for (int i = 0; i < s.len; i++) {
-            h ^= (u8)s.s[i];
+            h ^= (uint8_t)s.s[i];
             h *= 16777619u;
         }
     }
@@ -550,16 +550,16 @@ static bool memeq(const void* s1, const void* s2, int n) {
     return 0 == memcmp(s1, s2, (size_t)n);
 }
 
-static u32 MurmurHash2(const void* key, int n) {
+static uint32_t MurmurHash2(const void* key, int n) {
     if (n <= 0) {
         return 0;
     }
-    const u32 m = 0x5bd1e995;
+    const uint32_t m = 0x5bd1e995;
     const int r = 24;
-    u32 h = 5381u ^ (u32)n;
-    const u8* data = (const u8*)key;
+    uint32_t h = 5381u ^ (uint32_t)n;
+    const uint8_t* data = (const uint8_t*)key;
     while (n >= 4) {
-        u32 k = *(u32*)data;
+        uint32_t k = *(uint32_t*)data;
         k *= m;
         k ^= k >> r;
         k *= m;
@@ -583,30 +583,30 @@ static u32 MurmurHash2(const void* key, int n) {
     return h;
 }
 
-static u32 MurmurHash2(Str s) {
+static uint32_t MurmurHash2(Str s) {
     return MurmurHash2(s.s, s.len);
 }
 
 struct TextMeasSlot {
     char* text = nullptr;
     int len = 0;
-    u32 hash = 0;
+    uint32_t hash = 0;
     float fontSize = 0;
     float maxW = 0;
     float w = 0;
     float h = 0;
-    u32 lastUsed = 0;
+    uint32_t lastUsed = 0;
     IDWriteTextLayout* layout = nullptr;
-    u8 wrap = 0;
-    u8 bold = 0;
-    u8 occupied = 0;
+    uint8_t wrap = 0;
+    uint8_t bold = 0;
+    uint8_t occupied = 0;
 };
 
-static u32 TextMeasHash(Str s, float fontSize, float maxW, bool wrap,
-                        bool bold) {
-    u32 h = MurmurHash2(s);
-    u32 fs = 0;
-    u32 mw = 0;
+static uint32_t TextMeasHash(Str s, float fontSize, float maxW, bool wrap,
+                             bool bold) {
+    uint32_t h = MurmurHash2(s);
+    uint32_t fs = 0;
+    uint32_t mw = 0;
     memcpy(&fs, &fontSize, sizeof(fs));
     memcpy(&mw, &maxW, sizeof(mw));
     h ^= fs * 0x9e3779b9u;
@@ -620,7 +620,7 @@ static u32 TextMeasHash(Str s, float fontSize, float maxW, bool wrap,
     return h;
 }
 
-static bool TextMeasKeyEq(const TextMeasSlot* sl, u32 hash, Str s,
+static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
                           float fontSize, float maxW, bool wrap, bool bold) {
     if (!sl->occupied || sl->hash != hash || sl->len != s.len) {
         return false;
@@ -650,10 +650,10 @@ static void TextMeasFreeSlot(TextMeasSlot* sl) {
 
 static TextMeasSlot* TextMeasFind(TextMeasCache* c, Str s, float fontSize,
                                   float maxW, bool wrap, bool bold,
-                                  u32* outHash) {
+                                  uint32_t* outHash) {
     float keyFont = MeasKeyFont(fontSize);
     float keyMaxW = MeasKeyMaxW(maxW, wrap);
-    u32 hash = TextMeasHash(s, keyFont, keyMaxW, wrap, bold);
+    uint32_t hash = TextMeasHash(s, keyFont, keyMaxW, wrap, bold);
     if (outHash) {
         *outHash = hash;
     }
@@ -661,7 +661,7 @@ static TextMeasSlot* TextMeasFind(TextMeasCache* c, Str s, float fontSize,
         return nullptr;
     }
     int mask = c->cap - 1;
-    int i = (int)(hash & (u32)mask);
+    int i = (int)(hash & (uint32_t)mask);
     for (int n = 0; n < c->cap; n++) {
         TextMeasSlot* sl = &((TextMeasSlot*)c->slots)[i];
         if (!sl->occupied) {
@@ -706,7 +706,7 @@ static void TextMeasInsertMove(TextMeasCache* c, TextMeasSlot* src) {
         return;
     }
     int mask = c->cap - 1;
-    int i = (int)(src->hash & (u32)mask);
+    int i = (int)(src->hash & (uint32_t)mask);
     for (int n = 0; n < c->cap; n++) {
         TextMeasSlot* sl = &((TextMeasSlot*)c->slots)[i];
         if (!sl->occupied) {
@@ -729,7 +729,7 @@ static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
     TextMeasCache* c = &ctx->textCache;
     float keyFont = MeasKeyFont(fontSize);
     float keyMaxW = MeasKeyMaxW(maxW, wrap);
-    u32 hash = TextMeasHash(s, keyFont, keyMaxW, wrap, bold);
+    uint32_t hash = TextMeasHash(s, keyFont, keyMaxW, wrap, bold);
     if (c->cap == 0 || (c->used + 1) * 10 > c->cap * 6) {
         TextMeasGrow(c, c->cap > 0 ? c->cap * 2 : 256);
     }
@@ -737,7 +737,7 @@ static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
         return nullptr;
     }
     int mask = c->cap - 1;
-    int i = (int)(hash & (u32)mask);
+    int i = (int)(hash & (uint32_t)mask);
     TextMeasSlot* sl = nullptr;
     for (int n = 0; n < c->cap; n++) {
         TextMeasSlot* cand = &((TextMeasSlot*)c->slots)[i];
@@ -800,7 +800,7 @@ void TextMeasEndFrame(PaintCtx* ctx) {
     if (!c->slots || c->cap <= 0) {
         return;
     }
-    u32 frame = c->frame;
+    uint32_t frame = c->frame;
     TextMeasSlot* old = (TextMeasSlot*)c->slots;
     int oldCap = c->cap;
     int keep = 0;
@@ -1001,9 +1001,9 @@ int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
     if (wpos > wn) {
         wpos = wn;
     }
-    int u8 = WideOffToUtf8(s, wpos);
+    int utf8Off = WideOffToUtf8(s, wpos);
     layout->Release();
-    return u8;
+    return utf8Off;
 }
 
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,

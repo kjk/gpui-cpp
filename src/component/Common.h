@@ -5,7 +5,7 @@
 
 namespace gpui {
 
-enum class UiSize : u8 {
+enum class UiSize : uint8_t {
     XSmall,
     Small,
     Medium,

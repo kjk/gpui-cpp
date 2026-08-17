@@ -88,7 +88,7 @@ struct ShowcaseApp {
     bool checkboxOn = true;
     bool collapsibleOpen = false;
     bool colorOpen = false;
-    u32 colorHex = 0x2563eb;
+    uint32_t colorHex = 0x2563eb;
     bool comboboxOpen = false;
     char comboboxSel[32] = "Select framework";
     LineInput comboQuery = {};
@@ -118,7 +118,7 @@ struct ShowcaseApp {
     int radioSel = 0;
     bool switchOn = true;
     bool toggleOn = true;
-    u8 toggleGroup = 0;
+    uint8_t toggleGroup = 0;
     int tab = 0;
     bool selectOpen = false;
     int selectIx = 0;
@@ -262,7 +262,7 @@ void ShowcaseClickRegistered(ShowcaseApp* app, int id);
     }
 
 void ShowcaseClick(ShowcaseApp* app, AppHost* host, int id);
-void ShowcaseChar(ShowcaseApp* app, AppHost* host, u32 cp);
+void ShowcaseChar(ShowcaseApp* app, AppHost* host, uint32_t cp);
 void ShowcaseKey(ShowcaseApp* app, AppHost* host, int vk, bool down);
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta);
 void ShowcaseMouseMove(ShowcaseApp* app, AppHost* host, float x, float y);

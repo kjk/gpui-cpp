@@ -6,7 +6,7 @@ namespace gpui {
 
 namespace component {
 
-enum class NotificationKind : u8 {
+enum class NotificationKind : uint8_t {
     Info,
     Success,
     Warning,

@@ -6,7 +6,7 @@ namespace gpui {
 
 namespace component {
 
-enum class TagVariant : u8 {
+enum class TagVariant : uint8_t {
     Primary,
     Secondary,
     Danger,

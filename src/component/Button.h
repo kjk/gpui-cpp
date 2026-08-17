@@ -6,7 +6,7 @@ namespace gpui {
 
 namespace component {
 
-enum class ButtonVariant : u8 {
+enum class ButtonVariant : uint8_t {
     Default,
     Primary,
     Secondary,

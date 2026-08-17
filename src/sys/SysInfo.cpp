@@ -5,7 +5,7 @@
 
 namespace gpui {
 
-static u64 FtToU64(FILETIME ft) {
+static uint64_t FtToU64(FILETIME ft) {
     ULARGE_INTEGER u;
     u.LowPart = ft.dwLowDateTime;
     u.HighPart = ft.dwHighDateTime;
@@ -50,8 +50,8 @@ static void RefreshCpu(SysState* s) {
     cur.user = FtToU64(user);
     cur.valid = true;
     if (s->prevCpu.valid) {
-        u64 idleD = cur.idle - s->prevCpu.idle;
-        u64 totalD =
+        uint64_t idleD = cur.idle - s->prevCpu.idle;
+        uint64_t totalD =
             (cur.kernel - s->prevCpu.kernel) + (cur.user - s->prevCpu.user);
         // kernel includes idle
         if (totalD > 0) {
@@ -110,7 +110,7 @@ static void RefreshBattery(SysState* s) {
     s->battery.pct = (float)ps.BatteryLifePercent;
 }
 
-static u64 FindPrevCpu(const Vec<ProcSample>& prev, u32 pid) {
+static uint64_t FindPrevCpu(const Vec<ProcSample>& prev, uint32_t pid) {
     for (int i = 0; i < prev.len; i++) {
         if (prev[i].pid == pid) {
             return prev[i].cpu100ns;
@@ -130,9 +130,9 @@ static void RefreshProcesses(SysState* s) {
     PROCESSENTRY32W pe = {sizeof(pe)};
     FILETIME nowFt;
     GetSystemTimeAsFileTime(&nowFt);
-    static u64 sPrevWall = 0;
-    u64 now = FtToU64(nowFt);
-    u64 wallDelta = (sPrevWall && now > sPrevWall) ? (now - sPrevWall) : 0;
+    static uint64_t sPrevWall = 0;
+    uint64_t now = FtToU64(nowFt);
+    uint64_t wallDelta = (sPrevWall && now > sPrevWall) ? (now - sPrevWall) : 0;
     sPrevWall = now;
 
     if (Process32FirstW(snap, &pe)) {
@@ -163,10 +163,10 @@ static void RefreshProcesses(SysState* s) {
                 }
                 FILETIME c, e, k, u;
                 if (GetProcessTimes(h, &c, &e, &k, &u)) {
-                    u64 cpu = FtToU64(k) + FtToU64(u);
-                    u64 prev = FindPrevCpu(s->prevProcs, pi.pid);
+                    uint64_t cpu = FtToU64(k) + FtToU64(u);
+                    uint64_t prev = FindPrevCpu(s->prevProcs, pi.pid);
                     if (prev && wallDelta > 0) {
-                        u64 d = cpu >= prev ? cpu - prev : 0;
+                        uint64_t d = cpu >= prev ? cpu - prev : 0;
                         pi.cpu = (float)((double)d * 100.0 /
                                          ((double)wallDelta * (double)s->ncpu));
                     }
@@ -245,10 +245,10 @@ void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
     }
 }
 
-TempStr FormatBytes(u64 bytes) {
-    const u64 KB = 1024;
-    const u64 MB = KB * 1024;
-    const u64 GB = MB * 1024;
+TempStr FormatBytes(uint64_t bytes) {
+    const uint64_t KB = 1024;
+    const uint64_t MB = KB * 1024;
+    const uint64_t GB = MB * 1024;
     if (bytes >= GB) {
         return fmt("%.1f GB", (double)bytes / (double)GB);
     }
