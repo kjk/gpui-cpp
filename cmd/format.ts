@@ -1,8 +1,9 @@
 // Format this repo's C++ (clang-format) and TypeScript (prettier).
 //
-//   bun cmd/format.ts                  # all src/**/*.{cpp,h}, examples, and cmd/*.ts
+//   bun cmd/format.ts                  # src/**/*.{cpp,h} and cmd/*.ts
+//   bun cmd/format.ts -with-examples   # also clang-format examples/
 //   bun cmd/format.ts -ts              # prettier only (cmd/*.ts)
-//   bun cmd/format.ts -cpp             # clang-format only (src + examples)
+//   bun cmd/format.ts -cpp             # clang-format only (src/)
 //   bun cmd/format.ts src/gpui/Gpui.cpp cmd/build.ts
 
 import { $, Glob } from "bun";
@@ -16,17 +17,16 @@ process.chdir(root);
 const cppExt = new Set([".cpp", ".h", ".c", ".hpp"]);
 const tsExt = new Set([".ts", ".js", ".json", ".md"]);
 
-const cppGlobs = [
+const srcCppGlobs = [
   "src/*.cpp",
   "src/*.h",
   "src/gpui/*.{cpp,h}",
   "src/ui/*.{cpp,h}",
   "src/component/*.{cpp,h}",
   "src/sys/*.{cpp,h}",
-  "examples/*.cpp",
-  "examples/showcase/*.{cpp,h}",
-  "examples/story/*.{cpp,h}",
 ];
+
+const exampleCppGlobs = ["examples/*.cpp", "examples/showcase/*.{cpp,h}", "examples/story/*.{cpp,h}"];
 
 const tsGlobs = ["cmd/*.ts"];
 
@@ -102,6 +102,7 @@ const argv = Bun.argv.slice(2);
 const paths: string[] = [];
 let wantCpp = false;
 let wantTs = false;
+let withExamples = false;
 for (const raw of argv) {
   if (raw === "-ts" || raw === "--ts") {
     wantTs = true;
@@ -111,9 +112,13 @@ for (const raw of argv) {
     wantCpp = true;
     continue;
   }
+  if (raw === "-with-examples" || raw === "--with-examples") {
+    withExamples = true;
+    continue;
+  }
   if (raw.startsWith("-")) {
     console.error(`unknown option: ${raw}`);
-    console.error("usage: bun cmd/format.ts [-ts] [-cpp] [paths...]");
+    console.error("usage: bun cmd/format.ts [-ts] [-cpp] [-with-examples] [paths...]");
     process.exit(1);
   }
   paths.push(raw);
@@ -143,7 +148,8 @@ if (paths.length > 0) {
   }
 } else {
   if (wantCpp) {
-    cppFiles = await globFiles(cppGlobs);
+    const globs = withExamples ? [...srcCppGlobs, ...exampleCppGlobs] : srcCppGlobs;
+    cppFiles = await globFiles(globs);
   }
   if (wantTs) {
     tsFiles = await globFiles(tsGlobs);
