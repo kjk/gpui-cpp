@@ -1,7 +1,5 @@
 /* Unstyled resizable — crates/base/src/resizable */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

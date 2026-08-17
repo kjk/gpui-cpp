@@ -1,7 +1,5 @@
 /* Themed radio — crates/ui/src/radio.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

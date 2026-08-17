@@ -1,7 +1,5 @@
 /* Themed alert — crates/ui/src/alert.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

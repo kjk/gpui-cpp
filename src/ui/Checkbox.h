@@ -1,7 +1,5 @@
 /* Unstyled checkbox — crates/base/src/checkbox.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

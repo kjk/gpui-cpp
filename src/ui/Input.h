@@ -1,7 +1,5 @@
 /* Unstyled input / textarea / editor — crates/base/src/input */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

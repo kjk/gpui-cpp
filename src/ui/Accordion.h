@@ -1,7 +1,5 @@
 /* Unstyled accordion — crates/base/src/accordion.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* Themed calendar — crates/ui/src/time/calendar.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

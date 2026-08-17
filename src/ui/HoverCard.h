@@ -1,7 +1,5 @@
 /* Unstyled hover card — crates/base/src/hover_card.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

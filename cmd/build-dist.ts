@@ -311,7 +311,14 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   }
 
   const headerOrder = topoHeaders(headers);
-  const headerChunks: string[] = ["#pragma once", "#ifndef GPUI_AMALGAM", "#define GPUI_AMALGAM 1", "#endif", ""];
+  const headerChunks: string[] = [
+    "#ifndef GPUI_H_",
+    "#define GPUI_H_",
+    "#ifndef GPUI_AMALGAM",
+    "#define GPUI_AMALGAM 1",
+    "#endif",
+    "",
+  ];
   for (const rel of headerOrder) {
     const body = stripInternalIncludes(rel, readLf(rel)).trim();
     if (!body) {
@@ -319,6 +326,7 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
     }
     headerChunks.push(`#line 1 "${rel}"`, body, "");
   }
+  headerChunks.push("#endif");
 
   const cppTexts = new Map<string, string>();
   const nameToFiles = new Map<string, string[]>();

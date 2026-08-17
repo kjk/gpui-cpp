@@ -1,7 +1,5 @@
 /* Themed combobox — crates/ui/src/combobox.rs */
 
-#pragma once
-
 #include "component/Select.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* Themed group box — crates/ui/src/group_box.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

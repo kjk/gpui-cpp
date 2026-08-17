@@ -1,7 +1,5 @@
 /* Unstyled tree — crates/base/src/tree.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

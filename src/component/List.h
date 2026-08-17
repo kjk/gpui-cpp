@@ -1,7 +1,5 @@
 /* Themed list — crates/ui/src/list */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

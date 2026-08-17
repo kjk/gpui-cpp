@@ -1,7 +1,5 @@
 /* Themed text / markdown view — crates/ui/src/text */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

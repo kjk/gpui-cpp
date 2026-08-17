@@ -1,7 +1,5 @@
 /* Unstyled combobox — crates/base/src/combobox.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

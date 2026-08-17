@@ -1,7 +1,5 @@
 /* Unstyled dialog — crates/base/src/dialog.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* Themed spinner — crates/ui/src/spinner.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

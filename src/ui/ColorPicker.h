@@ -1,7 +1,5 @@
 /* Unstyled color picker — crates/base/src/color_picker.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

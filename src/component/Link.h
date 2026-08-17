@@ -1,7 +1,5 @@
 /* Themed link — crates/ui/src/link.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

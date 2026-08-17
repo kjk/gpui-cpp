@@ -1,7 +1,5 @@
 /* Themed searchable list — crates/ui/src/searchable_list */
 
-#pragma once
-
 #include "component/List.h"
 
 namespace gpui {

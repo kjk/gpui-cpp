@@ -1,7 +1,5 @@
 /* Themed icon wrapper — crates/ui/src/icon.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

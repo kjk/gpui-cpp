@@ -1,7 +1,5 @@
 /* Themed sidebar — crates/ui/src/sidebar */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

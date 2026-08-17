@@ -1,7 +1,5 @@
 /* C++ port of crates/story — GPUI Component gallery. */
 
-#pragma once
-
 #include "gpui.h"
 
 using namespace gpui;

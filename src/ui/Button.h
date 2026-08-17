@@ -1,8 +1,6 @@
 /* Unstyled button primitive — port of crates/base/src/button.rs.
    Owns click + focus. Layout, color, and typography stay with the caller. */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

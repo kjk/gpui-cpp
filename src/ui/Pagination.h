@@ -1,7 +1,5 @@
 /* Unstyled pagination — crates/base/src/pagination.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* Shared types for the themed gpui-component façade (crates/ui). */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 #include "ui/Ui.h"
 

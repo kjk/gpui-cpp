@@ -1,7 +1,5 @@
 /* Themed skeleton — crates/ui/src/skeleton.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

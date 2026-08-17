@@ -1,7 +1,5 @@
 /* Themed separator — crates/ui/src/separator.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

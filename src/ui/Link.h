@@ -2,8 +2,6 @@
    href is target data. Navigation is application-owned (showcase logs the
    path). */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

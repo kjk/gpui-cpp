@@ -1,7 +1,5 @@
 /* Unstyled switch — crates/base/src/switch.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* Themed checkbox — crates/ui/src/checkbox.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

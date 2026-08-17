@@ -1,7 +1,5 @@
 /* Themed progress — crates/ui/src/progress */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

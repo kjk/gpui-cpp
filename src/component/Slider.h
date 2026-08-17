@@ -1,7 +1,5 @@
 /* Themed slider — crates/ui/src/slider.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

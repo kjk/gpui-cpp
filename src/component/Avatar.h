@@ -1,7 +1,5 @@
 /* Themed avatar — crates/ui/src/avatar */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

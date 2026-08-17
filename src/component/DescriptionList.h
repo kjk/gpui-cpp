@@ -1,7 +1,5 @@
 /* Themed description list — crates/ui/src/description_list.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

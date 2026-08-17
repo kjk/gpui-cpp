@@ -1,7 +1,5 @@
 /* Themed rating — crates/ui/src/rating.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

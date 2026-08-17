@@ -1,7 +1,5 @@
 /* Themed tree — crates/ui/src/tree.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

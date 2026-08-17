@@ -1,7 +1,5 @@
 /* Unstyled alert dialog — crates/base/src/alert_dialog.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

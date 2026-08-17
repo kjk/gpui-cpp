@@ -1,7 +1,5 @@
 /* Themed status bar — crates/ui/src/status_bar.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

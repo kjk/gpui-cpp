@@ -1,7 +1,5 @@
 /* Unstyled radio / radio group — crates/base/src/radio.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

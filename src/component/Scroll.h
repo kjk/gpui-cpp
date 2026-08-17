@@ -1,7 +1,5 @@
 /* Themed scroll — crates/ui/src/scroll */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

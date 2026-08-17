@@ -1,7 +1,5 @@
 /* Themed date picker — crates/ui/src/time/date_picker.rs */
 
-#pragma once
-
 #include "component/Calendar.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* C++ GPUI subset used by system_monitor. Frame-rebuilt element tree. */
 
-#pragma once
-
 #include "Base.h"
 
 // ─── color ────────────────────────────────────────────────────────────────

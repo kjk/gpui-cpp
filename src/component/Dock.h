@@ -1,7 +1,5 @@
 /* Themed dock (simplified) — crates/ui/src/dock */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

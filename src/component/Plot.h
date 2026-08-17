@@ -1,8 +1,6 @@
 /* Plot helpers — crates/ui/src/plot
    Scale/shape math used by Chart; AreaChart is the render entry. */
 
-#pragma once
-
 #include "component/Chart.h"
 
 namespace gpui {

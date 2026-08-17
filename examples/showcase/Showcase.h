@@ -1,7 +1,5 @@
 /* GPUI Base showcase — C++ port of crates/base/examples/showcase. */
 
-#pragma once
-
 #include "gpui.h"
 
 using namespace gpui;

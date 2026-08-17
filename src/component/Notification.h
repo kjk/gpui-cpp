@@ -1,7 +1,5 @@
 /* Themed notification — crates/ui/src/notification.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

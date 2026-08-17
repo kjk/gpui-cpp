@@ -1,7 +1,5 @@
 /* Themed switch — crates/ui/src/switch.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

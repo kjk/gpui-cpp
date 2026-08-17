@@ -1,7 +1,5 @@
 /* Themed popover — crates/ui/src/popover.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

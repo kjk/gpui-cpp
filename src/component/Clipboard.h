@@ -1,7 +1,5 @@
 /* Themed clipboard — crates/ui/src/clipboard.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

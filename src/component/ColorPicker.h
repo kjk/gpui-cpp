@@ -1,7 +1,5 @@
 /* Themed color picker — crates/ui/src/color_picker.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

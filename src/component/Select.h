@@ -1,7 +1,5 @@
 /* Themed select — crates/ui/src/select.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

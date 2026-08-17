@@ -1,7 +1,5 @@
 /* Themed kbd — crates/ui/src/kbd.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

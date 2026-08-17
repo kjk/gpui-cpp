@@ -1,7 +1,5 @@
 /* Themed breadcrumb — crates/ui/src/breadcrumb.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

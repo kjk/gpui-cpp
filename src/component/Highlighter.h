@@ -1,8 +1,6 @@
 /* Themed highlighter façade — crates/ui/src/highlighter
    Syntax highlighting uses the simple keyword path from the showcase editor. */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

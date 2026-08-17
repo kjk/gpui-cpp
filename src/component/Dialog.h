@@ -1,7 +1,5 @@
 /* Themed dialog — crates/ui/src/dialog */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

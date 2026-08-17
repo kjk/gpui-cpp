@@ -1,7 +1,5 @@
 /* Unstyled tabs — crates/base/src/tabs.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

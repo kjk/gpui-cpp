@@ -1,7 +1,5 @@
 /* Unstyled avatar — crates/base/src/avatar.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

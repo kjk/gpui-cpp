@@ -1,7 +1,5 @@
 /* Themed virtual list — crates/ui/src/virtual_list.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

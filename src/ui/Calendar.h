@@ -1,7 +1,5 @@
 /* Unstyled calendar — crates/base/src/calendar.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

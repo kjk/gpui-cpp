@@ -1,7 +1,5 @@
 /* Themed hover card — crates/ui/src/hover_card.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

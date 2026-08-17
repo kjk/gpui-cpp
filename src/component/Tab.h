@@ -1,7 +1,5 @@
 /* Themed tabs — crates/ui/src/tab */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

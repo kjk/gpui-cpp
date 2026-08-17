@@ -1,7 +1,5 @@
 /* Unstyled table — crates/base/src/table.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

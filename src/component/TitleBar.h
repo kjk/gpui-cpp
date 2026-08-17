@@ -1,7 +1,5 @@
 /* Themed title bar — crates/ui/src/title_bar.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

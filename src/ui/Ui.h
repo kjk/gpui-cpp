@@ -1,8 +1,6 @@
 /* gpui-base unstyled primitives. Visuals belong to the caller (showcase /
  * theme). */
 
-#pragma once
-
 #include "ui/Accordion.h"
 #include "ui/AlertDialog.h"
 #include "ui/Avatar.h"

@@ -1,7 +1,5 @@
 /* Themed sheet — crates/ui/src/sheet.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

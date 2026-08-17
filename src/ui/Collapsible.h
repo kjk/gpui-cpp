@@ -1,7 +1,5 @@
 /* Unstyled collapsible — crates/base/src/collapsible.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

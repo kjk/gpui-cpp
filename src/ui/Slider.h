@@ -1,7 +1,5 @@
 /* Unstyled slider — crates/base/src/slider.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

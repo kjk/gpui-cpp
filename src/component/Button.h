@@ -1,7 +1,5 @@
 /* Themed button — crates/ui/src/button/button.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

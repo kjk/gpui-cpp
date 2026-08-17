@@ -1,7 +1,5 @@
 /* Themed badge — crates/ui/src/badge.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

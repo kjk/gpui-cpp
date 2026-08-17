@@ -1,7 +1,5 @@
 /* Unstyled OTP input — crates/base/src/otp_input.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

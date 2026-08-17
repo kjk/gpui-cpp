@@ -1,7 +1,5 @@
 /* Unstyled sheet — crates/base/src/sheet.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

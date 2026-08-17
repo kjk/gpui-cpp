@@ -1,7 +1,5 @@
 /* History helper — crates/ui/src/history.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

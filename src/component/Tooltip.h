@@ -1,7 +1,5 @@
 /* Themed tooltip — crates/ui/src/tooltip.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

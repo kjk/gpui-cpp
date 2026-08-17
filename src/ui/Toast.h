@@ -1,7 +1,5 @@
 /* Unstyled toast — crates/base/src/toast.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

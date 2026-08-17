@@ -1,7 +1,5 @@
 /* Unstyled progress — crates/base/src/progress.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

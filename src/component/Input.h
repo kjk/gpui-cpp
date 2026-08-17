@@ -1,7 +1,5 @@
 /* Themed input — crates/ui/src/input */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

@@ -1,7 +1,5 @@
 /* Unstyled toggle / toggle group — crates/base/src/toggle.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

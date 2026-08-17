@@ -1,7 +1,5 @@
 /* Window border helper — crates/ui/src/window_border.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {

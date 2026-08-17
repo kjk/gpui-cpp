@@ -1,7 +1,5 @@
 /* Unstyled popup — crates/base/src/popup.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

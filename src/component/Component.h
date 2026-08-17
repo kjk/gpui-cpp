@@ -1,7 +1,5 @@
 /* Themed gpui-component façade — crates/ui/src */
 
-#pragma once
-
 #include "component/Accordion.h"
 #include "component/Alert.h"
 #include "component/Avatar.h"

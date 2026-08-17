@@ -1,7 +1,5 @@
 /* Unstyled date picker — crates/base/src/date_picker.rs */
 
-#pragma once
-
 #include "gpui/Gpui.h"
 
 namespace gpui {

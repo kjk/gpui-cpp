@@ -1,7 +1,5 @@
 /* Themed accordion — crates/ui/src/accordion.rs */
 
-#pragma once
-
 #include "component/Common.h"
 
 namespace gpui {
