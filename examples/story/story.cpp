@@ -342,7 +342,8 @@ static El* Sidebar(StoryApp* app, Arena* a) {
         header->Child(SearchBox(app, a));
     }
     side->Child(header);
-    El* scroller = Div(a)->Grow()->ClipY()->ScrollY(0)->W(kFill);
+    El* scroller =
+        Div(a)->FlexCol()->Grow()->MinH(0)->ClipY()->ScrollY(0)->W(kFill);
     if (!app->collapsed) {
         scroller->Child(SidebarList(app, a));
     }
@@ -415,7 +416,13 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
     body->Child(Sidebar(app, frame));
     El* main = Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0);
     main->Child(Header(app, frame));
-    El* scroller = Div(frame)->Grow()->ClipY()->ScrollY(app->scrollY)->W(kFill);
+    El* scroller = Div(frame)
+                       ->FlexCol()
+                       ->Grow()
+                       ->MinH(0)
+                       ->ClipY()
+                       ->ScrollY(app->scrollY)
+                       ->W(kFill);
     scroller->Child(Div(frame)->Pad(16)->W(kFill)->Child(
         StoryRenderRegistered(app, frame, size)));
     main->Child(scroller);

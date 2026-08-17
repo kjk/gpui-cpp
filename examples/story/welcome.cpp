@@ -69,6 +69,43 @@ static El* AsciiLine(Arena* a, const char* s) {
     return StoryTxt(a, StoryDup(a, s), 12, th.mutedFg);
 }
 
+static El* Body(Arena* a, const char* s) {
+    const Theme& th = ThemeNow();
+    return StoryTxt(a, StoryDup(a, s), 14, th.foreground)->Wrap()->W(kFill);
+}
+
+static El* H2(Arena* a, const char* s) {
+    const Theme& th = ThemeNow();
+    return StoryTxt(a, StoryDup(a, s), 18, th.foreground)->Bold();
+}
+
+static El* H3(Arena* a, const char* s) {
+    const Theme& th = ThemeNow();
+    return StoryTxt(a, StoryDup(a, s), 16, th.foreground)->Bold();
+}
+
+static El* Quote(Arena* a, const char* s) {
+    const Theme& th = ThemeNow();
+    El* row = Div(a)->FlexRow()->W(kFill)->ItemsStart();
+    row->Child(Div(a)->W(3)->H(kFill)->MinH(20)->Bg(th.border)->Shrink0());
+    row->Child(Div(a)->PadL(12)->Grow()->Child(
+        StoryTxt(a, StoryDup(a, s), 14, th.mutedFg)->Wrap()->W(kFill)));
+    return row;
+}
+
+static El* CodeBlock(Arena* a, const char* s) {
+    const Theme& th = ThemeNow();
+    return Div(a)->W(kFill)->Pad(12)->Radius(6)->Bg(th.muted)->Child(
+        StoryTxt(a, StoryDup(a, s), 12, th.foreground)->Wrap()->W(kFill));
+}
+
+static El* Bullet(Arena* a, const char* s) {
+    const Theme& th = ThemeNow();
+    return StoryTxt(a, StoryFmt(a, "\xE2\x80\xA2  %s", s), 14, th.foreground)
+        ->Wrap()
+        ->W(kFill);
+}
+
 El* WelcomeRender(StoryApp* app, Arena* a) {
     (void)app;
     const Theme& th = ThemeNow();
@@ -184,6 +221,107 @@ El* WelcomeRender(StoryApp* app, Arena* a) {
         diagram->Child(AsciiLine(a, kDiagram[i]));
     }
     col->Child(diagram);
+
+    col->Child(
+        Quote(a,
+              "Behavior belongs to the foundation. Presentation belongs to the "
+              "application."));
+    col->Child(Body(
+        a,
+        "Use GPUI Component when you want polished controls ready to ship. "
+        "Build on gpui-base when your application should own its component "
+        "source, layout, styling, and motion while reusing difficult "
+        "interaction behavior."));
+    col->Child(Body(a,
+                    "The layering follows the same separation that makes "
+                    "the shadcn ecosystem flexible:"));
+
+    El* eco2 = Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Shrink0();
+    eco2->Child(
+        MdTableRow(a, "GPUI Component ecosystem", "Web ecosystem", true));
+    eco2->Child(MdTableRow(a, "GPUI", "HTML + Tailwind CSS", false));
+    eco2->Child(MdTableRow(a, "gpui-base", "Base UI", false));
+    eco2->Child(MdTableRow(a, "GPUI Component",
+                           "shadcn's styled component layer", false));
+    col->Child(eco2);
+
+    col->Child(H2(a, "Showcase"));
+    col->Child(Body(a, "https://longbridge.github.io/gpui-component/gallery/"));
+    col->Child(
+        Body(a,
+             "Here is the first application: Longbridge Pro, built using "
+             "GPUI Component."));
+
+    col->Child(H2(a, "Usage"));
+    col->Child(CodeBlock(
+        a,
+        "gpui = { git = \"https://github.com/zed-industries/zed\" }\n"
+        "gpui_platform = { git = \"https://github.com/zed-industries/zed\", "
+        "features = [\"font-kit\"] }\n"
+        "gpui-component = { git = "
+        "\"https://github.com/longbridge/gpui-component\" }"));
+
+    col->Child(H3(a, "Basic Example"));
+    col->Child(Body(
+        a,
+        "See examples/hello_world.cpp in this tree, or the Rust hello_world "
+        "example: a centered \"Hello, World!\" label and a primary Let's Go "
+        "button inside Root."));
+
+    col->Child(H3(a, "Icons"));
+    col->Child(Body(
+        a,
+        "GPUI Component has an Icon element, but it does not include SVG "
+        "files by default. The example uses Lucide icons; add any icons you "
+        "need to your project."));
+
+    col->Child(H2(a, "Development"));
+    col->Child(H3(a, "Desktop Gallery (Story)"));
+    col->Child(Body(a, "The story crate is a gallery of every component."));
+    col->Child(CodeBlock(a, "cargo run"));
+    col->Child(H3(a, "Examples"));
+    col->Child(Body(a, "Some examples are built into the story crate:"));
+    col->Child(CodeBlock(a,
+                         "cargo run --example editor\n"
+                         "cargo run --example dock\n"
+                         "cargo run --example markdown\n"
+                         "cargo run --example html"));
+    col->Child(Body(
+        a,
+        "Standalone crates live under examples/; run them with cargo run -p "
+        "<name> (hello_world, system_monitor, window_title, \xE2\x80\xA6)."));
+    col->Child(H3(a, "Web Gallery (WASM)"));
+    col->Child(CodeBlock(
+        a, "cd crates/story-web\nmake install   # first time\nmake dev"));
+    col->Child(Body(a, "The gallery is at http://localhost:3000"));
+
+    col->Child(H2(a, "Compare to others"));
+    El* cmp = Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Shrink0();
+    cmp->Child(MdTableRow(a, "Feature", "GPUI Component", true));
+    cmp->Child(MdTableRow(a, "Language", "Rust", false));
+    cmp->Child(MdTableRow(a, "Core Render", "GPUI", false));
+    cmp->Child(MdTableRow(a, "License", "Apache 2.0", false));
+    cmp->Child(MdTableRow(a, "Min Binary Size", "12MB", false));
+    cmp->Child(MdTableRow(a, "Cross-Platform", "Yes", false));
+    cmp->Child(MdTableRow(a, "Web", "Yes (WASM)", false));
+    cmp->Child(MdTableRow(a, "UI Style", "Modern", false));
+    cmp->Child(MdTableRow(a, "CJK Support", "Yes", false));
+    cmp->Child(MdTableRow(a, "Chart", "Yes", false));
+    cmp->Child(MdTableRow(a, "Table (Large dataset)",
+                          "Yes (Virtual Rows, Columns)", false));
+    cmp->Child(MdTableRow(a, "CodeEditor", "Simple", false));
+    cmp->Child(MdTableRow(a, "Dock Layout", "Yes", false));
+    cmp->Child(MdTableRow(a, "Syntax Highlight", "Tree Sitter", false));
+    cmp->Child(MdTableRow(a, "Markdown Rendering", "Yes", false));
+    cmp->Child(MdTableRow(a, "HTML Rendering", "Basic", false));
+    cmp->Child(MdTableRow(a, "Custom Theme", "Yes", false));
+    cmp->Child(MdTableRow(a, "I18n", "Yes", false));
+    col->Child(cmp);
+
+    col->Child(H2(a, "License"));
+    col->Child(Body(a, "Apache-2.0"));
+    col->Child(Bullet(a, "UI design based on shadcn/ui, some from Reui."));
+    col->Child(Bullet(a, "Icons from Lucide."));
 
     return col;
 }

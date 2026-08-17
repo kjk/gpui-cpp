@@ -1286,40 +1286,54 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     float crossAvail = row ? innerH : innerW;
     float gap = e->style.gap;
     float gaps = gap * (n - 1);
-    // Column scrollers measure children at their intrinsic height so
+    // Overflow-y scroll: measure children with unconstrained height so
     // contentH can exceed the viewport (needed for the thumb + scroll).
-    bool unconstrMain = !row && e->style.overflowY == OverflowY::Scroll;
+    bool unconstrH = e->style.overflowY == OverflowY::Scroll;
+    float childCross0 = (unconstrH && row) ? 0.f : crossAvail;
+    float childMain0 = (unconstrH && !row) ? 0.f : mainAvail;
 
-    // First pass: layout with unconstrained main axis for non-grow, definite
-    // for grow
+    // First pass: non-grow at the available size; grow+wrap at leftover
+    // width so wrapping text is not measured as one infinite line.
     float used = 0;
     float growSum = 0;
+    int nGrow = 0;
     for (El* c = e->first; c; c = c->next) {
         if (c->style.absolute) {
             continue;
         }
         growSum += c->style.flexGrow;
-        float childMainAvail = unconstrMain ? 0.f : mainAvail;
-        float childCross = crossAvail;
         if (c->style.flexGrow > 0) {
-            // temporary: measure min
-            if (row) {
-                LayoutEl(ctx, c, 0, 0, 0, childCross, inheritFont, inheritFg);
-            } else {
-                LayoutEl(ctx, c, 0, 0, childCross, 0, inheritFont, inheritFg);
-            }
+            nGrow++;
+            continue;
+        }
+        if (row) {
+            LayoutEl(ctx, c, 0, 0, childMain0, childCross0, inheritFont,
+                     inheritFg);
         } else {
-            if (row) {
-                LayoutEl(ctx, c, 0, 0, childMainAvail, childCross, inheritFont,
-                         inheritFg);
-            } else {
-                LayoutEl(ctx, c, 0, 0, childCross, childMainAvail, inheritFont,
-                         inheritFg);
-            }
+            LayoutEl(ctx, c, 0, 0, childCross0, childMain0, inheritFont,
+                     inheritFg);
         }
         used += row ? c->w : c->h;
     }
     used += gaps;
+    float remain = mainAvail - used;
+    if (remain < 0) {
+        remain = 0;
+    }
+    for (El* c = e->first; c; c = c->next) {
+        if (c->style.absolute || c->style.flexGrow <= 0) {
+            continue;
+        }
+        float growMain = (row && c->style.wrap) ? remain : 0.f;
+        if (row) {
+            LayoutEl(ctx, c, 0, 0, growMain, childCross0, inheritFont,
+                     inheritFg);
+        } else {
+            LayoutEl(ctx, c, 0, 0, childCross0, growMain, inheritFont,
+                     inheritFg);
+        }
+        used += row ? c->w : c->h;
+    }
 
     float leftover = mainAvail - used;
     if (leftover < 0) {
@@ -1984,7 +1998,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         float thumbX = e->x + e->w - thumbW - 4.f;
         float thumbY = e->y + t * (view - thumbH);
         FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
-                  Rgba8(0x17, 0x17, 0x17, 90));
+                  Rgba8(0x17, 0x17, 0x17, 160));
     }
 
     if (e->style.trapId && e->style.focusId &&
