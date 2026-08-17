@@ -62,7 +62,8 @@ enum class ProcessSort : i32 {
     Cpu = 2,
     Memory = 3
 };
-void SysSortProcesses(SysState* s, ProcessSort field, bool descending, int keepTop);
+void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
+                      int keepTop);
 
 TempStr FormatBytes(u64 bytes);
 TempStr FormatPct(float v, int decimals);

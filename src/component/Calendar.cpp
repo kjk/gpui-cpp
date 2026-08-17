@@ -50,19 +50,27 @@ static int Dim(int y, int m) {
 
 El* Calendar::IntoEl() {
     const Theme& th = ThemeNow();
-    static const char* mon[] = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    El* root = ::Calendar::New(a, StrL("calendar"))->FlexCol()->W(250)->Pad(12)->Border(1, th.border);
+    static const char* mon[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    El* root = ::Calendar::New(a, StrL("calendar"))
+                   ->FlexCol()
+                   ->W(250)
+                   ->Pad(12)
+                   ->Border(1, th.border);
     El* nav = Div(a)->FlexRow()->JustifyBetween()->ItemsCenter();
     El* prev = Div(a)->W(28)->H(28)->ItemsCenter()->JustifyCenter()->Child(
         IconEl(a, IconName::ChevronRight, 14)->Fg(th.foreground));
-    // reuse chevron: flip conceptually — use ChevronRight for next, we'll draw left as text
+    // reuse chevron: flip conceptually — use ChevronRight for next, we'll draw
+    // left as text
     prev->Child(TextEl(a, StrL("‹"))->Font(16)->Fg(th.foreground));
     BindClick(prev, StrL("cal-prev"), onPrev);
-    El* next =
-        Div(a)->W(28)->H(28)->ItemsCenter()->JustifyCenter()->Child(TextEl(a, StrL("›"))->Font(16)->Fg(th.foreground));
+    El* next = Div(a)->W(28)->H(28)->ItemsCenter()->JustifyCenter()->Child(
+        TextEl(a, StrL("›"))->Font(16)->Fg(th.foreground));
     BindClick(next, StrL("cal-next"), onNext);
     nav->Child(prev)
-        ->Child(TextEl(a, str::Dup(a, fmt("%s %d", Str(mon[month]), year)))->Font(13)->Fg(th.foreground))
+        ->Child(TextEl(a, str::Dup(a, fmt("%s %d", Str(mon[month]), year)))
+                    ->Font(13)
+                    ->Fg(th.foreground))
         ->Child(next);
     root->Child(nav);
     int dim = Dim(year, month);
@@ -74,12 +82,20 @@ El* Calendar::IntoEl() {
             grid->Child(row);
         }
         bool on = d == day;
-        El* cell =
-            CalendarItem::New(a, HashClickId(str::Dup(a, fmt("d%d", d))))->W(32)->H(32)->ItemsCenter()->JustifyCenter();
+        El* cell = CalendarItem::New(a, HashClickId(str::Dup(a, fmt("d%d", d))))
+                       ->W(32)
+                       ->H(32)
+                       ->ItemsCenter()
+                       ->JustifyCenter();
         if (on) {
-            cell->Bg(th.primary)->Child(TextEl(a, str::Dup(a, fmt("%d", d)))->Font(12)->Fg(th.primaryFg));
+            cell->Bg(th.primary)
+                ->Child(TextEl(a, str::Dup(a, fmt("%d", d)))
+                            ->Font(12)
+                            ->Fg(th.primaryFg));
         } else {
-            cell->Child(TextEl(a, str::Dup(a, fmt("%d", d)))->Font(12)->Fg(th.foreground));
+            cell->Child(TextEl(a, str::Dup(a, fmt("%d", d)))
+                            ->Font(12)
+                            ->Fg(th.foreground));
         }
         if (onDay.IsValid()) {
             DayBind* b = ::New<DayBind>(a);

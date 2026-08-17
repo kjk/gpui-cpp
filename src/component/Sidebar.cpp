@@ -40,16 +40,25 @@ Sidebar* Sidebar::OnSelect(Func1<int> fn) {
 
 El* Sidebar::IntoEl() {
     const Theme& th = ThemeNow();
-    El* col = Div(a)->FlexCol()->W(collapsed ? 48.f : 220.f)->H(kFill)->Pad(8)->Gap(4)->Bg(th.sidebar);
+    El* col = Div(a)
+                  ->FlexCol()
+                  ->W(collapsed ? 48.f : 220.f)
+                  ->H(kFill)
+                  ->Pad(8)
+                  ->Gap(4)
+                  ->Bg(th.sidebar);
     if (title.s && !collapsed) {
         col->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(th.sidebarFg));
     }
     for (int i = 0; i < n; i++) {
-        El* row = Div(a)->H(32)->PadX(8)->ItemsCenter()->Radius(6)->HoverBg(th.secondaryHover);
+        El* row = Div(a)->H(32)->PadX(8)->ItemsCenter()->Radius(6)->HoverBg(
+            th.secondaryHover);
         if (i == selected) {
             row->Bg(th.accent);
         }
-        row->Child(TextEl(a, collapsed ? StrL("•") : items[i])->Font(13)->Fg(th.sidebarFg));
+        row->Child(TextEl(a, collapsed ? StrL("•") : items[i])
+                       ->Font(13)
+                       ->Fg(th.sidebarFg));
         if (onSelect.IsValid()) {
             SideBind* b = ::New<SideBind>(a);
             b->fn = onSelect;

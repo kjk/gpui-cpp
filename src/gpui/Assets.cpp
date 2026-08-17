@@ -102,10 +102,13 @@ void AssetsAddDefaultRoots(Str exampleName) {
             if (exampleName.s) {
                 // rust layout: examples/app_assets/assets
                 char rust[MAX_PATH];
-                _snprintf_s(rust, MAX_PATH, _TRUNCATE, "examples\\%s\\assets", exampleName.s);
+                _snprintf_s(rust, MAX_PATH, _TRUNCATE, "examples\\%s\\assets",
+                            exampleName.s);
                 JoinPath(p, MAX_PATH, walk, rust);
                 AddRootRaw(p);
-                _snprintf_s(rust, MAX_PATH, _TRUNCATE, ".work\\gpui-component\\examples\\%s\\assets", exampleName.s);
+                _snprintf_s(rust, MAX_PATH, _TRUNCATE,
+                            ".work\\gpui-component\\examples\\%s\\assets",
+                            exampleName.s);
                 JoinPath(p, MAX_PATH, walk, rust);
                 AddRootRaw(p);
             }
@@ -120,12 +123,14 @@ void AssetsAddDefaultRoots(Str exampleName) {
 }
 
 static bool ReadFileAll(const char* path, Vec<u8>* out) {
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         return false;
     }
     LARGE_INTEGER sz;
-    if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 0 || sz.QuadPart > 8 * 1024 * 1024) {
+    if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 0 ||
+        sz.QuadPart > 8 * 1024 * 1024) {
         CloseHandle(h);
         return false;
     }

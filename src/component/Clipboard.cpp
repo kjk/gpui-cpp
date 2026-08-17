@@ -24,7 +24,10 @@ Clipboard* Clipboard::OnCopy(Func1<Str> fn) {
 
 El* Clipboard::IntoEl() {
     const Theme& th = ThemeNow();
-    Button* btn = Button::New(a, StrL("clipboard"))->Icon(IconName::Copy)->Ghost()->Tooltip(StrL("Copy"));
+    Button* btn = Button::New(a, StrL("clipboard"))
+                      ->Icon(IconName::Copy)
+                      ->Ghost()
+                      ->Tooltip(StrL("Copy"));
     if (onCopy.IsValid()) {
         ClipBind* b = ::New<ClipBind>(a);
         b->fn = onCopy;

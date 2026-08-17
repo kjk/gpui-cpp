@@ -37,11 +37,21 @@ Radio* Radio::OnClick(Func1<bool> fn) {
 
 El* Radio::IntoEl() {
     const Theme& th = ThemeNow();
-    El* dot = Div(a)->W(14)->H(14)->Radius(7)->Border(1, th.foreground)->ItemsCenter()->JustifyCenter()->Shrink0();
+    El* dot = Div(a)
+                  ->W(14)
+                  ->H(14)
+                  ->Radius(7)
+                  ->Border(1, th.foreground)
+                  ->ItemsCenter()
+                  ->JustifyCenter()
+                  ->Shrink0();
     if (checked) {
         dot->Child(Div(a)->W(6)->H(6)->Radius(3)->Bg(th.primary));
     }
-    El* row = ::Radio::New(a, id, disabled ? 0 : HashClickId(id))->FlexRow()->ItemsCenter()->Gap(8);
+    El* row = ::Radio::New(a, id, disabled ? 0 : HashClickId(id))
+                  ->FlexRow()
+                  ->ItemsCenter()
+                  ->Gap(8);
     if (onClick.IsValid() && !disabled) {
         RadioBind* b = ::New<RadioBind>(a);
         b->fn = onClick;
@@ -49,7 +59,8 @@ El* Radio::IntoEl() {
     }
     row->Child(dot);
     if (label.s) {
-        row->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg : th.foreground));
+        row->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg
+                                                           : th.foreground));
     }
     return row;
 }

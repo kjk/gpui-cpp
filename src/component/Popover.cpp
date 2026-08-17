@@ -21,7 +21,10 @@ Popover* Popover::Open(bool v) {
 }
 
 El* Popover::IntoEl() {
-    return ::Popover::New(a, StrL("popover"))->Trigger(trigger)->Content(open ? content : nullptr)->IntoEl();
+    return ::Popover::New(a, StrL("popover"))
+        ->Trigger(trigger)
+        ->Content(open ? content : nullptr)
+        ->IntoEl();
 }
 
 } // namespace component

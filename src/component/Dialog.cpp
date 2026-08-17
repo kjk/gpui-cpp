@@ -38,20 +38,41 @@ El* Dialog::IntoEl(WinSize size) {
         return Div(a);
     }
     const Theme& th = ThemeNow();
-    El* panel = Div(a)->W(360)->Pad(16)->FlexCol()->Gap(8)->Bg(th.background)->Border(1, th.border)->Radius(th.radius);
-    panel->Child(DialogTitle::New(a)->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground)));
+    El* panel = Div(a)
+                    ->W(360)
+                    ->Pad(16)
+                    ->FlexCol()
+                    ->Gap(8)
+                    ->Bg(th.background)
+                    ->Border(1, th.border)
+                    ->Radius(th.radius);
+    panel->Child(DialogTitle::New(a)->Child(
+        TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground)));
     if (description.s) {
-        panel->Child(DialogDescription::New(a)->Child(TextEl(a, description)->Font(13)->Fg(th.mutedFg)->Wrap()));
+        panel->Child(DialogDescription::New(a)->Child(
+            TextEl(a, description)->Font(13)->Fg(th.mutedFg)->Wrap()));
     }
     if (body) {
         panel->Child(body);
     }
     El* actions = Div(a)->FlexRow()->JustifyEnd()->Gap(8);
-    actions->Child(Button::New(a, StrL("dialog-cancel"))->Label(StrL("Cancel"))->OnClick(onClose)->IntoEl());
-    actions->Child(Button::New(a, StrL("dialog-ok"))->Label(StrL("OK"))->Primary()->OnClick(onOk)->IntoEl());
+    actions->Child(Button::New(a, StrL("dialog-cancel"))
+                       ->Label(StrL("Cancel"))
+                       ->OnClick(onClose)
+                       ->IntoEl());
+    actions->Child(Button::New(a, StrL("dialog-ok"))
+                       ->Label(StrL("OK"))
+                       ->Primary()
+                       ->OnClick(onOk)
+                       ->IntoEl());
     panel->Child(actions);
-    El* backdrop =
-        DialogBackdrop::New(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->Bg(Rgba8(0, 0, 0, 51));
+    El* backdrop = DialogBackdrop::New(a)
+                       ->Absolute()
+                       ->Top(0)
+                       ->Left(0)
+                       ->W(size.dipW)
+                       ->H(size.dipH)
+                       ->Bg(Rgba8(0, 0, 0, 51));
     if (onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
     }

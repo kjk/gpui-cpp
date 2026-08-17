@@ -53,16 +53,18 @@ static HRESULT CreateDeviceResources(AppHost* host) {
         return S_OK;
     }
     host->paint.dpi = 96;
-    D2D1_RENDER_TARGET_PROPERTIES rtp =
-        D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                                     D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96.f, 96.f);
+    D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
+        96.f, 96.f);
     HRESULT hr = host->paint.d2d->CreateDCRenderTarget(&rtp, &host->paint.dcRt);
     if (FAILED(hr)) {
         logf("CreateDCRenderTarget failed %08x", (unsigned)hr);
         return hr;
     }
     host->paint.rt = host->paint.dcRt;
-    hr = host->paint.rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &host->paint.brush);
+    hr = host->paint.rt
+             ->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &host->paint.brush);
     return hr;
 }
 
@@ -119,7 +121,9 @@ static void RenderFrame(AppHost* host, HDC hdc) {
     host->paint.rt->BeginDraw();
     host->paint.rt->SetTransform(D2D1::Matrix3x2F::Identity());
     const Theme& th = ThemeNow();
-    host->paint.rt->Clear(D2D1::ColorF(th.background.r / 255.f, th.background.g / 255.f, th.background.b / 255.f, 1));
+    host->paint.rt
+        ->Clear(D2D1::ColorF(th.background.r / 255.f, th.background.g / 255.f,
+                             th.background.b / 255.f, 1));
 
     if (root) {
         LayoutEl(&host->paint, root, 0, 0, dipW, dipH, 16.f, th.foreground);
@@ -138,7 +142,8 @@ static int BorderPx() {
     return GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
 }
 
-static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
+                                LPARAM lParam) {
     AppHost* host = (AppHost*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (msg == WM_NCCREATE) {
         auto* cs = (CREATESTRUCTW*)lParam;
@@ -153,7 +158,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     switch (msg) {
         case WM_CREATE: {
             if (host->winOpts.anim || host->hooks.onTick) {
-                int ms = host->winOpts.timerMs > 0 ? host->winOpts.timerMs : kTickMs;
+                int ms =
+                    host->winOpts.timerMs > 0 ? host->winOpts.timerMs : kTickMs;
                 if (host->winOpts.anim) {
                     ms = 16;
                 }
@@ -178,7 +184,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (host->hooks.onKey) {
                 host->hooks.onKey(host, (int)wParam, true);
             }
-            if (wParam == VK_RETURN && host->focusId && host->hooks.onClick && !host->eatReturn) {
+            if (wParam == VK_RETURN && host->focusId && host->hooks.onClick &&
+                !host->eatReturn) {
                 host->hooks.onClick(host, host->focusId);
             }
             host->eatReturn = false;
@@ -253,8 +260,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         case WM_DPICHANGED: {
             auto* r = (RECT*)lParam;
-            SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
+            SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left,
+                         r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
             DiscardDeviceResources(host);
             return 0;
         }
@@ -357,7 +364,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             ScreenToClient(hwnd, &pt);
             float x = PxToDip(&host->paint, pt.x);
             float y = PxToDip(&host->paint, pt.y);
-            float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA * 48.f;
+            float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) /
+                          (float)WHEEL_DELTA * 48.f;
             if (host->hooks.onWheel) {
                 host->hooks.onWheel(host, x, y, delta);
             }
@@ -399,7 +407,8 @@ void AppToggleMaximize(AppHost* host) {
     }
     WINDOWPLACEMENT wp = {sizeof(wp)};
     GetWindowPlacement(host->hwnd, &wp);
-    ShowWindow(host->hwnd, wp.showCmd == SW_SHOWMAXIMIZED ? SW_RESTORE : SW_MAXIMIZE);
+    ShowWindow(host->hwnd,
+               wp.showCmd == SW_SHOWMAXIMIZED ? SW_RESTORE : SW_MAXIMIZE);
 }
 void AppClose(AppHost* host) {
     AppQuit(host);
@@ -428,7 +437,9 @@ void AppRequestAnim(AppHost* host, bool on) {
             if (on) {
                 SetTimer(host->hwnd, 1, 16u, nullptr);
             } else if (host->hooks.onTick) {
-                UINT ms = host->winOpts.timerMs > 0 ? (UINT)host->winOpts.timerMs : kTickMs;
+                UINT ms = host->winOpts.timerMs > 0
+                              ? (UINT)host->winOpts.timerMs
+                              : kTickMs;
                 SetTimer(host->hwnd, 1, ms, nullptr);
             } else {
                 KillTimer(host->hwnd, 1);
@@ -437,19 +448,22 @@ void AppRequestAnim(AppHost* host, bool on) {
     }
 }
 
-int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* user) {
+int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
+           void* user) {
     AppWinOpts opts = {};
     return RunAppEx(title, dipW, dipH, hooks, user, opts);
 }
 
-int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* user, AppWinOpts opts) {
+int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
+             void* user, AppWinOpts opts) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     (void)hrCo;
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (user32) {
         typedef BOOL(WINAPI * SetDpiFn)(HANDLE);
-        auto setDpi = (SetDpiFn)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        auto setDpi =
+            (SetDpiFn)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
         if (setDpi) {
             setDpi((HANDLE)-4); // PER_MONITOR_AWARE_V2
         }
@@ -464,19 +478,24 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* use
         host.hooks.onInit(&host);
     }
 
-    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &host.paint.d2d);
+    HRESULT hr =
+        D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &host.paint.d2d);
     if (FAILED(hr)) {
         return 1;
     }
-    hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&host.paint.dwrite);
+    hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                             __uuidof(IDWriteFactory),
+                             (IUnknown**)&host.paint.dwrite);
     if (FAILED(hr)) {
         Rel(&host.paint.d2d);
         return 1;
     }
 
     auto makeFont = [&](float px, IDWriteTextFormat** out) {
-        host.paint.dwrite->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                                            DWRITE_FONT_STRETCH_NORMAL, px, L"en-us", out);
+        host.paint.dwrite
+            ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                               DWRITE_FONT_STYLE_NORMAL,
+                               DWRITE_FONT_STRETCH_NORMAL, px, L"en-us", out);
         if (*out) {
             (*out)->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         }
@@ -484,12 +503,18 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* use
     makeFont(16.f, &host.paint.font16);
     makeFont(14.f, &host.paint.font14);
     makeFont(12.f, &host.paint.font12);
-    host.paint.dwrite->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, 20.f, L"en-us", &host.paint.font20);
-    host.paint.dwrite->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, 24.f, L"en-us", &host.paint.font24);
-    host.paint.dwrite->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-                                        DWRITE_FONT_STRETCH_NORMAL, 16.f, L"en-us", &host.paint.font16b);
+    host.paint.dwrite
+        ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                           20.f, L"en-us", &host.paint.font20);
+    host.paint.dwrite
+        ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                           24.f, L"en-us", &host.paint.font24);
+    host.paint.dwrite
+        ->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                           16.f, L"en-us", &host.paint.font16b);
     if (host.paint.font20) {
         host.paint.font20->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     }
@@ -520,13 +545,15 @@ int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* use
     int x = (sx - pxW) / 2;
     int y = (sy - pxH) / 2;
 
-    HWND hwnd = CreateWindowExW(0, kWndClass, title, style, x, y, pxW, pxH, nullptr, nullptr, wc.hInstance, &host);
+    HWND hwnd = CreateWindowExW(0, kWndClass, title, style, x, y, pxW, pxH,
+                                nullptr, nullptr, wc.hInstance, &host);
     if (!hwnd) {
         return 1;
     }
 
     BOOL dark = TRUE;
-    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
+    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark,
+                          sizeof(dark));
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);

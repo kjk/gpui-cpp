@@ -55,9 +55,13 @@ El* Checkbox::IntoEl() {
                   ->Border(1, th.foreground)
                   ->Radius(3);
     if (checked) {
-        ind->Bg(th.primary)->Child(IconEl(a, IconName::Check, box - 4)->Fg(th.primaryFg));
+        ind->Bg(th.primary)
+            ->Child(IconEl(a, IconName::Check, box - 4)->Fg(th.primaryFg));
     }
-    El* row = ::Checkbox::New(a, id, disabled ? 0 : HashClickId(id))->FlexRow()->ItemsCenter()->Gap(8);
+    El* row = ::Checkbox::New(a, id, disabled ? 0 : HashClickId(id))
+                  ->FlexRow()
+                  ->ItemsCenter()
+                  ->Gap(8);
     if (onClick.IsValid() && !disabled) {
         CheckBind* b = ::New<CheckBind>(a);
         b->fn = onClick;
@@ -69,7 +73,9 @@ El* Checkbox::IntoEl() {
     }
     row->Child(ind);
     if (label.s) {
-        row->Child(TextEl(a, label)->Font(UiFontPx(size))->Fg(disabled ? th.mutedFg : th.foreground));
+        row->Child(TextEl(a, label)
+                       ->Font(UiFontPx(size))
+                       ->Fg(disabled ? th.mutedFg : th.foreground));
     }
     return row;
 }

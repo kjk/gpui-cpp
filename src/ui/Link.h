@@ -1,5 +1,6 @@
 /* Unstyled link — crates/base/src/link.rs
-   href is target data. Navigation is application-owned (showcase logs the path). */
+   href is target data. Navigation is application-owned (showcase logs the
+   path). */
 
 #pragma once
 

@@ -34,13 +34,15 @@ El* Rating::IntoEl() {
     int n = max > 8 ? 8 : max;
     for (int i = 1; i <= n; i++) {
         bool on = i <= value;
-        El* star = TextEl(a, StrL("★"))->Font(18)->Fg(on ? th.warning : th.border);
+        El* star =
+            TextEl(a, StrL("★"))->Font(18)->Fg(on ? th.warning : th.border);
         El* hit = Div(a)->Child(star);
         if (onChange.IsValid()) {
             RateBind* b = ::New<RateBind>(a);
             b->fn = onChange;
             b->value = i;
-            BindClick(hit, str::Dup(a, fmt("star-%d", i)), MkFunc0(&FireRate, b));
+            BindClick(hit, str::Dup(a, fmt("star-%d", i)),
+                      MkFunc0(&FireRate, b));
         }
         row->Child(hit);
     }

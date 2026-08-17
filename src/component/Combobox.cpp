@@ -45,29 +45,35 @@ Combobox* Combobox::OnToggle(Func0 fn) {
 
 El* Combobox::IntoEl() {
     const Theme& th = ThemeNow();
-    El* trigger = Div(a)
-                      ->H(28)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Border(1, th.border)
-                      ->Child(TextEl(a, selected.s ? selected : StrL("Select"))->Font(13)->Fg(th.foreground))
-                      ->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.mutedFg));
+    El* trigger =
+        Div(a)
+            ->H(28)
+            ->PadX(8)
+            ->ItemsCenter()
+            ->JustifyBetween()
+            ->Border(1, th.border)
+            ->Child(TextEl(a, selected.s ? selected : StrL("Select"))
+                        ->Font(13)
+                        ->Fg(th.foreground))
+            ->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.mutedFg));
     BindClick(trigger, id, onToggle);
     El* pop = nullptr;
     if (open) {
-        pop = Div(a)->FlexCol()->Pad(4)->Border(1, th.border)->Bg(th.background);
+        pop =
+            Div(a)->FlexCol()->Pad(4)->Border(1, th.border)->Bg(th.background);
         if (query) {
-            pop->Child(InputBase::New(a, StrL("cb-q"), HashClickId(StrL("cb-q")))
-                           ->H(28)
-                           ->PadX(8)
-                           ->ItemsCenter()
-                           ->Border(1, th.border)
-                           ->Child(::Input::New(a, query)));
+            pop->Child(
+                InputBase::New(a, StrL("cb-q"), HashClickId(StrL("cb-q")))
+                    ->H(28)
+                    ->PadX(8)
+                    ->ItemsCenter()
+                    ->Border(1, th.border)
+                    ->Child(::Input::New(a, query)));
         }
         for (int i = 0; i < n; i++) {
-            El* row = Div(a)->H(28)->PadX(8)->ItemsCenter()->HoverBg(th.muted)->Child(
-                TextEl(a, options[i])->Font(13)->Fg(th.foreground));
+            El* row =
+                Div(a)->H(28)->PadX(8)->ItemsCenter()->HoverBg(th.muted)->Child(
+                    TextEl(a, options[i])->Font(13)->Fg(th.foreground));
             if (onChange.IsValid()) {
                 CbBind* b = ::New<CbBind>(a);
                 b->fn = onChange;

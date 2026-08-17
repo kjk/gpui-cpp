@@ -21,7 +21,10 @@ HoverCard* HoverCard::Open(bool v) {
 }
 
 El* HoverCard::IntoEl() {
-    return ::HoverCard::New(a, StrL("hover-card"))->Trigger(trigger)->Content(open ? content : nullptr)->IntoEl();
+    return ::HoverCard::New(a, StrL("hover-card"))
+        ->Trigger(trigger)
+        ->Content(open ? content : nullptr)
+        ->IntoEl();
 }
 
 } // namespace component

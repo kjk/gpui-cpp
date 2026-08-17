@@ -44,7 +44,9 @@ El* Link::IntoEl() {
         b->href = href;
         e->OnClick(MkFunc0(&FireLink, b));
     }
-    e->Child(TextEl(a, text.s ? text : href)->Font(14)->Fg(disabled ? th.mutedFg : th.blue));
+    e->Child(TextEl(a, text.s ? text : href)
+                 ->Font(14)
+                 ->Fg(disabled ? th.mutedFg : th.blue));
     return e;
 }
 

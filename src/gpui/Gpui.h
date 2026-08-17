@@ -31,9 +31,11 @@ inline Rgba Rgba8(u8 r, u8 g, u8 b, u8 a) {
 inline Rgba RgbaHex(u32 hex) {
     // 0xRRGGBB or 0xAARRGGBB if top byte set
     if (hex > 0xFFFFFFu) {
-        return Rgba{(u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff), (u8)(hex & 0xff), (u8)((hex >> 24) & 0xff)};
+        return Rgba{(u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff),
+                    (u8)(hex & 0xff), (u8)((hex >> 24) & 0xff)};
     }
-    return Rgba{(u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff), (u8)(hex & 0xff), 255};
+    return Rgba{(u8)((hex >> 16) & 0xff), (u8)((hex >> 8) & 0xff),
+                (u8)(hex & 0xff), 255};
 }
 Rgba RgbaOpacity(Rgba c, float a01);
 Rgba RgbaMix(Rgba a, Rgba b, float t);
@@ -210,7 +212,7 @@ struct Style {
     bool fontSemibold = false;
     bool borderDashed = false;
     bool absolute = false;
-    bool fixed = false;       // out-of-flow in window coords (Rust deferred overlay)
+    bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
     bool anchorBelow = false; // absolute, just under the parent box
     float anchorGap = 0;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
@@ -316,7 +318,8 @@ El* TextEl(Arena* a, Str s);
 El* IconEl(Arena* a, IconName name);
 El* IconEl(Arena* a, IconName name, float size);
 El* ProgressEl(Arena* a, float value01to100, float barW, float barH);
-El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop, Rgba fillBot, int tickMargin);
+El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
+            Rgba fillBot, int tickMargin);
 
 // ─── paint / window ───────────────────────────────────────────────────────
 
@@ -401,14 +404,17 @@ struct WinSize {
 float PxToDip(PaintCtx* ctx, int px);
 int DipToPx(PaintCtx* ctx, float dip);
 
-void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW, float* outH, bool wrap = false);
+void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
+                 float* outH, bool wrap = false);
 void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);
-int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap, float relX, float relY);
-void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap, float x, float y, int u8a, int u8b,
-                    Rgba color);
-void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW, float availH, float inheritFont, Rgba inheritFg);
+int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
+                float relX, float relY);
+void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
+                    float x, float y, int u8a, int u8b, Rgba color);
+void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
+              float availH, float inheritFont, Rgba inheritFg);
 void PaintEl(PaintCtx* ctx, El* e);
 int HitTest(PaintCtx* ctx, float x, float y);
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
@@ -471,8 +477,10 @@ struct AppHost {
     AppHost() = default;
 };
 
-int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* user);
-int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks, void* user, AppWinOpts opts);
+int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
+           void* user);
+int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
+             void* user, AppWinOpts opts);
 void AppSetTitle(AppHost* host, const wchar_t* title);
 void AppRequestAnim(AppHost* host, bool on);
 

@@ -41,7 +41,8 @@
 #endif
 
 /* OS_POSIX - Any POSIX-like system */
-#if OS_DARWIN || OS_LINUX || defined(unix) || defined(__unix) || defined(__unix__)
+#if OS_DARWIN || OS_LINUX || defined(unix) || defined(__unix) || \
+    defined(__unix__)
 #define OS_POSIX 1
 #else
 #define OS_POSIX 0
@@ -213,7 +214,9 @@ struct Str {
     int len;
 
     Str() : s(nullptr), len(0) {}
-    Str(const char* s_) : s((char*)s_), len(0) { len = s_ ? (int)strlen(s_) : 0; }
+    Str(const char* s_) : s((char*)s_), len(0) {
+        len = s_ ? (int)strlen(s_) : 0;
+    }
     explicit Str(const char* s_, int len_) : s((char*)s_), len(len_) {}
     explicit Str(char* s_) : s(s_), len(0) { len = s ? (int)strlen(s) : 0; }
     explicit Str(char* s_, int len_) : s(s_), len(len_) {}
@@ -362,7 +365,9 @@ struct Func1 {
     }
     ~Func1() = default;
 
-    void SetData(void* d, bool dropsArg) { userData = (uintptr_t)d | (dropsArg ? kDropsArgBit : 0); }
+    void SetData(void* d, bool dropsArg) {
+        userData = (uintptr_t)d | (dropsArg ? kDropsArgBit : 0);
+    }
     bool IsValid() const { return fn != nullptr; }
     void Call(T arg) const {
         if (!fn) {
@@ -469,7 +474,8 @@ struct Arena {
     ~Arena() = delete;
 };
 
-static_assert(sizeof(Arena) <= kArenaHeaderSize, "Arena header must fit in reserved header bytes");
+static_assert(sizeof(Arena) <= kArenaHeaderSize,
+              "Arena header must fit in reserved header bytes");
 
 extern u64 gArenaDefaultReserveSize;
 extern u64 gArenaDefaultCommitSize;
@@ -489,7 +495,8 @@ void Free(struct Arena* arena, void* mem);
 void* Alloc(struct Arena* arena, size_t size);
 void* AllocZero(struct Arena* arena, size_t size);
 void* Realloc(struct Arena* arena, void* mem, size_t newSize, size_t copySize);
-void* MemDup(struct Arena* arena, const void* mem, size_t size, size_t extraBytes = 0);
+void* MemDup(struct Arena* arena, const void* mem, size_t size,
+             size_t extraBytes = 0);
 
 template <typename T>
 inline T* AllocArray(struct Arena* arena, int n = 1) {
@@ -502,7 +509,8 @@ T* New(Arena* arena, Args&&... args) {
     return new (mem) T(std::forward<Args>(args)...);
 }
 
-bool VecRealloc(struct Arena* a, void** els, int len, int* cap, int newCap, int elSize);
+bool VecRealloc(struct Arena* a, void** els, int len, int* cap, int newCap,
+                int elSize);
 
 template <typename T>
 struct Vec;
@@ -548,7 +556,8 @@ struct Vec {
         VecReserve(*this, other.len);
         len = other.len;
         if (other.len > 0 && other.els && els) {
-            memcpy((void*)els, (const void*)other.els, sizeof(T) * (size_t)other.len);
+            memcpy((void*)els, (const void*)other.els,
+                   sizeof(T) * (size_t)other.len);
         }
     }
 
@@ -602,7 +611,8 @@ bool VecReserve(Arena* arena, T& v, int wantedSize) {
         return true;
     }
     int newCap = std::max(v.cap * 2, wantedSize);
-    return VecRealloc(arena, (void**)&v.els, v.len, &v.cap, newCap, (int)sizeof(*v.els));
+    return VecRealloc(arena, (void**)&v.els, v.len, &v.cap, newCap,
+                      (int)sizeof(*v.els));
 }
 
 template <typename T>
@@ -624,7 +634,8 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
     if (v.len > idx) {
         T* src = v.els + idx;
         T* dst = v.els + idx + count;
-        memmove((void*)dst, (const void*)src, (size_t)(v.len - idx) * sizeof(T));
+        memmove((void*)dst, (const void*)src,
+                (size_t)(v.len - idx) * sizeof(T));
     }
     v.len = newLen;
     return res;

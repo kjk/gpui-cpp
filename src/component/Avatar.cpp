@@ -24,9 +24,21 @@ Avatar* Avatar::Size(float v) {
 
 El* Avatar::IntoEl() {
     const Theme& th = ThemeNow();
-    El* fb = AvatarFallback::New(a)->W(size - 2)->H(size - 2)->ItemsCenter()->JustifyCenter()->Bg(bg)->Child(
-        TextEl(a, initials)->Font(size * 0.35f)->Fg(th.foreground));
-    return ::Avatar::New(a)->Size(size)->Fallback(fb)->IntoEl()->Border(1, th.border)->Radius(size * 0.5f)->ClipY();
+    El* fb =
+        AvatarFallback::New(a)
+            ->W(size - 2)
+            ->H(size - 2)
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Bg(bg)
+            ->Child(TextEl(a, initials)->Font(size * 0.35f)->Fg(th.foreground));
+    return ::Avatar::New(a)
+        ->Size(size)
+        ->Fallback(fb)
+        ->IntoEl()
+        ->Border(1, th.border)
+        ->Radius(size * 0.5f)
+        ->ClipY();
 }
 
 } // namespace component

@@ -15,7 +15,13 @@ GroupBox* GroupBox::Child(El* e) {
 
 El* GroupBox::IntoEl() {
     const Theme& th = ThemeNow();
-    El* box = Div(a)->FlexCol()->Gap(8)->Pad(12)->Radius(th.radius)->Bg(th.muted)->Border(1, th.border);
+    El* box = Div(a)
+                  ->FlexCol()
+                  ->Gap(8)
+                  ->Pad(12)
+                  ->Radius(th.radius)
+                  ->Bg(th.muted)
+                  ->Border(1, th.border);
     if (title.s) {
         box->Child(TextEl(a, title)->Font(13)->Semibold()->Fg(th.foreground));
     }

@@ -58,7 +58,8 @@ static void AddLine(SvgIcon* ic, float x, float y) {
     o.y = y;
     AddOp(ic, o);
 }
-static void AddCubic(SvgIcon* ic, float x1, float y1, float x2, float y2, float x, float y) {
+static void AddCubic(SvgIcon* ic, float x1, float y1, float x2, float y2,
+                     float x, float y) {
     SvgOp o;
     o.cmd = kCubic;
     o.x1 = x1;
@@ -75,7 +76,8 @@ static void AddClose(SvgIcon* ic) {
     AddOp(ic, o);
 }
 
-static void AddRoundRect(SvgIcon* ic, float x, float y, float w, float h, float rx) {
+static void AddRoundRect(SvgIcon* ic, float x, float y, float w, float h,
+                         float rx) {
     if (rx < 0) {
         rx = 0;
     }
@@ -117,7 +119,8 @@ struct PathScan {
 };
 
 static void SkipWs(PathScan* s) {
-    while (s->p < s->end && (*s->p == ' ' || *s->p == '\t' || *s->p == '\n' || *s->p == '\r' || *s->p == ',')) {
+    while (s->p < s->end && (*s->p == ' ' || *s->p == '\t' || *s->p == '\n' ||
+                             *s->p == '\r' || *s->p == ',')) {
         s->p++;
     }
 }
@@ -155,8 +158,8 @@ static float Angle(float ux, float uy, float vx, float vy) {
     return a;
 }
 
-static void AddArc(SvgIcon* ic, float x1, float y1, float rx, float ry, float phiDeg, bool large, bool sweep, float x2,
-                   float y2) {
+static void AddArc(SvgIcon* ic, float x1, float y1, float rx, float ry,
+                   float phiDeg, bool large, bool sweep, float x2, float y2) {
     rx = fabsf(rx);
     ry = fabsf(ry);
     if (rx < 1e-6f || ry < 1e-6f) {
@@ -195,7 +198,8 @@ static void AddArc(SvgIcon* ic, float x1, float y1, float rx, float ry, float ph
     float cx = cosP * cxp - sinP * cyp + (x1 + x2) * 0.5f;
     float cy = sinP * cxp + cosP * cyp + (y1 + y2) * 0.5f;
     float theta1 = Angle(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
-    float dtheta = Angle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+    float dtheta = Angle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx,
+                         (-y1p - cyp) / ry);
     if (!sweep && dtheta > 0) {
         dtheta -= 2 * kPi;
     }
@@ -225,10 +229,14 @@ static void AddArc(SvgIcon* ic, float x1, float y1, float rx, float ry, float ph
         (void)p0y;
         float p1x = cx + cosP * e1x - sinP * e1y;
         float p1y = cy + sinP * e1x + cosP * e1y;
-        float c1x = cx + cosP * (e0x + alpha * d0x) - sinP * (e0y + alpha * d0y);
-        float c1y = cy + sinP * (e0x + alpha * d0x) + cosP * (e0y + alpha * d0y);
-        float c2x = cx + cosP * (e1x - alpha * d1x) - sinP * (e1y - alpha * d1y);
-        float c2y = cy + sinP * (e1x - alpha * d1x) + cosP * (e1y - alpha * d1y);
+        float c1x =
+            cx + cosP * (e0x + alpha * d0x) - sinP * (e0y + alpha * d0y);
+        float c1y =
+            cy + sinP * (e0x + alpha * d0x) + cosP * (e0y + alpha * d0y);
+        float c2x =
+            cx + cosP * (e1x - alpha * d1x) - sinP * (e1y - alpha * d1y);
+        float c2y =
+            cy + sinP * (e1x - alpha * d1x) + cosP * (e1y - alpha * d1y);
         AddCubic(ic, c1x, c1y, c2x, c2y, p1x, p1y);
     }
 }
@@ -324,8 +332,9 @@ static void ParsePathD(SvgIcon* ic, Str d) {
         }
         if (op == 'C') {
             float x1, y1, x2, y2, x, y;
-            if (!ParseNum(&s, &x1) || !ParseNum(&s, &y1) || !ParseNum(&s, &x2) || !ParseNum(&s, &y2) ||
-                !ParseNum(&s, &x) || !ParseNum(&s, &y)) {
+            if (!ParseNum(&s, &x1) || !ParseNum(&s, &y1) ||
+                !ParseNum(&s, &x2) || !ParseNum(&s, &y2) || !ParseNum(&s, &x) ||
+                !ParseNum(&s, &y)) {
                 break;
             }
             if (rel) {
@@ -346,7 +355,8 @@ static void ParsePathD(SvgIcon* ic, Str d) {
         }
         if (op == 'S') {
             float x2, y2, x, y;
-            if (!ParseNum(&s, &x2) || !ParseNum(&s, &y2) || !ParseNum(&s, &x) || !ParseNum(&s, &y)) {
+            if (!ParseNum(&s, &x2) || !ParseNum(&s, &y2) || !ParseNum(&s, &x) ||
+                !ParseNum(&s, &y)) {
                 break;
             }
             if (rel) {
@@ -367,7 +377,8 @@ static void ParsePathD(SvgIcon* ic, Str d) {
         }
         if (op == 'Q') {
             float x1, y1, x, y;
-            if (!ParseNum(&s, &x1) || !ParseNum(&s, &y1) || !ParseNum(&s, &x) || !ParseNum(&s, &y)) {
+            if (!ParseNum(&s, &x1) || !ParseNum(&s, &y1) || !ParseNum(&s, &x) ||
+                !ParseNum(&s, &y)) {
                 break;
             }
             if (rel) {
@@ -415,7 +426,8 @@ static void ParsePathD(SvgIcon* ic, Str d) {
         if (op == 'A') {
             float rx, ry, rot, x, y;
             float fA, fS;
-            if (!ParseNum(&s, &rx) || !ParseNum(&s, &ry) || !ParseNum(&s, &rot) || !ParseNum(&s, &fA) ||
+            if (!ParseNum(&s, &rx) || !ParseNum(&s, &ry) ||
+                !ParseNum(&s, &rot) || !ParseNum(&s, &fA) ||
                 !ParseNum(&s, &fS) || !ParseNum(&s, &x) || !ParseNum(&s, &y)) {
                 break;
             }
@@ -471,7 +483,8 @@ static bool StartsWithI(const char* p, const char* end, const char* lit) {
 }
 
 static bool IsIdentChar(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '-' || c == '_';
 }
 
 static bool GetAttr(Str tag, const char* name, char* out, int outN) {
@@ -533,7 +546,8 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         }
         if (p < end && *p == '!') {
             // comment / doctype
-            while (p + 2 < end && !(p[0] == '-' && p[1] == '-' && p[2] == '>')) {
+            while (p + 2 < end &&
+                   !(p[0] == '-' && p[1] == '-' && p[2] == '>')) {
                 p++;
             }
             p += 3;
@@ -623,7 +637,9 @@ static const SvgIcon* GetIcon(Str assetPath) {
         return nullptr;
     }
     for (int i = 0; i < gCacheN; i++) {
-        if (gCache[i].ok && _strnicmp(gCache[i].path, assetPath.s, (size_t)assetPath.len) == 0 &&
+        if (gCache[i].ok &&
+            _strnicmp(gCache[i].path, assetPath.s, (size_t)assetPath.len) ==
+                0 &&
             gCache[i].path[assetPath.len] == 0) {
             return &gCache[i].icon;
         }
@@ -648,7 +664,8 @@ static D2D1_COLOR_F ToD2D(Rgba c) {
     return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
 }
 
-bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size, Rgba color) {
+bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
+             Rgba color) {
     if (!ctx || !ctx->rt || !ctx->d2d || size <= 0) {
         return false;
     }
@@ -726,7 +743,8 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size, Rgba co
     float sy = size / (ic->vbH > 0 ? ic->vbH : 24.f);
     D2D1_MATRIX_3X2_F old;
     ctx->rt->GetTransform(&old);
-    D2D1_MATRIX_3X2_F xf = D2D1::Matrix3x2F::Translation(-ic->vbX, -ic->vbY) * D2D1::Matrix3x2F::Scale(sx, sy) *
+    D2D1_MATRIX_3X2_F xf = D2D1::Matrix3x2F::Translation(-ic->vbX, -ic->vbY) *
+                           D2D1::Matrix3x2F::Scale(sx, sy) *
                            D2D1::Matrix3x2F::Translation(x, y);
     ctx->rt->SetTransform(xf * old);
 
@@ -740,7 +758,8 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size, Rgba co
 
     if (ctx->brush) {
         ctx->brush->SetColor(ToD2D(color));
-        ctx->rt->DrawGeometry(geom, ctx->brush, ic->strokeW > 0 ? ic->strokeW : 2.f, ss);
+        ctx->rt->DrawGeometry(geom, ctx->brush,
+                              ic->strokeW > 0 ? ic->strokeW : 2.f, ss);
     }
     if (ss) {
         ss->Release();

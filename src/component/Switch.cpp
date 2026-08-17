@@ -43,15 +43,24 @@ Switch* Switch::OnClick(Func1<bool> fn) {
 El* Switch::IntoEl() {
     const Theme& th = ThemeNow();
     Rgba on = hasColor ? color : th.primary;
-    El* track =
-        SwitchTrack::New(a, id)->W(36)->H(20)->Pad(2)->Radius(10)->Bg(checked ? on : th.secondary)->ItemsCenter();
+    El* track = SwitchTrack::New(a, id)
+                    ->W(36)
+                    ->H(20)
+                    ->Pad(2)
+                    ->Radius(10)
+                    ->Bg(checked ? on : th.secondary)
+                    ->ItemsCenter();
     if (checked) {
         track->JustifyEnd();
     } else {
         track->JustifyStart();
     }
-    track->Child(SwitchThumb::New(a)->W(16)->H(16)->Radius(8)->Bg(th.background));
-    El* root = ::Switch::New(a, id, disabled ? 0 : HashClickId(id))->FlexRow()->ItemsCenter()->Gap(8);
+    track->Child(
+        SwitchThumb::New(a)->W(16)->H(16)->Radius(8)->Bg(th.background));
+    El* root = ::Switch::New(a, id, disabled ? 0 : HashClickId(id))
+                   ->FlexRow()
+                   ->ItemsCenter()
+                   ->Gap(8);
     if (onClick.IsValid() && !disabled) {
         SwitchBind* b = ::New<SwitchBind>(a);
         b->fn = onClick;
@@ -60,7 +69,8 @@ El* Switch::IntoEl() {
     }
     root->Child(track);
     if (label.s) {
-        root->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg : th.foreground));
+        root->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg
+                                                            : th.foreground));
     }
     return root;
 }

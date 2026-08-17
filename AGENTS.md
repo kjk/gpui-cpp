@@ -177,7 +177,7 @@ Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan:
 
 `bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` (launch under `windbgx.exe -g -G`). It does not accept `all` — pick one binary.
 
-After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for `src/` + `cmd/*.ts`) before finishing. It runs clang-format on C++ (`/.clang-format`, Chromium-based, 120 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Add `-with-examples` to also clang-format `examples/`. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
+After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for `src/` + `cmd/*.ts`) before finishing. It runs clang-format on C++ (`/.clang-format`, Chromium-based, 80 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Add `-with-examples` to also clang-format `examples/`. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
 
 The Rust reference (optional, slow first build because it pulls Zed). `bun cmd/build.ts` / `bun cmd/versions.ts` installs `.work/gpui-component` at the SHA in `cmd/versions.ts`:
 

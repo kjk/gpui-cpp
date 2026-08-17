@@ -11,7 +11,8 @@ AllowShortEnumsOnASingleLine: false
 # Aligns the enumerators vertically after the {
 AlignAfterOpenBracket: Align
 IndentWidth: 4
-ColumnLimit: 120
+ColumnLimit: 80
+PenaltyBreakBeforeMemberAccess: 0
 AccessModifierOffset: -2
 PointerAlignment: Left
 SpacesBeforeTrailingComments: 1

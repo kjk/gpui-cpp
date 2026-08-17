@@ -60,15 +60,29 @@ El* Badge::IntoEl() {
         font = 8;
     }
     Rgba bg = hasColor ? color : th.danger;
-    El* mark = Div(a)->Absolute()->Top(-box * 0.35f)->Right(-box * 0.35f)->Bg(bg)->ItemsCenter()->JustifyCenter();
+    El* mark = Div(a)
+                   ->Absolute()
+                   ->Top(-box * 0.35f)
+                   ->Right(-box * 0.35f)
+                   ->Bg(bg)
+                   ->ItemsCenter()
+                   ->JustifyCenter();
     if (kind == BadgeKind::Dot) {
         mark->W(8)->H(8)->Radius(4);
     } else if (kind == BadgeKind::Icon) {
-        mark->W(box)->H(box)->Radius(box * 0.5f)->Child(IconEl(a, icon, box * 0.6f)->Fg(th.dangerFg));
+        mark->W(box)
+            ->H(box)
+            ->Radius(box * 0.5f)
+            ->Child(IconEl(a, icon, box * 0.6f)->Fg(th.dangerFg));
     } else {
         int shown = count > max ? max : count;
-        Str txt = count > max ? str::Dup(a, fmt("%d+", shown)) : str::Dup(a, fmt("%d", shown));
-        mark->MinW(box)->H(box)->PadX(4)->Radius(box * 0.5f)->Child(TextEl(a, txt)->Font(font)->Fg(th.dangerFg));
+        Str txt = count > max ? str::Dup(a, fmt("%d+", shown))
+                              : str::Dup(a, fmt("%d", shown));
+        mark->MinW(box)
+            ->H(box)
+            ->PadX(4)
+            ->Radius(box * 0.5f)
+            ->Child(TextEl(a, txt)->Font(font)->Fg(th.dangerFg));
     }
     root->Child(mark);
     return root;

@@ -32,15 +32,17 @@ Tabs* Tabs::OnChange(Func1<int> fn) {
 
 El* Tabs::IntoEl() {
     const Theme& th = ThemeNow();
-    El* bar = ::Tabs::New(a, StrL("tabs"))->FlexRow()->Gap(4)->BorderB(1, th.border);
+    El* bar =
+        ::Tabs::New(a, StrL("tabs"))->FlexRow()->Gap(4)->BorderB(1, th.border);
     for (int i = 0; i < n; i++) {
         bool on = i == selected;
-        El* tab = ::Tab::New(a, labels[i], HashClickId(labels[i]))
-                      ->H(28)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->BorderB(2, on ? th.foreground : th.background)
-                      ->Child(TextEl(a, labels[i])->Font(13)->Fg(th.foreground));
+        El* tab =
+            ::Tab::New(a, labels[i], HashClickId(labels[i]))
+                ->H(28)
+                ->PadX(8)
+                ->ItemsCenter()
+                ->BorderB(2, on ? th.foreground : th.background)
+                ->Child(TextEl(a, labels[i])->Font(13)->Fg(th.foreground));
         if (on) {
             tab->first->style.fontSemibold = true;
         }

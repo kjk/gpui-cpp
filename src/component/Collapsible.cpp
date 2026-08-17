@@ -22,7 +22,11 @@ Collapsible* Collapsible::Content(El* e) {
 }
 
 El* Collapsible::IntoEl() {
-    return ::Collapsible::New(a)->Open(open)->Child(trigger)->Content(content)->IntoEl();
+    return ::Collapsible::New(a)
+        ->Open(open)
+        ->Child(trigger)
+        ->Content(content)
+        ->IntoEl();
 }
 
 } // namespace component

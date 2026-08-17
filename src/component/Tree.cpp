@@ -62,7 +62,11 @@ El* Tree::IntoEl() {
         if (!Visible(this, i)) {
             continue;
         }
-        El* row = TreeItem::New(a, HashClickId(nodes[i].label))->H(28)->PadX(8)->ItemsCenter()->Gap(4);
+        El* row = TreeItem::New(a, HashClickId(nodes[i].label))
+                      ->H(28)
+                      ->PadX(8)
+                      ->ItemsCenter()
+                      ->Gap(4);
         if (i == selected) {
             row->Bg(th.muted);
         }
@@ -71,7 +75,11 @@ El* Tree::IntoEl() {
             row->Child(Div(a)->W((float)d * 12));
         }
         if (nodes[i].folder) {
-            row->Child(IconEl(a, nodes[i].open ? IconName::ChevronDown : IconName::ChevronRight, 12)->Fg(th.mutedFg));
+            row->Child(IconEl(a,
+                              nodes[i].open ? IconName::ChevronDown
+                                            : IconName::ChevronRight,
+                              12)
+                           ->Fg(th.mutedFg));
         } else {
             row->Child(Div(a)->W(12));
         }
@@ -84,7 +92,12 @@ El* Tree::IntoEl() {
         }
         list->Child(row);
     }
-    return ::Tree::New(a)->W(256)->H(192)->Border(1, th.border)->ClipY()->Child(list);
+    return ::Tree::New(a)
+        ->W(256)
+        ->H(192)
+        ->Border(1, th.border)
+        ->ClipY()
+        ->Child(list);
 }
 
 } // namespace component

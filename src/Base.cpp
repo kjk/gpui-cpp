@@ -127,7 +127,8 @@ static void* ArenaPushLocked(Arena* arena, u64 size, u64 align, bool zero) {
         u64 reserveChunkSize = current->reserveChunkSize;
         u64 commitChunkSize = current->commitChunkSize;
         if (size + kArenaHeaderSize > reserveChunkSize) {
-            reserveChunkSize = ArenaAlignPow2(size + kArenaHeaderSize, ArenaMax(align, ArenaPageSize()));
+            reserveChunkSize = ArenaAlignPow2(size + kArenaHeaderSize,
+                                              ArenaMax(align, ArenaPageSize()));
             commitChunkSize = reserveChunkSize;
         }
 
@@ -208,8 +209,10 @@ Arena* ArenaNew(const ArenaParams& srcParams) {
 
     bool useLargePages = (params.flags & ArenaFlagLargePages) != 0;
     const u64 pageSize = useLargePages ? ArenaLargePageSize() : ArenaPageSize();
-    u64 reserveSize = ArenaAlignPow2(ArenaMax(params.reserveSize, kArenaHeaderSize), pageSize);
-    u64 commitSize = ArenaAlignPow2(ArenaMax(params.commitSize, kArenaHeaderSize), pageSize);
+    u64 reserveSize = ArenaAlignPow2(
+        ArenaMax(params.reserveSize, kArenaHeaderSize), pageSize);
+    u64 commitSize =
+        ArenaAlignPow2(ArenaMax(params.commitSize, kArenaHeaderSize), pageSize);
     commitSize = ArenaClampTop(commitSize, reserveSize);
 
     void* base = params.optionalBackingBuffer;
@@ -454,7 +457,8 @@ Str AllocStrTemp(int size) {
 // Updates *els and *cap. len is not modified (caller owns logical length).
 // Grow/shrink vec-like storage to newCap elements (+1 trailing zero pad).
 // Updates *els and *cap; keeps min(len, newCap) elements.
-NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap, int newCap, int elSize) {
+NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap, int newCap,
+                          int elSize) {
     // newCap+1 must fit in int; newElCount * elSize must not overflow.
     if (elSize <= 0 || newCap < 0 || newCap > INT_MAX - 1) {
         return false;
@@ -470,7 +474,8 @@ NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap, int newCap, i
     int oldSize = keep * elSize;
     int allocSize = newElCount * elSize;
 
-    // Realloc(a, nullptr, n, 0) is malloc-like; single path for first alloc and grow.
+    // Realloc(a, nullptr, n, 0) is malloc-like; single path for first alloc and
+    // grow.
     void* newEls = Realloc(a, *els, (size_t)allocSize, (size_t)oldSize);
     if (!newEls) {
         return false;
@@ -484,7 +489,8 @@ NO_INLINE bool VecRealloc(Arena* a, void** els, int len, int* cap, int newCap, i
     return true;
 }
 
-// ─── Arena_win.cpp ───────────────────────────────────────────────────────────────
+// ─── Arena_win.cpp
+// ───────────────────────────────────────────────────────────────
 
 u64 ArenaPageSize() {
     static u64 pageSize = 0;
@@ -550,7 +556,8 @@ Str Dup(Arena* a, Str s) {
         return {};
     }
     int cch = s.len;
-    return WrapAllocated((char*)MemDup(a, s.s, (size_t)cch * sizeof(char), sizeof(char)), cch);
+    return WrapAllocated(
+        (char*)MemDup(a, s.s, (size_t)cch * sizeof(char), sizeof(char)), cch);
 }
 
 Str Dup(Str s) {
@@ -689,7 +696,8 @@ static char* EnsureCap(str::Builder* s, int needed) {
             newEls[0] = 0;
         }
     } else {
-        newEls = (char*)Realloc(s->a, s->els, (size_t)allocSize, (size_t)s->len + kPadding);
+        newEls = (char*)Realloc(s->a, s->els, (size_t)allocSize,
+                                (size_t)s->len + kPadding);
     }
     if (!newEls) {
         return nullptr;
@@ -823,7 +831,8 @@ Str str::Builder::TakeStr() {
     return Str(res, n);
 }
 
-// ─── StrFormatParse.cpp ───────────────────────────────────────────────────────────────
+// ─── StrFormatParse.cpp
+// ───────────────────────────────────────────────────────────────
 
 #if OS_POSIX
 #include <locale.h>
@@ -868,13 +877,14 @@ namespace str {
 struct Inst {
     FmtArg::Kind t = FmtArg::Kind::None;
     int argNo = 0;  // <0 for strings that come from formatting string
-    int rawOff = 0; // offset into format for FmtArg::Kind::RawStr / start of fwp for % spec
+    int rawOff = 0; // offset into format for FmtArg::Kind::RawStr / start of
+                    // fwp for % spec
     int sLen = 0;   // length, for FmtArg::Kind::RawStr
 
     // for a % spec: the conversion char and the flags+width+precision range
     // (everything between '%' and the length-modifier/conversion). We delegate
-    // the actual formatting to snprintf, only normalizing the length modifier so
-    // 32/64-bit semantics match printf exactly.
+    // the actual formatting to snprintf, only normalizing the length modifier
+    // so 32/64-bit semantics match printf exactly.
     char conv = 0;
     int intBits = 0; // 32 or 64 for integer-family conversions
     int fwpOff = 0;  // offset into format of flags+width+precision
@@ -890,7 +900,8 @@ struct Fmt {
 
     bool Eval(const FmtArg** args, int nArgs);
 
-    bool isOk = true; // true if mismatch between formatting instruction and args
+    bool isOk =
+        true; // true if mismatch between formatting instruction and args
 
     Str format;
     Inst instructions[32]{}; // 32 should be big enough for everybody
@@ -920,8 +931,9 @@ static int parseArgDefBrace(Fmt& fmt, int off) {
     off++;
     int n = 0;
     bool positional = false;
-    // a '{' with no closing '}' must not walk past the end of the format string.
-    // Reachable via a translated format string (fmt(_TRA("...").s, ...)).
+    // a '{' with no closing '}' must not walk past the end of the format
+    // string. Reachable via a translated format string (fmt(_TRA("...").s,
+    // ...)).
     while (off < fmt.format.len && fmt.format.s[off] != '}') {
         if (!str::IsDigit(fmt.format.s[off])) {
             fmt.isOk = false;
@@ -998,7 +1010,8 @@ static int parseArgDefPerc(Fmt& fmt, int off) {
     bool leftJust = false;
     // flags
     while (off < f.len &&
-           (f.s[off] == '-' || f.s[off] == '+' || f.s[off] == ' ' || f.s[off] == '0' || f.s[off] == '#')) {
+           (f.s[off] == '-' || f.s[off] == '+' || f.s[off] == ' ' ||
+            f.s[off] == '0' || f.s[off] == '#')) {
         if (f.s[off] == '-') {
             leftJust = true;
         }
@@ -1024,9 +1037,11 @@ static int parseArgDefPerc(Fmt& fmt, int off) {
     // length modifier; determine integer width (32/64 on LLP64 / win64)
     int bits = 32;
     char lenMod = (off < f.len) ? f.s[off] : 0;
-    bool is32BitLenMod = lenMod == 'l' || lenMod == 'h' || lenMod == 'L' || lenMod == 'w';
+    bool is32BitLenMod =
+        lenMod == 'l' || lenMod == 'h' || lenMod == 'L' || lenMod == 'w';
     // size_t / intmax_t / ptrdiff_t / MS size_t
-    bool is64BitLenMod = lenMod == 'z' || lenMod == 'j' || lenMod == 't' || lenMod == 'I';
+    bool is64BitLenMod =
+        lenMod == 'z' || lenMod == 'j' || lenMod == 't' || lenMod == 'I';
     if (startsWith(f, off, "I64")) {
         bits = 64;
         off += 3;
@@ -1069,7 +1084,8 @@ static bool hasInstructionWithArgNo(Inst* insts, int nInst, int argNo) {
 }
 
 static bool isIntLike(FmtArg::Kind t) {
-    return t == FmtArg::Kind::Char || t == FmtArg::Kind::Int || t == FmtArg::Kind::Ptr;
+    return t == FmtArg::Kind::Char || t == FmtArg::Kind::Int ||
+           t == FmtArg::Kind::Ptr;
 }
 
 static bool validArgTypes(FmtArg::Kind instType, FmtArg::Kind argType) {
@@ -1079,11 +1095,13 @@ static bool validArgTypes(FmtArg::Kind instType, FmtArg::Kind argType) {
     // integer-family specs (%c %d %u %x %p ...) accept any integer-like arg
     // (char / int / pointer), matching printf's leniency -- e.g. an HWND with
     // %x, or an int with %c.
-    if (instType == FmtArg::Kind::Char || instType == FmtArg::Kind::Int || instType == FmtArg::Kind::Ptr) {
+    if (instType == FmtArg::Kind::Char || instType == FmtArg::Kind::Int ||
+        instType == FmtArg::Kind::Ptr) {
         return isIntLike(argType);
     }
     if (instType == FmtArg::Kind::Float) {
-        return argType == FmtArg::Kind::Float || argType == FmtArg::Kind::Double;
+        return argType == FmtArg::Kind::Float ||
+               argType == FmtArg::Kind::Double;
     }
     if (instType == FmtArg::Kind::Str) {
         return argType == FmtArg::Kind::Str || argType == FmtArg::Kind::WStr;
@@ -1146,8 +1164,9 @@ static bool ParseFormat(Fmt& o, Str fmtStr) {
     return true;
 }
 
-// format a single value into a caller-provided buffer via snprintf, NUL-terminating
-// even on truncation. Avoids allocating (assuming vsnprintf doesn't allocate).
+// format a single value into a caller-provided buffer via snprintf,
+// NUL-terminating even on truncation. Avoids allocating (assuming vsnprintf
+// doesn't allocate).
 static void bufFmt(Str buf, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -1156,7 +1175,8 @@ static void bufFmt(Str buf, const char* fmt, ...) {
     buf.s[buf.len - 1] = 0;
 }
 
-// default formatting for {n} positional and %v: format by the arg's runtime type
+// default formatting for {n} positional and %v: format by the arg's runtime
+// type
 static void evalDefault(Fmt& fmt, const FmtArg& arg) {
     TempStr s;
     Str buf(fmt.buf, dimofi(fmt.buf));
@@ -1206,8 +1226,8 @@ static i64 argToI64(const FmtArg& arg) {
 
 // format a typed % spec by reconstructing a single-conversion printf format and
 // delegating to snprintf (bufFmt), normalizing the length modifier so the
-// 32/64-bit value width matches printf. %s padding/truncation is done by hand to
-// avoid relying on the Str being NUL-terminated.
+// 32/64-bit value width matches printf. %s padding/truncation is done by hand
+// to avoid relying on the Str being NUL-terminated.
 static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     char* buf = fmt.buf;
     Str bufS(fmt.buf, dimofi(fmt.buf));
@@ -1297,8 +1317,11 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             fmt.res.Append(buf);
         } break;
         case 'p': {
-            // flags/width are uncommon (and platform-specific) for %p; emit plain
-            const void* pv = (arg.t == FmtArg::Kind::Ptr) ? arg.ptr : (const void*)(intptr_t)ival;
+            // flags/width are uncommon (and platform-specific) for %p; emit
+            // plain
+            const void* pv = (arg.t == FmtArg::Kind::Ptr)
+                                 ? arg.ptr
+                                 : (const void*)(intptr_t)ival;
             bufFmt(bufS, "%p", pv);
             fmt.res.Append(buf);
         } break;
@@ -1348,7 +1371,8 @@ bool Fmt::Eval(const FmtArg** args, int nArgs) {
 // the crash handler, which pre-allocates its arena). FormatTempArgs() is just
 // this with GetTempArena().
 Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args, int nArgs) {
-    // trailing arguments could be empty (unused defaults from the variadic call)
+    // trailing arguments could be empty (unused defaults from the variadic
+    // call)
     while (nArgs > 0 && args[nArgs - 1]->t == FmtArg::Kind::None) {
         nArgs--;
     }
@@ -1411,8 +1435,8 @@ static _locale_t GetUtf8FormatLocale() {
 }
 #endif
 
-// The format string is a plain const char* because this is a thin wrapper around
-// vsnprintf and is almost always called with a string literal.
+// The format string is a plain const char* because this is a thin wrapper
+// around vsnprintf and is almost always called with a string literal.
 int str::VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
 #if defined(_MSC_VER)
     _locale_t loc = GetUtf8FormatLocale();

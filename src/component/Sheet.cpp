@@ -45,8 +45,14 @@ El* Sheet::IntoEl(WinSize size) {
     if (body) {
         surface->Child(body);
     }
-    surface->Child(Button::New(a, StrL("sheet-done"))->Label(StrL("Done"))->Primary()->OnClick(onClose)->IntoEl());
-    El* overlay = Div(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->Bg(Rgba8(0, 0, 0, 40));
+    surface->Child(Button::New(a, StrL("sheet-done"))
+                       ->Label(StrL("Done"))
+                       ->Primary()
+                       ->OnClick(onClose)
+                       ->IntoEl());
+    El* overlay =
+        Div(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->Bg(
+            Rgba8(0, 0, 0, 40));
     if (onClose.IsValid()) {
         overlay->OnClick(onClose)->Click(HashClickId(StrL("sheet-overlay")));
     }

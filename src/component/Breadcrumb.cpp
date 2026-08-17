@@ -34,7 +34,9 @@ El* Breadcrumb::IntoEl() {
             row->Child(TextEl(a, StrL("/"))->Font(12)->Fg(th.mutedFg));
         }
         bool last = i == n - 1;
-        El* t = TextEl(a, items[i])->Font(13)->Fg(last ? th.foreground : th.mutedFg);
+        El* t = TextEl(a, items[i])
+                    ->Font(13)
+                    ->Fg(last ? th.foreground : th.mutedFg);
         if (!last && onClick.IsValid()) {
             El* hit = Div(a)->Child(t);
             CrumbBind* b = ::New<CrumbBind>(a);

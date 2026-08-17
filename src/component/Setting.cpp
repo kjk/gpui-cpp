@@ -22,12 +22,13 @@ El* Setting::IntoEl() {
     El* col = Div(a)->FlexCol()->Gap(12);
     col->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
     for (int i = 0; i < n; i++) {
-        col->Child(Div(a)
-                       ->FlexRow()
-                       ->ItemsCenter()
-                       ->JustifyBetween()
-                       ->Child(TextEl(a, items[i].label)->Font(13)->Fg(th.foreground))
-                       ->Child(items[i].control ? items[i].control : Div(a)));
+        col->Child(
+            Div(a)
+                ->FlexRow()
+                ->ItemsCenter()
+                ->JustifyBetween()
+                ->Child(TextEl(a, items[i].label)->Font(13)->Fg(th.foreground))
+                ->Child(items[i].control ? items[i].control : Div(a)));
     }
     return col;
 }

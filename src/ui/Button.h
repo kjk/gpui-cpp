@@ -6,7 +6,7 @@
 #include "gpui/Gpui.h"
 
 struct Button {
-    // id is the stable element id (Rust ElementId). clickId is the C++ hit/focus
-    // token (Rust on_click). Pass 0 for a non-interactive shell.
+    // id is the stable element id (Rust ElementId). clickId is the C++
+    // hit/focus token (Rust on_click). Pass 0 for a non-interactive shell.
     static El* New(Arena* a, Str id, int clickId = 0);
 };

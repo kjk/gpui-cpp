@@ -25,12 +25,13 @@ El* Input::IntoEl() {
     if (label.s) {
         col->Child(TextEl(a, label)->Font(12)->Fg(th.foreground));
     }
-    El* field = InputBase::New(a, id, HashClickId(id))
-                    ->H(28)
-                    ->PadX(8)
-                    ->ItemsCenter()
-                    ->Border(1, state && state->focused ? th.foreground : th.border)
-                    ->Child(::Input::New(a, state));
+    El* field =
+        InputBase::New(a, id, HashClickId(id))
+            ->H(28)
+            ->PadX(8)
+            ->ItemsCenter()
+            ->Border(1, state && state->focused ? th.foreground : th.border)
+            ->Child(::Input::New(a, state));
     if (onChange.IsValid()) {
         field->OnClick(onChange);
     }
@@ -87,8 +88,16 @@ El* NumberInput::IntoEl() {
                     ->PadX(8)
                     ->ItemsCenter()
                     ->Child(::Input::New(a, state)))
-        ->Child(Button::New(a, StrL("inc"))->Label(StrL("+"))->Compact()->OnClick(onInc)->IntoEl())
-        ->Child(Button::New(a, StrL("dec"))->Label(StrL("−"))->Compact()->OnClick(onDec)->IntoEl());
+        ->Child(Button::New(a, StrL("inc"))
+                    ->Label(StrL("+"))
+                    ->Compact()
+                    ->OnClick(onInc)
+                    ->IntoEl())
+        ->Child(Button::New(a, StrL("dec"))
+                    ->Label(StrL("−"))
+                    ->Compact()
+                    ->OnClick(onDec)
+                    ->IntoEl());
 }
 
 OtpInput* OtpInput::New(Arena* a, const char* value, int len) {
@@ -119,7 +128,9 @@ El* OtpInput::IntoEl() {
                        ->ItemsCenter()
                        ->JustifyCenter()
                        ->Border(1, i == len ? th.foreground : th.border)
-                       ->Child(TextEl(a, str::Dup(a, Str(ch)))->Font(14)->Fg(th.foreground)));
+                       ->Child(TextEl(a, str::Dup(a, Str(ch)))
+                                   ->Font(14)
+                                   ->Fg(th.foreground)));
     }
     return row;
 }

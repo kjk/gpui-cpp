@@ -87,7 +87,12 @@ El* Alert::IntoEl() {
         default:
             break;
     }
-    El* row = Div(a)->FlexRow()->Gap(8)->Pad(banner ? 8.f : 12.f)->ItemsStart()->Bg(bg);
+    El* row = Div(a)
+                  ->FlexRow()
+                  ->Gap(8)
+                  ->Pad(banner ? 8.f : 12.f)
+                  ->ItemsStart()
+                  ->Bg(bg);
     if (!banner) {
         row->Border(1, bd)->Radius(th.radius);
     }
@@ -96,10 +101,12 @@ El* Alert::IntoEl() {
     if (title.s && !banner) {
         col->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(th.foreground));
     }
-    col->Child(TextEl(a, message)->Font(UiFontPx(size))->Fg(th.foreground)->Wrap());
+    col->Child(
+        TextEl(a, message)->Font(UiFontPx(size))->Fg(th.foreground)->Wrap());
     row->Child(col);
     if (onClose.IsValid()) {
-        El* x = Div(a)->W(20)->H(20)->ItemsCenter()->JustifyCenter()->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg));
+        El* x = Div(a)->W(20)->H(20)->ItemsCenter()->JustifyCenter()->Child(
+            IconEl(a, IconName::X, 14)->Fg(th.mutedFg));
         BindClick(x, StrL("alert-close"), onClose);
         row->Child(x);
     }

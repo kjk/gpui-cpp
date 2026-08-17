@@ -35,7 +35,9 @@ El* Input::New(Arena* a, LineInput* state) {
         row->Child(slot);
     }
     if (cur < state->len) {
-        row->Child(TextEl(a, Str(state->buf + cur, state->len - cur))->Font(12)->Fg(fg));
+        row->Child(TextEl(a, Str(state->buf + cur, state->len - cur))
+                       ->Font(12)
+                       ->Fg(fg));
     }
     return row;
 }
@@ -59,7 +61,9 @@ El* Textarea::New(Arena* a, const char* text, bool caret) {
         memcpy(tmp, text + start, (size_t)n);
         tmp[n] = 0;
         bool last = text[i] == 0;
-        El* line = TextEl(a, str::Dup(a, Str(tmp)))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17));
+        El* line = TextEl(a, str::Dup(a, Str(tmp)))
+                       ->Font(12)
+                       ->Fg(Rgb(0x17, 0x17, 0x17));
         if (last && caret) {
             El* row = Div(a)->FlexRow()->ItemsCenter()->H(16);
             row->Child(line);
@@ -77,7 +81,8 @@ El* Textarea::New(Arena* a, const char* text, bool caret) {
 }
 
 static bool IsIdentChar(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_';
 }
 
 static bool TokEq(const char* s, int n, const char* kw) {
@@ -86,15 +91,18 @@ static bool TokEq(const char* s, int n, const char* kw) {
 }
 
 static Rgba EditorTokColor(const char* s, int n) {
-    static const char* kws[] = {"use", "struct", "fn", "impl", "let",    "mut",  "pub",   "self",  "Self",  "as",
-                                "in",  "for",    "if", "else", "return", "true", "false", "crate", "super", nullptr};
+    static const char* kws[] = {"use",  "struct", "fn",    "impl",  "let",
+                                "mut",  "pub",    "self",  "Self",  "as",
+                                "in",   "for",    "if",    "else",  "return",
+                                "true", "false",  "crate", "super", nullptr};
     for (int i = 0; kws[i]; i++) {
         if (TokEq(s, n, kws[i])) {
             return Rgb(0x25, 0x63, 0xeb);
         }
     }
-    static const char* tys[] = {"usize", "isize",  "i32",  "u32",     "u64",  "i64",
-                                "str",   "String", "bool", "HashMap", nullptr};
+    static const char* tys[] = {"usize", "isize",   "i32",  "u32",
+                                "u64",   "i64",     "str",  "String",
+                                "bool",  "HashMap", nullptr};
     for (int i = 0; tys[i]; i++) {
         if (TokEq(s, n, tys[i])) {
             return Rgb(0x25, 0x63, 0xeb);
@@ -118,7 +126,8 @@ static void EditorCaret(Arena* a, El* row, bool on) {
     row->Child(slot);
 }
 
-static void EditorRun(Arena* a, El* row, const char* s, int n, Rgba c, int* col, int caretCol, bool caretOn) {
+static void EditorRun(Arena* a, El* row, const char* s, int n, Rgba c, int* col,
+                      int caretCol, bool caretOn) {
     if (n <= 0) {
         return;
     }
@@ -140,7 +149,8 @@ static void EditorRun(Arena* a, El* row, const char* s, int n, Rgba c, int* col,
     *col = end;
 }
 
-static void HighlightEditorLine(Arena* a, El* row, const char* line, int n, int caretCol, bool caretOn) {
+static void HighlightEditorLine(Arena* a, El* row, const char* line, int n,
+                                int caretCol, bool caretOn) {
     int i = 0;
     int col = 0;
     while (i < n && line[i] == ' ') {
@@ -153,7 +163,8 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n, int 
     }
     while (i < n) {
         if (line[i] == '/' && i + 1 < n && line[i + 1] == '/') {
-            EditorRun(a, row, line + i, n - i, Rgb(0x73, 0x73, 0x73), &col, caretCol, caretOn);
+            EditorRun(a, row, line + i, n - i, Rgb(0x73, 0x73, 0x73), &col,
+                      caretCol, caretOn);
             i = n;
             break;
         }
@@ -165,7 +176,8 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n, int 
             if (j < n) {
                 j++;
             }
-            EditorRun(a, row, line + i, j - i, Rgb(0x7c, 0x3a, 0xed), &col, caretCol, caretOn);
+            EditorRun(a, row, line + i, j - i, Rgb(0x7c, 0x3a, 0xed), &col,
+                      caretCol, caretOn);
             i = j;
             continue;
         }
@@ -177,7 +189,8 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n, int 
             if (j < n) {
                 j++;
             }
-            EditorRun(a, row, line + i, j - i, Rgb(0x16, 0xa3, 0x4a), &col, caretCol, caretOn);
+            EditorRun(a, row, line + i, j - i, Rgb(0x16, 0xa3, 0x4a), &col,
+                      caretCol, caretOn);
             i = j;
             continue;
         }
@@ -186,11 +199,13 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n, int 
             while (j < n && IsIdentChar(line[j])) {
                 j++;
             }
-            EditorRun(a, row, line + i, j - i, EditorTokColor(line + i, j - i), &col, caretCol, caretOn);
+            EditorRun(a, row, line + i, j - i, EditorTokColor(line + i, j - i),
+                      &col, caretCol, caretOn);
             i = j;
             continue;
         }
-        EditorRun(a, row, line + i, 1, Rgb(0x17, 0x17, 0x17), &col, caretCol, caretOn);
+        EditorRun(a, row, line + i, 1, Rgb(0x17, 0x17, 0x17), &col, caretCol,
+                  caretOn);
         i++;
     }
     if (caretCol == col) {
@@ -223,7 +238,9 @@ El* Editor::New(Arena* a, const char* text, int cursor, bool caret) {
         }
         El* row = Div(a)->FlexRow()->H(20)->Gap(8)->ItemsCenter();
         row->Child(Div(a)->W(20)->JustifyEnd()->Child(
-            TextEl(a, str::Dup(a, fmt("%d", lineNo)))->Font(11)->Fg(Rgb(0xa3, 0xa3, 0xa3))));
+            TextEl(a, str::Dup(a, fmt("%d", lineNo)))
+                ->Font(11)
+                ->Fg(Rgb(0xa3, 0xa3, 0xa3))));
         El* code = Div(a)->FlexRow()->ItemsCenter();
         HighlightEditorLine(a, code, text + start, n, caretCol, blink);
         row->Child(code);

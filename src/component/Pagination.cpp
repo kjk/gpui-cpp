@@ -24,13 +24,18 @@ Pagination* Pagination::OnChange(Func1<int> fn) {
 }
 
 El* Pagination::IntoEl() {
-    El* row = ::Pagination::New(a, StrL("pagination"))->FlexRow()->Gap(8)->ItemsCenter();
+    El* row = ::Pagination::New(a, StrL("pagination"))
+                  ->FlexRow()
+                  ->Gap(8)
+                  ->ItemsCenter();
     int n = total > 12 ? 12 : total;
     if (n < 1) {
         n = 1;
     }
     for (int i = 1; i <= n; i++) {
-        Button* b = Button::New(a, str::Dup(a, fmt("page-%d", i)))->Label(str::Dup(a, fmt("%d", i)))->Compact();
+        Button* b = Button::New(a, str::Dup(a, fmt("page-%d", i)))
+                        ->Label(str::Dup(a, fmt("%d", i)))
+                        ->Compact();
         if (i == page) {
             b->Primary();
         }

@@ -28,7 +28,9 @@ El* Notification::IntoEl() {
     } else if (kind == NotificationKind::Error) {
         v = AlertVariant::Error;
     }
-    Alert* al = Alert::New(a, StrL("notification"), message)->Title(title)->OnClose(onClose);
+    Alert* al = Alert::New(a, StrL("notification"), message)
+                    ->Title(title)
+                    ->OnClose(onClose);
     al->variant = v;
     return al->IntoEl();
 }

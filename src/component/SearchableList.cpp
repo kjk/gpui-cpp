@@ -30,7 +30,11 @@ El* SearchableList::IntoEl() {
         list->Item(items[i]);
     }
     list->OnSelect(onSelect);
-    return Div(a)->FlexCol()->Gap(8)->Child(Input::New(a, StrL("search"), query)->IntoEl())->Child(list->IntoEl());
+    return Div(a)
+        ->FlexCol()
+        ->Gap(8)
+        ->Child(Input::New(a, StrL("search"), query)->IntoEl())
+        ->Child(list->IntoEl());
 }
 
 } // namespace component

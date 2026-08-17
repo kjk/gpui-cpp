@@ -48,7 +48,8 @@ static void RefreshCpu(SysState* s) {
     cur.valid = true;
     if (s->prevCpu.valid) {
         u64 idleD = cur.idle - s->prevCpu.idle;
-        u64 totalD = (cur.kernel - s->prevCpu.kernel) + (cur.user - s->prevCpu.user);
+        u64 totalD =
+            (cur.kernel - s->prevCpu.kernel) + (cur.user - s->prevCpu.user);
         // kernel includes idle
         if (totalD > 0) {
             double used = (double)(totalD - idleD) / (double)totalD;
@@ -82,7 +83,8 @@ static void RefreshDisk(SysState* s) {
                 s->disk.total = total.QuadPart;
                 s->disk.used = total.QuadPart - freeBytes.QuadPart;
                 if (s->disk.total > 0) {
-                    s->disk.usedPct = (float)((double)s->disk.used * 100.0 / (double)s->disk.total);
+                    s->disk.usedPct = (float)((double)s->disk.used * 100.0 /
+                                              (double)s->disk.total);
                 }
                 return;
             }
@@ -138,14 +140,18 @@ static void RefreshProcesses(SysState* s) {
             ProcessInfo pi;
             pi.pid = pe.th32ProcessID;
             int n =
-                WideCharToMultiByte(CP_UTF8, 0, pe.szExeFile, -1, pi.name, (int)sizeof(pi.name) - 1, nullptr, nullptr);
+                WideCharToMultiByte(CP_UTF8, 0, pe.szExeFile, -1, pi.name,
+                                    (int)sizeof(pi.name) - 1, nullptr, nullptr);
             if (n <= 0) {
                 pi.name[0] = 0;
             }
 
-            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+            HANDLE h =
+                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
+                            FALSE, pe.th32ProcessID);
             if (!h) {
-                h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+                h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                pe.th32ProcessID);
             }
             if (h) {
                 PROCESS_MEMORY_COUNTERS pmc = {sizeof(pmc)};
@@ -158,7 +164,8 @@ static void RefreshProcesses(SysState* s) {
                     u64 prev = FindPrevCpu(s->prevProcs, pi.pid);
                     if (prev && wallDelta > 0) {
                         u64 d = cpu >= prev ? cpu - prev : 0;
-                        pi.cpu = (float)((double)d * 100.0 / ((double)wallDelta * (double)s->ncpu));
+                        pi.cpu = (float)((double)d * 100.0 /
+                                         ((double)wallDelta * (double)s->ncpu));
                     }
                     ProcSample sm;
                     sm.pid = pi.pid;
@@ -191,7 +198,8 @@ struct SortCtx {
     bool desc;
 };
 
-static int CmpProc(const ProcessInfo* a, const ProcessInfo* b, ProcessSort field, bool desc) {
+static int CmpProc(const ProcessInfo* a, const ProcessInfo* b,
+                   ProcessSort field, bool desc) {
     int c = 0;
     switch (field) {
         case ProcessSort::Pid:
@@ -217,10 +225,12 @@ static ProcessSort gSortField = ProcessSort::Cpu;
 static bool gSortDesc = true;
 
 static int QsortProc(const void* x, const void* y) {
-    return CmpProc((const ProcessInfo*)x, (const ProcessInfo*)y, gSortField, gSortDesc);
+    return CmpProc((const ProcessInfo*)x, (const ProcessInfo*)y, gSortField,
+                   gSortDesc);
 }
 
-void SysSortProcesses(SysState* s, ProcessSort field, bool descending, int keepTop) {
+void SysSortProcesses(SysState* s, ProcessSort field, bool descending,
+                      int keepTop) {
     if (s->procs.len <= 1) {
         return;
     }

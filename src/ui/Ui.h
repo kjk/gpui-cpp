@@ -1,4 +1,5 @@
-/* gpui-base unstyled primitives. Visuals belong to the caller (showcase / theme). */
+/* gpui-base unstyled primitives. Visuals belong to the caller (showcase /
+ * theme). */
 
 #pragma once
 

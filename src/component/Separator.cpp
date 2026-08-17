@@ -51,7 +51,11 @@ El* Separator::IntoEl() {
         root->Child(lineEl);
     }
     if (label.s) {
-        root->Child(TextEl(a, label)->Font(12)->Fg(th.mutedFg)->Bg(th.background)->PadX(8));
+        root->Child(TextEl(a, label)
+                        ->Font(12)
+                        ->Fg(th.mutedFg)
+                        ->Bg(th.background)
+                        ->PadX(8));
     }
     return root;
 }

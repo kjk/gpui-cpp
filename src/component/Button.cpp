@@ -84,7 +84,8 @@ Button* Button::OnClick(Func0 fn) {
 
 El* Button::IntoEl() {
     const Theme& th = ThemeNow();
-    Rgba bg = th.secondary, fg = th.secondaryFg, hover = th.secondaryHover, bd = th.border;
+    Rgba bg = th.secondary, fg = th.secondaryFg, hover = th.secondaryHover,
+         bd = th.border;
     switch (variant) {
         case ButtonVariant::Primary:
             bg = th.primary;
