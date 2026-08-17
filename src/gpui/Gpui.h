@@ -241,6 +241,7 @@ struct El {
     El* next = nullptr;
     float x = 0, y = 0, w = 0, h = 0;
     float scrollY = 0;
+    int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
@@ -283,6 +284,7 @@ struct El {
     El* Truncate();
     El* ClipY();
     El* ScrollY(float off);
+    El* ScrollId(int id);
     El* Click(int id);
     El* OnClick(Func0 fn);
     El* Child(El* c);
@@ -329,6 +331,12 @@ struct HitRect {
     Func0 onClick;
 };
 
+struct ScrollRect {
+    int id = 0;
+    float x = 0, y = 0, w = 0, h = 0;
+    float contentH = 0;
+};
+
 // Two-generation shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots.
 struct TextMeasCache {
     void* slots = nullptr;
@@ -355,6 +363,7 @@ struct PaintCtx {
     int hoverId = 0;
     int focusId = 0;
     Vec<HitRect> hits;
+    Vec<ScrollRect> scrolls;
     TextMeasCache textCache;
 
     PaintCtx() = default;
@@ -364,12 +373,6 @@ struct FocusRect {
     int id = 0;
     int trapId = 0;
     float x = 0, y = 0, w = 0, h = 0;
-};
-
-struct ScrollRect {
-    int id = 0;
-    float x = 0, y = 0, w = 0, h = 0;
-    float contentH = 0;
 };
 
 struct LineInput {
@@ -418,6 +421,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
 void PaintEl(PaintCtx* ctx, El* e);
 int HitTest(PaintCtx* ctx, float x, float y);
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
+const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y);
 int HashClickId(Str s);
 
 // Reserved click ids for custom window chrome (WM_NCHITTEST).

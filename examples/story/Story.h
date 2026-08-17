@@ -90,6 +90,7 @@ enum {
 struct StoryApp {
     int story = StoryWelcome;
     float scrollY = 0;
+    float sideScrollY = 0;
     bool collapsed = false;
     LineInput search = {};
     UiSize size = UiSize::Medium;

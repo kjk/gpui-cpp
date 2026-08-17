@@ -424,8 +424,14 @@ static El* Sidebar(StoryApp* app, Arena* a) {
         header->Child(SearchBox(app, a));
     }
     side->Child(header);
-    El* scroller =
-        Div(a)->FlexCol()->Grow()->MinH(0)->ClipY()->ScrollY(0)->W(kFill);
+    El* scroller = Div(a)
+                       ->FlexCol()
+                       ->Grow()
+                       ->MinH(0)
+                       ->ClipY()
+                       ->ScrollY(app->sideScrollY)
+                       ->ScrollId(2)
+                       ->W(kFill);
     if (!app->collapsed) {
         scroller->Child(SidebarList(app, a));
     }
@@ -504,6 +510,7 @@ static El* OnRender(AppHost* host, Arena* frame, WinSize size) {
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->scrollY)
+                       ->ScrollId(1)
                        ->W(kFill);
     scroller->Child(Div(frame)->Pad(16)->W(kFill)->Child(
         StoryRenderRegistered(app, frame, size)));
@@ -614,15 +621,25 @@ static void OnKey(AppHost* host, int vk, bool down) {
 }
 
 static void OnWheel(AppHost* host, float x, float y, float delta) {
-    (void)x;
-    (void)y;
     auto* app = (StoryApp*)host->user;
-    app->scrollY -= delta;
-    if (app->scrollY < 0) {
-        app->scrollY = 0;
+    const ScrollRect* pane = HitScrollRect(&host->paint, x, y);
+    float* off = &app->scrollY;
+    float maxS = 8000.f;
+    if (pane) {
+        if (pane->id == 2) {
+            off = &app->sideScrollY;
+        }
+        maxS = pane->contentH - pane->h;
+        if (maxS < 0) {
+            maxS = 0;
+        }
     }
-    if (app->scrollY > 8000) {
-        app->scrollY = 8000;
+    *off -= delta;
+    if (*off < 0) {
+        *off = 0;
+    }
+    if (*off > maxS) {
+        *off = maxS;
     }
 }
 

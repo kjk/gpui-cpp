@@ -394,6 +394,10 @@ El* El::ScrollY(float off) {
     scrollY = off;
     return this;
 }
+El* El::ScrollId(int id) {
+    scrollId = id;
+    return this;
+}
 El* El::Click(int id) {
     clickId = id;
     return this;
@@ -1882,6 +1886,16 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         hr.onClick = e->onClick;
         ctx->hits.Append(hr);
     }
+    if (e->style.overflowY == OverflowY::Scroll) {
+        ScrollRect sr;
+        sr.id = e->scrollId;
+        sr.x = e->x;
+        sr.y = e->y;
+        sr.w = e->w;
+        sr.h = e->h;
+        sr.contentH = e->contentH;
+        ctx->scrolls.Append(sr);
+    }
 
     if (e->style.hasHoverBg &&
         ((e->clickId && e->clickId == ctx->hoverId) ||
@@ -2035,6 +2049,16 @@ const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {
 int HitTest(PaintCtx* ctx, float x, float y) {
     const HitRect* h = HitTestRect(ctx, x, y);
     return h ? h->id : 0;
+}
+
+const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y) {
+    for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
+        const ScrollRect& s = ctx->scrolls[i];
+        if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) {
+            return &ctx->scrolls[i];
+        }
+    }
+    return nullptr;
 }
 
 static void CollectFocus(El* e, AppHost* host) {
