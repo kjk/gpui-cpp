@@ -352,7 +352,9 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "/FS",
     "/Zi",
     // /MT /MTd: static CRT. Do not use /MD — that pulls vcruntime140.dll.
-    ...(debug ? ["/Od", "/MTd", "/DDEBUG"] : ["/O2", "/MT", "/DNDEBUG"]),
+    // /Gy /Gw: one COMDAT per function/global so the linker can drop unused
+    // code and fold identical functions. /DEBUG would otherwise disable that.
+    ...(debug ? ["/Od", "/MTd", "/DDEBUG"] : ["/O2", "/Gy", "/Gw", "/MT", "/DNDEBUG"]),
   ];
   if (asan) {
     cflags.push("/fsanitize=address");
@@ -424,7 +426,10 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
       "/NODEFAULTLIB:vcruntimed.lib",
       ...libs,
     ];
-    if (asan) {
+    if (!debug) {
+      // /DEBUG implies /OPT:NOREF unless we opt back in.
+      link.push("/INCREMENTAL:NO", "/OPT:REF", "/OPT:ICF");
+    } else if (asan) {
       link.push("/INCREMENTAL:NO");
     }
     link.push("/DEBUG", `/PDB:${outDir}\\${name}.pdb`);
