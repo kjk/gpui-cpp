@@ -41,8 +41,7 @@ El* Rating::IntoEl() {
             RateBind* b = ::New<RateBind>(a);
             b->fn = onChange;
             b->value = i;
-            BindClick(hit, str::Dup(a, fmt("star-%d", i)),
-                      MkFunc0(&FireRate, b));
+            BindClick(hit, StrDup(a, fmt("star-%d", i)), MkFunc0(&FireRate, b));
         }
         row->Child(hit);
     }

@@ -43,7 +43,7 @@ El* Stepper::IntoEl() {
                       ->ItemsCenter()
                       ->JustifyCenter()
                       ->Bg(on || done ? th.primary : th.secondary);
-        dot->Child(TextEl(a, str::Dup(a, fmt("%d", i + 1)))
+        dot->Child(TextEl(a, StrDup(a, fmt("%d", i + 1)))
                        ->Font(11)
                        ->Fg(on || done ? th.primaryFg : th.secondaryFg));
         El* cell = Div(a)->FlexRow()->ItemsCenter()->Gap(6)->Child(dot)->Child(

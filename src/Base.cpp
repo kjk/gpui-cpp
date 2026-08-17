@@ -352,7 +352,7 @@ void* MemDup(Arena* arena, const void* mem, size_t size, size_t extraBytes) {
         memcpy(newMem, mem, size);
     }
     // zero the tail so callers using extraBytes to append a null terminator
-    // (e.g. str::Dup with extraBytes = sizeof(char)) don't read uninitialized
+    // (e.g. StrDup with extraBytes = sizeof(char)) don't read uninitialized
     // memory. When allocated from an arena via Push(..., zero=false) or from
     // malloc() the bytes past `size` aren't otherwise zeroed.
     if (extraBytes > 0) {
@@ -480,8 +480,6 @@ void ArenaReleaseMemory(void* base, u64 size) {
     VirtualFree(base, 0, MEM_RELEASE);
 }
 
-namespace str {
-
 static Str WrapAllocated(char* s, int cch = -1) {
     if (!s) {
         return {};
@@ -492,8 +490,8 @@ static Str WrapAllocated(char* s, int cch = -1) {
     return Str(s, cch);
 }
 
-Str Dup(Arena* a, Str s) {
-    if (str::IsNull(s) || s.len < 0) {
+Str StrDup(Arena* a, Str s) {
+    if (StrIsNull(s) || s.len < 0) {
         return {};
     }
     int cch = s.len;
@@ -501,28 +499,24 @@ Str Dup(Arena* a, Str s) {
         (char*)MemDup(a, s.s, (size_t)cch * sizeof(char), sizeof(char)), cch);
 }
 
-Str Dup(Str s) {
-    return Dup(nullptr, s);
+Str StrDup(Str s) {
+    return StrDup(nullptr, s);
 }
 
-} // namespace str
-
-namespace str {
-
-void Free(Str s) {
+void StrFree(Str s) {
     free(s.s);
 }
 
-bool Eq(Str s1, Str s2) {
+bool StrEq(Str s1, Str s2) {
     if (s1.s == s2.s) {
         return true;
     }
     int len1 = 0;
-    while (!str::IsNull(s1) && len1 < s1.len && s1.s[len1]) {
+    while (!StrIsNull(s1) && len1 < s1.len && s1.s[len1]) {
         len1++;
     }
     int len2 = 0;
-    while (!str::IsNull(s2) && len2 < s2.len && s2.s[len2]) {
+    while (!StrIsNull(s2) && len2 < s2.len && s2.s[len2]) {
         len2++;
     }
     if (len1 != len2) {
@@ -531,14 +525,14 @@ bool Eq(Str s1, Str s2) {
     if (len1 == 0) {
         return true;
     }
-    if (str::IsNull(s1) || str::IsNull(s2)) {
+    if (StrIsNull(s1) || StrIsNull(s2)) {
         return false;
     }
     return 0 == memcmp(s1.s, s2.s, (size_t)len1);
 }
 
 // return true if s1 == s2, case insensitive
-bool EqI(Str s1, Str s2) {
+bool StrEqI(Str s1, Str s2) {
     if (s1.s == s2.s) {
         return true;
     }
@@ -548,25 +542,25 @@ bool EqI(Str s1, Str s2) {
     if (s1.len == 0) {
         return true;
     }
-    if (str::IsNull(s1) || str::IsNull(s2)) {
+    if (StrIsNull(s1) || StrIsNull(s2)) {
         return false;
     }
     return 0 == _strnicmp(s1.s, s2.s, (size_t)s1.len);
 }
 
-bool ContainsI(Str s, Str sub) {
+bool StrContainsI(Str s, Str sub) {
     if (!s || !sub || sub.len <= 0) {
         return false;
     }
     for (int off = 0; off + sub.len <= s.len; off++) {
-        if (EqNI(Str(s.s + off, s.len - off), sub, sub.len)) {
+        if (StrEqNI(Str(s.s + off, s.len - off), sub, sub.len)) {
             return true;
         }
     }
     return false;
 }
 
-bool EqNI(Str s1, Str s2, int n) {
+bool StrEqNI(Str s1, Str s2, int n) {
     if (s1.s == s2.s) {
         return true;
     }
@@ -588,18 +582,16 @@ bool IsDigit(char c) {
     return ('0' <= c) && (c <= '9');
 }
 
-} // namespace str
-
 // for compatibility with C string, the last character is always 0
 // kPadding is number of characters needed for terminating character
 static constexpr int kPadding = 1;
 
 // using external scratch, or no storage yet (not heap)
-static bool IsExternalOrEmpty(const str::Builder* s) {
+static bool IsExternalOrEmpty(const StrBuilder* s) {
     return !s->els || (s->buf.s && s->els == s->buf.s);
 }
 
-static char* EnsureCap(str::Builder* s, int needed) {
+static char* EnsureCap(StrBuilder* s, int needed) {
     // only use external buf if we haven't moved to the heap yet.
     // RemoveAt() can shrink len enough for needed to fit again and switching
     // back would lose the data and leak the heap allocation.
@@ -648,7 +640,7 @@ static char* EnsureCap(str::Builder* s, int needed) {
     return newEls;
 }
 
-static char* MakeSpaceAt(str::Builder* s, int idx, int count) {
+static char* MakeSpaceAt(StrBuilder* s, int idx, int count) {
     int newLen = std::max(s->len, idx) + count;
     char* buf = EnsureCap(s, newLen);
     if (!buf) {
@@ -667,7 +659,7 @@ static char* MakeSpaceAt(str::Builder* s, int idx, int count) {
     return res;
 }
 
-static void StrBuilderReset(str::Builder* s) {
+static void StrBuilderReset(StrBuilder* s) {
     s->len = 0;
     // keep an existing heap buffer for re-use; only bind external buf when
     // we have not allocated heap yet
@@ -679,7 +671,7 @@ static void StrBuilderReset(str::Builder* s) {
     }
 }
 
-static void StrBuilderFree(str::Builder* s) {
+static void StrBuilderFree(StrBuilder* s) {
     if (s->els && !(s->buf.s && s->els == s->buf.s)) {
         Free(s->a, s->els);
     }
@@ -691,7 +683,7 @@ static void StrBuilderFree(str::Builder* s) {
     }
 }
 
-void str::Builder::Reset(Str s) {
+void StrBuilder::Reset(Str s) {
     StrBuilderReset(this);
     Append(s); // no-op if s is empty
 }
@@ -699,31 +691,31 @@ void str::Builder::Reset(Str s) {
 // arena is not owned by Builder; set .a after construction if needed
 // capHint: preferred capacity after first grow
 // capHint: preferred capacity after first grow
-str::Builder::Builder(Str externalBuf) {
+StrBuilder::StrBuilder(Str externalBuf) {
     this->buf = externalBuf;
     Reset();
 }
 
 // capHint: preferred capacity after first grow
 // capHint: preferred capacity after first grow
-str::Builder::Builder(int capHint) {
+StrBuilder::StrBuilder(int capHint) {
     Reset();
     cap = capHint + kPadding; // + kPadding for terminating 0
 }
 
-str::Builder::~Builder() {
+StrBuilder::~StrBuilder() {
     StrBuilderFree(this);
 }
 
-char& str::Builder::operator[](int idx) const {
+char& StrBuilder::operator[](int idx) const {
     return els[idx];
 }
 
-int len(const str::Builder& b) {
+int len(const StrBuilder& b) {
     return b.len;
 }
 
-bool str::Builder::InsertAt(int idx, char el) {
+bool StrBuilder::InsertAt(int idx, char el) {
     char* p = MakeSpaceAt(this, idx, 1);
     if (!p) {
         return false;
@@ -732,12 +724,12 @@ bool str::Builder::InsertAt(int idx, char el) {
     return true;
 }
 
-bool str::Builder::AppendChar(char c) {
+bool StrBuilder::AppendChar(char c) {
     return InsertAt(len, c);
 }
 
-bool str::Builder::Append(Str src) {
-    if (str::IsNull(src) || 0 == src.len) {
+bool StrBuilder::Append(Str src) {
+    if (StrIsNull(src) || 0 == src.len) {
         return true;
     }
     char* dst = MakeSpaceAt(this, len, src.len);
@@ -752,7 +744,7 @@ bool str::Builder::Append(Str src) {
 // without duplicate allocation. Note: since Vec over-allocates, this
 // is likely to use more memory than strictly necessary, but in most cases
 // it doesn't matter
-Str str::Builder::TakeStr() {
+Str StrBuilder::TakeStr() {
     int n = len;
     char* res = els;
     if (!els || n == 0) {
@@ -776,7 +768,7 @@ Str str::Builder::TakeStr() {
 // ───────────────────────────────────────────────────────────────
 
 /*
-str::Fmt is type-safe printf()-like system. Every directive starts with '%':
+Fmt is type-safe printf()-like system. Every directive starts with '%':
 the usual %d / %s / %f etc., plus two that take an argument of any type:
 
   %{}   the next argument, whatever its type (same as %v)
@@ -794,7 +786,7 @@ because in some languages translation is akward if you can't re-arrange
 the order of arguments.
 
 Idiomatic usage:
-str::Fmt fmt("%d = %s");
+Fmt fmt("%d = %s");
 char *s = fmt.i(5).s("5").Get(); // returns "5 = 5"
 // s is valid until fmt is valid
 // use .GetDup() to get a copy that must be free()d
@@ -807,8 +799,6 @@ n-th % directive) but it's easy to mis-count when adding %{$n} to the mix.
 
 TODO: similar approach could be used for type-safe scanf() replacement.
 */
-
-namespace str {
 
 // formatting instruction
 struct Inst {
@@ -846,7 +836,7 @@ struct Fmt {
 
     int currArgNo = 0;
     int currPercArgNo = 0;
-    str::Builder res;
+    StrBuilder res;
 
     char buf[256] = {};
 };
@@ -872,7 +862,7 @@ static int parseArgDefBrace(Fmt& fmt, int off) {
     // string. Reachable via a translated format string (fmt(_TRA("...").s,
     // ...)).
     while (off < fmt.format.len && fmt.format.s[off] != '}') {
-        if (!str::IsDigit(fmt.format.s[off])) {
+        if (!IsDigit(fmt.format.s[off])) {
             fmt.isOk = false;
             return off;
         }
@@ -956,7 +946,7 @@ static int parseArgDefPerc(Fmt& fmt, int off) {
     }
     // width
     int width = 0;
-    while (off < f.len && str::IsDigit(f.s[off])) {
+    while (off < f.len && IsDigit(f.s[off])) {
         width = (width * 10) + (f.s[off] - '0');
         off++;
     }
@@ -965,7 +955,7 @@ static int parseArgDefPerc(Fmt& fmt, int off) {
     if (off < f.len && f.s[off] == '.') {
         off++;
         prec = 0;
-        while (off < f.len && str::IsDigit(f.s[off])) {
+        while (off < f.len && IsDigit(f.s[off])) {
             prec = (prec * 10) + (f.s[off] - '0');
             off++;
         }
@@ -1107,7 +1097,7 @@ static bool ParseFormat(Fmt& o, Str fmtStr) {
 static void bufFmt(Str buf, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    str::VsnprintfUtf8(buf, fmt, args);
+    VsnprintfUtf8(buf, fmt, args);
     va_end(args);
     buf.s[buf.len - 1] = 0;
 }
@@ -1325,7 +1315,7 @@ Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args, int nArgs) {
             }
         }
         if (!hasDirective) {
-            return str::Dup(a, Str(fmt));
+            return StrDup(a, Str(fmt));
         }
     }
 
@@ -1348,8 +1338,6 @@ Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args, int nArgs) {
 TempStr FormatTempArgs(const char* fmt, const FmtArg** args, int nArgs) {
     return FormatArgs(GetTempArena(), fmt, args, nArgs);
 }
-
-} // namespace str
 
 #include <locale.h>
 
@@ -1374,7 +1362,7 @@ static _locale_t GetUtf8FormatLocale() {
 
 // The format string is a plain const char* because this is a thin wrapper
 // around vsnprintf and is almost always called with a string literal.
-int str::VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
+int VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
 #if defined(_MSC_VER)
     _locale_t loc = GetUtf8FormatLocale();
     if (loc) {

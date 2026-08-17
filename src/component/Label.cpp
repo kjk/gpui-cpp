@@ -33,7 +33,7 @@ El* Label::IntoEl() {
             buf[i] = '*';
         }
         buf[n] = 0;
-        shown = str::Dup(a, Str(buf, n));
+        shown = StrDup(a, Str(buf, n));
     }
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
     row->Child(TextEl(a, shown)->Font(14)->Fg(th.foreground));

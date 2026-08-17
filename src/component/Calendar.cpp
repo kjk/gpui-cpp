@@ -68,7 +68,7 @@ El* Calendar::IntoEl() {
         TextEl(a, StrL("›"))->Font(16)->Fg(th.foreground));
     BindClick(next, StrL("cal-next"), onNext);
     nav->Child(prev)
-        ->Child(TextEl(a, str::Dup(a, fmt("%s %d", Str(mon[month]), year)))
+        ->Child(TextEl(a, StrDup(a, fmt("%s %d", Str(mon[month]), year)))
                     ->Font(13)
                     ->Fg(th.foreground))
         ->Child(next);
@@ -82,18 +82,18 @@ El* Calendar::IntoEl() {
             grid->Child(row);
         }
         bool on = d == day;
-        El* cell = CalendarItem::New(a, HashClickId(str::Dup(a, fmt("d%d", d))))
+        El* cell = CalendarItem::New(a, HashClickId(StrDup(a, fmt("d%d", d))))
                        ->W(32)
                        ->H(32)
                        ->ItemsCenter()
                        ->JustifyCenter();
         if (on) {
             cell->Bg(th.primary)
-                ->Child(TextEl(a, str::Dup(a, fmt("%d", d)))
+                ->Child(TextEl(a, StrDup(a, fmt("%d", d)))
                             ->Font(12)
                             ->Fg(th.primaryFg));
         } else {
-            cell->Child(TextEl(a, str::Dup(a, fmt("%d", d)))
+            cell->Child(TextEl(a, StrDup(a, fmt("%d", d)))
                             ->Font(12)
                             ->Fg(th.foreground));
         }

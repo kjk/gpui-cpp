@@ -33,8 +33,8 @@ El* Pagination::IntoEl() {
         n = 1;
     }
     for (int i = 1; i <= n; i++) {
-        Button* b = Button::New(a, str::Dup(a, fmt("page-%d", i)))
-                        ->Label(str::Dup(a, fmt("%d", i)))
+        Button* b = Button::New(a, StrDup(a, fmt("page-%d", i)))
+                        ->Label(StrDup(a, fmt("%d", i)))
                         ->Compact();
         if (i == page) {
             b->Primary();

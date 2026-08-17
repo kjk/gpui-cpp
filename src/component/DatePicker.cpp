@@ -38,7 +38,7 @@ El* DatePicker::IntoEl() {
                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     El* trigger =
         Button::New(a, StrL("date"))
-            ->Label(str::Dup(a, fmt("%s %d, %d", Str(mon[month]), day, year)))
+            ->Label(StrDup(a, fmt("%s %d, %d", Str(mon[month]), day, year)))
             ->OnClick(onToggle)
             ->IntoEl();
     El* cal = nullptr;

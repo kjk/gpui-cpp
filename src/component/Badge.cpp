@@ -76,8 +76,8 @@ El* Badge::IntoEl() {
             ->Child(IconEl(a, icon, box * 0.6f)->Fg(th.dangerFg));
     } else {
         int shown = count > max ? max : count;
-        Str txt = count > max ? str::Dup(a, fmt("%d+", shown))
-                              : str::Dup(a, fmt("%d", shown));
+        Str txt = count > max ? StrDup(a, fmt("%d+", shown))
+                              : StrDup(a, fmt("%d", shown));
         mark->MinW(box)
             ->H(box)
             ->PadX(4)

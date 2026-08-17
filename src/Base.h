@@ -450,25 +450,23 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
     return res;
 }
 
-namespace str {
+void StrFree(Str s);
+void StrFree(const char*) = delete;
 
-void Free(Str s);
-void Free(const char*) = delete;
+Str StrDup(Arena*, Str str);
+Str StrDup(Str s);
 
-Str Dup(Arena*, Str str);
-Str Dup(Str s);
-
-bool Eq(Str s1, Str s2);
-bool EqI(Str s1, Str s2);
-bool EqNI(Str s1, Str s2, int n);
-bool ContainsI(Str s, Str sub);
+bool StrEq(Str s1, Str s2);
+bool StrEqI(Str s1, Str s2);
+bool StrEqNI(Str s1, Str s2, int n);
+bool StrContainsI(Str s, Str sub);
 bool IsDigit(char c);
 
-inline bool IsNull(const Str& s) {
+inline bool StrIsNull(const Str& s) {
     return !s.s;
 }
 
-struct Builder {
+struct StrBuilder {
     Arena* a = nullptr;
     char* els = nullptr;
     int len = 0;
@@ -476,11 +474,11 @@ struct Builder {
     Str buf;
     int nReallocs = 0;
 
-    explicit Builder(Str externalBuf = {});
-    explicit Builder(int capHint);
-    Builder(const Builder&) = delete;
-    Builder& operator=(const Builder&) = delete;
-    ~Builder();
+    explicit StrBuilder(Str externalBuf = {});
+    explicit StrBuilder(int capHint);
+    StrBuilder(const StrBuilder&) = delete;
+    StrBuilder& operator=(const StrBuilder&) = delete;
+    ~StrBuilder();
 
     void Reset(Str s = {});
     char& operator[](int idx) const;
@@ -552,14 +550,13 @@ TempStr FormatTemp(const char* fmt, const TArgs&... args) {
 }
 
 int VsnprintfUtf8(Str buf, const char* fmt, va_list args);
-} // namespace str
 
 template <typename... TArgs>
 inline TempStr fmt(const char* format, const TArgs&... args) {
-    return str::FormatTemp(format, args...);
+    return FormatTemp(format, args...);
 }
 
 template <typename... TArgs>
 inline void logf(const char* format, const TArgs&... args) {
-    log(str::FormatTemp(format, args...));
+    log(FormatTemp(format, args...));
 }

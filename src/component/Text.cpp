@@ -28,14 +28,14 @@ El* TextView::IntoEl() {
         memcpy(buf, p + start, (size_t)cpy);
         buf[cpy] = 0;
         if (buf[0] == '#' && buf[1] == ' ') {
-            col->Child(TextEl(a, str::Dup(a, Str(buf + 2)))
+            col->Child(TextEl(a, StrDup(a, Str(buf + 2)))
                            ->Font(18)
                            ->Semibold()
                            ->Fg(th.foreground));
         } else if (n == 0) {
             col->Child(Div(a)->H(8));
         } else {
-            col->Child(TextEl(a, str::Dup(a, Str(buf)))
+            col->Child(TextEl(a, StrDup(a, Str(buf)))
                            ->Font(14)
                            ->Fg(th.foreground)
                            ->Wrap());

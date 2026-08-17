@@ -635,7 +635,7 @@ static void TextMeasFreeSlot(TextMeasSlot* sl) {
         return;
     }
     if (sl->text) {
-        str::Free(Str{sl->text, sl->len});
+        StrFree(Str{sl->text, sl->len});
         sl->text = nullptr;
     }
     if (sl->layout) {
@@ -753,7 +753,7 @@ static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
         return nullptr;
     }
     if (!sl->occupied) {
-        Str copy = str::Dup(s);
+        Str copy = StrDup(s);
         if (!copy.s) {
             return nullptr;
         }

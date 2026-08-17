@@ -34,11 +34,11 @@ El* Table::IntoEl() {
     t->Child(head);
     El* body = TableBody::New(a, StrL("tb"))->FlexCol();
     for (int r = 0; r < nRows; r++) {
-        El* row = TableRow::New(a, str::Dup(a, fmt("r%d", r)))
+        El* row = TableRow::New(a, StrDup(a, fmt("r%d", r)))
                       ->FlexRow()
                       ->BorderT(1, th.border);
         for (int c = 0; c < nHeads; c++) {
-            row->Child(TableCell::New(a, str::Dup(a, fmt("c%d", c)))
+            row->Child(TableCell::New(a, StrDup(a, fmt("c%d", c)))
                            ->Pad(8)
                            ->Grow()
                            ->Child(TextEl(a, Str(rows[r][c]))

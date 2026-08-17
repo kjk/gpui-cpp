@@ -54,11 +54,11 @@ const char* CompSlug(int i) {
 }
 
 int CompFromSlug(const char* slug) {
-    if (!slug || !slug[0] || str::EqI(Str(slug), StrL("overview"))) {
+    if (!slug || !slug[0] || StrEqI(Str(slug), StrL("overview"))) {
         return CompOverview;
     }
     for (int i = 0; i < CompCount; i++) {
-        if (str::EqI(Str(slug), Str(kSlugs[i]))) {
+        if (StrEqI(Str(slug), Str(kSlugs[i]))) {
             return i;
         }
     }
@@ -66,7 +66,7 @@ int CompFromSlug(const char* slug) {
 }
 
 Str DupA(Arena* a, const char* s) {
-    return str::Dup(a, Str(s));
+    return StrDup(a, Str(s));
 }
 
 Str DupFmt(Arena* a, const char* f, ...) {
@@ -75,7 +75,7 @@ Str DupFmt(Arena* a, const char* f, ...) {
     va_start(args, f);
     _vsnprintf_s(buf, _TRUNCATE, f, args);
     va_end(args);
-    return str::Dup(a, Str(buf));
+    return StrDup(a, Str(buf));
 }
 
 El* ScTxt(Arena* a, Str s, float px, Rgba c) {

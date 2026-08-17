@@ -45,7 +45,7 @@ El* VirtualList::IntoEl() {
             list->Child(row(a, ix));
         } else {
             list->Child(Div(a)->H(rowH)->PadX(8)->ItemsCenter()->Child(
-                TextEl(a, str::Dup(a, fmt("Item %d", ix)))
+                TextEl(a, StrDup(a, fmt("Item %d", ix)))
                     ->Font(12)
                     ->Fg(th.foreground)));
         }

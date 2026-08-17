@@ -61,9 +61,8 @@ El* Textarea::New(Arena* a, const char* text, bool caret) {
         memcpy(tmp, text + start, (size_t)n);
         tmp[n] = 0;
         bool last = text[i] == 0;
-        El* line = TextEl(a, str::Dup(a, Str(tmp)))
-                       ->Font(12)
-                       ->Fg(Rgb(0x17, 0x17, 0x17));
+        El* line =
+            TextEl(a, StrDup(a, Str(tmp)))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17));
         if (last && caret) {
             El* row = Div(a)->FlexRow()->ItemsCenter()->H(16);
             row->Child(line);
@@ -115,7 +114,7 @@ static void EditorSpan(Arena* a, El* row, const char* s, int n, Rgba c) {
     if (n <= 0) {
         return;
     }
-    row->Child(TextEl(a, str::Dup(a, Str(s, n)))->Font(12)->Fg(c));
+    row->Child(TextEl(a, StrDup(a, Str(s, n)))->Font(12)->Fg(c));
 }
 
 static void EditorCaret(Arena* a, El* row, bool on) {
@@ -238,7 +237,7 @@ El* Editor::New(Arena* a, const char* text, int cursor, bool caret) {
         }
         El* row = Div(a)->FlexRow()->H(20)->Gap(8)->ItemsCenter();
         row->Child(Div(a)->W(20)->JustifyEnd()->Child(
-            TextEl(a, str::Dup(a, fmt("%d", lineNo)))
+            TextEl(a, StrDup(a, fmt("%d", lineNo)))
                 ->Font(11)
                 ->Fg(Rgb(0xa3, 0xa3, 0xa3))));
         El* code = Div(a)->FlexRow()->ItemsCenter();

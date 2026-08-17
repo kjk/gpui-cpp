@@ -55,7 +55,7 @@ static void OnKey(AppHost* host, int vk, bool down) {
     }
     auto* app = (SelApp*)host->user;
     if (vk == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
-        str::Builder b;
+        StrBuilder b;
         int a = app->selFrom, c = app->selTo;
         if (a > c) {
             int t = a;
@@ -82,7 +82,7 @@ static void OnKey(AppHost* host, int vk, bool down) {
             CloseClipboard();
             strncpy_s(app->copied, s.s, _TRUNCATE);
         }
-        str::Free(s);
+        StrFree(s);
     }
 }
 

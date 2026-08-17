@@ -44,7 +44,7 @@ El* ColorPicker::IntoEl() {
             ->Gap(8)
             ->Border(1, th.foreground)
             ->Child(Div(a)->W(14)->H(14)->Bg(c)->Border(1, th.foreground))
-            ->Child(TextEl(a, str::Dup(a, fmt("#%06x", hex & 0xffffff)))
+            ->Child(TextEl(a, StrDup(a, fmt("#%06x", hex & 0xffffff)))
                         ->Font(12)
                         ->Fg(th.foreground));
     BindClick(trigger, StrL("color-trigger"), onToggle);
@@ -61,7 +61,7 @@ El* ColorPicker::IntoEl() {
         for (int i = 0; i < 5; i++) {
             Rgba sc = Rgb((u8)((sw[i] >> 16) & 0xff), (u8)((sw[i] >> 8) & 0xff),
                           (u8)(sw[i] & 0xff));
-            El* cell = ColorSwatch::New(a, str::Dup(a, fmt("sw%d", i)))
+            El* cell = ColorSwatch::New(a, StrDup(a, fmt("sw%d", i)))
                            ->W(24)
                            ->H(24)
                            ->Bg(sc);
@@ -69,7 +69,7 @@ El* ColorPicker::IntoEl() {
                 ColBind* b = ::New<ColBind>(a);
                 b->fn = onChange;
                 b->hex = sw[i];
-                BindClick(cell, str::Dup(a, fmt("sw%d", i)),
+                BindClick(cell, StrDup(a, fmt("sw%d", i)),
                           MkFunc0(&FireCol, b));
             }
             pop->Child(cell);

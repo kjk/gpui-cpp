@@ -59,7 +59,7 @@ ProgressCircle* ProgressCircle::Size(float v) {
 
 El* ProgressCircle::IntoEl() {
     return Div(a)->W(size)->H(size)->ItemsCenter()->JustifyCenter()->Child(
-        TextEl(a, str::Dup(a, fmt("%.0f%%", value)))
+        TextEl(a, StrDup(a, fmt("%.0f%%", value)))
             ->Font(12)
             ->Fg(ThemeNow().foreground));
 }

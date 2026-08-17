@@ -159,8 +159,8 @@ int StoryFromSlug(const char* slug) {
         return StoryWelcome;
     }
     for (int i = 0; i < StoryCount; i++) {
-        if (str::EqI(Str(slug), Str(kMeta[i].slug)) ||
-            str::EqI(Str(slug), Str(kMeta[i].title))) {
+        if (StrEqI(Str(slug), Str(kMeta[i].slug)) ||
+            StrEqI(Str(slug), Str(kMeta[i].title))) {
             return i;
         }
     }
@@ -168,7 +168,7 @@ int StoryFromSlug(const char* slug) {
 }
 
 Str StoryDup(Arena* a, const char* s) {
-    return str::Dup(a, Str(s));
+    return StrDup(a, Str(s));
 }
 
 Str StoryFmt(Arena* a, const char* f, ...) {
@@ -177,7 +177,7 @@ Str StoryFmt(Arena* a, const char* f, ...) {
     va_start(args, f);
     _vsnprintf_s(buf, _TRUNCATE, f, args);
     va_end(args);
-    return str::Dup(a, Str(buf));
+    return StrDup(a, Str(buf));
 }
 
 El* StoryTxt(Arena* a, Str s, float px, Rgba c) {
@@ -345,8 +345,8 @@ static bool StoryMatches(const StoryInfo* m, const char* q) {
     if (!q || !q[0]) {
         return true;
     }
-    return str::ContainsI(Str(m->title), Str(q)) ||
-           str::ContainsI(Str(m->slug), Str(q));
+    return StrContainsI(Str(m->title), Str(q)) ||
+           StrContainsI(Str(m->slug), Str(q));
 }
 
 static El* SidebarList(StoryApp* app, Arena* a) {

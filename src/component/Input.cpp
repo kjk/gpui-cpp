@@ -128,7 +128,7 @@ El* OtpInput::IntoEl() {
                        ->ItemsCenter()
                        ->JustifyCenter()
                        ->Border(1, i == len ? th.foreground : th.border)
-                       ->Child(TextEl(a, str::Dup(a, Str(ch)))
+                       ->Child(TextEl(a, StrDup(a, Str(ch)))
                                    ->Font(14)
                                    ->Fg(th.foreground)));
     }
