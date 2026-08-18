@@ -319,7 +319,7 @@ static El* ToolbarDropBtn(Ctx* cx, Str label) {
 }
 
 static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
-                           bool on) {
+                           bool on, bool plain = false) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     return Div(a)
@@ -442,7 +442,8 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
             optMenu = ToolbarMenu(cx);
             for (int i = 0; i < nrows; i++) {
                 optMenu->Child(ToolbarCheckRow(cx, onAct, rows[i].act,
-                                               rows[i].label, rows[i].checked));
+                                               rows[i].label, rows[i].checked,
+                                               rows[i].plain));
             }
         }
         group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
@@ -450,6 +451,29 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
                          ->IntoEl());
     }
     return row;
+}
+
+El* StoryToolbarGroup(Ctx* cx) {
+    return ToolbarGroup(cx);
+}
+
+El* StoryToolbarDivider(Ctx* cx) {
+    return ToolbarSep(cx);
+}
+
+El* StoryToolbarDropdown(Ctx* cx, Str id, Str label, bool open, Listener onOpen,
+                         const StoryToolbarOpt* rows, int nrows,
+                         Listener onAct) {
+    El* trigger = ToolbarDropBtn(cx, label)->OnClick(onOpen);
+    El* menu = nullptr;
+    if (open) {
+        menu = ToolbarMenu(cx);
+        for (int i = 0; i < nrows; i++) {
+            menu->Child(ToolbarCheckRow(cx, onAct, rows[i].act, rows[i].label,
+                                        rows[i].checked, rows[i].plain));
+        }
+    }
+    return Popup::New(cx, id, trigger)->Content(menu)->IntoEl();
 }
 
 El* StoryComingSoon(Ctx* cx, int story) {

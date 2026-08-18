@@ -158,7 +158,17 @@ struct StoryToolbarOpt {
     const char* label = nullptr;
     bool checked = false;
     int act = 0;
+    // menu() rather than menu_with_check(): no check column.
+    bool plain = false;
 };
+
+// For a page whose toolbar is not one size button plus one Options menu: the
+// group draws the frame, each dropdown adds a button and its menu.
+El* StoryToolbarGroup(Ctx* cx);
+El* StoryToolbarDropdown(Ctx* cx, Str id, Str label, bool open, Listener onOpen,
+                         const StoryToolbarOpt* rows, int nrows,
+                         Listener onAct);
+El* StoryToolbarDivider(Ctx* cx);
 
 void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
                        int act);
