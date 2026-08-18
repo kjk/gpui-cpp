@@ -78,9 +78,15 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                     ->FlexRow()
                     ->JustifyEnd()
                     ->Gap(8)
+                    // Rust hangs Cancel off DialogClose, which dispatches the
+                    // Cancel action. The button inside carries a click id of
+                    // its own and the hit test takes the innermost rect, so
+                    // it needs the handler too.
                     ->Child(DialogClose::New(cx, ClickDlgCancel)
+                                ->OnClick(Listen(cx, &CloseDlg))
                                 ->Child(Button::New(cx, StrL("dialog-cancel"),
                                                     ClickDlgCancel)
+                                            ->OnClick(Listen(cx, &CloseDlg))
                                             ->H(28)
                                             ->PadX(12)
                                             ->ItemsCenter()
@@ -90,6 +96,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                                                         ->Fg(Rgb(0x17, 0x17,
                                                                  0x17)))))
                     ->Child(Button::New(cx, StrL("dialog-save"), ClickDlgSave)
+                                ->OnClick(Listen(cx, &CloseDlg))
                                 ->H(28)
                                 ->PadX(12)
                                 ->ItemsCenter()
@@ -104,7 +111,8 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                        ->W(kFill)
                        ->H(kFill)
                        ->Bg(Rgba8(0, 0, 0, 51))
-                       ->Click(ClickDlgCancel);
+                       ->Click(ClickDlgCancel)
+                       ->OnClick(Listen(cx, &CloseDlg));
     El* popup = DialogPopup::New(cx)
                     ->Absolute()
                     ->Top(0)

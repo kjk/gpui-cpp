@@ -44,6 +44,7 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
                 ->JustifyBetween()
                 ->BorderB(1, Rgb(0xd4, 0xd4, 0xd4))
                 ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                ->OnClick(Listen(cx, &ToggleAcc, i))
                 ->Child(
                     TextEl(a, Str(qs[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
                 ->Child(TextEl(a, open ? StrL("−") : StrL("+"))

@@ -63,7 +63,8 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
                       ->PadX(8)
                       ->ItemsCenter()
                       ->Gap(4)
-                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
+                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
+                      ->OnClick(Listen(cx, &PickTree, i));
         if (sel) {
             row->Bg(Rgb(0xf0, 0xf0, 0xf0));
         }
