@@ -184,11 +184,19 @@ struct TickEvent {
 
 // cx.listener(...): a handler plus the entity it runs against. Dispatch looks
 // the entity up and drops the event if the handle went stale.
+//
+// `arg` is what the Rust closure would have captured — the tab index in
+// `cx.listener(move |this, _, _, cx| this.tab = ix)`. Without it a view has to
+// hand out element ids and decode them again in one big switch.
 using ListenerFn = void (*)(void* self, Ctx* cx, const void* ev);
+using ListenerArgFn = void (*)(void* self, Ctx* cx, const void* ev,
+                               intptr_t arg);
 
 struct Listener {
-    ListenerFn fn = nullptr;
+    void* fn = nullptr;
     EntityId view = {};
+    intptr_t arg = 0;
+    bool hasArg = false;
 
     bool IsValid() const { return fn != nullptr; }
 };
@@ -679,8 +687,20 @@ Entity<T> EntityNewState(App* app) {
 template <typename T, typename E>
 Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
-    l.fn = (ListenerFn)fn;
+    l.fn = (void*)fn;
     l.view = cx->self;
+    return l;
+}
+
+// cx.listener(move |this, ...| ... ix ...): same, carrying a captured value.
+template <typename T, typename E>
+Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t),
+                intptr_t arg) {
+    Listener l;
+    l.fn = (void*)fn;
+    l.view = cx->self;
+    l.arg = arg;
+    l.hasArg = true;
     return l;
 }
 
@@ -688,8 +708,19 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*)) {
 template <typename T, typename E>
 Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*)) {
     Listener l;
-    l.fn = (ListenerFn)fn;
+    l.fn = (void*)fn;
     l.view = e.id;
+    return l;
+}
+
+template <typename T, typename E>
+Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t),
+                  intptr_t arg) {
+    Listener l;
+    l.fn = (void*)fn;
+    l.view = e.id;
+    l.arg = arg;
+    l.hasArg = true;
     return l;
 }
 

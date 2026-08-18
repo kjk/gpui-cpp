@@ -131,7 +131,11 @@ void ListenerCall(App* app, Window* win, const Listener& l, const void* ev) {
     cx.win = win;
     cx.a = win ? win->frameArena : nullptr;
     cx.self = l.view;
-    l.fn(self, &cx, ev);
+    if (l.hasArg) {
+        ((ListenerArgFn)l.fn)(self, &cx, ev, l.arg);
+    } else {
+        ((ListenerFn)l.fn)(self, &cx, ev);
+    }
 }
 
 void WindowOnKey(Window* win, Listener l) {

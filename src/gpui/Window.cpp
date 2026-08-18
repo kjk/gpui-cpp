@@ -187,11 +187,26 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 KeyEvent ev = {(int)wParam, 0, true};
                 ListenerCall(win->app, win, win->onKey, &ev);
             }
-            // Enter activates the focused element, like a click on it.
-            if (wParam == VK_RETURN && win->focusId && !win->eatReturn &&
-                win->onClick.IsValid()) {
+            // Enter activates the focused element: run that element's own
+            // listener, the one a click on it would have run.
+            if (wParam == VK_RETURN && win->focusId && !win->eatReturn) {
+                const HitRect* focused = nullptr;
+                for (int i = win->paint.hits.len - 1; i >= 0; i--) {
+                    if (win->paint.hits[i].id == win->focusId) {
+                        focused = &win->paint.hits[i];
+                        break;
+                    }
+                }
                 ClickEvent ev = {0, 0, 1, win->focusId};
-                ListenerCall(win->app, win, win->onClick, &ev);
+                if (focused) {
+                    ev.x = focused->x + focused->w * 0.5f;
+                    ev.y = focused->y + focused->h * 0.5f;
+                }
+                if (focused && focused->listener.IsValid()) {
+                    ListenerCall(win->app, win, focused->listener, &ev);
+                } else if (win->onClick.IsValid()) {
+                    ListenerCall(win->app, win, win->onClick, &ev);
+                }
             }
             win->eatReturn = false;
             InvalidateRect(hwnd, nullptr, FALSE);
