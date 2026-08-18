@@ -97,6 +97,9 @@ struct Theme {
     Rgba warning;
     Rgba warningFg;
     Rgba skeleton;
+    // description_list_label: the label cell of a DescriptionList.
+    Rgba descListLabel;
+    Rgba descListLabelFg;
     // crates/ui/src/theme/mod.rs: radius 6, radius_lg 8 (Dialog, Notification).
     float radius;
     float radiusLg;

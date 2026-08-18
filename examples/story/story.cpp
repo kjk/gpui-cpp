@@ -88,7 +88,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"date-picker", "DatePicker",
      "A date picker component with range and presets."},
     {"description-list", "DescriptionList",
-     "A list of terms and their corresponding descriptions."},
+     "Present labels and values in a structured summary."},
     {"dialog", "Dialog",
      "A window overlaid on either the primary window or another dialog "
      "window."},
