@@ -51,7 +51,9 @@ static void PickTree(ShowcaseApp* app, Ctx* cx, const ClickEvent*, intptr_t i) {
 
 El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* list = Div(a)->FlexCol()->PadY(4);
+    // The rows fill the tree: Rust's item is mx_1 inside a size_full list, so
+    // the selected background runs the width of the box less 4px a side.
+    El* list = Div(a)->FlexCol()->W(kFill)->PadX(4)->PadY(4);
     for (int i = 0; i < 8; i++) {
         if (!Visible(app, i)) {
             continue;
@@ -60,6 +62,7 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         bool sel = app->treeSel == i;
         El* row = TreeItem::New(cx, ClickTree + i)
                       ->H(32)
+                      ->W(kFill)
                       ->PadX(8)
                       ->ItemsCenter()
                       ->Gap(4)
@@ -71,10 +74,14 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         if (depth) {
             row->Child(Div(a)->W((float)depth * 12));
         }
+        // A 12px chevron, right when the folder is collapsed and down when it
+        // is open — the two SVGs the Rust example inlines. The box is there
+        // for a file too, so the labels line up.
         El* icon = Div(a)->W(12)->H(12)->ItemsCenter()->JustifyCenter();
         if (kTree[i].folder) {
-            icon->Child(ScTxt(cx, app->treeOpen[i] ? StrL("v") : StrL(">"), 11,
-                              ScInk()));
+            IconName chevron = app->treeOpen[i] ? IconName::ChevronDown
+                                                : IconName::ChevronRight;
+            icon->Child(IconEl(a, chevron, 12)->Fg(ScInk()));
         }
         row->Child(icon);
         row->Child(ScTxt(cx, Str(kTree[i].label), 14, ScInk()));
