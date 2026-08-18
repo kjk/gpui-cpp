@@ -30,7 +30,7 @@ const simpleExamples = [
   "markdown_table",
 ];
 
-const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;
+const knownTargets = ["system_monitor", "app_assets", "showcase", "story", "tests", ...simpleExamples] as const;
 type Target = (typeof knownTargets)[number];
 
 const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<example>]
@@ -190,6 +190,9 @@ function sourcesFor(name: string): string[] | null {
   if (name === "story") {
     return [...amalgamSrc, ...cppDir("examples/story")];
   }
+  if (name === "tests") {
+    return [...amalgamSrc, ...cppDir("tests")];
+  }
   if (simpleExamples.includes(name)) {
     return [...amalgamSrc, `examples/${name}.cpp`];
   }
@@ -241,6 +244,7 @@ function groupSources(files: string[]): { key: string; files: string[] }[] {
     gpui: [],
     showcase: [],
     story: [],
+    tests: [],
     ex: [],
   };
   for (const f of files) {
@@ -252,6 +256,8 @@ function groupSources(files: string[]): { key: string; files: string[] }[] {
       buckets.showcase.push(f);
     } else if (f.startsWith("examples/story/")) {
       buckets.story.push(f);
+    } else if (f.startsWith("tests/")) {
+      buckets.tests.push(f);
     } else {
       buckets.ex.push(f);
     }
@@ -423,7 +429,9 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   if (linkNeeded) {
     const link = [
       "/link",
-      "/SUBSYSTEM:WINDOWS",
+      // The test runner writes its report to stdout, so it is a console app.
+      // The entry point is the amalgam's wWinMain either way.
+      name === "tests" ? "/SUBSYSTEM:CONSOLE" : "/SUBSYSTEM:WINDOWS",
       "/ENTRY:wWinMainCRTStartup",
       "/NODEFAULTLIB:msvcrt.lib",
       "/NODEFAULTLIB:msvcrtd.lib",
@@ -497,6 +505,8 @@ if (clean) {
 }
 const built: string[] = [];
 if (all) {
+  // Every example. The test runner is a target but not an example, so -all
+  // leaves it to cmd/test.ts.
   built.push("system_monitor", "app_assets", "showcase", "story", ...simpleExamples);
 } else if (target) {
   built.push(target);

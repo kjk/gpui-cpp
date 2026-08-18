@@ -299,10 +299,29 @@ macOS needs the Xcode command line tools and nothing else. `bun cmd/mac-build.ts
 working tree into a commit, force-pushes it to a scratch branch, and has the
 Mac fetch and build it. It compiles only; a Cocoa window needs a login session.
 
-CI (`.github/workflows/build.yml`) runs `bun cmd/build.ts -rel -all` on
-windows-latest, ubuntu-latest and macos-latest. There are no tests; compiling
-every example on all three is the check. It sets `GPUI_NO_RUST_TREE=1` so the
-Rust spec clone is skipped.
+## Tests
+
+```
+bun cmd/test.ts          # build tests/ and run it
+bun cmd/test.ts -dbg
+```
+
+`tests/` holds ports of the pure-logic tests in `.work/gpui-component`, one
+file per Rust module, each naming the module it came from. The framework is
+`utassert(cond)` and a counter — `tests/Test.h` is all of it. A test is a plain
+function that `tests.cpp` calls; nothing registers itself.
+
+Only tests that pin code we actually ported belong here. Most of upstream's are
+`#[gpui::test]` and need GPUI's `TestAppContext`, which has no counterpart, and
+most of the rest cover Rust we deliberately did not port. When a test needs a
+seam to reach the logic — `FrameSamplerIngest` is the drain half of
+`FrameSamplerTick`, split out so the rolling window can be driven without a
+window — add the seam rather than the harness.
+
+CI (`.github/workflows/build.yml`) runs `bun cmd/build.ts -rel -all` and then
+`bun cmd/test.ts -rel` on windows-latest, ubuntu-latest and macos-latest.
+Compiling every example on all three is most of the check, and the suite is the
+rest. It sets `GPUI_NO_RUST_TREE=1` so the Rust spec clone is skipped.
 
 **Warnings are errors.** `/W4 /WX` on MSVC, `-Wall -Wextra -Werror` on
 gcc/clang. Fix the warning; do not add a suppression. The only suppressions left are the same
@@ -341,6 +360,8 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
+cmd/test.ts            build tests/ and run it
+tests/                 utassert ports of the pure-logic Rust tests
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/Base.h/.cpp        vendored SumatraPDF subset
 src/Base_win.cpp       Windows platform layer (memory, paths, strings)

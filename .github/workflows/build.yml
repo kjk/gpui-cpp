@@ -1,7 +1,8 @@
 name: build
 
-# Compiles every example on all three platforms. There are no tests to run —
-# `bun cmd/build.ts -rel -all` succeeding is the check.
+# Compiles every example on all three platforms and runs the test suite.
+# `bun cmd/build.ts -rel -all` succeeding is most of the check; `bun
+# cmd/test.ts` is the rest.
 
 on:
   push:
@@ -56,8 +57,15 @@ jobs:
           for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSPATH=%%i"
           if not defined VSPATH (echo could not find a VC toolset & exit /b 1)
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          bun cmd/build.ts -rel -all
+          bun cmd/build.ts -rel -all || exit /b 1
+          bun cmd/test.ts -rel
 
       - name: Build (Linux / macOS)
         if: matrix.name != 'windows'
         run: bun cmd/build.ts -rel -all
+
+      # macOS runners have no login session, so only the tests can run there;
+      # they draw nothing and need no window.
+      - name: Test (Linux / macOS)
+        if: matrix.name != 'windows'
+        run: bun cmd/test.ts -rel

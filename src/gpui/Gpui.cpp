@@ -2330,15 +2330,17 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         const Theme& th = ThemeNow();
         float tw = 0, thh = 0;
         MeasureText(ctx, e->style.tooltip, 12, 280, &tw, &thh);
-        float pw = tw + 16, ph = thh + 10;
-        float px = e->x;
-        float py = e->y - ph - 8;
-        if (py < 4) {
-            py = e->y + e->h + 8;
-        }
-        FillRound(ctx, px, py, pw, ph, 6, th.foreground);
-        DrawTextAt(ctx, e->style.tooltip, px + 8, py + 5, tw + 4, thh, 12,
-                   th.background, false);
+        // TooltipPositioner: the shared positioner's side placement, with no
+        // preferred side (which prefers above), centered on the trigger, no
+        // gap, and the window margin.
+        Rect trigger = {e->x, e->y, e->w, e->h};
+        Positioned at =
+            PositionSide(trigger, tw + 16, thh + 10, ctx->viewW, ctx->viewH,
+                         kPopupMargin, nullptr, PopupAlign::Center, 0);
+        FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
+                  th.foreground);
+        DrawTextAt(ctx, e->style.tooltip, at.bounds.x + 8, at.bounds.y + 5,
+                   tw + 4, thh, 12, th.background, false);
     }
 }
 

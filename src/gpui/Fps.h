@@ -61,6 +61,12 @@ struct FrameSampler {
 // Drains the frames drawn since the previous call. Call once per rendered
 // frame.
 void FrameSamplerTick(FrameSampler* s, Window* win);
+// ingest(): the half of the tick that is not the window. Takes the draw times
+// of the frames that arrived and the moment they arrived at, which is what
+// makes the rolling window testable without a window to drive it. Rust filters
+// the process-wide frame trace by window id here; ours is already per-window.
+void FrameSamplerIngest(FrameSampler* s, const float* drawSecs, int n,
+                        double now);
 void FrameSamplerSetCapacity(FrameSampler* s, int capacity);
 // Frames per second over the arrivals still inside the one second window. `n`
 // frames span `n - 1` intervals, so the rate comes from the elapsed span

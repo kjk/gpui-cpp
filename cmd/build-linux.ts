@@ -31,7 +31,7 @@ const simpleExamples = [
   "markdown_table",
 ];
 
-const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;
+const knownTargets = ["system_monitor", "app_assets", "showcase", "story", "tests", ...simpleExamples] as const;
 type Target = (typeof knownTargets)[number];
 
 const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<example>]
@@ -177,6 +177,9 @@ function sourcesFor(name: string): string[] | null {
   if (name === "story") {
     return [...amalgamSrc, ...cppDir("examples/story")];
   }
+  if (name === "tests") {
+    return [...amalgamSrc, ...cppDir("tests")];
+  }
   if (simpleExamples.includes(name)) {
     return [...amalgamSrc, `examples/${name}.cpp`];
   }
@@ -320,6 +323,9 @@ function objGroup(f: string): string {
   if (f.startsWith("examples/story/")) {
     return "story";
   }
+  if (f.startsWith("tests/")) {
+    return "tests";
+  }
   return "ex";
 }
 
@@ -453,6 +459,8 @@ if (clean) {
 }
 const built: string[] = [];
 if (all) {
+  // Every example. The test runner is a target but not an example, so -all
+  // leaves it to cmd/test.ts.
   built.push("system_monitor", "app_assets", "showcase", "story", ...simpleExamples);
 } else if (target) {
   built.push(target);

@@ -64,18 +64,16 @@ static void FrameSamplerPush(FrameSampler* s, float drawSecs, double now) {
     s->arrivals[s->nArrivals++] = now;
 }
 
-void FrameSamplerTick(FrameSampler* s, Window* win) {
-    if (!s || !win) {
+void FrameSamplerIngest(FrameSampler* s, const float* drawSecs, int n,
+                        double now) {
+    if (!s) {
         return;
     }
     if (s->capacity < 1 || s->capacity > kFpsCapacity) {
         s->capacity = kFpsCapacity;
     }
-    FrameTiming timings[kFrameTraceCap];
-    int n = WindowCollectFrames(win, &s->cursor, timings, kFrameTraceCap);
-    double now = TimeNow();
     for (int i = 0; i < n; i++) {
-        FrameSamplerPush(s, timings[i].drawSecs, now);
+        FrameSamplerPush(s, drawSecs[i], now);
     }
 
     int drop = 0;
@@ -87,6 +85,19 @@ void FrameSamplerTick(FrameSampler* s, Window* win) {
                 sizeof(double) * (size_t)(s->nArrivals - drop));
         s->nArrivals -= drop;
     }
+}
+
+void FrameSamplerTick(FrameSampler* s, Window* win) {
+    if (!s || !win) {
+        return;
+    }
+    FrameTiming timings[kFrameTraceCap];
+    int n = WindowCollectFrames(win, &s->cursor, timings, kFrameTraceCap);
+    float draws[kFrameTraceCap];
+    for (int i = 0; i < n; i++) {
+        draws[i] = timings[i].drawSecs;
+    }
+    FrameSamplerIngest(s, draws, n, TimeNow());
 }
 
 float FrameSamplerFps(const FrameSampler* s) {
