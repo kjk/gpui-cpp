@@ -24,7 +24,7 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
     float lineMult = kInputLineH / font;
     float caretH = font + 2.f;
     Rgba fg = state->len > 0 ? style.foreground : style.mutedForeground;
-    bool caret = state->focused && WindowCaretVisible(cx->win);
+    bool caret = state->focused && BlinkVisible(cx, state->blink);
     El* bar = Div(a)->W(2)->H(caretH)->Bg(style.caret);
     El* slot = caret ? bar : Div(a)->W(2)->H(caretH);
     El* row = Div(a)->FlexRow()->ItemsCenter()->H(kInputLineH);
@@ -286,7 +286,7 @@ El* Editor::New(Ctx* cx, const char* text, int cursor, bool caret) {
     if (!text) {
         text = "";
     }
-    bool blink = caret && WindowCaretVisible(cx->win);
+    bool blink = caret;
     int i = 0;
     int pos = 0;
     int lineNo = 1;

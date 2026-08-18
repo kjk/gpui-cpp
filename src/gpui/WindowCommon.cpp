@@ -63,6 +63,19 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
 
     El* root = EntityRender(win->app, win, win->frameArena, win->root);
 
+    // Whatever the view pointed win->input at is the focused field. Start its
+    // caret and stop the one that lost focus, so no app has to. Rust hangs
+    // this off InputState::on_focus / on_blur.
+    if (win->input != win->prevInput) {
+        if (win->prevInput) {
+            BlinkStop(win->app, win, &win->prevInput->blink);
+        }
+        if (win->input) {
+            BlinkStart(win->app, win, &win->input->blink);
+        }
+        win->prevInput = win->input;
+    }
+
     const Theme& th = ThemeNow();
     CanvasClear(&win->paint, th.background);
     if (root) {
@@ -101,9 +114,10 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         return;
     }
     // Moving the caret is activity, so it stays solid then too.
-    if (key == KeyLeft || key == KeyRight || key == KeyUp || key == KeyDown ||
-        key == KeyHome || key == KeyEnd || key == KeyBack || key == KeyDelete) {
-        WindowCaretPause(win);
+    if (win->input && (key == KeyLeft || key == KeyRight || key == KeyUp ||
+                       key == KeyDown || key == KeyHome || key == KeyEnd ||
+                       key == KeyBack || key == KeyDelete)) {
+        BlinkPause(win->app, win, &win->input->blink);
     }
     if (win->onKey.IsValid()) {
         KeyEvent ev = {};
@@ -170,7 +184,7 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
         if (changed) {
             // Solid while the keys are coming, the way Rust's
             // pause_blink_cursor is called from every edit.
-            WindowCaretPause(win);
+            BlinkPause(win->app, win, &in->blink);
         }
         // InputEvent::Change, for the view that subscribed to it.
         if (changed && in->onChange.IsValid()) {
@@ -286,54 +300,104 @@ void WindowDoubleClick(Window* win, float x, float y) {
     }
 }
 
-// The caret's own 500 ms clock, and the 300 ms it stays solid after a
-// keystroke. Both from crates/base/src/input/base/blink_cursor.rs.
-static const double kCaretInterval = 0.5;
-static const double kCaretPause = 0.3;
+// blink_cursor.rs: INTERVAL and PAUSE_DELAY.
+static const int kBlinkIntervalMs = 500;
+static const int kBlinkPauseMs = 300;
 
-void WindowCaretStart(Window* win) {
-    if (!win || win->caretOn) {
+static BlinkCursor* BlinkGet(App* app, EntityId handle) {
+    return (BlinkCursor*)EntityGet(app, handle);
+}
+
+void BlinkCursor::OnFlip(BlinkCursor* self, Ctx* cx, const TickEvent*) {
+    if (self->paused) {
         return;
     }
-    win->caretOn = true;
-    win->caretPaused = false;
-    // Rust starts hidden and flips on the first tick; showing it immediately
-    // is what makes a click feel like it landed.
-    win->caretVisible = true;
-    win->caretDueAt = TimeNow() + kCaretInterval;
-    PlatSetTimer(win, WindowTimerMs(win));
+    self->visible = !self->visible;
+    Notify(cx);
+}
+
+void BlinkCursor::OnResume(BlinkCursor* self, Ctx* cx, const TickEvent*) {
+    // The pause is over; pick blinking back up lit, as Rust does.
+    self->paused = false;
+    self->visible = true;
+    Listener flip;
+    flip.fn = (void*)&BlinkCursor::OnFlip;
+    flip.view = cx->self;
+    self->timer = WindowSetInterval(cx->win, kBlinkIntervalMs, flip);
+    Notify(cx);
+}
+
+// The Listener a timer calls back through, bound to the cursor's own entity —
+// which is what makes the timer die with it.
+static Listener BlinkListener(EntityId handle, void* fn) {
+    Listener l;
+    l.fn = fn;
+    l.view = handle;
+    return l;
+}
+
+void BlinkStart(App* app, Window* win, EntityId* handle) {
+    if (!app || !win || !handle) {
+        return;
+    }
+    if (!handle->IsValid()) {
+        // cx.new(|_| BlinkCursor::new())
+        *handle = EntityNewRaw(app, new BlinkCursor(), nullptr,
+                               &EntityDropT<BlinkCursor>);
+    }
+    BlinkCursor* b = BlinkGet(app, *handle);
+    if (!b || b->timer) {
+        return; // already blinking
+    }
+    b->paused = false;
+    // Rust starts hidden and flips on the first tick; lit immediately is what
+    // makes a click feel like it landed.
+    b->visible = true;
+    b->timer =
+        WindowSetInterval(win, kBlinkIntervalMs,
+                          BlinkListener(*handle, (void*)&BlinkCursor::OnFlip));
     AppInvalidate(win);
 }
 
-void WindowCaretStop(Window* win) {
-    if (!win || !win->caretOn) {
+void BlinkStop(App* app, Window* win, EntityId* handle) {
+    if (!app || !win || !handle || !handle->IsValid()) {
         return;
     }
-    win->caretOn = false;
-    win->caretPaused = false;
-    win->caretVisible = false;
-    win->caretDueAt = 0;
-    PlatSetTimer(win, WindowTimerMs(win));
+    BlinkCursor* b = BlinkGet(app, *handle);
+    if (!b) {
+        return;
+    }
+    WindowCancelTimer(win, b->timer);
+    b->timer = 0;
+    b->paused = false;
+    b->visible = false;
     AppInvalidate(win);
 }
 
-void WindowCaretPause(Window* win) {
-    if (!win || !win->caretOn) {
+void BlinkPause(App* app, Window* win, EntityId* handle) {
+    if (!app || !win || !handle || !handle->IsValid()) {
         return;
     }
-    win->caretPaused = true;
-    win->caretVisible = true;
-    win->caretDueAt = TimeNow() + kCaretPause;
-    PlatSetTimer(win, WindowTimerMs(win));
+    BlinkCursor* b = BlinkGet(app, *handle);
+    if (!b || !b->timer) {
+        return; // not blinking, nothing to keep solid
+    }
+    WindowCancelTimer(win, b->timer);
+    b->paused = true;
+    b->visible = true;
+    b->timer =
+        WindowSetTimeout(win, kBlinkPauseMs,
+                         BlinkListener(*handle, (void*)&BlinkCursor::OnResume));
     AppInvalidate(win);
 }
 
-bool WindowCaretVisible(Window* win) {
-    if (!win || !win->caretOn) {
+bool BlinkVisible(App* app, EntityId handle) {
+    BlinkCursor* b = BlinkGet(app, handle);
+    if (!b || !b->timer) {
         return false;
     }
     // Paused means solid, not hidden.
-    return win->caretPaused || win->caretVisible;
+    return b->paused || b->visible;
 }
 
 void WindowTimerTick(Window* win) {
@@ -342,18 +406,6 @@ void WindowTimerTick(Window* win) {
     }
     double now = TimeNow();
     bool repaint = false;
-
-    if (win->caretOn && win->caretDueAt > 0 && now >= win->caretDueAt) {
-        if (win->caretPaused) {
-            // The pause is over; pick up blinking where Rust does, lit.
-            win->caretPaused = false;
-            win->caretVisible = true;
-        } else {
-            win->caretVisible = !win->caretVisible;
-        }
-        win->caretDueAt = now + kCaretInterval;
-        repaint = true;
-    }
 
     // A snapshot of the count, so a timer armed by a handler runs next pass
     // rather than inside this one.
@@ -417,10 +469,6 @@ int WindowTimerMs(Window* win) {
     double soonest = -1;
     if (win->anim || win->opts.anim) {
         soonest = now + 0.016;
-    }
-    if (win->caretOn && win->caretDueAt > 0 &&
-        (soonest < 0 || win->caretDueAt < soonest)) {
-        soonest = win->caretDueAt;
     }
     for (int i = 0; i < win->timers.len; i++) {
         double due = win->timers[i].dueAt;

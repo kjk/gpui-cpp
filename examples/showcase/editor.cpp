@@ -59,7 +59,7 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
         app->editorCursor = 0;
         app->editorInited = true;
     }
-    bool blink = app->editorOn && WindowCaretVisible(cx->win);
+    bool blink = app->editorOn && BlinkVisible(cx, app->editorCaret);
     return Div(a)
         ->FlexCol()
         ->W(320)

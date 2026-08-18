@@ -239,13 +239,17 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     WinSize size = WindowSize(win);
     app->hoverId = win->hoverId;
     BindInput(app, win);
-    // The window owns the caret clock; focus just turns it on and off. The
-    // textarea and the editor track focus with their own flags rather than
-    // through win->input.
-    if (win->input != nullptr || app->textareaOn || app->editorOn) {
-        WindowCaretStart(win);
+    // The runtime starts and stops the caret of whichever LineInput is
+    // focused; these two are not LineInputs, so they do it themselves.
+    if (app->textareaOn) {
+        BlinkStart(cx, &app->textareaCaret);
     } else {
-        WindowCaretStop(win);
+        BlinkStop(cx, &app->textareaCaret);
+    }
+    if (app->editorOn) {
+        BlinkStart(cx, &app->editorCaret);
+    } else {
+        BlinkStop(cx, &app->editorCaret);
     }
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
@@ -352,9 +356,10 @@ static void ParseHexIn(ShowcaseApp* app) {
 }
 
 void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp) {
-    // The textarea, editor and OTP keep their own buffers, so the pause the
+    // The textarea and the editor keep their own buffers, so the pause the
     // runtime does for a LineInput edit has to be asked for here.
-    WindowCaretPause(win);
+    BlinkPause(win->app, win, &app->textareaCaret);
+    BlinkPause(win->app, win, &app->editorCaret);
     if (app->component == CompOtpInput && app->otpOn) {
         if (cp >= '0' && cp <= '9' && app->otpLen < 6) {
             app->otp[app->otpLen++] = (char)cp;

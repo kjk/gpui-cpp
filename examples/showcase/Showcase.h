@@ -121,10 +121,14 @@ struct ShowcaseApp {
         "Build focused interfaces.\nKeep behavior composable.";
     int textareaLen = 0;
     bool textareaOn = false;
+    // Their own caret clocks. The LineInput fields carry theirs inside
+    // LineInput; these two keep plain char buffers, so they hold the handle.
+    EntityId textareaCaret = {};
     char editor[4096] = {};
     int editorLen = 0;
     int editorCursor = 0;
     bool editorOn = false;
+    EntityId editorCaret = {};
     bool editorInited = false;
     char otp[8] = "12";
     int otpLen = 2;

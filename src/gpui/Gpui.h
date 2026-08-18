@@ -640,6 +640,9 @@ struct LineInput {
     char placeholder[128] = {};
     bool focused = false;
     Listener onChange = {};
+    // This field's caret clock, the counterpart of InputState::blink_cursor.
+    // Created on first use, so a LineInput stays a plain value.
+    EntityId blink = {};
 };
 
 struct Overlay {
@@ -769,13 +772,9 @@ struct Window {
     // Armed timers, any number of them.
     Vec<TimerSub> timers;
     int nextTimerId = 1;
-    // The caret clock. GPUI gives every InputState its own BlinkCursor
-    // entity; a window only ever shows one caret, so the window owns it.
-    // Port of crates/base/src/input/base/blink_cursor.rs.
-    bool caretOn = false;      // blinking at all
-    bool caretVisible = false; // which half of the blink
-    bool caretPaused = false;  // solid, because the user is typing
-    double caretDueAt = 0;
+    // Which LineInput had focus last frame, so the runtime can start and stop
+    // its caret without every app wiring that up.
+    LineInput* prevInput = nullptr;
     // Ring of the last kFrameTraceCap draw times; frameSeq counts every frame
     // ever drawn and is what a collector cursors on.
     FrameTiming frameTrace[kFrameTraceCap] = {};
@@ -940,19 +939,49 @@ void WindowCancelTimer(Window* win, int id);
 
 // ─── caret ────────────────────────────────────────────────────────────────
 //
-// A blinking caret is state, not a function of the clock: the window flips it
-// on a 500 ms timer and every repaint in between shows what the last flip
-// decided. Sampling the clock at paint time instead makes the caret invisible
-// whenever nothing happens to repaint during the lit half.
+// Port of crates/base/src/input/base/blink_cursor.rs. A blinking caret is
+// state, not a function of the clock: something flips it on a 500 ms timer
+// and every repaint in between shows what the last flip decided. Sampling the
+// clock at paint time instead makes the caret invisible whenever nothing
+// happens to repaint during the lit half.
+//
+// One per text field, the way Rust gives every InputState its own
+// Entity<BlinkCursor>. `handle` is an EntityId the owner keeps; the first
+// Start creates the entity behind it.
 
-// Start / stop blinking. Idempotent; call them from wherever focus changes.
-void WindowCaretStart(Window* win);
-void WindowCaretStop(Window* win);
-// Keep it solid, then resume blinking shortly after. Call it on every edit,
-// so the caret does not wink out from under the cursor mid-keystroke.
-void WindowCaretPause(Window* win);
-// What a text widget asks before drawing its caret.
-bool WindowCaretVisible(Window* win);
+struct BlinkCursor {
+    bool visible = false;
+    bool paused = false; // solid, because the user is typing
+    // The armed timer. Cancelling it is what Rust's epoch counter does.
+    int timer = 0;
+
+    static void OnFlip(BlinkCursor* self, Ctx* cx, const TickEvent* ev);
+    static void OnResume(BlinkCursor* self, Ctx* cx, const TickEvent* ev);
+};
+
+// Idempotent. Rust calls these from on_focus / on_blur.
+void BlinkStart(App* app, Window* win, EntityId* handle);
+void BlinkStop(App* app, Window* win, EntityId* handle);
+// Keep it solid, then resume blinking shortly after — Rust's
+// pause_blink_cursor, called from every edit and cursor movement.
+void BlinkPause(App* app, Window* win, EntityId* handle);
+// What a text widget asks before drawing its caret. Rust:
+// blink_cursor.read(cx).visible().
+bool BlinkVisible(App* app, EntityId handle);
+
+// The same, when a Ctx is already in hand — which it is inside any Render.
+inline void BlinkStart(Ctx* cx, EntityId* handle) {
+    BlinkStart(cx->app, cx->win, handle);
+}
+inline void BlinkStop(Ctx* cx, EntityId* handle) {
+    BlinkStop(cx->app, cx->win, handle);
+}
+inline void BlinkPause(Ctx* cx, EntityId* handle) {
+    BlinkPause(cx->app, cx->win, handle);
+}
+inline bool BlinkVisible(Ctx* cx, EntityId handle) {
+    return BlinkVisible(cx->app, handle);
+}
 
 // Open a window whose root is a view entity, the WindowOpen + cx.new pair.
 Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,

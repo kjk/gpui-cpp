@@ -720,17 +720,11 @@ static El* Footer(StoryApp* app, Ctx* cx) {
 
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
     cx->win->paint.selA = app->selA;
     cx->win->paint.selB = app->selB;
     // Pages that own a text field point the window at it from their Render.
     if (app->search.focused) {
         cx->win->input = &app->search;
-    }
-    if (cx->win->input != nullptr) {
-        WindowCaretStart(win);
-    } else {
-        WindowCaretStop(win);
     }
     const Theme& th = cx->theme();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
