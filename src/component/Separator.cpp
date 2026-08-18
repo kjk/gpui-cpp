@@ -43,16 +43,22 @@ El* Separator::IntoEl() {
     El* root = Div(a)->ItemsCenter()->JustifyCenter()->Shrink0();
     if (vertical) {
         root->H(kFill)->W(label.s ? 24.f : 1.f);
-        El* lineEl = Div(a)->W(1)->H(kFill)->Bg(c);
+        // A dashed rule is the border alone; filling the box as well would
+        // paint the gaps back in.
+        El* lineEl = Div(a)->W(1)->H(kFill);
         if (line == SeparatorStyle::Dashed) {
             lineEl->Dashed()->Border(1, c);
+        } else {
+            lineEl->Bg(c);
         }
         root->Child(lineEl);
     } else {
         root->W(kFill)->H(label.s ? 24.f : 1.f);
-        El* lineEl = Div(a)->H(1)->W(kFill)->Bg(c);
+        El* lineEl = Div(a)->H(1)->W(kFill);
         if (line == SeparatorStyle::Dashed) {
             lineEl->Dashed()->Border(1, c);
+        } else {
+            lineEl->Bg(c);
         }
         root->Child(lineEl);
     }

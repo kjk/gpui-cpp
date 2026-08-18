@@ -2335,8 +2335,12 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         if (e->style.borderDashed) {
             ID2D1StrokeStyle* dash = nullptr;
             D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties();
-            sp.dashStyle = D2D1_DASH_STYLE_DASH;
-            ctx->d2d->CreateStrokeStyle(sp, nullptr, 0, &dash);
+            // In stroke widths: a 4px dash with a 3px gap at 1px, which is
+            // what GPUI's dashed border draws. D2D's own DASH style is 2/2 and
+            // reads as dotted.
+            const float kDashes[] = {4.f, 3.f};
+            sp.dashStyle = D2D1_DASH_STYLE_CUSTOM;
+            ctx->d2d->CreateStrokeStyle(sp, kDashes, 2, &dash);
             SetBrush(ctx, e->style.borderColor);
             D2D1_ROUNDED_RECT rr;
             rr.rect = D2D1::RectF(e->x, e->y, e->x + e->w, e->y + e->h);
