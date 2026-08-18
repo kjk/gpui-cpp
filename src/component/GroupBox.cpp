@@ -27,7 +27,7 @@ GroupBox* GroupBox::Filled(bool v) {
 }
 
 El* GroupBox::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* box = Div(a)->FlexCol()->Gap(8)->Pad(12)->Radius(th.radius)->Border(
         1, th.border);
     if (filled && !outline) {

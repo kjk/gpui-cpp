@@ -35,7 +35,7 @@ struct Example {
 
     static El* Render(Example* self, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = ThemeNow();
+        const Theme& th = cx->theme();
         // The window routes WM_CHAR into whichever LineInput has focus.
         cx->win->input = &self->in;
         El* col = Div(a)
@@ -57,7 +57,7 @@ struct Example {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     Entity<Example> view = EntityNew<Example>(app);
     Example* self = view.Get(app);
     strncpy_s(self->in.placeholder, "Enter your name", _TRUNCATE);

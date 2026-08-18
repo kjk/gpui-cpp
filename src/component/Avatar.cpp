@@ -88,7 +88,7 @@ static Rgba AvatarHue(Str initials) {
 }
 
 El* Avatar::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     float r = radius >= 0 ? radius : size * 0.5f;
     bool named = initials.s && initials.len > 0;
     Rgba fill = th.secondary;

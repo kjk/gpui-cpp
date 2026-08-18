@@ -48,7 +48,7 @@ Combobox* Combobox::OnToggle(Listener fn) {
 }
 
 El* Combobox::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* trigger =
         Div(a)
             ->H(28)

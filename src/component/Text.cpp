@@ -14,7 +14,7 @@ TextView* TextView::New(Ctx* cx, Str source) {
 }
 
 El* TextView::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(8);
     if (!source.s) {
         return col;

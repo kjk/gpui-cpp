@@ -30,7 +30,7 @@ VirtualList* VirtualList::Row(El* (*fn)(Arena*, int)) {
 }
 
 El* VirtualList::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     int first = (int)(scrollY / rowH);
     if (first < 0) {
         first = 0;

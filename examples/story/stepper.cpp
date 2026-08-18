@@ -44,7 +44,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     const char* descs[] = {"Description for step 1.", "Description for step 2.",
                            "Description for step 3.",
                            "Description for step 4."};
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     for (int i = 0; i < 4; i++) {
         bool on = i == self->stepper;
         bool done = i < self->stepper;

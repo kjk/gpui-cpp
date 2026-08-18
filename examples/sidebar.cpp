@@ -59,9 +59,10 @@ static void SetMode(SidebarApp* app, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-static El* MenuItem(Arena* a, Listener onClick, IconName icon,
-                    const char* label, bool active, bool iconOnly) {
-    const Theme& th = ThemeNow();
+static El* MenuItem(Ctx* cx, Listener onClick, IconName icon, const char* label,
+                    bool active, bool iconOnly) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
     El* row = Div(a)
                   ->FlexRow()
                   ->H(36)
@@ -87,7 +88,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
 
     WinSize size = WindowSize(cx->win);
 
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     bool iconCollapsed = app->collapsed && app->mode == CollIcon;
     bool hide = app->collapsed && app->mode == CollOffcanvas;
     bool showToggle = app->mode != CollNone;
@@ -133,15 +134,14 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
             TextEl(frame, iconCollapsed ? StrL("") : StrL("Application"))
                 ->Font(12)
                 ->Fg(th.mutedFg));
-        side->Child(MenuItem(frame, Listener{}, IconName::LayoutDashboard,
+        side->Child(MenuItem(cx, Listener{}, IconName::LayoutDashboard,
                              "Dashboard", true, iconCollapsed));
-        side->Child(MenuItem(frame, Listener{}, IconName::Inbox, "Inbox", false,
+        side->Child(MenuItem(cx, Listener{}, IconName::Inbox, "Inbox", false,
                              iconCollapsed));
-        side->Child(MenuItem(frame, Listener{}, IconName::Calendar, "Calendar",
+        side->Child(MenuItem(cx, Listener{}, IconName::Calendar, "Calendar",
                              false, iconCollapsed));
-        side->Child(MenuItem(frame, Listen(cx, &ToggleProjects),
-                             IconName::Folder, "Projects", false,
-                             iconCollapsed));
+        side->Child(MenuItem(cx, Listen(cx, &ToggleProjects), IconName::Folder,
+                             "Projects", false, iconCollapsed));
         if (app->projOpen && !iconCollapsed) {
             side->Child(Div(frame)
                             ->PadL(28)
@@ -157,7 +157,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
                                         ->Font(13)
                                         ->Fg(th.sidebarFg)));
         }
-        side->Child(MenuItem(frame, Listener{}, IconName::Settings, "Settings",
+        side->Child(MenuItem(cx, Listener{}, IconName::Settings, "Settings",
                              false, iconCollapsed));
         El* foot = Div(frame)->FlexRow()->Gap(8)->ItemsCenter()->Grow();
         // spacer then footer at bottom: put grow spacer
@@ -217,7 +217,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<SidebarApp> view = EntityNew<SidebarApp>(app);
     SidebarApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));

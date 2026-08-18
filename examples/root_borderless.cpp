@@ -2,8 +2,9 @@
 
 using namespace gpui;
 
-static El* Chip(Arena* a, Str s) {
-    const Theme& th = ThemeNow();
+static El* Chip(Ctx* cx, Str s) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
     return Div(a)
         ->Radius(6)
         ->Border(1, th.border)
@@ -19,7 +20,7 @@ struct Example {
 
 El* Example::Render(Example*, Ctx* cx) {
     Arena* frame = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(frame)
         ->FlexCol()
         ->SizeFull()
@@ -40,13 +41,13 @@ El* Example::Render(Example*, Ctx* cx) {
         ->Child(Div(frame)
                     ->FlexRow()
                     ->Gap(12)
-                    ->Child(Chip(frame, StrL("Root.bordered = false")))
-                    ->Child(Chip(frame, StrL("window_decorations = Client"))));
+                    ->Child(Chip(cx, StrL("Root.bordered = false")))
+                    ->Child(Chip(cx, StrL("window_decorations = Client"))));
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     WinOpts opts = {};
     opts.borderless = true;
     return AppRunView(StrL("Root Borderless"), 640, 320,

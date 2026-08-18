@@ -14,7 +14,7 @@ static void SetTab(TabsStory* self, Ctx* cx, const ClickEvent*, intptr_t ix) {
 
 static El* TabPanel(Ctx* cx, TabsStory* self, El* bar) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     const char* bodies[] = {"Workspace overview", "Recent activity",
                             "Workspace settings"};
     int i = self->tab;
@@ -27,7 +27,7 @@ static El* TabPanel(Ctx* cx, TabsStory* self, El* bar) {
 
 El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 

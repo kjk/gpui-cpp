@@ -210,7 +210,7 @@ El* StoryTxt(Ctx* cx, Str s, float px, Rgba c) {
 
 El* StorySection(Ctx* cx, const char* title, const char* desc) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     // Rust StorySection is an outline GroupBox: title sits above a bordered
     // content pane that centers its children (crates/story/src/lib.rs).
     El* wrap = Div(a)->FlexCol()->Gap(12)->W(kFill);
@@ -265,7 +265,7 @@ static const char* StorySizeName(UiSize s) {
 // neighbour's border instead of drawing a second one.
 static El* ToolbarGroup(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(a)
         ->FlexRow()
         ->ItemsStart()
@@ -276,7 +276,7 @@ static El* ToolbarGroup(Ctx* cx) {
 
 static El* ToolbarSep(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(a)->W(1)->H(24)->Shrink0()->Bg(th.border);
 }
 
@@ -284,7 +284,7 @@ static El* ToolbarSep(Ctx* cx) {
 // an opaque child would cover the stroke that straddles the group's edge.
 static El* ToolbarDropBtn(Ctx* cx, Str label) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(a)
         ->H(24)
         ->PadX(10)
@@ -297,7 +297,7 @@ static El* ToolbarDropBtn(Ctx* cx, Str label) {
 static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
                            bool on) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(a)
         ->H(28)
         ->W(160)
@@ -315,7 +315,7 @@ static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
 
 static El* ToolbarMenu(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(a)
         ->FlexCol()
         ->PadY(4)
@@ -426,7 +426,7 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
 
 El* StoryComingSoon(Ctx* cx, int story) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     const StoryInfo* m = StoryMeta(story);
     return Div(a)
         ->FlexCol()
@@ -477,7 +477,7 @@ static void ClearSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
 
 static El* SidebarList(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* list = Div(a)->FlexCol()->Gap(2)->Pad(8);
     const char* q = app->search.buf;
     for (int i = 0; i < StoryCount; i++) {
@@ -509,7 +509,7 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
 
 static El* SearchBox(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* box = Div(a)
                   ->H(36)
                   ->W(kFill)
@@ -556,7 +556,7 @@ static float SidebarWidth(Ctx* cx) {
 
 static El* Sidebar(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     float w = app->collapsed ? 56.f : SidebarWidth(cx);
     El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar);
     El* header = Div(a)->FlexCol()->Pad(12)->Gap(16);
@@ -601,7 +601,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
 
 static El* Header(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
         ->W(kFill)
@@ -616,7 +616,7 @@ static El* Header(StoryApp* app, Ctx* cx) {
 
 static El* Footer(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
         ->W(kFill)
@@ -661,7 +661,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
         cx->win->input = &app->search;
     }
     AppRequestAnim(win, cx->win->input != nullptr);
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));
@@ -841,7 +841,7 @@ static void ParseSlug(PWSTR cmd, char* out, int cap) {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));

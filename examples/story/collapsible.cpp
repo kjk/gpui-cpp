@@ -20,12 +20,12 @@ static void OnColl(CollapsibleStory* self, Ctx* cx, const ClickEvent*,
 static El* Chevron(Ctx* cx, bool open) {
     Arena* a = cx->a;
     return IconEl(a, open ? IconName::ChevronDown : IconName::ChevronRight, 14)
-        ->Fg(ThemeNow().mutedFg);
+        ->Fg(cx->theme().mutedFg);
 }
 
 El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* basic = StorySection(

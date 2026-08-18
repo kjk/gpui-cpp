@@ -12,7 +12,7 @@ static void ToggleMask(LabelStory* self, Ctx* cx, const ClickEvent*) {
 
 El* LabelStory::Render(LabelStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def =

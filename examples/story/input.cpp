@@ -20,7 +20,7 @@ enum {
 static El* FieldBox(Ctx* cx, const char* text, const char* prefix,
                     const char* suffix, bool disabled) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* field = Div(a)
                     ->FlexRow()
                     ->H(28)

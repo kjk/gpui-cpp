@@ -67,7 +67,7 @@ Accordion* Accordion::OnToggle(Listener fn) {
 }
 
 El* Accordion::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     // Items paint tokens.accordion (= background); bordered turns the group
     // into one rounded card instead of a stack of separators.
     El* root =

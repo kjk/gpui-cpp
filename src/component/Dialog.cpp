@@ -41,7 +41,7 @@ El* Dialog::IntoEl(WinSize size) {
     if (!open) {
         return Div(a);
     }
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* panel = Div(a)
                     ->W(360)
                     ->Pad(16)

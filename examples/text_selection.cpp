@@ -111,7 +111,7 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
 
     WinSize size = WindowSize(cx->win);
 
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col =
         Div(frame)->FlexCol()->SizeFull()->Pad(16)->Gap(12)->Bg(th.background);
     for (int i = 0; i < kNMsgs; i++) {
@@ -141,7 +141,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<SelApp> view = EntityNew<SelApp>(app);
     SelApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     strncpy_s(self->in.placeholder,
               "Type here (selection must NOT start from here)", _TRUNCATE);
     self->copied[0] = 0;

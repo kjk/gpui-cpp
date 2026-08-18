@@ -21,7 +21,7 @@ Form* Form::Field(Str label, El* control) {
 }
 
 El* Form::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(12);
     for (int i = 0; i < n; i++) {
         El* f = Div(a)->FlexCol()->Gap(4);

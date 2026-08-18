@@ -21,7 +21,7 @@ DescriptionList* DescriptionList::Item(Str key, Str val) {
 }
 
 El* DescriptionList::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(8);
     for (int i = 0; i < n; i++) {
         col->Child(

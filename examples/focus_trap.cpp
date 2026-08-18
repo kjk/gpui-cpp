@@ -13,7 +13,7 @@ struct Example {
 
 El* Example::Render(Example*, Ctx* cx) {
     Arena* frame = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Listener onBtn = Listen(cx, &Example::OnBtn);
 
     // The click id doubles as the focus id, so buttons keep theirs.
@@ -105,7 +105,7 @@ El* Example::Render(Example*, Ctx* cx) {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Focus Trap"), 800, 600, EntityNew<Example>(app).id,
                       app, WinOpts{});
 }

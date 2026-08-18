@@ -97,6 +97,14 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
     return s.render(s.ptr, &cx);
 }
 
+const Theme& Ctx::theme() const {
+    return themeMode() == ThemeMode::Dark ? ThemeDark() : ThemeLight();
+}
+
+ThemeMode Ctx::themeMode() const {
+    return app ? app->themeMode : ThemeGet();
+}
+
 void NotifyApp(App* app) {
     if (!app) {
         return;

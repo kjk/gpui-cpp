@@ -11,7 +11,7 @@ static void OnCopy(ClipboardStory* self, Ctx* cx, const ClickEvent*,
 
 El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(cx, "Default",

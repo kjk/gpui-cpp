@@ -21,7 +21,7 @@ static void TogglePop(PopoverStory* self, Ctx* cx, const ClickEvent*,
 
 static El* PopCard(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* content = Div(a)
                       ->W(220)
                       ->Pad(12)

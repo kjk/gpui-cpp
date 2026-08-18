@@ -28,7 +28,7 @@ Skeleton* Skeleton::H(float v) {
 }
 
 El* Skeleton::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Rgba bg = th.skeleton;
     if (secondary) {
         bg = RgbaOpacity(bg, 0.5f);

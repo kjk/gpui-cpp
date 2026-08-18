@@ -24,7 +24,7 @@ Kbd* Kbd::Outline() {
 }
 
 El* Kbd::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     if (!appearance) {
         return TextEl(a, stroke)->Font(12)->Fg(th.mutedFg);
     }

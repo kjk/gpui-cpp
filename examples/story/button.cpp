@@ -26,7 +26,7 @@ static El* ProgressIcon(Ctx* cx, float value, Rgba color, bool hasColor) {
 static El* BtnGroup(Ctx* cx, ButtonStory* self, bool vertical,
                     const char* prefix) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     const char* labels[] = {"One", "Two", "Three"};
     El* g = vertical ? Div(a)->FlexCol() : Div(a)->FlexRow();
     g->Border(1, th.border)->Radius(th.radius);
@@ -44,7 +44,7 @@ static El* BtnGroup(Ctx* cx, ButtonStory* self, bool vertical,
 
 El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 

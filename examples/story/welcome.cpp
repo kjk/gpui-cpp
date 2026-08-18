@@ -56,7 +56,7 @@ static const float kMdCode = 13.f;
 
 static El* FeatureLine(Ctx* cx, const char* label, const char* rest) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->Gap(6)->W(kFill)->ItemsStart();
     row->Child(
         MdTxt(cx, StoryFmt(cx, "\xE2\x80\xA2  %s:", label), kMd, th.foreground)
@@ -69,7 +69,7 @@ static El* FeatureLine(Ctx* cx, const char* label, const char* rest) {
 
 static El* MdTableCell(Ctx* cx, const char* s, bool header) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* txt = MdTxt(cx, StoryDup(cx, s), kMd, th.foreground);
     if (header) {
         txt->Bold();
@@ -80,7 +80,7 @@ static El* MdTableCell(Ctx* cx, const char* s, bool header) {
 static El* MdTableRow(Ctx* cx, const char* left, const char* right,
                       bool header) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->W(kFill)->Shrink0();
     if (!header) {
         row->BorderT(1, th.border);
@@ -94,13 +94,13 @@ static El* MdTableRow(Ctx* cx, const char* left, const char* right,
 
 static El* AsciiLine(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMdCode, th.foreground);
 }
 
 static El* Body(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMd, th.foreground)
         ->Wrap()
         ->W(kFill)
@@ -109,7 +109,7 @@ static El* Body(Ctx* cx, const char* s) {
 
 static El* LinkBody(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMd, th.primary)
         ->Wrap()
         ->W(kFill)
@@ -118,7 +118,7 @@ static El* LinkBody(Ctx* cx, const char* s) {
 
 static El* H2(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMdH2, th.foreground)
         ->Semibold()
         ->PadB(5);
@@ -126,7 +126,7 @@ static El* H2(Ctx* cx, const char* s) {
 
 static El* H3(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMdH3, th.foreground)
         ->Semibold()
         ->PadB(5);
@@ -134,7 +134,7 @@ static El* H3(Ctx* cx, const char* s) {
 
 static El* Quote(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->W(kFill)->ItemsStart()->PadB(16);
     row->Child(
         Div(a)->W(3)->H(kFill)->MinH(20)->Bg(th.secondaryActive)->Shrink0());
@@ -145,7 +145,7 @@ static El* Quote(Ctx* cx, const char* s) {
 
 static El* CodeBlock(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* box = Div(a)->W(kFill)->Pad(12)->Radius(th.radius)->Bg(th.muted)->Child(
         MdTxt(cx, StoryDup(cx, s), kMdCode, th.foreground)->Wrap()->W(kFill));
     return Div(a)->W(kFill)->PadB(16)->Child(box);
@@ -153,7 +153,7 @@ static El* CodeBlock(Ctx* cx, const char* s) {
 
 static El* Bullet(Ctx* cx, const char* s) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return MdTxt(cx, StoryFmt(cx, "\xE2\x80\xA2  %s", s), kMd, th.foreground)
         ->Wrap()
         ->W(kFill);
@@ -161,7 +161,7 @@ static El* Bullet(Ctx* cx, const char* s) {
 
 El* WelcomeStory::Render(WelcomeStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(0)->W(kFill);
 
     // Rust TextView does not honor README <p align="center">; logo stays left.

@@ -12,7 +12,7 @@ static void OnCrumb(BreadcrumbStory* self, Ctx* cx, const ClickEvent*,
 
 El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(cx, "Default",

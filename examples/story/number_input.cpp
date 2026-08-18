@@ -57,7 +57,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
                    ->OnInc(Listen(cx, &IncNum))
                    ->OnDec(Listen(cx, &DecNum))
                    ->IntoEl());
-    row->Child(StoryTxt(cx, StrL("px"), 13, ThemeNow().mutedFg));
+    row->Child(StoryTxt(cx, StrL("px"), 13, cx->theme().mutedFg));
     StorySectionAdd(suf, row);
     page->Child(suf);
     return page;

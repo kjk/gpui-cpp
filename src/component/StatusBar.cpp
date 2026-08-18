@@ -21,7 +21,7 @@ StatusBar* StatusBar::Right(Str s) {
 }
 
 El* StatusBar::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return Div(a)
         ->FlexRow()
         ->H(28)

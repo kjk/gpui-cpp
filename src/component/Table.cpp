@@ -23,7 +23,7 @@ Table* Table::Rows(const char*** r, int n) {
 }
 
 El* Table::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* t =
         gpui::Table::New(cx, StrL("table"))->FlexCol()->Border(1, th.border);
     El* head =

@@ -48,7 +48,7 @@ Radio* Radio::OnClick(Listener fn) {
 }
 
 El* Radio::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* dot = Div(a)
                   ->W(14)
                   ->H(14)

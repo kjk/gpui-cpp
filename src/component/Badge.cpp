@@ -45,7 +45,7 @@ Badge* Badge::Child(El* c) {
 }
 
 El* Badge::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     bool visible = kind != BadgeKind::Number || count > 0;
     El* root = Div(a);
     if (child) {

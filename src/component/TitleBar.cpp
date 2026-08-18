@@ -18,7 +18,7 @@ TitleBar* TitleBar::Right(El* e) {
 }
 
 El* TitleBar::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* bar = Div(a)
                   ->FlexRow()
                   ->H(34)

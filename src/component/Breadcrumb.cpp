@@ -31,7 +31,7 @@ Breadcrumb* Breadcrumb::OnClick(Listener fn) {
 }
 
 El* Breadcrumb::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
     for (int i = 0; i < n; i++) {
         if (i) {

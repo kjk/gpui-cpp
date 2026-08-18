@@ -12,7 +12,7 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
     El* box = Div(a)
                   ->W(288)
                   ->H(192)
-                  ->Border(1, ThemeNow().border)
+                  ->Border(1, cx->theme().border)
                   ->ClipY()
                   ->ScrollY(0);
     El* list = Div(a)->FlexCol();
@@ -23,12 +23,12 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                 ->PadX(8)
                 ->ItemsCenter()
                 ->JustifyBetween()
-                ->BorderB(1, ThemeNow().border)
+                ->BorderB(1, cx->theme().border)
                 ->Child(StoryTxt(cx, StoryFmt(cx, "Activity %d", i), 12,
-                                 ThemeNow().foreground))
+                                 cx->theme().foreground))
                 ->Child(StoryTxt(
                     cx, i % 3 == 0 ? StrL("Completed") : StrL("Pending"), 12,
-                    ThemeNow().mutedFg)));
+                    cx->theme().mutedFg)));
     }
     box->Child(list);
     StorySectionAdd(sec, box);

@@ -33,7 +33,7 @@ static El* AlertW(Ctx* cx, El* child) {
 
 El* AlertStory::Render(AlertStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 

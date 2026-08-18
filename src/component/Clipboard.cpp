@@ -27,7 +27,7 @@ Clipboard* Clipboard::OnCopy(Listener fn) {
 }
 
 El* Clipboard::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Button* btn = Button::New(cx, StrL("clipboard"))
                       ->Icon(IconName::Copy)
                       ->Ghost()

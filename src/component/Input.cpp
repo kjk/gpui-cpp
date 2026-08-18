@@ -29,7 +29,7 @@ Input* Input::OnFocus(Listener fn) {
 }
 
 El* Input::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(4);
     if (label.s) {
         col->Child(TextEl(a, label)->Font(12)->Fg(th.foreground));
@@ -64,7 +64,7 @@ Textarea* Textarea::OnFocus(Listener fn) {
     return this;
 }
 El* Textarea::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* box = InputBase::New(cx, id, HashClickId(id))
                   ->H(64)
                   ->Pad(8)
@@ -97,7 +97,7 @@ El* NumberInput::IntoEl() {
     return gpui::NumberInput::New(cx)
         ->FlexRow()
         ->H(28)
-        ->Border(1, ThemeNow().border)
+        ->Border(1, cx->theme().border)
         ->Child(InputBase::New(cx, StrL("number"), HashClickId(StrL("number")))
                     ->Grow()
                     ->PadX(8)
@@ -129,7 +129,7 @@ OtpInput* OtpInput::OnFocus(Listener fn) {
     return this;
 }
 El* OtpInput::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row =
         gpui::OtpInput::New(cx, HashClickId(StrL("otp")))->FlexRow()->Gap(4);
     if (onFocus.IsValid()) {

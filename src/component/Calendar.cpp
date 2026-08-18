@@ -53,7 +53,7 @@ static int Dim(int y, int m) {
 }
 
 El* Calendar::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     static const char* mon[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     El* root = gpui::Calendar::New(cx, StrL("calendar"))

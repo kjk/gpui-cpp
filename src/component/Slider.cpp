@@ -21,7 +21,7 @@ Slider* Slider::OnChange(Listener fn) {
 }
 
 El* Slider::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     float p = value;
     if (p < 0) {
         p = 0;

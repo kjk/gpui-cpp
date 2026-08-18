@@ -17,7 +17,7 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
                    ->FlexCol()
                    ->W(288)
                    ->H(192)
-                   ->Border(1, ThemeNow().border)
+                   ->Border(1, cx->theme().border)
                    ->ClipY();
     for (int i = 0; i < 24; i++) {
         list->Child(
@@ -26,11 +26,11 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
                 ->PadX(8)
                 ->ItemsCenter()
                 ->JustifyBetween()
-                ->BorderB(1, ThemeNow().border)
+                ->BorderB(1, cx->theme().border)
                 ->Child(StoryTxt(cx, StoryFmt(cx, "Customer %06d", i + 1), 12,
-                                 ThemeNow().foreground))
+                                 cx->theme().foreground))
                 ->Child(StoryTxt(cx, StoryFmt(cx, "ID-%06d", 100000 + i), 12,
-                                 ThemeNow().mutedFg)));
+                                 cx->theme().mutedFg)));
     }
     StorySectionAdd(sec, list);
     page->Child(sec);

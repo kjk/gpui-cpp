@@ -104,7 +104,7 @@ El* TableApp::Render(TableApp* app, Ctx* cx) {
     Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     app->viewH = size.dipH;
     app->tableTopPage = kPagePad + kAboveH + kPageGap;
 
@@ -207,7 +207,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<TableApp> view = EntityNew<TableApp>(app);
     TableApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     WinOpts opts = {};
     Window* win = WindowOpenView(app, StrL("Table in Scrollable"), 700, 700,
                                  view.id, opts);

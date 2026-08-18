@@ -6,7 +6,7 @@ struct ThemeColorsStory {
 
 static El* Swatch(Ctx* cx, const char* name, Rgba c) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(4)->W(88);
     col->Child(Div(a)->W(88)->H(40)->Bg(c)->Radius(6)->Border(1, th.border));
     col->Child(StoryTxt(cx, Str(name), 11, th.mutedFg));
@@ -15,7 +15,7 @@ static El* Swatch(Ctx* cx, const char* name, Rgba c) {
 
 El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* base = StorySection(cx, "Base", "Surface, text, and border tokens.");

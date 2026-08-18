@@ -49,7 +49,7 @@ Switch* Switch::OnClick(Listener fn) {
 }
 
 El* Switch::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Rgba on = hasColor ? color : th.primary;
     float trackW = 36;
     float trackH = 20;

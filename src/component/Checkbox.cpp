@@ -56,7 +56,7 @@ Checkbox* Checkbox::OnClick(Listener fn) {
 }
 
 El* Checkbox::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     float box = size == UiSize::Small ? 14.f : 16.f;
     El* ind = CheckboxIndicator::New(cx)
                   ->W(box)

@@ -176,7 +176,7 @@ El* MdApp::Render(MdApp* app, Ctx* cx) {
 
     WinSize size = WindowSize(cx->win);
 
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* bar = Div(frame)
                   ->FlexRow()
                   ->Pad(8)
@@ -203,7 +203,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<MdApp> view = EntityNew<MdApp>(app);
     MdApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("markdown_table"));
     AssetsAddRoot(StrL("assets/markdown_table"));

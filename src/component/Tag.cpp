@@ -57,7 +57,7 @@ Tag* Tag::Custom(Rgba bg, Rgba fg) {
 }
 
 El* Tag::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Rgba bg = th.secondary, fg = th.secondaryFg, bd = th.border;
     switch (variant) {
         case TagVariant::Primary:

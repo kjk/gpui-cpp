@@ -36,7 +36,7 @@ static void ToggleOpen(bool* flags, int n, int i, bool multiple) {
 
 El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsStart();
     page->Child(StoryToolbarWithOptions(cx, self));
 

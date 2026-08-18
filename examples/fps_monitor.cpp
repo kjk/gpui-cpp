@@ -346,7 +346,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<FpsApp> view = EntityNew<FpsApp>(app);
     FpsApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Dark);
+    ThemeSet(app, ThemeMode::Dark);
     self->curves = 6;
     self->start = GetTickCount64();
     self->lastTick = self->start;

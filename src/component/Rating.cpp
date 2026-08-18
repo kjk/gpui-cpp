@@ -46,7 +46,7 @@ Rating* Rating::OnChange(Listener fn) {
 }
 
 El* Rating::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->Gap(4);
     int n = max > 8 ? 8 : max;
     for (int i = 1; i <= n; i++) {

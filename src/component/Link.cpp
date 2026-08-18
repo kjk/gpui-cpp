@@ -40,7 +40,7 @@ Link* Link::OnOpen(Listener fn) {
 }
 
 El* Link::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* e = gpui::Link::New(cx, id, disabled ? 0 : HashClickId(id));
     if (onOpen.IsValid() && !disabled) {
         e->OnClick(onOpen);

@@ -7,7 +7,7 @@ using namespace gpui;
 struct Example {
     static El* Render(Example*, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = ThemeNow();
+        const Theme& th = cx->theme();
         // Rust Icon default is size_4 / text size = 16px, two icons, gap_2.
         return Div(a)
             ->FlexCol()
@@ -23,7 +23,7 @@ struct Example {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("app_assets"));
     return AppRunView(StrL("App Assets"), 800, 600, EntityNew<Example>(app).id,

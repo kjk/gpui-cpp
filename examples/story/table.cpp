@@ -20,8 +20,8 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
 
     El* bordered = StorySection(cx, "Bordered", nullptr);
     StorySectionAdd(bordered, Div(a)
-                                  ->Border(1, ThemeNow().border)
-                                  ->Radius(ThemeNow().radius)
+                                  ->Border(1, cx->theme().border)
+                                  ->Radius(cx->theme().radius)
                                   ->Child(component::Table::New(cx)
                                               ->Heads(heads, 3)
                                               ->Rows(rows, 3)

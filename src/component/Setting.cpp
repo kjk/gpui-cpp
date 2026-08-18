@@ -22,7 +22,7 @@ Setting* Setting::Item(Str label, El* control) {
 }
 
 El* Setting::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(12);
     col->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
     for (int i = 0; i < n; i++) {

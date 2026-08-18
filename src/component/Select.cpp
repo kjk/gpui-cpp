@@ -44,7 +44,7 @@ Select* Select::OnToggle(Listener fn) {
 }
 
 El* Select::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     int sel = selected;
     if (sel < 0 || sel >= n) {
         sel = 0;

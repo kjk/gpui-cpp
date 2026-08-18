@@ -35,7 +35,7 @@ Stepper* Stepper::OnChange(Listener fn) {
 }
 
 El* Stepper::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
     for (int i = 0; i < n; i++) {
         bool on = i == current;

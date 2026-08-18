@@ -43,7 +43,7 @@ Sidebar* Sidebar::OnSelect(Listener fn) {
 }
 
 El* Sidebar::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)
                   ->FlexCol()
                   ->W(collapsed ? 48.f : 220.f)

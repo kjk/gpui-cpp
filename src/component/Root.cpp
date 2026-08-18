@@ -21,7 +21,7 @@ Root* Root::Child(El* e) {
 }
 
 El* Root::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.background);
     if (bordered) {
         e->Border(1, th.border);

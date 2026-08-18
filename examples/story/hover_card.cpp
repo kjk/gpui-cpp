@@ -13,7 +13,7 @@ static void ToggleCard(HoverCardStory*, Ctx* cx, const ClickEvent*,
 
 static El* Card(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* card = Div(a)
                    ->W(280)
                    ->Pad(12)
@@ -29,7 +29,7 @@ static El* Card(Ctx* cx, const char* title, const char* body) {
 
 El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(

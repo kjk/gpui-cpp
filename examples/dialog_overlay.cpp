@@ -64,7 +64,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
 
     El* bar = Div(frame)
                   ->FlexRow()
@@ -195,7 +195,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<DialogApp> view = EntityNew<DialogApp>(app);
     DialogApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     WinOpts opts = {};
     Window* win =
         WindowOpenView(app, StrL("Dialog Overlay"), 800, 600, view.id, opts);

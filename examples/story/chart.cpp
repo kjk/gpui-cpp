@@ -8,7 +8,7 @@ static const float kYs[] = {12, 18, 15, 22, 28, 24, 31, 29, 35, 32, 38, 40};
 
 static El* BarChart(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->Gap(6)->H(140)->ItemsStart();
     for (int i = 0; i < 12; i++) {
         El* col = Div(a)->FlexCol()->H(140)->W(18)->JustifyEnd();
@@ -36,8 +36,8 @@ El* ChartStory::Render(ChartStory* self, Ctx* cx) {
         component::ProgressCircle::New(cx)->Value(62)->Size(80)->IntoEl());
     El* legend = Div(a)->FlexCol()->Gap(6);
     legend
-        ->Child(StoryTxt(cx, StrL("Desktop  62%"), 13, ThemeNow().foreground));
-    legend->Child(StoryTxt(cx, StrL("Mobile   38%"), 13, ThemeNow().mutedFg));
+        ->Child(StoryTxt(cx, StrL("Desktop  62%"), 13, cx->theme().foreground));
+    legend->Child(StoryTxt(cx, StrL("Mobile   38%"), 13, cx->theme().mutedFg));
     pieRow->Child(legend);
     StorySectionAdd(pie, pieRow);
     page->Child(pie);

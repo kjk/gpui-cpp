@@ -33,7 +33,7 @@ El* Sheet::IntoEl(WinSize size) {
     if (!open) {
         return Div(a);
     }
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* surface = Div(a)
                       ->Absolute()
                       ->Top(0)

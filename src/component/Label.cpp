@@ -32,7 +32,7 @@ Label* Label::Font(float px) {
 }
 
 El* Label::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Str shown = text;
     if (masked && text.len > 0) {
         char buf[64];

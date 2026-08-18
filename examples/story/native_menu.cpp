@@ -29,7 +29,7 @@ El* NativeMenuStory::Render(NativeMenuStory* self, Ctx* cx) {
         drop, StoryTxt(cx,
                        StrL("Native application menus are not wired on this "
                             "Win32 port. Use the in-window Menu story."),
-                       13, ThemeNow().mutedFg)
+                       13, cx->theme().mutedFg)
                   ->Wrap()
                   ->MaxW(420));
     page->Child(drop);

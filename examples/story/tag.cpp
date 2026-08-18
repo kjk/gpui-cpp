@@ -37,7 +37,7 @@ static El* TagRow(Ctx* cx, TagStory* self, bool outline, float radius) {
     if (radius < 0) {
         component::Tag* c =
             component::Tag::New(cx, StrL("Custom"))
-                ->Custom(outline ? ThemeNow().background : indigoBg, indigo)
+                ->Custom(outline ? cx->theme().background : indigoBg, indigo)
                 ->WithSize(self->toolbar.size);
         if (outline) {
             c->Outline();
@@ -74,7 +74,7 @@ El* TagStory::Render(TagStory* self, Ctx* cx) {
         const char* name;
         Rgba c;
     };
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Named named[] = {{"Red", th.red},         {"Green", th.green},
                      {"Blue", th.blue},       {"Yellow", th.yellow},
                      {"Info", th.info},       {"Success", th.success},

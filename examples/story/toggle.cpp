@@ -21,7 +21,7 @@ static void OnToggle(ToggleStory* self, Ctx* cx, const ClickEvent*,
 static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
                       IconName icon, bool on, bool outline) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", slot)), 0)
                 ->OnClick(ListenerArg(onToggle, slot))
                 ->H(28)
@@ -49,7 +49,7 @@ static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
 
 El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Listener onToggle = Listen(cx, &OnToggle);
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));

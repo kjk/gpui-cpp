@@ -31,7 +31,7 @@ Menu* Menu::OnClick(Listener fn) {
 }
 
 El* Menu::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)
                   ->FlexCol()
                   ->W(180)

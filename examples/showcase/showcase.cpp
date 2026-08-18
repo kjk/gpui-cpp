@@ -658,7 +658,7 @@ static void ParseSlug(PWSTR cmd, char* out, int cap) {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
 
     Entity<ShowcaseApp> view = EntityNew<ShowcaseApp>(app);
     ShowcaseApp* self = view.Get(app);

@@ -33,7 +33,7 @@ Spinner* Spinner::Color(Rgba c) {
 }
 
 El* Spinner::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     float dim = px > 0 ? px : UiSizePx(size);
     El* ic = IconEl(a, icon, dim);
     if (hasColor) {

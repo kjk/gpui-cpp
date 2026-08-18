@@ -377,7 +377,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Entity<MonitorApp> view = EntityNew<MonitorApp>(app);
     MonitorApp* self = view.Get(app);
     (void)self;
-    ThemeSet(ThemeMode::Dark);
+    ThemeSet(app, ThemeMode::Dark);
     SysStateInit(&self->sys);
     Collect(self);
     WinOpts opts = {};

@@ -37,7 +37,7 @@ ColorPicker* ColorPicker::OnToggle(Listener fn) {
 }
 
 El* ColorPicker::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     Rgba c = Rgb((uint8_t)((hex >> 16) & 0xff), (uint8_t)((hex >> 8) & 0xff),
                  (uint8_t)(hex & 0xff));
     El* trigger =

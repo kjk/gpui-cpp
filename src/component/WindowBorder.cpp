@@ -17,7 +17,7 @@ WindowBorder* WindowBorder::Child(El* e) {
 }
 
 El* WindowBorder::IntoEl() {
-    El* e = Div(a)->SizeFull()->Border(1, ThemeNow().border);
+    El* e = Div(a)->SizeFull()->Border(1, cx->theme().border);
     if (child) {
         e->Child(child);
     }

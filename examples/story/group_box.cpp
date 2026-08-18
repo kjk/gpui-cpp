@@ -6,7 +6,7 @@ struct GroupBoxStory {
 
 static El* BoxBody(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(8);
     col->Child(component::Checkbox::New(cx, StrL("gb-dark"))
                    ->Label(StrL("Dark mode"))

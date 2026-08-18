@@ -35,7 +35,7 @@ List* List::OnSelect(Listener fn) {
 }
 
 El* List::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Border(1, th.border);
     for (int i = 0; i < n; i++) {
         El* row = Div(a)->H(32)->PadX(10)->ItemsCenter()->HoverBg(th.muted);

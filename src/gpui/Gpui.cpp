@@ -139,7 +139,11 @@ const Theme& ThemeLight() {
 
 static ThemeMode gThemeMode = ThemeMode::Light;
 
-void ThemeSet(ThemeMode mode) {
+void ThemeSet(App* app, ThemeMode mode) {
+    if (app) {
+        app->themeMode = mode;
+    }
+    // Painting happens below Ctx, so it reads the mode from here.
     gThemeMode = mode;
 }
 

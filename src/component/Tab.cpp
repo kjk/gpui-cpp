@@ -35,7 +35,7 @@ Tabs* Tabs::OnChange(Listener fn) {
 }
 
 El* Tabs::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* bar = gpui::Tabs::New(cx, StrL("tabs"))
                   ->FlexRow()
                   ->Gap(4)

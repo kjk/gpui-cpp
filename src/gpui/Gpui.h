@@ -39,6 +39,8 @@ constexpr float kFill = -2.f;
 
 // ─── theme (Default Dark) ─────────────────────────────────────────────────
 
+struct App;
+
 struct Theme {
     Rgba background;
     Rgba foreground;
@@ -93,8 +95,10 @@ enum class ThemeMode : uint8_t {
 
 const Theme& ThemeDark();
 const Theme& ThemeLight();
+// The theme belongs to App, the way Rust keeps it as a Global; read it with
+// cx->theme(). ThemeNow() is the paint-time fallback for code below Ctx.
 const Theme& ThemeNow();
-void ThemeSet(ThemeMode mode);
+void ThemeSet(App* app, ThemeMode mode);
 ThemeMode ThemeGet();
 
 // ─── entities ─────────────────────────────────────────────────────────────
@@ -106,7 +110,6 @@ ThemeMode ThemeGet();
 // `&mut App` / `&mut Window` / `&mut Context<T>` only to satisfy the borrow
 // checker).
 
-struct App;
 struct Window;
 struct Ctx;
 struct El;
@@ -585,6 +588,7 @@ struct App {
     IDWriteTextFormat* font20 = nullptr;
     IDWriteTextFormat* font24 = nullptr;
     IDWriteTextFormat* font16b = nullptr;
+    ThemeMode themeMode = ThemeMode::Light;
     Vec<Window*> windows;
     // Entity store; see Entity.h. Slots are recycled, so a handle carries a
     // generation and goes stale instead of dangling.
@@ -639,6 +643,10 @@ struct Ctx {
     Window* win = nullptr;
     Arena* a = nullptr;
     EntityId self = {};
+
+    // cx.theme() — the colors every widget reads.
+    const Theme& theme() const;
+    ThemeMode themeMode() const;
 };
 
 EntityId EntityNewRaw(App* app, void* ptr, RenderFn render, DropFn drop);

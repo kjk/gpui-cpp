@@ -47,7 +47,7 @@ static El* AvatarRow(Ctx* cx, AvatarStory* self, const char** names, int n,
     if (extra) {
         box->Child(component::Avatar::New(cx)
                        ->Initials(StrL("\xE2\x8B\xAF"))
-                       ->Bg(ThemeNow().secondary)
+                       ->Bg(cx->theme().secondary)
                        ->WithSize(self->toolbar.size)
                        ->IntoEl()
                        ->Absolute()
@@ -102,12 +102,13 @@ El* AvatarStory::Render(AvatarStory* self, Ctx* cx) {
 
     El* shape = StorySection(cx, "Custom shape",
                              "Set an explicit size and corner radius.");
-    StorySectionAdd(shape, FacePx(cx, "JL", 100, 20, 1, ThemeNow().border));
+    StorySectionAdd(shape, FacePx(cx, "JL", 100, 20, 1, cx->theme().border));
     page->Child(shape);
 
     El* style = StorySection(cx, "Custom style",
                              "Add borders and shadows to the image.");
-    StorySectionAdd(style, FacePx(cx, "TW", 100, -1, 3, ThemeNow().foreground));
+    StorySectionAdd(style,
+                    FacePx(cx, "TW", 100, -1, 3, cx->theme().foreground));
     page->Child(style);
     return page;
 }

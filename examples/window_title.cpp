@@ -10,7 +10,7 @@ struct Example {
 
     static El* Render(Example*, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = ThemeNow();
+        const Theme& th = cx->theme();
         El* bar = Div(a)
                       ->FlexRow()
                       ->H(34)
@@ -52,7 +52,7 @@ struct Example {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Window Title"), 800, 600,
                       EntityNew<Example>(app).id, app, WinOpts{});
 }

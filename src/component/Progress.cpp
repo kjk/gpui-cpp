@@ -34,7 +34,7 @@ Progress* Progress::H(float v) {
 }
 
 El* Progress::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     return gpui::Progress::New(cx, StrL("progress"))
         ->W(w)
         ->Child(gpui::ProgressTrack::New(cx)
@@ -140,7 +140,7 @@ El* ProgressCircle::IntoEl() {
     if (showLabel && size >= 28) {
         e->Child(TextEl(a, StrDup(a, fmt("%.0f%%", value)))
                      ->Font(size * 0.22f)
-                     ->Fg(hasColor ? color : ThemeNow().foreground));
+                     ->Fg(hasColor ? color : cx->theme().foreground));
     }
     return e;
 }

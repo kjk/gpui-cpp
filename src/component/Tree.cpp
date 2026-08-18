@@ -60,7 +60,7 @@ static int Depth(Tree* t, int i) {
 }
 
 El* Tree::IntoEl() {
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* list = Div(a)->FlexCol();
     for (int i = 0; i < n; i++) {
         if (!Visible(this, i)) {

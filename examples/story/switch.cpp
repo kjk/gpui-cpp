@@ -23,7 +23,7 @@ static void SetSw4(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
 static El* SwitchRow(Ctx* cx, SwitchStory* self, const char* title,
                      const char* desc, const char* id, int slot, Listener on) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* text = Div(a)->FlexCol()->Gap(4)->Grow();
     text->Child(StoryTxt(cx, Str(title), 14, th.foreground)->Semibold());
     text->Child(StoryTxt(cx, Str(desc), 13, th.mutedFg));
@@ -44,7 +44,7 @@ static El* SwitchRow(Ctx* cx, SwitchStory* self, const char* title,
 
 El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = ThemeNow();
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 

@@ -68,14 +68,14 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     if (self->sheetOpen) {
         El* body = Div(a)->FlexCol()->Gap(8);
         body->Child(StoryTxt(cx, StrL("Workspace preferences for your team."),
-                             13, ThemeNow().mutedFg)
+                             13, cx->theme().mutedFg)
                         ->Wrap()
                         ->MaxW(280));
         if (self->selB == 1) {
             for (int i = 0; i < 12; i++) {
                 body->Child(StoryTxt(cx,
                                      StoryFmt(cx, "Preference row %d", i + 1),
-                                     13, ThemeNow().foreground));
+                                     13, cx->theme().foreground));
             }
         }
         page->Child(component::Sheet::New(cx)

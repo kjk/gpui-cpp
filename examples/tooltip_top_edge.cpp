@@ -7,7 +7,7 @@ using namespace gpui;
 struct Example {
     static El* Render(Example*, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = ThemeNow();
+        const Theme& th = cx->theme();
         El* btn = ButtonEl(a, 1, StrL("Hover for tooltip"), BtnKind::Primary);
         btn->Tip(StrL(
             "This tooltip should appear below the trigger near the top edge."));
@@ -30,7 +30,7 @@ struct Example {
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Tooltip Top Edge"), 520, 260,
                       EntityNew<Example>(app).id, app, WinOpts{});
 }
