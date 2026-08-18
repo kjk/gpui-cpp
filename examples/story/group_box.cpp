@@ -131,6 +131,28 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
                     Listen(cx, &ToggleCompact)))
                 ->IntoEl()));
     page->Child(untitled);
+
+    // Custom Style: title_style and content_style, refined independently.
+    El* custom = StorySection(cx, "Custom Style", nullptr);
+    StorySectionAdd(
+        custom,
+        Div(a)->W(512)->Child(
+            component::GroupBox::New(cx, StrL("This is a custom style"))
+                ->Outline()
+                ->TitleSemibold()
+                ->TitlePadX(12)
+                ->ContentBg(cx->theme().groupBox)
+                ->ContentRadius(12)
+                ->ContentPad(16)
+                ->ContentBorder(2)
+                ->Child(component::TextView::New(
+                            cx, StrL("You can use `title_style` to customize "
+                                     "the style of the title. And any style in "
+                                     "`GroupBox` will apply to the content "
+                                     "container."))
+                            ->IntoEl())
+                ->IntoEl()));
+    page->Child(custom);
     return page;
 }
 

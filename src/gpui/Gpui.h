@@ -98,6 +98,10 @@ struct Theme {
     // theme.overlay: what a dialog backdrop tints the page with. 5% black in
     // light, 20% in dark (default-theme.json).
     Rgba overlay;
+    // group_box.background / group_box.foreground: the surface a filled
+    // GroupBox puts its content on.
+    Rgba groupBox;
+    Rgba groupBoxFg;
     // description_list_label: the label cell of a DescriptionList.
     Rgba descListLabel;
     Rgba descListLabelFg;

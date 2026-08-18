@@ -25,27 +25,70 @@ GroupBox* GroupBox::Filled(bool v) {
     filled = v;
     return this;
 }
+GroupBox* GroupBox::TitleSemibold(bool v) {
+    titleSemibold = v;
+    return this;
+}
+GroupBox* GroupBox::TitlePadX(float px) {
+    titlePadX = px;
+    return this;
+}
+GroupBox* GroupBox::ContentBg(Rgba c) {
+    contentBg = c;
+    hasContentBg = true;
+    return this;
+}
+GroupBox* GroupBox::ContentRadius(float px) {
+    contentRadius = px;
+    return this;
+}
+GroupBox* GroupBox::ContentPad(float px) {
+    contentPad = px;
+    return this;
+}
+GroupBox* GroupBox::ContentBorder(float px) {
+    contentBorder = px;
+    return this;
+}
 
 El* GroupBox::IntoEl() {
     const Theme& th = cx->theme();
-    // Normal has neither surface nor border and no padding of its own; fill
-    // and outline each take one, and pad their content.
+    // The title sits outside the surface: only the content container takes
+    // the fill, the border and the padding. Normal has none of the three, so
+    // it spaces title and content further apart (gap_4 against gap_3).
     bool padded = filled || outline;
     El* box = Div(a)->FlexCol()->W(kFill)->Gap(padded ? 12.f : 16.f);
-    if (padded) {
-        box->Pad(12)->Radius(th.radius);
+    if (title.s && title.len > 0) {
+        El* text = TextEl(a, title)->Font(14)->Fg(th.mutedFg)->LineHeight(1.f);
+        if (titleSemibold) {
+            text->Semibold();
+        }
+        box->Child(titlePadX > 0 ? Div(a)->PadX(titlePadX)->Child(text) : text);
+    }
+    El* content = Div(a)->FlexCol()->W(kFill)->Gap(16)->Fg(th.groupBoxFg);
+    content->Radius(contentRadius >= 0 ? contentRadius : th.radius);
+    if (filled) {
+        content->Bg(th.groupBox);
     }
     if (outline) {
-        box->Border(1, th.border);
-    } else if (filled) {
-        box->Bg(th.muted);
+        content->Border(1, th.border);
     }
-    if (title.s) {
-        box->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(th.mutedFg));
+    if (padded) {
+        content->Pad(16);
+    }
+    if (hasContentBg) {
+        content->Bg(contentBg);
+    }
+    if (contentPad >= 0) {
+        content->Pad(contentPad);
+    }
+    if (contentBorder >= 0) {
+        content->Border(contentBorder, th.border);
     }
     if (child) {
-        box->Child(child);
+        content->Child(child);
     }
+    box->Child(content);
     return box;
 }
 
