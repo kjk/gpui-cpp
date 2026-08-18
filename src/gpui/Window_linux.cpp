@@ -674,12 +674,14 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     if (!win) {
         return nullptr;
     }
+    int sw = DisplayWidth(gDpy, gScreen);
+    int sh = DisplayHeight(gDpy, gScreen);
+    WindowClampToDisplay(&dipW, &dipH, sw, sh);
+
     auto* pw = new PlatWindow();
     pw->pxW = dipW;
     pw->pxH = dipH;
 
-    int sw = DisplayWidth(gDpy, gScreen);
-    int sh = DisplayHeight(gDpy, gScreen);
     int x = (sw - dipW) / 2;
     int y = (sh - dipH) / 2;
 

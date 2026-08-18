@@ -86,9 +86,9 @@ struct TextView {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str source = {};
-    // Body text size. In Rust this is whatever text size the TextView
-    // inherits, which is separate from the heading base below.
-    float baseFont = 14;
+    // Body text size. In Rust this is whatever the TextView inherits, which
+    // is theme.font_size — 16 — and is separate from the heading base below.
+    float baseFont = 16;
     // TextViewStyle::heading_base_font_size. Heading sizes are multiples of
     // it: node.rs 2258 has h1 2.0, h2 1.5, h3 1.25, h4 1.125, h5 and h6 1.0.
     float headingFont = 14;

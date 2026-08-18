@@ -28,8 +28,68 @@ Dialog* Dialog::Body(El* e) {
     body = e;
     return this;
 }
+Dialog* Dialog::W(float px) {
+    width = px;
+    return this;
+}
+Dialog* Dialog::Icon(IconName n, Rgba color, float size) {
+    icon = n;
+    iconColor = color;
+    hasIconColor = true;
+    iconSize = size;
+    return this;
+}
+Dialog* Dialog::HeaderCentered(bool v) {
+    headerCentered = v;
+    return this;
+}
+Dialog* Dialog::OkText(Str s) {
+    okText = s;
+    return this;
+}
+Dialog* Dialog::CancelText(Str s) {
+    cancelText = s;
+    return this;
+}
+Dialog* Dialog::OkVariant(ButtonVariant v, bool outline) {
+    okVariant = v;
+    okOutline = outline;
+    return this;
+}
+Dialog* Dialog::ShowCancel(bool v) {
+    showCancel = v;
+    return this;
+}
+Dialog* Dialog::CloseButton(bool v) {
+    closeButton = v;
+    return this;
+}
+Dialog* Dialog::Footer(El* e) {
+    footer = e;
+    return this;
+}
+Dialog* Dialog::FooterVertical(bool v) {
+    footerVertical = v;
+    return this;
+}
+Dialog* Dialog::FooterStretch(bool v) {
+    footerStretch = v;
+    return this;
+}
+Dialog* Dialog::FooterMuted(bool v) {
+    footerMuted = v;
+    return this;
+}
+Dialog* Dialog::FooterDivider(bool v) {
+    footerDivider = v;
+    return this;
+}
 Dialog* Dialog::OnClose(Listener fn) {
     onClose = fn;
+    return this;
+}
+Dialog* Dialog::OnCancel(Listener fn) {
+    onCancel = fn;
     return this;
 }
 Dialog* Dialog::OnOk(Listener fn) {
@@ -37,39 +97,141 @@ Dialog* Dialog::OnOk(Listener fn) {
     return this;
 }
 
+// DialogHeader: the icon, title and description, centered as a group once
+// there is an icon above them.
+El* Dialog::Header() {
+    const Theme& th = cx->theme();
+    El* head = Div(a)->FlexCol()->W(kFill)->Pad(16)->Gap(8);
+    El* ic = nullptr;
+    if (icon != IconName::None) {
+        ic = IconEl(a, icon, iconSize)->Shrink0();
+        if (hasIconColor) {
+            ic->Fg(iconColor);
+        }
+    }
+    if (headerCentered) {
+        head->ItemsCenter();
+        if (ic) {
+            head->Child(ic);
+        }
+        ic = nullptr;
+    }
+    if (title.s && title.len > 0) {
+        El* text = TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground);
+        El* line = text;
+        if (ic) {
+            line = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Child(ic)->Child(
+                text);
+        }
+        head->Child(DialogTitle::New(cx)->Child(line));
+    } else if (ic) {
+        head->Child(ic);
+    }
+    if (description.s && description.len > 0) {
+        head->Child(DialogDescription::New(cx)->Child(TextEl(a, description)
+                                                          ->Font(13)
+                                                          ->Fg(th.mutedFg)
+                                                          ->Wrap()
+                                                          ->W(kFill)));
+    }
+    if (body) {
+        head->Child(body);
+    }
+    return head;
+}
+
+// DialogFooter: the action row, or whatever the caller put in its place.
+El* Dialog::Actions() {
+    const Theme& th = cx->theme();
+    El* row = Div(a)->W(kFill)->Pad(16)->Gap(8);
+    if (footerVertical) {
+        row->FlexCol();
+    } else {
+        row->FlexRow()->JustifyEnd();
+    }
+    if (footerMuted) {
+        row->Bg(th.muted);
+    }
+    if (footerDivider) {
+        row->BorderT(1, th.border);
+    }
+    if (footer) {
+        row->Child(footer);
+        return row;
+    }
+
+    El* cancel = nullptr;
+    if (showCancel) {
+        cancel = Button::New(cx, StrL("dialog-cancel"))
+                     ->Label(cancelText.s ? cancelText : StrL("Cancel"))
+                     ->Outline()
+                     ->OnClick(onCancel.IsValid() ? onCancel : onClose)
+                     ->IntoEl();
+    }
+    Button* okBtn = Button::New(cx, StrL("dialog-ok"))
+                        ->Label(okText.s ? okText : StrL("OK"))
+                        ->OnClick(onOk);
+    switch (okVariant) {
+        case ButtonVariant::Danger:
+            okBtn->Danger();
+            break;
+        case ButtonVariant::Default:
+            break;
+        default:
+            okBtn->Primary();
+            break;
+    }
+    if (okOutline) {
+        okBtn->Outline();
+    }
+    El* ok = okBtn->IntoEl();
+
+    // Stacked, the primary action leads; in a row it sits at the end.
+    if (footerVertical) {
+        row->Child(ok->W(kFill));
+        if (cancel) {
+            row->Child(cancel->W(kFill));
+        }
+        return row;
+    }
+    if (cancel) {
+        row->Child(footerStretch ? cancel->Grow() : cancel);
+    }
+    row->Child(footerStretch ? ok->Grow() : ok);
+    return row;
+}
+
 El* Dialog::IntoEl(WinSize size) {
     if (!open) {
         return Div(a);
     }
     const Theme& th = cx->theme();
+    // The parts carry the padding, so a footer that tints or rules itself
+    // reaches the panel's edges (AlertDialog::p_0 in the Rust story).
     El* panel = Div(a)
-                    ->W(360)
-                    ->Pad(16)
+                    ->W(width)
                     ->FlexCol()
-                    ->Gap(8)
                     ->Bg(th.background)
                     ->Border(1, th.border)
-                    ->Radius(th.radius);
-    panel->Child(DialogTitle::New(cx)->Child(
-        TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground)));
-    if (description.s) {
-        panel->Child(DialogDescription::New(cx)->Child(
-            TextEl(a, description)->Font(13)->Fg(th.mutedFg)->Wrap()));
+                    ->Radius(th.radius)
+                    ->ClipY();
+    panel->Child(Header());
+    panel->Child(Actions());
+    if (closeButton) {
+        El* x = Div(a)
+                    ->Absolute()
+                    ->Top(12)
+                    ->Right(12)
+                    ->W(20)
+                    ->H(20)
+                    ->ItemsCenter()
+                    ->JustifyCenter()
+                    ->Radius(th.radius)
+                    ->HoverBg(th.secondaryHover)
+                    ->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg));
+        BindClick(x, StrL("dialog-close-x"), onClose);
+        panel->Child(x);
     }
-    if (body) {
-        panel->Child(body);
-    }
-    El* actions = Div(a)->FlexRow()->JustifyEnd()->Gap(8);
-    actions->Child(Button::New(cx, StrL("dialog-cancel"))
-                       ->Label(StrL("Cancel"))
-                       ->OnClick(onClose)
-                       ->IntoEl());
-    actions->Child(Button::New(cx, StrL("dialog-ok"))
-                       ->Label(StrL("OK"))
-                       ->Primary()
-                       ->OnClick(onOk)
-                       ->IntoEl());
-    panel->Child(actions);
     El* backdrop = DialogBackdrop::New(cx)
                        ->Absolute()
                        ->Top(0)

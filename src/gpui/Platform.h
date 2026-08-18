@@ -44,6 +44,10 @@ bool AppAnyWindowOpen(App* app);
 // Allocate and register the Window, minus its OS half. WindowOpen fills in
 // `plat` and shows it.
 Window* WindowAlloc(App* app, WinOpts opts);
+// Cap a requested window size at 85% of the display, the way Rust's
+// create_new_window_with_size does. Each WindowOpen calls it with the metrics
+// its platform reports.
+void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH);
 
 // ─── implemented per platform ────────────────────────────────────────────
 

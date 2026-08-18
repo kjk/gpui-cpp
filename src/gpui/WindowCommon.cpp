@@ -569,6 +569,17 @@ void AppRequestAnim(Window* win, bool on) {
     PlatSetTimer(win, WindowTimerMs(win));
 }
 
+// crates/story/src/lib.rs create_new_window_with_size: a window never asks
+// for more than 85% of the display, however big the caller's default is.
+void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH) {
+    if (screenW > 0 && *dipW > (int)(screenW * 0.85f)) {
+        *dipW = (int)(screenW * 0.85f);
+    }
+    if (screenH > 0 && *dipH > (int)(screenH * 0.85f)) {
+        *dipH = (int)(screenH * 0.85f);
+    }
+}
+
 Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,
                        WinOpts opts) {
     Window* win = WindowOpen(app, title, dipW, dipH, opts);

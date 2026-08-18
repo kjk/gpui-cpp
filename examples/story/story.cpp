@@ -762,9 +762,12 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));
-    // The resizable handle reads as a 1px rule.
-    body->Child(Div(frame)->W(1)->H(kFill)->Shrink0()->Bg(th.border));
-    El* main = Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0);
+    // The resizable handle reads as a 1px rule. Rust anchors it over the
+    // boundary rather than in the flow, so the content starts where the
+    // sidebar ends; a border here is painted inside the box without taking
+    // space from it, which puts the rule in the same place.
+    El* main =
+        Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0)->BorderL(1, th.border);
     main->Child(Header(app, cx));
     El* scroller = Div(frame)
                        ->FlexCol()
@@ -919,7 +922,9 @@ int GpuiMain(int argc, char** argv) {
     }
     StrCopyZ(self->search.placeholder, (int)sizeof(self->search.placeholder),
              "Search…");
-    Window* win = WindowOpenView(app, StrL("GPUI Component"), 1280, 960,
+    // create_new_window_with_size passes 1600x1200; WindowOpen caps it at
+    // 85% of the display and centers it.
+    Window* win = WindowOpenView(app, StrL("GPUI Component"), 1600, 1200,
                                  view.id, WinOpts{});
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));

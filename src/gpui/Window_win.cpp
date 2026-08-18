@@ -405,12 +405,13 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
         style = WS_OVERLAPPEDWINDOW & ~WS_CAPTION;
         style |= WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
     }
+    int sx = GetSystemMetrics(SM_CXSCREEN);
+    int sy = GetSystemMetrics(SM_CYSCREEN);
+    WindowClampToDisplay(&dipW, &dipH, sx, sy);
     RECT wr = {0, 0, dipW, dipH};
     AdjustWindowRectEx(&wr, style, FALSE, 0);
     int pxW = wr.right - wr.left;
     int pxH = wr.bottom - wr.top;
-    int sx = GetSystemMetrics(SM_CXSCREEN);
-    int sy = GetSystemMetrics(SM_CYSCREEN);
     int x = (sx - pxW) / 2;
     int y = (sy - pxH) / 2;
 

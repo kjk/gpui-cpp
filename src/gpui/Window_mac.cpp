@@ -432,6 +432,9 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
             style = NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable |
                     NSWindowStyleMaskMiniaturizable;
         }
+        NSRect vis = [[NSScreen mainScreen] visibleFrame];
+        WindowClampToDisplay(&dipW, &dipH, (int)vis.size.width,
+                             (int)vis.size.height);
         NSRect frame = NSMakeRect(0, 0, dipW, dipH);
         NSWindow* window =
             [[NSWindow alloc] initWithContentRect:frame

@@ -31,59 +31,155 @@ static void CloseAlert(AlertDialogStory* self, Ctx* cx, const ClickEvent*) {
     self->open = -1;
     Notify(cx);
 }
+// on_ok / on_cancel returning false: the Prevent close story keeps its dialog
+// up rather than dismissing it.
+static void KeepOpen(AlertDialogStory*, Ctx* cx, const ClickEvent*) {
+    Notify(cx);
+}
 
 struct AlertSpec {
     int which;
-    const char* title;
+    const char* section;
     const char* description;
     const char* id;
     const char* label;
-    bool danger;
-    const char* dialogTitle;
-    const char* dialogBody;
+    // The trigger is outline; Destructive adds danger.
+    bool dangerTrigger;
 };
 
 static const AlertSpec kAlerts[] = {
     {AlertDefault, "Default",
-     "Compose the header, message, and footer "
-     "actions.",
-     "info-alert", "Discard Draft", false, "Discard this draft?",
-     "Your changes will be lost if you leave without saving."},
+     "Compose the header, message, and footer actions.", "info-alert",
+     "Discard Draft", false},
     {AlertImperative, "Imperative API",
-     "Open an alert directly from the "
-     "window.",
-     "confirm-alert", "Delete File", false, "Delete this file?",
-     "The file will be moved to the trash."},
+     "Open an alert directly from the window.", "confirm-alert", "Delete File",
+     false},
     {AlertIcon, "Icon", "Add a visual cue above the title.", "icon-alert",
-     "Request Permission", false, "Allow access?",
-     "This app would like to use your microphone."},
+     "Request Permission", false},
     {AlertDestructive, "Destructive",
-     "Use a destructive action for "
-     "irreversible choices.",
-     "destructive-action", "Delete Account", true, "Delete your account?",
-     "This permanently removes your account and all of its data."},
+     "Use a destructive action for irreversible choices.", "destructive-action",
+     "Delete Account", true},
     {AlertNoTitle, "Without title", "Render content without a heading.",
-     "without-title", "Continue without Title", false, nullptr,
-     "Continue without a title on this confirm?"},
+     "without-title", "Continue without Title", false},
     {AlertCustomFooter, "Custom footer", "Replace the default action row.",
-     "session-timeout", "Show Session Expiry", false, "Session expiring",
-     "You will be signed out in five minutes."},
+     "session-timeout", "Show Session Expiry", false},
     {AlertCustomContent, "Custom content",
      "Style header and footer regions independently.", "update",
-     "Install Update", false, "Update available",
-     "Version 2.1 is ready to install."},
+     "Install Update", false},
     {AlertKeyboard, "Keyboard", "Disable keyboard dismissal when required.",
-     "keyboard-disabled", "Review Notice", false, "Review this notice",
-     "Press the button below to acknowledge."},
+     "keyboard-disabled", "Review Notice", false},
     {AlertConfirm, "Confirm mode", "Provide standard OK and Cancel actions.",
-     "overlay-closable", "Open Confirmation", false, "Are you sure?",
-     "This action cannot be undone."},
-    {AlertPreventClose, "Prevent close",
-     "Callbacks can keep the dialog "
-     "open.",
-     "prevent-close", "Close During Sync", false, "Sync in progress",
-     "Closing now would leave the workspace half-synced."},
+     "overlay-closable", "Open Confirmation", false},
+    {AlertPreventClose, "Prevent close", "Callbacks can keep the dialog open.",
+     "prevent-close", "Close During Sync", false},
 };
+
+// Each section opens its own alert; alert_dialog_story.rs builds ten of them
+// and no two are alike.
+static component::Dialog* Alert(AlertDialogStory* self, Ctx* cx) {
+    const Theme& th = cx->theme();
+    Listener close = Listen(cx, &CloseAlert);
+    component::Dialog* d =
+        component::Dialog::New(cx)->Open(true)->OnClose(close)->OnOk(close);
+
+    switch (self->open) {
+        case AlertDefault:
+            // A muted, ruled footer with Cancel beside a danger Discard.
+            return d->Title(StrL("Discard unsaved changes?"))
+                ->Description(StrL("Your edits since the last save will be "
+                                   "permanently lost."))
+                ->OkText(StrL("Discard"))
+                ->OkVariant(component::ButtonVariant::Danger)
+                ->FooterStretch()
+                ->FooterMuted()
+                ->FooterDivider();
+        case AlertImperative:
+            // AlertDialog::icon: inline before the title.
+            return d->Icon(IconName::Info, th.danger)
+                ->Title(StrL("Delete File"))
+                ->Description(StrL("Are you sure you want to delete this file? "
+                                   "This action cannot be undone."))
+                ->OkText(StrL("Delete"))
+                ->OkVariant(component::ButtonVariant::Danger);
+        case AlertIcon:
+            // A wider alert, a big warning glyph, and stacked full-width
+            // actions with Allow above Deny.
+            return d->W(320)
+                ->HeaderCentered()
+                ->Icon(IconName::TriangleAlert, th.warning, 40)
+                ->Title(StrL("Network Permission Required"))
+                ->Description(
+                    StrL("We need your permission to access the network to "
+                         "provide better services. Please allow network access "
+                         "in your system settings."))
+                ->OkText(StrL("Allow"))
+                ->CancelText(StrL("Deny"))
+                ->FooterVertical();
+        case AlertDestructive:
+            return d->Title(StrL("Delete Account"))
+                ->Description(
+                    StrL("This will permanently delete your account and all "
+                         "associated data. This action cannot be undone."))
+                ->OkText(StrL("Delete"))
+                ->OkVariant(component::ButtonVariant::Danger, true)
+                ->FooterStretch();
+        case AlertNoTitle:
+            // confirm(): no heading, just the question and OK / Cancel.
+            return d->Body(StoryTxt(cx, StrL("Continue with this action?"), 13,
+                                    th.foreground)
+                               ->Wrap()
+                               ->W(kFill));
+        case AlertCustomFooter: {
+            // footer(): one full-width primary action in place of the row.
+            El* signIn = component::Button::New(cx, StrL("sign-in"))
+                             ->Label(StrL("Sign in"))
+                             ->Primary()
+                             ->OnClick(close)
+                             ->IntoEl()
+                             ->W(kFill);
+            return d->Title(StrL("Session Expired"))
+                ->Description(StrL("Your session has expired due to "
+                                   "inactivity. Please log in again to "
+                                   "continue."))
+                ->Footer(signIn);
+        }
+        case AlertCustomContent:
+            return d->Title(StrL("Update Available"))
+                ->Description(StrL("A new version (v2.0.0) is available. This "
+                                   "update includes new features and bug "
+                                   "fixes."))
+                ->OkText(StrL("Update"))
+                ->CancelText(StrL("Later"))
+                ->FooterStretch()
+                ->FooterMuted();
+        case AlertKeyboard:
+            // keyboard(false): Esc is ignored, and there is nothing to cancel.
+            return d->Title(StrL("Important Notice"))
+                ->Description(StrL("Please read this important notice "
+                                   "carefully before proceeding."))
+                ->OkText(StrL("Got It"))
+                ->ShowCancel(false);
+        case AlertConfirm:
+            return d->Title(StrL("Are you sure?"))
+                ->Body(StoryTxt(cx, StrL("Continue with this action?"), 13,
+                                th.foreground)
+                           ->Wrap()
+                           ->W(kFill));
+        default: {
+            // Both callbacks return false, so neither button dismisses it;
+            // only the x in the corner does.
+            Listener keep = Listen(cx, &KeepOpen);
+            return d->Title(StrL("Sync in progress"))
+                ->Description(StrL("Your changes are still syncing. The dialog "
+                                   "remains open until syncing finishes."))
+                ->CloseButton()
+                ->OkText(StrL("Close"))
+                ->CancelText(StrL("Wait"))
+                ->OnOk(keep)
+                ->OnCancel(keep);
+        }
+    }
+}
 
 El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
     WinSize size = WindowSize(cx->win);
@@ -93,12 +189,12 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
 
     for (size_t i = 0; i < sizeof(kAlerts) / sizeof(kAlerts[0]); i++) {
         const AlertSpec& s = kAlerts[i];
-        El* sec = StorySection(cx, s.title, s.description);
+        El* sec = StorySection(cx, s.section, s.description);
         component::Button* btn = component::Button::New(cx, Str(s.id))
                                      ->Label(Str(s.label))
                                      ->Outline()
                                      ->OnClick(ListenerArg(open, s.which));
-        if (s.danger) {
+        if (s.dangerTrigger) {
             btn->Danger();
         }
         StorySectionAdd(sec, btn->IntoEl());
@@ -106,24 +202,19 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
     }
 
     if (self->open >= 0) {
-        const AlertSpec& s = kAlerts[self->open];
-        component::Dialog* d = component::Dialog::New(cx)
-                                   ->Open(true)
-                                   ->OnClose(Listen(cx, &CloseAlert))
-                                   ->OnOk(Listen(cx, &CloseAlert));
-        if (s.dialogTitle) {
-            d->Title(Str(s.dialogTitle));
-        }
-        d->Description(Str(s.dialogBody));
-        page->Child(d->IntoEl(size));
+        page->Child(Alert(self, cx)->IntoEl(size));
     }
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
+// Esc closes what this page has open, except the alert that turns keyboard
+// dismissal off and the one whose callbacks refuse to close.
 void AlertDialogStory::OnKey(AlertDialogStory* self, Ctx* cx,
                              const KeyEvent* ev) {
     if (ev->vk != KeyEscape) {
+        return;
+    }
+    if (self->open == AlertKeyboard || self->open == AlertPreventClose) {
         return;
     }
     self->open = -1;

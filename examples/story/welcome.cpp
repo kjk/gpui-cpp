@@ -39,10 +39,9 @@ El* WelcomeStory::Render(WelcomeStory* self, Ctx* cx) {
     if (!self->loaded) {
         LoadReadme(self);
     }
-    // Body 16px, headings off the 14px TextViewStyle base, so h1 is 28 and
-    // h2 21 the way the Rust page renders them.
+    // Body 16px and headings off the 14px TextViewStyle base — h1 28, h2 21 —
+    // both of which TextView already defaults to.
     return component::TextView::New(cx, Str(self->source))
-        ->Font(16)
         ->Selectable()
         ->IntoEl();
 }

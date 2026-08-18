@@ -99,7 +99,7 @@ int GpuiMain(int argc, char** argv) {
                  "# Missing report.md");
     }
 
-    Window* win = WindowOpenView(app, StrL("Markdown Table"), 900, 720, view.id,
+    Window* win = WindowOpenView(app, StrL("Markdown Table"), 900, 700, view.id,
                                  WinOpts{});
     WindowOnWheel(win, ListenTo(view, &OnWheel));
     int rc = AppRun(app);
