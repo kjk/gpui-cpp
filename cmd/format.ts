@@ -46,6 +46,20 @@ function ensureLf(text: string): string {
 }
 
 function findClangFormat(): string {
+  if (process.platform !== "win32") {
+    const found = Bun.spawnSync(["xcrun", "--find", "clang-format"], {
+      cwd: root,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if ((found.exitCode ?? 1) === 0) {
+      const path = new TextDecoder().decode(found.stdout).trim();
+      if (path) {
+        return path;
+      }
+    }
+    return "clang-format";
+  }
   const rels = [String.raw`VC\Tools\Llvm\bin\clang-format.exe`, String.raw`VC\Tools\Llvm\x64\bin\clang-format.exe`];
   const editions = ["Community", "Professional", "Enterprise"];
   const programFiles = process.env["ProgramFiles"] ?? String.raw`C:\Program Files`;
@@ -64,7 +78,8 @@ function findClangFormat(): string {
 }
 
 async function formatCpp(clangFormatPath: string, path: string): Promise<void> {
-  await $`${clangFormatPath} -i -style=file ${path}`.quiet();
+  const compat = process.platform === "darwin" ? ["--Wno-error=unknown"] : [];
+  await $`${clangFormatPath} ${compat} -i -style=file ${path}`.quiet();
   const text = await Bun.file(path).text();
   const lf = ensureLf(text);
   if (lf !== text) {

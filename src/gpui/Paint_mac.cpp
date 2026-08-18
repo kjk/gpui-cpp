@@ -557,9 +557,13 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     }
 
     CFMutableDictionaryRef attrs =
-        CFDictionaryCreateMutable(nullptr, 2, &kCFTypeDictionaryKeyCallBacks,
+        CFDictionaryCreateMutable(nullptr, 3, &kCFTypeDictionaryKeyCallBacks,
                                   &kCFTypeDictionaryValueCallBacks);
     CFDictionarySetValue(attrs, kCTFontAttributeName, font);
+    // CTLine otherwise supplies its default black foreground and ignores the
+    // CGContext fill color selected by TextLayoutDraw.
+    CFDictionarySetValue(attrs, kCTForegroundColorFromContextAttributeName,
+                         kCFBooleanTrue);
     if (weight & kFontUnderline) {
         int32_t style = kCTUnderlineStyleSingle;
         CFNumberRef n = CFNumberCreate(nullptr, kCFNumberSInt32Type, &style);

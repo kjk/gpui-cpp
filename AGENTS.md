@@ -1,6 +1,6 @@
 # gpui2 — C++ port of gpui-component
 
-This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows and Linux**. The north-star deliverable is the `system_monitor` example: a dark-theme desktop window with live CPU/memory area charts, a sortable process table, a custom title bar with segmented tabs, and a status bar.
+This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows, Linux and macOS**. The north-star deliverable is the `system_monitor` example: a dark-theme desktop window with live CPU/memory area charts, a sortable process table, a custom title bar with segmented tabs, and a status bar.
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
@@ -8,7 +8,7 @@ The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not t
 
 ## Goal
 
-Ship the gpui-component examples as C++ Windows apps, starting with `system_monitor` and continuing one example at a time.
+Ship the gpui-component examples as native C++ desktop apps, starting with `system_monitor` and continuing one example at a time.
 
 ```
 bun cmd/build.ts system_monitor
@@ -38,7 +38,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 
 ## Non-goals (until system_monitor is done)
 
-- macOS / WASM
+- WASM
 - The full GPUI GPU scene graph or async executor. We do have `App`/`Window`/
   `Entity`/`Ctx` — see below — but not refcounted entities, observers,
   `EventEmitter`, actions/key bindings, or `Task`
@@ -50,11 +50,11 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
-3. **Two platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config` — those are the counterparts of Direct2D and DirectWrite, not vendored dependencies. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. The one vendored library is `ext/md4c` — the CommonMark parser behind `component::TextView`, a single C file with no dependencies, checked in with its version and refresh commands in `ext/md4c/readme.md` and compiled as C outside the `src/**` amalgamation. Adding a second one needs the same bar: no build system of its own, no transitive dependencies, and a reason the tree cannot write it itself.
+3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. The one vendored library is `ext/md4c` — the CommonMark parser behind `component::TextView`, a single C file with no dependencies, checked in with its version and refresh commands in `ext/md4c/readme.md` and compiled as C outside the `src/**` amalgamation. Adding a second one needs the same bar: no build system of its own, no transitive dependencies, and a reason the tree cannot write it itself.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
 6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
-7. **Portable by default.** `GPUI_OS_WINDOWS` / `GPUI_OS_LINUX` are for the handful of places where a single expression differs. Anything larger gets a portable signature in a shared header and an implementation in `<name>_win.cpp` and `<name>_linux.cpp`. Never call an OS API from a shared file.
+7. **Portable by default.** `GPUI_OS_WINDOWS` / `GPUI_OS_LINUX` / `GPUI_OS_MAC` are for the handful of places where a single expression differs. Anything larger gets a portable signature in a shared header and an implementation in `<name>_win.cpp`, `<name>_linux.cpp` and `<name>_mac.cpp`. Never call an OS API from a shared file.
 
 ## What we are actually porting
 
@@ -94,8 +94,10 @@ src/gpui/   App + Window + entity store, flex layout, hit-test, timer,
         ▼
 src/gpui/Paint_win.cpp     Direct2D + DirectWrite
 src/gpui/Paint_linux.cpp   cairo + Pango
+src/gpui/Paint_mac.cpp     Core Graphics + Core Text
 src/gpui/Window_win.cpp    Win32 message loop
 src/gpui/Window_linux.cpp  X11 event loop
+src/gpui/Window_mac.cpp    Cocoa event loop
         │
         ▼
 src/sys/    process/CPU/memory/disk/battery, per OS
@@ -106,20 +108,20 @@ src/Base.h  Str, Vec, Arena, Geom, Color helpers
 
 ## Portability
 
-`src/Base.h` defines `GPUI_OS_WINDOWS` and `GPUI_OS_LINUX` from the compiler's
-own predefines; exactly one is 1. They exist for one-expression differences
+`src/Base.h` defines `GPUI_OS_WINDOWS`, `GPUI_OS_LINUX` and `GPUI_OS_MAC` from
+the compiler's own predefines; exactly one is 1. They exist for one-expression differences
 (the path separator, `SRWLOCK` vs `pthread_mutex_t`). Everything bigger is a
-portable signature plus a pair of implementations:
+portable signature plus one implementation per platform:
 
-| Seam | Shared header | Windows | Linux |
-| --- | --- | --- | --- |
-| virtual memory, paths, strings, self usage | `src/Base.h` (`Plat*`) | `src/Base_win.cpp` | `src/Base_linux.cpp` |
-| 2D drawing and shaped text | `src/gpui/Paint.h` | `src/gpui/Paint_win.cpp` | `src/gpui/Paint_linux.cpp` |
-| the OS window and its event loop | `src/gpui/Platform.h` | `src/gpui/Window_win.cpp` | `src/gpui/Window_linux.cpp` |
-| system metrics | `src/sys/SysInfo.h` | `src/sys/SysInfo_win.cpp` | `src/sys/SysInfo_linux.cpp` |
+| Seam                                       | Shared header          | Windows                   | Linux                       | macOS                     |
+| ------------------------------------------ | ---------------------- | ------------------------- | --------------------------- | ------------------------- |
+| virtual memory, paths, strings, self usage | `src/Base.h` (`Plat*`) | `src/Base_win.cpp`        | `src/Base_linux.cpp`        | `src/Base_mac.cpp`        |
+| 2D drawing and shaped text                 | `src/gpui/Paint.h`     | `src/gpui/Paint_win.cpp`  | `src/gpui/Paint_linux.cpp`  | `src/gpui/Paint_mac.cpp`  |
+| the OS window and its event loop           | `src/gpui/Platform.h`  | `src/gpui/Window_win.cpp` | `src/gpui/Window_linux.cpp` | `src/gpui/Window_mac.cpp` |
+| system metrics                             | `src/sys/SysInfo.h`    | `src/sys/SysInfo_win.cpp` | `src/sys/SysInfo_linux.cpp` | `src/sys/SysInfo_mac.cpp` |
 
 `src/gpui/WindowCommon.cpp` holds everything a window does that is not the OS
-window — frame drawing, input dispatch, the app lifecycle — and both platform
+window — frame drawing, input dispatch, the app lifecycle — and all platform
 files call into it.
 
 An example never names an OS API. It implements `int GpuiMain(int argc,
@@ -128,36 +130,36 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
 `cmd/build-dist.ts` amalgamates `src/` into three files: `gpui.h`, the
-portable `gpui.cpp`, and `gpui_win.cpp` or `gpui_linux.cpp`. The platform half
+portable `gpui.cpp`, and `gpui_win.cpp`, `gpui_linux.cpp` or `gpui_mac.cpp`. The platform half
 is its own translation unit so `<windows.h>` and `<X11/Xlib.h>` never meet.
 
 ## Source of truth for visuals
 
 Dark theme from `crates/ui/src/theme/default-theme.json` ("Default Dark") resolved against `default-colors.json`:
 
-| Token | Hex |
-| --- | --- |
-| background | `#0a0a0a` (neutral-950) |
-| foreground | `#fafafa` (neutral-50) |
-| border | `#262626` (neutral-800) |
-| muted.foreground | `#a3a3a3` (neutral-400) |
-| title_bar / tab_bar / status_bar | `#171717` |
-| title_bar.border / window.border | `#262626` |
-| tab.active.background | `#0a0a0a` |
-| tab.active.foreground | `#fafafa` |
-| tab.foreground | `#d4d4d4` |
-| table.background | `#0a0a0a` |
-| table.head.foreground | `#525252` |
-| table.row.border | `#262626` @ ~70% |
-| table even row | `#171717` @ 40% |
-| progress_bar | `#f5f5f5` |
-| base.red | `#f87171` (red-400) |
-| base.green | `#4ade80` (green-400) |
-| base.blue | `#60a5fa` (blue-400) |
-| base.yellow | `#facc15` (yellow-400) |
-| danger (close hover) | `#f87171` |
-| secondary.hover | `#292929` |
-| secondary.active | `#212121` |
+| Token                            | Hex                     |
+| -------------------------------- | ----------------------- |
+| background                       | `#0a0a0a` (neutral-950) |
+| foreground                       | `#fafafa` (neutral-50)  |
+| border                           | `#262626` (neutral-800) |
+| muted.foreground                 | `#a3a3a3` (neutral-400) |
+| title_bar / tab_bar / status_bar | `#171717`               |
+| title_bar.border / window.border | `#262626`               |
+| tab.active.background            | `#0a0a0a`               |
+| tab.active.foreground            | `#fafafa`               |
+| tab.foreground                   | `#d4d4d4`               |
+| table.background                 | `#0a0a0a`               |
+| table.head.foreground            | `#525252`               |
+| table.row.border                 | `#262626` @ ~70%        |
+| table even row                   | `#171717` @ 40%         |
+| progress_bar                     | `#f5f5f5`               |
+| base.red                         | `#f87171` (red-400)     |
+| base.green                       | `#4ade80` (green-400)   |
+| base.blue                        | `#60a5fa` (blue-400)    |
+| base.yellow                      | `#facc15` (yellow-400)  |
+| danger (close hover)             | `#f87171`               |
+| secondary.hover                  | `#292929`               |
+| secondary.active                 | `#212121`               |
 
 Layout constants from the Rust example / components:
 
@@ -181,19 +183,19 @@ Typography: Segoe UI, 16 px base. `text_sm` = 14, `text_xs` = 12. Spacing uses a
 
 The runtime mirrors GPUI's shape. Read this before touching `src/gpui`, adding an example, or writing a widget that owns state.
 
-| GPUI (Rust) | Here |
-| --- | --- |
-| `App` | `App` — D2D/DirectWrite factories, shared fonts, window list, entity store |
-| `Window` | `Window` — hwnd, render target, frame arena, hover/focus, its root view |
-| `Entity<T>` | `Entity<T>` — a POD generational handle; `App` owns the state |
-| `Context<T>` | `Ctx` — `{app, win, a, self}`; one type, GPUI only splits it for the borrow checker |
-| `impl Render for T` | `static El* T::Render(T* self, Ctx* cx)` |
-| `cx.new(...)` | `EntityNew<T>(app)` |
-| `cx.listener(...)` | `Listen(cx, &T::OnThing)` / `ListenTo(entity, &T::OnThing)` |
-| `cx.listener(move \|…\| … ix …)` | `Listen(cx, &T::OnThing, ix)` — the captured value |
-| `cx.notify()` | `Notify(cx)` |
-| `Drop for T` | `~T()`, run when the entity is dropped |
-| `window.use_keyed_state` | `KeyedState<T>(cx, key)` |
+| GPUI (Rust)                      | Here                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| `App`                            | `App` — D2D/DirectWrite factories, shared fonts, window list, entity store          |
+| `Window`                         | `Window` — hwnd, render target, frame arena, hover/focus, its root view             |
+| `Entity<T>`                      | `Entity<T>` — a POD generational handle; `App` owns the state                       |
+| `Context<T>`                     | `Ctx` — `{app, win, a, self}`; one type, GPUI only splits it for the borrow checker |
+| `impl Render for T`              | `static El* T::Render(T* self, Ctx* cx)`                                            |
+| `cx.new(...)`                    | `EntityNew<T>(app)`                                                                 |
+| `cx.listener(...)`               | `Listen(cx, &T::OnThing)` / `ListenTo(entity, &T::OnThing)`                         |
+| `cx.listener(move \|…\| … ix …)` | `Listen(cx, &T::OnThing, ix)` — the captured value                                  |
+| `cx.notify()`                    | `Notify(cx)`                                                                        |
+| `Drop for T`                     | `~T()`, run when the entity is dropped                                              |
+| `window.use_keyed_state`         | `KeyedState<T>(cx, key)`                                                            |
 
 A view is a plain struct with state, a static `Render`, and static handlers:
 
@@ -270,15 +272,16 @@ bun cmd/run.ts -rel -windbg showcase
 ```
 
 `cmd/build.ts` and `cmd/run.ts` are dispatchers: they forward every flag to
-`cmd/build-windows.ts` / `cmd/run-windows.ts` on Windows and to
-`cmd/build-linux.ts` / `cmd/run-linux.ts` on Linux. Use those names directly
-only when you mean one specific toolchain.
+`cmd/build-windows.ts` / `cmd/run-windows.ts` on Windows,
+`cmd/build-linux.ts` / `cmd/run-linux.ts` on Linux, or
+`cmd/build-mac.ts` / `cmd/run-mac.ts` on macOS. Use those names directly only
+when you mean one specific toolchain.
 
 No example name (or a flag last) prints the valid example list. The example is the last argument.
 
-Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/`). Clean rebuild of that dir: add `-clean`. The Linux build writes under `out/linux/` instead, so building the same checkout for both platforms — which is what `cmd/wsl-run.ts` does — never clobbers the other side.
+Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/` on Windows). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/` on Windows). Clean rebuild of that dir: add `-clean`. Linux and macOS write under `out/linux/` and `out/mac/`, so building the same checkout for multiple platforms never clobbers another platform's output.
 
-`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` on Windows (launch under `windbgx.exe`) and `-gdb` on Linux. It does not accept `-all` — pick one binary.
+`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` on Windows (launch under `windbgx.exe`), `-gdb` on Linux, and `-lldb` on macOS. It does not accept `-all` — pick one binary.
 
 Linux prerequisites (g++/clang++, pkg-config, X11 + cairo + Pango headers,
 gdb, bun, rust) install with `bash cmd/ubuntu-install-deps.sh`; add
@@ -367,7 +370,7 @@ Button::New(cx, StrL("primary-button"), ClickSave)
     ->Child(TextEl(cx->a, StrL("Save changes")));
 ```
 
-Do not inline a styled `Div` tree in a showcase page when a primitive exists. `ButtonEl` in `src/gpui` is a *themed* helper for older examples; new showcase pages use `src/ui`.
+Do not inline a styled `Div` tree in a showcase page when a primitive exists. `ButtonEl` in `src/gpui` is a _themed_ helper for older examples; new showcase pages use `src/ui`.
 
 When a primitive needs a GPUI capability we do not have (text input, overlay), add the smallest piece in `src/gpui` first, then the widget.
 

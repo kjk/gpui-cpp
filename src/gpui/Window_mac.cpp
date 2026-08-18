@@ -464,6 +464,10 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
 
         AppSetTitle(win, title);
         [window makeKeyAndOrderFront:nil];
+        // AppNew may run well before a window is opened (system_monitor does
+        // an initial metrics sweep). Activate again now that Cocoa has a key
+        // window to bring forward.
+        [NSApp activateIgnoringOtherApps:YES];
         PlatSetTimer(win, WindowTimerMs(win));
     }
     return win;

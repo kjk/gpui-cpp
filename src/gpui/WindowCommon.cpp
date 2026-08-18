@@ -7,8 +7,6 @@
 
 namespace gpui {
 
-static const int kTickMs = 500;
-
 int WindowCollectFrames(Window* win, uint64_t* cursor, FrameTiming* out,
                         int max) {
     if (!win || !cursor || !out || max <= 0) {

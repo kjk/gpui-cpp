@@ -168,6 +168,7 @@ static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current,
             ->PadX(12)
             ->PadY(4)
             ->Child(TextEl(a, title)->Font(14)->Fg(th.foreground))
+            ->Child(Div(a)->Grow())
             ->Child(TextEl(a, FormatPct(current, 1))->Font(14)->Fg(color));
 
     Rgba fillTop = RgbaOpacity(color, 0.4f);

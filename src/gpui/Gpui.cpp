@@ -1377,14 +1377,12 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     // width so wrapping text is not measured as one infinite line.
     float used = 0;
     float growSum = 0;
-    int nGrow = 0;
     for (El* c = e->first; c; c = c->next) {
         if (c->style.absolute) {
             continue;
         }
         growSum += c->style.flexGrow;
         if (c->style.flexGrow > 0) {
-            nGrow++;
             continue;
         }
         if (row) {

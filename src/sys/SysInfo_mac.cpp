@@ -9,6 +9,7 @@
 #include <libproc.h>
 #include <mach/mach.h>
 #include <mach/mach_host.h>
+#include <mach/mach_time.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <time.h>
@@ -167,6 +168,17 @@ static uint64_t FindPrevCpu(const Vec<ProcSample>& prev, uint32_t pid) {
     return 0;
 }
 
+static uint64_t MachTicksTo100ns(uint64_t ticks) {
+    static mach_timebase_info_data_t timebase = {};
+    if (timebase.denom == 0) {
+        mach_timebase_info(&timebase);
+    }
+    // proc_taskinfo reports Mach absolute-time ticks, not nanoseconds.
+    long double ns = (long double)ticks * (long double)timebase.numer /
+                     (long double)timebase.denom;
+    return (uint64_t)(ns / 100.0L);
+}
+
 static void RefreshProcesses(SysState* s) {
     int cap = proc_listpids(PROC_ALL_PIDS, 0, nullptr, 0);
     if (cap <= 0) {
@@ -214,9 +226,8 @@ static void RefreshProcesses(SysState* s) {
             pi.name, (int)sizeof(pi.name),
             info.pbsd.pbi_name[0] ? info.pbsd.pbi_name : info.pbsd.pbi_comm);
         pi.memory = info.ptinfo.pti_resident_size;
-        // Mach reports thread times in nanoseconds.
-        uint64_t cpu =
-            (info.ptinfo.pti_total_user + info.ptinfo.pti_total_system) / 100;
+        uint64_t cpu = MachTicksTo100ns(info.ptinfo.pti_total_user +
+                                        info.ptinfo.pti_total_system);
         uint64_t prev = FindPrevCpu(s->prevProcs, pi.pid);
         if (prev && wallDelta > 0) {
             uint64_t delta = cpu >= prev ? cpu - prev : 0;

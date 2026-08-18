@@ -1,13 +1,13 @@
 # gpui for C++
 
-A **C++** port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed). Runs on **Windows** and **Linux**.
+A **C++** port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed). Runs on **Windows**, **Linux** and **macOS**.
 
 Original project:
 
 - Repository: https://github.com/longbridge/gpui-component
 - Docs: https://longbridge.github.io/gpui-component
 
-This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates and does not use Taffy, Blade, or Zed’s renderer.
+This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux, and Cocoa + Core Graphics + Core Text on macOS. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates and does not use Taffy, Blade, or Zed’s renderer.
 
 The API follows GPUI's shape: an `App` owns the entity store and the windows, a `Window` renders a view, and a view is a struct with state plus `static El* Render(T* self, Ctx* cx)`:
 
@@ -30,14 +30,14 @@ int GpuiMain(int argc, char** argv) {
 }
 ```
 
-Entities are generational handles owned by `App`, not refcounted; `cx.listener` becomes `Listen(cx, &T::Handler)` and `cx.notify()` becomes `Notify(cx)`. See the *App, Window, Entity, Ctx* section of [AGENTS.md](AGENTS.md).
+Entities are generational handles owned by `App`, not refcounted; `cx.listener` becomes `Listen(cx, &T::Handler)` and `cx.notify()` becomes `Notify(cx)`. See the _App, Window, Entity, Ctx_ section of [AGENTS.md](AGENTS.md).
 
 The Rust sources used as the spec live in a gitignored clone at `.work/gpui-component/`. Exact checkins we are porting are in [`cmd/versions.ts`](cmd/versions.ts); `bun cmd/build.ts` installs that tree. Ingest playbook: [port-upstream.md](port-upstream.md).
 
 ## Build
 
 `bun cmd/build.ts` and `bun cmd/run.ts` dispatch to the toolchain for the
-machine they run on, so the same commands work on both platforms:
+machine they run on, so the same commands work on all three platforms:
 
 ```
 bun cmd/build.ts -rel story
