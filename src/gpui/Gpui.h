@@ -726,10 +726,10 @@ void WindowOnMouse(Window* win, Listener l);
 void WindowSetInterval(Window* win, int ms, Listener l);
 
 // Open a window whose root is a view entity, the WindowOpen + cx.new pair.
-Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
-                       EntityId root, WinOpts opts);
-int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
-               App* app, WinOpts opts);
+Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,
+                       WinOpts opts);
+int AppRunView(Str title, int dipW, int dipH, EntityId root, App* app,
+               WinOpts opts);
 
 // The view a window renders, typed.
 template <typename T>
@@ -743,9 +743,8 @@ WinSize WindowSize(Window* win);
 App* AppNew();
 void AppFree(App* app);
 int AppRun(App* app);
-Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
-                   WinOpts opts);
-void AppSetTitle(Window* win, const wchar_t* title);
+Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);
+void AppSetTitle(Window* win, Str title);
 void AppRequestAnim(Window* win, bool on);
 
 // Collect focusable click targets from last paint for Tab cycling.

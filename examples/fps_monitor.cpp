@@ -354,7 +354,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     WinOpts opts = {};
     opts.anim = true;
     opts.timerMs = 16;
-    Window* win = WindowOpenView(app, L"FPS Monitor", 800, 600, view.id, opts);
+    Window* win =
+        WindowOpenView(app, StrL("FPS Monitor"), 800, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnMouse(win, ListenTo(view, &OnMouse));
     WindowSetInterval(win, 16, ListenTo(view, &OnTick));

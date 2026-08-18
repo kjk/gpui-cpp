@@ -52,6 +52,11 @@ using TempStr = Str;
 
 Str AllocStrTemp(int size);
 
+// UTF-8 Str -> null-terminated UTF-16 for the OS calls that need it.
+// Temp-arena backed: do not free, and do not keep it past the next
+// ResetTempArena().
+WCHAR* ToCWstrTemp(Str s);
+
 void* AllocZero(int count, int size);
 
 template <typename T>

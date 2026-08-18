@@ -839,8 +839,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
         self->search.cursor = self->search.len;
     }
     strncpy_s(self->search.placeholder, "Search…", _TRUNCATE);
-    Window* win =
-        WindowOpenView(app, L"GPUI Component", 1280, 960, view.id, WinOpts{});
+    Window* win = WindowOpenView(app, StrL("GPUI Component"), 1280, 960,
+                                 view.id, WinOpts{});
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

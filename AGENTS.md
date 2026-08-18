@@ -182,8 +182,8 @@ struct Example {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
-    return AppRunView(L"Example", 800, 600, EntityNew<Example>(app).id, app,
-                      WinOpts{});
+    return AppRunView(StrL("Example"), 800, 600,
+                      EntityNew<Example>(app).id, app, WinOpts{});
 }
 ```
 
@@ -218,6 +218,7 @@ void FormatBytes(uint64_t bytes, StrBuilder& out);
 - `Vec<T>` for arrays of POD. Not for `Str` graphs — use `Vec<ProcessInfo>` where `ProcessInfo` holds a `char name[kMax]` or an arena `Str`.
 - `logf("...")` for debug prints.
 - Prefer `int32_t` indexes. `int` is fine when matching existing base APIs (`Vec::len` is `int`).
+- Strings are UTF-8 `Str` everywhere, including our own API (`WindowOpen`, `AppSetTitle`). Convert with `ToCWstrTemp(s)` only where an OS call needs UTF-16, at the call itself. Do not widen a signature to `wchar_t*` to save a conversion.
 - COM interfaces: pair every successful `Create` with `Release`. No `CComPtr`.
 
 ## Build

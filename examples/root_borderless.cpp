@@ -49,6 +49,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     ThemeSet(ThemeMode::Light);
     WinOpts opts = {};
     opts.borderless = true;
-    return AppRunView(L"Root Borderless", 640, 320, EntityNew<Example>(app).id,
-                      app, opts);
+    return AppRunView(StrL("Root Borderless"), 640, 320,
+                      EntityNew<Example>(app).id, app, opts);
 }

@@ -699,7 +699,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     self->textareaLen = (int)strlen(self->textarea);
 
     Window* win =
-        WindowOpenView(app, L"GPUI Base", 840, 640, view.id, WinOpts{});
+        WindowOpenView(app, StrL("GPUI Base"), 840, 640, view.id, WinOpts{});
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

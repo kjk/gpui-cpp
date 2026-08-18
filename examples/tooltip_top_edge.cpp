@@ -31,6 +31,6 @@ struct Example {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
-    return AppRunView(L"Tooltip Top Edge", 520, 260, EntityNew<Example>(app).id,
-                      app, WinOpts{});
+    return AppRunView(StrL("Tooltip Top Edge"), 520, 260,
+                      EntityNew<Example>(app).id, app, WinOpts{});
 }

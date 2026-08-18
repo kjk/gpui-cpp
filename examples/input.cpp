@@ -63,7 +63,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     strncpy_s(self->in.placeholder, "Enter your name", _TRUNCATE);
     self->in.focused = true;
 
-    Window* win = WindowOpenView(app, L"Input", 800, 600, view.id, WinOpts{});
+    Window* win =
+        WindowOpenView(app, StrL("Input"), 800, 600, view.id, WinOpts{});
     WindowOnKey(win, ListenTo(view, &Example::OnKey));
     int rc = AppRun(app);
     AppFree(app);

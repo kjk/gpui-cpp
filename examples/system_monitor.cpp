@@ -413,7 +413,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     Collect(self);
     WinOpts opts = {};
     Window* win =
-        WindowOpenView(app, L"System Monitor", 680, 600, view.id, opts);
+        WindowOpenView(app, StrL("System Monitor"), 680, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnWheel(win, ListenTo(view, &OnWheel));
     WindowSetInterval(win, 500, ListenTo(view, &OnTick));

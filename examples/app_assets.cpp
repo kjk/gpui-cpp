@@ -26,6 +26,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     ThemeSet(ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("app_assets"));
-    return AppRunView(L"App Assets", 800, 600, EntityNew<Example>(app).id, app,
-                      WinOpts{});
+    return AppRunView(StrL("App Assets"), 800, 600, EntityNew<Example>(app).id,
+                      app, WinOpts{});
 }

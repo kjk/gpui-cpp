@@ -194,7 +194,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     ThemeSet(ThemeMode::Light);
     WinOpts opts = {};
     Window* win =
-        WindowOpenView(app, L"Dialog Overlay", 800, 600, view.id, opts);
+        WindowOpenView(app, StrL("Dialog Overlay"), 800, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnMouse(win, ListenTo(view, &OnMouse));
     win->menu.nItems = 4;

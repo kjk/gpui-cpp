@@ -146,7 +146,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     self->selTo = -1;
     WinOpts opts = {};
     Window* win =
-        WindowOpenView(app, L"Text Selection", 800, 600, view.id, opts);
+        WindowOpenView(app, StrL("Text Selection"), 800, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     win->input = &self->in;

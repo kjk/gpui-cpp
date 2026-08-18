@@ -106,6 +106,6 @@ El* Example::Render(Example*, Ctx* cx) {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
-    return AppRunView(L"Focus Trap", 800, 600, EntityNew<Example>(app).id, app,
-                      WinOpts{});
+    return AppRunView(StrL("Focus Trap"), 800, 600, EntityNew<Example>(app).id,
+                      app, WinOpts{});
 }

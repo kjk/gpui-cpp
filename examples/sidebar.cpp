@@ -217,7 +217,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));
     WinOpts opts = {};
-    Window* win = WindowOpenView(app, L"Sidebar", 900, 620, view.id, opts);
+    Window* win = WindowOpenView(app, StrL("Sidebar"), 900, 620, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));
     int rc = AppRun(app);
     AppFree(app);

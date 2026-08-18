@@ -453,9 +453,9 @@ bool AppIsMaximized(Window* win) {
     return win && win->maximized;
 }
 
-void AppSetTitle(Window* win, const wchar_t* title) {
-    if (win && win->hwnd && title) {
-        SetWindowTextW(win->hwnd, title);
+void AppSetTitle(Window* win, Str title) {
+    if (win && win->hwnd) {
+        SetWindowTextW(win->hwnd, ToCWstrTemp(title));
     }
 }
 
@@ -577,8 +577,7 @@ void AppFree(App* app) {
     CoUninitialize();
 }
 
-Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
-                   WinOpts opts) {
+Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     if (!app) {
         return nullptr;
     }
@@ -612,8 +611,8 @@ Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
     int y = (sy - pxH) / 2;
 
     HWND hwnd =
-        CreateWindowExW(0, kWndClass, title, style, x, y, pxW, pxH, nullptr,
-                        nullptr, GetModuleHandleW(nullptr), win);
+        CreateWindowExW(0, kWndClass, ToCWstrTemp(title), style, x, y, pxW, pxH,
+                        nullptr, nullptr, GetModuleHandleW(nullptr), win);
     if (!hwnd) {
         return nullptr;
     }
@@ -626,8 +625,8 @@ Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
     return win;
 }
 
-Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
-                       EntityId root, WinOpts opts) {
+Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,
+                       WinOpts opts) {
     Window* win = WindowOpen(app, title, dipW, dipH, opts);
     if (win) {
         win->root = root;
@@ -648,8 +647,8 @@ int AppRun(App* app) {
     return (int)msg.wParam;
 }
 
-int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
-               App* app, WinOpts opts) {
+int AppRunView(Str title, int dipW, int dipH, EntityId root, App* app,
+               WinOpts opts) {
     if (!WindowOpenView(app, title, dipW, dipH, root, opts)) {
         return 1;
     }

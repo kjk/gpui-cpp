@@ -28,6 +28,6 @@ struct Example {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
-    return AppRunView(L"Hello World", 800, 600, EntityNew<Example>(app).id, app,
-                      WinOpts{});
+    return AppRunView(StrL("Hello World"), 800, 600, EntityNew<Example>(app).id,
+                      app, WinOpts{});
 }

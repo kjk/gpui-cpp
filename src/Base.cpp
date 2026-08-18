@@ -419,6 +419,24 @@ Str AllocStrTemp(int size) {
     return Str(res, size);
 }
 
+WCHAR* ToCWstrTemp(Str s) {
+    Arena* arena = GetTempArena();
+    int n = 0;
+    if (s.s && s.len > 0) {
+        n = MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, nullptr, 0);
+        if (n < 0) {
+            n = 0;
+        }
+    }
+    auto res = (WCHAR*)arena->Push((uint64_t)(n + 1) * sizeof(WCHAR),
+                                   alignof(WCHAR), false);
+    if (n > 0) {
+        MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, res, n);
+    }
+    res[n] = 0;
+    return res;
+}
+
 // Grow/shrink vec storage to newCap elements, plus one trailing zero-pad
 // element (so Vec<char>/Vec<WCHAR> stay C-string compatible).
 // Keeps the first min(len, newCap) elements; zeros the rest of the new block.
