@@ -62,8 +62,7 @@ static const StoryInfo kMeta[StoryCount] = {
      "Communicate important status changes without interrupting the user's "
      "workflow."},
     {"alert-dialog", "AlertDialog",
-     "A modal dialog that interrupts the user with important content and "
-     "expects a response."},
+     "Require a response before the user can continue."},
     {"avatar", "Avatar",
      "Represent a person or organization with an image or fallback."},
     {"badge", "Badge",
@@ -74,77 +73,86 @@ static const StoryInfo kMeta[StoryCount] = {
     {"button", "Button",
      "Displays a button or a component that looks like a button."},
     {"calendar", "Calendar", "A calendar to select a date or date range."},
-    {"chart", "Chart", "Beautiful charts. Built using GPUI components."},
+    {"chart", "Chart", "Beautiful Charts & Graphs."},
     {"checkbox", "Checkbox", "Select one or more independent options."},
     {"clipboard", "Clipboard",
      "Copy text or generated values to the clipboard."},
     {"collapsible", "Collapsible",
      "An interactive element that expands/collapses."},
-    {"color-picker", "ColorPicker",
-     "A color picker that allows users to select a color."},
+    {"color-picker", "ColorPicker", "Choose and preview a color value."},
     {"combobox", "Combobox",
-     "Autocomplete input and command palette with a list of suggestions."},
-    {"data-table", "DataTable", "Powerful table and datagrids built."},
+     "An autocomplete input paired with a searchable dropdown "
+     "list."},
+    {"data-table", "DataTable",
+     "A complex data table with selection, sorting, column moving, "
+     "and loading more."},
     {"date-picker", "DatePicker",
-     "A date picker component with range and presets."},
+     "A date picker to select a date or date range."},
     {"description-list", "DescriptionList",
      "Present labels and values in a structured summary."},
-    {"dialog", "Dialog",
-     "A window overlaid on either the primary window or another dialog "
-     "window."},
+    {"dialog", "Dialog", "Present focused content above the current view."},
     {"dropdown-button", "DropdownButton",
-     "A button that opens a dropdown menu of actions."},
+     "A button with an attached dropdown menu for additional "
+     "options."},
     {"editor", "Editor",
-     "A code editor with syntax highlighting, line numbers, and folding."},
-    {"form", "Form", "Building forms with validation and various input types."},
+     "Code editor with theme-aware syntax highlighting and "
+     "folding."},
+    {"form", "Form", "Form to collect multiple inputs."},
     {"group-box", "GroupBox",
      "A styled container element that with an optional title to groups "
      "related content together."},
     {"hover-card", "HoverCard",
-     "For sighted users to preview content available behind a link."},
+     "A hover card displays content when hovering over a trigger "
+     "element, with configurable delays."},
     {"icon", "Icon", "SVG Icons based on Lucide.dev"},
-    {"image", "Image", "Image display with fallbacks."},
+    {"image", "Image", "Image and SVG image supported."},
     {"input", "Input",
-     "Displays a form input field or a component that looks like an input "
-     "field."},
+     "Capture and validate short-form text, credentials, "
+     "identifiers, and formatted values."},
     {"kbd", "Kbd", "A tag style to display keyboard shortcuts"},
     {"label", "Label",
      "Display concise text with hierarchy, highlighting, and masking."},
-    {"list", "List", "A list of items that can be selected."},
+    {"list", "List", "A list displays a series of items."},
     {"menu", "Menu", "Popup menu and context menu"},
-    {"native-menu", "NativeMenu", "Native application menu bar."},
+    {"native-menu", "NativeMenu",
+     "A menu rendered by the operating system. Unlike PopupMenu, "
+     "it is drawn by the OS and can extend beyond the window "
+     "bounds — useful for small windows."},
     {"notification", "Notification",
      "Show transient feedback without interrupting the current task."},
     {"number-input", "NumberInput",
-     "An input for numeric values with increment and decrement controls."},
-    {"otp-input", "OtpInput", "A one-time password input component."},
+     "Adjust constrained numeric values precisely with typing or "
+     "increment and decrement controls."},
+    {"otp-input", "OtpInput",
+     "Enter short verification and recovery codes with clear "
+     "grouping and masking controls."},
     {"pagination", "Pagination",
-     "Pagination with page navigation, next and previous controls."},
-    {"popover", "Popover",
-     "Displays rich content in a portal, triggered by a button."},
+     "Pagination with page navigation, next and previous links."},
+    {"popover", "Popover", "Show focused content beside a trigger."},
     {"progress", "Progress",
      "Show task completion with determinate or loading indicators."},
     {"radio", "Radio", "Choose one option from a set."},
     {"rating", "Rating", "A simple interactive star rating component."},
-    {"resizable", "Resizable",
-     "Accessible resizable panel groups and layouts."},
-    {"scrollbar", "Scrollbar",
-     "A scrollbar that allows users to scroll content."},
+    {"resizable", "Resizable", "The resizable panels."},
+    {"scrollbar", "Scrollbar", "Add scrollbar to a scrollable element."},
     {"select", "Select",
-     "Displays a list of options for the user to pick from."},
+     "Displays a list of options for the user to pick "
+     "from—triggered by a button."},
     {"separator", "Separator",
      "A separator that can be either vertical or horizontal."},
-    {"settings", "Settings", "A settings page with groups and typed fields."},
-    {"sheet", "Sheet",
-     "Extends the Dialog component to display content that complements the "
-     "main content."},
+    {"settings", "Settings",
+     "A collection of settings groups and items for the "
+     "application."},
+    {"sheet", "Sheet", "Sheet for open a popup in the edge of the window"},
     {"sidebar", "Sidebar",
      "A composable, themeable and customizable sidebar component."},
     {"skeleton", "Skeleton",
      "Use to show a placeholder while content is loading."},
     {"slider", "Slider",
      "Displays a slider control for selecting a value within a range."},
-    {"spinner", "Spinner", "A loading spinner."},
+    {"spinner", "Spinner",
+     "Displays an spinner showing the completion progress of a "
+     "task."},
     {"status-bar", "StatusBar",
      "A horizontal bar with left/center/right regions, usually placed at the "
      "bottom."},
@@ -152,22 +160,25 @@ static const StoryInfo kMeta[StoryCount] = {
      "A step-by-step process for users to navigate through a series of "
      "steps."},
     {"switch", "Switch", "Turn a setting on or off."},
-    {"table", "Table", "A responsive table component."},
+    {"table", "Table",
+     "A basic table component for directly rendering tabular data."},
     {"tabs", "Tabs",
      "A set of layered sections of content—known as tab panels—that are "
      "displayed one at a time."},
-    {"tag", "Tag", "A tag component to categorize or organize items."},
-    {"textarea", "Textarea",
-     "Displays a form textarea or a component that looks like a textarea."},
+    {"tag", "Tag",
+     "A short item that can be used to categorize or label "
+     "content."},
+    {"textarea", "Textarea", "Input with multi-line mode."},
     {"theme-colors", "Theme Colors",
-     "Theme color tokens used by the components."},
+     "A color theme viewer to explore colors organized by "
+     "categories."},
     {"toggle", "Toggle", "Turn an option on or off, alone or in a group."},
-    {"tooltip", "Tooltip",
-     "A popup that displays information related to an element when the element "
-     "receives keyboard focus or the mouse hovers over it."},
+    {"tooltip", "Tooltip", "Describe a control on hover or keyboard focus."},
     {"tree", "Tree", "A tree view component for hierarchical data."},
     {"virtual-list", "VirtualList",
-     "A virtualized list for efficiently rendering large lists."},
+     "Add vertical or horizontal, or both scrollbars to a "
+     "container, and use virtual_list to render a large number of "
+     "items."},
 };
 
 const StoryInfo* StoryMeta(int i) {
