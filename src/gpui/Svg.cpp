@@ -873,6 +873,16 @@ Str IconNamePath(IconName name) {
             return StrL("icons/ellipsis.svg");
         case IconName::ChevronsUpDown:
             return StrL("icons/chevrons-up-down.svg");
+        case IconName::SquareTerminal:
+            return StrL("icons/square-terminal.svg");
+        case IconName::BookOpen:
+            return StrL("icons/book-open.svg");
+        case IconName::Settings2:
+            return StrL("icons/settings-2.svg");
+        case IconName::Frame:
+            return StrL("icons/frame.svg");
+        case IconName::ChartPie:
+            return StrL("icons/chart-pie.svg");
         case IconName::File:
             return StrL("icons/file.svg");
         case IconName::FolderOpen:
