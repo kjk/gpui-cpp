@@ -3,6 +3,9 @@ import { dirname, join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
 import {
   captureWindowToPng,
+  clientToScreen,
+  getClientRect,
+  packCoords,
   clickClient,
   killAndWait,
   setForegroundWindow,
@@ -19,12 +22,15 @@ const argv = Bun.argv.slice(2);
 let debug = false;
 const clicks: { x: number; y: number }[] = [];
 const keys: number[] = [];
+let wheel = 0;
 const rest: string[] = [];
 for (const a of argv) {
   if (a === "-dbg") {
     debug = true;
   } else if (a === "-rel") {
     debug = false;
+  } else if (a.startsWith("-wheel=")) {
+    wheel = Number(a.slice(7));
   } else if (a.startsWith("-key=")) {
     keys.push(Number(a.slice(5)));
   } else if (a.startsWith("-click=")) {
@@ -63,6 +69,17 @@ setForegroundWindow(hwnd);
 await sleep(500);
 for (const c of clicks) {
   await clickClient(hwnd, c.x, c.y);
+}
+// Scroll before keys/capture: notches of WM_MOUSEWHEEL at the window centre.
+if (wheel !== 0) {
+  const r = getClientRect(hwnd);
+  const pt = clientToScreen(hwnd, Math.floor(r.right / 2), Math.floor(r.bottom / 2));
+  const step = wheel > 0 ? 120 : -120;
+  for (let i = 0; i < Math.abs(wheel); i++) {
+    sendMessage(hwnd, 0x020a /* WM_MOUSEWHEEL */, (step << 16) >>> 0, packCoords(pt.x, pt.y));
+    await sleep(40);
+  }
+  await sleep(250);
 }
 for (const vk of keys) {
   sendMessage(hwnd, 0x0100 /* WM_KEYDOWN */, vk, 0);

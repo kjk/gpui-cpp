@@ -306,22 +306,21 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
                              ->H(24));
     page->Child(csz);
 
-    Rgba magenta = Rgb(0xd9, 0x46, 0xef);
     El* customSec = StorySection(cx, "Custom color", nullptr);
     El* customRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
     customRow->Child(Btn(cx, self, "button-6-custom")
-                         ->Custom(magenta)
+                         ->Custom(th.magenta)
                          ->Label(StrL("Custom Button"))
                          ->IntoEl());
     customRow->Child(Btn(cx, self, "button-outline-6-custom")
                          ->Outline()
-                         ->Custom(magenta)
+                         ->Custom(th.magenta)
                          ->Label(StrL("Outline Button"))
                          ->IntoEl());
     customRow->Child(Btn(cx, self, "button-outline-6-custom-1")
                          ->Outline()
                          ->Icon(IconName::Bell)
-                         ->Custom(magenta)
+                         ->Custom(th.magenta)
                          ->Label(StrL("Icon Button"))
                          ->IntoEl());
     StorySectionAdd(customSec, customRow);
