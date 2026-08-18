@@ -283,6 +283,7 @@ enum class IconName : uint8_t {
     CircleX,
     Loader,
     LoaderCircle,
+    Ellipsis,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
