@@ -401,7 +401,10 @@ void AppRequestAnim(Window* win, bool on) {
     }
     win->anim = on;
     win->opts.anim = on;
-    if (!on && win->tickMs <= 0 && win->opts.timerMs <= 0) {
+    // Once the animation stops, only a WindowSetInterval subscription still
+    // wants a timer. WinOpts::timerMs is the interval to use if one is
+    // wanted, not a reason to keep one alive.
+    if (!on && win->tickMs <= 0) {
         PlatSetTimer(win, 0);
         return;
     }

@@ -222,6 +222,8 @@ static void BindInput(ShowcaseApp* app, Window* win) {
                               app->comboboxOpen;
     app->hexIn.focused = app->hexIn.focused &&
                          app->component == CompColorPicker && app->colorOpen;
+    app->textareaOn = app->textareaOn && app->component == CompTextarea;
+    app->editorOn = app->editorOn && app->component == CompEditor;
     if (app->comboQuery.focused) {
         win->input = &app->comboQuery;
     } else if (app->hexIn.focused) {
@@ -237,6 +239,13 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     WinSize size = WindowSize(win);
     app->hoverId = win->hoverId;
     BindInput(app, win);
+    // A caret blinks off TimeNow(), so it is only visible while frames keep
+    // coming. Without this the one repaint that follows the click can land in
+    // the dark half of the blink and stay there until the next keystroke.
+    // The textarea and the editor track focus themselves rather than through
+    // win->input. Same call story.cpp makes.
+    AppRequestAnim(win,
+                   win->input != nullptr || app->textareaOn || app->editorOn);
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
