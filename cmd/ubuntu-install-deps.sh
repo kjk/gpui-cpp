@@ -4,6 +4,7 @@
 # Non-interactive: safe to run from a script, a Dockerfile, or `wsl bash`.
 #
 #   bash cmd/ubuntu-install-deps.sh
+#   bash cmd/ubuntu-install-deps.sh --build-only   # just what a compile needs
 #
 # Installs:
 #   build-essential, clang, lld, pkg-config  — the C++ toolchain
@@ -16,8 +17,24 @@
 #   rustup + stable toolchain                — for `-compare` runs
 #
 # Rust and bun are per-user installs; everything else goes through apt.
+#
+# --build-only stops after the apt packages a compile needs: no debuggers, no
+# CJK fonts, no bun, no rustup. That is what CI runs, so the compile
+# dependencies have one source of truth.
 
 set -euo pipefail
+
+BUILD_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+  --build-only | -build-only) BUILD_ONLY=1 ;;
+  *)
+    echo "unknown option: $arg" >&2
+    echo "usage: bash cmd/ubuntu-install-deps.sh [--build-only]" >&2
+    exit 1
+    ;;
+  esac
+done
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -37,15 +54,11 @@ echo "==> apt-get update"
 $SUDO apt-get update $APT_FLAGS
 
 echo "==> apt-get install"
-# lldb is not in every Ubuntu release's main pocket; it is installed on its
-# own below so a missing package does not fail the whole run.
 $SUDO apt-get install $APT_FLAGS --no-install-recommends \
   build-essential \
   clang \
   lld \
   pkg-config \
-  gdb \
-  valgrind \
   libx11-dev \
   libxext-dev \
   libcairo2-dev \
@@ -58,6 +71,21 @@ $SUDO apt-get install $APT_FLAGS --no-install-recommends \
   git \
   unzip \
   xz-utils
+
+if [ "$BUILD_ONLY" = "1" ]; then
+  echo ""
+  echo "==> versions"
+  "${CXX:-g++}" --version | head -1 || true
+  pkg-config --modversion x11 cairo pangocairo | tr '\n' ' ' && echo "(x11 cairo pangocairo)"
+  echo ""
+  echo "Done (--build-only). Compile with: bun cmd/build.ts -rel -all"
+  exit 0
+fi
+
+echo "==> debuggers"
+# lldb is not in every Ubuntu release's main pocket; it is installed on its
+# own below so a missing package does not fail the whole run.
+$SUDO apt-get install $APT_FLAGS --no-install-recommends gdb valgrind
 
 echo "==> CJK fonts (optional)"
 # The story gallery has a Chinese link; without these it renders as tofu.

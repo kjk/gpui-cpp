@@ -1,0 +1,63 @@
+name: build
+
+# Compiles every example on all three platforms. There are no tests to run —
+# `bun cmd/build.ts -rel -all` succeeding is the check.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Rust spec tree under .work/ is a reading reference, not a build input.
+  GPUI_NO_RUST_TREE: "1"
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: linux
+            os: ubuntu-latest
+          - name: macos
+            os: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # X11, cairo and Pango are to Linux what Direct2D and DirectWrite are to
+      # Windows: system libraries, found through pkg-config. --build-only is
+      # the subset a compile needs, so this and a developer setup cannot drift.
+      - name: Install Linux dependencies
+        if: matrix.name == 'linux'
+        run: bash cmd/ubuntu-install-deps.sh --build-only
+
+      # cl.exe is not on PATH on the runners, and vcvars64 only applies to the
+      # shell that calls it, so the build has to run in the same step.
+      - name: Build (Windows)
+        if: matrix.name == 'windows'
+        shell: cmd
+        run: |
+          set VSWHERE="%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq delims=" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSPATH=%%i"
+          if not defined VSPATH (echo could not find a VC toolset & exit /b 1)
+          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          bun cmd/build.ts -rel -all
+
+      - name: Build (Linux / macOS)
+        if: matrix.name != 'windows'
+        run: bun cmd/build.ts -rel -all

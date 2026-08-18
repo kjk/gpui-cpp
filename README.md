@@ -55,12 +55,18 @@ packages. On Ubuntu or Debian:
 bash cmd/ubuntu-install-deps.sh
 ```
 
+**macOS** needs the Xcode command line tools (`xcode-select --install`).
+
 From a Windows checkout you can build and run the Linux binaries under WSL
-without leaving the shell:
+without leaving the shell, and compile the macOS ones on a Mac over ssh:
 
 ```
 bun cmd/wsl-run.ts -rel system_monitor
+bun cmd/mac-build.ts -rel -all
 ```
+
+CI compiles every example on all three platforms on each push
+([`.github/workflows/build.yml`](.github/workflows/build.yml)).
 
 # Why port to C++?
 

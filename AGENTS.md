@@ -280,9 +280,20 @@ Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan:
 `bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` on Windows (launch under `windbgx.exe`) and `-gdb` on Linux. It does not accept `-all` — pick one binary.
 
 Linux prerequisites (g++/clang++, pkg-config, X11 + cairo + Pango headers,
-gdb, bun, rust) install with `bash cmd/ubuntu-install-deps.sh`. From a Windows
-checkout, `bun cmd/wsl-run.ts -rel system_monitor` builds and runs the Linux
-binary inside WSL; the window comes up through WSLg.
+gdb, bun, rust) install with `bash cmd/ubuntu-install-deps.sh`; add
+`--build-only` for just what a compile needs. From a Windows checkout,
+`bun cmd/wsl-run.ts -rel system_monitor` builds and runs the Linux binary
+inside WSL; the window comes up through WSLg.
+
+macOS needs the Xcode command line tools and nothing else. `bun cmd/mac-build.ts
+-rel -all` compiles on a remote Mac over ssh from any host — it snapshots the
+working tree into a commit, force-pushes it to a scratch branch, and has the
+Mac fetch and build it. It compiles only; a Cocoa window needs a login session.
+
+CI (`.github/workflows/build.yml`) runs `bun cmd/build.ts -rel -all` on
+windows-latest, ubuntu-latest and macos-latest. There are no tests; compiling
+every example on all three is the check. It sets `GPUI_NO_RUST_TREE=1` so the
+Rust spec clone is skipped.
 
 After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for the whole tree) before finishing. It runs clang-format on C++ in `src/` and `examples/` (`/.clang-format`, Chromium-based, 80 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
 

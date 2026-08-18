@@ -475,8 +475,9 @@ const { target, all, debug, asan, clean } = parseArgs(Bun.argv.slice(2));
 try {
   ensureRustTree(root);
 } catch (e) {
+  // The Rust spec tree is a reading reference, not a build input; a missing
+  // clone must not stop a build.
   console.error(e instanceof Error ? e.message : e);
-  process.exit(1);
 }
 const amalgam = buildDist({ outDir: ".work", platform: "win" });
 console.log(

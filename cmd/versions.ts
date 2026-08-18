@@ -85,10 +85,18 @@ function checkoutPin(dir: string, sha: string): void {
   }
 }
 
-/** Clone or reset `.work/gpui-component` to `gpuiComponent.sha`. */
+/**
+ * Clone or reset `.work/gpui-component` to `gpuiComponent.sha`.
+ *
+ * The tree is a reading reference, not a build input, so a compile-only run
+ * (CI) can skip the clone with GPUI_NO_RUST_TREE=1.
+ */
 export function ensureRustTree(repoRoot: string): string {
   const dir = rustTreeDir(repoRoot);
   const sha = gpuiComponent.sha;
+  if (process.env["GPUI_NO_RUST_TREE"]) {
+    return dir;
+  }
   if (hasGit(dir)) {
     if (headSha(dir) === sha) {
       return dir;
