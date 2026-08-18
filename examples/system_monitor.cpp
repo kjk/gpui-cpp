@@ -214,8 +214,8 @@ static El* ProcTableHeader(Ctx* cx, MonitorApp* app) {
     const char* names[4] = {"PID", "Name", "CPU %", "Memory"};
     ProcessSort fields[4] = {ProcessSort::Pid, ProcessSort::Name,
                              ProcessSort::Cpu, ProcessSort::Memory};
-    El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(
-        Rgba8(0x17, 0x17, 0x17, 0x66));
+    El* row =
+        Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(th.tableHead);
     for (int i = 0; i < 4; i++) {
         TempStr lab = fmt("%s%s", Str(names[i]),
                           SortMark(fields[i], app->sort, app->sortDesc));

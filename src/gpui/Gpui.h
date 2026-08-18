@@ -53,6 +53,7 @@ struct Theme {
     Rgba tabActiveFg;
     Rgba tabFg;
     Rgba tableBg;
+    Rgba tableHead;
     Rgba tableHeadFg;
     Rgba tableRowBorder;
     Rgba tableEven;
