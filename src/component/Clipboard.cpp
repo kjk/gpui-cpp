@@ -27,20 +27,17 @@ Clipboard* Clipboard::OnCopy(Listener fn) {
 }
 
 El* Clipboard::IntoEl() {
-    const Theme& th = cx->theme();
+    // A Clipboard is just the ghost icon button; `value` is what it copies,
+    // not something it shows. The caller renders any label next to it.
     Button* btn = Button::New(cx, StrL("clipboard"))
                       ->Icon(IconName::Copy)
                       ->Ghost()
+                      ->WithSize(UiSize::XSmall)
                       ->Tooltip(StrL("Copy"));
     if (onCopy.IsValid()) {
         btn->OnClick(onCopy);
     }
-    return Div(a)
-        ->FlexRow()
-        ->ItemsCenter()
-        ->Gap(8)
-        ->Child(TextEl(a, value)->Font(13)->Fg(th.foreground))
-        ->Child(btn->IntoEl());
+    return btn->IntoEl();
 }
 
 } // namespace component

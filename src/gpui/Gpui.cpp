@@ -2062,10 +2062,15 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(12, 6, 12, 18);
             break;
         case IconName::Copy:
-            DrawRoundStroke(ctx, x + s * 0.32f, y + s * 0.18f, s * 0.42f,
-                            s * 0.50f, 2, sw, c);
-            DrawRoundStroke(ctx, x + s * 0.18f, y + s * 0.32f, s * 0.42f,
-                            s * 0.50f, 2, sw, c);
+            // lucide copy: the front sheet is a 13x13 rounded square at 8,8;
+            // the one behind it shows as an L along its top and left.
+            DrawRoundStroke(ctx, x + s * (8.f / 24.f), y + s * (8.f / 24.f),
+                            s * (13.f / 24.f), s * (13.f / 24.f), s * 0.08f, sw,
+                            c);
+            line(5, 15, 4, 15);
+            line(4, 15, 4, 4);
+            line(4, 4, 15, 4);
+            line(15, 4, 15, 5);
             break;
         case IconName::Bell:
             line(12, 4, 12, 5);
