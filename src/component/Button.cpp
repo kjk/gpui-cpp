@@ -105,8 +105,11 @@ Button* Button::OnClick(Listener l) {
 
 El* Button::IntoEl() {
     const Theme& th = cx->theme();
-    Rgba bg = th.secondary, fg = th.secondaryFg, hover = th.secondaryHover,
-         bd = th.border;
+    // The default variant is the background with an input-colored border, not
+    // a secondary fill: crates/ui falls `button` back to the theme background
+    // in light mode, and hovers toward the input color.
+    Rgba bg = th.background, fg = th.foreground,
+         hover = RgbaOpacity(th.inputBorder, 0.5f), bd = th.inputBorder;
     // The status variants are washes, not fills: crates/ui's button_danger and
     // friends are the status color mixed 20% toward transparent, with the
     // color itself as the text and the same wash as the border. Outlined, the
@@ -114,6 +117,12 @@ El* Button::IntoEl() {
     Rgba accent = {};
     bool hasAccent = false;
     switch (variant) {
+        case ButtonVariant::Secondary:
+            bg = th.secondary;
+            fg = th.secondaryFg;
+            hover = th.secondaryHover;
+            bd = th.border;
+            break;
         case ButtonVariant::Primary:
             bg = th.primary;
             fg = th.primaryFg;

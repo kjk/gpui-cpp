@@ -51,7 +51,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     El* vars = StorySection(cx, "Variants",
                             "Visual treatments communicate action priority.");
     // Rust gives this section .w_128(); the row wraps inside it.
-    El* row = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter()->W(512);
+    El* row = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter()->W(512);
     row->Child(Btn(cx, self, "button-0")->Label(StrL("Default"))->IntoEl());
     row->Child(
         Btn(cx, self, "button-1")->Label(StrL("Primary"))->Primary()->IntoEl());
@@ -84,7 +84,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
 
     El* icons = StorySection(
         cx, "Icons", "Icons can lead labels or appear in custom content.");
-    El* iconRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
+    El* iconRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter();
     iconRow->Child(Btn(cx, self, "button-icon-1")
                        ->Outline()
                        ->Label(StrL("Confirm"))
@@ -148,7 +148,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
 
     El* out = StorySection(cx, "Outline",
                            "Outlined treatments keep actions visually quiet.");
-    El* outRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter()->W(512);
+    El* outRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter()->W(512);
     outRow->Child(Btn(cx, self, "button-outline-1")
                       ->Primary()
                       ->Outline()
@@ -198,7 +198,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
 
     El* drop =
         StorySection(cx, "Dropdown", "A caret indicates an attached menu.");
-    El* dropRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter()->W(512);
+    El* dropRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter()->W(512);
     dropRow->Child(Btn(cx, self, "button-dropdown-caret-primary")
                        ->Primary()
                        ->DropdownCaret()
@@ -268,7 +268,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
 
     El* only = StorySection(cx, "Icon-only",
                             "Compact actions can omit visible labels.");
-    El* onlyRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    El* onlyRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     onlyRow->Child(Btn(cx, self, "icon-button-primary")
                        ->Icon(IconName::Search)
                        ->Primary()
@@ -308,7 +308,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     page->Child(csz);
 
     El* customSec = StorySection(cx, "Custom color", nullptr);
-    El* customRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
+    El* customRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter();
     customRow->Child(Btn(cx, self, "button-6-custom")
                          ->Custom(th.magenta)
                          ->Label(StrL("Custom Button"))

@@ -62,9 +62,10 @@ El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     El* tog =
         StorySection(cx, "Toggle", "Describe text and icon-only toggles.");
     El* togRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    // An unselected Toggle has no frame of its own.
     togRow->Child(component::Button::New(cx, StrL("toggle1"))
                       ->Label(StrL("Bold"))
-                      ->Outline()
+                      ->Ghost()
                       ->Tooltip(StrL("Toggle bold"))
                       ->IntoEl());
     togRow->Child(component::Button::New(cx, StrL("toggle2"))
