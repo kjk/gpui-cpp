@@ -44,3 +44,8 @@ bun cmd/run.ts -rel -compare story
 ```
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
+
+# Why port to C++?
+
+- Do you know a good joke?
+- Yes, Rust.
