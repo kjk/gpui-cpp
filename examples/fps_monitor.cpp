@@ -307,17 +307,11 @@ static void StepCurves(FpsApp* app, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-// GPUI lays a line of text into a box 1.618x the font size, which is what
-// gives the original's buttons their height; DirectWrite's line height is
-// tighter, so the box is asked for explicitly here.
-static const float kButtonHeight = 12.f * 1.618f + 8.f;
-
 static El* LoadButton(Ctx* cx, Str id, Str label, intptr_t delta) {
     return Div(cx->a)
         ->Click(HashClickId(id))
         ->FlexRow()
         ->ItemsCenter()
-        ->H(kButtonHeight)
         ->PadX(12)
         ->PadY(4)
         ->Radius(6)

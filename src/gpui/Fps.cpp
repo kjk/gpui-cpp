@@ -199,14 +199,6 @@ static const float kCompactFigureWidth = 25.f;
 // Size of every label and reading. Collapsed, the figure uses it too.
 static const float kTextSize = 10.f;
 
-// GPUI lays a line of text into a box 1.618x the font size and centers the
-// glyphs in it; DirectWrite's own line height is tighter than that, so without
-// the box the HUD's rows come out cramped and the whole thing ends up shorter
-// than the original. Each row asks for the line box and centers its text.
-static const float kLineBox = kTextSize * 1.618f;
-// The line box plus py(1px) above and below.
-static const float kRowHeight = kLineBox + 2.f;
-
 // The trace sits behind the headline, so it is dimmed enough to stay out of
 // the figure's way while still showing its shape and color.
 static const float kTraceOpacity = 0.35f;
@@ -377,7 +369,6 @@ static void PaintFpsTrace(PaintCtx* ctx, El* e, void* user) {
 static El* FpsPair(Ctx* cx, Str label, Str value, const FpsStyle& style) {
     return Div(cx->a)
         ->FlexRow()
-        ->ItemsCenter()
         ->Gap(4)
         ->Child(TextEl(cx->a, label)->Fg(style.muted))
         ->Child(TextEl(cx->a, value)->Fg(style.foreground));
@@ -390,9 +381,7 @@ static El* FpsReading(Ctx* cx, Str label, Str value, Rgba valueColor,
                       const FpsStyle& style) {
     return Div(cx->a)
         ->FlexRow()
-        ->ItemsCenter()
         ->W(kFill)
-        ->H(kRowHeight)
         ->JustifyBetween()
         ->Gap(8)
         ->PadY(1)
@@ -414,6 +403,8 @@ static El* FpsHeadline(Ctx* cx, FpsMonitor* self, float fps, Rgba color,
 
     // The figure is centered in a fixed box so neither the unit nor the group
     // shifts as the count gains or loses a digit; the two share a bottom edge.
+    // The box is the figure's own size because the headline sets
+    // line_height(relative(1.)) on it, tighter than the inherited phi.
     El* figure = Div(cx->a)
                      ->W(kFigureWidth)
                      ->H(kFigureSize)
@@ -422,6 +413,7 @@ static El* FpsHeadline(Ctx* cx, FpsMonitor* self, float fps, Rgba color,
                      ->JustifyCenter()
                      ->Child(TextEl(cx->a, fmt("%.0f", fps))
                                  ->Font(kFigureSize)
+                                 ->LineHeight(1.f)
                                  ->Fg(color));
 
     return Div(cx->a)
@@ -438,13 +430,10 @@ static El* FpsHeadline(Ctx* cx, FpsMonitor* self, float fps, Rgba color,
                     // An empty box matching the unit on the right. Without it
                     // the unit's own width pushes the figure off center by
                     // half of it, which reads as misalignment.
-                    ->Child(Div(cx->a)->W(kUnitWidth)->H(kLineBox))
+                    ->Child(Div(cx->a)->W(kUnitWidth)->H(kTextSize))
                     ->Child(figure)
                     ->Child(Div(cx->a)
                                 ->W(kUnitWidth)
-                                ->H(kLineBox)
-                                ->FlexRow()
-                                ->ItemsCenter()
                                 ->Child(TextEl(cx->a, StrL("FPS"))
                                             ->Fg(style.muted))));
 }
@@ -489,9 +478,7 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
             ->Child(
                 Div(cx->a)
                     ->W(kCompactFigureWidth)
-                    ->H(kLineBox)
                     ->FlexRow()
-                    ->ItemsCenter()
                     ->JustifyEnd()
                     ->Child(TextEl(cx->a, fmt("%.0f", r.fps))->Fg(fpsColor)))
             ->Child(TextEl(cx->a, StrL("FPS"))->Fg(style.muted));
@@ -515,9 +502,7 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
         hud->Child(
             Div(cx->a)
                 ->FlexRow()
-                ->ItemsCenter()
                 ->W(kFill)
-                ->H(kRowHeight)
                 ->JustifyBetween()
                 ->Gap(8)
                 ->PadY(1)

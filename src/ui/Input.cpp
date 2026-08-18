@@ -18,21 +18,25 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
         return TextEl(a, Str{});
     }
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
-    // Input::LINE_HEIGHT is 1.25rem against the input's own text size.
-    float lineH = font * 1.25f;
+    // Input::LINE_HEIGHT is 1.25rem — 20px at the 16px root, whatever the
+    // text size is, rather than the phi box every other line of text gets.
+    const float kInputLineH = 20.f;
+    float lineMult = kInputLineH / font;
     float caretH = font + 2.f;
     Rgba fg = state->len > 0 ? style.foreground : style.mutedForeground;
     bool caret = state->focused && ((GetTickCount() / 500) % 2 == 0);
     El* bar = Div(a)->W(2)->H(caretH)->Bg(style.caret);
     El* slot = caret ? bar : Div(a)->W(2)->H(caretH);
-    El* row = Div(a)->FlexRow()->ItemsCenter()->H(lineH);
+    El* row = Div(a)->FlexRow()->ItemsCenter()->H(kInputLineH);
     if (state->len <= 0) {
         // Overlay the caret so blinking does not shove the cue text.
         if (caret) {
             row->Child(bar->Absolute()->Left(0)->Top(1));
         }
-        return row
-            ->Child(TextEl(a, Str(state->placeholder))->Font(font)->Fg(fg));
+        return row->Child(TextEl(a, Str(state->placeholder))
+                              ->Font(font)
+                              ->LineHeight(lineMult)
+                              ->Fg(fg));
     }
     int cur = state->cursor;
     if (cur < 0) {
@@ -42,7 +46,10 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
         cur = state->len;
     }
     if (cur > 0) {
-        row->Child(TextEl(a, Str(state->buf, cur))->Font(font)->Fg(fg));
+        row->Child(TextEl(a, Str(state->buf, cur))
+                       ->Font(font)
+                       ->LineHeight(lineMult)
+                       ->Fg(fg));
     }
     if (state->focused) {
         row->Child(slot);
@@ -50,6 +57,7 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
     if (cur < state->len) {
         row->Child(TextEl(a, Str(state->buf + cur, state->len - cur))
                        ->Font(font)
+                       ->LineHeight(lineMult)
                        ->Fg(fg));
     }
     return row;

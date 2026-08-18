@@ -335,6 +335,8 @@ struct Style {
     Rgba borderColor = {};
     Rgba color = {};
     float fontSize = 0; // 0 = inherit
+    // line_height as a multiple of the font size. 0 = GPUI's default, phi.
+    float lineHeight = 0;
     bool truncate = false;
     bool wrap = false;
     bool hasBg = false;
@@ -417,6 +419,7 @@ struct El {
     El* Radius(float r);
     El* Fg(Rgba c);
     El* Font(float px);
+    El* LineHeight(float mult);
     El* Truncate();
     El* ClipY();
     El* ScrollY(float off);
@@ -576,7 +579,8 @@ float PxToDip(PaintCtx* ctx, int px);
 int DipToPx(PaintCtx* ctx, float dip);
 
 void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
-                 float* outH, bool wrap = false, int weight = 0);
+                 float* outH, bool wrap = false, int weight = 0,
+                 float lineH = 0);
 void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);
