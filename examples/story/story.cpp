@@ -123,7 +123,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"popover", "Popover",
      "Displays rich content in a portal, triggered by a button."},
     {"progress", "Progress",
-     "Displays an indicator showing the completion progress of a task."},
+     "Show task completion with determinate or loading indicators."},
     {"radio", "Radio", "Choose one option from a set."},
     {"rating", "Rating", "A rating component that allows users to rate items."},
     {"resizable", "Resizable",

@@ -1,6 +1,10 @@
 #include "Story.h"
 
 struct ProgressStory {
+    // The story's value starts at 25 and its toolbar steps it.
+    float value = 25;
+    StoryToolbarState toolbar;
+
     static El* Render(ProgressStory* self, Ctx* cx);
 };
 
@@ -8,6 +12,7 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    page->Child(StoryToolbar(cx, self));
 
     El* upload = StorySection(
         cx, "Upload", "Pair progress with a clear label, value, and status.");
@@ -18,14 +23,16 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
                    ->Pad(16)
                    ->Border(1, th.border)
                    ->Radius(th.radius);
-    El* head = Div(a)->FlexRow()->JustifyBetween()->ItemsCenter();
+    El* head = Div(a)->FlexRow()->W(kFill)->JustifyBetween()->ItemsCenter();
     head->Child(
         StoryTxt(cx, StrL("Uploading design-assets.zip"), 14, th.foreground)
             ->Semibold());
-    head->Child(StoryTxt(cx, StrL("68%"), 13, th.mutedFg));
+    head->Child(
+        StoryTxt(cx, StoryFmt(cx, "%.0f%%", self->value), 13, th.mutedFg));
     card->Child(head);
-    card->Child(component::Progress::New(cx)->Value(68)->W(368)->IntoEl());
-    El* foot = Div(a)->FlexRow()->JustifyBetween()->ItemsCenter();
+    card->Child(
+        component::Progress::New(cx)->Value(self->value)->W(kFill)->IntoEl());
+    El* foot = Div(a)->FlexRow()->W(kFill)->JustifyBetween()->ItemsCenter();
     foot->Child(StoryTxt(cx, StrL("24.8 MB of 96 MB"), 12, th.mutedFg));
     foot->Child(StoryTxt(cx, StrL("About 1 min left"), 12, th.mutedFg));
     card->Child(foot);
@@ -42,8 +49,10 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
                       ->Pad(16)
                       ->Radius(th.radius)
                       ->Bg(RgbaOpacity(th.muted, 0.4f));
-    circBox->Child(
-        component::ProgressCircle::New(cx)->Value(68)->Size(80)->IntoEl());
+    circBox->Child(component::ProgressCircle::New(cx)
+                       ->Value(self->value)
+                       ->Size(80)
+                       ->IntoEl());
     El* circText = Div(a)->FlexCol()->Gap(4);
     circText->Child(StoryTxt(cx, StrL("Analyzing project"), 14, th.foreground)
                         ->Semibold());
