@@ -7,34 +7,22 @@ struct ImageStory {
 El* ImageStory::Render(ImageStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    El* ph = Div(a)
-                 ->W(160)
-                 ->H(100)
-                 ->ItemsCenter()
-                 ->JustifyCenter()
-                 ->Bg(th.muted)
-                 ->Radius(th.radius)
-                 ->Child(StoryTxt(cx, StrL("No image"), 12, th.mutedFg));
+    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
 
     El* remote = StorySection(cx, "Remote SVG",
-                              "Remote images are not fetched in this port.");
-    StorySectionAdd(remote, ph);
+                              "Loads and renders an SVG from a remote URL.");
+    // The frame is the same; the image inside it is not fetched in this port,
+    // as in the Rust window when the URL is unreachable.
+    El* frame = Div(a)
+                    ->FlexRow()
+                    ->W(480)
+                    ->H(180)
+                    ->ItemsCenter()
+                    ->JustifyCenter()
+                    ->Radius(th.radiusLg)
+                    ->Border(1, th.border);
+    StorySectionAdd(remote, frame);
     page->Child(remote);
-
-    El* sec = StorySection(
-        cx, "Fallback",
-        "Image display with a placeholder when no asset is loaded.");
-    StorySectionAdd(
-        sec, Div(a)
-                 ->W(160)
-                 ->H(100)
-                 ->ItemsCenter()
-                 ->JustifyCenter()
-                 ->Bg(th.muted)
-                 ->Radius(th.radius)
-                 ->Child(StoryTxt(cx, StrL("No image"), 12, th.mutedFg)));
-    page->Child(sec);
     return page;
 }
 
