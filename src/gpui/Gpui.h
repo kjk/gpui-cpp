@@ -174,6 +174,12 @@ struct ClickEvent {
     int button = 1;
     // The element's click id, when it has one. Lets one handler serve a list.
     int id = 0;
+    // The box that was hit, so a handler can place the click inside it — what
+    // a slider needs to turn a press on its track into a value.
+    float elX = 0;
+    float elY = 0;
+    float elW = 0;
+    float elH = 0;
 };
 
 // Portable key codes. The values are the Win32 VK_* ones, so the Windows

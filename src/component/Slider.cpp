@@ -11,6 +11,11 @@ Slider* Slider::New(Ctx* cx) {
     s->cx = cx;
     return s;
 }
+Slider* Slider::New(Ctx* cx, Str id) {
+    Slider* s = New(cx);
+    s->id = id;
+    return s;
+}
 Slider* Slider::Value(float v) {
     value = v;
     return this;
@@ -23,6 +28,10 @@ Slider* Slider::Range(float low, float high) {
 }
 Slider* Slider::Reverse(bool v) {
     reverse = v;
+    return this;
+}
+Slider* Slider::Vertical(bool v) {
+    vertical = v;
     return this;
 }
 Slider* Slider::Disabled(bool v) {
@@ -64,6 +73,51 @@ El* Slider::IntoEl() {
     Rgba fillBg = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
     Rgba thumbBorder = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
 
+    if (vertical) {
+        // The same three parts turned on their side, filling upward from the
+        // bottom of the track.
+        El* vtrack = SliderTrack::New(cx)->W(kH)->H(w);
+        vtrack->Child(Div(a)
+                          ->Absolute()
+                          ->Left(mid)
+                          ->Top(0)
+                          ->W(kBar)
+                          ->H(w)
+                          ->Radius(kBar * 0.5f)
+                          ->Bg(railBg));
+        float vFrom = reverse ? hi : low;
+        float vTo = reverse ? 1.f : hi;
+        vtrack->Child(SliderIndicator::New(cx)
+                          ->Absolute()
+                          ->Left(mid)
+                          ->Top(w * (1.f - vTo))
+                          ->W(kBar)
+                          ->H(w * (vTo - vFrom))
+                          ->Radius(kBar * 0.5f)
+                          ->Bg(fillBg));
+        for (int i = 0; i < (range ? 2 : 1); i++) {
+            float at = (range && i == 0) ? low : hi;
+            vtrack->Child(SliderThumb::New(cx)
+                              ->Absolute()
+                              ->Left((kH - kThumb) * 0.5f)
+                              ->Top(w * (1.f - at) - kThumb * 0.5f)
+                              ->W(kThumb)
+                              ->H(kThumb)
+                              ->Radius(kThumb * 0.5f)
+                              ->Bg(th.background)
+                              ->Border(1, thumbBorder));
+        }
+        El* vroot =
+            gpui::Slider::New(cx, HashClickId(id.s ? id : StrL("slider-v")))
+                ->W(kH)
+                ->H(w)
+                ->Child(vtrack);
+        if (onChange.IsValid() && !disabled) {
+            vroot->OnClick(onChange);
+        }
+        return vroot;
+    }
+
     El* track = SliderTrack::New(cx)->W(w)->H(kH);
     track->Child(Div(a)
                      ->Absolute()
@@ -96,7 +150,7 @@ El* Slider::IntoEl() {
                          ->Bg(th.background)
                          ->Border(1, thumbBorder));
     }
-    El* root = gpui::Slider::New(cx, HashClickId(StrL("slider")))
+    El* root = gpui::Slider::New(cx, HashClickId(id.s ? id : StrL("slider")))
                    ->W(w)
                    ->H(kH)
                    ->Child(track);

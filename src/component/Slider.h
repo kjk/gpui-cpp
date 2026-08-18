@@ -9,6 +9,9 @@ namespace component {
 struct Slider {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
+    // Each slider on a page needs its own click id, or they share a hover
+    // and the hit test cannot tell them apart.
+    Str id = {};
     // 0..1. A range slider fills between lo and hi; a single one from the
     // start of the track to `value`.
     float value = 0;
@@ -18,13 +21,17 @@ struct Slider {
     // "remaining capacity" readings.
     bool reverse = false;
     bool disabled = false;
+    // vertical(): the track runs bottom-to-top, and `width` is its length.
+    bool vertical = false;
     float width = 224;
     Listener onChange;
 
     static Slider* New(Ctx* cx);
+    static Slider* New(Ctx* cx, Str id);
     Slider* Value(float v);
     Slider* Range(float low, float high);
     Slider* Reverse(bool v = true);
+    Slider* Vertical(bool v = true);
     Slider* Disabled(bool v = true);
     Slider* W(float px);
     Slider* OnChange(Listener fn);
