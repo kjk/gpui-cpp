@@ -284,6 +284,7 @@ enum class IconName : uint8_t {
     Loader,
     LoaderCircle,
     Ellipsis,
+    ChevronsUpDown,
     File,
     FolderOpen,
     ChevronDown,
@@ -344,6 +345,8 @@ struct Style {
     float border = 0;
     float borderT = 0;
     float borderB = 0;
+    float borderL = 0;
+    float borderR = 0;
     float radius = 0;
     Rgba bg = {};
     Rgba borderColor = {};
@@ -435,6 +438,8 @@ struct El {
     El* Border(float width, Rgba c);
     El* BorderT(float width, Rgba c);
     El* BorderB(float width, Rgba c);
+    El* BorderL(float width, Rgba c);
+    El* BorderR(float width, Rgba c);
     El* Radius(float r);
     El* Fg(Rgba c);
     El* Font(float px);

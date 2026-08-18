@@ -443,6 +443,16 @@ El* El::BorderB(float width, Rgba c) {
     style.borderColor = c;
     return this;
 }
+El* El::BorderL(float width, Rgba c) {
+    style.borderL = width;
+    style.borderColor = c;
+    return this;
+}
+El* El::BorderR(float width, Rgba c) {
+    style.borderR = width;
+    style.borderColor = c;
+    return this;
+}
 El* El::Radius(float r) {
     style.radius = r;
     return this;
@@ -2389,6 +2399,14 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
     if (e->style.borderB > 0) {
         DrawLine(ctx, e->x, e->y + e->h, e->x + e->w, e->y + e->h,
                  e->style.borderB, e->style.borderColor);
+    }
+    if (e->style.borderL > 0) {
+        DrawLine(ctx, e->x, e->y, e->x, e->y + e->h, e->style.borderL,
+                 e->style.borderColor);
+    }
+    if (e->style.borderR > 0) {
+        DrawLine(ctx, e->x + e->w, e->y, e->x + e->w, e->y + e->h,
+                 e->style.borderR, e->style.borderColor);
     }
 
     bool clip = e->style.overflowY != OverflowY::Visible;
