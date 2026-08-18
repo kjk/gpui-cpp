@@ -115,7 +115,7 @@ static const StoryInfo kMeta[StoryCount] = {
      "Displays a menu to the user — such as a set of actions or functions."},
     {"native-menu", "NativeMenu", "Native application menu bar."},
     {"notification", "Notification",
-     "A brief message that appears temporarily."},
+     "Show transient feedback without interrupting the current task."},
     {"number-input", "NumberInput",
      "An input for numeric values with increment and decrement controls."},
     {"otp-input", "OtpInput", "A one-time password input component."},

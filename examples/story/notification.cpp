@@ -82,23 +82,85 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
 
     El* titled = StorySection(cx, "Title and description",
                               "Pair a concise title with supporting detail.");
-    StorySectionAdd(titled, component::Button::New(cx, StrL("show-typed-info"))
-                                ->OnClick(Listen(cx, &ShowNotify, 5))
-                                ->Info()
-                                ->Label(StrL("Info"))
-                                ->IntoEl());
-    if (self->notifyOn && self->selA == 5) {
+    // One button per type, as the story has.
+    El* titledRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
+    titledRow->Child(component::Button::New(cx, StrL("show-typed-info"))
+                         ->OnClick(Listen(cx, &ShowNotify, 5))
+                         ->Info()
+                         ->Label(StrL("Info"))
+                         ->IntoEl());
+    titledRow->Child(component::Button::New(cx, StrL("show-typed-success"))
+                         ->OnClick(Listen(cx, &ShowNotify, 6))
+                         ->Success()
+                         ->Label(StrL("Success"))
+                         ->IntoEl());
+    titledRow->Child(component::Button::New(cx, StrL("show-typed-warning"))
+                         ->OnClick(Listen(cx, &ShowNotify, 7))
+                         ->Warning()
+                         ->Label(StrL("Warning"))
+                         ->IntoEl());
+    titledRow->Child(component::Button::New(cx, StrL("show-typed-error"))
+                         ->OnClick(Listen(cx, &ShowNotify, 8))
+                         ->Danger()
+                         ->Label(StrL("Error"))
+                         ->IntoEl());
+    StorySectionAdd(titled, titledRow);
+    if (self->notifyOn && self->selA >= 5 && self->selA <= 8) {
         StorySectionAdd(
             titled,
             component::Notification::New(
                 cx, StrL("All changes saved"),
                 StrL("Your changes have been saved to the cloud and will sync "
                      "across all of your devices."))
-                ->Kind(component::NotificationKind::Info)
+                ->Kind(self->selA == 6   ? component::NotificationKind::Success
+                       : self->selA == 7 ? component::NotificationKind::Warning
+                       : self->selA == 8 ? component::NotificationKind::Error
+                                         : component::NotificationKind::Info)
                 ->OnClose(Listen(cx, &HideNote))
                 ->IntoEl());
     }
     page->Child(titled);
+
+    El* unique =
+        StorySection(cx, "Unique", "Replace duplicate notifications by type.");
+    StorySectionAdd(unique, component::Button::New(cx, StrL("unique-notify"))
+                                ->OnClick(Listen(cx, &ShowNotify, 9))
+                                ->Outline()
+                                ->Label(StrL("Unique Notification"))
+                                ->IntoEl());
+    if (self->notifyOn && self->selA == 9) {
+        StorySectionAdd(
+            unique, component::Notification::New(
+                        cx, Str{},
+                        StrL("Only one of these is ever on screen at a time."))
+                        ->OnClose(Listen(cx, &HideNote))
+                        ->IntoEl());
+    }
+    page->Child(unique);
+
+    El* keyed = StorySection(cx, "Keyed",
+                             "Keep separate unique notifications with keys.");
+    El* keyRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
+    keyRow->Child(component::Button::New(cx, StrL("keyed-a"))
+                      ->OnClick(Listen(cx, &ShowNotify, 10))
+                      ->Outline()
+                      ->Label(StrL("A Notification"))
+                      ->IntoEl());
+    keyRow->Child(component::Button::New(cx, StrL("keyed-b"))
+                      ->OnClick(Listen(cx, &ShowNotify, 11))
+                      ->Outline()
+                      ->Label(StrL("B Notification"))
+                      ->IntoEl());
+    StorySectionAdd(keyed, keyRow);
+    if (self->notifyOn && (self->selA == 10 || self->selA == 11)) {
+        StorySectionAdd(keyed, component::Notification::New(
+                                   cx, Str{},
+                                   self->selA == 10 ? StrL("Notification A")
+                                                    : StrL("Notification B"))
+                                   ->OnClose(Listen(cx, &HideNote))
+                                   ->IntoEl());
+    }
+    page->Child(keyed);
     return page;
 }
 
