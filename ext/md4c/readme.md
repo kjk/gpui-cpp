@@ -32,10 +32,28 @@ rather than building an AST. `component::TextView` turns those callbacks into
 the block tree it renders, which is the same shape gpui-component gets by
 converting the `markdown` crate's mdast into `crates/ui/src/text/node.rs`.
 
-It is compiled as C, as its own translation unit — it is not part of the
-`src/**` amalgamation that `cmd/build-dist.ts` produces. The three build
-scripts add `ext/md4c` to the include path and compile this one file with
-`/TC /std:c17 /w` (MSVC) or `-x c -std=c11 -w` (gcc, clang), so the tree's
-`-Werror` / `/WX` applies to our code and not to a vendored file we do not
-edit. Keep it that way: update by re-running the curl commands above, never by
-patching in place.
+## How it is built
+
+`cmd/build-dist.ts` amalgamates it along with `src/**`: `md4c.h` becomes the
+tail of `gpui.h` and `md4c.c` the tail of `gpui.cpp`, so it compiles as C++
+inside the one translation unit the library is. Nothing includes `md4c.h` by
+name any more — `src/component/Text.cpp` still says so, and the amalgamator
+strips that the way it strips every other internal include.
+
+Two things follow from that, and both live in `cmd/build-dist.ts`, not here:
+
+- **The casts C++ needs and C did not.** Five `malloc` / `realloc` results and
+  one `md_mark_get_ptr` result are assigned or passed as a typed pointer, which
+  C converts from `void*` on its own and C++ does not. The amalgamator adds
+  those six casts as it emits the chunk. Each one must match exactly once, so a refresh
+  that moves them fails the build instead of silently skipping a fix.
+- **Warnings.** The tree builds with `/W4 /WX` and `-Wall -Wextra -Werror`, and
+  this file is not ours to keep clean under those. The chunk is bracketed by
+  `#pragma warning(push, 0)` plus an explicit `disable` for C4701 and C4702 —
+  MSVC decides those two after code generation, so the level-0 push does not
+  reach them — and by `#pragma GCC diagnostic ignored
+  "-Wmissing-field-initializers"`. `MIN` and `MAX` are `#undef`ed first,
+  because md4c defines both unguarded and glib already has them.
+
+The files themselves stay unmodified. Update by re-running the curl commands
+above, never by patching in place.

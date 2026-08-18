@@ -42,8 +42,8 @@ const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<exa
   -clean  delete out/<dir>/ before building
   -all    build every example (amalgamation + compile); print total elapsed
 
-Always writes .work/gpui.h, .work/gpui.cpp and .work/gpui_linux.cpp, then
-compiles examples against them.
+Always writes .work/gpui.h and .work/gpui.cpp, then compiles examples
+against them.
 
 Outputs (out/linux/, so a Windows build of the same checkout survives):
   out/linux/rel/          release
@@ -149,9 +149,9 @@ function outDirName(debug: boolean, asan: boolean): string {
   return join("linux", asan ? `${base}_asan` : base);
 }
 
-// The portable core plus the Linux half; see cmd/build-dist.ts.
-// ext/md4c is C and stays its own translation unit.
-const amalgamSrc = [".work/gpui.cpp", ".work/gpui_linux.cpp", "ext/md4c/md4c.c"];
+// The whole library, the platform halves and md4c included; one file, see
+// cmd/build-dist.ts.
+const amalgamSrc = [".work/gpui.cpp"];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -336,8 +336,6 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "-std=c++20",
     "-I",
     ".work",
-    "-I",
-    "ext/md4c",
     "-Wall",
     "-Wextra",
     "-Werror",
@@ -383,14 +381,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   for (const srcFile of dirty) {
     const objDir = join(outDir, "obj", objGroup(srcFile));
     const obj = join(objDir, basename(srcFile).replace(/\.(cpp|c)$/i, ".o"));
-    // md4c is C, and it is not ours to keep warning-clean.
-    const isC = srcFile.endsWith(".c");
-    const flags = isC
-      ? cflags
-          .filter((f) => f !== "-std=c++20" && f !== "-Werror" && f !== "-fno-rtti")
-          .concat(["-x", "c", "-std=c11", "-w"])
-      : cflags;
-    run([cxx, ...flags, "-c", srcFile, "-o", obj]);
+    run([cxx, ...cflags, "-c", srcFile, "-o", obj]);
   }
   mkdirSync(join(root, outDir, "obj"), { recursive: true });
   writeFileSync(join(root, stampPath), flagsKey);
@@ -447,9 +438,9 @@ try {
   // clone must not stop a Linux build.
   console.error(e instanceof Error ? e.message : e);
 }
-const amalgam = buildDist({ outDir: ".work", platform: "linux" });
+const amalgam = buildDist({ outDir: ".work" });
 console.log(
-  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} + ${amalgam.platformSourcePath} ` +
+  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
     `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources)`,
 );
 const outDir = join("out", outDirName(debug, asan));

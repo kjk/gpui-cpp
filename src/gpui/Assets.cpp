@@ -56,7 +56,16 @@ static void JoinPath(char* dst, int dstN, const char* a, const char* b) {
         StrCopyZ(dst, dstN, a);
         return;
     }
-    snprintf(dst, (size_t)dstN, "%s%c%s", a, kSep, b);
+    // Copy and append rather than snprintf: truncating to dstN is the whole
+    // point here, and gcc's -Wformat-truncation cannot tell that from a bug
+    // once it inlines this into a caller whose buffer it can size.
+    StrCopyZ(dst, dstN, a);
+    int n = (int)strlen(dst);
+    if (n + 1 < dstN) {
+        dst[n++] = kSep;
+        dst[n] = 0;
+        StrCopyZ(dst + n, dstN - n, b);
+    }
 }
 
 static void ParentDir(char* path) {

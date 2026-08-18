@@ -2,9 +2,9 @@
 // tools (xcode-select --install); everything it links against ships with the
 // system. Reached through cmd/build.ts, which dispatches by host platform.
 //
-// The mac half of the amalgam is Objective-C++ and is compiled with
-// -x objective-c++ -fobjc-arc; the portable half and the examples are plain
-// C++.
+// The amalgam carries the mac half, which is Objective-C++, so the whole of
+// gpui.cpp is compiled with -x objective-c++ -fobjc-arc. The examples are
+// plain C++.
 //   bun cmd/build.ts                         # print example list
 //   bun cmd/build.ts app_assets
 //   bun cmd/build.ts -dbg -all
@@ -46,8 +46,8 @@ const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<exa
   -clean  delete out/<dir>/ before building
   -all    build every example (amalgamation + compile); print total elapsed
 
-Always writes .work/gpui.h, .work/gpui.cpp and .work/gpui_mac.cpp, then
-compiles examples against them.
+Always writes .work/gpui.h and .work/gpui.cpp, then compiles examples
+against them.
 
 Outputs (out/mac/, so a build of the same checkout for another OS survives):
   out/mac/rel/          release
@@ -153,10 +153,10 @@ function outDirName(debug: boolean, asan: boolean): string {
   return join("mac", asan ? `${base}_asan` : base);
 }
 
-// The portable core plus the macOS half; see cmd/build-dist.ts.
-const macAmalgam = ".work/gpui_mac.cpp";
-// ext/md4c is C and stays its own translation unit.
-const amalgamSrc = [".work/gpui.cpp", macAmalgam, "ext/md4c/md4c.c"];
+// The whole library, the platform halves and md4c included; one file, see
+// cmd/build-dist.ts.
+const macAmalgam = ".work/gpui.cpp";
+const amalgamSrc = [macAmalgam];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -324,8 +324,6 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "-std=c++20",
     "-I",
     ".work",
-    "-I",
-    "ext/md4c",
     "-Wall",
     "-Wextra",
     "-Werror",
@@ -342,7 +340,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     cflags.push("-fsanitize=address", "-fno-omit-frame-pointer");
     ldflags.push("-fsanitize=address");
   }
-  // Only the mac half of the amalgam is Objective-C++.
+  // The amalgam holds the mac half, so all of it is Objective-C++.
   const objcFlags = ["-x", "objective-c++", "-fobjc-arc"];
 
   const cfg = `${debug ? "dbg" : "rel"}${asan ? "+asan" : ""}`;
@@ -377,14 +375,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     const objDir = join(outDir, "obj", objGroup(srcFile));
     const obj = join(objDir, basename(srcFile).replace(/\.(cpp|c)$/i, ".o"));
     const extra = srcFile === macAmalgam ? objcFlags : [];
-    // md4c is C, and it is not ours to keep warning-clean.
-    const isC = srcFile.endsWith(".c");
-    const flags = isC
-      ? cflags
-          .filter((f) => f !== "-std=c++20" && f !== "-Werror" && f !== "-fno-rtti")
-          .concat(["-x", "c", "-std=c11", "-w"])
-      : cflags;
-    run([cxx, ...flags, ...extra, "-c", srcFile, "-o", obj]);
+    run([cxx, ...cflags, ...extra, "-c", srcFile, "-o", obj]);
   }
   mkdirSync(join(root, outDir, "obj"), { recursive: true });
   writeFileSync(join(root, stampPath), flagsKey);
@@ -441,9 +432,9 @@ try {
   // clone must not stop a macOS build.
   console.error(e instanceof Error ? e.message : e);
 }
-const amalgam = buildDist({ outDir: ".work", platform: "mac" });
+const amalgam = buildDist({ outDir: ".work" });
 console.log(
-  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} + ${amalgam.platformSourcePath} ` +
+  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
     `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources)`,
 );
 const outDir = join("out", outDirName(debug, asan));

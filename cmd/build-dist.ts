@@ -1,19 +1,25 @@
-// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h plus two .cpp files: the
-// portable core (gpui.cpp) and the platform half (gpui_win.cpp, gpui_linux.cpp
-// or gpui_mac.cpp). The split is what keeps <windows.h>, <X11/*> and <Cocoa/*>
-// out of the same translation unit as everything else.
+// Amalgamate src/**/*.h and src/**/*.cpp, plus the vendored md4c, into two
+// files: gpui.h and gpui.cpp. Both are the same on every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
-// _mac.cpp, and _posix.cpp for the Linux and macOS halves both.
+// _mac.cpp, and _posix.cpp for the Linux and macOS halves both. Each of those
+// goes into gpui.cpp inside its own `#if GPUI_OS_*`, so <windows.h>, <X11/*>
+// and <Cocoa/*> still never reach the same translation unit — the preprocessor
+// drops the two halves that are not this platform's before anything parses
+// them. On macOS the whole file is Objective-C++, because the mac half is.
+//
+// md4c is the tail of both outputs: md4c.h at the end of gpui.h, md4c.c at the
+// end of gpui.cpp. `ext/md4c` stays pristine, so the handful of edits C++
+// needs that C did not — casting malloc/realloc away from void* — are applied
+// here, each one asserted to match exactly once so an md4c refresh that moves
+// them fails loudly instead of silently.
 //
 //   bun cmd/build-dist.ts           # write dist/, then time dbg+rel compile
 //   bun cmd/build-dist.ts -work     # write .work/ instead of dist/
-//   bun cmd/build-dist.ts -linux    # amalgamate the Linux platform half
-//   bun cmd/build-dist.ts -mac      # ... the macOS one
 //   bun cmd/build-dist.ts -no-bench # skip the compile timing
 //
 // import { buildDist } from "./build-dist.ts";
-// buildDist();                 // dist/gpui.h + gpui.cpp + gpui_<plat>.cpp
+// buildDist();                 // dist/gpui.h + dist/gpui.cpp
 // buildDist({ outDir: ".work" });
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
@@ -25,32 +31,23 @@ export type DistOutDir = "dist" | ".work";
 
 export type Platform = "win" | "linux" | "mac";
 
-export function hostPlatform(): Platform {
-  if (process.platform === "win32") {
-    return "win";
-  }
-  return process.platform === "darwin" ? "mac" : "linux";
-}
+export const allPlatforms: Platform[] = ["win", "linux", "mac"];
 
 export type BuildDistOpts = {
   /** Destination directory relative to the repo root. Default: "dist". */
   outDir?: DistOutDir;
-  /** Which platform half to emit. Default: the host. */
-  platform?: Platform;
 };
 
 export type BuildDistResult = {
   outDir: string;
-  platform: Platform;
   headerPath: string;
   sourcePath: string;
-  /** The <name>_win.cpp / <name>_linux.cpp amalgam. */
-  platformSourcePath: string;
   headerBytes: number;
   sourceBytes: number;
-  platformSourceBytes: number;
   headerCount: number;
+  /** Portable sources. */
   sourceCount: number;
+  /** The _win / _linux / _mac / _posix ones, all of them. */
   platformSourceCount: number;
 };
 
@@ -70,6 +67,97 @@ function filePlatforms(rel: string): Platform[] {
     return ["linux", "mac"];
   }
   return [];
+}
+
+const osMacro: Record<Platform, string> = {
+  win: "GPUI_OS_WINDOWS",
+  linux: "GPUI_OS_LINUX",
+  mac: "GPUI_OS_MAC",
+};
+
+// src/Base.h defines all three, exactly one of them 1, so a plain #if is all a
+// platform chunk needs to be there for its own platform and nowhere else.
+function guardFor(plats: Platform[]): string {
+  return `#if ${plats.map((p) => osMacro[p]).join(" || ")}`;
+}
+
+// The vendored parser, appended to the tail of each output. See ext/md4c.
+const md4cHeader = "ext/md4c/md4c.h";
+const md4cSource = "ext/md4c/md4c.c";
+
+// md4c is C, and C++ will not convert a void* to a typed pointer on its own.
+// These six are every place that needs a cast — five malloc/realloc results and
+// one md_mark_get_ptr. Each must match exactly once.
+const md4cCppFixes: [string, string][] = [
+  [
+    "            new_buffer = realloc(ctx->buffer, new_size);",
+    "            new_buffer = (CHAR*) realloc(ctx->buffer, new_size);",
+  ],
+  [
+    "    ctx->ref_def_hashtable = malloc(ctx->ref_def_hashtable_size * sizeof(void*));",
+    "    ctx->ref_def_hashtable = (void**) malloc(ctx->ref_def_hashtable_size * sizeof(void*));",
+  ],
+  [
+    "        new_marks = realloc(ctx->marks, ctx->alloc_marks * sizeof(MD_MARK));",
+    "        new_marks = (MD_MARK*) realloc(ctx->marks, ctx->alloc_marks * sizeof(MD_MARK));",
+  ],
+  [
+    "                                md_mark_get_ptr(ctx, (int)(title_mark - ctx->marks)),",
+    "                                (const CHAR*) md_mark_get_ptr(ctx, (int)(title_mark - ctx->marks)),",
+  ],
+  [
+    "    align = malloc(col_count * sizeof(MD_ALIGN));",
+    "    align = (MD_ALIGN*) malloc(col_count * sizeof(MD_ALIGN));",
+  ],
+  [
+    "        new_containers = realloc(ctx->containers, ctx->alloc_containers * sizeof(MD_CONTAINER));",
+    "        new_containers = (MD_CONTAINER*) realloc(ctx->containers, ctx->alloc_containers * sizeof(MD_CONTAINER));",
+  ],
+];
+
+// The tree compiles with /W4 /WX and -Wall -Wextra -Werror. md4c is not ours
+// to keep clean under those, so its two chunks are bracketed by these.
+const warnPush = [
+  "#if defined(_MSC_VER)",
+  "#pragma warning(push, 0)",
+  // C4701 and C4702 are decided after code generation, so the level-0 push
+  // above does not reach them; they have to be named.
+  "#pragma warning(disable : 4701 4702)",
+  "#elif defined(__GNUC__) || defined(__clang__)",
+  "#pragma GCC diagnostic push",
+  '#pragma GCC diagnostic ignored "-Wmissing-field-initializers"',
+  "#endif",
+].join("\n");
+
+const warnPop = [
+  "#if defined(_MSC_VER)",
+  "#pragma warning(pop)",
+  "#elif defined(__GNUC__) || defined(__clang__)",
+  "#pragma GCC diagnostic pop",
+  "#endif",
+].join("\n");
+
+// md4c defines these two unguarded, and glib (through Pango) already has them,
+// which gcc reports with a warning that has no -W switch to turn off. Nothing
+// after md4c uses either, so dropping the earlier definition is enough.
+const md4cUndefs = ["#undef MIN", "#undef MAX"];
+
+// `pop` is optional because md4c is the last chunk of whichever file it lands
+// in: the header has to restore the includer's warning state, but the .cpp
+// must not, since MSVC decides C4701 and C4702 after code generation and reads
+// the state as it stands at the end of the translation unit.
+function md4cChunk(rel: string, fixes: [string, string][], pop: boolean): string {
+  let body = stripInternalIncludes(rel, readLf(rel));
+  for (const [from, to] of fixes) {
+    const n = body.split(from).length - 1;
+    if (n !== 1) {
+      throw new Error(`${rel}: expected 1 match, found ${n}, for: ${from.trim()}`);
+    }
+    body = body.split(from).join(to);
+  }
+  const tail = pop ? [warnPop, ""] : [""];
+  const undefs = rel.endsWith(".c") ? md4cUndefs : [];
+  return [warnPush, ...undefs, `#line 1 "${rel}"`, body, ...tail].join("\n");
 }
 
 const quotedIncRe = /^\s*#\s*include\s+"([^"]+)"/;
@@ -112,7 +200,13 @@ function readLf(rel: string): string {
 function resolveQuoted(fromRel: string, inc: string): string | null {
   const incNorm = inc.replaceAll("\\", "/");
   const fromDir = dirname(fromRel).replaceAll("\\", "/");
-  const candidates = [`src/${incNorm}`, `${fromDir}/${incNorm}`, `src/${incNorm.split("/").pop()}`];
+  const candidates = [
+    `src/${incNorm}`,
+    `${fromDir}/${incNorm}`,
+    `src/${incNorm.split("/").pop()}`,
+    // md4c.h is part of the amalgam too, so the include of it is internal.
+    `ext/md4c/${incNorm.split("/").pop()}`,
+  ];
   for (const raw of candidates) {
     const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
     if (existsSync(join(root, norm))) {
@@ -347,16 +441,17 @@ function finish(text: string): string {
 
 export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   const outDir = opts?.outDir ?? "dist";
-  const platform = opts?.platform ?? hostPlatform();
   const headers = listSrc(".h");
   const allCpps = preferredCppOrder(listSrc(".cpp"));
   const cpps = allCpps.filter((f) => filePlatforms(f).length === 0);
-  const platCpps = allCpps.filter((f) => filePlatforms(f).includes(platform));
+  const platCpps = allCpps.filter((f) => filePlatforms(f).length > 0);
   if (headers.length === 0 || cpps.length === 0) {
     throw new Error("no src/**/*.h or src/**/*.cpp to amalgamate");
   }
-  if (platCpps.length === 0) {
-    throw new Error(`no src/**/*_${platform}.cpp to amalgamate`);
+  for (const p of allPlatforms) {
+    if (!platCpps.some((f) => filePlatforms(f).includes(p))) {
+      throw new Error(`no src/**/*_${p}.cpp to amalgamate`);
+    }
   }
 
   const headerOrder = topoHeaders(headers);
@@ -375,49 +470,68 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
     }
     headerChunks.push(`#line 1 "${rel}"`, body, "");
   }
+  headerChunks.push(md4cChunk(md4cHeader, [], true));
   headerChunks.push("#endif");
 
   const cppTexts = new Map<string, string>();
-  const nameToFiles = new Map<string, string[]>();
+  const fileNames = new Map<string, string[]>();
   for (const rel of [...cpps, ...platCpps]) {
     const body = stripInternalIncludes(rel, readLf(rel));
     cppTexts.set(rel, body);
-    for (const name of staticNames(body)) {
-      const list = nameToFiles.get(name) ?? [];
-      list.push(rel);
-      nameToFiles.set(name, list);
-    }
+    fileNames.set(rel, staticNames(body));
   }
+  // Two files only clash if they can be visible at once, and the three
+  // platform halves never are: Window_win.cpp and Window_linux.cpp may both
+  // have a `ClientDecorated` and neither has to be renamed for it. So the
+  // collision set is whatever repeats within one platform's view of the tree.
   const colliding = new Set<string>();
-  for (const [name, files] of nameToFiles) {
-    if (new Set(files).size > 1) {
-      colliding.add(name);
+  for (const p of allPlatforms) {
+    const visible = [...cpps, ...platCpps.filter((f) => filePlatforms(f).includes(p))];
+    const nameToFiles = new Map<string, Set<string>>();
+    for (const rel of visible) {
+      for (const name of fileNames.get(rel) ?? []) {
+        const set = nameToFiles.get(name) ?? new Set<string>();
+        set.add(rel);
+        nameToFiles.set(name, set);
+      }
+    }
+    for (const [name, files] of nameToFiles) {
+      if (files.size > 1) {
+        colliding.add(name);
+      }
     }
   }
 
-  const concat = (list: string[]): string => {
-    const chunks: string[] = ['#include "gpui.h"', ""];
-    for (const rel of list) {
-      let body = cppTexts.get(rel) ?? "";
-      const local = new Set(staticNames(body).filter((n) => colliding.has(n)));
-      body = renameIdents(body, local, filePrefix(rel));
-      if (!body.trim()) {
-        continue;
-      }
-      chunks.push(`#line 1 "${rel}"`, body, "");
+  const chunkFor = (rel: string): string | null => {
+    let body = cppTexts.get(rel) ?? "";
+    const local = new Set((fileNames.get(rel) ?? []).filter((n) => colliding.has(n)));
+    body = renameIdents(body, local, filePrefix(rel));
+    if (!body.trim()) {
+      return null;
     }
-    return finish(chunks.join("\n"));
+    const plats = filePlatforms(rel);
+    if (plats.length === 0) {
+      return [`#line 1 "${rel}"`, body, ""].join("\n");
+    }
+    return [guardFor(plats), `#line 1 "${rel}"`, body, "#endif", ""].join("\n");
   };
 
+  const chunks: string[] = ['#include "gpui.h"', ""];
+  for (const rel of [...cpps, ...platCpps]) {
+    const chunk = chunkFor(rel);
+    if (chunk) {
+      chunks.push(chunk);
+    }
+  }
+  chunks.push(md4cChunk(md4cSource, md4cCppFixes, false));
+
   const headerText = finish(headerChunks.join("\n"));
-  const sourceText = concat(cpps);
-  const platformText = concat(platCpps);
+  const sourceText = finish(chunks.join("\n"));
 
   const absOut = join(root, outDir);
   mkdirSync(absOut, { recursive: true });
   const headerPath = join(absOut, "gpui.h");
   const sourcePath = join(absOut, "gpui.cpp");
-  const platformSourcePath = join(absOut, `gpui_${platform}.cpp`);
   const writeIfChanged = (path: string, text: string) => {
     if (existsSync(path) && readFileSync(path, "utf8") === text) {
       return;
@@ -426,18 +540,14 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   };
   writeIfChanged(headerPath, headerText);
   writeIfChanged(sourcePath, sourceText);
-  writeIfChanged(platformSourcePath, platformText);
 
   return {
     outDir,
-    platform,
     headerPath: srcRel(headerPath),
     sourcePath: srcRel(sourcePath),
-    platformSourcePath: srcRel(platformSourcePath),
     headerBytes: Buffer.byteLength(headerText, "utf8"),
     sourceBytes: Buffer.byteLength(sourceText, "utf8"),
-    platformSourceBytes: Buffer.byteLength(platformText, "utf8"),
-    headerCount: headerOrder.length,
+    headerCount: headerOrder.length + 1,
     sourceCount: cpps.length,
     platformSourceCount: platCpps.length,
   };
@@ -525,25 +635,13 @@ function die(msg: string): never {
   process.exit(1);
 }
 
-function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean; platform: Platform } {
+function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean } {
   let outDir: DistOutDir = "dist";
   let bench = true;
-  let platform = hostPlatform();
+  const usage = "usage: bun cmd/build-dist.ts [-work] [-no-bench]";
   for (const raw of argv) {
     if (raw === "-work" || raw === "--work") {
       outDir = ".work";
-      continue;
-    }
-    if (raw === "-win" || raw === "--win") {
-      platform = "win";
-      continue;
-    }
-    if (raw === "-linux" || raw === "--linux") {
-      platform = "linux";
-      continue;
-    }
-    if (raw === "-mac" || raw === "--mac") {
-      platform = "mac";
       continue;
     }
     if (raw === "-no-bench" || raw === "--no-bench") {
@@ -554,21 +652,19 @@ function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean; platfor
       bench = true;
       continue;
     }
-    if (raw.startsWith("-")) {
-      die(`unknown option: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux|-mac] [-no-bench]`);
-    }
-    die(`unknown argument: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux|-mac] [-no-bench]`);
+    const what = raw.startsWith("-") ? "unknown option" : "unknown argument";
+    die(`${what}: ${raw}\n${usage}`);
   }
-  return { outDir, bench, platform };
+  return { outDir, bench };
 }
 
 function main(): void {
-  const { outDir, bench, platform } = parseCli(Bun.argv.slice(2));
-  const built = buildDist({ outDir, platform });
+  const { outDir, bench } = parseCli(Bun.argv.slice(2));
+  const built = buildDist({ outDir });
   console.log(`wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${built.headerCount} headers)`);
-  console.log(`wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ${built.sourceCount} sources)`);
   console.log(
-    `wrote ${built.platformSourcePath} (${formatBytes(built.platformSourceBytes)}, ${built.platformSourceCount} sources)`,
+    `wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ` +
+      `${built.sourceCount} + ${built.platformSourceCount} sources)`,
   );
   if (!bench) {
     return;

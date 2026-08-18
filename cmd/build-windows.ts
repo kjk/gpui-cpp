@@ -145,9 +145,9 @@ function outDirName(debug: boolean, asan: boolean): string {
   return asan ? `${base}_asan` : base;
 }
 
-// The portable core plus the Windows half; see cmd/build-dist.ts.
-// ext/md4c is C and stays its own translation unit.
-const amalgamSrc = [".work/gpui.cpp", ".work/gpui_win.cpp", "ext/md4c/md4c.c"];
+// The whole library, the platform halves and md4c included; one file, see
+// cmd/build-dist.ts.
+const amalgamSrc = [".work/gpui.cpp"];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -350,8 +350,6 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "/utf-8",
     "/I",
     ".work",
-    "/I",
-    "ext/md4c",
     "/DUNICODE",
     "/D_UNICODE",
     "/W4",
@@ -401,14 +399,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
       }
     }
     if (dirty.length > 0) {
-      // md4c is C, and it is not ours to keep warning-clean.
-      const flags =
-        g.key === "ext"
-          ? cflags
-              .filter((f) => f !== "/std:c++20" && f !== "/EHsc" && f !== "/W4" && f !== "/WX")
-              .concat(["/TC", "/std:c17", "/w"])
-          : cflags;
-      runCl([...flags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...dirty]);
+      runCl([...cflags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...dirty]);
       compiled += dirty.length;
     }
   }
@@ -491,9 +482,9 @@ try {
   // clone must not stop a build.
   console.error(e instanceof Error ? e.message : e);
 }
-const amalgam = buildDist({ outDir: ".work", platform: "win" });
+const amalgam = buildDist({ outDir: ".work" });
 console.log(
-  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} + ${amalgam.platformSourcePath} ` +
+  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
     `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources)`,
 );
 const outDir = join("out", outDirName(debug, asan));

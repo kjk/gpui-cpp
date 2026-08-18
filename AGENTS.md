@@ -50,7 +50,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
-3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. The one vendored library is `ext/md4c` — the CommonMark parser behind `component::TextView`, a single C file with no dependencies, checked in with its version and refresh commands in `ext/md4c/readme.md` and compiled as C outside the `src/**` amalgamation. Adding a second one needs the same bar: no build system of its own, no transitive dependencies, and a reason the tree cannot write it itself.
+3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. The one vendored library is `ext/md4c` — the CommonMark parser behind `component::TextView`, a single C file with no dependencies, checked in with its version and refresh commands in `ext/md4c/readme.md` and amalgamated into `gpui.h` / `gpui.cpp` along with `src/**`. Adding a second one needs the same bar: no build system of its own, no transitive dependencies, and a reason the tree cannot write it itself.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
 6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
@@ -129,9 +129,14 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 `Key*` constants in `Gpui.h` (the Win32 `VK_*` values, which the X11 window
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
-`cmd/build-dist.ts` amalgamates `src/` into three files: `gpui.h`, the
-portable `gpui.cpp`, and `gpui_win.cpp`, `gpui_linux.cpp` or `gpui_mac.cpp`. The platform half
-is its own translation unit so `<windows.h>` and `<X11/Xlib.h>` never meet.
+`cmd/build-dist.ts` amalgamates `src/` plus `ext/md4c` into two files:
+`gpui.h` and `gpui.cpp`. Both are the same on every platform. Each `_win.cpp` /
+`_linux.cpp` / `_mac.cpp` / `_posix.cpp` sits in `gpui.cpp` inside its own `#if
+GPUI_OS_*`, so `<windows.h>`, `<X11/Xlib.h>` and `<Cocoa/Cocoa.h>` still never
+reach one translation unit — the preprocessor drops the other two halves before
+anything parses them. macOS compiles the whole file as Objective-C++, because
+the mac half is. md4c is the tail of both outputs: `md4c.h` at the end of
+`gpui.h`, `md4c.c` at the end of `gpui.cpp`.
 
 ## Source of truth for visuals
 
@@ -335,6 +340,7 @@ cmd/ubuntu-install-deps.sh  non-interactive apt + bun + rustup setup for Linux
 cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords)
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
+cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/Base.h/.cpp        vendored SumatraPDF subset
 src/Base_win.cpp       Windows platform layer (memory, paths, strings)
