@@ -2372,7 +2372,7 @@ int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
     return n;
 }
 
-static void CollectFocus(El* e, AppHost* host) {
+static void CollectFocus(El* e, Window* host) {
     if (!e) {
         return;
     }
@@ -2391,12 +2391,12 @@ static void CollectFocus(El* e, AppHost* host) {
     }
 }
 
-void FocusCollect(AppHost* host, El* root) {
+void FocusCollect(Window* host, El* root) {
     host->focusEls.Clear();
     CollectFocus(root, host);
 }
 
-int FocusNext(AppHost* host, int trapId, bool backward) {
+int FocusNext(Window* host, int trapId, bool backward) {
     int n = host->focusEls.len;
     if (n == 0) {
         return 0;

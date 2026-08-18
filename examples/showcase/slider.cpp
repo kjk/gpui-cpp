@@ -69,7 +69,7 @@ void ShowcaseSliderClick(ShowcaseApp* app, int id) {
     }
 }
 
-void ShowcaseSliderDrag(ShowcaseApp* app, AppHost* host, float x, float y) {
+void ShowcaseSliderDrag(ShowcaseApp* app, Window* host, float x, float y) {
     (void)y;
     if (!app->draggingSlider && !host->mouseDown) {
         return;

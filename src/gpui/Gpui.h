@@ -560,22 +560,6 @@ enum {
 struct App;
 struct Window;
 
-// Legacy hook table. New code gives the Window a root entity instead; see
-// `Ctx` and `WindowOpenView` below.
-struct AppHooks {
-    void (*onInit)(Window* win);
-    void (*onTick)(Window* win);
-    El* (*onRender)(Window* win, Arena* frame, WinSize size);
-    void (*onClick)(Window* win, int clickId);
-    void (*onWheel)(Window* win, float x, float y, float delta);
-    void (*onKey)(Window* win, int vk, bool down);
-    void (*onChar)(Window* win, uint32_t cp);
-    void (*onMouseMove)(Window* win, float x, float y);
-    void (*onMouseDown)(Window* win, float x, float y, int button);
-    void (*onMouseUp)(Window* win, float x, float y, int button);
-    void (*onShutdown)(Window* win);
-};
-
 struct AppWinOpts {
     bool borderless = false;
     bool anim = false;
@@ -610,9 +594,7 @@ struct Window {
     HWND hwnd = nullptr;
     PaintCtx paint = {};
     Arena* frameArena = nullptr;
-    AppHooks hooks = {};
-    void* user = nullptr;
-    // Root view entity. When set it renders instead of hooks.onRender.
+    // The view this window renders. GPUI's Window holds a root view too.
     EntityId root = {};
     int hoverId = 0;
     int focusId = 0;
@@ -639,9 +621,6 @@ struct Window {
 
     Window() = default;
 };
-
-// AppHost was the two fused together. Kept so un-migrated examples build.
-using AppHost = Window;
 
 // ─── context ──────────────────────────────────────────────────────────────
 
@@ -765,12 +744,7 @@ App* AppNew();
 void AppFree(App* app);
 int AppRun(App* app);
 Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
-                   AppHooks hooks, void* user, AppWinOpts opts);
-
-int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
-           void* user);
-int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
-             void* user, AppWinOpts opts);
+                   AppWinOpts opts);
 void AppSetTitle(Window* win, const wchar_t* title);
 void AppRequestAnim(Window* win, bool on);
 

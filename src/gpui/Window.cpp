@@ -117,12 +117,8 @@ static void RenderFrame(Window* host, HDC hdc) {
     ws.pxW = rc.right - rc.left;
     ws.pxH = rc.bottom - rc.top;
 
-    El* root = nullptr;
-    if (host->root.IsValid()) {
-        root = EntityRender(host->app, host, host->frameArena, host->root);
-    } else if (host->hooks.onRender) {
-        root = host->hooks.onRender(host, host->frameArena, ws);
-    }
+    (void)ws;
+    El* root = EntityRender(host->app, host, host->frameArena, host->root);
 
     host->paint.rt->BeginDraw();
     host->paint.rt->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -161,7 +157,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
     switch (msg) {
         case WM_CREATE: {
-            if (host->winOpts.anim || host->hooks.onTick || host->tickMs > 0) {
+            if (host->winOpts.anim || host->tickMs > 0) {
                 int ms =
                     host->winOpts.timerMs > 0 ? host->winOpts.timerMs : kTickMs;
                 if (host->tickMs > 0) {
@@ -192,12 +188,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 KeyEvent ev = {(int)wParam, 0, true};
                 ListenerCall(host->app, host, host->onKey, &ev);
             }
-            if (host->hooks.onKey) {
-                host->hooks.onKey(host, (int)wParam, true);
-            }
-            if (wParam == VK_RETURN && host->focusId && host->hooks.onClick &&
-                !host->eatReturn) {
-                host->hooks.onClick(host, host->focusId);
+            // Enter activates the focused element, like a click on it.
+            if (wParam == VK_RETURN && host->focusId && !host->eatReturn &&
+                host->onClick.IsValid()) {
+                ClickEvent ev = {0, 0, 1, host->focusId};
+                ListenerCall(host->app, host, host->onClick, &ev);
             }
             host->eatReturn = false;
             InvalidateRect(hwnd, nullptr, FALSE);
@@ -207,9 +202,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (host->onKey.IsValid() && wParam >= 32) {
                 KeyEvent ev = {0, (uint32_t)wParam, true};
                 ListenerCall(host->app, host, host->onKey, &ev);
-            }
-            if (host->hooks.onChar && wParam >= 32) {
-                host->hooks.onChar(host, (uint32_t)wParam);
             }
             if (host->input && host->input->focused) {
                 LineInput* in = host->input;
@@ -234,9 +226,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (host->onMouse.IsValid()) {
                 MouseEvent ev = {MouseKind::Down, x, y, 2, 0};
                 ListenerCall(host->app, host, host->onMouse, &ev);
-            }
-            if (host->hooks.onMouseDown) {
-                host->hooks.onMouseDown(host, x, y, 2);
             }
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
@@ -289,10 +278,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 TickEvent ev = {host->tickMs};
                 ListenerCall(host->app, host, host->onTick, &ev);
             }
-            if (host->hooks.onTick) {
-                host->hooks.onTick(host);
-            }
-            if (host->anim || host->hooks.onTick || host->onTick.IsValid()) {
+            if (host->anim || host->onTick.IsValid()) {
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -317,9 +303,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                  id};
                 ListenerCall(host->app, host, host->onMouse, &ev);
             }
-            if (host->hooks.onMouseMove) {
-                host->hooks.onMouseMove(host, host->mouseX, host->mouseY);
-            }
             if (host->mouseDown) {
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
@@ -343,9 +326,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (id) {
                 host->focusId = id;
             }
-            if (host->hooks.onMouseDown) {
-                host->hooks.onMouseDown(host, x, y, 1);
-            }
             if (host->onMouse.IsValid()) {
                 MouseEvent ev = {MouseKind::Down, x, y, 1, id};
                 ListenerCall(host->app, host, host->onMouse, &ev);
@@ -360,9 +340,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (hit && hit->onClick.IsValid()) {
                 hit->onClick.Call();
             }
-            if (host->hooks.onClick) {
-                host->hooks.onClick(host, id);
-            }
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
@@ -373,9 +350,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (host->onMouse.IsValid()) {
                 MouseEvent ev = {MouseKind::Up, x, y, 1, 0};
                 ListenerCall(host->app, host, host->onMouse, &ev);
-            }
-            if (host->hooks.onMouseUp) {
-                host->hooks.onMouseUp(host, x, y, 1);
             }
             return 0;
         }
@@ -413,9 +387,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 WheelEvent ev = {x, y, delta};
                 ListenerCall(host->app, host, host->onWheel, &ev);
             }
-            if (host->hooks.onWheel) {
-                host->hooks.onWheel(host, x, y, delta);
-            }
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
@@ -423,9 +394,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 1;
         case WM_DESTROY: {
             KillTimer(hwnd, 1);
-            if (host->hooks.onShutdown) {
-                host->hooks.onShutdown(host);
-            }
             DiscardDeviceResources(host);
             host->hwnd = nullptr;
             host->running = false;
@@ -499,7 +467,7 @@ void AppRequestAnim(Window* host, bool on) {
         if (host->hwnd) {
             if (on) {
                 SetTimer(host->hwnd, 1, 16u, nullptr);
-            } else if (host->hooks.onTick) {
+            } else if (host->tickMs > 0) {
                 UINT ms = host->winOpts.timerMs > 0
                               ? (UINT)host->winOpts.timerMs
                               : kTickMs;
@@ -612,14 +580,12 @@ void AppFree(App* app) {
 }
 
 Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
-                   AppHooks hooks, void* user, AppWinOpts opts) {
+                   AppWinOpts opts) {
     if (!app) {
         return nullptr;
     }
     Window* win = new Window();
     win->app = app;
-    win->hooks = hooks;
-    win->user = user;
     win->winOpts = opts;
     win->anim = opts.anim;
     // The factories and the font cache live on App; each window borrows them.
@@ -632,10 +598,6 @@ Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
     win->paint.font24 = app->font24;
     win->paint.font16b = app->font16b;
     app->windows.Append(win);
-
-    if (win->hooks.onInit) {
-        win->hooks.onInit(win);
-    }
 
     DWORD style = WS_OVERLAPPEDWINDOW;
     if (opts.borderless) {
@@ -668,8 +630,7 @@ Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
 
 Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
                        EntityId root, AppWinOpts opts) {
-    AppHooks hooks = {};
-    Window* win = WindowOpen(app, title, dipW, dipH, hooks, nullptr, opts);
+    Window* win = WindowOpen(app, title, dipW, dipH, opts);
     if (win) {
         win->root = root;
         AppInvalidate(win);
@@ -692,27 +653,6 @@ int AppRun(App* app) {
 int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
                App* app, AppWinOpts opts) {
     if (!WindowOpenView(app, title, dipW, dipH, root, opts)) {
-        return 1;
-    }
-    int rc = AppRun(app);
-    AppFree(app);
-    return rc;
-}
-
-int RunApp(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
-           void* user) {
-    AppWinOpts opts = {};
-    return RunAppEx(title, dipW, dipH, hooks, user, opts);
-}
-
-int RunAppEx(const wchar_t* title, int dipW, int dipH, AppHooks hooks,
-             void* user, AppWinOpts opts) {
-    App* app = AppNew();
-    if (!app) {
-        return 1;
-    }
-    if (!WindowOpen(app, title, dipW, dipH, hooks, user, opts)) {
-        AppFree(app);
         return 1;
     }
     int rc = AppRun(app);

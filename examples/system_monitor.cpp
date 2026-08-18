@@ -151,7 +151,7 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, int id) {
     return t;
 }
 
-static El* TitleBar(Arena* a, AppHost* host, MonitorApp* app) {
+static El* TitleBar(Arena* a, Window* host, MonitorApp* app) {
     const Theme& th = ThemeDark();
     Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
 

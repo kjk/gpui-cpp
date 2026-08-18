@@ -64,7 +64,7 @@ void ShowcaseResizableClick(ShowcaseApp* app, int id) {
     }
 }
 
-void ShowcaseResizeDrag(ShowcaseApp* app, AppHost* host, float x, float y) {
+void ShowcaseResizeDrag(ShowcaseApp* app, Window* host, float x, float y) {
     (void)y;
     if (!app->draggingResize) {
         return;

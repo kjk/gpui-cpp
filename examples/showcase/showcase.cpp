@@ -207,7 +207,7 @@ static El* RenderComp(ShowcaseApp* app, Ctx* cx, WinSize size) {
     return ShowcaseRenderRegistered(app, cx, size);
 }
 
-static void BindInput(ShowcaseApp* app, AppHost* host) {
+static void BindInput(ShowcaseApp* app, Window* host) {
     host->input = nullptr;
     app->input.focused =
         app->input.focused &&
@@ -266,7 +266,7 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-void ShowcaseClick(ShowcaseApp* app, AppHost* host, int id) {
+void ShowcaseClick(ShowcaseApp* app, Window* host, int id) {
     (void)host;
     if (id == ClickBack) {
         app->component = CompOverview;
@@ -363,7 +363,7 @@ static void ParseHexIn(ShowcaseApp* app) {
     }
 }
 
-void ShowcaseChar(ShowcaseApp* app, AppHost* host, uint32_t cp) {
+void ShowcaseChar(ShowcaseApp* app, Window* host, uint32_t cp) {
     (void)host;
     if (app->component == CompOtpInput && app->otpOn) {
         if (cp >= '0' && cp <= '9' && app->otpLen < 6) {
@@ -387,7 +387,7 @@ void ShowcaseChar(ShowcaseApp* app, AppHost* host, uint32_t cp) {
     }
 }
 
-void ShowcaseKey(ShowcaseApp* app, AppHost* host, int vk, bool down) {
+void ShowcaseKey(ShowcaseApp* app, Window* host, int vk, bool down) {
     if (!down) {
         return;
     }
@@ -512,7 +512,7 @@ void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta) {
     }
 }
 
-static int TextSelOffsetAt(AppHost* host, float x, float y, bool nearest) {
+static int TextSelOffsetAt(Window* host, float x, float y, bool nearest) {
     static const char* paras[] = {
         "Text selection across renderers",
         "Selection should feel like a natural part of reading a product brief. "
@@ -579,7 +579,7 @@ static int TextSelOffsetAt(AppHost* host, float x, float y, bool nearest) {
     return off + local;
 }
 
-void ShowcaseMouseMove(ShowcaseApp* app, AppHost* host, float x, float y) {
+void ShowcaseMouseMove(ShowcaseApp* app, Window* host, float x, float y) {
     if (app->component == CompSlider) {
         ShowcaseSliderDrag(app, host, x, y);
     } else if (app->component == CompResizable) {
@@ -592,7 +592,7 @@ void ShowcaseMouseMove(ShowcaseApp* app, AppHost* host, float x, float y) {
     }
 }
 
-void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y,
+void ShowcaseMouseDown(ShowcaseApp* app, Window* host, float x, float y,
                        int button) {
     (void)button;
     if (app->component == CompSlider) {
@@ -608,7 +608,7 @@ void ShowcaseMouseDown(ShowcaseApp* app, AppHost* host, float x, float y,
     }
 }
 
-void ShowcaseMouseUp(ShowcaseApp* app, AppHost* host, float x, float y,
+void ShowcaseMouseUp(ShowcaseApp* app, Window* host, float x, float y,
                      int button) {
     (void)host;
     (void)x;
