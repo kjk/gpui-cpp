@@ -461,9 +461,7 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
 
         AppSetTitle(win, title);
         [window makeKeyAndOrderFront:nil];
-        if (opts.anim || win->tickMs > 0) {
-            PlatSetTimer(win, WindowTimerMs(win));
-        }
+        PlatSetTimer(win, WindowTimerMs(win));
     }
     return win;
 }
@@ -535,8 +533,7 @@ int AppRun(App* app) {
                     continue;
                 }
                 if (now >= w->plat->nextTick) {
-                    int ms = WindowTimerMs(w);
-                    w->plat->nextTick = now + (ms > 0 ? ms : 500) / 1000.0;
+                    // WindowTimerTick re-arms through PlatSetTimer.
                     WindowTimerTick(w);
                 }
             }

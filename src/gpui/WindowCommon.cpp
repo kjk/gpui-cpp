@@ -100,6 +100,11 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         AppInvalidate(win);
         return;
     }
+    // Moving the caret is activity, so it stays solid then too.
+    if (key == KeyLeft || key == KeyRight || key == KeyUp || key == KeyDown ||
+        key == KeyHome || key == KeyEnd || key == KeyBack || key == KeyDelete) {
+        WindowCaretPause(win);
+    }
     if (win->onKey.IsValid()) {
         KeyEvent ev = {};
         ev.vk = key;
@@ -161,6 +166,11 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
             in->buf[in->len] = 0;
             in->cursor = in->len;
             changed = true;
+        }
+        if (changed) {
+            // Solid while the keys are coming, the way Rust's
+            // pause_blink_cursor is called from every edit.
+            WindowCaretPause(win);
         }
         // InputEvent::Change, for the view that subscribed to it.
         if (changed && in->onChange.IsValid()) {
@@ -276,17 +286,113 @@ void WindowDoubleClick(Window* win, float x, float y) {
     }
 }
 
+// The caret's own 500 ms clock, and the 300 ms it stays solid after a
+// keystroke. Both from crates/base/src/input/base/blink_cursor.rs.
+static const double kCaretInterval = 0.5;
+static const double kCaretPause = 0.3;
+
+void WindowCaretStart(Window* win) {
+    if (!win || win->caretOn) {
+        return;
+    }
+    win->caretOn = true;
+    win->caretPaused = false;
+    // Rust starts hidden and flips on the first tick; showing it immediately
+    // is what makes a click feel like it landed.
+    win->caretVisible = true;
+    win->caretDueAt = TimeNow() + kCaretInterval;
+    PlatSetTimer(win, WindowTimerMs(win));
+    AppInvalidate(win);
+}
+
+void WindowCaretStop(Window* win) {
+    if (!win || !win->caretOn) {
+        return;
+    }
+    win->caretOn = false;
+    win->caretPaused = false;
+    win->caretVisible = false;
+    win->caretDueAt = 0;
+    PlatSetTimer(win, WindowTimerMs(win));
+    AppInvalidate(win);
+}
+
+void WindowCaretPause(Window* win) {
+    if (!win || !win->caretOn) {
+        return;
+    }
+    win->caretPaused = true;
+    win->caretVisible = true;
+    win->caretDueAt = TimeNow() + kCaretPause;
+    PlatSetTimer(win, WindowTimerMs(win));
+    AppInvalidate(win);
+}
+
+bool WindowCaretVisible(Window* win) {
+    if (!win || !win->caretOn) {
+        return false;
+    }
+    // Paused means solid, not hidden.
+    return win->caretPaused || win->caretVisible;
+}
+
 void WindowTimerTick(Window* win) {
     if (!win) {
         return;
     }
-    if (win->onTick.IsValid()) {
-        TickEvent ev = {win->tickMs};
-        ListenerCall(win->app, win, win->onTick, &ev);
+    double now = TimeNow();
+    bool repaint = false;
+
+    if (win->caretOn && win->caretDueAt > 0 && now >= win->caretDueAt) {
+        if (win->caretPaused) {
+            // The pause is over; pick up blinking where Rust does, lit.
+            win->caretPaused = false;
+            win->caretVisible = true;
+        } else {
+            win->caretVisible = !win->caretVisible;
+        }
+        win->caretDueAt = now + kCaretInterval;
+        repaint = true;
     }
-    if (win->anim || win->onTick.IsValid()) {
+
+    // A snapshot of the count, so a timer armed by a handler runs next pass
+    // rather than inside this one.
+    int n = win->timers.len;
+    for (int i = 0; i < n && i < win->timers.len; i++) {
+        TimerSub& t = win->timers[i];
+        if (t.dueAt > now) {
+            continue;
+        }
+        Listener l = t.l;
+        int ms = t.ms;
+        if (t.repeat) {
+            t.dueAt = now + (double)ms / 1000.0;
+        } else {
+            t.dueAt = 0; // swept below
+        }
+        TickEvent ev = {ms};
+        ListenerCall(win->app, win, l, &ev);
+        repaint = true;
+    }
+
+    // Drop the one-shots that fired, and any timer whose view is gone — the
+    // lifetime Rust gets from Task being dropped with its entity.
+    int keep = 0;
+    for (int i = 0; i < win->timers.len; i++) {
+        const TimerSub& t = win->timers[i];
+        bool dead = t.dueAt <= 0 ||
+                    (t.l.view.IsValid() && !EntityGet(win->app, t.l.view));
+        if (dead) {
+            continue;
+        }
+        win->timers[keep++] = win->timers[i];
+    }
+    win->timers.len = keep;
+
+    if (win->anim || repaint) {
         AppInvalidate(win);
     }
+    PlatSetTimer(win, WindowTimerMs(win));
 }
 
 int WindowChromeHit(Window* win, float x, float y) {
@@ -305,19 +411,28 @@ int WindowTimerMs(Window* win) {
     if (!win) {
         return 0;
     }
-    if (win->anim) {
-        return 16;
+    // Milliseconds until the soonest thing that wants the window back, or 0
+    // if nothing does.
+    double now = TimeNow();
+    double soonest = -1;
+    if (win->anim || win->opts.anim) {
+        soonest = now + 0.016;
     }
-    if (win->tickMs > 0) {
-        return win->tickMs;
+    if (win->caretOn && win->caretDueAt > 0 &&
+        (soonest < 0 || win->caretDueAt < soonest)) {
+        soonest = win->caretDueAt;
     }
-    if (win->opts.anim) {
-        return 16;
+    for (int i = 0; i < win->timers.len; i++) {
+        double due = win->timers[i].dueAt;
+        if (due > 0 && (soonest < 0 || due < soonest)) {
+            soonest = due;
+        }
     }
-    if (win->opts.timerMs > 0) {
-        return win->opts.timerMs;
+    if (soonest < 0) {
+        return 0;
     }
-    return kTickMs;
+    int ms = (int)((soonest - now) * 1000.0 + 0.5);
+    return ms > 0 ? ms : 1;
 }
 
 // ─── lifecycle ────────────────────────────────────────────────────────────
@@ -384,6 +499,7 @@ void AppFree(App* app) {
         }
         TextMeasClear(&w->paint);
         PaintTargetFree(&w->paint);
+        w->timers.Reset();
         WindowKeyedFree(w);
         delete w;
     }
@@ -401,13 +517,7 @@ void AppRequestAnim(Window* win, bool on) {
     }
     win->anim = on;
     win->opts.anim = on;
-    // Once the animation stops, only a WindowSetInterval subscription still
-    // wants a timer. WinOpts::timerMs is the interval to use if one is
-    // wanted, not a reason to keep one alive.
-    if (!on && win->tickMs <= 0) {
-        PlatSetTimer(win, 0);
-        return;
-    }
+    // WindowTimerMs answers 0 when nothing is left wanting the window back.
     PlatSetTimer(win, WindowTimerMs(win));
 }
 

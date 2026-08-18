@@ -183,13 +183,44 @@ void WindowOnMouse(Window* win, Listener l) {
     }
 }
 
-void WindowSetInterval(Window* win, int ms, Listener l) {
-    if (!win) {
+static int WindowArmTimer(Window* win, int ms, Listener l, bool repeat) {
+    if (!win || ms <= 0 || !l.IsValid()) {
+        return 0;
+    }
+    TimerSub t;
+    t.id = win->nextTimerId++;
+    t.ms = ms;
+    t.dueAt = TimeNow() + (double)ms / 1000.0;
+    t.repeat = repeat;
+    t.l = l;
+    win->timers.Append(t);
+    PlatSetTimer(win, WindowTimerMs(win));
+    return t.id;
+}
+
+int WindowSetInterval(Window* win, int ms, Listener l) {
+    return WindowArmTimer(win, ms, l, true);
+}
+
+int WindowSetTimeout(Window* win, int ms, Listener l) {
+    return WindowArmTimer(win, ms, l, false);
+}
+
+void WindowCancelTimer(Window* win, int id) {
+    if (!win || id <= 0) {
         return;
     }
-    win->onTick = l;
-    win->tickMs = ms;
-    PlatSetTimer(win, ms > 0 ? WindowTimerMs(win) : 0);
+    for (int i = 0; i < win->timers.len; i++) {
+        if (win->timers[i].id != id) {
+            continue;
+        }
+        for (int j = i + 1; j < win->timers.len; j++) {
+            win->timers[j - 1] = win->timers[j];
+        }
+        win->timers.len--;
+        break;
+    }
+    PlatSetTimer(win, WindowTimerMs(win));
 }
 
 void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop) {

@@ -239,13 +239,14 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     WinSize size = WindowSize(win);
     app->hoverId = win->hoverId;
     BindInput(app, win);
-    // A caret blinks off TimeNow(), so it is only visible while frames keep
-    // coming. Without this the one repaint that follows the click can land in
-    // the dark half of the blink and stay there until the next keystroke.
-    // The textarea and the editor track focus themselves rather than through
-    // win->input. Same call story.cpp makes.
-    AppRequestAnim(win,
-                   win->input != nullptr || app->textareaOn || app->editorOn);
+    // The window owns the caret clock; focus just turns it on and off. The
+    // textarea and the editor track focus with their own flags rather than
+    // through win->input.
+    if (win->input != nullptr || app->textareaOn || app->editorOn) {
+        WindowCaretStart(win);
+    } else {
+        WindowCaretStop(win);
+    }
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
@@ -351,7 +352,9 @@ static void ParseHexIn(ShowcaseApp* app) {
 }
 
 void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp) {
-    (void)win;
+    // The textarea, editor and OTP keep their own buffers, so the pause the
+    // runtime does for a LineInput edit has to be asked for here.
+    WindowCaretPause(win);
     if (app->component == CompOtpInput && app->otpOn) {
         if (cp >= '0' && cp <= '9' && app->otpLen < 6) {
             app->otp[app->otpLen++] = (char)cp;

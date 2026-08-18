@@ -230,9 +230,10 @@ Rules:
 3. **Elements carry their own listener.** `->OnClick(Listen(cx, &T::Handler))`. Dispatch resolves the entity and drops the event if the handle went stale, so a listener can outlive its view safely. There is no click-id switch anywhere; do not add one.
 4. **Bind the value instead of decoding an id.** What a Rust closure captures, `Listen` takes as an `intptr_t`: `Listen(cx, &T::OnTab, ix)`. A component that produces the value itself — which day, which row — fills it with `ListenerArg` and its caller writes `Listen(cx, &T::OnDay)`.
 5. `El::Click(id)` is identity only: hit-testing, hover, focus, Tab traps — GPUI's `ElementId`. It does not dispatch. `WindowOnUnhandledClick` fires for a click no element handled, which is the outside click that dismisses an overlay.
-6. Window-level input is a subscription bound to a view: `WindowOnKey`, `WindowOnWheel`, `WindowOnMouse`, `WindowSetInterval` (GPUI spells the last one `cx.spawn` + `Timer::after`).
-7. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
-8. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
+6. Window-level input is a subscription bound to a view: `WindowOnKey`, `WindowOnWheel`, `WindowOnMouse`, `WindowSetInterval` / `WindowSetTimeout` (GPUI spells the last two `cx.spawn` + `Timer::after`). Any number of timers can be armed; each returns a handle for `WindowCancelTimer`, and one whose view goes stale is dropped the way Rust drops a `Task` with its entity.
+7. A blinking caret is state, not a function of the clock. The window owns it — `WindowCaretStart` / `Stop` / `Pause` / `Visible`, a port of `crates/base/src/input/base/blink_cursor.rs`. Sampling `TimeNow()` at paint time instead makes the caret invisible whenever nothing happens to repaint during the lit half. `AppRequestAnim` is for real animation (the FPS HUD), never for a caret.
+8. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
+9. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
 
 `AppNew` → `WindowOpenView` → `AppRun` → `AppFree` is the whole lifecycle; `AppRunView` is the one-window shorthand. There is no hook table.
 

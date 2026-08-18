@@ -234,7 +234,7 @@ struct WheelEvent {
     float delta = 0;
 };
 
-// Fired by the window timer; GPUI does this with cx.spawn + Timer::after.
+// Fired by a window timer; GPUI does this with cx.spawn + Timer::after.
 struct TickEvent {
     int ms = 0;
 };
@@ -256,6 +256,17 @@ struct Listener {
     bool hasArg = false;
 
     bool IsValid() const { return fn != nullptr; }
+};
+
+// One armed timer. GPUI has no timer list: it spawns a task per timer and the
+// Task handle cancels on drop. Here the window keeps them, and dispatch drops
+// one whose view went stale — which is the same lifetime, spelled differently.
+struct TimerSub {
+    int id = 0; // what WindowCancelTimer takes
+    int ms = 0;
+    double dueAt = 0; // TimeNow() deadline
+    bool repeat = false;
+    Listener l;
 };
 
 // ─── style / element ──────────────────────────────────────────────────────
@@ -753,10 +764,18 @@ struct Window {
     // Window-level subscriptions bound to view entities.
     Listener onKey = {};
     Listener onWheel = {};
-    Listener onTick = {};
     Listener onClick = {};
     Listener onMouse = {};
-    int tickMs = 0;
+    // Armed timers, any number of them.
+    Vec<TimerSub> timers;
+    int nextTimerId = 1;
+    // The caret clock. GPUI gives every InputState its own BlinkCursor
+    // entity; a window only ever shows one caret, so the window owns it.
+    // Port of crates/base/src/input/base/blink_cursor.rs.
+    bool caretOn = false;      // blinking at all
+    bool caretVisible = false; // which half of the blink
+    bool caretPaused = false;  // solid, because the user is typing
+    double caretDueAt = 0;
     // Ring of the last kFrameTraceCap draw times; frameSeq counts every frame
     // ever drawn and is what a collector cursors on.
     FrameTiming frameTrace[kFrameTraceCap] = {};
@@ -911,9 +930,29 @@ void WindowOnWheel(Window* win, Listener l);
 // overlay. Elements carry their own listener; this is not a dispatch table.
 void WindowOnUnhandledClick(Window* win, Listener l);
 void WindowOnMouse(Window* win, Listener l);
-// Repeating timer. ms <= 0 stops it. GPUI's system_monitor does the same with
-// a spawned task that sleeps and calls cx.notify().
-void WindowSetInterval(Window* win, int ms, Listener l);
+// Repeating timer; GPUI's system_monitor does the same with a spawned task
+// that sleeps and calls cx.notify(). Returns a handle, or 0. Any number may
+// be armed at once.
+int WindowSetInterval(Window* win, int ms, Listener l);
+// Fires once, then forgets itself. GPUI's Timer::after.
+int WindowSetTimeout(Window* win, int ms, Listener l);
+void WindowCancelTimer(Window* win, int id);
+
+// ─── caret ────────────────────────────────────────────────────────────────
+//
+// A blinking caret is state, not a function of the clock: the window flips it
+// on a 500 ms timer and every repaint in between shows what the last flip
+// decided. Sampling the clock at paint time instead makes the caret invisible
+// whenever nothing happens to repaint during the lit half.
+
+// Start / stop blinking. Idempotent; call them from wherever focus changes.
+void WindowCaretStart(Window* win);
+void WindowCaretStop(Window* win);
+// Keep it solid, then resume blinking shortly after. Call it on every edit,
+// so the caret does not wink out from under the cursor mid-keystroke.
+void WindowCaretPause(Window* win);
+// What a text widget asks before drawing its caret.
+bool WindowCaretVisible(Window* win);
 
 // Open a window whose root is a view entity, the WindowOpen + cx.new pair.
 Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,

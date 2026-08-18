@@ -112,9 +112,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
     switch (msg) {
         case WM_CREATE: {
-            if (win->opts.anim || win->tickMs > 0) {
-                SetTimer(hwnd, 1, (UINT)WindowTimerMs(win), nullptr);
-            }
+            PlatSetTimer(win, WindowTimerMs(win));
             return 0;
         }
         case WM_KEYDOWN:

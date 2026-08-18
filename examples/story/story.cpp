@@ -531,7 +531,6 @@ static void OpenStory(StoryApp* app, Ctx* cx, const ClickEvent*,
 static void FocusSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
     app->search.focused = true;
     cx->win->input = &app->search;
-    AppRequestAnim(cx->win, true);
     Notify(cx);
 }
 
@@ -728,7 +727,11 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     if (app->search.focused) {
         cx->win->input = &app->search;
     }
-    AppRequestAnim(win, cx->win->input != nullptr);
+    if (cx->win->input != nullptr) {
+        WindowCaretStart(win);
+    } else {
+        WindowCaretStop(win);
+    }
     const Theme& th = cx->theme();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);

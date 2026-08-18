@@ -26,15 +26,16 @@ void WindowMouseUp(Window* win, float x, float y, int button);
 void WindowMouseLeave(Window* win);
 void WindowWheel(Window* win, float x, float y, float delta);
 void WindowDoubleClick(Window* win, float x, float y);
-// The timer fired: raise the tick subscription and repaint if anything is
-// animating.
+// The timer fired: run whatever is due — the caret flip and any armed
+// timers — repaint if that changed anything, and re-arm through PlatSetTimer
+// for the next deadline. The platform never computes an interval itself.
 void WindowTimerTick(Window* win);
 // The window chrome under the cursor: ClickWinMin / Max / Close / Caption, or
 // 0 for ordinary content. Windows answers WM_NCHITTEST with it; X11 uses it
 // to route a press on the custom title bar.
 int WindowChromeHit(Window* win, float x, float y);
 
-// The interval this window's timer should run at, or 0 for no timer.
+// Milliseconds until the window next wants waking, or 0 if nothing does.
 int WindowTimerMs(Window* win);
 
 // The OS window went away. Frees the paint target and clears `plat`.
