@@ -581,6 +581,17 @@ El* El::AnchorBelow(float gap) {
     style.anchorGap = gap;
     return this;
 }
+El* El::AnchorAbove(float gap) {
+    style.absolute = true;
+    style.anchorAbove = true;
+    style.anchorGap = gap;
+    return this;
+}
+El* El::AnchorCenterX() {
+    style.absolute = true;
+    style.anchorCenterX = true;
+    return this;
+}
 El* El::Top(float v) {
     style.absTop = v;
     return this;
@@ -1306,6 +1317,12 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
     }
     if (c->style.anchorBelow) {
         ay = parent->y + parent->h + c->style.anchorGap;
+    }
+    if (c->style.anchorAbove) {
+        ay = parent->y - c->h - c->style.anchorGap;
+    }
+    if (c->style.anchorCenterX) {
+        ax = parent->x + (parent->w - c->w) * 0.5f;
     }
     c->x = ax;
     c->y = ay;

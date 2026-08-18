@@ -19,7 +19,10 @@ HoverCard* HoverCard::Trigger(El* trigger) {
 
 HoverCard* HoverCard::Content(El* content) {
     if (content) {
-        content->Absolute()->Top(22)->Left(0);
+        // Under the trigger unless the caller already placed it.
+        if (!content->style.absolute) {
+            content->Absolute()->Top(22)->Left(0);
+        }
         root->Child(content);
     }
     return this;

@@ -448,7 +448,9 @@ struct Style {
     // deferred(): a popup anchored to its trigger still draws over the page
     // below it, and hit-tests before it.
     bool deferred = false;
-    bool anchorBelow = false; // absolute, just under the parent box
+    bool anchorBelow = false;   // absolute, just under the parent box
+    bool anchorAbove = false;   // absolute, just over it
+    bool anchorCenterX = false; // absolute, centered on the parent box
     float anchorGap = 0;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
     Rgba hoverBg = {};
@@ -546,6 +548,8 @@ struct El {
     El* Fixed();
     El* Deferred();
     El* AnchorBelow(float gap = 0);
+    El* AnchorAbove(float gap = 0);
+    El* AnchorCenterX();
     El* Top(float v);
     El* Left(float v);
     El* Bottom(float v);

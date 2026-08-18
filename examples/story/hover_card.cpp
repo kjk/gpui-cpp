@@ -4,11 +4,18 @@ struct HoverCardStory {
     static El* Render(HoverCardStory* self, Ctx* cx);
 };
 
-// The window's hover id doubles as "which card is open" on this page.
-static void ToggleCard(HoverCardStory*, Ctx* cx, const ClickEvent*,
-                       intptr_t which) {
-    cx->win->hoverId = cx->win->hoverId == (int)which ? 0 : (int)which;
-    Notify(cx);
+// A card is open while its trigger is hovered, which is what a HoverCard is
+// for. The window already tracks the hovered element, so the page reads that
+// rather than keeping a register of its own.
+static bool Hovered(Ctx* cx, Str id) {
+    return cx->win->hoverId == HashClickId(id);
+}
+
+// Gives a trigger a click id, so the runtime can report it as hovered. The
+// card opens on hover alone; there is nothing to click.
+static El* Trig(El* e, Str id) {
+    int cid = HashClickId(id);
+    return e->Id(id)->Click(cid);
 }
 
 static El* Card(Ctx* cx, const char* title, const char* body) {
@@ -27,6 +34,18 @@ static El* Card(Ctx* cx, const char* title, const char* body) {
     return card;
 }
 
+// The Position cards carry no heading in Rust, just the one line.
+static El* PlainCard(Ctx* cx, Str body) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    return Div(a)
+        ->Pad(12)
+        ->Border(1, th.border)
+        ->Bg(th.background)
+        ->Radius(th.radius)
+        ->Child(StoryTxt(cx, body, 13, th.foreground));
+}
+
 El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -35,18 +54,18 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     El* def = StorySection(
         cx, "Default",
         "Shows supporting information without changing the current view.");
-    El* defTrig = StoryTxt(cx, StrL("Hover over me"), 13, th.primary);
-    defTrig->OnClick(Listen(cx, &ToggleCard, 1));
+    bool defOpen = Hovered(cx, StrL("hc-default"));
+    El* defTrig = Trig(StoryTxt(cx, StrL("Hover over me"), 13, th.primary),
+                       StrL("hc-default"));
     StorySectionAdd(def,
-                    component::HoverCard::New(cx)
+                    component::HoverCard::New(cx, StrL("hc-default-card"))
                         ->Trigger(defTrig)
-                        ->Content(cx->win->hoverId == 1
-                                      ? Card(cx, "This is a hover card",
-                                             "You can display rich content "
-                                             "when hovering over a "
-                                             "trigger element.")
-                                      : nullptr)
-                        ->Open(cx->win->hoverId == 1)
+                        ->Content(defOpen ? Card(cx, "This is a hover card",
+                                                 "You can display rich content "
+                                                 "when hovering over a "
+                                                 "trigger element.")
+                                          : nullptr)
+                        ->Open(defOpen)
                         ->IntoEl());
     page->Child(def);
 
@@ -55,10 +74,11 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
         "Cards can contain avatars, typography, and structured details.");
     El* richRow = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
     richRow->Child(StoryTxt(cx, StrL("Hover over"), 16, th.foreground));
-    El* link = StoryTxt(cx, StrL("@huacnlee"), 16, th.blue)->Underline();
-    link->OnClick(Listen(cx, &ToggleCard, 2));
+    bool richOpen = Hovered(cx, StrL("hc-rich"));
+    El* link = Trig(StoryTxt(cx, StrL("@huacnlee"), 16, th.blue)->Underline(),
+                    StrL("hc-rich"));
     El* profile = nullptr;
-    if (cx->win->hoverId == 2) {
+    if (richOpen) {
         profile = Div(a)
                       ->FlexRow()
                       ->Gap(12)
@@ -82,7 +102,7 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     richRow->Child(component::HoverCard::New(cx)
                        ->Trigger(link)
                        ->Content(profile)
-                       ->Open(cx->win->hoverId == 2)
+                       ->Open(richOpen)
                        ->IntoEl());
     richRow
         ->Child(StoryTxt(cx, StrL("to see their profile"), 16, th.foreground));
@@ -97,27 +117,25 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
                          ->Trigger(component::Button::New(cx, StrL("fast"))
                                        ->Label(StrL("Fast Open (200ms)"))
                                        ->Outline()
-                                       ->IntoEl()
-                                       ->OnClick(Listen(cx, &ToggleCard, 3)))
-                         ->Content(cx->win->hoverId == 3
+                                       ->IntoEl())
+                         ->Content(Hovered(cx, StrL("fast"))
                                        ? Card(cx, "Fast open",
                                               "This hover card opens after "
                                               "200ms")
                                        : nullptr)
-                         ->Open(cx->win->hoverId == 3)
+                         ->Open(Hovered(cx, StrL("fast")))
                          ->IntoEl());
     timingRow->Child(component::HoverCard::New(cx)
                          ->Trigger(component::Button::New(cx, StrL("slow"))
                                        ->Label(StrL("Slow Open (1000ms)"))
                                        ->Outline()
-                                       ->IntoEl()
-                                       ->OnClick(Listen(cx, &ToggleCard, 4)))
-                         ->Content(cx->win->hoverId == 4
+                                       ->IntoEl())
+                         ->Content(Hovered(cx, StrL("slow"))
                                        ? Card(cx, "Slow open",
                                               "This hover card opens after "
                                               "1000ms")
                                        : nullptr)
-                         ->Open(cx->win->hoverId == 4)
+                         ->Open(Hovered(cx, StrL("slow")))
                          ->IntoEl());
     StorySectionAdd(timing, timingRow);
     page->Child(timing);
@@ -128,29 +146,33 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     struct AnchorBtn {
         const char* id;
         const char* label;
+        component::HoverCardAnchor anchor;
     };
     static const AnchorBtn kAnchors[2][3] = {
-        {{"tl", "Top Left"}, {"tc", "Top Center"}, {"tr", "Top Right"}},
-        {{"bl", "Bottom Left"},
-         {"bc", "Bottom Center"},
-         {"br", "Bottom Right"}},
+        {{"tl", "Top Left", component::HoverCardAnchor::TopLeft},
+         {"tc", "Top Center", component::HoverCardAnchor::TopCenter},
+         {"tr", "Top Right", component::HoverCardAnchor::TopRight}},
+        {{"bl", "Bottom Left", component::HoverCardAnchor::BottomLeft},
+         {"bc", "Bottom Center", component::HoverCardAnchor::BottomCenter},
+         {"br", "Bottom Right", component::HoverCardAnchor::BottomRight}},
     };
     for (int r = 0; r < 2; r++) {
         El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
         for (int i = 0; i < 3; i++) {
-            int which = 5 + r * 3 + i;
+            Str id = Str(kAnchors[r][i].id);
+            bool on = Hovered(cx, id);
             row->Child(
-                component::HoverCard::New(cx)
-                    ->Trigger(component::Button::New(cx, Str(kAnchors[r][i].id))
+                component::HoverCard::New(cx, id)
+                    ->Anchor(kAnchors[r][i].anchor)
+                    ->Trigger(component::Button::New(cx, id)
                                   ->Label(Str(kAnchors[r][i].label))
                                   ->Outline()
-                                  ->IntoEl()
-                                  ->OnClick(Listen(cx, &ToggleCard, which)))
-                    ->Content(cx->win->hoverId == which
-                                  ? Card(cx, kAnchors[r][i].label,
-                                         "Positioned at this anchor.")
-                                  : nullptr)
-                    ->Open(cx->win->hoverId == which)
+                                  ->IntoEl())
+                    ->Content(
+                        on ? PlainCard(cx, StoryFmt(cx, "Positioned at %s",
+                                                    kAnchors[r][i].label))
+                           : nullptr)
+                    ->Open(on)
                     ->IntoEl());
         }
         posCol->Child(row);
