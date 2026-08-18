@@ -47,7 +47,7 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
     icRow->Child(component::Spinner::New(cx)
                      ->WithSize(self->toolbar.size)
                      ->Icon(IconName::Loader)
-                     ->Color(Rgb(0x22, 0xd3, 0xee))
+                     ->Color(th.cyan)
                      ->IntoEl());
     StorySectionAdd(ic, icRow);
     page->Child(ic);
