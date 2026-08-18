@@ -2,7 +2,8 @@
 
 using namespace gpui;
 
-// examples/window_title — a client-drawn title strip above the body.
+// examples/window_title — TitleBar::new() over the body, on a window opened
+// with TitleBar::window_options().
 struct Example {
     static void OnGo(Example*, Ctx*, const ClickEvent*) {
         log(StrL("Clicked!"));
@@ -11,20 +12,22 @@ struct Example {
     static El* Render(Example*, Ctx* cx) {
         Arena* a = cx->a;
         const Theme& th = cx->theme();
-        El* bar = Div(a)
-                      ->FlexRow()
-                      ->H(34)
-                      ->PadX(12)
-                      ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Bg(th.titleBar)
-                      ->BorderT(0, th.titleBarBorder)
-                      ->Child(TextEl(a, StrL("App with Custom title bar"))
-                                  ->Font(14)
-                                  ->Fg(th.foreground))
-                      ->Child(TextEl(a, StrL("Right Item"))
-                                  ->Font(14)
-                                  ->Fg(th.mutedFg));
+        // One child, the full-width justify-between row Rust puts in the bar.
+        El* bar =
+            component::TitleBar::New(cx)
+                ->Child(Div(a)
+                            ->FlexRow()
+                            ->W(kFill)
+                            ->ItemsCenter()
+                            ->PadR(8)
+                            ->JustifyBetween()
+                            ->Child(TextEl(a, StrL("App with Custom title bar"))
+                                        ->Font(14)
+                                        ->Fg(th.foreground))
+                            ->Child(TextEl(a, StrL("Right Item"))
+                                        ->Font(14)
+                                        ->Fg(th.mutedFg)))
+                ->IntoEl();
 
         El* body =
             Div(a)
@@ -45,7 +48,6 @@ struct Example {
             ->SizeFull()
             ->Bg(th.background)
             ->Child(bar)
-            ->Child(Div(a)->H(1)->W(kFill)->Bg(th.titleBarBorder))
             ->Child(body);
     }
 };
@@ -55,6 +57,9 @@ int GpuiMain(int argc, char** argv) {
     (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
+    WinOpts opts = {};
+    // TitleBar::window_options(): the example draws its own title bar.
+    opts.clientTitleBar = true;
     return AppRunView(StrL("Window Title"), 800, 600,
-                      EntityNew<Example>(app).id, app, WinOpts{});
+                      EntityNew<Example>(app).id, app, opts);
 }

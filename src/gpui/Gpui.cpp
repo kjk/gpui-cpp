@@ -613,6 +613,11 @@ El* El::HoverBg(Rgba c) {
     style.hasHoverBg = true;
     return this;
 }
+El* El::HoverFg(Rgba c) {
+    style.hoverFg = c;
+    style.hasHoverFg = true;
+    return this;
+}
 El* El::FocusId(int v) {
     style.focusId = v;
     return this;
@@ -1134,6 +1139,21 @@ static float ResolveSize(float spec, float avail, float growAsFill) {
 static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                            Rgba inheritFg);
 
+// text_color cascades in GPUI, but here a Text or an Icon resolves its own
+// color when it paints. So a hovered element stamps its hover color onto the
+// descendants that set none — a child with a color of its own keeps it, and
+// so does its subtree.
+static void StampFg(El* e, Rgba c) {
+    for (El* ch = e->first; ch; ch = ch->next) {
+        if (ch->style.hasColor) {
+            continue;
+        }
+        ch->style.color = c;
+        ch->style.hasColor = true;
+        StampFg(ch, c);
+    }
+}
+
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
               float availH, float inheritFont, Rgba inheritFg) {
     if (!e) {
@@ -1141,6 +1161,12 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     }
     float font = e->style.fontSize > 0 ? e->style.fontSize : inheritFont;
     Rgba fg = e->style.hasColor ? e->style.color : inheritFg;
+    // Like HoverBg, this needs a click id of its own: without one the element
+    // would match hoverId 0, which means nothing is hovered.
+    if (e->style.hasHoverFg && e->clickId && e->clickId == ctx->hoverId) {
+        fg = e->style.hoverFg;
+        StampFg(e, fg);
+    }
     // font_family inherits. Pushing the flag one level down here cascades it
     // through the subtree, since every child is laid out the same way.
     if (e->style.fontMono) {

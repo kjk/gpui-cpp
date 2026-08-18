@@ -13,10 +13,9 @@ static El* ControlIcon(Ctx* cx, IconName icon, int clickId) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     bool isClose = clickId == ClickWinClose;
-    // El::HoverBg has no foreground half, and the close cell needs one: its
-    // hover fills with danger, which the default foreground disappears into.
-    bool hovered = cx->win && cx->win->hoverId == clickId;
-    Rgba fg = !hovered ? th.foreground : isClose ? th.dangerFg : th.secondaryFg;
+    // The icon takes the theme foreground it would default to anyway, so the
+    // cell's hover color is the one that reaches it. Close needs that half:
+    // its hover fills with danger, which the default foreground vanishes into.
     return Div(a)
         ->W(kTitleBarHeight)
         ->H(kFill)
@@ -25,7 +24,8 @@ static El* ControlIcon(Ctx* cx, IconName icon, int clickId) {
         ->JustifyCenter()
         ->Click(clickId)
         ->HoverBg(isClose ? th.danger : th.secondaryHover)
-        ->Child(IconEl(a, icon, UiIconPx(UiSize::Small))->Fg(fg));
+        ->HoverFg(isClose ? th.dangerFg : th.secondaryFg)
+        ->Child(IconEl(a, icon, UiIconPx(UiSize::Small)));
 }
 
 // WindowControls: nothing on macOS, where the native traffic lights sit over

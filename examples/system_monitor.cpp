@@ -12,10 +12,6 @@ enum ClickId : int {
     ClickSortName = 11,
     ClickSortCpu = 12,
     ClickSortMem = 13,
-    ClickMin = ClickWinMin,
-    ClickMax = ClickWinMax,
-    ClickClose = ClickWinClose,
-    ClickDrag = ClickWinCaption,
 };
 
 struct MonitorApp {
@@ -115,18 +111,19 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, Listener onClick) {
     return t;
 }
 
+// TitleBar::new().child(TabBar.segmented()).child(total memory): the tabs and
+// the memory label are the only things this example puts in the bar, and
+// component::TitleBar supplies the rest — the background, the drag region and
+// the window controls.
 static El* TitleBar(Ctx* cx, MonitorApp* app) {
     Arena* a = cx->a;
-    Window* win = cx->win;
-    (void)win;
     const Theme& th = ThemeDark();
-    Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
 
     El* tabs = Div(a)
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(2)
-                   ->Pad(2)
+                   ->PadY(2)
                    ->Radius(8)
                    ->Bg(th.tabBar)
                    ->Child(SegmentedTab(a, StrL("System"), app->tab == 0,
@@ -135,25 +132,11 @@ static El* TitleBar(Ctx* cx, MonitorApp* app) {
                                         Listen(cx, &PickTab, 1)));
 
     double gb = (double)app->sys.memTotal / (1024.0 * 1024.0 * 1024.0);
-    El* memLabel = TextEl(a, fmt("%.1f GB", gb))->Font(12)->Fg(th.mutedFg);
+    // mr_4 in Rust; the label is the last thing before the window controls.
+    El* memLabel = Div(a)->PadR(16)->Child(
+        TextEl(a, fmt("%.1f GB", gb))->Font(12)->Fg(th.mutedFg));
 
-    El* spacer = Div(a)->Grow()->H(34);
-
-    El* bar = Div(a)
-                  ->FlexRow()
-                  ->H(34)
-                  ->PadL(12)
-                  ->PadR(12)
-                  ->ItemsCenter()
-                  ->Bg(mixed)
-                  ->Child(tabs)
-                  ->Child(spacer)
-                  ->Child(memLabel);
-
-    // bottom border under title bar
-    El* wrap = Div(a)->FlexCol()->Shrink0()->W(kFill)->Child(bar)->Child(
-        Div(a)->H(1)->W(kFill)->Bg(th.titleBarBorder));
-    return wrap;
+    return component::TitleBar::New(cx)->Child(tabs)->Child(memLabel)->IntoEl();
 }
 
 static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current,
@@ -381,6 +364,8 @@ int GpuiMain(int argc, char** argv) {
     SysStateInit(&self->sys);
     Collect(self);
     WinOpts opts = {};
+    // TitleBar::window_options(): the example draws its own title bar.
+    opts.clientTitleBar = true;
     Window* win =
         WindowOpenView(app, StrL("System Monitor"), 680, 600, view.id, opts);
     WindowOnWheel(win, ListenTo(view, &OnWheel));

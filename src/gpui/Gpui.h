@@ -455,6 +455,10 @@ struct Style {
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
     Rgba hoverBg = {};
     bool hasHoverBg = false;
+    // hover(|style| style.text_color(..)): what the subtree under a hovered
+    // element paints with, for the descendants that set no color of their own.
+    Rgba hoverFg = {};
+    bool hasHoverFg = false;
     int focusId = 0;
     int trapId = 0;
     Str tooltip;
@@ -555,6 +559,7 @@ struct El {
     El* Bottom(float v);
     El* Right(float v);
     El* HoverBg(Rgba c);
+    El* HoverFg(Rgba c);
     El* FocusId(int v);
     El* TrapId(int v);
     El* Tip(Str s);

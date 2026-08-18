@@ -53,7 +53,7 @@ static Str gClipboard = {};
 
 static Atom aWmDeleteWindow, aWmProtocols, aNetWmName, aUtf8String;
 static Atom aNetWmState, aNetWmStateMaxVert, aNetWmStateMaxHorz;
-static Atom aNetWmMoveResize, aMotifWmHints;
+static Atom aNetWmMoveResize, aMotifWmHints, aGtkShowWindowMenu;
 static Atom aClipboard, aTargets;
 
 double TimeNow() {
@@ -368,6 +368,28 @@ static void StartMoveDrag(Window* win, int rootX, int rootY) {
     StartMoveResize(win, rootX, rootY, kMoveResizeMove);
 }
 
+// _GTK_SHOW_WINDOW_MENU: what a right click on the title bar of a
+// client-decorated window asks the window manager for. Windows gets the same
+// menu from DefWindowProc on WM_NCRBUTTONUP over HTCAPTION.
+static void ShowWindowMenu(Window* win, int rootX, int rootY) {
+    PlatWindow* pw = win->plat;
+    if (!pw) {
+        return;
+    }
+    XUngrabPointer(gDpy, CurrentTime);
+    XEvent ev = {};
+    ev.type = ClientMessage;
+    ev.xclient.window = pw->xwin;
+    ev.xclient.message_type = aGtkShowWindowMenu;
+    ev.xclient.format = 32;
+    ev.xclient.data.l[0] = 0; // the device, which we do not track
+    ev.xclient.data.l[1] = rootX;
+    ev.xclient.data.l[2] = rootY;
+    XSendEvent(gDpy, gRoot, False,
+               SubstructureNotifyMask | SubstructureRedirectMask, &ev);
+    XFlush(gDpy);
+}
+
 // An undecorated window has no frame to grab, so the outer band of the client
 // area is the resize handle — the same job WM_NCHITTEST does on Windows.
 static const int kResizeBand = 6;
@@ -564,6 +586,12 @@ static void HandleEvent(App* app, XEvent* ev) {
                 break;
             }
             if (b == Button3) {
+                // The title bar's drag region belongs to the window manager,
+                // the way it does for a server-decorated one.
+                if (WindowChromeHit(win, x, y) == ClickWinCaption) {
+                    ShowWindowMenu(win, ev->xbutton.x_root, ev->xbutton.y_root);
+                    break;
+                }
                 WindowMouseDown(win, x, y, 2);
                 break;
             }
@@ -724,6 +752,7 @@ bool PlatInit(App* app) {
         XInternAtom(gDpy, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
     aNetWmMoveResize = XInternAtom(gDpy, "_NET_WM_MOVERESIZE", False);
     aMotifWmHints = XInternAtom(gDpy, "_MOTIF_WM_HINTS", False);
+    aGtkShowWindowMenu = XInternAtom(gDpy, "_GTK_SHOW_WINDOW_MENU", False);
     aClipboard = XInternAtom(gDpy, "CLIPBOARD", False);
     aTargets = XInternAtom(gDpy, "TARGETS", False);
     return true;
