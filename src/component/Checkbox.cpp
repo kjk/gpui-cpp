@@ -58,17 +58,24 @@ Checkbox* Checkbox::OnClick(Listener fn) {
 El* Checkbox::IntoEl() {
     const Theme& th = cx->theme();
     float box = size == UiSize::Small ? 14.f : 16.f;
+    // An unchecked box carries the input border, a checked one the primary
+    // color, and a disabled one either at half strength.
+    Rgba mark = checked ? th.primary : th.inputBorder;
+    if (disabled) {
+        mark = RgbaOpacity(mark, 0.5f);
+    }
+    float radius = th.radius < 4.f ? th.radius : 4.f;
     El* ind = CheckboxIndicator::New(cx)
                   ->W(box)
                   ->H(box)
                   ->Shrink0()
                   ->ItemsCenter()
                   ->JustifyCenter()
-                  ->Border(1, th.foreground)
-                  ->Radius(3);
+                  ->Border(1, mark)
+                  ->Radius(radius);
     if (checked) {
-        ind->Bg(th.primary)
-            ->Child(IconEl(a, IconName::Check, box - 4)->Fg(th.primaryFg));
+        Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;
+        ind->Bg(mark)->Child(IconEl(a, IconName::Check, box - 4)->Fg(tick));
     }
     El* row = gpui::Checkbox::New(cx, id, disabled ? 0 : HashClickId(id))
                   ->FlexRow()

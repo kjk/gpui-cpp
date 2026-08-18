@@ -39,20 +39,20 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
 
     El* def = StorySection(
         cx, "Default", "Checked and unchecked options can be mixed freely.");
-    El* defCol = Div(a)->FlexCol()->Gap(8);
-    defCol->Child(component::Checkbox::New(cx, StrL("updates"))
-                      ->Label(StrL("Product updates"))
-                      ->Checked(self->checks[0])
-                      ->WithSize(self->toolbar.size)
-                      ->OnClick(Listen(cx, &SetCheck0))
-                      ->IntoEl());
-    defCol->Child(component::Checkbox::New(cx, StrL("remember"))
-                      ->Label(StrL("Remember this device"))
-                      ->Checked(self->checks[1])
-                      ->WithSize(self->toolbar.size)
-                      ->OnClick(Listen(cx, &SetCheck1))
-                      ->IntoEl());
-    StorySectionAdd(def, defCol);
+    // Each checkbox is its own child of the section, which lays them out in
+    // a wrapping row.
+    StorySectionAdd(def, component::Checkbox::New(cx, StrL("updates"))
+                             ->Label(StrL("Product updates"))
+                             ->Checked(self->checks[0])
+                             ->WithSize(self->toolbar.size)
+                             ->OnClick(Listen(cx, &SetCheck0))
+                             ->IntoEl());
+    StorySectionAdd(def, component::Checkbox::New(cx, StrL("remember"))
+                             ->Label(StrL("Remember this device"))
+                             ->Checked(self->checks[1])
+                             ->WithSize(self->toolbar.size)
+                             ->OnClick(Listen(cx, &SetCheck1))
+                             ->IntoEl());
     page->Child(def);
 
     El* bare =
