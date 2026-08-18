@@ -5,6 +5,10 @@
 //   bun cmd/compare-showcase.ts -rel accordion
 //   bun cmd/compare-showcase.ts -keep accordion  # leave windows open
 //
+// Rust takes the left half of the work area, ours the right, both 80% of the
+// work area tall — same placement as `bun cmd/run.ts -compare`, so the two
+// shots are the same size and directly comparable.
+//
 // Screenshots: out/compare/<slug>-rust.png and <slug>-cpp.png
 
 import { existsSync, mkdirSync, rmSync } from "node:fs";
@@ -13,11 +17,10 @@ import {
   captureWindowToPng,
   clickClient,
   getClientRect,
-  getWindowRect,
   getWorkArea,
   hoverClient,
   killAndWait,
-  moveWindow,
+  placeOnWorkAreaHalf,
   setCursorPos,
   setForegroundWindow,
   setProcessDpiAware,
@@ -145,18 +148,11 @@ async function launch(exe: string, slug: string, cwd: string): Promise<Bun.Subpr
   return Bun.spawn(args, { cwd, stdout: "ignore", stderr: "ignore" });
 }
 
+// Same placement as `bun cmd/run.ts -compare`: rust on the left half, ours on
+// the right, both 80% of the work area tall. Keeps the two shots comparable.
 function placePair(rustHwnd: number, cppHwnd: number) {
-  const wa = getWorkArea();
-  const rust = getWindowRect(rustHwnd);
-  const rustW = rust.right - rust.left;
-  const rustH = rust.bottom - rust.top;
-  const cpp = getWindowRect(cppHwnd);
-  const cppW = cpp.right - cpp.left;
-  const cppH = cpp.bottom - cpp.top;
-  const gap = 8;
-  const y = wa.top + 8;
-  moveWindow(rustHwnd, wa.left + 8, y, rustW, rustH);
-  moveWindow(cppHwnd, wa.left + 8 + rustW + gap, y, cppW, cppH);
+  placeOnWorkAreaHalf(rustHwnd, "left");
+  placeOnWorkAreaHalf(cppHwnd, "right");
 }
 
 type Pair = {

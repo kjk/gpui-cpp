@@ -262,6 +262,7 @@ cmd/build.ts           MSVC compile/link via bun; also clones the pinned Rust sp
 cmd/run.ts             build then run; same flags as build.ts plus -windbg / -compare
 cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords)
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
+                       (rust left half, ours right half, both 80% work-area tall)
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/Base.h/.cpp        vendored SumatraPDF subset
 src/gpui/Gpui.h        App, Window, Entity, Ctx, El, theme, paint

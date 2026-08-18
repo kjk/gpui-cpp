@@ -5,16 +5,19 @@
 //   bun cmd/compare-story.ts -rel accordion
 //   bun cmd/compare-story.ts -nobuild introduction
 //
+// Rust takes the left half of the work area, ours the right, both 80% of the
+// work area tall — same placement as `bun cmd/run.ts -compare`, so the two
+// shots are the same size and directly comparable.
+//
 // Screenshots: out/compare-story/<slug>-rust.png and <slug>-cpp.png
 
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   captureWindowToPng,
-  getWindowRect,
   getWorkArea,
   killAndWait,
-  moveWindow,
+  placeOnWorkAreaHalf,
   setCursorPos,
   setForegroundWindow,
   setProcessDpiAware,
@@ -156,17 +159,11 @@ function run(cmd: string[], cwd: string): number {
   return r.exitCode ?? 1;
 }
 
+// Same placement as `bun cmd/run.ts -compare`: rust on the left half, ours on
+// the right, both 80% of the work area tall. Keeps the two shots comparable.
 function placePair(rustHwnd: number, cppHwnd: number) {
-  const wa = getWorkArea();
-  const rust = getWindowRect(rustHwnd);
-  const rustW = rust.right - rust.left;
-  const rustH = rust.bottom - rust.top;
-  const cpp = getWindowRect(cppHwnd);
-  const cppW = cpp.right - cpp.left;
-  const cppH = cpp.bottom - cpp.top;
-  const y = wa.top + 8;
-  moveWindow(rustHwnd, wa.left + 8, y, rustW, rustH);
-  moveWindow(cppHwnd, wa.left + 8 + rustW + 8, y, cppW, cppH);
+  placeOnWorkAreaHalf(rustHwnd, "left");
+  placeOnWorkAreaHalf(cppHwnd, "right");
 }
 
 const { debug, nobuild, pages } = parseArgs(Bun.argv.slice(2));
