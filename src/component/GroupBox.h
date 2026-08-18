@@ -11,8 +11,10 @@ struct GroupBox {
     Ctx* cx = nullptr;
     Str title = {};
     El* child = nullptr;
+    // GroupBoxVariant: Normal by default, with fill() and outline() as the
+    // other two.
     bool outline = false;
-    bool filled = true;
+    bool filled = false;
 
     static GroupBox* New(Ctx* cx, Str title);
     GroupBox* Child(El* e);

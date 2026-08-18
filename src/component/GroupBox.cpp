@@ -28,13 +28,20 @@ GroupBox* GroupBox::Filled(bool v) {
 
 El* GroupBox::IntoEl() {
     const Theme& th = cx->theme();
-    El* box = Div(a)->FlexCol()->Gap(8)->Pad(12)->Radius(th.radius)->Border(
-        1, th.border);
-    if (filled && !outline) {
+    // Normal has neither surface nor border and no padding of its own; fill
+    // and outline each take one, and pad their content.
+    bool padded = filled || outline;
+    El* box = Div(a)->FlexCol()->W(kFill)->Gap(padded ? 12.f : 16.f);
+    if (padded) {
+        box->Pad(12)->Radius(th.radius);
+    }
+    if (outline) {
+        box->Border(1, th.border);
+    } else if (filled) {
         box->Bg(th.muted);
     }
     if (title.s) {
-        box->Child(TextEl(a, title)->Font(13)->Semibold()->Fg(th.foreground));
+        box->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(th.mutedFg));
     }
     if (child) {
         box->Child(child);

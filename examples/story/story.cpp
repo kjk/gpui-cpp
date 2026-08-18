@@ -98,7 +98,8 @@ static const StoryInfo kMeta[StoryCount] = {
      "A code editor with syntax highlighting, line numbers, and folding."},
     {"form", "Form", "Building forms with validation and various input types."},
     {"group-box", "GroupBox",
-     "A container that groups related content with a title."},
+     "A styled container element that with an optional title to groups "
+     "related content together."},
     {"hover-card", "HoverCard",
      "For sighted users to preview content available behind a link."},
     {"icon", "Icon", "SVG Icons based on Lucide.dev"},
