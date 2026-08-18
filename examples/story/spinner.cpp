@@ -42,11 +42,11 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
     El* icRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     icRow->Child(component::Spinner::New(cx)
                      ->WithSize(self->toolbar.size)
-                     ->Icon(IconName::Loader)
+                     ->Icon(IconName::LoaderCircle)
                      ->IntoEl());
     icRow->Child(component::Spinner::New(cx)
                      ->WithSize(self->toolbar.size)
-                     ->Icon(IconName::Loader)
+                     ->Icon(IconName::LoaderCircle)
                      ->Color(th.cyan)
                      ->IntoEl());
     StorySectionAdd(ic, icRow);
@@ -54,16 +54,14 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
 
     El* ease =
         StorySection(cx, "Easing", "Customize the rotation timing curve.");
+    // Three spinners, one per easing curve; ours all spin linearly.
     El* easeRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    easeRow->Child(component::Spinner::New(cx)
-                       ->WithSize(self->toolbar.size)
-                       ->Icon(IconName::Loader)
-                       ->IntoEl());
-    easeRow->Child(component::Spinner::New(cx)
-                       ->WithSize(self->toolbar.size)
-                       ->Icon(IconName::Loader)
-                       ->Color(th.blue)
-                       ->IntoEl());
+    for (int i = 0; i < 3; i++) {
+        easeRow->Child(component::Spinner::New(cx)
+                           ->WithSize(self->toolbar.size)
+                           ->Icon(IconName::Loader)
+                           ->IntoEl());
+    }
     StorySectionAdd(ease, easeRow);
     page->Child(ease);
     return page;
