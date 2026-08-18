@@ -333,6 +333,10 @@ static El* ToolbarDropBtn(Ctx* cx, Str label) {
 
 static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
                            bool on, bool plain = false) {
+    // TODO: plain means "no check column" (StoryToolbarOpt::plain, Rust's
+    // menu() rather than menu_with_check()); the cell below is still drawn
+    // unconditionally.
+    (void)plain;
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     return Div(a)
@@ -718,7 +722,6 @@ static El* Footer(StoryApp* app, Ctx* cx) {
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     Arena* frame = cx->a;
     Window* win = cx->win;
-    WinSize size = WindowSize(win);
     cx->win->paint.selA = app->selA;
     cx->win->paint.selB = app->selB;
     // Pages that own a text field point the window at it from their Render.
@@ -769,7 +772,6 @@ static void OnChar(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
 }
 
 static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
-    Window* win = cx->win;
     int vk = ev->vk;
     bool down = ev->down;
     if (ev->ch != 0) {
@@ -800,7 +802,6 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
 }
 
 static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
-    Window* win = cx->win;
     float x = ev->x;
     float y = ev->y;
     float delta = ev->delta;
@@ -826,7 +827,6 @@ static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
 }
 
 static void OnMouse(StoryApp* app, Ctx* cx, const MouseEvent* ev) {
-    Window* win = cx->win;
     float x = ev->x;
     float y = ev->y;
     int button = ev->button;

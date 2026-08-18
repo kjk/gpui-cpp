@@ -348,10 +348,12 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     ".work",
     "/DUNICODE",
     "/D_UNICODE",
-    "/W3",
+    "/W4",
+    "/WX",
     "/wd4996",
-    "/wd4244",
-    "/wd4267",
+    // The amalgam concatenates every file, so a static helper used only by
+    // one of them looks unreferenced to the compiler.
+    "/wd4505",
     "/MP",
     "/FS",
     "/Zi",

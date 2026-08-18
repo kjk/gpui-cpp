@@ -7,23 +7,20 @@ struct BadgeStory {
 };
 
 static El* Face(Ctx* cx, BadgeStory* self, const char* initials) {
-    Arena* a = cx->a;
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(self->toolbar.size)
         ->IntoEl();
 }
 
-static El* FaceLarge(Ctx* cx, BadgeStory* self, const char* initials) {
-    Arena* a = cx->a;
+static El* FaceLarge(Ctx* cx, BadgeStory*, const char* initials) {
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(UiSize::Large)
         ->IntoEl();
 }
 
-static El* FaceSmall(Ctx* cx, BadgeStory* self, const char* initials) {
-    Arena* a = cx->a;
+static El* FaceSmall(Ctx* cx, BadgeStory*, const char* initials) {
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(UiSize::Small)

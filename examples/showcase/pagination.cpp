@@ -38,8 +38,8 @@ static El* PageBtn(Ctx* cx, int p, bool on) {
 
 El* ShowcasePagination(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const int n = 8;
-    const int maxVis = 5;
+    constexpr int n = 8;
+    constexpr int maxVis = 5;
     int cur = app->page;
     if (cur < 1) {
         cur = 1;
@@ -51,7 +51,9 @@ El* ShowcasePagination(ShowcaseApp* app, Ctx* cx) {
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);
-    if (n <= maxVis) {
+    // Both are fixed here, so the compiler is right that this never runs;
+    // keep it for the day the page count stops being a constant.
+    if constexpr (n <= maxVis) {
         for (int p = 1; p <= n; p++) {
             row->Child(PageBtn(cx, p, p == cur));
         }

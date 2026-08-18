@@ -7,9 +7,8 @@ struct RatingStory {
     static El* Render(RatingStory* self, Ctx* cx);
 };
 
-static void SetRating(RatingStory* self, Ctx* cx, const ClickEvent*,
-                      intptr_t v) {
-    self->rating = v;
+static void SetRating(RatingStory* self, Ctx*, const ClickEvent*, intptr_t v) {
+    self->rating = (int)v;
 }
 
 El* RatingStory::Render(RatingStory* self, Ctx* cx) {

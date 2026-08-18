@@ -89,7 +89,6 @@ static void PaintPie(PaintCtx* ctx, El* e, void* user) {
     if (total <= 0) {
         return;
     }
-    const float kPi = 3.14159265f;
     float angle = -kPi * 0.5f;
     for (int i = 0; i < p->n; i++) {
         const PieSlice& s = p->slices[i];

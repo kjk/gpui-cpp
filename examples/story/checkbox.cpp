@@ -7,27 +7,27 @@ struct CheckboxStory {
     static El* Render(CheckboxStory* self, Ctx* cx);
 };
 
-static void SetCheck0(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+static void SetCheck0(CheckboxStory* self, Ctx*, const ClickEvent*,
                       intptr_t v) {
     self->checks[0] = v;
 }
-static void SetCheck1(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+static void SetCheck1(CheckboxStory* self, Ctx*, const ClickEvent*,
                       intptr_t v) {
     self->checks[1] = v;
 }
-static void SetCheck2(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+static void SetCheck2(CheckboxStory* self, Ctx*, const ClickEvent*,
                       intptr_t v) {
     self->checks[2] = v;
 }
-static void SetCheck3(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+static void SetCheck3(CheckboxStory* self, Ctx*, const ClickEvent*,
                       intptr_t v) {
     self->checks[3] = v;
 }
-static void SetCheck4(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+static void SetCheck4(CheckboxStory* self, Ctx*, const ClickEvent*,
                       intptr_t v) {
     self->checks[4] = v;
 }
-static void SetCheck5(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+static void SetCheck5(CheckboxStory* self, Ctx*, const ClickEvent*,
                       intptr_t v) {
     self->checks[5] = v;
 }

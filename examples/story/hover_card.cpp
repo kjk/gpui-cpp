@@ -27,7 +27,7 @@ static El* Card(Ctx* cx, const char* title, const char* body) {
     return card;
 }
 
-El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
+El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

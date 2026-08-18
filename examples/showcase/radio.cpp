@@ -44,13 +44,11 @@ static El* RadioRow(Ctx* cx, Str id, Listener onClick, bool on,
 }
 
 El* ShowcaseRadio(ShowcaseApp* app, Ctx* cx) {
-    Arena* a = cx->a;
     return RadioRow(cx, StrL("example-radio"), Listen(cx, &PickRadio, 0),
                     app->radioSel == 0, "Standard", "3–5 business days", false);
 }
 
 El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
-    Arena* a = cx->a;
     return RadioGroup::New(cx, StrL("example-radio-group"))
         ->W(224)
         ->FlexCol()

@@ -5,9 +5,9 @@ struct BreadcrumbStory {
     static El* Render(BreadcrumbStory* self, Ctx* cx);
 };
 
-static void OnCrumb(BreadcrumbStory* self, Ctx* cx, const ClickEvent*,
+static void OnCrumb(BreadcrumbStory* self, Ctx*, const ClickEvent*,
                     intptr_t i) {
-    self->crumbClicked = i;
+    self->crumbClicked = (int)i;
 }
 
 El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {

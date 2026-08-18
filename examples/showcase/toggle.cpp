@@ -42,13 +42,11 @@ static El* ToggleCell(Ctx* cx, Str id, Listener onClick, const char* label,
 }
 
 El* ShowcaseToggle(ShowcaseApp* app, Ctx* cx) {
-    Arena* a = cx->a;
     return ToggleCell(cx, StrL("example-toggle"), Listen(cx, &ToggleBold), "B",
                       app->toggleOn);
 }
 
 El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
-    Arena* a = cx->a;
     bool italic = (app->toggleGroup & 1) != 0;
     bool under = (app->toggleGroup & 2) != 0;
     return ToggleGroup::New(cx, StrL("example-toggle-group"))

@@ -4,7 +4,7 @@ struct KbdStory {
     static El* Render(KbdStory* self, Ctx* cx);
 };
 
-El* KbdStory::Render(KbdStory* self, Ctx* cx) {
+El* KbdStory::Render(KbdStory*, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     // Kbd::format spells the modifiers out on Windows, in Ctrl+Alt+Shift+Win

@@ -4,7 +4,7 @@ struct ImageStory {
     static El* Render(ImageStory* self, Ctx* cx);
 };
 
-El* ImageStory::Render(ImageStory* self, Ctx* cx) {
+El* ImageStory::Render(ImageStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();

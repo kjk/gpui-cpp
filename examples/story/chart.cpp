@@ -56,7 +56,7 @@ static El* ChartCard(Ctx* cx, const char* title, El* chart, bool center) {
     return card;
 }
 
-El* ChartStory::Render(ChartStory* self, Ctx* cx) {
+El* ChartStory::Render(ChartStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);

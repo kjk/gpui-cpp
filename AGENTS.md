@@ -295,6 +295,12 @@ windows-latest, ubuntu-latest and macos-latest. There are no tests; compiling
 every example on all three is the check. It sets `GPUI_NO_RUST_TREE=1` so the
 Rust spec clone is skipped.
 
+**Warnings are errors.** `/W4 /WX` on MSVC, `-Wall -Wextra -Werror` on
+gcc/clang. Fix the warning; do not add a suppression. The only suppressions left are the same
+amalgam artifact under two names — `/wd4505` and `-Wno-unused-function`, a
+static helper that only one of the concatenated files uses — plus `/wd4996`
+for the deprecated CRT names. Each carries a comment saying why.
+
 After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for the whole tree) before finishing. It runs clang-format on C++ in `src/` and `examples/` (`/.clang-format`, Chromium-based, 80 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
 
 The Rust reference (optional, slow first build because it pulls Zed). `bun cmd/build.ts` / `bun cmd/versions.ts` installs `.work/gpui-component` at the SHA in `cmd/versions.ts`:

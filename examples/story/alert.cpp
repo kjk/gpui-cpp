@@ -7,7 +7,7 @@ struct AlertStory {
     static El* Render(AlertStory* self, Ctx* cx);
 };
 
-static void HideBanner(AlertStory* self, Ctx* cx, const ClickEvent*) {
+static void HideBanner(AlertStory* self, Ctx*, const ClickEvent*) {
     self->alertBanner = false;
 }
 static void AlertNoop(AlertStory*, Ctx*, const ClickEvent*) {}

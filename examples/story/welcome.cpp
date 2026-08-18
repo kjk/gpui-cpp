@@ -5,7 +5,6 @@ struct WelcomeStory {
 };
 
 static El* MdTxt(Ctx* cx, Str s, float px, Rgba c) {
-    Arena* a = cx->a;
     return StoryTxt(cx, s, px, c)->Selectable();
 }
 
@@ -101,13 +100,11 @@ static El* MdTableRow(Ctx* cx, const char* left, const char* right,
 }
 
 static El* AsciiLine(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMdCode, th.foreground);
 }
 
 static El* Body(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMd, th.foreground)
         ->Wrap()
@@ -116,7 +113,6 @@ static El* Body(Ctx* cx, const char* s) {
 }
 
 static El* LinkBody(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMd, th.primary)
         ->Wrap()
@@ -125,7 +121,6 @@ static El* LinkBody(Ctx* cx, const char* s) {
 }
 
 static El* H2(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMdH2, th.foreground)
         ->Semibold()
@@ -133,7 +128,6 @@ static El* H2(Ctx* cx, const char* s) {
 }
 
 static El* H3(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     const Theme& th = cx->theme();
     return MdTxt(cx, StoryDup(cx, s), kMdH3, th.foreground)
         ->Semibold()
@@ -160,14 +154,13 @@ static El* CodeBlock(Ctx* cx, const char* s) {
 }
 
 static El* Bullet(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     const Theme& th = cx->theme();
     return MdTxt(cx, StoryFmt(cx, "\xE2\x80\xA2  %s", s), kMd, th.foreground)
         ->Wrap()
         ->W(kFill);
 }
 
-El* WelcomeStory::Render(WelcomeStory* self, Ctx* cx) {
+El* WelcomeStory::Render(WelcomeStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(0)->W(kFill);

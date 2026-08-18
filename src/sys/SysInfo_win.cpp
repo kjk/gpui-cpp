@@ -65,7 +65,7 @@ static void RefreshMemory(SysState* s) {
     if (GlobalMemoryStatusEx(&ms)) {
         s->memTotal = ms.ullTotalPhys;
         s->memUsed = ms.ullTotalPhys - ms.ullAvailPhys;
-        s->mem = ms.dwMemoryLoad;
+        s->mem = (float)ms.dwMemoryLoad;
     }
 }
 

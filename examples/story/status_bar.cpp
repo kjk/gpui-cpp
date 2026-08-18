@@ -4,7 +4,7 @@ struct StatusBarStory {
     static El* Render(StatusBarStory* self, Ctx* cx);
 };
 
-El* StatusBarStory::Render(StatusBarStory* self, Ctx* cx) {
+El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

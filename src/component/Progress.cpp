@@ -105,7 +105,6 @@ static void PaintCircleProgress(PaintCtx* ctx, El* e, void* user) {
     if (v <= 0) {
         return;
     }
-    const float kPi = 3.14159265f;
     float start = -kPi * 0.5f;
     float sweep = 2.f * kPi * (v / 100.f);
     Path* arc = PathNew(ctx, true);

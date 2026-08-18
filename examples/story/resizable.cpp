@@ -50,7 +50,6 @@ static El* Frame(Ctx* cx, float h) {
 
 El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
 
     El* nested = StorySection(cx, "Nested Panels",

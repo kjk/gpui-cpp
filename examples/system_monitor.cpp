@@ -54,7 +54,7 @@ static void Collect(MonitorApp* app) {
     PushHist(app, app->sys.cpu, app->sys.mem);
 }
 
-static void OnTick(MonitorApp* app, Ctx* cx, const TickEvent*) {
+static void OnTick(MonitorApp* app, Ctx*, const TickEvent*) {
     Collect(app);
 }
 
@@ -350,9 +350,6 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
 
 El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
-
-    WinSize size = WindowSize(cx->win);
 
     const Theme& th = ThemeDark();
 

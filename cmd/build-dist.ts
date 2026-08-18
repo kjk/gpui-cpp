@@ -179,15 +179,22 @@ function topoHeaders(headers: string[]): string[] {
   return order;
 }
 
+// Every transform here replaces rather than removes lines: an amalgam chunk
+// starts with `#line 1 "<original>"`, and that is only true if the chunk has
+// exactly as many lines as the file it came from. A compiler diagnostic then
+// points at the real line of the real file, which -Werror makes worth the
+// handful of blank lines it costs.
 function stripInternalIncludes(fromRel: string, text: string): string {
   const lines = text.split("\n");
   const keep: string[] = [];
   for (const line of lines) {
     if (pragmaOnceRe.test(line)) {
+      keep.push("");
       continue;
     }
     const m = quotedIncRe.exec(line);
     if (m && resolveQuoted(fromRel, m[1]!)) {
+      keep.push("");
       continue;
     }
     keep.push(line);
@@ -252,12 +259,22 @@ function stripComments(src: string): string {
       continue;
     }
     if (c === "/" && d === "*") {
+      const start = i;
       i += 2;
       while (i + 1 < n && !(src[i] === "*" && src[i + 1] === "/")) {
         i++;
       }
       i = i + 1 < n ? i + 2 : n;
-      out += " ";
+      // Keep the newlines the comment spanned, so the #line directives above
+      // each chunk stay true and a compiler diagnostic points at the real
+      // line of the real file.
+      let nl = "";
+      for (let k = start; k < i; k++) {
+        if (src[k] === "\n") {
+          nl += "\n";
+        }
+      }
+      out += nl.length > 0 ? nl : " ";
       continue;
     }
     out += c;
@@ -266,28 +283,12 @@ function stripComments(src: string): string {
   return out;
 }
 
-function collapseBlankLines(src: string): string {
+function trimTrailingSpace(src: string): string {
   const lines = src.split("\n").map((l) => l.replace(/[ \t]+$/g, ""));
-  const out: string[] = [];
-  let blank = false;
-  for (const line of lines) {
-    if (line.length === 0) {
-      if (!blank) {
-        out.push("");
-      }
-      blank = true;
-      continue;
-    }
-    blank = false;
-    out.push(line);
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
   }
-  while (out.length > 0 && out[0] === "") {
-    out.shift();
-  }
-  while (out.length > 0 && out[out.length - 1] === "") {
-    out.pop();
-  }
-  return out.join("\n") + "\n";
+  return lines.join("\n") + "\n";
 }
 
 function staticNames(src: string): string[] {
@@ -341,7 +342,7 @@ function preferredCppOrder(cpps: string[]): string[] {
 }
 
 function finish(text: string): string {
-  return collapseBlankLines(stripComments(text));
+  return trimTrailingSpace(stripComments(text));
 }
 
 export function buildDist(opts?: BuildDistOpts): BuildDistResult {
@@ -368,8 +369,8 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
     "",
   ];
   for (const rel of headerOrder) {
-    const body = stripInternalIncludes(rel, readLf(rel)).trim();
-    if (!body) {
+    const body = stripInternalIncludes(rel, readLf(rel));
+    if (!body.trim()) {
       continue;
     }
     headerChunks.push(`#line 1 "${rel}"`, body, "");
@@ -399,8 +400,8 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
     for (const rel of list) {
       let body = cppTexts.get(rel) ?? "";
       const local = new Set(staticNames(body).filter((n) => colliding.has(n)));
-      body = renameIdents(body, local, filePrefix(rel)).trim();
-      if (!body) {
+      body = renameIdents(body, local, filePrefix(rel));
+      if (!body.trim()) {
         continue;
       }
       chunks.push(`#line 1 "${rel}"`, body, "");

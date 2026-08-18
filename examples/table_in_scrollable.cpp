@@ -101,7 +101,6 @@ static El* Filler(Arena* a, Str label, float h, const Theme& th) {
 
 El* TableApp::Render(TableApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
     const Theme& th = cx->theme();

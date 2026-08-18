@@ -8,19 +8,19 @@ struct RadioStory {
     static El* Render(RadioStory* self, Ctx* cx);
 };
 
-static void SetDel0(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
+static void SetDel0(RadioStory* self, Ctx*, const ClickEvent*, intptr_t) {
     self->radioSel = 0;
 }
-static void SetDel1(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
+static void SetDel1(RadioStory* self, Ctx*, const ClickEvent*, intptr_t) {
     self->radioSel = 1;
 }
-static void SetBill0(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
+static void SetBill0(RadioStory* self, Ctx*, const ClickEvent*, intptr_t) {
     self->radioBilling = 0;
 }
-static void SetBill1(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
+static void SetBill1(RadioStory* self, Ctx*, const ClickEvent*, intptr_t) {
     self->radioBilling = 1;
 }
-static void SetBill2(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
+static void SetBill2(RadioStory* self, Ctx*, const ClickEvent*, intptr_t) {
     self->radioBilling = 2;
 }
 

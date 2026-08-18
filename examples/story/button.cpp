@@ -7,12 +7,10 @@ struct ButtonStory {
 };
 
 static component::Button* Btn(Ctx* cx, ButtonStory* self, const char* id) {
-    Arena* a = cx->a;
     return component::Button::New(cx, Str(id))->WithSize(self->toolbar.size);
 }
 
 static El* ProgressIcon(Ctx* cx, float value, Rgba color, bool hasColor) {
-    Arena* a = cx->a;
     component::ProgressCircle* p = component::ProgressCircle::New(cx)
                                        ->Value(value)
                                        ->Size(14)

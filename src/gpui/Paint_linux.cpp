@@ -11,8 +11,6 @@
 
 namespace gpui {
 
-static const float kPi = 3.14159265358979f;
-
 struct PaintApp {
     // A cairo-backed font map context, so a layout can be shaped and measured
     // without a target bound.

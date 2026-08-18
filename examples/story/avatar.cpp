@@ -7,7 +7,6 @@ struct AvatarStory {
 };
 
 static El* Face(Ctx* cx, AvatarStory* self, const char* initials) {
-    Arena* a = cx->a;
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(self->toolbar.size)
@@ -16,7 +15,6 @@ static El* Face(Ctx* cx, AvatarStory* self, const char* initials) {
 
 static El* FacePx(Ctx* cx, const char* initials, float px, float radius,
                   float borderW, Rgba borderC) {
-    Arena* a = cx->a;
     component::Avatar* av =
         component::Avatar::New(cx)->Initials(Str(initials))->Size(px);
     if (radius >= 0) {

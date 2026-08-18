@@ -48,7 +48,7 @@ struct TextareaStory {
 
 static void NoOp(TextareaStory*, Ctx*, const ClickEvent*) {}
 
-El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
+El* TextareaStory::Render(TextareaStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);

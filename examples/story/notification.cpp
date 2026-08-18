@@ -14,7 +14,7 @@ static void ShowNotify(NotificationStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-static void HideNote(NotificationStory* self, Ctx* cx, const ClickEvent*) {
+static void HideNote(NotificationStory* self, Ctx*, const ClickEvent*) {
     self->notifyOn = false;
 }
 

@@ -9,23 +9,22 @@ struct CalendarStory {
     static El* Render(CalendarStory* self, Ctx* cx);
 };
 
-static void CalPrev(CalendarStory* self, Ctx* cx, const ClickEvent*) {
+static void CalPrev(CalendarStory* self, Ctx*, const ClickEvent*) {
     self->calMonth--;
     if (self->calMonth < 1) {
         self->calMonth = 12;
         self->calYear--;
     }
 }
-static void CalNext(CalendarStory* self, Ctx* cx, const ClickEvent*) {
+static void CalNext(CalendarStory* self, Ctx*, const ClickEvent*) {
     self->calMonth++;
     if (self->calMonth > 12) {
         self->calMonth = 1;
         self->calYear++;
     }
 }
-static void CalDay(CalendarStory* self, Ctx* cx, const ClickEvent*,
-                   intptr_t d) {
-    self->calDay = d;
+static void CalDay(CalendarStory* self, Ctx*, const ClickEvent*, intptr_t d) {
+    self->calDay = (int)d;
 }
 
 El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {

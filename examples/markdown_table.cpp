@@ -172,9 +172,6 @@ static const char* ModeLabel(int mode) {
 
 El* MdApp::Render(MdApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
-
-    WinSize size = WindowSize(cx->win);
 
     const Theme& th = cx->theme();
     El* bar = Div(frame)

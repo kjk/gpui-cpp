@@ -10,13 +10,13 @@ struct AccordionStory {
 };
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple);
-static void OnAccDefault(AccordionStory* self, Ctx* cx, const ClickEvent*,
+static void OnAccDefault(AccordionStory* self, Ctx*, const ClickEvent*,
                          intptr_t i) {
-    ToggleOpen(self->accordionOpen, 3, i, self->options.multiple);
+    ToggleOpen(self->accordionOpen, 3, (int)i, self->options.multiple);
 }
-static void OnAccStyled(AccordionStory* self, Ctx* cx, const ClickEvent*,
+static void OnAccStyled(AccordionStory* self, Ctx*, const ClickEvent*,
                         intptr_t i) {
-    ToggleOpen(self->accordionStyledOpen, 3, i, self->options.multiple);
+    ToggleOpen(self->accordionStyledOpen, 3, (int)i, self->options.multiple);
 }
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple) {

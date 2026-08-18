@@ -333,14 +333,11 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "-I",
     ".work",
     "-Wall",
-    "-Wno-unused-parameter",
-    "-Wno-unused-variable",
+    "-Wextra",
+    "-Werror",
     // The amalgam concatenates every file, so a static helper used only by
     // one of them looks unused to the compiler.
     "-Wno-unused-function",
-    "-Wno-nonnull-compare",
-    "-Wno-missing-field-initializers",
-    "-Wno-write-strings",
     "-fno-rtti",
     "-g",
     ...(debug ? ["-O0", "-DDEBUG"] : ["-O2", "-DNDEBUG"]),

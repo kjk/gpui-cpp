@@ -62,7 +62,7 @@ static El* PopText(Ctx* cx, const char* s) {
     return StoryTxt(cx, Str(s), 14, cx->theme().foreground)->Wrap();
 }
 
-static El* PopTrigger(PopoverStory* self, Ctx* cx, int which, const char* id,
+static El* PopTrigger(PopoverStory*, Ctx* cx, int which, const char* id,
                       const char* label, Listener toggle) {
     return component::Button::New(cx, Str(id))
         ->Label(Str(label))

@@ -7,7 +7,6 @@ struct DescriptionListStory {
 };
 
 static El* Para(Ctx* cx, const char* s) {
-    Arena* a = cx->a;
     return StoryTxt(cx, StoryDup(cx, s), 14, cx->theme().foreground)->Wrap();
 }
 

@@ -261,43 +261,36 @@ void ArenaDelete(Arena* arena) {
 }
 
 void* Arena::Push(uint64_t size, uint64_t align, bool zero) {
-    if (!this) {
-        return nullptr;
-    }
     lock.Lock();
     void* mem = ArenaPushLocked(this, size, align, zero);
     lock.Unlock();
     return mem;
 }
 
-void Arena::PopTo(uint64_t pos) {
+void Arena::PopTo(uint64_t popPos) {
     Arena* arena = this;
-    if (!arena) {
-        return;
-    }
-
     lock.Lock();
 
-    uint64_t bigPos = ArenaClampBot(kArenaHeaderSize, pos);
-    Arena* current = arena->current;
-    while (current && current->basePos >= bigPos) {
-        Arena* prev = current->prev;
-        if (!current->usesExternalBuffer) {
-            ArenaRelease(current);
+    uint64_t bigPos = ArenaClampBot(kArenaHeaderSize, popPos);
+    Arena* node = arena->current;
+    while (node && node->basePos >= bigPos) {
+        Arena* prevNode = node->prev;
+        if (!node->usesExternalBuffer) {
+            ArenaRelease(node);
         } else {
-            current->pos = kArenaHeaderSize;
+            node->pos = kArenaHeaderSize;
         }
-        current = prev;
+        node = prevNode;
     }
 
-    if (!current) {
+    if (!node) {
         lock.Unlock();
         return;
     }
 
-    arena->current = current;
-    uint64_t newPos = bigPos - current->basePos;
-    current->pos = newPos;
+    arena->current = node;
+    uint64_t newPos = bigPos - node->basePos;
+    node->pos = newPos;
     lock.Unlock();
 }
 

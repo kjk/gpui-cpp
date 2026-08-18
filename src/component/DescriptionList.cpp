@@ -77,7 +77,6 @@ El* DescriptionList::IntoEl() {
     // Pack the items into rows of `columns`, spans included; a separator ends
     // the row it lands in.
     int i = 0;
-    El* pending[16] = {};
     while (i < n) {
         int used = 0;
         int count = 0;
@@ -89,7 +88,7 @@ El* DescriptionList::IntoEl() {
             if (used + items[i].span > columns && count > 0) {
                 break;
             }
-            pending[count++] = nullptr;
+            count++;
             used += items[i].span;
             i++;
         }

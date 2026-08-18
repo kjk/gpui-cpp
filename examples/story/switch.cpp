@@ -7,16 +7,16 @@ struct SwitchStory {
     static El* Render(SwitchStory* self, Ctx* cx);
 };
 
-static void SetSw0(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
+static void SetSw0(SwitchStory* self, Ctx*, const ClickEvent*, intptr_t v) {
     self->switches[0] = v;
 }
-static void SetSw1(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
+static void SetSw1(SwitchStory* self, Ctx*, const ClickEvent*, intptr_t v) {
     self->switches[1] = v;
 }
-static void SetSw3(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
+static void SetSw3(SwitchStory* self, Ctx*, const ClickEvent*, intptr_t v) {
     self->switches[3] = v;
 }
-static void SetSw4(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
+static void SetSw4(SwitchStory* self, Ctx*, const ClickEvent*, intptr_t v) {
     self->switches[4] = v;
 }
 

@@ -7,9 +7,8 @@ struct StepperStory {
     static El* Render(StepperStory* self, Ctx* cx);
 };
 
-static void SetStep(StepperStory* self, Ctx* cx, const ClickEvent*,
-                    intptr_t i) {
-    self->stepper = i;
+static void SetStep(StepperStory* self, Ctx*, const ClickEvent*, intptr_t i) {
+    self->stepper = (int)i;
 }
 
 El* StepperStory::Render(StepperStory* self, Ctx* cx) {

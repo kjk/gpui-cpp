@@ -4,7 +4,7 @@ struct IconStory {
     static El* Render(IconStory* self, Ctx* cx);
 };
 
-El* IconStory::Render(IconStory* self, Ctx* cx) {
+El* IconStory::Render(IconStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

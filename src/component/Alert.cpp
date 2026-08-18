@@ -15,28 +15,24 @@ Alert* Alert::New(Ctx* cx, Str id, Str message) {
 }
 
 Alert* Alert::Info(Ctx* cx, Str id, Str message) {
-    Arena* a = cx->a;
     Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Info;
     al->icon = IconName::Info;
     return al;
 }
 Alert* Alert::Success(Ctx* cx, Str id, Str message) {
-    Arena* a = cx->a;
     Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Success;
     al->icon = IconName::CircleCheck;
     return al;
 }
 Alert* Alert::Warning(Ctx* cx, Str id, Str message) {
-    Arena* a = cx->a;
     Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Warning;
     al->icon = IconName::TriangleAlert;
     return al;
 }
 Alert* Alert::Error(Ctx* cx, Str id, Str message) {
-    Arena* a = cx->a;
     Alert* al = New(cx, id, message);
     al->variant = AlertVariant::Error;
     al->icon = IconName::CircleX;

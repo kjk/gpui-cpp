@@ -14,8 +14,6 @@
 
 namespace gpui {
 
-static const float kPi = 3.14159265358979f;
-
 // A resolved font, keyed by the size and weight byte the element tree asks
 // for. Small and linear: a frame uses a handful of distinct fonts.
 struct FontSlot {

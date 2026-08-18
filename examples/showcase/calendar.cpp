@@ -168,7 +168,6 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
 }
 
 El* ShowcaseCalendar(ShowcaseApp* app, Ctx* cx) {
-    Arena* a = cx->a;
     return ShowcaseCalendarGrid(app, cx);
 }
 

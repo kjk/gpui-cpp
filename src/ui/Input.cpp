@@ -55,9 +55,8 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
         char* dots = (char*)Alloc(a, chars * 3 + 1);
         int n = 0;
         for (int i = 0; i < chars; i++) {
-            dots[n++] = (char)0xe2;
-            dots[n++] = (char)0x80;
-            dots[n++] = (char)0xa2; // U+2022 BULLET
+            memcpy(dots + n, "\xE2\x80\xA2", 3); // U+2022 BULLET
+            n += 3;
         }
         dots[n] = 0;
         row->Child(
@@ -279,7 +278,6 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n,
 }
 
 El* Editor::New(Ctx* cx, const char* text) {
-    Arena* a = cx->a;
     return New(cx, text, -1, false);
 }
 

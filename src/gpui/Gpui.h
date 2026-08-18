@@ -36,6 +36,7 @@ Rgba RgbaHsla(float h, float s, float l, float a01);
 
 constexpr float kAuto = -1.f;
 constexpr float kFill = -2.f;
+constexpr float kPi = 3.14159265358979f;
 
 // ─── theme (Default Dark) ─────────────────────────────────────────────────
 
@@ -490,8 +491,8 @@ struct El {
     El* Truncate();
     El* ClipY();
     El* ScrollY(float off);
-    El* ScrollId(int id);
-    El* Click(int id);
+    El* ScrollId(int v);
+    El* Click(int v);
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
     El* Child(El* c);
@@ -513,8 +514,8 @@ struct El {
     El* Bottom(float v);
     El* Right(float v);
     El* HoverBg(Rgba c);
-    El* FocusId(int id);
-    El* TrapId(int id);
+    El* FocusId(int v);
+    El* TrapId(int v);
     El* Tip(Str s);
     El* Id(Str s);
 };

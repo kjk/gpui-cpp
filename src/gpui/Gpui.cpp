@@ -274,7 +274,7 @@ El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected) {
             ->Bg(selected ? th.secondaryActive : th.secondary)
             ->HoverBg(th.secondaryHover);
         b->Child(
-            TextEl(a, label)->Font(selected ? 13 : 14)->Fg(th.secondaryFg));
+            TextEl(a, label)->Font(selected ? 13.f : 14.f)->Fg(th.secondaryFg));
     }
     return b;
 }
@@ -489,12 +489,12 @@ El* El::ScrollY(float off) {
     scrollY = off;
     return this;
 }
-El* El::ScrollId(int id) {
-    scrollId = id;
+El* El::ScrollId(int v) {
+    scrollId = v;
     return this;
 }
-El* El::Click(int id) {
-    clickId = id;
+El* El::Click(int v) {
+    clickId = v;
     return this;
 }
 El* El::OnClick(Func0 fn) {
@@ -592,12 +592,12 @@ El* El::HoverBg(Rgba c) {
     style.hasHoverBg = true;
     return this;
 }
-El* El::FocusId(int id) {
-    style.focusId = id;
+El* El::FocusId(int v) {
+    style.focusId = v;
     return this;
 }
-El* El::TrapId(int id) {
-    style.trapId = id;
+El* El::TrapId(int v) {
+    style.trapId = v;
     return this;
 }
 El* El::Tip(Str s) {
@@ -672,8 +672,10 @@ static uint32_t MurmurHash2(const void* key, int n) {
     switch (n) {
         case 3:
             h ^= data[2] << 16;
+            [[fallthrough]];
         case 2:
             h ^= data[1] << 8;
+            [[fallthrough]];
         case 1:
             h ^= data[0];
             h *= m;
@@ -1574,7 +1576,6 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     }
 
     float maxCross = 0;
-    float mainEnd = 0;
     for (El* c = e->first; c; c = c->next) {
         if (c->style.absolute) {
             continue;
@@ -1624,7 +1625,6 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
 
         float step = (row ? c->w : c->h) + gap + betweenExtra;
         cursor += step;
-        mainEnd = cursor - gap - betweenExtra;
         float cr = row ? c->h : c->w;
         if (cr > maxCross) {
             maxCross = cr;

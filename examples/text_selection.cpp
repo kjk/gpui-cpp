@@ -100,9 +100,6 @@ static El* Bubble(Ctx* cx, int ix, const Theme& th) {
 
 El* SelApp::Render(SelApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
-
-    WinSize size = WindowSize(cx->win);
 
     const Theme& th = cx->theme();
     El* col =

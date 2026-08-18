@@ -4,12 +4,11 @@ struct ClipboardStory {
     static El* Render(ClipboardStory* self, Ctx* cx);
 };
 
-static void OnCopy(ClipboardStory* self, Ctx* cx, const ClickEvent*,
-                   intptr_t v) {
+static void OnCopy(ClipboardStory*, Ctx*, const ClickEvent*, intptr_t v) {
     (void)v;
 }
 
-El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
+El* ClipboardStory::Render(ClipboardStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);

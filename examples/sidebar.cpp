@@ -84,9 +84,6 @@ static El* MenuItem(Ctx* cx, Listener onClick, IconName icon, const char* label,
 
 El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
-
-    WinSize size = WindowSize(cx->win);
 
     const Theme& th = cx->theme();
     bool iconCollapsed = app->collapsed && app->mode == CollIcon;
@@ -224,7 +221,7 @@ int GpuiMain(int argc, char** argv) {
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));
     WinOpts opts = {};
-    Window* win = WindowOpenView(app, StrL("Sidebar"), 900, 620, view.id, opts);
+    WindowOpenView(app, StrL("Sidebar"), 900, 620, view.id, opts);
     int rc = AppRun(app);
     AppFree(app);
     return rc;

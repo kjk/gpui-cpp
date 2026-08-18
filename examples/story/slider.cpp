@@ -25,7 +25,7 @@ static El* SliderCard(Ctx* cx, const char* label, const char* value, El* slider,
     return card;
 }
 
-El* SliderStory::Render(SliderStory* self, Ctx* cx) {
+El* SliderStory::Render(SliderStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill)->ItemsCenter();

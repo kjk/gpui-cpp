@@ -4,7 +4,7 @@ struct SkeletonStory {
     static El* Render(SkeletonStory* self, Ctx* cx);
 };
 
-El* SkeletonStory::Render(SkeletonStory* self, Ctx* cx) {
+El* SkeletonStory::Render(SkeletonStory*, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

@@ -59,7 +59,6 @@ static void DropToolbarAct(DropdownButtonStory* self, Ctx* cx,
 }
 
 static El* DropMenu(Ctx* cx) {
-    Arena* a = cx->a;
     return component::Menu::New(cx)
         ->Item(StrL("Disabled"))
         ->Item(StrL("Loading"))
