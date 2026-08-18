@@ -143,7 +143,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"skeleton", "Skeleton",
      "Use to show a placeholder while content is loading."},
     {"slider", "Slider",
-     "An input where the user selects a value from within a given range."},
+     "Displays a slider control for selecting a value within a range."},
     {"spinner", "Spinner", "A loading spinner."},
     {"status-bar", "StatusBar",
      "A status bar that typically sits at the bottom of the window."},

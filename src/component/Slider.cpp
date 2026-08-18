@@ -15,44 +15,95 @@ Slider* Slider::Value(float v) {
     value = v;
     return this;
 }
+Slider* Slider::Range(float low, float high) {
+    lo = low;
+    value = high;
+    range = true;
+    return this;
+}
+Slider* Slider::Reverse(bool v) {
+    reverse = v;
+    return this;
+}
+Slider* Slider::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+Slider* Slider::W(float px) {
+    width = px;
+    return this;
+}
 Slider* Slider::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
 
+static float Clamp01f(float v) {
+    if (v < 0) {
+        return 0;
+    }
+    return v > 1 ? 1 : v;
+}
+
 El* Slider::IntoEl() {
     const Theme& th = cx->theme();
-    float p = value;
-    if (p < 0) {
-        p = 0;
+    float hi = Clamp01f(value);
+    float low = range ? Clamp01f(lo) : 0.f;
+    if (low > hi) {
+        float t = low;
+        low = hi;
+        hi = t;
     }
-    if (p > 1) {
-        p = 1;
-    }
-    float w = 224;
-    El* track = SliderTrack::New(cx)->W(w)->H(28);
-    track->Child(
-        Div(a)->Absolute()->Top(13)->Left(0)->W(w)->H(2)->Bg(th.secondary));
+    const float kBar = 4.f; // h_1: the rail
+    const float kThumb = 14.f;
+    const float kH = 20.f;
+    float w = width;
+    float mid = (kH - kBar) * 0.5f;
+
+    Rgba railBg = th.secondary;
+    Rgba fillBg = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
+    Rgba thumbBorder = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
+
+    El* track = SliderTrack::New(cx)->W(w)->H(kH);
+    track->Child(Div(a)
+                     ->Absolute()
+                     ->Top(mid)
+                     ->Left(0)
+                     ->W(w)
+                     ->H(kBar)
+                     ->Radius(kBar * 0.5f)
+                     ->Bg(railBg));
+    // Reversed, the filled part is what is left beyond the thumb.
+    float fillFrom = reverse ? hi : low;
+    float fillTo = reverse ? 1.f : hi;
     track->Child(SliderIndicator::New(cx)
                      ->Absolute()
-                     ->Top(13)
-                     ->Left(0)
-                     ->W(w * p)
-                     ->H(2)
-                     ->Bg(th.primary));
-    track->Child(SliderThumb::New(cx)
-                     ->Absolute()
-                     ->Top(7)
-                     ->Left(w * p - 7)
-                     ->W(14)
-                     ->H(14)
-                     ->Radius(7)
-                     ->Bg(th.background)
-                     ->Border(1, th.primary));
-    return gpui::Slider::New(cx, HashClickId(StrL("slider")))
-        ->W(w)
-        ->H(28)
-        ->Child(track);
+                     ->Top(mid)
+                     ->Left(w * fillFrom)
+                     ->W(w * (fillTo - fillFrom))
+                     ->H(kBar)
+                     ->Radius(kBar * 0.5f)
+                     ->Bg(fillBg));
+    for (int i = 0; i < (range ? 2 : 1); i++) {
+        float at = (range && i == 0) ? low : hi;
+        track->Child(SliderThumb::New(cx)
+                         ->Absolute()
+                         ->Top((kH - kThumb) * 0.5f)
+                         ->Left(w * at - kThumb * 0.5f)
+                         ->W(kThumb)
+                         ->H(kThumb)
+                         ->Radius(kThumb * 0.5f)
+                         ->Bg(th.background)
+                         ->Border(1, thumbBorder));
+    }
+    El* root = gpui::Slider::New(cx, HashClickId(StrL("slider")))
+                   ->W(w)
+                   ->H(kH)
+                   ->Child(track);
+    if (onChange.IsValid() && !disabled) {
+        root->OnClick(onChange);
+    }
+    return root;
 }
 
 } // namespace component
