@@ -120,12 +120,26 @@ struct NumberInput {
 struct OtpInput {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
+    Str id = {};
     const char* value = nullptr;
     int len = 0;
     int slots = 6;
+    // The cells are split into this many groups, spaced further apart.
+    int groups = 2;
+    bool masked = false;
+    bool disabled = false;
+    UiSize size = UiSize::Medium;
+    float cellPx = 0; // with_size(px(..)): a custom cell edge
     Listener onFocus;
 
     static OtpInput* New(Ctx* cx, const char* value, int len);
+    OtpInput* Id(Str s);
+    OtpInput* Slots(int n);
+    OtpInput* Groups(int n);
+    OtpInput* Masked(bool v);
+    OtpInput* Disabled(bool v);
+    OtpInput* WithSize(UiSize s);
+    OtpInput* CellSize(float px);
     OtpInput* OnFocus(Listener fn);
     El* IntoEl();
 };

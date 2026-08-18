@@ -369,31 +369,92 @@ OtpInput* OtpInput::New(Ctx* cx, const char* value, int len) {
     o->len = len;
     return o;
 }
+OtpInput* OtpInput::Id(Str s) {
+    id = s;
+    return this;
+}
+OtpInput* OtpInput::Slots(int n) {
+    slots = n;
+    return this;
+}
+OtpInput* OtpInput::Groups(int n) {
+    groups = n;
+    return this;
+}
+OtpInput* OtpInput::Masked(bool v) {
+    masked = v;
+    return this;
+}
+OtpInput* OtpInput::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+OtpInput* OtpInput::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+OtpInput* OtpInput::CellSize(float px) {
+    cellPx = px;
+    return this;
+}
 OtpInput* OtpInput::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
 }
+
 El* OtpInput::IntoEl() {
     const Theme& th = cx->theme();
-    El* row =
-        gpui::OtpInput::New(cx, HashClickId(StrL("otp")))->FlexRow()->Gap(4);
-    if (onFocus.IsValid()) {
+    float cell = 32, text = 16;
+    if (cellPx > 0) {
+        cell = cellPx;
+        text = cellPx * 0.5f;
+    } else if (size == UiSize::Large) {
+        cell = 44;
+        text = 18;
+    } else if (size == UiSize::Small || size == UiSize::XSmall) {
+        cell = 24;
+        text = 14;
+    }
+    int nGroups = groups < 1 ? 1 : (groups > slots ? slots : groups);
+    int per = (slots + nGroups - 1) / nGroups;
+    if (per < 1) {
+        per = 1;
+    }
+    Rgba fg = disabled ? th.mutedFg : th.secondaryFg;
+    // gap_5 between the groups, gap_1 inside one.
+    El* row = gpui::OtpInput::New(cx, HashClickId(id.s ? id : StrL("otp")))
+                  ->FlexRow()
+                  ->ItemsCenter()
+                  ->Gap(20);
+    if (onFocus.IsValid() && !disabled) {
         row->OnClick(onFocus);
     }
+    El* group = nullptr;
     for (int i = 0; i < slots; i++) {
-        char ch[2] = {' ', 0};
-        if (value && i < len) {
-            ch[0] = value[i];
+        if (i % per == 0) {
+            group = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
+            row->Child(group);
         }
-        row->Child(Div(a)
-                       ->W(28)
-                       ->H(28)
-                       ->ItemsCenter()
-                       ->JustifyCenter()
-                       ->Border(1, i == len ? th.foreground : th.border)
-                       ->Child(TextEl(a, StrDup(a, Str(ch)))
-                                   ->Font(14)
-                                   ->Fg(th.foreground)));
+        El* box = Div(a)
+                      ->W(cell)
+                      ->H(cell)
+                      ->ItemsCenter()
+                      ->JustifyCenter()
+                      ->Radius(th.radius)
+                      ->Bg(disabled ? th.muted : th.inputBg)
+                      ->Border(1, th.inputBorder);
+        if (value && i < len) {
+            if (masked) {
+                box->Child(IconEl(a, IconName::Asterisk, text)->Fg(fg));
+            } else {
+                char ch[2] = {value[i], 0};
+                box->Child(TextEl(a, StrDup(a, Str(ch)))
+                               ->Font(text)
+                               ->LineHeight(1.f)
+                               ->Fg(fg));
+            }
+        }
+        group->Child(box);
     }
     return row;
 }
