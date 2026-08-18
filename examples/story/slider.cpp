@@ -1,5 +1,7 @@
 #include "Story.h"
 
+#include <math.h>
+
 struct SliderStory {
     // The Color Picker's four channels, and the logarithmic speed slider.
     float hsl[4] = {0.58f, 0.62f, 0.5f, 1.f};
