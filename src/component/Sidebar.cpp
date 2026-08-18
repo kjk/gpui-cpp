@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct SideBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireSide(SideBind* b) {
-    b->fn.Call(b->index);
-}
-
 Sidebar* Sidebar::New(Ctx* cx) {
     Arena* a = cx->a;
     Sidebar* s = ArenaNew<Sidebar>(a);

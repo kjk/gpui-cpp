@@ -357,9 +357,6 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "/W4",
     "/WX",
     "/wd4996",
-    // The amalgam concatenates every file, so a static helper used only by
-    // one of them looks unreferenced to the compiler.
-    "/wd4505",
     "/MP",
     "/FS",
     "/Zi",

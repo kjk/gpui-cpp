@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct StepBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireStep(StepBind* b) {
-    b->fn.Call(b->index);
-}
-
 Stepper* Stepper::New(Ctx* cx) {
     Arena* a = cx->a;
     Stepper* s = ArenaNew<Stepper>(a);

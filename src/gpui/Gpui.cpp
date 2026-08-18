@@ -1100,14 +1100,6 @@ static float Clamp(float v, float lo, float hi) {
     return v;
 }
 
-static int CountChildren(El* e) {
-    int n = 0;
-    for (El* c = e->first; c; c = c->next) {
-        n++;
-    }
-    return n;
-}
-
 static float ResolveSize(float spec, float avail, float growAsFill) {
     (void)growAsFill;
     if (spec == kFill) {

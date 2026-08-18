@@ -4,15 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct SwitchBind {
-    Func1<bool> fn;
-    bool next = false;
-};
-
-static void FireSwitch(SwitchBind* b) {
-    b->fn.Call(b->next);
-}
-
 Switch* Switch::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Switch* s = ArenaNew<Switch>(a);

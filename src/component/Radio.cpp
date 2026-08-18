@@ -4,15 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct RadioBind {
-    Func1<bool> fn;
-    bool next = true;
-};
-
-static void FireRadio(RadioBind* b) {
-    b->fn.Call(b->next);
-}
-
 Radio* Radio::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Radio* r = ArenaNew<Radio>(a);

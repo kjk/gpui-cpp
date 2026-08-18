@@ -4,15 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct CheckBind {
-    Func1<bool> fn;
-    bool next = false;
-};
-
-static void FireCheck(CheckBind* b) {
-    b->fn.Call(b->next);
-}
-
 Checkbox* Checkbox::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Checkbox* c = ArenaNew<Checkbox>(a);

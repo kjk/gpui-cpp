@@ -4,15 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct LinkBind {
-    Func1<Str> fn;
-    Str href;
-};
-
-static void FireLink(LinkBind* b) {
-    b->fn.Call(b->href);
-}
-
 Link* Link::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Link* l = ArenaNew<Link>(a);

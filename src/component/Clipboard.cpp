@@ -5,14 +5,6 @@ namespace gpui {
 
 namespace component {
 
-struct ClipBind {
-    Func1<Str> fn;
-    Str value;
-};
-static void FireClip(ClipBind* b) {
-    b->fn.Call(b->value);
-}
-
 Clipboard* Clipboard::New(Ctx* cx, Str value) {
     Arena* a = cx->a;
     Clipboard* c = ArenaNew<Clipboard>(a);

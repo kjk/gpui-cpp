@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct RateBind {
-    Func1<int> fn;
-    int value = 0;
-};
-static void FireRate(RateBind* b) {
-    b->fn.Call(b->value);
-}
-
 Rating* Rating::New(Ctx* cx) {
     Arena* a = cx->a;
     Rating* r = ArenaNew<Rating>(a);

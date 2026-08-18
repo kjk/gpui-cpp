@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct DayBind {
-    Func1<int> fn;
-    int day = 1;
-};
-static void FireDay(DayBind* b) {
-    b->fn.Call(b->day);
-}
-
 Calendar* Calendar::New(Ctx* cx) {
     Arena* a = cx->a;
     Calendar* c = ArenaNew<Calendar>(a);

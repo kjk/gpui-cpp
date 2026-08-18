@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct CrumbBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireCrumb(CrumbBind* b) {
-    b->fn.Call(b->index);
-}
-
 Breadcrumb* Breadcrumb::New(Ctx* cx) {
     Arena* a = cx->a;
     Breadcrumb* b = ArenaNew<Breadcrumb>(a);

@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct TreeBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireTree(TreeBind* b) {
-    b->fn.Call(b->index);
-}
-
 Tree* Tree::New(Ctx* cx) {
     Arena* a = cx->a;
     Tree* t = ArenaNew<Tree>(a);

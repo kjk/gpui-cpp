@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct TabBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireTab(TabBind* b) {
-    b->fn.Call(b->index);
-}
-
 Tabs* Tabs::New(Ctx* cx) {
     Arena* a = cx->a;
     Tabs* t = ArenaNew<Tabs>(a);

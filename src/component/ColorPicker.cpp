@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct ColBind {
-    Func1<uint32_t> fn;
-    uint32_t hex = 0;
-};
-static void FireCol(ColBind* b) {
-    b->fn.Call(b->hex);
-}
-
 ColorPicker* ColorPicker::New(Ctx* cx) {
     Arena* a = cx->a;
     ColorPicker* c = ArenaNew<ColorPicker>(a);

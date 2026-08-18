@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct MenuBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireMenu(MenuBind* b) {
-    b->fn.Call(b->index);
-}
-
 Menu* Menu::New(Ctx* cx) {
     Arena* a = cx->a;
     Menu* m = ArenaNew<Menu>(a);

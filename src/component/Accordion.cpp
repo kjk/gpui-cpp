@@ -5,15 +5,6 @@ namespace gpui {
 
 namespace component {
 
-struct AccBind {
-    Func1<int> fn;
-    int index = 0;
-};
-
-static void FireAcc(AccBind* b) {
-    b->fn.Call(b->index);
-}
-
 Accordion* Accordion::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Accordion* acc = ArenaNew<Accordion>(a);

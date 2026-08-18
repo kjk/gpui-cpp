@@ -5,14 +5,6 @@ namespace gpui {
 
 namespace component {
 
-struct PageBind {
-    Func1<int> fn;
-    int page = 1;
-};
-static void FirePage(PageBind* b) {
-    b->fn.Call(b->page);
-}
-
 Pagination* Pagination::New(Ctx* cx, int page, int total) {
     Arena* a = cx->a;
     Pagination* p = ArenaNew<Pagination>(a);

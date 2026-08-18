@@ -28,14 +28,6 @@ static int ParaLen(int i) {
     return (int)strlen(kParas[i]);
 }
 
-static int ParaStart(int i) {
-    int o = 0;
-    for (int k = 0; k < i; k++) {
-        o += ParaLen(k) + 1;
-    }
-    return o;
-}
-
 static void CopySelected(ShowcaseApp* app, char* out, int cap) {
     if (cap <= 0) {
         return;

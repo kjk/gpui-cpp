@@ -4,14 +4,6 @@ namespace gpui {
 
 namespace component {
 
-struct ListBind {
-    Func1<int> fn;
-    int index = 0;
-};
-static void FireList(ListBind* b) {
-    b->fn.Call(b->index);
-}
-
 List* List::New(Ctx* cx) {
     Arena* a = cx->a;
     List* l = ArenaNew<List>(a);
