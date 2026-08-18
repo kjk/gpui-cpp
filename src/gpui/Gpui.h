@@ -49,6 +49,14 @@ struct Theme {
     Rgba foreground;
     Rgba border;
     Rgba mutedFg;
+    // input.border, and theme.input_background(): the surface an input paints
+    // itself on — the window background in light, the input border at 70% in
+    // dark, the way Rust mixes it toward transparent.
+    Rgba inputBorder;
+    Rgba inputBg;
+    // ring: the focus ring color. caret: the text cursor.
+    Rgba ring;
+    Rgba caret;
     Rgba titleBar;
     Rgba titleBarBorder;
     Rgba tabBar;
@@ -517,12 +525,26 @@ struct FocusRect {
     float x = 0, y = 0, w = 0, h = 0;
 };
 
+// gpui_component::input::InputEvent. Change is the only variant raised so
+// far; PressEnter / Focus / Blur have no subscriber here yet.
+enum class InputEventKind : uint8_t {
+    Change
+};
+
+struct InputEvent {
+    InputEventKind kind = InputEventKind::Change;
+};
+
+// GPUI's InputState: the text a themed Input is bound to. `onChange` is what
+// Rust spells cx.subscribe(&input_state, |ev: &InputEvent| ...) — the window
+// fires it after an edit.
 struct LineInput {
     char buf[512] = {};
     int len = 0;
     int cursor = 0;
     char placeholder[128] = {};
     bool focused = false;
+    Listener onChange = {};
 };
 
 struct Overlay {

@@ -261,16 +261,24 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             }
             if (win->input && win->input->focused) {
                 LineInput* in = win->input;
+                bool changed = false;
                 if (wParam == 8) {
                     if (in->len > 0) {
                         in->len--;
                         in->buf[in->len] = 0;
                         in->cursor = in->len;
+                        changed = true;
                     }
                 } else if (wParam >= 32 && wParam < 127 && in->len < 511) {
                     in->buf[in->len++] = (char)wParam;
                     in->buf[in->len] = 0;
                     in->cursor = in->len;
+                    changed = true;
+                }
+                // InputEvent::Change, for the view that subscribed to it.
+                if (changed && in->onChange.IsValid()) {
+                    InputEvent ev = {InputEventKind::Change};
+                    ListenerCall(win->app, win, in->onChange, &ev);
                 }
             }
             InvalidateRect(hwnd, nullptr, FALSE);
