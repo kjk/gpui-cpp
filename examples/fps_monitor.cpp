@@ -1,37 +1,70 @@
+// Overlays the gpui-fps HUD on a port of three.js' `webgl_lines_colors`
+// demo: 3D Hilbert curves smoothed with a Catmull-Rom spline, colored by the
+// same three HSL schemes as the original, rotating over a black background.
+//
+// The number of curves is adjustable, which makes it a load knob for watching
+// the frame time trace react.
+
 #include "gpui.h"
 
 using namespace gpui;
 
 #include <math.h>
 
+// Matches the original demo: a one-iteration Hilbert curve of 64 control
+// points, resampled at six points each.
 static const float kHilbertSize = 200.f;
 static const uint32_t kHilbertIter = 1;
 static const int kSubdiv = 6;
+
+// How far the curve actually reaches from the origin.
+//
+// Not kHilbertSize / 2: each recursion centers a sub-cell *on a corner* of the
+// cell above it and then extends half a sub-cell further out, so one iteration
+// reaches 1.5x the half size. Scaling against the nominal size instead would
+// draw every curve larger than its grid cell.
 static const float kHilbertExtent = kHilbertSize / 2.f * 1.5f;
+
+// Fraction of a grid cell the curve is allowed to fill.
+//
+// Two effects push past the nominal size and the margin has to cover both, or
+// neighbouring curves overlap: the spline overshoots its control polygon by
+// about 8%, and the perspective divide magnifies the near face by
+// kEye / (kEye - kHilbertExtent), roughly 1.32. Together that is ~1.43.
 static const float kCellFill = 0.68f;
+
+// Points per drawn run. A run carries one color, so the gradient is built from
+// short runs rather than per-vertex colors.
 static const int kSegPts = 6;
+
+static const int kCurveStep = 1;
 static const int kMaxCurves = 48;
+
+// Distance from the eye to the origin, for the perspective divide.
 static const float kEye = 620.f;
+// How quickly the view catches up with the cursor.
 static const float kEase = 0.08f;
+
 static const int kMaxPts = 512;
-static const int kFpsHist = 120;
+static const int kMaxCtrl = 64;
 
 struct V3 {
     float x = 0, y = 0, z = 0;
 };
 
 struct FpsApp {
-    static El* Render(FpsApp* self, Ctx* cx);
+    // The spline, shared by every curve on screen.
     V3 pts[kMaxPts];
     int nPts = 0;
+    // Vertex colors for the demo's three schemes, indexed by scheme.
     Rgba pal[3][kMaxPts];
     int curves = 6;
-    float cursorX = 0, cursorY = 0;
+    // Where the view is being pulled to, and where it currently is.
+    float cursorTiltX = 0, cursorTiltY = 0;
     float tiltX = 0, tiltY = 0;
-    ULONGLONG start = 0;
-    float hist[kFpsHist] = {};
-    int histN = 0;
-    ULONGLONG lastTick = 0;
+    double started = 0;
+
+    static El* Render(FpsApp* self, Ctx* cx);
 };
 
 static float Dist(V3 a, V3 b) {
@@ -44,8 +77,9 @@ static V3 Lerp(V3 a, V3 b, float t) {
               a.z + (b.z - a.z) * t};
 }
 
-static void Hilbert(V3 center, float size, uint32_t iter, int v[8], V3* out,
-                    int* n) {
+// Port of three.js' hilbert3D.
+static void Hilbert(V3 center, float size, uint32_t iter, const int v[8],
+                    V3* out, int* n) {
     float half = size / 2.f;
     V3 corners[8] = {
         {center.x - half, center.y + half, center.z - half},
@@ -62,7 +96,7 @@ static void Hilbert(V3 center, float size, uint32_t iter, int v[8], V3* out,
         vec[i] = corners[v[i]];
     }
     if (iter == 0) {
-        for (int i = 0; i < 8 && *n < kMaxPts; i++) {
+        for (int i = 0; i < 8 && *n < kMaxCtrl; i++) {
             out[(*n)++] = vec[i];
         }
         return;
@@ -82,7 +116,15 @@ static void Hilbert(V3 center, float size, uint32_t iter, int v[8], V3* out,
     }
 }
 
-static V3 Catmull(V3* ctrl, int nCtrl, float t) {
+// Centripetal Catmull-Rom evaluation over the whole control polygon, with the
+// endpoints clamped.
+//
+// Centripetal (the alpha = 0.5 knot parameterization) rather than uniform,
+// matching CatmullRomCurve3's default, because a Hilbert curve turns a corner
+// at nearly every control point. Uniform parameterization overshoots hard at
+// those turns — the curve shoots away from its control polygon and loops back
+// — which reads as long straight spikes across the scene.
+static V3 Catmull(const V3* ctrl, int nCtrl, float t) {
     if (nCtrl <= 0) {
         return {};
     }
@@ -90,13 +132,7 @@ static V3 Catmull(V3* ctrl, int nCtrl, float t) {
         return ctrl[0];
     }
     int spans = nCtrl - 1;
-    float scaled = t * (float)spans;
-    if (scaled < 0) {
-        scaled = 0;
-    }
-    if (scaled > (float)spans) {
-        scaled = (float)spans;
-    }
+    float scaled = (t < 0 ? 0 : (t > 1 ? 1 : t)) * (float)spans;
     int span = (int)scaled;
     if (span > spans - 1) {
         span = spans - 1;
@@ -112,6 +148,11 @@ static V3 Catmull(V3* ctrl, int nCtrl, float t) {
         return ctrl[i];
     };
     V3 p0 = at(span - 1), p1 = at(span), p2 = at(span + 1), p3 = at(span + 2);
+    // Knots spaced by the square root of the chord length. Coincident control
+    // points — which the clamped endpoints always produce — would collapse a
+    // span to zero width, so each step is floored. The floor is well above
+    // FLT_EPSILON: a span that small makes the divisions below overflow into
+    // the millions and lose all precision.
     auto knot = [](V3 a, V3 b) {
         float d = sqrtf(Dist(a, b));
         return d < 1e-3f ? 1e-3f : d;
@@ -119,47 +160,19 @@ static V3 Catmull(V3* ctrl, int nCtrl, float t) {
     float t0 = 0, t1 = t0 + knot(p0, p1), t2 = t1 + knot(p1, p2),
           t3 = t2 + knot(p2, p3);
     float tt = t1 + (t2 - t1) * local;
+    // Barry-Goldman pyramid: three lerps, then two, then one.
     V3 a1 = Lerp(p0, p1, (tt - t0) / (t1 - t0));
     V3 a2 = Lerp(p1, p2, (tt - t1) / (t2 - t1));
-    V3 a3 = Lerp(p2, p3, (tt - t3 + t3 - t2) / (t3 - t2));
-    a3 = Lerp(p2, p3, (tt - t2) / (t3 - t2));
+    V3 a3 = Lerp(p2, p3, (tt - t2) / (t3 - t2));
     V3 b1 = Lerp(a1, a2, (tt - t0) / (t2 - t0));
     V3 b2 = Lerp(a2, a3, (tt - t1) / (t3 - t1));
     return Lerp(b1, b2, (tt - t1) / (t2 - t1));
 }
 
-static Rgba Hsla(float h, float s, float l) {
-    // h 0..1, s/l 0..1 -> rgb
-    float c = (1 - fabsf(2 * l - 1)) * s;
-    float hp = h * 6.f;
-    float x = c * (1 - fabsf(fmodf(hp, 2.f) - 1));
-    float r = 0, g = 0, b = 0;
-    if (hp < 1) {
-        r = c;
-        g = x;
-    } else if (hp < 2) {
-        r = x;
-        g = c;
-    } else if (hp < 3) {
-        g = c;
-        b = x;
-    } else if (hp < 4) {
-        g = x;
-        b = c;
-    } else if (hp < 5) {
-        r = x;
-        b = c;
-    } else {
-        r = c;
-        b = x;
-    }
-    float m = l - c * 0.5f;
-    return Rgb((uint8_t)((r + m) * 255), (uint8_t)((g + m) * 255),
-               (uint8_t)((b + m) * 255));
-}
-
+// A Hilbert curve resampled through a Catmull-Rom spline, plus the three
+// vertex color schemes from the original demo.
 static void BuildGeom(FpsApp* app) {
-    V3 ctrl[64];
+    V3 ctrl[kMaxCtrl];
     int nCtrl = 0;
     int order[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     Hilbert({}, kHilbertSize, kHilbertIter, order, ctrl, &nCtrl);
@@ -173,20 +186,15 @@ static void BuildGeom(FpsApp* app) {
     }
     for (int i = 0; i < app->nPts; i++) {
         V3 v = app->pts[i];
-        float lx = (-v.x / 200.f);
-        if (lx < 0) {
-            lx = 0;
-        }
-        float ly = (-v.y / 200.f);
-        if (ly < 0) {
-            ly = 0;
-        }
-        app->pal[0][i] = Hsla(0.6f, 1.f, lx + 0.5f);
-        app->pal[1][i] = Hsla(0.9f, 1.f, ly + 0.5f);
-        app->pal[2][i] = Hsla((float)i / (float)app->nPts, 1.f, 0.5f);
+        float lx = -v.x / 200.f;
+        float ly = -v.y / 200.f;
+        app->pal[0][i] = RgbaHsla(0.6f, 1.f, (lx < 0 ? 0 : lx) + 0.5f, 1.f);
+        app->pal[1][i] = RgbaHsla(0.9f, 1.f, (ly < 0 ? 0 : ly) + 0.5f, 1.f);
+        app->pal[2][i] = RgbaHsla((float)i / (float)app->nPts, 1.f, 0.5f, 1.f);
     }
 }
 
+// Rotates around Y then X and applies a perspective divide.
 static void Project(V3 v, float yaw, float pitch, float cx, float cy,
                     float scale, float* ox, float* oy) {
     float sy = sinf(yaw), cyw = cosf(yaw);
@@ -195,6 +203,7 @@ static void Project(V3 v, float yaw, float pitch, float cx, float cy,
     float sp = sinf(pitch), cp = cosf(pitch);
     float y = v.y * cp - z * sp;
     z = z * cp + v.y * sp;
+    // Guard the divide: a vertex level with the eye would blow up.
     float depth = kEye + z;
     if (depth < 1) {
         depth = 1;
@@ -204,160 +213,169 @@ static void Project(V3 v, float yaw, float pitch, float cx, float cy,
     *oy = cy + y * persp * scale;
 }
 
+static bool Finite(float v) {
+    return v == v && v < 1e30f && v > -1e30f;
+}
+
 static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
     auto* app = (FpsApp*)user;
-    float w = e->w, h = e->h;
+    if (!ctx->rt || !ctx->brush) {
+        return;
+    }
     int curves = app->curves;
+    // Lay the curves out on the squarest grid that fits them.
     int columns = (int)ceilf(sqrtf((float)curves));
     if (columns < 1) {
         columns = 1;
     }
     int rows = (curves + columns - 1) / columns;
-    float cellW = w / (float)columns;
-    float cellH = h / (float)rows;
+    float cellW = e->w / (float)columns;
+    float cellH = e->h / (float)rows;
     float scale =
         (cellW < cellH ? cellW : cellH) / (kHilbertExtent * 2.f) * kCellFill;
-    ULONGLONG now = GetTickCount64();
-    float spin = (float)(now - app->start) / 1000.f * 0.35f;
+    float spin = (float)(TimeNow() - app->started) * 0.35f;
 
     for (int index = 0; index < curves; index++) {
-        int col = index % columns;
+        int column = index % columns;
         int row = index / columns;
-        float cx = e->x + cellW * (col + 0.5f);
-        float cy = e->y + cellH * (row + 0.5f);
+        float cx = e->x + cellW * ((float)column + 0.5f);
+        float cy = e->y + cellH * ((float)row + 0.5f);
+        // Alternating spin direction, as in the original.
         float dir = (index % 2 == 0) ? 1.f : -1.f;
-        float yaw = spin * dir + index * 0.4f + app->tiltX;
+        float yaw = spin * dir + (float)index * 0.4f + app->tiltX;
         float pitch = app->tiltY;
         const Rgba* pal = app->pal[index % 3];
         float px[kMaxPts], py[kMaxPts];
         for (int i = 0; i < app->nPts; i++) {
             Project(app->pts[i], yaw, pitch, cx, cy, scale, &px[i], &py[i]);
         }
+
+        // Paint the curve as short runs of constant color, approximating the
+        // per-vertex gradient of the original.
         int start = 0;
         while (start + 1 < app->nPts) {
             int end = start + kSegPts;
             if (end > app->nPts - 1) {
                 end = app->nPts - 1;
             }
-            Rgba col = pal[(start + end) / 2];
-            if (ctx->brush) {
-                ctx->brush->SetColor(RgbaToD2D(col));
+            bool finite = true;
+            for (int i = start; i <= end; i++) {
+                if (!Finite(px[i]) || !Finite(py[i])) {
+                    finite = false;
+                    break;
+                }
             }
-            for (int i = start + 1; i <= end; i++) {
-                ctx->rt->DrawLine(D2D1::Point2F(px[i - 1], py[i - 1]),
-                                  D2D1::Point2F(px[i], py[i]), ctx->brush, 1.f);
+            if (finite) {
+                ctx->brush->SetColor(RgbaToD2D(pal[(start + end) / 2]));
+                for (int i = start + 1; i <= end; i++) {
+                    ctx->rt->DrawLine(D2D1::Point2F(px[i - 1], py[i - 1]),
+                                      D2D1::Point2F(px[i], py[i]), ctx->brush,
+                                      1.f);
+                }
             }
+            // Share the boundary vertex so runs join without a gap.
             start = end;
         }
     }
 }
 
-static void OnTick(FpsApp* app, Ctx* cx, const TickEvent*) {
-    ULONGLONG now = GetTickCount64();
-    float dt = (float)(now - app->lastTick);
-    app->lastTick = now;
-    if (dt < 1) {
-        dt = 1;
-    }
-    float fps = 1000.f / dt;
-    if (app->histN < kFpsHist) {
-        app->hist[app->histN++] = fps;
-    } else {
-        memmove(app->hist, app->hist + 1, sizeof(float) * (kFpsHist - 1));
-        app->hist[kFpsHist - 1] = fps;
-    }
-    app->tiltX += (app->cursorX - app->tiltX) * kEase;
-    app->tiltY += (app->cursorY - app->tiltY) * kEase;
-}
-
-static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
-    Window* win = cx->win;
-
-    float x = ev->x;
-    float y = ev->y;
-    RECT rc = {};
-    GetClientRect(cx->win->hwnd, &rc);
-    float w = (float)(rc.right - rc.left);
-    float h = (float)(rc.bottom - rc.top);
-    if (w <= 0 || h <= 0) {
+static void OnMouseMove(FpsApp* app, Ctx* cx, const MouseEvent* ev) {
+    if (ev->kind != MouseKind::Move) {
         return;
     }
-    app->cursorX = (x / w - 0.5f) * 2.4f;
-    app->cursorY = (y / h - 0.5f) * 1.2f;
+    WinSize view = WindowSize(cx->win);
+    // A zero-sized viewport would divide to infinity here, and the easing in
+    // Render would then keep the tilt non-finite forever.
+    if (view.dipW <= 0 || view.dipH <= 0) {
+        return;
+    }
+    // No notify: the scene already redraws every frame.
+    app->cursorTiltX = (ev->x / view.dipW - 0.5f) * 2.4f;
+    app->cursorTiltY = (ev->y / view.dipH - 0.5f) * 1.2f;
 }
 
 static void StepCurves(FpsApp* app, Ctx* cx, const ClickEvent*,
                        intptr_t delta) {
-    int n = app->curves + (int)delta;
-    if (n >= 1 && n <= kMaxCurves) {
-        app->curves = n;
+    int n = app->curves + (int)delta * kCurveStep;
+    if (n < 1) {
+        n = 1;
     }
+    if (n > kMaxCurves) {
+        n = kMaxCurves;
+    }
+    app->curves = n;
     Notify(cx);
 }
 
+// GPUI lays a line of text into a box 1.618x the font size, which is what
+// gives the original's buttons their height; DirectWrite's line height is
+// tighter, so the box is asked for explicitly here.
+static const float kButtonHeight = 12.f * 1.618f + 8.f;
+
+static El* LoadButton(Ctx* cx, Str id, Str label, intptr_t delta) {
+    return Div(cx->a)
+        ->Click(HashClickId(id))
+        ->FlexRow()
+        ->ItemsCenter()
+        ->H(kButtonHeight)
+        ->PadX(12)
+        ->PadY(4)
+        ->Radius(6)
+        ->Bg(RgbaHsla(0.f, 0.f, 1.f, 0.08f))
+        ->Border(1, RgbaHsla(0.f, 0.f, 1.f, 0.16f))
+        ->Child(
+            TextEl(cx->a, label)->Font(12)->Fg(RgbaHsla(0.f, 0.f, 0.75f, 1.f)))
+        ->OnClick(Listen(cx, &StepCurves, delta));
+}
+
+static El* RenderLoadControls(FpsApp* app, Ctx* cx) {
+    Rgba fg = RgbaHsla(0.f, 0.f, 0.75f, 1.f);
+    return Div(cx->a)
+        ->Absolute()
+        ->Bottom(16)
+        ->Left(16)
+        ->FlexRow()
+        ->ItemsCenter()
+        ->Gap(8)
+        ->Font(12)
+        ->Child(LoadButton(cx, StrL("fewer"), StrL("\xE2\x88\x92 load"), -1))
+        ->Child(TextEl(cx->a, fmt("%d curves", app->curves))->Fg(fg))
+        ->Child(LoadButton(cx, StrL("more"), StrL("+ load"), 1));
+}
+
 El* FpsApp::Render(FpsApp* app, Ctx* cx) {
-    Arena* frame = cx->a;
-    Window* win = cx->win;
+    // Ease toward the cursor rather than snapping, the way the original demo
+    // drifts its camera.
+    app->tiltX += (app->cursorTiltX - app->tiltX) * kEase;
+    app->tiltY += (app->cursorTiltY - app->tiltY) * kEase;
 
-    WinSize size = WindowSize(cx->win);
-
-    El* canvas = Div(frame)->SizeFull();
+    El* canvas = Div(cx->a)->Absolute()->Top(0)->Left(0)->SizeFull();
     canvas->customPaint = PaintCurves;
     canvas->customUser = app;
 
-    float fps = app->histN ? app->hist[app->histN - 1] : 0;
-    El* hud = Div(frame)
-                  ->Absolute()
-                  ->Top(8)
-                  ->Right(8)
-                  ->PadX(10)
-                  ->PadY(6)
-                  ->Radius(6)
-                  ->Bg(Rgba8(0, 0, 0, 160))
-                  ->Child(TextEl(frame, fmt("%.0f FPS", fps))
-                              ->Font(12)
-                              ->Fg(Rgb(200, 200, 200)));
-
-    El* ctrl = Div(frame)
-                   ->Absolute()
-                   ->Bottom(16)
-                   ->Left(16)
-                   ->FlexRow()
-                   ->ItemsCenter()
-                   ->Gap(8)
-                   ->Child(ButtonEl(frame, 1, StrL("- load"))
-                               ->OnClick(Listen(cx, &StepCurves, -1)))
-                   ->Child(TextEl(frame, fmt("%d curves", app->curves))
-                               ->Font(12)
-                               ->Fg(Rgb(190, 190, 190)))
-                   ->Child(ButtonEl(frame, 2, StrL("+ load"))
-                               ->OnClick(Listen(cx, &StepCurves, 1)));
-
-    return Div(frame)
+    return Div(cx->a)
         ->SizeFull()
         ->Bg(Rgb(0, 0, 0))
         ->Child(canvas)
-        ->Child(hud)
-        ->Child(ctrl);
+        ->Child(RenderLoadControls(app, cx))
+        ->Child(FpsMonitorEl(cx));
 }
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     Entity<FpsApp> view = EntityNew<FpsApp>(app);
     FpsApp* self = view.Get(app);
-    (void)self;
     ThemeSet(app, ThemeMode::Dark);
-    self->curves = 6;
-    self->start = GetTickCount64();
-    self->lastTick = self->start;
+    self->started = TimeNow();
     BuildGeom(self);
+    // The scene has to keep asking for frames to stay animated, which is what
+    // the Rust example spells window.request_animation_frame().
     WinOpts opts = {};
     opts.anim = true;
     opts.timerMs = 16;
     Window* win =
         WindowOpenView(app, StrL("FPS Monitor"), 800, 600, view.id, opts);
-    WindowOnMouse(win, ListenTo(view, &OnMouse));
-    WindowSetInterval(win, 16, ListenTo(view, &OnTick));
+    WindowOnMouse(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

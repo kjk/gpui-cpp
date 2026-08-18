@@ -35,7 +35,7 @@ out\rel\showcase.exe
 | 18. table_in_scrollable | done | Nested scroll; inner table y-band heuristic |
 | 19. text_selection | done | Selectable text block |
 | 20. markdown_table | done | Heading / hr / paragraph / pipe-table parser |
-| 21. fps_monitor | done | Hilbert + Catmull-Rom + HSL customPaint, 16 ms |
+| 21. fps_monitor | done | Hilbert + Catmull-Rom + HSL customPaint, 16 ms; `crates/fps` HUD in `src/gpui/Fps.h` |
 | 22. showcase | done | `crates/base/examples/showcase` — overview + 39 component pages |
 | 23. story gallery | done | `crates/story` — sidebar + 62 stories (`bun cmd/build.ts story`) |
 | 24. App / Window / Entity / Ctx | done | GPUI's runtime shape; see AGENTS.md |
@@ -123,3 +123,4 @@ cargo run -p system_monitor
 - 2026-08-17: Moved pins to `cmd/versions.ts` (source of truth). `build.ts` / `run.ts` clone `.work/gpui-component` at that SHA.
 - 2026-08-18: Click dispatch moved onto the elements. Listener carries the value a Rust closure would capture; component callbacks became Listeners instead of raw-pointer Func1s; the 62 story pages, 33 showcase pages and 6 examples dropped their click-id switches. `El::Click(id)` is identity only now (hit-test, hover, focus, Tab traps) and WindowOnUnhandledClick is just the outside-click dismiss.
 - 2026-08-18: Adopted GPUI's runtime shape. `AppHost` split into `App` (factories, fonts, window list, entity store) and `Window` (render target, frame arena, hover/focus, root view). Added generational `Entity<T>`, `Ctx`, `Listen`/`Notify`, and window subscriptions. Every example, the showcase and all 62 story pages became view entities; components take `Ctx*` instead of `Arena*`; `StoryApp`'s 56-field god struct became one entity per page. `AppHooks` removed.
+- 2026-08-18: `fps_monitor` matches the Rust example. Ported `crates/fps` (the `gpui-fps` crate) to `src/gpui/Fps.h` / `Fps.cpp`: frame sampler over the window's own frame trace, frame time chart, FRAME / DROP / CPU / MEM readouts, click-to-collapse, and the 8-way anchored overlay. Runtime grew `RgbaHsla`, `El::Mono()` (Consolas, inherited like `font_family`), `El::ItemsEnd()`, `TimeNow()` (QPC) and `WindowCollectFrames` (GPUI's `FrameTimingCollector`). The example's own fixes: HSL lightness is clamped instead of wrapping (blue where the original is white), non-finite projections are dropped, the load buttons use the original's translucent style, and the tilt eases in render rather than on a timer.
