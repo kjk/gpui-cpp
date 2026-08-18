@@ -2,56 +2,50 @@
 
 using namespace gpui;
 
-// examples/input — the view owns the field, and greets on every keystroke.
+// examples/input — an Input bound to its state. The view subscribes to the
+// state's change event and republishes the greeting from the value.
 struct Example {
-    LineInput in;
-    char display[256] = {};
+    LineInput inputState;
+    char displayText[560] = {};
+    bool subscribed = false;
 
-    static void OnKey(Example* self, Ctx* cx, const KeyEvent* ev) {
-        if (!ev || ev->ch == 0) {
-            return;
-        }
-        if (self->in.len > 0) {
-            _snprintf_s(self->display, _TRUNCATE, "Hello, %s!", self->in.buf);
-        } else {
-            self->display[0] = 0;
-        }
+    static void OnChange(Example* self, Ctx* cx, const InputEvent*) {
+        _snprintf_s(self->displayText, _TRUNCATE, "Hello, %s!",
+                    self->inputState.buf);
         Notify(cx);
     }
 
-    static El* Field(Arena* a, LineInput* in, const Theme& th) {
-        Str shown = in->len > 0 ? Str(in->buf, in->len) : Str(in->placeholder);
-        Rgba fg = in->len > 0 ? th.foreground : th.mutedFg;
-        return Div(a)
-            ->W(320)
-            ->H(36)
-            ->PadX(12)
-            ->ItemsCenter()
-            ->Radius(6)
-            ->Border(1, th.border)
-            ->Bg(th.background)
-            ->Child(TextEl(a, shown)->Font(14)->Fg(fg));
+    // Clicking the field focuses it; GPUI routes that through the focus
+    // handle the Input owns.
+    static void OnFocus(Example* self, Ctx* cx, const ClickEvent*) {
+        self->inputState.focused = true;
+        Notify(cx);
     }
 
     static El* Render(Example* self, Ctx* cx) {
         Arena* a = cx->a;
         const Theme& th = cx->theme();
-        // The window routes WM_CHAR into whichever LineInput has focus.
-        cx->win->input = &self->in;
-        El* col = Div(a)
-                      ->FlexCol()
-                      ->SizeFull()
-                      ->Pad(20)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->JustifyCenter()
-                      ->Bg(th.background);
-        col->Child(Field(a, &self->in, th));
-        if (self->display[0]) {
-            col->Child(
-                TextEl(a, Str(self->display))->Font(16)->Fg(th.foreground));
+        if (!self->subscribed) {
+            self->subscribed = true;
+            self->inputState.onChange =
+                ListenTo(Entity<Example>{cx->self}, &Example::OnChange);
         }
-        return col;
+        // The window routes WM_CHAR into whichever LineInput has focus.
+        if (self->inputState.focused) {
+            cx->win->input = &self->inputState;
+        }
+        return Div(a)
+            ->FlexCol()
+            ->Pad(20)
+            ->Gap(8)
+            ->SizeFull()
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Bg(th.background)
+            ->Child(component::Input::New(cx, StrL("input"), &self->inputState)
+                        ->OnFocus(Listen(cx, &Example::OnFocus))
+                        ->IntoEl())
+            ->Child(TextEl(a, Str(self->displayText))->Fg(th.foreground));
     }
 };
 
@@ -60,13 +54,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     ThemeSet(app, ThemeMode::Light);
     Entity<Example> view = EntityNew<Example>(app);
     Example* self = view.Get(app);
-    strncpy_s(self->in.placeholder, "Enter your name", _TRUNCATE);
-    self->in.focused = true;
+    strncpy_s(self->inputState.placeholder, "Enter your name", _TRUNCATE);
 
-    Window* win =
-        WindowOpenView(app, StrL("Input"), 800, 600, view.id, WinOpts{});
-    WindowOnKey(win, ListenTo(view, &Example::OnKey));
-    int rc = AppRun(app);
-    AppFree(app);
-    return rc;
+    return AppRunView(StrL("Input"), 800, 600, view.id, app, WinOpts{});
 }
