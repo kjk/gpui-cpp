@@ -319,6 +319,10 @@ struct ChartSeries {
     const float* ys = nullptr;
     int n = 0;
     int tickMargin = 15;
+    // The x-axis labels, one per point; without them the index is drawn.
+    const char* const* labels = nullptr;
+    // A second series drawn over the first, as a stacked area chart does.
+    bool overlay = false;
     Rgba stroke = {};
     Rgba fillTop = {};
     Rgba fillBot = {};

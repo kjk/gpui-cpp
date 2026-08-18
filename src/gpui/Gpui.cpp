@@ -2202,24 +2202,24 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         return;
     }
 
-    // grid
-    ID2D1StrokeStyle* dash = nullptr;
-    D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties();
-    sp.dashStyle = D2D1_DASH_STYLE_CUSTOM;
-    float dashes[2] = {4.f, 2.f};
-    ctx->d2d->CreateStrokeStyle(sp, dashes, 2, &dash);
-    SetBrush(ctx, th.border);
-    for (int i = 0; i <= 3; i++) {
-        float gy = y + plotH * (i / 4.f);
-        ctx->rt->DrawLine(D2D1::Point2F(x, gy), D2D1::Point2F(x + w, gy),
-                          ctx->brush, 1.f, dash);
+    // An overlay series draws over the grid and axis the first one drew.
+    if (!e->chart.overlay) {
+        ID2D1StrokeStyle* dash = nullptr;
+        D2D1_STROKE_STYLE_PROPERTIES sp2 = D2D1::StrokeStyleProperties();
+        sp2.dashStyle = D2D1_DASH_STYLE_CUSTOM;
+        float dashes2[2] = {4.f, 2.f};
+        ctx->d2d->CreateStrokeStyle(sp2, dashes2, 2, &dash);
+        SetBrush(ctx, th.border);
+        for (int i = 0; i <= 3; i++) {
+            float gy = y + plotH * (i / 4.f);
+            ctx->rt->DrawLine(D2D1::Point2F(x, gy), D2D1::Point2F(x + w, gy),
+                              ctx->brush, 1.f, dash);
+        }
+        if (dash) {
+            dash->Release();
+        }
+        DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
     }
-    if (dash) {
-        dash->Release();
-    }
-
-    // axis
-    DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
 
     int n = e->chart.n;
     const float* ys = e->chart.ys;
@@ -2303,10 +2303,17 @@ static void DrawChart(PaintCtx* ctx, El* e) {
     if (step < 1) {
         step = 15;
     }
+    if (e->chart.overlay) {
+        return;
+    }
     for (int i = 0; i < n; i += step) {
-        TempStr lab = fmt("%ds", i);
-        DrawTextAt(ctx, lab, Xat(i) - 8, y + plotH + 2, 40, 16, 10, th.mutedFg,
-                   false);
+        if (e->chart.labels) {
+            DrawTextAt(ctx, Str(e->chart.labels[i]), Xat(i) - 16, y + plotH + 2,
+                       60, 16, 10, th.mutedFg, false);
+        } else {
+            DrawTextAt(ctx, fmt("%ds", i), Xat(i) - 16, y + plotH + 2, 60, 16,
+                       10, th.mutedFg, false);
+        }
     }
 }
 
