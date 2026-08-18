@@ -25,8 +25,9 @@ struct Input {
 
 struct Textarea {
     static El* New(Ctx* cx, const char* text, bool caret = false);
+    // soft_wrap: long lines wrap inside the box instead of running past it.
     static El* New(Ctx* cx, const char* text, const InputEditorStyle& style,
-                   bool caret = false);
+                   bool caret = false, bool softWrap = false);
 };
 
 struct Editor {

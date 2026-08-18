@@ -37,13 +37,20 @@ struct Textarea {
     Ctx* cx = nullptr;
     Str id = {};
     const char* text = nullptr;
+    Str placeholder = {};
     int rows = 0;
+    float height = 0;
+    bool softWrap = true;
     Listener onFocus;
 
     static Textarea* New(Ctx* cx, Str id, const char* text);
     // Rust sizes a textarea by rows (`auto_grow(min, max)`); without one it
-    // keeps the two-row default.
+    // keeps the two-row default. An explicit height wins, as `.h(px(..))`
+    // does there.
     Textarea* Rows(int n);
+    Textarea* H(float px);
+    Textarea* Placeholder(Str s);
+    Textarea* SoftWrap(bool v);
     Textarea* OnFocus(Listener fn);
     El* IntoEl();
 };

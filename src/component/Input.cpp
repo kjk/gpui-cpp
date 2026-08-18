@@ -109,6 +109,18 @@ Textarea* Textarea::Rows(int n) {
     rows = n;
     return this;
 }
+Textarea* Textarea::H(float px) {
+    height = px;
+    return this;
+}
+Textarea* Textarea::Placeholder(Str s) {
+    placeholder = s;
+    return this;
+}
+Textarea* Textarea::SoftWrap(bool v) {
+    softWrap = v;
+    return this;
+}
 Textarea* Textarea::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
@@ -122,16 +134,24 @@ El* Textarea::IntoEl() {
     editor.fontSize = kInputTextSize;
     // A row is one 1.25rem line box, like the single-line input; the border
     // sits outside the padded content, as in GPUI.
-    float h = rows > 0 ? (float)rows * 20.f + 2 * 8 + 2 : 64;
-    El* box = InputBase::New(cx, id, HashClickId(id))
-                  ->W(kFill)
-                  ->H(h)
-                  ->Pad(8)
-                  ->ClipY()
-                  ->Radius(th.radius)
-                  ->Bg(th.inputBg)
-                  ->Border(1, th.inputBorder)
-                  ->Child(gpui::Textarea::New(cx, text, editor));
+    float h = height > 0 ? height
+              : rows > 0 ? (float)rows * 20.f + 2 * 8 + 2
+                         : 64;
+    bool empty = !text || !text[0];
+    const char* body = empty && placeholder.s ? placeholder.s : text;
+    if (empty && placeholder.s) {
+        editor.foreground = th.mutedFg;
+    }
+    El* box =
+        InputBase::New(cx, id, HashClickId(id))
+            ->W(kFill)
+            ->H(h)
+            ->Pad(8)
+            ->ClipY()
+            ->Radius(th.radius)
+            ->Bg(th.inputBg)
+            ->Border(1, th.inputBorder)
+            ->Child(gpui::Textarea::New(cx, body, editor, false, softWrap));
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);
     }

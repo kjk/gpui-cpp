@@ -69,7 +69,7 @@ El* Textarea::New(Ctx* cx, const char* text, bool caret) {
 }
 
 El* Textarea::New(Ctx* cx, const char* text, const InputEditorStyle& style,
-                  bool caret) {
+                  bool caret, bool softWrap) {
     Arena* a = cx->a;
     El* col = Div(a)->FlexCol();
     if (!text) {
@@ -81,10 +81,10 @@ El* Textarea::New(Ctx* cx, const char* text, const InputEditorStyle& style,
         while (text[i] && text[i] != '\n') {
             i++;
         }
-        char tmp[256];
+        char tmp[512];
         int n = i - start;
-        if (n > 255) {
-            n = 255;
+        if (n > 511) {
+            n = 511;
         }
         memcpy(tmp, text + start, (size_t)n);
         tmp[n] = 0;
@@ -95,6 +95,9 @@ El* Textarea::New(Ctx* cx, const char* text, const InputEditorStyle& style,
                        ->Font(font)
                        ->LineHeight(20.f / font)
                        ->Fg(style.foreground);
+        if (softWrap) {
+            line->Wrap();
+        }
         if (last && caret) {
             El* row = Div(a)->FlexRow()->ItemsCenter()->H(20);
             row->Child(line);
