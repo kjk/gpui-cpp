@@ -219,7 +219,9 @@ static void HighlightEditorLine(Arena* a, El* row, const char* line, int n,
         if (caretCol == col) {
             EditorCaret(a, row, caretOn);
         }
-        EditorSpan(a, row, "\xC2\xB7", 2, Rgb(0xa3, 0xa3, 0xa3));
+        // Indentation draws as plain space: the Rust editor only marks
+        // whitespace when its state asks for it.
+        EditorSpan(a, row, " ", 1, Rgb(0xa3, 0xa3, 0xa3));
         col++;
         i++;
     }
