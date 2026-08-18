@@ -30,6 +30,9 @@ inline Rgba RgbaHex(uint32_t hex) {
 }
 Rgba RgbaOpacity(Rgba c, float a01);
 Rgba RgbaMix(Rgba a, Rgba b, float t);
+// gpui::hsla. h/s/l/a are 0..1 and are clamped, so a lightness computed from
+// scene coordinates cannot wrap around into a different hue.
+Rgba RgbaHsla(float h, float s, float l, float a01);
 inline D2D1_COLOR_F RgbaToD2D(Rgba c) {
     return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
 }
@@ -327,6 +330,7 @@ struct Style {
     bool hasColor = false;
     bool fontBold = false;
     bool fontSemibold = false;
+    bool fontMono = false; // font_family("Consolas")
     bool borderDashed = false;
     bool absolute = false;
     bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
@@ -389,6 +393,7 @@ struct El {
     El* PadB(float v);
     El* ItemsCenter();
     El* ItemsStart();
+    El* ItemsEnd();
     El* JustifyBetween();
     El* JustifyCenter();
     El* JustifyEnd();
@@ -410,6 +415,7 @@ struct El {
     El* Child(El* c);
     El* Bold();
     El* Semibold();
+    El* Mono();
     El* Selectable();
     El* Wrap();
     El* Dashed();
@@ -488,6 +494,7 @@ struct PaintCtx {
     IDWriteTextFormat* font20 = nullptr;
     IDWriteTextFormat* font24 = nullptr;
     IDWriteTextFormat* font16b = nullptr;
+    IDWriteTextFormat* fontMono = nullptr;
     float dpi = 96;
     float viewW = 0;
     float viewH = 0;
@@ -580,6 +587,18 @@ struct WinOpts {
     int timerMs = 500;
 };
 
+// gpui::FrameTiming. One drawn frame, as measured by the window itself, so the
+// FPS HUD reports what the runtime actually spent rather than an approximation
+// taken from the outside. GPUI gates recording behind
+// `set_frame_trace_enabled`; here it is two QPC reads per frame and always on.
+struct FrameTiming {
+    float drawSecs = 0;
+};
+
+enum {
+    kFrameTraceCap = 256
+};
+
 // Process-wide state: the Direct2D / DirectWrite factories, the shared font
 // cache, the entity store and the open windows. GPUI's `App`.
 struct App {
@@ -591,6 +610,7 @@ struct App {
     IDWriteTextFormat* font20 = nullptr;
     IDWriteTextFormat* font24 = nullptr;
     IDWriteTextFormat* font16b = nullptr;
+    IDWriteTextFormat* fontMono = nullptr;
     ThemeMode themeMode = ThemeMode::Light;
     Vec<Window*> windows;
     // Entity store; see Entity.h. Slots are recycled, so a handle carries a
@@ -633,6 +653,10 @@ struct Window {
     Listener onClick = {};
     Listener onMouse = {};
     int tickMs = 0;
+    // Ring of the last kFrameTraceCap draw times; frameSeq counts every frame
+    // ever drawn and is what a collector cursors on.
+    FrameTiming frameTrace[kFrameTraceCap] = {};
+    uint64_t frameSeq = 0;
 
     Window() = default;
 };
@@ -801,6 +825,16 @@ T* WindowRoot(Window* win) {
 
 // Client size in DIPs; what onRender used to receive as WinSize.
 WinSize WindowSize(Window* win);
+
+// FrameTimingCollector::collect_unseen: copy the frames drawn since *cursor
+// into `out` and advance the cursor. Frames dropped from the ring while the
+// caller was away are skipped. Returns how many were written.
+int WindowCollectFrames(Window* win, uint64_t* cursor, FrameTiming* out,
+                        int max);
+
+// Monotonic seconds since the first call. GPUI's `Instant`, which the FPS
+// readouts need at a finer resolution than GetTickCount64's ~16 ms.
+double TimeNow();
 
 App* AppNew();
 void AppFree(App* app);

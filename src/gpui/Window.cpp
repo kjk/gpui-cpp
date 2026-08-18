@@ -19,6 +19,40 @@ static void Rel(T** p) {
     SafeRelease_((IUnknown**)p);
 }
 
+double TimeNow() {
+    static LARGE_INTEGER freq = {};
+    static LARGE_INTEGER start = {};
+    if (freq.QuadPart == 0) {
+        QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&start);
+    }
+    LARGE_INTEGER now = {};
+    QueryPerformanceCounter(&now);
+    return (double)(now.QuadPart - start.QuadPart) / (double)freq.QuadPart;
+}
+
+int WindowCollectFrames(Window* win, uint64_t* cursor, FrameTiming* out,
+                        int max) {
+    if (!win || !cursor || !out || max <= 0) {
+        return 0;
+    }
+    uint64_t from = *cursor;
+    // Frames that fell out of the ring while nobody was collecting are gone.
+    if (win->frameSeq > (uint64_t)kFrameTraceCap &&
+        from < win->frameSeq - (uint64_t)kFrameTraceCap) {
+        from = win->frameSeq - (uint64_t)kFrameTraceCap;
+    }
+    if (from + (uint64_t)max < win->frameSeq) {
+        from = win->frameSeq - (uint64_t)max;
+    }
+    int n = 0;
+    for (uint64_t i = from; i < win->frameSeq; i++) {
+        out[n++] = win->frameTrace[i % (uint64_t)kFrameTraceCap];
+    }
+    *cursor = win->frameSeq;
+    return n;
+}
+
 static float HostDpi(HWND hwnd) {
     UINT dpi = 96;
     HMODULE user = GetModuleHandleW(L"user32.dll");
@@ -77,6 +111,7 @@ static void RenderFrame(Window* win, HDC hdc) {
     if (FAILED(CreateDeviceResources(win))) {
         return;
     }
+    double drawStart = TimeNow();
     RECT rc = {};
     GetClientRect(win->hwnd, &rc);
     HRESULT bindHr = win->paint.dcRt->BindDC(hdc, &rc);
@@ -136,6 +171,13 @@ static void RenderFrame(Window* win, HDC hdc) {
         DiscardDeviceResources(win);
     }
     TextMeasEndFrame(&win->paint);
+
+    // Record the frame for the trace. GPUI times Window::draw, which is this
+    // whole function: build the element tree, lay it out, paint it.
+    FrameTiming timing;
+    timing.drawSecs = (float)(TimeNow() - drawStart);
+    win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
+    win->frameSeq++;
 }
 
 static int BorderPx() {
@@ -511,16 +553,21 @@ static void RegisterWndClass() {
     gClassRegistered = true;
 }
 
-static void MakeFont(App* app, float px, int weight, bool wrap,
-                     IDWriteTextFormat** out) {
+static void MakeFontFamily(App* app, const wchar_t* family, float px,
+                           int weight, bool wrap, IDWriteTextFormat** out) {
     DWRITE_FONT_WEIGHT w =
         weight ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
     app->dwrite
-        ->CreateTextFormat(L"Segoe UI", nullptr, w, DWRITE_FONT_STYLE_NORMAL,
+        ->CreateTextFormat(family, nullptr, w, DWRITE_FONT_STYLE_NORMAL,
                            DWRITE_FONT_STRETCH_NORMAL, px, L"en-us", out);
     if (*out && !wrap) {
         (*out)->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     }
+}
+
+static void MakeFont(App* app, float px, int weight, bool wrap,
+                     IDWriteTextFormat** out) {
+    MakeFontFamily(app, L"Segoe UI", px, weight, wrap, out);
 }
 
 App* AppNew() {
@@ -557,6 +604,9 @@ App* AppNew() {
     MakeFont(app, 20.f, 1, false, &app->font20);
     MakeFont(app, 24.f, 1, true, &app->font24);
     MakeFont(app, 16.f, 1, true, &app->font16b);
+    // The monospace family the FPS HUD asks for. Consolas ships with Windows,
+    // so nothing has to configure a font for its columns to line up.
+    MakeFontFamily(app, L"Consolas", 12.f, 0, false, &app->fontMono);
     if (app->font24) {
         app->font24->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     }
@@ -585,6 +635,7 @@ void AppFree(App* app) {
     Rel(&app->font20);
     Rel(&app->font24);
     Rel(&app->font16b);
+    Rel(&app->fontMono);
     Rel(&app->dwrite);
     Rel(&app->d2d);
     delete app;
@@ -609,6 +660,7 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     win->paint.font20 = app->font20;
     win->paint.font24 = app->font24;
     win->paint.font16b = app->font16b;
+    win->paint.fontMono = app->fontMono;
     app->windows.Append(win);
 
     DWORD style = WS_OVERLAPPEDWINDOW;

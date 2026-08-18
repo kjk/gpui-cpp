@@ -33,6 +33,47 @@ Rgba RgbaMix(Rgba a, Rgba b, float t) {
     return o;
 }
 
+static float Clamp01(float v) {
+    if (v < 0) {
+        return 0;
+    }
+    return v > 1 ? 1 : v;
+}
+
+Rgba RgbaHsla(float h, float s, float l, float a01) {
+    h = h - floorf(h); // hue wraps, everything else clamps
+    s = Clamp01(s);
+    l = Clamp01(l);
+    float c = (1.f - fabsf(2.f * l - 1.f)) * s;
+    float hp = h * 6.f;
+    float x = c * (1.f - fabsf(fmodf(hp, 2.f) - 1.f));
+    float r = 0, g = 0, b = 0;
+    if (hp < 1.f) {
+        r = c;
+        g = x;
+    } else if (hp < 2.f) {
+        r = x;
+        g = c;
+    } else if (hp < 3.f) {
+        g = c;
+        b = x;
+    } else if (hp < 4.f) {
+        g = x;
+        b = c;
+    } else if (hp < 5.f) {
+        r = x;
+        b = c;
+    } else {
+        r = c;
+        b = x;
+    }
+    float m = l - c * 0.5f;
+    return Rgba{(uint8_t)(Clamp01(r + m) * 255.f + 0.5f),
+                (uint8_t)(Clamp01(g + m) * 255.f + 0.5f),
+                (uint8_t)(Clamp01(b + m) * 255.f + 0.5f),
+                (uint8_t)(Clamp01(a01) * 255.f + 0.5f)};
+}
+
 const Theme& ThemeDark() {
     static Theme t;
     static bool init = false;
@@ -342,6 +383,10 @@ El* El::ItemsStart() {
     style.align = Align::Start;
     return this;
 }
+El* El::ItemsEnd() {
+    style.align = Align::End;
+    return this;
+}
 El* El::JustifyBetween() {
     style.justify = Justify::SpaceBetween;
     return this;
@@ -443,6 +488,10 @@ El* El::Semibold() {
     style.fontSemibold = true;
     return this;
 }
+El* El::Mono() {
+    style.fontMono = true;
+    return this;
+}
 El* El::Selectable() {
     selectable = true;
     return this;
@@ -530,7 +579,18 @@ int DipToPx(PaintCtx* ctx, float dip) {
     return (int)(dip * (ctx->dpi > 0 ? ctx->dpi : 96.f) / 96.f + 0.5f);
 }
 
-static IDWriteTextFormat* FontFor(PaintCtx* ctx, float fontSize) {
+// Text weight byte: the DWrite weight in the low bits plus a family flag, so
+// the shaped-text cache keys mono and proportional runs apart on its own.
+enum {
+    kFontWeightMask = 3,
+    kFontMono = 4
+};
+
+static IDWriteTextFormat* FontFor(PaintCtx* ctx, float fontSize,
+                                  uint8_t weight) {
+    if ((weight & kFontMono) && ctx->fontMono) {
+        return ctx->fontMono;
+    }
     if (fontSize >= 22.f && ctx->font24) {
         return ctx->font24;
     }
@@ -652,16 +712,20 @@ static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
 }
 
 static uint8_t ElTextWeight(const El* e) {
+    uint8_t w = 0;
     if (e->style.fontBold) {
-        return 2;
+        w = 2;
+    } else if (e->style.fontSemibold) {
+        w = 1;
     }
-    if (e->style.fontSemibold) {
-        return 1;
+    if (e->style.fontMono) {
+        w |= kFontMono;
     }
-    return 0;
+    return w;
 }
 
 static DWRITE_FONT_WEIGHT DwriteWeight(uint8_t weight) {
+    weight &= kFontWeightMask;
     if (weight >= 2) {
         return DWRITE_FONT_WEIGHT_BOLD;
     }
@@ -923,7 +987,7 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
         hit->layout->AddRef();
         return hit->layout;
     }
-    IDWriteTextFormat* fmt = FontFor(ctx, fontSize);
+    IDWriteTextFormat* fmt = FontFor(ctx, fontSize, weight);
     if (!fmt) {
         return nullptr;
     }
@@ -944,7 +1008,7 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     if (fontSize > 0) {
         layout->SetFontSize(fontSize, range);
     }
-    if (weight) {
+    if (weight & kFontWeightMask) {
         layout->SetFontWeight(DwriteWeight(weight), range);
     }
     layout->SetWordWrapping(wrap && maxW > 0 ? DWRITE_WORD_WRAPPING_WRAP
@@ -1163,6 +1227,13 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     }
     float font = e->style.fontSize > 0 ? e->style.fontSize : inheritFont;
     Rgba fg = e->style.hasColor ? e->style.color : inheritFg;
+    // font_family inherits. Pushing the flag one level down here cascades it
+    // through the subtree, since every child is laid out the same way.
+    if (e->style.fontMono) {
+        for (El* c = e->first; c; c = c->next) {
+            c->style.fontMono = true;
+        }
+    }
 
     float wSpec = ResolveSize(e->style.width, availW, e->style.flexGrow);
     float hSpec = ResolveSize(e->style.height, availH, e->style.flexGrow);
@@ -1658,7 +1729,7 @@ static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
         layout->Release();
         return;
     }
-    IDWriteTextFormat* fmt = FontFor(ctx, fontSize);
+    IDWriteTextFormat* fmt = FontFor(ctx, fontSize, (uint8_t)weight);
     if (!fmt) {
         return;
     }
