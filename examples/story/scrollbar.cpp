@@ -6,7 +6,7 @@ struct ScrollbarStory {
 
 El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
     El* sec = StorySection(cx, "Default",
                            "A scrollbar that allows users to scroll content.");
     El* box = Div(a)

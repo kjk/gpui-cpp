@@ -51,7 +51,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     Listener onToggle = Listen(cx, &OnToggle);
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default",

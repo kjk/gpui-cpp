@@ -19,7 +19,7 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     if (self->field.focused) {
         cx->win->input = &self->field;
     }
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* sec = StorySection(cx, "Default",
                            "A settings page with groups and typed fields.");
     StorySectionAdd(sec, component::Setting::New(cx, StrL("General"))

@@ -33,7 +33,7 @@ static component::Select* Framework(Ctx* cx, SelectStory* self,
 
 El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
     El* search = StorySection(cx, "Search and clear", nullptr);
     StorySectionAdd(search, Framework(cx, self, "framework")->IntoEl());

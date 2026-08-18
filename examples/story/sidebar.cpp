@@ -6,7 +6,7 @@ struct SidebarStory {
 
 El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
     El* sec = StorySection(
         cx, "Default",
         "A composable, themeable and customizable sidebar component.");

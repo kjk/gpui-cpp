@@ -226,11 +226,19 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
     const Theme& th = cx->theme();
     // Rust StorySection is an outline GroupBox: title sits above a bordered
     // content pane that centers its children (crates/story/src/lib.rs).
-    El* wrap = Div(a)->FlexCol()->Gap(12)->W(kFill);
+    // mb_6 on the GroupBox: every section carries its own bottom margin, on
+    // top of whatever gap the page sets.
+    El* wrap = Div(a)->FlexCol()->Gap(12)->PadB(24)->W(kFill);
+    // GroupBox draws its title with line_height(relative(1.)), which the
+    // description inherits, so the header is 16 + 4 + 12 tall.
     El* head = Div(a)->FlexCol()->Gap(4)->W(kFill);
-    head->Child(StoryTxt(cx, StoryDup(cx, title), 14, th.mutedFg)->Semibold());
+    head->Child(StoryTxt(cx, StoryDup(cx, title), 16, th.mutedFg)
+                    ->Medium()
+                    ->LineHeight(1.f));
     if (desc && desc[0]) {
-        head->Child(StoryTxt(cx, StoryDup(cx, desc), 12, th.mutedFg)->Wrap());
+        head->Child(StoryTxt(cx, StoryDup(cx, desc), 12, th.mutedFg)
+                        ->LineHeight(1.f)
+                        ->Wrap());
     }
     // section(): h_flex().w_full().flex_wrap().justify_center().items_center()
     // .gap_4() inside the pane.

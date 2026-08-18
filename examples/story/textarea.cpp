@@ -7,7 +7,7 @@ struct TextareaStory {
 
 El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Textarea", nullptr);
     StorySectionAdd(def,

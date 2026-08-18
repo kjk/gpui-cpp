@@ -54,7 +54,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     if (self->field.focused) {
         cx->win->input = &self->field;
     }
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def =

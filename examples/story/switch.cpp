@@ -45,7 +45,7 @@ static El* SwitchRow(Ctx* cx, SwitchStory* self, const char* title,
 El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default",

@@ -15,7 +15,7 @@ static void SetRating(RatingStory* self, Ctx* cx, const ClickEvent*,
 El* RatingStory::Render(RatingStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def =

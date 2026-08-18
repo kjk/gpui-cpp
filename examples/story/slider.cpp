@@ -28,7 +28,7 @@ static El* SliderCard(Ctx* cx, const char* label, const char* value, El* slider,
 El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill)->ItemsCenter();
 
     El* def = StorySection(cx, "Default",
                            "Adjust a single value within a defined range.");

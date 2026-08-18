@@ -26,7 +26,7 @@ static void SetBill2(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
 
 El* RadioStory::Render(RadioStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* del = StorySection(cx, "Delivery",
@@ -58,7 +58,10 @@ El* RadioStory::Render(RadioStory* self, Ctx* cx) {
     El* bill =
         StorySection(cx, "Billing cycle",
                      "Horizontal groups work for short, related choices.");
-    El* billRow = Div(a)->FlexRow()->Gap(16)->W(320)->JustifyBetween();
+    // RadioGroup::horizontal is h_flex().w_full().flex_wrap().gap_3(); the
+    // justify_between the story asks for lands on the wrapper, which has one
+    // child, so it never spreads them.
+    El* billRow = Div(a)->FlexRow()->FlexWrap()->Gap(12)->W(320);
     billRow->Child(component::Radio::New(cx, StrL("monthly"))
                        ->Label(StrL("Monthly"))
                        ->Checked(self->radioBilling == 0)

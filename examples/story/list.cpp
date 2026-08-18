@@ -11,7 +11,7 @@ static void PickList(ListStory* self, Ctx* cx, const ClickEvent*, intptr_t i) {
 
 El* ListStory::Render(ListStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(4)->W(kFill);
     El* sec =
         StorySection(cx, "Default", "A list of items that can be selected.");
     StorySectionAdd(sec, component::List::New(cx)

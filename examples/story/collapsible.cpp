@@ -26,7 +26,7 @@ static El* Chevron(Ctx* cx, bool open) {
 El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(8)->W(kFill);
 
     El* basic = StorySection(
         cx, "Basic",

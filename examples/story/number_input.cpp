@@ -37,7 +37,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
         strncpy_s(self->field.buf, "12", _TRUNCATE);
         self->field.len = 2;
     }
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* sec = StorySection(
         cx, "Default", "Numeric input with increment and decrement controls.");
     StorySectionAdd(sec, component::NumberInput::New(cx, &self->field)

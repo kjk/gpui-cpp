@@ -45,7 +45,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     if (self->search.focused) {
         cx->win->input = &self->search;
     }
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
     El* def = StorySection(
         cx, "Default",

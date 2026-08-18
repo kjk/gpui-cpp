@@ -37,7 +37,7 @@ static El* PopCard(Ctx* cx, const char* title, const char* body) {
 
 El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(8)->W(kFill);
 
     El* def = StorySection(
         cx, "Default",

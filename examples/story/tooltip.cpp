@@ -12,7 +12,7 @@ static void RemoveTip(TooltipStory* self, Ctx* cx, const ClickEvent*) {
 
 El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* btn = StorySection(cx, "Button",
                            "Add plain text or a keyboard shortcut hint.");

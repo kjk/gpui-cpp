@@ -36,7 +36,7 @@ El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
         self->calYear = now.wYear;
         self->calMonth = now.wMonth;
     }
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* single = StorySection(cx, "Single month", "Single-date selection.");
     StorySectionAdd(single, component::Calendar::New(cx)
                                 ->Year(self->calYear)

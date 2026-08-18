@@ -20,7 +20,7 @@ static void HideNote(NotificationStory* self, Ctx* cx, const ClickEvent*) {
 
 El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Default", "Show a short message.");
     StorySectionAdd(def, component::Button::New(cx, StrL("show-notify-0"))

@@ -6,7 +6,7 @@ struct TreeStory {
 
 El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* sec = StorySection(cx, "File tree",
                            "A tree view component for hierarchical data.");
     StorySectionAdd(sec, component::Tree::New(cx)

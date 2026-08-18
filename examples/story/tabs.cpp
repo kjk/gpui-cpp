@@ -22,7 +22,7 @@ static const int kTabCount = 8;
 El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* tabs = StorySection(cx, "Tabs", nullptr);

@@ -34,7 +34,7 @@ static void SetCheck5(CheckboxStory* self, Ctx* cx, const ClickEvent*,
 
 El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(

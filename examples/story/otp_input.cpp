@@ -8,7 +8,7 @@ struct OtpInputStory {
 
 El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(20)->W(kFill);
     El* sec =
         StorySection(cx, "Default", "A one-time password input component.");
     StorySectionAdd(sec,

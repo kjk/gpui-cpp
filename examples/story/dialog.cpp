@@ -22,7 +22,7 @@ static void CloseDlg(DialogStory* self, Ctx* cx, const ClickEvent*) {
 El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     WinSize size = WindowSize(cx->win);
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def =
         StorySection(cx, "Default", "A window overlaid on the primary window.");
