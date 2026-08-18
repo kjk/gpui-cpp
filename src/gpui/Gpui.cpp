@@ -1913,6 +1913,22 @@ static void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
     ctx->rt->DrawRoundedRectangle(rr, ctx->brush, stroke);
 }
 
+// Layout lands on fractions of a pixel, which spreads a hairline over two
+// rows however it is inset. A border line is snapped to the nearest device
+// pixel center so it covers exactly one.
+static float EdgeLine(PaintCtx* ctx, float v) {
+    float scale = ctx->dpi > 0 ? (float)ctx->dpi / 96.f : 1.f;
+    float px = v * scale;
+    return (floorf(px) + 0.5f) / scale;
+}
+
+// The ends of a border line, snapped to the pixel boundary: a dash pattern
+// starts at the path's start, so a fractional one smears every dash.
+static float EdgeEnd(PaintCtx* ctx, float v) {
+    float scale = ctx->dpi > 0 ? (float)ctx->dpi / 96.f : 1.f;
+    return floorf(v * scale + 0.5f) / scale;
+}
+
 static void DrawLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
                      float stroke, Rgba c) {
     SetBrush(ctx, c);
@@ -2400,12 +2416,38 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
             sp.dashStyle = D2D1_DASH_STYLE_CUSTOM;
             ctx->d2d->CreateStrokeStyle(sp, kDashes, 2, &dash);
             SetBrush(ctx, e->style.borderColor);
-            D2D1_ROUNDED_RECT rr;
-            rr.rect = D2D1::RectF(e->x, e->y, e->x + e->w, e->y + e->h);
-            rr.radiusX = e->style.radius;
-            rr.radiusY = e->style.radius;
-            ctx->rt
-                ->DrawRoundedRectangle(rr, ctx->brush, e->style.border, dash);
+            // Inset by half the stroke, like the solid path: D2D centers a
+            // stroke on its path, so drawing on the bounds would split a
+            // hairline across two pixel rows.
+            float half = e->style.border * 0.5f;
+            if (e->style.radius <= 0) {
+                // Square corners: stroke each side on its own, so both the
+                // line and the dashes along it can land on whole pixels.
+                float l = EdgeLine(ctx, e->x + half);
+                float r = EdgeLine(ctx, e->x + e->w - half);
+                float t = EdgeLine(ctx, e->y + half);
+                float b = EdgeLine(ctx, e->y + e->h - half);
+                float x0 = EdgeEnd(ctx, e->x);
+                float x1 = EdgeEnd(ctx, e->x + e->w);
+                float y0 = EdgeEnd(ctx, e->y);
+                float y1 = EdgeEnd(ctx, e->y + e->h);
+                ctx->rt->DrawLine(D2D1::Point2F(x0, t), D2D1::Point2F(x1, t),
+                                  ctx->brush, e->style.border, dash);
+                ctx->rt->DrawLine(D2D1::Point2F(x0, b), D2D1::Point2F(x1, b),
+                                  ctx->brush, e->style.border, dash);
+                ctx->rt->DrawLine(D2D1::Point2F(l, y0), D2D1::Point2F(l, y1),
+                                  ctx->brush, e->style.border, dash);
+                ctx->rt->DrawLine(D2D1::Point2F(r, y0), D2D1::Point2F(r, y1),
+                                  ctx->brush, e->style.border, dash);
+            } else {
+                D2D1_ROUNDED_RECT rr;
+                rr.rect = D2D1::RectF(e->x + half, e->y + half,
+                                      e->x + e->w - half, e->y + e->h - half);
+                rr.radiusX = e->style.radius;
+                rr.radiusY = e->style.radius;
+                ctx->rt->DrawRoundedRectangle(rr, ctx->brush, e->style.border,
+                                              dash);
+            }
             if (dash) {
                 dash->Release();
             }
@@ -2414,21 +2456,27 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
                             e->style.border, e->style.borderColor);
         }
     }
+    // An edge border sits inside the box and covers whole pixels: the line
+    // goes half a stroke in from the edge, and lands on a device pixel.
     if (e->style.borderT > 0) {
-        DrawLine(ctx, e->x, e->y, e->x + e->w, e->y, e->style.borderT,
+        float y = EdgeLine(ctx, e->y + e->style.borderT * 0.5f);
+        DrawLine(ctx, e->x, y, e->x + e->w, y, e->style.borderT,
                  e->style.borderColor);
     }
     if (e->style.borderB > 0) {
-        DrawLine(ctx, e->x, e->y + e->h, e->x + e->w, e->y + e->h,
-                 e->style.borderB, e->style.borderColor);
+        float y = EdgeLine(ctx, e->y + e->h - e->style.borderB * 0.5f);
+        DrawLine(ctx, e->x, y, e->x + e->w, y, e->style.borderB,
+                 e->style.borderColor);
     }
     if (e->style.borderL > 0) {
-        DrawLine(ctx, e->x, e->y, e->x, e->y + e->h, e->style.borderL,
+        float x = EdgeLine(ctx, e->x + e->style.borderL * 0.5f);
+        DrawLine(ctx, x, e->y, x, e->y + e->h, e->style.borderL,
                  e->style.borderColor);
     }
     if (e->style.borderR > 0) {
-        DrawLine(ctx, e->x + e->w, e->y, e->x + e->w, e->y + e->h,
-                 e->style.borderR, e->style.borderColor);
+        float x = EdgeLine(ctx, e->x + e->w - e->style.borderR * 0.5f);
+        DrawLine(ctx, x, e->y, x, e->y + e->h, e->style.borderR,
+                 e->style.borderColor);
     }
 
     bool clip = e->style.overflowY != OverflowY::Visible;
