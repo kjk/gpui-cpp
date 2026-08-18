@@ -1730,9 +1730,15 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     if (e->style.justify == Justify::SpaceBetween && n > 1) {
         float total = 0;
         for (El* c = e->first; c; c = c->next) {
+            if (c->style.absolute) {
+                continue;
+            }
             total += row ? c->w : c->h;
         }
-        float free = mainAvail - total;
+        // Placement adds the gap on top of betweenExtra, so the gaps have to
+        // come out of the free space here or the last child lands past the
+        // content box.
+        float free = mainAvail - total - gaps;
         if (free > 0) {
             betweenExtra = free / (n - 1);
         }
