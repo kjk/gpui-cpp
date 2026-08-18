@@ -28,13 +28,20 @@ El* Kbd::IntoEl() {
     if (!appearance) {
         return TextEl(a, stroke)->Font(12)->Fg(th.mutedFg);
     }
-    El* e = Div(a)->PadX(6)->PadY(2)->ItemsCenter()->JustifyCenter()->Radius(4);
+    // The plain chip is a muted wash with no border; outline swaps to the
+    // window background inside one. px_1 / py_0p5 / min_w_5 / radius half.
+    El* e = Div(a)
+                ->PadX(4)
+                ->PadY(2)
+                ->MinW(20)
+                ->ItemsCenter()
+                ->JustifyCenter()
+                ->Radius(th.radius * 0.5f)
+                ->Bg(th.muted);
     if (outline) {
-        e->Border(1, th.border);
-    } else {
-        e->Bg(th.muted)->Border(1, th.border);
+        e->Bg(th.background)->Border(1, th.border);
     }
-    e->Child(TextEl(a, stroke)->Font(11)->Fg(th.foreground));
+    e->Child(TextEl(a, stroke)->Font(12)->LineHeight(1.f)->Fg(th.mutedFg));
     return e;
 }
 
