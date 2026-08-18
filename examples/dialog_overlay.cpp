@@ -103,70 +103,6 @@ static void MenuPicked(DialogApp* app, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-// A TextView::markdown stand-in: `**bold**` and `*italic*` runs, laid out a
-// word at a time so the paragraph wraps between words like the real one.
-static El* MdText(Ctx* cx, const char* text, float font, Rgba color,
-                  bool selectable) {
-    Arena* a = cx->a;
-    El* row = Div(a)->FlexRow()->FlexWrap()->W(kFill)->Gap(4);
-    bool bold = false;
-    bool italic = false;
-    char word[128];
-    int n = 0;
-    for (const char* p = text;; p++) {
-        if (*p == '*') {
-            // Flush what is buffered before the emphasis changes.
-            if (n > 0) {
-                El* t =
-                    TextEl(a, StrDup(a, Str(word, n)))->Font(font)->Fg(color);
-                if (selectable) {
-                    t->Selectable();
-                }
-                if (bold) {
-                    t->Semibold();
-                }
-                if (italic) {
-                    t->Italic();
-                }
-                row->Child(t);
-                n = 0;
-            }
-            if (p[1] == '*') {
-                bold = !bold;
-                p++;
-            } else {
-                italic = !italic;
-            }
-            continue;
-        }
-        if (*p == ' ' || *p == 0) {
-            if (n > 0) {
-                El* t =
-                    TextEl(a, StrDup(a, Str(word, n)))->Font(font)->Fg(color);
-                if (selectable) {
-                    t->Selectable();
-                }
-                if (bold) {
-                    t->Semibold();
-                }
-                if (italic) {
-                    t->Italic();
-                }
-                row->Child(t);
-                n = 0;
-            }
-            if (*p == 0) {
-                break;
-            }
-            continue;
-        }
-        if (n < (int)sizeof(word) - 1) {
-            word[n++] = *p;
-        }
-    }
-    return row;
-}
-
 // The header both overlays share: the title, and the close button opposite.
 static El* OverlayHeader(Ctx* cx, Str title) {
     Arena* a = cx->a;
@@ -241,11 +177,13 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                                          StrL("Open Sheet"), BtnKind::Outline)
                                     ->OnClick(Listen(cx, &OpenOverlay,
                                                      OverlaySheet))))
-            ->Child(MdText(cx,
-                           "**Background text** behind the modals. While a "
-                           "dialog or sheet is open, a selection started "
-                           "inside it must not extend onto this paragraph.",
-                           14, th.foreground, app->overlay == OverlayNone))
+            ->Child(component::TextView::New(
+                        cx, StrL("**Background text** behind the modals. "
+                                 "While a dialog or sheet is open, a "
+                                 "selection started inside it must not "
+                                 "extend onto this paragraph."))
+                        ->Selectable(app->overlay == OverlayNone)
+                        ->IntoEl())
             ->Child(hoverBox);
 
     El* root = Div(frame)
@@ -298,16 +236,18 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
         }
         panel->Child(OverlayHeader(
             cx, dialog ? StrL("Selectable dialog") : StrL("Selectable Sheet")));
-        panel->Child(MdText(cx,
-                            dialog ? "Select **this** text, then drag the "
-                                     "mouse *out of the dialog* over the "
-                                     "paragraph behind it. The text behind "
-                                     "must NOT get selected"
-                                   : "Select **this** text, then drag the "
-                                     "mouse *out of the sheet* over the "
-                                     "paragraph behind it. The text behind "
-                                     "must NOT get selected",
-                            14, th.foreground, true));
+        panel->Child(
+            component::TextView::New(
+                cx, dialog ? StrL("Select **this** text, then drag the mouse "
+                                  "*out of the dialog* over the paragraph "
+                                  "behind it. The text behind must NOT get "
+                                  "selected")
+                           : StrL("Select **this** text, then drag the mouse "
+                                  "*out of the sheet* over the paragraph "
+                                  "behind it. The text behind must NOT get "
+                                  "selected"))
+                ->Selectable()
+                ->IntoEl());
         root->Child(panel);
     }
 
