@@ -104,7 +104,7 @@ static El* Bubble(Arena* a, int ix, const Theme& th) {
 
 El* SelApp::Render(SelApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
 
@@ -144,7 +144,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     self->copied[0] = 0;
     self->selFrom = -1;
     self->selTo = -1;
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     Window* win =
         WindowOpenView(app, L"Text Selection", 800, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));

@@ -55,13 +55,11 @@ static void Collect(MonitorApp* app) {
 }
 
 static void OnTick(MonitorApp* app, Ctx* cx, const TickEvent*) {
-    Window* host = cx->win;
-
     Collect(app);
 }
 
 static void OnClick(MonitorApp* app, Ctx* cx, const ClickEvent* ev) {
-    Window* host = cx->win;
+    Window* win = cx->win;
     int id = ev->id;
     if (id == ClickTabSystem) {
         app->tab = 0;
@@ -72,19 +70,19 @@ static void OnClick(MonitorApp* app, Ctx* cx, const ClickEvent* ev) {
         return;
     }
     if (id == ClickMin) {
-        AppMinimize(host);
+        AppMinimize(win);
         return;
     }
     if (id == ClickMax) {
-        AppToggleMaximize(host);
+        AppToggleMaximize(win);
         return;
     }
     if (id == ClickClose) {
-        AppClose(host);
+        AppClose(win);
         return;
     }
     if (id == ClickDrag) {
-        AppDrag(host);
+        AppDrag(win);
         return;
     }
     ProcessSort field = ProcessSort::Cpu;
@@ -151,7 +149,7 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, int id) {
     return t;
 }
 
-static El* TitleBar(Arena* a, Window* host, MonitorApp* app) {
+static El* TitleBar(Arena* a, Window* win, MonitorApp* app) {
     const Theme& th = ThemeDark();
     Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
 
@@ -383,7 +381,7 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
 
 El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
 
@@ -400,7 +398,7 @@ El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
         ->FlexCol()
         ->SizeFull()
         ->Bg(th.background)
-        ->Child(TitleBar(frame, host, app))
+        ->Child(TitleBar(frame, win, app))
         ->Child(content)
         ->Child(StatusBar(frame, app));
 }
@@ -413,7 +411,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     ThemeSet(ThemeMode::Dark);
     SysStateInit(&self->sys);
     Collect(self);
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     Window* win =
         WindowOpenView(app, L"System Monitor", 680, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));

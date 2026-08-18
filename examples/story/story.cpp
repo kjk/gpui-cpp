@@ -608,15 +608,15 @@ static El* Footer(StoryApp* app, Ctx* cx) {
 
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
-    WinSize size = WindowSize(host);
+    Window* win = cx->win;
+    WinSize size = WindowSize(win);
     cx->win->paint.selA = app->selA;
     cx->win->paint.selB = app->selB;
     // Pages that own a text field point the window at it from their Render.
     if (app->search.focused) {
         cx->win->input = &app->search;
     }
-    AppRequestAnim(host, cx->win->input != nullptr);
+    AppRequestAnim(win, cx->win->input != nullptr);
     const Theme& th = ThemeNow();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
@@ -641,13 +641,12 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
 }
 
 static void OnClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
-    Window* host = cx->win;
-    (void)host;
+    Window* win = cx->win;
     int id = ev->id;
     if (id == ClickSearch) {
         app->search.focused = true;
         cx->win->input = &app->search;
-        AppRequestAnim(host, true);
+        AppRequestAnim(win, true);
         return;
     }
     if (id == ClickSearchClear) {
@@ -709,7 +708,7 @@ static void CopyUtf8(HWND hwnd, const char* s, int n) {
 }
 
 static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
-    Window* host = cx->win;
+    Window* win = cx->win;
     int vk = ev->vk;
     bool down = ev->down;
     if (ev->ch != 0) {
@@ -741,7 +740,7 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
 }
 
 static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
-    Window* host = cx->win;
+    Window* win = cx->win;
     float x = ev->x;
     float y = ev->y;
     float delta = ev->delta;
@@ -767,7 +766,7 @@ static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
 }
 
 static void OnMouse(StoryApp* app, Ctx* cx, const MouseEvent* ev) {
-    Window* host = cx->win;
+    Window* win = cx->win;
     float x = ev->x;
     float y = ev->y;
     int button = ev->button;
@@ -840,8 +839,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
         self->search.cursor = self->search.len;
     }
     strncpy_s(self->search.placeholder, "Search…", _TRUNCATE);
-    Window* win = WindowOpenView(app, L"GPUI Component", 1280, 960, view.id,
-                                 AppWinOpts{});
+    Window* win =
+        WindowOpenView(app, L"GPUI Component", 1280, 960, view.id, WinOpts{});
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

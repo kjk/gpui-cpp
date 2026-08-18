@@ -253,8 +253,6 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
 }
 
 static void OnTick(FpsApp* app, Ctx* cx, const TickEvent*) {
-    Window* host = cx->win;
-
     ULONGLONG now = GetTickCount64();
     float dt = (float)(now - app->lastTick);
     app->lastTick = now;
@@ -284,7 +282,7 @@ static void OnClick(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
 }
 
 static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     float x = ev->x;
     float y = ev->y;
@@ -301,7 +299,7 @@ static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
 
 El* FpsApp::Render(FpsApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
 
@@ -353,7 +351,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     self->start = GetTickCount64();
     self->lastTick = self->start;
     BuildGeom(self);
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     opts.anim = true;
     opts.timerMs = 16;
     Window* win = WindowOpenView(app, L"FPS Monitor", 800, 600, view.id, opts);

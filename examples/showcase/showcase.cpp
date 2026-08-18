@@ -207,8 +207,8 @@ static El* RenderComp(ShowcaseApp* app, Ctx* cx, WinSize size) {
     return ShowcaseRenderRegistered(app, cx, size);
 }
 
-static void BindInput(ShowcaseApp* app, Window* host) {
-    host->input = nullptr;
+static void BindInput(ShowcaseApp* app, Window* win) {
+    win->input = nullptr;
     app->input.focused =
         app->input.focused &&
         (app->component == CompInput || app->component == CompNumberInput ||
@@ -219,21 +219,20 @@ static void BindInput(ShowcaseApp* app, Window* host) {
     app->hexIn.focused = app->hexIn.focused &&
                          app->component == CompColorPicker && app->colorOpen;
     if (app->comboQuery.focused) {
-        host->input = &app->comboQuery;
+        win->input = &app->comboQuery;
     } else if (app->hexIn.focused) {
-        host->input = &app->hexIn;
+        win->input = &app->hexIn;
     } else if (app->input.focused) {
-        host->input = &app->input;
+        win->input = &app->input;
     }
 }
 
 El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
-    (void)host;
-    WinSize size = WindowSize(host);
-    app->hoverId = host->hoverId;
-    BindInput(app, host);
+    Window* win = cx->win;
+    WinSize size = WindowSize(win);
+    app->hoverId = win->hoverId;
+    BindInput(app, win);
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
@@ -266,8 +265,8 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-void ShowcaseClick(ShowcaseApp* app, Window* host, int id) {
-    (void)host;
+void ShowcaseClick(ShowcaseApp* app, Window* win, int id) {
+    (void)win;
     if (id == ClickBack) {
         app->component = CompOverview;
         app->scrollY = 0;
@@ -363,8 +362,8 @@ static void ParseHexIn(ShowcaseApp* app) {
     }
 }
 
-void ShowcaseChar(ShowcaseApp* app, Window* host, uint32_t cp) {
-    (void)host;
+void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp) {
+    (void)win;
     if (app->component == CompOtpInput && app->otpOn) {
         if (cp >= '0' && cp <= '9' && app->otpLen < 6) {
             app->otp[app->otpLen++] = (char)cp;
@@ -387,7 +386,7 @@ void ShowcaseChar(ShowcaseApp* app, Window* host, uint32_t cp) {
     }
 }
 
-void ShowcaseKey(ShowcaseApp* app, Window* host, int vk, bool down) {
+void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
     if (!down) {
         return;
     }
@@ -474,11 +473,11 @@ void ShowcaseKey(ShowcaseApp* app, Window* host, int vk, bool down) {
         if (app->component == CompTextarea && app->textareaOn) {
             InsertBuf(app->textarea, &app->textareaLen,
                       (int)sizeof(app->textarea), '\n');
-            host->eatReturn = true;
+            win->eatReturn = true;
         } else if (app->component == CompEditor && app->editorOn) {
             InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor),
                      &app->editorCursor, '\n');
-            host->eatReturn = true;
+            win->eatReturn = true;
         }
     }
 }
@@ -512,7 +511,7 @@ void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta) {
     }
 }
 
-static int TextSelOffsetAt(Window* host, float x, float y, bool nearest) {
+static int TextSelOffsetAt(Window* win, float x, float y, bool nearest) {
     static const char* paras[] = {
         "Text selection across renderers",
         "Selection should feel like a natural part of reading a product brief. "
@@ -530,8 +529,8 @@ static int TextSelOffsetAt(Window* host, float x, float y, bool nearest) {
     };
     const HitRect* best = nullptr;
     float bestDist = 1e9f;
-    for (int i = host->paint.hits.len - 1; i >= 0; i--) {
-        const HitRect& h = host->paint.hits[i];
+    for (int i = win->paint.hits.len - 1; i >= 0; i--) {
+        const HitRect& h = win->paint.hits[i];
         if (h.id < 531 || h.id >= 535) {
             continue;
         }
@@ -562,7 +561,7 @@ static int TextSelOffsetAt(Window* host, float x, float y, bool nearest) {
     }
     int para = best->id - 531;
     float font = para == 0 ? 18.f : 14.f;
-    int local = TextIndexAt(&host->paint, Str(paras[para]), font,
+    int local = TextIndexAt(&win->paint, Str(paras[para]), font,
                             best->w > 0 ? best->w : 560.f, true, x - best->x,
                             y - best->y);
     int off = 0;
@@ -579,28 +578,28 @@ static int TextSelOffsetAt(Window* host, float x, float y, bool nearest) {
     return off + local;
 }
 
-void ShowcaseMouseMove(ShowcaseApp* app, Window* host, float x, float y) {
+void ShowcaseMouseMove(ShowcaseApp* app, Window* win, float x, float y) {
     if (app->component == CompSlider) {
-        ShowcaseSliderDrag(app, host, x, y);
+        ShowcaseSliderDrag(app, win, x, y);
     } else if (app->component == CompResizable) {
-        ShowcaseResizeDrag(app, host, x, y);
-    } else if (app->component == CompTextSelection && host->mouseDown) {
-        int off = TextSelOffsetAt(host, x, y, true);
+        ShowcaseResizeDrag(app, win, x, y);
+    } else if (app->component == CompTextSelection && win->mouseDown) {
+        int off = TextSelOffsetAt(win, x, y, true);
         if (off >= 0) {
             app->selB = off;
         }
     }
 }
 
-void ShowcaseMouseDown(ShowcaseApp* app, Window* host, float x, float y,
+void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
                        int button) {
     (void)button;
     if (app->component == CompSlider) {
-        ShowcaseSliderDrag(app, host, x, y);
+        ShowcaseSliderDrag(app, win, x, y);
     } else if (app->component == CompResizable) {
-        ShowcaseResizeDrag(app, host, x, y);
+        ShowcaseResizeDrag(app, win, x, y);
     } else if (app->component == CompTextSelection) {
-        int off = TextSelOffsetAt(host, x, y, false);
+        int off = TextSelOffsetAt(win, x, y, false);
         if (off >= 0) {
             app->selA = off;
             app->selB = off;
@@ -608,9 +607,9 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* host, float x, float y,
     }
 }
 
-void ShowcaseMouseUp(ShowcaseApp* app, Window* host, float x, float y,
+void ShowcaseMouseUp(ShowcaseApp* app, Window* win, float x, float y,
                      int button) {
-    (void)host;
+    (void)win;
     (void)x;
     (void)y;
     (void)button;
@@ -700,7 +699,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     self->textareaLen = (int)strlen(self->textarea);
 
     Window* win =
-        WindowOpenView(app, L"GPUI Base", 840, 640, view.id, AppWinOpts{});
+        WindowOpenView(app, L"GPUI Base", 840, 640, view.id, WinOpts{});
     WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

@@ -69,9 +69,9 @@ void ShowcaseSliderClick(ShowcaseApp* app, int id) {
     }
 }
 
-void ShowcaseSliderDrag(ShowcaseApp* app, Window* host, float x, float y) {
+void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y) {
     (void)y;
-    if (!app->draggingSlider && !host->mouseDown) {
+    if (!app->draggingSlider && !win->mouseDown) {
         return;
     }
     if (!app->draggingSlider) {
@@ -80,8 +80,8 @@ void ShowcaseSliderDrag(ShowcaseApp* app, Window* host, float x, float y) {
     // track is centered; approximate using last painted hit? use mouse vs
     // window. Host mouse is absolute. We store track by using a simple mapping:
     // content is centered. Use the slider hit rect from last paint.
-    for (int i = 0; i < host->paint.hits.len; i++) {
-        HitRect h = host->paint.hits[i];
+    for (int i = 0; i < win->paint.hits.len; i++) {
+        HitRect h = win->paint.hits[i];
         if (h.id == ClickSlider) {
             float t = (x - h.x) / (h.w > 1 ? h.w : 1);
             if (t < 0) {

@@ -183,7 +183,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
     return AppRunView(L"Example", 800, 600, EntityNew<Example>(app).id, app,
-                      AppWinOpts{});
+                      WinOpts{});
 }
 ```
 

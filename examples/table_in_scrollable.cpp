@@ -101,7 +101,7 @@ static El* Filler(Arena* a, Str label, float h, const Theme& th) {
 
 El* TableApp::Render(TableApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
     const Theme& th = ThemeNow();
@@ -208,7 +208,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     TableApp* self = view.Get(app);
     (void)self;
     ThemeSet(ThemeMode::Light);
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     Window* win =
         WindowOpenView(app, L"Table in Scrollable", 700, 700, view.id, opts);
     WindowOnWheel(win, ListenTo(view, &OnWheel));

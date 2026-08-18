@@ -83,7 +83,7 @@ static El* MenuItem(Arena* a, int id, IconName icon, const char* label,
 
 El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
 
@@ -216,7 +216,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     AssetsClear();
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     Window* win = WindowOpenView(app, L"Sidebar", 900, 620, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));
     int rc = AppRun(app);

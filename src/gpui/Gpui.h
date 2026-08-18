@@ -560,7 +560,7 @@ enum {
 struct App;
 struct Window;
 
-struct AppWinOpts {
+struct WinOpts {
     bool borderless = false;
     bool anim = false;
     int timerMs = 500;
@@ -610,7 +610,7 @@ struct Window {
     MenuState menu = {};
     Vec<FocusRect> focusEls;
     Vec<KeyedSlot> keyed;
-    AppWinOpts winOpts = {};
+    WinOpts opts = {};
     // Window-level subscriptions bound to view entities.
     Listener onKey = {};
     Listener onWheel = {};
@@ -727,9 +727,9 @@ void WindowSetInterval(Window* win, int ms, Listener l);
 
 // Open a window whose root is a view entity, the WindowOpen + cx.new pair.
 Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
-                       EntityId root, AppWinOpts opts);
+                       EntityId root, WinOpts opts);
 int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
-               App* app, AppWinOpts opts);
+               App* app, WinOpts opts);
 
 // The view a window renders, typed.
 template <typename T>
@@ -744,7 +744,7 @@ App* AppNew();
 void AppFree(App* app);
 int AppRun(App* app);
 Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
-                   AppWinOpts opts);
+                   WinOpts opts);
 void AppSetTitle(Window* win, const wchar_t* title);
 void AppRequestAnim(Window* win, bool on);
 

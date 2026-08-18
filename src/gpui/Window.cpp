@@ -35,10 +35,10 @@ static float HostDpi(HWND hwnd) {
     return (float)dpi;
 }
 
-static void UpdateDipSize(Window* host) {
+static void UpdateDipSize(Window* win) {
     RECT rc = {};
-    GetClientRect(host->hwnd, &rc);
-    host->paint.dpi = HostDpi(host->hwnd);
+    GetClientRect(win->hwnd, &rc);
+    win->paint.dpi = HostDpi(win->hwnd);
     int pxW = rc.right - rc.left;
     int pxH = rc.bottom - rc.top;
     // unused but kept for future pixel-accurate work
@@ -46,70 +46,70 @@ static void UpdateDipSize(Window* host) {
     (void)pxH;
 }
 
-static HRESULT CreateDeviceResources(Window* host) {
-    if (host->paint.dcRt) {
-        host->paint.rt = host->paint.dcRt;
+static HRESULT CreateDeviceResources(Window* win) {
+    if (win->paint.dcRt) {
+        win->paint.rt = win->paint.dcRt;
         return S_OK;
     }
-    host->paint.dpi = 96;
+    win->paint.dpi = 96;
     D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
         96.f, 96.f);
-    HRESULT hr = host->paint.d2d->CreateDCRenderTarget(&rtp, &host->paint.dcRt);
+    HRESULT hr = win->paint.d2d->CreateDCRenderTarget(&rtp, &win->paint.dcRt);
     if (FAILED(hr)) {
         logf("CreateDCRenderTarget failed %08x", (unsigned)hr);
         return hr;
     }
-    host->paint.rt = host->paint.dcRt;
-    hr = host->paint.rt
-             ->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &host->paint.brush);
+    win->paint.rt = win->paint.dcRt;
+    hr = win->paint.rt
+             ->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &win->paint.brush);
     return hr;
 }
 
-static void DiscardDeviceResources(Window* host) {
-    Rel(&host->paint.brush);
-    Rel(&host->paint.dcRt);
-    host->paint.rt = nullptr;
+static void DiscardDeviceResources(Window* win) {
+    Rel(&win->paint.brush);
+    Rel(&win->paint.dcRt);
+    win->paint.rt = nullptr;
 }
 
-static void RenderFrame(Window* host, HDC hdc) {
-    if (FAILED(CreateDeviceResources(host))) {
+static void RenderFrame(Window* win, HDC hdc) {
+    if (FAILED(CreateDeviceResources(win))) {
         return;
     }
     RECT rc = {};
-    GetClientRect(host->hwnd, &rc);
-    HRESULT bindHr = host->paint.dcRt->BindDC(hdc, &rc);
+    GetClientRect(win->hwnd, &rc);
+    HRESULT bindHr = win->paint.dcRt->BindDC(hdc, &rc);
     if (FAILED(bindHr)) {
         logf("BindDC failed %08x", (unsigned)bindHr);
-        DiscardDeviceResources(host);
+        DiscardDeviceResources(win);
         return;
     }
-    host->paint.dpi = 96;
+    win->paint.dpi = 96;
     float dipW = (float)(rc.right - rc.left);
     float dipH = (float)(rc.bottom - rc.top);
 
     WINDOWPLACEMENT wp = {sizeof(wp)};
-    GetWindowPlacement(host->hwnd, &wp);
-    host->maximized = wp.showCmd == SW_SHOWMAXIMIZED;
+    GetWindowPlacement(win->hwnd, &wp);
+    win->maximized = wp.showCmd == SW_SHOWMAXIMIZED;
 
-    if (host->frameArena) {
-        host->frameArena->Reset();
+    if (win->frameArena) {
+        win->frameArena->Reset();
     } else {
-        host->frameArena = ArenaNew();
+        win->frameArena = ArenaNew();
     }
     ResetTempArena();
-    host->paint.hits.Clear();
-    host->paint.scrolls.Clear();
-    host->paint.texts.Clear();
-    host->paint.textDocLen = 0;
-    host->paint.selA = -1;
-    host->paint.selB = -1;
-    host->paint.hoverId = host->hoverId;
-    host->paint.focusId = host->focusId;
-    host->paint.viewW = dipW;
-    host->paint.viewH = dipH;
-    TextMeasBeginFrame(&host->paint);
+    win->paint.hits.Clear();
+    win->paint.scrolls.Clear();
+    win->paint.texts.Clear();
+    win->paint.textDocLen = 0;
+    win->paint.selA = -1;
+    win->paint.selB = -1;
+    win->paint.hoverId = win->hoverId;
+    win->paint.focusId = win->focusId;
+    win->paint.viewW = dipW;
+    win->paint.viewH = dipH;
+    TextMeasBeginFrame(&win->paint);
 
     WinSize ws;
     ws.dipW = dipW;
@@ -118,24 +118,24 @@ static void RenderFrame(Window* host, HDC hdc) {
     ws.pxH = rc.bottom - rc.top;
 
     (void)ws;
-    El* root = EntityRender(host->app, host, host->frameArena, host->root);
+    El* root = EntityRender(win->app, win, win->frameArena, win->root);
 
-    host->paint.rt->BeginDraw();
-    host->paint.rt->SetTransform(D2D1::Matrix3x2F::Identity());
+    win->paint.rt->BeginDraw();
+    win->paint.rt->SetTransform(D2D1::Matrix3x2F::Identity());
     const Theme& th = ThemeNow();
-    host->paint.rt->Clear(RgbaToD2D(th.background));
+    win->paint.rt->Clear(RgbaToD2D(th.background));
 
     if (root) {
-        LayoutEl(&host->paint, root, 0, 0, dipW, dipH, 16.f, th.foreground);
-        FocusCollect(host, root);
-        PaintEl(&host->paint, root);
+        LayoutEl(&win->paint, root, 0, 0, dipW, dipH, 16.f, th.foreground);
+        FocusCollect(win, root);
+        PaintEl(&win->paint, root);
     }
 
-    HRESULT hr = host->paint.rt->EndDraw();
+    HRESULT hr = win->paint.rt->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) {
-        DiscardDeviceResources(host);
+        DiscardDeviceResources(win);
     }
-    TextMeasEndFrame(&host->paint);
+    TextMeasEndFrame(&win->paint);
 }
 
 static int BorderPx() {
@@ -144,26 +144,25 @@ static int BorderPx() {
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam) {
-    Window* host = (Window*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    Window* win = (Window*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (msg == WM_NCCREATE) {
         auto* cs = (CREATESTRUCTW*)lParam;
-        host = (Window*)cs->lpCreateParams;
-        host->hwnd = hwnd;
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)host);
+        win = (Window*)cs->lpCreateParams;
+        win->hwnd = hwnd;
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)win);
     }
-    if (!host) {
+    if (!win) {
         return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
     switch (msg) {
         case WM_CREATE: {
-            if (host->winOpts.anim || host->tickMs > 0) {
-                int ms =
-                    host->winOpts.timerMs > 0 ? host->winOpts.timerMs : kTickMs;
-                if (host->tickMs > 0) {
-                    ms = host->tickMs;
+            if (win->opts.anim || win->tickMs > 0) {
+                int ms = win->opts.timerMs > 0 ? win->opts.timerMs : kTickMs;
+                if (win->tickMs > 0) {
+                    ms = win->tickMs;
                 }
-                if (host->winOpts.anim) {
+                if (win->opts.anim) {
                     ms = 16;
                 }
                 SetTimer(hwnd, 1, (UINT)ms, nullptr);
@@ -174,37 +173,37 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (wParam == VK_TAB) {
                 bool back = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                 int trap = 0;
-                for (int i = 0; i < host->focusEls.len; i++) {
-                    if (host->focusEls[i].id == host->focusId) {
-                        trap = host->focusEls[i].trapId;
+                for (int i = 0; i < win->focusEls.len; i++) {
+                    if (win->focusEls[i].id == win->focusId) {
+                        trap = win->focusEls[i].trapId;
                         break;
                     }
                 }
-                FocusNext(host, trap, back);
+                FocusNext(win, trap, back);
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
             }
-            if (host->onKey.IsValid()) {
+            if (win->onKey.IsValid()) {
                 KeyEvent ev = {(int)wParam, 0, true};
-                ListenerCall(host->app, host, host->onKey, &ev);
+                ListenerCall(win->app, win, win->onKey, &ev);
             }
             // Enter activates the focused element, like a click on it.
-            if (wParam == VK_RETURN && host->focusId && !host->eatReturn &&
-                host->onClick.IsValid()) {
-                ClickEvent ev = {0, 0, 1, host->focusId};
-                ListenerCall(host->app, host, host->onClick, &ev);
+            if (wParam == VK_RETURN && win->focusId && !win->eatReturn &&
+                win->onClick.IsValid()) {
+                ClickEvent ev = {0, 0, 1, win->focusId};
+                ListenerCall(win->app, win, win->onClick, &ev);
             }
-            host->eatReturn = false;
+            win->eatReturn = false;
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         }
         case WM_CHAR: {
-            if (host->onKey.IsValid() && wParam >= 32) {
+            if (win->onKey.IsValid() && wParam >= 32) {
                 KeyEvent ev = {0, (uint32_t)wParam, true};
-                ListenerCall(host->app, host, host->onKey, &ev);
+                ListenerCall(win->app, win, win->onKey, &ev);
             }
-            if (host->input && host->input->focused) {
-                LineInput* in = host->input;
+            if (win->input && win->input->focused) {
+                LineInput* in = win->input;
                 if (wParam == 8) {
                     if (in->len > 0) {
                         in->len--;
@@ -221,11 +220,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_RBUTTONDOWN: {
-            float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
-            if (host->onMouse.IsValid()) {
+            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+            if (win->onMouse.IsValid()) {
                 MouseEvent ev = {MouseKind::Down, x, y, 2, 0};
-                ListenerCall(host->app, host, host->onMouse, &ev);
+                ListenerCall(win->app, win, win->onMouse, &ev);
             }
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
@@ -245,9 +244,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (pt.y < b) {
                 return HTTOP;
             }
-            float dipX = PxToDip(&host->paint, pt.x);
-            float dipY = PxToDip(&host->paint, pt.y);
-            int id = HitTest(&host->paint, dipX, dipY);
+            float dipX = PxToDip(&win->paint, pt.x);
+            float dipY = PxToDip(&win->paint, pt.y);
+            int id = HitTest(&win->paint, dipX, dipY);
             if (id == ClickWinMin) {
                 return HTMINBUTTON;
             }
@@ -263,47 +262,47 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return HTCLIENT;
         }
         case WM_SIZE:
-            UpdateDipSize(host);
+            UpdateDipSize(win);
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         case WM_DPICHANGED: {
             auto* r = (RECT*)lParam;
             SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left,
                          r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
-            DiscardDeviceResources(host);
+            DiscardDeviceResources(win);
             return 0;
         }
         case WM_TIMER:
-            if (host->onTick.IsValid()) {
-                TickEvent ev = {host->tickMs};
-                ListenerCall(host->app, host, host->onTick, &ev);
+            if (win->onTick.IsValid()) {
+                TickEvent ev = {win->tickMs};
+                ListenerCall(win->app, win, win->onTick, &ev);
             }
-            if (host->anim || host->onTick.IsValid()) {
+            if (win->anim || win->onTick.IsValid()) {
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
-            RenderFrame(host, hdc);
+            RenderFrame(win, hdc);
             EndPaint(hwnd, &ps);
             return 0;
         }
         case WM_MOUSEMOVE: {
-            host->paint.dpi = HostDpi(hwnd);
-            host->mouseX = PxToDip(&host->paint, GET_X_LPARAM(lParam));
-            host->mouseY = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
-            int id = HitTest(&host->paint, host->mouseX, host->mouseY);
-            if (id != host->hoverId) {
-                host->hoverId = id;
+            win->paint.dpi = HostDpi(hwnd);
+            win->mouseX = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+            win->mouseY = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+            int id = HitTest(&win->paint, win->mouseX, win->mouseY);
+            if (id != win->hoverId) {
+                win->hoverId = id;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
-            if (host->onMouse.IsValid()) {
-                MouseEvent ev = {MouseKind::Move, host->mouseX, host->mouseY, 0,
+            if (win->onMouse.IsValid()) {
+                MouseEvent ev = {MouseKind::Move, win->mouseX, win->mouseY, 0,
                                  id};
-                ListenerCall(host->app, host, host->onMouse, &ev);
+                ListenerCall(win->app, win, win->onMouse, &ev);
             }
-            if (host->mouseDown) {
+            if (win->mouseDown) {
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             TRACKMOUSEEVENT tme = {sizeof(tme)};
@@ -313,29 +312,29 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_MOUSELEAVE:
-            host->hoverId = 0;
+            win->hoverId = 0;
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
         case WM_LBUTTONDOWN: {
-            host->paint.dpi = HostDpi(hwnd);
-            float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
-            const HitRect* hit = HitTestRect(&host->paint, x, y);
+            win->paint.dpi = HostDpi(hwnd);
+            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+            const HitRect* hit = HitTestRect(&win->paint, x, y);
             int id = hit ? hit->id : 0;
-            host->mouseDown = true;
+            win->mouseDown = true;
             if (id) {
-                host->focusId = id;
+                win->focusId = id;
             }
-            if (host->onMouse.IsValid()) {
+            if (win->onMouse.IsValid()) {
                 MouseEvent ev = {MouseKind::Down, x, y, 1, id};
-                ListenerCall(host->app, host, host->onMouse, &ev);
+                ListenerCall(win->app, win, win->onMouse, &ev);
             }
             if (hit && hit->listener.IsValid()) {
                 ClickEvent ev = {x, y, 1, id};
-                ListenerCall(host->app, host, hit->listener, &ev);
-            } else if (host->onClick.IsValid()) {
+                ListenerCall(win->app, win, hit->listener, &ev);
+            } else if (win->onClick.IsValid()) {
                 ClickEvent ev = {x, y, 1, id};
-                ListenerCall(host->app, host, host->onClick, &ev);
+                ListenerCall(win->app, win, win->onClick, &ev);
             }
             if (hit && hit->onClick.IsValid()) {
                 hit->onClick.Call();
@@ -344,48 +343,48 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_LBUTTONUP: {
-            float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
-            host->mouseDown = false;
-            if (host->onMouse.IsValid()) {
+            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+            win->mouseDown = false;
+            if (win->onMouse.IsValid()) {
                 MouseEvent ev = {MouseKind::Up, x, y, 1, 0};
-                ListenerCall(host->app, host, host->onMouse, &ev);
+                ListenerCall(win->app, win, win->onMouse, &ev);
             }
             return 0;
         }
         case WM_LBUTTONDBLCLK: {
-            float x = PxToDip(&host->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&host->paint, GET_Y_LPARAM(lParam));
-            int id = HitTest(&host->paint, x, y);
+            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+            int id = HitTest(&win->paint, x, y);
             if (id == ClickWinCaption || (id == 0 && y < 34)) {
-                AppToggleMaximize(host);
+                AppToggleMaximize(win);
             }
             return 0;
         }
         case WM_NCLBUTTONDOWN:
             if (wParam == HTMINBUTTON) {
-                AppMinimize(host);
+                AppMinimize(win);
                 return 0;
             }
             if (wParam == HTMAXBUTTON) {
-                AppToggleMaximize(host);
+                AppToggleMaximize(win);
                 return 0;
             }
             if (wParam == HTCLOSE) {
-                AppClose(host);
+                AppClose(win);
                 return 0;
             }
             break;
         case WM_MOUSEWHEEL: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
-            float x = PxToDip(&host->paint, pt.x);
-            float y = PxToDip(&host->paint, pt.y);
+            float x = PxToDip(&win->paint, pt.x);
+            float y = PxToDip(&win->paint, pt.y);
             float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) /
                           (float)WHEEL_DELTA * 48.f;
-            if (host->onWheel.IsValid()) {
+            if (win->onWheel.IsValid()) {
                 WheelEvent ev = {x, y, delta};
-                ListenerCall(host->app, host, host->onWheel, &ev);
+                ListenerCall(win->app, win, win->onWheel, &ev);
             }
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
@@ -394,11 +393,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 1;
         case WM_DESTROY: {
             KillTimer(hwnd, 1);
-            DiscardDeviceResources(host);
-            host->hwnd = nullptr;
-            host->running = false;
+            DiscardDeviceResources(win);
+            win->hwnd = nullptr;
+            win->running = false;
             // The message loop ends when the last window closes.
-            App* app = host->app;
+            App* app = win->app;
             bool anyLeft = false;
             if (app) {
                 for (int i = 0; i < app->windows.len; i++) {
@@ -417,63 +416,62 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-void AppQuit(Window* host) {
-    if (host && host->hwnd) {
-        DestroyWindow(host->hwnd);
+void AppQuit(Window* win) {
+    if (win && win->hwnd) {
+        DestroyWindow(win->hwnd);
     }
 }
-void AppInvalidate(Window* host) {
-    if (host && host->hwnd) {
-        InvalidateRect(host->hwnd, nullptr, FALSE);
+void AppInvalidate(Window* win) {
+    if (win && win->hwnd) {
+        InvalidateRect(win->hwnd, nullptr, FALSE);
     }
 }
-void AppMinimize(Window* host) {
-    if (host && host->hwnd) {
-        ShowWindow(host->hwnd, SW_MINIMIZE);
+void AppMinimize(Window* win) {
+    if (win && win->hwnd) {
+        ShowWindow(win->hwnd, SW_MINIMIZE);
     }
 }
-void AppToggleMaximize(Window* host) {
-    if (!host || !host->hwnd) {
+void AppToggleMaximize(Window* win) {
+    if (!win || !win->hwnd) {
         return;
     }
     WINDOWPLACEMENT wp = {sizeof(wp)};
-    GetWindowPlacement(host->hwnd, &wp);
-    ShowWindow(host->hwnd,
+    GetWindowPlacement(win->hwnd, &wp);
+    ShowWindow(win->hwnd,
                wp.showCmd == SW_SHOWMAXIMIZED ? SW_RESTORE : SW_MAXIMIZE);
 }
-void AppClose(Window* host) {
-    AppQuit(host);
+void AppClose(Window* win) {
+    AppQuit(win);
 }
-void AppDrag(Window* host) {
-    if (host && host->hwnd) {
+void AppDrag(Window* win) {
+    if (win && win->hwnd) {
         ReleaseCapture();
-        SendMessageW(host->hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        SendMessageW(win->hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
     }
 }
-bool AppIsMaximized(Window* host) {
-    return host && host->maximized;
+bool AppIsMaximized(Window* win) {
+    return win && win->maximized;
 }
 
-void AppSetTitle(Window* host, const wchar_t* title) {
-    if (host && host->hwnd && title) {
-        SetWindowTextW(host->hwnd, title);
+void AppSetTitle(Window* win, const wchar_t* title) {
+    if (win && win->hwnd && title) {
+        SetWindowTextW(win->hwnd, title);
     }
 }
 
-void AppRequestAnim(Window* host, bool on) {
-    if (host) {
-        host->anim = on;
-        host->winOpts.anim = on;
-        if (host->hwnd) {
+void AppRequestAnim(Window* win, bool on) {
+    if (win) {
+        win->anim = on;
+        win->opts.anim = on;
+        if (win->hwnd) {
             if (on) {
-                SetTimer(host->hwnd, 1, 16u, nullptr);
-            } else if (host->tickMs > 0) {
-                UINT ms = host->winOpts.timerMs > 0
-                              ? (UINT)host->winOpts.timerMs
-                              : kTickMs;
-                SetTimer(host->hwnd, 1, ms, nullptr);
+                SetTimer(win->hwnd, 1, 16u, nullptr);
+            } else if (win->tickMs > 0) {
+                UINT ms =
+                    win->opts.timerMs > 0 ? (UINT)win->opts.timerMs : kTickMs;
+                SetTimer(win->hwnd, 1, ms, nullptr);
             } else {
-                KillTimer(host->hwnd, 1);
+                KillTimer(win->hwnd, 1);
             }
         }
     }
@@ -580,13 +578,13 @@ void AppFree(App* app) {
 }
 
 Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
-                   AppWinOpts opts) {
+                   WinOpts opts) {
     if (!app) {
         return nullptr;
     }
     Window* win = new Window();
     win->app = app;
-    win->winOpts = opts;
+    win->opts = opts;
     win->anim = opts.anim;
     // The factories and the font cache live on App; each window borrows them.
     win->paint.d2d = app->d2d;
@@ -629,7 +627,7 @@ Window* WindowOpen(App* app, const wchar_t* title, int dipW, int dipH,
 }
 
 Window* WindowOpenView(App* app, const wchar_t* title, int dipW, int dipH,
-                       EntityId root, AppWinOpts opts) {
+                       EntityId root, WinOpts opts) {
     Window* win = WindowOpen(app, title, dipW, dipH, opts);
     if (win) {
         win->root = root;
@@ -651,7 +649,7 @@ int AppRun(App* app) {
 }
 
 int AppRunView(const wchar_t* title, int dipW, int dipH, EntityId root,
-               App* app, AppWinOpts opts) {
+               App* app, WinOpts opts) {
     if (!WindowOpenView(app, title, dipW, dipH, root, opts)) {
         return 1;
     }

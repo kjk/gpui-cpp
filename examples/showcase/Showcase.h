@@ -233,8 +233,8 @@ void ShowcaseTooltipClick(ShowcaseApp* app, int id);
 void ShowcaseTreeClick(ShowcaseApp* app, int id);
 void ShowcaseVirtualListClick(ShowcaseApp* app, int id);
 
-void ShowcaseSliderDrag(ShowcaseApp* app, Window* host, float x, float y);
-void ShowcaseResizeDrag(ShowcaseApp* app, Window* host, float x, float y);
+void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y);
+void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y);
 
 typedef El* (*ShowcaseRenderFn)(ShowcaseApp* app, Ctx* cx, WinSize size);
 typedef void (*ShowcaseClickFn)(ShowcaseApp* app, int id);
@@ -263,12 +263,12 @@ void ShowcaseClickRegistered(ShowcaseApp* app, int id);
     } _sc_reg_##COMP;                                                         \
     }
 
-void ShowcaseClick(ShowcaseApp* app, Window* host, int id);
-void ShowcaseChar(ShowcaseApp* app, Window* host, uint32_t cp);
-void ShowcaseKey(ShowcaseApp* app, Window* host, int vk, bool down);
+void ShowcaseClick(ShowcaseApp* app, Window* win, int id);
+void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp);
+void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down);
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta);
-void ShowcaseMouseMove(ShowcaseApp* app, Window* host, float x, float y);
-void ShowcaseMouseDown(ShowcaseApp* app, Window* host, float x, float y,
+void ShowcaseMouseMove(ShowcaseApp* app, Window* win, float x, float y);
+void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
                        int button);
-void ShowcaseMouseUp(ShowcaseApp* app, Window* host, float x, float y,
+void ShowcaseMouseUp(ShowcaseApp* app, Window* win, float x, float y,
                      int button);

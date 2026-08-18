@@ -54,5 +54,5 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
     return AppRunView(L"Window Title", 800, 600, EntityNew<Example>(app).id,
-                      app, AppWinOpts{});
+                      app, WinOpts{});
 }

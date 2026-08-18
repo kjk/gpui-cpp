@@ -40,7 +40,7 @@ static void OnClick(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
 
 static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
     (void)app;
-    Window* host = cx->win;
+    Window* win = cx->win;
     if (ev->kind != MouseKind::Down) {
         return;
     }
@@ -60,7 +60,7 @@ static El* MdLine(Arena* a, Str s, Rgba c) {
 
 El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
     const Theme& th = ThemeNow();
@@ -192,7 +192,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     DialogApp* self = view.Get(app);
     (void)self;
     ThemeSet(ThemeMode::Light);
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     Window* win =
         WindowOpenView(app, L"Dialog Overlay", 800, 600, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));

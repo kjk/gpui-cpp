@@ -47,7 +47,7 @@ El* Example::Render(Example*, Ctx* cx) {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     ThemeSet(ThemeMode::Light);
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     opts.borderless = true;
     return AppRunView(L"Root Borderless", 640, 320, EntityNew<Example>(app).id,
                       app, opts);

@@ -175,7 +175,7 @@ static const char* ModeLabel(int mode) {
 
 El* MdApp::Render(MdApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* host = cx->win;
+    Window* win = cx->win;
 
     WinSize size = WindowSize(cx->win);
 
@@ -219,7 +219,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     } else {
         strncpy_s(self->source, "# Missing report.md", _TRUNCATE);
     }
-    AppWinOpts opts = {};
+    WinOpts opts = {};
     Window* win =
         WindowOpenView(app, L"Markdown Table", 900, 700, view.id, opts);
     WindowOnClick(win, ListenTo(view, &OnClick));

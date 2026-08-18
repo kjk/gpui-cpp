@@ -64,13 +64,13 @@ void ShowcaseResizableClick(ShowcaseApp* app, int id) {
     }
 }
 
-void ShowcaseResizeDrag(ShowcaseApp* app, Window* host, float x, float y) {
+void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y) {
     (void)y;
     if (!app->draggingResize) {
         return;
     }
-    for (int i = 0; i < host->paint.hits.len; i++) {
-        HitRect h = host->paint.hits[i];
+    for (int i = 0; i < win->paint.hits.len; i++) {
+        HitRect h = win->paint.hits[i];
         if (h.id == ClickResize) {
             // move left panel: new width is x relative to the 288 box
             // approximate: hit x is divider; delta from divider center

@@ -2372,7 +2372,7 @@ int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
     return n;
 }
 
-static void CollectFocus(El* e, Window* host) {
+static void CollectFocus(El* e, Window* win) {
     if (!e) {
         return;
     }
@@ -2384,26 +2384,26 @@ static void CollectFocus(El* e, Window* host) {
         fr.y = e->y;
         fr.w = e->w;
         fr.h = e->h;
-        host->focusEls.Append(fr);
+        win->focusEls.Append(fr);
     }
     for (El* c = e->first; c; c = c->next) {
-        CollectFocus(c, host);
+        CollectFocus(c, win);
     }
 }
 
-void FocusCollect(Window* host, El* root) {
-    host->focusEls.Clear();
-    CollectFocus(root, host);
+void FocusCollect(Window* win, El* root) {
+    win->focusEls.Clear();
+    CollectFocus(root, win);
 }
 
-int FocusNext(Window* host, int trapId, bool backward) {
-    int n = host->focusEls.len;
+int FocusNext(Window* win, int trapId, bool backward) {
+    int n = win->focusEls.len;
     if (n == 0) {
         return 0;
     }
     int cur = -1;
     for (int i = 0; i < n; i++) {
-        if (host->focusEls[i].id == host->focusId) {
+        if (win->focusEls[i].id == win->focusId) {
             cur = i;
             break;
         }
@@ -2412,21 +2412,21 @@ int FocusNext(Window* host, int trapId, bool backward) {
     int i = cur;
     for (int k = 0; k < n; k++) {
         i = (i + step + n) % n;
-        if (trapId && host->focusEls[i].trapId != trapId) {
+        if (trapId && win->focusEls[i].trapId != trapId) {
             continue;
         }
-        if (!trapId && host->focusEls[i].trapId) {
+        if (!trapId && win->focusEls[i].trapId) {
             // stay out of traps unless already inside
-            if (cur < 0 || host->focusEls[cur].trapId == 0) {
+            if (cur < 0 || win->focusEls[cur].trapId == 0) {
                 continue;
             }
-            if (host->focusEls[i].trapId != host->focusEls[cur].trapId) {
+            if (win->focusEls[i].trapId != win->focusEls[cur].trapId) {
                 continue;
             }
         }
-        host->focusId = host->focusEls[i].id;
-        return host->focusId;
+        win->focusId = win->focusEls[i].id;
+        return win->focusId;
     }
-    return host->focusId;
+    return win->focusId;
 }
 } // namespace gpui
