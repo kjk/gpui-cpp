@@ -10,10 +10,28 @@ enum {
     ClickDlgField = 353
 };
 
+static void OpenDlg(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->dialogOpen = true;
+    app->input.focused = true;
+    Notify(cx);
+}
+
+static void CloseDlg(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->dialogOpen = false;
+    app->input.focused = false;
+    Notify(cx);
+}
+
+static void FocusDlgField(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->input.focused = true;
+    Notify(cx);
+}
+
 El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
-    root->Child(Button::New(cx, StrL("open-dialog"), ClickDlgOpen)
+    root->Child(Button::New(cx, StrL("open-dialog"), 0)
+                    ->OnClick(Listen(cx, &OpenDlg))
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
@@ -46,7 +64,8 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->Child(Div(a)->PadT(12)->Child(TextEl(a, StrL("Display name"))
                                                 ->Font(14)
                                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-            ->Child(InputBase::New(cx, StrL("dialog-name"), ClickDlgField)
+            ->Child(InputBase::New(cx, StrL("dialog-name"), 0)
+                        ->OnClick(Listen(cx, &FocusDlgField))
                         ->W(264)
                         ->H(28)
                         ->PadX(8)
@@ -100,15 +119,8 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseDialogClick(ShowcaseApp* app, int id) {
-    if (id == ClickDlgOpen) {
-        app->dialogOpen = true;
-        app->input.focused = true;
-    } else if (id == ClickDlgCancel || id == ClickDlgSave) {
-        app->dialogOpen = false;
-        app->input.focused = false;
-    } else if (id == ClickDlgField) {
-        app->input.focused = true;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompDialog, ShowcaseDialog, ShowcaseDialogClick);

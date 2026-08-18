@@ -85,7 +85,7 @@ El* ScTxt(Ctx* cx, Str s, float px, Rgba c) {
     return TextEl(a, s)->Font(px)->Fg(c);
 }
 
-El* ScBtnInk(Ctx* cx, int id, Str label) {
+El* ScBtnInk(Ctx* cx, int id, Listener onClick, Str label) {
     Arena* a = cx->a;
     return Div(a)
         ->H(28)
@@ -94,12 +94,12 @@ El* ScBtnInk(Ctx* cx, int id, Str label) {
         ->JustifyCenter()
         ->Bg(ScInk())
         ->HoverBg(Rgb(0x40, 0x40, 0x40))
-        ->Click(id)
+        ->OnClick(onClick)
         ->FocusId(id)
         ->Child(ScTxt(cx, label, 12, ScWhite()));
 }
 
-El* ScBtnGhost(Ctx* cx, int id, Str label) {
+El* ScBtnGhost(Ctx* cx, int id, Listener onClick, Str label) {
     Arena* a = cx->a;
     return Div(a)
         ->H(28)
@@ -109,12 +109,12 @@ El* ScBtnGhost(Ctx* cx, int id, Str label) {
         ->Border(1, ScInk())
         ->Bg(ScWhite())
         ->HoverBg(ScHover())
-        ->Click(id)
+        ->OnClick(onClick)
         ->FocusId(id)
         ->Child(ScTxt(cx, label, 12, ScInk()));
 }
 
-El* ScBtnLine(Ctx* cx, int id, Str label) {
+El* ScBtnLine(Ctx* cx, int id, Listener onClick, Str label) {
     Arena* a = cx->a;
     return Div(a)
         ->H(28)
@@ -124,7 +124,7 @@ El* ScBtnLine(Ctx* cx, int id, Str label) {
         ->Border(1, ScBorder())
         ->Bg(ScWhite())
         ->HoverBg(ScHover())
-        ->Click(id)
+        ->OnClick(onClick)
         ->FocusId(id)
         ->Child(ScTxt(cx, label, 12, ScInk()));
 }
@@ -162,6 +162,20 @@ El* ScComingSoon(Ctx* cx, const char* name) {
                       ScMutedC()));
 }
 
+// Gallery navigation: the tile knows which component it opens.
+static void OpenComp(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                     intptr_t comp) {
+    app->component = (int)comp;
+    app->scrollY = 0;
+    Notify(cx);
+}
+
+static void BackToOverview(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->component = CompOverview;
+    app->scrollY = 0;
+    Notify(cx);
+}
+
 El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     (void)app;
@@ -193,7 +207,7 @@ El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx) {
                          ->Border(1, ScBorder())
                          ->Bg(ScWhite())
                          ->HoverBg(ScHover())
-                         ->Click(ClickOverview + i)
+                         ->OnClick(Listen(cx, &OpenComp, i))
                          ->FocusId(ClickOverview + i)
                          ->Child(ScTxt(cx, Str(kSlugs[i]), 12, ScInk())));
         }
@@ -244,7 +258,8 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
                 ->ItemsCenter()
                 ->Shrink0()
                 ->BorderB(1, ScLine())
-                ->Child(ScBtnGhost(cx, ClickBack, StrL("All components"))));
+                ->Child(ScBtnGhost(cx, ClickBack, Listen(cx, &BackToOverview),
+                                   StrL("All components"))));
     }
 
     El* content = RenderComp(app, cx, size);
@@ -267,16 +282,8 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
 
 void ShowcaseClick(ShowcaseApp* app, Window* win, int id) {
     (void)win;
-    if (id == ClickBack) {
-        app->component = CompOverview;
-        app->scrollY = 0;
-        return;
-    }
-    if (id >= ClickOverview && id < ClickOverview + CompCount) {
-        app->component = id - ClickOverview;
-        app->scrollY = 0;
-        return;
-    }
+    // A click no element claimed dismisses whatever is open, the way GPUI
+    // closes an overlay on an outside click.
     if (id == 0) {
         app->colorOpen = false;
         app->comboboxOpen = false;

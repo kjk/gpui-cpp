@@ -7,6 +7,12 @@ enum {
     ClickCollapsible = 290
 };
 
+static void OnCollapsible(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->collapsibleOpen = !app->collapsibleOpen;
+    Notify(cx);
+}
+
 static El* RepoRow(Ctx* cx, const char* name) {
     Arena* a = cx->a;
     return Div(a)
@@ -33,6 +39,7 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
                                 ->Fg(Rgb(0x17, 0x17, 0x17)))
                     ->Child(Button::New(cx, StrL("collapsible-trigger"),
                                         ClickCollapsible)
+                                ->OnClick(Listen(cx, &OnCollapsible))
                                 ->W(28)
                                 ->H(28)
                                 ->ItemsCenter()
@@ -55,9 +62,8 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseCollapsibleClick(ShowcaseApp* app, int id) {
-    if (id == ClickCollapsible) {
-        app->collapsibleOpen = !app->collapsibleOpen;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompCollapsible, ShowcaseCollapsible, ShowcaseCollapsibleClick);

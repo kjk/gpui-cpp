@@ -7,13 +7,23 @@ enum {
     ClickOtp = 410
 };
 
+static void OnOtp(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->otpOn = true;
+    app->input.focused = false;
+    Notify(cx);
+}
+
 El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     int active = app->otpLen;
     if (active > 5) {
         active = 5;
     }
-    El* cells = OtpInput::New(cx, ClickOtp)->FlexRow()->Gap(4);
+    El* cells = OtpInput::New(cx, ClickOtp)
+                    ->OnClick(Listen(cx, &OnOtp))
+                    ->FlexRow()
+                    ->Gap(4);
     for (int i = 0; i < 6; i++) {
         char ch[2] = {' ', 0};
         if (i < app->otpLen) {
@@ -38,10 +48,8 @@ El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseOtpInputClick(ShowcaseApp* app, int id) {
-    if (id == ClickOtp) {
-        app->otpOn = true;
-        app->input.focused = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompOtpInput, ShowcaseOtpInput, ShowcaseOtpInputClick);

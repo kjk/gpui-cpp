@@ -446,6 +446,35 @@ static bool StoryMatches(const StoryInfo* m, const char* q) {
            StrContainsI(Str(m->slug), Str(q));
 }
 
+// Gallery::set_active_story
+static void OpenStory(StoryApp* app, Ctx* cx, const ClickEvent*,
+                      intptr_t story) {
+    app->search.focused = false;
+    cx->win->input = nullptr;
+    app->story = (int)story;
+    app->scrollY = 0;
+    app->selA = -1;
+    app->selB = -1;
+    app->selecting = false;
+    Notify(cx);
+}
+
+static void FocusSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
+    app->search.focused = true;
+    cx->win->input = &app->search;
+    AppRequestAnim(cx->win, true);
+    Notify(cx);
+}
+
+static void ClearSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
+    app->search.buf[0] = 0;
+    app->search.len = 0;
+    app->search.cursor = 0;
+    app->search.focused = false;
+    cx->win->input = nullptr;
+    Notify(cx);
+}
+
 static El* SidebarList(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -463,7 +492,7 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
                       ->PadX(10)
                       ->ItemsCenter()
                       ->Radius(6)
-                      ->Click(ClickStory + i)
+                      ->OnClick(Listen(cx, &OpenStory, i))
                       ->FocusId(ClickStory + i);
         El* label = StoryTxt(cx, Str(m->title), 13, th.sidebarFg);
         if (on) {
@@ -491,7 +520,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
                   ->Gap(8)
                   ->Radius(18)
                   ->Bg(th.secondary)
-                  ->Click(ClickSearch)
+                  ->OnClick(Listen(cx, &FocusSearch))
                   ->FocusId(ClickSearch);
     box->Child(::Input::New(cx, &app->search)->Grow());
     if (app->search.len > 0) {
@@ -501,7 +530,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
                        ->ItemsCenter()
                        ->JustifyCenter()
                        ->Shrink0()
-                       ->Click(ClickSearchClear)
+                       ->OnClick(Listen(cx, &ClearSearch))
                        ->Child(IconEl(a, IconName::X, 12)->Fg(th.mutedFg)));
     }
     return box;
@@ -639,37 +668,12 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
 }
 
 static void OnClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
-    Window* win = cx->win;
-    int id = ev->id;
-    if (id == ClickSearch) {
-        app->search.focused = true;
-        cx->win->input = &app->search;
-        AppRequestAnim(win, true);
-        return;
-    }
-    if (id == ClickSearchClear) {
-        app->search.buf[0] = 0;
-        app->search.len = 0;
-        app->search.cursor = 0;
+    // A click that no element claimed lands here: dismiss the search field
+    // the way GPUI dismisses an overlay on an outside click.
+    if (ev->id == 0 && app->search.focused) {
         app->search.focused = false;
         cx->win->input = nullptr;
-        return;
     }
-    app->search.focused = false;
-    cx->win->input = nullptr;
-    if (id == ClickCollapse) {
-        app->collapsed = !app->collapsed;
-        return;
-    }
-    if (id >= ClickStory && id < ClickStory + StoryCount) {
-        app->story = id - ClickStory;
-        app->scrollY = 0;
-        app->selA = -1;
-        app->selB = -1;
-        app->selecting = false;
-        return;
-    }
-    StoryClickRegistered(app, cx, id);
 }
 
 static void OnChar(StoryApp* app, Ctx* cx, const KeyEvent* ev) {

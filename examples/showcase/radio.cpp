@@ -8,6 +8,12 @@ enum {
     ClickRadioExpress = 461
 };
 
+static void PickRadio(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                      intptr_t ix) {
+    app->radioSel = (int)ix;
+    Notify(cx);
+}
+
 static El* RadioDot(Ctx* cx, bool on) {
     Arena* a = cx->a;
     El* outer =
@@ -19,10 +25,11 @@ static El* RadioDot(Ctx* cx, bool on) {
     return outer;
 }
 
-static El* RadioRow(Ctx* cx, Str id, int clickId, bool on, const char* title,
-                    const char* sub, bool disabled) {
+static El* RadioRow(Ctx* cx, Str id, Listener onClick, bool on,
+                    const char* title, const char* sub, bool disabled) {
     Arena* a = cx->a;
-    El* row = Radio::New(cx, id, disabled ? 0 : clickId)
+    El* row = Radio::New(cx, id, 0)
+                  ->OnClick(disabled ? Listener{} : onClick)
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
@@ -38,14 +45,13 @@ static El* RadioRow(Ctx* cx, Str id, int clickId, bool on, const char* title,
 
 El* ShowcaseRadio(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    return RadioRow(cx, StrL("example-radio"), ClickRadioStd,
+    return RadioRow(cx, StrL("example-radio"), Listen(cx, &PickRadio, 0),
                     app->radioSel == 0, "Standard", "3–5 business days", false);
 }
 
 void ShowcaseRadioClick(ShowcaseApp* app, int id) {
-    if (id == ClickRadioStd) {
-        app->radioSel = 0;
-    }
+    (void)app;
+    (void)id;
 }
 
 El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
@@ -54,22 +60,19 @@ El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
         ->W(224)
         ->FlexCol()
         ->Gap(8)
-        ->Child(RadioRow(cx, StrL("example-radio"), ClickRadioStd,
+        ->Child(RadioRow(cx, StrL("example-radio"), Listen(cx, &PickRadio, 0),
                          app->radioSel == 0, "Standard", "3–5 business days",
                          false))
-        ->Child(RadioRow(cx, StrL("express-radio"), ClickRadioExpress,
+        ->Child(RadioRow(cx, StrL("express-radio"), Listen(cx, &PickRadio, 1),
                          app->radioSel == 1, "Express", "Next business day",
                          false))
-        ->Child(RadioRow(cx, StrL("pickup-radio"), 0, false, "Local pickup",
-                         "Currently unavailable", true));
+        ->Child(RadioRow(cx, StrL("pickup-radio"), Listener{}, false,
+                         "Local pickup", "Currently unavailable", true));
 }
 
 void ShowcaseRadioGroupClick(ShowcaseApp* app, int id) {
-    if (id == ClickRadioStd) {
-        app->radioSel = 0;
-    } else if (id == ClickRadioExpress) {
-        app->radioSel = 1;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompRadio, ShowcaseRadio, ShowcaseRadioClick);

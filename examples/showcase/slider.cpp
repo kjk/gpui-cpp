@@ -7,6 +7,12 @@ enum {
     ClickSlider = 500
 };
 
+static void OnSlider(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->draggingSlider = true;
+    Notify(cx);
+}
+
 El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     float p = app->slider;
@@ -60,13 +66,16 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("Drag to adjust"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(Slider::New(cx, ClickSlider)->W(trackW)->H(28)->Child(track));
+        ->Child(Slider::New(cx, ClickSlider)
+                    ->OnClick(Listen(cx, &OnSlider))
+                    ->W(trackW)
+                    ->H(28)
+                    ->Child(track));
 }
 
 void ShowcaseSliderClick(ShowcaseApp* app, int id) {
-    if (id == ClickSlider) {
-        app->draggingSlider = true;
-    }
+    (void)app;
+    (void)id;
 }
 
 void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y) {

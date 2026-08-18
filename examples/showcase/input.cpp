@@ -7,6 +7,12 @@ enum {
     ClickInput = 380
 };
 
+static void OnInput(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->input.focused = true;
+    Notify(cx);
+}
+
 El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     return Div(a)
@@ -19,6 +25,7 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
         ->Child(InputBase::New(cx, StrL("example-input"), ClickInput)
+                    ->OnClick(Listen(cx, &OnInput))
                     ->W(224)
                     ->H(28)
                     ->PadX(8)
@@ -30,9 +37,8 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseInputClick(ShowcaseApp* app, int id) {
-    if (id == ClickInput) {
-        app->input.focused = true;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompInput, ShowcaseInput, ShowcaseInputClick);

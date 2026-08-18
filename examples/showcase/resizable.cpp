@@ -7,6 +7,12 @@ enum {
     ClickResize = 470
 };
 
+static void OnResize(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->draggingResize = true;
+    Notify(cx);
+}
+
 El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     float left = app->resizeW;
@@ -30,8 +36,11 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
         nav->Child(Div(a)->H(26)->PadX(8)->ItemsCenter()->Child(
             TextEl(a, Str(items[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
     }
-    El* split =
-        Div(a)->W(4)->H(kFill)->Click(ClickResize)->FocusId(ClickResize);
+    El* split = Div(a)
+                    ->W(4)
+                    ->H(kFill)
+                    ->OnClick(Listen(cx, &OnResize))
+                    ->FocusId(ClickResize);
     split->Child(Div(a)->W(1)->H(kFill)->Bg(Rgb(0x17, 0x17, 0x17)));
     El* main =
         ResizablePanel::New(cx)
@@ -59,9 +68,8 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseResizableClick(ShowcaseApp* app, int id) {
-    if (id == ClickResize) {
-        app->draggingResize = true;
-    }
+    (void)app;
+    (void)id;
 }
 
 void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y) {

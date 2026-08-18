@@ -74,6 +74,13 @@ static void CopySelected(ShowcaseApp* app, char* out, int cap) {
     out[n] = 0;
 }
 
+static void OnSelClear(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->selA = -1;
+    app->selB = -1;
+    Notify(cx);
+}
+
 El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     int a0 = app->selA;
@@ -139,6 +146,7 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
                     ->Semibold())
             ->Child(preview)
             ->Child(Button::New(cx, StrL("clear-text-selection"), ClickSelClear)
+                        ->OnClick(Listen(cx, &OnSelClear))
                         ->H(28)
                         ->PadX(8)
                         ->Shrink0()
@@ -161,10 +169,8 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseTextSelectionClick(ShowcaseApp* app, int id) {
-    if (id == ClickSelClear) {
-        app->selA = -1;
-        app->selB = -1;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompTextSelection, ShowcaseTextSelection,

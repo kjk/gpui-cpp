@@ -34,6 +34,27 @@ static uint32_t DisplayedColor(ShowcaseApp* app) {
     return app->colorHex & 0xffffff;
 }
 
+static void ToggleColor(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->colorOpen = !app->colorOpen;
+    app->hexIn.focused = false;
+    Notify(cx);
+}
+
+static void FocusHex(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->hexIn.focused = true;
+    app->input.focused = false;
+    Notify(cx);
+}
+
+static void PickSwatch(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t ix) {
+    app->colorHex = kSwatches[ix];
+    SetHexBuf(app);
+    app->colorOpen = false;
+    app->hexIn.focused = false;
+    Notify(cx);
+}
+
 El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     uint32_t shown = DisplayedColor(app);
@@ -48,7 +69,7 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                       ->Gap(8)
                       ->Border(1, Rgb(0x17, 0x17, 0x17))
                       ->Bg(Rgb(0xff, 0xff, 0xff))
-                      ->Click(ClickColor)
+                      ->OnClick(Listen(cx, &ToggleColor))
                       ->FocusId(ClickColor)
                       ->Child(Div(a)
                                   ->W(14)
@@ -74,8 +95,8 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
         El* sw = Div(a)->FlexRow()->Gap(4);
         for (int i = 0; i < 5; i++) {
             bool on = (app->colorHex & 0xffffff) == kSwatches[i];
-            sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i),
-                                       ClickSwatch + i)
+            sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i), 0)
+                          ->OnClick(Listen(cx, &PickSwatch, i))
                           ->W(24)
                           ->H(24)
                           ->Bg(FromHex(kSwatches[i]))
@@ -83,7 +104,8 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                                          : Rgb(0xff, 0xff, 0xff)));
         }
         pop->Child(sw);
-        pop->Child(InputBase::New(cx, StrL("color-hex-input"), ClickHex)
+        pop->Child(InputBase::New(cx, StrL("color-hex-input"), 0)
+                       ->OnClick(Listen(cx, &FocusHex))
                        ->W(204)
                        ->H(28)
                        ->PadX(8)
@@ -100,18 +122,8 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseColorPickerClick(ShowcaseApp* app, int id) {
-    if (id == ClickColor) {
-        app->colorOpen = !app->colorOpen;
-        app->hexIn.focused = false;
-    } else if (id == ClickHex) {
-        app->hexIn.focused = true;
-        app->input.focused = false;
-    } else if (id >= ClickSwatch && id < ClickSwatch + 5) {
-        app->colorHex = kSwatches[id - ClickSwatch];
-        SetHexBuf(app);
-        app->colorOpen = false;
-        app->hexIn.focused = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompColorPicker, ShowcaseColorPicker, ShowcaseColorPickerClick);

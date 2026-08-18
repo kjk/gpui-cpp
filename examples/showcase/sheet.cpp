@@ -8,13 +8,24 @@ enum {
     ClickSheetDone = 491
 };
 
+static void OpenSheet(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->sheetOpen = true;
+    Notify(cx);
+}
+
+static void CloseSheet(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->sheetOpen = false;
+    Notify(cx);
+}
+
 El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     // Rust is size_full + min_h_64. A wrap-sized page recenters when the
     // overlay mounts and the trigger jumps.
     El* root =
         Div(a)->FlexCol()->W(kFill)->MinH(256)->ItemsCenter()->JustifyCenter();
-    El* trigger = Button::New(cx, StrL("open-sheet"), ClickSheetOpen)
+    El* trigger = Button::New(cx, StrL("open-sheet"), 0)
+                      ->OnClick(Listen(cx, &OpenSheet))
                       ->H(28)
                       ->PadX(8)
                       ->ItemsCenter()
@@ -63,7 +74,8 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                         ->Child(ScTxt(cx, StrL("Notifications  ·  Enabled"), 12,
                                       ScInk())))
             ->Child(Div(a)->PadT(12)->W(kFill)->FlexRow()->JustifyEnd()->Child(
-                Button::New(cx, StrL("close-sheet"), ClickSheetDone)
+                Button::New(cx, StrL("close-sheet"), 0)
+                    ->OnClick(Listen(cx, &CloseSheet))
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
@@ -80,17 +92,14 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                       ->W(kFill)
                       ->H(kFill)
                       ->Bg(Rgba8(0, 0, 0, 38))
-                      ->Click(ClickSheetDone);
+                      ->OnClick(Listen(cx, &CloseSheet));
     root->Child(Sheet::New(cx)->Overlay(overlay)->Surface(surface)->IntoEl());
     return root;
 }
 
 void ShowcaseSheetClick(ShowcaseApp* app, int id) {
-    if (id == ClickSheetOpen) {
-        app->sheetOpen = true;
-    } else if (id == ClickSheetDone) {
-        app->sheetOpen = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompSheet, ShowcaseSheet, ShowcaseSheetClick);

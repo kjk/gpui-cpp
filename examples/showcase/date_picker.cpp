@@ -7,10 +7,16 @@ enum {
     ClickDate = 340
 };
 
+static void ToggleDate(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->dateOpen = !app->dateOpen;
+    Notify(cx);
+}
+
 El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* trigger =
-        Button::New(cx, StrL("date-trigger"), ClickDate)
+        Button::New(cx, StrL("date-trigger"), 0)
+            ->OnClick(Listen(cx, &ToggleDate))
             ->W(250)
             ->H(28)
             ->PadX(12)
@@ -32,11 +38,8 @@ El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseDatePickerClick(ShowcaseApp* app, int id) {
-    if (id == ClickDate) {
-        app->dateOpen = !app->dateOpen;
-        return;
-    }
-    ShowcaseCalendarClick(app, id);
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompDatePicker, ShowcaseDatePicker, ShowcaseDatePickerClick);

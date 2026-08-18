@@ -9,10 +9,21 @@ enum {
     ClickAlertOk = 212
 };
 
+static void OpenAlert(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->alertOpen = true;
+    Notify(cx);
+}
+
+static void CloseAlert(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->alertOpen = false;
+    Notify(cx);
+}
+
 El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
-    root->Child(Button::New(cx, StrL("open-alert-dialog"), ClickAlertOpen)
+    root->Child(Button::New(cx, StrL("open-alert-dialog"), 0)
+                    ->OnClick(Listen(cx, &OpenAlert))
                     ->H(28)
                     ->PadX(12)
                     ->ItemsCenter()
@@ -45,31 +56,32 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
                                     ->Wrap()
                                     ->MaxW(264)))
             ->Child(Div(a)->H(12))
-            ->Child(
-                Div(a)
-                    ->FlexRow()
-                    ->W(kFill)
-                    ->JustifyEnd()
-                    ->Gap(8)
-                    ->Child(AlertDialogCancel::New(cx)->Child(
-                        Button::New(cx, StrL("cancel-delete"), ClickAlertCancel)
-                            ->H(28)
-                            ->PadX(12)
-                            ->ItemsCenter()
-                            ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                            ->Child(TextEl(a, StrL("Cancel"))
-                                        ->Font(12)
-                                        ->Fg(Rgb(0x17, 0x17, 0x17)))))
-                    ->Child(AlertDialogAction::New(cx)->Child(
-                        Button::New(cx, StrL("confirm-delete"), ClickAlertOk)
-                            ->H(28)
-                            ->PadX(12)
-                            ->ItemsCenter()
-                            ->Border(1, Rgb(0x17, 0x17, 0x17))
-                            ->Bg(Rgb(0x17, 0x17, 0x17))
-                            ->Child(TextEl(a, StrL("Delete"))
-                                        ->Font(12)
-                                        ->Fg(Rgb(0xff, 0xff, 0xff))))));
+            ->Child(Div(a)
+                        ->FlexRow()
+                        ->W(kFill)
+                        ->JustifyEnd()
+                        ->Gap(8)
+                        ->Child(AlertDialogCancel::New(cx)->Child(
+                            Button::New(cx, StrL("cancel-delete"), 0)
+                                ->OnClick(Listen(cx, &CloseAlert))
+                                ->H(28)
+                                ->PadX(12)
+                                ->ItemsCenter()
+                                ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                                ->Child(TextEl(a, StrL("Cancel"))
+                                            ->Font(12)
+                                            ->Fg(Rgb(0x17, 0x17, 0x17)))))
+                        ->Child(AlertDialogAction::New(cx)->Child(
+                            Button::New(cx, StrL("confirm-delete"), 0)
+                                ->OnClick(Listen(cx, &CloseAlert))
+                                ->H(28)
+                                ->PadX(12)
+                                ->ItemsCenter()
+                                ->Border(1, Rgb(0x17, 0x17, 0x17))
+                                ->Bg(Rgb(0x17, 0x17, 0x17))
+                                ->Child(TextEl(a, StrL("Delete"))
+                                            ->Font(12)
+                                            ->Fg(Rgb(0xff, 0xff, 0xff))))));
 
     El* backdrop = AlertDialogBackdrop::New(cx)
                        ->Absolute()
@@ -93,11 +105,8 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseAlertDialogClick(ShowcaseApp* app, int id) {
-    if (id == ClickAlertOpen) {
-        app->alertOpen = true;
-    } else if (id == ClickAlertCancel || id == ClickAlertOk) {
-        app->alertOpen = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompAlertDialog, ShowcaseAlertDialog, ShowcaseAlertDialogClick);

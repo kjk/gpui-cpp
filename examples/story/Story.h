@@ -73,7 +73,6 @@ enum {
 enum {
     ClickStory = 1000, // + Story*
     ClickSearch = 990,
-    ClickCollapse = 991,
     ClickSearchClear = 992,
     ClickSizeXs = 980,
     ClickSizeSm = 981,

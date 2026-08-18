@@ -9,6 +9,12 @@ enum {
     ClickAcc2 = 202
 };
 
+static void ToggleAcc(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                      intptr_t i) {
+    app->accordionOpen[i] = !app->accordionOpen[i];
+    Notify(cx);
+}
+
 El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     static const char* qs[] = {
@@ -62,10 +68,8 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseAccordionClick(ShowcaseApp* app, int id) {
-    if (id >= ClickAcc0 && id <= ClickAcc2) {
-        int i = id - ClickAcc0;
-        app->accordionOpen[i] = !app->accordionOpen[i];
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompAccordion, ShowcaseAccordion, ShowcaseAccordionClick);

@@ -40,6 +40,41 @@ static void EnsureCalendarDate(ShowcaseApp* app) {
     app->calMonth = st.wMonth;
 }
 
+static void CalStep(ShowcaseApp* app, intptr_t dir) {
+    app->calMonth += (int)dir;
+    if (app->calMonth < 1) {
+        app->calMonth = 12;
+        app->calYear--;
+    } else if (app->calMonth > 12) {
+        app->calMonth = 1;
+        app->calYear++;
+    }
+}
+
+static void CalPrevNext(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                        intptr_t dir) {
+    CalStep(app, dir);
+    Notify(cx);
+}
+
+static void CalPickDay(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t cell) {
+    int first = Dow(app->calYear, app->calMonth, 1);
+    int dim = DaysInMonth(app->calYear, app->calMonth);
+    int day = (int)cell - first + 1;
+    if (day >= 1 && day <= dim) {
+        app->calDay = day;
+    } else if (day < 1) {
+        CalStep(app, -1);
+        app->calDay = DaysInMonth(app->calYear, app->calMonth) + day;
+    } else {
+        int over = day - dim;
+        CalStep(app, 1);
+        app->calDay = over;
+    }
+    Notify(cx);
+}
+
 El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     EnsureCalendarDate(app);
@@ -60,7 +95,7 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
                    ->ItemsCenter()
                    ->JustifyCenter()
                    ->HoverBg(ScHover())
-                   ->Click(ClickCalPrev)
+                   ->OnClick(Listen(cx, &CalPrevNext, -1))
                    ->FocusId(ClickCalPrev)
                    ->Child(ScTxt(cx, StrL("‹"), 14, ScInk())));
     El* title = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
@@ -73,7 +108,7 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
                    ->ItemsCenter()
                    ->JustifyCenter()
                    ->HoverBg(ScHover())
-                   ->Click(ClickCalNext)
+                   ->OnClick(Listen(cx, &CalPrevNext, 1))
                    ->FocusId(ClickCalNext)
                    ->Child(ScTxt(cx, StrL("›"), 14, ScInk())));
     root->Child(nav);
@@ -114,7 +149,7 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
                         ->H(32)
                         ->ItemsCenter()
                         ->JustifyCenter()
-                        ->Click(ClickCalDay + cell)
+                        ->OnClick(Listen(cx, &CalPickDay, cell))
                         ->FocusId(ClickCalDay + cell);
             if (active) {
                 d->Bg(ScInk())
@@ -140,34 +175,8 @@ El* ShowcaseCalendar(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseCalendarClick(ShowcaseApp* app, int id) {
-    if (id == ClickCalPrev) {
-        app->calMonth--;
-        if (app->calMonth < 1) {
-            app->calMonth = 12;
-            app->calYear--;
-        }
-    } else if (id == ClickCalNext) {
-        app->calMonth++;
-        if (app->calMonth > 12) {
-            app->calMonth = 1;
-            app->calYear++;
-        }
-    } else if (id >= ClickCalDay && id < ClickCalDay + 42) {
-        int cell = id - ClickCalDay;
-        int first = Dow(app->calYear, app->calMonth, 1);
-        int dim = DaysInMonth(app->calYear, app->calMonth);
-        int day = cell - first + 1;
-        if (day >= 1 && day <= dim) {
-            app->calDay = day;
-        } else if (day < 1) {
-            ShowcaseCalendarClick(app, ClickCalPrev);
-            app->calDay = DaysInMonth(app->calYear, app->calMonth) + day;
-        } else {
-            int over = day - dim;
-            ShowcaseCalendarClick(app, ClickCalNext);
-            app->calDay = over;
-        }
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompCalendar, ShowcaseCalendar, ShowcaseCalendarClick);

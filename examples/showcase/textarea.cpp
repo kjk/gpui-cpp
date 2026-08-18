@@ -7,6 +7,13 @@ enum {
     ClickTextarea = 540
 };
 
+static void OnTextarea(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->textareaOn = true;
+    app->input.focused = false;
+    Notify(cx);
+}
+
 El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     return Div(a)
@@ -17,6 +24,7 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
         ->Child(Div(a)->H(16)->ItemsCenter()->Child(
             TextEl(a, StrL("Textarea"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
         ->Child(InputBase::New(cx, StrL("example-textarea"), ClickTextarea)
+                    ->OnClick(Listen(cx, &OnTextarea))
                     ->W(224)
                     ->H(64)
                     ->PadX(8)
@@ -31,10 +39,8 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseTextareaClick(ShowcaseApp* app, int id) {
-    if (id == ClickTextarea) {
-        app->textareaOn = true;
-        app->input.focused = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompTextarea, ShowcaseTextarea, ShowcaseTextareaClick);

@@ -9,10 +9,16 @@ enum {
     ClickToggleU = 562
 };
 
-static El* ToggleCell(Ctx* cx, Str id, int clickId, const char* label,
+static void ToggleBold(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->toggleOn = !app->toggleOn;
+    Notify(cx);
+}
+
+static El* ToggleCell(Ctx* cx, Str id, Listener onClick, const char* label,
                       bool on) {
     Arena* a = cx->a;
-    El* b = Toggle::New(cx, id, clickId)
+    El* b = Toggle::New(cx, id, 0)
+                ->OnClick(onClick)
                 ->W(28)
                 ->H(28)
                 ->ItemsCenter()
@@ -37,14 +43,13 @@ static El* ToggleCell(Ctx* cx, Str id, int clickId, const char* label,
 
 El* ShowcaseToggle(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    return ToggleCell(cx, StrL("example-toggle"), ClickToggleB, "B",
+    return ToggleCell(cx, StrL("example-toggle"), Listen(cx, &ToggleBold), "B",
                       app->toggleOn);
 }
 
 void ShowcaseToggleClick(ShowcaseApp* app, int id) {
-    if (id == ClickToggleB) {
-        app->toggleOn = !app->toggleOn;
-    }
+    (void)app;
+    (void)id;
 }
 
 El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
@@ -54,19 +59,14 @@ El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
     return ToggleGroup::New(cx, StrL("example-toggle-group"))
         ->FlexRow()
         ->Child(ShowcaseToggle(app, cx))
+        ->Child(ToggleCell(cx, StrL("italic-toggle"), Listener{}, "I", italic))
         ->Child(
-            ToggleCell(cx, StrL("italic-toggle"), ClickToggleI, "I", italic))
-        ->Child(
-            ToggleCell(cx, StrL("underline-toggle"), ClickToggleU, "U", under));
+            ToggleCell(cx, StrL("underline-toggle"), Listener{}, "U", under));
 }
 
 void ShowcaseToggleGroupClick(ShowcaseApp* app, int id) {
-    ShowcaseToggleClick(app, id);
-    if (id == ClickToggleI) {
-        app->toggleGroup ^= 1;
-    } else if (id == ClickToggleU) {
-        app->toggleGroup ^= 2;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompToggle, ShowcaseToggle, ShowcaseToggleClick);

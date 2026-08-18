@@ -43,6 +43,14 @@ static const char* kEditorDefault =
     "    println!(\"{}\", workspace.summary());\n"
     "}\n";
 
+static void OnEditor(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->editorOn = true;
+    app->textareaOn = false;
+    app->input.focused = false;
+    Notify(cx);
+}
+
 El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     if (!app->editorInited) {
@@ -62,6 +70,7 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
         ->Child(InputBase::New(cx, StrL("example-editor"), ClickEditor)
+                    ->OnClick(Listen(cx, &OnEditor))
                     ->W(320)
                     ->H(128)
                     ->PadX(8)
@@ -76,11 +85,8 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseEditorClick(ShowcaseApp* app, int id) {
-    if (id == ClickEditor) {
-        app->editorOn = true;
-        app->textareaOn = false;
-        app->input.focused = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompEditor, ShowcaseEditor, ShowcaseEditorClick);

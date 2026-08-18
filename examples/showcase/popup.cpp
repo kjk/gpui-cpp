@@ -7,9 +7,16 @@ enum {
     ClickPopup = 450
 };
 
+static void OnPopup(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->popupOpen = !app->popupOpen;
+    Notify(cx);
+}
+
 El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* trigger = Button::New(cx, StrL("popup-trigger"), ClickPopup)
+                      ->OnClick(Listen(cx, &OnPopup))
                       ->H(28)
                       ->PadX(12)
                       ->ItemsCenter()
@@ -47,9 +54,8 @@ El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcasePopupClick(ShowcaseApp* app, int id) {
-    if (id == ClickPopup) {
-        app->popupOpen = !app->popupOpen;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompPopup, ShowcasePopup, ShowcasePopupClick);

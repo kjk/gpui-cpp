@@ -8,9 +8,20 @@ enum {
     ClickToastDismiss = 551
 };
 
+static void ShowToast(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->toastOn = true;
+    Notify(cx);
+}
+
+static void HideToast(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->toastOn = false;
+    Notify(cx);
+}
+
 El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* btn = Button::New(cx, StrL("show-toast"), ClickToastShow)
+    El* btn = Button::New(cx, StrL("show-toast"), 0)
+                  ->OnClick(Listen(cx, &ShowToast))
                   ->H(28)
                   ->PadX(8)
                   ->Shrink0()
@@ -43,8 +54,8 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                                     ->Font(12)
                                     ->Fg(Rgb(0x17, 0x17, 0x17))
                                     ->Semibold())
-                        ->Child(Button::New(cx, StrL("dismiss-toast"),
-                                            ClickToastDismiss)
+                        ->Child(Button::New(cx, StrL("dismiss-toast"), 0)
+                                    ->OnClick(Listen(cx, &HideToast))
                                     ->W(24)
                                     ->H(24)
                                     ->ItemsCenter()
@@ -61,11 +72,8 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseToastClick(ShowcaseApp* app, int id) {
-    if (id == ClickToastShow) {
-        app->toastOn = true;
-    } else if (id == ClickToastDismiss) {
-        app->toastOn = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompToast, ShowcaseToast, ShowcaseToastClick);

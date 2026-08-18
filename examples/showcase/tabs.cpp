@@ -9,6 +9,11 @@ enum {
     ClickTab2 = 522
 };
 
+static void PickTab(ShowcaseApp* app, Ctx* cx, const ClickEvent*, intptr_t i) {
+    app->tab = (int)i;
+    Notify(cx);
+}
+
 El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const char* labels[] = {"Overview", "Activity", "Settings"};
@@ -66,9 +71,8 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseTabsClick(ShowcaseApp* app, int id) {
-    if (id >= ClickTab0 && id <= ClickTab2) {
-        app->tab = id - ClickTab0;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompTabs, ShowcaseTabs, ShowcaseTabsClick);

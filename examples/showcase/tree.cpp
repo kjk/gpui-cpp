@@ -41,6 +41,14 @@ static int Depth(int i) {
     return d;
 }
 
+static void PickTree(ShowcaseApp* app, Ctx* cx, const ClickEvent*, intptr_t i) {
+    app->treeSel = (int)i;
+    if (kTree[i].folder) {
+        app->treeOpen[i] = !app->treeOpen[i];
+    }
+    Notify(cx);
+}
+
 El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* list = Div(a)->FlexCol()->PadY(4);
@@ -80,14 +88,8 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseTreeClick(ShowcaseApp* app, int id) {
-    if (id < ClickTree || id >= ClickTree + 8) {
-        return;
-    }
-    int i = id - ClickTree;
-    app->treeSel = i;
-    if (kTree[i].folder) {
-        app->treeOpen[i] = !app->treeOpen[i];
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompTree, ShowcaseTree, ShowcaseTreeClick);

@@ -7,6 +7,12 @@ enum {
     ClickCheckbox = 280
 };
 
+static void OnCheckbox(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->checkboxOn = !app->checkboxOn;
+    Notify(cx);
+}
+
 El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool on = app->checkboxOn;
@@ -22,6 +28,7 @@ El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
             ->Child(TextEl(a, StrL("✓"))->Font(11)->Fg(Rgb(0xff, 0xff, 0xff)));
     }
     return Checkbox::New(cx, StrL("example-checkbox"), ClickCheckbox)
+        ->OnClick(Listen(cx, &OnCheckbox))
         ->FlexRow()
         ->ItemsCenter()
         ->Gap(8)
@@ -32,9 +39,8 @@ El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseCheckboxClick(ShowcaseApp* app, int id) {
-    if (id == ClickCheckbox) {
-        app->checkboxOn = !app->checkboxOn;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompCheckbox, ShowcaseCheckbox, ShowcaseCheckboxClick);

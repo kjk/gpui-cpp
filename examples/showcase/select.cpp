@@ -10,6 +10,18 @@ enum {
 
 static const char* kFw[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
+static void ToggleSelect(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->selectOpen = !app->selectOpen;
+    Notify(cx);
+}
+
+static void PickOption(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t ix) {
+    app->selectIx = (int)ix;
+    app->selectOpen = false;
+    Notify(cx);
+}
+
 El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     int sel = app->selectIx;
@@ -24,7 +36,7 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
                       ->JustifyBetween()
                       ->Border(1, Rgb(0x17, 0x17, 0x17))
                       ->Bg(Rgb(0xff, 0xff, 0xff))
-                      ->Click(ClickSelect)
+                      ->OnClick(Listen(cx, &ToggleSelect))
                       ->FocusId(0)
                       ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
                       ->Child(TextEl(a, Str(kFw[sel]))
@@ -47,7 +59,7 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
                           ->FlexRow()
                           ->JustifyBetween()
                           ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                          ->Click(ClickSel0 + i)
+                          ->OnClick(Listen(cx, &PickOption, i))
                           ->Child(TextEl(a, Str(kFw[i]))
                                       ->Font(12)
                                       ->Fg(Rgb(0x17, 0x17, 0x17)));
@@ -65,12 +77,8 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseSelectClick(ShowcaseApp* app, int id) {
-    if (id == ClickSelect) {
-        app->selectOpen = !app->selectOpen;
-    } else if (id >= ClickSel0 && id < ClickSel0 + 4) {
-        app->selectIx = id - ClickSel0;
-        app->selectOpen = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompSelect, ShowcaseSelect, ShowcaseSelectClick);

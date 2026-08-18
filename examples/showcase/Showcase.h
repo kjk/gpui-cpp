@@ -146,9 +146,9 @@ Str DupA(Ctx* cx, const char* s);
 Str DupFmt(Ctx* cx, const char* fmt, ...);
 
 El* ScTxt(Ctx* cx, Str s, float px, Rgba c);
-El* ScBtnInk(Ctx* cx, int id, Str label);
-El* ScBtnGhost(Ctx* cx, int id, Str label);
-El* ScBtnLine(Ctx* cx, int id, Str label);
+El* ScBtnInk(Ctx* cx, int id, Listener onClick, Str label);
+El* ScBtnGhost(Ctx* cx, int id, Listener onClick, Str label);
+El* ScBtnLine(Ctx* cx, int id, Listener onClick, Str label);
 El* ScComingSoon(Ctx* cx, const char* name);
 
 El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx);

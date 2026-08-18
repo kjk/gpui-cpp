@@ -7,9 +7,16 @@ enum {
     ClickPageBase = 420
 };
 
+static void GoPage(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                   intptr_t page) {
+    app->page = (int)page;
+    Notify(cx);
+}
+
 static El* PageBtn(Ctx* cx, int p, bool on) {
     Arena* a = cx->a;
-    El* b = Button::New(cx, DupFmt(cx, "page-%d", p), ClickPageBase + p)
+    El* b = Button::New(cx, DupFmt(cx, "page-%d", p), 0)
+                ->OnClick(Listen(cx, &GoPage, p))
                 ->W(28)
                 ->H(28)
                 ->ItemsCenter()
@@ -72,9 +79,8 @@ El* ShowcasePagination(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcasePaginationClick(ShowcaseApp* app, int id) {
-    if (id >= ClickPageBase + 1 && id <= ClickPageBase + 8) {
-        app->page = id - ClickPageBase;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompPagination, ShowcasePagination, ShowcasePaginationClick);

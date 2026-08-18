@@ -24,6 +24,27 @@ static bool Matches(const char* label, const char* q) {
     return strstr(a, b) != nullptr;
 }
 
+static void ToggleCombo(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->comboboxOpen = !app->comboboxOpen;
+    app->comboQuery.focused = app->comboboxOpen;
+    app->input.focused = false;
+    Notify(cx);
+}
+
+static void FocusComboQuery(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->comboQuery.focused = true;
+    app->input.focused = false;
+    Notify(cx);
+}
+
+static void PickCombo(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                      intptr_t ix) {
+    strncpy_s(app->comboboxSel, kFwCombo[ix], _TRUNCATE);
+    app->comboboxOpen = false;
+    app->comboQuery.focused = false;
+    Notify(cx);
+}
+
 El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* trigger =
@@ -36,7 +57,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
             ->JustifyBetween()
             ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
             ->Bg(Rgb(0xff, 0xff, 0xff))
-            ->Click(ClickCombo)
+            ->OnClick(Listen(cx, &ToggleCombo))
             ->FocusId(ClickCombo)
             ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
             ->Child(TextEl(a, Str(app->comboboxSel))
@@ -51,7 +72,8 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                   ->Pad(4)
                   ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                   ->Bg(Rgb(0xff, 0xff, 0xff));
-        pop->Child(InputBase::New(cx, StrL("combobox-search"), ClickComboQ)
+        pop->Child(InputBase::New(cx, StrL("combobox-search"), 0)
+                       ->OnClick(Listen(cx, &FocusComboQuery))
                        ->W(kFill)
                        ->H(28)
                        ->PadX(8)
@@ -69,7 +91,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                             ->PadX(8)
                             ->ItemsCenter()
                             ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                            ->Click(ClickCombo0 + i)
+                            ->OnClick(Listen(cx, &PickCombo, i))
                             ->Child(TextEl(a, Str(kFwCombo[i]))
                                         ->Font(12)
                                         ->Fg(Rgb(0x17, 0x17, 0x17))));
@@ -84,18 +106,8 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
 }
 
 void ShowcaseComboboxClick(ShowcaseApp* app, int id) {
-    if (id == ClickCombo) {
-        app->comboboxOpen = !app->comboboxOpen;
-        app->comboQuery.focused = app->comboboxOpen;
-        app->input.focused = false;
-    } else if (id == ClickComboQ) {
-        app->comboQuery.focused = true;
-        app->input.focused = false;
-    } else if (id >= ClickCombo0 && id < ClickCombo0 + 4) {
-        strncpy_s(app->comboboxSel, kFwCombo[id - ClickCombo0], _TRUNCATE);
-        app->comboboxOpen = false;
-        app->comboQuery.focused = false;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompCombobox, ShowcaseCombobox, ShowcaseComboboxClick);

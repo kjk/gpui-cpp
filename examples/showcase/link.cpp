@@ -7,6 +7,12 @@ enum {
     ClickLink = 390
 };
 
+static void OnLink(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    log("open /base/primitives/link");
+    Notify(cx);
+}
+
 El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     (void)app;
@@ -18,6 +24,7 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
                     ->Font(12)
                     ->Fg(Rgb(0x17, 0x17, 0x17)))
         ->Child(Link::New(cx, StrL("example-link"), ClickLink)
+                    ->OnClick(Listen(cx, &OnLink))
                     ->W(kFill)
                     ->H(28)
                     ->PadX(12)
@@ -40,9 +47,7 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
 
 void ShowcaseLinkClick(ShowcaseApp* app, int id) {
     (void)app;
-    if (id == ClickLink) {
-        log("open /base/primitives/link");
-    }
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompLink, ShowcaseLink, ShowcaseLinkClick);

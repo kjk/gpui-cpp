@@ -7,6 +7,12 @@ enum {
     ClickSwitch = 510
 };
 
+static void OnSwitch(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    (void)app;
+    app->switchOn = !app->switchOn;
+    Notify(cx);
+}
+
 El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool on = app->switchOn;
@@ -39,13 +45,13 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
                         ->Font(12)
                         ->Fg(Rgb(0x73, 0x73, 0x73)))))
         ->Child(Switch::New(cx, StrL("example-switch"), ClickSwitch)
+                    ->OnClick(Listen(cx, &OnSwitch))
                     ->Child(track));
 }
 
 void ShowcaseSwitchClick(ShowcaseApp* app, int id) {
-    if (id == ClickSwitch) {
-        app->switchOn = !app->switchOn;
-    }
+    (void)app;
+    (void)id;
 }
 
 SHOWCASE_PAGE(CompSwitch, ShowcaseSwitch, ShowcaseSwitchClick);
