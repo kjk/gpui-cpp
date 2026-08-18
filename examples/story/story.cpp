@@ -317,49 +317,65 @@ static El* ToolbarSep(Ctx* cx) {
     return Div(a)->W(1)->H(24)->Shrink0()->Bg(th.border);
 }
 
-// No Bg on the button: the group paints its background and border first, and
-// an opaque child would cover the stroke that straddles the group's edge.
+// Button::outline().small(): h_6, px_2, text_sm. No Bg on the button — the
+// group paints its background and border first, and an opaque child would
+// cover the stroke that straddles the group's edge.
 static El* ToolbarDropBtn(Ctx* cx, Str label) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     return Div(a)
         ->H(24)
-        ->PadX(10)
+        ->PadX(8)
         ->ItemsCenter()
         ->JustifyCenter()
         ->HoverBg(th.muted)
-        ->Child(StoryTxt(cx, label, 12, th.foreground));
+        ->Child(StoryTxt(cx, label, 14, th.foreground));
 }
 
+// PopupMenu::render_item: h 26, px_2, gap_x_1, text_sm, rounded, and a 12px
+// icon gutter that Icon::empty() holds open on the rows that are not the
+// checked one. `gutter` is Rust's has_left_icon: a menu with nothing checked
+// has no column at all, so its rows sit flush left.
+//
+// Rust's rows fill the menu. A column here does not stretch its children, so
+// they carry min_w(rems(8)) less the menu's padding instead, and the menu
+// shrink-wraps around the widest of them.
 static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
-                           bool on, bool plain = false) {
-    // TODO: plain means "no check column" (StoryToolbarOpt::plain, Rust's
-    // menu() rather than menu_with_check()); the cell below is still drawn
-    // unconditionally.
-    (void)plain;
+                           bool on, bool gutter) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    return Div(a)
-        ->H(28)
-        ->W(160)
-        ->PadX(10)
-        ->FlexRow()
-        ->Gap(8)
-        ->ItemsCenter()
-        ->HoverBg(th.muted)
-        ->OnClick(ListenerArg(onAct, act))
-        ->Child(StoryTxt(cx, on ? StrL("\xE2\x9C\x93") : StrL(" "), 12,
-                         th.foreground)
-                    ->W(14))
-        ->Child(StoryTxt(cx, Str(label), 12, th.foreground));
+    El* row = Div(a)
+                  ->H(26)
+                  ->MinW(120)
+                  ->PadX(8)
+                  ->FlexRow()
+                  ->Gap(4)
+                  ->ItemsCenter()
+                  ->Radius(th.radius)
+                  ->HoverBg(th.accent);
+    // The row needs a click id of its own, or HoverBg has nothing to match
+    // against and the hovered row never lights up.
+    row->Click(HashClickId(StoryFmt(cx, "story-toolbar-opt%d", act)))
+        ->OnClick(ListenerArg(onAct, act));
+    if (gutter) {
+        El* mark = Div(a)->W(12)->H(12)->Shrink0();
+        if (on) {
+            mark->Child(IconEl(a, IconName::Check, 12)->Fg(th.foreground));
+        }
+        row->Child(mark);
+    }
+    row->Child(StoryTxt(cx, Str(label), 14, th.foreground));
+    return row;
 }
 
+// popover_style, plus PopupMenu's p_1 and gap_y_0p5 around the items.
 static El* ToolbarMenu(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     return Div(a)
         ->FlexCol()
-        ->PadY(4)
+        ->Pad(4)
+        ->Gap(2)
         ->Bg(th.background)
         ->Border(1, th.border)
         ->Radius(th.radius);
@@ -423,17 +439,20 @@ static El* StorySizeMenu(Ctx* cx, StoryToolbarState* st, Listener onAct) {
             ->OnClick(ListenerArg(onAct, ToolbarOpenSize));
     El* sizeMenu = nullptr;
     if (st->sizeMenuOpen) {
+        // One size is always the current one, so the check column is always
+        // there.
         sizeMenu = ToolbarMenu(cx);
         sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeXs, "XSmall",
-                                        st->size == UiSize::XSmall));
+                                        st->size == UiSize::XSmall, true));
         sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeSm, "Small",
-                                        st->size == UiSize::Small));
+                                        st->size == UiSize::Small, true));
         sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeMd, "Medium",
-                                        st->size == UiSize::Medium));
+                                        st->size == UiSize::Medium, true));
         sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeLg, "Large",
-                                        st->size == UiSize::Large));
+                                        st->size == UiSize::Large, true));
     }
     return Popup::New(cx, StrL("story-size-menu"), sizeTrig)
+        ->AnchorRight()
         ->Content(sizeMenu)
         ->IntoEl();
 }
@@ -456,14 +475,22 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
                           ->OnClick(ListenerArg(onAct, ToolbarOpenOpts));
         El* optMenu = nullptr;
         if (st->optsOpen) {
+            // has_left_icon: the column is there only while something in the
+            // menu is checked. A row built with menu() rather than
+            // menu_with_check() never is.
+            bool gutter = false;
+            for (int i = 0; i < nrows; i++) {
+                gutter = gutter || (rows[i].checked && !rows[i].plain);
+            }
             optMenu = ToolbarMenu(cx);
             for (int i = 0; i < nrows; i++) {
-                optMenu->Child(ToolbarCheckRow(cx, onAct, rows[i].act,
-                                               rows[i].label, rows[i].checked,
-                                               rows[i].plain));
+                optMenu->Child(
+                    ToolbarCheckRow(cx, onAct, rows[i].act, rows[i].label,
+                                    rows[i].checked && !rows[i].plain, gutter));
             }
         }
         group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
+                         ->AnchorRight()
                          ->Content(optMenu)
                          ->IntoEl());
     }
@@ -484,13 +511,18 @@ El* StoryToolbarDropdown(Ctx* cx, Str id, Str label, bool open, Listener onOpen,
     El* trigger = ToolbarDropBtn(cx, label)->OnClick(onOpen);
     El* menu = nullptr;
     if (open) {
+        bool gutter = false;
+        for (int i = 0; i < nrows; i++) {
+            gutter = gutter || (rows[i].checked && !rows[i].plain);
+        }
         menu = ToolbarMenu(cx);
         for (int i = 0; i < nrows; i++) {
             menu->Child(ToolbarCheckRow(cx, onAct, rows[i].act, rows[i].label,
-                                        rows[i].checked, rows[i].plain));
+                                        rows[i].checked && !rows[i].plain,
+                                        gutter));
         }
     }
-    return Popup::New(cx, id, trigger)->Content(menu)->IntoEl();
+    return Popup::New(cx, id, trigger)->AnchorRight()->Content(menu)->IntoEl();
 }
 
 El* StoryComingSoon(Ctx* cx, int story) {

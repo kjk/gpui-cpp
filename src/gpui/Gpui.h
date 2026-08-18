@@ -431,6 +431,10 @@ struct Style {
     float dashOff = 1;
     bool absolute = false;
     bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
+    // Laid out where it sits, painted after everything else — GPUI's
+    // deferred(): a popup anchored to its trigger still draws over the page
+    // below it, and hit-tests before it.
+    bool deferred = false;
     bool anchorBelow = false; // absolute, just under the parent box
     float anchorGap = 0;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
@@ -527,6 +531,7 @@ struct El {
     El* DashArray(float on, float off);
     El* Absolute();
     El* Fixed();
+    El* Deferred();
     El* AnchorBelow(float gap = 0);
     El* Top(float v);
     El* Left(float v);

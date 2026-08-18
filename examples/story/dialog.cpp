@@ -90,7 +90,8 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     StoryToolbarOpt opts[4] = {
         {"Overlay", self->overlay, DlgOptOverlay},
-        {"Overlay closable", self->overlayClosable, DlgOptOverlayClosable},
+        {"Close on overlay click", self->overlayClosable,
+         DlgOptOverlayClosable},
         {"Close button", self->closeButton, DlgOptCloseButton},
         {"Keyboard", self->keyboard, DlgOptKeyboard},
     };

@@ -97,11 +97,11 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
         group->Child(StoryToolbarDivider(cx));
         El* btn = Div(a)
                       ->H(24)
-                      ->PadX(10)
+                      ->PadX(8)
                       ->ItemsCenter()
                       ->JustifyCenter()
                       ->HoverBg(th.muted)
-                      ->Child(StoryTxt(cx, Str(kScrollBtns[i].label), 12,
+                      ->Child(StoryTxt(cx, Str(kScrollBtns[i].label), 14,
                                        th.foreground));
         btn->Click(HashClickId(Str(kScrollBtns[i].id)))
             ->OnClick(ListenerArg(scrollTo, kScrollBtns[i].row));

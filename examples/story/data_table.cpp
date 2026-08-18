@@ -169,11 +169,11 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     El* exportBtn =
         Div(a)
             ->H(24)
-            ->PadX(10)
+            ->PadX(8)
             ->ItemsCenter()
             ->JustifyCenter()
             ->HoverBg(th.muted)
-            ->Child(StoryTxt(cx, StrL("Export CSV"), 12, th.foreground));
+            ->Child(StoryTxt(cx, StrL("Export CSV"), 14, th.foreground));
     group->Child(exportBtn);
     toolbarRow->Child(group);
     page->Child(toolbarRow);

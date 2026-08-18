@@ -565,6 +565,10 @@ El* El::Fixed() {
     style.fixed = true;
     return this;
 }
+El* El::Deferred() {
+    style.deferred = true;
+    return this;
+}
 El* El::AnchorBelow(float gap) {
     style.absolute = true;
     style.anchorBelow = true;
@@ -2049,31 +2053,39 @@ static void DrawChart(PaintCtx* ctx, El* e) {
     }
 }
 
-static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed);
+static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay);
 
-static void PaintFixedOverlays(PaintCtx* ctx, El* e) {
+static bool IsOverlay(El* e) {
+    return e->style.fixed || e->style.deferred;
+}
+
+// GPUI paints deferred elements after the tree they came from, so a dialog or
+// an open dropdown covers the page instead of being covered by the siblings
+// that follow it. Painting last also hit-tests first: HitTestRect walks the
+// rects backwards.
+static void PaintOverlays(PaintCtx* ctx, El* e) {
     if (!e) {
         return;
     }
-    if (e->style.fixed) {
+    if (IsOverlay(e)) {
         PaintElNode(ctx, e, false);
         return;
     }
     for (El* c = e->first; c; c = c->next) {
-        PaintFixedOverlays(ctx, c);
+        PaintOverlays(ctx, c);
     }
 }
 
 void PaintEl(PaintCtx* ctx, El* e) {
     PaintElNode(ctx, e, true);
-    PaintFixedOverlays(ctx, e);
+    PaintOverlays(ctx, e);
 }
 
-static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
+static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (!e || !ctx->rt) {
         return;
     }
-    if (skipFixed && e->style.fixed) {
+    if (skipOverlay && IsOverlay(e)) {
         return;
     }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid()) {
@@ -2234,7 +2246,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
     }
 
     for (El* c = e->first; c; c = c->next) {
-        PaintElNode(ctx, c, skipFixed);
+        PaintElNode(ctx, c, skipOverlay);
     }
 
     if (clip) {
