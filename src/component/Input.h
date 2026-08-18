@@ -13,10 +13,12 @@ struct Input {
     LineInput* state = nullptr;
     Str label = {};
     Listener onChange;
+    Listener onFocus;
 
     static Input* New(Ctx* cx, Str id, LineInput* state);
     Input* Label(Str s);
     Input* OnChange(Listener fn);
+    Input* OnFocus(Listener fn);
     El* IntoEl();
 };
 

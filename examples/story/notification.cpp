@@ -8,6 +8,13 @@ struct NotificationStory {
     static void Click(NotificationStory* self, Ctx* cx, int id);
 };
 
+static void ShowNotify(NotificationStory* self, Ctx* cx, const ClickEvent*,
+                       intptr_t kind) {
+    self->notifyOn = true;
+    self->selA = (int)kind;
+    Notify(cx);
+}
+
 static void HideNote(NotificationStory* self, Ctx* cx, const ClickEvent*) {
     self->notifyOn = false;
 }
@@ -18,6 +25,7 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default", "Show a short message.");
     StorySectionAdd(def, component::Button::New(cx, StrL("show-notify-0"))
+                             ->OnClick(Listen(cx, &ShowNotify, 0))
                              ->Outline()
                              ->Label(StrL("Show Notification"))
                              ->IntoEl());
@@ -33,18 +41,22 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                              "Use semantic treatments for common outcomes.");
     El* typeRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
     typeRow->Child(component::Button::New(cx, StrL("show-notify-info"))
+                       ->OnClick(Listen(cx, &ShowNotify, 1))
                        ->Info()
                        ->Label(StrL("Info"))
                        ->IntoEl());
     typeRow->Child(component::Button::New(cx, StrL("show-notify-success"))
+                       ->OnClick(Listen(cx, &ShowNotify, 2))
                        ->Success()
                        ->Label(StrL("Success"))
                        ->IntoEl());
     typeRow->Child(component::Button::New(cx, StrL("show-notify-warning"))
+                       ->OnClick(Listen(cx, &ShowNotify, 3))
                        ->Warning()
                        ->Label(StrL("Warning"))
                        ->IntoEl());
     typeRow->Child(component::Button::New(cx, StrL("show-notify-error"))
+                       ->OnClick(Listen(cx, &ShowNotify, 4))
                        ->Danger()
                        ->Label(StrL("Error"))
                        ->IntoEl());
@@ -72,6 +84,7 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     El* titled = StorySection(cx, "Title and description",
                               "Pair a concise title with supporting detail.");
     StorySectionAdd(titled, component::Button::New(cx, StrL("show-typed-info"))
+                                ->OnClick(Listen(cx, &ShowNotify, 5))
                                 ->Info()
                                 ->Label(StrL("Info"))
                                 ->IntoEl());
@@ -91,26 +104,9 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
 }
 
 void NotificationStory::Click(NotificationStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == HashClickId(StrL("show-notify-0"))) {
-        self->notifyOn = true;
-        self->selA = 0;
-    } else if (id == HashClickId(StrL("show-notify-info"))) {
-        self->notifyOn = true;
-        self->selA = 1;
-    } else if (id == HashClickId(StrL("show-notify-success"))) {
-        self->notifyOn = true;
-        self->selA = 2;
-    } else if (id == HashClickId(StrL("show-notify-warning"))) {
-        self->notifyOn = true;
-        self->selA = 3;
-    } else if (id == HashClickId(StrL("show-notify-error"))) {
-        self->notifyOn = true;
-        self->selA = 4;
-    } else if (id == HashClickId(StrL("show-typed-info"))) {
-        self->notifyOn = true;
-        self->selA = 5;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryNotification, NotificationStory);

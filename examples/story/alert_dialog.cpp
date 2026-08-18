@@ -8,6 +8,13 @@ struct AlertDialogStory {
     static void Click(AlertDialogStory* self, Ctx* cx, int id);
 };
 
+static void OpenAlert(AlertDialogStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t variant) {
+    self->alertOpen = true;
+    self->selB = (int)variant;
+    Notify(cx);
+}
+
 static void CloseAlert(AlertDialogStory* self, Ctx* cx, const ClickEvent*) {
     self->alertOpen = false;
 }
@@ -21,6 +28,7 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
         cx, "Default",
         "A modal dialog that interrupts the user with important content.");
     StorySectionAdd(def, component::Button::New(cx, StrL("open-alert"))
+                             ->OnClick(Listen(cx, &OpenAlert, 0))
                              ->Label(StrL("Show Dialog"))
                              ->Outline()
                              ->IntoEl());
@@ -28,6 +36,7 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
 
     El* dest = StorySection(cx, "Destructive", nullptr);
     StorySectionAdd(dest, component::Button::New(cx, StrL("open-alert-danger"))
+                              ->OnClick(Listen(cx, &OpenAlert, 1))
                               ->Label(StrL("Delete project"))
                               ->Danger()
                               ->IntoEl());
@@ -35,6 +44,7 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
 
     El* none = StorySection(cx, "Without title", nullptr);
     StorySectionAdd(none, component::Button::New(cx, StrL("open-alert-notitle"))
+                              ->OnClick(Listen(cx, &OpenAlert, 2))
                               ->Label(StrL("Confirm"))
                               ->Outline()
                               ->IntoEl());
@@ -61,17 +71,9 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
 }
 
 void AlertDialogStory::Click(AlertDialogStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == HashClickId(StrL("open-alert"))) {
-        self->alertOpen = true;
-        self->selB = 0;
-    } else if (id == HashClickId(StrL("open-alert-danger"))) {
-        self->alertOpen = true;
-        self->selB = 1;
-    } else if (id == HashClickId(StrL("open-alert-notitle"))) {
-        self->alertOpen = true;
-        self->selB = 2;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryAlertDialog, AlertDialogStory);

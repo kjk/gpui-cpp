@@ -6,9 +6,10 @@ struct TooltipStory {
     static void Click(TooltipStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickTipRemove = 2600
-};
+static void RemoveTip(TooltipStory* self, Ctx* cx, const ClickEvent*) {
+    self->tipRemoved = true;
+    Notify(cx);
+}
 
 El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     Arena* a = cx->a;
@@ -102,17 +103,16 @@ El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
                 ->Label(StrL("Remove me"))
                 ->Tooltip(StrL("Clicking this button removes the trigger."))
                 ->IntoEl()
-                ->Click(ClickTipRemove));
+                ->OnClick(Listen(cx, &RemoveTip)));
     }
     page->Child(rem);
     return page;
 }
 
 void TooltipStory::Click(TooltipStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == ClickTipRemove) {
-        self->tipRemoved = true;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryTooltip, TooltipStory);

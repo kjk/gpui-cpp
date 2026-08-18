@@ -23,6 +23,11 @@ Input* Input::OnChange(Listener fn) {
     return this;
 }
 
+Input* Input::OnFocus(Listener fn) {
+    onFocus = fn;
+    return this;
+}
+
 El* Input::IntoEl() {
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(4);
@@ -36,7 +41,9 @@ El* Input::IntoEl() {
             ->ItemsCenter()
             ->Border(1, state && state->focused ? th.foreground : th.border)
             ->Child(gpui::Input::New(cx, state));
-    if (onChange.IsValid()) {
+    if (onFocus.IsValid()) {
+        field->OnClick(onFocus);
+    } else if (onChange.IsValid()) {
         field->OnClick(onChange);
     }
     col->Child(field);

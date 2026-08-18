@@ -8,6 +8,13 @@ struct SheetStory {
     static void Click(SheetStory* self, Ctx* cx, int id);
 };
 
+static void OpenSheet(SheetStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t variant) {
+    self->sheetOpen = true;
+    self->selB = (int)variant;
+    Notify(cx);
+}
+
 static void CloseSheet(SheetStory* self, Ctx* cx, const ClickEvent*) {
     self->sheetOpen = false;
 }
@@ -20,18 +27,22 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     El* place = StorySection(cx, "Placement", nullptr);
     El* row = Div(a)->FlexRow()->Gap(8)->Wrap();
     row->Child(component::Button::New(cx, StrL("sheet-right"))
+                   ->OnClick(Listen(cx, &OpenSheet, 0))
                    ->Label(StrL("Right"))
                    ->Outline()
                    ->IntoEl());
     row->Child(component::Button::New(cx, StrL("sheet-left"))
+                   ->OnClick(Listen(cx, &OpenSheet, 0))
                    ->Label(StrL("Left"))
                    ->Outline()
                    ->IntoEl());
     row->Child(component::Button::New(cx, StrL("sheet-top"))
+                   ->OnClick(Listen(cx, &OpenSheet, 0))
                    ->Label(StrL("Top"))
                    ->Outline()
                    ->IntoEl());
     row->Child(component::Button::New(cx, StrL("sheet-bottom"))
+                   ->OnClick(Listen(cx, &OpenSheet, 0))
                    ->Label(StrL("Bottom"))
                    ->Outline()
                    ->IntoEl());
@@ -40,6 +51,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
 
     El* scroll = StorySection(cx, "Scrollable Sheet", nullptr);
     StorySectionAdd(scroll, component::Button::New(cx, StrL("sheet-scroll"))
+                                ->OnClick(Listen(cx, &OpenSheet, 1))
                                 ->Label(StrL("Open scrollable"))
                                 ->Outline()
                                 ->IntoEl());
@@ -47,6 +59,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
 
     El* focus = StorySection(cx, "Focus back test", nullptr);
     StorySectionAdd(focus, component::Button::New(cx, StrL("sheet-focus"))
+                               ->OnClick(Listen(cx, &OpenSheet, 2))
                                ->Label(StrL("Open and return focus"))
                                ->Outline()
                                ->IntoEl());
@@ -76,20 +89,9 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
 }
 
 void SheetStory::Click(SheetStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == HashClickId(StrL("sheet-right")) ||
-        id == HashClickId(StrL("sheet-left")) ||
-        id == HashClickId(StrL("sheet-top")) ||
-        id == HashClickId(StrL("sheet-bottom"))) {
-        self->sheetOpen = true;
-        self->selB = 0;
-    } else if (id == HashClickId(StrL("sheet-scroll"))) {
-        self->sheetOpen = true;
-        self->selB = 1;
-    } else if (id == HashClickId(StrL("sheet-focus"))) {
-        self->sheetOpen = true;
-        self->selB = 2;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StorySheet, SheetStory);

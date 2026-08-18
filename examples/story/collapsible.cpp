@@ -6,14 +6,16 @@ struct CollapsibleStory {
     static void Click(CollapsibleStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickColl0 = 2400
-};
-
 static void ToggleColl(CollapsibleStory* self, int i) {
     if (i >= 0 && i < 8) {
         self->collOpen[i] = !self->collOpen[i];
     }
+}
+
+static void OnColl(CollapsibleStory* self, Ctx* cx, const ClickEvent*,
+                   intptr_t ix) {
+    ToggleColl(self, (int)ix);
+    Notify(cx);
 }
 
 static El* Chevron(Ctx* cx, bool open) {
@@ -39,7 +41,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                          ->Icon(IconName::ChevronDown)
                          ->Tooltip(StrL("Toggle details"))
                          ->IntoEl()
-                         ->Click(ClickColl0 + 0));
+                         ->OnClick(Listen(cx, &OnColl, 0)));
     El* status = Div(a)
                      ->FlexRow()
                      ->W(360)
@@ -81,7 +83,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                       ->W(360)
                       ->ItemsCenter()
                       ->JustifyBetween()
-                      ->Click(ClickColl0 + 1)
+                      ->OnClick(Listen(cx, &OnColl, 1))
                       ->Child(StoryTxt(cx, StrL("How do I reset my password?"),
                                        13, th.foreground))
                       ->Child(Chevron(cx, self->collOpen[1]));
@@ -110,7 +112,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                       ->Label(StrL("Notification settings"))
                       ->IntoEl()
                       ->W(360)
-                      ->Click(ClickColl0 + 3);
+                      ->OnClick(Listen(cx, &OnColl, 3));
     El* setBody =
         Div(a)->FlexCol()->W(360)->Border(1, th.border)->Radius(th.radius);
     const char* notes[] = {"Push notifications", "Email notifications",
@@ -133,8 +135,8 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
         cx, "Profile",
         "Shows who someone is, and their details only on request.");
     El* profTrig =
-        Div(a)->FlexRow()->W(360)->ItemsCenter()->JustifyBetween()->Click(
-            ClickColl0 + 7);
+        Div(a)->FlexRow()->W(360)->ItemsCenter()->JustifyBetween()->OnClick(
+            Listen(cx, &OnColl, 7));
     El* who = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     who->Child(component::Avatar::New(cx)
                    ->Initials(StrL("JL"))
@@ -169,10 +171,9 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
 }
 
 void CollapsibleStory::Click(CollapsibleStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id >= ClickColl0 && id < ClickColl0 + 8) {
-        ToggleColl(self, id - ClickColl0);
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryCollapsible, CollapsibleStory);

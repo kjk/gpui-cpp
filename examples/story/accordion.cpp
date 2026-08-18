@@ -10,11 +10,6 @@ struct AccordionStory {
     static void Click(AccordionStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickAccItem = 2100,
-    ClickAccStyled = 2110,
-};
-
 static void ToggleOpen(bool* flags, int n, int i, bool multiple);
 static void OnAccDefault(AccordionStory* self, Ctx* cx, const ClickEvent*,
                          intptr_t i) {
@@ -109,32 +104,9 @@ El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
 }
 
 void AccordionStory::Click(AccordionStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == ClickAccMultiple) {
-        self->options.multiple = !self->options.multiple;
-        return;
-    }
-    if (id == ClickAccIcon) {
-        self->options.icon = !self->options.icon;
-        return;
-    }
-    if (id == ClickAccDisabled) {
-        self->options.disabled = !self->options.disabled;
-        return;
-    }
-    if (id == ClickAccBordered) {
-        self->options.bordered = !self->options.bordered;
-        return;
-    }
-    if (id >= ClickAccItem && id < ClickAccItem + 3) {
-        ToggleOpen(self->accordionOpen, 3, id - ClickAccItem,
-                   self->options.multiple);
-        return;
-    }
-    if (id >= ClickAccStyled && id < ClickAccStyled + 3) {
-        ToggleOpen(self->accordionStyledOpen, 3, id - ClickAccStyled,
-                   self->options.multiple);
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryAccordion, AccordionStory);

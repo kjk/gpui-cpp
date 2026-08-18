@@ -8,8 +8,9 @@ struct TabsStory {
     static void Click(TabsStory* self, Ctx* cx, int id);
 };
 
-static void SetTab(TabsStory* self, Ctx* cx, const ClickEvent*, intptr_t i) {
-    self->tab = i;
+static void SetTab(TabsStory* self, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    self->tab = (int)ix;
+    Notify(cx);
 }
 
 static El* TabPanel(Ctx* cx, TabsStory* self, El* bar) {
@@ -62,7 +63,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                     ->PadX(12)
                     ->ItemsCenter()
                     ->Radius(14)
-                    ->Click(HashClickId(Str(names[i])))
+                    ->OnClick(Listen(cx, &SetTab, i))
                     ->Child(StoryTxt(
                         cx, Str(names[i]), 13,
                         i == self->tab ? th.primaryFg : th.foreground));
@@ -85,7 +86,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                     ->ItemsCenter()
                     ->Radius(th.radius)
                     ->Border(1, th.border)
-                    ->Click(HashClickId(Str(names[i])))
+                    ->OnClick(Listen(cx, &SetTab, i))
                     ->Child(StoryTxt(cx, Str(names[i]), 13, th.foreground));
         if (i == self->tab) {
             t->Bg(th.muted);
@@ -104,7 +105,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                     ->PadX(12)
                     ->ItemsCenter()
                     ->Radius(th.radius)
-                    ->Click(HashClickId(Str(names[i])))
+                    ->OnClick(Listen(cx, &SetTab, i))
                     ->Child(StoryTxt(cx, Str(names[i]), 13, th.foreground));
         if (i == self->tab) {
             t->Bg(th.background);
@@ -117,14 +118,9 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
 }
 
 void TabsStory::Click(TabsStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == HashClickId(StrL("Overview"))) {
-        self->tab = 0;
-    } else if (id == HashClickId(StrL("Activity"))) {
-        self->tab = 1;
-    } else if (id == HashClickId(StrL("Settings"))) {
-        self->tab = 2;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryTabs, TabsStory);

@@ -5,6 +5,13 @@ struct HoverCardStory {
     static void Click(HoverCardStory* self, Ctx* cx, int id);
 };
 
+// The window's hover id doubles as "which card is open" on this page.
+static void ToggleCard(HoverCardStory*, Ctx* cx, const ClickEvent*,
+                       intptr_t which) {
+    cx->win->hoverId = cx->win->hoverId == (int)which ? 0 : (int)which;
+    Notify(cx);
+}
+
 static El* Card(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -30,7 +37,7 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
         cx, "Default",
         "Shows supporting information without changing the current view.");
     El* defTrig = StoryTxt(cx, StrL("Hover over me"), 13, th.primary);
-    defTrig->Click(1);
+    defTrig->OnClick(Listen(cx, &ToggleCard, 1));
     StorySectionAdd(def,
                     component::HoverCard::New(cx)
                         ->Trigger(defTrig)
@@ -50,7 +57,7 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
     El* richRow = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
     richRow->Child(StoryTxt(cx, StrL("Hover over"), 13, th.foreground));
     El* link = StoryTxt(cx, StrL("@huacnlee"), 13, th.blue);
-    link->Click(2);
+    link->OnClick(Listen(cx, &ToggleCard, 2));
     El* profile = nullptr;
     if (cx->win->hoverId == 2) {
         profile = Div(a)
@@ -90,7 +97,7 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
                                 ->Label(StrL("Fast Open (200ms)"))
                                 ->Outline()
                                 ->IntoEl()
-                                ->Click(3));
+                                ->OnClick(Listen(cx, &ToggleCard, 3)));
     if (cx->win->hoverId == 3) {
         StorySectionAdd(timing, Card(cx, "Fast open",
                                      "This hover card opens after 200ms."));
@@ -102,7 +109,7 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
                              ->Label(StrL("Hover for position"))
                              ->Outline()
                              ->IntoEl()
-                             ->Click(4));
+                             ->OnClick(Listen(cx, &ToggleCard, 4)));
     if (cx->win->hoverId == 4) {
         StorySectionAdd(
             pos, Card(cx, "Positioned card", "Shown relative to the trigger."));
@@ -112,10 +119,9 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
 }
 
 void HoverCardStory::Click(HoverCardStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id >= 1 && id <= 4) {
-        cx->win->hoverId = cx->win->hoverId == id ? 0 : id;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryHoverCard, HoverCardStory);

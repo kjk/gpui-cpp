@@ -9,11 +9,16 @@ struct DropdownButtonStory {
     static void Click(DropdownButtonStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickDropDefault = 2750,
-    ClickDropOutline,
-    ClickDropGhost
-};
+static void ToggleDrop(DropdownButtonStory* self, Ctx* cx, const ClickEvent*,
+                       intptr_t which) {
+    if (self->selectOpen && self->selectIx == (int)which) {
+        self->selectOpen = false;
+    } else {
+        self->selectOpen = true;
+        self->selectIx = (int)which;
+    }
+    Notify(cx);
+}
 
 static El* DropMenu(Ctx* cx) {
     Arena* a = cx->a;
@@ -45,6 +50,7 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
         StorySection(cx, "Default", "A primary action with an attached menu.");
     StorySectionAdd(def, DropBlock(cx, self, 0,
                                    component::Button::New(cx, StrL("btn0"))
+                                       ->OnClick(Listen(cx, &ToggleDrop, 0))
                                        ->Label(StrL("Primary Dropdown"))
                                        ->Primary()
                                        ->WithSize(self->toolbar.size)));
@@ -54,6 +60,7 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
     StorySectionAdd(out,
                     DropBlock(cx, self, 1,
                               component::Button::New(cx, StrL("btn-outline"))
+                                  ->OnClick(Listen(cx, &ToggleDrop, 1))
                                   ->Label(StrL("Outline Dropdown"))
                                   ->Danger()
                                   ->Outline()
@@ -64,6 +71,7 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
     StorySectionAdd(ghost,
                     DropBlock(cx, self, 2,
                               component::Button::New(cx, StrL("btn-ghost"))
+                                  ->OnClick(Listen(cx, &ToggleDrop, 2))
                                   ->Label(StrL("Ghost Dropdown"))
                                   ->Ghost()
                                   ->WithSize(self->toolbar.size)));
@@ -72,25 +80,9 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
 }
 
 void DropdownButtonStory::Click(DropdownButtonStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    int which = -1;
-    if (id == ClickDropDefault || id == HashClickId(StrL("btn0"))) {
-        which = 0;
-    } else if (id == ClickDropOutline ||
-               id == HashClickId(StrL("btn-outline"))) {
-        which = 1;
-    } else if (id == ClickDropGhost || id == HashClickId(StrL("btn-ghost"))) {
-        which = 2;
-    }
-    if (which < 0) {
-        return;
-    }
-    if (self->selectOpen && self->selectIx == which) {
-        self->selectOpen = false;
-    } else {
-        self->selectOpen = true;
-        self->selectIx = which;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryDropdownButton, DropdownButtonStory);

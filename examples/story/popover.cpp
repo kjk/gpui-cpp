@@ -8,6 +8,17 @@ struct PopoverStory {
     static void Click(PopoverStory* self, Ctx* cx, int id);
 };
 
+static void TogglePop(PopoverStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t which) {
+    if (self->selectOpen && self->selB == (int)which) {
+        self->selectOpen = false;
+    } else {
+        self->selectOpen = true;
+        self->selB = (int)which;
+    }
+    Notify(cx);
+}
+
 static El* PopCard(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -34,6 +45,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     StorySectionAdd(def,
                     component::Popover::New(cx)
                         ->Trigger(component::Button::New(cx, StrL("open-pop"))
+                                      ->OnClick(Listen(cx, &TogglePop, 0))
                                       ->Label(StrL("Open popover"))
                                       ->Outline()
                                       ->IntoEl())
@@ -51,6 +63,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
         form,
         component::Popover::New(cx)
             ->Trigger(component::Button::New(cx, StrL("pop-form"))
+                          ->OnClick(Listen(cx, &TogglePop, 1))
                           ->Label(StrL("Edit"))
                           ->Outline()
                           ->IntoEl())
@@ -65,6 +78,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     StorySectionAdd(list,
                     component::Popover::New(cx)
                         ->Trigger(component::Button::New(cx, StrL("pop-list"))
+                                      ->OnClick(Listen(cx, &TogglePop, 2))
                                       ->Label(StrL("Assign"))
                                       ->Outline()
                                       ->IntoEl())
@@ -80,6 +94,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
 
     El* right = StorySection(cx, "Right click", nullptr);
     StorySectionAdd(right, component::Button::New(cx, StrL("pop-right"))
+                               ->OnClick(Listen(cx, &TogglePop, 3))
                                ->Label(StrL("Right click me"))
                                ->Ghost()
                                ->IntoEl());
@@ -88,26 +103,9 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
 }
 
 void PopoverStory::Click(PopoverStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    int which = -1;
-    if (id == HashClickId(StrL("open-pop"))) {
-        which = 0;
-    } else if (id == HashClickId(StrL("pop-form"))) {
-        which = 1;
-    } else if (id == HashClickId(StrL("pop-list"))) {
-        which = 2;
-    } else if (id == HashClickId(StrL("pop-right"))) {
-        which = 3;
-    }
-    if (which < 0) {
-        return;
-    }
-    if (self->selectOpen && self->selB == which) {
-        self->selectOpen = false;
-    } else {
-        self->selectOpen = true;
-        self->selB = which;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryPopover, PopoverStory);

@@ -8,6 +8,13 @@ struct DialogStory {
     static void Click(DialogStory* self, Ctx* cx, int id);
 };
 
+static void OpenDialog(DialogStory* self, Ctx* cx, const ClickEvent*,
+                       intptr_t variant) {
+    self->dialogOpen = true;
+    self->selB = (int)variant;
+    Notify(cx);
+}
+
 static void CloseDlg(DialogStory* self, Ctx* cx, const ClickEvent*) {
     self->dialogOpen = false;
 }
@@ -20,6 +27,7 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     El* def =
         StorySection(cx, "Default", "A window overlaid on the primary window.");
     StorySectionAdd(def, component::Button::New(cx, StrL("open-dlg"))
+                             ->OnClick(Listen(cx, &OpenDialog, 0))
                              ->Label(StrL("Edit profile"))
                              ->Primary()
                              ->IntoEl());
@@ -27,6 +35,7 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
 
     El* none = StorySection(cx, "Without title", nullptr);
     StorySectionAdd(none, component::Button::New(cx, StrL("open-dlg-notitle"))
+                              ->OnClick(Listen(cx, &OpenDialog, 1))
                               ->Label(StrL("Open"))
                               ->Outline()
                               ->IntoEl());
@@ -34,6 +43,7 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
 
     El* acts = StorySection(cx, "Custom actions", nullptr);
     StorySectionAdd(acts, component::Button::New(cx, StrL("open-dlg-custom"))
+                              ->OnClick(Listen(cx, &OpenDialog, 2))
                               ->Label(StrL("Share"))
                               ->Secondary()
                               ->IntoEl());
@@ -61,17 +71,9 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
 }
 
 void DialogStory::Click(DialogStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == HashClickId(StrL("open-dlg"))) {
-        self->dialogOpen = true;
-        self->selB = 0;
-    } else if (id == HashClickId(StrL("open-dlg-notitle"))) {
-        self->dialogOpen = true;
-        self->selB = 1;
-    } else if (id == HashClickId(StrL("open-dlg-custom"))) {
-        self->dialogOpen = true;
-        self->selB = 2;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryDialog, DialogStory);

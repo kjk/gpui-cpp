@@ -6,9 +6,10 @@ struct LabelStory {
     static void Click(LabelStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickLabelMask = 2500
-};
+static void ToggleMask(LabelStory* self, Ctx* cx, const ClickEvent*) {
+    self->labelMasked = !self->labelMasked;
+    Notify(cx);
+}
 
 El* LabelStory::Render(LabelStory* self, Ctx* cx) {
     Arena* a = cx->a;
@@ -88,17 +89,16 @@ El* LabelStory::Render(LabelStory* self, Ctx* cx) {
                        ->Ghost()
                        ->Icon(self->labelMasked ? IconName::Eye : IconName::Eye)
                        ->IntoEl()
-                       ->Click(ClickLabelMask));
+                       ->OnClick(Listen(cx, &ToggleMask)));
     StorySectionAdd(mask, maskRow);
     page->Child(mask);
     return page;
 }
 
 void LabelStory::Click(LabelStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == ClickLabelMask) {
-        self->labelMasked = !self->labelMasked;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryLabel, LabelStory);

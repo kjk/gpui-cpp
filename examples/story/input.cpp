@@ -10,8 +10,12 @@ struct InputStory {
     static void Click(InputStory* self, Ctx* cx, int id);
 };
 
+static void FocusField(InputStory* self, Ctx* cx, const ClickEvent*) {
+    self->field.focused = true;
+    Notify(cx);
+}
+
 enum {
-    ClickStoryField = 2600
 };
 
 static El* FieldBox(Ctx* cx, const char* text, const char* prefix,
@@ -57,6 +61,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     El* def =
         StorySection(cx, "Default", "Capture and validate short-form text.");
     StorySectionAdd(def, component::Input::New(cx, StrL("name"), &self->field)
+                             ->OnFocus(Listen(cx, &FocusField))
                              ->Label(StrL("Display name"))
                              ->IntoEl());
     page->Child(def);
@@ -86,10 +91,9 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 }
 
 void InputStory::Click(InputStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == ClickStoryField || id == HashClickId(StrL("name"))) {
-        self->field.focused = true;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryInput, InputStory);

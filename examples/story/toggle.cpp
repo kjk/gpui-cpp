@@ -9,25 +9,22 @@ struct ToggleStory {
     static void Click(ToggleStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickTogglePreview = 2300,
-    ClickToggleStar,
-    ClickToggleBell,
-    ClickToggleInbox,
-    ClickToggleCheck,
-    ClickToggleBell2,
-    ClickToggleInbox2,
-    ClickToggleCheck2,
-    ClickToggleBold,
-    ClickToggleItalic,
-    ClickToggleCode
-};
+static void OnToggle(ToggleStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t slot) {
+    if (slot < 0) {
+        self->toggleSel = self->toggleSel == 1 ? 0 : 1;
+    } else if (slot < 10) {
+        self->toggles[slot] = !self->toggles[slot];
+    }
+    Notify(cx);
+}
 
-static El* ToggleChip(Ctx* cx, int id, const char* label, IconName icon,
-                      bool on, bool outline) {
+static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
+                      IconName icon, bool on, bool outline) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
-    El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", id)), id)
+    El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", slot)), 0)
+                ->OnClick(ListenerArg(onToggle, slot))
                 ->H(28)
                 ->PadX(label ? 10.f : 8.f)
                 ->ItemsCenter()
@@ -54,15 +51,16 @@ static El* ToggleChip(Ctx* cx, int id, const char* label, IconName icon,
 El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
+    Listener onToggle = Listen(cx, &OnToggle);
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default",
                            "Text and icon toggles with clear selected states.");
     El* defRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    defRow->Child(ToggleChip(cx, ClickTogglePreview, "Preview", IconName::None,
+    defRow->Child(ToggleChip(cx, onToggle, -1, "Preview", IconName::None,
                              self->toggleSel == 1, true));
-    defRow->Child(ToggleChip(cx, ClickToggleStar, nullptr, IconName::Star,
+    defRow->Child(ToggleChip(cx, onToggle, 0, nullptr, IconName::Star,
                              self->toggles[0], true));
     StorySectionAdd(def, defRow);
     page->Child(def);
@@ -72,21 +70,21 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     El* varsCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
     varsCol->Child(StoryTxt(cx, StrL("Ghost"), 13, th.foreground)->Semibold());
     El* ghost = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    ghost->Child(ToggleChip(cx, ClickToggleBell, nullptr, IconName::Bell,
+    ghost->Child(ToggleChip(cx, onToggle, 1, nullptr, IconName::Bell,
                             self->toggles[1], false));
-    ghost->Child(ToggleChip(cx, ClickToggleInbox, nullptr, IconName::Inbox,
+    ghost->Child(ToggleChip(cx, onToggle, 2, nullptr, IconName::Inbox,
                             self->toggles[2], false));
-    ghost->Child(ToggleChip(cx, ClickToggleCheck, nullptr, IconName::Check,
+    ghost->Child(ToggleChip(cx, onToggle, 3, nullptr, IconName::Check,
                             self->toggles[3], false));
     varsCol->Child(ghost);
     varsCol
         ->Child(StoryTxt(cx, StrL("Outline"), 13, th.foreground)->Semibold());
     El* outline = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    outline->Child(ToggleChip(cx, ClickToggleBell2, nullptr, IconName::Bell,
+    outline->Child(ToggleChip(cx, onToggle, 4, nullptr, IconName::Bell,
                               self->toggles[4], true));
-    outline->Child(ToggleChip(cx, ClickToggleInbox2, nullptr, IconName::Inbox,
+    outline->Child(ToggleChip(cx, onToggle, 5, nullptr, IconName::Inbox,
                               self->toggles[5], true));
-    outline->Child(ToggleChip(cx, ClickToggleCheck2, nullptr, IconName::Check,
+    outline->Child(ToggleChip(cx, onToggle, 6, nullptr, IconName::Check,
                               self->toggles[6], true));
     varsCol->Child(outline);
     StorySectionAdd(vars, varsCol);
@@ -95,11 +93,11 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     El* grp = StorySection(cx, "Group",
                            "Connected toggles keep related choices together.");
     El* g = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
-    g->Child(ToggleChip(cx, ClickToggleBold, "Bold", IconName::None,
+    g->Child(ToggleChip(cx, onToggle, 7, "Bold", IconName::None,
                         self->toggles[7], false));
-    g->Child(ToggleChip(cx, ClickToggleItalic, "Italic", IconName::None,
+    g->Child(ToggleChip(cx, onToggle, 8, "Italic", IconName::None,
                         self->toggles[8], false));
-    g->Child(ToggleChip(cx, ClickToggleCode, "Code", IconName::None,
+    g->Child(ToggleChip(cx, onToggle, 9, "Code", IconName::None,
                         self->toggles[9], false));
     StorySectionAdd(grp, g);
     page->Child(grp);
@@ -107,15 +105,9 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
 }
 
 void ToggleStory::Click(ToggleStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == ClickTogglePreview) {
-        self->toggleSel = self->toggleSel == 1 ? 0 : 1;
-        return;
-    }
-    int slot = id - ClickToggleStar;
-    if (slot >= 0 && slot < 10) {
-        self->toggles[slot] = !self->toggles[slot];
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryToggle, ToggleStory);

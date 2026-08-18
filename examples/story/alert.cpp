@@ -8,10 +8,6 @@ struct AlertStory {
     static void Click(AlertStory* self, Ctx* cx, int id);
 };
 
-enum {
-    ClickAlertBannerClose = 2200
-};
-
 static void HideBanner(AlertStory* self, Ctx* cx, const ClickEvent*) {
     self->alertBanner = false;
 }
@@ -177,10 +173,9 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
 }
 
 void AlertStory::Click(AlertStory* self, Ctx* cx, int id) {
+    (void)self;
     (void)cx;
-    if (id == ClickAlertBannerClose) {
-        self->alertBanner = false;
-    }
+    (void)id;
 }
 
 STORY_PAGE(StoryAlert, AlertStory);
