@@ -62,6 +62,7 @@ struct Theme {
     Rgba green;
     Rgba blue;
     Rgba yellow;
+    Rgba cyan;
     Rgba danger;
     Rgba dangerFg;
     Rgba secondaryHover;

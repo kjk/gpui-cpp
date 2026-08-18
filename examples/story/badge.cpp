@@ -72,7 +72,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
     El* icRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
     icRow->Child(component::Badge::New(cx)
                      ->Icon(IconName::Check)
-                     ->Color(Rgb(0x22, 0xd3, 0xee))
+                     ->Color(th.cyan)
                      ->WithSize(self->toolbar.size)
                      ->Child(Face(cx, self, "JL"))
                      ->IntoEl());
@@ -119,7 +119,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                        ->WithSize(UiSize::Large)
                        ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Check)
-                                   ->Color(Rgb(0x22, 0xd3, 0xee))
+                                   ->Color(th.cyan)
                                    ->WithSize(self->toolbar.size)
                                    ->Child(Face(cx, self, "JL"))
                                    ->IntoEl())
