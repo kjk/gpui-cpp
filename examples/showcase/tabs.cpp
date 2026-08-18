@@ -70,9 +70,4 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
                                 ->MaxW(260)));
 }
 
-void ShowcaseTabsClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompTabs, ShowcaseTabs, ShowcaseTabsClick);
+SHOWCASE_PAGE(CompTabs, ShowcaseTabs);

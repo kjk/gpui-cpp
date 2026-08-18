@@ -18,12 +18,6 @@ struct DialogApp {
     int overlay = 0; // 1 dialog, 2 sheet
 };
 
-static void OnClick(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
-    (void)app;
-    (void)cx;
-    (void)ev;
-}
-
 static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
     (void)app;
     Window* win = cx->win;
@@ -205,7 +199,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     WinOpts opts = {};
     Window* win =
         WindowOpenView(app, StrL("Dialog Overlay"), 800, 600, view.id, opts);
-    WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnMouse(win, ListenTo(view, &OnMouse));
     win->menu.nItems = 4;
     strncpy_s(win->menu.items[0], "Open", _TRUNCATE);

@@ -104,9 +104,4 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-void ShowcaseAlertDialogClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompAlertDialog, ShowcaseAlertDialog, ShowcaseAlertDialogClick);
+SHOWCASE_PAGE(CompAlertDialog, ShowcaseAlertDialog);

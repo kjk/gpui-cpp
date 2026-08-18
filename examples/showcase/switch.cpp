@@ -49,9 +49,4 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
                     ->Child(track));
 }
 
-void ShowcaseSwitchClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompSwitch, ShowcaseSwitch, ShowcaseSwitchClick);
+SHOWCASE_PAGE(CompSwitch, ShowcaseSwitch);

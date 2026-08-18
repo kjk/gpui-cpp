@@ -174,9 +174,4 @@ El* ShowcaseCalendar(ShowcaseApp* app, Ctx* cx) {
     return ShowcaseCalendarGrid(app, cx);
 }
 
-void ShowcaseCalendarClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompCalendar, ShowcaseCalendar, ShowcaseCalendarClick);
+SHOWCASE_PAGE(CompCalendar, ShowcaseCalendar);

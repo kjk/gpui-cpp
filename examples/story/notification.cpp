@@ -5,7 +5,6 @@ struct NotificationStory {
     int selA = -1;
 
     static El* Render(NotificationStory* self, Ctx* cx);
-    static void Click(NotificationStory* self, Ctx* cx, int id);
 };
 
 static void ShowNotify(NotificationStory* self, Ctx* cx, const ClickEvent*,
@@ -101,12 +100,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     }
     page->Child(titled);
     return page;
-}
-
-void NotificationStory::Click(NotificationStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryNotification, NotificationStory);

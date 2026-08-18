@@ -67,9 +67,4 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-void ShowcaseAccordionClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompAccordion, ShowcaseAccordion, ShowcaseAccordionClick);
+SHOWCASE_PAGE(CompAccordion, ShowcaseAccordion);

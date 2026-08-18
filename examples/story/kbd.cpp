@@ -2,7 +2,6 @@
 
 struct KbdStory {
     static El* Render(KbdStory* self, Ctx* cx);
-    static void Click(KbdStory* self, Ctx* cx, int id);
 };
 
 El* KbdStory::Render(KbdStory* self, Ctx* cx) {
@@ -28,11 +27,6 @@ El* KbdStory::Render(KbdStory* self, Ctx* cx) {
     StorySectionAdd(out, row2);
     page->Child(out);
     return page;
-}
-
-void KbdStory::Click(KbdStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryKbd, KbdStory);

@@ -5,7 +5,6 @@ struct SwitchStory {
     StoryToolbarState toolbar;
 
     static El* Render(SwitchStory* self, Ctx* cx);
-    static void Click(SwitchStory* self, Ctx* cx, int id);
 };
 
 static void SetSw0(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
@@ -107,11 +106,6 @@ El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
     StorySectionAdd(col, colRow);
     page->Child(col);
     return page;
-}
-
-void SwitchStory::Click(SwitchStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySwitch, SwitchStory);

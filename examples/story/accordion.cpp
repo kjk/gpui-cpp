@@ -7,7 +7,6 @@ struct AccordionStory {
     StoryAccordionOptions options;
 
     static El* Render(AccordionStory* self, Ctx* cx);
-    static void Click(AccordionStory* self, Ctx* cx, int id);
 };
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple);
@@ -101,12 +100,6 @@ El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
     page->Child(custom);
     (void)th;
     return page;
-}
-
-void AccordionStory::Click(AccordionStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryAccordion, AccordionStory);

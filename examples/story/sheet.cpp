@@ -5,7 +5,7 @@ struct SheetStory {
     int selB = -1;
 
     static El* Render(SheetStory* self, Ctx* cx);
-    static void Click(SheetStory* self, Ctx* cx, int id);
+    static void OnKey(SheetStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void OpenSheet(SheetStory* self, Ctx* cx, const ClickEvent*,
@@ -88,10 +88,13 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     return page;
 }
 
-void SheetStory::Click(SheetStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void SheetStory::OnKey(SheetStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->sheetOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StorySheet, SheetStory);
+STORY_PAGE_KEYS(StorySheet, SheetStory);

@@ -2,7 +2,6 @@
 
 struct SidebarStory {
     static El* Render(SidebarStory* self, Ctx* cx);
-    static void Click(SidebarStory* self, Ctx* cx, int id);
 };
 
 El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
@@ -21,11 +20,6 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void SidebarStory::Click(SidebarStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySidebar, SidebarStory);

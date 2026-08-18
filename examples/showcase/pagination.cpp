@@ -78,9 +78,4 @@ El* ShowcasePagination(ShowcaseApp* app, Ctx* cx) {
     return row;
 }
 
-void ShowcasePaginationClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompPagination, ShowcasePagination, ShowcasePaginationClick);
+SHOWCASE_PAGE(CompPagination, ShowcasePagination);

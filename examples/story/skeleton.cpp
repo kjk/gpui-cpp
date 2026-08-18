@@ -2,7 +2,6 @@
 
 struct SkeletonStory {
     static El* Render(SkeletonStory* self, Ctx* cx);
-    static void Click(SkeletonStory* self, Ctx* cx, int id);
 };
 
 El* SkeletonStory::Render(SkeletonStory* self, Ctx* cx) {
@@ -31,11 +30,6 @@ El* SkeletonStory::Render(SkeletonStory* self, Ctx* cx) {
     StorySectionAdd(card, cardCol);
     page->Child(card);
     return page;
-}
-
-void SkeletonStory::Click(SkeletonStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySkeleton, SkeletonStory);

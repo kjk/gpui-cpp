@@ -82,9 +82,4 @@ El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx) {
     return box;
 }
 
-void ShowcaseVirtualListClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompVirtualList, ShowcaseVirtualList, ShowcaseVirtualListClick);
+SHOWCASE_PAGE(CompVirtualList, ShowcaseVirtualList);

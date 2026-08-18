@@ -4,7 +4,6 @@ struct SpinnerStory {
     StoryToolbarState toolbar;
 
     static El* Render(SpinnerStory* self, Ctx* cx);
-    static void Click(SpinnerStory* self, Ctx* cx, int id);
 };
 
 El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
@@ -68,11 +67,6 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
     StorySectionAdd(ease, easeRow);
     page->Child(ease);
     return page;
-}
-
-void SpinnerStory::Click(SpinnerStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySpinner, SpinnerStory);

@@ -97,9 +97,4 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-void ShowcaseSheetClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompSheet, ShowcaseSheet, ShowcaseSheetClick);
+SHOWCASE_PAGE(CompSheet, ShowcaseSheet);

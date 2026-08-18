@@ -15,12 +15,6 @@ struct MdApp {
     char source[16000];
 };
 
-static void OnClick(MdApp* app, Ctx* cx, const ClickEvent* ev) {
-    (void)app;
-    (void)cx;
-    (void)ev;
-}
-
 static void OnWheel(MdApp* app, Ctx* cx, const WheelEvent* ev) {
     (void)cx;
     float x = ev->x;
@@ -226,7 +220,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     WinOpts opts = {};
     Window* win =
         WindowOpenView(app, StrL("Markdown Table"), 900, 700, view.id, opts);
-    WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnWheel(win, ListenTo(view, &OnWheel));
     int rc = AppRun(app);
     AppFree(app);

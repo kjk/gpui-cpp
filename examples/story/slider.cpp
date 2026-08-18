@@ -2,7 +2,6 @@
 
 struct SliderStory {
     static El* Render(SliderStory* self, Ctx* cx);
-    static void Click(SliderStory* self, Ctx* cx, int id);
 };
 
 static void SetSlider(SliderStory*, Ctx*, const ClickEvent*) {}
@@ -32,11 +31,6 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     StorySectionAdd(rev, component::Slider::New(cx)->Value(0.35f)->IntoEl());
     page->Child(rev);
     return page;
-}
-
-void SliderStory::Click(SliderStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySlider, SliderStory);

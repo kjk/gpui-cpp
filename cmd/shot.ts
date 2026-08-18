@@ -6,6 +6,7 @@ import {
   clickClient,
   killAndWait,
   setForegroundWindow,
+  sendMessage,
   setProcessDpiAware,
   sleep,
   waitForPidWindow,
@@ -17,12 +18,15 @@ process.chdir(root);
 const argv = Bun.argv.slice(2);
 let debug = false;
 const clicks: { x: number; y: number }[] = [];
+const keys: number[] = [];
 const rest: string[] = [];
 for (const a of argv) {
   if (a === "-dbg") {
     debug = true;
   } else if (a === "-rel") {
     debug = false;
+  } else if (a.startsWith("-key=")) {
+    keys.push(Number(a.slice(5)));
   } else if (a.startsWith("-click=")) {
     const [x, y] = a.slice(7).split(",").map(Number);
     clicks.push({ x: x ?? 0, y: y ?? 0 });
@@ -59,6 +63,10 @@ setForegroundWindow(hwnd);
 await sleep(500);
 for (const c of clicks) {
   await clickClient(hwnd, c.x, c.y);
+}
+for (const vk of keys) {
+  sendMessage(hwnd, 0x0100 /* WM_KEYDOWN */, vk, 0);
+  await sleep(120);
 }
 captureWindowToPng(hwnd, dst);
 await killAndWait(proc);

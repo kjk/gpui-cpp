@@ -121,9 +121,4 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
         ->IntoEl();
 }
 
-void ShowcaseColorPickerClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompColorPicker, ShowcaseColorPicker, ShowcaseColorPickerClick);
+SHOWCASE_PAGE(CompColorPicker, ShowcaseColorPicker);

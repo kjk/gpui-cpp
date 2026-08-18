@@ -2,7 +2,6 @@
 
 struct GroupBoxStory {
     static El* Render(GroupBoxStory* self, Ctx* cx);
-    static void Click(GroupBoxStory* self, Ctx* cx, int id);
 };
 
 static El* BoxBody(Ctx* cx) {
@@ -60,11 +59,6 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
                                 ->IntoEl());
     page->Child(custom);
     return page;
-}
-
-void GroupBoxStory::Click(GroupBoxStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryGroupBox, GroupBoxStory);

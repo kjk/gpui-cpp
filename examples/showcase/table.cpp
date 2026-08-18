@@ -86,9 +86,4 @@ El* ShowcaseTable(ShowcaseApp* app, Ctx* cx) {
     return t;
 }
 
-void ShowcaseTableClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompTable, ShowcaseTable, ShowcaseTableClick);
+SHOWCASE_PAGE(CompTable, ShowcaseTable);

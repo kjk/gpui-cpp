@@ -2,7 +2,6 @@
 
 struct DataTableStory {
     static El* Render(DataTableStory* self, Ctx* cx);
-    static void Click(DataTableStory* self, Ctx* cx, int id);
 };
 
 El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
@@ -20,11 +19,6 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         component::Table::New(cx)->Heads(heads, 3)->Rows(rows, 4)->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void DataTableStory::Click(DataTableStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryDataTable, DataTableStory);

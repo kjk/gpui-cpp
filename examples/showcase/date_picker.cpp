@@ -37,9 +37,4 @@ El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx) {
                     ->IntoEl());
 }
 
-void ShowcaseDatePickerClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompDatePicker, ShowcaseDatePicker, ShowcaseDatePickerClick);
+SHOWCASE_PAGE(CompDatePicker, ShowcaseDatePicker);

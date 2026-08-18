@@ -8,7 +8,7 @@ struct ComboboxStory {
     bool seeded = false;
 
     static El* Render(ComboboxStory* self, Ctx* cx);
-    static void Click(ComboboxStory* self, Ctx* cx, int id);
+    static void OnKey(ComboboxStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void ToggleCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*) {
@@ -71,9 +71,13 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     return page;
 }
 
-void ComboboxStory::Click(ComboboxStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void ComboboxStory::OnKey(ComboboxStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->comboOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StoryCombobox, ComboboxStory);
+STORY_PAGE_KEYS(StoryCombobox, ComboboxStory);

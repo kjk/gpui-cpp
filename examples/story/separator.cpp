@@ -2,7 +2,6 @@
 
 struct SeparatorStory {
     static El* Render(SeparatorStory* self, Ctx* cx);
-    static void Click(SeparatorStory* self, Ctx* cx, int id);
 };
 
 El* SeparatorStory::Render(SeparatorStory* self, Ctx* cx) {
@@ -64,11 +63,6 @@ El* SeparatorStory::Render(SeparatorStory* self, Ctx* cx) {
     StorySectionAdd(ctx, box);
     page->Child(ctx);
     return page;
-}
-
-void SeparatorStory::Click(SeparatorStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySeparator, SeparatorStory);

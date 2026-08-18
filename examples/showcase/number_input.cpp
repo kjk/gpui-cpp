@@ -102,9 +102,4 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
                     ->Fg(Rgb(0x73, 0x73, 0x73)));
 }
 
-void ShowcaseNumberInputClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompNumberInput, ShowcaseNumberInput, ShowcaseNumberInputClick);
+SHOWCASE_PAGE(CompNumberInput, ShowcaseNumberInput);

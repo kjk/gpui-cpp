@@ -7,7 +7,6 @@ struct InputStory {
     bool seeded = false;
 
     static El* Render(InputStory* self, Ctx* cx);
-    static void Click(InputStory* self, Ctx* cx, int id);
 };
 
 static void FocusField(InputStory* self, Ctx* cx, const ClickEvent*) {
@@ -88,12 +87,6 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     StorySectionAdd(affix, affixCol);
     page->Child(affix);
     return page;
-}
-
-void InputStory::Click(InputStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryInput, InputStory);

@@ -2,7 +2,6 @@
 
 struct ProgressStory {
     static El* Render(ProgressStory* self, Ctx* cx);
-    static void Click(ProgressStory* self, Ctx* cx, int id);
 };
 
 El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
@@ -54,11 +53,6 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     StorySectionAdd(circ, circBox);
     page->Child(circ);
     return page;
-}
-
-void ProgressStory::Click(ProgressStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryProgress, ProgressStory);

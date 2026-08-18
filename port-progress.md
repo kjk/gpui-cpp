@@ -68,7 +68,7 @@ out\rel\showcase.exe
 - **Showcase virtual-list** virtualizes 100k rows with a spacer + always-on thumb; not GPUI `v_virtual_list`.
 - **Story gallery** pages are themed façades of `src/component`, not a line-for-line port of every Rust story variant (editor/highlighter, full DataTable, native menus, dock/tiles).
 - **`Notify` is coarse.** The frame tree is rebuilt every paint, so `Notify(cx)` invalidates the window instead of tracking which views observe an entity. The API matches GPUI, the invalidation does not.
-- **No actions or key bindings.** GPUI dispatches `Box<dyn Action>` through the focus chain; here a window-level `WindowOnKey` listener plus per-element click listeners cover the same ground.
+- **No actions or key bindings.** GPUI dispatches `Box<dyn Action>` through the focus chain; here a window-level `WindowOnKey` listener plus per-element click listeners cover the same ground. The story gallery adds a per-page key subscription (`STORY_PAGE_KEYS`) so Esc reaches the page with an overlay open.
 - **One window.** `App` holds a window list and the loop ends when the last one closes, but nothing opens a second window yet — dialogs, sheets and notifications are still drawn inside the main window.
 - **No `EventEmitter` / `subscribe`.** Views talk to each other by holding an `Entity<T>` and calling `Get`.
 
@@ -121,4 +121,5 @@ cargo run -p system_monitor
 - 2026-08-17: Ported `crates/story` as `bun cmd/build.ts story`. Sidebar gallery plus one commit per story (62 pages).
 - 2026-08-17: Recorded upstream pins in `port-upstream.md`: gpui-component `da4f93696dc2`, zed gpui `cc053a4a6fa2`.
 - 2026-08-17: Moved pins to `cmd/versions.ts` (source of truth). `build.ts` / `run.ts` clone `.work/gpui-component` at that SHA.
+- 2026-08-18: Click dispatch moved onto the elements. Listener carries the value a Rust closure would capture; component callbacks became Listeners instead of raw-pointer Func1s; the 62 story pages, 33 showcase pages and 6 examples dropped their click-id switches. `El::Click(id)` is identity only now (hit-test, hover, focus, Tab traps) and WindowOnUnhandledClick is just the outside-click dismiss.
 - 2026-08-18: Adopted GPUI's runtime shape. `AppHost` split into `App` (factories, fonts, window list, entity store) and `Window` (render target, frame arena, hover/focus, root view). Added generational `Entity<T>`, `Ctx`, `Listen`/`Notify`, and window subscriptions. Every example, the showcase and all 62 story pages became view entities; components take `Ctx*` instead of `Arena*`; `StoryApp`'s 56-field god struct became one entity per page. `AppHooks` removed.

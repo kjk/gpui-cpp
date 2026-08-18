@@ -5,7 +5,7 @@ struct PopoverStory {
     int selB = -1;
 
     static El* Render(PopoverStory* self, Ctx* cx);
-    static void Click(PopoverStory* self, Ctx* cx, int id);
+    static void OnKey(PopoverStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void TogglePop(PopoverStory* self, Ctx* cx, const ClickEvent*,
@@ -102,10 +102,13 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     return page;
 }
 
-void PopoverStory::Click(PopoverStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void PopoverStory::OnKey(PopoverStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->selectOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StoryPopover, PopoverStory);
+STORY_PAGE_KEYS(StoryPopover, PopoverStory);

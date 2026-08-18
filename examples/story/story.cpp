@@ -7,14 +7,14 @@ using namespace gpui;
 #include <stdio.h>
 
 static StoryPageNewFn gNew[StoryCount] = {};
-static StoryPageClickFn gClick[StoryCount] = {};
+static StoryPageKeyFn gKey[StoryCount] = {};
 
-void StoryRegister(int story, StoryPageNewFn create, StoryPageClickFn click) {
+void StoryRegister(int story, StoryPageNewFn create, StoryPageKeyFn onKey) {
     if (story < 0 || story >= StoryCount) {
         return;
     }
     gNew[story] = create;
-    gClick[story] = click;
+    gKey[story] = onKey;
 }
 
 // Resolve (creating on first view) the entity for the active story and render
@@ -30,17 +30,9 @@ static EntityId StoryPageEntity(StoryApp* app, Ctx* cx) {
     return app->pages[s];
 }
 
-El* StoryRenderRegistered(StoryApp* app, Ctx* cx) {
-    EntityId page = StoryPageEntity(app, cx);
-    if (!page.IsValid()) {
-        return StoryComingSoon(cx, app->story);
-    }
-    return EntityRender(cx->app, cx->win, cx->a, page);
-}
-
-void StoryClickRegistered(StoryApp* app, Ctx* cx, int id) {
+void StoryKeyRegistered(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     int s = app->story;
-    if (s < 0 || s >= StoryCount || !gClick[s]) {
+    if (s < 0 || s >= StoryCount || !gKey[s]) {
         return;
     }
     EntityId page = StoryPageEntity(app, cx);
@@ -50,7 +42,15 @@ void StoryClickRegistered(StoryApp* app, Ctx* cx, int id) {
     }
     Ctx pageCx = *cx;
     pageCx.self = page;
-    gClick[s](self, &pageCx, id);
+    gKey[s](self, &pageCx, ev);
+}
+
+El* StoryRenderRegistered(StoryApp* app, Ctx* cx) {
+    EntityId page = StoryPageEntity(app, cx);
+    if (!page.IsValid()) {
+        return StoryComingSoon(cx, app->story);
+    }
+    return EntityRender(cx->app, cx->win, cx->a, page);
 }
 
 static const StoryInfo kMeta[StoryCount] = {
@@ -667,7 +667,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     return root;
 }
 
-static void OnClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
+static void OnUnhandledClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
     // A click that no element claimed lands here: dismiss the search field
     // the way GPUI dismisses an overlay on an outside click.
     if (ev->id == 0 && app->search.focused) {
@@ -737,7 +737,7 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
         app->selB = -1;
         app->selecting = false;
         // Let the page close whatever it has open.
-        StoryClickRegistered(app, cx, ClickEscape);
+        StoryKeyRegistered(app, cx, ev);
     }
 }
 
@@ -843,7 +843,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     strncpy_s(self->search.placeholder, "Search…", _TRUNCATE);
     Window* win = WindowOpenView(app, StrL("GPUI Component"), 1280, 960,
                                  view.id, WinOpts{});
-    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));
     WindowOnMouse(win, ListenTo(view, &OnMouse));

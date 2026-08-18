@@ -73,11 +73,6 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->Child(track));
 }
 
-void ShowcaseSliderClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
 void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y) {
     (void)y;
     if (!app->draggingSlider && !win->mouseDown) {
@@ -105,4 +100,4 @@ void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y) {
     }
 }
 
-SHOWCASE_PAGE(CompSlider, ShowcaseSlider, ShowcaseSliderClick);
+SHOWCASE_PAGE(CompSlider, ShowcaseSlider);

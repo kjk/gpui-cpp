@@ -47,11 +47,6 @@ El* ShowcaseToggle(ShowcaseApp* app, Ctx* cx) {
                       app->toggleOn);
 }
 
-void ShowcaseToggleClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
 El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool italic = (app->toggleGroup & 1) != 0;
@@ -64,10 +59,5 @@ El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
             ToggleCell(cx, StrL("underline-toggle"), Listener{}, "U", under));
 }
 
-void ShowcaseToggleGroupClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompToggle, ShowcaseToggle, ShowcaseToggleClick);
-SHOWCASE_PAGE(CompToggleGroup, ShowcaseToggleGroup, ShowcaseToggleGroupClick);
+SHOWCASE_PAGE(CompToggle, ShowcaseToggle);
+SHOWCASE_PAGE(CompToggleGroup, ShowcaseToggleGroup);

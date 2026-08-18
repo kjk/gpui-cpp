@@ -4,15 +4,12 @@
 #include <stdio.h>
 
 static ShowcaseRenderFn gRender[CompCount] = {};
-static ShowcaseClickFn gClick[CompCount] = {};
 
-void ShowcaseRegister(int comp, ShowcaseRenderFn render,
-                      ShowcaseClickFn click) {
+void ShowcaseRegister(int comp, ShowcaseRenderFn render) {
     if (comp < 0 || comp >= CompCount) {
         return;
     }
     gRender[comp] = render;
-    gClick[comp] = click;
 }
 
 El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size) {
@@ -24,13 +21,6 @@ El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size) {
         return ShowcaseOverview(app, cx);
     }
     return ScComingSoon(cx, CompSlug(c));
-}
-
-void ShowcaseClickRegistered(ShowcaseApp* app, int id) {
-    int c = app->component;
-    if (c >= 0 && c < CompCount && gClick[c]) {
-        gClick[c](app, id);
-    }
 }
 
 static const char* kSlugs[CompCount] = {
@@ -278,24 +268,6 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
                                    ->Child(content));
     root->Child(scroller);
     return root;
-}
-
-void ShowcaseClick(ShowcaseApp* app, Window* win, int id) {
-    (void)win;
-    // A click no element claimed dismisses whatever is open, the way GPUI
-    // closes an overlay on an outside click.
-    if (id == 0) {
-        app->colorOpen = false;
-        app->comboboxOpen = false;
-        app->selectOpen = false;
-        app->dateOpen = false;
-        app->popupOpen = false;
-        app->popoverOpen = false;
-        app->hexIn.focused = false;
-        app->comboQuery.focused = false;
-        return;
-    }
-    ShowcaseClickRegistered(app, id);
 }
 
 static void InsertBuf(char* buf, int* len, int cap, uint32_t cp) {
@@ -624,8 +596,18 @@ void ShowcaseMouseUp(ShowcaseApp* app, Window* win, float x, float y,
     app->draggingResize = false;
 }
 
-static void OnClick(ShowcaseApp* app, Ctx* cx, const ClickEvent* ev) {
-    ShowcaseClick(app, cx->win, ev->id);
+// A click no element claimed dismisses whatever is open, the way GPUI closes
+// an overlay on an outside click.
+static void OnUnhandledClick(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+    app->colorOpen = false;
+    app->comboboxOpen = false;
+    app->selectOpen = false;
+    app->dateOpen = false;
+    app->popupOpen = false;
+    app->popoverOpen = false;
+    app->hexIn.focused = false;
+    app->comboQuery.focused = false;
+    Notify(cx);
 }
 
 static void OnKey(ShowcaseApp* app, Ctx* cx, const KeyEvent* ev) {
@@ -707,7 +689,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
 
     Window* win =
         WindowOpenView(app, StrL("GPUI Base"), 840, 640, view.id, WinOpts{});
-    WindowOnClick(win, ListenTo(view, &OnClick));
+    WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));
     WindowOnMouse(win, ListenTo(view, &OnMouse));

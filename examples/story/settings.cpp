@@ -6,7 +6,6 @@ struct SettingsStory {
     bool seeded = false;
 
     static El* Render(SettingsStory* self, Ctx* cx);
-    static void Click(SettingsStory* self, Ctx* cx, int id);
 };
 
 El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
@@ -48,11 +47,6 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
             ->IntoEl());
     page->Child(editor);
     return page;
-}
-
-void SettingsStory::Click(SettingsStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StorySettings, SettingsStory);

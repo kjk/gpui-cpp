@@ -105,9 +105,4 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
         ->IntoEl();
 }
 
-void ShowcaseComboboxClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompCombobox, ShowcaseCombobox, ShowcaseComboboxClick);
+SHOWCASE_PAGE(CompCombobox, ShowcaseCombobox);

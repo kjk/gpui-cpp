@@ -84,8 +84,6 @@ enum {
     ClickAccIcon = 2121,
     ClickAccDisabled = 2122,
     ClickAccBordered = 2123,
-    // Esc reaches the active page so it can close its overlays.
-    ClickEscape = -100,
 };
 
 struct StoryApp {
@@ -184,21 +182,35 @@ El* StoryToolbarWithOptions(Ctx* cx, T* self) {
 }
 
 typedef EntityId (*StoryPageNewFn)(App* app);
-typedef void (*StoryPageClickFn)(void* self, Ctx* cx, int id);
+// A page can subscribe to keys, the way a view calls WindowOnKey. Used by the
+// pages with an overlay, so Esc closes it.
+typedef void (*StoryPageKeyFn)(void* self, Ctx* cx, const KeyEvent* ev);
 
-void StoryRegister(int story, StoryPageNewFn create, StoryPageClickFn click);
+void StoryRegister(int story, StoryPageNewFn create,
+                   StoryPageKeyFn onKey = nullptr);
 El* StoryRenderRegistered(StoryApp* app, Ctx* cx);
-void StoryClickRegistered(StoryApp* app, Ctx* cx, int id);
+void StoryKeyRegistered(StoryApp* app, Ctx* cx, const KeyEvent* ev);
 
-#define STORY_PAGE(ID, TYPE)                                               \
-    namespace {                                                            \
-    EntityId _st_new_##ID(App* app) {                                      \
-        return EntityNew<TYPE>(app).id;                                    \
-    }                                                                      \
-    void _st_click_##ID(void* self, Ctx* cx, int id) {                     \
-        TYPE::Click((TYPE*)self, cx, id);                                  \
-    }                                                                      \
-    struct _StReg_##ID {                                                   \
-        _StReg_##ID() { StoryRegister(ID, _st_new_##ID, _st_click_##ID); } \
-    } _st_reg_##ID;                                                        \
+#define STORY_PAGE(ID, TYPE)                               \
+    namespace {                                            \
+    EntityId _st_new_##ID(App* app) {                      \
+        return EntityNew<TYPE>(app).id;                    \
+    }                                                      \
+    struct _StReg_##ID {                                   \
+        _StReg_##ID() { StoryRegister(ID, _st_new_##ID); } \
+    } _st_reg_##ID;                                        \
+    }
+
+// Same, for a page that also wants keys: TYPE::OnKey(TYPE*, Ctx*, KeyEvent*).
+#define STORY_PAGE_KEYS(ID, TYPE)                                           \
+    namespace {                                                             \
+    EntityId _stk_new_##ID(App* app) {                                      \
+        return EntityNew<TYPE>(app).id;                                     \
+    }                                                                       \
+    void _stk_key_##ID(void* self, Ctx* cx, const KeyEvent* ev) {           \
+        TYPE::OnKey((TYPE*)self, cx, ev);                                   \
+    }                                                                       \
+    struct _StkReg_##ID {                                                   \
+        _StkReg_##ID() { StoryRegister(ID, _stk_new_##ID, _stk_key_##ID); } \
+    } _stk_reg_##ID;                                                        \
     }

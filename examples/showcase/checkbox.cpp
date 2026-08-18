@@ -38,9 +38,4 @@ El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
                     ->Fg(Rgb(0x17, 0x17, 0x17)));
 }
 
-void ShowcaseCheckboxClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompCheckbox, ShowcaseCheckbox, ShowcaseCheckboxClick);
+SHOWCASE_PAGE(CompCheckbox, ShowcaseCheckbox);

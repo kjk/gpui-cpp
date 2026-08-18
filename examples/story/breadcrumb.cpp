@@ -3,7 +3,6 @@
 struct BreadcrumbStory {
     int crumbClicked = -1;
     static El* Render(BreadcrumbStory* self, Ctx* cx);
-    static void Click(BreadcrumbStory* self, Ctx* cx, int id);
 };
 
 static void OnCrumb(BreadcrumbStory* self, Ctx* cx, const ClickEvent*,
@@ -48,11 +47,6 @@ El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
     StorySectionAdd(inter, col);
     page->Child(inter);
     return page;
-}
-
-void BreadcrumbStory::Click(BreadcrumbStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryBreadcrumb, BreadcrumbStory);

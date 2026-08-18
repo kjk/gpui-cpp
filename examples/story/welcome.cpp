@@ -2,7 +2,6 @@
 
 struct WelcomeStory {
     static El* Render(WelcomeStory* self, Ctx* cx);
-    static void Click(WelcomeStory* self, Ctx* cx, int id);
 };
 
 static El* MdTxt(Ctx* cx, Str s, float px, Rgba c) {
@@ -428,11 +427,6 @@ El* WelcomeStory::Render(WelcomeStory* self, Ctx* cx) {
     col->Child(Bullet(cx, "Icons from Lucide."));
 
     return col;
-}
-
-void WelcomeStory::Click(WelcomeStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryWelcome, WelcomeStory);

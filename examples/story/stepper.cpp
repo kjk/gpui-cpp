@@ -5,7 +5,6 @@ struct StepperStory {
     StoryToolbarState toolbar;
 
     static El* Render(StepperStory* self, Ctx* cx);
-    static void Click(StepperStory* self, Ctx* cx, int id);
 };
 
 static void SetStep(StepperStory* self, Ctx* cx, const ClickEvent*,
@@ -80,11 +79,6 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
                             ->IntoEl());
     page->Child(tc);
     return page;
-}
-
-void StepperStory::Click(StepperStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryStepper, StepperStory);

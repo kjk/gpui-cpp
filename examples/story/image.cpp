@@ -2,7 +2,6 @@
 
 struct ImageStory {
     static El* Render(ImageStory* self, Ctx* cx);
-    static void Click(ImageStory* self, Ctx* cx, int id);
 };
 
 El* ImageStory::Render(ImageStory* self, Ctx* cx) {
@@ -37,11 +36,6 @@ El* ImageStory::Render(ImageStory* self, Ctx* cx) {
                  ->Child(StoryTxt(cx, StrL("No image"), 12, th.mutedFg)));
     page->Child(sec);
     return page;
-}
-
-void ImageStory::Click(ImageStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryImage, ImageStory);

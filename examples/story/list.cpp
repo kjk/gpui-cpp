@@ -3,7 +3,6 @@
 struct ListStory {
     int listSel = 0;
     static El* Render(ListStory* self, Ctx* cx);
-    static void Click(ListStory* self, Ctx* cx, int id);
 };
 
 static void PickList(ListStory* self, Ctx* cx, const ClickEvent*, intptr_t i) {
@@ -27,11 +26,6 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void ListStory::Click(ListStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryList, ListStory);

@@ -63,9 +63,4 @@ El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
         ->IntoEl();
 }
 
-void ShowcasePopoverClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompPopover, ShowcasePopover, ShowcasePopoverClick);
+SHOWCASE_PAGE(CompPopover, ShowcasePopover);

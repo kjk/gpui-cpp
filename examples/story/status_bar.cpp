@@ -2,7 +2,6 @@
 
 struct StatusBarStory {
     static El* Render(StatusBarStory* self, Ctx* cx);
-    static void Click(StatusBarStory* self, Ctx* cx, int id);
 };
 
 El* StatusBarStory::Render(StatusBarStory* self, Ctx* cx) {
@@ -95,11 +94,6 @@ El* StatusBarStory::Render(StatusBarStory* self, Ctx* cx) {
     StorySectionAdd(align, alignCol);
     page->Child(align);
     return page;
-}
-
-void StatusBarStory::Click(StatusBarStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryStatusBar, StatusBarStory);

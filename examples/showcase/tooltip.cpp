@@ -44,9 +44,4 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
         ->IntoEl();
 }
 
-void ShowcaseTooltipClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompTooltip, ShowcaseTooltip, ShowcaseTooltipClick);
+SHOWCASE_PAGE(CompTooltip, ShowcaseTooltip);

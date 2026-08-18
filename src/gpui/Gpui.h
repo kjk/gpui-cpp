@@ -768,10 +768,9 @@ T* KeyedState(Ctx* cx, uint32_t key) {
 // cx.spawn + Timer::after; here each one is a Listener bound to a view.
 void WindowOnKey(Window* win, Listener l);
 void WindowOnWheel(Window* win, Listener l);
-// View-level click dispatch: fires with ClickEvent::id for any hit that has a
-// click id but no listener of its own. Elements should carry their own
-// listener; this is the bridge for code still written against click ids.
-void WindowOnClick(Window* win, Listener l);
+// Fires for a click no element handled — the outside click that dismisses an
+// overlay. Elements carry their own listener; this is not a dispatch table.
+void WindowOnUnhandledClick(Window* win, Listener l);
 void WindowOnMouse(Window* win, Listener l);
 // Repeating timer. ms <= 0 stops it. GPUI's system_monitor does the same with
 // a spawned task that sleeps and calls cx.notify().

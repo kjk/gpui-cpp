@@ -5,7 +5,6 @@ struct CalendarStory {
     int calMonth = 8;
     int calDay = 17;
     static El* Render(CalendarStory* self, Ctx* cx);
-    static void Click(CalendarStory* self, Ctx* cx, int id);
 };
 
 static void CalPrev(CalendarStory* self, Ctx* cx, const ClickEvent*) {
@@ -75,11 +74,6 @@ El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(dis);
     return page;
-}
-
-void CalendarStory::Click(CalendarStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryCalendar, CalendarStory);

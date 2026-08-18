@@ -71,9 +71,4 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
     return box;
 }
 
-void ShowcaseToastClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompToast, ShowcaseToast, ShowcaseToastClick);
+SHOWCASE_PAGE(CompToast, ShowcaseToast);

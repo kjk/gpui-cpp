@@ -2,7 +2,6 @@
 
 struct ClipboardStory {
     static El* Render(ClipboardStory* self, Ctx* cx);
-    static void Click(ClipboardStory* self, Ctx* cx, int id);
 };
 
 static void OnCopy(ClipboardStory* self, Ctx* cx, const ClickEvent*,
@@ -48,11 +47,6 @@ El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
     StorySectionAdd(input, field);
     page->Child(input);
     return page;
-}
-
-void ClipboardStory::Click(ClipboardStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryClipboard, ClipboardStory);

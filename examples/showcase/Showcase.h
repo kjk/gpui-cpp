@@ -193,77 +193,34 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTree(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx);
 
-void ShowcaseAccordionClick(ShowcaseApp* app, int id);
-void ShowcaseAlertDialogClick(ShowcaseApp* app, int id);
-void ShowcaseAvatarClick(ShowcaseApp* app, int id);
-void ShowcaseButtonClick(ShowcaseApp* app, int id);
-void ShowcaseCalendarClick(ShowcaseApp* app, int id);
-void ShowcaseCheckboxClick(ShowcaseApp* app, int id);
-void ShowcaseCollapsibleClick(ShowcaseApp* app, int id);
-void ShowcaseColorPickerClick(ShowcaseApp* app, int id);
-void ShowcaseComboboxClick(ShowcaseApp* app, int id);
-void ShowcaseDatePickerClick(ShowcaseApp* app, int id);
-void ShowcaseDialogClick(ShowcaseApp* app, int id);
-void ShowcaseEditorClick(ShowcaseApp* app, int id);
-void ShowcaseHoverCardClick(ShowcaseApp* app, int id);
-void ShowcaseInputClick(ShowcaseApp* app, int id);
-void ShowcaseLinkClick(ShowcaseApp* app, int id);
-void ShowcaseNumberInputClick(ShowcaseApp* app, int id);
-void ShowcaseOtpInputClick(ShowcaseApp* app, int id);
-void ShowcasePaginationClick(ShowcaseApp* app, int id);
-void ShowcasePopoverClick(ShowcaseApp* app, int id);
-void ShowcasePopupClick(ShowcaseApp* app, int id);
-void ShowcaseProgressClick(ShowcaseApp* app, int id);
-void ShowcaseRadioClick(ShowcaseApp* app, int id);
-void ShowcaseRadioGroupClick(ShowcaseApp* app, int id);
-void ShowcaseResizableClick(ShowcaseApp* app, int id);
-void ShowcaseScrollbarClick(ShowcaseApp* app, int id);
-void ShowcaseSelectClick(ShowcaseApp* app, int id);
-void ShowcaseSheetClick(ShowcaseApp* app, int id);
-void ShowcaseSliderClick(ShowcaseApp* app, int id);
-void ShowcaseSwitchClick(ShowcaseApp* app, int id);
-void ShowcaseTableClick(ShowcaseApp* app, int id);
-void ShowcaseTabsClick(ShowcaseApp* app, int id);
-void ShowcaseTextSelectionClick(ShowcaseApp* app, int id);
-void ShowcaseTextareaClick(ShowcaseApp* app, int id);
-void ShowcaseToastClick(ShowcaseApp* app, int id);
-void ShowcaseToggleClick(ShowcaseApp* app, int id);
-void ShowcaseToggleGroupClick(ShowcaseApp* app, int id);
-void ShowcaseTooltipClick(ShowcaseApp* app, int id);
-void ShowcaseTreeClick(ShowcaseApp* app, int id);
-void ShowcaseVirtualListClick(ShowcaseApp* app, int id);
-
 void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y);
 void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y);
 
 typedef El* (*ShowcaseRenderFn)(ShowcaseApp* app, Ctx* cx, WinSize size);
-typedef void (*ShowcaseClickFn)(ShowcaseApp* app, int id);
-void ShowcaseRegister(int comp, ShowcaseRenderFn render, ShowcaseClickFn click);
+void ShowcaseRegister(int comp, ShowcaseRenderFn render);
 El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size);
-void ShowcaseClickRegistered(ShowcaseApp* app, int id);
 
-#define SHOWCASE_PAGE(COMP, RENDER, CLICK)                                    \
-    namespace {                                                               \
-    static El* _sc_render_##COMP(ShowcaseApp* app, Ctx* cx, WinSize size) {   \
-        (void)size;                                                           \
-        return RENDER(app, cx);                                               \
-    }                                                                         \
-    struct _ScReg_##COMP {                                                    \
-        _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP, CLICK); } \
-    } _sc_reg_##COMP;                                                         \
+#define SHOWCASE_PAGE(COMP, RENDER)                                         \
+    namespace {                                                             \
+    static El* _sc_render_##COMP(ShowcaseApp* app, Ctx* cx, WinSize size) { \
+        (void)size;                                                         \
+        return RENDER(app, cx);                                             \
+    }                                                                       \
+    struct _ScReg_##COMP {                                                  \
+        _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP); }      \
+    } _sc_reg_##COMP;                                                       \
     }
 
-#define SHOWCASE_PAGE_SZ(COMP, RENDER, CLICK)                                 \
-    namespace {                                                               \
-    static El* _sc_render_##COMP(ShowcaseApp* app, Ctx* cx, WinSize size) {   \
-        return RENDER(app, cx, size);                                         \
-    }                                                                         \
-    struct _ScReg_##COMP {                                                    \
-        _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP, CLICK); } \
-    } _sc_reg_##COMP;                                                         \
+#define SHOWCASE_PAGE_SZ(COMP, RENDER)                                      \
+    namespace {                                                             \
+    static El* _sc_render_##COMP(ShowcaseApp* app, Ctx* cx, WinSize size) { \
+        return RENDER(app, cx, size);                                       \
+    }                                                                       \
+    struct _ScReg_##COMP {                                                  \
+        _ScReg_##COMP() { ShowcaseRegister(COMP, _sc_render_##COMP); }      \
+    } _sc_reg_##COMP;                                                       \
     }
 
-void ShowcaseClick(ShowcaseApp* app, Window* win, int id);
 void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp);
 void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down);
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta);

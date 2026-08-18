@@ -2,7 +2,6 @@
 
 struct ThemeColorsStory {
     static El* Render(ThemeColorsStory* self, Ctx* cx);
-    static void Click(ThemeColorsStory* self, Ctx* cx, int id);
 };
 
 static El* Swatch(Ctx* cx, const char* name, Rgba c) {
@@ -50,11 +49,6 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     StorySectionAdd(chrome, chromeRow);
     page->Child(chrome);
     return page;
-}
-
-void ThemeColorsStory::Click(ThemeColorsStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryThemeColors, ThemeColorsStory);

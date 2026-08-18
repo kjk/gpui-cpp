@@ -53,9 +53,4 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
     return box;
 }
 
-void ShowcaseScrollbarClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompScrollbar, ShowcaseScrollbar, ShowcaseScrollbarClick);
+SHOWCASE_PAGE(CompScrollbar, ShowcaseScrollbar);

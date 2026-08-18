@@ -4,7 +4,7 @@ struct ColorPickerStory {
     uint32_t colorHex = 0x2563eb;
     bool colorOpen = false;
     static El* Render(ColorPickerStory* self, Ctx* cx);
-    static void Click(ColorPickerStory* self, Ctx* cx, int id);
+    static void OnKey(ColorPickerStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
@@ -19,9 +19,14 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     return page;
 }
 
-void ColorPickerStory::Click(ColorPickerStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void ColorPickerStory::OnKey(ColorPickerStory* self, Ctx* cx,
+                             const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->colorOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StoryColorPicker, ColorPickerStory);
+STORY_PAGE_KEYS(StoryColorPicker, ColorPickerStory);

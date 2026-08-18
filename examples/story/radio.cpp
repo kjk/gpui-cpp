@@ -6,7 +6,6 @@ struct RadioStory {
     StoryToolbarState toolbar;
 
     static El* Render(RadioStory* self, Ctx* cx);
-    static void Click(RadioStory* self, Ctx* cx, int id);
 };
 
 static void SetDel0(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
@@ -81,11 +80,6 @@ El* RadioStory::Render(RadioStory* self, Ctx* cx) {
     StorySectionAdd(bill, billRow);
     page->Child(bill);
     return page;
-}
-
-void RadioStory::Click(RadioStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryRadio, RadioStory);

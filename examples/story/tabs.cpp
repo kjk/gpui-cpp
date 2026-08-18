@@ -5,7 +5,6 @@ struct TabsStory {
     StoryToolbarState toolbar;
 
     static El* Render(TabsStory* self, Ctx* cx);
-    static void Click(TabsStory* self, Ctx* cx, int id);
 };
 
 static void SetTab(TabsStory* self, Ctx* cx, const ClickEvent*, intptr_t ix) {
@@ -115,12 +114,6 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     StorySectionAdd(seg, TabPanel(cx, self, segBar));
     page->Child(seg);
     return page;
-}
-
-void TabsStory::Click(TabsStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryTabs, TabsStory);

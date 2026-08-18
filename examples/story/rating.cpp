@@ -5,7 +5,6 @@ struct RatingStory {
     StoryToolbarState toolbar;
 
     static El* Render(RatingStory* self, Ctx* cx);
-    static void Click(RatingStory* self, Ctx* cx, int id);
 };
 
 static void SetRating(RatingStory* self, Ctx* cx, const ClickEvent*,
@@ -49,11 +48,6 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(col);
     return page;
-}
-
-void RatingStory::Click(RatingStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryRating, RatingStory);

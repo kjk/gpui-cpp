@@ -67,11 +67,6 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
         ->Child(main);
 }
 
-void ShowcaseResizableClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
 void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y) {
     (void)y;
     if (!app->draggingResize) {
@@ -96,4 +91,4 @@ void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y) {
     }
 }
 
-SHOWCASE_PAGE(CompResizable, ShowcaseResizable, ShowcaseResizableClick);
+SHOWCASE_PAGE(CompResizable, ShowcaseResizable);

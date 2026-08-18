@@ -2,7 +2,6 @@
 
 struct DescriptionListStory {
     static El* Render(DescriptionListStory* self, Ctx* cx);
-    static void Click(DescriptionListStory* self, Ctx* cx, int id);
 };
 
 El* DescriptionListStory::Render(DescriptionListStory* self, Ctx* cx) {
@@ -19,11 +18,6 @@ El* DescriptionListStory::Render(DescriptionListStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void DescriptionListStory::Click(DescriptionListStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryDescriptionList, DescriptionListStory);

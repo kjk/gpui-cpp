@@ -3,7 +3,6 @@
 struct LabelStory {
     bool labelMasked = false;
     static El* Render(LabelStory* self, Ctx* cx);
-    static void Click(LabelStory* self, Ctx* cx, int id);
 };
 
 static void ToggleMask(LabelStory* self, Ctx* cx, const ClickEvent*) {
@@ -93,12 +92,6 @@ El* LabelStory::Render(LabelStory* self, Ctx* cx) {
     StorySectionAdd(mask, maskRow);
     page->Child(mask);
     return page;
-}
-
-void LabelStory::Click(LabelStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryLabel, LabelStory);

@@ -38,9 +38,4 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
                         app->textareaOn && ((GetTickCount() / 500) % 2 == 0))));
 }
 
-void ShowcaseTextareaClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompTextarea, ShowcaseTextarea, ShowcaseTextareaClick);
+SHOWCASE_PAGE(CompTextarea, ShowcaseTextarea);

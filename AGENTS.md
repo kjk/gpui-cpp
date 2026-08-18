@@ -155,6 +155,7 @@ The runtime mirrors GPUI's shape. Read this before touching `src/gpui`, adding a
 | `impl Render for T` | `static El* T::Render(T* self, Ctx* cx)` |
 | `cx.new(...)` | `EntityNew<T>(app)` |
 | `cx.listener(...)` | `Listen(cx, &T::OnThing)` / `ListenTo(entity, &T::OnThing)` |
+| `cx.listener(move \|…\| … ix …)` | `Listen(cx, &T::OnThing, ix)` — the captured value |
 | `cx.notify()` | `Notify(cx)` |
 | `Drop for T` | `~T()`, run when the entity is dropped |
 | `window.use_keyed_state` | `KeyedState<T>(cx, key)` |
@@ -191,11 +192,12 @@ Rules:
 
 1. **State lives in an entity, never in a `static` or a `void*` payload.** One view type per screen or page; if two things have independent state they are two entities.
 2. **`Ctx*` is the first parameter** of anything that builds elements — components, page helpers, everything. The frame arena is `cx->a`; do not pass `Arena*` around.
-3. **Elements carry their own listener.** `->OnClick(Listen(cx, &T::Handler))`. Dispatch resolves the entity and drops the event if the handle went stale, so a listener can outlive its view safely.
-4. `WindowOnClick` dispatches `ClickEvent::id` to a view for code still written against click ids. It is a bridge, not the goal — prefer a listener on the element.
-5. Window-level input is a subscription bound to a view: `WindowOnKey`, `WindowOnWheel`, `WindowOnMouse`, `WindowSetInterval` (GPUI spells the last one `cx.spawn` + `Timer::after`).
-6. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
-7. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
+3. **Elements carry their own listener.** `->OnClick(Listen(cx, &T::Handler))`. Dispatch resolves the entity and drops the event if the handle went stale, so a listener can outlive its view safely. There is no click-id switch anywhere; do not add one.
+4. **Bind the value instead of decoding an id.** What a Rust closure captures, `Listen` takes as an `intptr_t`: `Listen(cx, &T::OnTab, ix)`. A component that produces the value itself — which day, which row — fills it with `ListenerArg` and its caller writes `Listen(cx, &T::OnDay)`.
+5. `El::Click(id)` is identity only: hit-testing, hover, focus, Tab traps — GPUI's `ElementId`. It does not dispatch. `WindowOnUnhandledClick` fires for a click no element handled, which is the outside click that dismisses an overlay.
+6. Window-level input is a subscription bound to a view: `WindowOnKey`, `WindowOnWheel`, `WindowOnMouse`, `WindowSetInterval` (GPUI spells the last one `cx.spawn` + `Timer::after`).
+7. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
+8. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
 
 `AppNew` → `WindowOpenView` → `AppRun` → `AppFree` is the whole lifecycle; `AppRunView` is the one-window shorthand. There is no hook table.
 

@@ -2,7 +2,6 @@
 
 struct ResizableStory {
     static El* Render(ResizableStory* self, Ctx* cx);
-    static void Click(ResizableStory* self, Ctx* cx, int id);
 };
 
 El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
@@ -62,11 +61,6 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     StorySectionAdd(grow, growBox);
     page->Child(grow);
     return page;
-}
-
-void ResizableStory::Click(ResizableStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryResizable, ResizableStory);

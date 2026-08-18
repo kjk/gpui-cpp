@@ -62,9 +62,4 @@ El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
         ->IntoEl();
 }
 
-void ShowcaseHoverCardClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompHoverCard, ShowcaseHoverCard, ShowcaseHoverCardClick);
+SHOWCASE_PAGE(CompHoverCard, ShowcaseHoverCard);

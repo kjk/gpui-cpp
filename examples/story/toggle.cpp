@@ -6,7 +6,6 @@ struct ToggleStory {
     StoryToolbarState toolbar;
 
     static El* Render(ToggleStory* self, Ctx* cx);
-    static void Click(ToggleStory* self, Ctx* cx, int id);
 };
 
 static void OnToggle(ToggleStory* self, Ctx* cx, const ClickEvent*,
@@ -102,12 +101,6 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     StorySectionAdd(grp, g);
     page->Child(grp);
     return page;
-}
-
-void ToggleStory::Click(ToggleStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryToggle, ToggleStory);

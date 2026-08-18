@@ -49,11 +49,6 @@ El* ShowcaseRadio(ShowcaseApp* app, Ctx* cx) {
                     app->radioSel == 0, "Standard", "3–5 business days", false);
 }
 
-void ShowcaseRadioClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
 El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     return RadioGroup::New(cx, StrL("example-radio-group"))
@@ -70,10 +65,5 @@ El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
                          "Local pickup", "Currently unavailable", true));
 }
 
-void ShowcaseRadioGroupClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompRadio, ShowcaseRadio, ShowcaseRadioClick);
-SHOWCASE_PAGE(CompRadioGroup, ShowcaseRadioGroup, ShowcaseRadioGroupClick);
+SHOWCASE_PAGE(CompRadio, ShowcaseRadio);
+SHOWCASE_PAGE(CompRadioGroup, ShowcaseRadioGroup);

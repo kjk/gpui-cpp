@@ -8,7 +8,6 @@ struct FormStory {
     bool seeded = false;
 
     static El* Render(FormStory* self, Ctx* cx);
-    static void Click(FormStory* self, Ctx* cx, int id);
 };
 
 static void SetFormSwitch(FormStory* self, Ctx* cx, const ClickEvent*,
@@ -47,11 +46,6 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
             ->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void FormStory::Click(FormStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryForm, FormStory);

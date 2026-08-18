@@ -168,10 +168,5 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
         ->Child(footer);
 }
 
-void ShowcaseTextSelectionClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
 SHOWCASE_PAGE(CompTextSelection, ShowcaseTextSelection,
               ShowcaseTextSelectionClick);

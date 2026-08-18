@@ -36,9 +36,4 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
                     ->Child(Input::New(cx, &app->input)));
 }
 
-void ShowcaseInputClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompInput, ShowcaseInput, ShowcaseInputClick);
+SHOWCASE_PAGE(CompInput, ShowcaseInput);

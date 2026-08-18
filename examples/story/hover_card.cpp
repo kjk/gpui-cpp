@@ -2,7 +2,6 @@
 
 struct HoverCardStory {
     static El* Render(HoverCardStory* self, Ctx* cx);
-    static void Click(HoverCardStory* self, Ctx* cx, int id);
 };
 
 // The window's hover id doubles as "which card is open" on this page.
@@ -116,12 +115,6 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
     }
     page->Child(pos);
     return page;
-}
-
-void HoverCardStory::Click(HoverCardStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryHoverCard, HoverCardStory);

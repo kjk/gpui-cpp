@@ -6,7 +6,7 @@ struct DatePickerStory {
     int calDay = 17;
     bool dateOpen = false;
     static El* Render(DatePickerStory* self, Ctx* cx);
-    static void Click(DatePickerStory* self, Ctx* cx, int id);
+    static void OnKey(DatePickerStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void ToggleDate(DatePickerStory* self, Ctx* cx, const ClickEvent*) {
@@ -75,9 +75,14 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     return page;
 }
 
-void DatePickerStory::Click(DatePickerStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void DatePickerStory::OnKey(DatePickerStory* self, Ctx* cx,
+                            const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->dateOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StoryDatePicker, DatePickerStory);
+STORY_PAGE_KEYS(StoryDatePicker, DatePickerStory);

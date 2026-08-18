@@ -61,9 +61,4 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
         ->W(256);
 }
 
-void ShowcaseCollapsibleClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompCollapsible, ShowcaseCollapsible, ShowcaseCollapsibleClick);
+SHOWCASE_PAGE(CompCollapsible, ShowcaseCollapsible);

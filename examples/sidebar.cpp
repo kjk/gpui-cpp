@@ -27,12 +27,6 @@ struct SidebarApp {
     bool projOpen = true;
 };
 
-static void OnClick(SidebarApp* app, Ctx* cx, const ClickEvent* ev) {
-    (void)app;
-    (void)cx;
-    (void)ev;
-}
-
 static const char* Description(const SidebarApp* app) {
     if (app->mode == CollOffcanvas) {
         return "The sidebar releases its layout width when collapsed and keeps "
@@ -229,7 +223,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     AssetsAddRoot(StrL("assets"));
     WinOpts opts = {};
     Window* win = WindowOpenView(app, StrL("Sidebar"), 900, 620, view.id, opts);
-    WindowOnClick(win, ListenTo(view, &OnClick));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

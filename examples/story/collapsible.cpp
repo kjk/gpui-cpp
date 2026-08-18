@@ -3,7 +3,6 @@
 struct CollapsibleStory {
     bool collOpen[8] = {false, false, false, true, true, true, false, true};
     static El* Render(CollapsibleStory* self, Ctx* cx);
-    static void Click(CollapsibleStory* self, Ctx* cx, int id);
 };
 
 static void ToggleColl(CollapsibleStory* self, int i) {
@@ -168,12 +167,6 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                                  ->IntoEl());
     page->Child(profile);
     return page;
-}
-
-void CollapsibleStory::Click(CollapsibleStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryCollapsible, CollapsibleStory);

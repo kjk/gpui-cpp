@@ -4,7 +4,6 @@ struct AvatarStory {
     StoryToolbarState toolbar;
 
     static El* Render(AvatarStory* self, Ctx* cx);
-    static void Click(AvatarStory* self, Ctx* cx, int id);
 };
 
 static El* Face(Ctx* cx, AvatarStory* self, const char* initials) {
@@ -111,11 +110,6 @@ El* AvatarStory::Render(AvatarStory* self, Ctx* cx) {
     StorySectionAdd(style, FacePx(cx, "TW", 100, -1, 3, ThemeNow().foreground));
     page->Child(style);
     return page;
-}
-
-void AvatarStory::Click(AvatarStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryAvatar, AvatarStory);

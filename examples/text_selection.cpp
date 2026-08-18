@@ -21,12 +21,6 @@ static const char* kMsgs[] = {
 static const int kNMsgs = 4;
 static const bool kMine[] = {false, true, false, true};
 
-static void OnClick(SelApp* app, Ctx* cx, const ClickEvent* ev) {
-    (void)app;
-    (void)cx;
-    (void)ev;
-}
-
 static void OnKey(SelApp* app, Ctx* cx, const KeyEvent* ev) {
     (void)cx;
     (void)app;
@@ -156,7 +150,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     WinOpts opts = {};
     Window* win =
         WindowOpenView(app, StrL("Text Selection"), 800, 600, view.id, opts);
-    WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     win->input = &self->in;
     int rc = AppRun(app);

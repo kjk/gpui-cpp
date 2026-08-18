@@ -2,7 +2,6 @@
 
 struct MenuStory {
     static El* Render(MenuStory* self, Ctx* cx);
-    static void Click(MenuStory* self, Ctx* cx, int id);
 };
 
 El* MenuStory::Render(MenuStory* self, Ctx* cx) {
@@ -34,11 +33,6 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     StorySectionAdd(scroll, m->IntoEl());
     page->Child(scroll);
     return page;
-}
-
-void MenuStory::Click(MenuStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryMenu, MenuStory);

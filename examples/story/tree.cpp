@@ -2,7 +2,6 @@
 
 struct TreeStory {
     static El* Render(TreeStory* self, Ctx* cx);
-    static void Click(TreeStory* self, Ctx* cx, int id);
 };
 
 El* TreeStory::Render(TreeStory* self, Ctx* cx) {
@@ -21,11 +20,6 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void TreeStory::Click(TreeStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryTree, TreeStory);

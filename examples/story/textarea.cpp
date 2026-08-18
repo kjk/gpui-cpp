@@ -3,7 +3,6 @@
 struct TextareaStory {
     char areaBuf[512] = "Build focused interfaces.";
     static El* Render(TextareaStory* self, Ctx* cx);
-    static void Click(TextareaStory* self, Ctx* cx, int id);
 };
 
 El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
@@ -40,11 +39,6 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(chat);
     return page;
-}
-
-void TextareaStory::Click(TextareaStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryTextarea, TextareaStory);

@@ -87,9 +87,4 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         ->Child(list);
 }
 
-void ShowcaseTreeClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompTree, ShowcaseTree, ShowcaseTreeClick);
+SHOWCASE_PAGE(CompTree, ShowcaseTree);

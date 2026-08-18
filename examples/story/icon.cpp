@@ -2,7 +2,6 @@
 
 struct IconStory {
     static El* Render(IconStory* self, Ctx* cx);
-    static void Click(IconStory* self, Ctx* cx, int id);
 };
 
 El* IconStory::Render(IconStory* self, Ctx* cx) {
@@ -61,11 +60,6 @@ El* IconStory::Render(IconStory* self, Ctx* cx) {
                              ->H(20));
     page->Child(csz);
     return page;
-}
-
-void IconStory::Click(IconStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryIcon, IconStory);

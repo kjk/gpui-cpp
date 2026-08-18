@@ -2,7 +2,6 @@
 
 struct ChartStory {
     static El* Render(ChartStory* self, Ctx* cx);
-    static void Click(ChartStory* self, Ctx* cx, int id);
 };
 
 static const float kYs[] = {12, 18, 15, 22, 28, 24, 31, 29, 35, 32, 38, 40};
@@ -43,11 +42,6 @@ El* ChartStory::Render(ChartStory* self, Ctx* cx) {
     StorySectionAdd(pie, pieRow);
     page->Child(pie);
     return page;
-}
-
-void ChartStory::Click(ChartStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryChart, ChartStory);

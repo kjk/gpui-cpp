@@ -2,7 +2,6 @@
 
 struct TableStory {
     static El* Render(TableStory* self, Ctx* cx);
-    static void Click(TableStory* self, Ctx* cx, int id);
 };
 
 El* TableStory::Render(TableStory* self, Ctx* cx) {
@@ -29,11 +28,6 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
                                               ->IntoEl()));
     page->Child(bordered);
     return page;
-}
-
-void TableStory::Click(TableStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryTable, TableStory);

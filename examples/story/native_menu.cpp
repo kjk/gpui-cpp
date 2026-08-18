@@ -2,7 +2,6 @@
 
 struct NativeMenuStory {
     static El* Render(NativeMenuStory* self, Ctx* cx);
-    static void Click(NativeMenuStory* self, Ctx* cx, int id);
 };
 
 El* NativeMenuStory::Render(NativeMenuStory* self, Ctx* cx) {
@@ -35,11 +34,6 @@ El* NativeMenuStory::Render(NativeMenuStory* self, Ctx* cx) {
                   ->MaxW(420));
     page->Child(drop);
     return page;
-}
-
-void NativeMenuStory::Click(NativeMenuStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryNativeMenu, NativeMenuStory);

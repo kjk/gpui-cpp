@@ -49,9 +49,4 @@ El* ShowcaseButton(ShowcaseApp* app, Ctx* cx) {
                                 ->Fg(Rgb(0x17, 0x17, 0x17))));
 }
 
-void ShowcaseButtonClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompButton, ShowcaseButton, ShowcaseButtonClick);
+SHOWCASE_PAGE(CompButton, ShowcaseButton);

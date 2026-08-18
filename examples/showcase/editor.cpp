@@ -84,9 +84,4 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
                                         blink)));
 }
 
-void ShowcaseEditorClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompEditor, ShowcaseEditor, ShowcaseEditorClick);
+SHOWCASE_PAGE(CompEditor, ShowcaseEditor);

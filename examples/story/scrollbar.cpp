@@ -2,7 +2,6 @@
 
 struct ScrollbarStory {
     static El* Render(ScrollbarStory* self, Ctx* cx);
-    static void Click(ScrollbarStory* self, Ctx* cx, int id);
 };
 
 El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
@@ -35,11 +34,6 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
     StorySectionAdd(sec, box);
     page->Child(sec);
     return page;
-}
-
-void ScrollbarStory::Click(ScrollbarStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryScrollbar, ScrollbarStory);

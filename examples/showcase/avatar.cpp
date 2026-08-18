@@ -39,9 +39,4 @@ El* ShowcaseAvatar(ShowcaseApp* app, Ctx* cx) {
     return row;
 }
 
-void ShowcaseAvatarClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompAvatar, ShowcaseAvatar, ShowcaseAvatarClick);
+SHOWCASE_PAGE(CompAvatar, ShowcaseAvatar);

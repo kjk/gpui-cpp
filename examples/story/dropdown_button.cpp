@@ -6,7 +6,7 @@ struct DropdownButtonStory {
     StoryToolbarState toolbar;
 
     static El* Render(DropdownButtonStory* self, Ctx* cx);
-    static void Click(DropdownButtonStory* self, Ctx* cx, int id);
+    static void OnKey(DropdownButtonStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void ToggleDrop(DropdownButtonStory* self, Ctx* cx, const ClickEvent*,
@@ -79,10 +79,14 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
     return page;
 }
 
-void DropdownButtonStory::Click(DropdownButtonStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void DropdownButtonStory::OnKey(DropdownButtonStory* self, Ctx* cx,
+                                const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->selectOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StoryDropdownButton, DropdownButtonStory);
+STORY_PAGE_KEYS(StoryDropdownButton, DropdownButtonStory);

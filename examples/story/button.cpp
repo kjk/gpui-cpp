@@ -4,7 +4,6 @@ struct ButtonStory {
     StoryToolbarState toolbar;
 
     static El* Render(ButtonStory* self, Ctx* cx);
-    static void Click(ButtonStory* self, Ctx* cx, int id);
 };
 
 static component::Button* Btn(Ctx* cx, ButtonStory* self, const char* id) {
@@ -328,11 +327,6 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     StorySectionAdd(customSec, customRow);
     page->Child(customSec);
     return page;
-}
-
-void ButtonStory::Click(ButtonStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryButton, ButtonStory);

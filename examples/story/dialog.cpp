@@ -5,7 +5,7 @@ struct DialogStory {
     int selB = -1;
 
     static El* Render(DialogStory* self, Ctx* cx);
-    static void Click(DialogStory* self, Ctx* cx, int id);
+    static void OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void OpenDialog(DialogStory* self, Ctx* cx, const ClickEvent*,
@@ -70,10 +70,13 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     return page;
 }
 
-void DialogStory::Click(DialogStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void DialogStory::OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->dialogOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StoryDialog, DialogStory);
+STORY_PAGE_KEYS(StoryDialog, DialogStory);

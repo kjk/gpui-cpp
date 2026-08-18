@@ -2,7 +2,6 @@
 
 struct EditorStory {
     static El* Render(EditorStory* self, Ctx* cx);
-    static void Click(EditorStory* self, Ctx* cx, int id);
 };
 
 El* EditorStory::Render(EditorStory* self, Ctx* cx) {
@@ -14,11 +13,6 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(sec);
     return page;
-}
-
-void EditorStory::Click(EditorStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryEditor, EditorStory);

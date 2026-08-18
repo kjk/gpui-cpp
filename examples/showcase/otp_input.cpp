@@ -47,9 +47,4 @@ El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
         ->Child(ScTxt(cx, StrL("Enter the 6-digit code."), 12, ScMutedC()));
 }
 
-void ShowcaseOtpInputClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompOtpInput, ShowcaseOtpInput, ShowcaseOtpInputClick);
+SHOWCASE_PAGE(CompOtpInput, ShowcaseOtpInput);

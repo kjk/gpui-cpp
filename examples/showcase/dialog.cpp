@@ -118,9 +118,4 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-void ShowcaseDialogClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompDialog, ShowcaseDialog, ShowcaseDialogClick);
+SHOWCASE_PAGE(CompDialog, ShowcaseDialog);

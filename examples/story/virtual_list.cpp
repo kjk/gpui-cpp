@@ -4,7 +4,6 @@ struct VirtualListStory {
     StoryToolbarState toolbar;
 
     static El* Render(VirtualListStory* self, Ctx* cx);
-    static void Click(VirtualListStory* self, Ctx* cx, int id);
 };
 
 El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
@@ -36,11 +35,6 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     StorySectionAdd(sec, list);
     page->Child(sec);
     return page;
-}
-
-void VirtualListStory::Click(VirtualListStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryVirtualList, VirtualListStory);

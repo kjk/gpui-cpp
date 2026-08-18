@@ -4,7 +4,6 @@ struct OtpInputStory {
     char otpBuf[8] = "12";
     int otpLen = 2;
     static El* Render(OtpInputStory* self, Ctx* cx);
-    static void Click(OtpInputStory* self, Ctx* cx, int id);
 };
 
 El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
@@ -35,11 +34,6 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(dis);
     return page;
-}
-
-void OtpInputStory::Click(OtpInputStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryOtpInput, OtpInputStory);

@@ -4,7 +4,6 @@ struct TagStory {
     StoryToolbarState toolbar;
 
     static El* Render(TagStory* self, Ctx* cx);
-    static void Click(TagStory* self, Ctx* cx, int id);
 };
 
 static El* TagRow(Ctx* cx, TagStory* self, bool outline, float radius) {
@@ -89,11 +88,6 @@ El* TagStory::Render(TagStory* self, Ctx* cx) {
     StorySectionAdd(colors, crow);
     page->Child(colors);
     return page;
-}
-
-void TagStory::Click(TagStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryTag, TagStory);

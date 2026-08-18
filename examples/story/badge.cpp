@@ -4,7 +4,6 @@ struct BadgeStory {
     StoryToolbarState toolbar;
 
     static El* Render(BadgeStory* self, Ctx* cx);
-    static void Click(BadgeStory* self, Ctx* cx, int id);
 };
 
 static El* Face(Ctx* cx, BadgeStory* self, const char* initials) {
@@ -160,11 +159,6 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
     StorySectionAdd(nest, nestRow);
     page->Child(nest);
     return page;
-}
-
-void BadgeStory::Click(BadgeStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryBadge, BadgeStory);

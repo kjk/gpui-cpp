@@ -76,9 +76,4 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
         ->IntoEl();
 }
 
-void ShowcaseSelectClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompSelect, ShowcaseSelect, ShowcaseSelectClick);
+SHOWCASE_PAGE(CompSelect, ShowcaseSelect);

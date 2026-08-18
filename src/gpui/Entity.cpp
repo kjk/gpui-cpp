@@ -162,7 +162,7 @@ WinSize WindowSize(Window* win) {
     return ws;
 }
 
-void WindowOnClick(Window* win, Listener l) {
+void WindowOnUnhandledClick(Window* win, Listener l) {
     if (win) {
         win->onClick = l;
     }

@@ -3,7 +3,6 @@
 struct TooltipStory {
     bool tipRemoved = false;
     static El* Render(TooltipStory* self, Ctx* cx);
-    static void Click(TooltipStory* self, Ctx* cx, int id);
 };
 
 static void RemoveTip(TooltipStory* self, Ctx* cx, const ClickEvent*) {
@@ -107,12 +106,6 @@ El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     }
     page->Child(rem);
     return page;
-}
-
-void TooltipStory::Click(TooltipStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryTooltip, TooltipStory);

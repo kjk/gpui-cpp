@@ -45,9 +45,4 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
                                 ->Fg(Rgb(0x73, 0x73, 0x73))));
 }
 
-void ShowcaseLinkClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompLink, ShowcaseLink, ShowcaseLinkClick);
+SHOWCASE_PAGE(CompLink, ShowcaseLink);

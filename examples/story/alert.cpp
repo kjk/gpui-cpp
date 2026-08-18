@@ -5,7 +5,6 @@ struct AlertStory {
     StoryToolbarState toolbar;
 
     static El* Render(AlertStory* self, Ctx* cx);
-    static void Click(AlertStory* self, Ctx* cx, int id);
 };
 
 static void HideBanner(AlertStory* self, Ctx* cx, const ClickEvent*) {
@@ -170,12 +169,6 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
                        ->IntoEl()));
     page->Child(custom);
     return page;
-}
-
-void AlertStory::Click(AlertStory* self, Ctx* cx, int id) {
-    (void)self;
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryAlert, AlertStory);

@@ -6,7 +6,7 @@ struct SelectStory {
     int selB = -1;
 
     static El* Render(SelectStory* self, Ctx* cx);
-    static void Click(SelectStory* self, Ctx* cx, int id);
+    static void OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void ToggleSel(SelectStory* self, Ctx* cx, const ClickEvent*) {
@@ -59,9 +59,13 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     return page;
 }
 
-void SelectStory::Click(SelectStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
+// Esc closes what this page has open, like an overlay dismiss.
+void SelectStory::OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (ev->vk != VK_ESCAPE) {
+        return;
+    }
+    self->selectOpen = false;
+    Notify(cx);
 }
 
-STORY_PAGE(StorySelect, SelectStory);
+STORY_PAGE_KEYS(StorySelect, SelectStory);

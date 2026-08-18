@@ -5,7 +5,6 @@ struct CheckboxStory {
     StoryToolbarState toolbar;
 
     static El* Render(CheckboxStory* self, Ctx* cx);
-    static void Click(CheckboxStory* self, Ctx* cx, int id);
 };
 
 static void SetCheck0(CheckboxStory* self, Ctx* cx, const ClickEvent*,
@@ -116,11 +115,6 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
     StorySectionAdd(labs, labCol);
     page->Child(labs);
     return page;
-}
-
-void CheckboxStory::Click(CheckboxStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryCheckbox, CheckboxStory);

@@ -49,9 +49,4 @@ El* ShowcaseProgress(ShowcaseApp* app, Ctx* cx) {
                                 Rgb(0x73, 0x73, 0x73)))));
 }
 
-void ShowcaseProgressClick(ShowcaseApp* app, int id) {
-    (void)app;
-    (void)id;
-}
-
-SHOWCASE_PAGE(CompProgress, ShowcaseProgress, ShowcaseProgressClick);
+SHOWCASE_PAGE(CompProgress, ShowcaseProgress);

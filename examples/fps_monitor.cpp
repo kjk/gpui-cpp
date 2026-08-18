@@ -270,12 +270,6 @@ static void OnTick(FpsApp* app, Ctx* cx, const TickEvent*) {
     app->tiltY += (app->cursorY - app->tiltY) * kEase;
 }
 
-static void OnClick(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
-    (void)app;
-    (void)cx;
-    (void)ev;
-}
-
 static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
     Window* win = cx->win;
 
@@ -362,7 +356,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     opts.timerMs = 16;
     Window* win =
         WindowOpenView(app, StrL("FPS Monitor"), 800, 600, view.id, opts);
-    WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnMouse(win, ListenTo(view, &OnMouse));
     WindowSetInterval(win, 16, ListenTo(view, &OnTick));
     int rc = AppRun(app);

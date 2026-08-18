@@ -5,7 +5,6 @@ struct NumberInputStory {
     bool seeded = false;
 
     static El* Render(NumberInputStory* self, Ctx* cx);
-    static void Click(NumberInputStory* self, Ctx* cx, int id);
 };
 
 static void IncNum(NumberInputStory* self, Ctx* cx, const ClickEvent*) {
@@ -62,11 +61,6 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     StorySectionAdd(suf, row);
     page->Child(suf);
     return page;
-}
-
-void NumberInputStory::Click(NumberInputStory* self, Ctx* cx, int id) {
-    (void)cx;
-    (void)id;
 }
 
 STORY_PAGE(StoryNumberInput, NumberInputStory);
