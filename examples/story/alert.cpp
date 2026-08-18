@@ -27,8 +27,8 @@ static El* AlertBullet(Ctx* cx, Rgba fg, El* text) {
 
 static El* AlertW(Ctx* cx, El* child) {
     Arena* a = cx->a;
-    // Rust Alert sections use .w_2_3() on the inner pane (~640px).
-    return Div(a)->W(640)->Child(child);
+    // Every Alert section is .w_2_3() of the pane it sits in.
+    return Div(a)->WFrac(2.f / 3.f)->Child(child);
 }
 
 El* AlertStory::Render(AlertStory* self, Ctx* cx) {

@@ -325,6 +325,10 @@ El* El::W(float v) {
     style.width = v;
     return this;
 }
+El* El::WFrac(float f) {
+    style.widthFrac = f;
+    return this;
+}
 El* El::H(float v) {
     style.height = v;
     return this;
@@ -1447,6 +1451,18 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
             }
         }
         return;
+    }
+
+    // w_2_3 and friends are a fraction of this element's content box. Resolve
+    // them here, once: layout re-runs a child with the width it already got,
+    // and a fraction taken again would compound.
+    if (innerW > 0) {
+        for (El* c = e->first; c; c = c->next) {
+            if (c->style.widthFrac > 0) {
+                c->style.width = innerW * c->style.widthFrac;
+                c->style.widthFrac = 0;
+            }
+        }
     }
 
     bool row = e->style.dir == FlexDir::Row;

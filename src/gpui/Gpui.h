@@ -316,6 +316,9 @@ struct Style {
     OverflowY overflowY = OverflowY::Visible;
     float width = kAuto;
     float height = kAuto;
+    // w_1_2 / w_2_3 / …: a fraction of the parent's content box, which GPUI
+    // has as first-class widths. 0 = unset.
+    float widthFrac = 0;
     float minW = 0;
     float minH = 0;
     float maxW = 1e9f;
@@ -385,6 +388,7 @@ struct El {
     El* Grow(float g = 1);
     El* Shrink0();
     El* W(float v);
+    El* WFrac(float f);
     El* H(float v);
     El* SizeFull();
     El* MinH(float v);
