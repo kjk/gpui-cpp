@@ -399,13 +399,8 @@ void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
     }
 }
 
-El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
-                     const StoryToolbarOpt* rows, int nrows, Listener onAct) {
-    Arena* a = cx->a;
-    El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
-    El* group = ToolbarGroup(cx);
-    row->Child(group);
-
+// The size dropdown, which most pages carry.
+static El* StorySizeMenu(Ctx* cx, StoryToolbarState* st, Listener onAct) {
     El* sizeTrig =
         ToolbarDropBtn(cx, StoryFmt(cx, "Size: %s", StorySizeName(st->size)))
             ->OnClick(ListenerArg(onAct, ToolbarOpenSize));
@@ -421,9 +416,22 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
         sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeLg, "Large",
                                         st->size == UiSize::Large));
     }
-    group->Child(Popup::New(cx, StrL("story-size-menu"), sizeTrig)
-                     ->Content(sizeMenu)
-                     ->IntoEl());
+    return Popup::New(cx, StrL("story-size-menu"), sizeTrig)
+        ->Content(sizeMenu)
+        ->IntoEl();
+}
+
+El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
+                     const StoryToolbarOpt* rows, int nrows, Listener onAct,
+                     bool withSize) {
+    Arena* a = cx->a;
+    El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+    El* group = ToolbarGroup(cx);
+    row->Child(group);
+
+    if (withSize) {
+        group->Child(StorySizeMenu(cx, st, onAct));
+    }
 
     if (rows && nrows > 0) {
         group->Child(ToolbarSep(cx));

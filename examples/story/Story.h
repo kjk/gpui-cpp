@@ -163,7 +163,8 @@ struct StoryToolbarOpt {
 void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
                        int act);
 El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
-                     const StoryToolbarOpt* rows, int nrows, Listener onAct);
+                     const StoryToolbarOpt* rows, int nrows, Listener onAct,
+                     bool withSize = true);
 
 template <typename T>
 void StoryToolbarAct(T* self, Ctx* cx, const ClickEvent*, intptr_t act) {
@@ -185,11 +186,13 @@ El* StoryToolbar(Ctx* cx, T* self) {
                             Listen(cx, &StoryToolbarAct<T>));
 }
 
-// The page passes the rows it wants; the handler is its own.
+// The page passes the rows it wants; the handler is its own. A page that
+// calls story_toolbar_group() rather than story_toolbar(size) has no size
+// button, so withSize is false there.
 template <typename T>
 El* StoryToolbarOptions(Ctx* cx, T* self, const StoryToolbarOpt* rows,
-                        int nrows, Listener onAct) {
-    return StoryToolbarCore(cx, &self->toolbar, rows, nrows, onAct);
+                        int nrows, Listener onAct, bool withSize = true) {
+    return StoryToolbarCore(cx, &self->toolbar, rows, nrows, onAct, withSize);
 }
 
 template <typename T>
