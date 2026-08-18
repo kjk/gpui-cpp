@@ -536,12 +536,29 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
     return box;
 }
 
+// gallery.rs wraps the sidebar in
+//   resizable_panel().size(px(255.)).size_range(px(200.)..px(320.))
+// GPUI turns that 255 into a fraction of the group at first layout, and the
+// story window opens at 1600 wide (crates/story/src/lib.rs), so the sidebar
+// tracks 255/1600 of the window width, clamped to the size_range. It is 200 at
+// half a 1920 screen and 221 at 1400, which is what the Rust app draws.
+static float SidebarWidth(Ctx* cx) {
+    float w = WindowSize(cx->win).dipW * (255.f / 1600.f);
+    w = (float)(int)(w + 0.5f); // GPUI rounds; truncating is off by one at 1400
+    if (w < 200.f) {
+        w = 200.f;
+    }
+    if (w > 320.f) {
+        w = 320.f;
+    }
+    return w;
+}
+
 static El* Sidebar(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
-    float w = app->collapsed ? 56.f : 255.f;
-    El* side =
-        Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar)->Border(0, th.border);
+    float w = app->collapsed ? 56.f : SidebarWidth(cx);
+    El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar);
     El* header = Div(a)->FlexCol()->Pad(12)->Gap(16);
     El* brand = Div(a)->FlexRow()->Gap(10)->ItemsCenter();
     El* logo = Div(a)
@@ -648,6 +665,8 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));
+    // The resizable handle reads as a 1px rule.
+    body->Child(Div(frame)->W(1)->H(kFill)->Shrink0()->Bg(th.border));
     El* main = Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0);
     main->Child(Header(app, cx));
     El* scroller = Div(frame)
