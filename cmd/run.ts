@@ -10,7 +10,7 @@
 //   bun cmd/run.ts -rel -compare story     # rust left half, ours right half
 
 import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import {
   findVisibleClassWindows,
   placeOnWorkAreaHalf,
@@ -18,6 +18,7 @@ import {
   waitForNewClassWindow,
   waitForPidWindow,
 } from "./winapi.ts";
+import { printSizeTable } from "./sizes.ts";
 import { ensureRustTree, rustTreeDir } from "./versions.ts";
 
 const root = resolve(dirname(Bun.main), "..");
@@ -50,7 +51,8 @@ const usage = `Usage: bun cmd/run.ts [-rel|-dbg] [-asan] [-clean] [-windbg] [-co
   -windbg   run the C++ exe under windbgx.exe (-G, ignore first-chance C++ EH)
   -compare  also cargo-build and launch the Rust example from .work/gpui-component
             (cloned at the SHA in cmd/versions.ts if missing)
-            rust on the left half of the screen, ours on the right
+            prints both exe sizes, then rust on the left half of the screen,
+            ours on the right
 
 Builds with cmd/build.ts, then launches out/<dir>/<target>.exe and exits.
 The example name is the last argument.`;
@@ -140,6 +142,13 @@ function parseArgs(argv: string[]): {
 function outDirName(debug: boolean, asan: boolean): string {
   const base = debug ? "dbg" : "rel";
   return asan ? `${base}_asan` : base;
+}
+
+// Repo-relative if it lives here (the rust tree is under .work/), absolute
+// otherwise. Keeps the size table readable.
+function repoPath(p: string): string {
+  const rel = relative(root, p);
+  return rel.startsWith("..") ? p : rel.replaceAll("/", "\\");
 }
 
 function firstWhereLine(stdout: Uint8Array): string | null {
@@ -424,6 +433,14 @@ if (compare) {
   if (!existsSync(rustExe)) {
     die(`Missing rust exe after cargo build: ${rustExe}`);
   }
+  // Both binaries are built now; how big each one came out is the first thing
+  // a comparison run wants to know.
+  console.log("");
+  printSizeTable([
+    { label: repoPath(exe), path: exe },
+    { label: repoPath(rustExe), path: rustExe },
+  ]);
+  console.log("");
 }
 
 const cpp = cppCmd();

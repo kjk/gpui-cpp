@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { buildDist } from "./build-dist.ts";
+import { printSizeTable } from "./sizes.ts";
 import { ensureRustTree } from "./versions.ts";
 
 const root = resolve(dirname(Bun.main), "..");
@@ -457,39 +458,13 @@ function formatElapsed(ms: number): string {
   return `${milli}ms`;
 }
 
-function formatExactBytes(n: number): string {
-  return `${n.toLocaleString("en-US")} b`;
-}
-
-function formatHumanBytes(n: number): string {
-  if (n >= 1_000_000_000) {
-    return `${(n / 1_000_000_000).toFixed(1)} GB`;
-  }
-  if (n >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1)} MB`;
-  }
-  if (n >= 1_000) {
-    return `${(n / 1_000).toFixed(1)} kB`;
-  }
-  return `${n} b`;
-}
-
 function printExeTable(outDir: string, names: string[]) {
-  const rows = names.map((n) => {
-    const relPath = join(outDir, `${n}.exe`).replaceAll("/", "\\");
-    const abs = join(root, outDir, `${n}.exe`);
-    if (!existsSync(abs)) {
-      return { name: relPath, bytes: "(not generated)", human: "" };
-    }
-    const size = statSync(abs).size;
-    return { name: relPath, bytes: formatExactBytes(size), human: formatHumanBytes(size) };
-  });
-  const nameW = Math.max(...rows.map((r) => r.name.length));
-  const bytesW = Math.max(...rows.map((r) => r.bytes.length));
-  const humanW = Math.max(...rows.map((r) => r.human.length));
-  for (const r of rows) {
-    console.log(`${r.name.padEnd(nameW)}  ${r.bytes.padStart(bytesW)}  ${r.human.padStart(humanW)}`);
-  }
+  printSizeTable(
+    names.map((n) => ({
+      label: join(outDir, `${n}.exe`).replaceAll("/", "\\"),
+      path: join(root, outDir, `${n}.exe`),
+    })),
+  );
 }
 
 const started = performance.now();
