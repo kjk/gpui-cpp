@@ -16,11 +16,9 @@ struct MdApp {
 };
 
 static void OnClick(MdApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)app;
     (void)cx;
-    int id = ev->id;
-    if (id == 1) {
-        app->mode = (app->mode + 1) % 3;
-    }
+    (void)ev;
 }
 
 static void OnWheel(MdApp* app, Ctx* cx, const WheelEvent* ev) {
@@ -38,6 +36,11 @@ static void OnWheel(MdApp* app, Ctx* cx, const WheelEvent* ev) {
 
 static bool IsTableLine(const char* s) {
     return s && s[0] == '|';
+}
+
+static void CycleMode(MdApp* app, Ctx* cx, const ClickEvent*) {
+    app->mode = (app->mode + 1) % 3;
+    Notify(cx);
 }
 
 static El* RenderMd(Arena* a, const char* src, int mode, const Theme& th) {
@@ -185,7 +188,8 @@ El* MdApp::Render(MdApp* app, Ctx* cx) {
                   ->Pad(8)
                   ->Gap(8)
                   ->BorderT(0, th.border)
-                  ->Child(ButtonEl(frame, 1, Str(ModeLabel(app->mode))));
+                  ->Child(ButtonEl(frame, 1, Str(ModeLabel(app->mode)))
+                              ->OnClick(Listen(cx, &CycleMode)));
     El* body = Div(frame)
                    ->Grow()
                    ->ClipY()

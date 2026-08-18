@@ -58,58 +58,6 @@ static void OnTick(MonitorApp* app, Ctx* cx, const TickEvent*) {
     Collect(app);
 }
 
-static void OnClick(MonitorApp* app, Ctx* cx, const ClickEvent* ev) {
-    Window* win = cx->win;
-    int id = ev->id;
-    if (id == ClickTabSystem) {
-        app->tab = 0;
-        return;
-    }
-    if (id == ClickTabProcesses) {
-        app->tab = 1;
-        return;
-    }
-    if (id == ClickMin) {
-        AppMinimize(win);
-        return;
-    }
-    if (id == ClickMax) {
-        AppToggleMaximize(win);
-        return;
-    }
-    if (id == ClickClose) {
-        AppClose(win);
-        return;
-    }
-    if (id == ClickDrag) {
-        AppDrag(win);
-        return;
-    }
-    ProcessSort field = ProcessSort::Cpu;
-    bool isSort = true;
-    if (id == ClickSortPid) {
-        field = ProcessSort::Pid;
-    } else if (id == ClickSortName) {
-        field = ProcessSort::Name;
-    } else if (id == ClickSortCpu) {
-        field = ProcessSort::Cpu;
-    } else if (id == ClickSortMem) {
-        field = ProcessSort::Memory;
-    } else {
-        isSort = false;
-    }
-    if (isSort) {
-        if (app->sort == field) {
-            app->sortDesc = !app->sortDesc;
-        } else {
-            app->sort = field;
-            app->sortDesc =
-                field != ProcessSort::Name && field != ProcessSort::Pid;
-        }
-        SysSortProcesses(&app->sys, app->sort, app->sortDesc, kKeepProcs);
-    }
-}
-
 static void OnWheel(MonitorApp* app, Ctx* cx, const WheelEvent* ev) {
     (void)cx;
     float x = ev->x;
@@ -132,7 +80,25 @@ static void OnWheel(MonitorApp* app, Ctx* cx, const WheelEvent* ev) {
     }
 }
 
-static El* SegmentedTab(Arena* a, Str label, bool selected, int id) {
+static void PickTab(MonitorApp* app, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    app->tab = (int)ix;
+    Notify(cx);
+}
+
+static void SortBy(MonitorApp* app, Ctx* cx, const ClickEvent*,
+                   intptr_t which) {
+    ProcessSort field = (ProcessSort)which;
+    if (app->sort == field) {
+        app->sortDesc = !app->sortDesc;
+    } else {
+        app->sort = field;
+        app->sortDesc = field != ProcessSort::Name && field != ProcessSort::Pid;
+    }
+    SysSortProcesses(&app->sys, app->sort, app->sortDesc, kKeepProcs);
+    Notify(cx);
+}
+
+static El* SegmentedTab(Arena* a, Str label, bool selected, Listener onClick) {
     const Theme& th = ThemeDark();
     El* t = Div(a)
                 ->H(24)
@@ -140,7 +106,7 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, int id) {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Radius(6)
-                ->Click(id)
+                ->OnClick(onClick)
                 ->Child(TextEl(a, label)->Font(13)->Fg(selected ? th.tabActiveFg
                                                                 : th.tabFg));
     if (selected) {
@@ -149,7 +115,10 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, int id) {
     return t;
 }
 
-static El* TitleBar(Arena* a, Window* win, MonitorApp* app) {
+static El* TitleBar(Ctx* cx, MonitorApp* app) {
+    Arena* a = cx->a;
+    Window* win = cx->win;
+    (void)win;
     const Theme& th = ThemeDark();
     Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
 
@@ -161,9 +130,9 @@ static El* TitleBar(Arena* a, Window* win, MonitorApp* app) {
                    ->Radius(8)
                    ->Bg(th.tabBar)
                    ->Child(SegmentedTab(a, StrL("System"), app->tab == 0,
-                                        ClickTabSystem))
+                                        Listen(cx, &PickTab, 0)))
                    ->Child(SegmentedTab(a, StrL("Processes"), app->tab == 1,
-                                        ClickTabProcesses));
+                                        Listen(cx, &PickTab, 1)));
 
     double gb = (double)app->sys.memTotal / (1024.0 * 1024.0 * 1024.0);
     El* memLabel = TextEl(a, fmt("%.1f GB", gb))->Font(12)->Fg(th.mutedFg);
@@ -231,8 +200,6 @@ static El* SystemTab(Arena* a, MonitorApp* app) {
 }
 
 static const float kColW[4] = {70, 380, 80, 100};
-static const int kSortClick[4] = {ClickSortPid, ClickSortName, ClickSortCpu,
-                                  ClickSortMem};
 
 static Str SortMark(ProcessSort field, ProcessSort cur, bool desc) {
     if (field != cur) {
@@ -241,7 +208,8 @@ static Str SortMark(ProcessSort field, ProcessSort cur, bool desc) {
     return desc ? StrL(" ↓") : StrL(" ↑");
 }
 
-static El* ProcTableHeader(Arena* a, MonitorApp* app) {
+static El* ProcTableHeader(Ctx* cx, MonitorApp* app) {
+    Arena* a = cx->a;
     const Theme& th = ThemeDark();
     const char* names[4] = {"PID", "Name", "CPU %", "Memory"};
     ProcessSort fields[4] = {ProcessSort::Pid, ProcessSort::Name,
@@ -256,7 +224,7 @@ static El* ProcTableHeader(Arena* a, MonitorApp* app) {
                        ->H(28)
                        ->PadX(8)
                        ->ItemsCenter()
-                       ->Click(kSortClick[i])
+                       ->OnClick(Listen(cx, &SortBy, (intptr_t)fields[i]))
                        ->Child(TextEl(a, lab)->Font(12)->Fg(th.tableHeadFg)));
     }
     return row;
@@ -293,7 +261,8 @@ static El* ProcTableRow(Arena* a, const ProcessInfo* p, int ix) {
     return row;
 }
 
-static El* ProcessesTab(Arena* a, MonitorApp* app) {
+static El* ProcessesTab(Ctx* cx, MonitorApp* app) {
+    Arena* a = cx->a;
     El* body = Div(a)->FlexCol()->Grow()->ClipY();
     int n = app->sys.procs.len;
     // virtualize a bit: skip rows above scroll
@@ -318,7 +287,7 @@ static El* ProcessesTab(Arena* a, MonitorApp* app) {
     return Div(a)
         ->FlexCol()
         ->SizeFull()
-        ->Child(ProcTableHeader(a, app))
+        ->Child(ProcTableHeader(cx, app))
         ->Child(body);
 }
 
@@ -391,14 +360,14 @@ El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
     if (app->tab == 0) {
         content->Child(SystemTab(frame, app));
     } else {
-        content->Child(ProcessesTab(frame, app));
+        content->Child(ProcessesTab(cx, app));
     }
 
     return Div(frame)
         ->FlexCol()
         ->SizeFull()
         ->Bg(th.background)
-        ->Child(TitleBar(frame, win, app))
+        ->Child(TitleBar(cx, app))
         ->Child(content)
         ->Child(StatusBar(frame, app));
 }
@@ -414,7 +383,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     WinOpts opts = {};
     Window* win =
         WindowOpenView(app, StrL("System Monitor"), 680, 600, view.id, opts);
-    WindowOnClick(win, ListenTo(view, &OnClick));
     WindowOnWheel(win, ListenTo(view, &OnWheel));
     WindowSetInterval(win, 500, ListenTo(view, &OnTick));
     int rc = AppRun(app);

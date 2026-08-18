@@ -28,19 +28,9 @@ struct SidebarApp {
 };
 
 static void OnClick(SidebarApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)app;
     (void)cx;
-    int id = ev->id;
-    if (id == ClickToggle) {
-        app->collapsed = !app->collapsed;
-    } else if (id == ClickModeIcon) {
-        app->mode = CollIcon;
-    } else if (id == ClickModeOff) {
-        app->mode = CollOffcanvas;
-    } else if (id == ClickModeNone) {
-        app->mode = CollNone;
-    } else if (id == ClickProj) {
-        app->projOpen = !app->projOpen;
-    }
+    (void)ev;
 }
 
 static const char* Description(const SidebarApp* app) {
@@ -59,8 +49,24 @@ static const char* Description(const SidebarApp* app) {
            "collapsible=\"icon\" behavior.";
 }
 
-static El* MenuItem(Arena* a, int id, IconName icon, const char* label,
-                    bool active, bool iconOnly) {
+static void ToggleCollapse(SidebarApp* app, Ctx* cx, const ClickEvent*) {
+    app->collapsed = !app->collapsed;
+    Notify(cx);
+}
+
+static void ToggleProjects(SidebarApp* app, Ctx* cx, const ClickEvent*) {
+    app->projOpen = !app->projOpen;
+    Notify(cx);
+}
+
+static void SetMode(SidebarApp* app, Ctx* cx, const ClickEvent*,
+                    intptr_t mode) {
+    app->mode = (int)mode;
+    Notify(cx);
+}
+
+static El* MenuItem(Arena* a, Listener onClick, IconName icon,
+                    const char* label, bool active, bool iconOnly) {
     const Theme& th = ThemeNow();
     El* row = Div(a)
                   ->FlexRow()
@@ -69,7 +75,7 @@ static El* MenuItem(Arena* a, int id, IconName icon, const char* label,
                   ->Gap(8)
                   ->ItemsCenter()
                   ->Radius(6)
-                  ->Click(id);
+                  ->OnClick(onClick);
     if (active) {
         row->Bg(th.secondary);
     }
@@ -133,14 +139,15 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
             TextEl(frame, iconCollapsed ? StrL("") : StrL("Application"))
                 ->Font(12)
                 ->Fg(th.mutedFg));
-        side->Child(MenuItem(frame, ClickDash, IconName::LayoutDashboard,
+        side->Child(MenuItem(frame, Listener{}, IconName::LayoutDashboard,
                              "Dashboard", true, iconCollapsed));
-        side->Child(MenuItem(frame, ClickInbox, IconName::Inbox, "Inbox", false,
+        side->Child(MenuItem(frame, Listener{}, IconName::Inbox, "Inbox", false,
                              iconCollapsed));
-        side->Child(MenuItem(frame, ClickCal, IconName::Calendar, "Calendar",
+        side->Child(MenuItem(frame, Listener{}, IconName::Calendar, "Calendar",
                              false, iconCollapsed));
-        side->Child(MenuItem(frame, ClickProj, IconName::Folder, "Projects",
-                             false, iconCollapsed));
+        side->Child(MenuItem(frame, Listen(cx, &ToggleProjects),
+                             IconName::Folder, "Projects", false,
+                             iconCollapsed));
         if (app->projOpen && !iconCollapsed) {
             side->Child(Div(frame)
                             ->PadL(28)
@@ -156,7 +163,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
                                         ->Font(13)
                                         ->Fg(th.sidebarFg)));
         }
-        side->Child(MenuItem(frame, ClickSet, IconName::Settings, "Settings",
+        side->Child(MenuItem(frame, Listener{}, IconName::Settings, "Settings",
                              false, iconCollapsed));
         El* foot = Div(frame)->FlexRow()->Gap(8)->ItemsCenter()->Grow();
         // spacer then footer at bottom: put grow spacer
@@ -175,7 +182,8 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     El* top = Div(frame)->FlexRow()->ItemsCenter()->Gap(12);
     if (showToggle) {
         top->Child(ButtonEl(frame, ClickToggle,
-                            StrL(iconCollapsed || hide ? ">" : "<")));
+                            StrL(iconCollapsed || hide ? ">" : "<"))
+                       ->OnClick(Listen(cx, &ToggleCollapse)));
     }
     top->Child(TextEl(frame, StrL("Sidebar collapsible modes"))
                    ->Font(16)
@@ -188,12 +196,15 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
             ->ItemsCenter()
             ->Gap(8)
             ->Child(TextEl(frame, StrL("Mode:"))->Font(14)->Fg(th.foreground))
-            ->Child(ButtonSmall(frame, ClickModeIcon, StrL("Icon"),
-                                BtnKind::Default, app->mode == CollIcon))
-            ->Child(ButtonSmall(frame, ClickModeOff, StrL("Offcanvas"),
-                                BtnKind::Default, app->mode == CollOffcanvas))
-            ->Child(ButtonSmall(frame, ClickModeNone, StrL("None"),
-                                BtnKind::Default, app->mode == CollNone)));
+            ->Child(ButtonSmall(frame, 0, StrL("Icon"), BtnKind::Default,
+                                app->mode == CollIcon)
+                        ->OnClick(Listen(cx, &SetMode, CollIcon)))
+            ->Child(ButtonSmall(frame, 0, StrL("Offcanvas"), BtnKind::Default,
+                                app->mode == CollOffcanvas)
+                        ->OnClick(Listen(cx, &SetMode, CollOffcanvas)))
+            ->Child(ButtonSmall(frame, 0, StrL("None"), BtnKind::Default,
+                                app->mode == CollNone)
+                        ->OnClick(Listen(cx, &SetMode, CollNone))));
     main->Child(Div(frame)
                     ->Grow()
                     ->Radius(th.radius)

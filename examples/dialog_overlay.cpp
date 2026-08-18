@@ -19,23 +19,9 @@ struct DialogApp {
 };
 
 static void OnClick(DialogApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)app;
     (void)cx;
-    int id = ev->id;
-    if (id == ClickOpenDialog) {
-        app->overlay = 1;
-        cx->win->menu.open = false;
-    } else if (id == ClickOpenSheet) {
-        app->overlay = 2;
-        cx->win->menu.open = false;
-    } else if (id == ClickDismiss || id == ClickCtx) {
-        if (app->overlay) {
-            app->overlay = 0;
-        }
-        cx->win->menu.open = false;
-    } else if (id >= ClickMenuOpen && id <= ClickMenuInfo) {
-        logf("menu %d", id);
-        cx->win->menu.open = false;
-    }
+    (void)ev;
 }
 
 static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
@@ -52,6 +38,27 @@ static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
         cx->win->menu.x = x;
         cx->win->menu.y = y;
     }
+}
+
+static void OpenOverlay(DialogApp* app, Ctx* cx, const ClickEvent*,
+                        intptr_t kind) {
+    app->overlay = (int)kind;
+    cx->win->menu.open = false;
+    Notify(cx);
+}
+
+static void DismissAll(DialogApp* app, Ctx* cx, const ClickEvent*) {
+    app->overlay = 0;
+    cx->win->menu.open = false;
+    Notify(cx);
+}
+
+static void MenuPicked(DialogApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t ix) {
+    (void)app;
+    logf("menu %d", (int)ix);
+    cx->win->menu.open = false;
+    Notify(cx);
 }
 
 static El* MdLine(Arena* a, Str s, Rgba c) {
@@ -86,7 +93,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
             ->Border(1, th.foreground)
             ->Dashed()
             ->HoverBg(RgbaOpacity(th.yellow, 0.2f))
-            ->Click(ClickCtx)
+            ->OnClick(Listen(cx, &DismissAll))
             ->Child(TextEl(frame, StrL("Hover test here."))
                         ->Font(14)
                         ->Fg(th.foreground))
@@ -104,9 +111,11 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                         ->FlexRow()
                         ->Gap(16)
                         ->Child(ButtonEl(frame, ClickOpenDialog,
-                                         StrL("Open dialog"), BtnKind::Outline))
+                                         StrL("Open dialog"), BtnKind::Outline)
+                                    ->OnClick(Listen(cx, &OpenOverlay, 1)))
                         ->Child(ButtonEl(frame, ClickOpenSheet,
-                                         StrL("Open Sheet"), BtnKind::Outline)))
+                                         StrL("Open Sheet"), BtnKind::Outline)
+                                    ->OnClick(Listen(cx, &OpenOverlay, 2))))
             ->Child(MdLine(frame,
                            StrL("Background text behind the modals. While a "
                                 "dialog or sheet is open, "
@@ -129,24 +138,25 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
             "Select this text, then drag the mouse out of the dialog over the "
             "paragraph behind it. "
             "The text behind must NOT get selected.";
-        El* panel = Div(frame)
-                        ->W(app->overlay == 1 ? 420.f : size.dipW * 0.5f)
-                        ->Pad(20)
-                        ->Gap(12)
-                        ->FlexCol()
-                        ->Radius(8)
-                        ->Bg(th.background)
-                        ->Border(1, th.border)
-                        ->Child(TextEl(frame, Str(title))
-                                    ->Font(18)
-                                    ->Semibold()
-                                    ->Fg(th.foreground))
-                        ->Child(TextEl(frame, Str(msg))
-                                    ->Font(14)
-                                    ->Fg(th.foreground)
-                                    ->Wrap())
-                        ->Child(ButtonEl(frame, ClickDismiss, StrL("Close"),
-                                         BtnKind::Primary));
+        El* panel =
+            Div(frame)
+                ->W(app->overlay == 1 ? 420.f : size.dipW * 0.5f)
+                ->Pad(20)
+                ->Gap(12)
+                ->FlexCol()
+                ->Radius(8)
+                ->Bg(th.background)
+                ->Border(1, th.border)
+                ->Child(TextEl(frame, Str(title))
+                            ->Font(18)
+                            ->Semibold()
+                            ->Fg(th.foreground))
+                ->Child(TextEl(frame, Str(msg))
+                            ->Font(14)
+                            ->Fg(th.foreground)
+                            ->Wrap())
+                ->Child(ButtonEl(frame, 0, StrL("Close"), BtnKind::Primary)
+                            ->OnClick(Listen(cx, &DismissAll)));
         El* backdrop = Div(frame)
                            ->Absolute()
                            ->Top(0)
@@ -154,7 +164,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                            ->W(size.dipW)
                            ->H(size.dipH)
                            ->Bg(Rgba8(0, 0, 0, 80))
-                           ->Click(ClickDismiss)
+                           ->OnClick(Listen(cx, &DismissAll))
                            ->ItemsCenter()
                            ->JustifyCenter()
                            ->Child(panel);
@@ -177,8 +187,8 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                        ->Radius(6);
         const char* labels[] = {"Open", "Delete", "Export", "Info"};
         for (int i = 0; i < 4; i++) {
-            menu->Child(ButtonEl(frame, ClickMenuOpen + i, Str(labels[i]),
-                                 BtnKind::Default));
+            menu->Child(ButtonEl(frame, 0, Str(labels[i]), BtnKind::Default)
+                            ->OnClick(Listen(cx, &MenuPicked, i)));
         }
         root->Child(menu);
     }

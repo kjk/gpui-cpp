@@ -22,24 +22,9 @@ static const int kNMsgs = 4;
 static const bool kMine[] = {false, true, false, true};
 
 static void OnClick(SelApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)app;
     (void)cx;
-    int id = ev->id;
-    if (id == 1) {
-        // button: must not start selection
-        app->selFrom = -1;
-        app->selTo = -1;
-        app->in.focused = false;
-    } else if (id == 2) {
-        app->in.focused = true;
-        app->selFrom = -1;
-    } else if (id >= 10 && id < 10 + kNMsgs) {
-        app->in.focused = false;
-        int ix = id - 10;
-        if (app->selFrom < 0) {
-            app->selFrom = ix;
-        }
-        app->selTo = ix;
-    }
+    (void)ev;
 }
 
 static void OnKey(SelApp* app, Ctx* cx, const KeyEvent* ev) {
@@ -82,7 +67,31 @@ static void OnKey(SelApp* app, Ctx* cx, const KeyEvent* ev) {
     }
 }
 
-static El* Bubble(Arena* a, int ix, const Theme& th) {
+static void PickBubble(SelApp* app, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    app->in.focused = false;
+    if (app->selFrom < 0) {
+        app->selFrom = (int)ix;
+    }
+    app->selTo = (int)ix;
+    Notify(cx);
+}
+
+// A button must not start a selection.
+static void ClearSelection(SelApp* app, Ctx* cx, const ClickEvent*) {
+    app->selFrom = -1;
+    app->selTo = -1;
+    app->in.focused = false;
+    Notify(cx);
+}
+
+static void FocusField(SelApp* app, Ctx* cx, const ClickEvent*) {
+    app->in.focused = true;
+    app->selFrom = -1;
+    Notify(cx);
+}
+
+static El* Bubble(Ctx* cx, int ix, const Theme& th) {
+    Arena* a = cx->a;
     bool mine = kMine[ix];
     El* inner =
         Div(a)
@@ -90,7 +99,7 @@ static El* Bubble(Arena* a, int ix, const Theme& th) {
             ->Pad(12)
             ->Radius(8)
             ->Bg(mine ? RgbaOpacity(th.primary, 0.1f) : th.muted)
-            ->Click(10 + ix)
+            ->OnClick(Listen(cx, &PickBubble, ix))
             ->Child(
                 TextEl(a, Str(kMsgs[ix]))->Font(14)->Fg(th.foreground)->Wrap());
     El* row = Div(a)->FlexRow()->W(kFill);
@@ -112,11 +121,11 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
     El* col =
         Div(frame)->FlexCol()->SizeFull()->Pad(16)->Gap(12)->Bg(th.background);
     for (int i = 0; i < kNMsgs; i++) {
-        col->Child(Bubble(frame, i, th));
+        col->Child(Bubble(cx, i, th));
     }
     col->Child(Div(frame)->Grow());
-    col->Child(
-        ButtonEl(frame, 1, StrL("Clicking me must not start selection")));
+    col->Child(ButtonEl(frame, 1, StrL("Clicking me must not start selection"))
+                   ->OnClick(Listen(cx, &ClearSelection)));
     Str shown = app->in.len > 0 ? Str(app->in.buf, app->in.len)
                                 : Str(app->in.placeholder);
     col->Child(Div(frame)
@@ -126,7 +135,7 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
                    ->ItemsCenter()
                    ->Radius(6)
                    ->Border(1, th.border)
-                   ->Click(2)
+                   ->OnClick(Listen(cx, &FocusField))
                    ->Child(TextEl(frame, shown)
                                ->Font(14)
                                ->Fg(app->in.len ? th.foreground : th.mutedFg)));

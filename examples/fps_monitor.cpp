@@ -271,14 +271,9 @@ static void OnTick(FpsApp* app, Ctx* cx, const TickEvent*) {
 }
 
 static void OnClick(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
+    (void)app;
     (void)cx;
-    int id = ev->id;
-    if (id == 1 && app->curves > 1) {
-        app->curves--;
-    }
-    if (id == 2 && app->curves < kMaxCurves) {
-        app->curves++;
-    }
+    (void)ev;
 }
 
 static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
@@ -295,6 +290,15 @@ static void OnMouse(FpsApp* app, Ctx* cx, const ClickEvent* ev) {
     }
     app->cursorX = (x / w - 0.5f) * 2.4f;
     app->cursorY = (y / h - 0.5f) * 1.2f;
+}
+
+static void StepCurves(FpsApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t delta) {
+    int n = app->curves + (int)delta;
+    if (n >= 1 && n <= kMaxCurves) {
+        app->curves = n;
+    }
+    Notify(cx);
 }
 
 El* FpsApp::Render(FpsApp* app, Ctx* cx) {
@@ -327,11 +331,13 @@ El* FpsApp::Render(FpsApp* app, Ctx* cx) {
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8)
-                   ->Child(ButtonEl(frame, 1, StrL("- load")))
+                   ->Child(ButtonEl(frame, 1, StrL("- load"))
+                               ->OnClick(Listen(cx, &StepCurves, -1)))
                    ->Child(TextEl(frame, fmt("%d curves", app->curves))
                                ->Font(12)
                                ->Fg(Rgb(190, 190, 190)))
-                   ->Child(ButtonEl(frame, 2, StrL("+ load")));
+                   ->Child(ButtonEl(frame, 2, StrL("+ load"))
+                               ->OnClick(Listen(cx, &StepCurves, 1)));
 
     return Div(frame)
         ->SizeFull()
