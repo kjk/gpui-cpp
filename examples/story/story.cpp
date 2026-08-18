@@ -148,7 +148,8 @@ static const StoryInfo kMeta[StoryCount] = {
     {"status-bar", "StatusBar",
      "A status bar that typically sits at the bottom of the window."},
     {"stepper", "Stepper",
-     "A stepper component to display progress through a sequence of steps."},
+     "A step-by-step process for users to navigate through a series of "
+     "steps."},
     {"switch", "Switch", "Turn a setting on or off."},
     {"table", "Table", "A responsive table component."},
     {"tabs", "Tabs",

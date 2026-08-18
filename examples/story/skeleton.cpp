@@ -16,7 +16,8 @@ El* SkeletonStory::Render(SkeletonStory* self, Ctx* cx) {
         component::Skeleton::New(cx)->W(48)->H(48)->IntoEl()->Radius(24));
     El* lines = Div(a)->FlexCol()->Gap(8)->Grow();
     lines->Child(component::Skeleton::New(cx)->W(kFill)->H(16)->IntoEl());
-    lines->Child(component::Skeleton::New(cx)->W(200)->H(16)->IntoEl());
+    lines->Child(component::Skeleton::New(cx)->W(kFill)->H(16)->IntoEl()->WFrac(
+        2.f / 3.f));
     textRow->Child(lines);
     StorySectionAdd(text, textRow);
     page->Child(text);
@@ -26,7 +27,7 @@ El* SkeletonStory::Render(SkeletonStory* self, Ctx* cx) {
     El* cardCol = Div(a)->FlexCol()->Gap(8)->W(360);
     cardCol->Child(component::Skeleton::New(cx)->W(kFill)->H(180)->IntoEl());
     cardCol->Child(component::Skeleton::New(cx)->W(kFill)->H(16)->IntoEl());
-    cardCol->Child(component::Skeleton::New(cx)->W(240)->H(16)->IntoEl());
+    cardCol->Child(component::Skeleton::New(cx)->W(200)->H(16)->IntoEl());
     StorySectionAdd(card, cardCol);
     page->Child(card);
     return page;
