@@ -45,9 +45,10 @@ static El* AvatarRow(Ctx* cx, AvatarStory* self, const char** names, int n,
     // flex_row_reverse lays the row right to left, so the leftmost avatar
     // paints last and sits on top.
     if (extra) {
+        // AvatarGroup asks for the secondary background, but naming the chip
+        // ⋯ puts it back on the tinted initials path, as any other name does.
         box->Child(component::Avatar::New(cx)
                        ->Initials(StrL("\xE2\x8B\xAF"))
-                       ->Bg(cx->theme().secondary)
                        ->WithSize(self->toolbar.size)
                        ->IntoEl()
                        ->Absolute()

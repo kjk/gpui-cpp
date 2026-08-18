@@ -90,6 +90,10 @@ static Rgba AvatarHue(Str initials) {
 El* Avatar::IntoEl() {
     const Theme& th = cx->theme();
     float r = radius >= 0 ? radius : size * 0.5f;
+    // GPUI's border sits inside the box, so the fallback fills what is left
+    // of it; drawn edge to edge it would paint over the ring.
+    float inset = borderW > 0 ? borderW : 0;
+    float innerSize = size - inset * 2;
     bool named = initials.s && initials.len > 0;
     Rgba fill = th.secondary;
     Rgba fg = th.mutedFg;
@@ -105,12 +109,12 @@ El* Avatar::IntoEl() {
     El* inner = named ? TextEl(a, initials)->Font(txt)->Fg(fg)->Semibold()
                       : IconEl(a, placeholder, size * 0.6f)->Fg(fg);
     El* fb = AvatarFallback::New(cx)
-                 ->W(size)
-                 ->H(size)
+                 ->W(innerSize)
+                 ->H(innerSize)
                  ->ItemsCenter()
                  ->JustifyCenter()
                  ->Bg(fill)
-                 ->Radius(r)
+                 ->Radius(r - inset)
                  ->Child(inner);
     // The base is opaque (bg tokens.secondary) and the fallback tint sits on
     // top, so overlapping group avatars do not show through each other.
@@ -122,7 +126,7 @@ El* Avatar::IntoEl() {
                  ->Bg(th.secondary);
     Rgba bd = hasBorderC ? borderC : th.border;
     if (borderW > 0) {
-        el->Border(borderW, bd);
+        el->Pad(inset)->Border(borderW, bd);
     }
     return el;
 }
