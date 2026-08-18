@@ -27,10 +27,16 @@ El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx) {
         first = 0;
     }
     int visible = (int)(viewH / kVirtRowH) + 2;
-    El* list = Div(a)->FlexCol();
-    if (first > 0) {
-        list->Child(Div(a)->H((float)first * kVirtRowH));
-    }
+    // v_virtual_list renders only the visible range and translates it by the
+    // scroll offset. The rendered window starts at the first item's own
+    // offset, so it rides up as the offset grows; a spacer above the rows
+    // would push them out of the box instead of scrolling them.
+    El* list = Div(a)
+                   ->FlexCol()
+                   ->Absolute()
+                   ->Left(0)
+                   ->Top((float)first * kVirtRowH - app->virtualScroll)
+                   ->W(kFill);
     for (int i = 0; i < visible; i++) {
         int ix = first + i;
         if (ix >= kVirtCount) {
@@ -38,6 +44,7 @@ El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx) {
         }
         list->Child(
             Div(a)
+                ->W(kFill)
                 ->H((float)kVirtRowH)
                 ->PadX(8)
                 ->ItemsCenter()
