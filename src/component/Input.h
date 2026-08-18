@@ -6,6 +6,12 @@ namespace gpui {
 
 namespace component {
 
+enum class InputAlign : uint8_t {
+    Left,
+    Center,
+    Right
+};
+
 struct Input {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -15,11 +21,33 @@ struct Input {
     float width = kFill;
     El* prefix = nullptr;
     El* suffix = nullptr;
+    UiSize size = UiSize::Medium;
+    InputAlign align = InputAlign::Left;
+    bool disabled = false;
+    bool cleanable = false;
+    // A masked input draws bullets; mask_toggle adds the eye that flips it.
+    bool masked = false;
+    bool maskToggle = false;
+    bool appearance = true;
+    Rgba textColor = {};
+    bool hasTextColor = false;
     Listener onChange;
     Listener onFocus;
+    Listener onClear;
+    Listener onToggleMask;
 
     static Input* New(Ctx* cx, Str id, LineInput* state);
     Input* Label(Str s);
+    Input* WithSize(UiSize s);
+    Input* Align(InputAlign v);
+    Input* Disabled(bool v);
+    Input* Cleanable(bool v = true);
+    Input* Masked(bool v);
+    Input* MaskToggle(bool v = true);
+    Input* Appearance(bool v);
+    Input* TextColor(Rgba c);
+    Input* OnClear(Listener fn);
+    Input* OnToggleMask(Listener fn);
     // Rust's Input::prefix / Input::suffix: content inside the border box, on
     // either side of the editor. A prefix brings its own left padding.
     Input* Prefix(El* el);

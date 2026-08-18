@@ -39,6 +39,47 @@ Input* Input::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
 }
+Input* Input::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+Input* Input::Align(InputAlign v) {
+    align = v;
+    return this;
+}
+Input* Input::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+Input* Input::Cleanable(bool v) {
+    cleanable = v;
+    return this;
+}
+Input* Input::Masked(bool v) {
+    masked = v;
+    return this;
+}
+Input* Input::MaskToggle(bool v) {
+    maskToggle = v;
+    return this;
+}
+Input* Input::Appearance(bool v) {
+    appearance = v;
+    return this;
+}
+Input* Input::TextColor(Rgba c) {
+    textColor = c;
+    hasTextColor = true;
+    return this;
+}
+Input* Input::OnClear(Listener fn) {
+    onClear = fn;
+    return this;
+}
+Input* Input::OnToggleMask(Listener fn) {
+    onToggleMask = fn;
+    return this;
+}
 
 // Size::Medium, the default: input_h is h_8, input_px 10, input_py 8,
 // input_text_size text_sm, gap 6 (crates/ui/src/sizing.rs).
@@ -54,43 +95,89 @@ El* Input::IntoEl() {
     if (label.s) {
         col->Child(TextEl(a, label)->Font(12)->Fg(th.foreground));
     }
-    bool focused = state && state->focused;
+    bool focused = state && state->focused && !disabled;
+    // input_h / input_px / input_py / input_text_size, by size.
+    float h = kInputHeight, padX = kInputPadX, padY = kInputPadY,
+          font = kInputTextSize;
+    if (size == UiSize::Large) {
+        h = 44;
+        padX = 12;
+        padY = 10;
+        font = 16;
+    } else if (size == UiSize::Small) {
+        h = 24;
+        padX = 8;
+        padY = 2;
+    } else if (size == UiSize::XSmall) {
+        h = 20;
+        padX = 4;
+        padY = 0;
+        font = 12;
+    }
     InputEditorStyle editor;
-    editor.foreground = th.foreground;
+    editor.foreground = hasTextColor ? textColor : th.foreground;
     editor.mutedForeground = th.mutedFg;
     editor.caret = th.caret;
-    editor.fontSize = kInputTextSize;
-    El* field =
-        InputBase::New(cx, id, HashClickId(id))
-            ->FlexRow()
-            ->W(width)
-            ->H(kInputHeight)
-            ->PadX(kInputPadX)
-            ->PadY(kInputPadY)
-            ->Gap(kInputGap)
-            ->ItemsCenter()
-            ->Radius(th.radius)
-            ->Bg(th.inputBg)
+    editor.fontSize = font;
+    editor.mask = masked;
+    editor.align = align == InputAlign::Center  ? 1
+                   : align == InputAlign::Right ? 2
+                                                : 0;
+    if (disabled) {
+        editor.foreground = th.mutedFg;
+    }
+    El* field = InputBase::New(cx, id, disabled ? 0 : HashClickId(id))
+                    ->FlexRow()
+                    ->W(width)
+                    ->H(h)
+                    ->PadX(padX)
+                    ->PadY(padY)
+                    ->Gap(kInputGap)
+                    ->ItemsCenter();
+    if (appearance) {
+        field->Radius(th.radius)
+            ->Bg(disabled ? th.muted : th.inputBg)
             // Rust draws a ring outside the border box on focus; without one
             // here the ring color goes on the border itself.
             ->Border(1, focused ? th.ring : th.inputBorder);
+    }
     if (prefix) {
         // `.pl_0()`: the prefix owns the space to the left of the editor.
         field->PadL(0)->Child(prefix);
     }
-    if (prefix || suffix) {
+    bool hasValue = state && state->len > 0;
+    bool trailing = suffix || (cleanable && hasValue) || maskToggle;
+    if (prefix || trailing) {
         field
             ->Child(Div(a)->Grow()->Child(gpui::Input::New(cx, state, editor)));
     } else {
         field->Child(gpui::Input::New(cx, state, editor));
     }
+    if (maskToggle) {
+        field->Child(Button::New(cx, StrDup(a, fmt("%s-mask", id)))
+                         ->Text()
+                         ->WithSize(UiSize::XSmall)
+                         ->Icon(IconName::Eye)
+                         ->OnClick(onToggleMask)
+                         ->IntoEl());
+    }
+    if (cleanable && hasValue && !disabled) {
+        field->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
+                         ->Text()
+                         ->WithSize(UiSize::XSmall)
+                         ->Icon(IconName::X)
+                         ->OnClick(onClear)
+                         ->IntoEl());
+    }
     if (suffix) {
         field->Child(suffix);
     }
-    if (onFocus.IsValid()) {
-        field->OnClick(onFocus);
-    } else if (onChange.IsValid()) {
-        field->OnClick(onChange);
+    if (!disabled) {
+        if (onFocus.IsValid()) {
+            field->OnClick(onFocus);
+        } else if (onChange.IsValid()) {
+            field->OnClick(onChange);
+        }
     }
     col->Child(field);
     return col;
@@ -125,6 +212,7 @@ Textarea* Textarea::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
 }
+
 El* Textarea::IntoEl() {
     const Theme& th = cx->theme();
     InputEditorStyle editor;

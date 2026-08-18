@@ -16,6 +16,10 @@ struct InputEditorStyle {
     Rgba mutedForeground = Rgb(0x73, 0x73, 0x73);
     Rgba caret = Rgb(0x17, 0x17, 0x17);
     float fontSize = 12;
+    // A masked field draws one bullet per character, and text_center /
+    // text_right move the run inside the field.
+    bool mask = false;
+    int align = 0;
 };
 
 struct Input {

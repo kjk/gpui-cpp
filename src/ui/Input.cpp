@@ -28,6 +28,11 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
     El* bar = Div(a)->W(2)->H(caretH)->Bg(style.caret);
     El* slot = caret ? bar : Div(a)->W(2)->H(caretH);
     El* row = Div(a)->FlexRow()->ItemsCenter()->H(kInputLineH);
+    if (style.align == 1) {
+        row->W(kFill)->JustifyCenter();
+    } else if (style.align == 2) {
+        row->W(kFill)->JustifyEnd();
+    }
     if (state->len <= 0) {
         // Overlay the caret so blinking does not shove the cue text.
         if (caret) {
@@ -37,6 +42,29 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
                               ->Font(font)
                               ->LineHeight(lineMult)
                               ->Fg(fg));
+    }
+    if (style.mask) {
+        // One bullet per character, not per byte.
+        int chars = 0;
+        for (int i = 0; i < state->len; i++) {
+            if (((unsigned char)state->buf[i] & 0xc0) != 0x80) {
+                chars++;
+            }
+        }
+        char* dots = (char*)Alloc(a, chars * 3 + 1);
+        int n = 0;
+        for (int i = 0; i < chars; i++) {
+            dots[n++] = (char)0xe2;
+            dots[n++] = (char)0x80;
+            dots[n++] = (char)0xa2; // U+2022 BULLET
+        }
+        dots[n] = 0;
+        row->Child(
+            TextEl(a, Str(dots, n))->Font(font)->LineHeight(lineMult)->Fg(fg));
+        if (state->focused) {
+            row->Child(slot);
+        }
+        return row;
     }
     int cur = state->cursor;
     if (cur < 0) {
