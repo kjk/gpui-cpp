@@ -9,21 +9,30 @@ El* InputBase::New(Ctx* cx, Str id, int clickId) {
 }
 
 El* Input::New(Ctx* cx, LineInput* state) {
+    return New(cx, state, InputEditorStyle{});
+}
+
+El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
     Arena* a = cx->a;
     if (!state) {
         return TextEl(a, Str{});
     }
-    Rgba fg = state->len > 0 ? Rgb(0x17, 0x17, 0x17) : Rgb(0x73, 0x73, 0x73);
+    float font = style.fontSize > 0 ? style.fontSize : 12.f;
+    // Input::LINE_HEIGHT is 1.25rem against the input's own text size.
+    float lineH = font * 1.25f;
+    float caretH = font + 2.f;
+    Rgba fg = state->len > 0 ? style.foreground : style.mutedForeground;
     bool caret = state->focused && ((GetTickCount() / 500) % 2 == 0);
-    El* bar = Div(a)->W(2)->H(14)->Bg(Rgb(0x17, 0x17, 0x17));
-    El* slot = caret ? bar : Div(a)->W(2)->H(14);
-    El* row = Div(a)->FlexRow()->ItemsCenter()->H(16);
+    El* bar = Div(a)->W(2)->H(caretH)->Bg(style.caret);
+    El* slot = caret ? bar : Div(a)->W(2)->H(caretH);
+    El* row = Div(a)->FlexRow()->ItemsCenter()->H(lineH);
     if (state->len <= 0) {
         // Overlay the caret so blinking does not shove the cue text.
         if (caret) {
             row->Child(bar->Absolute()->Left(0)->Top(1));
         }
-        return row->Child(TextEl(a, Str(state->placeholder))->Font(12)->Fg(fg));
+        return row
+            ->Child(TextEl(a, Str(state->placeholder))->Font(font)->Fg(fg));
     }
     int cur = state->cursor;
     if (cur < 0) {
@@ -33,14 +42,14 @@ El* Input::New(Ctx* cx, LineInput* state) {
         cur = state->len;
     }
     if (cur > 0) {
-        row->Child(TextEl(a, Str(state->buf, cur))->Font(12)->Fg(fg));
+        row->Child(TextEl(a, Str(state->buf, cur))->Font(font)->Fg(fg));
     }
     if (state->focused) {
         row->Child(slot);
     }
     if (cur < state->len) {
         row->Child(TextEl(a, Str(state->buf + cur, state->len - cur))
-                       ->Font(12)
+                       ->Font(font)
                        ->Fg(fg));
     }
     return row;

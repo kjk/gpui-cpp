@@ -18,6 +18,10 @@ Input* Input::Label(Str s) {
     label = s;
     return this;
 }
+Input* Input::W(float v) {
+    width = v;
+    return this;
+}
 Input* Input::OnChange(Listener fn) {
     onChange = fn;
     return this;
@@ -28,19 +32,41 @@ Input* Input::OnFocus(Listener fn) {
     return this;
 }
 
+// Size::Medium, the default: input_h is h_8, input_px 10, input_py 8,
+// input_text_size text_sm, gap 6 (crates/ui/src/sizing.rs).
+static const float kInputHeight = 32;
+static const float kInputPadX = 10;
+static const float kInputPadY = 8;
+static const float kInputGap = 6;
+static const float kInputTextSize = 14;
+
 El* Input::IntoEl() {
     const Theme& th = cx->theme();
     El* col = Div(a)->FlexCol()->Gap(4);
     if (label.s) {
         col->Child(TextEl(a, label)->Font(12)->Fg(th.foreground));
     }
+    bool focused = state && state->focused;
+    InputEditorStyle editor;
+    editor.foreground = th.foreground;
+    editor.mutedForeground = th.mutedFg;
+    editor.caret = th.caret;
+    editor.fontSize = kInputTextSize;
     El* field =
         InputBase::New(cx, id, HashClickId(id))
-            ->H(28)
-            ->PadX(8)
+            ->FlexRow()
+            ->W(width)
+            ->H(kInputHeight)
+            ->PadX(kInputPadX)
+            ->PadY(kInputPadY)
+            ->Gap(kInputGap)
             ->ItemsCenter()
-            ->Border(1, state && state->focused ? th.foreground : th.border)
-            ->Child(gpui::Input::New(cx, state));
+            ->Radius(th.radius)
+            ->Bg(th.inputBg)
+            // Rust draws a ring outside the border box on focus; without one
+            // here the ring color goes on the border itself.
+            ->Border(1, focused ? th.ring : th.inputBorder)
+            ->Child(gpui::Input::New(cx, state, editor));
     if (onFocus.IsValid()) {
         field->OnClick(onFocus);
     } else if (onChange.IsValid()) {
@@ -85,6 +111,10 @@ NumberInput* NumberInput::New(Ctx* cx, LineInput* state) {
     n->state = state;
     return n;
 }
+NumberInput* NumberInput::W(float v) {
+    width = v;
+    return this;
+}
 NumberInput* NumberInput::OnInc(Listener fn) {
     onInc = fn;
     return this;
@@ -96,6 +126,7 @@ NumberInput* NumberInput::OnDec(Listener fn) {
 El* NumberInput::IntoEl() {
     return gpui::NumberInput::New(cx)
         ->FlexRow()
+        ->W(width)
         ->H(28)
         ->Border(1, cx->theme().border)
         ->Child(InputBase::New(cx, StrL("number"), HashClickId(StrL("number")))

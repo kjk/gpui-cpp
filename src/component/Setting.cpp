@@ -23,12 +23,15 @@ Setting* Setting::Item(Str label, El* control) {
 
 El* Setting::IntoEl() {
     const Theme& th = cx->theme();
-    El* col = Div(a)->FlexCol()->Gap(12);
+    // The group and its rows fill the width they are given, so the label sits
+    // against the left edge and the control against the right.
+    El* col = Div(a)->FlexCol()->Gap(12)->W(kFill);
     col->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
     for (int i = 0; i < n; i++) {
         col->Child(
             Div(a)
                 ->FlexRow()
+                ->W(kFill)
                 ->ItemsCenter()
                 ->JustifyBetween()
                 ->Child(TextEl(a, items[i].label)->Font(13)->Fg(th.foreground))

@@ -26,6 +26,7 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
                              ->Item(StrL("Display name"),
                                     component::Input::New(cx, StrL("set-name"),
                                                           &self->field)
+                                        ->W(180)
                                         ->IntoEl())
                              ->Item(StrL("Automatic updates"),
                                     component::Switch::New(cx, StrL("set-sw"))
@@ -38,8 +39,9 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     StorySectionAdd(
         editor,
         component::Setting::New(cx, StrL("Editor"))
-            ->Item(StrL("Tab size"),
-                   component::NumberInput::New(cx, &self->field)->IntoEl())
+            ->Item(
+                StrL("Tab size"),
+                component::NumberInput::New(cx, &self->field)->W(180)->IntoEl())
             ->Item(StrL("Word wrap"),
                    component::Switch::New(cx, StrL("set-wrap"))
                        ->Checked(true)

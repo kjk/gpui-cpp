@@ -8,8 +8,19 @@ struct InputBase {
     static El* New(Ctx* cx, Str id, int clickId = 0);
 };
 
+// gpui_base::input::InputEditorStyle. The base draws the text and the caret;
+// what they look like is pushed in by the themed layer above it, the way Rust
+// calls state.set_editor_style(...) before rendering.
+struct InputEditorStyle {
+    Rgba foreground = Rgb(0x17, 0x17, 0x17);
+    Rgba mutedForeground = Rgb(0x73, 0x73, 0x73);
+    Rgba caret = Rgb(0x17, 0x17, 0x17);
+    float fontSize = 12;
+};
+
 struct Input {
     static El* New(Ctx* cx, LineInput* state);
+    static El* New(Ctx* cx, LineInput* state, const InputEditorStyle& style);
 };
 
 struct Textarea {

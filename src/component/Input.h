@@ -12,11 +12,15 @@ struct Input {
     Str id = {};
     LineInput* state = nullptr;
     Str label = {};
+    float width = kFill;
     Listener onChange;
     Listener onFocus;
 
     static Input* New(Ctx* cx, Str id, LineInput* state);
     Input* Label(Str s);
+    // Rust's Input fills its parent (`size_full`); a caller that puts one in a
+    // row next to other content sizes it with `.w(px(..))` instead.
+    Input* W(float v);
     Input* OnChange(Listener fn);
     Input* OnFocus(Listener fn);
     El* IntoEl();
@@ -38,10 +42,13 @@ struct NumberInput {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     LineInput* state = nullptr;
+    float width = kFill;
     Listener onInc;
     Listener onDec;
 
     static NumberInput* New(Ctx* cx, LineInput* state);
+    // Fills its parent unless the caller sizes it, as in Rust.
+    NumberInput* W(float v);
     NumberInput* OnInc(Listener fn);
     NumberInput* OnDec(Listener fn);
     El* IntoEl();
