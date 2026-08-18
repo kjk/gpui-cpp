@@ -1,12 +1,22 @@
 #include "Story.h"
 
+// The panels, in the order the sections use them. Rust keys them by name and
+// starts SETTINGS, API_KEYS, COMPONENTS_DIR and PROFILE open.
+enum {
+    CollApiKeys = 8,
+    CollComponentsDir,
+    CollUiDir,
+    CollCount
+};
+
 struct CollapsibleStory {
-    bool collOpen[8] = {false, false, false, true, true, true, false, true};
+    bool collOpen[CollCount] = {false, false, false, true, true, true,
+                                false, true,  true,  true, false};
     static El* Render(CollapsibleStory* self, Ctx* cx);
 };
 
 static void ToggleColl(CollapsibleStory* self, int i) {
-    if (i >= 0 && i < 8) {
+    if (i >= 0 && i < CollCount) {
         self->collOpen[i] = !self->collOpen[i];
     }
 }
@@ -21,6 +31,45 @@ static El* Chevron(Ctx* cx, bool open) {
     Arena* a = cx->a;
     return IconEl(a, open ? IconName::ChevronDown : IconName::ChevronRight, 14)
         ->Fg(cx->theme().mutedFg);
+}
+
+// A leaf of the tree: a file icon and its name, indented past the chevron
+// the folder rows carry.
+static El* FileRow(Ctx* cx, Str name) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    return Div(a)
+        ->FlexRow()
+        ->H(28)
+        ->PadX(8)
+        ->Gap(8)
+        ->ItemsCenter()
+        ->Radius(th.radius)
+        ->HoverBg(th.accent)
+        ->Child(Div(a)->W(12)->Shrink0())
+        ->Child(IconEl(a, IconName::File, 12)->Fg(th.mutedFg))
+        ->Child(StoryTxt(cx, name, 13, th.foreground));
+}
+
+// A branch: the chevron, an open or closed folder, and the name.
+static El* FolderRow(CollapsibleStory* self, Ctx* cx, int key, Str name) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    bool open = self->collOpen[key];
+    return Div(a)
+        ->FlexRow()
+        ->H(28)
+        ->W(kFill)
+        ->PadX(8)
+        ->Gap(8)
+        ->ItemsCenter()
+        ->Radius(th.radius)
+        ->HoverBg(th.accent)
+        ->OnClick(Listen(cx, &OnColl, key))
+        ->Child(Chevron(cx, open))
+        ->Child(IconEl(a, open ? IconName::FolderOpen : IconName::Folder, 12)
+                    ->Fg(th.mutedFg))
+        ->Child(StoryTxt(cx, name, 13, th.foreground));
 }
 
 El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
@@ -201,6 +250,114 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                                   ->IntoEl());
     page->Child(settings);
 
+    // Row actions: buttons beside the trigger, in the header and every row.
+    El* rowActions =
+        StorySection(cx, "Row actions",
+                     "Actions live beside the trigger, in the header and in "
+                     "every row.");
+    El* keysHead = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+    El* keysTrig = Div(a)->FlexRow()->Grow()->Gap(8)->ItemsCenter()->OnClick(
+        Listen(cx, &OnColl, CollApiKeys));
+    keysTrig->Child(Chevron(cx, self->collOpen[CollApiKeys]));
+    keysTrig
+        ->Child(StoryTxt(cx, StrL("API Keys"), 13, th.foreground)->Medium());
+    keysHead->Child(keysTrig);
+    keysHead->Child(component::Button::New(cx, StrL("add-key"))
+                        ->Ghost()
+                        ->WithSize(UiSize::XSmall)
+                        ->Icon(IconName::Plus)
+                        ->Tooltip(StrL("Add key"))
+                        ->IntoEl());
+    struct KeyRow {
+        const char* name;
+        const char* key;
+    };
+    static const KeyRow kKeys[] = {
+        {"Production", "PRDK230454*242SDIFPPL"},
+        {"Development", "DUILO30454*242SDIFUIP"},
+        {"Staging", "IPPODAS230454*242SDI"},
+    };
+    El* keysBody = Div(a)->FlexCol()->Gap(8)->W(kFill);
+    for (size_t i = 0; i < sizeof(kKeys) / sizeof(kKeys[0]); i++) {
+        El* keyRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->W(kFill);
+        keyRow->Child(
+            Div(a)
+                ->W(20)
+                ->H(20)
+                ->Shrink0()
+                ->ItemsCenter()
+                ->JustifyCenter()
+                ->Radius(th.radius)
+                ->Bg(th.muted)
+                ->Child(IconEl(a, IconName::Asterisk, 12)->Fg(th.green)));
+        keyRow->Child(StoryTxt(cx, Str(kKeys[i].name), 12, th.foreground)
+                          ->W(80)
+                          ->Shrink0());
+        keyRow->Child(
+            Div(a)
+                ->Grow()
+                ->PadX(8)
+                ->PadY(2)
+                ->Radius(th.radius)
+                ->Bg(th.muted)
+                ->Child(StoryTxt(cx, Str(kKeys[i].key), 12, th.foreground)));
+        keyRow->Child(component::Button::New(cx, Str(kKeys[i].name))
+                          ->Ghost()
+                          ->WithSize(UiSize::XSmall)
+                          ->Icon(IconName::Ellipsis)
+                          ->Tooltip(StrL("More"))
+                          ->IntoEl());
+        keysBody->Child(keyRow);
+    }
+    StorySectionAdd(rowActions,
+                    Div(a)->W(360)->Child(
+                        component::GroupBox::New(cx, Str{})
+                            ->Outline()
+                            ->Child(component::Collapsible::New(cx)
+                                        ->Open(self->collOpen[CollApiKeys])
+                                        ->Trigger(keysHead)
+                                        ->Content(keysBody)
+                                        ->IntoEl())
+                            ->IntoEl()));
+    page->Child(rowActions);
+
+    // Nested: panels inside panels, as a file tree.
+    El* nested = StorySection(cx, "Nested",
+                              "Panels nest to any depth, here as a file tree.");
+    El* tree = Div(a)->FlexCol()->W(kFill);
+    tree->Child(
+        component::Collapsible::New(cx)
+            ->Open(self->collOpen[CollComponentsDir])
+            ->Trigger(
+                FolderRow(self, cx, CollComponentsDir, StrL("components")))
+            ->Content(
+                Div(a)
+                    ->FlexCol()
+                    ->W(kFill)
+                    ->PadL(12)
+                    ->Child(component::Collapsible::New(cx)
+                                ->Open(self->collOpen[CollUiDir])
+                                ->Trigger(
+                                    FolderRow(self, cx, CollUiDir, StrL("ui")))
+                                ->Content(
+                                    Div(a)
+                                        ->FlexCol()
+                                        ->W(kFill)
+                                        ->PadL(12)
+                                        ->Child(FileRow(cx, StrL("button.rs")))
+                                        ->Child(FileRow(cx, StrL("card.rs")))
+                                        ->Child(FileRow(cx, StrL("dialog.rs"))))
+                                ->IntoEl())
+                    ->Child(FileRow(cx, StrL("login_form.rs"))))
+            ->IntoEl());
+    tree->Child(FileRow(cx, StrL("main.rs")));
+    StorySectionAdd(nested,
+                    Div(a)->W(360)->Child(component::GroupBox::New(cx, Str{})
+                                              ->Outline()
+                                              ->Child(tree)
+                                              ->IntoEl()));
+    page->Child(nested);
+
     El* profile = StorySection(
         cx, "Profile",
         "Shows who someone is, and their details only on request.");
@@ -222,7 +379,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     };
     Field fields[] = {{IconName::Inbox, "Last activity", "2 hours ago"},
                       {IconName::Calendar, "Online since", "Today, 9:00 AM"},
-                      {IconName::Search, "Location", "Hong Kong"}};
+                      {IconName::Globe, "Location", "Hong Kong"}};
     for (int i = 0; i < 3; i++) {
         El* f = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
         f->Child(IconEl(a, fields[i].icon, 12)->Fg(th.mutedFg));
