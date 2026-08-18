@@ -68,6 +68,11 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
     (void)event;
     return YES;
 }
+- (BOOL)mouseDownCanMoveWindow {
+    // Client title bars decide which pixels drag. Without this, AppKit also
+    // moves a full-size-content window when a menu or tool button is dragged.
+    return NO;
+}
 
 - (void)drawRect:(NSRect)dirty {
     (void)dirty;
@@ -135,6 +140,10 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
         return;
     }
     if (chrome == gpui::ClickWinCaption) {
+        if ([event clickCount] == 2) {
+            gpui::WindowDoubleClick(win, x, y);
+            return;
+        }
         [[self window] performWindowDragWithEvent:event];
         return;
     }
@@ -428,13 +437,18 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
         NSWindowStyleMask style =
             NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
             NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+        if (opts.clientTitleBar) {
+            style |= NSWindowStyleMaskFullSizeContentView;
+        }
         if (opts.borderless) {
             style = NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable |
                     NSWindowStyleMaskMiniaturizable;
         }
-        NSRect vis = [[NSScreen mainScreen] visibleFrame];
-        WindowClampToDisplay(&dipW, &dipH, (int)vis.size.width,
-                             (int)vis.size.height);
+        // GPUI's primary_display().bounds() is the full display, not the
+        // work area below the menu bar and above the Dock.
+        NSRect screen = [[NSScreen mainScreen] frame];
+        WindowClampToDisplay(&dipW, &dipH, (int)screen.size.width,
+                             (int)screen.size.height);
         NSRect frame = NSMakeRect(0, 0, dipW, dipH);
         NSWindow* window =
             [[NSWindow alloc] initWithContentRect:frame
@@ -443,6 +457,12 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
                                             defer:NO];
         if (!window) {
             return nullptr;
+        }
+        if (opts.clientTitleBar) {
+            [window setTitleVisibility:NSWindowTitleHidden];
+            [window setTitlebarAppearsTransparent:YES];
+            [window setTitlebarSeparatorStyle:NSTitlebarSeparatorStyleNone];
+            [window setMovableByWindowBackground:NO];
         }
         GpuiView* view = [[GpuiView alloc] initWithFrame:frame];
         view->win = win;

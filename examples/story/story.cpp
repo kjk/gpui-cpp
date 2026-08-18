@@ -533,8 +533,8 @@ El* StoryComingSoon(Ctx* cx, int story) {
         ->FlexCol()
         ->Gap(8)
         ->Pad(8)
-        ->Child(StoryTxt(cx, StoryDup(cx, m->title), 16, th.foreground)
-                    ->Semibold())
+        ->Child(
+            StoryTxt(cx, StoryDup(cx, m->title), 16, th.foreground)->Semibold())
         ->Child(StoryTxt(cx, StoryDup(cx, "This story is not ported yet."), 13,
                          th.mutedFg));
 }
@@ -661,21 +661,22 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
     El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar);
     El* header = Div(a)->FlexCol()->Pad(12)->Gap(16);
     El* brand = Div(a)->FlexRow()->Gap(10)->ItemsCenter();
-    El* logo = Div(a)
-                   ->W(32)
-                   ->H(32)
-                   ->Radius(8)
-                   ->Bg(th.primary)
-                   ->ItemsCenter()
-                   ->JustifyCenter()
-                   ->Shrink0()
-                   ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)
-                               ->Fg(th.primaryFg));
+    El* logo =
+        Div(a)
+            ->W(32)
+            ->H(32)
+            ->Radius(8)
+            ->Bg(th.primary)
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Shrink0()
+            ->Child(
+                IconEl(a, IconName::GalleryVerticalEnd, 16)->Fg(th.primaryFg));
     brand->Child(logo);
     if (!app->collapsed) {
         El* names = Div(a)->FlexCol();
-        names->Child(StoryTxt(cx, StrL("GPUI Component"), 14, th.sidebarFg)
-                         ->Semibold());
+        names->Child(
+            StoryTxt(cx, StrL("GPUI Component"), 14, th.sidebarFg)->Semibold());
         names->Child(StoryTxt(cx, StrL("Component showcase"), 12, th.mutedFg));
         brand->Child(names);
     }
@@ -714,6 +715,84 @@ static El* Header(StoryApp* app, Ctx* cx) {
         ->Child(StoryTxt(cx, Str(m->description), 16, th.mutedFg)->Wrap());
 }
 
+// AppTitleBar in crates/story: on macOS the native traffic lights sit above
+// this client-drawn strip, so its left side starts after their 80px reserve.
+// The menu and tool buttons claim their own hit rectangles; the remaining
+// surface is the window drag region.
+static El* StoryTitleMenuItem(Ctx* cx, const char* label, bool semibold) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* text = StoryTxt(cx, Str(label), 14, th.foreground);
+    if (semibold) {
+        text->Semibold();
+    }
+    return Div(a)
+        ->H(kFill)
+        ->PadX(8)
+        ->ItemsCenter()
+        ->Radius(th.radius)
+        ->Click(HashClickId(StoryFmt(cx, "story-title-%s", label)))
+        ->HoverBg(th.muted)
+        ->Child(text);
+}
+
+static El* StoryTitleBar(Ctx* cx) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
+
+    El* menus = Div(a)
+                    ->FlexRow()
+                    ->H(kFill)
+                    ->ItemsCenter()
+                    ->Child(StoryTitleMenuItem(cx, "GPUI Component", true))
+                    ->Child(StoryTitleMenuItem(cx, "Edit", false))
+                    ->Child(StoryTitleMenuItem(cx, "Window", false))
+                    ->Child(StoryTitleMenuItem(cx, "Help", false));
+    El* tools =
+        Div(a)
+            ->FlexRow()
+            ->H(kFill)
+            ->ItemsCenter()
+            ->Gap(2)
+            ->Child(component::Button::New(cx, StrL("story-title-settings"))
+                        ->Icon(IconName::Settings2)
+                        ->Ghost()
+                        ->Compact()
+                        ->WithSize(UiSize::Small)
+                        ->Tooltip(StrL("Appearance"))
+                        ->IntoEl())
+            ->Child(component::Button::New(cx, StrL("story-title-github"))
+                        ->Icon(IconName::Github)
+                        ->Ghost()
+                        ->Compact()
+                        ->WithSize(UiSize::Small)
+                        ->Tooltip(StrL("GitHub"))
+                        ->IntoEl())
+            ->Child(component::Button::New(cx, StrL("story-title-bell"))
+                        ->Icon(IconName::Bell)
+                        ->Ghost()
+                        ->Compact()
+                        ->WithSize(UiSize::Small)
+                        ->Tooltip(StrL("Notifications"))
+                        ->IntoEl());
+
+    return Div(a)
+        ->FlexRow()
+        ->H(34)
+        ->W(kFill)
+        ->Shrink0()
+        ->PadL(80)
+        ->PadR(8)
+        ->ItemsCenter()
+        ->JustifyBetween()
+        ->Bg(mixed)
+        ->BorderB(1, th.titleBarBorder)
+        ->Click(ClickWinCaption)
+        ->Child(menus)
+        ->Child(tools);
+}
+
 static El* Footer(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -732,8 +811,8 @@ static El* Footer(StoryApp* app, Ctx* cx) {
                 ->FlexRow()
                 ->Gap(8)
                 ->ItemsCenter()
-                ->Child(IconEl(a, IconName::GalleryVerticalEnd, 12)
-                            ->Fg(th.mutedFg))
+                ->Child(
+                    IconEl(a, IconName::GalleryVerticalEnd, 12)->Fg(th.mutedFg))
                 ->Child(StoryTxt(cx, StoryFmt(cx, "%d components", StoryCount),
                                  12, th.mutedFg))
                 ->Child(Div(a)->W(1)->H(12)->Bg(th.border))
@@ -760,6 +839,9 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     }
     const Theme& th = cx->theme();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
+    if (cx->win->opts.clientTitleBar) {
+        root->Child(StoryTitleBar(cx));
+    }
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));
     // The resizable handle reads as a 1px rule. Rust anchors it over the
@@ -924,8 +1006,13 @@ int GpuiMain(int argc, char** argv) {
              "Search…");
     // create_new_window_with_size passes 1600x1200; WindowOpen caps it at
     // 85% of the display and centers it.
-    Window* win = WindowOpenView(app, StrL("GPUI Component"), 1600, 1200,
-                                 view.id, WinOpts{});
+    WinOpts opts = {};
+    // The pinned GPUI story uses a transparent native macOS title bar with a
+    // 34px client-drawn AppTitleBar underneath its traffic lights. Keep the
+    // existing server decorations on Windows and Linux for now.
+    opts.clientTitleBar = GPUI_OS_MAC;
+    Window* win =
+        WindowOpenView(app, StrL("GPUI Component"), 1600, 1200, view.id, opts);
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

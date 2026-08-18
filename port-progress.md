@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**system_monitor**, **app_assets**, the twelve simple examples, the **gpui-base showcase**, and the **crates/ui story gallery** all build on **Windows, Linux and macOS**. The macOS `system_monitor` and `hello_world` examples have also been run and visually smoke-tested.
+**system_monitor**, **app_assets**, the twelve simple examples, the **gpui-base showcase**, and the **crates/ui story gallery** all build on **Windows, Linux and macOS**. The macOS `system_monitor`, `hello_world`, and `story` examples have also been run and visually smoke-tested.
 
 ```
 bun cmd/build.ts all
@@ -12,35 +12,35 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 
 ## Status
 
-| Phase                           | Status | Notes                                                                                                                                               |
-| ------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Plan + AGENTS.md             | done   | `AGENTS.md`, `port.md`                                                                                                                              |
-| 1. Vendored base + build        | done   | `src/Base.h` / `src/Base.cpp` from SumatraPDF + `cmd/build.ts`                                                                                      |
-| 2. D2D window + chrome          | done   | Win32 + `ID2D1DCRenderTarget` (HWND target did not present)                                                                                         |
-| 3. Flex + TitleBar + tabs       | done   | Segmented System / Processes tabs                                                                                                                   |
-| 4. AreaChart                    | done   | Grid, stroke, gradient fill, 120-sample history                                                                                                     |
-| 5. SysInfo + 500 ms loop        | done   | CPU, memory, disk, battery, processes via Win32                                                                                                     |
-| 6. Process table                | done   | Sortable columns, stripes, virtualized rows, top 200                                                                                                |
-| 7. Status bar + icons           | done   | Disk / memory / CPU chips + battery if present                                                                                                      |
-| 8. Visual match vs Rust         | mostly | See remaining gaps below                                                                                                                            |
-| 9. app_assets                   | done   | Light window, Inbox + Bot from `assets/app_assets/icons/*.svg`                                                                                      |
-| 10. hello_world                 | done   | Button, hover, light theme tokens                                                                                                                   |
-| 11. window_title                | done   | In-client title strip + Hello World body                                                                                                            |
-| 12. root_borderless             | done   | Root.bordered=false note; still uses Win32 chrome                                                                                                   |
-| 13. tooltip_top_edge            | done   | Absolute top-edge button; tooltip flips below                                                                                                       |
-| 14. input                       | done   | LineInput + WM_CHAR; Hello, {name}!                                                                                                                 |
-| 15. focus_trap                  | done   | Two Tab traps + buttons outside                                                                                                                     |
-| 16. dialog_overlay              | done   | Center dialog, bottom sheet, context menu                                                                                                           |
-| 17. sidebar                     | done   | Collapsible icon/offcanvas/none + Lucide nav                                                                                                        |
-| 18. table_in_scrollable         | done   | Nested scroll; inner table y-band heuristic                                                                                                         |
-| 19. text_selection              | done   | Selectable text block                                                                                                                               |
-| 20. markdown_table              | done   | md4c parses, `component::TextView` renders                                                                                                          |
-| 21. fps_monitor                 | done   | Hilbert + Catmull-Rom + HSL customPaint, 16 ms; `crates/fps` HUD in `src/gpui/Fps.h`                                                                |
-| 22. showcase                    | done   | `crates/base/examples/showcase` — overview + 39 component pages                                                                                     |
-| 23. story gallery               | done   | `crates/story` — sidebar + 62 stories (`bun cmd/build.ts story`)                                                                                    |
-| 24. App / Window / Entity / Ctx | done   | GPUI's runtime shape; see AGENTS.md                                                                                                                 |
-| 25. Linux port                  | done   | X11 + cairo + Pango behind `Paint.h` / `Platform.h`; every target builds and runs                                                                   |
-| 26. macOS port                  | done   | Cocoa + Core Graphics + Core Text behind the same seams. Every target builds; `system_monitor` renders live metrics and its sortable process table. |
+| Phase                           | Status | Notes                                                                                                                               |
+| ------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Plan + AGENTS.md             | done   | `AGENTS.md`, `port.md`                                                                                                              |
+| 1. Vendored base + build        | done   | `src/Base.h` / `src/Base.cpp` from SumatraPDF + `cmd/build.ts`                                                                      |
+| 2. D2D window + chrome          | done   | Win32 + `ID2D1DCRenderTarget` (HWND target did not present)                                                                         |
+| 3. Flex + TitleBar + tabs       | done   | Segmented System / Processes tabs                                                                                                   |
+| 4. AreaChart                    | done   | Grid, stroke, gradient fill, 120-sample history                                                                                     |
+| 5. SysInfo + 500 ms loop        | done   | CPU, memory, disk, battery, processes via Win32                                                                                     |
+| 6. Process table                | done   | Sortable columns, stripes, virtualized rows, top 200                                                                                |
+| 7. Status bar + icons           | done   | Disk / memory / CPU chips + battery if present                                                                                      |
+| 8. Visual match vs Rust         | mostly | See remaining gaps below                                                                                                            |
+| 9. app_assets                   | done   | Light window, Inbox + Bot from `assets/app_assets/icons/*.svg`                                                                      |
+| 10. hello_world                 | done   | Button, hover, light theme tokens                                                                                                   |
+| 11. window_title                | done   | In-client title strip + Hello World body                                                                                            |
+| 12. root_borderless             | done   | Root.bordered=false note; still uses Win32 chrome                                                                                   |
+| 13. tooltip_top_edge            | done   | Absolute top-edge button; tooltip flips below                                                                                       |
+| 14. input                       | done   | LineInput + WM_CHAR; Hello, {name}!                                                                                                 |
+| 15. focus_trap                  | done   | Two Tab traps + buttons outside                                                                                                     |
+| 16. dialog_overlay              | done   | Center dialog, bottom sheet, context menu                                                                                           |
+| 17. sidebar                     | done   | Collapsible icon/offcanvas/none + Lucide nav                                                                                        |
+| 18. table_in_scrollable         | done   | Nested scroll; inner table y-band heuristic                                                                                         |
+| 19. text_selection              | done   | Selectable text block                                                                                                               |
+| 20. markdown_table              | done   | md4c parses, `component::TextView` renders                                                                                          |
+| 21. fps_monitor                 | done   | Hilbert + Catmull-Rom + HSL customPaint, 16 ms; `crates/fps` HUD in `src/gpui/Fps.h`                                                |
+| 22. showcase                    | done   | `crates/base/examples/showcase` — overview + 39 component pages                                                                     |
+| 23. story gallery               | done   | `crates/story` — sidebar + 62 stories; macOS uses the upstream-style client title bar (`bun cmd/build.ts story`)                    |
+| 24. App / Window / Entity / Ctx | done   | GPUI's runtime shape; see AGENTS.md                                                                                                 |
+| 25. Linux port                  | done   | X11 + cairo + Pango behind `Paint.h` / `Platform.h`; every target builds and runs                                                   |
+| 26. macOS port                  | done   | Cocoa + Core Graphics + Core Text behind the same seams. Every target builds; native traffic lights coexist with client title bars. |
 
 ## What matches the Rust example
 
@@ -132,3 +132,4 @@ cargo run -p system_monitor
 - 2026-08-18: Text is laid into GPUI's line box. Every line now gets a box phi (1.618) times the font size — `TextStyle::line_height`'s default — with ascent+descent centered in it, instead of DirectWrite's tighter natural height, so text blocks and the rows that shrink-wrap them stop coming out shorter than the original. `El::LineHeight` is the per-element override (`line_height(relative(1.))` on the FPS figure, 1.25rem inside an Input), keyed into the shaped-text cache. The local workarounds this replaces — explicit line boxes in the FPS HUD, a hand-computed load-button height — are gone.
 - 2026-08-18: Markdown is parsed by md4c. `ext/md4c` vendors the CommonMark parser (0.5.3, one C file, MIT) and `component::TextView` became what `crates/ui/src/text` is: md4c's SAX callbacks build an `MdNode` block tree — the shape of `text/node.rs`'s `BlockNode` — and the renderer walks it. That replaces the line-at-a-time parser and brings blockquotes, fenced code blocks, nested and ordered lists, task lists, strikethrough, autolinks, link and image alt text, HTML entities and content-proportional table columns. `examples/story/welcome.cpp` collapsed from 434 hand-built lines to what `welcome_story.rs` is — `markdown(README.md).selectable(true)` — rendering `assets/story/README.md`, gpui-component's README at the pinned SHA. Still short of Rust: no syntax highlighting (no tree-sitter), no images, no link clicks, no strikethrough or table column alignment in the paint layer.
 - 2026-08-18: Compiled and ran the macOS port locally for the first time. All examples build under Apple clang; `hello_world` and `system_monitor` were visually smoke-tested, including tab switching and live process sorting. Fixed Core Text foreground colors, Mach-time process CPU conversion, initial window activation, chart-header spacing, and Apple clang-format discovery.
+- 2026-08-18: Matched the story gallery's macOS window chrome. `WinOpts::clientTitleBar` gives Cocoa a transparent full-size content view while preserving native traffic lights; the story draws the pinned 34 px AppTitleBar with its 80 px traffic-light reserve, menu labels, and tool icons. Client controls opt out of AppKit's implicit title-bar dragging, while empty chrome supports drag and double-click zoom. The Mac display clamp now uses the full display bounds like GPUI, restoring the reference's 85% window height.

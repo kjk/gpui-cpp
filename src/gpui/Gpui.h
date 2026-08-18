@@ -722,6 +722,10 @@ struct Window;
 
 struct WinOpts {
     bool borderless = false;
+    // Let client content occupy a transparent native title-bar area. Cocoa
+    // keeps its traffic-light controls above that content; the view supplies
+    // the title-bar background and drag region.
+    bool clientTitleBar = false;
     bool anim = false;
     int timerMs = 500;
 };
