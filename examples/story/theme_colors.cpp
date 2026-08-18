@@ -41,7 +41,7 @@ static void ThemeOptionAct(ThemeColorsStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 static void ToggleColorGroup(ThemeColorsStory* self, Ctx* cx, const ClickEvent*,
-                        intptr_t ix) {
+                             intptr_t ix) {
     self->openGroup = self->openGroup == (int)ix ? -1 : (int)ix;
     Notify(cx);
 }
