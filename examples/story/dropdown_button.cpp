@@ -1,8 +1,21 @@
 #include "Story.h"
 
+enum {
+    DropOptDisabled = ToolbarOptMultiple,
+    DropOptLoading = ToolbarOptIcon,
+    DropOptSelected = ToolbarOptDisabled,
+    DropOptCompact = ToolbarOptBordered,
+    DropOptShadow = ToolbarOptHorizontal
+};
+
 struct DropdownButtonStory {
     int selectIx = 0;
     bool selectOpen = false;
+    bool disabled = false;
+    bool loading = false;
+    bool selected = false;
+    bool compact = false;
+    bool shadow = false;
     StoryToolbarState toolbar;
 
     static El* Render(DropdownButtonStory* self, Ctx* cx);
@@ -16,6 +29,31 @@ static void ToggleDrop(DropdownButtonStory* self, Ctx* cx, const ClickEvent*,
     } else {
         self->selectOpen = true;
         self->selectIx = (int)which;
+    }
+    Notify(cx);
+}
+
+static void DropToolbarAct(DropdownButtonStory* self, Ctx* cx,
+                           const ClickEvent*, intptr_t act) {
+    switch (act) {
+        case DropOptDisabled:
+            self->disabled = !self->disabled;
+            break;
+        case DropOptLoading:
+            self->loading = !self->loading;
+            break;
+        case DropOptSelected:
+            self->selected = !self->selected;
+            break;
+        case DropOptCompact:
+            self->compact = !self->compact;
+            break;
+        case DropOptShadow:
+            self->shadow = !self->shadow;
+            break;
+        default:
+            StoryToolbarApply(&self->toolbar, nullptr, (int)act);
+            break;
     }
     Notify(cx);
 }
@@ -34,6 +72,12 @@ static El* DropBlock(Ctx* cx, DropdownButtonStory* self, int which,
                      component::Button* btn) {
     Arena* a = cx->a;
     El* col = Div(a)->FlexCol()->Gap(4);
+    btn->Disabled(self->disabled)
+        ->Loading(self->loading)
+        ->Selected(self->selected);
+    if (self->compact) {
+        btn->Compact();
+    }
     col->Child(btn->DropdownCaret()->IntoEl()->Click(2750 + which));
     if (self->selectIx == which && self->selectOpen) {
         col->Child(DropMenu(cx));
@@ -44,7 +88,15 @@ static El* DropBlock(Ctx* cx, DropdownButtonStory* self, int which,
 El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, self));
+    StoryToolbarOpt opts[5] = {
+        {"Disabled", self->disabled, DropOptDisabled},
+        {"Loading", self->loading, DropOptLoading},
+        {"Selected", self->selected, DropOptSelected},
+        {"Compact", self->compact, DropOptCompact},
+        {"Shadow", self->shadow, DropOptShadow},
+    };
+    page->Child(
+        StoryToolbarOptions(cx, self, opts, 5, Listen(cx, &DropToolbarAct)));
 
     El* def =
         StorySection(cx, "Default", "A primary action with an attached menu.");

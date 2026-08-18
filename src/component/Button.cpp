@@ -249,6 +249,11 @@ El* Button::IntoEl() {
         e->Child(TextEl(a, label)->Font(fontPx)->Fg(fg));
     }
     if (dropdown) {
+        // Rust splits the caret into its own segment; the seam is the button
+        // border between them.
+        if (bd.a) {
+            e->Child(Div(a)->W(1)->H(kFill)->Bg(bd));
+        }
         e->Child(IconEl(a, IconName::ChevronDown, 12)->Fg(fg));
     }
     return e;
