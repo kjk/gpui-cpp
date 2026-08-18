@@ -63,12 +63,19 @@ El* Switch::IntoEl() {
         trackH = 24;
         thumb = 20;
     }
+    // Disabled halves the checked track and dims the thumb, the way
+    // disabled_checked_bg and the thumb's disabled style do.
+    Rgba trackBg = checked ? on : th.secondary;
+    if (disabled && checked) {
+        trackBg = RgbaOpacity(trackBg, 0.5f);
+    }
+    Rgba thumbBg = disabled ? RgbaOpacity(th.background, 0.35f) : th.background;
     El* track = SwitchTrack::New(cx, id)
                     ->W(trackW)
                     ->H(trackH)
                     ->Pad(2)
                     ->Radius(trackH * 0.5f)
-                    ->Bg(checked ? on : th.secondary)
+                    ->Bg(trackBg)
                     ->ItemsCenter();
     if (checked) {
         track->JustifyEnd();
@@ -79,7 +86,7 @@ El* Switch::IntoEl() {
                      ->W(thumb)
                      ->H(thumb)
                      ->Radius(thumb * 0.5f)
-                     ->Bg(th.background));
+                     ->Bg(thumbBg));
     El* root = gpui::Switch::New(cx, id, disabled ? 0 : HashClickId(id))
                    ->FlexRow()
                    ->ItemsCenter()
