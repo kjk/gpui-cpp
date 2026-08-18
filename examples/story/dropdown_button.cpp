@@ -134,7 +134,7 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
 // Esc closes what this page has open, like an overlay dismiss.
 void DropdownButtonStory::OnKey(DropdownButtonStory* self, Ctx* cx,
                                 const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->selectOpen = false;

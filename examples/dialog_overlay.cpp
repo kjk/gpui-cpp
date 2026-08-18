@@ -298,7 +298,9 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     return root;
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     Entity<DialogApp> view = EntityNew<DialogApp>(app);
     ThemeSet(app, ThemeMode::Light);

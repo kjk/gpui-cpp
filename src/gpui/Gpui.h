@@ -33,9 +33,6 @@ Rgba RgbaMix(Rgba a, Rgba b, float t);
 // gpui::hsla. h/s/l/a are 0..1 and are clamped, so a lightness computed from
 // scene coordinates cannot wrap around into a different hue.
 Rgba RgbaHsla(float h, float s, float l, float a01);
-inline D2D1_COLOR_F RgbaToD2D(Rgba c) {
-    return D2D1::ColorF(c.r / 255.f, c.g / 255.f, c.b / 255.f, c.a / 255.f);
-}
 
 constexpr float kAuto = -1.f;
 constexpr float kFill = -2.f;
@@ -171,10 +168,41 @@ struct ClickEvent {
     int id = 0;
 };
 
+// Portable key codes. The values are the Win32 VK_* ones, so the Windows
+// window passes wParam straight through and the X11 window maps keysyms onto
+// them. Only the keys the widgets react to are named.
+enum {
+    KeyBack = 8,
+    KeyTab = 9,
+    KeyReturn = 13,
+    KeyShift = 16,
+    KeyControl = 17,
+    KeyMenu = 18,
+    KeyEscape = 27,
+    KeySpace = 32,
+    KeyPageUp = 33,
+    KeyPageDown = 34,
+    KeyEnd = 35,
+    KeyHome = 36,
+    KeyLeft = 37,
+    KeyUp = 38,
+    KeyRight = 39,
+    KeyDown = 40,
+    KeyDelete = 46,
+    // Letters and digits are their ASCII uppercase / digit codes.
+    KeyA = 65,
+    KeyC = 67,
+    KeyV = 86,
+    KeyX = 88
+};
+
 struct KeyEvent {
-    int vk = 0;
-    uint32_t ch = 0; // WM_CHAR codepoint, 0 for key down/up
+    int vk = 0;      // a Key* code, 0 for a typed character
+    uint32_t ch = 0; // typed codepoint, 0 for key down/up
     bool down = false;
+    bool shift = false;
+    bool ctrl = false;
+    bool alt = false;
 };
 
 enum class MouseKind : uint8_t {
@@ -540,19 +568,16 @@ struct TextMeasCache {
     uint32_t frame = 0;
 };
 
+// The 2D backend. Direct2D + DirectWrite on Windows, cairo + Pango on Linux;
+// both are opaque here and only Paint_win.cpp / Paint_linux.cpp look inside.
+// `PaintApp` is the process-wide half (factories, fonts), `PaintTarget` the
+// per-window drawing surface.
+struct PaintApp;
+struct PaintTarget;
+
 struct PaintCtx {
-    ID2D1Factory* d2d = nullptr;
-    IDWriteFactory* dwrite = nullptr;
-    ID2D1RenderTarget* rt = nullptr;
-    ID2D1DCRenderTarget* dcRt = nullptr;
-    ID2D1SolidColorBrush* brush = nullptr;
-    IDWriteTextFormat* font16 = nullptr;
-    IDWriteTextFormat* font14 = nullptr;
-    IDWriteTextFormat* font12 = nullptr;
-    IDWriteTextFormat* font20 = nullptr;
-    IDWriteTextFormat* font24 = nullptr;
-    IDWriteTextFormat* font16b = nullptr;
-    IDWriteTextFormat* fontMono = nullptr;
+    PaintApp* pa = nullptr;
+    PaintTarget* rt = nullptr;
     float dpi = 96;
     float viewW = 0;
     float viewH = 0;
@@ -675,15 +700,7 @@ enum {
 // Process-wide state: the Direct2D / DirectWrite factories, the shared font
 // cache, the entity store and the open windows. GPUI's `App`.
 struct App {
-    ID2D1Factory* d2d = nullptr;
-    IDWriteFactory* dwrite = nullptr;
-    IDWriteTextFormat* font16 = nullptr;
-    IDWriteTextFormat* font14 = nullptr;
-    IDWriteTextFormat* font12 = nullptr;
-    IDWriteTextFormat* font20 = nullptr;
-    IDWriteTextFormat* font24 = nullptr;
-    IDWriteTextFormat* font16b = nullptr;
-    IDWriteTextFormat* fontMono = nullptr;
+    PaintApp* paint = nullptr;
     ThemeMode themeMode = ThemeMode::Light;
     Vec<Window*> windows;
     // Entity store; see Entity.h. Slots are recycled, so a handle carries a
@@ -697,9 +714,12 @@ struct App {
 
 // One platform window: its render target, frame arena, hover / focus state
 // and the view it renders. GPUI's `Window`.
+// The OS window: an HWND wrapper on Windows, an X11 Window on Linux.
+struct PlatWindow;
+
 struct Window {
     App* app = nullptr;
-    HWND hwnd = nullptr;
+    PlatWindow* plat = nullptr;
     PaintCtx paint = {};
     Arena* frameArena = nullptr;
     // The view this window renders. GPUI's Window holds a root view too.
@@ -911,6 +931,9 @@ double TimeNow();
 
 App* AppNew();
 void AppFree(App* app);
+
+// Put UTF-8 text on the system clipboard.
+void ClipboardSetText(Window* win, Str text);
 int AppRun(App* app);
 Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);
 void AppSetTitle(Window* win, Str title);
@@ -927,3 +950,9 @@ void AppClose(Window* win);
 void AppDrag(Window* win);
 bool AppIsMaximized(Window* win);
 } // namespace gpui
+
+// The entry point every example implements. The platform half of the runtime
+// provides wWinMain / main and calls this, so no example spells out either.
+// Global scope, so an example that says `using namespace gpui;` can define it
+// without qualifying the name.
+int GpuiMain(int argc, char** argv);

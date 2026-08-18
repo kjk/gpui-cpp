@@ -2,27 +2,33 @@
 
 #include "gpui.h"
 
+#include <stdio.h>
+
 using namespace gpui;
 
+// out/gpui2.log next to the binary's working directory, appended to for the
+// life of the process.
 static void LogToFile(Str s) {
-    static HANDLE h = INVALID_HANDLE_VALUE;
-    if (h == INVALID_HANDLE_VALUE) {
-        h = CreateFileA("out\\gpui2.log", GENERIC_WRITE, FILE_SHARE_READ,
-                        nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    static FILE* f = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        f = fopen("out/gpui2.log", "wb");
     }
-    if (h == INVALID_HANDLE_VALUE) {
+    if (!f || !s.s || s.len <= 0) {
         return;
     }
-    if (s.s && s.len > 0) {
-        DWORD w = 0;
-        WriteFile(h, s.s, (DWORD)s.len, &w, nullptr);
-        if (s.s[s.len - 1] != '\n') {
-            WriteFile(h, "\n", 1, &w, nullptr);
-        }
+    fwrite(s.s, 1, (size_t)s.len, f);
+    if (s.s[s.len - 1] != '\n') {
+        fwrite("\n", 1, 1, f);
     }
+    fflush(f);
 }
 
-void gpui::log(Str s) {
+// The second sink is the attached debugger on Windows and stderr on Linux;
+// both are what a developer running the example is already watching.
+static void LogToConsole(Str s) {
+#if GPUI_OS_WINDOWS
     if (s.s && s.len > 0) {
         OutputDebugStringA(s.s);
         if (s.s[s.len - 1] != '\n') {
@@ -31,5 +37,20 @@ void gpui::log(Str s) {
     } else {
         OutputDebugStringA("\n");
     }
+#else
+    if (s.s && s.len > 0) {
+        fwrite(s.s, 1, (size_t)s.len, stderr);
+        if (s.s[s.len - 1] != '\n') {
+            fputc('\n', stderr);
+        }
+    } else {
+        fputc('\n', stderr);
+    }
+    fflush(stderr);
+#endif
+}
+
+void gpui::log(Str s) {
+    LogToConsole(s);
     LogToFile(s);
 }

@@ -34,10 +34,9 @@ static void EnsureCalendarDate(ShowcaseApp* app) {
     if (app->calYear > 0 && app->calMonth > 0) {
         return;
     }
-    SYSTEMTIME st = {};
-    GetLocalTime(&st);
-    app->calYear = st.wYear;
-    app->calMonth = st.wMonth;
+    LocalDate st = DateToday();
+    app->calYear = st.year;
+    app->calMonth = st.month;
 }
 
 static void CalStep(ShowcaseApp* app, intptr_t dir) {
@@ -78,8 +77,7 @@ static void CalPickDay(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
 El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     EnsureCalendarDate(app);
-    SYSTEMTIME today = {};
-    GetLocalTime(&today);
+    LocalDate today = DateToday();
     int y = app->calYear;
     int m = app->calMonth;
     El* root = Calendar::New(cx, StrL("example-calendar"))
@@ -142,8 +140,8 @@ El* ShowcaseCalendarGrid(ShowcaseApp* app, Ctx* cx) {
             }
             bool active = !muted && app->calDay > 0 && day == app->calDay &&
                           m == app->calMonth && y == app->calYear;
-            bool isToday = !muted && day == (int)today.wDay &&
-                           m == (int)today.wMonth && y == (int)today.wYear;
+            bool isToday = !muted && day == (int)today.day &&
+                           m == (int)today.month && y == (int)today.year;
             El* d = Div(a)
                         ->W(32)
                         ->H(32)

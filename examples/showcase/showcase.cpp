@@ -65,7 +65,7 @@ Str DupFmt(Ctx* cx, const char* f, ...) {
     char buf[512];
     va_list args;
     va_start(args, f);
-    _vsnprintf_s(buf, _TRUNCATE, f, args);
+    vsnprintf(buf, sizeof(buf), f, args);
     va_end(args);
     return StrDup(a, Str(buf));
 }
@@ -336,7 +336,7 @@ static void ParseHexIn(ShowcaseApp* app) {
         s++;
     }
     unsigned v = 0;
-    if (sscanf_s(s, "%x", &v) == 1) {
+    if (sscanf(s, "%x", &v) == 1) {
         app->colorHex = v & 0xffffff;
     }
 }
@@ -369,7 +369,7 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
     if (!down) {
         return;
     }
-    if (vk == VK_BACK) {
+    if (vk == KeyBack) {
         if (app->component == CompOtpInput && app->otpOn) {
             BackspaceBuf(app->otp, &app->otpLen);
         } else if (app->component == CompTextarea && app->textareaOn) {
@@ -382,23 +382,23 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
     if (app->component == CompEditor && app->editorOn) {
         int cur = app->editorCursor;
         int len = app->editorLen;
-        if (vk == VK_LEFT && cur > 0) {
+        if (vk == KeyLeft && cur > 0) {
             app->editorCursor = cur - 1;
             return;
         }
-        if (vk == VK_RIGHT && cur < len) {
+        if (vk == KeyRight && cur < len) {
             app->editorCursor = cur + 1;
             return;
         }
-        if (vk == VK_HOME) {
+        if (vk == KeyHome) {
             app->editorCursor = LineStartAt(app->editor, cur);
             return;
         }
-        if (vk == VK_END) {
+        if (vk == KeyEnd) {
             app->editorCursor = LineEndAt(app->editor, len, cur);
             return;
         }
-        if (vk == VK_UP) {
+        if (vk == KeyUp) {
             int start = LineStartAt(app->editor, cur);
             int col = cur - start;
             if (start > 0) {
@@ -411,7 +411,7 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
             }
             return;
         }
-        if (vk == VK_DOWN) {
+        if (vk == KeyDown) {
             int start = LineStartAt(app->editor, cur);
             int col = cur - start;
             int end = LineEndAt(app->editor, len, cur);
@@ -425,13 +425,13 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
             }
             return;
         }
-        if (vk == VK_DELETE && cur < len) {
+        if (vk == KeyDelete && cur < len) {
             app->editorCursor = cur + 1;
             BackspaceAt(app->editor, &app->editorLen, &app->editorCursor);
             return;
         }
     }
-    if (vk == VK_ESCAPE) {
+    if (vk == KeyEscape) {
         app->colorOpen = false;
         app->comboboxOpen = false;
         app->selectOpen = false;
@@ -442,7 +442,7 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
         app->comboQuery.focused = false;
         return;
     }
-    if (vk == VK_RETURN) {
+    if (vk == KeyReturn) {
         if (app->component == CompColorPicker && app->colorOpen) {
             ParseHexIn(app);
             app->colorOpen = false;
@@ -637,41 +637,32 @@ static void OnMouse(ShowcaseApp* app, Ctx* cx, const MouseEvent* ev) {
     }
 }
 
-static void ParseSlug(PWSTR cmd, char* out, int cap) {
+// The page to open, if one was named on the command line.
+static void ParseSlug(int argc, char** argv, char* out, int cap) {
     out[0] = 0;
-    if (!cmd) {
+    if (argc < 2 || !argv[1]) {
         return;
     }
-    while (*cmd == L' ' || *cmd == L'\t') {
-        cmd++;
-    }
-    if (*cmd == L'"') {
-        cmd++;
-    }
-    int n = 0;
-    while (*cmd && *cmd != L' ' && *cmd != L'"' && n < cap - 1) {
-        wchar_t c = *cmd++;
-        out[n++] = (c < 128) ? (char)c : '?';
-    }
-    out[n] = 0;
+    StrCopyZ(out, cap, argv[1]);
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
+int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
 
     Entity<ShowcaseApp> view = EntityNew<ShowcaseApp>(app);
     ShowcaseApp* self = view.Get(app);
     char slug[64] = {};
-    ParseSlug(cmd, slug, 64);
+    ParseSlug(argc, argv, slug, 64);
     self->component = CompFromSlug(slug);
     self->navigationEnabled = (self->component == CompOverview);
 
-    strncpy_s(self->input.placeholder, "Type something…", _TRUNCATE);
+    StrCopyZ(self->input.placeholder, (int)sizeof(self->input.placeholder),
+             "Type something…");
     if (self->component == CompNumberInput) {
-        strncpy_s(self->input.buf, "12", _TRUNCATE);
+        StrCopyZ(self->input.buf, (int)sizeof(self->input.buf), "12");
     } else {
-        strncpy_s(self->input.buf, "Hello GPUI", _TRUNCATE);
+        StrCopyZ(self->input.buf, (int)sizeof(self->input.buf), "Hello GPUI");
     }
     self->input.len = (int)strlen(self->input.buf);
     if (self->component == CompInput || self->component == CompNumberInput) {
@@ -681,9 +672,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     } else if (self->component == CompOtpInput) {
         self->otpOn = true;
     }
-    strncpy_s(self->comboQuery.placeholder, "Search frameworks…", _TRUNCATE);
-    strncpy_s(self->hexIn.placeholder, "#2563EB", _TRUNCATE);
-    strncpy_s(self->hexIn.buf, "#2563EB", _TRUNCATE);
+    StrCopyZ(self->comboQuery.placeholder,
+             (int)sizeof(self->comboQuery.placeholder), "Search frameworks…");
+    StrCopyZ(self->hexIn.placeholder, (int)sizeof(self->hexIn.placeholder),
+             "#2563EB");
+    StrCopyZ(self->hexIn.buf, (int)sizeof(self->hexIn.buf), "#2563EB");
     self->hexIn.len = 7;
     self->textareaLen = (int)strlen(self->textarea);
 

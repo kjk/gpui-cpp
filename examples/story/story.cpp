@@ -211,7 +211,7 @@ Str StoryFmt(Ctx* cx, const char* f, ...) {
     char buf[512];
     va_list args;
     va_start(args, f);
-    _vsnprintf_s(buf, _TRUNCATE, f, args);
+    vsnprintf(buf, sizeof(buf), f, args);
     va_end(args);
     return StrDup(a, Str(buf));
 }
@@ -768,31 +768,6 @@ static void OnChar(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     }
 }
 
-static void CopyUtf8(HWND hwnd, const char* s, int n) {
-    if (!hwnd || !s || n <= 0) {
-        return;
-    }
-    int wn = MultiByteToWideChar(CP_UTF8, 0, s, n, nullptr, 0);
-    if (wn <= 0) {
-        return;
-    }
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)(wn + 1) * sizeof(WCHAR));
-    if (!h) {
-        return;
-    }
-    auto* w = (WCHAR*)GlobalLock(h);
-    MultiByteToWideChar(CP_UTF8, 0, s, n, w, wn);
-    w[wn] = 0;
-    GlobalUnlock(h);
-    if (!OpenClipboard(hwnd)) {
-        GlobalFree(h);
-        return;
-    }
-    EmptyClipboard();
-    SetClipboardData(CF_UNICODETEXT, h);
-    CloseClipboard();
-}
-
 static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     Window* win = cx->win;
     int vk = ev->vk;
@@ -804,17 +779,16 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     if (!down) {
         return;
     }
-    if (vk == 'C' && (GetKeyState(VK_CONTROL) & 0x8000) && app->selA >= 0 &&
-        app->selA != app->selB) {
+    if (vk == KeyC && ev->ctrl && app->selA >= 0 && app->selA != app->selB) {
         char buf[8192];
         int n = CopyTextHits(&cx->win->paint, app->selA, app->selB, buf,
                              (int)sizeof(buf));
         if (n > 0) {
-            CopyUtf8(cx->win->hwnd, buf, n);
+            ClipboardSetText(cx->win, Str(buf, n));
         }
         return;
     }
-    if (vk == VK_ESCAPE) {
+    if (vk == KeyEscape) {
         app->search.focused = false;
         cx->win->input = nullptr;
         app->selA = -1;
@@ -885,26 +859,16 @@ static void OnMouse(StoryApp* app, Ctx* cx, const MouseEvent* ev) {
     app->selecting = false;
 }
 
-static void ParseSlug(PWSTR cmd, char* out, int cap) {
+// The story to open, if one was named on the command line.
+static void ParseSlug(int argc, char** argv, char* out, int cap) {
     out[0] = 0;
-    if (!cmd) {
+    if (argc < 2 || !argv[1]) {
         return;
     }
-    while (*cmd == L' ' || *cmd == L'\t') {
-        cmd++;
-    }
-    if (*cmd == L'"') {
-        cmd++;
-    }
-    int n = 0;
-    while (*cmd && *cmd != L' ' && *cmd != L'"' && n < cap - 1) {
-        wchar_t c = *cmd++;
-        out[n++] = (c < 128) ? (char)c : '?';
-    }
-    out[n] = 0;
+    StrCopyZ(out, cap, argv[1]);
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
+int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
     AssetsClear();
@@ -914,17 +878,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
     Entity<StoryApp> view = EntityNew<StoryApp>(app);
     StoryApp* self = view.Get(app);
     char slug[64] = {};
-    ParseSlug(cmd, slug, 64);
+    ParseSlug(argc, argv, slug, 64);
     self->story = StoryFromSlug(slug);
     // Rust Gallery::set_active_story puts the launch name in the sidebar
     // search box so the list filters to matching titles.
     if (slug[0]) {
         const StoryInfo* m = StoryMeta(self->story);
-        strncpy_s(self->search.buf, m->title, _TRUNCATE);
+        StrCopyZ(self->search.buf, (int)sizeof(self->search.buf), m->title);
         self->search.len = (int)strlen(self->search.buf);
         self->search.cursor = self->search.len;
     }
-    strncpy_s(self->search.placeholder, "Search…", _TRUNCATE);
+    StrCopyZ(self->search.placeholder, (int)sizeof(self->search.placeholder),
+             "Search…");
     Window* win = WindowOpenView(app, StrL("GPUI Component"), 1280, 960,
                                  view.id, WinOpts{});
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));

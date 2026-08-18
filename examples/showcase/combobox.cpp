@@ -17,10 +17,10 @@ static bool Matches(const char* label, const char* q) {
     }
     char a[32] = {};
     char b[32] = {};
-    strncpy_s(a, label, _TRUNCATE);
-    strncpy_s(b, q, _TRUNCATE);
-    _strlwr_s(a);
-    _strlwr_s(b);
+    StrCopyZ(a, (int)sizeof(a), label);
+    StrCopyZ(b, (int)sizeof(b), q);
+    StrLowerAscii(a);
+    StrLowerAscii(b);
     return strstr(a, b) != nullptr;
 }
 
@@ -39,7 +39,7 @@ static void FocusComboQuery(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 
 static void PickCombo(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
                       intptr_t ix) {
-    strncpy_s(app->comboboxSel, kFwCombo[ix], _TRUNCATE);
+    StrCopyZ(app->comboboxSel, (int)sizeof(app->comboboxSel), kFwCombo[ix]);
     app->comboboxOpen = false;
     app->comboQuery.focused = false;
     Notify(cx);

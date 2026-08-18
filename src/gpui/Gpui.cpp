@@ -1,4 +1,5 @@
 #include "gpui/Gpui.h"
+#include "gpui/Paint.h"
 #include "gpui/Svg.h"
 
 #include <math.h>
@@ -630,37 +631,6 @@ int DipToPx(PaintCtx* ctx, float dip) {
     return (int)(dip * (ctx->dpi > 0 ? ctx->dpi : 96.f) / 96.f + 0.5f);
 }
 
-// Text weight byte: the DWrite weight in the low bits plus a family flag, so
-// the shaped-text cache keys mono and proportional runs apart on its own.
-enum {
-    kFontWeightMask = 3,
-    kFontMono = 4,
-    kFontUnderline = 8,
-    kFontItalic = 16
-};
-
-static IDWriteTextFormat* FontFor(PaintCtx* ctx, float fontSize,
-                                  uint8_t weight) {
-    if ((weight & kFontMono) && ctx->fontMono) {
-        return ctx->fontMono;
-    }
-    if (fontSize >= 22.f && ctx->font24) {
-        return ctx->font24;
-    }
-    if (fontSize >= 18.f && ctx->font20) {
-        return ctx->font20;
-    }
-    if (fontSize <= 13.f) {
-        return ctx->font12;
-    }
-    if (fontSize <= 15.f) {
-        return ctx->font14;
-    }
-    return ctx->font16;
-}
-
-static void SetBrush(PaintCtx* ctx, Rgba c);
-
 // Key wrap width: 0 = unconstrained. Round to 1 DIP so tiny parent-size
 // jitter from extra layout passes still hits.
 static float MeasKeyMaxW(float maxW, bool wrap) {
@@ -729,7 +699,7 @@ struct TextMeasSlot {
     float w = 0;
     float h = 0;
     uint32_t lastUsed = 0;
-    IDWriteTextLayout* layout = nullptr;
+    TextLayout* layout = nullptr;
     uint8_t wrap = 0;
     uint8_t bold = 0;
     uint8_t occupied = 0;
@@ -770,13 +740,13 @@ static bool TextMeasKeyEq(const TextMeasSlot* sl, uint32_t hash, Str s,
 }
 
 static uint8_t ElTextWeight(const El* e) {
-    uint8_t w = 0;
+    uint8_t w = kFontWeightNormal;
     if (e->style.fontBold) {
-        w = 2;
+        w = kFontWeightBold;
     } else if (e->style.fontSemibold) {
-        w = 1;
+        w = kFontWeightSemibold;
     } else if (e->style.fontMedium) {
-        w = 3;
+        w = kFontWeightMedium;
     }
     if (e->style.fontMono) {
         w |= kFontMono;
@@ -790,20 +760,6 @@ static uint8_t ElTextWeight(const El* e) {
     return w;
 }
 
-static DWRITE_FONT_WEIGHT DwriteWeight(uint8_t weight) {
-    weight &= kFontWeightMask;
-    if (weight == 2) {
-        return DWRITE_FONT_WEIGHT_BOLD;
-    }
-    if (weight == 1) {
-        return DWRITE_FONT_WEIGHT_SEMI_BOLD;
-    }
-    if (weight == 3) {
-        return DWRITE_FONT_WEIGHT_MEDIUM;
-    }
-    return DWRITE_FONT_WEIGHT_NORMAL;
-}
-
 static void TextMeasFreeSlot(TextMeasSlot* sl) {
     if (!sl) {
         return;
@@ -813,7 +769,7 @@ static void TextMeasFreeSlot(TextMeasSlot* sl) {
         sl->text = nullptr;
     }
     if (sl->layout) {
-        sl->layout->Release();
+        TextLayoutRelease(sl->layout);
         sl->layout = nullptr;
     }
     sl->occupied = 0;
@@ -898,7 +854,7 @@ static void TextMeasInsertMove(TextMeasCache* c, TextMeasSlot* src) {
 static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
                                     float maxW, bool wrap, uint8_t weight,
                                     float lineH, float w, float h,
-                                    IDWriteTextLayout* layout) {
+                                    TextLayout* layout) {
     TextMeasCache* c = &ctx->textCache;
     float keyFont = MeasKeyFont(fontSize);
     float keyMaxW = MeasKeyMaxW(maxW, wrap);
@@ -949,9 +905,9 @@ static TextMeasSlot* TextMeasInsert(PaintCtx* ctx, Str s, float fontSize,
     sl->lastUsed = c->frame;
     if (layout && sl->layout != layout) {
         if (sl->layout) {
-            sl->layout->Release();
+            TextLayoutRelease(sl->layout);
         }
-        layout->AddRef();
+        TextLayoutAddRef(layout);
         sl->layout = layout;
     }
     return sl;
@@ -1031,39 +987,10 @@ void TextMeasClear(PaintCtx* ctx) {
     c->frame = 0;
 }
 
-// GPUI lays every line of text into a box phi times the font size — the
-// default TextStyle::line_height (gpui::phi(), geometry.rs) — and centers the
-// glyphs in it. DirectWrite's own line height is tighter (~1.33em for Segoe
-// UI), so without this every text block, and every row that shrink-wraps one,
-// comes out shorter than the original.
-static const float kLineHeight = 1.618034f;
-
-// gpui text_system: padding_top = (line_height - ascent - descent) / 2.
-// `mult` is an element's own line_height (relative(1.) on the FPS figure, for
-// instance); 0 takes the default.
-static void ApplyLineHeight(IDWriteTextLayout* layout, float fontSize,
-                            float mult) {
-    if (!layout || fontSize <= 0) {
-        return;
-    }
-    DWRITE_LINE_METRICS lm = {};
-    UINT32 n = 0;
-    // Returns E_NOT_SUFFICIENT_BUFFER past the first line, which still fills
-    // it; every line has the same metrics here, so one is enough.
-    layout->GetLineMetrics(&lm, 1, &n);
-    if (n == 0 || lm.height <= 0) {
-        return;
-    }
-    float box = fontSize * (mult > 0 ? mult : kLineHeight);
-    float baseline = lm.baseline + (box - lm.height) * 0.5f;
-    layout->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, box, baseline);
-}
-
-// Create or reuse a cached IDWriteTextLayout. Caller must Release.
-static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
-                                         float maxW, bool wrap, uint8_t weight,
-                                         float lineH, float* outW,
-                                         float* outH) {
+// Create or reuse a cached shaped run. Caller must TextLayoutRelease.
+static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
+                                  float maxW, bool wrap, uint8_t weight,
+                                  float lineH, float* outW, float* outH) {
     if (outW) {
         *outW = 0;
     }
@@ -1071,7 +998,7 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
         *outH =
             fontSize > 0 ? fontSize * (lineH > 0 ? lineH : kLineHeight) : 16.f;
     }
-    if (!ctx || !ctx->dwrite || !s.s || s.len <= 0) {
+    if (!ctx || !ctx->pa || !s.s || s.len <= 0) {
         return nullptr;
     }
     TextMeasCache* c = &ctx->textCache;
@@ -1085,52 +1012,23 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
         if (outH) {
             *outH = hit->h;
         }
-        hit->layout->AddRef();
+        TextLayoutAddRef(hit->layout);
         return hit->layout;
     }
-    IDWriteTextFormat* fmt = FontFor(ctx, fontSize, weight);
-    if (!fmt) {
+    float w = 0;
+    float h = 0;
+    TextLayout* layout =
+        TextLayoutNew(ctx, s, fontSize, maxW, wrap, weight, lineH, &w, &h);
+    if (!layout) {
         return nullptr;
     }
-    WCHAR wbuf[2048];
-    int n = MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, wbuf, 2047);
-    if (n <= 0) {
-        return nullptr;
-    }
-    wbuf[n] = 0;
-    IDWriteTextLayout* layout = nullptr;
-    float layoutW = maxW > 0 ? maxW : 10000.f;
-    HRESULT hr = ctx->dwrite->CreateTextLayout(wbuf, (UINT32)n, fmt, layoutW,
-                                               4000.f, &layout);
-    if (FAILED(hr) || !layout) {
-        return nullptr;
-    }
-    DWRITE_TEXT_RANGE range = {0, (UINT32)n};
-    if (fontSize > 0) {
-        layout->SetFontSize(fontSize, range);
-    }
-    if (weight & kFontWeightMask) {
-        layout->SetFontWeight(DwriteWeight(weight), range);
-    }
-    if (weight & kFontUnderline) {
-        layout->SetUnderline(TRUE, range);
-    }
-    if (weight & kFontItalic) {
-        layout->SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range);
-    }
-    layout->SetWordWrapping(wrap && maxW > 0 ? DWRITE_WORD_WRAPPING_WRAP
-                                             : DWRITE_WORD_WRAPPING_NO_WRAP);
-    ApplyLineHeight(layout, fontSize, lineH);
-    DWRITE_TEXT_METRICS m = {};
-    layout->GetMetrics(&m);
     if (outW) {
-        *outW = m.widthIncludingTrailingWhitespace;
+        *outW = w;
     }
     if (outH) {
-        *outH = m.height;
+        *outH = h;
     }
-    TextMeasInsert(ctx, s, fontSize, maxW, wrap, weight, lineH,
-                   m.widthIncludingTrailingWhitespace, m.height, layout);
+    TextMeasInsert(ctx, s, fontSize, maxW, wrap, weight, lineH, w, h, layout);
     return layout;
 }
 
@@ -1138,84 +1036,23 @@ void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
                  float* outH, bool wrap, int weight, float lineH) {
     *outW = 0;
     *outH = fontSize > 0 ? fontSize * (lineH > 0 ? lineH : kLineHeight) : 16.f;
-    IDWriteTextLayout* layout = TextMeasLayout(
-        ctx, s, fontSize, maxW, wrap, (uint8_t)weight, lineH, outW, outH);
+    TextLayout* layout = TextMeasLayout(ctx, s, fontSize, maxW, wrap,
+                                        (uint8_t)weight, lineH, outW, outH);
     if (layout) {
-        layout->Release();
+        TextLayoutRelease(layout);
     }
-}
-
-static int Utf8ToWideN(Str s, WCHAR* wbuf, int cap) {
-    if (!s.s || s.len <= 0 || cap < 2) {
-        if (wbuf && cap > 0) {
-            wbuf[0] = 0;
-        }
-        return 0;
-    }
-    int n = MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, wbuf, cap - 1);
-    if (n < 0) {
-        n = 0;
-    }
-    wbuf[n] = 0;
-    return n;
-}
-
-static int Utf8OffToWide(Str s, int u8off) {
-    if (u8off <= 0 || !s.s) {
-        return 0;
-    }
-    if (u8off > s.len) {
-        u8off = s.len;
-    }
-    return MultiByteToWideChar(CP_UTF8, 0, s.s, u8off, nullptr, 0);
-}
-
-static int WideOffToUtf8(Str s, int woff) {
-    if (woff <= 0 || !s.s) {
-        return 0;
-    }
-    WCHAR wbuf[2048];
-    int wn = Utf8ToWideN(s, wbuf, 2048);
-    if (woff > wn) {
-        woff = wn;
-    }
-    return WideCharToMultiByte(CP_UTF8, 0, wbuf, woff, nullptr, 0, nullptr,
-                               nullptr);
-}
-
-static IDWriteTextLayout* MakeLayout(PaintCtx* ctx, Str s, float fontSize,
-                                     float maxW, bool wrap, int* outWide) {
-    if (outWide) {
-        WCHAR wbuf[2048];
-        *outWide = Utf8ToWideN(s, wbuf, 2048);
-    }
-    return TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr, nullptr);
 }
 
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                 float relX, float relY) {
-    int wn = 0;
-    IDWriteTextLayout* layout = MakeLayout(ctx, s, fontSize, maxW, wrap, &wn);
+    TextLayout* layout =
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr, nullptr);
     if (!layout) {
         return 0;
     }
-    BOOL trailing = FALSE;
-    BOOL inside = FALSE;
-    DWRITE_HIT_TEST_METRICS m = {};
-    layout->HitTestPoint(relX, relY, &trailing, &inside, &m);
-    int wpos = (int)m.textPosition;
-    if (trailing) {
-        wpos += (int)m.length;
-    }
-    if (wpos < 0) {
-        wpos = 0;
-    }
-    if (wpos > wn) {
-        wpos = wn;
-    }
-    int utf8Off = WideOffToUtf8(s, wpos);
-    layout->Release();
-    return utf8Off;
+    int off = TextLayoutHitPoint(layout, s, relX, relY);
+    TextLayoutRelease(layout);
+    return off;
 }
 
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
@@ -1231,65 +1068,20 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
     if (u8a == u8b) {
         return;
     }
-    int wn = 0;
-    IDWriteTextLayout* layout = MakeLayout(ctx, s, fontSize, maxW, wrap, &wn);
+    TextLayout* layout =
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr, nullptr);
     if (!layout) {
         return;
     }
-    int wa = Utf8OffToWide(s, u8a);
-    int wb = Utf8OffToWide(s, u8b);
-    if (wa > wb) {
-        int t = wa;
-        wa = wb;
-        wb = t;
+    // One rect per line the selection covers; 32 is more lines than any
+    // selectable text block here has.
+    RectF rects[32] = {};
+    int n = TextLayoutRangeRects(layout, s, u8a, u8b, rects, 32);
+    for (int i = 0; i < n; i++) {
+        CanvasFillRect(ctx, x + rects[i].x, y + rects[i].y, rects[i].w,
+                       rects[i].h, color);
     }
-    DWRITE_TEXT_METRICS tm = {};
-    layout->GetMetrics(&tm);
-    UINT32 lineCount = tm.lineCount;
-    if (lineCount == 0) {
-        layout->Release();
-        return;
-    }
-    DWRITE_LINE_METRICS lines[32] = {};
-    if (lineCount > 32) {
-        lineCount = 32;
-    }
-    UINT32 actual = 0;
-    layout->GetLineMetrics(lines, lineCount, &actual);
-    UINT32 pos = 0;
-    SetBrush(ctx, color);
-    for (UINT32 i = 0; i < actual; i++) {
-        int lineStart = (int)pos;
-        int lineEnd = lineStart + (int)lines[i].length;
-        int visEnd = lineEnd - (int)lines[i].newlineLength;
-        pos = (UINT32)lineEnd;
-        int lo = wa > lineStart ? wa : lineStart;
-        int hi = wb < visEnd ? wb : visEnd;
-        if (lo >= hi) {
-            continue;
-        }
-        FLOAT x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-        DWRITE_HIT_TEST_METRICS a = {}, b = {};
-        layout->HitTestTextPosition((UINT32)lo, FALSE, &x0, &y0, &a);
-        layout->HitTestTextPosition((UINT32)hi, FALSE, &x1, &y1, &b);
-        float top = y + y0;
-        float bot = top + lines[i].height;
-        float left = x + x0;
-        float right = x + x1;
-        if (right < left) {
-            float tmp = left;
-            left = right;
-            right = tmp;
-        }
-        if (hi == visEnd && lo < visEnd) {
-            right = x + tm.layoutWidth;
-            if (x1 > 0 && x1 + 1.f < tm.layoutWidth) {
-                right = x + x1;
-            }
-        }
-        ctx->rt->FillRectangle(D2D1::RectF(left, top, right, bot), ctx->brush);
-    }
-    layout->Release();
+    TextLayoutRelease(layout);
 }
 
 static float Clamp(float v, float lo, float hi) {
@@ -1880,37 +1672,14 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
 
 // ─── paint ────────────────────────────────────────────────────────────────
 
-static void SetBrush(PaintCtx* ctx, Rgba c) {
-    if (ctx->brush) {
-        ctx->brush->SetColor(RgbaToD2D(c));
-    }
-}
-
 static void FillRound(PaintCtx* ctx, float x, float y, float w, float h,
                       float r, Rgba c) {
-    if (w <= 0 || h <= 0 || c.a == 0) {
-        return;
-    }
-    SetBrush(ctx, c);
-    D2D1_ROUNDED_RECT rr;
-    rr.rect = D2D1::RectF(x, y, x + w, y + h);
-    rr.radiusX = r;
-    rr.radiusY = r;
-    ctx->rt->FillRoundedRectangle(rr, ctx->brush);
+    CanvasFillRound(ctx, x, y, w, h, r, c);
 }
 
 static void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
                             float r, float stroke, Rgba c) {
-    if (stroke <= 0 || w <= 0 || h <= 0) {
-        return;
-    }
-    SetBrush(ctx, c);
-    D2D1_ROUNDED_RECT rr;
-    rr.rect = D2D1::RectF(x + stroke * 0.5f, y + stroke * 0.5f,
-                          x + w - stroke * 0.5f, y + h - stroke * 0.5f);
-    rr.radiusX = r;
-    rr.radiusY = r;
-    ctx->rt->DrawRoundedRectangle(rr, ctx->brush, stroke);
+    CanvasStrokeRound(ctx, x, y, w, h, r, stroke, c);
 }
 
 // Layout lands on fractions of a pixel, which spreads a hairline over two
@@ -1931,53 +1700,42 @@ static float EdgeEnd(PaintCtx* ctx, float v) {
 
 static void DrawLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
                      float stroke, Rgba c) {
-    SetBrush(ctx, c);
-    ctx->rt->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), ctx->brush,
-                      stroke);
+    CanvasLine(ctx, x1, y1, x2, y2, stroke, c);
 }
 
 static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
                        float fontSize, Rgba c, bool truncate, bool wrap = false,
                        float measMaxW = -1.f, int weight = 0, float lineH = 0) {
-    if (!s.s || s.len <= 0 || !ctx->dwrite) {
+    if (!s.s || s.len <= 0 || !ctx->pa) {
         return;
     }
-    SetBrush(ctx, c);
-    float boxW = w > 0 ? w : 10000.f;
-    float boxH = h > 0 ? h : 1000.f;
-    D2D1_DRAW_TEXT_OPTIONS opt =
-        truncate ? D2D1_DRAW_TEXT_OPTIONS_CLIP : D2D1_DRAW_TEXT_OPTIONS_NONE;
+    (void)w;
+    (void)h;
     float keyW = wrap ? (measMaxW >= 0 ? measMaxW : (w > 0 ? w : 0)) : 0;
-    IDWriteTextLayout* layout = TextMeasLayout(
+    TextLayout* layout = TextMeasLayout(
         ctx, s, fontSize, keyW, wrap, (uint8_t)weight, lineH, nullptr, nullptr);
-    if (layout) {
-        ctx->rt->DrawTextLayout(D2D1::Point2F(x, y), layout, ctx->brush, opt);
-        layout->Release();
+    if (!layout) {
         return;
     }
-    IDWriteTextFormat* fmt = FontFor(ctx, fontSize, (uint8_t)weight);
-    if (!fmt) {
-        return;
-    }
-    WCHAR wbuf[1024];
-    int n = MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, wbuf, 1023);
-    if (n <= 0) {
-        return;
-    }
-    wbuf[n] = 0;
-    D2D1_RECT_F rc = D2D1::RectF(x, y, x + boxW, y + boxH);
-    ctx->rt->DrawTextW(wbuf, (UINT32)n, fmt, rc, ctx->brush, opt);
+    TextLayoutDraw(ctx, layout, x, y, c, truncate);
+    TextLayoutRelease(layout);
 }
 
 static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
                      Rgba c) {
-    SetBrush(ctx, c);
     float sw = 1.6f;
-    auto P = [&](float u, float v) {
-        return D2D1::Point2F(x + u * s / 24.f, y + v * s / 24.f);
-    };
+    // The lucide icons are authored in a 24x24 viewBox; PX / PY map that onto
+    // the element box.
+    auto PX = [&](float u) { return x + u * s / 24.f; };
+    auto PY = [&](float v) { return y + v * s / 24.f; };
     auto line = [&](float x1, float y1, float x2, float y2) {
-        ctx->rt->DrawLine(P(x1, y1), P(x2, y2), ctx->brush, sw, nullptr);
+        CanvasLine(ctx, PX(x1), PY(y1), PX(x2), PY(y2), sw, c);
+    };
+    auto dot = [&](float u, float v, float r) {
+        CanvasEllipse(ctx, PX(u), PY(v), r, r, 0, c);
+    };
+    auto ring = [&](float u, float v, float rx, float ry) {
+        CanvasEllipse(ctx, PX(u), PY(v), rx, ry, sw, c);
     };
     switch (name) {
         case IconName::WindowMinimize:
@@ -2025,8 +1783,7 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
         case IconName::HardDrive:
             DrawRoundStroke(ctx, x + s * 0.12f, y + s * 0.38f, s * 0.76f,
                             s * 0.36f, s * 0.08f, sw, c);
-            ctx->rt
-                ->FillEllipse(D2D1::Ellipse(P(8, 14), 1.2f, 1.2f), ctx->brush);
+            dot(8, 14, 1.2f);
             break;
         case IconName::Battery:
         case IconName::BatteryMedium:
@@ -2054,18 +1811,14 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             break;
         }
         case IconName::Info:
-            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.38f),
-                                 ctx->brush, sw);
+            ring(12, 12, s * 0.38f, s * 0.38f);
             line(12, 10, 12, 16);
-            ctx->rt
-                ->FillEllipse(D2D1::Ellipse(P(12, 8), 1.2f, 1.2f), ctx->brush);
+            dot(12, 8, 1.2f);
             break;
         case IconName::X:
         case IconName::CircleX:
             if (name == IconName::CircleX) {
-                ctx->rt->DrawEllipse(
-                    D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.38f), ctx->brush,
-                    sw);
+                ring(12, 12, s * 0.38f, s * 0.38f);
             }
             // lucide x.svg spans 6..18 of the 24 viewBox; CircleX keeps its
             // stroke inside the ring.
@@ -2078,8 +1831,7 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             }
             break;
         case IconName::CircleCheck:
-            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.38f),
-                                 ctx->brush, sw);
+            ring(12, 12, s * 0.38f, s * 0.38f);
             line(8, 12, 11, 15);
             line(11, 15, 16, 9);
             break;
@@ -2088,8 +1840,7 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(20, 19, 4, 19);
             line(4, 19, 12, 5);
             line(12, 10, 12, 14);
-            ctx->rt
-                ->FillEllipse(D2D1::Ellipse(P(12, 17), 1.1f, 1.1f), ctx->brush);
+            dot(12, 17, 1.1f);
             break;
         case IconName::Loader:
             line(12, 4, 12, 8);
@@ -2122,8 +1873,7 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(10, 16, 18, 8);
             break;
         case IconName::Search:
-            ctx->rt->DrawEllipse(D2D1::Ellipse(P(10, 10), s * 0.22f, s * 0.22f),
-                                 ctx->brush, sw);
+            ring(10, 10, s * 0.22f, s * 0.22f);
             line(14, 14, 20, 20);
             break;
         case IconName::Minus:
@@ -2149,8 +1899,7 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             DrawRoundStroke(ctx, x + s * 0.29f, y + s * 0.25f, s * 0.42f,
                             s * 0.42f, s * 0.18f, sw, c);
             line(7, 16, 17, 16);
-            ctx->rt
-                ->FillEllipse(D2D1::Ellipse(P(12, 19), 1.2f, 1.2f), ctx->brush);
+            dot(12, 19, 1.2f);
             break;
         case IconName::Star:
             line(12, 4, 14, 10);
@@ -2165,18 +1914,12 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(10, 10, 12, 4);
             break;
         case IconName::Eye:
-            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.38f, s * 0.22f),
-                                 ctx->brush, sw);
-            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.12f, s * 0.12f),
-                                 ctx->brush, sw);
+            ring(12, 12, s * 0.38f, s * 0.22f);
+            ring(12, 12, s * 0.12f, s * 0.12f);
             break;
         case IconName::Heart:
-            ctx->rt
-                ->DrawEllipse(D2D1::Ellipse(P(8.5f, 9), s * 0.16f, s * 0.16f),
-                              ctx->brush, sw);
-            ctx->rt
-                ->DrawEllipse(D2D1::Ellipse(P(15.5f, 9), s * 0.16f, s * 0.16f),
-                              ctx->brush, sw);
+            ring(8.5f, 9, s * 0.16f, s * 0.16f);
+            ring(15.5f, 9, s * 0.16f, s * 0.16f);
             line(5, 11, 12, 20);
             line(19, 11, 12, 20);
             break;
@@ -2202,8 +1945,7 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(18, 8, 6, 16);
             break;
         case IconName::Sun:
-            ctx->rt->DrawEllipse(D2D1::Ellipse(P(12, 12), s * 0.16f, s * 0.16f),
-                                 ctx->brush, sw);
+            ring(12, 12, s * 0.16f, s * 0.16f);
             line(12, 3, 12, 6);
             line(12, 18, 12, 21);
             line(3, 12, 6, 12);
@@ -2236,19 +1978,10 @@ static void DrawChart(PaintCtx* ctx, El* e) {
 
     // An overlay series draws over the grid and axis the first one drew.
     if (!e->chart.overlay) {
-        ID2D1StrokeStyle* dash = nullptr;
-        D2D1_STROKE_STYLE_PROPERTIES sp2 = D2D1::StrokeStyleProperties();
-        sp2.dashStyle = D2D1_DASH_STYLE_CUSTOM;
-        float dashes2[2] = {4.f, 2.f};
-        ctx->d2d->CreateStrokeStyle(sp2, dashes2, 2, &dash);
-        SetBrush(ctx, th.border);
+        const float kGridDash[2] = {4.f, 2.f};
         for (int i = 0; i <= 3; i++) {
             float gy = y + plotH * (i / 4.f);
-            ctx->rt->DrawLine(D2D1::Point2F(x, gy), D2D1::Point2F(x + w, gy),
-                              ctx->brush, 1.f, dash);
-        }
-        if (dash) {
-            dash->Release();
+            CanvasLine(ctx, x, gy, x + w, gy, 1.f, th.border, kGridDash);
         }
         DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
     }
@@ -2275,59 +2008,26 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         return y + 10.f + (1.f - v / 100.f) * (plotH - 10.f);
     };
 
-    ID2D1PathGeometry* geom = nullptr;
-    ctx->d2d->CreatePathGeometry(&geom);
-    if (geom) {
-        ID2D1GeometrySink* sink = nullptr;
-        if (SUCCEEDED(geom->Open(&sink))) {
-            sink->BeginFigure(D2D1::Point2F(Xat(0), y + plotH),
-                              D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(Xat(0), Yat(ys[0])));
-            for (int i = 1; i < n; i++) {
-                sink->AddLine(D2D1::Point2F(Xat(i), Yat(ys[i])));
-            }
-            sink->AddLine(D2D1::Point2F(Xat(n - 1), y + plotH));
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            sink->Close();
-            sink->Release();
+    Path* area = PathNew(ctx, true);
+    if (area) {
+        PathMoveTo(area, Xat(0), y + plotH);
+        PathLineTo(area, Xat(0), Yat(ys[0]));
+        for (int i = 1; i < n; i++) {
+            PathLineTo(area, Xat(i), Yat(ys[i]));
         }
-
-        ID2D1GradientStopCollection* stops = nullptr;
-        D2D1_GRADIENT_STOP gs[2];
-        gs[0].position = 0.f;
-        gs[0].color = RgbaToD2D(e->chart.fillTop);
-        gs[1].position = 1.f;
-        gs[1].color = RgbaToD2D(e->chart.fillBot);
-        ctx->rt->CreateGradientStopCollection(gs, 2, &stops);
-        bool filled = false;
-        if (stops) {
-            ID2D1LinearGradientBrush* gb = nullptr;
-            ctx->rt->CreateLinearGradientBrush(
-                D2D1::LinearGradientBrushProperties(
-                    D2D1::Point2F(x, y), D2D1::Point2F(x, y + plotH)),
-                stops, &gb);
-            if (gb) {
-                ctx->rt->FillGeometry(geom, gb);
-                gb->Release();
-                filled = true;
-            }
-            stops->Release();
-        }
-        if (!filled) {
-            SetBrush(ctx, e->chart.fillTop);
-            ctx->rt->FillGeometry(geom, ctx->brush);
-        }
-        geom->Release();
+        PathLineTo(area, Xat(n - 1), y + plotH);
+        PathClose(area);
+        PathFillGradientV(ctx, area, y, y + plotH, e->chart.fillTop,
+                          e->chart.fillBot);
+        PathFree(area);
     }
 
-    SetBrush(ctx, e->chart.stroke);
     if (n == 1) {
-        ctx->rt->DrawLine(D2D1::Point2F(x, Yat(ys[0])),
-                          D2D1::Point2F(x + w, Yat(ys[0])), ctx->brush, 2.f);
+        DrawLine(ctx, x, Yat(ys[0]), x + w, Yat(ys[0]), 2.f, e->chart.stroke);
     }
     for (int i = 1; i < n; i++) {
-        ctx->rt->DrawLine(D2D1::Point2F(Xat(i - 1), Yat(ys[i - 1])),
-                          D2D1::Point2F(Xat(i), Yat(ys[i])), ctx->brush, 2.f);
+        DrawLine(ctx, Xat(i - 1), Yat(ys[i - 1]), Xat(i), Yat(ys[i]), 2.f,
+                 e->chart.stroke);
     }
 
     // x labels every tickMargin
@@ -2408,17 +2108,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
     }
     if (e->style.border > 0) {
         if (e->style.borderDashed) {
-            ID2D1StrokeStyle* dash = nullptr;
-            D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties();
             // In stroke widths; the default is what GPUI's border_dashed
             // draws. D2D's own DASH style is 2/2 and reads too sparse.
-            const float kDashes[] = {e->style.dashOn, e->style.dashOff};
-            sp.dashStyle = D2D1_DASH_STYLE_CUSTOM;
-            ctx->d2d->CreateStrokeStyle(sp, kDashes, 2, &dash);
-            SetBrush(ctx, e->style.borderColor);
-            // Inset by half the stroke, like the solid path: D2D centers a
-            // stroke on its path, so drawing on the bounds would split a
-            // hairline across two pixel rows.
+            const float dash[2] = {e->style.dashOn, e->style.dashOff};
             float half = e->style.border * 0.5f;
             if (e->style.radius <= 0) {
                 // Square corners: stroke each side on its own, so both the
@@ -2431,25 +2123,15 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
                 float x1 = EdgeEnd(ctx, e->x + e->w);
                 float y0 = EdgeEnd(ctx, e->y);
                 float y1 = EdgeEnd(ctx, e->y + e->h);
-                ctx->rt->DrawLine(D2D1::Point2F(x0, t), D2D1::Point2F(x1, t),
-                                  ctx->brush, e->style.border, dash);
-                ctx->rt->DrawLine(D2D1::Point2F(x0, b), D2D1::Point2F(x1, b),
-                                  ctx->brush, e->style.border, dash);
-                ctx->rt->DrawLine(D2D1::Point2F(l, y0), D2D1::Point2F(l, y1),
-                                  ctx->brush, e->style.border, dash);
-                ctx->rt->DrawLine(D2D1::Point2F(r, y0), D2D1::Point2F(r, y1),
-                                  ctx->brush, e->style.border, dash);
+                Rgba bc = e->style.borderColor;
+                float bw = e->style.border;
+                CanvasLine(ctx, x0, t, x1, t, bw, bc, dash);
+                CanvasLine(ctx, x0, b, x1, b, bw, bc, dash);
+                CanvasLine(ctx, l, y0, l, y1, bw, bc, dash);
+                CanvasLine(ctx, r, y0, r, y1, bw, bc, dash);
             } else {
-                D2D1_ROUNDED_RECT rr;
-                rr.rect = D2D1::RectF(e->x + half, e->y + half,
-                                      e->x + e->w - half, e->y + e->h - half);
-                rr.radiusX = e->style.radius;
-                rr.radiusY = e->style.radius;
-                ctx->rt->DrawRoundedRectangle(rr, ctx->brush, e->style.border,
-                                              dash);
-            }
-            if (dash) {
-                dash->Release();
+                CanvasStrokeRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
+                                  e->style.border, e->style.borderColor, dash);
             }
         } else {
             DrawRoundStroke(ctx, e->x, e->y, e->w, e->h, e->style.radius,
@@ -2481,9 +2163,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
 
     bool clip = e->style.overflowY != OverflowY::Visible;
     if (clip) {
-        ctx->rt->PushAxisAlignedClip(
-            D2D1::RectF(e->x, e->y, e->x + e->w, e->y + e->h),
-            D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        CanvasPushClip(ctx, e->x, e->y, e->w, e->h);
     }
 
     if (e->kind == ElKind::Text) {
@@ -2558,7 +2238,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
     }
 
     if (clip) {
-        ctx->rt->PopAxisAlignedClip();
+        CanvasPopClip(ctx);
     }
 
     if (e->style.overflowY == OverflowY::Scroll && e->contentH > e->h + 1.f &&

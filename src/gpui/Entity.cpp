@@ -1,6 +1,7 @@
 /* Entity store, contexts and listeners — GPUI's App/Context in C++. */
 
 #include "gpui/Gpui.h"
+#include "gpui/Platform.h"
 
 namespace gpui {
 
@@ -188,14 +189,7 @@ void WindowSetInterval(Window* win, int ms, Listener l) {
     }
     win->onTick = l;
     win->tickMs = ms;
-    if (!win->hwnd) {
-        return;
-    }
-    if (ms > 0) {
-        SetTimer(win->hwnd, 1, (UINT)ms, nullptr);
-    } else {
-        KillTimer(win->hwnd, 1);
-    }
+    PlatSetTimer(win, ms > 0 ? WindowTimerMs(win) : 0);
 }
 
 void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop) {

@@ -44,7 +44,7 @@ static void StepNum(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
         n = 0;
     }
     n += (int)delta;
-    _snprintf_s(app->input.buf, _TRUNCATE, "%d", n);
+    snprintf(app->input.buf, sizeof(app->input.buf), "%d", n);
     app->input.len = (int)strlen(app->input.buf);
     app->input.cursor = app->input.len;
     Notify(cx);

@@ -1,11 +1,15 @@
-// Amalgamate src/**/*.h and src/**/*.cpp into a single gpui.h / gpui.cpp pair.
+// Amalgamate src/**/*.h and src/**/*.cpp into gpui.h plus two .cpp files: the
+// portable core (gpui.cpp) and the platform half (gpui_win.cpp on Windows,
+// gpui_linux.cpp on Linux). The split is what keeps <windows.h> and <X11/*>
+// out of the same translation unit as everything else.
 //
 //   bun cmd/build-dist.ts           # write dist/, then time dbg+rel compile
 //   bun cmd/build-dist.ts -work     # write .work/ instead of dist/
+//   bun cmd/build-dist.ts -linux    # amalgamate the Linux platform half
 //   bun cmd/build-dist.ts -no-bench # skip the compile timing
 //
 // import { buildDist } from "./build-dist.ts";
-// buildDist();                 // dist/gpui.h + dist/gpui.cpp
+// buildDist();                 // dist/gpui.h + gpui.cpp + gpui_<plat>.cpp
 // buildDist({ outDir: ".work" });
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
@@ -15,20 +19,44 @@ const root = resolve(import.meta.dir, "..");
 
 export type DistOutDir = "dist" | ".work";
 
+export type Platform = "win" | "linux";
+
+export function hostPlatform(): Platform {
+  return process.platform === "win32" ? "win" : "linux";
+}
+
 export type BuildDistOpts = {
   /** Destination directory relative to the repo root. Default: "dist". */
   outDir?: DistOutDir;
+  /** Which platform half to emit. Default: the host. */
+  platform?: Platform;
 };
 
 export type BuildDistResult = {
   outDir: string;
+  platform: Platform;
   headerPath: string;
   sourcePath: string;
+  /** The <name>_win.cpp / <name>_linux.cpp amalgam. */
+  platformSourcePath: string;
   headerBytes: number;
   sourceBytes: number;
+  platformSourceBytes: number;
   headerCount: number;
   sourceCount: number;
+  platformSourceCount: number;
 };
+
+// src/gpui/Window_win.cpp -> "win". Null for a portable file.
+function filePlatform(rel: string): Platform | null {
+  if (/_win\.cpp$/.test(rel)) {
+    return "win";
+  }
+  if (/_linux\.cpp$/.test(rel)) {
+    return "linux";
+  }
+  return null;
+}
 
 const quotedIncRe = /^\s*#\s*include\s+"([^"]+)"/;
 const angleIncRe = /^\s*#\s*include\s+<([^>]+)>/;
@@ -304,10 +332,16 @@ function finish(text: string): string {
 
 export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   const outDir = opts?.outDir ?? "dist";
+  const platform = opts?.platform ?? hostPlatform();
   const headers = listSrc(".h");
-  const cpps = preferredCppOrder(listSrc(".cpp"));
+  const allCpps = preferredCppOrder(listSrc(".cpp"));
+  const cpps = allCpps.filter((f) => filePlatform(f) === null);
+  const platCpps = allCpps.filter((f) => filePlatform(f) === platform);
   if (headers.length === 0 || cpps.length === 0) {
     throw new Error("no src/**/*.h or src/**/*.cpp to amalgamate");
+  }
+  if (platCpps.length === 0) {
+    throw new Error(`no src/**/*_${platform}.cpp to amalgamate`);
   }
 
   const headerOrder = topoHeaders(headers);
@@ -330,7 +364,7 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
 
   const cppTexts = new Map<string, string>();
   const nameToFiles = new Map<string, string[]>();
-  for (const rel of cpps) {
+  for (const rel of [...cpps, ...platCpps]) {
     const body = stripInternalIncludes(rel, readLf(rel));
     cppTexts.set(rel, body);
     for (const name of staticNames(body)) {
@@ -346,24 +380,29 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
     }
   }
 
-  const cppChunks: string[] = ['#include "gpui.h"', ""];
-  for (const rel of cpps) {
-    let body = cppTexts.get(rel) ?? "";
-    const local = new Set(staticNames(body).filter((n) => colliding.has(n)));
-    body = renameIdents(body, local, filePrefix(rel)).trim();
-    if (!body) {
-      continue;
+  const concat = (list: string[]): string => {
+    const chunks: string[] = ['#include "gpui.h"', ""];
+    for (const rel of list) {
+      let body = cppTexts.get(rel) ?? "";
+      const local = new Set(staticNames(body).filter((n) => colliding.has(n)));
+      body = renameIdents(body, local, filePrefix(rel)).trim();
+      if (!body) {
+        continue;
+      }
+      chunks.push(`#line 1 "${rel}"`, body, "");
     }
-    cppChunks.push(`#line 1 "${rel}"`, body, "");
-  }
+    return finish(chunks.join("\n"));
+  };
 
   const headerText = finish(headerChunks.join("\n"));
-  const sourceText = finish(cppChunks.join("\n"));
+  const sourceText = concat(cpps);
+  const platformText = concat(platCpps);
 
   const absOut = join(root, outDir);
   mkdirSync(absOut, { recursive: true });
   const headerPath = join(absOut, "gpui.h");
   const sourcePath = join(absOut, "gpui.cpp");
+  const platformSourcePath = join(absOut, `gpui_${platform}.cpp`);
   const writeIfChanged = (path: string, text: string) => {
     if (existsSync(path) && readFileSync(path, "utf8") === text) {
       return;
@@ -372,15 +411,20 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   };
   writeIfChanged(headerPath, headerText);
   writeIfChanged(sourcePath, sourceText);
+  writeIfChanged(platformSourcePath, platformText);
 
   return {
     outDir,
+    platform,
     headerPath: srcRel(headerPath),
     sourcePath: srcRel(sourcePath),
+    platformSourcePath: srcRel(platformSourcePath),
     headerBytes: Buffer.byteLength(headerText, "utf8"),
     sourceBytes: Buffer.byteLength(sourceText, "utf8"),
+    platformSourceBytes: Buffer.byteLength(platformText, "utf8"),
     headerCount: headerOrder.length,
     sourceCount: cpps.length,
+    platformSourceCount: platCpps.length,
   };
 }
 
@@ -466,12 +510,21 @@ function die(msg: string): never {
   process.exit(1);
 }
 
-function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean } {
+function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean; platform: Platform } {
   let outDir: DistOutDir = "dist";
   let bench = true;
+  let platform = hostPlatform();
   for (const raw of argv) {
     if (raw === "-work" || raw === "--work") {
       outDir = ".work";
+      continue;
+    }
+    if (raw === "-win" || raw === "--win") {
+      platform = "win";
+      continue;
+    }
+    if (raw === "-linux" || raw === "--linux") {
+      platform = "linux";
       continue;
     }
     if (raw === "-no-bench" || raw === "--no-bench") {
@@ -483,19 +536,26 @@ function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean } {
       continue;
     }
     if (raw.startsWith("-")) {
-      die(`unknown option: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-no-bench]`);
+      die(`unknown option: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux] [-no-bench]`);
     }
-    die(`unknown argument: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-no-bench]`);
+    die(`unknown argument: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux] [-no-bench]`);
   }
-  return { outDir, bench };
+  return { outDir, bench, platform };
 }
 
 function main(): void {
-  const { outDir, bench } = parseCli(Bun.argv.slice(2));
-  const built = buildDist({ outDir });
+  const { outDir, bench, platform } = parseCli(Bun.argv.slice(2));
+  const built = buildDist({ outDir, platform });
   console.log(`wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${built.headerCount} headers)`);
   console.log(`wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ${built.sourceCount} sources)`);
+  console.log(
+    `wrote ${built.platformSourcePath} (${formatBytes(built.platformSourceBytes)}, ${built.platformSourceCount} sources)`,
+  );
   if (!bench) {
+    return;
+  }
+  if (process.platform !== "win32") {
+    console.log("skipping the compile bench: it shells out to cl.exe");
     return;
   }
   for (const debug of [true, false]) {

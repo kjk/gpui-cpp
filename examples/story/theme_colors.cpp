@@ -67,7 +67,8 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->filter.placeholder, "Search...", _TRUNCATE);
+        StrCopyZ(self->filter.placeholder,
+                 (int)sizeof(self->filter.placeholder), "Search...");
     }
     if (self->filter.focused) {
         cx->win->input = &self->filter;

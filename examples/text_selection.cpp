@@ -29,7 +29,7 @@ static void OnKey(SelApp* app, Ctx* cx, const KeyEvent* ev) {
     if (!down) {
         return;
     }
-    if (vk == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+    if (vk == KeyC && ev->ctrl) {
         StrBuilder b;
         int a = app->selFrom, c = app->selTo;
         if (a > c) {
@@ -46,16 +46,9 @@ static void OnKey(SelApp* app, Ctx* cx, const KeyEvent* ev) {
             }
         }
         Str s = b.TakeStr();
-        if (s.s && OpenClipboard(cx->win->hwnd)) {
-            EmptyClipboard();
-            HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)s.len + 1);
-            if (h) {
-                memcpy(GlobalLock(h), s.s, (size_t)s.len + 1);
-                GlobalUnlock(h);
-                SetClipboardData(CF_TEXT, h);
-            }
-            CloseClipboard();
-            strncpy_s(app->copied, s.s, _TRUNCATE);
+        if (s.s) {
+            ClipboardSetText(cx->win, s);
+            StrCopyZ(app->copied, (int)sizeof(app->copied), s.s);
         }
         StrFree(s);
     }
@@ -136,14 +129,16 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
     return col;
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     Entity<SelApp> view = EntityNew<SelApp>(app);
     SelApp* self = view.Get(app);
     (void)self;
     ThemeSet(app, ThemeMode::Light);
-    strncpy_s(self->in.placeholder,
-              "Type here (selection must NOT start from here)", _TRUNCATE);
+    StrCopyZ(self->in.placeholder, (int)sizeof(self->in.placeholder),
+             "Type here (selection must NOT start from here)");
     self->copied[0] = 0;
     self->selFrom = -1;
     self->selTo = -1;

@@ -1,6 +1,6 @@
-# gpui2 — C++ / Windows port of gpui-component
+# gpui2 — C++ port of gpui-component
 
-This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows only**. The north-star deliverable is the `system_monitor` example: a dark-theme desktop window with live CPU/memory area charts, a sortable process table, a custom title bar with segmented tabs, and a status bar.
+This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows and Linux**. The north-star deliverable is the `system_monitor` example: a dark-theme desktop window with live CPU/memory area charts, a sortable process table, a custom title bar with segmented tabs, and a status bar.
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
@@ -38,7 +38,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 
 ## Non-goals (until system_monitor is done)
 
-- macOS / Linux / WASM
+- macOS / WASM
 - The full GPUI GPU scene graph or async executor. We do have `App`/`Window`/
   `Entity`/`Ctx` — see below — but not refcounted entities, observers,
   `EventEmitter`, actions/key bindings, or `Task`
@@ -50,10 +50,11 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
-3. **Windows + MSVC.** `cl.exe` is on PATH. Build with `bun cmd/build.ts`. Static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Do not add CMake, vcpkg, or extra third-party C++ libraries.
+3. **Two platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config` — those are the counterparts of Direct2D and DirectWrite, not vendored dependencies. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
 6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
+7. **Portable by default.** `GPUI_OS_WINDOWS` / `GPUI_OS_LINUX` are for the handful of places where a single expression differs. Anything larger gets a portable signature in a shared header and an implementation in `<name>_win.cpp` and `<name>_linux.cpp`. Never call an OS API from a shared file.
 
 ## What we are actually porting
 
@@ -86,15 +87,49 @@ examples/system_monitor.cpp   MonitorApp: a view entity with Render(self, cx)
 src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root
         │
         ▼
-src/gpui/   App + Window + entity store, Win32 window, flex layout,
-            Direct2D/DirectWrite paint, hit-test, timer, frame arena
+src/gpui/   App + Window + entity store, flex layout, hit-test, timer,
+            frame arena; paint through Paint.h, the OS window through
+            Platform.h
         │
         ▼
-src/sys/    Win32 process/CPU/memory/disk/battery
+src/gpui/Paint_win.cpp     Direct2D + DirectWrite
+src/gpui/Paint_linux.cpp   cairo + Pango
+src/gpui/Window_win.cpp    Win32 message loop
+src/gpui/Window_linux.cpp  X11 event loop
+        │
+        ▼
+src/sys/    process/CPU/memory/disk/battery, per OS
         │
         ▼
 src/Base.h  Str, Vec, Arena, Geom, Color helpers
 ```
+
+## Portability
+
+`src/Base.h` defines `GPUI_OS_WINDOWS` and `GPUI_OS_LINUX` from the compiler's
+own predefines; exactly one is 1. They exist for one-expression differences
+(the path separator, `SRWLOCK` vs `pthread_mutex_t`). Everything bigger is a
+portable signature plus a pair of implementations:
+
+| Seam | Shared header | Windows | Linux |
+| --- | --- | --- | --- |
+| virtual memory, paths, strings, self usage | `src/Base.h` (`Plat*`) | `src/Base_win.cpp` | `src/Base_linux.cpp` |
+| 2D drawing and shaped text | `src/gpui/Paint.h` | `src/gpui/Paint_win.cpp` | `src/gpui/Paint_linux.cpp` |
+| the OS window and its event loop | `src/gpui/Platform.h` | `src/gpui/Window_win.cpp` | `src/gpui/Window_linux.cpp` |
+| system metrics | `src/sys/SysInfo.h` | `src/sys/SysInfo_win.cpp` | `src/sys/SysInfo_linux.cpp` |
+
+`src/gpui/WindowCommon.cpp` holds everything a window does that is not the OS
+window — frame drawing, input dispatch, the app lifecycle — and both platform
+files call into it.
+
+An example never names an OS API. It implements `int GpuiMain(int argc,
+char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
+`Key*` constants in `Gpui.h` (the Win32 `VK_*` values, which the X11 window
+maps keysyms onto), and the clipboard is `ClipboardSetText`.
+
+`cmd/build-dist.ts` amalgamates `src/` into three files: `gpui.h`, the
+portable `gpui.cpp`, and `gpui_win.cpp` or `gpui_linux.cpp`. The platform half
+is its own translation unit so `<windows.h>` and `<X11/Xlib.h>` never meet.
 
 ## Source of truth for visuals
 
@@ -180,9 +215,9 @@ struct Example {
     }
 };
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
-    ThemeSet(ThemeMode::Light);
+    ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Example"), 800, 600,
                       EntityNew<Example>(app).id, app, WinOpts{});
 }
@@ -233,11 +268,21 @@ bun cmd/run.ts -dbg hello_world
 bun cmd/run.ts -rel -windbg showcase
 ```
 
+`cmd/build.ts` and `cmd/run.ts` are dispatchers: they forward every flag to
+`cmd/build-windows.ts` / `cmd/run-windows.ts` on Windows and to
+`cmd/build-linux.ts` / `cmd/run-linux.ts` on Linux. Use those names directly
+only when you mean one specific toolchain.
+
 No example name (or a flag last) prints the valid example list. The example is the last argument.
 
-Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/`). Clean rebuild of that dir: add `-clean`.
+Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/`). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/`). Clean rebuild of that dir: add `-clean`. The Linux build writes under `out/linux/` instead, so building the same checkout for both platforms — which is what `cmd/wsl-run.ts` does — never clobbers the other side.
 
-`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` (launch under `windbgx.exe -g -G`). It does not accept `-all` — pick one binary.
+`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` on Windows (launch under `windbgx.exe`) and `-gdb` on Linux. It does not accept `-all` — pick one binary.
+
+Linux prerequisites (g++/clang++, pkg-config, X11 + cairo + Pango headers,
+gdb, bun, rust) install with `bash cmd/ubuntu-install-deps.sh`. From a Windows
+checkout, `bun cmd/wsl-run.ts -rel system_monitor` builds and runs the Linux
+binary inside WSL; the window comes up through WSLg.
 
 After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for the whole tree) before finishing. It runs clang-format on C++ in `src/` and `examples/` (`/.clang-format`, Chromium-based, 80 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
 
@@ -258,18 +303,30 @@ port-progress.md       what is done / what is next
 port-upstream.md       how to ingest later checkins (pins live in cmd/versions.ts)
 cmd/versions.ts        exact gpui-component + zed gpui SHAs we are porting
 cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
-cmd/build.ts           MSVC compile/link via bun; also clones the pinned Rust spec
-cmd/run.ts             build then run; same flags as build.ts plus -windbg / -compare
+cmd/build.ts           dispatches to build-windows.ts / build-linux.ts by host
+cmd/build-windows.ts   MSVC compile/link via bun; also clones the pinned Rust spec
+cmd/build-linux.ts     g++/clang++ compile/link, X11 + cairo + pango via pkg-config
+cmd/run.ts             dispatches to run-windows.ts / run-linux.ts by host
+cmd/run-windows.ts     build then run; same flags as build.ts plus -windbg / -compare
+cmd/run-linux.ts       build then run; same flags plus -gdb / -compare
+cmd/wsl-run.ts         run cmd/run-linux.ts inside WSL from a Windows checkout
+cmd/ubuntu-install-deps.sh  non-interactive apt + bun + rustup setup for Linux
 cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords)
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/Base.h/.cpp        vendored SumatraPDF subset
+src/Base_win.cpp       Windows platform layer (memory, paths, strings)
+src/Base_linux.cpp     the same, on POSIX
 src/gpui/Gpui.h        App, Window, Entity, Ctx, El, theme, paint
+src/gpui/Paint.h       the portable 2D canvas and shaped-text API
+src/gpui/Paint_win.cpp / Paint_linux.cpp   its two backends
+src/gpui/Platform.h    the seam between WindowCommon.cpp and the OS window
+src/gpui/WindowCommon.cpp   frame drawing, input dispatch, App lifecycle
+src/gpui/Window_win.cpp / Window_linux.cpp  the two OS windows
 src/gpui/Entity.cpp    entity store, listeners, window subscriptions
-src/gpui/Window.cpp    Win32 window, message loop, App lifecycle
 src/gpui/              layout, paint, assets, SVG, element tree
-src/sys/               Windows system metrics
+src/sys/               system metrics, portable + one file per OS
 src/ui/                gpui-base unstyled primitives (Button, …)
 src/component/         themed crates/ui façade (component::Button, Func0/Func1 callbacks)
 examples/              AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/

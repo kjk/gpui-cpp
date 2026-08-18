@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstdarg>
 #include <locale.h>
+#include <time.h>
 
 namespace gpui {
 
@@ -69,16 +70,10 @@ static uint64_t ArenaClampBot(uint64_t minValue, uint64_t value) {
     return (value > minValue) ? value : minValue;
 }
 
-static uint64_t ArenaPageSize();
-static uint64_t ArenaLargePageSize();
-static bool ArenaCommit(void* base, uint64_t size, bool largePages);
-static void* ArenaReserve(uint64_t size);
-static void* ArenaReserveAndCommit(uint64_t size, bool largePages);
-static void ArenaReleaseMemory(void* base, uint64_t size);
 static Arena* ArenaAlloc(const ArenaParams& params);
 
 static void ArenaRelease(Arena* arena) {
-    ArenaReleaseMemory(arena, arena->reserved);
+    PlatMemRelease(arena, arena->reserved);
 }
 
 static void* ArenaPushLocked(Arena* arena, uint64_t size, uint64_t align,
@@ -104,7 +99,7 @@ static void* ArenaPushLocked(Arena* arena, uint64_t size, uint64_t align,
         uint64_t commitChunkSize = current->commitChunkSize;
         if (size + kArenaHeaderSize > reserveChunkSize) {
             reserveChunkSize = ArenaAlignPow2(size + kArenaHeaderSize,
-                                              ArenaMax(align, ArenaPageSize()));
+                                              ArenaMax(align, PlatPageSize()));
             commitChunkSize = reserveChunkSize;
         }
 
@@ -139,7 +134,7 @@ static void* ArenaPushLocked(Arena* arena, uint64_t size, uint64_t align,
         uint64_t commitClamped = ArenaClampTop(commitEnd, current->reserved);
         uint64_t commitSize = commitClamped - current->committed;
         void* commitPtr = (char*)current + current->committed;
-        if (!ArenaCommit(commitPtr, commitSize, false)) {
+        if (!PlatMemCommit(commitPtr, commitSize, false)) {
             return nullptr;
         }
         current->committed = commitClamped;
@@ -189,7 +184,7 @@ static Arena* ArenaAlloc(const ArenaParams& srcParams) {
 
     bool useLargePages = (params.flags & ArenaFlagLargePages) != 0;
     const uint64_t pageSize =
-        useLargePages ? ArenaLargePageSize() : ArenaPageSize();
+        useLargePages ? PlatLargePageSize() : PlatPageSize();
     uint64_t reserveSize = ArenaAlignPow2(
         ArenaMax(params.reserveSize, kArenaHeaderSize), pageSize);
     uint64_t commitSize =
@@ -202,21 +197,21 @@ static Arena* ArenaAlloc(const ArenaParams& srcParams) {
 
     if (!usesExternalBuffer) {
         if (useLargePages) {
-            base = ArenaReserveAndCommit(reserveSize, true);
+            base = PlatMemReserveCommit(reserveSize, true);
             if (base) {
                 commitSize = reserveSize;
             } else {
                 actualFlags &= ~ArenaFlagLargePages;
                 useLargePages = false;
-                reserveSize = ArenaAlignPow2(reserveSize, ArenaPageSize());
-                commitSize = ArenaAlignPow2(commitSize, ArenaPageSize());
+                reserveSize = ArenaAlignPow2(reserveSize, PlatPageSize());
+                commitSize = ArenaAlignPow2(commitSize, PlatPageSize());
             }
         }
 
         if (!base) {
-            base = ArenaReserve(reserveSize);
-            if (base && !ArenaCommit(base, commitSize, false)) {
-                ArenaReleaseMemory(base, reserveSize);
+            base = PlatMemReserve(reserveSize);
+            if (base && !PlatMemCommit(base, commitSize, false)) {
+                PlatMemRelease(base, reserveSize);
                 base = nullptr;
             }
         }
@@ -390,7 +385,7 @@ static void* MemDup(Arena* arena, const void* mem, size_t size,
 
 static thread_local Arena* gTempArena = nullptr;
 
-static Arena* GetTempArena() {
+Arena* GetTempArena() {
     if (!gTempArena) {
         gTempArena = ArenaNew();
     }
@@ -419,32 +414,14 @@ Str AllocStrTemp(int size) {
     return Str(res, size);
 }
 
-WCHAR* ToCWstrTemp(Str s) {
-    Arena* arena = GetTempArena();
-    int n = 0;
-    if (s.s && s.len > 0) {
-        n = MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, nullptr, 0);
-        if (n < 0) {
-            n = 0;
-        }
-    }
-    auto res = (WCHAR*)arena->Push((uint64_t)(n + 1) * sizeof(WCHAR),
-                                   alignof(WCHAR), false);
-    if (n > 0) {
-        MultiByteToWideChar(CP_UTF8, 0, s.s, s.len, res, n);
-    }
-    res[n] = 0;
-    return res;
-}
-
 // Grow/shrink vec storage to newCap elements, plus one trailing zero-pad
 // element (so Vec<char>/Vec<WCHAR> stay C-string compatible).
 // Keeps the first min(len, newCap) elements; zeros the rest of the new block.
 // Updates *els and *cap. len is not modified (caller owns logical length).
 // Grow/shrink vec-like storage to newCap elements (+1 trailing zero pad).
 // Updates *els and *cap; keeps min(len, newCap) elements.
-__declspec(noinline) bool VecRealloc(Arena* a, void** els, int len, int* cap,
-                                     int newCap, int elSize) {
+GPUI_NOINLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
+                              int newCap, int elSize) {
     // newCap+1 must fit in int; newElCount * elSize must not overflow.
     if (elSize <= 0 || newCap < 0 || newCap > INT_MAX - 1) {
         return false;
@@ -473,56 +450,6 @@ __declspec(noinline) bool VecRealloc(Arena* a, void** els, int len, int* cap,
     *els = newEls;
     *cap = newCap;
     return true;
-}
-
-// ─── Arena_win.cpp
-// ───────────────────────────────────────────────────────────────
-
-static uint64_t ArenaPageSize() {
-    static uint64_t pageSize = 0;
-    if (pageSize == 0) {
-        SYSTEM_INFO info = {};
-        GetSystemInfo(&info);
-        pageSize = info.dwPageSize;
-    }
-    return pageSize;
-}
-
-static uint64_t ArenaLargePageSize() {
-    static uint64_t largePageSize = 0;
-    if (largePageSize == 0) {
-        SIZE_T size = GetLargePageMinimum();
-        largePageSize = size ? (uint64_t)size : ArenaPageSize();
-    }
-    return largePageSize;
-}
-
-static bool ArenaCommit(void* base, uint64_t size, bool largePages) {
-    if (size == 0) {
-        return true;
-    }
-    DWORD flags = MEM_COMMIT;
-    if (largePages) {
-        flags |= MEM_LARGE_PAGES;
-    }
-    return VirtualAlloc(base, (SIZE_T)size, flags, PAGE_READWRITE) != nullptr;
-}
-
-static void* ArenaReserve(uint64_t size) {
-    return VirtualAlloc(nullptr, (SIZE_T)size, MEM_RESERVE, PAGE_READWRITE);
-}
-
-static void* ArenaReserveAndCommit(uint64_t size, bool largePages) {
-    DWORD flags = MEM_RESERVE | MEM_COMMIT;
-    if (largePages) {
-        flags |= MEM_LARGE_PAGES;
-    }
-    return VirtualAlloc(nullptr, (SIZE_T)size, flags, PAGE_READWRITE);
-}
-
-static void ArenaReleaseMemory(void* base, uint64_t size) {
-    (void)size;
-    VirtualFree(base, 0, MEM_RELEASE);
 }
 
 static bool StrIsNull(const Str& s) {
@@ -556,6 +483,48 @@ void StrFree(Str s) {
     free(s.s);
 }
 
+LocalDate DateToday() {
+    LocalDate out;
+    time_t now = time(nullptr);
+    struct tm* lt = localtime(&now);
+    if (!lt) {
+        return out;
+    }
+    out.year = lt->tm_year + 1900;
+    out.month = lt->tm_mon + 1;
+    out.day = lt->tm_mday;
+    return out;
+}
+
+LocalDate DateAddDays(LocalDate base, int days) {
+    struct tm t = {};
+    t.tm_year = base.year - 1900;
+    t.tm_mon = base.month - 1;
+    t.tm_mday = base.day + days;
+    t.tm_hour = 12; // noon, so a DST shift cannot land on the previous day
+    t.tm_isdst = -1;
+    time_t stamp = mktime(&t);
+    if (stamp == (time_t)-1) {
+        return base;
+    }
+    LocalDate out;
+    out.year = t.tm_year + 1900;
+    out.month = t.tm_mon + 1;
+    out.day = t.tm_mday;
+    return out;
+}
+
+void StrLowerAscii(char* s) {
+    if (!s) {
+        return;
+    }
+    for (; *s; s++) {
+        if (*s >= 'A' && *s <= 'Z') {
+            *s = (char)(*s - 'A' + 'a');
+        }
+    }
+}
+
 bool StrEqI(Str s1, Str s2) {
     if (s1.s == s2.s) {
         return true;
@@ -569,7 +538,7 @@ bool StrEqI(Str s1, Str s2) {
     if (StrIsNull(s1) || StrIsNull(s2)) {
         return false;
     }
-    return 0 == _strnicmp(s1.s, s2.s, (size_t)s1.len);
+    return 0 == StrCmpNI(s1.s, s2.s, s1.len);
 }
 
 bool StrContainsI(Str s, Str sub) {

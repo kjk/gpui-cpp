@@ -110,7 +110,8 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->search.placeholder, "Search...", _TRUNCATE);
+        StrCopyZ(self->search.placeholder,
+                 (int)sizeof(self->search.placeholder), "Search...");
     }
     if (self->search.focused) {
         cx->win->input = &self->search;

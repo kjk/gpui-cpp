@@ -10,8 +10,8 @@ struct Example {
     bool subscribed = false;
 
     static void OnChange(Example* self, Ctx* cx, const InputEvent*) {
-        _snprintf_s(self->displayText, _TRUNCATE, "Hello, %s!",
-                    self->inputState.buf);
+        snprintf(self->displayText, sizeof(self->displayText), "Hello, %s!",
+                 self->inputState.buf);
         Notify(cx);
     }
 
@@ -49,12 +49,15 @@ struct Example {
     }
 };
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
     Entity<Example> view = EntityNew<Example>(app);
     Example* self = view.Get(app);
-    strncpy_s(self->inputState.placeholder, "Enter your name", _TRUNCATE);
+    StrCopyZ(self->inputState.placeholder,
+             (int)sizeof(self->inputState.placeholder), "Enter your name");
 
     return AppRunView(StrL("Input"), 800, 600, view.id, app, WinOpts{});
 }

@@ -1,4 +1,5 @@
 #include "component/Chart.h"
+#include "gpui/Paint.h"
 
 namespace gpui {
 
@@ -76,7 +77,7 @@ PieChart* PieChart::PadAngle(float radians) {
 
 static void PaintPie(PaintCtx* ctx, El* e, void* user) {
     auto* p = (PieChart*)user;
-    if (!p || !ctx->rt || !ctx->brush || !ctx->d2d || p->n == 0) {
+    if (!p || !ctx->rt || p->n == 0) {
         return;
     }
     float cx = e->x + e->w * 0.5f;
@@ -99,44 +100,20 @@ static void PaintPie(PaintCtx* ctx, El* e, void* user) {
         }
         float ro = p->outerRadius - s.outerInset;
         float ri = p->innerRadius;
-        ID2D1PathGeometry* geo = nullptr;
-        if (FAILED(ctx->d2d->CreatePathGeometry(&geo)) || !geo) {
-            return;
-        }
-        ID2D1GeometrySink* sink = nullptr;
-        if (SUCCEEDED(geo->Open(&sink)) && sink) {
-            float a0 = angle, a1 = angle + sweep;
-            D2D1_ARC_SIZE big =
-                sweep > kPi ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL;
-            sink->BeginFigure(
-                D2D1::Point2F(cx + ro * cosf(a0), cy + ro * sinf(a0)),
-                D2D1_FIGURE_BEGIN_FILLED);
-            D2D1_ARC_SEGMENT arc = {};
-            arc.point = D2D1::Point2F(cx + ro * cosf(a1), cy + ro * sinf(a1));
-            arc.size = D2D1::SizeF(ro, ro);
-            arc.sweepDirection = D2D1_SWEEP_DIRECTION_CLOCKWISE;
-            arc.arcSize = big;
-            sink->AddArc(arc);
+        float a0 = angle, a1 = angle + sweep;
+        Path* wedge = PathNew(ctx, true);
+        if (wedge) {
+            PathArcTo(wedge, cx, cy, ro, a0, a1, true);
             if (ri > 0) {
-                sink->AddLine(
-                    D2D1::Point2F(cx + ri * cosf(a1), cy + ri * sinf(a1)));
-                D2D1_ARC_SEGMENT inner = {};
-                inner.point =
-                    D2D1::Point2F(cx + ri * cosf(a0), cy + ri * sinf(a0));
-                inner.size = D2D1::SizeF(ri, ri);
-                inner.sweepDirection = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
-                inner.arcSize = big;
-                sink->AddArc(inner);
+                // Back along the inner radius to close the donut segment.
+                PathArcTo(wedge, cx, cy, ri, a1, a0, false);
             } else {
-                sink->AddLine(D2D1::Point2F(cx, cy));
+                PathLineTo(wedge, cx, cy);
             }
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            sink->Close();
-            sink->Release();
+            PathClose(wedge);
+            PathFill(ctx, wedge, s.color);
+            PathFree(wedge);
         }
-        ctx->brush->SetColor(RgbaToD2D(s.color));
-        ctx->rt->FillGeometry(geo, ctx->brush, nullptr);
-        geo->Release();
         angle += 2.f * kPi * (s.value / total);
     }
 }

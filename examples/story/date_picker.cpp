@@ -34,26 +34,10 @@ struct DatePickerStory {
     static void OnKey(DatePickerStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
-// chrono checked_add_days, on SYSTEMTIME.
-static SYSTEMTIME DayOffset(const SYSTEMTIME& base, int days) {
-    FILETIME ft = {};
-    SystemTimeToFileTime(&base, &ft);
-    ULARGE_INTEGER u = {};
-    u.LowPart = ft.dwLowDateTime;
-    u.HighPart = ft.dwHighDateTime;
-    u.QuadPart =
-        (ULONGLONG)((LONGLONG)u.QuadPart + (LONGLONG)days * 864000000000LL);
-    ft.dwLowDateTime = u.LowPart;
-    ft.dwHighDateTime = u.HighPart;
-    SYSTEMTIME out = {};
-    FileTimeToSystemTime(&ft, &out);
-    return out;
-}
-
-static void SetDate(DpDate* dst, const SYSTEMTIME& st) {
-    dst->y = st.wYear;
-    dst->m = st.wMonth;
-    dst->d = st.wDay;
+static void SetDate(DpDate* dst, LocalDate st) {
+    dst->y = st.year;
+    dst->m = st.month;
+    dst->d = st.day;
 }
 
 static void TogglePicker(DatePickerStory* self, Ctx* cx, const ClickEvent*,
@@ -66,7 +50,7 @@ static void ClearPicker(DatePickerStory* self, Ctx* cx, const ClickEvent*,
     self->dates[i].d = 0;
     self->dates[i].y2 = 0;
     if (i == DpDefault || i == DpDateRange || i == DpEmptyRange) {
-        strncpy_s(self->value, "None", _TRUNCATE);
+        StrCopyZ(self->value, (int)sizeof(self->value), "None");
     }
     Notify(cx);
 }
@@ -80,9 +64,8 @@ static void PickDay(DatePickerStory* self, Ctx* cx, const ClickEvent*,
     self->open = -1;
     if (i == DpDefault || i == DpDateRange || i == DpEmptyRange) {
         // The story subscribes to these three and prints the new date.
-        _snprintf_s(self->value, sizeof(self->value), _TRUNCATE,
-                    "Some(\"%d-%02d-%02d\")", self->dates[i].y,
-                    self->dates[i].m, self->dates[i].d);
+        snprintf(self->value, sizeof(self->value), "Some(\"%d-%02d-%02d\")",
+                 self->dates[i].y, self->dates[i].m, self->dates[i].d);
     }
     Notify(cx);
 }
@@ -110,17 +93,17 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        SYSTEMTIME now = {};
-        GetLocalTime(&now);
+        LocalDate now = DateToday();
         SetDate(&self->dates[DpDefault], now);
         SetDate(&self->dates[DpInterval], now);
-        SetDate(&self->dates[DpRange7], DayOffset(now, -1));
+        // chrono checked_add_days, the way the Rust story seeds the range.
+        SetDate(&self->dates[DpRange7], DateAddDays(now, -1));
         SetDate(&self->dates[DpCustom], now);
         SetDate(&self->dates[DpDateRange], now);
-        SYSTEMTIME end = DayOffset(now, 4);
-        self->dates[DpDateRange].y2 = end.wYear;
-        self->dates[DpDateRange].m2 = end.wMonth;
-        self->dates[DpDateRange].d2 = end.wDay;
+        LocalDate end = DateAddDays(now, 4);
+        self->dates[DpDateRange].y2 = end.year;
+        self->dates[DpDateRange].m2 = end.month;
+        self->dates[DpDateRange].d2 = end.day;
     }
     Listener toggle = Listen(cx, &TogglePicker);
     Listener clear = Listen(cx, &ClearPicker);
@@ -235,7 +218,7 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
 // Esc closes what this page has open, like an overlay dismiss.
 void DatePickerStory::OnKey(DatePickerStory* self, Ctx* cx,
                             const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->open = -1;

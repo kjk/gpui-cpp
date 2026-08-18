@@ -130,8 +130,8 @@ El* Calendar::IntoEl() {
     }
     root->Child(head);
 
-    SYSTEMTIME now = {};
-    GetLocalTime(&now);
+    // Today, for the "current day" ring.
+    LocalDate now = DateToday();
     int dim = Dim(year, month);
     int lead = Dow(year, month, 1);
     int prevY = 0, prevM = 0;
@@ -152,8 +152,8 @@ El* Calendar::IntoEl() {
                 shown = d - dim;
             }
             bool active = !muted && d == day;
-            bool today = !muted && year == now.wYear && month == now.wMonth &&
-                         d == now.wDay;
+            bool today = !muted && year == now.year && month == now.month &&
+                         d == now.day;
             El* cell = CalendarItem::New(
                            cx, HashClickId(StrDup(a, fmt("d%d-%d", month, d))))
                            ->W(kCell)

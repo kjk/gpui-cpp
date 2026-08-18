@@ -24,7 +24,8 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
     float lineMult = kInputLineH / font;
     float caretH = font + 2.f;
     Rgba fg = state->len > 0 ? style.foreground : style.mutedForeground;
-    bool caret = state->focused && ((GetTickCount() / 500) % 2 == 0);
+    // A 500 ms blink, off the same monotonic clock the frame timer uses.
+    bool caret = state->focused && ((int)(TimeNow() * 2.0) % 2 == 0);
     El* bar = Div(a)->W(2)->H(caretH)->Bg(style.caret);
     El* slot = caret ? bar : Div(a)->W(2)->H(caretH);
     El* row = Div(a)->FlexRow()->ItemsCenter()->H(kInputLineH);
@@ -288,7 +289,7 @@ El* Editor::New(Ctx* cx, const char* text, int cursor, bool caret) {
     if (!text) {
         text = "";
     }
-    bool blink = caret && ((GetTickCount() / 500) % 2 == 0);
+    bool blink = caret && ((int)(TimeNow() * 2.0) % 2 == 0);
     int i = 0;
     int pos = 0;
     int lineNo = 1;

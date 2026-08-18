@@ -198,7 +198,9 @@ El* MdApp::Render(MdApp* app, Ctx* cx) {
         ->Child(body);
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     Entity<MdApp> view = EntityNew<MdApp>(app);
     MdApp* self = view.Get(app);
@@ -215,7 +217,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         memcpy(self->source, buf.els, (size_t)n);
         self->source[n] = 0;
     } else {
-        strncpy_s(self->source, "# Missing report.md", _TRUNCATE);
+        StrCopyZ(self->source, (int)sizeof(self->source),
+                 "# Missing report.md");
     }
     WinOpts opts = {};
     Window* win =

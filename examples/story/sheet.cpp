@@ -58,8 +58,9 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->focusInput.placeholder,
-                  "For test focus back on dialog close.", _TRUNCATE);
+        StrCopyZ(self->focusInput.placeholder,
+                 (int)sizeof(self->focusInput.placeholder),
+                 "For test focus back on dialog close.");
     }
     if (self->focusInput.focused) {
         cx->win->input = &self->focusInput;
@@ -155,7 +156,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
 
 // Esc closes what this page has open, like an overlay dismiss.
 void SheetStory::OnKey(SheetStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->open = SheetNone;

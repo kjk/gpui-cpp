@@ -23,15 +23,15 @@ static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
     int slot = (int)(packed >> 1);
     int dir = (packed & 1) ? 1 : -1;
     double v = 0;
-    sscanf_s(self->fields[slot].buf, "%lf", &v);
+    sscanf(self->fields[slot].buf, "%lf", &v);
     // The format story steps by 0.01, the rest by one.
     double step = slot == NumFormat ? 0.01 : (slot == NumCustom ? 0.1 : 1);
     v += dir * step;
     LineInput* f = &self->fields[slot];
     if (slot == NumFormat || slot == NumCustom) {
-        _snprintf_s(f->buf, sizeof(f->buf), _TRUNCATE, "%.2f", v);
+        snprintf(f->buf, sizeof(f->buf), "%.2f", v);
     } else {
-        _snprintf_s(f->buf, sizeof(f->buf), _TRUNCATE, "%d", (int)v);
+        snprintf(f->buf, sizeof(f->buf), "%d", (int)v);
     }
     f->len = (int)strlen(f->buf);
     f->cursor = f->len;
@@ -65,10 +65,11 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
         };
         for (size_t i = 0; i < sizeof(seeds) / sizeof(seeds[0]); i++) {
             LineInput* f = &self->fields[seeds[i].slot];
-            strncpy_s(f->buf, seeds[i].value, _TRUNCATE);
+            StrCopyZ(f->buf, (int)sizeof(f->buf), seeds[i].value);
             f->len = (int)strlen(f->buf);
             f->cursor = f->len;
-            strncpy_s(f->placeholder, seeds[i].placeholder, _TRUNCATE);
+            StrCopyZ(f->placeholder, (int)sizeof(f->placeholder),
+                     seeds[i].placeholder);
         }
     }
     if (self->focused >= 0) {

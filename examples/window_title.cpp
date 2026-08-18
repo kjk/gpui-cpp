@@ -50,7 +50,9 @@ struct Example {
     }
 };
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Window Title"), 800, 600,

@@ -43,7 +43,8 @@ El* LabelStory::Render(LabelStory* self, Ctx* cx) {
                           "Find matching text across Latin and CJK content.");
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->search.placeholder, "Search labels", _TRUNCATE);
+        StrCopyZ(self->search.placeholder,
+                 (int)sizeof(self->search.placeholder), "Search labels");
     }
     if (self->search.focused) {
         cx->win->input = &self->search;

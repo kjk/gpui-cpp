@@ -18,14 +18,38 @@
 #include <algorithm> // for std::min, std::max
 #include <utility>   // for std::forward
 
+// ─── os ──────────────────────────────────────────────────────────────────
+//
+// One of these is 1, the other 0, on every build. Prefer a portable function
+// implemented in <name>_win.cpp / <name>_linux.cpp over an #if in shared code:
+// these are for the handful of places where a single expression differs.
+
+#if defined(_WIN32)
+#define GPUI_OS_WINDOWS 1
+#define GPUI_OS_LINUX 0
+#elif defined(__linux__)
+#define GPUI_OS_WINDOWS 0
+#define GPUI_OS_LINUX 1
+#else
+#error "unsupported platform: gpui builds on Windows and Linux"
+#endif
+
+#if GPUI_OS_WINDOWS
 #define NOMINMAX
 #include <windows.h>
 #include <windowsx.h>
-#include <d2d1.h>
-#include <dwrite.h>
-#include <dwmapi.h>
+#else
+#include <pthread.h>
+#include <limits.h>
+#endif
 
 namespace gpui {
+
+// The longest path we put on the stack. Windows spells it MAX_PATH; Linux
+// PATH_MAX, which is 4096 and too big for the fixed arrays here.
+enum {
+    kMaxPath = 1024
+};
 
 struct Arena;
 
@@ -52,10 +76,54 @@ using TempStr = Str;
 
 Str AllocStrTemp(int size);
 
+#if GPUI_OS_WINDOWS
 // UTF-8 Str -> null-terminated UTF-16 for the OS calls that need it.
 // Temp-arena backed: do not free, and do not keep it past the next
 // ResetTempArena().
 WCHAR* ToCWstrTemp(Str s);
+#endif
+
+// ─── platform layer ──────────────────────────────────────────────────────
+//
+// Implemented in Base_win.cpp / Base_linux.cpp.
+
+uint64_t PlatPageSize();
+uint64_t PlatLargePageSize();
+// Reserve address space without backing it. Returns null on failure.
+void* PlatMemReserve(uint64_t size);
+bool PlatMemCommit(void* base, uint64_t size, bool largePages);
+void* PlatMemReserveCommit(uint64_t size, bool largePages);
+void PlatMemRelease(void* base, uint64_t size);
+
+// Case-insensitive ASCII compares and a bounded copy: the CRT spells these
+// _stricmp / _strnicmp / strncpy_s on Windows and strcasecmp / strncasecmp /
+// strlcpy elsewhere.
+int StrCmpI(const char* a, const char* b);
+int StrCmpNI(const char* a, const char* b, int n);
+// Copies at most cap-1 bytes and always null-terminates.
+void StrCopyZ(char* dst, int cap, const char* src);
+
+// The filesystem bits the asset loader needs; reading a file is plain stdio.
+bool PlatDirExists(const char* path);
+void PlatGetCwd(char* out, int cap);
+// The directory the running binary sits in.
+void PlatGetExeDir(char* out, int cap);
+
+// One entry of a directory listing.
+struct DirEntry {
+    char name[260] = {};
+    bool isDir = false;
+};
+
+// Lists `dir`, skipping "." and "..". Returns how many entries were written,
+// 0 if the directory could not be read.
+int PlatListDir(const char* dir, DirEntry* out, int max);
+
+// Logical cores, at least 1.
+int PlatCoreCount();
+// This process' own CPU time in 100 ns units and its resident set, for the
+// FPS HUD. False if the OS would not say.
+bool PlatSelfUsage(uint64_t* cpu100ns, uint64_t* memBytes);
 
 void* AllocZero(int count, int size);
 
@@ -118,12 +186,19 @@ Func1<T2> MkFunc1(void (*fn)(T1*, T2), T1* d) {
     return res;
 }
 
+// A plain non-recursive lock. Only the arena uses it.
 struct Mutex {
+#if GPUI_OS_WINDOWS
     SRWLOCK lock = SRWLOCK_INIT;
-    Mutex() = default;
-    ~Mutex() = default;
     void Lock() { AcquireSRWLockExclusive(&lock); }
     void Unlock() { ReleaseSRWLockExclusive(&lock); }
+#else
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    void Lock() { pthread_mutex_lock(&lock); }
+    void Unlock() { pthread_mutex_unlock(&lock); }
+#endif
+    Mutex() = default;
+    ~Mutex() = default;
 };
 
 static const uint64_t kArenaHeaderSize = 256;
@@ -160,6 +235,8 @@ struct Arena {
 Arena* ArenaNew();
 void ArenaDelete(Arena* arena);
 
+// The per-frame scratch arena that fmt() / AllocStrTemp() carve out of.
+Arena* GetTempArena();
 void ResetTempArena();
 void DestroyTempArena();
 
@@ -172,8 +249,15 @@ T* ArenaNew(Arena* arena, Args&&... args) {
     return new (mem) T(std::forward<Args>(args)...);
 }
 
-bool VecRealloc(struct Arena* a, void** els, int len, int* cap, int newCap,
-                int elSize);
+// Kept out of line so the Vec<T> templates stay small at every use site.
+#if GPUI_OS_WINDOWS
+#define GPUI_NOINLINE __declspec(noinline)
+#else
+#define GPUI_NOINLINE __attribute__((noinline))
+#endif
+
+GPUI_NOINLINE bool VecRealloc(struct Arena* a, void** els, int len, int* cap,
+                              int newCap, int elSize);
 
 template <typename T>
 struct Vec;
@@ -292,6 +376,19 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
     return res;
 }
 
+// A calendar date, which is all the date widgets need out of the clock.
+struct LocalDate {
+    int year = 0;
+    int month = 0; // 1..12
+    int day = 0;   // 1..31
+};
+
+// Today, in local time.
+LocalDate DateToday();
+// `base` shifted by whole days, normalized. GPUI's date widgets get this from
+// chrono's checked_add_days.
+LocalDate DateAddDays(LocalDate base, int days);
+
 void StrFree(Str s);
 void StrFree(const char*) = delete;
 
@@ -300,6 +397,9 @@ Str StrDup(Str s);
 
 bool StrEqI(Str s1, Str s2);
 bool StrContainsI(Str s, Str sub);
+// Lowercase A-Z in place. ASCII only, which is what the filters using it
+// compare.
+void StrLowerAscii(char* s);
 
 struct StrBuilder {
     Arena* a = nullptr;

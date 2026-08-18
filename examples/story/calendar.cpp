@@ -31,10 +31,9 @@ static void CalDay(CalendarStory* self, Ctx* cx, const ClickEvent*,
 El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
     Arena* a = cx->a;
     if (self->calMonth == 0) {
-        SYSTEMTIME now = {};
-        GetLocalTime(&now);
-        self->calYear = now.wYear;
-        self->calMonth = now.wMonth;
+        LocalDate now = DateToday();
+        self->calYear = now.year;
+        self->calMonth = now.month;
     }
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     El* single = StorySection(cx, "Single month", "Single-date selection.");

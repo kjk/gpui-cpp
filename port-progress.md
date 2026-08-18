@@ -2,12 +2,12 @@
 
 ## Current phase
 
-**system_monitor**, **app_assets**, the twelve simple examples, the **gpui-base showcase**, and the **crates/ui story gallery** all run on Windows.
+**system_monitor**, **app_assets**, the twelve simple examples, the **gpui-base showcase**, and the **crates/ui story gallery** all run on **Windows and Linux**.
 
 ```
 bun cmd/build.ts all
 bun cmd/build.ts -rel showcase
-out\rel\showcase.exe
+out\rel\showcase.exe      # Linux: out/rel/showcase
 ```
 
 ## Status
@@ -39,6 +39,7 @@ out\rel\showcase.exe
 | 22. showcase | done | `crates/base/examples/showcase` — overview + 39 component pages |
 | 23. story gallery | done | `crates/story` — sidebar + 62 stories (`bun cmd/build.ts story`) |
 | 24. App / Window / Entity / Ctx | done | GPUI's runtime shape; see AGENTS.md |
+| 25. Linux port | done | X11 + cairo + Pango behind `Paint.h` / `Platform.h`; every target builds and runs |
 
 ## What matches the Rust example
 
@@ -88,7 +89,9 @@ out\rel\story.exe
 out\rel\story.exe Alert
 ```
 
-`all` builds `system_monitor`, `app_assets`, `showcase`, and every name in `simpleExamples` in `cmd/build.ts`.
+`all` builds `system_monitor`, `app_assets`, `showcase`, and every name in `simpleExamples`.
+
+`cmd/build.ts` and `cmd/run.ts` dispatch by host: `build-windows.ts` / `run-windows.ts` on Windows, `build-linux.ts` / `run-linux.ts` on Linux. On Linux the binaries land in `out/linux/rel/showcase` (no `.exe`) and need X11 + cairo + Pango; `bash cmd/ubuntu-install-deps.sh` installs the lot. From a Windows checkout, `bun cmd/wsl-run.ts -rel showcase` builds and runs the Linux binary under WSLg.
 
 Rust reference (slow first build; pulls Zed GPUI). Pins: [`cmd/versions.ts`](cmd/versions.ts). `bun cmd/build.ts` clones `.work/gpui-component` at that SHA if missing.
 

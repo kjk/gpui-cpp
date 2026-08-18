@@ -219,7 +219,7 @@ static bool Finite(float v) {
 
 static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
     auto* app = (FpsApp*)user;
-    if (!ctx->rt || !ctx->brush) {
+    if (!ctx->rt) {
         return;
     }
     int curves = app->curves;
@@ -266,11 +266,9 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
                 }
             }
             if (finite) {
-                ctx->brush->SetColor(RgbaToD2D(pal[(start + end) / 2]));
+                Rgba c = pal[(start + end) / 2];
                 for (int i = start + 1; i <= end; i++) {
-                    ctx->rt->DrawLine(D2D1::Point2F(px[i - 1], py[i - 1]),
-                                      D2D1::Point2F(px[i], py[i]), ctx->brush,
-                                      1.f);
+                    CanvasLine(ctx, px[i - 1], py[i - 1], px[i], py[i], 1.f, c);
                 }
             }
             // Share the boundary vertex so runs join without a gap.
@@ -355,7 +353,9 @@ El* FpsApp::Render(FpsApp* app, Ctx* cx) {
         ->Child(FpsMonitorEl(cx));
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     Entity<FpsApp> view = EntityNew<FpsApp>(app);
     FpsApp* self = view.Get(app);

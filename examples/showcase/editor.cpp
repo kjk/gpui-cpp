@@ -54,12 +54,12 @@ static void OnEditor(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     if (!app->editorInited) {
-        strncpy_s(app->editor, kEditorDefault, _TRUNCATE);
+        StrCopyZ(app->editor, (int)sizeof(app->editor), kEditorDefault);
         app->editorLen = (int)strlen(app->editor);
         app->editorCursor = 0;
         app->editorInited = true;
     }
-    bool blink = app->editorOn && ((GetTickCount() / 500) % 2 == 0);
+    bool blink = app->editorOn && ((int)(TimeNow() * 2.0) % 2 == 0);
     return Div(a)
         ->FlexCol()
         ->W(320)

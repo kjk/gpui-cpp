@@ -372,7 +372,9 @@ El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
         ->Child(StatusBar(frame, app));
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     Entity<MonitorApp> view = EntityNew<MonitorApp>(app);
     MonitorApp* self = view.Get(app);

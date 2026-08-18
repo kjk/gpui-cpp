@@ -2,10 +2,18 @@
 
 #include "Base.h"
 
+#include <stdio.h>
+
 namespace gpui {
 
+#if GPUI_OS_WINDOWS
+static const char kSep = '\\';
+#else
+static const char kSep = '/';
+#endif
+
 static const int kMaxRoots = 12;
-static char gRoots[kMaxRoots][MAX_PATH];
+static char gRoots[kMaxRoots][kMaxPath];
 static int gRootN = 0;
 
 void AssetsClear() {
@@ -17,15 +25,14 @@ static void AddRootRaw(const char* dir) {
         return;
     }
     for (int i = 0; i < gRootN; i++) {
-        if (_stricmp(gRoots[i], dir) == 0) {
+        if (StrCmpI(gRoots[i], dir) == 0) {
             return;
         }
     }
-    DWORD attr = GetFileAttributesA(dir);
-    if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+    if (!PlatDirExists(dir)) {
         return;
     }
-    strncpy_s(gRoots[gRootN], MAX_PATH, dir, _TRUNCATE);
+    StrCopyZ(gRoots[gRootN], kMaxPath, dir);
     gRootN++;
 }
 
@@ -33,8 +40,8 @@ void AssetsAddRoot(Str dir) {
     if (!dir.s || dir.len <= 0) {
         return;
     }
-    char buf[MAX_PATH];
-    int n = dir.len < MAX_PATH - 1 ? dir.len : MAX_PATH - 1;
+    char buf[kMaxPath];
+    int n = dir.len < kMaxPath - 1 ? dir.len : kMaxPath - 1;
     memcpy(buf, dir.s, (size_t)n);
     buf[n] = 0;
     AddRootRaw(buf);
@@ -42,14 +49,14 @@ void AssetsAddRoot(Str dir) {
 
 static void JoinPath(char* dst, int dstN, const char* a, const char* b) {
     if (!a || !a[0]) {
-        strncpy_s(dst, (size_t)dstN, b ? b : "", _TRUNCATE);
+        StrCopyZ(dst, dstN, b ? b : "");
         return;
     }
     if (!b || !b[0]) {
-        strncpy_s(dst, (size_t)dstN, a, _TRUNCATE);
+        StrCopyZ(dst, dstN, a);
         return;
     }
-    _snprintf_s(dst, (size_t)dstN, _TRUNCATE, "%s\\%s", a, b);
+    snprintf(dst, (size_t)dstN, "%s%c%s", a, kSep, b);
 }
 
 static void ParentDir(char* path) {
@@ -65,59 +72,60 @@ static void ParentDir(char* path) {
     }
 }
 
-static void SlashToBack(char* s) {
+// Asset paths are written with forward slashes; rewrite them to whatever the
+// OS wants.
+static void ToNativeSep(char* s) {
     for (; *s; s++) {
-        if (*s == '/') {
-            *s = '\\';
+        if (*s == '/' || *s == '\\') {
+            *s = kSep;
         }
     }
 }
 
 void AssetsAddDefaultRoots(Str exampleName) {
-    char cwd[MAX_PATH] = {};
-    GetCurrentDirectoryA(MAX_PATH, cwd);
+    char cwd[kMaxPath] = {};
+    PlatGetCwd(cwd, kMaxPath);
 
-    char exe[MAX_PATH] = {};
-    GetModuleFileNameA(nullptr, exe, MAX_PATH);
-    ParentDir(exe);
+    char exe[kMaxPath] = {};
+    PlatGetExeDir(exe, kMaxPath);
 
-    char sub[MAX_PATH];
+    char sub[kMaxPath];
     if (exampleName.s && exampleName.len > 0) {
-        _snprintf_s(sub, MAX_PATH, _TRUNCATE, "assets\\%s", exampleName.s);
+        snprintf(sub, kMaxPath, "assets%c%s", kSep, exampleName.s);
     } else {
-        strncpy_s(sub, MAX_PATH, "assets", _TRUNCATE);
+        StrCopyZ(sub, kMaxPath, "assets");
     }
 
-    char p[MAX_PATH];
-    JoinPath(p, MAX_PATH, cwd, sub);
+    char p[kMaxPath];
+    JoinPath(p, kMaxPath, cwd, sub);
     AddRootRaw(p);
-    JoinPath(p, MAX_PATH, exe, sub);
+    JoinPath(p, kMaxPath, exe, sub);
     AddRootRaw(p);
 
     // Walk parents of cwd and exe looking for assets/<name>
-    char walk[MAX_PATH];
+    char walk[kMaxPath];
     for (int src = 0; src < 2; src++) {
-        strncpy_s(walk, MAX_PATH, src == 0 ? cwd : exe, _TRUNCATE);
+        StrCopyZ(walk, kMaxPath, src == 0 ? cwd : exe);
         for (int up = 0; up < 6; up++) {
-            JoinPath(p, MAX_PATH, walk, sub);
+            JoinPath(p, kMaxPath, walk, sub);
             AddRootRaw(p);
             if (exampleName.s) {
                 // rust layout: examples/app_assets/assets
-                char rust[MAX_PATH];
-                _snprintf_s(rust, MAX_PATH, _TRUNCATE, "examples\\%s\\assets",
-                            exampleName.s);
-                JoinPath(p, MAX_PATH, walk, rust);
+                char rust[kMaxPath];
+                snprintf(rust, kMaxPath, "examples%c%s%cassets", kSep,
+                         exampleName.s, kSep);
+                JoinPath(p, kMaxPath, walk, rust);
                 AddRootRaw(p);
-                _snprintf_s(rust, MAX_PATH, _TRUNCATE,
-                            ".work\\gpui-component\\examples\\%s\\assets",
-                            exampleName.s);
-                JoinPath(p, MAX_PATH, walk, rust);
+                snprintf(rust, kMaxPath,
+                         ".work%cgpui-component%cexamples%c%s%cassets", kSep,
+                         kSep, kSep, exampleName.s, kSep);
+                JoinPath(p, kMaxPath, walk, rust);
                 AddRootRaw(p);
             }
-            char prev[MAX_PATH];
-            strncpy_s(prev, MAX_PATH, walk, _TRUNCATE);
+            char prev[kMaxPath];
+            StrCopyZ(prev, kMaxPath, walk);
             ParentDir(walk);
-            if (!walk[0] || _stricmp(prev, walk) == 0) {
+            if (!walk[0] || StrCmpI(prev, walk) == 0) {
                 break;
             }
         }
@@ -125,35 +133,37 @@ void AssetsAddDefaultRoots(Str exampleName) {
 }
 
 static bool ReadFileAll(const char* path, Vec<uint8_t>* out) {
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
+    FILE* f = fopen(path, "rb");
+    if (!f) {
         return false;
     }
-    LARGE_INTEGER sz;
-    if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 0 ||
-        sz.QuadPart > 8 * 1024 * 1024) {
-        CloseHandle(h);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
         return false;
     }
-    int n = (int)sz.QuadPart;
+    long size = ftell(f);
+    if (size < 0 || size > 8 * 1024 * 1024) {
+        fclose(f);
+        return false;
+    }
+    rewind(f);
     out->Reset();
-    if (n > 0) {
-        uint8_t* buf = out->AppendBlanks(n);
-        if (!buf) {
-            CloseHandle(h);
-            return false;
-        }
-        DWORD got = 0;
-        BOOL ok = ReadFile(h, buf, (DWORD)n, &got, nullptr);
-        CloseHandle(h);
-        if (!ok || (int)got != n) {
-            out->Reset();
-            return false;
-        }
+    int n = (int)size;
+    if (n == 0) {
+        fclose(f);
         return true;
     }
-    CloseHandle(h);
+    uint8_t* buf = out->AppendBlanks(n);
+    if (!buf) {
+        fclose(f);
+        return false;
+    }
+    size_t got = fread(buf, 1, (size_t)n, f);
+    fclose(f);
+    if ((int)got != n) {
+        out->Reset();
+        return false;
+    }
     return true;
 }
 
@@ -161,15 +171,15 @@ bool AssetsLoad(Str relPath, Vec<uint8_t>* out) {
     if (!relPath.s || relPath.len <= 0 || !out) {
         return false;
     }
-    char rel[MAX_PATH];
-    int n = relPath.len < MAX_PATH - 1 ? relPath.len : MAX_PATH - 1;
+    char rel[kMaxPath];
+    int n = relPath.len < kMaxPath - 1 ? relPath.len : kMaxPath - 1;
     memcpy(rel, relPath.s, (size_t)n);
     rel[n] = 0;
-    SlashToBack(rel);
+    ToNativeSep(rel);
 
     for (int i = 0; i < gRootN; i++) {
-        char full[MAX_PATH];
-        JoinPath(full, MAX_PATH, gRoots[i], rel);
+        char full[kMaxPath];
+        JoinPath(full, kMaxPath, gRoots[i], rel);
         if (ReadFileAll(full, out)) {
             return true;
         }

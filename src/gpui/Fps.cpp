@@ -1,6 +1,5 @@
 #include "gpui/Fps.h"
-
-#include <psapi.h>
+#include "gpui/Paint.h"
 
 namespace gpui {
 
@@ -140,22 +139,13 @@ bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
         return false;
     }
     if (!probe->primed) {
-        SYSTEM_INFO si = {};
-        GetSystemInfo(&si);
-        probe->cores =
-            si.dwNumberOfProcessors > 0 ? (float)si.dwNumberOfProcessors : 1.f;
+        probe->cores = (float)PlatCoreCount();
     }
-    HANDLE self = GetCurrentProcess();
-    FILETIME creation = {}, exit = {}, kernel = {}, user = {};
-    if (!GetProcessTimes(self, &creation, &exit, &kernel, &user)) {
+    uint64_t cpu100ns = 0;
+    uint64_t memBytes = 0;
+    if (!PlatSelfUsage(&cpu100ns, &memBytes)) {
         return false;
     }
-    ULARGE_INTEGER k = {}, u = {};
-    k.LowPart = kernel.dwLowDateTime;
-    k.HighPart = kernel.dwHighDateTime;
-    u.LowPart = user.dwLowDateTime;
-    u.HighPart = user.dwHighDateTime;
-    uint64_t cpu100ns = k.QuadPart + u.QuadPart;
     double now = TimeNow();
 
     // The first sample only establishes the baseline; CPU is a delta against
@@ -170,16 +160,10 @@ bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
         return false;
     }
 
-    PROCESS_MEMORY_COUNTERS mem = {};
-    mem.cb = sizeof(mem);
-    if (!GetProcessMemoryInfo(self, &mem, sizeof(mem))) {
-        return false;
-    }
-
     // 100ns ticks of CPU over 100ns ticks of wall clock across every core.
     float cpu = (float)((double)delta / (elapsed * 1e7 * probe->cores) * 100.);
     out->cpuPercent = cpu > 100.f ? 100.f : cpu;
-    out->memoryBytes = (uint64_t)mem.WorkingSetSize;
+    out->memoryBytes = memBytes;
     return true;
 }
 
@@ -314,7 +298,7 @@ static bool SameRgba(Rgba a, Rgba b) {
 static void PaintFpsTrace(PaintCtx* ctx, El* e, void* user) {
     auto* self = (FpsMonitor*)user;
     const FrameSampler* s = &self->sampler;
-    if (!ctx->rt || !ctx->brush || s->n < 2 || e->w <= 0 || e->h <= 0) {
+    if (!ctx->rt || s->n < 2 || e->w <= 0 || e->h <= 0) {
         return;
     }
     const FpsStyle& style = FpsStyleDark();
@@ -351,11 +335,10 @@ static void PaintFpsTrace(PaintCtx* ctx, El* e, void* user) {
         // A segment is as slow as the frame it ends on, so the color of the
         // later point decides the run.
         Rgba color = colors[start + 1];
-        ctx->brush->SetColor(RgbaToD2D(color));
         int end = start + 1;
         while (end < s->n && SameRgba(colors[end], color)) {
-            ctx->rt->DrawLine(D2D1::Point2F(px[end - 1], py[end - 1]),
-                              D2D1::Point2F(px[end], py[end]), ctx->brush, 1.f);
+            CanvasLine(ctx, px[end - 1], py[end - 1], px[end], py[end], 1.f,
+                       color);
             end++;
         }
         // Share the boundary point with the next run so the line stays

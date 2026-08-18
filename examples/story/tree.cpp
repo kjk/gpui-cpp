@@ -22,7 +22,10 @@ static void SelectTreeItem(TreeStory* self, Ctx* cx, const ClickEvent*,
 }
 static void SelectRandom(TreeStory* self, Ctx* cx, const ClickEvent*) {
     if (self->n > 0) {
-        self->selected = (int)(GetTickCount() % (DWORD)self->n);
+        // No RNG here; the monotonic clock in milliseconds is random
+        // enough for "pick a node".
+        self->selected =
+            (int)((uint64_t)(TimeNow() * 1000.0) % (uint64_t)self->n);
     }
     Notify(cx);
 }
@@ -39,32 +42,17 @@ static bool TreeSkip(const char* name) {
 }
 
 static void LoadTree(TreeStory* self) {
-    WIN32_FIND_DATAW fd = {};
-    HANDLE h = FindFirstFileW(L"./*", &fd);
-    if (h == INVALID_HANDLE_VALUE) {
-        return;
-    }
-    do {
-        if (fd.cFileName[0] == L'.' && fd.cFileName[1] == 0) {
+    static DirEntry found[256];
+    int got = PlatListDir(".", found, 256);
+    for (int i = 0; i < got && self->n < 256; i++) {
+        if (TreeSkip(found[i].name)) {
             continue;
-        }
-        if (fd.cFileName[0] == L'.' && fd.cFileName[1] == L'.' &&
-            fd.cFileName[2] == 0) {
-            continue;
-        }
-        if (self->n >= 256) {
-            break;
         }
         TreeEntry& e = self->entries[self->n];
-        WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, e.name,
-                            (int)sizeof(e.name), nullptr, nullptr);
-        if (TreeSkip(e.name)) {
-            continue;
-        }
-        e.folder = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        StrCopyZ(e.name, (int)sizeof(e.name), found[i].name);
+        e.folder = found[i].isDir;
         self->n++;
-    } while (FindNextFileW(h, &fd));
-    FindClose(h);
+    }
     // Folders first, then by name.
     for (int i = 1; i < self->n; i++) {
         TreeEntry key = self->entries[i];

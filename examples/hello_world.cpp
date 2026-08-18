@@ -25,7 +25,9 @@ struct Example {
     }
 };
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Hello World"), 800, 600, EntityNew<Example>(app).id,

@@ -55,9 +55,10 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->name.buf, "Jason Lee", _TRUNCATE);
+        StrCopyZ(self->name.buf, (int)sizeof(self->name.buf), "Jason Lee");
         self->name.len = (int)strlen(self->name.buf);
-        strncpy_s(self->email.placeholder, "Enter text here...", _TRUNCATE);
+        StrCopyZ(self->email.placeholder, (int)sizeof(self->email.placeholder),
+                 "Enter text here...");
     }
     if (self->name.focused) {
         cx->win->input = &self->name;

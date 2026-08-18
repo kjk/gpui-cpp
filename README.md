@@ -1,13 +1,13 @@
 # gpui for C++
 
-A **C++ / Windows** port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed).
+A **C++** port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component), a Rust UI kit built on [Zed GPUI](https://github.com/zed-industries/zed). Runs on **Windows** and **Linux**.
 
 Original project:
 
 - Repository: https://github.com/longbridge/gpui-component
 - Docs: https://longbridge.github.io/gpui-component
 
-This tree reimplements the component examples and a small Win32 + Direct2D + DirectWrite runtime. It is not a binding to the Rust crates and does not use Taffy, Blade, or Zed’s renderer.
+This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates and does not use Taffy, Blade, or Zed’s renderer.
 
 The API follows GPUI's shape: an `App` owns the entity store and the windows, a `Window` renders a view, and a view is a struct with state plus `static El* Render(T* self, Ctx* cx)`:
 
@@ -23,7 +23,7 @@ struct Example {
     }
 };
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
     return AppRunView(StrL("Hello World"), 800, 600,
                       EntityNew<Example>(app).id, app, WinOpts{});
@@ -36,7 +36,8 @@ The Rust sources used as the spec live in a gitignored clone at `.work/gpui-comp
 
 ## Build
 
-Windows, MSVC `cl.exe` on PATH, [Bun](https://bun.sh):
+`bun cmd/build.ts` and `bun cmd/run.ts` dispatch to the toolchain for the
+machine they run on, so the same commands work on both platforms:
 
 ```
 bun cmd/build.ts -rel story
@@ -44,6 +45,22 @@ bun cmd/run.ts -rel -compare story
 ```
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
+
+**Windows** needs MSVC `cl.exe` on PATH and [Bun](https://bun.sh).
+
+**Linux** needs g++ (or clang++), pkg-config and the X11 / cairo / pango dev
+packages. On Ubuntu or Debian:
+
+```
+bash cmd/ubuntu-install-deps.sh
+```
+
+From a Windows checkout you can build and run the Linux binaries under WSL
+without leaving the shell:
+
+```
+bun cmd/wsl-run.ts -rel system_monitor
+```
 
 # Why port to C++?
 

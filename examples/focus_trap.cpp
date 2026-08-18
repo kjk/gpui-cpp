@@ -103,7 +103,9 @@ El* Example::Render(Example*, Ctx* cx) {
                     ->Fg(th.mutedFg));
 }
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int GpuiMain(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Focus Trap"), 800, 600, EntityNew<Example>(app).id,

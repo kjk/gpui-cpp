@@ -18,7 +18,7 @@ static Rgba FromHex(uint32_t h) {
 }
 
 static void WriteHex(ShowcaseApp* app, uint32_t hex) {
-    _snprintf_s(app->hexIn.buf, _TRUNCATE, "#%06X", hex & 0xffffff);
+    snprintf(app->hexIn.buf, sizeof(app->hexIn.buf), "#%06X", hex & 0xffffff);
     app->hexIn.len = (int)strlen(app->hexIn.buf);
 }
 

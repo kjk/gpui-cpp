@@ -32,7 +32,7 @@ static El* BtnGroup(Ctx* cx, ButtonStory* self, bool vertical,
     g->Border(1, th.border)->Radius(th.radius);
     for (int i = 0; i < 3; i++) {
         char id[32];
-        _snprintf_s(id, _TRUNCATE, "%s-%d", prefix, i);
+        snprintf(id, sizeof(id), "%s-%d", prefix, i);
         El* b = Btn(cx, self, id)->Label(Str(labels[i]))->IntoEl();
         if (!vertical && i < 2) {
             b->Border(0, th.border);

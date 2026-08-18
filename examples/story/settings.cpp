@@ -83,10 +83,11 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->search.placeholder, "Search...", _TRUNCATE);
-        strncpy_s(self->fontSize.buf, "14", _TRUNCATE);
+        StrCopyZ(self->search.placeholder,
+                 (int)sizeof(self->search.placeholder), "Search...");
+        StrCopyZ(self->fontSize.buf, (int)sizeof(self->fontSize.buf), "14");
         self->fontSize.len = 2;
-        strncpy_s(self->lineHeight.buf, "12", _TRUNCATE);
+        StrCopyZ(self->lineHeight.buf, (int)sizeof(self->lineHeight.buf), "12");
         self->lineHeight.len = 2;
     }
     if (self->search.focused) {

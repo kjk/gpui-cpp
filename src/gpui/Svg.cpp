@@ -1,5 +1,6 @@
 #include "gpui/Svg.h"
 #include "gpui/Assets.h"
+#include "gpui/Paint.h"
 
 #include <math.h>
 
@@ -497,7 +498,7 @@ static bool GetAttr(Str tag, const char* name, char* out, int outN) {
     const char* end = tag.s + tag.len;
     while (p + nlen + 2 < end) {
         bool bound = (p == tag.s) || !IsIdentChar(p[-1]);
-        if (bound && _strnicmp(p, name, (size_t)nlen) == 0 && p[nlen] == '=') {
+        if (bound && StrCmpNI(p, name, nlen) == 0 && p[nlen] == '=') {
             p += nlen + 1;
             char q = 0;
             if (*p == '"' || *p == '\'') {
@@ -647,8 +648,7 @@ static const SvgIcon* GetIcon(Str assetPath) {
     }
     for (int i = 0; i < gCacheN; i++) {
         if (gCache[i].ok &&
-            _strnicmp(gCache[i].path, assetPath.s, (size_t)assetPath.len) ==
-                0 &&
+            StrCmpNI(gCache[i].path, assetPath.s, assetPath.len) == 0 &&
             gCache[i].path[assetPath.len] == 0) {
             return &gCache[i].icon;
         }
@@ -671,7 +671,7 @@ static const SvgIcon* GetIcon(Str assetPath) {
 
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
              Rgba color) {
-    if (!ctx || !ctx->rt || !ctx->d2d || size <= 0) {
+    if (!ctx || !ctx->rt || size <= 0) {
         return false;
     }
     const SvgIcon* ic = GetIcon(assetPath);
@@ -679,105 +679,40 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
         return false;
     }
 
-    ID2D1PathGeometry* geom = nullptr;
-    if (FAILED(ctx->d2d->CreatePathGeometry(&geom)) || !geom) {
+    // The viewBox -> element box transform, applied while the path is built.
+    // A canvas transform would otherwise have to be part of the backend API
+    // for the sake of this one caller.
+    float sx = size / (ic->vbW > 0 ? ic->vbW : 24.f);
+    float sy = size / (ic->vbH > 0 ? ic->vbH : 24.f);
+    auto TX = [&](float u) { return x + (u - ic->vbX) * sx; };
+    auto TY = [&](float v) { return y + (v - ic->vbY) * sy; };
+
+    Path* path = PathNew(ctx, true);
+    if (!path) {
         return false;
     }
-    ID2D1GeometrySink* sink = nullptr;
-    if (FAILED(geom->Open(&sink)) || !sink) {
-        geom->Release();
-        return false;
-    }
-    sink->SetFillMode(D2D1_FILL_MODE_WINDING);
-    bool fig = false;
-    float mx = 0, my = 0;
-    float cx = 0, cy = 0;
-    auto begin = [&](float px, float py) {
-        if (fig) {
-            sink->EndFigure(D2D1_FIGURE_END_OPEN);
-        }
-        // A filled icon's figures must be FILLED, or FillGeometry has
-        // nothing to cover.
-        sink->BeginFigure(
-            D2D1::Point2F(px, py),
-            ic->filled ? D2D1_FIGURE_BEGIN_FILLED : D2D1_FIGURE_BEGIN_HOLLOW);
-        fig = true;
-        mx = px;
-        my = py;
-        cx = px;
-        cy = py;
-    };
     for (int i = 0; i < ic->nOps; i++) {
         const SvgOp& o = ic->ops[i];
         if (o.cmd == kMove) {
-            begin(o.x, o.y);
+            PathMoveTo(path, TX(o.x), TY(o.y));
         } else if (o.cmd == kLine) {
-            if (!fig) {
-                begin(o.x, o.y);
-            } else {
-                sink->AddLine(D2D1::Point2F(o.x, o.y));
-                cx = o.x;
-                cy = o.y;
-            }
+            PathLineTo(path, TX(o.x), TY(o.y));
         } else if (o.cmd == kCubic) {
-            if (!fig) {
-                begin(o.x, o.y);
-            } else {
-                D2D1_BEZIER_SEGMENT b;
-                b.point1 = D2D1::Point2F(o.x1, o.y1);
-                b.point2 = D2D1::Point2F(o.x2, o.y2);
-                b.point3 = D2D1::Point2F(o.x, o.y);
-                sink->AddBezier(b);
-                cx = o.x;
-                cy = o.y;
-            }
+            PathCubicTo(path, TX(o.x1), TY(o.y1), TX(o.x2), TY(o.y2), TX(o.x),
+                        TY(o.y));
         } else if (o.cmd == kClose) {
-            if (fig) {
-                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-                fig = false;
-                cx = mx;
-                cy = my;
-            }
+            PathClose(path);
         }
     }
-    (void)cx;
-    (void)cy;
-    if (fig) {
-        sink->EndFigure(D2D1_FIGURE_END_OPEN);
-    }
-    sink->Close();
-    sink->Release();
 
-    float sx = size / (ic->vbW > 0 ? ic->vbW : 24.f);
-    float sy = size / (ic->vbH > 0 ? ic->vbH : 24.f);
-    D2D1_MATRIX_3X2_F old;
-    ctx->rt->GetTransform(&old);
-    D2D1_MATRIX_3X2_F xf = D2D1::Matrix3x2F::Translation(-ic->vbX, -ic->vbY) *
-                           D2D1::Matrix3x2F::Scale(sx, sy) *
-                           D2D1::Matrix3x2F::Translation(x, y);
-    ctx->rt->SetTransform(xf * old);
-
-    ID2D1StrokeStyle* ss = nullptr;
-    D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties();
-    sp.startCap = D2D1_CAP_STYLE_ROUND;
-    sp.endCap = D2D1_CAP_STYLE_ROUND;
-    sp.dashCap = D2D1_CAP_STYLE_ROUND;
-    sp.lineJoin = D2D1_LINE_JOIN_ROUND;
-    ctx->d2d->CreateStrokeStyle(sp, nullptr, 0, &ss);
-
-    if (ctx->brush) {
-        ctx->brush->SetColor(RgbaToD2D(color));
-        if (ic->filled) {
-            ctx->rt->FillGeometry(geom, ctx->brush, nullptr);
-        }
-        ctx->rt->DrawGeometry(geom, ctx->brush,
-                              ic->strokeW > 0 ? ic->strokeW : 2.f, ss);
+    if (ic->filled) {
+        PathFill(ctx, path, color);
     }
-    if (ss) {
-        ss->Release();
-    }
-    ctx->rt->SetTransform(old);
-    geom->Release();
+    // The authored stroke width is in viewBox units and scales with the icon.
+    float strokeScale = (sx + sy) * 0.5f;
+    PathStroke(ctx, path, (ic->strokeW > 0 ? ic->strokeW : 2.f) * strokeScale,
+               color, true);
+    PathFree(path);
     return true;
 }
 

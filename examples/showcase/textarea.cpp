@@ -35,7 +35,7 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
                                                 : Rgb(0xd4, 0xd4, 0xd4))
                     ->Child(Textarea::New(
                         cx, app->textarea,
-                        app->textareaOn && ((GetTickCount() / 500) % 2 == 0))));
+                        app->textareaOn && ((int)(TimeNow() * 2.0) % 2 == 0))));
 }
 
 SHOWCASE_PAGE(CompTextarea, ShowcaseTextarea);

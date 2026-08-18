@@ -229,7 +229,7 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
 
 // Esc closes what this page has open, like an overlay dismiss.
 void DialogStory::OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE || !self->keyboard) {
+    if (ev->vk != KeyEscape || !self->keyboard) {
         return;
     }
     self->open = -1;

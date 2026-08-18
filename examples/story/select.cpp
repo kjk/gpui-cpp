@@ -101,7 +101,8 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->phone.placeholder, "Your phone number", _TRUNCATE);
+        StrCopyZ(self->phone.placeholder, (int)sizeof(self->phone.placeholder),
+                 "Your phone number");
     }
     if (self->phone.focused) {
         cx->win->input = &self->phone;
@@ -242,7 +243,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
 
 // Esc closes what this page has open, like an overlay dismiss.
 void SelectStory::OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->open = -1;

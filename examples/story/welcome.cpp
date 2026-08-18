@@ -33,11 +33,7 @@ static El* Shield(Ctx* cx, const char* left, const char* right, Rgba rightBg,
 
 static void FillLogoBox(PaintCtx* ctx, float x, float y, float w, float h,
                         Rgba c) {
-    if (!ctx || !ctx->rt || !ctx->brush || w <= 0 || h <= 0) {
-        return;
-    }
-    ctx->brush->SetColor(RgbaToD2D(c));
-    ctx->rt->FillRectangle(D2D1::RectF(x, y, x + w, y + h), ctx->brush);
+    CanvasFillRect(ctx, x, y, w, h, c);
 }
 
 static void PaintLogoMark(PaintCtx* ctx, El* e, void*) {

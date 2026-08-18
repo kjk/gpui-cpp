@@ -41,7 +41,8 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->query.placeholder, "Search…", _TRUNCATE);
+        StrCopyZ(self->query.placeholder, (int)sizeof(self->query.placeholder),
+                 "Search…");
     }
     if (self->query.focused) {
         cx->win->input = &self->query;
@@ -131,7 +132,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
 
 // Esc closes what this page has open, like an overlay dismiss.
 void ComboboxStory::OnKey(ComboboxStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->open = -1;

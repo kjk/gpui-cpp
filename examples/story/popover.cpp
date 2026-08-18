@@ -76,7 +76,8 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->formInput.buf, "Hello", _TRUNCATE);
+        StrCopyZ(self->formInput.buf, (int)sizeof(self->formInput.buf),
+                 "Hello");
         self->formInput.len = (int)strlen(self->formInput.buf);
     }
     if (self->formInput.focused) {
@@ -249,7 +250,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
 
 // Esc closes what this page has open, like an overlay dismiss.
 void PopoverStory::OnKey(PopoverStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->open = -1;

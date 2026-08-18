@@ -147,10 +147,11 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         self->seeded = true;
         for (size_t i = 0; i < sizeof(kSeeds) / sizeof(kSeeds[0]); i++) {
             LineInput* f = &self->fields[kSeeds[i].slot];
-            strncpy_s(f->buf, kSeeds[i].value, _TRUNCATE);
+            StrCopyZ(f->buf, (int)sizeof(f->buf), kSeeds[i].value);
             f->len = (int)strlen(f->buf);
             f->cursor = f->len;
-            strncpy_s(f->placeholder, kSeeds[i].placeholder, _TRUNCATE);
+            StrCopyZ(f->placeholder, (int)sizeof(f->placeholder),
+                     kSeeds[i].placeholder);
         }
     }
     if (self->focusedField >= 0) {
@@ -378,7 +379,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
 // Esc clears the field that asks for it, as its section says.
 void InputStory::OnKey(InputStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != VK_ESCAPE) {
+    if (ev->vk != KeyEscape) {
         return;
     }
     self->fields[InEsc].buf[0] = 0;
