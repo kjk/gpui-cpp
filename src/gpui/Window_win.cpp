@@ -87,6 +87,17 @@ static int BorderPx() {
     return GetSystemMetrics(SM_CXFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
 }
 
+static int BorderYPx() {
+    return GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+}
+
+// A window whose client area reaches the top edge because the view draws the
+// title bar: WinOpts::clientTitleBar, and the older borderless flag that means
+// the same thing here.
+static bool ClientDecorated(Window* win) {
+    return win->opts.clientTitleBar || win->opts.borderless;
+}
+
 static bool ShiftDown() {
     return (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 }
@@ -127,8 +138,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             WindowMouseDown(win, x, y, 2);
             return 0;
         }
-        case WM_NCCALCSIZE:
-            break;
+        case WM_NCCALCSIZE: {
+            // The client title bar owns the top edge: keep the frame the
+            // default handler puts on the other three sides but hand the
+            // caption band back, so the view paints from y = 0. Maximized,
+            // Windows sizes the window past the work area by the frame
+            // thickness, so that much of the top inset has to come back or
+            // the title bar lands under the screen edge.
+            if (!ClientDecorated(win) || wParam == 0) {
+                break;
+            }
+            auto* p = (NCCALCSIZE_PARAMS*)lParam;
+            LONG top = p->rgrc[0].top;
+            LRESULT r = DefWindowProcW(hwnd, msg, wParam, lParam);
+            p->rgrc[0].top = top;
+            if (IsZoomed(hwnd)) {
+                p->rgrc[0].top += BorderYPx();
+            }
+            return r;
+        }
         case WM_NCHITTEST: {
             LRESULT hit = DefWindowProcW(hwnd, msg, wParam, lParam);
             if (hit != HTCLIENT) {
@@ -136,7 +164,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             }
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
-            if (pt.y < BorderPx()) {
+            // WM_NCCALCSIZE gave the top frame to the client, so the resize
+            // band along it is ours to report. The other three sides are
+            // still the default handler's, which answered above.
+            if (ClientDecorated(win) && !IsZoomed(hwnd) && pt.y < BorderYPx()) {
+                RECT rc = {};
+                GetClientRect(hwnd, &rc);
+                if (pt.x < BorderPx()) {
+                    return HTTOPLEFT;
+                }
+                if (pt.x >= rc.right - BorderPx()) {
+                    return HTTOPRIGHT;
+                }
                 return HTTOP;
             }
             float dipX = PxToDip(&win->paint, pt.x);
@@ -189,6 +228,32 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_MOUSELEAVE:
             WindowMouseLeave(win);
             return 0;
+        case WM_NCMOUSEMOVE: {
+            // The title bar's own cells answer WM_NCHITTEST as HTMINBUTTON,
+            // HTMAXBUTTON, HTCLOSE and HTCAPTION, so the pointer over them is
+            // non-client and never reaches WM_MOUSEMOVE. Hover still has to
+            // follow it. Falls through to the default handler afterwards,
+            // which is what puts up the Windows 11 snap layout flyout.
+            // Only those four: over a resize border the default handler owns
+            // the cursor, and WindowMouseMove would put the arrow back.
+            if (wParam != HTCAPTION && wParam != HTMINBUTTON &&
+                wParam != HTMAXBUTTON && wParam != HTCLOSE) {
+                break;
+            }
+            win->paint.dpi = HostDpi(hwnd);
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ScreenToClient(hwnd, &pt);
+            WindowMouseMove(win, PxToDip(&win->paint, pt.x),
+                            PxToDip(&win->paint, pt.y));
+            TRACKMOUSEEVENT tme = {sizeof(tme)};
+            tme.dwFlags = TME_LEAVE | TME_NONCLIENT;
+            tme.hwndTrack = hwnd;
+            TrackMouseEvent(&tme);
+            break;
+        }
+        case WM_NCMOUSELEAVE:
+            WindowMouseLeave(win);
+            break;
         case WM_LBUTTONDOWN: {
             win->paint.dpi = HostDpi(hwnd);
             float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
@@ -401,7 +466,11 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     win->plat = new PlatWindow();
 
     DWORD style = WS_OVERLAPPEDWINDOW;
-    if (opts.borderless) {
+    if (ClientDecorated(win)) {
+        // No caption, but every other part of a normal frame: the thick
+        // frame keeps the resize borders, the drop shadow, snapping and the
+        // minimize / maximize animations. WM_NCCALCSIZE above then pulls the
+        // client area up over the band the caption would have used.
         style = WS_OVERLAPPEDWINDOW & ~WS_CAPTION;
         style |= WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
     }
@@ -427,6 +496,15 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     BOOL dark = TRUE;
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark,
                           sizeof(dark));
+    if (ClientDecorated(win)) {
+        // Creation only asks WM_NCCALCSIZE the wParam == FALSE question,
+        // which cannot say where the client area goes. SWP_FRAMECHANGED is
+        // what makes Windows ask the real one, so the caption band the
+        // handler above reclaims is gone before the window is ever shown.
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                         SWP_NOACTIVATE);
+    }
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     return win;

@@ -726,9 +726,12 @@ struct Window;
 
 struct WinOpts {
     bool borderless = false;
-    // Let client content occupy a transparent native title-bar area. Cocoa
-    // keeps its traffic-light controls above that content; the view supplies
-    // the title-bar background and drag region.
+    // The view draws the title bar. Cocoa keeps its traffic-light controls
+    // above a transparent full-size content view; Windows drops the caption
+    // but keeps the rest of the frame, and X11 drops the frame outright. On
+    // all three the view supplies the title-bar background, its drag region
+    // and — off macOS — the minimize / maximize / close controls, which is
+    // what component::TitleBar builds.
     bool clientTitleBar = false;
     bool anim = false;
     int timerMs = 500;

@@ -4,33 +4,84 @@ namespace gpui {
 
 namespace component {
 
-TitleBar* TitleBar::New(Ctx* cx, Str title) {
+#if !GPUI_OS_MAC
+// ControlIcon: a fixed 34x34 cell per window command. The press is the
+// platform window's business — WM_NCHITTEST hands it back as HTMINBUTTON and
+// friends on Windows, and the X11 loop claims it before the element tree sees
+// it — so the click id here is identity only, the way El::Click always is.
+static El* ControlIcon(Ctx* cx, IconName icon, int clickId) {
     Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    bool isClose = clickId == ClickWinClose;
+    // El::HoverBg has no foreground half, and the close cell needs one: its
+    // hover fills with danger, which the default foreground disappears into.
+    bool hovered = cx->win && cx->win->hoverId == clickId;
+    Rgba fg = !hovered ? th.foreground : isClose ? th.dangerFg : th.secondaryFg;
+    return Div(a)
+        ->W(kTitleBarHeight)
+        ->H(kFill)
+        ->Shrink0()
+        ->ItemsCenter()
+        ->JustifyCenter()
+        ->Click(clickId)
+        ->HoverBg(isClose ? th.danger : th.secondaryHover)
+        ->Child(IconEl(a, icon, UiIconPx(UiSize::Small))->Fg(fg));
+}
+
+// WindowControls: nothing on macOS, where the native traffic lights sit over
+// the bar instead.
+static El* WindowControls(Ctx* cx) {
+    Arena* a = cx->a;
+    Window* win = cx->win;
+    bool maximized = win && win->maximized;
+    return Div(a)
+        ->FlexRow()
+        ->H(kFill)
+        ->ItemsCenter()
+        ->Shrink0()
+        ->Child(ControlIcon(cx, IconName::WindowMinimize, ClickWinMin))
+        ->Child(ControlIcon(
+            cx, maximized ? IconName::WindowRestore : IconName::WindowMaximize,
+            ClickWinMax))
+        ->Child(ControlIcon(cx, IconName::WindowClose, ClickWinClose));
+}
+#endif
+
+TitleBar* TitleBar::New(Ctx* cx) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
     TitleBar* t = ArenaNew<TitleBar>(a);
     t->a = a;
     t->cx = cx;
-    t->title = title;
+    // default_title_bar_background mixes the title bar 55% into the window
+    // background; Rust runs that mix down a 180° gradient to the plain title
+    // bar color, which this fills flat.
+    Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
+    t->content =
+        Div(a)->FlexRow()->H(kFill)->Grow()->ItemsCenter()->JustifyBetween();
+    t->bar = Div(a)
+                 ->FlexRow()
+                 ->W(kFill)
+                 ->H(kTitleBarHeight)
+                 ->Shrink0()
+                 ->PadL(kTitleBarLeftPad)
+                 ->ItemsCenter()
+                 ->Bg(mixed)
+                 ->BorderB(1, th.titleBarBorder)
+                 ->Click(ClickWinCaption)
+                 ->Child(t->content);
     return t;
 }
-TitleBar* TitleBar::Right(El* e) {
-    right = e;
+
+TitleBar* TitleBar::Child(El* e) {
+    content->Child(e);
     return this;
 }
 
 El* TitleBar::IntoEl() {
-    const Theme& th = cx->theme();
-    El* bar = Div(a)
-                  ->FlexRow()
-                  ->H(34)
-                  ->PadX(12)
-                  ->ItemsCenter()
-                  ->JustifyBetween()
-                  ->Bg(th.titleBar)
-                  ->BorderB(1, th.titleBarBorder);
-    bar->Child(TextEl(a, title)->Font(13)->Fg(th.foreground));
-    if (right) {
-        bar->Child(right);
-    }
+#if !GPUI_OS_MAC
+    bar->Child(WindowControls(cx));
+#endif
     return bar;
 }
 

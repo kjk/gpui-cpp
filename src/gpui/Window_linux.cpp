@@ -35,6 +35,12 @@ struct PlatWindow {
     bool dirty = true;
     // Monotonic deadline for the next tick; 0 when the timer is off.
     double nextTick = 0;
+    // -1, or the _NET_WM_MOVERESIZE direction the pointer is currently over.
+    // WindowMouseMove only asks for arrow or I-beam, so the edge cursor has
+    // to be put back by hand once the pointer leaves the band, and put back
+    // up again whenever that arrow/I-beam choice changed underneath it.
+    int edge = -1;
+    CursorKind edgeUnder = CursorKind::Arrow;
 };
 
 // One display per process. GPUI's App is a singleton in practice, and an X
@@ -333,7 +339,11 @@ static void OnKeyPress(Window* win, XKeyEvent* ke) {
     }
 }
 
-static void StartMoveDrag(Window* win, int rootX, int rootY) {
+// _NET_WM_MOVERESIZE: the window manager takes the pointer grab and runs the
+// drag. Directions 0..7 go clockwise from the top-left corner; 8 is a move.
+static const int kMoveResizeMove = 8;
+
+static void StartMoveResize(Window* win, int rootX, int rootY, int dir) {
     PlatWindow* pw = win->plat;
     if (!pw) {
         return;
@@ -346,11 +356,69 @@ static void StartMoveDrag(Window* win, int rootX, int rootY) {
     ev.xclient.format = 32;
     ev.xclient.data.l[0] = rootX;
     ev.xclient.data.l[1] = rootY;
-    ev.xclient.data.l[2] = 8; // _NET_WM_MOVERESIZE_MOVE
+    ev.xclient.data.l[2] = dir;
     ev.xclient.data.l[3] = Button1;
     ev.xclient.data.l[4] = 1;
     XSendEvent(gDpy, gRoot, False,
                SubstructureNotifyMask | SubstructureRedirectMask, &ev);
+    XFlush(gDpy);
+}
+
+static void StartMoveDrag(Window* win, int rootX, int rootY) {
+    StartMoveResize(win, rootX, rootY, kMoveResizeMove);
+}
+
+// An undecorated window has no frame to grab, so the outer band of the client
+// area is the resize handle — the same job WM_NCHITTEST does on Windows.
+static const int kResizeBand = 6;
+
+static bool ClientDecorated(Window* win) {
+    return win->opts.clientTitleBar || win->opts.borderless;
+}
+
+static int ResizeEdge(Window* win, int x, int y) {
+    PlatWindow* pw = win->plat;
+    if (!pw || !ClientDecorated(win) || win->maximized) {
+        return -1;
+    }
+    bool l = x < kResizeBand;
+    bool r = x >= pw->pxW - kResizeBand;
+    bool t = y < kResizeBand;
+    bool b = y >= pw->pxH - kResizeBand;
+    if (t) {
+        return l ? 0 : r ? 2 : 1;
+    }
+    if (b) {
+        return l ? 6 : r ? 4 : 5;
+    }
+    if (l) {
+        return 7;
+    }
+    return r ? 3 : -1;
+}
+
+static void SetEdgeCursor(Window* win, int dir) {
+    PlatWindow* pw = win->plat;
+    if (!pw || (pw->edge == dir && pw->edgeUnder == win->cursor)) {
+        return;
+    }
+    pw->edge = dir;
+    pw->edgeUnder = win->cursor;
+    if (dir < 0) {
+        // WindowMouseMove decided on this one before the band overrode it.
+        PlatSetCursor(win, win->cursor);
+        return;
+    }
+    static const unsigned kShapes[8] = {XC_top_left_corner,     XC_top_side,
+                                        XC_top_right_corner,    XC_right_side,
+                                        XC_bottom_right_corner, XC_bottom_side,
+                                        XC_bottom_left_corner,  XC_left_side};
+    // The server owns cursors; one per shape is all this needs.
+    static ::Cursor cache[8] = {};
+    if (!cache[dir]) {
+        cache[dir] = XCreateFontCursor(gDpy, kShapes[dir]);
+    }
+    XDefineCursor(gDpy, pw->xwin, cache[dir]);
     XFlush(gDpy);
 }
 
@@ -478,9 +546,13 @@ static void HandleEvent(App* app, XEvent* ev) {
             break;
         case MotionNotify:
             WindowMouseMove(win, (float)ev->xmotion.x, (float)ev->xmotion.y);
+            SetEdgeCursor(win, ResizeEdge(win, ev->xmotion.x, ev->xmotion.y));
             break;
         case LeaveNotify:
             WindowMouseLeave(win);
+            // Whatever the pointer picks up outside, the band has to claim
+            // the cursor again the next time it comes back.
+            pw->edge = -1;
             break;
         case ButtonPress: {
             float x = (float)ev->xbutton.x;
@@ -498,8 +570,15 @@ static void HandleEvent(App* app, XEvent* ev) {
             if (b != Button1) {
                 break;
             }
-            // The custom chrome is claimed before the element tree sees the
-            // press, the way WM_NCHITTEST takes it on Windows.
+            // The resize band and the custom chrome are claimed before the
+            // element tree sees the press, the way WM_NCHITTEST takes both
+            // on Windows.
+            int edge = ResizeEdge(win, ev->xbutton.x, ev->xbutton.y);
+            if (edge >= 0) {
+                StartMoveResize(win, ev->xbutton.x_root, ev->xbutton.y_root,
+                                edge);
+                break;
+            }
             int chrome = WindowChromeHit(win, x, y);
             if (chrome == ClickWinMin) {
                 AppMinimize(win);
@@ -701,7 +780,7 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     win->plat = pw;
 
     XSetWMProtocols(gDpy, pw->xwin, &aWmDeleteWindow, 1);
-    if (opts.borderless) {
+    if (opts.borderless || opts.clientTitleBar) {
         SetUndecorated(pw->xwin);
     }
     AppSetTitle(win, title);
