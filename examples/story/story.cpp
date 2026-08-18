@@ -146,7 +146,8 @@ static const StoryInfo kMeta[StoryCount] = {
      "Displays a slider control for selecting a value within a range."},
     {"spinner", "Spinner", "A loading spinner."},
     {"status-bar", "StatusBar",
-     "A status bar that typically sits at the bottom of the window."},
+     "A horizontal bar with left/center/right regions, usually placed at the "
+     "bottom."},
     {"stepper", "Stepper",
      "A step-by-step process for users to navigate through a series of "
      "steps."},

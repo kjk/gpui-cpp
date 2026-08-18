@@ -81,14 +81,23 @@ El* StatusBarStory::Render(StatusBarStory* self, Ctx* cx) {
         "Center content adapts when either side is empty or populated.");
     El* alignCol = Div(a)->FlexCol()->Gap(12)->W(kFill);
     alignCol->Child(component::StatusBar::New(cx)
-                        ->Left(StrL("Center only → start-aligned"))
+                        ->Center(StrL("Center only → start-aligned"))
                         ->IntoEl());
     alignCol->Child(component::StatusBar::New(cx)
                         ->Left(StrL("Left"))
-                        ->Right(StrL("Center → end (only left)"))
+                        ->Center(StrL("Center → end (only left)"))
                         ->IntoEl());
     alignCol->Child(component::StatusBar::New(cx)
-                        ->Left(StrL("Center → start (only right)"))
+                        ->Center(StrL("Center → start (only right)"))
+                        ->Right(StrL("Right"))
+                        ->IntoEl());
+    alignCol->Child(component::StatusBar::New(cx)
+                        ->Left(StrL("Left"))
+                        ->Center(StrL("Center → centered (left + right)"))
+                        ->Right(StrL("Right"))
+                        ->IntoEl());
+    alignCol->Child(component::StatusBar::New(cx)
+                        ->Left(StrL("Left"))
                         ->Right(StrL("Right"))
                         ->IntoEl());
     StorySectionAdd(align, alignCol);
