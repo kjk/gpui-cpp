@@ -33,16 +33,30 @@ double TimeNow() {
     return (double)(now.QuadPart - start.QuadPart) / (double)freq.QuadPart;
 }
 
+// user32!GetDpiForWindow is Windows 10 1607 and later, so it has to be
+// resolved at runtime. HostDpi runs on every mouse move, so resolve it once
+// and keep the answer.
+typedef UINT(WINAPI* GetDpiForWindowFn)(HWND);
+
+// The "looked it up and this Windows does not have it" sentinel. An address
+// of 1 is not a possible GetProcAddress result, so one pointer carries all
+// three states: null is not looked up yet, kNoDpiFn is missing, anything
+// else is the function.
+static GetDpiForWindowFn kNoDpiFn = (GetDpiForWindowFn)1;
+
 static float HostDpi(HWND hwnd) {
-    UINT dpi = 96;
-    HMODULE user = GetModuleHandleW(L"user32.dll");
-    if (user) {
-        typedef UINT(WINAPI * GetDpiForWindowFn)(HWND);
-        auto fn = (GetDpiForWindowFn)GetProcAddress(user, "GetDpiForWindow");
-        if (fn) {
-            dpi = fn(hwnd);
+    static GetDpiForWindowFn getDpiForWindow = nullptr;
+    if (!getDpiForWindow) {
+        HMODULE user = GetModuleHandleW(L"user32.dll");
+        if (user) {
+            getDpiForWindow =
+                (GetDpiForWindowFn)GetProcAddress(user, "GetDpiForWindow");
+        }
+        if (!getDpiForWindow) {
+            getDpiForWindow = kNoDpiFn;
         }
     }
+    UINT dpi = getDpiForWindow != kNoDpiFn ? getDpiForWindow(hwnd) : 96;
     if (dpi == 0) {
         dpi = 96;
     }
