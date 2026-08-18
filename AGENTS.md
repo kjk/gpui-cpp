@@ -39,7 +39,9 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 ## Non-goals (until system_monitor is done)
 
 - macOS / Linux / WASM
-- The full GPUI GPU scene graph, entity system, or async executor
+- The full GPUI GPU scene graph or async executor. We do have `App`/`Window`/
+  `Entity`/`Ctx` — see below — but not refcounted entities, observers,
+  `EventEmitter`, actions/key bindings, or `Task`
 - The unused story-gallery widgets (editor, tree-sitter, webview, date picker, …)
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
 - Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
@@ -78,14 +80,14 @@ sysinfo + battery      (process/CPU/mem/disk + battery)
 C++ stack we implement:
 
 ```
-examples/system_monitor.cpp
+examples/system_monitor.cpp   MonitorApp: a view entity with Render(self, cx)
         │
         ▼
 src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root
         │
         ▼
-src/gpui/   Win32 window, flex layout, Direct2D/DirectWrite paint,
-            hit-test, timer, frame arena element tree
+src/gpui/   App + Window + entity store, Win32 window, flex layout,
+            Direct2D/DirectWrite paint, hit-test, timer, frame arena
         │
         ▼
 src/sys/    Win32 process/CPU/memory/disk/battery
@@ -139,6 +141,63 @@ Layout constants from the Rust example / components:
 - Status chips: width 135, progress `w_12` × `h_2` (48×8)
 
 Typography: Segoe UI, 16 px base. `text_sm` = 14, `text_xs` = 12. Spacing uses a 4 px grid (`gap_2` = 8, `p_3` = 12, `gap_4` = 16).
+
+## App, Window, Entity, Ctx
+
+The runtime mirrors GPUI's shape. Read this before touching `src/gpui`, adding an example, or writing a widget that owns state.
+
+| GPUI (Rust) | Here |
+| --- | --- |
+| `App` | `App` — D2D/DirectWrite factories, shared fonts, window list, entity store |
+| `Window` | `Window` — hwnd, render target, frame arena, hover/focus, its root view |
+| `Entity<T>` | `Entity<T>` — a POD generational handle; `App` owns the state |
+| `Context<T>` | `Ctx` — `{app, win, a, self}`; one type, GPUI only splits it for the borrow checker |
+| `impl Render for T` | `static El* T::Render(T* self, Ctx* cx)` |
+| `cx.new(...)` | `EntityNew<T>(app)` |
+| `cx.listener(...)` | `Listen(cx, &T::OnThing)` / `ListenTo(entity, &T::OnThing)` |
+| `cx.notify()` | `Notify(cx)` |
+| `Drop for T` | `~T()`, run when the entity is dropped |
+| `window.use_keyed_state` | `KeyedState<T>(cx, key)` |
+
+A view is a plain struct with state, a static `Render`, and static handlers:
+
+```cpp
+struct Example {
+    int clicks = 0;
+
+    static void OnGo(Example* self, Ctx* cx, const ClickEvent*) {
+        self->clicks++;
+        Notify(cx);
+    }
+
+    static El* Render(Example* self, Ctx* cx) {
+        return Div(cx->a)->Child(
+            component::Button::New(cx, StrL("go"))
+                ->Label(StrL("Let's Go!"))
+                ->OnClick(Listen(cx, &Example::OnGo))
+                ->IntoEl());
+    }
+};
+
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    App* app = AppNew();
+    ThemeSet(ThemeMode::Light);
+    return AppRunView(L"Example", 800, 600, EntityNew<Example>(app).id, app,
+                      AppWinOpts{});
+}
+```
+
+Rules:
+
+1. **State lives in an entity, never in a `static` or a `void*` payload.** One view type per screen or page; if two things have independent state they are two entities.
+2. **`Ctx*` is the first parameter** of anything that builds elements — components, page helpers, everything. The frame arena is `cx->a`; do not pass `Arena*` around.
+3. **Elements carry their own listener.** `->OnClick(Listen(cx, &T::Handler))`. Dispatch resolves the entity and drops the event if the handle went stale, so a listener can outlive its view safely.
+4. `WindowOnClick` dispatches `ClickEvent::id` to a view for code still written against click ids. It is a bridge, not the goal — prefer a listener on the element.
+5. Window-level input is a subscription bound to a view: `WindowOnKey`, `WindowOnWheel`, `WindowOnMouse`, `WindowSetInterval` (GPUI spells the last one `cx.spawn` + `Timer::after`).
+6. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
+7. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
+
+`AppNew` → `WindowOpenView` → `AppRun` → `AppFree` is the whole lifecycle; `AppRunView` is the one-window shorthand. There is no hook table.
 
 ## Code style (match SumatraPDF `src/base`)
 
@@ -198,8 +257,14 @@ cmd/versions.ts        exact gpui-component + zed gpui SHAs we are porting
 cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
 cmd/build.ts           MSVC compile/link via bun; also clones the pinned Rust spec
 cmd/run.ts             build then run; same flags as build.ts plus -windbg / -compare
+cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords)
+cmd/compare-story.ts   screenshot a story page from the Rust app and this one
+cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/Base.h/.cpp        vendored SumatraPDF subset
-src/gpui/              window, layout, paint, assets, SVG, element tree
+src/gpui/Gpui.h        App, Window, Entity, Ctx, El, theme, paint
+src/gpui/Entity.cpp    entity store, listeners, window subscriptions
+src/gpui/Window.cpp    Win32 window, message loop, App lifecycle
+src/gpui/              layout, paint, assets, SVG, element tree
 src/sys/               Windows system metrics
 src/ui/                gpui-base unstyled primitives (Button, …)
 src/component/         themed crates/ui façade (component::Button, Func0/Func1 callbacks)
@@ -216,11 +281,11 @@ Port **gpui-base unstyled primitives** into `src/ui/`, one Rust module at a time
 These primitives own interaction (click, focus, open/checked state wiring). They do **not** own paint: the showcase (or a later themed façade) applies `.Bg()`, `.Border()`, `.H()`, `.Child()`, matching how Rust `Button::new(id).bg(...).child(...)` works.
 
 ```cpp
-Button::New(a, StrL("primary-button"), ClickSave)
+Button::New(cx, StrL("primary-button"), ClickSave)
     ->PadX(12)
     ->H(28)
     ->Bg(Rgb(0x17, 0x17, 0x17))
-    ->Child(TextEl(a, StrL("Save changes")));
+    ->Child(TextEl(cx->a, StrL("Save changes")));
 ```
 
 Do not inline a styled `Div` tree in a showcase page when a primitive exists. `ButtonEl` in `src/gpui` is a *themed* helper for older examples; new showcase pages use `src/ui`.

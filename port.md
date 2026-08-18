@@ -246,6 +246,26 @@ Rust: `.work/gpui-component/crates/story` via `cargo run -p gpui-component-story
 
 C++: `examples/story/` — `bun cmd/build.ts story`, window 1280×800, light theme, sidebar + 62 stories matching the Rust gallery list.
 
+### App / Window / Entity / Ctx (ported 2026-08-18)
+
+The runtime originally had one fused `AppHost`: D2D factories, the font cache and the message loop sat next to `hwnd`, hover, focus and the frame arena, and app state lived behind a `void* user` with dispatch through a nine-entry `AppHooks` table and integer click ids.
+
+It now follows GPUI's split. `App` owns the factories, shared fonts, window list and entity store; `Window` owns its render target, frame arena, input state and root view. A view is a struct with state, a `static El* Render(T*, Ctx*)` and static handlers bound with `Listen(cx, &T::Handler)`. `Ctx` carries `{app, win, a, self}` — GPUI splits that into `&mut App` / `&mut Window` / `&mut Context<T>` only because of the borrow checker.
+
+Entity handles are generational rather than refcounted: `App` owns the state, `Entity<T>` is POD, and a stale handle reads back null instead of dangling. Dispatch resolves the handle and drops the event if the view is gone, which is what `cx.listener` does with its weak entity.
+
+Landed in order, each step building all 16 examples:
+
+1. Split `AppHost` into `App` + `Window`; add the entity store, `Ctx`, `Listener`.
+2. Render windows from a root entity; dispatch clicks to listeners.
+3. Convert all 16 examples; `system_monitor`'s `onShutdown` became `~MonitorApp`.
+4. Story gallery and showcase become entities; every page takes `Ctx*`.
+5. Components take `Ctx*` instead of `Arena*` (~40 builders, ~100 call sites).
+6. One entity per story page; `StoryApp` drops from 56 fields to the shell.
+7. Delete `AppHooks`.
+
+Details and the rules for new code: the *App, Window, Entity, Ctx* section of [AGENTS.md](AGENTS.md). Known deviations: [port-progress.md](port-progress.md).
+
 ### Next
 
-Fidelity on story pages vs Rust (`crates/story/src/stories`), then optional heavy surfaces (full editor, TextView, dock/tiles, webview).
+Fidelity on story pages vs Rust (`crates/story/src/stories`), then optional heavy surfaces (full editor, TextView, dock/tiles, webview). On the runtime side: real second windows for dialogs and notifications, actions / key bindings, and finer-grained `Notify`.

@@ -38,6 +38,7 @@ struct Button {
     Str tooltip = {};
     El* extra = nullptr;
     Func0 onClick;
+    Listener listener = {};
 
     static Button* New(Ctx* cx, Str id);
     Button* Label(Str s);
@@ -62,6 +63,7 @@ struct Button {
     Button* WithSize(UiSize s);
     Button* Tooltip(Str s);
     Button* OnClick(Func0 fn);
+    Button* OnClick(Listener l);
     El* IntoEl();
 };
 
