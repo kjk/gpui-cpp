@@ -220,6 +220,14 @@ struct MouseEvent {
     int id = 0;     // click id under the cursor, when there is one
 };
 
+// The pointer shape the window asks the OS for. GPUI spells this
+// CursorStyle and has a dozen; these are the two the element tree can tell
+// apart today.
+enum class CursorKind : uint8_t {
+    Arrow,
+    IBeam
+};
+
 struct WheelEvent {
     float x = 0;
     float y = 0;
@@ -729,6 +737,8 @@ struct Window {
     int focusId = 0;
     float mouseX = 0;
     float mouseY = 0;
+    // What the pointer looks like right now; the OS is only told on a change.
+    CursorKind cursor = CursorKind::Arrow;
     bool maximized = false;
     bool running = true;
     bool anim = false;

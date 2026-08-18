@@ -52,5 +52,7 @@ bool PlatInit(App* app);
 void PlatShutdown(App* app);
 // Restart the window's repeating timer at `ms`; 0 stops it.
 void PlatSetTimer(Window* win, int ms);
+// Ask the OS for a pointer shape. Only called when it changes.
+void PlatSetCursor(Window* win, CursorKind kind);
 
 } // namespace gpui

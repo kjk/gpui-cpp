@@ -8,6 +8,7 @@ enum {
     ClickCloseOverlay = 3,
     ClickHoverArea = 4,
     ClickOverlayScrim = 5,
+    ClickOverlayPanel = 6,
     ClickMenuBase = 10, // + item index
 };
 
@@ -33,10 +34,29 @@ struct DialogApp {
     bool menuOpen = false;
     float menuX = 0;
     float menuY = 0;
+    // Text selection, as offsets into the frame's selectable text; -1 is no
+    // selection. `selecting` is true between press and release.
+    int selA = -1;
+    int selB = -1;
+    bool selecting = false;
 };
 
 static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
-    if (ev->kind != MouseKind::Down) {
+    if (ev->kind == MouseKind::Up) {
+        app->selecting = false;
+        return;
+    }
+    if (ev->kind == MouseKind::Move) {
+        if (!app->selecting) {
+            return;
+        }
+        // `nearest` clamps to the closest selectable run, so dragging past
+        // the end of the dialog's text stops there instead of reaching the
+        // paragraph behind it.
+        int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
+        if (moveOff >= 0) {
+            app->selB = moveOff;
+        }
         return;
     }
     // The context menu belongs to the dashed area, so a right click anywhere
@@ -52,6 +72,16 @@ static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
         app->menuOpen = false;
         Notify(cx);
     }
+    int off = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, false);
+    if (off >= 0) {
+        app->selA = off;
+        app->selB = off;
+        app->selecting = true;
+        return;
+    }
+    app->selA = -1;
+    app->selB = -1;
+    app->selecting = false;
 }
 
 static void OpenOverlay(DialogApp* app, Ctx* cx, const ClickEvent*,
@@ -75,7 +105,8 @@ static void MenuPicked(DialogApp* app, Ctx* cx, const ClickEvent*,
 
 // A TextView::markdown stand-in: `**bold**` and `*italic*` runs, laid out a
 // word at a time so the paragraph wraps between words like the real one.
-static El* MdText(Ctx* cx, const char* text, float font, Rgba color) {
+static El* MdText(Ctx* cx, const char* text, float font, Rgba color,
+                  bool selectable) {
     Arena* a = cx->a;
     El* row = Div(a)->FlexRow()->FlexWrap()->W(kFill)->Gap(4);
     bool bold = false;
@@ -88,6 +119,9 @@ static El* MdText(Ctx* cx, const char* text, float font, Rgba color) {
             if (n > 0) {
                 El* t =
                     TextEl(a, StrDup(a, Str(word, n)))->Font(font)->Fg(color);
+                if (selectable) {
+                    t->Selectable();
+                }
                 if (bold) {
                     t->Semibold();
                 }
@@ -109,6 +143,9 @@ static El* MdText(Ctx* cx, const char* text, float font, Rgba color) {
             if (n > 0) {
                 El* t =
                     TextEl(a, StrDup(a, Str(word, n)))->Font(font)->Fg(color);
+                if (selectable) {
+                    t->Selectable();
+                }
                 if (bold) {
                     t->Semibold();
                 }
@@ -153,6 +190,8 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     Arena* frame = cx->a;
     WinSize size = WindowSize(cx->win);
     const Theme& th = cx->theme();
+    cx->win->paint.selA = app->selA;
+    cx->win->paint.selB = app->selB;
 
     El* bar = Div(frame)
                   ->FlexRow()
@@ -206,7 +245,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                            "**Background text** behind the modals. While a "
                            "dialog or sheet is open, a selection started "
                            "inside it must not extend onto this paragraph.",
-                           14, th.foreground))
+                           14, th.foreground, app->overlay == OverlayNone))
             ->Child(hoverBox);
 
     El* root = Div(frame)
@@ -232,8 +271,14 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
         }
         root->Child(scrim);
 
-        El* panel =
-            Div(frame)->Absolute()->FlexCol()->Gap(8)->Bg(th.background);
+        // The panel takes the click itself; without a hit rect of its own
+        // every press inside it reached the scrim and dismissed the overlay.
+        El* panel = Div(frame)
+                        ->Absolute()
+                        ->FlexCol()
+                        ->Gap(8)
+                        ->Bg(th.background)
+                        ->Click(ClickOverlayPanel);
         if (dialog) {
             panel->W(kDialogWidth)
                 ->Left((size.dipW - kDialogWidth) * 0.5f)
@@ -262,7 +307,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                                      "mouse *out of the sheet* over the "
                                      "paragraph behind it. The text behind "
                                      "must NOT get selected",
-                            14, th.foreground));
+                            14, th.foreground, true));
         root->Child(panel);
     }
 

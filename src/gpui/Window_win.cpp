@@ -15,6 +15,9 @@ static const wchar_t* kWndClass = L"Gpui2SystemMonitor";
 
 struct PlatWindow {
     HWND hwnd = nullptr;
+    // WM_SETCURSOR fires on every move over the client area and has to put it
+    // back, so the window remembers what it last asked for.
+    HCURSOR cursor = nullptr;
 };
 
 static HWND Hwnd(Window* win) {
@@ -231,6 +234,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             WindowWheel(win, x, y, delta);
             return 0;
         }
+        case WM_SETCURSOR:
+            // Only the client area; the frame's resize arrows are the
+            // default handler's business.
+            if (LOWORD(lParam) == HTCLIENT) {
+                SetCursor(win->plat->cursor ? win->plat->cursor
+                                            : LoadCursorW(nullptr, IDC_ARROW));
+                return TRUE;
+            }
+            break;
         case WM_ERASEBKGND:
             return 1;
         case WM_DESTROY: {
@@ -308,6 +320,15 @@ void PlatSetTimer(Window* win, int ms) {
     }
 }
 
+void PlatSetCursor(Window* win, CursorKind kind) {
+    if (!win || !win->plat) {
+        return;
+    }
+    LPCWSTR name = kind == CursorKind::IBeam ? IDC_IBEAM : IDC_ARROW;
+    win->plat->cursor = LoadCursorW(nullptr, name);
+    SetCursor(win->plat->cursor);
+}
+
 void ClipboardSetText(Window* win, Str text) {
     HWND hwnd = Hwnd(win);
     if (!text.s || text.len <= 0) {
@@ -358,7 +379,9 @@ bool PlatInit(App* app) {
         wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
         wc.lpfnWndProc = WndProc;
         wc.hInstance = GetModuleHandleW(nullptr);
-        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        // Null, so the default handler does not reset the pointer to an
+        // arrow on every move; WM_SETCURSOR above owns it.
+        wc.hCursor = nullptr;
         wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
         wc.lpszClassName = kWndClass;
         RegisterClassExW(&wc);

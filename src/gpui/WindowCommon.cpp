@@ -177,6 +177,15 @@ void WindowMouseMove(Window* win, float x, float y) {
     }
     win->mouseX = x;
     win->mouseY = y;
+    // An I-beam over anything selectable, the way every text view does it.
+    // TextHitOffsetAt only answers for text that asked to be Selectable().
+    CursorKind want = TextHitOffsetAt(&win->paint, x, y, false) >= 0
+                          ? CursorKind::IBeam
+                          : CursorKind::Arrow;
+    if (want != win->cursor) {
+        win->cursor = want;
+        PlatSetCursor(win, want);
+    }
     int id = HitTest(&win->paint, x, y);
     if (id != win->hoverId) {
         win->hoverId = id;

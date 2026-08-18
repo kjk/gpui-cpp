@@ -10,6 +10,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
+#include <X11/cursorfont.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 #include <cairo/cairo.h>
@@ -354,6 +355,24 @@ static void StartMoveDrag(Window* win, int rootX, int rootY) {
 }
 
 // ─── clipboard ────────────────────────────────────────────────────────────
+
+void PlatSetCursor(Window* win, CursorKind kind) {
+    if (!win || !win->plat || !gDpy) {
+        return;
+    }
+    // The server owns these; two per process is all this needs.
+    static ::Cursor arrow = 0;
+    static ::Cursor ibeam = 0;
+    if (!arrow) {
+        arrow = XCreateFontCursor(gDpy, XC_left_ptr);
+    }
+    if (!ibeam) {
+        ibeam = XCreateFontCursor(gDpy, XC_xterm);
+    }
+    XDefineCursor(gDpy, win->plat->xwin,
+                  kind == CursorKind::IBeam ? ibeam : arrow);
+    XFlush(gDpy);
+}
 
 void ClipboardSetText(Window* win, Str text) {
     if (!win || !win->plat || !text.s || text.len <= 0) {

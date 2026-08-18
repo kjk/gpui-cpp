@@ -375,6 +375,15 @@ void PlatSetTimer(Window* win, int ms) {
     win->plat->nextTick = ms > 0 ? TimeNow() + ms / 1000.0 : 0;
 }
 
+void PlatSetCursor(Window* win, CursorKind kind) {
+    (void)win;
+    if (kind == CursorKind::IBeam) {
+        [[NSCursor IBeamCursor] set];
+    } else {
+        [[NSCursor arrowCursor] set];
+    }
+}
+
 void ClipboardSetText(Window* win, Str text) {
     (void)win;
     if (!text.s || text.len <= 0) {
