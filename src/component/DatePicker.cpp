@@ -1,4 +1,5 @@
 #include "component/DatePicker.h"
+#include "component/Button.h"
 
 namespace gpui {
 
@@ -23,6 +24,32 @@ DatePicker* DatePicker::Day(int d) {
     day = d;
     return this;
 }
+DatePicker* DatePicker::RangeEnd(int y, int m, int d) {
+    year2 = y;
+    month2 = m;
+    day2 = d;
+    return this;
+}
+DatePicker* DatePicker::Format(DateFormat f) {
+    format = f;
+    return this;
+}
+DatePicker* DatePicker::W(float v) {
+    width = v;
+    return this;
+}
+DatePicker* DatePicker::Cleanable(bool v) {
+    cleanable = v;
+    return this;
+}
+DatePicker* DatePicker::Appearance(bool v) {
+    appearance = v;
+    return this;
+}
+DatePicker* DatePicker::OnClear(Listener fn) {
+    onClear = fn;
+    return this;
+}
 DatePicker* DatePicker::Placeholder(Str s) {
     placeholder = s;
     return this;
@@ -40,30 +67,49 @@ DatePicker* DatePicker::OnDay(Listener fn) {
     return this;
 }
 
+static Str FormatDate(Arena* a, DateFormat f, int y, int m, int d) {
+    const char* sep = f == DateFormat::Dash ? "-" : "/";
+    return StrDup(a, fmt("%d%s%02d%s%02d", y, Str(sep), m, Str(sep), d));
+}
+
 El* DatePicker::IntoEl() {
-    static const char* mon[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     const Theme& th = cx->theme();
     bool hasDate = day > 0;
-    Str title = hasDate
-                    ? StrDup(a, fmt("%s %d, %d", Str(mon[month]), day, year))
-                    : (placeholder.s ? placeholder : StrL("Select date"));
+    Str title;
+    if (!hasDate) {
+        title = placeholder.s ? placeholder : StrL("Select date");
+    } else if (year2 > 0) {
+        title =
+            StrDup(a, fmt("%s - %s", FormatDate(a, format, year, month, day),
+                          FormatDate(a, format, year2, month2, day2)));
+    } else {
+        title = FormatDate(a, format, year, month, day);
+    }
     // The trigger is input-shaped: the date (or placeholder) with a calendar
-    // icon at the right edge.
+    // icon, or the clear button when there is something to clear.
     El* trigger = Div(a)
                       ->FlexRow()
-                      ->W(kFill)
+                      ->W(width)
                       ->H(32)
                       ->PadX(10)
                       ->Gap(4)
                       ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Radius(th.radius)
-                      ->Bg(th.inputBg)
-                      ->Border(1, th.inputBorder);
+                      ->JustifyBetween();
+    if (appearance) {
+        trigger->Radius(th.radius)->Bg(th.inputBg)->Border(1, th.inputBorder);
+    }
     trigger->Child(
         TextEl(a, title)->Font(14)->Fg(hasDate ? th.foreground : th.mutedFg));
-    trigger->Child(IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
+    if (cleanable && hasDate) {
+        trigger->Child(Button::New(cx, StrL("date-clean"))
+                           ->Text()
+                           ->WithSize(UiSize::XSmall)
+                           ->Icon(IconName::X)
+                           ->OnClick(onClear)
+                           ->IntoEl());
+    } else {
+        trigger->Child(IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
+    }
     BindClick(trigger, StrL("date"), onToggle);
     El* cal = nullptr;
     if (open) {
@@ -75,7 +121,7 @@ El* DatePicker::IntoEl() {
                   ->IntoEl();
     }
     return gpui::DatePicker::New(cx, StrL("date-picker"))
-        ->W(kFill)
+        ->W(width)
         ->Child(
             Popup::New(cx, StrL("date-pop"), trigger)->Content(cal)->IntoEl());
 }
