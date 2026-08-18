@@ -21,6 +21,15 @@ ColorPicker* ColorPicker::New(Ctx* cx) {
 }
 ColorPicker* ColorPicker::Hex(uint32_t h) {
     hex = h;
+    hasValue = true;
+    return this;
+}
+ColorPicker* ColorPicker::Label(Str s) {
+    label = s;
+    return this;
+}
+ColorPicker* ColorPicker::WithSize(UiSize s) {
+    size = s;
     return this;
 }
 ColorPicker* ColorPicker::Open(bool v) {
@@ -40,17 +49,28 @@ El* ColorPicker::IntoEl() {
     const Theme& th = cx->theme();
     Rgba c = Rgb((uint8_t)((hex >> 16) & 0xff), (uint8_t)((hex >> 8) & 0xff),
                  (uint8_t)(hex & 0xff));
-    El* trigger =
-        Div(a)
-            ->H(28)
-            ->PadX(8)
-            ->ItemsCenter()
-            ->Gap(8)
-            ->Border(1, th.foreground)
-            ->Child(Div(a)->W(14)->H(14)->Bg(c)->Border(1, th.foreground))
-            ->Child(TextEl(a, StrDup(a, fmt("#%06x", hex & 0xffffff)))
-                        ->Font(12)
-                        ->Fg(th.foreground));
+    // size_with(size): the swatch is the whole trigger; the hex only shows in
+    // the tooltip in Rust, so it is not drawn here.
+    float sq = 32;
+    if (size == UiSize::Large) {
+        sq = 44;
+    } else if (size == UiSize::Small) {
+        sq = 20;
+    } else if (size == UiSize::XSmall) {
+        sq = 16;
+    }
+    El* swatch = Div(a)
+                     ->W(sq)
+                     ->H(sq)
+                     ->Radius(th.radius)
+                     ->Bg(hasValue ? c : th.background)
+                     // darken(0.3) on the value, the input border when empty.
+                     ->Border(1, hasValue ? RgbaMix(c, Rgb(0, 0, 0), 0.3f)
+                                          : th.inputBorder);
+    El* trigger = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Child(swatch);
+    if (label.s) {
+        trigger->Child(TextEl(a, label)->Font(16)->Fg(th.foreground));
+    }
     BindClick(trigger, StrL("color-trigger"), onToggle);
     El* pop = nullptr;
     if (open) {

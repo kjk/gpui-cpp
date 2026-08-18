@@ -148,12 +148,22 @@ enum StoryToolbarAction {
     ToolbarOptIcon,
     ToolbarOptDisabled,
     ToolbarOptBordered,
+    ToolbarOptHorizontal,
+    ToolbarOptColumns,
+};
+
+// One row of the toolbar's Options dropdown. Each page names its own rows,
+// the way the Rust story builds the menu inline.
+struct StoryToolbarOpt {
+    const char* label = nullptr;
+    bool checked = false;
+    int act = 0;
 };
 
 void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
                        int act);
 El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
-                     StoryAccordionOptions* opts, Listener onAct);
+                     const StoryToolbarOpt* rows, int nrows, Listener onAct);
 
 template <typename T>
 void StoryToolbarAct(T* self, Ctx* cx, const ClickEvent*, intptr_t act) {
@@ -171,13 +181,26 @@ void StoryToolbarActOpts(T* self, Ctx* cx, const ClickEvent*, intptr_t act) {
 // handlers.
 template <typename T>
 El* StoryToolbar(Ctx* cx, T* self) {
-    return StoryToolbarCore(cx, &self->toolbar, nullptr,
+    return StoryToolbarCore(cx, &self->toolbar, nullptr, 0,
                             Listen(cx, &StoryToolbarAct<T>));
+}
+
+// The page passes the rows it wants; the handler is its own.
+template <typename T>
+El* StoryToolbarOptions(Ctx* cx, T* self, const StoryToolbarOpt* rows,
+                        int nrows, Listener onAct) {
+    return StoryToolbarCore(cx, &self->toolbar, rows, nrows, onAct);
 }
 
 template <typename T>
 El* StoryToolbarWithOptions(Ctx* cx, T* self) {
-    return StoryToolbarCore(cx, &self->toolbar, &self->options,
+    StoryToolbarOpt rows[4] = {
+        {"Multiple", self->options.multiple, ToolbarOptMultiple},
+        {"Icons", self->options.icon, ToolbarOptIcon},
+        {"Disabled", self->options.disabled, ToolbarOptDisabled},
+        {"Bordered", self->options.bordered, ToolbarOptBordered},
+    };
+    return StoryToolbarCore(cx, &self->toolbar, rows, 4,
                             Listen(cx, &StoryToolbarActOpts<T>));
 }
 

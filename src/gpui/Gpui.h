@@ -355,7 +355,8 @@ struct Style {
     bool hasColor = false;
     bool fontBold = false;
     bool fontSemibold = false;
-    bool fontMono = false; // font_family("Consolas")
+    bool fontMedium = false; // font_medium(): DWrite weight 500
+    bool fontMono = false;   // font_family("Consolas")
     bool borderDashed = false;
     bool absolute = false;
     bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
@@ -443,6 +444,7 @@ struct El {
     El* Child(El* c);
     El* Bold();
     El* Semibold();
+    El* Medium();
     El* Mono();
     El* Selectable();
     El* Wrap();

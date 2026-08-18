@@ -512,6 +512,10 @@ El* El::Semibold() {
     style.fontSemibold = true;
     return this;
 }
+El* El::Medium() {
+    style.fontMedium = true;
+    return this;
+}
 El* El::Mono() {
     style.fontMono = true;
     return this;
@@ -746,6 +750,8 @@ static uint8_t ElTextWeight(const El* e) {
         w = 2;
     } else if (e->style.fontSemibold) {
         w = 1;
+    } else if (e->style.fontMedium) {
+        w = 3;
     }
     if (e->style.fontMono) {
         w |= kFontMono;
@@ -755,11 +761,14 @@ static uint8_t ElTextWeight(const El* e) {
 
 static DWRITE_FONT_WEIGHT DwriteWeight(uint8_t weight) {
     weight &= kFontWeightMask;
-    if (weight >= 2) {
+    if (weight == 2) {
         return DWRITE_FONT_WEIGHT_BOLD;
     }
     if (weight == 1) {
         return DWRITE_FONT_WEIGHT_SEMI_BOLD;
+    }
+    if (weight == 3) {
+        return DWRITE_FONT_WEIGHT_MEDIUM;
     }
     return DWRITE_FONT_WEIGHT_NORMAL;
 }

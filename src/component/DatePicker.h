@@ -11,7 +11,8 @@ struct DatePicker {
     Ctx* cx = nullptr;
     int year = 2026;
     int month = 1;
-    int day = 1;
+    int day = 1; // 0: no date picked, so the placeholder shows
+    Str placeholder = {};
     bool open = false;
     Listener onToggle;
     Listener onDay;
@@ -20,6 +21,7 @@ struct DatePicker {
     DatePicker* Year(int y);
     DatePicker* Month(int m);
     DatePicker* Day(int d);
+    DatePicker* Placeholder(Str s);
     DatePicker* Open(bool v);
     DatePicker* OnToggle(Listener fn);
     DatePicker* OnDay(Listener fn);

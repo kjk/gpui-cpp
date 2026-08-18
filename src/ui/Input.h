@@ -25,6 +25,8 @@ struct Input {
 
 struct Textarea {
     static El* New(Ctx* cx, const char* text, bool caret = false);
+    static El* New(Ctx* cx, const char* text, const InputEditorStyle& style,
+                   bool caret = false);
 };
 
 struct Editor {

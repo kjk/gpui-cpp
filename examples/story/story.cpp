@@ -392,7 +392,7 @@ void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
 }
 
 El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
-                     StoryAccordionOptions* opts, Listener onAct) {
+                     const StoryToolbarOpt* rows, int nrows, Listener onAct) {
     Arena* a = cx->a;
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
     El* group = ToolbarGroup(cx);
@@ -417,21 +417,17 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
                      ->Content(sizeMenu)
                      ->IntoEl());
 
-    if (opts) {
+    if (rows && nrows > 0) {
         group->Child(ToolbarSep(cx));
         El* optTrig = ToolbarDropBtn(cx, StrL("Options"))
                           ->OnClick(ListenerArg(onAct, ToolbarOpenOpts));
         El* optMenu = nullptr;
         if (st->optsOpen) {
             optMenu = ToolbarMenu(cx);
-            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptMultiple,
-                                           "Multiple", opts->multiple));
-            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptIcon, "Icons",
-                                           opts->icon));
-            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptDisabled,
-                                           "Disabled", opts->disabled));
-            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptBordered,
-                                           "Bordered", opts->bordered));
+            for (int i = 0; i < nrows; i++) {
+                optMenu->Child(ToolbarCheckRow(cx, onAct, rows[i].act,
+                                               rows[i].label, rows[i].checked));
+            }
         }
         group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
                          ->Content(optMenu)

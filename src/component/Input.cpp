@@ -18,6 +18,14 @@ Input* Input::Label(Str s) {
     label = s;
     return this;
 }
+Input* Input::Prefix(El* el) {
+    prefix = el;
+    return this;
+}
+Input* Input::Suffix(El* el) {
+    suffix = el;
+    return this;
+}
 Input* Input::W(float v) {
     width = v;
     return this;
@@ -65,8 +73,20 @@ El* Input::IntoEl() {
             ->Bg(th.inputBg)
             // Rust draws a ring outside the border box on focus; without one
             // here the ring color goes on the border itself.
-            ->Border(1, focused ? th.ring : th.inputBorder)
-            ->Child(gpui::Input::New(cx, state, editor));
+            ->Border(1, focused ? th.ring : th.inputBorder);
+    if (prefix) {
+        // `.pl_0()`: the prefix owns the space to the left of the editor.
+        field->PadL(0)->Child(prefix);
+    }
+    if (prefix || suffix) {
+        field
+            ->Child(Div(a)->Grow()->Child(gpui::Input::New(cx, state, editor)));
+    } else {
+        field->Child(gpui::Input::New(cx, state, editor));
+    }
+    if (suffix) {
+        field->Child(suffix);
+    }
     if (onFocus.IsValid()) {
         field->OnClick(onFocus);
     } else if (onChange.IsValid()) {
@@ -85,18 +105,33 @@ Textarea* Textarea::New(Ctx* cx, Str id, const char* text) {
     t->text = text;
     return t;
 }
+Textarea* Textarea::Rows(int n) {
+    rows = n;
+    return this;
+}
 Textarea* Textarea::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
 }
 El* Textarea::IntoEl() {
     const Theme& th = cx->theme();
+    InputEditorStyle editor;
+    editor.foreground = th.foreground;
+    editor.mutedForeground = th.mutedFg;
+    editor.caret = th.caret;
+    editor.fontSize = kInputTextSize;
+    // A row is one 1.25rem line box, like the single-line input; the border
+    // sits outside the padded content, as in GPUI.
+    float h = rows > 0 ? (float)rows * 20.f + 2 * 8 + 2 : 64;
     El* box = InputBase::New(cx, id, HashClickId(id))
-                  ->H(64)
+                  ->W(kFill)
+                  ->H(h)
                   ->Pad(8)
                   ->ClipY()
-                  ->Border(1, th.border)
-                  ->Child(gpui::Textarea::New(cx, text));
+                  ->Radius(th.radius)
+                  ->Bg(th.inputBg)
+                  ->Border(1, th.inputBorder)
+                  ->Child(gpui::Textarea::New(cx, text, editor));
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);
     }

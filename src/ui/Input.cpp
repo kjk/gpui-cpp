@@ -64,6 +64,12 @@ El* Input::New(Ctx* cx, LineInput* state, const InputEditorStyle& style) {
 }
 
 El* Textarea::New(Ctx* cx, const char* text, bool caret) {
+    InputEditorStyle style;
+    return New(cx, text, style, caret);
+}
+
+El* Textarea::New(Ctx* cx, const char* text, const InputEditorStyle& style,
+                  bool caret) {
     Arena* a = cx->a;
     El* col = Div(a)->FlexCol();
     if (!text) {
@@ -83,12 +89,16 @@ El* Textarea::New(Ctx* cx, const char* text, bool caret) {
         memcpy(tmp, text + start, (size_t)n);
         tmp[n] = 0;
         bool last = text[i] == 0;
-        El* line =
-            TextEl(a, StrDup(a, Str(tmp)))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17));
+        float font = style.fontSize > 0 ? style.fontSize : 12.f;
+        // Same 1.25rem line box as the single-line input.
+        El* line = TextEl(a, StrDup(a, Str(tmp)))
+                       ->Font(font)
+                       ->LineHeight(20.f / font)
+                       ->Fg(style.foreground);
         if (last && caret) {
-            El* row = Div(a)->FlexRow()->ItemsCenter()->H(16);
+            El* row = Div(a)->FlexRow()->ItemsCenter()->H(20);
             row->Child(line);
-            row->Child(Div(a)->W(2)->H(14)->Bg(Rgb(0x17, 0x17, 0x17)));
+            row->Child(Div(a)->W(2)->H(14)->Bg(style.caret));
             col->Child(row);
         } else {
             col->Child(line);
