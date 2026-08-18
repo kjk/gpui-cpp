@@ -768,6 +768,34 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
 
 Str IconNamePath(IconName name) {
     switch (name) {
+        case IconName::ArrowLeft:
+            return StrL("icons/arrow-left.svg");
+        case IconName::Asterisk:
+            return StrL("icons/asterisk.svg");
+        case IconName::Bell:
+            return StrL("icons/bell.svg");
+        case IconName::Building2:
+            return StrL("icons/building-2.svg");
+        case IconName::Eye:
+            return StrL("icons/eye.svg");
+        case IconName::Heart:
+            return StrL("icons/heart.svg");
+        case IconName::HeartOff:
+            return StrL("icons/heart-off.svg");
+        case IconName::Maximize:
+            return StrL("icons/maximize.svg");
+        case IconName::Minimize:
+            return StrL("icons/minimize.svg");
+        case IconName::Star:
+            return StrL("icons/star.svg");
+        case IconName::Sun:
+            return StrL("icons/sun.svg");
+        case IconName::Map:
+            return StrL("icons/map.svg");
+        case IconName::Globe:
+            return StrL("icons/globe.svg");
+        case IconName::Github:
+            return StrL("icons/github.svg");
         case IconName::Inbox:
             return StrL("icons/inbox.svg");
         case IconName::Bot:

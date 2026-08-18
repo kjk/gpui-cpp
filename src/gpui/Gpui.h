@@ -300,6 +300,11 @@ enum class IconName : uint8_t {
     Asterisk,
     Sun,
     Maximize,
+    Minimize,
+    Map,
+    Globe,
+    Github,
+    HeartOff,
 };
 
 struct PaintCtx;

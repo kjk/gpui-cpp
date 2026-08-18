@@ -101,7 +101,7 @@ static const StoryInfo kMeta[StoryCount] = {
      "A container that groups related content with a title."},
     {"hover-card", "HoverCard",
      "For sighted users to preview content available behind a link."},
-    {"icon", "Icon", "Icon display component."},
+    {"icon", "Icon", "SVG Icons based on Lucide.dev"},
     {"image", "Image", "Image display with fallbacks."},
     {"input", "Input",
      "Displays a form input field or a component that looks like an input "

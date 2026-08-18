@@ -11,9 +11,8 @@ El* IconStory::Render(IconStory* self, Ctx* cx) {
 
     El* icons = StorySection(
         cx, "Icons", "Common interface symbols from the bundled icon set.");
-    IconName names[] = {IconName::Info,     IconName::Search,
-                        IconName::Bot,      IconName::Settings,
-                        IconName::Calendar, IconName::Folder,
+    IconName names[] = {IconName::Info,   IconName::Map,      IconName::Bot,
+                        IconName::Github, IconName::Calendar, IconName::Globe,
                         IconName::Heart};
     El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     for (int i = 0; i < 7; i++) {
@@ -26,24 +25,25 @@ El* IconStory::Render(IconStory* self, Ctx* cx) {
         StorySection(cx, "Color", "Icons inherit semantic foreground colors.");
     El* colorRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     colorRow->Child(IconEl(a, IconName::Maximize, 24)->Fg(th.green));
-    colorRow->Child(IconEl(a, IconName::Minus, 24)->Fg(th.red));
+    colorRow->Child(IconEl(a, IconName::Minimize, 24)->Fg(th.red));
     StorySectionAdd(color, colorRow);
     page->Child(color);
 
     El* btns = StorySection(cx, "Icon Buttons",
                             "Icons can be used as compact button content.");
     El* btnRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
+    // A neutral heart, a red heart-off, a green heart — each a size_6 icon.
     btnRow->Child(component::Button::New(cx, StrL("like1"))
-                      ->Icon(IconName::Heart)
                       ->Ghost()
+                      ->Extra(IconEl(a, IconName::Heart, 24)->Fg(th.mutedFg))
                       ->IntoEl());
     btnRow->Child(component::Button::New(cx, StrL("like2"))
-                      ->Icon(IconName::Heart)
                       ->Ghost()
+                      ->Extra(IconEl(a, IconName::HeartOff, 24)->Fg(th.red))
                       ->IntoEl());
     btnRow->Child(component::Button::New(cx, StrL("like3"))
-                      ->Icon(IconName::Heart)
                       ->Ghost()
+                      ->Extra(IconEl(a, IconName::Heart, 24)->Fg(th.green))
                       ->IntoEl());
     StorySectionAdd(btns, btnRow);
     page->Child(btns);
