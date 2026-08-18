@@ -284,6 +284,8 @@ enum class IconName : uint8_t {
     Loader,
     LoaderCircle,
     Ellipsis,
+    File,
+    FolderOpen,
     ChevronDown,
     ChevronLeft,
     ChevronRight,

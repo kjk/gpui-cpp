@@ -231,7 +231,11 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
     El* wrap = Div(a)->FlexCol()->Gap(12)->PadB(24)->W(kFill);
     // GroupBox draws its title with line_height(relative(1.)), which the
     // description inherits, so the header is 16 + 4 + 12 tall.
-    El* head = Div(a)->FlexCol()->Gap(4)->W(kFill);
+    // The header is a row: the title column, and whatever sub-title the page
+    // adds opposite it.
+    El* headRow =
+        Div(a)->FlexRow()->W(kFill)->Gap(16)->ItemsStart()->JustifyBetween();
+    El* head = Div(a)->FlexCol()->Gap(4);
     head->Child(StoryTxt(cx, StoryDup(cx, title), 16, th.mutedFg)
                     ->Medium()
                     ->LineHeight(1.f));
@@ -252,9 +256,18 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
                    ->Radius(th.radius)
                    ->ItemsCenter()
                    ->JustifyCenter();
-    wrap->Child(head);
+    headRow->Child(head);
+    wrap->Child(headRow);
     wrap->Child(body);
     return wrap;
+}
+
+El* StorySectionSubTitle(El* section, El* sub) {
+    if (!section || !sub || !section->first) {
+        return section;
+    }
+    section->first->Child(sub);
+    return section;
 }
 
 El* StorySectionAdd(El* section, El* child) {

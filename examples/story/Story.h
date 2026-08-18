@@ -117,6 +117,8 @@ Str StoryFmt(Ctx* cx, const char* f, ...);
 El* StoryTxt(Ctx* cx, Str s, float px, Rgba c);
 El* StorySection(Ctx* cx, const char* title, const char* desc);
 El* StorySectionAdd(El* section, El* child);
+// section().sub_title(..): sits opposite the title, in the header row.
+El* StorySectionSubTitle(El* section, El* sub);
 El* StoryComingSoon(Ctx* cx, int story);
 
 // story_toolbar(size): the Size dropdown, plus an Options dropdown for the
