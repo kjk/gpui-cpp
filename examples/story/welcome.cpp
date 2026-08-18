@@ -9,14 +9,25 @@ static El* MdTxt(Ctx* cx, Str s, float px, Rgba c) {
     return StoryTxt(cx, s, px, c)->Selectable();
 }
 
-static El* Shield(Ctx* cx, const char* left, const char* right, Rgba rightBg) {
+// A shields.io badge: dark label on the left, colored value on the right.
+// The colors are the mid-tone of each badge SVG's vertical gradient, which is
+// what the README renders to; a flat fill of the nominal color reads brighter.
+// `mark` stands in for a badge logo — the CI badge carries the GitHub mark,
+// which is not one of the Lucide icons this tree ships.
+static El* Shield(Ctx* cx, const char* left, const char* right, Rgba rightBg,
+                  bool mark = false, Rgba leftBg = Rgb(0x5a, 0x5a, 0x5a)) {
     Arena* a = cx->a;
-    Rgba leftBg = Rgb(0x55, 0x55, 0x55);
+    Rgba white = Rgb(0xff, 0xff, 0xff);
     El* row = Div(a)->FlexRow()->H(20)->Radius(3);
-    row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(leftBg)->Child(
-        MdTxt(cx, Str(left), 11, Rgb(0xff, 0xff, 0xff))));
+    El* label =
+        Div(a)->FlexRow()->H(20)->PadX(6)->Gap(4)->ItemsCenter()->Bg(leftBg);
+    if (mark) {
+        label->Child(Div(a)->W(11)->H(11)->Radius(6)->Bg(white)->Shrink0());
+    }
+    label->Child(MdTxt(cx, Str(left), 11, white));
+    row->Child(label);
     row->Child(Div(a)->H(20)->PadX(6)->ItemsCenter()->Bg(rightBg)->Child(
-        MdTxt(cx, Str(right), 11, Rgb(0xff, 0xff, 0xff))));
+        MdTxt(cx, Str(right), 11, white)));
     return row;
 }
 
@@ -183,10 +194,11 @@ El* WelcomeStory::Render(WelcomeStory* self, Ctx* cx) {
     col->Child(langs->PadB(16));
 
     El* badges = Div(a)->FlexRow()->Gap(6)->ItemsCenter();
-    // The CI badge SVG never loads in the Rust app; it leaves a 20px hole.
-    badges->Child(Div(a)->W(19)->H(20)->Shrink0());
-    badges->Child(Shield(cx, "docs", "passing", Rgb(0x44, 0xcc, 0x11)));
-    badges->Child(Shield(cx, "crates.io", "v0.5.1", Rgb(0xfe, 0x7d, 0x37)));
+    // The CI badge is GitHub's own, with a slate label rather than shields'.
+    badges->Child(Shield(cx, "CI", "failing", Rgb(0xd4, 0x35, 0x43), true,
+                         Rgb(0x3c, 0x44, 0x4d)));
+    badges->Child(Shield(cx, "docs", "passing", Rgb(0x4b, 0xb6, 0x0f)));
+    badges->Child(Shield(cx, "crates.io", "v0.5.1", Rgb(0xdf, 0x74, 0x3d)));
     col->Child(badges->PadB(16));
 
     El* blurb = Div(a)->FlexRow()->W(kFill)->Wrap()->PadB(16);
