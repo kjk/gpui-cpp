@@ -45,8 +45,10 @@ El* Link::IntoEl() {
     if (onOpen.IsValid() && !disabled) {
         e->OnClick(onOpen);
     }
+    // text_decoration_1(): a link is underlined at rest, not only on hover.
     e->Child(TextEl(a, text.s ? text : href)
                  ->Font(14)
+                 ->Underline()
                  ->Fg(disabled ? th.mutedFg : th.blue));
     return e;
 }

@@ -54,8 +54,8 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
         cx, "Rich Content",
         "Cards can contain avatars, typography, and structured details.");
     El* richRow = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
-    richRow->Child(StoryTxt(cx, StrL("Hover over"), 13, th.foreground));
-    El* link = StoryTxt(cx, StrL("@huacnlee"), 13, th.blue);
+    richRow->Child(StoryTxt(cx, StrL("Hover over"), 16, th.foreground));
+    El* link = StoryTxt(cx, StrL("@huacnlee"), 16, th.blue)->Underline();
     link->OnClick(Listen(cx, &ToggleCard, 2));
     El* profile = nullptr;
     if (cx->win->hoverId == 2) {
@@ -85,34 +85,77 @@ El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
                        ->Open(cx->win->hoverId == 2)
                        ->IntoEl());
     richRow
-        ->Child(StoryTxt(cx, StrL("to see their profile"), 13, th.foreground));
+        ->Child(StoryTxt(cx, StrL("to see their profile"), 16, th.foreground));
     StorySectionAdd(rich, richRow);
     page->Child(rich);
 
     El* timing = StorySection(
         cx, "Timing",
         "Open and close delays can match the interaction context.");
-    StorySectionAdd(timing, component::Button::New(cx, StrL("fast"))
-                                ->Label(StrL("Fast Open (200ms)"))
-                                ->Outline()
-                                ->IntoEl()
-                                ->OnClick(Listen(cx, &ToggleCard, 3)));
-    if (cx->win->hoverId == 3) {
-        StorySectionAdd(timing, Card(cx, "Fast open",
-                                     "This hover card opens after 200ms."));
-    }
+    El* timingRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
+    timingRow->Child(component::HoverCard::New(cx)
+                         ->Trigger(component::Button::New(cx, StrL("fast"))
+                                       ->Label(StrL("Fast Open (200ms)"))
+                                       ->Outline()
+                                       ->IntoEl()
+                                       ->OnClick(Listen(cx, &ToggleCard, 3)))
+                         ->Content(cx->win->hoverId == 3
+                                       ? Card(cx, "Fast open",
+                                              "This hover card opens after "
+                                              "200ms")
+                                       : nullptr)
+                         ->Open(cx->win->hoverId == 3)
+                         ->IntoEl());
+    timingRow->Child(component::HoverCard::New(cx)
+                         ->Trigger(component::Button::New(cx, StrL("slow"))
+                                       ->Label(StrL("Slow Open (1000ms)"))
+                                       ->Outline()
+                                       ->IntoEl()
+                                       ->OnClick(Listen(cx, &ToggleCard, 4)))
+                         ->Content(cx->win->hoverId == 4
+                                       ? Card(cx, "Slow open",
+                                              "This hover card opens after "
+                                              "1000ms")
+                                       : nullptr)
+                         ->Open(cx->win->hoverId == 4)
+                         ->IntoEl());
+    StorySectionAdd(timing, timingRow);
     page->Child(timing);
 
-    El* pos = StorySection(cx, "Position", nullptr);
-    StorySectionAdd(pos, component::Button::New(cx, StrL("pos"))
-                             ->Label(StrL("Hover for position"))
-                             ->Outline()
-                             ->IntoEl()
-                             ->OnClick(Listen(cx, &ToggleCard, 4)));
-    if (cx->win->hoverId == 4) {
-        StorySectionAdd(
-            pos, Card(cx, "Positioned card", "Shown relative to the trigger."));
+    El* pos = StorySection(cx, "Position",
+                           "Content can anchor to each side of its trigger.");
+    El* posCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter()->JustifyCenter();
+    struct AnchorBtn {
+        const char* id;
+        const char* label;
+    };
+    static const AnchorBtn kAnchors[2][3] = {
+        {{"tl", "Top Left"}, {"tc", "Top Center"}, {"tr", "Top Right"}},
+        {{"bl", "Bottom Left"},
+         {"bc", "Bottom Center"},
+         {"br", "Bottom Right"}},
+    };
+    for (int r = 0; r < 2; r++) {
+        El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
+        for (int i = 0; i < 3; i++) {
+            int which = 5 + r * 3 + i;
+            row->Child(
+                component::HoverCard::New(cx)
+                    ->Trigger(component::Button::New(cx, Str(kAnchors[r][i].id))
+                                  ->Label(Str(kAnchors[r][i].label))
+                                  ->Outline()
+                                  ->IntoEl()
+                                  ->OnClick(Listen(cx, &ToggleCard, which)))
+                    ->Content(cx->win->hoverId == which
+                                  ? Card(cx, kAnchors[r][i].label,
+                                         "Positioned at this anchor.")
+                                  : nullptr)
+                    ->Open(cx->win->hoverId == which)
+                    ->IntoEl());
+        }
+        posCol->Child(row);
     }
+    StorySectionAdd(pos, posCol);
     page->Child(pos);
     return page;
 }

@@ -520,6 +520,10 @@ El* El::Mono() {
     style.fontMono = true;
     return this;
 }
+El* El::Underline() {
+    style.underline = true;
+    return this;
+}
 El* El::Selectable() {
     selectable = true;
     return this;
@@ -611,7 +615,8 @@ int DipToPx(PaintCtx* ctx, float dip) {
 // the shaped-text cache keys mono and proportional runs apart on its own.
 enum {
     kFontWeightMask = 3,
-    kFontMono = 4
+    kFontMono = 4,
+    kFontUnderline = 8
 };
 
 static IDWriteTextFormat* FontFor(PaintCtx* ctx, float fontSize,
@@ -755,6 +760,9 @@ static uint8_t ElTextWeight(const El* e) {
     }
     if (e->style.fontMono) {
         w |= kFontMono;
+    }
+    if (e->style.underline) {
+        w |= kFontUnderline;
     }
     return w;
 }
@@ -1080,6 +1088,9 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     }
     if (weight & kFontWeightMask) {
         layout->SetFontWeight(DwriteWeight(weight), range);
+    }
+    if (weight & kFontUnderline) {
+        layout->SetUnderline(TRUE, range);
     }
     layout->SetWordWrapping(wrap && maxW > 0 ? DWRITE_WORD_WRAPPING_WRAP
                                              : DWRITE_WORD_WRAPPING_NO_WRAP);
