@@ -2033,6 +2033,10 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(6, 9, 12, 15);
             line(12, 15, 18, 9);
             break;
+        case IconName::ChevronLeft:
+            line(15, 6, 9, 12);
+            line(9, 12, 15, 18);
+            break;
         case IconName::ChevronRight:
             line(9, 6, 15, 12);
             line(15, 12, 9, 18);

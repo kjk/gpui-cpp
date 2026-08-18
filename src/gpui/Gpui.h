@@ -280,6 +280,7 @@ enum class IconName : uint8_t {
     CircleX,
     Loader,
     ChevronDown,
+    ChevronLeft,
     ChevronRight,
     ChevronUp,
     Check,

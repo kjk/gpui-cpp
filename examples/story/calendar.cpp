@@ -1,9 +1,11 @@
 #include "Story.h"
 
+// CalendarState::new starts on the current month with nothing selected; the
+// calendar marks today on its own.
 struct CalendarStory {
-    int calYear = 2026;
-    int calMonth = 8;
-    int calDay = 17;
+    int calYear = 0;
+    int calMonth = 0;
+    int calDay = 0;
     static El* Render(CalendarStory* self, Ctx* cx);
 };
 
@@ -28,6 +30,12 @@ static void CalDay(CalendarStory* self, Ctx* cx, const ClickEvent*,
 
 El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    if (self->calMonth == 0) {
+        SYSTEMTIME now = {};
+        GetLocalTime(&now);
+        self->calYear = now.wYear;
+        self->calMonth = now.wMonth;
+    }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* single = StorySection(cx, "Single month", "Single-date selection.");
     StorySectionAdd(single, component::Calendar::New(cx)
@@ -42,7 +50,7 @@ El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
 
     El* multi =
         StorySection(cx, "Multiple months", "Three months shown together.");
-    El* months = Div(a)->FlexRow()->Gap(16)->Wrap();
+    El* months = Div(a)->FlexRow()->FlexWrap()->Gap(16);
     for (int i = 0; i < 3; i++) {
         int m = self->calMonth + i;
         int y = self->calYear;
