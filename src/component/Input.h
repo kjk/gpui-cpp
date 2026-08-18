@@ -86,14 +86,32 @@ struct Textarea {
 struct NumberInput {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
+    Str id = {};
     LineInput* state = nullptr;
     float width = kFill;
+    UiSize size = UiSize::Medium;
+    bool disabled = false;
+    bool appearance = true;
+    El* suffix = nullptr;
+    Rgba bg = {};
+    bool hasBg = false;
+    Rgba textColor = {};
+    bool hasTextColor = false;
     Listener onInc;
     Listener onDec;
+    Listener onFocus;
 
     static NumberInput* New(Ctx* cx, LineInput* state);
+    static NumberInput* New(Ctx* cx, Str id, LineInput* state);
     // Fills its parent unless the caller sizes it, as in Rust.
     NumberInput* W(float v);
+    NumberInput* WithSize(UiSize s);
+    NumberInput* Disabled(bool v);
+    NumberInput* Appearance(bool v);
+    NumberInput* Suffix(El* el);
+    NumberInput* Bg(Rgba c);
+    NumberInput* TextColor(Rgba c);
+    NumberInput* OnFocus(Listener fn);
     NumberInput* OnInc(Listener fn);
     NumberInput* OnDec(Listener fn);
     El* IntoEl();

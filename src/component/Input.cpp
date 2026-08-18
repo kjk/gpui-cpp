@@ -254,6 +254,41 @@ NumberInput* NumberInput::New(Ctx* cx, LineInput* state) {
     n->state = state;
     return n;
 }
+NumberInput* NumberInput::New(Ctx* cx, Str id, LineInput* state) {
+    NumberInput* n = New(cx, state);
+    n->id = id;
+    return n;
+}
+NumberInput* NumberInput::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+NumberInput* NumberInput::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+NumberInput* NumberInput::Appearance(bool v) {
+    appearance = v;
+    return this;
+}
+NumberInput* NumberInput::Suffix(El* el) {
+    suffix = el;
+    return this;
+}
+NumberInput* NumberInput::Bg(Rgba c) {
+    bg = c;
+    hasBg = true;
+    return this;
+}
+NumberInput* NumberInput::TextColor(Rgba c) {
+    textColor = c;
+    hasTextColor = true;
+    return this;
+}
+NumberInput* NumberInput::OnFocus(Listener fn) {
+    onFocus = fn;
+    return this;
+}
 NumberInput* NumberInput::W(float v) {
     width = v;
     return this;
@@ -267,26 +302,62 @@ NumberInput* NumberInput::OnDec(Listener fn) {
     return this;
 }
 El* NumberInput::IntoEl() {
-    return gpui::NumberInput::New(cx)
-        ->FlexRow()
-        ->W(width)
-        ->H(28)
-        ->Border(1, cx->theme().border)
-        ->Child(InputBase::New(cx, StrL("number"), HashClickId(StrL("number")))
-                    ->Grow()
-                    ->PadX(8)
-                    ->ItemsCenter()
-                    ->Child(gpui::Input::New(cx, state)))
-        ->Child(Button::New(cx, StrL("inc"))
-                    ->Label(StrL("+"))
-                    ->Compact()
-                    ->OnClick(onInc)
-                    ->IntoEl())
-        ->Child(Button::New(cx, StrL("dec"))
-                    ->Label(StrL("−"))
-                    ->Compact()
-                    ->OnClick(onDec)
-                    ->IntoEl());
+    const Theme& th = cx->theme();
+    float h = 32, btn = 32, font = 14;
+    if (size == UiSize::Large) {
+        h = 44;
+        btn = 32;
+        font = 16;
+    } else if (size == UiSize::Small) {
+        h = 24;
+        btn = 24;
+    } else if (size == UiSize::XSmall) {
+        h = 20;
+        btn = 24;
+        font = 12;
+    }
+    Rgba border = disabled ? RgbaOpacity(th.inputBorder, 0.5f) : th.inputBorder;
+    El* frame = gpui::NumberInput::New(cx)->FlexRow()->W(width)->H(h);
+    if (appearance) {
+        frame->Radius(th.radius)
+            ->Bg(hasBg ? bg : (disabled ? th.muted : th.inputBg))
+            ->Border(1, border);
+    } else if (hasBg) {
+        frame->Radius(th.radius)->Bg(bg);
+    }
+    // The step buttons are transparent until hovered, and fill the frame.
+    // Only their outer corners are rounded in Rust; ours are square, which
+    // shows on hover alone.
+    Rgba stepFg = disabled ? RgbaOpacity(th.secondaryFg, 0.5f) : th.secondaryFg;
+    El* dec = Div(a)->W(btn)->H(kFill)->ItemsCenter()->JustifyCenter()->Child(
+        IconEl(a, IconName::Minus, font)->Fg(stepFg));
+    El* inc = Div(a)->W(btn)->H(kFill)->ItemsCenter()->JustifyCenter()->Child(
+        IconEl(a, IconName::Plus, font)->Fg(stepFg));
+    if (!disabled) {
+        dec->HoverBg(RgbaOpacity(th.inputBorder, 0.4f));
+        inc->HoverBg(RgbaOpacity(th.inputBorder, 0.4f));
+        BindClick(dec, StrDup(a, fmt("%s-dec", id.s ? id : StrL("number"))),
+                  onDec);
+        BindClick(inc, StrDup(a, fmt("%s-inc", id.s ? id : StrL("number"))),
+                  onInc);
+    }
+    frame->Child(dec);
+    // The editor sits between them, centered and without its own frame.
+    Input* editor = Input::New(cx, id.s ? id : StrL("number"), state)
+                        ->WithSize(size)
+                        ->Align(InputAlign::Center)
+                        ->Appearance(false)
+                        ->Disabled(disabled)
+                        ->OnFocus(onFocus);
+    if (hasTextColor) {
+        editor->TextColor(textColor);
+    }
+    if (suffix) {
+        editor->Suffix(suffix);
+    }
+    frame->Child(Div(a)->Grow()->H(kFill)->Child(editor->IntoEl()));
+    frame->Child(inc);
+    return frame;
 }
 
 OtpInput* OtpInput::New(Ctx* cx, const char* value, int len) {

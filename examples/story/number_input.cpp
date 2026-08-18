@@ -1,65 +1,148 @@
 #include "Story.h"
 
+enum {
+    NumDefault = 0,
+    NumDisabled,
+    NumSuffix,
+    NumFormat,
+    NumCustom,
+    NumCount
+};
+
 struct NumberInputStory {
-    LineInput field = {};
+    LineInput fields[NumCount] = {};
+    int focused = -1;
+    StoryToolbarState toolbar;
     bool seeded = false;
 
     static El* Render(NumberInputStory* self, Ctx* cx);
 };
 
-static void IncNum(NumberInputStory* self, Ctx* cx, const ClickEvent*) {
-    int v = 0;
-    sscanf_s(self->field.buf, "%d", &v);
-    v++;
-    _snprintf_s(self->field.buf, _TRUNCATE, "%d", v);
-    self->field.len = (int)strlen(self->field.buf);
+static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
+                    intptr_t packed) {
+    int slot = (int)(packed >> 1);
+    int dir = (packed & 1) ? 1 : -1;
+    double v = 0;
+    sscanf_s(self->fields[slot].buf, "%lf", &v);
+    // The format story steps by 0.01, the rest by one.
+    double step = slot == NumFormat ? 0.01 : (slot == NumCustom ? 0.1 : 1);
+    v += dir * step;
+    LineInput* f = &self->fields[slot];
+    if (slot == NumFormat || slot == NumCustom) {
+        _snprintf_s(f->buf, sizeof(f->buf), _TRUNCATE, "%.2f", v);
+    } else {
+        _snprintf_s(f->buf, sizeof(f->buf), _TRUNCATE, "%d", (int)v);
+    }
+    f->len = (int)strlen(f->buf);
+    f->cursor = f->len;
+    Notify(cx);
 }
-static void DecNum(NumberInputStory* self, Ctx* cx, const ClickEvent*) {
-    int v = 0;
-    sscanf_s(self->field.buf, "%d", &v);
-    v--;
-    _snprintf_s(self->field.buf, _TRUNCATE, "%d", v);
-    self->field.len = (int)strlen(self->field.buf);
+static void FocusNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t slot) {
+    for (int i = 0; i < NumCount; i++) {
+        self->fields[i].focused = false;
+    }
+    self->fields[slot].focused = true;
+    self->focused = (int)slot;
+    Notify(cx);
 }
 
 El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        strncpy_s(self->field.buf, "12", _TRUNCATE);
-        self->field.len = (int)strlen(self->field.buf);
+        struct {
+            int slot;
+            const char* value;
+            const char* placeholder;
+        } seeds[] = {
+            {NumDefault, "1", "Normal Integer"},
+            {NumDisabled, "100", "Disabled"},
+            {NumSuffix, "", "Unsized Integer"},
+            {NumFormat, "1234.56", "Mask pattern"},
+            {NumCustom, "0.9", "Styling"},
+        };
+        for (size_t i = 0; i < sizeof(seeds) / sizeof(seeds[0]); i++) {
+            LineInput* f = &self->fields[seeds[i].slot];
+            strncpy_s(f->buf, seeds[i].value, _TRUNCATE);
+            f->len = (int)strlen(f->buf);
+            f->cursor = f->len;
+            strncpy_s(f->placeholder, seeds[i].placeholder, _TRUNCATE);
+        }
     }
-    if (self->field.focused) {
-        cx->win->input = &self->field;
+    if (self->focused >= 0) {
+        cx->win->input = &self->fields[self->focused];
     }
-    if (self->field.len == 0 || self->field.buf[0] < '0' ||
-        self->field.buf[0] > '9') {
-        strncpy_s(self->field.buf, "12", _TRUNCATE);
-        self->field.len = 2;
-    }
-    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
-    El* sec = StorySection(
-        cx, "Default", "Numeric input with increment and decrement controls.");
-    StorySectionAdd(sec, component::NumberInput::New(cx, &self->field)
-                             ->OnInc(Listen(cx, &IncNum))
-                             ->OnDec(Listen(cx, &DecNum))
-                             ->IntoEl());
-    page->Child(sec);
+    Listener step = Listen(cx, &StepNum);
+    Listener focus = Listen(cx, &FocusNum);
 
-    El* dis = StorySection(cx, "Disabled", nullptr);
-    StorySectionAdd(dis, component::NumberInput::New(cx, &self->field)
+    // NumberInput is flex_1 inside the section, so the w(260) each story asks
+    // for loses to the 512 the section gives it.
+    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
+
+    El* def = StorySection(cx, "Default", "Application-managed step events.");
+    StorySectionAdd(def, component::NumberInput::New(cx, StrL("num1"),
+                                                     &self->fields[NumDefault])
+                             ->W(512)
+                             ->WithSize(self->toolbar.size)
+                             ->OnInc(ListenerArg(step, (NumDefault << 1) | 1))
+                             ->OnDec(ListenerArg(step, NumDefault << 1))
+                             ->OnFocus(ListenerArg(focus, NumDefault))
+                             ->IntoEl());
+    page->Child(def);
+
+    El* dis = StorySection(cx, "Disabled", "Read-only disabled state.");
+    StorySectionAdd(dis, component::NumberInput::New(cx, StrL("num-disabled"),
+                                                     &self->fields[NumDisabled])
+                             ->W(512)
+                             ->WithSize(self->toolbar.size)
+                             ->Disabled(true)
                              ->IntoEl());
     page->Child(dis);
 
-    El* suf = StorySection(cx, "Suffix", nullptr);
-    El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
-    row->Child(component::NumberInput::New(cx, &self->field)
-                   ->OnInc(Listen(cx, &IncNum))
-                   ->OnDec(Listen(cx, &DecNum))
-                   ->IntoEl());
-    row->Child(StoryTxt(cx, StrL("px"), 13, cx->theme().mutedFg));
-    StorySectionAdd(suf, row);
+    El* suf = StorySection(cx, "Suffix", "Small size with a suffix action.");
+    StorySectionAdd(suf, component::NumberInput::New(cx, StrL("num2"),
+                                                     &self->fields[NumSuffix])
+                             ->W(512)
+                             ->WithSize(UiSize::Small)
+                             ->Suffix(component::Button::New(cx, StrL("info"))
+                                          ->Text()
+                                          ->WithSize(UiSize::XSmall)
+                                          ->Icon(IconName::Info)
+                                          ->IntoEl())
+                             ->OnInc(ListenerArg(step, (NumSuffix << 1) | 1))
+                             ->OnDec(ListenerArg(step, NumSuffix << 1))
+                             ->OnFocus(ListenerArg(focus, NumSuffix))
+                             ->IntoEl());
     page->Child(suf);
+
+    El* fmtSec = StorySection(cx, "Number format",
+                              "Grouping, decimals, range, and step.");
+    StorySectionAdd(fmtSec, component::NumberInput::New(
+                                cx, StrL("num3"), &self->fields[NumFormat])
+                                ->W(512)
+                                ->WithSize(self->toolbar.size)
+                                ->OnInc(ListenerArg(step, (NumFormat << 1) | 1))
+                                ->OnDec(ListenerArg(step, NumFormat << 1))
+                                ->OnFocus(ListenerArg(focus, NumFormat))
+                                ->IntoEl());
+    page->Child(fmtSec);
+
+    El* custom = StorySection(cx, "Custom style",
+                              "Appearance-free input with dynamic steps.");
+    StorySectionAdd(custom, component::NumberInput::New(
+                                cx, StrL("num4"), &self->fields[NumCustom])
+                                ->W(512)
+                                ->WithSize(self->toolbar.size)
+                                ->Appearance(false)
+                                ->Bg(th.secondary)
+                                ->TextColor(th.info)
+                                ->OnInc(ListenerArg(step, (NumCustom << 1) | 1))
+                                ->OnDec(ListenerArg(step, NumCustom << 1))
+                                ->OnFocus(ListenerArg(focus, NumCustom))
+                                ->IntoEl());
+    page->Child(custom);
     return page;
 }
 
