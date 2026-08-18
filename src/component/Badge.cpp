@@ -12,9 +12,10 @@ Badge* Badge::New(Ctx* cx) {
     return b;
 }
 
+// Only dot() and icon() pick the variant; count() sets the value the Number
+// variant shows and leaves a dot a dot, as the Dot story asks for.
 Badge* Badge::Count(int n) {
     count = n;
-    kind = BadgeKind::Number;
     return this;
 }
 Badge* Badge::Max(int n) {
