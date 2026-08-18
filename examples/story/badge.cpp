@@ -39,13 +39,13 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
         component::Badge::New(cx)
             ->Count(3)
             ->WithSize(self->toolbar.size)
-            ->Child(IconEl(a, IconName::Bell, UiSizePx(self->toolbar.size)))
+            ->Child(IconEl(a, IconName::Bell, UiIconPx(self->toolbar.size)))
             ->IntoEl());
     iconRow->Child(
         component::Badge::New(cx)
             ->Count(103)
             ->WithSize(self->toolbar.size)
-            ->Child(IconEl(a, IconName::Inbox, UiSizePx(self->toolbar.size)))
+            ->Child(IconEl(a, IconName::Inbox, UiIconPx(self->toolbar.size)))
             ->IntoEl());
     StorySectionAdd(icons, iconRow);
     page->Child(icons);
