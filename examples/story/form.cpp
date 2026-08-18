@@ -11,7 +11,8 @@ struct FormStory {
     static void Click(FormStory* self, Ctx* cx, int id);
 };
 
-static void SetFormSwitch(FormStory* self, bool v) {
+static void SetFormSwitch(FormStory* self, Ctx* cx, const ClickEvent*,
+                          intptr_t v) {
     self->switchOn = v;
 }
 
@@ -41,7 +42,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
                         ->IntoEl())
             ->Field(StrL("Notify"), component::Switch::New(cx, StrL("form-sw"))
                                         ->Checked(self->switchOn)
-                                        ->OnClick(MkFunc1(&SetFormSwitch, self))
+                                        ->OnClick(Listen(cx, &SetFormSwitch))
                                         ->IntoEl())
             ->IntoEl());
     page->Child(sec);

@@ -25,7 +25,7 @@ Menu* Menu::Item(Str s) {
     }
     return this;
 }
-Menu* Menu::OnClick(Func1<int> fn) {
+Menu* Menu::OnClick(Listener fn) {
     onClick = fn;
     return this;
 }
@@ -43,10 +43,7 @@ El* Menu::IntoEl() {
             Div(a)->H(28)->PadX(10)->ItemsCenter()->HoverBg(th.muted)->Child(
                 TextEl(a, items[i])->Font(13)->Fg(th.foreground));
         if (onClick.IsValid()) {
-            MenuBind* b = ArenaNew<MenuBind>(a);
-            b->fn = onClick;
-            b->index = i;
-            BindClick(row, items[i], MkFunc0(&FireMenu, b));
+            BindClick(row, items[i], ListenerArg(onClick, i));
         }
         col->Child(row);
     }

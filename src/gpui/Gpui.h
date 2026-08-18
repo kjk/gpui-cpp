@@ -704,6 +704,27 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t),
     return l;
 }
 
+// A handler that takes a value the component supplies: which day of the
+// calendar, which combobox row. The component fills it with ListenerArg.
+template <typename T, typename E>
+Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t)) {
+    Listener l;
+    l.fn = (void*)fn;
+    l.view = cx->self;
+    l.hasArg = true;
+    return l;
+}
+
+// Bind the value a component hands its caller. This is what a Rust closure
+// gets as its event payload: `.on_click(cx.listener(|this, day, _, cx| ...))`.
+inline Listener ListenerArg(Listener l, intptr_t arg) {
+    if (l.IsValid()) {
+        l.arg = arg;
+        l.hasArg = true;
+    }
+    return l;
+}
+
 // Same, but bound to another entity instead of the one that is rendering.
 template <typename T, typename E>
 Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*)) {

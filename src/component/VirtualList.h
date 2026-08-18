@@ -13,7 +13,7 @@ struct VirtualList {
     float rowH = 32;
     float viewH = 192;
     float scrollY = 0;
-    Func1<int> onRenderRow; // not used; rows built here
+    Listener onRenderRow; // not used; rows built here
     El* (*row)(Arena* a, int ix) = nullptr;
 
     static VirtualList* New(Ctx* cx, int count);

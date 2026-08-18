@@ -8,7 +8,7 @@ struct AlertDialogStory {
     static void Click(AlertDialogStory* self, Ctx* cx, int id);
 };
 
-static void CloseAlert(AlertDialogStory* self) {
+static void CloseAlert(AlertDialogStory* self, Ctx* cx, const ClickEvent*) {
     self->alertOpen = false;
 }
 
@@ -43,8 +43,8 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
     if (self->alertOpen) {
         component::Dialog* d = component::Dialog::New(cx)
                                    ->Open(true)
-                                   ->OnClose(MkFunc0(&CloseAlert, self))
-                                   ->OnOk(MkFunc0(&CloseAlert, self));
+                                   ->OnClose(Listen(cx, &CloseAlert))
+                                   ->OnOk(Listen(cx, &CloseAlert));
         if (self->selB == 1) {
             d->Title(StrL("Delete project?"))
                 ->Description(StrL("This permanently deletes Acme Studio and "

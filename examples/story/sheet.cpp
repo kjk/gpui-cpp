@@ -8,7 +8,7 @@ struct SheetStory {
     static void Click(SheetStory* self, Ctx* cx, int id);
 };
 
-static void CloseSheet(SheetStory* self) {
+static void CloseSheet(SheetStory* self, Ctx* cx, const ClickEvent*) {
     self->sheetOpen = false;
 }
 
@@ -69,7 +69,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
                         ->Open(true)
                         ->Title(StrL("Settings"))
                         ->Body(body)
-                        ->OnClose(MkFunc0(&CloseSheet, self))
+                        ->OnClose(Listen(cx, &CloseSheet))
                         ->IntoEl(size));
     }
     return page;

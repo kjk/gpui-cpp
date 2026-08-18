@@ -8,14 +8,14 @@ struct NumberInputStory {
     static void Click(NumberInputStory* self, Ctx* cx, int id);
 };
 
-static void IncNum(NumberInputStory* self) {
+static void IncNum(NumberInputStory* self, Ctx* cx, const ClickEvent*) {
     int v = 0;
     sscanf_s(self->field.buf, "%d", &v);
     v++;
     _snprintf_s(self->field.buf, _TRUNCATE, "%d", v);
     self->field.len = (int)strlen(self->field.buf);
 }
-static void DecNum(NumberInputStory* self) {
+static void DecNum(NumberInputStory* self, Ctx* cx, const ClickEvent*) {
     int v = 0;
     sscanf_s(self->field.buf, "%d", &v);
     v--;
@@ -42,8 +42,8 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     El* sec = StorySection(
         cx, "Default", "Numeric input with increment and decrement controls.");
     StorySectionAdd(sec, component::NumberInput::New(cx, &self->field)
-                             ->OnInc(MkFunc0(&IncNum, self))
-                             ->OnDec(MkFunc0(&DecNum, self))
+                             ->OnInc(Listen(cx, &IncNum))
+                             ->OnDec(Listen(cx, &DecNum))
                              ->IntoEl());
     page->Child(sec);
 
@@ -55,8 +55,8 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     El* suf = StorySection(cx, "Suffix", nullptr);
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
     row->Child(component::NumberInput::New(cx, &self->field)
-                   ->OnInc(MkFunc0(&IncNum, self))
-                   ->OnDec(MkFunc0(&DecNum, self))
+                   ->OnInc(Listen(cx, &IncNum))
+                   ->OnDec(Listen(cx, &DecNum))
                    ->IntoEl());
     row->Child(StoryTxt(cx, StrL("px"), 13, ThemeNow().mutedFg));
     StorySectionAdd(suf, row);

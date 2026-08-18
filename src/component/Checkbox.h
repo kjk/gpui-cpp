@@ -17,7 +17,7 @@ struct Checkbox {
     UiSize size = UiSize::Medium;
     Str tooltip = {};
     float w = 0;
-    Func1<bool> onClick;
+    Listener onClick;
 
     static Checkbox* New(Ctx* cx, Str id);
     Checkbox* Label(Str s);
@@ -27,7 +27,7 @@ struct Checkbox {
     Checkbox* WithSize(UiSize s);
     Checkbox* W(float v);
     Checkbox* Tooltip(Str s);
-    Checkbox* OnClick(Func1<bool> fn);
+    Checkbox* OnClick(Listener fn);
     El* IntoEl();
 };
 

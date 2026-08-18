@@ -5,9 +5,7 @@ struct SliderStory {
     static void Click(SliderStory* self, Ctx* cx, int id);
 };
 
-static void SetSlider(SliderStory* self, float v) {
-    (void)v;
-}
+static void SetSlider(SliderStory*, Ctx*, const ClickEvent*) {}
 
 El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     Arena* a = cx->a;
@@ -18,7 +16,7 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     El* col = Div(a)->FlexCol()->Gap(8)->W(280);
     col->Child(component::Slider::New(cx)
                    ->Value(0.64f)
-                   ->OnChange(MkFunc1(&SetSlider, self))
+                   ->OnChange(Listen(cx, &SetSlider))
                    ->IntoEl());
     StorySectionAdd(sec, col);
     page->Child(sec);

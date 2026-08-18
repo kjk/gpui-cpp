@@ -26,7 +26,7 @@ struct Alert {
     UiSize size = UiSize::Medium;
     bool banner = false;
     bool visible = true;
-    Func0 onClose;
+    Listener onClose;
 
     static Alert* New(Ctx* cx, Str id, Str message);
     static Alert* Info(Ctx* cx, Str id, Str message);
@@ -38,7 +38,7 @@ struct Alert {
     Alert* Content(El* e);
     Alert* Banner();
     Alert* Visible(bool v);
-    Alert* OnClose(Func0 fn);
+    Alert* OnClose(Listener fn);
     Alert* WithSize(UiSize s);
     El* IntoEl();
 };

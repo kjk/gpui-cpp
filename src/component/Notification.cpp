@@ -18,7 +18,7 @@ Notification* Notification::Kind(NotificationKind k) {
     kind = k;
     return this;
 }
-Notification* Notification::OnClose(Func0 fn) {
+Notification* Notification::OnClose(Listener fn) {
     onClose = fn;
     return this;
 }

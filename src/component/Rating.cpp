@@ -40,7 +40,7 @@ Rating* Rating::WithSize(UiSize s) {
     size = s;
     return this;
 }
-Rating* Rating::OnChange(Func1<int> fn) {
+Rating* Rating::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
@@ -57,10 +57,8 @@ El* Rating::IntoEl() {
                        ->Fg(on ? onC : th.border);
         El* hit = Div(a)->Child(star);
         if (onChange.IsValid() && !disabled) {
-            RateBind* b = ArenaNew<RateBind>(a);
-            b->fn = onChange;
-            b->value = i;
-            BindClick(hit, StrDup(a, fmt("star-%d", i)), MkFunc0(&FireRate, b));
+            BindClick(hit, StrDup(a, fmt("star-%d", i)),
+                      ListenerArg(onChange, i));
         }
         row->Child(hit);
     }

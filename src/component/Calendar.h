@@ -12,17 +12,17 @@ struct Calendar {
     int year = 2026;
     int month = 1;
     int day = 1;
-    Func1<int> onDay; // day of month
-    Func0 onPrev;
-    Func0 onNext;
+    Listener onDay; // day of month
+    Listener onPrev;
+    Listener onNext;
 
     static Calendar* New(Ctx* cx);
     Calendar* Year(int y);
     Calendar* Month(int m);
     Calendar* Day(int d);
-    Calendar* OnDay(Func1<int> fn);
-    Calendar* OnPrev(Func0 fn);
-    Calendar* OnNext(Func0 fn);
+    Calendar* OnDay(Listener fn);
+    Calendar* OnPrev(Listener fn);
+    Calendar* OnNext(Listener fn);
     El* IntoEl();
 };
 

@@ -19,12 +19,12 @@ struct Tree {
     TreeNode nodes[16] = {};
     int n = 0;
     int selected = -1;
-    Func1<int> onSelect;
+    Listener onSelect;
 
     static Tree* New(Ctx* cx);
     Tree* Node(Str label, int parent, bool folder, bool open);
     Tree* Selected(int i);
-    Tree* OnSelect(Func1<int> fn);
+    Tree* OnSelect(Listener fn);
     El* IntoEl();
 };
 

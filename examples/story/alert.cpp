@@ -12,10 +12,10 @@ enum {
     ClickAlertBannerClose = 2200
 };
 
-static void HideBanner(AlertStory* self) {
+static void HideBanner(AlertStory* self, Ctx* cx, const ClickEvent*) {
     self->alertBanner = false;
 }
-static void AlertNoop(AlertStory*) {}
+static void AlertNoop(AlertStory*, Ctx*, const ClickEvent*) {}
 
 static El* AlertLine(Ctx* cx, Str s, Rgba fg) {
     Arena* a = cx->a;
@@ -72,7 +72,7 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
         component::Alert::Info(cx, StrL("info1"),
                                StrL("Maintenance starts Friday at 22:00 UTC."))
             ->Title(StrL("Scheduled maintenance"))
-            ->OnClose(MkFunc0(&AlertNoop, self))
+            ->OnClose(Listen(cx, &AlertNoop))
             ->WithSize(self->toolbar.size)
             ->IntoEl());
     col->Child(
@@ -125,7 +125,7 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
                 StrL("Reporting is read-only while the nightly ledger closes."))
                 ->Banner()
                 ->Visible(true)
-                ->OnClose(MkFunc0(&HideBanner, self))
+                ->OnClose(Listen(cx, &HideBanner))
                 ->WithSize(self->toolbar.size)
                 ->IntoEl());
     }

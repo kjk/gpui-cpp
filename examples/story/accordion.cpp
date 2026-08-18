@@ -16,10 +16,12 @@ enum {
 };
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple);
-static void OnAccDefault(AccordionStory* self, int i) {
+static void OnAccDefault(AccordionStory* self, Ctx* cx, const ClickEvent*,
+                         intptr_t i) {
     ToggleOpen(self->accordionOpen, 3, i, self->options.multiple);
 }
-static void OnAccStyled(AccordionStory* self, int i) {
+static void OnAccStyled(AccordionStory* self, Ctx* cx, const ClickEvent*,
+                        intptr_t i) {
     ToggleOpen(self->accordionStyledOpen, 3, i, self->options.multiple);
 }
 
@@ -61,7 +63,7 @@ El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
                                     ->Bordered(self->options.bordered)
                                     ->Disabled(self->options.disabled)
                                     ->WithSize(self->toolbar.size)
-                                    ->OnToggle(MkFunc1(&OnAccDefault, self));
+                                    ->OnToggle(Listen(cx, &OnAccDefault));
     for (int i = 0; i < 3; i++) {
         acc->Item(Str(titles[i]), Str(bodies[i]), self->accordionOpen[i]);
     }
@@ -76,7 +78,7 @@ El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
             ->Bordered(true)
             ->Disabled(self->options.disabled)
             ->WithSize(self->toolbar.size)
-            ->OnToggle(MkFunc1(&OnAccStyled, self));
+            ->OnToggle(Listen(cx, &OnAccStyled));
     styled->SettingsItem(
         StrL("Account Settings"),
         StrL("Manage your account preferences, security settings, and "

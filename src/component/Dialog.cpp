@@ -28,11 +28,11 @@ Dialog* Dialog::Body(El* e) {
     body = e;
     return this;
 }
-Dialog* Dialog::OnClose(Func0 fn) {
+Dialog* Dialog::OnClose(Listener fn) {
     onClose = fn;
     return this;
 }
-Dialog* Dialog::OnOk(Func0 fn) {
+Dialog* Dialog::OnOk(Listener fn) {
     onOk = fn;
     return this;
 }

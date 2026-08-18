@@ -27,11 +27,11 @@ ColorPicker* ColorPicker::Open(bool v) {
     open = v;
     return this;
 }
-ColorPicker* ColorPicker::OnChange(Func1<uint32_t> fn) {
+ColorPicker* ColorPicker::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
-ColorPicker* ColorPicker::OnToggle(Func0 fn) {
+ColorPicker* ColorPicker::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
@@ -71,11 +71,8 @@ El* ColorPicker::IntoEl() {
                            ->H(24)
                            ->Bg(sc);
             if (onChange.IsValid()) {
-                ColBind* b = ArenaNew<ColBind>(a);
-                b->fn = onChange;
-                b->hex = sw[i];
                 BindClick(cell, StrDup(a, fmt("sw%d", i)),
-                          MkFunc0(&FireCol, b));
+                          ListenerArg(onChange, (intptr_t)sw[i]));
             }
             pop->Child(cell);
         }

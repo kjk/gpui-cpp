@@ -42,7 +42,7 @@ Radio* Radio::WithSize(UiSize s) {
     size = s;
     return this;
 }
-Radio* Radio::OnClick(Func1<bool> fn) {
+Radio* Radio::OnClick(Listener fn) {
     onClick = fn;
     return this;
 }
@@ -65,9 +65,7 @@ El* Radio::IntoEl() {
                   ->ItemsCenter()
                   ->Gap(8);
     if (onClick.IsValid() && !disabled) {
-        RadioBind* b = ArenaNew<RadioBind>(a);
-        b->fn = onClick;
-        row->OnClick(MkFunc0(&FireRadio, b));
+        row->OnClick(ListenerArg(onClick, checked ? 0 : 1));
     }
     row->Child(dot);
     if (label.s || hint.s) {

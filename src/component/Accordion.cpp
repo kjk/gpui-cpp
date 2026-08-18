@@ -61,7 +61,7 @@ Accordion* Accordion::SettingsItem(Str title, Str body, bool open,
     }
     return this;
 }
-Accordion* Accordion::OnToggle(Func1<int> fn) {
+Accordion* Accordion::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
@@ -120,10 +120,7 @@ El* Accordion::IntoEl() {
                    14)
                 ->Fg(th.mutedFg));
         if (onToggle.IsValid() && !disabled) {
-            AccBind* b = ArenaNew<AccBind>(a);
-            b->fn = onToggle;
-            b->index = i;
-            trig->OnClick(MkFunc0(&FireAcc, b));
+            trig->OnClick(ListenerArg(onToggle, i));
         }
         gpui::AccordionItem* it =
             gpui::AccordionItem::New(cx)

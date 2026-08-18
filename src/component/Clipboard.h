@@ -10,10 +10,10 @@ struct Clipboard {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str value = {};
-    Func1<Str> onCopy;
+    Listener onCopy;
 
     static Clipboard* New(Ctx* cx, Str value);
-    Clipboard* OnCopy(Func1<Str> fn);
+    Clipboard* OnCopy(Listener fn);
     El* IntoEl();
 };
 

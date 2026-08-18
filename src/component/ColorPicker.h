@@ -11,14 +11,14 @@ struct ColorPicker {
     Ctx* cx = nullptr;
     uint32_t hex = 0x2563eb;
     bool open = false;
-    Func1<uint32_t> onChange;
-    Func0 onToggle;
+    Listener onChange;
+    Listener onToggle;
 
     static ColorPicker* New(Ctx* cx);
     ColorPicker* Hex(uint32_t h);
     ColorPicker* Open(bool v);
-    ColorPicker* OnChange(Func1<uint32_t> fn);
-    ColorPicker* OnToggle(Func0 fn);
+    ColorPicker* OnChange(Listener fn);
+    ColorPicker* OnToggle(Listener fn);
     El* IntoEl();
 };
 

@@ -28,11 +28,11 @@ DatePicker* DatePicker::Open(bool v) {
     open = v;
     return this;
 }
-DatePicker* DatePicker::OnToggle(Func0 fn) {
+DatePicker* DatePicker::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
-DatePicker* DatePicker::OnDay(Func1<int> fn) {
+DatePicker* DatePicker::OnDay(Listener fn) {
     onDay = fn;
     return this;
 }

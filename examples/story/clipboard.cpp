@@ -5,7 +5,8 @@ struct ClipboardStory {
     static void Click(ClipboardStory* self, Ctx* cx, int id);
 };
 
-static void OnCopy(ClipboardStory* self, Str v) {
+static void OnCopy(ClipboardStory* self, Ctx* cx, const ClickEvent*,
+                   intptr_t v) {
     (void)v;
 }
 
@@ -20,7 +21,7 @@ El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
     defRow->Child(component::Label::New(cx, StrL("A clipboard button"))
                       ->IntoEl());
     defRow->Child(component::Clipboard::New(cx, StrL("masked :false"))
-                      ->OnCopy(MkFunc1(&OnCopy, self))
+                      ->OnCopy(Listen(cx, &OnCopy))
                       ->IntoEl());
     StorySectionAdd(def, defRow);
     page->Child(def);

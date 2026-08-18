@@ -8,22 +8,21 @@ struct SwitchStory {
     static void Click(SwitchStory* self, Ctx* cx, int id);
 };
 
-static void SetSw0(SwitchStory* self, bool v) {
+static void SetSw0(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
     self->switches[0] = v;
 }
-static void SetSw1(SwitchStory* self, bool v) {
+static void SetSw1(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
     self->switches[1] = v;
 }
-static void SetSw3(SwitchStory* self, bool v) {
+static void SetSw3(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
     self->switches[3] = v;
 }
-static void SetSw4(SwitchStory* self, bool v) {
+static void SetSw4(SwitchStory* self, Ctx* cx, const ClickEvent*, intptr_t v) {
     self->switches[4] = v;
 }
 
 static El* SwitchRow(Ctx* cx, SwitchStory* self, const char* title,
-                     const char* desc, const char* id, int slot,
-                     Func1<bool> on) {
+                     const char* desc, const char* id, int slot, Listener on) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* text = Div(a)->FlexCol()->Gap(4)->Grow();
@@ -56,11 +55,11 @@ El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
         Div(a)->FlexCol()->W(512)->Border(1, th.border)->Radius(th.radius);
     list->Child(SwitchRow(cx, self, "Product updates",
                           "New features and release notes.", "switch1", 0,
-                          MkFunc1(&SetSw0, self)));
+                          Listen(cx, &SetSw0)));
     list->Child(component::Separator::Horizontal(cx)->IntoEl());
     list->Child(SwitchRow(cx, self, "Security alerts",
                           "Important activity on your account.", "switch2", 1,
-                          MkFunc1(&SetSw1, self)));
+                          Listen(cx, &SetSw1)));
     StorySectionAdd(def, list);
     page->Child(def);
 
@@ -89,14 +88,14 @@ El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
                       ->Checked(self->switches[3])
                       ->Color(th.success)
                       ->WithSize(self->toolbar.size)
-                      ->OnClick(MkFunc1(&SetSw3, self))
+                      ->OnClick(Listen(cx, &SetSw3))
                       ->IntoEl());
     colRow->Child(component::Switch::New(cx, StrL("switch5"))
                       ->Label(StrL("Destructive"))
                       ->Checked(self->switches[4])
                       ->Color(th.danger)
                       ->WithSize(self->toolbar.size)
-                      ->OnClick(MkFunc1(&SetSw4, self))
+                      ->OnClick(Listen(cx, &SetSw4))
                       ->IntoEl());
     colRow->Child(component::Switch::New(cx, StrL("switch4_disabled"))
                       ->Label(StrL("Disabled"))

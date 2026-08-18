@@ -9,10 +9,10 @@ struct SelectStory {
     static void Click(SelectStory* self, Ctx* cx, int id);
 };
 
-static void ToggleSel(SelectStory* self) {
+static void ToggleSel(SelectStory* self, Ctx* cx, const ClickEvent*) {
     self->selectOpen = !self->selectOpen;
 }
-static void PickSel(SelectStory* self, int i) {
+static void PickSel(SelectStory* self, Ctx* cx, const ClickEvent*, intptr_t i) {
     self->selectIx = i;
     self->selectOpen = false;
 }
@@ -27,8 +27,8 @@ static component::Select* Framework(Ctx* cx, SelectStory* self,
         ->Option(StrL("Vue"))
         ->Selected(self->selectIx)
         ->Open(self->selectOpen && self->selB == (int)id[0])
-        ->OnToggle(MkFunc0(&ToggleSel, self))
-        ->OnChange(MkFunc1(&PickSel, self));
+        ->OnToggle(Listen(cx, &ToggleSel))
+        ->OnChange(Listen(cx, &PickSel));
 }
 
 El* SelectStory::Render(SelectStory* self, Ctx* cx) {

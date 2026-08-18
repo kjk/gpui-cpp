@@ -29,7 +29,7 @@ Tabs* Tabs::Selected(int i) {
     selected = i;
     return this;
 }
-Tabs* Tabs::OnChange(Func1<int> fn) {
+Tabs* Tabs::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
@@ -53,10 +53,7 @@ El* Tabs::IntoEl() {
             tab->first->style.fontSemibold = true;
         }
         if (onChange.IsValid()) {
-            TabBind* b = ArenaNew<TabBind>(a);
-            b->fn = onChange;
-            b->index = i;
-            tab->OnClick(MkFunc0(&FireTab, b));
+            tab->OnClick(ListenerArg(onChange, i));
         }
         bar->Child(tab);
     }

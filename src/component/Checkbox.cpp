@@ -50,7 +50,7 @@ Checkbox* Checkbox::Tooltip(Str s) {
     tooltip = s;
     return this;
 }
-Checkbox* Checkbox::OnClick(Func1<bool> fn) {
+Checkbox* Checkbox::OnClick(Listener fn) {
     onClick = fn;
     return this;
 }
@@ -75,10 +75,7 @@ El* Checkbox::IntoEl() {
                   ->ItemsCenter()
                   ->Gap(8);
     if (onClick.IsValid() && !disabled) {
-        CheckBind* b = ArenaNew<CheckBind>(a);
-        b->fn = onClick;
-        b->next = !checked;
-        row->OnClick(MkFunc0(&FireCheck, b));
+        row->OnClick(ListenerArg(onClick, !checked));
     }
     if (tooltip.s) {
         row->Tip(tooltip);

@@ -21,7 +21,7 @@ Clipboard* Clipboard::New(Ctx* cx, Str value) {
     c->value = value;
     return c;
 }
-Clipboard* Clipboard::OnCopy(Func1<Str> fn) {
+Clipboard* Clipboard::OnCopy(Listener fn) {
     onCopy = fn;
     return this;
 }
@@ -33,10 +33,7 @@ El* Clipboard::IntoEl() {
                       ->Ghost()
                       ->Tooltip(StrL("Copy"));
     if (onCopy.IsValid()) {
-        ClipBind* b = ArenaNew<ClipBind>(a);
-        b->fn = onCopy;
-        b->value = value;
-        btn->OnClick(MkFunc0(&FireClip, b));
+        btn->OnClick(onCopy);
     }
     return Div(a)
         ->FlexRow()

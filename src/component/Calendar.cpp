@@ -31,15 +31,15 @@ Calendar* Calendar::Day(int d) {
     day = d;
     return this;
 }
-Calendar* Calendar::OnDay(Func1<int> fn) {
+Calendar* Calendar::OnDay(Listener fn) {
     onDay = fn;
     return this;
 }
-Calendar* Calendar::OnPrev(Func0 fn) {
+Calendar* Calendar::OnPrev(Listener fn) {
     onPrev = fn;
     return this;
 }
-Calendar* Calendar::OnNext(Func0 fn) {
+Calendar* Calendar::OnNext(Listener fn) {
     onNext = fn;
     return this;
 }
@@ -102,10 +102,7 @@ El* Calendar::IntoEl() {
                             ->Fg(th.foreground));
         }
         if (onDay.IsValid()) {
-            DayBind* b = ArenaNew<DayBind>(a);
-            b->fn = onDay;
-            b->day = d;
-            cell->OnClick(MkFunc0(&FireDay, b));
+            cell->OnClick(ListenerArg(onDay, d));
         }
         row->Child(cell);
     }

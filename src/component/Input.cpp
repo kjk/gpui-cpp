@@ -18,7 +18,7 @@ Input* Input::Label(Str s) {
     label = s;
     return this;
 }
-Input* Input::OnChange(Func0 fn) {
+Input* Input::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
@@ -52,7 +52,7 @@ Textarea* Textarea::New(Ctx* cx, Str id, const char* text) {
     t->text = text;
     return t;
 }
-Textarea* Textarea::OnFocus(Func0 fn) {
+Textarea* Textarea::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
 }
@@ -78,11 +78,11 @@ NumberInput* NumberInput::New(Ctx* cx, LineInput* state) {
     n->state = state;
     return n;
 }
-NumberInput* NumberInput::OnInc(Func0 fn) {
+NumberInput* NumberInput::OnInc(Listener fn) {
     onInc = fn;
     return this;
 }
-NumberInput* NumberInput::OnDec(Func0 fn) {
+NumberInput* NumberInput::OnDec(Listener fn) {
     onDec = fn;
     return this;
 }
@@ -117,7 +117,7 @@ OtpInput* OtpInput::New(Ctx* cx, const char* value, int len) {
     o->len = len;
     return o;
 }
-OtpInput* OtpInput::OnFocus(Func0 fn) {
+OtpInput* OtpInput::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
 }

@@ -34,11 +34,11 @@ Select* Select::Open(bool v) {
     open = v;
     return this;
 }
-Select* Select::OnChange(Func1<int> fn) {
+Select* Select::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
-Select* Select::OnToggle(Func0 fn) {
+Select* Select::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
@@ -72,10 +72,7 @@ El* Select::IntoEl() {
             El* row = Div(a)->PadX(8)->PadY(4)->HoverBg(th.muted)->Child(
                 TextEl(a, options[i])->Font(13)->Fg(th.foreground));
             if (onChange.IsValid()) {
-                SelBind* b = ArenaNew<SelBind>(a);
-                b->fn = onChange;
-                b->index = i;
-                BindClick(row, options[i], MkFunc0(&FireSel, b));
+                BindClick(row, options[i], ListenerArg(onChange, i));
             }
             opts->Child(row);
         }

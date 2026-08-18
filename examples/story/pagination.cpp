@@ -9,10 +9,12 @@ struct PaginationStory {
     static void Click(PaginationStory* self, Ctx* cx, int id);
 };
 
-static void SetPage(PaginationStory* self, int p) {
+static void SetPage(PaginationStory* self, Ctx* cx, const ClickEvent*,
+                    intptr_t p) {
     self->page = p;
 }
-static void SetPageMany(PaginationStory* self, int p) {
+static void SetPageMany(PaginationStory* self, Ctx* cx, const ClickEvent*,
+                        intptr_t p) {
     self->pageMany = p;
 }
 
@@ -23,7 +25,7 @@ El* PaginationStory::Render(PaginationStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default", nullptr);
     StorySectionAdd(def, component::Pagination::New(cx, self->page, 10)
-                             ->OnChange(MkFunc1(&SetPage, self))
+                             ->OnChange(Listen(cx, &SetPage))
                              ->IntoEl());
     page->Child(def);
 
@@ -31,13 +33,13 @@ El* PaginationStory::Render(PaginationStory* self, Ctx* cx) {
         cx, "Visible Pages",
         "Control how many page links remain visible in a larger result set.");
     StorySectionAdd(many, component::Pagination::New(cx, self->pageMany, 50)
-                              ->OnChange(MkFunc1(&SetPageMany, self))
+                              ->OnChange(Listen(cx, &SetPageMany))
                               ->IntoEl());
     page->Child(many);
 
     El* compact = StorySection(cx, "Compact Style", nullptr);
     StorySectionAdd(compact, component::Pagination::New(cx, self->page, 10)
-                                 ->OnChange(MkFunc1(&SetPage, self))
+                                 ->OnChange(Listen(cx, &SetPage))
                                  ->IntoEl());
     page->Child(compact);
 

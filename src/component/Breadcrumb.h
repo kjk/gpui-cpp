@@ -12,11 +12,11 @@ struct Breadcrumb {
     Str items[8] = {};
     int n = 0;
     int clickBase = 0;
-    Func1<int> onClick;
+    Listener onClick;
 
     static Breadcrumb* New(Ctx* cx);
     Breadcrumb* Item(Str s);
-    Breadcrumb* OnClick(Func1<int> fn);
+    Breadcrumb* OnClick(Listener fn);
     El* IntoEl();
 };
 

@@ -9,10 +9,11 @@ struct DatePickerStory {
     static void Click(DatePickerStory* self, Ctx* cx, int id);
 };
 
-static void ToggleDate(DatePickerStory* self) {
+static void ToggleDate(DatePickerStory* self, Ctx* cx, const ClickEvent*) {
     self->dateOpen = !self->dateOpen;
 }
-static void PickDate(DatePickerStory* self, int d) {
+static void PickDate(DatePickerStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t d) {
     self->calDay = d;
     self->dateOpen = false;
 }
@@ -27,8 +28,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                              ->Month(self->calMonth)
                              ->Day(self->calDay)
                              ->Open(self->dateOpen)
-                             ->OnToggle(MkFunc0(&ToggleDate, self))
-                             ->OnDay(MkFunc1(&PickDate, self))
+                             ->OnToggle(Listen(cx, &ToggleDate))
+                             ->OnDay(Listen(cx, &PickDate))
                              ->IntoEl());
     page->Child(sec);
 

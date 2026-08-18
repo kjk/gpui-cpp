@@ -25,7 +25,7 @@ Breadcrumb* Breadcrumb::Item(Str s) {
     }
     return this;
 }
-Breadcrumb* Breadcrumb::OnClick(Func1<int> fn) {
+Breadcrumb* Breadcrumb::OnClick(Listener fn) {
     onClick = fn;
     return this;
 }
@@ -43,10 +43,7 @@ El* Breadcrumb::IntoEl() {
                     ->Fg(last ? th.foreground : th.mutedFg);
         if (onClick.IsValid()) {
             El* hit = Div(a)->Child(t);
-            CrumbBind* b = ArenaNew<CrumbBind>(a);
-            b->fn = onClick;
-            b->index = i;
-            BindClick(hit, items[i], MkFunc0(&FireCrumb, b));
+            BindClick(hit, items[i], ListenerArg(onClick, i));
             row->Child(hit);
         } else {
             row->Child(t);

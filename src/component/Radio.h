@@ -15,7 +15,7 @@ struct Radio {
     bool checked = false;
     bool disabled = false;
     UiSize size = UiSize::Medium;
-    Func1<bool> onClick;
+    Listener onClick;
 
     static Radio* New(Ctx* cx, Str id);
     Radio* Label(Str s);
@@ -23,7 +23,7 @@ struct Radio {
     Radio* Checked(bool v);
     Radio* Disabled(bool v);
     Radio* WithSize(UiSize s);
-    Radio* OnClick(Func1<bool> fn);
+    Radio* OnClick(Listener fn);
     El* IntoEl();
 };
 

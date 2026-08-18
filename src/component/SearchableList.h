@@ -12,11 +12,11 @@ struct SearchableList {
     LineInput* query = nullptr;
     Str items[32] = {};
     int n = 0;
-    Func1<int> onSelect;
+    Listener onSelect;
 
     static SearchableList* New(Ctx* cx, LineInput* query);
     SearchableList* Item(Str s);
-    SearchableList* OnSelect(Func1<int> fn);
+    SearchableList* OnSelect(Listener fn);
     El* IntoEl();
 };
 

@@ -8,7 +8,7 @@ struct NotificationStory {
     static void Click(NotificationStory* self, Ctx* cx, int id);
 };
 
-static void HideNote(NotificationStory* self) {
+static void HideNote(NotificationStory* self, Ctx* cx, const ClickEvent*) {
     self->notifyOn = false;
 }
 
@@ -24,7 +24,7 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     if (self->notifyOn && self->selA == 0) {
         StorySectionAdd(def, component::Notification::New(
                                  cx, {}, StrL("This is a notification."))
-                                 ->OnClose(MkFunc0(&HideNote, self))
+                                 ->OnClose(Listen(cx, &HideNote))
                                  ->IntoEl());
     }
     page->Child(def);
@@ -64,7 +64,7 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
         StorySectionAdd(
             types, component::Notification::New(cx, {}, Str(kMsgs[self->selA]))
                        ->Kind(kKinds[self->selA])
-                       ->OnClose(MkFunc0(&HideNote, self))
+                       ->OnClose(Listen(cx, &HideNote))
                        ->IntoEl());
     }
     page->Child(types);
@@ -83,7 +83,7 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                 StrL("Your changes have been saved to the cloud and will sync "
                      "across all of your devices."))
                 ->Kind(component::NotificationKind::Info)
-                ->OnClose(MkFunc0(&HideNote, self))
+                ->OnClose(Listen(cx, &HideNote))
                 ->IntoEl());
     }
     page->Child(titled);

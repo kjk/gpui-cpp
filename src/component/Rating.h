@@ -15,7 +15,7 @@ struct Rating {
     Rgba color = {};
     bool hasColor = false;
     UiSize size = UiSize::Medium;
-    Func1<int> onChange;
+    Listener onChange;
 
     static Rating* New(Ctx* cx);
     Rating* Value(int v);
@@ -23,7 +23,7 @@ struct Rating {
     Rating* Disabled(bool v);
     Rating* Color(Rgba c);
     Rating* WithSize(UiSize s);
-    Rating* OnChange(Func1<int> fn);
+    Rating* OnChange(Listener fn);
     El* IntoEl();
 };
 

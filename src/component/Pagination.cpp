@@ -22,7 +22,7 @@ Pagination* Pagination::New(Ctx* cx, int page, int total) {
     p->total = total;
     return p;
 }
-Pagination* Pagination::OnChange(Func1<int> fn) {
+Pagination* Pagination::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
@@ -44,10 +44,7 @@ El* Pagination::IntoEl() {
             b->Primary();
         }
         if (onChange.IsValid()) {
-            PageBind* bind = ArenaNew<PageBind>(a);
-            bind->fn = onChange;
-            bind->page = i;
-            b->OnClick(MkFunc0(&FirePage, bind));
+            b->OnClick(ListenerArg(onChange, i));
         }
         row->Child(b->IntoEl());
     }

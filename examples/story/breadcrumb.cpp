@@ -6,7 +6,8 @@ struct BreadcrumbStory {
     static void Click(BreadcrumbStory* self, Ctx* cx, int id);
 };
 
-static void OnCrumb(BreadcrumbStory* self, int i) {
+static void OnCrumb(BreadcrumbStory* self, Ctx* cx, const ClickEvent*,
+                    intptr_t i) {
     self->crumbClicked = i;
 }
 
@@ -32,7 +33,7 @@ El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
                    ->Item(StrL("Documents"))
                    ->Item(StrL("Projects"))
                    ->Item(StrL("Current"))
-                   ->OnClick(MkFunc1(&OnCrumb, self))
+                   ->OnClick(Listen(cx, &OnCrumb))
                    ->IntoEl());
     if (self->crumbClicked >= 0) {
         static const char* kNames[] = {"Home", "Documents", "Projects",

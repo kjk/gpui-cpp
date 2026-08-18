@@ -12,12 +12,12 @@ struct Stepper {
     Str steps[8] = {};
     int n = 0;
     int current = 0;
-    Func1<int> onChange;
+    Listener onChange;
 
     static Stepper* New(Ctx* cx);
     Stepper* Step(Str s);
     Stepper* Current(int i);
-    Stepper* OnChange(Func1<int> fn);
+    Stepper* OnChange(Listener fn);
     El* IntoEl();
 };
 

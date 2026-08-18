@@ -14,15 +14,15 @@ struct Select {
     int n = 0;
     int selected = 0;
     bool open = false;
-    Func1<int> onChange;
-    Func0 onToggle;
+    Listener onChange;
+    Listener onToggle;
 
     static Select* New(Ctx* cx, Str id);
     Select* Option(Str s);
     Select* Selected(int i);
     Select* Open(bool v);
-    Select* OnChange(Func1<int> fn);
-    Select* OnToggle(Func0 fn);
+    Select* OnChange(Listener fn);
+    Select* OnToggle(Listener fn);
     El* IntoEl();
 };
 

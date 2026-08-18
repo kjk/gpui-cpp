@@ -63,7 +63,7 @@ Alert* Alert::Visible(bool v) {
     visible = v;
     return this;
 }
-Alert* Alert::OnClose(Func0 fn) {
+Alert* Alert::OnClose(Listener fn) {
     onClose = fn;
     return this;
 }

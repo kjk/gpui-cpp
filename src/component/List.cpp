@@ -29,7 +29,7 @@ List* List::Selected(int i) {
     selected = i;
     return this;
 }
-List* List::OnSelect(Func1<int> fn) {
+List* List::OnSelect(Listener fn) {
     onSelect = fn;
     return this;
 }
@@ -44,10 +44,7 @@ El* List::IntoEl() {
         }
         row->Child(TextEl(a, items[i])->Font(13)->Fg(th.foreground));
         if (onSelect.IsValid()) {
-            ListBind* b = ArenaNew<ListBind>(a);
-            b->fn = onSelect;
-            b->index = i;
-            BindClick(row, items[i], MkFunc0(&FireList, b));
+            BindClick(row, items[i], ListenerArg(onSelect, i));
         }
         col->Child(row);
     }

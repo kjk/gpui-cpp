@@ -16,7 +16,7 @@ struct Switch {
     UiSize size = UiSize::Medium;
     Rgba color = {};
     bool hasColor = false;
-    Func1<bool> onClick;
+    Listener onClick;
 
     static Switch* New(Ctx* cx, Str id);
     Switch* Label(Str s);
@@ -24,7 +24,7 @@ struct Switch {
     Switch* Disabled(bool v);
     Switch* WithSize(UiSize s);
     Switch* Color(Rgba c);
-    Switch* OnClick(Func1<bool> fn);
+    Switch* OnClick(Listener fn);
     El* IntoEl();
 };
 

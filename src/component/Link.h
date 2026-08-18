@@ -13,13 +13,13 @@ struct Link {
     Str href = {};
     Str text = {};
     bool disabled = false;
-    Func1<Str> onOpen;
+    Listener onOpen;
 
     static Link* New(Ctx* cx, Str id);
     Link* Href(Str s);
     Link* Text(Str s);
     Link* Disabled(bool v);
-    Link* OnOpen(Func1<Str> fn);
+    Link* OnOpen(Listener fn);
     El* IntoEl();
 };
 

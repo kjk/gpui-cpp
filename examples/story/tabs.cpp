@@ -8,7 +8,7 @@ struct TabsStory {
     static void Click(TabsStory* self, Ctx* cx, int id);
 };
 
-static void SetTab(TabsStory* self, int i) {
+static void SetTab(TabsStory* self, Ctx* cx, const ClickEvent*, intptr_t i) {
     self->tab = i;
 }
 
@@ -38,7 +38,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                                        ->Tab(StrL("Activity"))
                                        ->Tab(StrL("Settings"))
                                        ->Selected(self->tab)
-                                       ->OnChange(MkFunc1(&SetTab, self))
+                                       ->OnChange(Listen(cx, &SetTab))
                                        ->IntoEl()));
     page->Child(tabs);
 
@@ -49,7 +49,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                                         ->Tab(StrL("Activity"))
                                         ->Tab(StrL("Settings"))
                                         ->Selected(self->tab)
-                                        ->OnChange(MkFunc1(&SetTab, self))
+                                        ->OnChange(Listen(cx, &SetTab))
                                         ->IntoEl()));
     page->Child(under);
 

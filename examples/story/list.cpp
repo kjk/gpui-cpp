@@ -6,7 +6,7 @@ struct ListStory {
     static void Click(ListStory* self, Ctx* cx, int id);
 };
 
-static void PickList(ListStory* self, int i) {
+static void PickList(ListStory* self, Ctx* cx, const ClickEvent*, intptr_t i) {
     self->listSel = i;
 }
 
@@ -23,7 +23,7 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
                              ->Item(StrL("Spam"))
                              ->Item(StrL("Trash"))
                              ->Selected(self->listSel)
-                             ->OnSelect(MkFunc1(&PickList, self))
+                             ->OnSelect(Listen(cx, &PickList))
                              ->IntoEl());
     page->Child(sec);
     return page;

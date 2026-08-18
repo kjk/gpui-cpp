@@ -15,7 +15,7 @@ Slider* Slider::Value(float v) {
     value = v;
     return this;
 }
-Slider* Slider::OnChange(Func1<float> fn) {
+Slider* Slider::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }

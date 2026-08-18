@@ -24,7 +24,7 @@ Sheet* Sheet::Body(El* e) {
     body = e;
     return this;
 }
-Sheet* Sheet::OnClose(Func0 fn) {
+Sheet* Sheet::OnClose(Listener fn) {
     onClose = fn;
     return this;
 }

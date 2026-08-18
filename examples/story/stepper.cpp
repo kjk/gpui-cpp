@@ -8,7 +8,8 @@ struct StepperStory {
     static void Click(StepperStory* self, Ctx* cx, int id);
 };
 
-static void SetStep(StepperStory* self, int i) {
+static void SetStep(StepperStory* self, Ctx* cx, const ClickEvent*,
+                    intptr_t i) {
     self->stepper = i;
 }
 
@@ -23,7 +24,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
                            ->Step(StrL("Step 2"))
                            ->Step(StrL("Step 3"))
                            ->Current(self->stepper)
-                           ->OnChange(MkFunc1(&SetStep, self))
+                           ->OnChange(Listen(cx, &SetStep))
                            ->IntoEl());
     page->Child(h);
 
@@ -34,7 +35,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
                             ->Step(StrL("Preview"))
                             ->Step(StrL("Finish"))
                             ->Current(self->stepper)
-                            ->OnChange(MkFunc1(&SetStep, self))
+                            ->OnChange(Listen(cx, &SetStep))
                             ->IntoEl());
     page->Child(ic);
 
@@ -75,7 +76,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
                             ->Step(StrL("Step 2"))
                             ->Step(StrL("Step 3"))
                             ->Current(self->stepper)
-                            ->OnChange(MkFunc1(&SetStep, self))
+                            ->OnChange(Listen(cx, &SetStep))
                             ->IntoEl());
     page->Child(tc);
     return page;

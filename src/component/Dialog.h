@@ -13,16 +13,16 @@ struct Dialog {
     Str description = {};
     bool open = false;
     El* body = nullptr;
-    Func0 onClose;
-    Func0 onOk;
+    Listener onClose;
+    Listener onOk;
 
     static Dialog* New(Ctx* cx);
     Dialog* Title(Str s);
     Dialog* Description(Str s);
     Dialog* Open(bool v);
     Dialog* Body(El* e);
-    Dialog* OnClose(Func0 fn);
-    Dialog* OnOk(Func0 fn);
+    Dialog* OnClose(Listener fn);
+    Dialog* OnOk(Listener fn);
     El* IntoEl(WinSize size);
 };
 

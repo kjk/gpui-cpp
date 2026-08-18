@@ -15,16 +15,16 @@ struct Combobox {
     Str selected = {};
     bool open = false;
     LineInput* query = nullptr;
-    Func1<int> onChange;
-    Func0 onToggle;
+    Listener onChange;
+    Listener onToggle;
 
     static Combobox* New(Ctx* cx, Str id);
     Combobox* Option(Str s);
     Combobox* Selected(Str s);
     Combobox* Open(bool v);
     Combobox* Query(LineInput* q);
-    Combobox* OnChange(Func1<int> fn);
-    Combobox* OnToggle(Func0 fn);
+    Combobox* OnChange(Listener fn);
+    Combobox* OnToggle(Listener fn);
     El* IntoEl();
 };
 

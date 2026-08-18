@@ -14,14 +14,14 @@ struct Sidebar {
     int n = 0;
     int selected = 0;
     bool collapsed = false;
-    Func1<int> onSelect;
+    Listener onSelect;
 
     static Sidebar* New(Ctx* cx);
     Sidebar* Title(Str s);
     Sidebar* Item(Str s);
     Sidebar* Selected(int i);
     Sidebar* Collapsed(bool v);
-    Sidebar* OnSelect(Func1<int> fn);
+    Sidebar* OnSelect(Listener fn);
     El* IntoEl();
 };
 

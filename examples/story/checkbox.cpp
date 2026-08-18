@@ -8,22 +8,28 @@ struct CheckboxStory {
     static void Click(CheckboxStory* self, Ctx* cx, int id);
 };
 
-static void SetCheck0(CheckboxStory* self, bool v) {
+static void SetCheck0(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->checks[0] = v;
 }
-static void SetCheck1(CheckboxStory* self, bool v) {
+static void SetCheck1(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->checks[1] = v;
 }
-static void SetCheck2(CheckboxStory* self, bool v) {
+static void SetCheck2(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->checks[2] = v;
 }
-static void SetCheck3(CheckboxStory* self, bool v) {
+static void SetCheck3(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->checks[3] = v;
 }
-static void SetCheck4(CheckboxStory* self, bool v) {
+static void SetCheck4(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->checks[4] = v;
 }
-static void SetCheck5(CheckboxStory* self, bool v) {
+static void SetCheck5(CheckboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->checks[5] = v;
 }
 
@@ -39,13 +45,13 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
                       ->Label(StrL("Product updates"))
                       ->Checked(self->checks[0])
                       ->WithSize(self->toolbar.size)
-                      ->OnClick(MkFunc1(&SetCheck0, self))
+                      ->OnClick(Listen(cx, &SetCheck0))
                       ->IntoEl());
     defCol->Child(component::Checkbox::New(cx, StrL("remember"))
                       ->Label(StrL("Remember this device"))
                       ->Checked(self->checks[1])
                       ->WithSize(self->toolbar.size)
-                      ->OnClick(MkFunc1(&SetCheck1, self))
+                      ->OnClick(Listen(cx, &SetCheck1))
                       ->IntoEl());
     StorySectionAdd(def, defCol);
     page->Child(def);
@@ -56,7 +62,7 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
     StorySectionAdd(bare, component::Checkbox::New(cx, StrL("unlabelled"))
                               ->Checked(self->checks[2])
                               ->WithSize(self->toolbar.size)
-                              ->OnClick(MkFunc1(&SetCheck2, self))
+                              ->OnClick(Listen(cx, &SetCheck2))
                               ->IntoEl());
     page->Child(bare);
 
@@ -88,7 +94,7 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
             ->Checked(self->checks[3])
             ->WithSize(self->toolbar.size)
             ->W(320)
-            ->OnClick(MkFunc1(&SetCheck3, self))
+            ->OnClick(Listen(cx, &SetCheck3))
             ->IntoEl());
     labCol->Child(component::Checkbox::New(cx, StrL("wrapping"))
                       ->Label(StrL("Notify me when a new device signs in to "
@@ -96,7 +102,7 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
                       ->Checked(self->checks[5])
                       ->WithSize(self->toolbar.size)
                       ->W(320)
-                      ->OnClick(MkFunc1(&SetCheck5, self))
+                      ->OnClick(Listen(cx, &SetCheck5))
                       ->IntoEl());
     labCol
         ->Child(component::Checkbox::New(cx, StrL("markdown"))
@@ -105,7 +111,7 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
                     ->Checked(self->checks[4])
                     ->WithSize(self->toolbar.size)
                     ->W(320)
-                    ->OnClick(MkFunc1(&SetCheck4, self))
+                    ->OnClick(Listen(cx, &SetCheck4))
                     ->IntoEl());
     StorySectionAdd(labs, labCol);
     page->Child(labs);

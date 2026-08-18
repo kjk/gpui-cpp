@@ -8,7 +8,8 @@ struct RatingStory {
     static void Click(RatingStory* self, Ctx* cx, int id);
 };
 
-static void SetRating(RatingStory* self, int v) {
+static void SetRating(RatingStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->rating = v;
 }
 
@@ -24,7 +25,7 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
                              ->Value(self->rating)
                              ->Max(5)
                              ->WithSize(self->toolbar.size)
-                             ->OnChange(MkFunc1(&SetRating, self))
+                             ->OnChange(Listen(cx, &SetRating))
                              ->IntoEl());
     page->Child(def);
 
@@ -44,7 +45,7 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
                              ->Max(5)
                              ->Color(th.green)
                              ->WithSize(self->toolbar.size)
-                             ->OnChange(MkFunc1(&SetRating, self))
+                             ->OnChange(Listen(cx, &SetRating))
                              ->IntoEl());
     page->Child(col);
     return page;

@@ -38,11 +38,11 @@ Combobox* Combobox::Query(LineInput* q) {
     query = q;
     return this;
 }
-Combobox* Combobox::OnChange(Func1<int> fn) {
+Combobox* Combobox::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
-Combobox* Combobox::OnToggle(Func0 fn) {
+Combobox* Combobox::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
@@ -79,10 +79,7 @@ El* Combobox::IntoEl() {
                 Div(a)->H(28)->PadX(8)->ItemsCenter()->HoverBg(th.muted)->Child(
                     TextEl(a, options[i])->Font(13)->Fg(th.foreground));
             if (onChange.IsValid()) {
-                CbBind* b = ArenaNew<CbBind>(a);
-                b->fn = onChange;
-                b->index = i;
-                BindClick(row, options[i], MkFunc0(&FireCb, b));
+                BindClick(row, options[i], ListenerArg(onChange, i));
             }
             pop->Child(row);
         }

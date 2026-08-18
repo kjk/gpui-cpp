@@ -19,7 +19,7 @@ SearchableList* SearchableList::Item(Str s) {
     }
     return this;
 }
-SearchableList* SearchableList::OnSelect(Func1<int> fn) {
+SearchableList* SearchableList::OnSelect(Listener fn) {
     onSelect = fn;
     return this;
 }

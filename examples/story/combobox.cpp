@@ -11,10 +11,11 @@ struct ComboboxStory {
     static void Click(ComboboxStory* self, Ctx* cx, int id);
 };
 
-static void ToggleCombo(ComboboxStory* self) {
+static void ToggleCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*) {
     self->comboOpen = !self->comboOpen;
 }
-static void PickCombo(ComboboxStory* self, int i) {
+static void PickCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t i) {
     self->selectIx = i;
     self->comboOpen = false;
 }
@@ -26,8 +27,8 @@ static El* Combo(Ctx* cx, ComboboxStory* self, const char* id) {
                                   ->Selected(Str(opts[self->selectIx]))
                                   ->Open(self->comboOpen)
                                   ->Query(&self->search)
-                                  ->OnToggle(MkFunc0(&ToggleCombo, self))
-                                  ->OnChange(MkFunc1(&PickCombo, self));
+                                  ->OnToggle(Listen(cx, &ToggleCombo))
+                                  ->OnChange(Listen(cx, &PickCombo));
     cb->Option(StrL("GPUI"))
         ->Option(StrL("React"))
         ->Option(StrL("SwiftUI"))

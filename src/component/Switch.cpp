@@ -43,7 +43,7 @@ Switch* Switch::Color(Rgba c) {
     hasColor = true;
     return this;
 }
-Switch* Switch::OnClick(Func1<bool> fn) {
+Switch* Switch::OnClick(Listener fn) {
     onClick = fn;
     return this;
 }
@@ -85,10 +85,7 @@ El* Switch::IntoEl() {
                    ->ItemsCenter()
                    ->Gap(8);
     if (onClick.IsValid() && !disabled) {
-        SwitchBind* b = ArenaNew<SwitchBind>(a);
-        b->fn = onClick;
-        b->next = !checked;
-        root->OnClick(MkFunc0(&FireSwitch, b));
+        root->OnClick(ListenerArg(onClick, !checked));
     }
     root->Child(track);
     if (label.s) {

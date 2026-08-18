@@ -19,11 +19,11 @@ struct Notification {
     NotificationKind kind = NotificationKind::Info;
     Str title = {};
     Str message = {};
-    Func0 onClose;
+    Listener onClose;
 
     static Notification* New(Ctx* cx, Str title, Str message);
     Notification* Kind(NotificationKind k);
-    Notification* OnClose(Func0 fn);
+    Notification* OnClose(Listener fn);
     El* IntoEl();
 };
 

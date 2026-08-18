@@ -9,19 +9,19 @@ struct RadioStory {
     static void Click(RadioStory* self, Ctx* cx, int id);
 };
 
-static void SetDel0(RadioStory* self, bool) {
+static void SetDel0(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
     self->radioSel = 0;
 }
-static void SetDel1(RadioStory* self, bool) {
+static void SetDel1(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
     self->radioSel = 1;
 }
-static void SetBill0(RadioStory* self, bool) {
+static void SetBill0(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
     self->radioBilling = 0;
 }
-static void SetBill1(RadioStory* self, bool) {
+static void SetBill1(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
     self->radioBilling = 1;
 }
-static void SetBill2(RadioStory* self, bool) {
+static void SetBill2(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
     self->radioBilling = 2;
 }
 
@@ -38,14 +38,14 @@ El* RadioStory::Render(RadioStory* self, Ctx* cx) {
                       ->Hint(StrL("Arrives in 3–5 business days."))
                       ->Checked(self->radioSel == 0)
                       ->WithSize(self->toolbar.size)
-                      ->OnClick(MkFunc1(&SetDel0, self))
+                      ->OnClick(Listen(cx, &SetDel0))
                       ->IntoEl());
     delCol->Child(component::Radio::New(cx, StrL("express"))
                       ->Label(StrL("Express delivery"))
                       ->Hint(StrL("Arrives the next business day."))
                       ->Checked(self->radioSel == 1)
                       ->WithSize(self->toolbar.size)
-                      ->OnClick(MkFunc1(&SetDel1, self))
+                      ->OnClick(Listen(cx, &SetDel1))
                       ->IntoEl());
     delCol->Child(component::Radio::New(cx, StrL("pickup"))
                       ->Label(StrL("Store pickup"))
@@ -64,19 +64,19 @@ El* RadioStory::Render(RadioStory* self, Ctx* cx) {
                        ->Label(StrL("Monthly"))
                        ->Checked(self->radioBilling == 0)
                        ->WithSize(self->toolbar.size)
-                       ->OnClick(MkFunc1(&SetBill0, self))
+                       ->OnClick(Listen(cx, &SetBill0))
                        ->IntoEl());
     billRow->Child(component::Radio::New(cx, StrL("yearly"))
                        ->Label(StrL("Yearly"))
                        ->Checked(self->radioBilling == 1)
                        ->WithSize(self->toolbar.size)
-                       ->OnClick(MkFunc1(&SetBill1, self))
+                       ->OnClick(Listen(cx, &SetBill1))
                        ->IntoEl());
     billRow->Child(component::Radio::New(cx, StrL("lifetime"))
                        ->Label(StrL("Lifetime"))
                        ->Checked(self->radioBilling == 2)
                        ->WithSize(self->toolbar.size)
-                       ->OnClick(MkFunc1(&SetBill2, self))
+                       ->OnClick(Listen(cx, &SetBill2))
                        ->IntoEl());
     StorySectionAdd(bill, billRow);
     page->Child(bill);

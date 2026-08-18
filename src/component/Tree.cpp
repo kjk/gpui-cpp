@@ -33,7 +33,7 @@ Tree* Tree::Selected(int i) {
     selected = i;
     return this;
 }
-Tree* Tree::OnSelect(Func1<int> fn) {
+Tree* Tree::OnSelect(Listener fn) {
     onSelect = fn;
     return this;
 }
@@ -89,10 +89,7 @@ El* Tree::IntoEl() {
         }
         row->Child(TextEl(a, nodes[i].label)->Font(13)->Fg(th.foreground));
         if (onSelect.IsValid()) {
-            TreeBind* b = ArenaNew<TreeBind>(a);
-            b->fn = onSelect;
-            b->index = i;
-            row->OnClick(MkFunc0(&FireTree, b));
+            row->OnClick(ListenerArg(onSelect, i));
         }
         list->Child(row);
     }

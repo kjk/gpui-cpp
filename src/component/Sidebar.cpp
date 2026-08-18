@@ -37,7 +37,7 @@ Sidebar* Sidebar::Collapsed(bool v) {
     collapsed = v;
     return this;
 }
-Sidebar* Sidebar::OnSelect(Func1<int> fn) {
+Sidebar* Sidebar::OnSelect(Listener fn) {
     onSelect = fn;
     return this;
 }
@@ -64,10 +64,7 @@ El* Sidebar::IntoEl() {
                        ->Font(13)
                        ->Fg(th.sidebarFg));
         if (onSelect.IsValid()) {
-            SideBind* b = ArenaNew<SideBind>(a);
-            b->fn = onSelect;
-            b->index = i;
-            BindClick(row, items[i], MkFunc0(&FireSide, b));
+            BindClick(row, items[i], ListenerArg(onSelect, i));
         }
         col->Child(row);
     }

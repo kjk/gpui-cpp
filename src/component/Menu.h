@@ -11,11 +11,11 @@ struct Menu {
     Ctx* cx = nullptr;
     Str items[8] = {};
     int n = 0;
-    Func1<int> onClick;
+    Listener onClick;
 
     static Menu* New(Ctx* cx);
     Menu* Item(Str s);
-    Menu* OnClick(Func1<int> fn);
+    Menu* OnClick(Listener fn);
     El* IntoEl();
 };
 

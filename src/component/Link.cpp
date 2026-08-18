@@ -34,7 +34,7 @@ Link* Link::Disabled(bool v) {
     disabled = v;
     return this;
 }
-Link* Link::OnOpen(Func1<Str> fn) {
+Link* Link::OnOpen(Listener fn) {
     onOpen = fn;
     return this;
 }
@@ -43,10 +43,7 @@ El* Link::IntoEl() {
     const Theme& th = ThemeNow();
     El* e = gpui::Link::New(cx, id, disabled ? 0 : HashClickId(id));
     if (onOpen.IsValid() && !disabled) {
-        LinkBind* b = ArenaNew<LinkBind>(a);
-        b->fn = onOpen;
-        b->href = href;
-        e->OnClick(MkFunc0(&FireLink, b));
+        e->OnClick(onOpen);
     }
     e->Child(TextEl(a, text.s ? text : href)
                  ->Font(14)

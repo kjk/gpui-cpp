@@ -12,13 +12,13 @@ struct Sheet {
     Str title = {};
     bool open = false;
     El* body = nullptr;
-    Func0 onClose;
+    Listener onClose;
 
     static Sheet* New(Ctx* cx);
     Sheet* Title(Str s);
     Sheet* Open(bool v);
     Sheet* Body(El* e);
-    Sheet* OnClose(Func0 fn);
+    Sheet* OnClose(Listener fn);
     El* IntoEl(WinSize size);
 };
 

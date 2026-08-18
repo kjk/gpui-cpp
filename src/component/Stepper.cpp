@@ -29,7 +29,7 @@ Stepper* Stepper::Current(int i) {
     current = i;
     return this;
 }
-Stepper* Stepper::OnChange(Func1<int> fn) {
+Stepper* Stepper::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
@@ -53,10 +53,7 @@ El* Stepper::IntoEl() {
         El* cell = Div(a)->FlexRow()->ItemsCenter()->Gap(6)->Child(dot)->Child(
             TextEl(a, steps[i])->Font(13)->Fg(th.foreground));
         if (onChange.IsValid()) {
-            StepBind* b = ArenaNew<StepBind>(a);
-            b->fn = onChange;
-            b->index = i;
-            BindClick(cell, steps[i], MkFunc0(&FireStep, b));
+            BindClick(cell, steps[i], ListenerArg(onChange, i));
         }
         row->Child(cell);
         if (i + 1 < n) {

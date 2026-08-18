@@ -40,7 +40,7 @@ inline float UiFontPx(UiSize s) {
 
 namespace component {
 
-inline El* BindClick(El* e, Str id, Func0 onClick) {
+inline El* BindClick(El* e, Str id, Listener onClick) {
     int cid = HashClickId(id);
     e->Id(id)->Click(cid)->FocusId(cid);
     if (onClick.IsValid()) {

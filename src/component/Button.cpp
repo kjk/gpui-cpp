@@ -99,11 +99,7 @@ Button* Button::Tooltip(Str s) {
     return this;
 }
 Button* Button::OnClick(Listener l) {
-    listener = l;
-    return this;
-}
-Button* Button::OnClick(Func0 fn) {
-    onClick = fn;
+    onClick = l;
     return this;
 }
 
@@ -196,9 +192,6 @@ El* Button::IntoEl() {
     }
     if (!disabled) {
         e->HoverBg(hover);
-        if (listener.IsValid()) {
-            e->OnClick(listener);
-        }
         if (onClick.IsValid()) {
             e->OnClick(onClick);
         }

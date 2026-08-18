@@ -8,21 +8,22 @@ struct CalendarStory {
     static void Click(CalendarStory* self, Ctx* cx, int id);
 };
 
-static void CalPrev(CalendarStory* self) {
+static void CalPrev(CalendarStory* self, Ctx* cx, const ClickEvent*) {
     self->calMonth--;
     if (self->calMonth < 1) {
         self->calMonth = 12;
         self->calYear--;
     }
 }
-static void CalNext(CalendarStory* self) {
+static void CalNext(CalendarStory* self, Ctx* cx, const ClickEvent*) {
     self->calMonth++;
     if (self->calMonth > 12) {
         self->calMonth = 1;
         self->calYear++;
     }
 }
-static void CalDay(CalendarStory* self, int d) {
+static void CalDay(CalendarStory* self, Ctx* cx, const ClickEvent*,
+                   intptr_t d) {
     self->calDay = d;
 }
 
@@ -34,9 +35,9 @@ El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
                                 ->Year(self->calYear)
                                 ->Month(self->calMonth)
                                 ->Day(self->calDay)
-                                ->OnPrev(MkFunc0(&CalPrev, self))
-                                ->OnNext(MkFunc0(&CalNext, self))
-                                ->OnDay(MkFunc1(&CalDay, self))
+                                ->OnPrev(Listen(cx, &CalPrev))
+                                ->OnNext(Listen(cx, &CalNext))
+                                ->OnDay(Listen(cx, &CalDay))
                                 ->IntoEl());
     page->Child(single);
 
@@ -54,9 +55,9 @@ El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
                           ->Year(y)
                           ->Month(m)
                           ->Day(i == 0 ? self->calDay : 0)
-                          ->OnPrev(MkFunc0(&CalPrev, self))
-                          ->OnNext(MkFunc0(&CalNext, self))
-                          ->OnDay(MkFunc1(&CalDay, self))
+                          ->OnPrev(Listen(cx, &CalPrev))
+                          ->OnNext(Listen(cx, &CalNext))
+                          ->OnDay(Listen(cx, &CalDay))
                           ->IntoEl());
     }
     StorySectionAdd(multi, months);
@@ -68,9 +69,9 @@ El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
                              ->Year(self->calYear)
                              ->Month(self->calMonth)
                              ->Day(self->calDay)
-                             ->OnPrev(MkFunc0(&CalPrev, self))
-                             ->OnNext(MkFunc0(&CalNext, self))
-                             ->OnDay(MkFunc1(&CalDay, self))
+                             ->OnPrev(Listen(cx, &CalPrev))
+                             ->OnNext(Listen(cx, &CalNext))
+                             ->OnDay(Listen(cx, &CalDay))
                              ->IntoEl());
     page->Child(dis);
     return page;

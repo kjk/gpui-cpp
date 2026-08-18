@@ -8,7 +8,7 @@ struct DialogStory {
     static void Click(DialogStory* self, Ctx* cx, int id);
 };
 
-static void CloseDlg(DialogStory* self) {
+static void CloseDlg(DialogStory* self, Ctx* cx, const ClickEvent*) {
     self->dialogOpen = false;
 }
 
@@ -42,8 +42,8 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     if (self->dialogOpen) {
         component::Dialog* d = component::Dialog::New(cx)
                                    ->Open(true)
-                                   ->OnClose(MkFunc0(&CloseDlg, self))
-                                   ->OnOk(MkFunc0(&CloseDlg, self));
+                                   ->OnClose(Listen(cx, &CloseDlg))
+                                   ->OnOk(Listen(cx, &CloseDlg));
         if (self->selB == 1) {
             d->Description(
                 StrL("This dialog has no title, only a short message."));

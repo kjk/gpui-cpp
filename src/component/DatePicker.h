@@ -13,16 +13,16 @@ struct DatePicker {
     int month = 1;
     int day = 1;
     bool open = false;
-    Func0 onToggle;
-    Func1<int> onDay;
+    Listener onToggle;
+    Listener onDay;
 
     static DatePicker* New(Ctx* cx);
     DatePicker* Year(int y);
     DatePicker* Month(int m);
     DatePicker* Day(int d);
     DatePicker* Open(bool v);
-    DatePicker* OnToggle(Func0 fn);
-    DatePicker* OnDay(Func1<int> fn);
+    DatePicker* OnToggle(Listener fn);
+    DatePicker* OnDay(Listener fn);
     El* IntoEl();
 };
 

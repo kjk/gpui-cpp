@@ -25,7 +25,7 @@ struct Accordion {
     UiSize size = UiSize::Medium;
     AccordionItem items[8] = {};
     int nItems = 0;
-    Func1<int> onToggle;
+    Listener onToggle;
 
     static Accordion* New(Ctx* cx, Str id);
     Accordion* Multiple(bool v);
@@ -35,7 +35,7 @@ struct Accordion {
     Accordion* Item(Str title, Str body, bool open);
     Accordion* SettingsItem(Str title, Str body, bool open, IconName icon,
                             Str tag);
-    Accordion* OnToggle(Func1<int> fn);
+    Accordion* OnToggle(Listener fn);
     El* IntoEl();
 };
 
