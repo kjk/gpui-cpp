@@ -52,9 +52,11 @@ El* Rating::IntoEl() {
     for (int i = 1; i <= n; i++) {
         bool on = i <= value;
         Rgba onC = hasColor ? color : th.warning;
-        El* star = TextEl(a, StrL("★"))
-                       ->Font(UiFontPx(size) + 4)
-                       ->Fg(on ? onC : th.border);
+        // Filled stars take the rating color; the rest are the same lucide
+        // star outline in the muted foreground, not a grey block.
+        El* star = IconEl(a, on ? IconName::StarFill : IconName::Star,
+                          UiSizePx(size) * 0.6f)
+                       ->Fg(on ? onC : th.mutedFg);
         El* hit = Div(a)->Child(star);
         if (onChange.IsValid() && !disabled) {
             BindClick(hit, StrDup(a, fmt("star-%d", i)),

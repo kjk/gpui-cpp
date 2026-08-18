@@ -125,7 +125,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"progress", "Progress",
      "Show task completion with determinate or loading indicators."},
     {"radio", "Radio", "Choose one option from a set."},
-    {"rating", "Rating", "A rating component that allows users to rate items."},
+    {"rating", "Rating", "A simple interactive star rating component."},
     {"resizable", "Resizable",
      "Accessible resizable panel groups and layouts."},
     {"scrollbar", "Scrollbar",

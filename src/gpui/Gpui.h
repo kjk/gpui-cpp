@@ -293,6 +293,7 @@ enum class IconName : uint8_t {
     Copy,
     Bell,
     Star,
+    StarFill,
     Eye,
     Heart,
     ArrowLeft,

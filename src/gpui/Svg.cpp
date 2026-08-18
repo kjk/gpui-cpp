@@ -26,6 +26,9 @@ struct SvgOp {
 struct SvgIcon {
     float vbX = 0, vbY = 0, vbW = 24, vbH = 24;
     float strokeW = 2;
+    // fill="currentColor" on the root: the solid variants (star-fill, …) are
+    // filled and stroked, everything else is stroke only.
+    bool filled = false;
     int nOps = 0;
     SvgOp ops[kMaxOps];
 };
@@ -525,6 +528,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->vbW = 24;
     ic->vbH = 24;
     ic->strokeW = 2;
+    ic->filled = false;
     if (!xml.s || xml.len <= 0) {
         return;
     }
@@ -581,6 +585,10 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             float sw = AttrF(tag, "stroke-width", 0);
             if (sw > 0) {
                 ic->strokeW = sw;
+            }
+            char fill[64];
+            if (GetAttr(tag, "fill", fill, 64)) {
+                ic->filled = !StrEqI(Str(fill), StrL("none"));
             }
             continue;
         }
@@ -688,7 +696,11 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
         if (fig) {
             sink->EndFigure(D2D1_FIGURE_END_OPEN);
         }
-        sink->BeginFigure(D2D1::Point2F(px, py), D2D1_FIGURE_BEGIN_HOLLOW);
+        // A filled icon's figures must be FILLED, or FillGeometry has
+        // nothing to cover.
+        sink->BeginFigure(
+            D2D1::Point2F(px, py),
+            ic->filled ? D2D1_FIGURE_BEGIN_FILLED : D2D1_FIGURE_BEGIN_HOLLOW);
         fig = true;
         mx = px;
         my = py;
@@ -755,6 +767,9 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
 
     if (ctx->brush) {
         ctx->brush->SetColor(RgbaToD2D(color));
+        if (ic->filled) {
+            ctx->rt->FillGeometry(geom, ctx->brush, nullptr);
+        }
         ctx->rt->DrawGeometry(geom, ctx->brush,
                               ic->strokeW > 0 ? ic->strokeW : 2.f, ss);
     }
@@ -788,6 +803,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/minimize.svg");
         case IconName::Star:
             return StrL("icons/star.svg");
+        case IconName::StarFill:
+            return StrL("icons/star-fill.svg");
         case IconName::Sun:
             return StrL("icons/sun.svg");
         case IconName::Map:
