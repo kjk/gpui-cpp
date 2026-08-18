@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* ResizableRender(StoryApp* app, Ctx* cx) {
+struct ResizableStory {
+    static El* Render(ResizableStory* self, Ctx* cx);
+    static void Click(ResizableStory* self, Ctx* cx, int id);
+};
+
+El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(cx, "Default",
@@ -60,9 +64,9 @@ El* ResizableRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ResizableClick(StoryApp* app, int id) {
-    (void)app;
+void ResizableStory::Click(ResizableStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryResizable, ResizableRender, ResizableClick);
+STORY_PAGE(StoryResizable, ResizableStory);

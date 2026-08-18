@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* DataTableRender(StoryApp* app, Ctx* cx) {
+struct DataTableStory {
+    static El* Render(DataTableStory* self, Ctx* cx);
+    static void Click(DataTableStory* self, Ctx* cx, int id);
+};
+
+El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     static const char* heads[] = {"Name", "Email", "Role"};
     static const char* r0[] = {"Ada Lovelace", "ada@example.com", "Admin"};
     static const char* r1[] = {"Alan Turing", "alan@example.com", "Editor"};
@@ -18,9 +22,9 @@ El* DataTableRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void DataTableClick(StoryApp* app, int id) {
-    (void)app;
+void DataTableStory::Click(DataTableStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryDataTable, DataTableRender, DataTableClick);
+STORY_PAGE(StoryDataTable, DataTableStory);

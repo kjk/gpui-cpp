@@ -1,5 +1,13 @@
 #include "Story.h"
 
+struct PopoverStory {
+    bool selectOpen = false;
+    int selB = -1;
+
+    static El* Render(PopoverStory* self, Ctx* cx);
+    static void Click(PopoverStory* self, Ctx* cx, int id);
+};
+
 static El* PopCard(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -16,7 +24,7 @@ static El* PopCard(Ctx* cx, const char* title, const char* body) {
     return content;
 }
 
-El* PopoverRender(StoryApp* app, Ctx* cx) {
+El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -29,12 +37,12 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
                                       ->Label(StrL("Open popover"))
                                       ->Outline()
                                       ->IntoEl())
-                        ->Content(app->selectOpen && app->selB == 0
+                        ->Content(self->selectOpen && self->selB == 0
                                       ? PopCard(cx, "Dimensions",
                                                 "Set the width and height "
                                                 "of the layer.")
                                       : nullptr)
-                        ->Open(app->selectOpen && app->selB == 0)
+                        ->Open(self->selectOpen && self->selB == 0)
                         ->IntoEl());
     page->Child(def);
 
@@ -46,10 +54,10 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
                           ->Label(StrL("Edit"))
                           ->Outline()
                           ->IntoEl())
-            ->Content(app->selectOpen && app->selB == 1
+            ->Content(self->selectOpen && self->selB == 1
                           ? PopCard(cx, "Name", "Update the display name.")
                           : nullptr)
-            ->Open(app->selectOpen && app->selB == 1)
+            ->Open(self->selectOpen && self->selB == 1)
             ->IntoEl());
     page->Child(form);
 
@@ -60,13 +68,13 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
                                       ->Label(StrL("Assign"))
                                       ->Outline()
                                       ->IntoEl())
-                        ->Content(app->selectOpen && app->selB == 2
+                        ->Content(self->selectOpen && self->selB == 2
                                       ? component::Menu::New(cx)
                                             ->Item(StrL("Jason Lee"))
                                             ->Item(StrL("Ada Lovelace"))
                                             ->IntoEl()
                                       : nullptr)
-                        ->Open(app->selectOpen && app->selB == 2)
+                        ->Open(self->selectOpen && self->selB == 2)
                         ->IntoEl());
     page->Child(list);
 
@@ -79,7 +87,8 @@ El* PopoverRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void PopoverClick(StoryApp* app, int id) {
+void PopoverStory::Click(PopoverStory* self, Ctx* cx, int id) {
+    (void)cx;
     int which = -1;
     if (id == HashClickId(StrL("open-pop"))) {
         which = 0;
@@ -93,12 +102,12 @@ void PopoverClick(StoryApp* app, int id) {
     if (which < 0) {
         return;
     }
-    if (app->selectOpen && app->selB == which) {
-        app->selectOpen = false;
+    if (self->selectOpen && self->selB == which) {
+        self->selectOpen = false;
     } else {
-        app->selectOpen = true;
-        app->selB = which;
+        self->selectOpen = true;
+        self->selB = which;
     }
 }
 
-STORY_PAGE(StoryPopover, PopoverRender, PopoverClick);
+STORY_PAGE(StoryPopover, PopoverStory);

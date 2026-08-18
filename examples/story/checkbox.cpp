@@ -1,43 +1,51 @@
 #include "Story.h"
 
-static void SetCheck0(StoryApp* app, bool v) {
-    app->checks[0] = v;
+struct CheckboxStory {
+    bool checks[8] = {false, true};
+    StoryToolbarState toolbar;
+
+    static El* Render(CheckboxStory* self, Ctx* cx);
+    static void Click(CheckboxStory* self, Ctx* cx, int id);
+};
+
+static void SetCheck0(CheckboxStory* self, bool v) {
+    self->checks[0] = v;
 }
-static void SetCheck1(StoryApp* app, bool v) {
-    app->checks[1] = v;
+static void SetCheck1(CheckboxStory* self, bool v) {
+    self->checks[1] = v;
 }
-static void SetCheck2(StoryApp* app, bool v) {
-    app->checks[2] = v;
+static void SetCheck2(CheckboxStory* self, bool v) {
+    self->checks[2] = v;
 }
-static void SetCheck3(StoryApp* app, bool v) {
-    app->checks[3] = v;
+static void SetCheck3(CheckboxStory* self, bool v) {
+    self->checks[3] = v;
 }
-static void SetCheck4(StoryApp* app, bool v) {
-    app->checks[4] = v;
+static void SetCheck4(CheckboxStory* self, bool v) {
+    self->checks[4] = v;
 }
-static void SetCheck5(StoryApp* app, bool v) {
-    app->checks[5] = v;
+static void SetCheck5(CheckboxStory* self, bool v) {
+    self->checks[5] = v;
 }
 
-El* CheckboxRender(StoryApp* app, Ctx* cx) {
+El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def = StorySection(
         cx, "Default", "Checked and unchecked options can be mixed freely.");
     El* defCol = Div(a)->FlexCol()->Gap(8);
     defCol->Child(component::Checkbox::New(cx, StrL("updates"))
                       ->Label(StrL("Product updates"))
-                      ->Checked(app->checks[0])
-                      ->WithSize(app->size)
-                      ->OnClick(MkFunc1(&SetCheck0, app))
+                      ->Checked(self->checks[0])
+                      ->WithSize(self->toolbar.size)
+                      ->OnClick(MkFunc1(&SetCheck0, self))
                       ->IntoEl());
     defCol->Child(component::Checkbox::New(cx, StrL("remember"))
                       ->Label(StrL("Remember this device"))
-                      ->Checked(app->checks[1])
-                      ->WithSize(app->size)
-                      ->OnClick(MkFunc1(&SetCheck1, app))
+                      ->Checked(self->checks[1])
+                      ->WithSize(self->toolbar.size)
+                      ->OnClick(MkFunc1(&SetCheck1, self))
                       ->IntoEl());
     StorySectionAdd(def, defCol);
     page->Child(def);
@@ -46,9 +54,9 @@ El* CheckboxRender(StoryApp* app, Ctx* cx) {
         StorySection(cx, "Without label",
                      "The label can be supplied by surrounding content.");
     StorySectionAdd(bare, component::Checkbox::New(cx, StrL("unlabelled"))
-                              ->Checked(app->checks[2])
-                              ->WithSize(app->size)
-                              ->OnClick(MkFunc1(&SetCheck2, app))
+                              ->Checked(self->checks[2])
+                              ->WithSize(self->toolbar.size)
+                              ->OnClick(MkFunc1(&SetCheck2, self))
                               ->IntoEl());
     page->Child(bare);
 
@@ -59,13 +67,13 @@ El* CheckboxRender(StoryApp* app, Ctx* cx) {
                       ->Label(StrL("Checked"))
                       ->Checked(true)
                       ->Disabled(true)
-                      ->WithSize(app->size)
+                      ->WithSize(self->toolbar.size)
                       ->IntoEl());
     disRow->Child(component::Checkbox::New(cx, StrL("disabled-unchecked"))
                       ->Label(StrL("Unchecked"))
                       ->Checked(false)
                       ->Disabled(true)
-                      ->WithSize(app->size)
+                      ->WithSize(self->toolbar.size)
                       ->IntoEl());
     StorySectionAdd(dis, disRow);
     page->Child(dis);
@@ -77,36 +85,39 @@ El* CheckboxRender(StoryApp* app, Ctx* cx) {
         component::Checkbox::New(cx, StrL("description"))
             ->Label(StrL("Automatic updates"))
             ->Hint(StrL("Download updates when the application is idle."))
-            ->Checked(app->checks[3])
-            ->WithSize(app->size)
+            ->Checked(self->checks[3])
+            ->WithSize(self->toolbar.size)
             ->W(320)
-            ->OnClick(MkFunc1(&SetCheck3, app))
+            ->OnClick(MkFunc1(&SetCheck3, self))
             ->IntoEl());
     labCol->Child(component::Checkbox::New(cx, StrL("wrapping"))
                       ->Label(StrL("Notify me when a new device signs in to "
                                    "my account"))
-                      ->Checked(app->checks[5])
-                      ->WithSize(app->size)
+                      ->Checked(self->checks[5])
+                      ->WithSize(self->toolbar.size)
                       ->W(320)
-                      ->OnClick(MkFunc1(&SetCheck5, app))
+                      ->OnClick(MkFunc1(&SetCheck5, self))
                       ->IntoEl());
     labCol
         ->Child(component::Checkbox::New(cx, StrL("markdown"))
                     ->Label(StrL("Accept the terms"))
                     ->Hint(StrL("Read the terms of service before continuing."))
-                    ->Checked(app->checks[4])
-                    ->WithSize(app->size)
+                    ->Checked(self->checks[4])
+                    ->WithSize(self->toolbar.size)
                     ->W(320)
-                    ->OnClick(MkFunc1(&SetCheck4, app))
+                    ->OnClick(MkFunc1(&SetCheck4, self))
                     ->IntoEl());
     StorySectionAdd(labs, labCol);
     page->Child(labs);
     return page;
 }
 
-void CheckboxClick(StoryApp* app, int id) {
-    (void)app;
+void CheckboxStory::Click(CheckboxStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryCheckbox, CheckboxRender, CheckboxClick);
+STORY_PAGE(StoryCheckbox, CheckboxStory);

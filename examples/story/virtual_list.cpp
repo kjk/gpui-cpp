@@ -1,9 +1,16 @@
 #include "Story.h"
 
-El* VirtualListRender(StoryApp* app, Ctx* cx) {
+struct VirtualListStory {
+    StoryToolbarState toolbar;
+
+    static El* Render(VirtualListStory* self, Ctx* cx);
+    static void Click(VirtualListStory* self, Ctx* cx, int id);
+};
+
+El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
     El* sec = StorySection(
         cx, "Default",
         "A virtualized list for efficiently rendering large lists.");
@@ -31,9 +38,12 @@ El* VirtualListRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void VirtualListClick(StoryApp* app, int id) {
-    (void)app;
+void VirtualListStory::Click(VirtualListStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryVirtualList, VirtualListRender, VirtualListClick);
+STORY_PAGE(StoryVirtualList, VirtualListStory);

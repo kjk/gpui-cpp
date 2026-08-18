@@ -1,10 +1,17 @@
 #include "Story.h"
 
-static El* Face(Ctx* cx, StoryApp* app, const char* initials) {
+struct AvatarStory {
+    StoryToolbarState toolbar;
+
+    static El* Render(AvatarStory* self, Ctx* cx);
+    static void Click(AvatarStory* self, Ctx* cx, int id);
+};
+
+static El* Face(Ctx* cx, AvatarStory* self, const char* initials) {
     Arena* a = cx->a;
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
-        ->WithSize(app->size)
+        ->WithSize(self->toolbar.size)
         ->IntoEl();
 }
 
@@ -22,10 +29,10 @@ static El* FacePx(Ctx* cx, const char* initials, float px, float radius,
     return av->IntoEl();
 }
 
-static El* AvatarRow(Ctx* cx, StoryApp* app, const char** names, int n,
+static El* AvatarRow(Ctx* cx, AvatarStory* self, const char** names, int n,
                      int limit, bool ellipsis) {
     Arena* a = cx->a;
-    float sz = component::AvatarSizePx(app->size);
+    float sz = component::AvatarSizePx(self->toolbar.size);
     int shown = n;
     if (limit > 0 && n > limit) {
         shown = limit;
@@ -42,7 +49,7 @@ static El* AvatarRow(Ctx* cx, StoryApp* app, const char** names, int n,
         box->Child(component::Avatar::New(cx)
                        ->Initials(StrL("\xE2\x8B\xAF"))
                        ->Bg(ThemeNow().secondary)
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->IntoEl()
                        ->Absolute()
                        ->Left(extraLeft));
@@ -50,7 +57,7 @@ static El* AvatarRow(Ctx* cx, StoryApp* app, const char** names, int n,
     for (int i = shown - 1; i >= 0; i--) {
         box->Child(component::Avatar::New(cx)
                        ->Initials(Str(names[i]))
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->IntoEl()
                        ->Absolute()
                        ->Left(i * step));
@@ -58,26 +65,27 @@ static El* AvatarRow(Ctx* cx, StoryApp* app, const char** names, int n,
     return box;
 }
 
-El* AvatarRender(StoryApp* app, Ctx* cx) {
+El* AvatarStory::Render(AvatarStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* img = StorySection(cx, "Image", "Use an image when one is available.");
     El* imgRow = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
-    imgRow->Child(Face(cx, app, "JL"));
-    imgRow->Child(Face(cx, app, "HU"));
+    imgRow->Child(Face(cx, self, "JL"));
+    imgRow->Child(Face(cx, self, "HU"));
     StorySectionAdd(img, imgRow);
     page->Child(img);
 
     El* fb = StorySection(
         cx, "Fallback", "Show initials or an icon when no image is available.");
     El* fbRow = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
-    fbRow->Child(Face(cx, app, "JL"));
-    fbRow->Child(component::Avatar::New(cx)->WithSize(app->size)->IntoEl());
+    fbRow->Child(Face(cx, self, "JL"));
+    fbRow->Child(
+        component::Avatar::New(cx)->WithSize(self->toolbar.size)->IntoEl());
     fbRow->Child(component::Avatar::New(cx)
                      ->Placeholder(IconName::Building2)
-                     ->WithSize(app->size)
+                     ->WithSize(self->toolbar.size)
                      ->IntoEl());
     StorySectionAdd(fb, fbRow);
     page->Child(fb);
@@ -88,8 +96,8 @@ El* AvatarRender(StoryApp* app, Ctx* cx) {
     El* grp = StorySection(
         cx, "Group", "Groups can limit visible avatars and show overflow.");
     El* grpCol = Div(a)->FlexCol()->Gap(20)->ItemsCenter();
-    grpCol->Child(AvatarRow(cx, app, kGroupA, 6, 3, false));
-    grpCol->Child(AvatarRow(cx, app, kGroupB, 11, 5, true));
+    grpCol->Child(AvatarRow(cx, self, kGroupA, 6, 3, false));
+    grpCol->Child(AvatarRow(cx, self, kGroupB, 11, 5, true));
     StorySectionAdd(grp, grpCol);
     page->Child(grp);
 
@@ -105,9 +113,12 @@ El* AvatarRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void AvatarClick(StoryApp* app, int id) {
-    (void)app;
+void AvatarStory::Click(AvatarStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryAvatar, AvatarRender, AvatarClick);
+STORY_PAGE(StoryAvatar, AvatarStory);

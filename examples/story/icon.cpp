@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* IconRender(StoryApp* app, Ctx* cx) {
+struct IconStory {
+    static El* Render(IconStory* self, Ctx* cx);
+    static void Click(IconStory* self, Ctx* cx, int id);
+};
+
+El* IconStory::Render(IconStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -59,9 +63,9 @@ El* IconRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void IconClick(StoryApp* app, int id) {
-    (void)app;
+void IconStory::Click(IconStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryIcon, IconRender, IconClick);
+STORY_PAGE(StoryIcon, IconStory);

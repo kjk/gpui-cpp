@@ -1,21 +1,27 @@
 #include "Story.h"
 
-El* ColorPickerRender(StoryApp* app, Ctx* cx) {
+struct ColorPickerStory {
+    uint32_t colorHex = 0x2563eb;
+    bool colorOpen = false;
+    static El* Render(ColorPickerStory* self, Ctx* cx);
+    static void Click(ColorPickerStory* self, Ctx* cx, int id);
+};
+
+El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(cx, "Theme Color", nullptr);
     StorySectionAdd(sec, component::ColorPicker::New(cx)
-                             ->Hex(app->colorHex)
-                             ->Open(app->colorOpen)
+                             ->Hex(self->colorHex)
+                             ->Open(self->colorOpen)
                              ->IntoEl());
     page->Child(sec);
     return page;
 }
 
-void ColorPickerClick(StoryApp* app, int id) {
-    (void)app;
+void ColorPickerStory::Click(ColorPickerStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryColorPicker, ColorPickerRender, ColorPickerClick);
+STORY_PAGE(StoryColorPicker, ColorPickerStory);

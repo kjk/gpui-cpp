@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* SkeletonRender(StoryApp* app, Ctx* cx) {
+struct SkeletonStory {
+    static El* Render(SkeletonStory* self, Ctx* cx);
+    static void Click(SkeletonStory* self, Ctx* cx, int id);
+};
+
+El* SkeletonStory::Render(SkeletonStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* text = StorySection(
@@ -29,9 +33,9 @@ El* SkeletonRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void SkeletonClick(StoryApp* app, int id) {
-    (void)app;
+void SkeletonStory::Click(SkeletonStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StorySkeleton, SkeletonRender, SkeletonClick);
+STORY_PAGE(StorySkeleton, SkeletonStory);

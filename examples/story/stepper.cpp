@@ -1,21 +1,29 @@
 #include "Story.h"
 
-static void SetStep(StoryApp* app, int i) {
-    app->stepper = i;
+struct StepperStory {
+    int stepper = 1;
+    StoryToolbarState toolbar;
+
+    static El* Render(StepperStory* self, Ctx* cx);
+    static void Click(StepperStory* self, Ctx* cx, int id);
+};
+
+static void SetStep(StepperStory* self, int i) {
+    self->stepper = i;
 }
 
-El* StepperRender(StoryApp* app, Ctx* cx) {
+El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* h = StorySection(cx, "Horizontal Stepper", nullptr);
     StorySectionAdd(h, component::Stepper::New(cx)
                            ->Step(StrL("Step 1"))
                            ->Step(StrL("Step 2"))
                            ->Step(StrL("Step 3"))
-                           ->Current(app->stepper)
-                           ->OnChange(MkFunc1(&SetStep, app))
+                           ->Current(self->stepper)
+                           ->OnChange(MkFunc1(&SetStep, self))
                            ->IntoEl());
     page->Child(h);
 
@@ -25,8 +33,8 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
                             ->Step(StrL("Shipping"))
                             ->Step(StrL("Preview"))
                             ->Step(StrL("Finish"))
-                            ->Current(app->stepper)
-                            ->OnChange(MkFunc1(&SetStep, app))
+                            ->Current(self->stepper)
+                            ->OnChange(MkFunc1(&SetStep, self))
                             ->IntoEl());
     page->Child(ic);
 
@@ -38,8 +46,8 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
                            "Description for step 4."};
     const Theme& th = ThemeNow();
     for (int i = 0; i < 4; i++) {
-        bool on = i == app->stepper;
-        bool done = i < app->stepper;
+        bool on = i == self->stepper;
+        bool done = i < self->stepper;
         El* row = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
         El* dot = Div(a)
                       ->W(22)
@@ -66,16 +74,19 @@ El* StepperRender(StoryApp* app, Ctx* cx) {
                             ->Step(StrL("Step 1"))
                             ->Step(StrL("Step 2"))
                             ->Step(StrL("Step 3"))
-                            ->Current(app->stepper)
-                            ->OnChange(MkFunc1(&SetStep, app))
+                            ->Current(self->stepper)
+                            ->OnChange(MkFunc1(&SetStep, self))
                             ->IntoEl());
     page->Child(tc);
     return page;
 }
 
-void StepperClick(StoryApp* app, int id) {
-    (void)app;
+void StepperStory::Click(StepperStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryStepper, StepperRender, StepperClick);
+STORY_PAGE(StoryStepper, StepperStory);

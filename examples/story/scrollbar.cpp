@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* ScrollbarRender(StoryApp* app, Ctx* cx) {
+struct ScrollbarStory {
+    static El* Render(ScrollbarStory* self, Ctx* cx);
+    static void Click(ScrollbarStory* self, Ctx* cx, int id);
+};
+
+El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(cx, "Default",
                            "A scrollbar that allows users to scroll content.");
@@ -33,9 +37,9 @@ El* ScrollbarRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ScrollbarClick(StoryApp* app, int id) {
-    (void)app;
+void ScrollbarStory::Click(ScrollbarStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryScrollbar, ScrollbarRender, ScrollbarClick);
+STORY_PAGE(StoryScrollbar, ScrollbarStory);

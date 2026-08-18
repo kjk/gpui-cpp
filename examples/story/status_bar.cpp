@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* StatusBarRender(StoryApp* app, Ctx* cx) {
+struct StatusBarStory {
+    static El* Render(StatusBarStory* self, Ctx* cx);
+    static void Click(StatusBarStory* self, Ctx* cx, int id);
+};
+
+El* StatusBarStory::Render(StatusBarStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -93,9 +97,9 @@ El* StatusBarRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void StatusBarClick(StoryApp* app, int id) {
-    (void)app;
+void StatusBarStory::Click(StatusBarStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryStatusBar, StatusBarRender, StatusBarClick);
+STORY_PAGE(StoryStatusBar, StatusBarStory);

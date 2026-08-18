@@ -1,5 +1,15 @@
 #include "Story.h"
 
+struct InputStory {
+    LineInput field = {};
+    StoryToolbarState toolbar;
+
+    bool seeded = false;
+
+    static El* Render(InputStory* self, Ctx* cx);
+    static void Click(InputStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickStoryField = 2600
 };
@@ -30,14 +40,23 @@ static El* FieldBox(Ctx* cx, const char* text, const char* prefix,
     return field;
 }
 
-El* InputRender(StoryApp* app, Ctx* cx) {
+El* InputStory::Render(InputStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    if (!self->seeded) {
+        self->seeded = true;
+        strncpy_s(self->field.placeholder, "Type something…", _TRUNCATE);
+        strncpy_s(self->field.buf, "Hello GPUI", _TRUNCATE);
+        self->field.len = (int)strlen(self->field.buf);
+    }
+    if (self->field.focused) {
+        cx->win->input = &self->field;
+    }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def =
         StorySection(cx, "Default", "Capture and validate short-form text.");
-    StorySectionAdd(def, component::Input::New(cx, StrL("name"), &app->field)
+    StorySectionAdd(def, component::Input::New(cx, StrL("name"), &self->field)
                              ->Label(StrL("Display name"))
                              ->IntoEl());
     page->Child(def);
@@ -66,10 +85,14 @@ El* InputRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void InputClick(StoryApp* app, int id) {
+void InputStory::Click(InputStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     if (id == ClickStoryField || id == HashClickId(StrL("name"))) {
-        app->field.focused = true;
+        self->field.focused = true;
     }
 }
 
-STORY_PAGE(StoryInput, InputRender, InputClick);
+STORY_PAGE(StoryInput, InputStory);

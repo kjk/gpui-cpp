@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* NativeMenuRender(StoryApp* app, Ctx* cx) {
+struct NativeMenuStory {
+    static El* Render(NativeMenuStory* self, Ctx* cx);
+    static void Click(NativeMenuStory* self, Ctx* cx, int id);
+};
+
+El* NativeMenuStory::Render(NativeMenuStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* builder = StorySection(cx, "Builder API", nullptr);
     StorySectionAdd(builder, component::Menu::New(cx)
@@ -33,9 +37,9 @@ El* NativeMenuRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void NativeMenuClick(StoryApp* app, int id) {
-    (void)app;
+void NativeMenuStory::Click(NativeMenuStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryNativeMenu, NativeMenuRender, NativeMenuClick);
+STORY_PAGE(StoryNativeMenu, NativeMenuStory);

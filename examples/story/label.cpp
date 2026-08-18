@@ -1,10 +1,16 @@
 #include "Story.h"
 
+struct LabelStory {
+    bool labelMasked = false;
+    static El* Render(LabelStory* self, Ctx* cx);
+    static void Click(LabelStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickLabelMask = 2500
 };
 
-El* LabelRender(StoryApp* app, Ctx* cx) {
+El* LabelStory::Render(LabelStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -73,14 +79,14 @@ El* LabelRender(StoryApp* app, Ctx* cx) {
     El* bal = Div(a)->FlexCol()->Gap(4);
     bal->Child(StoryTxt(cx, StrL("Available balance"), 12, th.mutedFg));
     bal->Child(component::Label::New(cx, StrL("$9,182.10"))
-                   ->Masked(app->labelMasked)
+                   ->Masked(self->labelMasked)
                    ->Semibold()
                    ->Font(24)
                    ->IntoEl());
     maskRow->Child(bal);
     maskRow->Child(component::Button::New(cx, StrL("btn-mask"))
                        ->Ghost()
-                       ->Icon(app->labelMasked ? IconName::Eye : IconName::Eye)
+                       ->Icon(self->labelMasked ? IconName::Eye : IconName::Eye)
                        ->IntoEl()
                        ->Click(ClickLabelMask));
     StorySectionAdd(mask, maskRow);
@@ -88,10 +94,11 @@ El* LabelRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void LabelClick(StoryApp* app, int id) {
+void LabelStory::Click(LabelStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id == ClickLabelMask) {
-        app->labelMasked = !app->labelMasked;
+        self->labelMasked = !self->labelMasked;
     }
 }
 
-STORY_PAGE(StoryLabel, LabelRender, LabelClick);
+STORY_PAGE(StoryLabel, LabelStory);

@@ -1,8 +1,15 @@
 #include "Story.h"
 
-static component::Button* Btn(Ctx* cx, StoryApp* app, const char* id) {
+struct ButtonStory {
+    StoryToolbarState toolbar;
+
+    static El* Render(ButtonStory* self, Ctx* cx);
+    static void Click(ButtonStory* self, Ctx* cx, int id);
+};
+
+static component::Button* Btn(Ctx* cx, ButtonStory* self, const char* id) {
     Arena* a = cx->a;
-    return component::Button::New(cx, Str(id))->WithSize(app->size);
+    return component::Button::New(cx, Str(id))->WithSize(self->toolbar.size);
 }
 
 static El* ProgressIcon(Ctx* cx, float value, Rgba color, bool hasColor) {
@@ -17,7 +24,8 @@ static El* ProgressIcon(Ctx* cx, float value, Rgba color, bool hasColor) {
     return p->IntoEl();
 }
 
-static El* BtnGroup(Ctx* cx, StoryApp* app, bool vertical, const char* prefix) {
+static El* BtnGroup(Ctx* cx, ButtonStory* self, bool vertical,
+                    const char* prefix) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     const char* labels[] = {"One", "Two", "Three"};
@@ -26,7 +34,7 @@ static El* BtnGroup(Ctx* cx, StoryApp* app, bool vertical, const char* prefix) {
     for (int i = 0; i < 3; i++) {
         char id[32];
         _snprintf_s(id, _TRUNCATE, "%s-%d", prefix, i);
-        El* b = Btn(cx, app, id)->Label(Str(labels[i]))->IntoEl();
+        El* b = Btn(cx, self, id)->Label(Str(labels[i]))->IntoEl();
         if (!vertical && i < 2) {
             b->Border(0, th.border);
         }
@@ -35,59 +43,59 @@ static El* BtnGroup(Ctx* cx, StoryApp* app, bool vertical, const char* prefix) {
     return g;
 }
 
-El* ButtonRender(StoryApp* app, Ctx* cx) {
+El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* vars = StorySection(cx, "Variants",
                             "Visual treatments communicate action priority.");
     El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    row->Child(Btn(cx, app, "button-0")->Label(StrL("Default"))->IntoEl());
+    row->Child(Btn(cx, self, "button-0")->Label(StrL("Default"))->IntoEl());
     row->Child(
-        Btn(cx, app, "button-1")->Label(StrL("Primary"))->Primary()->IntoEl());
-    row->Child(Btn(cx, app, "button-2")
+        Btn(cx, self, "button-1")->Label(StrL("Primary"))->Primary()->IntoEl());
+    row->Child(Btn(cx, self, "button-2")
                    ->Label(StrL("Secondary"))
                    ->Secondary()
                    ->IntoEl());
     row->Child(
-        Btn(cx, app, "button-4")->Label(StrL("Danger"))->Danger()->IntoEl());
-    row->Child(Btn(cx, app, "button-4-warning")
+        Btn(cx, self, "button-4")->Label(StrL("Danger"))->Danger()->IntoEl());
+    row->Child(Btn(cx, self, "button-4-warning")
                    ->Label(StrL("Warning"))
                    ->Warning()
                    ->IntoEl());
-    row->Child(Btn(cx, app, "button-4-success")
+    row->Child(Btn(cx, self, "button-4-success")
                    ->Label(StrL("Success"))
                    ->Success()
                    ->IntoEl());
     row->Child(
-        Btn(cx, app, "button-5-info")->Label(StrL("Info"))->Info()->IntoEl());
-    row->Child(Btn(cx, app, "button-5-ghost")
+        Btn(cx, self, "button-5-info")->Label(StrL("Info"))->Info()->IntoEl());
+    row->Child(Btn(cx, self, "button-5-ghost")
                    ->Label(StrL("Ghost"))
                    ->Ghost()
                    ->IntoEl());
     row->Child(
-        Btn(cx, app, "button-5-link")->Label(StrL("Link"))->Link()->IntoEl());
+        Btn(cx, self, "button-5-link")->Label(StrL("Link"))->Link()->IntoEl());
     row->Child(
-        Btn(cx, app, "button-5-text")->Label(StrL("Text"))->Text()->IntoEl());
+        Btn(cx, self, "button-5-text")->Label(StrL("Text"))->Text()->IntoEl());
     StorySectionAdd(vars, row);
     page->Child(vars);
 
     El* icons = StorySection(
         cx, "Icons", "Icons can lead labels or appear in custom content.");
     El* iconRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    iconRow->Child(Btn(cx, app, "button-icon-1")
+    iconRow->Child(Btn(cx, self, "button-icon-1")
                        ->Outline()
                        ->Label(StrL("Confirm"))
                        ->Icon(IconName::Check)
                        ->IntoEl());
-    iconRow->Child(Btn(cx, app, "button-icon-2")
+    iconRow->Child(Btn(cx, self, "button-icon-2")
                        ->Outline()
                        ->Label(StrL("Abort"))
                        ->Icon(IconName::X)
                        ->IntoEl());
-    iconRow->Child(Btn(cx, app, "button-icon-3")
+    iconRow->Child(Btn(cx, self, "button-icon-3")
                        ->Outline()
                        ->Label(StrL("Maximize"))
                        ->Icon(IconName::Maximize)
@@ -96,18 +104,18 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     custom->Child(StoryTxt(cx, StrL("Custom Child"), 14, th.foreground));
     custom->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.foreground));
     custom->Child(IconEl(a, IconName::Eye, 14)->Fg(th.foreground));
-    iconRow->Child(Btn(cx, app, "button-icon-4")->Extra(custom)->IntoEl());
-    iconRow->Child(Btn(cx, app, "button-icon-5-ghost")
+    iconRow->Child(Btn(cx, self, "button-icon-4")->Extra(custom)->IntoEl());
+    iconRow->Child(Btn(cx, self, "button-icon-5-ghost")
                        ->Ghost()
                        ->Icon(IconName::Check)
                        ->Label(StrL("Confirm"))
                        ->IntoEl());
-    iconRow->Child(Btn(cx, app, "button-icon-6-link")
+    iconRow->Child(Btn(cx, self, "button-icon-6-link")
                        ->Link()
                        ->Icon(IconName::Check)
                        ->Label(StrL("Link"))
                        ->IntoEl());
-    iconRow->Child(Btn(cx, app, "button-icon-6-text")
+    iconRow->Child(Btn(cx, self, "button-icon-6-text")
                        ->Text()
                        ->Icon(IconName::Check)
                        ->Label(StrL("Text Button"))
@@ -118,20 +126,20 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     El* prog =
         StorySection(cx, "Progress", "Buttons can show determinate progress.");
     El* progRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter()->Wrap();
-    progRow->Child(Btn(cx, app, "progress-button-1")
+    progRow->Child(Btn(cx, self, "progress-button-1")
                        ->Primary()
                        ->Extra(ProgressIcon(cx, 25, th.primaryFg, true))
                        ->Label(StrL("Installing..."))
                        ->IntoEl());
-    progRow->Child(Btn(cx, app, "progress-button-2")
+    progRow->Child(Btn(cx, self, "progress-button-2")
                        ->Extra(ProgressIcon(cx, 35, {}, false))
                        ->Label(StrL("Installing..."))
                        ->IntoEl());
-    progRow->Child(Btn(cx, app, "progress-button-3")
+    progRow->Child(Btn(cx, self, "progress-button-3")
                        ->Extra(ProgressIcon(cx, 68, {}, false))
                        ->Label(StrL("Installing..."))
                        ->IntoEl());
-    progRow->Child(Btn(cx, app, "progress-button-4")
+    progRow->Child(Btn(cx, self, "progress-button-4")
                        ->Extra(ProgressIcon(cx, 85, {}, false))
                        ->Label(StrL("Installing..."))
                        ->IntoEl());
@@ -141,46 +149,46 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     El* out = StorySection(cx, "Outline",
                            "Outlined treatments keep actions visually quiet.");
     El* outRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    outRow->Child(Btn(cx, app, "button-outline-1")
+    outRow->Child(Btn(cx, self, "button-outline-1")
                       ->Primary()
                       ->Outline()
                       ->Label(StrL("Primary Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-2")
+    outRow->Child(Btn(cx, self, "button-outline-2")
                       ->Outline()
                       ->Label(StrL("Normal Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-4-danger")
+    outRow->Child(Btn(cx, self, "button-outline-4-danger")
                       ->Danger()
                       ->Outline()
                       ->Label(StrL("Danger Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-4-warning")
+    outRow->Child(Btn(cx, self, "button-outline-4-warning")
                       ->Warning()
                       ->Outline()
                       ->Label(StrL("Warning Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-4-success")
+    outRow->Child(Btn(cx, self, "button-outline-4-success")
                       ->Success()
                       ->Outline()
                       ->Label(StrL("Success Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-5-info")
+    outRow->Child(Btn(cx, self, "button-outline-5-info")
                       ->Info()
                       ->Outline()
                       ->Label(StrL("Info Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-5-ghost")
+    outRow->Child(Btn(cx, self, "button-outline-5-ghost")
                       ->Ghost()
                       ->Outline()
                       ->Label(StrL("Ghost Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-5-link")
+    outRow->Child(Btn(cx, self, "button-outline-5-link")
                       ->Link()
                       ->Outline()
                       ->Label(StrL("Link Button"))
                       ->IntoEl());
-    outRow->Child(Btn(cx, app, "button-outline-5-text")
+    outRow->Child(Btn(cx, self, "button-outline-5-text")
                       ->Text()
                       ->Outline()
                       ->Label(StrL("Text Button"))
@@ -191,31 +199,31 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     El* drop =
         StorySection(cx, "Dropdown", "A caret indicates an attached menu.");
     El* dropRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    dropRow->Child(Btn(cx, app, "button-dropdown-caret-primary")
+    dropRow->Child(Btn(cx, self, "button-dropdown-caret-primary")
                        ->Primary()
                        ->DropdownCaret()
                        ->Label(StrL("Primary Button"))
                        ->IntoEl());
-    dropRow->Child(Btn(cx, app, "button-dropdown-caret-default")
+    dropRow->Child(Btn(cx, self, "button-dropdown-caret-default")
                        ->DropdownCaret()
                        ->Label(StrL("Default Button"))
                        ->IntoEl());
-    dropRow->Child(Btn(cx, app, "button-outline-3")
+    dropRow->Child(Btn(cx, self, "button-outline-3")
                        ->Secondary()
                        ->DropdownCaret()
                        ->Label(StrL("Secondary Button"))
                        ->IntoEl());
-    dropRow->Child(Btn(cx, app, "button-dropdown-caret-ghost")
+    dropRow->Child(Btn(cx, self, "button-dropdown-caret-ghost")
                        ->Ghost()
                        ->DropdownCaret()
                        ->Label(StrL("Ghost Button"))
                        ->IntoEl());
-    dropRow->Child(Btn(cx, app, "button-dropdown-caret-link")
+    dropRow->Child(Btn(cx, self, "button-dropdown-caret-link")
                        ->Link()
                        ->DropdownCaret()
                        ->Label(StrL("Link Button"))
                        ->IntoEl());
-    dropRow->Child(Btn(cx, app, "button-dropdown-caret-small")
+    dropRow->Child(Btn(cx, self, "button-dropdown-caret-small")
                        ->Outline()
                        ->DropdownCaret()
                        ->Label(StrL("Small Button"))
@@ -224,33 +232,33 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     page->Child(drop);
 
     El* hg = StorySection(cx, "Horizontal group", nullptr);
-    StorySectionAdd(hg, BtnGroup(cx, app, false, "button-h"));
+    StorySectionAdd(hg, BtnGroup(cx, self, false, "button-h"));
     page->Child(hg);
 
     El* vg = StorySection(cx, "Vertical group", nullptr);
-    StorySectionAdd(vg, BtnGroup(cx, app, true, "button-v"));
+    StorySectionAdd(vg, BtnGroup(cx, self, true, "button-v"));
     page->Child(vg);
 
     El* sel = StorySection(cx, "Selection group",
                            "Groups support single or multiple selection.");
     El* selRow = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
-    selRow->Child(Btn(cx, app, "disabled-toggle-button")
+    selRow->Child(Btn(cx, self, "disabled-toggle-button")
                       ->Label(StrL("Disabled"))
                       ->Compact()
                       ->Outline()
                       ->IntoEl());
-    selRow->Child(Btn(cx, app, "loading-toggle-button")
+    selRow->Child(Btn(cx, self, "loading-toggle-button")
                       ->Label(StrL("Loading"))
                       ->Compact()
                       ->Outline()
                       ->IntoEl());
-    selRow->Child(Btn(cx, app, "selected-toggle-button")
+    selRow->Child(Btn(cx, self, "selected-toggle-button")
                       ->Label(StrL("Selected"))
                       ->Compact()
                       ->Outline()
                       ->Selected(true)
                       ->IntoEl());
-    selRow->Child(Btn(cx, app, "compact-toggle-button")
+    selRow->Child(Btn(cx, self, "compact-toggle-button")
                       ->Label(StrL("Compact"))
                       ->Compact()
                       ->Outline()
@@ -261,27 +269,27 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     El* only = StorySection(cx, "Icon-only",
                             "Compact actions can omit visible labels.");
     El* onlyRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    onlyRow->Child(Btn(cx, app, "icon-button-primary")
+    onlyRow->Child(Btn(cx, self, "icon-button-primary")
                        ->Icon(IconName::Search)
                        ->Primary()
                        ->IntoEl());
-    onlyRow->Child(Btn(cx, app, "icon-button-secondary")
+    onlyRow->Child(Btn(cx, self, "icon-button-secondary")
                        ->Icon(IconName::Info)
                        ->Loading(true)
                        ->IntoEl());
-    onlyRow->Child(Btn(cx, app, "icon-button-danger")
+    onlyRow->Child(Btn(cx, self, "icon-button-danger")
                        ->Icon(IconName::X)
                        ->Danger()
                        ->IntoEl());
-    onlyRow->Child(Btn(cx, app, "icon-button-small-primary")
+    onlyRow->Child(Btn(cx, self, "icon-button-small-primary")
                        ->Icon(IconName::Search)
                        ->Primary()
                        ->IntoEl());
-    onlyRow->Child(Btn(cx, app, "icon-button-outline")
+    onlyRow->Child(Btn(cx, self, "icon-button-outline")
                        ->Icon(IconName::Search)
                        ->Outline()
                        ->IntoEl());
-    onlyRow->Child(Btn(cx, app, "icon-button-ghost")
+    onlyRow->Child(Btn(cx, self, "icon-button-ghost")
                        ->Icon(IconName::ArrowLeft)
                        ->Ghost()
                        ->IntoEl());
@@ -302,16 +310,16 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     Rgba magenta = Rgb(0xd9, 0x46, 0xef);
     El* customSec = StorySection(cx, "Custom color", nullptr);
     El* customRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    customRow->Child(Btn(cx, app, "button-6-custom")
+    customRow->Child(Btn(cx, self, "button-6-custom")
                          ->Custom(magenta)
                          ->Label(StrL("Custom Button"))
                          ->IntoEl());
-    customRow->Child(Btn(cx, app, "button-outline-6-custom")
+    customRow->Child(Btn(cx, self, "button-outline-6-custom")
                          ->Outline()
                          ->Custom(magenta)
                          ->Label(StrL("Outline Button"))
                          ->IntoEl());
-    customRow->Child(Btn(cx, app, "button-outline-6-custom-1")
+    customRow->Child(Btn(cx, self, "button-outline-6-custom-1")
                          ->Outline()
                          ->Icon(IconName::Bell)
                          ->Custom(magenta)
@@ -322,9 +330,12 @@ El* ButtonRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ButtonClick(StoryApp* app, int id) {
-    (void)app;
+void ButtonStory::Click(ButtonStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryButton, ButtonRender, ButtonClick);
+STORY_PAGE(StoryButton, ButtonStory);

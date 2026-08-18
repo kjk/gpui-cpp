@@ -1,14 +1,21 @@
 #include "Story.h"
 
-static El* Face(Ctx* cx, StoryApp* app, const char* initials) {
+struct BadgeStory {
+    StoryToolbarState toolbar;
+
+    static El* Render(BadgeStory* self, Ctx* cx);
+    static void Click(BadgeStory* self, Ctx* cx, int id);
+};
+
+static El* Face(Ctx* cx, BadgeStory* self, const char* initials) {
     Arena* a = cx->a;
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
-        ->WithSize(app->size)
+        ->WithSize(self->toolbar.size)
         ->IntoEl();
 }
 
-static El* FaceLarge(Ctx* cx, StoryApp* app, const char* initials) {
+static El* FaceLarge(Ctx* cx, BadgeStory* self, const char* initials) {
     Arena* a = cx->a;
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
@@ -16,33 +23,34 @@ static El* FaceLarge(Ctx* cx, StoryApp* app, const char* initials) {
         ->IntoEl();
 }
 
-static El* FaceSmall(Ctx* cx, StoryApp* app, const char* initials) {
+static El* FaceSmall(Ctx* cx, BadgeStory* self, const char* initials) {
     Arena* a = cx->a;
-    (void)app;
     return component::Avatar::New(cx)
         ->Initials(Str(initials))
         ->WithSize(UiSize::Small)
         ->IntoEl();
 }
 
-El* BadgeRender(StoryApp* app, Ctx* cx) {
+El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* icons = StorySection(cx, "Icon", nullptr);
     El* iconRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
-    iconRow->Child(component::Badge::New(cx)
-                       ->Count(3)
-                       ->WithSize(app->size)
-                       ->Child(IconEl(a, IconName::Bell, UiSizePx(app->size)))
-                       ->IntoEl());
-    iconRow->Child(component::Badge::New(cx)
-                       ->Count(103)
-                       ->WithSize(app->size)
-                       ->Child(IconEl(a, IconName::Inbox, UiSizePx(app->size)))
-                       ->IntoEl());
+    iconRow->Child(
+        component::Badge::New(cx)
+            ->Count(3)
+            ->WithSize(self->toolbar.size)
+            ->Child(IconEl(a, IconName::Bell, UiSizePx(self->toolbar.size)))
+            ->IntoEl());
+    iconRow->Child(
+        component::Badge::New(cx)
+            ->Count(103)
+            ->WithSize(self->toolbar.size)
+            ->Child(IconEl(a, IconName::Inbox, UiSizePx(self->toolbar.size)))
+            ->IntoEl());
     StorySectionAdd(icons, iconRow);
     page->Child(icons);
 
@@ -50,13 +58,13 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     El* countRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
     countRow->Child(component::Badge::New(cx)
                         ->Count(3)
-                        ->WithSize(app->size)
-                        ->Child(Face(cx, app, "JL"))
+                        ->WithSize(self->toolbar.size)
+                        ->Child(Face(cx, self, "JL"))
                         ->IntoEl());
     countRow->Child(component::Badge::New(cx)
                         ->Count(103)
-                        ->WithSize(app->size)
-                        ->Child(Face(cx, app, "HU"))
+                        ->WithSize(self->toolbar.size)
+                        ->Child(Face(cx, self, "HU"))
                         ->IntoEl());
     StorySectionAdd(counts, countRow);
     page->Child(counts);
@@ -66,14 +74,14 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     icRow->Child(component::Badge::New(cx)
                      ->Icon(IconName::Check)
                      ->Color(Rgb(0x22, 0xd3, 0xee))
-                     ->WithSize(app->size)
-                     ->Child(Face(cx, app, "JL"))
+                     ->WithSize(self->toolbar.size)
+                     ->Child(Face(cx, self, "JL"))
                      ->IntoEl());
     icRow->Child(component::Badge::New(cx)
                      ->Icon(IconName::Star)
                      ->Color(th.yellow)
-                     ->WithSize(app->size)
-                     ->Child(Face(cx, app, "TW"))
+                     ->WithSize(self->toolbar.size)
+                     ->Child(Face(cx, self, "TW"))
                      ->IntoEl());
     StorySectionAdd(ic, icRow);
     page->Child(ic);
@@ -82,8 +90,8 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     StorySectionAdd(dots, component::Badge::New(cx)
                               ->Dot()
                               ->Count(1)
-                              ->WithSize(app->size)
-                              ->Child(Face(cx, app, "JL"))
+                              ->WithSize(self->toolbar.size)
+                              ->Child(Face(cx, self, "JL"))
                               ->IntoEl());
     page->Child(dots);
 
@@ -92,15 +100,15 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     colorRow->Child(component::Badge::New(cx)
                         ->Count(3)
                         ->Color(th.blue)
-                        ->WithSize(app->size)
-                        ->Child(Face(cx, app, "JL"))
+                        ->WithSize(self->toolbar.size)
+                        ->Child(Face(cx, self, "JL"))
                         ->IntoEl());
     colorRow->Child(component::Badge::New(cx)
                         ->Dot()
                         ->Color(th.green)
                         ->Count(1)
-                        ->WithSize(app->size)
-                        ->Child(Face(cx, app, "JL"))
+                        ->WithSize(self->toolbar.size)
+                        ->Child(Face(cx, self, "JL"))
                         ->IntoEl());
     StorySectionAdd(color, colorRow);
     page->Child(color);
@@ -113,8 +121,8 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
                        ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Check)
                                    ->Color(Rgb(0x22, 0xd3, 0xee))
-                                   ->WithSize(app->size)
-                                   ->Child(Face(cx, app, "JL"))
+                                   ->WithSize(self->toolbar.size)
+                                   ->Child(Face(cx, self, "JL"))
                                    ->IntoEl())
                        ->IntoEl());
     nestRow->Child(component::Badge::New(cx)
@@ -124,29 +132,29 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
                        ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Star)
                                    ->Color(th.yellow)
-                                   ->WithSize(app->size)
-                                   ->Child(FaceLarge(cx, app, "TW"))
+                                   ->WithSize(self->toolbar.size)
+                                   ->Child(FaceLarge(cx, self, "TW"))
                                    ->IntoEl())
                        ->IntoEl());
     nestRow->Child(component::Badge::New(cx)
                        ->Count(3)
                        ->Color(th.green)
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Asterisk)
                                    ->Color(th.green)
-                                   ->WithSize(app->size)
-                                   ->Child(Face(cx, app, "AB"))
+                                   ->WithSize(self->toolbar.size)
+                                   ->Child(Face(cx, self, "AB"))
                                    ->IntoEl())
                        ->IntoEl());
     nestRow->Child(component::Badge::New(cx)
                        ->Dot()
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->Child(component::Badge::New(cx)
                                    ->Icon(IconName::Sun)
                                    ->Color(th.red)
-                                   ->WithSize(app->size)
-                                   ->Child(FaceSmall(cx, app, "CD"))
+                                   ->WithSize(self->toolbar.size)
+                                   ->Child(FaceSmall(cx, self, "CD"))
                                    ->IntoEl())
                        ->IntoEl());
     StorySectionAdd(nest, nestRow);
@@ -154,9 +162,12 @@ El* BadgeRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void BadgeClick(StoryApp* app, int id) {
-    (void)app;
+void BadgeStory::Click(BadgeStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryBadge, BadgeRender, BadgeClick);
+STORY_PAGE(StoryBadge, BadgeStory);

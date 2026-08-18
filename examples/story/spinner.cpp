@@ -1,26 +1,34 @@
 #include "Story.h"
 
-El* SpinnerRender(StoryApp* app, Ctx* cx) {
+struct SpinnerStory {
+    StoryToolbarState toolbar;
+
+    static El* Render(SpinnerStory* self, Ctx* cx);
+    static void Click(SpinnerStory* self, Ctx* cx, int id);
+};
+
+El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def =
         StorySection(cx, "Default", "An indeterminate loading indicator.");
-    StorySectionAdd(def,
-                    component::Spinner::New(cx)->WithSize(app->size)->IntoEl());
+    StorySectionAdd(def, component::Spinner::New(cx)
+                             ->WithSize(self->toolbar.size)
+                             ->IntoEl());
     page->Child(def);
 
     El* color = StorySection(cx, "Color",
                              "Use a color that suits the surrounding status.");
     El* colorRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     colorRow->Child(component::Spinner::New(cx)
-                        ->WithSize(app->size)
+                        ->WithSize(self->toolbar.size)
                         ->Color(th.blue)
                         ->IntoEl());
     colorRow->Child(component::Spinner::New(cx)
-                        ->WithSize(app->size)
+                        ->WithSize(self->toolbar.size)
                         ->Color(th.green)
                         ->IntoEl());
     StorySectionAdd(color, colorRow);
@@ -34,11 +42,11 @@ El* SpinnerRender(StoryApp* app, Ctx* cx) {
     El* ic = StorySection(cx, "Icon", "Replace the default spinner glyph.");
     El* icRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     icRow->Child(component::Spinner::New(cx)
-                     ->WithSize(app->size)
+                     ->WithSize(self->toolbar.size)
                      ->Icon(IconName::Loader)
                      ->IntoEl());
     icRow->Child(component::Spinner::New(cx)
-                     ->WithSize(app->size)
+                     ->WithSize(self->toolbar.size)
                      ->Icon(IconName::Loader)
                      ->Color(Rgb(0x22, 0xd3, 0xee))
                      ->IntoEl());
@@ -49,11 +57,11 @@ El* SpinnerRender(StoryApp* app, Ctx* cx) {
         StorySection(cx, "Easing", "Customize the rotation timing curve.");
     El* easeRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     easeRow->Child(component::Spinner::New(cx)
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->Icon(IconName::Loader)
                        ->IntoEl());
     easeRow->Child(component::Spinner::New(cx)
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->Icon(IconName::Loader)
                        ->Color(th.blue)
                        ->IntoEl());
@@ -62,9 +70,12 @@ El* SpinnerRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void SpinnerClick(StoryApp* app, int id) {
-    (void)app;
+void SpinnerStory::Click(SpinnerStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StorySpinner, SpinnerRender, SpinnerClick);
+STORY_PAGE(StorySpinner, SpinnerStory);

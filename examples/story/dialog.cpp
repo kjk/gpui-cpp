@@ -1,10 +1,19 @@
 #include "Story.h"
 
-static void CloseDlg(StoryApp* app) {
-    app->dialogOpen = false;
+struct DialogStory {
+    bool dialogOpen = false;
+    int selB = -1;
+
+    static El* Render(DialogStory* self, Ctx* cx);
+    static void Click(DialogStory* self, Ctx* cx, int id);
+};
+
+static void CloseDlg(DialogStory* self) {
+    self->dialogOpen = false;
 }
 
-El* DialogRender(StoryApp* app, Ctx* cx, WinSize size) {
+El* DialogStory::Render(DialogStory* self, Ctx* cx) {
+    WinSize size = WindowSize(cx->win);
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -30,15 +39,15 @@ El* DialogRender(StoryApp* app, Ctx* cx, WinSize size) {
                               ->IntoEl());
     page->Child(acts);
 
-    if (app->dialogOpen) {
+    if (self->dialogOpen) {
         component::Dialog* d = component::Dialog::New(cx)
                                    ->Open(true)
-                                   ->OnClose(MkFunc0(&CloseDlg, app))
-                                   ->OnOk(MkFunc0(&CloseDlg, app));
-        if (app->selB == 1) {
+                                   ->OnClose(MkFunc0(&CloseDlg, self))
+                                   ->OnOk(MkFunc0(&CloseDlg, self));
+        if (self->selB == 1) {
             d->Description(
                 StrL("This dialog has no title, only a short message."));
-        } else if (app->selB == 2) {
+        } else if (self->selB == 2) {
             d->Title(StrL("Share workspace"))
                 ->Description(StrL("Anyone with the link can view this file."));
         } else {
@@ -51,17 +60,18 @@ El* DialogRender(StoryApp* app, Ctx* cx, WinSize size) {
     return page;
 }
 
-void DialogClick(StoryApp* app, int id) {
+void DialogStory::Click(DialogStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id == HashClickId(StrL("open-dlg"))) {
-        app->dialogOpen = true;
-        app->selB = 0;
+        self->dialogOpen = true;
+        self->selB = 0;
     } else if (id == HashClickId(StrL("open-dlg-notitle"))) {
-        app->dialogOpen = true;
-        app->selB = 1;
+        self->dialogOpen = true;
+        self->selB = 1;
     } else if (id == HashClickId(StrL("open-dlg-custom"))) {
-        app->dialogOpen = true;
-        app->selB = 2;
+        self->dialogOpen = true;
+        self->selB = 2;
     }
 }
 
-STORY_PAGE_SZ(StoryDialog, DialogRender, DialogClick);
+STORY_PAGE(StoryDialog, DialogStory);

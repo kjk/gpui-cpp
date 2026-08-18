@@ -1,19 +1,27 @@
 #include "Story.h"
 
-static void SetSw0(StoryApp* app, bool v) {
-    app->switches[0] = v;
+struct SwitchStory {
+    bool switches[8] = {true, false, true, true, false};
+    StoryToolbarState toolbar;
+
+    static El* Render(SwitchStory* self, Ctx* cx);
+    static void Click(SwitchStory* self, Ctx* cx, int id);
+};
+
+static void SetSw0(SwitchStory* self, bool v) {
+    self->switches[0] = v;
 }
-static void SetSw1(StoryApp* app, bool v) {
-    app->switches[1] = v;
+static void SetSw1(SwitchStory* self, bool v) {
+    self->switches[1] = v;
 }
-static void SetSw3(StoryApp* app, bool v) {
-    app->switches[3] = v;
+static void SetSw3(SwitchStory* self, bool v) {
+    self->switches[3] = v;
 }
-static void SetSw4(StoryApp* app, bool v) {
-    app->switches[4] = v;
+static void SetSw4(SwitchStory* self, bool v) {
+    self->switches[4] = v;
 }
 
-static El* SwitchRow(Ctx* cx, StoryApp* app, const char* title,
+static El* SwitchRow(Ctx* cx, SwitchStory* self, const char* title,
                      const char* desc, const char* id, int slot,
                      Func1<bool> on) {
     Arena* a = cx->a;
@@ -30,29 +38,29 @@ static El* SwitchRow(Ctx* cx, StoryApp* app, const char* title,
         ->Pad(16)
         ->Child(text)
         ->Child(component::Switch::New(cx, Str(id))
-                    ->Checked(app->switches[slot])
-                    ->WithSize(app->size)
+                    ->Checked(self->switches[slot])
+                    ->WithSize(self->toolbar.size)
                     ->OnClick(on)
                     ->IntoEl());
 }
 
-El* SwitchRender(StoryApp* app, Ctx* cx) {
+El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def = StorySection(cx, "Default",
                            "Switches work well in a compact settings list.");
     El* list =
         Div(a)->FlexCol()->W(512)->Border(1, th.border)->Radius(th.radius);
-    list->Child(SwitchRow(cx, app, "Product updates",
+    list->Child(SwitchRow(cx, self, "Product updates",
                           "New features and release notes.", "switch1", 0,
-                          MkFunc1(&SetSw0, app)));
+                          MkFunc1(&SetSw0, self)));
     list->Child(component::Separator::Horizontal(cx)->IntoEl());
-    list->Child(SwitchRow(cx, app, "Security alerts",
+    list->Child(SwitchRow(cx, self, "Security alerts",
                           "Important activity on your account.", "switch2", 1,
-                          MkFunc1(&SetSw1, app)));
+                          MkFunc1(&SetSw1, self)));
     StorySectionAdd(def, list);
     page->Child(def);
 
@@ -60,15 +68,15 @@ El* SwitchRender(StoryApp* app, Ctx* cx) {
         cx, "Disabled", "Unavailable switches preserve their current value.");
     El* disRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter()->Wrap();
     disRow->Child(component::Switch::New(cx, StrL("switch3"))
-                      ->Checked(app->switches[2])
+                      ->Checked(self->switches[2])
                       ->Disabled(true)
-                      ->WithSize(app->size)
+                      ->WithSize(self->toolbar.size)
                       ->IntoEl());
     disRow->Child(component::Switch::New(cx, StrL("switch3_1"))
                       ->Label(StrL("Airplane mode"))
                       ->Checked(true)
                       ->Disabled(true)
-                      ->WithSize(app->size)
+                      ->WithSize(self->toolbar.size)
                       ->IntoEl());
     StorySectionAdd(dis, disRow);
     page->Child(dis);
@@ -78,33 +86,36 @@ El* SwitchRender(StoryApp* app, Ctx* cx) {
     El* colRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter()->Wrap();
     colRow->Child(component::Switch::New(cx, StrL("switch4"))
                       ->Label(StrL("Success"))
-                      ->Checked(app->switches[3])
+                      ->Checked(self->switches[3])
                       ->Color(th.success)
-                      ->WithSize(app->size)
-                      ->OnClick(MkFunc1(&SetSw3, app))
+                      ->WithSize(self->toolbar.size)
+                      ->OnClick(MkFunc1(&SetSw3, self))
                       ->IntoEl());
     colRow->Child(component::Switch::New(cx, StrL("switch5"))
                       ->Label(StrL("Destructive"))
-                      ->Checked(app->switches[4])
+                      ->Checked(self->switches[4])
                       ->Color(th.danger)
-                      ->WithSize(app->size)
-                      ->OnClick(MkFunc1(&SetSw4, app))
+                      ->WithSize(self->toolbar.size)
+                      ->OnClick(MkFunc1(&SetSw4, self))
                       ->IntoEl());
     colRow->Child(component::Switch::New(cx, StrL("switch4_disabled"))
                       ->Label(StrL("Disabled"))
                       ->Checked(true)
                       ->Color(th.success)
                       ->Disabled(true)
-                      ->WithSize(app->size)
+                      ->WithSize(self->toolbar.size)
                       ->IntoEl());
     StorySectionAdd(col, colRow);
     page->Child(col);
     return page;
 }
 
-void SwitchClick(StoryApp* app, int id) {
-    (void)app;
+void SwitchStory::Click(SwitchStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StorySwitch, SwitchRender, SwitchClick);
+STORY_PAGE(StorySwitch, SwitchStory);

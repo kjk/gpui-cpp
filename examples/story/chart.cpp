@@ -1,5 +1,10 @@
 #include "Story.h"
 
+struct ChartStory {
+    static El* Render(ChartStory* self, Ctx* cx);
+    static void Click(ChartStory* self, Ctx* cx, int id);
+};
+
 static const float kYs[] = {12, 18, 15, 22, 28, 24, 31, 29, 35, 32, 38, 40};
 
 static El* BarChart(Ctx* cx) {
@@ -14,9 +19,8 @@ static El* BarChart(Ctx* cx) {
     return row;
 }
 
-El* ChartRender(StoryApp* app, Ctx* cx) {
+El* ChartStory::Render(ChartStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* area = StorySection(cx, "Area", "A simple area series.");
@@ -41,9 +45,9 @@ El* ChartRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ChartClick(StoryApp* app, int id) {
-    (void)app;
+void ChartStory::Click(ChartStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryChart, ChartRender, ChartClick);
+STORY_PAGE(StoryChart, ChartStory);

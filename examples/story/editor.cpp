@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* EditorRender(StoryApp* app, Ctx* cx) {
+struct EditorStory {
+    static El* Render(EditorStory* self, Ctx* cx);
+    static void Click(EditorStory* self, Ctx* cx, int id);
+};
+
+El* EditorStory::Render(EditorStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(cx, "Code", "A code editor with line numbers.");
     StorySectionAdd(sec, component::Highlighter::New(
@@ -12,9 +16,9 @@ El* EditorRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void EditorClick(StoryApp* app, int id) {
-    (void)app;
+void EditorStory::Click(EditorStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryEditor, EditorRender, EditorClick);
+STORY_PAGE(StoryEditor, EditorStory);

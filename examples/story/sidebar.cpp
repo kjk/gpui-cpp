@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* SidebarRender(StoryApp* app, Ctx* cx) {
+struct SidebarStory {
+    static El* Render(SidebarStory* self, Ctx* cx);
+    static void Click(SidebarStory* self, Ctx* cx, int id);
+};
+
+El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
         cx, "Default",
@@ -19,9 +23,9 @@ El* SidebarRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void SidebarClick(StoryApp* app, int id) {
-    (void)app;
+void SidebarStory::Click(SidebarStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StorySidebar, SidebarRender, SidebarClick);
+STORY_PAGE(StorySidebar, SidebarStory);

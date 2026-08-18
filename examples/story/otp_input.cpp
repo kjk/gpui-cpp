@@ -1,35 +1,45 @@
 #include "Story.h"
 
-El* OtpInputRender(StoryApp* app, Ctx* cx) {
+struct OtpInputStory {
+    char otpBuf[8] = "12";
+    int otpLen = 2;
+    static El* Render(OtpInputStory* self, Ctx* cx);
+    static void Click(OtpInputStory* self, Ctx* cx, int id);
+};
+
+El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec =
         StorySection(cx, "Default", "A one-time password input component.");
-    StorySectionAdd(sec, component::OtpInput::New(cx, app->otpBuf, app->otpLen)
-                             ->IntoEl());
+    StorySectionAdd(sec,
+                    component::OtpInput::New(cx, self->otpBuf, self->otpLen)
+                        ->IntoEl());
     page->Child(sec);
 
     El* group = StorySection(cx, "Grouping", nullptr);
     StorySectionAdd(group,
-                    component::OtpInput::New(cx, app->otpBuf, app->otpLen)
+                    component::OtpInput::New(cx, self->otpBuf, self->otpLen)
                         ->IntoEl());
     page->Child(group);
 
     El* csz = StorySection(cx, "Custom size", nullptr);
-    StorySectionAdd(csz, component::OtpInput::New(cx, app->otpBuf, app->otpLen)
-                             ->IntoEl());
+    StorySectionAdd(csz,
+                    component::OtpInput::New(cx, self->otpBuf, self->otpLen)
+                        ->IntoEl());
     page->Child(csz);
 
     El* dis = StorySection(cx, "Disabled", nullptr);
-    StorySectionAdd(dis, component::OtpInput::New(cx, app->otpBuf, app->otpLen)
-                             ->IntoEl());
+    StorySectionAdd(dis,
+                    component::OtpInput::New(cx, self->otpBuf, self->otpLen)
+                        ->IntoEl());
     page->Child(dis);
     return page;
 }
 
-void OtpInputClick(StoryApp* app, int id) {
-    (void)app;
+void OtpInputStory::Click(OtpInputStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryOtpInput, OtpInputRender, OtpInputClick);
+STORY_PAGE(StoryOtpInput, OtpInputStory);

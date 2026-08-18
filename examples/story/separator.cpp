@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* SeparatorRender(StoryApp* app, Ctx* cx) {
+struct SeparatorStory {
+    static El* Render(SeparatorStory* self, Ctx* cx);
+    static void Click(SeparatorStory* self, Ctx* cx, int id);
+};
+
+El* SeparatorStory::Render(SeparatorStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -62,9 +66,9 @@ El* SeparatorRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void SeparatorClick(StoryApp* app, int id) {
-    (void)app;
+void SeparatorStory::Click(SeparatorStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StorySeparator, SeparatorRender, SeparatorClick);
+STORY_PAGE(StorySeparator, SeparatorStory);

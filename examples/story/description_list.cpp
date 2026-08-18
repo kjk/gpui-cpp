@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* DescriptionListRender(StoryApp* app, Ctx* cx) {
+struct DescriptionListStory {
+    static El* Render(DescriptionListStory* self, Ctx* cx);
+    static void Click(DescriptionListStory* self, Ctx* cx, int id);
+};
+
+El* DescriptionListStory::Render(DescriptionListStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
         cx, "Default", "A list of terms and their corresponding descriptions.");
@@ -17,9 +21,9 @@ El* DescriptionListRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void DescriptionListClick(StoryApp* app, int id) {
-    (void)app;
+void DescriptionListStory::Click(DescriptionListStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryDescriptionList, DescriptionListRender, DescriptionListClick);
+STORY_PAGE(StoryDescriptionList, DescriptionListStory);

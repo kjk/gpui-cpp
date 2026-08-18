@@ -45,6 +45,9 @@ setProcessDpiAware();
 // AppLog writes out\gpui2.log relative to cwd.
 mkdirSync(join(exeDir, "out"), { recursive: true });
 const logPath = join(exeDir, "out", "gpui2.log");
+try {
+  await Bun.file(logPath).delete();
+} catch {}
 const proc = Bun.spawn([exe, ...rest.slice(2)], { cwd: exeDir, stdout: "pipe", stderr: "pipe" });
 const hwnd = await waitForPidWindow(proc.pid ?? 0, 15000);
 if (!hwnd) {

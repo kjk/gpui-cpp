@@ -1,13 +1,16 @@
 #include "Story.h"
 
-static void SetSlider(StoryApp* app, float v) {
-    (void)app;
+struct SliderStory {
+    static El* Render(SliderStory* self, Ctx* cx);
+    static void Click(SliderStory* self, Ctx* cx, int id);
+};
+
+static void SetSlider(SliderStory* self, float v) {
     (void)v;
 }
 
-El* SliderRender(StoryApp* app, Ctx* cx) {
+El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
         cx, "Default",
@@ -15,7 +18,7 @@ El* SliderRender(StoryApp* app, Ctx* cx) {
     El* col = Div(a)->FlexCol()->Gap(8)->W(280);
     col->Child(component::Slider::New(cx)
                    ->Value(0.64f)
-                   ->OnChange(MkFunc1(&SetSlider, app))
+                   ->OnChange(MkFunc1(&SetSlider, self))
                    ->IntoEl());
     StorySectionAdd(sec, col);
     page->Child(sec);
@@ -33,9 +36,9 @@ El* SliderRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void SliderClick(StoryApp* app, int id) {
-    (void)app;
+void SliderStory::Click(SliderStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StorySlider, SliderRender, SliderClick);
+STORY_PAGE(StorySlider, SliderStory);

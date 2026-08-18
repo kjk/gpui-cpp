@@ -1,10 +1,16 @@
 #include "Story.h"
 
-static void PickList(StoryApp* app, int i) {
-    app->listSel = i;
+struct ListStory {
+    int listSel = 0;
+    static El* Render(ListStory* self, Ctx* cx);
+    static void Click(ListStory* self, Ctx* cx, int id);
+};
+
+static void PickList(ListStory* self, int i) {
+    self->listSel = i;
 }
 
-El* ListRender(StoryApp* app, Ctx* cx) {
+El* ListStory::Render(ListStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec =
@@ -16,16 +22,16 @@ El* ListRender(StoryApp* app, Ctx* cx) {
                              ->Item(StrL("Archive"))
                              ->Item(StrL("Spam"))
                              ->Item(StrL("Trash"))
-                             ->Selected(app->listSel)
-                             ->OnSelect(MkFunc1(&PickList, app))
+                             ->Selected(self->listSel)
+                             ->OnSelect(MkFunc1(&PickList, self))
                              ->IntoEl());
     page->Child(sec);
     return page;
 }
 
-void ListClick(StoryApp* app, int id) {
-    (void)app;
+void ListStory::Click(ListStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryList, ListRender, ListClick);
+STORY_PAGE(StoryList, ListStory);

@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* TableRender(StoryApp* app, Ctx* cx) {
+struct TableStory {
+    static El* Render(TableStory* self, Ctx* cx);
+    static void Click(TableStory* self, Ctx* cx, int id);
+};
+
+El* TableStory::Render(TableStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     static const char* heads[] = {"Component", "Status", "Version"};
     static const char* r0[] = {"gpui-base", "Stable", "0.4.1"};
     static const char* r1[] = {"gpui-component", "Active", "0.4.1"};
@@ -27,9 +31,9 @@ El* TableRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void TableClick(StoryApp* app, int id) {
-    (void)app;
+void TableStory::Click(TableStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryTable, TableRender, TableClick);
+STORY_PAGE(StoryTable, TableStory);

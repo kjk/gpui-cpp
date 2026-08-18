@@ -1,11 +1,15 @@
 #include "Story.h"
 
-static void OnCopy(StoryApp* app, Str v) {
-    (void)app;
+struct ClipboardStory {
+    static El* Render(ClipboardStory* self, Ctx* cx);
+    static void Click(ClipboardStory* self, Ctx* cx, int id);
+};
+
+static void OnCopy(ClipboardStory* self, Str v) {
     (void)v;
 }
 
-El* ClipboardRender(StoryApp* app, Ctx* cx) {
+El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -16,7 +20,7 @@ El* ClipboardRender(StoryApp* app, Ctx* cx) {
     defRow->Child(component::Label::New(cx, StrL("A clipboard button"))
                       ->IntoEl());
     defRow->Child(component::Clipboard::New(cx, StrL("masked :false"))
-                      ->OnCopy(MkFunc1(&OnCopy, app))
+                      ->OnCopy(MkFunc1(&OnCopy, self))
                       ->IntoEl());
     StorySectionAdd(def, defRow);
     page->Child(def);
@@ -45,9 +49,9 @@ El* ClipboardRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ClipboardClick(StoryApp* app, int id) {
-    (void)app;
+void ClipboardStory::Click(ClipboardStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryClipboard, ClipboardRender, ClipboardClick);
+STORY_PAGE(StoryClipboard, ClipboardStory);

@@ -1,22 +1,30 @@
 #include "Story.h"
 
-static void SetRating(StoryApp* app, int v) {
-    app->rating = v;
+struct RatingStory {
+    int rating = 3;
+    StoryToolbarState toolbar;
+
+    static El* Render(RatingStory* self, Ctx* cx);
+    static void Click(RatingStory* self, Ctx* cx, int id);
+};
+
+static void SetRating(RatingStory* self, int v) {
+    self->rating = v;
 }
 
-El* RatingRender(StoryApp* app, Ctx* cx) {
+El* RatingStory::Render(RatingStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def =
         StorySection(cx, "Default", "Select a value directly from the rating.");
     StorySectionAdd(def, component::Rating::New(cx)
-                             ->Value(app->rating)
+                             ->Value(self->rating)
                              ->Max(5)
-                             ->WithSize(app->size)
-                             ->OnChange(MkFunc1(&SetRating, app))
+                             ->WithSize(self->toolbar.size)
+                             ->OnChange(MkFunc1(&SetRating, self))
                              ->IntoEl());
     page->Child(def);
 
@@ -26,25 +34,28 @@ El* RatingRender(StoryApp* app, Ctx* cx) {
                              ->Max(5)
                              ->Color(th.green)
                              ->Disabled(true)
-                             ->WithSize(app->size)
+                             ->WithSize(self->toolbar.size)
                              ->IntoEl());
     page->Child(dis);
 
     El* col = StorySection(cx, "Color", nullptr);
     StorySectionAdd(col, component::Rating::New(cx)
-                             ->Value(app->rating)
+                             ->Value(self->rating)
                              ->Max(5)
                              ->Color(th.green)
-                             ->WithSize(app->size)
-                             ->OnChange(MkFunc1(&SetRating, app))
+                             ->WithSize(self->toolbar.size)
+                             ->OnChange(MkFunc1(&SetRating, self))
                              ->IntoEl());
     page->Child(col);
     return page;
 }
 
-void RatingClick(StoryApp* app, int id) {
-    (void)app;
+void RatingStory::Click(RatingStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryRating, RatingRender, RatingClick);
+STORY_PAGE(StoryRating, RatingStory);

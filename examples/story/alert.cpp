@@ -1,13 +1,21 @@
 #include "Story.h"
 
+struct AlertStory {
+    bool alertBanner = true;
+    StoryToolbarState toolbar;
+
+    static El* Render(AlertStory* self, Ctx* cx);
+    static void Click(AlertStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickAlertBannerClose = 2200
 };
 
-static void HideBanner(StoryApp* app) {
-    app->alertBanner = false;
+static void HideBanner(AlertStory* self) {
+    self->alertBanner = false;
 }
-static void AlertNoop(StoryApp*) {}
+static void AlertNoop(AlertStory*) {}
 
 static El* AlertLine(Ctx* cx, Str s, Rgba fg) {
     Arena* a = cx->a;
@@ -28,11 +36,11 @@ static El* AlertW(Ctx* cx, El* child) {
     return Div(a)->W(640)->Child(child);
 }
 
-El* AlertRender(StoryApp* app, Ctx* cx) {
+El* AlertStory::Render(AlertStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* defBody = Div(a)->FlexCol()->Gap(4);
     defBody->Child(AlertLine(cx, StrL("Your workspace is ready for the team."),
@@ -53,7 +61,7 @@ El* AlertRender(StoryApp* app, Ctx* cx) {
         def, AlertW(cx, component::Alert::New(cx, StrL("alert-default"), Str{})
                             ->Title(StrL("Workspace settings saved"))
                             ->Content(defBody)
-                            ->WithSize(app->size)
+                            ->WithSize(self->toolbar.size)
                             ->IntoEl()));
     page->Child(def);
 
@@ -64,15 +72,15 @@ El* AlertRender(StoryApp* app, Ctx* cx) {
         component::Alert::Info(cx, StrL("info1"),
                                StrL("Maintenance starts Friday at 22:00 UTC."))
             ->Title(StrL("Scheduled maintenance"))
-            ->OnClose(MkFunc0(&AlertNoop, app))
-            ->WithSize(app->size)
+            ->OnClose(MkFunc0(&AlertNoop, self))
+            ->WithSize(self->toolbar.size)
             ->IntoEl());
     col->Child(
         component::Alert::Success(cx, StrL("success-1"),
                                   StrL("The transfer is queued and usually "
                                        "settles within one business day."))
             ->Title(StrL("Transfer submitted"))
-            ->WithSize(app->size)
+            ->WithSize(self->toolbar.size)
             ->IntoEl());
 
     El* warnBody = Div(a)->FlexCol()->Gap(2);
@@ -86,7 +94,7 @@ El* AlertRender(StoryApp* app, Ctx* cx) {
         th.warning));
     col->Child(component::Alert::Warning(cx, StrL("warning-1"), Str{})
                    ->Content(warnBody)
-                   ->WithSize(app->size)
+                   ->WithSize(self->toolbar.size)
                    ->IntoEl());
 
     El* errBody = Div(a)->FlexCol()->Gap(4);
@@ -103,22 +111,22 @@ El* AlertRender(StoryApp* app, Ctx* cx) {
     col->Child(component::Alert::Error(cx, StrL("error-1"), Str{})
                    ->Title(StrL("Unable to process your payment."))
                    ->Content(errBody)
-                   ->WithSize(app->size)
+                   ->WithSize(self->toolbar.size)
                    ->IntoEl());
     StorySectionAdd(vars, AlertW(cx, col));
     page->Child(vars);
 
     El* ban = StorySection(cx, "Banner", "Full-width and closable alerts.");
     El* bcol = Div(a)->FlexCol()->Gap(8)->W(kFill);
-    if (app->alertBanner) {
+    if (self->alertBanner) {
         bcol->Child(
             component::Alert::New(
                 cx, StrL("banner-1"),
                 StrL("Reporting is read-only while the nightly ledger closes."))
                 ->Banner()
                 ->Visible(true)
-                ->OnClose(MkFunc0(&HideBanner, app))
-                ->WithSize(app->size)
+                ->OnClose(MkFunc0(&HideBanner, self))
+                ->WithSize(self->toolbar.size)
                 ->IntoEl());
     }
     bcol->Child(
@@ -126,27 +134,27 @@ El* AlertRender(StoryApp* app, Ctx* cx) {
             cx, StrL("banner-info"),
             StrL("A new desktop update will install after you restart."))
             ->Banner()
-            ->WithSize(app->size)
+            ->WithSize(self->toolbar.size)
             ->IntoEl());
     bcol->Child(
         component::Alert::Success(cx, StrL("banner-success"),
                                   StrL("All 1,284 records finished importing."))
             ->Banner()
-            ->WithSize(app->size)
+            ->WithSize(self->toolbar.size)
             ->IntoEl());
     bcol->Child(component::Alert::Warning(
                     cx, StrL("banner-warning"),
                     StrL("Your API key expires in 6 days. Rotate it before "
                          "August 19."))
                     ->Banner()
-                    ->WithSize(app->size)
+                    ->WithSize(self->toolbar.size)
                     ->IntoEl());
     bcol->Child(component::Alert::Error(
                     cx, StrL("banner-error"),
                     StrL("Live updates are disconnected. Changes may be "
                          "delayed."))
                     ->Banner()
-                    ->WithSize(app->size)
+                    ->WithSize(self->toolbar.size)
                     ->IntoEl());
     StorySectionAdd(ban, AlertW(cx, bcol));
     page->Child(ban);
@@ -162,16 +170,20 @@ El* AlertRender(StoryApp* app, Ctx* cx) {
                             "another owner before sending the agenda."))
                        ->Title(StrL("Two events overlap by 30 minutes"))
                        ->Icon(IconName::Calendar)
-                       ->WithSize(app->size)
+                       ->WithSize(self->toolbar.size)
                        ->IntoEl()));
     page->Child(custom);
     return page;
 }
 
-void AlertClick(StoryApp* app, int id) {
+void AlertStory::Click(AlertStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     if (id == ClickAlertBannerClose) {
-        app->alertBanner = false;
+        self->alertBanner = false;
     }
 }
 
-STORY_PAGE(StoryAlert, AlertRender, AlertClick);
+STORY_PAGE(StoryAlert, AlertStory);

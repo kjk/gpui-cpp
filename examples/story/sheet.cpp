@@ -1,10 +1,19 @@
 #include "Story.h"
 
-static void CloseSheet(StoryApp* app) {
-    app->sheetOpen = false;
+struct SheetStory {
+    bool sheetOpen = false;
+    int selB = -1;
+
+    static El* Render(SheetStory* self, Ctx* cx);
+    static void Click(SheetStory* self, Ctx* cx, int id);
+};
+
+static void CloseSheet(SheetStory* self) {
+    self->sheetOpen = false;
 }
 
-El* SheetRender(StoryApp* app, Ctx* cx, WinSize size) {
+El* SheetStory::Render(SheetStory* self, Ctx* cx) {
+    WinSize size = WindowSize(cx->win);
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -43,13 +52,13 @@ El* SheetRender(StoryApp* app, Ctx* cx, WinSize size) {
                                ->IntoEl());
     page->Child(focus);
 
-    if (app->sheetOpen) {
+    if (self->sheetOpen) {
         El* body = Div(a)->FlexCol()->Gap(8);
         body->Child(StoryTxt(cx, StrL("Workspace preferences for your team."),
                              13, ThemeNow().mutedFg)
                         ->Wrap()
                         ->MaxW(280));
-        if (app->selB == 1) {
+        if (self->selB == 1) {
             for (int i = 0; i < 12; i++) {
                 body->Child(StoryTxt(cx,
                                      StoryFmt(cx, "Preference row %d", i + 1),
@@ -60,26 +69,27 @@ El* SheetRender(StoryApp* app, Ctx* cx, WinSize size) {
                         ->Open(true)
                         ->Title(StrL("Settings"))
                         ->Body(body)
-                        ->OnClose(MkFunc0(&CloseSheet, app))
+                        ->OnClose(MkFunc0(&CloseSheet, self))
                         ->IntoEl(size));
     }
     return page;
 }
 
-void SheetClick(StoryApp* app, int id) {
+void SheetStory::Click(SheetStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id == HashClickId(StrL("sheet-right")) ||
         id == HashClickId(StrL("sheet-left")) ||
         id == HashClickId(StrL("sheet-top")) ||
         id == HashClickId(StrL("sheet-bottom"))) {
-        app->sheetOpen = true;
-        app->selB = 0;
+        self->sheetOpen = true;
+        self->selB = 0;
     } else if (id == HashClickId(StrL("sheet-scroll"))) {
-        app->sheetOpen = true;
-        app->selB = 1;
+        self->sheetOpen = true;
+        self->selB = 1;
     } else if (id == HashClickId(StrL("sheet-focus"))) {
-        app->sheetOpen = true;
-        app->selB = 2;
+        self->sheetOpen = true;
+        self->selB = 2;
     }
 }
 
-STORY_PAGE_SZ(StorySheet, SheetRender, SheetClick);
+STORY_PAGE(StorySheet, SheetStory);

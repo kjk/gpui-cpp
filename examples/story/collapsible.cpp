@@ -1,12 +1,18 @@
 #include "Story.h"
 
+struct CollapsibleStory {
+    bool collOpen[8] = {false, false, false, true, true, true, false, true};
+    static El* Render(CollapsibleStory* self, Ctx* cx);
+    static void Click(CollapsibleStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickColl0 = 2400
 };
 
-static void ToggleColl(StoryApp* app, int i) {
+static void ToggleColl(CollapsibleStory* self, int i) {
     if (i >= 0 && i < 8) {
-        app->collOpen[i] = !app->collOpen[i];
+        self->collOpen[i] = !self->collOpen[i];
     }
 }
 
@@ -16,7 +22,7 @@ static El* Chevron(Ctx* cx, bool open) {
         ->Fg(ThemeNow().mutedFg);
 }
 
-El* CollapsibleRender(StoryApp* app, Ctx* cx) {
+El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -60,7 +66,7 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
         ->Child(StoryTxt(cx, StrL("2x Studio Headphones"), 13, th.mutedFg));
     StorySectionAdd(
         basic, component::Collapsible::New(cx)
-                   ->Open(app->collOpen[0])
+                   ->Open(self->collOpen[0])
                    ->Trigger(Div(a)->FlexCol()->Gap(8)->Child(orderHead)->Child(
                        status))
                    ->Content(orderBody)
@@ -78,7 +84,7 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
                       ->Click(ClickColl0 + 1)
                       ->Child(StoryTxt(cx, StrL("How do I reset my password?"),
                                        13, th.foreground))
-                      ->Child(Chevron(cx, app->collOpen[1]));
+                      ->Child(Chevron(cx, self->collOpen[1]));
     El* faqBody = Div(a)->PadT(12)->W(360)->Child(
         StoryTxt(cx,
                  StrL("Click the Forgot Password link on the sign in page, "
@@ -88,7 +94,7 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
             ->Wrap()
             ->MaxW(340));
     StorySectionAdd(row, component::Collapsible::New(cx)
-                             ->Open(app->collOpen[1])
+                             ->Open(self->collOpen[1])
                              ->Trigger(faqTrig)
                              ->Content(faqBody)
                              ->IntoEl());
@@ -99,8 +105,8 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
         "Holds optional controls, keeping the default view short.");
     El* setTrig = component::Button::New(cx, StrL("settings"))
                       ->Outline()
-                      ->Icon(app->collOpen[3] ? IconName::ChevronDown
-                                              : IconName::ChevronRight)
+                      ->Icon(self->collOpen[3] ? IconName::ChevronDown
+                                               : IconName::ChevronRight)
                       ->Label(StrL("Notification settings"))
                       ->IntoEl()
                       ->W(360)
@@ -117,7 +123,7 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
                 ->IntoEl()));
     }
     StorySectionAdd(settings, component::Collapsible::New(cx)
-                                  ->Open(app->collOpen[3])
+                                  ->Open(self->collOpen[3])
                                   ->Trigger(setTrig)
                                   ->Content(setBody)
                                   ->IntoEl());
@@ -135,7 +141,7 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
                    ->WithSize(UiSize::Small)
                    ->IntoEl());
     who->Child(StoryTxt(cx, StrL("@huacnlee"), 13, th.foreground)->Semibold());
-    profTrig->Child(who)->Child(Chevron(cx, app->collOpen[7]));
+    profTrig->Child(who)->Child(Chevron(cx, self->collOpen[7]));
     El* profBody = Div(a)->FlexCol()->Gap(8)->W(360);
     struct Field {
         IconName icon;
@@ -154,7 +160,7 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
         profBody->Child(f);
     }
     StorySectionAdd(profile, component::Collapsible::New(cx)
-                                 ->Open(app->collOpen[7])
+                                 ->Open(self->collOpen[7])
                                  ->Trigger(profTrig)
                                  ->Content(profBody)
                                  ->IntoEl());
@@ -162,10 +168,11 @@ El* CollapsibleRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void CollapsibleClick(StoryApp* app, int id) {
+void CollapsibleStory::Click(CollapsibleStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id >= ClickColl0 && id < ClickColl0 + 8) {
-        ToggleColl(app, id - ClickColl0);
+        ToggleColl(self, id - ClickColl0);
     }
 }
 
-STORY_PAGE(StoryCollapsible, CollapsibleRender, CollapsibleClick);
+STORY_PAGE(StoryCollapsible, CollapsibleStory);

@@ -1,34 +1,43 @@
 #include "Story.h"
 
-static void SetPage(StoryApp* app, int p) {
-    app->page = p;
+struct PaginationStory {
+    int page = 3;
+    int pageMany = 12;
+    StoryToolbarState toolbar;
+
+    static El* Render(PaginationStory* self, Ctx* cx);
+    static void Click(PaginationStory* self, Ctx* cx, int id);
+};
+
+static void SetPage(PaginationStory* self, int p) {
+    self->page = p;
 }
-static void SetPageMany(StoryApp* app, int p) {
-    app->pageMany = p;
+static void SetPageMany(PaginationStory* self, int p) {
+    self->pageMany = p;
 }
 
-El* PaginationRender(StoryApp* app, Ctx* cx) {
+El* PaginationStory::Render(PaginationStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def = StorySection(cx, "Default", nullptr);
-    StorySectionAdd(def, component::Pagination::New(cx, app->page, 10)
-                             ->OnChange(MkFunc1(&SetPage, app))
+    StorySectionAdd(def, component::Pagination::New(cx, self->page, 10)
+                             ->OnChange(MkFunc1(&SetPage, self))
                              ->IntoEl());
     page->Child(def);
 
     El* many = StorySection(
         cx, "Visible Pages",
         "Control how many page links remain visible in a larger result set.");
-    StorySectionAdd(many, component::Pagination::New(cx, app->pageMany, 50)
-                              ->OnChange(MkFunc1(&SetPageMany, app))
+    StorySectionAdd(many, component::Pagination::New(cx, self->pageMany, 50)
+                              ->OnChange(MkFunc1(&SetPageMany, self))
                               ->IntoEl());
     page->Child(many);
 
     El* compact = StorySection(cx, "Compact Style", nullptr);
-    StorySectionAdd(compact, component::Pagination::New(cx, app->page, 10)
-                                 ->OnChange(MkFunc1(&SetPage, app))
+    StorySectionAdd(compact, component::Pagination::New(cx, self->page, 10)
+                                 ->OnChange(MkFunc1(&SetPage, self))
                                  ->IntoEl());
     page->Child(compact);
 
@@ -38,9 +47,12 @@ El* PaginationRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void PaginationClick(StoryApp* app, int id) {
-    (void)app;
+void PaginationStory::Click(PaginationStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryPagination, PaginationRender, PaginationClick);
+STORY_PAGE(StoryPagination, PaginationStory);

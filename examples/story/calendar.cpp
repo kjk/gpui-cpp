@@ -1,34 +1,42 @@
 #include "Story.h"
 
-static void CalPrev(StoryApp* app) {
-    app->calMonth--;
-    if (app->calMonth < 1) {
-        app->calMonth = 12;
-        app->calYear--;
+struct CalendarStory {
+    int calYear = 2026;
+    int calMonth = 8;
+    int calDay = 17;
+    static El* Render(CalendarStory* self, Ctx* cx);
+    static void Click(CalendarStory* self, Ctx* cx, int id);
+};
+
+static void CalPrev(CalendarStory* self) {
+    self->calMonth--;
+    if (self->calMonth < 1) {
+        self->calMonth = 12;
+        self->calYear--;
     }
 }
-static void CalNext(StoryApp* app) {
-    app->calMonth++;
-    if (app->calMonth > 12) {
-        app->calMonth = 1;
-        app->calYear++;
+static void CalNext(CalendarStory* self) {
+    self->calMonth++;
+    if (self->calMonth > 12) {
+        self->calMonth = 1;
+        self->calYear++;
     }
 }
-static void CalDay(StoryApp* app, int d) {
-    app->calDay = d;
+static void CalDay(CalendarStory* self, int d) {
+    self->calDay = d;
 }
 
-El* CalendarRender(StoryApp* app, Ctx* cx) {
+El* CalendarStory::Render(CalendarStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* single = StorySection(cx, "Single month", "Single-date selection.");
     StorySectionAdd(single, component::Calendar::New(cx)
-                                ->Year(app->calYear)
-                                ->Month(app->calMonth)
-                                ->Day(app->calDay)
-                                ->OnPrev(MkFunc0(&CalPrev, app))
-                                ->OnNext(MkFunc0(&CalNext, app))
-                                ->OnDay(MkFunc1(&CalDay, app))
+                                ->Year(self->calYear)
+                                ->Month(self->calMonth)
+                                ->Day(self->calDay)
+                                ->OnPrev(MkFunc0(&CalPrev, self))
+                                ->OnNext(MkFunc0(&CalNext, self))
+                                ->OnDay(MkFunc1(&CalDay, self))
                                 ->IntoEl());
     page->Child(single);
 
@@ -36,8 +44,8 @@ El* CalendarRender(StoryApp* app, Ctx* cx) {
         StorySection(cx, "Multiple months", "Three months shown together.");
     El* months = Div(a)->FlexRow()->Gap(16)->Wrap();
     for (int i = 0; i < 3; i++) {
-        int m = app->calMonth + i;
-        int y = app->calYear;
+        int m = self->calMonth + i;
+        int y = self->calYear;
         while (m > 12) {
             m -= 12;
             y++;
@@ -45,10 +53,10 @@ El* CalendarRender(StoryApp* app, Ctx* cx) {
         months->Child(component::Calendar::New(cx)
                           ->Year(y)
                           ->Month(m)
-                          ->Day(i == 0 ? app->calDay : 0)
-                          ->OnPrev(MkFunc0(&CalPrev, app))
-                          ->OnNext(MkFunc0(&CalNext, app))
-                          ->OnDay(MkFunc1(&CalDay, app))
+                          ->Day(i == 0 ? self->calDay : 0)
+                          ->OnPrev(MkFunc0(&CalPrev, self))
+                          ->OnNext(MkFunc0(&CalNext, self))
+                          ->OnDay(MkFunc1(&CalDay, self))
                           ->IntoEl());
     }
     StorySectionAdd(multi, months);
@@ -57,20 +65,20 @@ El* CalendarRender(StoryApp* app, Ctx* cx) {
     El* dis =
         StorySection(cx, "Disabled dates", "Recurring unavailable weekdays.");
     StorySectionAdd(dis, component::Calendar::New(cx)
-                             ->Year(app->calYear)
-                             ->Month(app->calMonth)
-                             ->Day(app->calDay)
-                             ->OnPrev(MkFunc0(&CalPrev, app))
-                             ->OnNext(MkFunc0(&CalNext, app))
-                             ->OnDay(MkFunc1(&CalDay, app))
+                             ->Year(self->calYear)
+                             ->Month(self->calMonth)
+                             ->Day(self->calDay)
+                             ->OnPrev(MkFunc0(&CalPrev, self))
+                             ->OnNext(MkFunc0(&CalNext, self))
+                             ->OnDay(MkFunc1(&CalDay, self))
                              ->IntoEl());
     page->Child(dis);
     return page;
 }
 
-void CalendarClick(StoryApp* app, int id) {
-    (void)app;
+void CalendarStory::Click(CalendarStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryCalendar, CalendarRender, CalendarClick);
+STORY_PAGE(StoryCalendar, CalendarStory);

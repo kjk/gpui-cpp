@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* MenuRender(StoryApp* app, Ctx* cx) {
+struct MenuStory {
+    static El* Render(MenuStory* self, Ctx* cx);
+    static void Click(MenuStory* self, Ctx* cx, int id);
+};
+
+El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* popup = StorySection(cx, "Popup Menu", nullptr);
@@ -32,9 +36,9 @@ El* MenuRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void MenuClick(StoryApp* app, int id) {
-    (void)app;
+void MenuStory::Click(MenuStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryMenu, MenuRender, MenuClick);
+STORY_PAGE(StoryMenu, MenuStory);

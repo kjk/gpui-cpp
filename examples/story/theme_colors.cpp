@@ -1,5 +1,10 @@
 #include "Story.h"
 
+struct ThemeColorsStory {
+    static El* Render(ThemeColorsStory* self, Ctx* cx);
+    static void Click(ThemeColorsStory* self, Ctx* cx, int id);
+};
+
 static El* Swatch(Ctx* cx, const char* name, Rgba c) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -9,9 +14,8 @@ static El* Swatch(Ctx* cx, const char* name, Rgba c) {
     return col;
 }
 
-El* ThemeColorsRender(StoryApp* app, Ctx* cx) {
+El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -48,9 +52,9 @@ El* ThemeColorsRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ThemeColorsClick(StoryApp* app, int id) {
-    (void)app;
+void ThemeColorsStory::Click(ThemeColorsStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryThemeColors, ThemeColorsRender, ThemeColorsClick);
+STORY_PAGE(StoryThemeColors, ThemeColorsStory);

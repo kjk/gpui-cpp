@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* TreeRender(StoryApp* app, Ctx* cx) {
+struct TreeStory {
+    static El* Render(TreeStory* self, Ctx* cx);
+    static void Click(TreeStory* self, Ctx* cx, int id);
+};
+
+El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(cx, "File tree",
                            "A tree view component for hierarchical data.");
@@ -19,9 +23,9 @@ El* TreeRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void TreeClick(StoryApp* app, int id) {
-    (void)app;
+void TreeStory::Click(TreeStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryTree, TreeRender, TreeClick);
+STORY_PAGE(StoryTree, TreeStory);

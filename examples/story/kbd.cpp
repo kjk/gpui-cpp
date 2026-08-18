@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* KbdRender(StoryApp* app, Ctx* cx) {
+struct KbdStory {
+    static El* Render(KbdStory* self, Ctx* cx);
+    static void Click(KbdStory* self, Ctx* cx, int id);
+};
+
+El* KbdStory::Render(KbdStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     const char* keys[] = {"⌘⇧P", "⌘⌃T", "⌘−", "⌘+", "Esc", "⌫", "/", "Enter"};
     El* def = StorySection(cx, "Default",
@@ -26,9 +30,9 @@ El* KbdRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void KbdClick(StoryApp* app, int id) {
-    (void)app;
+void KbdStory::Click(KbdStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryKbd, KbdRender, KbdClick);
+STORY_PAGE(StoryKbd, KbdStory);

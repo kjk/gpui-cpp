@@ -1,5 +1,10 @@
 #include "Story.h"
 
+struct GroupBoxStory {
+    static El* Render(GroupBoxStory* self, Ctx* cx);
+    static void Click(GroupBoxStory* self, Ctx* cx, int id);
+};
+
 static El* BoxBody(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -17,9 +22,8 @@ static El* BoxBody(Ctx* cx) {
     return col;
 }
 
-El* GroupBoxRender(StoryApp* app, Ctx* cx) {
+El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(cx, "Default", nullptr);
@@ -58,9 +62,9 @@ El* GroupBoxRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void GroupBoxClick(StoryApp* app, int id) {
-    (void)app;
+void GroupBoxStory::Click(GroupBoxStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryGroupBox, GroupBoxRender, GroupBoxClick);
+STORY_PAGE(StoryGroupBox, GroupBoxStory);

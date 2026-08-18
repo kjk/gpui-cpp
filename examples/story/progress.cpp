@@ -1,8 +1,12 @@
 #include "Story.h"
 
-El* ProgressRender(StoryApp* app, Ctx* cx) {
+struct ProgressStory {
+    static El* Render(ProgressStory* self, Ctx* cx);
+    static void Click(ProgressStory* self, Ctx* cx, int id);
+};
+
+El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -52,9 +56,9 @@ El* ProgressRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void ProgressClick(StoryApp* app, int id) {
-    (void)app;
+void ProgressStory::Click(ProgressStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryProgress, ProgressRender, ProgressClick);
+STORY_PAGE(StoryProgress, ProgressStory);

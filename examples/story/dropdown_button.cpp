@@ -1,5 +1,14 @@
 #include "Story.h"
 
+struct DropdownButtonStory {
+    int selectIx = 0;
+    bool selectOpen = false;
+    StoryToolbarState toolbar;
+
+    static El* Render(DropdownButtonStory* self, Ctx* cx);
+    static void Click(DropdownButtonStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickDropDefault = 2750,
     ClickDropOutline,
@@ -16,53 +25,57 @@ static El* DropMenu(Ctx* cx) {
         ->IntoEl();
 }
 
-static El* DropBlock(Ctx* cx, StoryApp* app, int which,
+static El* DropBlock(Ctx* cx, DropdownButtonStory* self, int which,
                      component::Button* btn) {
     Arena* a = cx->a;
     El* col = Div(a)->FlexCol()->Gap(4);
     col->Child(btn->DropdownCaret()->IntoEl()->Click(2750 + which));
-    if (app->selectIx == which && app->selectOpen) {
+    if (self->selectIx == which && self->selectOpen) {
         col->Child(DropMenu(cx));
     }
     return col;
 }
 
-El* DropdownButtonRender(StoryApp* app, Ctx* cx) {
+El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, app));
+    page->Child(StoryToolbar(cx, &self->toolbar));
 
     El* def =
         StorySection(cx, "Default", "A primary action with an attached menu.");
-    StorySectionAdd(def, DropBlock(cx, app, 0,
+    StorySectionAdd(def, DropBlock(cx, self, 0,
                                    component::Button::New(cx, StrL("btn0"))
                                        ->Label(StrL("Primary Dropdown"))
                                        ->Primary()
-                                       ->WithSize(app->size)));
+                                       ->WithSize(self->toolbar.size)));
     page->Child(def);
 
     El* out = StorySection(cx, "Outline", nullptr);
     StorySectionAdd(out,
-                    DropBlock(cx, app, 1,
+                    DropBlock(cx, self, 1,
                               component::Button::New(cx, StrL("btn-outline"))
                                   ->Label(StrL("Outline Dropdown"))
                                   ->Danger()
                                   ->Outline()
-                                  ->WithSize(app->size)));
+                                  ->WithSize(self->toolbar.size)));
     page->Child(out);
 
     El* ghost = StorySection(cx, "Ghost", nullptr);
     StorySectionAdd(ghost,
-                    DropBlock(cx, app, 2,
+                    DropBlock(cx, self, 2,
                               component::Button::New(cx, StrL("btn-ghost"))
                                   ->Label(StrL("Ghost Dropdown"))
                                   ->Ghost()
-                                  ->WithSize(app->size)));
+                                  ->WithSize(self->toolbar.size)));
     page->Child(ghost);
     return page;
 }
 
-void DropdownButtonClick(StoryApp* app, int id) {
+void DropdownButtonStory::Click(DropdownButtonStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    (void)cx;
     int which = -1;
     if (id == ClickDropDefault || id == HashClickId(StrL("btn0"))) {
         which = 0;
@@ -75,12 +88,12 @@ void DropdownButtonClick(StoryApp* app, int id) {
     if (which < 0) {
         return;
     }
-    if (app->selectOpen && app->selectIx == which) {
-        app->selectOpen = false;
+    if (self->selectOpen && self->selectIx == which) {
+        self->selectOpen = false;
     } else {
-        app->selectOpen = true;
-        app->selectIx = which;
+        self->selectOpen = true;
+        self->selectIx = which;
     }
 }
 
-STORY_PAGE(StoryDropdownButton, DropdownButtonRender, DropdownButtonClick);
+STORY_PAGE(StoryDropdownButton, DropdownButtonStory);

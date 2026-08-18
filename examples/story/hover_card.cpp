@@ -1,5 +1,10 @@
 #include "Story.h"
 
+struct HoverCardStory {
+    static El* Render(HoverCardStory* self, Ctx* cx);
+    static void Click(HoverCardStory* self, Ctx* cx, int id);
+};
+
 static El* Card(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
@@ -16,7 +21,7 @@ static El* Card(Ctx* cx, const char* title, const char* body) {
     return card;
 }
 
-El* HoverCardRender(StoryApp* app, Ctx* cx) {
+El* HoverCardStory::Render(HoverCardStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -26,17 +31,17 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
         "Shows supporting information without changing the current view.");
     El* defTrig = StoryTxt(cx, StrL("Hover over me"), 13, th.primary);
     defTrig->Click(1);
-    StorySectionAdd(
-        def,
-        component::HoverCard::New(cx)
-            ->Trigger(defTrig)
-            ->Content(app->hoverId == 1 ? Card(cx, "This is a hover card",
-                                               "You can display rich content "
-                                               "when hovering over a "
-                                               "trigger element.")
-                                        : nullptr)
-            ->Open(app->hoverId == 1)
-            ->IntoEl());
+    StorySectionAdd(def,
+                    component::HoverCard::New(cx)
+                        ->Trigger(defTrig)
+                        ->Content(cx->win->hoverId == 1
+                                      ? Card(cx, "This is a hover card",
+                                             "You can display rich content "
+                                             "when hovering over a "
+                                             "trigger element.")
+                                      : nullptr)
+                        ->Open(cx->win->hoverId == 1)
+                        ->IntoEl());
     page->Child(def);
 
     El* rich = StorySection(
@@ -47,7 +52,7 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
     El* link = StoryTxt(cx, StrL("@huacnlee"), 13, th.blue);
     link->Click(2);
     El* profile = nullptr;
-    if (app->hoverId == 2) {
+    if (cx->win->hoverId == 2) {
         profile = Div(a)
                       ->FlexRow()
                       ->Gap(12)
@@ -71,7 +76,7 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
     richRow->Child(component::HoverCard::New(cx)
                        ->Trigger(link)
                        ->Content(profile)
-                       ->Open(app->hoverId == 2)
+                       ->Open(cx->win->hoverId == 2)
                        ->IntoEl());
     richRow
         ->Child(StoryTxt(cx, StrL("to see their profile"), 13, th.foreground));
@@ -86,7 +91,7 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
                                 ->Outline()
                                 ->IntoEl()
                                 ->Click(3));
-    if (app->hoverId == 3) {
+    if (cx->win->hoverId == 3) {
         StorySectionAdd(timing, Card(cx, "Fast open",
                                      "This hover card opens after 200ms."));
     }
@@ -98,7 +103,7 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
                              ->Outline()
                              ->IntoEl()
                              ->Click(4));
-    if (app->hoverId == 4) {
+    if (cx->win->hoverId == 4) {
         StorySectionAdd(
             pos, Card(cx, "Positioned card", "Shown relative to the trigger."));
     }
@@ -106,10 +111,11 @@ El* HoverCardRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void HoverCardClick(StoryApp* app, int id) {
+void HoverCardStory::Click(HoverCardStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id >= 1 && id <= 4) {
-        app->hoverId = app->hoverId == id ? 0 : id;
+        cx->win->hoverId = cx->win->hoverId == id ? 0 : id;
     }
 }
 
-STORY_PAGE(StoryHoverCard, HoverCardRender, HoverCardClick);
+STORY_PAGE(StoryHoverCard, HoverCardStory);

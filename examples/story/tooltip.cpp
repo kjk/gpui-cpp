@@ -1,10 +1,16 @@
 #include "Story.h"
 
+struct TooltipStory {
+    bool tipRemoved = false;
+    static El* Render(TooltipStory* self, Ctx* cx);
+    static void Click(TooltipStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickTipRemove = 2600
 };
 
-El* TooltipRender(StoryApp* app, Ctx* cx) {
+El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -85,7 +91,7 @@ El* TooltipRender(StoryApp* app, Ctx* cx) {
 
     El* rem = StorySection(cx, "Removed trigger",
                            "Dismiss cleanly when the trigger leaves the view.");
-    if (app->tipRemoved) {
+    if (self->tipRemoved) {
         StorySectionAdd(
             rem, StoryTxt(cx, StrL("Trigger removed"), 13, ThemeNow().mutedFg));
     } else {
@@ -102,10 +108,11 @@ El* TooltipRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void TooltipClick(StoryApp* app, int id) {
+void TooltipStory::Click(TooltipStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id == ClickTipRemove) {
-        app->tipRemoved = true;
+        self->tipRemoved = true;
     }
 }
 
-STORY_PAGE(StoryTooltip, TooltipRender, TooltipClick);
+STORY_PAGE(StoryTooltip, TooltipStory);

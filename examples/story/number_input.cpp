@@ -1,46 +1,62 @@
 #include "Story.h"
 
-static void IncNum(StoryApp* app) {
+struct NumberInputStory {
+    LineInput field = {};
+    bool seeded = false;
+
+    static El* Render(NumberInputStory* self, Ctx* cx);
+    static void Click(NumberInputStory* self, Ctx* cx, int id);
+};
+
+static void IncNum(NumberInputStory* self) {
     int v = 0;
-    sscanf_s(app->field.buf, "%d", &v);
+    sscanf_s(self->field.buf, "%d", &v);
     v++;
-    _snprintf_s(app->field.buf, _TRUNCATE, "%d", v);
-    app->field.len = (int)strlen(app->field.buf);
+    _snprintf_s(self->field.buf, _TRUNCATE, "%d", v);
+    self->field.len = (int)strlen(self->field.buf);
 }
-static void DecNum(StoryApp* app) {
+static void DecNum(NumberInputStory* self) {
     int v = 0;
-    sscanf_s(app->field.buf, "%d", &v);
+    sscanf_s(self->field.buf, "%d", &v);
     v--;
-    _snprintf_s(app->field.buf, _TRUNCATE, "%d", v);
-    app->field.len = (int)strlen(app->field.buf);
+    _snprintf_s(self->field.buf, _TRUNCATE, "%d", v);
+    self->field.len = (int)strlen(self->field.buf);
 }
 
-El* NumberInputRender(StoryApp* app, Ctx* cx) {
+El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    if (app->field.len == 0 || app->field.buf[0] < '0' ||
-        app->field.buf[0] > '9') {
-        strncpy_s(app->field.buf, "12", _TRUNCATE);
-        app->field.len = 2;
+    if (!self->seeded) {
+        self->seeded = true;
+        strncpy_s(self->field.buf, "12", _TRUNCATE);
+        self->field.len = (int)strlen(self->field.buf);
+    }
+    if (self->field.focused) {
+        cx->win->input = &self->field;
+    }
+    if (self->field.len == 0 || self->field.buf[0] < '0' ||
+        self->field.buf[0] > '9') {
+        strncpy_s(self->field.buf, "12", _TRUNCATE);
+        self->field.len = 2;
     }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     El* sec = StorySection(
         cx, "Default", "Numeric input with increment and decrement controls.");
-    StorySectionAdd(sec, component::NumberInput::New(cx, &app->field)
-                             ->OnInc(MkFunc0(&IncNum, app))
-                             ->OnDec(MkFunc0(&DecNum, app))
+    StorySectionAdd(sec, component::NumberInput::New(cx, &self->field)
+                             ->OnInc(MkFunc0(&IncNum, self))
+                             ->OnDec(MkFunc0(&DecNum, self))
                              ->IntoEl());
     page->Child(sec);
 
     El* dis = StorySection(cx, "Disabled", nullptr);
-    StorySectionAdd(dis, component::NumberInput::New(cx, &app->field)
+    StorySectionAdd(dis, component::NumberInput::New(cx, &self->field)
                              ->IntoEl());
     page->Child(dis);
 
     El* suf = StorySection(cx, "Suffix", nullptr);
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
-    row->Child(component::NumberInput::New(cx, &app->field)
-                   ->OnInc(MkFunc0(&IncNum, app))
-                   ->OnDec(MkFunc0(&DecNum, app))
+    row->Child(component::NumberInput::New(cx, &self->field)
+                   ->OnInc(MkFunc0(&IncNum, self))
+                   ->OnDec(MkFunc0(&DecNum, self))
                    ->IntoEl());
     row->Child(StoryTxt(cx, StrL("px"), 13, ThemeNow().mutedFg));
     StorySectionAdd(suf, row);
@@ -48,9 +64,9 @@ El* NumberInputRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void NumberInputClick(StoryApp* app, int id) {
-    (void)app;
+void NumberInputStory::Click(NumberInputStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryNumberInput, NumberInputRender, NumberInputClick);
+STORY_PAGE(StoryNumberInput, NumberInputStory);

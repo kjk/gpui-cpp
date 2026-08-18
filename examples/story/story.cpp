@@ -6,30 +6,51 @@ using namespace gpui;
 #include <stdarg.h>
 #include <stdio.h>
 
-static StoryRenderFn gRender[StoryCount] = {};
-static StoryClickFn gClick[StoryCount] = {};
+static StoryPageNewFn gNew[StoryCount] = {};
+static StoryPageClickFn gClick[StoryCount] = {};
 
-void StoryRegister(int story, StoryRenderFn render, StoryClickFn click) {
+void StoryRegister(int story, StoryPageNewFn create, StoryPageClickFn click) {
     if (story < 0 || story >= StoryCount) {
         return;
     }
-    gRender[story] = render;
+    gNew[story] = create;
     gClick[story] = click;
 }
 
-El* StoryRenderRegistered(StoryApp* app, Ctx* cx, WinSize size) {
+// Resolve (creating on first view) the entity for the active story and render
+// it with its own Ctx, so listeners inside a page bind to that page.
+static EntityId StoryPageEntity(StoryApp* app, Ctx* cx) {
     int s = app->story;
-    if (s >= 0 && s < StoryCount && gRender[s]) {
-        return gRender[s](app, cx, size);
+    if (s < 0 || s >= StoryCount || !gNew[s]) {
+        return EntityId{};
     }
-    return StoryComingSoon(cx, s);
+    if (!app->pages[s].IsValid()) {
+        app->pages[s] = gNew[s](cx->app);
+    }
+    return app->pages[s];
 }
 
-void StoryClickRegistered(StoryApp* app, int id) {
-    int s = app->story;
-    if (s >= 0 && s < StoryCount && gClick[s]) {
-        gClick[s](app, id);
+El* StoryRenderRegistered(StoryApp* app, Ctx* cx) {
+    EntityId page = StoryPageEntity(app, cx);
+    if (!page.IsValid()) {
+        return StoryComingSoon(cx, app->story);
     }
+    return EntityRender(cx->app, cx->win, cx->a, page);
+}
+
+void StoryClickRegistered(StoryApp* app, Ctx* cx, int id) {
+    int s = app->story;
+    if (s < 0 || s >= StoryCount || !gClick[s]) {
+        return;
+    }
+    EntityId page = StoryPageEntity(app, cx);
+    void* self = EntityGet(cx->app, page);
+    if (!self) {
+        return;
+    }
+    Ctx pageCx = *cx;
+    pageCx.self = page;
+    gClick[s](self, &pageCx, id);
 }
 
 static const StoryInfo kMeta[StoryCount] = {
@@ -303,55 +324,106 @@ static El* ToolbarMenu(Ctx* cx) {
         ->Radius(th.radius);
 }
 
-El* StoryToolbar(Ctx* cx, StoryApp* app) {
-    Arena* a = cx->a;
-    return StoryToolbar(cx, app, false);
+El* StoryToolbar(Ctx* cx, StoryToolbarState* st) {
+    return StoryToolbar(cx, st, nullptr);
 }
 
-El* StoryToolbar(Ctx* cx, StoryApp* app, bool withOptions) {
+El* StoryToolbar(Ctx* cx, StoryToolbarState* st, StoryAccordionOptions* opts) {
     Arena* a = cx->a;
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
     El* group = ToolbarGroup(cx);
     row->Child(group);
 
     El* sizeTrig = ToolbarDropBtn(
-        cx, ClickSizeMenu, StoryFmt(cx, "Size: %s", StorySizeName(app->size)));
+        cx, ClickSizeMenu, StoryFmt(cx, "Size: %s", StorySizeName(st->size)));
     El* sizeMenu = nullptr;
-    if (app->sizeMenuOpen) {
+    if (st->sizeMenuOpen) {
         sizeMenu = ToolbarMenu(cx);
         sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeXs, "XSmall",
-                                        app->size == UiSize::XSmall));
+                                        st->size == UiSize::XSmall));
         sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeSm, "Small",
-                                        app->size == UiSize::Small));
+                                        st->size == UiSize::Small));
         sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeMd, "Medium",
-                                        app->size == UiSize::Medium));
+                                        st->size == UiSize::Medium));
         sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeLg, "Large",
-                                        app->size == UiSize::Large));
+                                        st->size == UiSize::Large));
     }
     group->Child(Popup::New(cx, StrL("story-size-menu"), sizeTrig)
                      ->Content(sizeMenu)
                      ->IntoEl());
 
-    if (withOptions) {
+    if (opts) {
         group->Child(ToolbarSep(cx));
         El* optTrig = ToolbarDropBtn(cx, ClickOptsMenu, StrL("Options"));
         El* optMenu = nullptr;
-        if (app->accOptsOpen) {
+        if (st->optsOpen) {
             optMenu = ToolbarMenu(cx);
             optMenu->Child(ToolbarCheckRow(cx, ClickAccMultiple, "Multiple",
-                                           app->accordionMultiple));
-            optMenu->Child(
-                ToolbarCheckRow(cx, ClickAccIcon, "Icons", app->accordionIcon));
+                                           opts->multiple));
+            optMenu
+                ->Child(ToolbarCheckRow(cx, ClickAccIcon, "Icons", opts->icon));
             optMenu->Child(ToolbarCheckRow(cx, ClickAccDisabled, "Disabled",
-                                           app->accordionDisabled));
+                                           opts->disabled));
             optMenu->Child(ToolbarCheckRow(cx, ClickAccBordered, "Bordered",
-                                           app->accordionBordered));
+                                           opts->bordered));
         }
         group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
                          ->Content(optMenu)
                          ->IntoEl());
     }
     return row;
+}
+
+bool StoryToolbarClick(StoryToolbarState* st, int id) {
+    switch (id) {
+        case ClickEscape:
+            st->sizeMenuOpen = false;
+            st->optsOpen = false;
+            return false;
+        case ClickSizeMenu:
+            st->sizeMenuOpen = !st->sizeMenuOpen;
+            return true;
+        case ClickOptsMenu:
+            st->optsOpen = !st->optsOpen;
+            return true;
+        case ClickSizeXs:
+            st->size = UiSize::XSmall;
+            st->sizeMenuOpen = false;
+            return true;
+        case ClickSizeSm:
+            st->size = UiSize::Small;
+            st->sizeMenuOpen = false;
+            return true;
+        case ClickSizeMd:
+            st->size = UiSize::Medium;
+            st->sizeMenuOpen = false;
+            return true;
+        case ClickSizeLg:
+            st->size = UiSize::Large;
+            st->sizeMenuOpen = false;
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool StoryAccordionOptionsClick(StoryAccordionOptions* o, int id) {
+    switch (id) {
+        case ClickAccMultiple:
+            o->multiple = !o->multiple;
+            return true;
+        case ClickAccIcon:
+            o->icon = !o->icon;
+            return true;
+        case ClickAccDisabled:
+            o->disabled = !o->disabled;
+            return true;
+        case ClickAccBordered:
+            o->bordered = !o->bordered;
+            return true;
+        default:
+            return false;
+    }
 }
 
 El* StoryComingSoon(Ctx* cx, int story) {
@@ -540,15 +612,11 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     WinSize size = WindowSize(host);
     cx->win->paint.selA = app->selA;
     cx->win->paint.selB = app->selB;
-    app->hoverId = cx->win->hoverId;
+    // Pages that own a text field point the window at it from their Render.
     if (app->search.focused) {
         cx->win->input = &app->search;
-    } else if (app->field.focused) {
-        cx->win->input = &app->field;
-    } else {
-        cx->win->input = nullptr;
     }
-    AppRequestAnim(host, app->search.focused || app->field.focused);
+    AppRequestAnim(host, cx->win->input != nullptr);
     const Theme& th = ThemeNow();
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
@@ -563,8 +631,8 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
                        ->ScrollY(app->scrollY)
                        ->ScrollId(1)
                        ->W(kFill);
-    scroller->Child(Div(frame)->Pad(16)->W(kFill)->Child(
-        StoryRenderRegistered(app, cx, size)));
+    scroller->Child(
+        Div(frame)->Pad(16)->W(kFill)->Child(StoryRenderRegistered(app, cx)));
     main->Child(scroller);
     body->Child(main);
     root->Child(body);
@@ -592,61 +660,19 @@ static void OnClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
     }
     app->search.focused = false;
     cx->win->input = nullptr;
-    if (id == ClickSizeMenu) {
-        app->sizeMenuOpen = !app->sizeMenuOpen;
-        app->accOptsOpen = false;
-        return;
-    }
-    if (id == ClickOptsMenu) {
-        app->accOptsOpen = !app->accOptsOpen;
-        app->sizeMenuOpen = false;
-        return;
-    }
     if (id == ClickCollapse) {
         app->collapsed = !app->collapsed;
-        app->sizeMenuOpen = false;
-        app->accOptsOpen = false;
-        return;
-    }
-    if (id == ClickSizeXs) {
-        app->size = UiSize::XSmall;
-        app->sizeMenuOpen = false;
-        return;
-    }
-    if (id == ClickSizeSm) {
-        app->size = UiSize::Small;
-        app->sizeMenuOpen = false;
-        return;
-    }
-    if (id == ClickSizeMd) {
-        app->size = UiSize::Medium;
-        app->sizeMenuOpen = false;
-        return;
-    }
-    if (id == ClickSizeLg) {
-        app->size = UiSize::Large;
-        app->sizeMenuOpen = false;
         return;
     }
     if (id >= ClickStory && id < ClickStory + StoryCount) {
         app->story = id - ClickStory;
         app->scrollY = 0;
-        app->sizeMenuOpen = false;
-        app->accOptsOpen = false;
         app->selA = -1;
         app->selB = -1;
         app->selecting = false;
         return;
     }
-    if (id == ClickAccMultiple || id == ClickAccIcon ||
-        id == ClickAccDisabled || id == ClickAccBordered) {
-        app->accOptsOpen = false;
-        StoryClickRegistered(app, id);
-        return;
-    }
-    app->sizeMenuOpen = false;
-    app->accOptsOpen = false;
-    StoryClickRegistered(app, id);
+    StoryClickRegistered(app, cx, id);
 }
 
 static void OnChar(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
@@ -706,14 +732,11 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     if (vk == VK_ESCAPE) {
         app->search.focused = false;
         cx->win->input = nullptr;
-        app->dialogOpen = false;
-        app->sheetOpen = false;
-        app->alertOpen = false;
-        app->sizeMenuOpen = false;
-        app->accOptsOpen = false;
         app->selA = -1;
         app->selB = -1;
         app->selecting = false;
+        // Let the page close whatever it has open.
+        StoryClickRegistered(app, cx, ClickEscape);
     }
 }
 
@@ -817,10 +840,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR cmd, int) {
         self->search.cursor = self->search.len;
     }
     strncpy_s(self->search.placeholder, "Search…", _TRUNCATE);
-    strncpy_s(self->field.placeholder, "Type something…", _TRUNCATE);
-    strncpy_s(self->field.buf, "Hello GPUI", _TRUNCATE);
-    self->field.len = (int)strlen(self->field.buf);
-
     Window* win = WindowOpenView(app, L"GPUI Component", 1280, 960, view.id,
                                  AppWinOpts{});
     WindowOnClick(win, ListenTo(view, &OnClick));

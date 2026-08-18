@@ -1,10 +1,16 @@
 #include "Story.h"
 
-static void OnCrumb(StoryApp* app, int i) {
-    app->crumbClicked = i;
+struct BreadcrumbStory {
+    int crumbClicked = -1;
+    static El* Render(BreadcrumbStory* self, Ctx* cx);
+    static void Click(BreadcrumbStory* self, Ctx* cx, int id);
+};
+
+static void OnCrumb(BreadcrumbStory* self, int i) {
+    self->crumbClicked = i;
 }
 
-El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
+El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -26,12 +32,12 @@ El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
                    ->Item(StrL("Documents"))
                    ->Item(StrL("Projects"))
                    ->Item(StrL("Current"))
-                   ->OnClick(MkFunc1(&OnCrumb, app))
+                   ->OnClick(MkFunc1(&OnCrumb, self))
                    ->IntoEl());
-    if (app->crumbClicked >= 0) {
+    if (self->crumbClicked >= 0) {
         static const char* kNames[] = {"Home", "Documents", "Projects",
                                        "Current"};
-        int i = app->crumbClicked;
+        int i = self->crumbClicked;
         if (i > 3) {
             i = 3;
         }
@@ -43,9 +49,9 @@ El* BreadcrumbRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void BreadcrumbClick(StoryApp* app, int id) {
-    (void)app;
+void BreadcrumbStory::Click(BreadcrumbStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryBreadcrumb, BreadcrumbRender, BreadcrumbClick);
+STORY_PAGE(StoryBreadcrumb, BreadcrumbStory);

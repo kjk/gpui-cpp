@@ -1,16 +1,26 @@
 #include "Story.h"
 
+struct AccordionStory {
+    bool accordionOpen[3] = {true, false, false};
+    bool accordionStyledOpen[3] = {true, false, false};
+    StoryToolbarState toolbar;
+    StoryAccordionOptions options;
+
+    static El* Render(AccordionStory* self, Ctx* cx);
+    static void Click(AccordionStory* self, Ctx* cx, int id);
+};
+
 enum {
     ClickAccItem = 2100,
     ClickAccStyled = 2110,
 };
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple);
-static void OnAccDefault(StoryApp* app, int i) {
-    ToggleOpen(app->accordionOpen, 3, i, app->accordionMultiple);
+static void OnAccDefault(AccordionStory* self, int i) {
+    ToggleOpen(self->accordionOpen, 3, i, self->options.multiple);
 }
-static void OnAccStyled(StoryApp* app, int i) {
-    ToggleOpen(app->accordionStyledOpen, 3, i, app->accordionMultiple);
+static void OnAccStyled(AccordionStory* self, int i) {
+    ToggleOpen(self->accordionStyledOpen, 3, i, self->options.multiple);
 }
 
 static void ToggleOpen(bool* flags, int n, int i, bool multiple) {
@@ -28,11 +38,11 @@ static void ToggleOpen(bool* flags, int n, int i, bool multiple) {
     flags[i] = next;
 }
 
-El* AccordionRender(StoryApp* app, Ctx* cx) {
+El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsStart();
-    page->Child(StoryToolbar(cx, app, true));
+    page->Child(StoryToolbar(cx, &self->toolbar, &self->options));
 
     const char* titles[] = {"Is it accessible?", "Can it hold any content?",
                             "Is it animated?"};
@@ -47,13 +57,13 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
     };
 
     component::Accordion* acc = component::Accordion::New(cx, StrL("test"))
-                                    ->Multiple(app->accordionMultiple)
-                                    ->Bordered(app->accordionBordered)
-                                    ->Disabled(app->accordionDisabled)
-                                    ->WithSize(app->size)
-                                    ->OnToggle(MkFunc1(&OnAccDefault, app));
+                                    ->Multiple(self->options.multiple)
+                                    ->Bordered(self->options.bordered)
+                                    ->Disabled(self->options.disabled)
+                                    ->WithSize(self->toolbar.size)
+                                    ->OnToggle(MkFunc1(&OnAccDefault, self));
     for (int i = 0; i < 3; i++) {
-        acc->Item(Str(titles[i]), Str(bodies[i]), app->accordionOpen[i]);
+        acc->Item(Str(titles[i]), Str(bodies[i]), self->accordionOpen[i]);
     }
     El* def =
         StorySection(cx, "Default", "Expand one item at a time by default.");
@@ -62,26 +72,26 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
 
     component::Accordion* styled =
         component::Accordion::New(cx, StrL("custom-style"))
-            ->Multiple(app->accordionMultiple)
+            ->Multiple(self->options.multiple)
             ->Bordered(true)
-            ->Disabled(app->accordionDisabled)
-            ->WithSize(app->size)
-            ->OnToggle(MkFunc1(&OnAccStyled, app));
+            ->Disabled(self->options.disabled)
+            ->WithSize(self->toolbar.size)
+            ->OnToggle(MkFunc1(&OnAccStyled, self));
     styled->SettingsItem(
         StrL("Account Settings"),
         StrL("Manage your account preferences, security settings, and "
              "personal information. You can also configure two-factor "
              "authentication here."),
-        app->accordionStyledOpen[0], IconName::Settings, StrL("New"));
+        self->accordionStyledOpen[0], IconName::Settings, StrL("New"));
     styled->SettingsItem(
         StrL("Privacy & Security"),
         StrL("Control who can see your profile and how your data is used."),
-        app->accordionStyledOpen[1], IconName::Eye, Str{});
+        self->accordionStyledOpen[1], IconName::Eye, Str{});
     styled->SettingsItem(
         StrL("Help & Support"),
         StrL(
             "Browse the documentation, or get in touch with the support team."),
-        app->accordionStyledOpen[2], IconName::Info, Str{});
+        self->accordionStyledOpen[2], IconName::Info, Str{});
     El* custom = StorySection(cx, "Custom style", nullptr);
     El* frame = Div(a)
                     ->W(480)
@@ -96,32 +106,39 @@ El* AccordionRender(StoryApp* app, Ctx* cx) {
     return page;
 }
 
-void AccordionClick(StoryApp* app, int id) {
+void AccordionStory::Click(AccordionStory* self, Ctx* cx, int id) {
+    if (StoryToolbarClick(&self->toolbar, id)) {
+        return;
+    }
+    if (StoryAccordionOptionsClick(&self->options, id)) {
+        return;
+    }
+    (void)cx;
     if (id == ClickAccMultiple) {
-        app->accordionMultiple = !app->accordionMultiple;
+        self->options.multiple = !self->options.multiple;
         return;
     }
     if (id == ClickAccIcon) {
-        app->accordionIcon = !app->accordionIcon;
+        self->options.icon = !self->options.icon;
         return;
     }
     if (id == ClickAccDisabled) {
-        app->accordionDisabled = !app->accordionDisabled;
+        self->options.disabled = !self->options.disabled;
         return;
     }
     if (id == ClickAccBordered) {
-        app->accordionBordered = !app->accordionBordered;
+        self->options.bordered = !self->options.bordered;
         return;
     }
     if (id >= ClickAccItem && id < ClickAccItem + 3) {
-        ToggleOpen(app->accordionOpen, 3, id - ClickAccItem,
-                   app->accordionMultiple);
+        ToggleOpen(self->accordionOpen, 3, id - ClickAccItem,
+                   self->options.multiple);
         return;
     }
     if (id >= ClickAccStyled && id < ClickAccStyled + 3) {
-        ToggleOpen(app->accordionStyledOpen, 3, id - ClickAccStyled,
-                   app->accordionMultiple);
+        ToggleOpen(self->accordionStyledOpen, 3, id - ClickAccStyled,
+                   self->options.multiple);
     }
 }
 
-STORY_PAGE(StoryAccordion, AccordionRender, AccordionClick);
+STORY_PAGE(StoryAccordion, AccordionStory);

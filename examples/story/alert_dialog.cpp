@@ -1,10 +1,19 @@
 #include "Story.h"
 
-static void CloseAlert(StoryApp* app) {
-    app->alertOpen = false;
+struct AlertDialogStory {
+    bool alertOpen = false;
+    int selB = -1;
+
+    static El* Render(AlertDialogStory* self, Ctx* cx);
+    static void Click(AlertDialogStory* self, Ctx* cx, int id);
+};
+
+static void CloseAlert(AlertDialogStory* self) {
+    self->alertOpen = false;
 }
 
-El* AlertDialogRender(StoryApp* app, Ctx* cx, WinSize size) {
+El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
+    WinSize size = WindowSize(cx->win);
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -31,16 +40,16 @@ El* AlertDialogRender(StoryApp* app, Ctx* cx, WinSize size) {
                               ->IntoEl());
     page->Child(none);
 
-    if (app->alertOpen) {
+    if (self->alertOpen) {
         component::Dialog* d = component::Dialog::New(cx)
                                    ->Open(true)
-                                   ->OnClose(MkFunc0(&CloseAlert, app))
-                                   ->OnOk(MkFunc0(&CloseAlert, app));
-        if (app->selB == 1) {
+                                   ->OnClose(MkFunc0(&CloseAlert, self))
+                                   ->OnOk(MkFunc0(&CloseAlert, self));
+        if (self->selB == 1) {
             d->Title(StrL("Delete project?"))
                 ->Description(StrL("This permanently deletes Acme Studio and "
                                    "all of its data."));
-        } else if (app->selB == 2) {
+        } else if (self->selB == 2) {
             d->Description(StrL("Continue without a title on this confirm?"));
         } else {
             d->Title(StrL("Are you sure?"))
@@ -51,17 +60,18 @@ El* AlertDialogRender(StoryApp* app, Ctx* cx, WinSize size) {
     return page;
 }
 
-void AlertDialogClick(StoryApp* app, int id) {
+void AlertDialogStory::Click(AlertDialogStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id == HashClickId(StrL("open-alert"))) {
-        app->alertOpen = true;
-        app->selB = 0;
+        self->alertOpen = true;
+        self->selB = 0;
     } else if (id == HashClickId(StrL("open-alert-danger"))) {
-        app->alertOpen = true;
-        app->selB = 1;
+        self->alertOpen = true;
+        self->selB = 1;
     } else if (id == HashClickId(StrL("open-alert-notitle"))) {
-        app->alertOpen = true;
-        app->selB = 2;
+        self->alertOpen = true;
+        self->selB = 2;
     }
 }
 
-STORY_PAGE_SZ(StoryAlertDialog, AlertDialogRender, AlertDialogClick);
+STORY_PAGE(StoryAlertDialog, AlertDialogStory);

@@ -1,5 +1,10 @@
 #include "Story.h"
 
+struct WelcomeStory {
+    static El* Render(WelcomeStory* self, Ctx* cx);
+    static void Click(WelcomeStory* self, Ctx* cx, int id);
+};
+
 static El* MdTxt(Ctx* cx, Str s, float px, Rgba c) {
     Arena* a = cx->a;
     return StoryTxt(cx, s, px, c)->Selectable();
@@ -155,9 +160,8 @@ static El* Bullet(Ctx* cx, const char* s) {
         ->W(kFill);
 }
 
-El* WelcomeRender(StoryApp* app, Ctx* cx) {
+El* WelcomeStory::Render(WelcomeStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    (void)app;
     const Theme& th = ThemeNow();
     El* col = Div(a)->FlexCol()->Gap(0)->W(kFill);
 
@@ -426,9 +430,9 @@ El* WelcomeRender(StoryApp* app, Ctx* cx) {
     return col;
 }
 
-void WelcomeClick(StoryApp* app, int id) {
-    (void)app;
+void WelcomeStory::Click(WelcomeStory* self, Ctx* cx, int id) {
+    (void)cx;
     (void)id;
 }
 
-STORY_PAGE(StoryWelcome, WelcomeRender, WelcomeClick);
+STORY_PAGE(StoryWelcome, WelcomeStory);

@@ -1,10 +1,18 @@
 #include "Story.h"
 
-static void HideNote(StoryApp* app) {
-    app->notifyOn = false;
+struct NotificationStory {
+    bool notifyOn = false;
+    int selA = -1;
+
+    static El* Render(NotificationStory* self, Ctx* cx);
+    static void Click(NotificationStory* self, Ctx* cx, int id);
+};
+
+static void HideNote(NotificationStory* self) {
+    self->notifyOn = false;
 }
 
-El* NotificationRender(StoryApp* app, Ctx* cx) {
+El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
@@ -13,10 +21,10 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
                              ->Outline()
                              ->Label(StrL("Show Notification"))
                              ->IntoEl());
-    if (app->notifyOn && app->selA == 0) {
+    if (self->notifyOn && self->selA == 0) {
         StorySectionAdd(def, component::Notification::New(
                                  cx, {}, StrL("This is a notification."))
-                                 ->OnClose(MkFunc0(&HideNote, app))
+                                 ->OnClose(MkFunc0(&HideNote, self))
                                  ->IntoEl());
     }
     page->Child(def);
@@ -41,7 +49,7 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
                        ->Label(StrL("Error"))
                        ->IntoEl());
     StorySectionAdd(types, typeRow);
-    if (app->notifyOn && app->selA >= 1 && app->selA <= 4) {
+    if (self->notifyOn && self->selA >= 1 && self->selA <= 4) {
         static const component::NotificationKind kKinds[] = {
             component::NotificationKind::Info,
             component::NotificationKind::Info,
@@ -54,9 +62,9 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
             "The network is not stable, please check your connection.",
             "There have some error occurred. Please try again later."};
         StorySectionAdd(
-            types, component::Notification::New(cx, {}, Str(kMsgs[app->selA]))
-                       ->Kind(kKinds[app->selA])
-                       ->OnClose(MkFunc0(&HideNote, app))
+            types, component::Notification::New(cx, {}, Str(kMsgs[self->selA]))
+                       ->Kind(kKinds[self->selA])
+                       ->OnClose(MkFunc0(&HideNote, self))
                        ->IntoEl());
     }
     page->Child(types);
@@ -67,7 +75,7 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
                                 ->Info()
                                 ->Label(StrL("Info"))
                                 ->IntoEl());
-    if (app->notifyOn && app->selA == 5) {
+    if (self->notifyOn && self->selA == 5) {
         StorySectionAdd(
             titled,
             component::Notification::New(
@@ -75,33 +83,34 @@ El* NotificationRender(StoryApp* app, Ctx* cx) {
                 StrL("Your changes have been saved to the cloud and will sync "
                      "across all of your devices."))
                 ->Kind(component::NotificationKind::Info)
-                ->OnClose(MkFunc0(&HideNote, app))
+                ->OnClose(MkFunc0(&HideNote, self))
                 ->IntoEl());
     }
     page->Child(titled);
     return page;
 }
 
-void NotificationClick(StoryApp* app, int id) {
+void NotificationStory::Click(NotificationStory* self, Ctx* cx, int id) {
+    (void)cx;
     if (id == HashClickId(StrL("show-notify-0"))) {
-        app->notifyOn = true;
-        app->selA = 0;
+        self->notifyOn = true;
+        self->selA = 0;
     } else if (id == HashClickId(StrL("show-notify-info"))) {
-        app->notifyOn = true;
-        app->selA = 1;
+        self->notifyOn = true;
+        self->selA = 1;
     } else if (id == HashClickId(StrL("show-notify-success"))) {
-        app->notifyOn = true;
-        app->selA = 2;
+        self->notifyOn = true;
+        self->selA = 2;
     } else if (id == HashClickId(StrL("show-notify-warning"))) {
-        app->notifyOn = true;
-        app->selA = 3;
+        self->notifyOn = true;
+        self->selA = 3;
     } else if (id == HashClickId(StrL("show-notify-error"))) {
-        app->notifyOn = true;
-        app->selA = 4;
+        self->notifyOn = true;
+        self->selA = 4;
     } else if (id == HashClickId(StrL("show-typed-info"))) {
-        app->notifyOn = true;
-        app->selA = 5;
+        self->notifyOn = true;
+        self->selA = 5;
     }
 }
 
-STORY_PAGE(StoryNotification, NotificationRender, NotificationClick);
+STORY_PAGE(StoryNotification, NotificationStory);
