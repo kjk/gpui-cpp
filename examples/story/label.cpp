@@ -2,8 +2,17 @@
 
 struct LabelStory {
     bool labelMasked = false;
+    // The Highlighting section is driven by a search field.
+    LineInput search;
+    bool seeded = false;
+
     static El* Render(LabelStory* self, Ctx* cx);
 };
+
+static void FocusSearch(LabelStory* self, Ctx* cx, const ClickEvent*) {
+    self->search.focused = true;
+    Notify(cx);
+}
 
 static void ToggleMask(LabelStory* self, Ctx* cx, const ClickEvent*) {
     self->labelMasked = !self->labelMasked;
@@ -32,6 +41,17 @@ El* LabelStory::Render(LabelStory* self, Ctx* cx) {
 
     El* hi = StorySection(cx, "Highlighting",
                           "Find matching text across Latin and CJK content.");
+    if (!self->seeded) {
+        self->seeded = true;
+        strncpy_s(self->search.placeholder, "Search labels", _TRUNCATE);
+    }
+    if (self->search.focused) {
+        cx->win->input = &self->search;
+    }
+    El* hiCol = Div(a)->FlexCol()->Gap(12)->W(320);
+    hiCol->Child(component::Input::New(cx, StrL("label-search"), &self->search)
+                     ->OnFocus(Listen(cx, &FocusSearch))
+                     ->IntoEl());
     El* hiBox = Div(a)
                     ->FlexCol()
                     ->Gap(12)
@@ -42,7 +62,8 @@ El* LabelStory::Render(LabelStory* self, Ctx* cx) {
     hiBox->Child(component::Label::New(cx, StrL("Design system documentation"))
                      ->IntoEl());
     hiBox->Child(component::Label::New(cx, StrL("AAA中文BB"))->IntoEl());
-    StorySectionAdd(hi, hiBox);
+    hiCol->Child(hiBox);
+    StorySectionAdd(hi, hiCol);
     page->Child(hi);
 
     El* lay = StorySection(cx, "Layout",
