@@ -101,6 +101,77 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                              ->IntoEl());
     page->Child(row);
 
+    // Bottom trigger: a usage card whose chevron sits on its bottom edge.
+    El* bottom = StorySection(
+        cx, "Bottom trigger",
+        "The trigger sits on the bottom edge of the card it opens.");
+    El* usageHead =
+        Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+    usageHead->Child(
+        StoryTxt(cx, StrL("3 days remaining in cycle"), 14, th.foreground));
+    usageHead->Child(component::Button::New(cx, StrL("billing"))
+                         ->Outline()
+                         ->WithSize(UiSize::XSmall)
+                         ->Label(StrL("Billing"))
+                         ->IntoEl());
+    El* usagePanel =
+        Div(a)->FlexCol()->W(kFill)->Gap(8)->Pad(12)->Radius(th.radius)->Bg(
+            RgbaOpacity(th.muted, 0.6f));
+    El* usageTop = Div(a)->FlexRow()->W(kFill)->JustifyBetween();
+    usageTop->Child(StoryTxt(cx, StrL("$18.08 / $20"), 14, th.foreground)
+                        ->Semibold());
+    usageTop->Child(StoryTxt(cx, StrL("$200"), 14, th.foreground)->Semibold());
+    usagePanel->Child(usageTop);
+    usagePanel
+        ->Child(component::Progress::New(cx)->Value(90)->W(kFill)->IntoEl());
+
+    static const char* kUsage[4][2] = {{"Requests", "$210.84"},
+                                       {"Active CPU", "$21.95"},
+                                       {"Events", "$21.20"},
+                                       {"Storage", "$20.45"}};
+    El* usageItems = Div(a)->FlexCol()->W(kFill)->Gap(8);
+    for (int i = 0; i < 4; i++) {
+        El* line = Div(a)->FlexRow()->W(kFill)->JustifyBetween();
+        line->Child(StoryTxt(cx, Str(kUsage[i][0]), 12, th.mutedFg)
+                        ->Semibold());
+        line->Child(StoryTxt(cx, Str(kUsage[i][1]), 12, th.foreground)
+                        ->Semibold());
+        usageItems->Child(line);
+    }
+
+    El* usageBody = Div(a)->FlexCol()->W(kFill)->Gap(12)->Child(usagePanel);
+    if (self->collOpen[2]) {
+        usageBody->Child(usageItems);
+    }
+    El* card = Div(a)->FlexCol()->W(360)->Child(
+        component::GroupBox::New(cx, Str{})
+            ->Outline()
+            ->Child(
+                Div(a)->FlexCol()->W(kFill)->Gap(12)->Child(usageHead)->Child(
+                    usageBody))
+            ->IntoEl());
+    // The toggle straddles the card's bottom border.
+    card->Child(
+        Div(a)
+            ->Absolute()
+            ->Bottom(-12)
+            ->Left(0)
+            ->W(kFill)
+            ->FlexRow()
+            ->JustifyCenter()
+            ->Child(component::Button::New(cx, StrL("toggle-usage"))
+                        ->Outline()
+                        ->WithSize(UiSize::XSmall)
+                        ->Icon(self->collOpen[2] ? IconName::ChevronUp
+                                                 : IconName::ChevronDown)
+                        ->Tooltip(StrL("Toggle details"))
+                        ->IntoEl()
+                        ->Radius(12)
+                        ->Bg(th.background)
+                        ->OnClick(Listen(cx, &OnColl, 2))));
+    StorySectionAdd(bottom, card);
+    page->Child(bottom);
+
     El* settings = StorySection(
         cx, "Settings",
         "Holds optional controls, keeping the default view short.");

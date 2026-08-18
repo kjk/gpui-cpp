@@ -42,8 +42,11 @@ El* Progress::IntoEl() {
                     ->H(h)
                     ->Radius(h * 0.5f)
                     ->Bg(RgbaOpacity(th.progress, 0.2f))
+                    // The indicator is a fraction of the track, the way Rust
+                    // spells w(relative(value / 100.)) — so it works whether
+                    // the bar has a fixed width or fills its parent.
                     ->Child(gpui::ProgressIndicator::New(cx)
-                                ->W(w * (value / 100.f))
+                                ->WFrac(value / 100.f)
                                 ->H(h)
                                 ->Radius(h * 0.5f)
                                 ->Bg(th.progress)));
