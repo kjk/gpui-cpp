@@ -8,6 +8,8 @@ struct TagStory {
 
 static El* TagRow(Ctx* cx, TagStory* self, bool outline, float radius) {
     Arena* a = cx->a;
+    // tag_story.rs uses the indigo_500()/indigo_50() palette helpers here,
+    // not theme tokens, so these stay literal.
     Rgba indigo = Rgb(0x63, 0x66, 0xf1);
     Rgba indigoBg = Rgb(0xee, 0xf2, 0xff);
     const char* labels[] = {"Tag",     "Secondary", "Danger",

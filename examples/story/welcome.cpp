@@ -31,6 +31,7 @@ static void FillLogoBox(PaintCtx* ctx, float x, float y, float w, float h,
 
 static void PaintLogoMark(PaintCtx* ctx, El* e, void*) {
     // website/public/logo.svg — 32 viewBox, README shows it at 112px.
+    // #1F2023 and #3B82F6 are the literal path fills in that file.
     float s = e->w / 32.f;
     Rgba dark = Rgb(0x1f, 0x20, 0x23);
     Rgba blue = Rgb(0x3b, 0x82, 0xf6);
