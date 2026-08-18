@@ -1,4 +1,8 @@
 // Screenshot one example window: bun cmd/shot.ts [-dbg] <example> [out.png]
+//   -click=X,Y   click at client coords first
+//   -hover=X,Y   leave the pointer there, for capturing a hover state
+//   -wheel=N     N notches of scroll at the window centre
+//   -key=VK      send a key down
 import { dirname, join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
 import {
@@ -7,6 +11,7 @@ import {
   getClientRect,
   packCoords,
   clickClient,
+  hoverClient,
   killAndWait,
   setForegroundWindow,
   sendMessage,
@@ -21,6 +26,7 @@ process.chdir(root);
 const argv = Bun.argv.slice(2);
 let debug = false;
 const clicks: { x: number; y: number }[] = [];
+let hover: { x: number; y: number } | null = null;
 const keys: number[] = [];
 let wheel = 0;
 const rest: string[] = [];
@@ -33,6 +39,9 @@ for (const a of argv) {
     wheel = Number(a.slice(7));
   } else if (a.startsWith("-key=")) {
     keys.push(Number(a.slice(5)));
+  } else if (a.startsWith("-hover=")) {
+    const [x, y] = a.slice(7).split(",").map(Number);
+    hover = { x: x ?? 0, y: y ?? 0 };
   } else if (a.startsWith("-click=")) {
     const [x, y] = a.slice(7).split(",").map(Number);
     clicks.push({ x: x ?? 0, y: y ?? 0 });
@@ -84,6 +93,10 @@ if (wheel !== 0) {
 for (const vk of keys) {
   sendMessage(hwnd, 0x0100 /* WM_KEYDOWN */, vk, 0);
   await sleep(120);
+}
+// Last, so the pointer is still on the element when the frame is captured.
+if (hover) {
+  await hoverClient(hwnd, hover.x, hover.y);
 }
 captureWindowToPng(hwnd, dst);
 await killAndWait(proc);

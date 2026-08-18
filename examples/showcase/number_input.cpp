@@ -56,7 +56,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
     bool valid = ParseNum(app->input.buf, &dummy);
     El* controls = Div(a)->FlexCol()->W(24)->Shrink0();
     controls->Child(
-        Button::New(cx, StrL("inc"), 0)
+        ScButton(cx, StrL("inc"))
             ->OnClick(Listen(cx, &StepNum, 1))
             ->Grow()
             ->W(24)
@@ -66,7 +66,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
             ->HoverBg(Rgb(0x40, 0x40, 0x40))
             ->Child(TextEl(a, StrL("+"))->Font(12)->Fg(Rgb(0xff, 0xff, 0xff))));
     controls->Child(
-        Button::New(cx, StrL("dec"), 0)
+        ScButton(cx, StrL("dec"))
             ->OnClick(Listen(cx, &StepNum, -1))
             ->Grow()
             ->W(24)

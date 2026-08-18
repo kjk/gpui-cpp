@@ -15,7 +15,7 @@ static void ToggleDate(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* trigger =
-        Button::New(cx, StrL("date-trigger"), 0)
+        ScButton(cx, StrL("date-trigger"))
             ->OnClick(Listen(cx, &ToggleDate))
             ->W(250)
             ->H(28)

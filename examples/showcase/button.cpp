@@ -3,11 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickBtnSave = 220,
-    ClickBtnCancel = 221
-};
-
 static void SaveClicked(ShowcaseApp*, Ctx*, const ClickEvent*) {
     log(StrL("Save changes"));
 }
@@ -23,7 +18,7 @@ El* ShowcaseButton(ShowcaseApp* app, Ctx* cx) {
         ->FlexRow()
         ->ItemsCenter()
         ->Gap(8)
-        ->Child(Button::New(cx, StrL("primary-button"), 0)
+        ->Child(ScButton(cx, StrL("primary-button"))
                     ->OnClick(Listen(cx, &SaveClicked))
                     ->PadX(12)
                     ->H(28)
@@ -35,7 +30,7 @@ El* ShowcaseButton(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("Save changes"))
                                 ->Font(12)
                                 ->Fg(Rgb(0xff, 0xff, 0xff))))
-        ->Child(Button::New(cx, StrL("secondary-button"), 0)
+        ->Child(ScButton(cx, StrL("secondary-button"))
                     ->OnClick(Listen(cx, &CancelClicked))
                     ->PadX(12)
                     ->H(28)

@@ -81,6 +81,15 @@ inline Rgba ScSilver() {
     return Rgb(0xa3, 0xa3, 0xa3);
 }
 
+// A button that reacts to the pointer. Hover, focus and hit-testing all key
+// off an element identity, so a button that only carries a listener paints as
+// if the cursor were never on it. HashClickId derives a stable identity from
+// the element id, the way component::Button does; Button::New(cx, id, 0) is
+// still the non-interactive shell.
+inline El* ScButton(Ctx* cx, Str id) {
+    return Button::New(cx, id, HashClickId(id));
+}
+
 struct ShowcaseApp {
     static El* Render(ShowcaseApp* self, Ctx* cx);
 
