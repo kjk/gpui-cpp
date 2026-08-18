@@ -1,38 +1,98 @@
 #include "Story.h"
 
+// The four datasets the Rust story cycles through.
+struct ScrollDataset {
+    const char* label;
+    int count;
+};
+
+static const ScrollDataset kDatasets[] = {
+    {"Standard", 5000},
+    {"Wide", 100},
+    {"Stress", 500000},
+    {"Short", 5},
+};
+
+// ITEM_HEIGHT in the Rust story.
+static const float kItemHeight = 50;
+
+enum {
+    ScrollActDataset = 200
+};
+
 struct ScrollbarStory {
+    int dataset = 0;
+    bool menuOpen = false;
+    float scrollY = 0;
+
     static El* Render(ScrollbarStory* self, Ctx* cx);
 };
 
+static void ToggleDatasetMenu(ScrollbarStory* self, Ctx* cx,
+                              const ClickEvent*) {
+    self->menuOpen = !self->menuOpen;
+    Notify(cx);
+}
+static void PickDataset(ScrollbarStory* self, Ctx* cx, const ClickEvent*,
+                        intptr_t act) {
+    self->dataset = (int)(act - ScrollActDataset);
+    self->menuOpen = false;
+    self->scrollY = 0;
+    Notify(cx);
+}
+
 El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
+    WinSize win = WindowSize(cx->win);
     Arena* a = cx->a;
+    const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
-    El* sec = StorySection(cx, "Default",
-                           "A scrollbar that allows users to scroll content.");
-    El* box = Div(a)
-                  ->W(288)
-                  ->H(192)
-                  ->Border(1, cx->theme().border)
-                  ->ClipY()
-                  ->ScrollY(0);
-    El* list = Div(a)->FlexCol();
-    for (int i = 1; i <= 40; i++) {
-        list->Child(
-            Div(a)
-                ->H(28)
-                ->PadX(8)
-                ->ItemsCenter()
-                ->JustifyBetween()
-                ->BorderB(1, cx->theme().border)
-                ->Child(StoryTxt(cx, StoryFmt(cx, "Activity %d", i), 12,
-                                 cx->theme().foreground))
-                ->Child(StoryTxt(
-                    cx, i % 3 == 0 ? StrL("Completed") : StrL("Pending"), 12,
-                    cx->theme().mutedFg)));
+
+    // story_toolbar_group() with the dataset dropdown.
+    El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+    El* group = StoryToolbarGroup(cx);
+    StoryToolbarOpt rows[4];
+    for (int i = 0; i < 4; i++) {
+        rows[i].label = kDatasets[i].label;
+        rows[i].checked = self->dataset == i;
+        rows[i].act = ScrollActDataset + i;
     }
-    box->Child(list);
-    StorySectionAdd(sec, box);
-    page->Child(sec);
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("scrollbar-dataset"),
+        StoryFmt(cx, "Dataset: %s", kDatasets[self->dataset].label),
+        self->menuOpen, Listen(cx, &ToggleDatasetMenu), rows, 4,
+        Listen(cx, &PickDataset)));
+    toolbarRow->Child(group);
+    page->Child(toolbarRow);
+
+    // The list fills what is left of the page, inside a bordered frame.
+    El* frame = Div(a)
+                    ->FlexCol()
+                    ->W(kFill)
+                    // flex_1 in a scrolling page: take what is left of the
+                    // window below the toolbar.
+                    ->H(win.dipH - 230)
+                    ->PadX(12)
+                    ->PadY(4)
+                    ->Border(1, th.border)
+                    ->ClipY()
+                    ->ScrollY(self->scrollY);
+    int count = kDatasets[self->dataset].count;
+    // Only what can show is built; the Rust list is virtualized.
+    int visible = count < 40 ? count : 40;
+    for (int i = 0; i < visible; i++) {
+        frame->Child(
+            Div(a)
+                ->H(kItemHeight)
+                ->W(kFill)
+                ->PadT(4)
+                ->Child(Div(a)
+                            ->W(kFill)
+                            ->Pad(8)
+                            ->Bg(th.secondary)
+                            ->Child(StoryTxt(cx, StoryFmt(cx, "Item %d", i), 14,
+                                             th.foreground))));
+    }
+    page->Child(frame);
     return page;
 }
 
