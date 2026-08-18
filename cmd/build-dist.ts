@@ -1,11 +1,15 @@
 // Amalgamate src/**/*.h and src/**/*.cpp into gpui.h plus two .cpp files: the
-// portable core (gpui.cpp) and the platform half (gpui_win.cpp on Windows,
-// gpui_linux.cpp on Linux). The split is what keeps <windows.h> and <X11/*>
+// portable core (gpui.cpp) and the platform half (gpui_win.cpp, gpui_linux.cpp
+// or gpui_mac.cpp). The split is what keeps <windows.h>, <X11/*> and <Cocoa/*>
 // out of the same translation unit as everything else.
+//
+// A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
+// _mac.cpp, and _posix.cpp for the Linux and macOS halves both.
 //
 //   bun cmd/build-dist.ts           # write dist/, then time dbg+rel compile
 //   bun cmd/build-dist.ts -work     # write .work/ instead of dist/
 //   bun cmd/build-dist.ts -linux    # amalgamate the Linux platform half
+//   bun cmd/build-dist.ts -mac      # ... the macOS one
 //   bun cmd/build-dist.ts -no-bench # skip the compile timing
 //
 // import { buildDist } from "./build-dist.ts";
@@ -19,10 +23,13 @@ const root = resolve(import.meta.dir, "..");
 
 export type DistOutDir = "dist" | ".work";
 
-export type Platform = "win" | "linux";
+export type Platform = "win" | "linux" | "mac";
 
 export function hostPlatform(): Platform {
-  return process.platform === "win32" ? "win" : "linux";
+  if (process.platform === "win32") {
+    return "win";
+  }
+  return process.platform === "darwin" ? "mac" : "linux";
 }
 
 export type BuildDistOpts = {
@@ -47,15 +54,22 @@ export type BuildDistResult = {
   platformSourceCount: number;
 };
 
-// src/gpui/Window_win.cpp -> "win". Null for a portable file.
-function filePlatform(rel: string): Platform | null {
+// Which platform halves a source file belongs to. Empty means it is portable
+// and goes in gpui.cpp; _posix.cpp belongs to two.
+function filePlatforms(rel: string): Platform[] {
   if (/_win\.cpp$/.test(rel)) {
-    return "win";
+    return ["win"];
   }
   if (/_linux\.cpp$/.test(rel)) {
-    return "linux";
+    return ["linux"];
   }
-  return null;
+  if (/_mac\.cpp$/.test(rel)) {
+    return ["mac"];
+  }
+  if (/_posix\.cpp$/.test(rel)) {
+    return ["linux", "mac"];
+  }
+  return [];
 }
 
 const quotedIncRe = /^\s*#\s*include\s+"([^"]+)"/;
@@ -335,8 +349,8 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   const platform = opts?.platform ?? hostPlatform();
   const headers = listSrc(".h");
   const allCpps = preferredCppOrder(listSrc(".cpp"));
-  const cpps = allCpps.filter((f) => filePlatform(f) === null);
-  const platCpps = allCpps.filter((f) => filePlatform(f) === platform);
+  const cpps = allCpps.filter((f) => filePlatforms(f).length === 0);
+  const platCpps = allCpps.filter((f) => filePlatforms(f).includes(platform));
   if (headers.length === 0 || cpps.length === 0) {
     throw new Error("no src/**/*.h or src/**/*.cpp to amalgamate");
   }
@@ -527,6 +541,10 @@ function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean; platfor
       platform = "linux";
       continue;
     }
+    if (raw === "-mac" || raw === "--mac") {
+      platform = "mac";
+      continue;
+    }
     if (raw === "-no-bench" || raw === "--no-bench") {
       bench = false;
       continue;
@@ -536,9 +554,9 @@ function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean; platfor
       continue;
     }
     if (raw.startsWith("-")) {
-      die(`unknown option: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux] [-no-bench]`);
+      die(`unknown option: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux|-mac] [-no-bench]`);
     }
-    die(`unknown argument: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux] [-no-bench]`);
+    die(`unknown argument: ${raw}\nusage: bun cmd/build-dist.ts [-work] [-win|-linux|-mac] [-no-bench]`);
   }
   return { outDir, bench, platform };
 }

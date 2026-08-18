@@ -20,19 +20,30 @@
 
 // ─── os ──────────────────────────────────────────────────────────────────
 //
-// One of these is 1, the other 0, on every build. Prefer a portable function
-// implemented in <name>_win.cpp / <name>_linux.cpp over an #if in shared code:
-// these are for the handful of places where a single expression differs.
+// Exactly one of these is 1 on every build. Prefer a portable function
+// implemented in <name>_win.cpp / <name>_linux.cpp / <name>_mac.cpp over an
+// #if in shared code: these are for the handful of places where a single
+// expression differs.
 
 #if defined(_WIN32)
 #define GPUI_OS_WINDOWS 1
 #define GPUI_OS_LINUX 0
+#define GPUI_OS_MAC 0
+#elif defined(__APPLE__)
+#define GPUI_OS_WINDOWS 0
+#define GPUI_OS_LINUX 0
+#define GPUI_OS_MAC 1
 #elif defined(__linux__)
 #define GPUI_OS_WINDOWS 0
 #define GPUI_OS_LINUX 1
+#define GPUI_OS_MAC 0
 #else
-#error "unsupported platform: gpui builds on Windows and Linux"
+#error "unsupported platform: gpui builds on Windows, Linux and macOS"
 #endif
+
+// Everything that is not Windows is a POSIX host here, which is what the
+// _posix.cpp half of the platform layer is written against.
+#define GPUI_OS_POSIX (!GPUI_OS_WINDOWS)
 
 #if GPUI_OS_WINDOWS
 #define NOMINMAX

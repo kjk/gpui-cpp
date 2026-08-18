@@ -40,6 +40,7 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 | 23. story gallery | done | `crates/story` — sidebar + 62 stories (`bun cmd/build.ts story`) |
 | 24. App / Window / Entity / Ctx | done | GPUI's runtime shape; see AGENTS.md |
 | 25. Linux port | done | X11 + cairo + Pango behind `Paint.h` / `Platform.h`; every target builds and runs |
+| 26. macOS port | wip | Cocoa + Core Graphics + Core Text behind the same seams. **Never compiled** — the build Mac was unreachable. Build it with `bun cmd/mac-build.ts -rel hello_world`. |
 
 ## What matches the Rust example
 

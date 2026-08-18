@@ -1,22 +1,28 @@
 // Build a gpui2 example, dispatching to the toolchain for this machine:
-// cmd/build-windows.ts (MSVC) on Windows, cmd/build-linux.ts (g++/clang++)
-// on Linux. Every flag is passed through untouched.
+// cmd/build-windows.ts (MSVC), cmd/build-linux.ts (g++/clang++) or
+// cmd/build-mac.ts (clang++). Every flag is passed through untouched.
 //
 //   bun cmd/build.ts                         # print example list
 //   bun cmd/build.ts -rel system_monitor
 //   bun cmd/build.ts -dbg -all
 //
-// To build the other platform's binaries from here, see cmd/wsl-run.ts.
+// To build another platform's binaries from here, see cmd/wsl-run.ts (Linux)
+// and cmd/mac-build.ts (macOS).
 
 import { dirname, join, resolve } from "node:path";
 
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);
 
-const script = process.platform === "win32" ? "cmd/build-windows.ts" : "cmd/build-linux.ts";
+const scripts: Record<string, string> = {
+  win32: "cmd/build-windows.ts",
+  linux: "cmd/build-linux.ts",
+  darwin: "cmd/build-mac.ts",
+};
 
-if (process.platform !== "win32" && process.platform !== "linux") {
-  console.error(`Unsupported platform: ${process.platform}. gpui2 builds on Windows and Linux.`);
+const script = scripts[process.platform];
+if (!script) {
+  console.error(`Unsupported platform: ${process.platform}. gpui2 builds on Windows, Linux and macOS.`);
   process.exit(1);
 }
 
