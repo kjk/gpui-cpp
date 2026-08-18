@@ -47,8 +47,8 @@ const usage = `Usage: bun cmd/run.ts [-rel|-dbg] [-asan] [-clean] [-lldb] [-comp
 Builds with cmd/build.ts, then launches out/mac/<cfg>/<target> and exits.
 The example name is the last argument.
 
-Needs a window server, so it has to run in a login session — over plain ssh
-the window has nowhere to appear.`;
+Run this from any terminal in a logged-in macOS desktop session, including
+Wave Terminal. Plain ssh sessions normally have no window server.`;
 
 function printExamples(msg?: string): never {
   if (msg) {
@@ -160,9 +160,10 @@ function run(cmd: string[], cwd: string): number {
   return r.exitCode ?? 1;
 }
 
-// setsid, so the app outlives this script and the shell that started it.
+// A detached, unreferenced process outlives this script and the shell that
+// started it. Bun handles the new process group; macOS does not ship setsid.
 function launchDetached(cmd: string[], cwd: string): ReturnType<typeof Bun.spawn> {
-  const proc = Bun.spawn(["setsid", ...cmd], {
+  const proc = Bun.spawn(cmd, {
     cwd,
     stdin: "ignore",
     stdout: "ignore",
@@ -238,7 +239,16 @@ if (compare) {
   }
   const cargo = findCargo();
   if (!cargo) {
-    die("Could not find cargo. Install Rust (https://rustup.rs) and ensure cargo is on PATH.");
+    die(`Cannot use -compare because Cargo was not found.
+
+Wave Terminal is supported; this error is unrelated to the macOS window server.
+
+Install Rust and try again:
+  brew install rust
+  bun cmd/run.ts ${debug ? "-dbg" : "-rel"} -compare ${target}
+
+To launch only the C++ port, omit -compare:
+  bun cmd/run.ts ${debug ? "-dbg" : "-rel"} ${target}`);
   }
   const cargoArgs = rustBuildArgs(target, debug);
   console.log(`Building rust: cargo ${cargoArgs.join(" ")}`);
