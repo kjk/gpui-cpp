@@ -30,7 +30,7 @@ El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
     El* field = Div(a)
                     ->FlexRow()
                     ->ItemsCenter()
-                    ->W(360)
+                    ->W(480)
                     ->H(32)
                     ->PadX(8)
                     ->Gap(8)

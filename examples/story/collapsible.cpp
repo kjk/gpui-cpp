@@ -37,7 +37,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                          ->Semibold());
     orderHead->Child(component::Button::New(cx, StrL("order-toggle"))
                          ->Ghost()
-                         ->Icon(IconName::ChevronDown)
+                         ->Icon(IconName::ChevronsUpDown)
                          ->Tooltip(StrL("Toggle details"))
                          ->IntoEl()
                          ->OnClick(Listen(cx, &OnColl, 0)));
