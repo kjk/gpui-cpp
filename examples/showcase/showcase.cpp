@@ -697,8 +697,8 @@ int GpuiMain(int argc, char** argv) {
     self->hexIn.len = 7;
     self->textareaLen = (int)strlen(self->textarea);
 
-    Window* win =
-        WindowOpenView(app, StrL("GPUI Base"), 840, 640, view.id, WinOpts{});
+    Window* win = WindowOpenView(app, StrL("GPUI Base C++"), 840, 640, view.id,
+                                 WinOpts{});
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

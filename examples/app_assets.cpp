@@ -28,6 +28,6 @@ int GpuiMain(int argc, char** argv) {
     ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("app_assets"));
-    return AppRunView(StrL("App Assets"), 800, 600, EntityNew<Example>(app).id,
-                      app, WinOpts{});
+    return AppRunView(StrL("App Assets C++"), 800, 600,
+                      EntityNew<Example>(app).id, app, WinOpts{});
 }

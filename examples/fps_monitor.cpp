@@ -368,7 +368,7 @@ int GpuiMain(int argc, char** argv) {
     opts.anim = true;
     opts.timerMs = 16;
     Window* win =
-        WindowOpenView(app, StrL("FPS Monitor"), 800, 600, view.id, opts);
+        WindowOpenView(app, StrL("FPS Monitor C++"), 800, 600, view.id, opts);
     WindowOnMouse(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);

@@ -52,6 +52,6 @@ int GpuiMain(int argc, char** argv) {
     ThemeSet(app, ThemeMode::Light);
     WinOpts opts = {};
     opts.borderless = true;
-    return AppRunView(StrL("Root Borderless"), 640, 320,
+    return AppRunView(StrL("Root Borderless C++"), 640, 320,
                       EntityNew<Example>(app).id, app, opts);
 }

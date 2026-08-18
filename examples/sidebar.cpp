@@ -221,7 +221,7 @@ int GpuiMain(int argc, char** argv) {
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));
     WinOpts opts = {};
-    WindowOpenView(app, StrL("Sidebar"), 900, 620, view.id, opts);
+    WindowOpenView(app, StrL("Sidebar C++"), 900, 620, view.id, opts);
     int rc = AppRun(app);
     AppFree(app);
     return rc;

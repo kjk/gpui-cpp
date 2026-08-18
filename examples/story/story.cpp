@@ -996,8 +996,8 @@ int GpuiMain(int argc, char** argv) {
     // Windows and X11 have none, so component::TitleBar draws the minimize /
     // maximize / close controls there itself.
     opts.clientTitleBar = true;
-    Window* win =
-        WindowOpenView(app, StrL("GPUI Component"), 1600, 1200, view.id, opts);
+    Window* win = WindowOpenView(app, StrL("GPUI Component C++"), 1600, 1200,
+                                 view.id, opts);
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
     WindowOnWheel(win, ListenTo(view, &OnWheel));

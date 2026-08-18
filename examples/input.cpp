@@ -59,5 +59,5 @@ int GpuiMain(int argc, char** argv) {
     StrCopyZ(self->inputState.placeholder,
              (int)sizeof(self->inputState.placeholder), "Enter your name");
 
-    return AppRunView(StrL("Input"), 800, 600, view.id, app, WinOpts{});
+    return AppRunView(StrL("Input C++"), 800, 600, view.id, app, WinOpts{});
 }

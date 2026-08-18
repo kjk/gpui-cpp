@@ -30,6 +30,6 @@ int GpuiMain(int argc, char** argv) {
     (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Light);
-    return AppRunView(StrL("Hello World"), 800, 600, EntityNew<Example>(app).id,
-                      app, WinOpts{});
+    return AppRunView(StrL("Hello World C++"), 800, 600,
+                      EntityNew<Example>(app).id, app, WinOpts{});
 }
