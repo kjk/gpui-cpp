@@ -28,7 +28,7 @@ static void SetBill2(RadioStory* self, Ctx* cx, const ClickEvent*, intptr_t) {
 El* RadioStory::Render(RadioStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* del = StorySection(cx, "Delivery",
                            "Choose one option from a clearly described set.");
@@ -84,9 +84,6 @@ El* RadioStory::Render(RadioStory* self, Ctx* cx) {
 }
 
 void RadioStory::Click(RadioStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

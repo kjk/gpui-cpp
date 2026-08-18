@@ -138,11 +138,51 @@ struct StoryAccordionOptions {
     bool bordered = false;
 };
 
-El* StoryToolbar(Ctx* cx, StoryToolbarState* st);
-El* StoryToolbar(Ctx* cx, StoryToolbarState* st, StoryAccordionOptions* opts);
-// Both return true when the id belonged to them.
-bool StoryToolbarClick(StoryToolbarState* st, int id);
-bool StoryAccordionOptionsClick(StoryAccordionOptions* o, int id);
+// What a toolbar row does, bound into its listener the way a Rust closure
+// would capture it.
+enum StoryToolbarAction {
+    ToolbarOpenSize = 1,
+    ToolbarOpenOpts,
+    ToolbarSizeXs,
+    ToolbarSizeSm,
+    ToolbarSizeMd,
+    ToolbarSizeLg,
+    ToolbarOptMultiple,
+    ToolbarOptIcon,
+    ToolbarOptDisabled,
+    ToolbarOptBordered,
+};
+
+void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
+                       int act);
+El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
+                     StoryAccordionOptions* opts, Listener onAct);
+
+template <typename T>
+void StoryToolbarAct(T* self, Ctx* cx, const ClickEvent*, intptr_t act) {
+    StoryToolbarApply(&self->toolbar, nullptr, (int)act);
+    Notify(cx);
+}
+
+template <typename T>
+void StoryToolbarActOpts(T* self, Ctx* cx, const ClickEvent*, intptr_t act) {
+    StoryToolbarApply(&self->toolbar, &self->options, (int)act);
+    Notify(cx);
+}
+
+// story_toolbar(self.size): the page owns the state, the rows own their
+// handlers.
+template <typename T>
+El* StoryToolbar(Ctx* cx, T* self) {
+    return StoryToolbarCore(cx, &self->toolbar, nullptr,
+                            Listen(cx, &StoryToolbarAct<T>));
+}
+
+template <typename T>
+El* StoryToolbarWithOptions(Ctx* cx, T* self) {
+    return StoryToolbarCore(cx, &self->toolbar, &self->options,
+                            Listen(cx, &StoryToolbarActOpts<T>));
+}
 
 typedef EntityId (*StoryPageNewFn)(App* app);
 typedef void (*StoryPageClickFn)(void* self, Ctx* cx, int id);

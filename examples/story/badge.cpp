@@ -35,7 +35,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* icons = StorySection(cx, "Icon", nullptr);
     El* iconRow = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
@@ -163,9 +163,6 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
 }
 
 void BadgeStory::Click(BadgeStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

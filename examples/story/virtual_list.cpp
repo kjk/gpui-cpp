@@ -10,7 +10,7 @@ struct VirtualListStory {
 El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
     El* sec = StorySection(
         cx, "Default",
         "A virtualized list for efficiently rendering large lists.");
@@ -39,9 +39,6 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
 }
 
 void VirtualListStory::Click(VirtualListStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

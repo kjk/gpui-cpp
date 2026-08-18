@@ -11,7 +11,7 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def =
         StorySection(cx, "Default", "An indeterminate loading indicator.");
@@ -71,9 +71,6 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
 }
 
 void SpinnerStory::Click(SpinnerStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

@@ -55,7 +55,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default",
                            "Text and icon toggles with clear selected states.");
@@ -107,9 +107,6 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
 }
 
 void ToggleStory::Click(ToggleStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     if (id == ClickTogglePreview) {
         self->toggleSel = self->toggleSel == 1 ? 0 : 1;

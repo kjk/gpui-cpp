@@ -36,7 +36,7 @@ static void SetCheck5(CheckboxStory* self, Ctx* cx, const ClickEvent*,
 El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(
         cx, "Default", "Checked and unchecked options can be mixed freely.");
@@ -119,9 +119,6 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
 }
 
 void CheckboxStory::Click(CheckboxStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

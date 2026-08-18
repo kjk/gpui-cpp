@@ -68,7 +68,7 @@ static El* AvatarRow(Ctx* cx, AvatarStory* self, const char** names, int n,
 El* AvatarStory::Render(AvatarStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* img = StorySection(cx, "Image", "Use an image when one is available.");
     El* imgRow = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
@@ -114,9 +114,6 @@ El* AvatarStory::Render(AvatarStory* self, Ctx* cx) {
 }
 
 void AvatarStory::Click(AvatarStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

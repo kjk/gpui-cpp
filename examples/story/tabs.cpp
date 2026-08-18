@@ -29,7 +29,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* tabs = StorySection(cx, "Tabs", nullptr);
     StorySectionAdd(tabs, TabPanel(cx, self,
@@ -117,9 +117,6 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
 }
 
 void TabsStory::Click(TabsStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     if (id == HashClickId(StrL("Overview"))) {
         self->tab = 0;

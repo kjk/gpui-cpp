@@ -47,7 +47,7 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* vars = StorySection(cx, "Variants",
                             "Visual treatments communicate action priority.");
@@ -331,9 +331,6 @@ El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
 }
 
 void ButtonStory::Click(ButtonStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

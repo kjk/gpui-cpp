@@ -16,7 +16,7 @@ static void SetStep(StepperStory* self, Ctx* cx, const ClickEvent*,
 El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* h = StorySection(cx, "Horizontal Stepper", nullptr);
     StorySectionAdd(h, component::Stepper::New(cx)
@@ -83,9 +83,6 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
 }
 
 void StepperStory::Click(StepperStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

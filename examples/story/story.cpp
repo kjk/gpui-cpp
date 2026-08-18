@@ -282,7 +282,7 @@ static El* ToolbarSep(Ctx* cx) {
 
 // No Bg on the button: the group paints its background and border first, and
 // an opaque child would cover the stroke that straddles the group's edge.
-static El* ToolbarDropBtn(Ctx* cx, int id, Str label) {
+static El* ToolbarDropBtn(Ctx* cx, Str label) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)
@@ -291,11 +291,11 @@ static El* ToolbarDropBtn(Ctx* cx, int id, Str label) {
         ->ItemsCenter()
         ->JustifyCenter()
         ->HoverBg(th.muted)
-        ->Click(id)
         ->Child(StoryTxt(cx, label, 12, th.foreground));
 }
 
-static El* ToolbarCheckRow(Ctx* cx, int id, const char* label, bool on) {
+static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
+                           bool on) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     return Div(a)
@@ -306,7 +306,7 @@ static El* ToolbarCheckRow(Ctx* cx, int id, const char* label, bool on) {
         ->Gap(8)
         ->ItemsCenter()
         ->HoverBg(th.muted)
-        ->Click(id)
+        ->OnClick(ListenerArg(onAct, act))
         ->Child(StoryTxt(cx, on ? StrL("\xE2\x9C\x93") : StrL(" "), 12,
                          th.foreground)
                     ->W(14))
@@ -324,28 +324,77 @@ static El* ToolbarMenu(Ctx* cx) {
         ->Radius(th.radius);
 }
 
-El* StoryToolbar(Ctx* cx, StoryToolbarState* st) {
-    return StoryToolbar(cx, st, nullptr);
+void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
+                       int act) {
+    switch (act) {
+        case ToolbarOpenSize:
+            st->sizeMenuOpen = !st->sizeMenuOpen;
+            st->optsOpen = false;
+            return;
+        case ToolbarOpenOpts:
+            st->optsOpen = !st->optsOpen;
+            st->sizeMenuOpen = false;
+            return;
+        case ToolbarSizeXs:
+            st->size = UiSize::XSmall;
+            st->sizeMenuOpen = false;
+            return;
+        case ToolbarSizeSm:
+            st->size = UiSize::Small;
+            st->sizeMenuOpen = false;
+            return;
+        case ToolbarSizeMd:
+            st->size = UiSize::Medium;
+            st->sizeMenuOpen = false;
+            return;
+        case ToolbarSizeLg:
+            st->size = UiSize::Large;
+            st->sizeMenuOpen = false;
+            return;
+        default:
+            break;
+    }
+    if (!opts) {
+        return;
+    }
+    switch (act) {
+        case ToolbarOptMultiple:
+            opts->multiple = !opts->multiple;
+            return;
+        case ToolbarOptIcon:
+            opts->icon = !opts->icon;
+            return;
+        case ToolbarOptDisabled:
+            opts->disabled = !opts->disabled;
+            return;
+        case ToolbarOptBordered:
+            opts->bordered = !opts->bordered;
+            return;
+        default:
+            return;
+    }
 }
 
-El* StoryToolbar(Ctx* cx, StoryToolbarState* st, StoryAccordionOptions* opts) {
+El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
+                     StoryAccordionOptions* opts, Listener onAct) {
     Arena* a = cx->a;
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
     El* group = ToolbarGroup(cx);
     row->Child(group);
 
-    El* sizeTrig = ToolbarDropBtn(
-        cx, ClickSizeMenu, StoryFmt(cx, "Size: %s", StorySizeName(st->size)));
+    El* sizeTrig =
+        ToolbarDropBtn(cx, StoryFmt(cx, "Size: %s", StorySizeName(st->size)))
+            ->OnClick(ListenerArg(onAct, ToolbarOpenSize));
     El* sizeMenu = nullptr;
     if (st->sizeMenuOpen) {
         sizeMenu = ToolbarMenu(cx);
-        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeXs, "XSmall",
+        sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeXs, "XSmall",
                                         st->size == UiSize::XSmall));
-        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeSm, "Small",
+        sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeSm, "Small",
                                         st->size == UiSize::Small));
-        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeMd, "Medium",
+        sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeMd, "Medium",
                                         st->size == UiSize::Medium));
-        sizeMenu->Child(ToolbarCheckRow(cx, ClickSizeLg, "Large",
+        sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeLg, "Large",
                                         st->size == UiSize::Large));
     }
     group->Child(Popup::New(cx, StrL("story-size-menu"), sizeTrig)
@@ -354,76 +403,25 @@ El* StoryToolbar(Ctx* cx, StoryToolbarState* st, StoryAccordionOptions* opts) {
 
     if (opts) {
         group->Child(ToolbarSep(cx));
-        El* optTrig = ToolbarDropBtn(cx, ClickOptsMenu, StrL("Options"));
+        El* optTrig = ToolbarDropBtn(cx, StrL("Options"))
+                          ->OnClick(ListenerArg(onAct, ToolbarOpenOpts));
         El* optMenu = nullptr;
         if (st->optsOpen) {
             optMenu = ToolbarMenu(cx);
-            optMenu->Child(ToolbarCheckRow(cx, ClickAccMultiple, "Multiple",
-                                           opts->multiple));
-            optMenu
-                ->Child(ToolbarCheckRow(cx, ClickAccIcon, "Icons", opts->icon));
-            optMenu->Child(ToolbarCheckRow(cx, ClickAccDisabled, "Disabled",
-                                           opts->disabled));
-            optMenu->Child(ToolbarCheckRow(cx, ClickAccBordered, "Bordered",
-                                           opts->bordered));
+            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptMultiple,
+                                           "Multiple", opts->multiple));
+            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptIcon, "Icons",
+                                           opts->icon));
+            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptDisabled,
+                                           "Disabled", opts->disabled));
+            optMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarOptBordered,
+                                           "Bordered", opts->bordered));
         }
         group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
                          ->Content(optMenu)
                          ->IntoEl());
     }
     return row;
-}
-
-bool StoryToolbarClick(StoryToolbarState* st, int id) {
-    switch (id) {
-        case ClickEscape:
-            st->sizeMenuOpen = false;
-            st->optsOpen = false;
-            return false;
-        case ClickSizeMenu:
-            st->sizeMenuOpen = !st->sizeMenuOpen;
-            return true;
-        case ClickOptsMenu:
-            st->optsOpen = !st->optsOpen;
-            return true;
-        case ClickSizeXs:
-            st->size = UiSize::XSmall;
-            st->sizeMenuOpen = false;
-            return true;
-        case ClickSizeSm:
-            st->size = UiSize::Small;
-            st->sizeMenuOpen = false;
-            return true;
-        case ClickSizeMd:
-            st->size = UiSize::Medium;
-            st->sizeMenuOpen = false;
-            return true;
-        case ClickSizeLg:
-            st->size = UiSize::Large;
-            st->sizeMenuOpen = false;
-            return true;
-        default:
-            return false;
-    }
-}
-
-bool StoryAccordionOptionsClick(StoryAccordionOptions* o, int id) {
-    switch (id) {
-        case ClickAccMultiple:
-            o->multiple = !o->multiple;
-            return true;
-        case ClickAccIcon:
-            o->icon = !o->icon;
-            return true;
-        case ClickAccDisabled:
-            o->disabled = !o->disabled;
-            return true;
-        case ClickAccBordered:
-            o->bordered = !o->bordered;
-            return true;
-        default:
-            return false;
-    }
 }
 
 El* StoryComingSoon(Ctx* cx, int story) {

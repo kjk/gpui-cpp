@@ -28,7 +28,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
         cx->win->input = &self->field;
     }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
     El* sec =
         StorySection(cx, "Default", "Building forms with labeled fields.");
     StorySectionAdd(
@@ -50,9 +50,6 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
 }
 
 void FormStory::Click(FormStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

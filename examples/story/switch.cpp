@@ -47,7 +47,7 @@ El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default",
                            "Switches work well in a compact settings list.");
@@ -110,9 +110,6 @@ El* SwitchStory::Render(SwitchStory* self, Ctx* cx) {
 }
 
 void SwitchStory::Click(SwitchStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

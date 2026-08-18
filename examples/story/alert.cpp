@@ -40,7 +40,7 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* defBody = Div(a)->FlexCol()->Gap(4);
     defBody->Child(AlertLine(cx, StrL("Your workspace is ready for the team."),
@@ -177,9 +177,6 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
 }
 
 void AlertStory::Click(AlertStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     if (id == ClickAlertBannerClose) {
         self->alertBanner = false;

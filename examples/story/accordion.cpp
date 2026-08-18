@@ -44,7 +44,7 @@ El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = ThemeNow();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsStart();
-    page->Child(StoryToolbar(cx, &self->toolbar, &self->options));
+    page->Child(StoryToolbarWithOptions(cx, self));
 
     const char* titles[] = {"Is it accessible?", "Can it hold any content?",
                             "Is it animated?"};
@@ -109,12 +109,6 @@ El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
 }
 
 void AccordionStory::Click(AccordionStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
-    if (StoryAccordionOptionsClick(&self->options, id)) {
-        return;
-    }
     (void)cx;
     if (id == ClickAccMultiple) {
         self->options.multiple = !self->options.multiple;

@@ -39,7 +39,7 @@ static El* DropBlock(Ctx* cx, DropdownButtonStory* self, int which,
 El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def =
         StorySection(cx, "Default", "A primary action with an attached menu.");
@@ -72,9 +72,6 @@ El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
 }
 
 void DropdownButtonStory::Click(DropdownButtonStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     int which = -1;
     if (id == ClickDropDefault || id == HashClickId(StrL("btn0"))) {

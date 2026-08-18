@@ -21,7 +21,7 @@ static void SetPageMany(PaginationStory* self, Ctx* cx, const ClickEvent*,
 El* PaginationStory::Render(PaginationStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default", nullptr);
     StorySectionAdd(def, component::Pagination::New(cx, self->page, 10)
@@ -50,9 +50,6 @@ El* PaginationStory::Render(PaginationStory* self, Ctx* cx) {
 }
 
 void PaginationStory::Click(PaginationStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

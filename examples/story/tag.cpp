@@ -51,7 +51,7 @@ static El* TagRow(Ctx* cx, TagStory* self, bool outline, float radius) {
 El* TagStory::Render(TagStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default", nullptr);
     StorySectionAdd(def, TagRow(cx, self, false, -1));
@@ -92,9 +92,6 @@ El* TagStory::Render(TagStory* self, Ctx* cx) {
 }
 
 void TagStory::Click(TagStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     (void)id;
 }

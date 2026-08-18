@@ -52,7 +52,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         cx->win->input = &self->field;
     }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, &self->toolbar));
+    page->Child(StoryToolbar(cx, self));
 
     El* def =
         StorySection(cx, "Default", "Capture and validate short-form text.");
@@ -86,9 +86,6 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 }
 
 void InputStory::Click(InputStory* self, Ctx* cx, int id) {
-    if (StoryToolbarClick(&self->toolbar, id)) {
-        return;
-    }
     (void)cx;
     if (id == ClickStoryField || id == HashClickId(StrL("name"))) {
         self->field.focused = true;
