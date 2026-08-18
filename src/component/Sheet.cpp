@@ -16,6 +16,18 @@ Sheet* Sheet::Title(Str s) {
     title = s;
     return this;
 }
+Sheet* Sheet::Placement(SheetPlacement p) {
+    placement = p;
+    return this;
+}
+Sheet* Sheet::Size(float px) {
+    size = px;
+    return this;
+}
+Sheet* Sheet::Overlay(bool v) {
+    overlay = v;
+    return this;
+}
 Sheet* Sheet::Open(bool v) {
     open = v;
     return this;
@@ -29,38 +41,59 @@ Sheet* Sheet::OnClose(Listener fn) {
     return this;
 }
 
-El* Sheet::IntoEl(WinSize size) {
+El* Sheet::IntoEl(WinSize win) {
     if (!open) {
         return Div(a);
     }
     const Theme& th = cx->theme();
+    bool horizontal =
+        placement == SheetPlacement::Left || placement == SheetPlacement::Right;
     El* surface = Div(a)
                       ->Absolute()
-                      ->Top(0)
-                      ->Right(0)
-                      ->H(size.dipH)
-                      ->W(280)
+                      ->W(horizontal ? size : win.dipW)
+                      ->H(horizontal ? win.dipH : size)
                       ->Pad(16)
                       ->FlexCol()
                       ->Gap(12)
                       ->Bg(th.background)
                       ->Border(1, th.border);
-    surface->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
+    switch (placement) {
+        case SheetPlacement::Left:
+            surface->Top(0)->Left(0);
+            break;
+        case SheetPlacement::Top:
+            surface->Top(0)->Left(0);
+            break;
+        case SheetPlacement::Bottom:
+            surface->Top(win.dipH - size)->Left(0);
+            break;
+        default:
+            surface->Top(0)->Left(win.dipW - size);
+            break;
+    }
+    El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+    head->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
+    head->Child(Button::New(cx, StrL("sheet-close"))
+                    ->Text()
+                    ->WithSize(UiSize::XSmall)
+                    ->Icon(IconName::X)
+                    ->OnClick(onClose)
+                    ->IntoEl());
+    surface->Child(head);
     if (body) {
         surface->Child(body);
     }
-    surface->Child(Button::New(cx, StrL("sheet-done"))
-                       ->Label(StrL("Done"))
-                       ->Primary()
-                       ->OnClick(onClose)
-                       ->IntoEl());
-    El* overlay =
-        Div(a)->Absolute()->Top(0)->Left(0)->W(size.dipW)->H(size.dipH)->Bg(
-            Rgba8(0, 0, 0, 40));
-    if (onClose.IsValid()) {
-        overlay->OnClick(onClose)->Click(HashClickId(StrL("sheet-overlay")));
+    El* backdrop = nullptr;
+    if (overlay) {
+        backdrop =
+            Div(a)->Absolute()->Top(0)->Left(0)->W(win.dipW)->H(win.dipH)->Bg(
+                Rgba8(0, 0, 0, 40));
+        if (onClose.IsValid()) {
+            backdrop->OnClick(onClose)
+                ->Click(HashClickId(StrL("sheet-overlay")));
+        }
     }
-    return gpui::Sheet::New(cx)->Overlay(overlay)->Surface(surface)->IntoEl();
+    return gpui::Sheet::New(cx)->Overlay(backdrop)->Surface(surface)->IntoEl();
 }
 
 } // namespace component
