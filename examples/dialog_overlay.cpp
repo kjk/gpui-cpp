@@ -5,64 +5,152 @@ using namespace gpui;
 enum {
     ClickOpenDialog = 1,
     ClickOpenSheet = 2,
-    ClickDismiss = 3,
-    ClickMenuOpen = 10,
-    ClickMenuDelete = 11,
-    ClickMenuExport = 12,
-    ClickMenuInfo = 13,
-    ClickCtx = 20,
+    ClickCloseOverlay = 3,
+    ClickHoverArea = 4,
+    ClickOverlayScrim = 5,
+    ClickMenuBase = 10, // + item index
 };
+
+enum {
+    OverlayNone = 0,
+    OverlayDialog = 1,
+    OverlaySheet = 2,
+};
+
+// dialog.rs: 448 wide, a tenth of the viewport down, and an overlay that is
+// present for hit testing but not painted. sheet.rs: 350 from the right, over
+// a visible overlay.
+static const float kDialogWidth = 448;
+static const float kSheetWidth = 350;
+
+static const char* kMenuItems[] = {"Open", "Delete", "Export", "Info"};
+static const int kMenuCount = 4;
 
 struct DialogApp {
     static El* Render(DialogApp* self, Ctx* cx);
-    int overlay = 0; // 1 dialog, 2 sheet
+
+    int overlay = OverlayNone;
+    bool menuOpen = false;
+    float menuX = 0;
+    float menuY = 0;
 };
 
 static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
-    (void)app;
-    Window* win = cx->win;
     if (ev->kind != MouseKind::Down) {
         return;
     }
-    float x = ev->x;
-    float y = ev->y;
-    int button = ev->button;
-    if (button == 2) {
-        cx->win->menu.open = true;
-        cx->win->menu.x = x;
-        cx->win->menu.y = y;
+    // The context menu belongs to the dashed area, so a right click anywhere
+    // else just dismisses it.
+    if (ev->button == 2) {
+        app->menuOpen = app->overlay == OverlayNone;
+        app->menuX = ev->x;
+        app->menuY = ev->y;
+        Notify(cx);
+        return;
+    }
+    if (app->menuOpen) {
+        app->menuOpen = false;
+        Notify(cx);
     }
 }
 
 static void OpenOverlay(DialogApp* app, Ctx* cx, const ClickEvent*,
                         intptr_t kind) {
     app->overlay = (int)kind;
-    cx->win->menu.open = false;
+    app->menuOpen = false;
     Notify(cx);
 }
 
-static void DismissAll(DialogApp* app, Ctx* cx, const ClickEvent*) {
-    app->overlay = 0;
-    cx->win->menu.open = false;
+static void CloseOverlay(DialogApp* app, Ctx* cx, const ClickEvent*) {
+    app->overlay = OverlayNone;
     Notify(cx);
 }
 
 static void MenuPicked(DialogApp* app, Ctx* cx, const ClickEvent*,
                        intptr_t ix) {
-    (void)app;
     logf("menu %d", (int)ix);
-    cx->win->menu.open = false;
+    app->menuOpen = false;
     Notify(cx);
 }
 
-static El* MdLine(Arena* a, Str s, Rgba c) {
-    return TextEl(a, s)->Font(14)->Fg(c)->Wrap();
+// A TextView::markdown stand-in: `**bold**` and `*italic*` runs, laid out a
+// word at a time so the paragraph wraps between words like the real one.
+static El* MdText(Ctx* cx, const char* text, float font, Rgba color) {
+    Arena* a = cx->a;
+    El* row = Div(a)->FlexRow()->FlexWrap()->W(kFill)->Gap(4);
+    bool bold = false;
+    bool italic = false;
+    char word[128];
+    int n = 0;
+    for (const char* p = text;; p++) {
+        if (*p == '*') {
+            // Flush what is buffered before the emphasis changes.
+            if (n > 0) {
+                El* t =
+                    TextEl(a, StrDup(a, Str(word, n)))->Font(font)->Fg(color);
+                if (bold) {
+                    t->Semibold();
+                }
+                if (italic) {
+                    t->Italic();
+                }
+                row->Child(t);
+                n = 0;
+            }
+            if (p[1] == '*') {
+                bold = !bold;
+                p++;
+            } else {
+                italic = !italic;
+            }
+            continue;
+        }
+        if (*p == ' ' || *p == 0) {
+            if (n > 0) {
+                El* t =
+                    TextEl(a, StrDup(a, Str(word, n)))->Font(font)->Fg(color);
+                if (bold) {
+                    t->Semibold();
+                }
+                if (italic) {
+                    t->Italic();
+                }
+                row->Child(t);
+                n = 0;
+            }
+            if (*p == 0) {
+                break;
+            }
+            continue;
+        }
+        if (n < (int)sizeof(word) - 1) {
+            word[n++] = *p;
+        }
+    }
+    return row;
+}
+
+// The header both overlays share: the title, and the close button opposite.
+static El* OverlayHeader(Ctx* cx, Str title) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* row = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+    row->Child(TextEl(a, title)->Font(15)->Semibold()->Fg(th.foreground));
+    row->Child(Div(a)
+                   ->W(20)
+                   ->H(20)
+                   ->ItemsCenter()
+                   ->JustifyCenter()
+                   ->Radius(4)
+                   ->HoverBg(th.muted)
+                   ->Click(ClickCloseOverlay)
+                   ->OnClick(Listen(cx, &CloseOverlay))
+                   ->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg)));
+    return row;
 }
 
 El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    Window* win = cx->win;
-
     WinSize size = WindowSize(cx->win);
     const Theme& th = cx->theme();
 
@@ -84,10 +172,12 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
             ->JustifyCenter()
             ->FlexCol()
             ->Gap(4)
-            ->Border(1, th.foreground)
+            // border_dashed over black, and gpui::yellow() at a fifth on
+            // hover: raw colors, like the rest of this example.
+            ->Border(1, Rgb(0, 0, 0))
             ->Dashed()
-            ->HoverBg(RgbaOpacity(th.yellow, 0.2f))
-            ->OnClick(Listen(cx, &DismissAll))
+            ->HoverBg(RgbaOpacity(Rgb(255, 255, 0), 0.2f))
+            ->Click(ClickHoverArea)
             ->Child(TextEl(frame, StrL("Hover test here."))
                         ->Font(14)
                         ->Fg(th.foreground))
@@ -106,16 +196,17 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                         ->Gap(16)
                         ->Child(ButtonEl(frame, ClickOpenDialog,
                                          StrL("Open dialog"), BtnKind::Outline)
-                                    ->OnClick(Listen(cx, &OpenOverlay, 1)))
+                                    ->OnClick(Listen(cx, &OpenOverlay,
+                                                     OverlayDialog)))
                         ->Child(ButtonEl(frame, ClickOpenSheet,
                                          StrL("Open Sheet"), BtnKind::Outline)
-                                    ->OnClick(Listen(cx, &OpenOverlay, 2))))
-            ->Child(MdLine(frame,
-                           StrL("Background text behind the modals. While a "
-                                "dialog or sheet is open, "
-                                "a selection started inside it must not extend "
-                                "onto this paragraph."),
-                           th.foreground))
+                                    ->OnClick(Listen(cx, &OpenOverlay,
+                                                     OverlaySheet))))
+            ->Child(MdText(cx,
+                           "**Background text** behind the modals. While a "
+                           "dialog or sheet is open, a selection started "
+                           "inside it must not extend onto this paragraph.",
+                           14, th.foreground))
             ->Child(hoverBox);
 
     El* root = Div(frame)
@@ -125,64 +216,81 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                    ->Child(bar)
                    ->Child(body);
 
-    if (app->overlay) {
-        const char* title =
-            app->overlay == 1 ? "Selectable dialog" : "Selectable Sheet";
-        const char* msg =
-            "Select this text, then drag the mouse out of the dialog over the "
-            "paragraph behind it. "
-            "The text behind must NOT get selected.";
-        El* panel =
-            Div(frame)
-                ->W(app->overlay == 1 ? 420.f : size.dipW * 0.5f)
-                ->Pad(20)
-                ->Gap(12)
-                ->FlexCol()
-                ->Radius(8)
-                ->Bg(th.background)
-                ->Border(1, th.border)
-                ->Child(TextEl(frame, Str(title))
-                            ->Font(18)
-                            ->Semibold()
-                            ->Fg(th.foreground))
-                ->Child(TextEl(frame, Str(msg))
-                            ->Font(14)
-                            ->Fg(th.foreground)
-                            ->Wrap())
-                ->Child(ButtonEl(frame, 0, StrL("Close"), BtnKind::Primary)
-                            ->OnClick(Listen(cx, &DismissAll)));
-        El* backdrop = Div(frame)
-                           ->Absolute()
-                           ->Top(0)
-                           ->Left(0)
-                           ->W(size.dipW)
-                           ->H(size.dipH)
-                           ->Bg(Rgba8(0, 0, 0, 80))
-                           ->OnClick(Listen(cx, &DismissAll))
-                           ->ItemsCenter()
-                           ->JustifyCenter()
-                           ->Child(panel);
-        if (app->overlay == 2) {
-            backdrop->ItemsStart()->JustifyCenter();
-            panel->W(size.dipW);
+    if (app->overlay != OverlayNone) {
+        bool dialog = app->overlay == OverlayDialog;
+        // The dialog's overlay is invisible, the sheet's is painted.
+        El* scrim = Div(frame)
+                        ->Absolute()
+                        ->Top(0)
+                        ->Left(0)
+                        ->W(size.dipW)
+                        ->H(size.dipH)
+                        ->Click(ClickOverlayScrim)
+                        ->OnClick(Listen(cx, &CloseOverlay));
+        if (!dialog) {
+            scrim->Bg(Rgba8(0, 0, 0, 13));
         }
-        root->Child(backdrop);
+        root->Child(scrim);
+
+        El* panel =
+            Div(frame)->Absolute()->FlexCol()->Gap(8)->Bg(th.background);
+        if (dialog) {
+            panel->W(kDialogWidth)
+                ->Left((size.dipW - kDialogWidth) * 0.5f)
+                ->Top(size.dipH / 10.f)
+                ->Pad(16)
+                ->Radius(8)
+                // GPUI drops a shadow here; a hairline is the nearest thing
+                // this runtime draws.
+                ->Border(1, th.border);
+        } else {
+            panel->W(kSheetWidth)
+                ->Left(size.dipW - kSheetWidth)
+                ->Top(0)
+                ->H(size.dipH)
+                ->Pad(16)
+                ->BorderL(1, th.border);
+        }
+        panel->Child(OverlayHeader(
+            cx, dialog ? StrL("Selectable dialog") : StrL("Selectable Sheet")));
+        panel->Child(MdText(cx,
+                            dialog ? "Select **this** text, then drag the "
+                                     "mouse *out of the dialog* over the "
+                                     "paragraph behind it. The text behind "
+                                     "must NOT get selected"
+                                   : "Select **this** text, then drag the "
+                                     "mouse *out of the sheet* over the "
+                                     "paragraph behind it. The text behind "
+                                     "must NOT get selected",
+                            14, th.foreground));
+        root->Child(panel);
     }
 
-    if (cx->win->menu.open) {
+    if (app->menuOpen) {
+        // PopupMenu: a card of plain rows at the cursor, no per-row frame.
         El* menu = Div(frame)
                        ->Absolute()
-                       ->Left(cx->win->menu.x)
-                       ->Top(cx->win->menu.y)
-                       ->W(140)
+                       ->Left(app->menuX)
+                       ->Top(app->menuY)
+                       ->W(130)
+                       ->PadY(4)
                        ->FlexCol()
                        ->Bg(th.background)
                        ->Border(1, th.border)
                        ->Radius(6);
-        const char* labels[] = {"Open", "Delete", "Export", "Info"};
-        for (int i = 0; i < 4; i++) {
-            menu->Child(ButtonEl(frame, 0, Str(labels[i]), BtnKind::Default)
-                            ->OnClick(Listen(cx, &MenuPicked, i)));
+        for (int i = 0; i < kMenuCount; i++) {
+            menu->Child(Div(frame)
+                            ->FlexRow()
+                            ->W(kFill)
+                            ->H(28)
+                            ->PadX(12)
+                            ->ItemsCenter()
+                            ->HoverBg(th.muted)
+                            ->Click(ClickMenuBase + i)
+                            ->OnClick(Listen(cx, &MenuPicked, i))
+                            ->Child(TextEl(frame, Str(kMenuItems[i]))
+                                        ->Font(14)
+                                        ->Fg(th.foreground)));
         }
         root->Child(menu);
     }
@@ -193,19 +301,11 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     App* app = AppNew();
     Entity<DialogApp> view = EntityNew<DialogApp>(app);
-    DialogApp* self = view.Get(app);
-    (void)self;
     ThemeSet(app, ThemeMode::Light);
     WinOpts opts = {};
     Window* win =
         WindowOpenView(app, StrL("Dialog Overlay"), 800, 600, view.id, opts);
     WindowOnMouse(win, ListenTo(view, &OnMouse));
-    win->menu.nItems = 4;
-    strncpy_s(win->menu.items[0], "Open", _TRUNCATE);
-    strncpy_s(win->menu.items[1], "Delete", _TRUNCATE);
-    strncpy_s(win->menu.items[2], "Export", _TRUNCATE);
-    strncpy_s(win->menu.items[3], "Info", _TRUNCATE);
-    win->menu.clickBase = ClickMenuOpen;
     int rc = AppRun(app);
     AppFree(app);
     return rc;

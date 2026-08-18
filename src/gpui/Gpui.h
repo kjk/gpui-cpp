@@ -374,7 +374,13 @@ struct Style {
     bool fontMedium = false; // font_medium(): DWrite weight 500
     bool fontMono = false;   // font_family("Consolas")
     bool underline = false;  // text_decoration_1()
+    bool italic = false;     // *emphasis*
     bool borderDashed = false;
+    // Dash on/off lengths for a dashed border, in stroke widths. GPUI's
+    // border_dashed draws 2 on, 1 off; a dashed Separator paints its own path
+    // with 4 on, 2 off.
+    float dashOn = 2;
+    float dashOff = 1;
     bool absolute = false;
     bool fixed = false; // out-of-flow in window coords (Rust deferred overlay)
     bool anchorBelow = false; // absolute, just under the parent box
@@ -466,9 +472,11 @@ struct El {
     El* Medium();
     El* Mono();
     El* Underline();
+    El* Italic();
     El* Selectable();
     El* Wrap();
     El* Dashed();
+    El* DashArray(float on, float off);
     El* Absolute();
     El* Fixed();
     El* AnchorBelow(float gap = 0);

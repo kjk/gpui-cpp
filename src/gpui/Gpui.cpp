@@ -453,6 +453,11 @@ El* El::BorderR(float width, Rgba c) {
     style.borderColor = c;
     return this;
 }
+El* El::DashArray(float on, float off) {
+    style.dashOn = on;
+    style.dashOff = off;
+    return this;
+}
 El* El::Radius(float r) {
     style.radius = r;
     return this;
@@ -532,6 +537,10 @@ El* El::Mono() {
 }
 El* El::Underline() {
     style.underline = true;
+    return this;
+}
+El* El::Italic() {
+    style.italic = true;
     return this;
 }
 El* El::Selectable() {
@@ -626,7 +635,8 @@ int DipToPx(PaintCtx* ctx, float dip) {
 enum {
     kFontWeightMask = 3,
     kFontMono = 4,
-    kFontUnderline = 8
+    kFontUnderline = 8,
+    kFontItalic = 16
 };
 
 static IDWriteTextFormat* FontFor(PaintCtx* ctx, float fontSize,
@@ -773,6 +783,9 @@ static uint8_t ElTextWeight(const El* e) {
     }
     if (e->style.underline) {
         w |= kFontUnderline;
+    }
+    if (e->style.italic) {
+        w |= kFontItalic;
     }
     return w;
 }
@@ -1101,6 +1114,9 @@ static IDWriteTextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     }
     if (weight & kFontUnderline) {
         layout->SetUnderline(TRUE, range);
+    }
+    if (weight & kFontItalic) {
+        layout->SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range);
     }
     layout->SetWordWrapping(wrap && maxW > 0 ? DWRITE_WORD_WRAPPING_WRAP
                                              : DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -2366,9 +2382,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         ctx->scrolls.Append(sr);
     }
 
-    if (e->style.hasHoverBg &&
-        ((e->clickId && e->clickId == ctx->hoverId) ||
-         (e->onClick.IsValid() && e->clickId == ctx->hoverId))) {
+    // The hover background needs a click id of its own: without one the
+    // element would match hoverId 0, which means nothing is hovered.
+    if (e->style.hasHoverBg && e->clickId && e->clickId == ctx->hoverId) {
         FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
                   e->style.hoverBg);
     } else if (e->style.hasBg) {
@@ -2378,10 +2394,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipFixed) {
         if (e->style.borderDashed) {
             ID2D1StrokeStyle* dash = nullptr;
             D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties();
-            // In stroke widths: a 4px dash with a 3px gap at 1px, which is
-            // what GPUI's dashed border draws. D2D's own DASH style is 2/2 and
-            // reads as dotted.
-            const float kDashes[] = {4.f, 3.f};
+            // In stroke widths; the default is what GPUI's border_dashed
+            // draws. D2D's own DASH style is 2/2 and reads too sparse.
+            const float kDashes[] = {e->style.dashOn, e->style.dashOff};
             sp.dashStyle = D2D1_DASH_STYLE_CUSTOM;
             ctx->d2d->CreateStrokeStyle(sp, kDashes, 2, &dash);
             SetBrush(ctx, e->style.borderColor);

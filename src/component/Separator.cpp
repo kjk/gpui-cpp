@@ -47,7 +47,8 @@ El* Separator::IntoEl() {
         // paint the gaps back in.
         El* lineEl = Div(a)->W(1)->H(kFill);
         if (line == SeparatorStyle::Dashed) {
-            lineEl->Dashed()->Border(1, c);
+            // PathBuilder::stroke(1).dash_array([4, 2]) in separator.rs.
+            lineEl->Dashed()->DashArray(4, 2)->Border(1, c);
         } else {
             lineEl->Bg(c);
         }
@@ -56,7 +57,8 @@ El* Separator::IntoEl() {
         root->W(kFill)->H(label.s ? 24.f : 1.f);
         El* lineEl = Div(a)->H(1)->W(kFill);
         if (line == SeparatorStyle::Dashed) {
-            lineEl->Dashed()->Border(1, c);
+            // PathBuilder::stroke(1).dash_array([4, 2]) in separator.rs.
+            lineEl->Dashed()->DashArray(4, 2)->Border(1, c);
         } else {
             lineEl->Bg(c);
         }
