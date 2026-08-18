@@ -140,6 +140,12 @@ static component::Input* Field(InputStory* self, Ctx* cx, int slot,
         ->OnClear(ListenerArg(clear, slot));
 }
 
+// section() is a justify_center wrapping row, so a readout that wraps under
+// its field is centered rather than pinned to the field's left edge.
+static El* Centered(Ctx* cx, El* child) {
+    return Div(cx->a)->FlexRow()->W(kFill)->JustifyCenter()->Child(child);
+}
+
 El* InputStory::Render(InputStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -285,9 +291,10 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                                 "Format currency while retaining its value.");
     El* currencyCol = Div(a)->FlexCol()->W(512)->Gap(16);
     currencyCol->Child(Field(self, cx, InCurrency, focus, clear)->IntoEl());
-    currencyCol->Child(StoryTxt(
-        cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InCurrency].buf), 16,
-        th.foreground));
+    currencyCol->Child(Centered(
+        cx, StoryTxt(
+                cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InCurrency].buf),
+                16, th.foreground)));
     StorySectionAdd(currency, currencyCol);
     page->Child(currency);
 
@@ -295,14 +302,14 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                              "Expose formatted and raw phone values.");
     El* phoneCol = Div(a)->FlexCol()->W(512)->Gap(16);
     phoneCol->Child(Field(self, cx, InPhone, focus, clear)->IntoEl());
-    El* phoneVals = Div(a)->FlexCol()->W(kFill);
+    El* phoneVals = Div(a)->FlexCol();
     phoneVals->Child(
         StoryTxt(cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InPhone].buf),
                  16, th.foreground));
     phoneVals->Child(StoryTxt(
         cx, StoryFmt(cx, "Unmask Value: \"%s\"", self->fields[InPhone].buf), 16,
         th.foreground));
-    phoneCol->Child(phoneVals);
+    phoneCol->Child(Centered(cx, phoneVals));
     StorySectionAdd(phone, phoneCol);
     page->Child(phone);
 
@@ -310,7 +317,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                                "Combine letter and number placeholders.");
     El* patternCol = Div(a)->FlexCol()->W(512)->Gap(16);
     patternCol->Child(Field(self, cx, InMaskPattern, focus, clear)->IntoEl());
-    El* patternVals = Div(a)->FlexCol()->W(kFill);
+    El* patternVals = Div(a)->FlexCol();
     patternVals->Child(StoryTxt(
         cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InMaskPattern].buf), 16,
         th.foreground));
@@ -318,8 +325,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         cx,
         StoryFmt(cx, "Unmask Value: \"%s\"", self->fields[InMaskPattern].buf),
         16, th.foreground));
-    patternCol->Child(patternVals);
-    StorySectionAdd(pattern, patternVals ? patternCol : patternCol);
+    patternCol->Child(Centered(cx, patternVals));
+    StorySectionAdd(pattern, patternCol);
     page->Child(pattern);
 
     El* validation =
@@ -342,8 +349,9 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                            ? StoryFmt(cx, "Value: Some(\"%s\")",
                                       self->fields[self->focusedField].buf)
                            : StoryDup(cx, "Value: None");
-    StorySectionAdd(focusedSec, StoryTxt(cx, focusedValue, 16, th.foreground)
-                                    ->W(512));
+    StorySectionAdd(focusedSec,
+                    Centered(cx, StoryTxt(cx, focusedValue, 16, th.foreground))
+                        ->W(512));
     page->Child(focusedSec);
 
     El* custom = StorySection(cx, "Custom appearance",
