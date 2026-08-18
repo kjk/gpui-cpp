@@ -219,8 +219,11 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
     if (desc && desc[0]) {
         head->Child(StoryTxt(cx, StoryDup(cx, desc), 12, th.mutedFg)->Wrap());
     }
+    // section(): h_flex().w_full().flex_wrap().justify_center().items_center()
+    // .gap_4() inside the pane.
     El* body = Div(a)
-                   ->FlexCol()
+                   ->FlexRow()
+                   ->FlexWrap()
                    ->Gap(16)
                    ->Pad(16)
                    ->W(kFill)

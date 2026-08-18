@@ -339,6 +339,8 @@ struct Style {
     float lineHeight = 0;
     bool truncate = false;
     bool wrap = false;
+    // flex_wrap on a row: children that do not fit start a new line.
+    bool flexWrap = false;
     bool hasBg = false;
     bool hasColor = false;
     bool fontBold = false;
@@ -387,6 +389,7 @@ struct El {
 
     El* FlexRow();
     El* FlexCol();
+    El* FlexWrap();
     El* Grow(float g = 1);
     El* Shrink0();
     El* W(float v);

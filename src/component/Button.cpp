@@ -107,6 +107,12 @@ El* Button::IntoEl() {
     const Theme& th = cx->theme();
     Rgba bg = th.secondary, fg = th.secondaryFg, hover = th.secondaryHover,
          bd = th.border;
+    // The status variants are washes, not fills: crates/ui's button_danger and
+    // friends are the status color mixed 20% toward transparent, with the
+    // color itself as the text and the same wash as the border. Outlined, the
+    // wash drops to 10% and the border goes to 60%.
+    Rgba accent = {};
+    bool hasAccent = false;
     switch (variant) {
         case ButtonVariant::Primary:
             bg = th.primary;
@@ -115,28 +121,20 @@ El* Button::IntoEl() {
             bd = th.primary;
             break;
         case ButtonVariant::Danger:
-            bg = th.danger;
-            fg = th.dangerFg;
-            hover = RgbaMix(th.danger, th.foreground, 0.85f);
-            bd = th.danger;
+            accent = th.danger;
+            hasAccent = true;
             break;
         case ButtonVariant::Success:
-            bg = th.success;
-            fg = th.successFg;
-            hover = RgbaMix(th.success, th.foreground, 0.85f);
-            bd = th.success;
+            accent = th.success;
+            hasAccent = true;
             break;
         case ButtonVariant::Warning:
-            bg = th.warning;
-            fg = th.warningFg;
-            hover = RgbaMix(th.warning, th.foreground, 0.85f);
-            bd = th.warning;
+            accent = th.warning;
+            hasAccent = true;
             break;
         case ButtonVariant::Info:
-            bg = th.info;
-            fg = th.infoFg;
-            hover = RgbaMix(th.info, th.foreground, 0.85f);
-            bd = th.info;
+            accent = th.info;
+            hasAccent = true;
             break;
         case ButtonVariant::Ghost:
         case ButtonVariant::Text:
@@ -154,6 +152,12 @@ El* Button::IntoEl() {
         default:
             break;
     }
+    if (hasAccent) {
+        bg = RgbaOpacity(accent, 0.2f);
+        fg = accent;
+        hover = RgbaOpacity(accent, 0.3f);
+        bd = bg;
+    }
     if (hasCustom) {
         fg = custom;
         bd = custom;
@@ -161,8 +165,18 @@ El* Button::IntoEl() {
         hover = RgbaOpacity(custom, 0.2f);
     }
     if (outline && !hasCustom) {
-        bg = th.background;
-        hover = th.muted;
+        if (hasAccent) {
+            bg = RgbaOpacity(accent, 0.1f);
+            bd = RgbaOpacity(accent, 0.6f);
+            hover = RgbaOpacity(accent, 0.2f);
+        } else if (variant == ButtonVariant::Primary) {
+            bg = RgbaOpacity(th.primary, 0.1f);
+            fg = th.primary;
+            hover = RgbaOpacity(th.primary, 0.2f);
+        } else {
+            bg = th.background;
+            hover = th.muted;
+        }
     }
     if (selected) {
         bg = th.secondaryActive;
@@ -171,8 +185,19 @@ El* Button::IntoEl() {
     if (disabled) {
         fg = th.mutedFg;
     }
-    float h = UiSizePx(size);
-    float padX = compact ? 8.f : 12.f;
+    // crates/ui/src/button: h_5/px_1, h_6/px_2, h_8/px_2p5, h_8/px_3, with a
+    // tighter px when compact. Buttons do not use the generic control height.
+    float h = 32.f;
+    float padX = compact ? 8.f : 10.f;
+    if (size == UiSize::XSmall) {
+        h = 20.f;
+        padX = 4.f;
+    } else if (size == UiSize::Small) {
+        h = 24.f;
+        padX = compact ? 6.f : 8.f;
+    } else if (size == UiSize::Large) {
+        padX = compact ? 8.f : 12.f;
+    }
     if (variant == ButtonVariant::Text || variant == ButtonVariant::Link) {
         padX = 0;
         h = 0;
@@ -207,7 +232,12 @@ El* Button::IntoEl() {
         e->Child(IconEl(a, icon, 14)->Fg(fg));
     }
     if (label.s) {
-        e->Child(TextEl(a, label)->Font(UiFontPx(size))->Fg(fg));
+        // button_text_size: text_xs, text_sm, then text_base — a step larger
+        // than the generic control font.
+        float fontPx = size == UiSize::XSmall  ? 12.f
+                       : size == UiSize::Small ? 14.f
+                                               : 16.f;
+        e->Child(TextEl(a, label)->Font(fontPx)->Fg(fg));
     }
     if (dropdown) {
         e->Child(IconEl(a, IconName::ChevronDown, 12)->Fg(fg));

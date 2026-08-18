@@ -313,6 +313,10 @@ El* El::FlexCol() {
     style.dir = FlexDir::Col;
     return this;
 }
+El* El::FlexWrap() {
+    style.flexWrap = true;
+    return this;
+}
 El* El::Grow(float g) {
     style.flexGrow = g;
     return this;
@@ -1593,6 +1597,91 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                 LayoutEl(ctx, c, 0, 0, crossAvail, h, inheritFont, inheritFg);
                 c->h = h;
             }
+        }
+    }
+
+    // flex_wrap: pack the children into lines no wider than the content box,
+    // then stack the lines. justify applies inside a line, align across it.
+    // Every story section is a wrapping row, so its content reflows instead of
+    // running off the right edge.
+    if (row && e->style.flexWrap && mainAvail > 0) {
+        enum {
+            kMaxWrapItems = 256
+        };
+        El* items[kMaxWrapItems];
+        int nItems = 0;
+        bool tooMany = false;
+        for (El* c = e->first; c; c = c->next) {
+            if (c->style.absolute) {
+                continue;
+            }
+            if (nItems >= kMaxWrapItems) {
+                tooMany = true;
+                break;
+            }
+            items[nItems++] = c;
+        }
+        if (!tooMany) {
+            float lineY = 0;
+            float widest = 0;
+            int i = 0;
+            while (i < nItems) {
+                int j = i;
+                float lineW = 0;
+                float lineH = 0;
+                while (j < nItems) {
+                    float next =
+                        j > i ? lineW + gap + items[j]->w : items[j]->w;
+                    if (j > i && next > mainAvail) {
+                        break;
+                    }
+                    lineW = next;
+                    if (items[j]->h > lineH) {
+                        lineH = items[j]->h;
+                    }
+                    j++;
+                }
+                float x = 0;
+                if (e->style.justify == Justify::Center) {
+                    x = (mainAvail - lineW) * 0.5f;
+                } else if (e->style.justify == Justify::End) {
+                    x = mainAvail - lineW;
+                }
+                if (x < 0) {
+                    x = 0;
+                }
+                for (int k = i; k < j; k++) {
+                    El* c = items[k];
+                    float cross = 0;
+                    if (e->style.align == Align::Center) {
+                        cross = (lineH - c->h) * 0.5f;
+                    } else if (e->style.align == Align::End) {
+                        cross = lineH - c->h;
+                    }
+                    float cx = e->x + padL + x;
+                    float cy = e->y + padT + lineY + cross - e->scrollY;
+                    c->x = cx;
+                    c->y = cy;
+                    if (c->first) {
+                        LayoutEl(ctx, c, cx, cy, c->w, c->h, inheritFont,
+                                 inheritFg);
+                    }
+                    x += c->w + gap;
+                }
+                if (lineW > widest) {
+                    widest = lineW;
+                }
+                lineY += lineH + gap;
+                i = j;
+            }
+            e->contentW = widest;
+            e->contentH = lineY > 0 ? lineY - gap : 0;
+            for (El* c = e->first; c; c = c->next) {
+                if (c->style.absolute) {
+                    PlaceOutOfFlow(ctx, e, c, inheritFont, inheritFg);
+                }
+            }
+            return;
         }
     }
 
