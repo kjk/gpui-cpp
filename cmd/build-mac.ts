@@ -155,7 +155,8 @@ function outDirName(debug: boolean, asan: boolean): string {
 
 // The portable core plus the macOS half; see cmd/build-dist.ts.
 const macAmalgam = ".work/gpui_mac.cpp";
-const amalgamSrc = [".work/gpui.cpp", macAmalgam];
+// ext/md4c is C and stays its own translation unit.
+const amalgamSrc = [".work/gpui.cpp", macAmalgam, "ext/md4c/md4c.c"];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -295,6 +296,9 @@ function needsCompile(src: string, obj: string, includes: string[]): boolean {
 // src/ui/Button.cpp and examples/showcase/button.cpp would both write
 // button.o, so each group gets its own object directory.
 function objGroup(f: string): string {
+  if (f.startsWith("ext/")) {
+    return "ext";
+  }
   if (f.startsWith(".work/gpui") || f.startsWith("src/gpui/")) {
     return "gpui";
   }
@@ -320,6 +324,8 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "-std=c++20",
     "-I",
     ".work",
+    "-I",
+    "ext/md4c",
     "-Wall",
     "-Wextra",
     "-Werror",
@@ -361,7 +367,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   for (const srcFile of ["examples/AppLog.cpp", ...src]) {
     const objDir = join(outDir, "obj", objGroup(srcFile));
     mkdirSync(join(root, objDir), { recursive: true });
-    const obj = join(objDir, basename(srcFile).replace(/\.cpp$/i, ".o"));
+    const obj = join(objDir, basename(srcFile).replace(/\.(cpp|c)$/i, ".o"));
     objs.push(obj);
     const deps = quotedIncludes(srcFile, includeMemo);
     if (flagsChanged || needsCompile(srcFile, obj, deps)) {
@@ -372,9 +378,16 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   }
   for (const srcFile of dirty) {
     const objDir = join(outDir, "obj", objGroup(srcFile));
-    const obj = join(objDir, basename(srcFile).replace(/\.cpp$/i, ".o"));
+    const obj = join(objDir, basename(srcFile).replace(/\.(cpp|c)$/i, ".o"));
     const extra = srcFile === macAmalgam ? objcFlags : [];
-    run([cxx, ...cflags, ...extra, "-c", srcFile, "-o", obj]);
+    // md4c is C, and it is not ours to keep warning-clean.
+    const isC = srcFile.endsWith(".c");
+    const flags = isC
+      ? cflags
+          .filter((f) => f !== "-std=c++20" && f !== "-Werror" && f !== "-fno-rtti")
+          .concat(["-x", "c", "-std=c11", "-w"])
+      : cflags;
+    run([cxx, ...flags, ...extra, "-c", srcFile, "-o", obj]);
   }
   mkdirSync(join(root, outDir, "obj"), { recursive: true });
   writeFileSync(join(root, stampPath), flagsKey);

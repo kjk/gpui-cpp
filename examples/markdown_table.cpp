@@ -38,11 +38,14 @@ static const char* ModeLabel(int mode) {
     return "Table: scroll (adaptive)";
 }
 
+// component::TextView proportions table columns by content and shrinks them
+// to a floor; the modes are three floors, from "let it wrap" to "keep every
+// column wide".
 static float ModeColumnWidth(int mode) {
     if (mode == ModeNowrap) {
-        return 180.f;
+        return 200.f;
     }
-    return mode == ModeAdaptive ? 140.f : 110.f;
+    return mode == ModeAdaptive ? 96.f : 48.f;
 }
 
 El* MdApp::Render(MdApp* app, Ctx* cx) {

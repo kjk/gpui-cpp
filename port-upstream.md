@@ -24,6 +24,11 @@ Trees we actually translate:
 - `crates/base/examples/showcase` → `examples/showcase/`
 - `examples/*` → `examples/*.cpp`
 
+One upstream file is checked in verbatim rather than translated:
+`README.md` → `assets/story/README.md`, which is what the Introduction page
+renders (`markdown(include_str!("README.md"))` in `welcome_story.rs`). Copy it
+again when the pin moves: `cp .work/gpui-component/README.md assets/story/`.
+
 Ingest a newer checkin:
 
 ```

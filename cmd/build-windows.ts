@@ -146,7 +146,8 @@ function outDirName(debug: boolean, asan: boolean): string {
 }
 
 // The portable core plus the Windows half; see cmd/build-dist.ts.
-const amalgamSrc = [".work/gpui.cpp", ".work/gpui_win.cpp"];
+// ext/md4c is C and stays its own translation unit.
+const amalgamSrc = [".work/gpui.cpp", ".work/gpui_win.cpp", "ext/md4c/md4c.c"];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -236,13 +237,16 @@ function copyAsanDll(outDir: string) {
 
 function groupSources(files: string[]): { key: string; files: string[] }[] {
   const buckets: Record<string, string[]> = {
+    ext: [],
     gpui: [],
     showcase: [],
     story: [],
     ex: [],
   };
   for (const f of files) {
-    if (f.startsWith(".work/gpui") || f.startsWith("src/gpui/")) {
+    if (f.startsWith("ext/")) {
+      buckets.ext.push(f);
+    } else if (f.startsWith(".work/gpui") || f.startsWith("src/gpui/")) {
       buckets.gpui.push(f);
     } else if (f.startsWith("examples/showcase/")) {
       buckets.showcase.push(f);
@@ -346,6 +350,8 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "/utf-8",
     "/I",
     ".work",
+    "/I",
+    "ext/md4c",
     "/DUNICODE",
     "/D_UNICODE",
     "/W4",
@@ -388,7 +394,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     mkdirSync(join(root, objDir), { recursive: true });
     const dirty: string[] = [];
     for (const srcFile of g.files) {
-      const obj = join(objDir, basename(srcFile).replace(/\.cpp$/i, ".obj"));
+      const obj = join(objDir, basename(srcFile).replace(/\.(cpp|c)$/i, ".obj"));
       objs.push(obj);
       const deps = quotedIncludes(srcFile, includeMemo);
       if (flagsChanged || needsCompile(srcFile, obj, deps)) {
@@ -398,7 +404,14 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
       }
     }
     if (dirty.length > 0) {
-      runCl([...cflags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...dirty]);
+      // md4c is C, and it is not ours to keep warning-clean.
+      const flags =
+        g.key === "ext"
+          ? cflags
+              .filter((f) => f !== "/std:c++20" && f !== "/EHsc" && f !== "/W4" && f !== "/WX")
+              .concat(["/TC", "/std:c17", "/w"])
+          : cflags;
+      runCl([...flags, "/c", `/Fo${objDir}\\`, `/Fd${objDir}\\`, ...dirty]);
       compiled += dirty.length;
     }
   }
