@@ -127,6 +127,7 @@ const Theme& ThemeDark() {
         t.warning = Rgb(0xfa, 0xcc, 0x15);
         t.warningFg = Rgb(0x0a, 0x0a, 0x0a);
         t.skeleton = Rgb(0x26, 0x26, 0x26);
+        t.overlay = Rgba8(0, 0, 0, 0x33);
         t.descListLabel = Rgb(0x17, 0x17, 0x17);
         t.descListLabelFg = Rgb(0xf5, 0xf5, 0xf5);
         t.radius = 6;
@@ -188,6 +189,7 @@ const Theme& ThemeLight() {
         t.warning = Rgb(0xea, 0xb3, 0x08);
         t.warningFg = Rgb(0x17, 0x17, 0x17);
         t.skeleton = Rgb(0xf5, 0xf5, 0xf5);
+        t.overlay = Rgba8(0, 0, 0, 0x0d);
         t.descListLabel = Rgb(0xfa, 0xfa, 0xfa);
         t.descListLabelFg = Rgb(0x17, 0x17, 0x17);
         t.radius = 6;

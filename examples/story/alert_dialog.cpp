@@ -79,8 +79,13 @@ static const AlertSpec kAlerts[] = {
 static component::Dialog* Alert(AlertDialogStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     Listener close = Listen(cx, &CloseAlert);
-    component::Dialog* d =
-        component::Dialog::New(cx)->Open(true)->OnClose(close)->OnOk(close);
+    // The alert layer never turns its overlay on, so the page behind keeps
+    // its own colors.
+    component::Dialog* d = component::Dialog::New(cx)
+                               ->Open(true)
+                               ->Overlay(false)
+                               ->OnClose(close)
+                               ->OnOk(close);
 
     switch (self->open) {
         case AlertDefault:

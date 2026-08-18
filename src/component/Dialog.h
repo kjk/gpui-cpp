@@ -22,6 +22,8 @@ struct Dialog {
 
     // AlertDialog::w.
     float width = 448;
+    // DialogProps::overlay. The alert story's dialogs never tint the page.
+    bool overlay = true;
     // AlertDialog::icon sits inline before the title. A story that builds its
     // own DialogHeader can center the group instead and put a large glyph
     // above it.
@@ -55,6 +57,7 @@ struct Dialog {
     Dialog* Open(bool v);
     Dialog* Body(El* e);
     Dialog* W(float px);
+    Dialog* Overlay(bool v);
     Dialog* Icon(IconName n, Rgba color, float size = 16);
     Dialog* HeaderCentered(bool v = true);
     Dialog* OkText(Str s);

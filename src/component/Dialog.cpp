@@ -32,6 +32,10 @@ Dialog* Dialog::W(float px) {
     width = px;
     return this;
 }
+Dialog* Dialog::Overlay(bool v) {
+    overlay = v;
+    return this;
+}
 Dialog* Dialog::Icon(IconName n, Rgba color, float size) {
     icon = n;
     iconColor = color;
@@ -232,24 +236,28 @@ El* Dialog::IntoEl(WinSize size) {
         BindClick(x, StrL("dialog-close-x"), onClose);
         panel->Child(x);
     }
-    El* backdrop = DialogBackdrop::New(cx)
-                       ->Absolute()
-                       ->Top(0)
-                       ->Left(0)
-                       ->W(size.dipW)
-                       ->H(size.dipH)
-                       ->Bg(Rgba8(0, 0, 0, 51));
+    // Fixed, not absolute: Rust hangs the dialog off the window Root, so it
+    // covers and centers on the window rather than on whatever page element
+    // happens to contain it.
+    El* backdrop =
+        DialogBackdrop::New(cx)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
+    if (overlay) {
+        backdrop->Bg(th.overlay);
+    }
     if (onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
     }
+    // DialogProps::margin_top: a tenth of the viewport down from the top,
+    // not centered in it.
     El* popup = DialogPopup::New(cx)
-                    ->Absolute()
+                    ->Fixed()
                     ->Top(0)
                     ->Left(0)
-                    ->W(size.dipW)
-                    ->H(size.dipH)
+                    ->W(kFill)
+                    ->H(kFill)
+                    ->FlexCol()
                     ->ItemsCenter()
-                    ->JustifyCenter()
+                    ->PadT(size.dipH * 0.1f)
                     ->Child(panel);
     return gpui::Dialog::New(cx)->Backdrop(backdrop)->Popup(popup)->IntoEl();
 }
