@@ -3,11 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickSelect = 480,
-    ClickSel0 = 481
-};
-
 static const char* kFw[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
 static void ToggleSelect(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
@@ -28,17 +23,18 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
     if (sel < 0 || sel > 3) {
         sel = 0;
     }
+    // The trigger fills the select root: GPUI lays a plain div out as a block,
+    // so its child spans the w_56 the root was given.
     El* trigger = Div(a)
                       ->Id(StrL("select-trigger"))
+                      ->Click(HashClickId(StrL("select-trigger")))
+                      ->W(kFill)
                       ->H(28)
                       ->PadX(8)
                       ->ItemsCenter()
                       ->JustifyBetween()
                       ->Border(1, Rgb(0x17, 0x17, 0x17))
-                      ->Bg(Rgb(0xff, 0xff, 0xff))
                       ->OnClick(Listen(cx, &ToggleSelect))
-                      ->FocusId(0)
-                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
                       ->Child(TextEl(a, Str(kFw[sel]))
                                   ->Font(12)
                                   ->Fg(Rgb(0x17, 0x17, 0x17)))
@@ -54,6 +50,7 @@ El* ShowcaseSelect(ShowcaseApp* app, Ctx* cx) {
                    ->Bg(Rgb(0xff, 0xff, 0xff));
         for (int i = 0; i < 4; i++) {
             El* row = Div(a)
+                          ->Click(HashClickId(fmt("select-option-%d", i)))
                           ->PadX(8)
                           ->PadY(4)
                           ->FlexRow()
