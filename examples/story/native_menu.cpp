@@ -35,11 +35,12 @@ static El* NativeTrigger(Ctx* cx, const char* label, int which,
 }
 
 static El* DemoMenu(Ctx* cx) {
-    return component::Menu::New(cx)
-        ->Item(StrL("New"))
-        ->Item(StrL("Open..."))
-        ->Item(StrL("Save"))
-        ->Item(StrL("Quit"))
+    return component::PopupMenu::New(cx, StrL("native-demo-menu"))
+        ->Menu(StrL("New"))
+        ->Menu(StrL("Open..."))
+        ->Menu(StrL("Save"))
+        ->Separator()
+        ->Menu(StrL("Quit"))
         ->IntoEl();
 }
 

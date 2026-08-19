@@ -483,7 +483,9 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     if (!in.IsFocusing()) {
         const HitRect* other = HitTestRect(&win->paint, x, y);
         if (other && other->onMouseDown.IsValid()) {
-            ListenerCall(win->app, win, other->onMouseDown, &in);
+            MouseDownEvent ev = in;
+            ev.el = other->bounds;
+            ListenerCall(win->app, win, other->onMouseDown, &ev);
         }
         AppInvalidate(win);
         return;
@@ -513,7 +515,9 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // itself — a slider jumping to it — gets the whole event, not the
     // ClickEvent the click path builds.
     if (hit && hit->onMouseDown.IsValid()) {
-        ListenerCall(win->app, win, hit->onMouseDown, &in);
+        MouseDownEvent ev = in;
+        ev.el = hit->bounds;
+        ListenerCall(win->app, win, hit->onMouseDown, &ev);
     }
     if (hit && hit->slider) {
         SliderPress(win, hit, {x, y});

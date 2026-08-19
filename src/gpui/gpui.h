@@ -332,6 +332,11 @@ struct MouseDownEvent {
     MouseButton button = MouseButton::Left;
     float x = 0;
     float y = 0;
+    // The box of the element the press landed on, when it has an identity —
+    // the same thing ClickEvent::el carries, and what a handler needs to
+    // place something where the press was inside it. A Rust hitbox has the
+    // bounds too; the event does not, because the closure already has them.
+    Bounds el = {};
     Modifiers modifiers = {};
     // How many presses this one is in an unbroken run: 1, 2, 3… What Rust's
     // on_double_click tests — `on_click(|ev, ..| ev.click_count() == 2)`.
