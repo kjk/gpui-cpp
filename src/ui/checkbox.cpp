@@ -68,13 +68,16 @@ El* Checkbox::IntoEl() {
         Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;
         ind->Bg(mark)->Child(IconEl(a, IconName::Check, box - 4)->Fg(tick));
     }
-    El* row = gpui::Checkbox::New(cx, id, disabled ? 0 : HashClickId(id))
+    // gpui_base::Checkbox owns identity, focus and activation. It hands the
+    // handler the state the activation produces; the themed checkbox is
+    // boolean, and CheckboxState::Unchecked / Checked are 0 and 1, so what
+    // the caller reads is the `!checked` Rust passes on.
+    CheckboxState state =
+        checked ? CheckboxState::Checked : CheckboxState::Unchecked;
+    El* row = gpui::Checkbox::New(cx, id, state, disabled, onClick)
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);
-    if (onClick.IsValid() && !disabled) {
-        row->OnClick(ListenerArg(onClick, !checked));
-    }
     if (tooltip.s) {
         row->Tip(tooltip);
     }

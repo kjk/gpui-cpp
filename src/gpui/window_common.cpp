@@ -97,6 +97,17 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
 }
 
 // The hit rect an element id painted, from the last frame. The tree is
+// Whether the frame gave this id a focus handle. CollectFocus walks the tree
+// for `FocusId`, so an element that only has `Click(id)` is missing here.
+static bool FocusIdIsFocusable(Window* win, int id) {
+    for (int i = 0; i < win->focusEls.len; i++) {
+        if (win->focusEls[i].id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // rebuilt every frame, so an id is the only handle that survives one.
 static const HitRect* HitRectById(Window* win, int id) {
     if (!win || !id) {
@@ -148,9 +159,14 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         ev.alt = alt;
         ListenerCall(win->app, win, win->onKey, &ev);
     }
-    // Enter activates the focused element: run that element's own listener,
-    // the one a click on it would have run.
-    if (key == KeyReturn && win->focusId && !win->eatReturn && !eaten) {
+    // Enter and Space both activate the focused element: run that element's
+    // own listener, the one a click on it would have run. GPUI turns either
+    // keystroke on a focused clickable element into a click, which is what
+    // checkbox.rs's `enter_and_space_each_emit_once` pins. A focused field
+    // takes the space as text instead, so it never reaches the element.
+    bool activates = (key == KeyReturn && !win->eatReturn) ||
+                     (key == KeySpace && !(win->input && win->input->focused));
+    if (activates && win->focusId && !eaten) {
         const HitRect* focused = HitRectById(win, win->focusId);
         // GPUI's ClickEvent::Keyboard: no pointer was involved, so the
         // position is the element's own box.
@@ -365,7 +381,11 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     int id = hit ? hit->id : 0;
     win->mouseDown = true;
     win->pressedId = id;
-    if (id) {
+    // A press takes focus only where there is a focus handle to take. Rust
+    // gives a disabled widget its element id all the same — `div().id(id)` is
+    // what makes it hit-testable and hoverable — and hangs `track_focus` off
+    // `when(!disabled)`, so pressing one leaves focus where it was.
+    if (id && FocusIdIsFocusable(win, id)) {
         win->focusId = id;
     }
     // on_mouse_down, ahead of the click: an element that wants the press

@@ -3,13 +3,12 @@
 
 using namespace gpui;
 
-enum {
-    ClickCheckbox = 280
-};
-
-static void OnCheckbox(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
-    (void)app;
-    app->checkboxOn = !app->checkboxOn;
+// The box hands the handler the state its activation produces, the way Rust's
+// on_change reports `next_state`. The page stores what it is told instead of
+// flipping its own copy.
+static void OnCheckbox(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t next) {
+    app->checkboxOn = (CheckboxState)next == CheckboxState::Checked;
     Notify(cx);
 }
 
@@ -27,8 +26,9 @@ El* ShowcaseCheckbox(ShowcaseApp* app, Ctx* cx) {
         indicator->Bg(Rgb(0x17, 0x17, 0x17))
             ->Child(TextEl(a, StrL("✓"))->Font(11)->Fg(Rgb(0xff, 0xff, 0xff)));
     }
-    return Checkbox::New(cx, StrL("example-checkbox"), ClickCheckbox)
-        ->OnClick(Listen(cx, &OnCheckbox))
+    return Checkbox::New(cx, StrL("example-checkbox"),
+                         on ? CheckboxState::Checked : CheckboxState::Unchecked,
+                         false, Listen(cx, &OnCheckbox))
         ->FlexRow()
         ->ItemsCenter()
         ->Gap(8)
