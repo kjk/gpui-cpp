@@ -1,0 +1,24 @@
+/* Themed breadcrumb — crates/ui/src/breadcrumb.rs */
+
+#include "ui/sizing.h"
+
+namespace gpui {
+
+namespace component {
+
+struct Breadcrumb {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Str items[8] = {};
+    int n = 0;
+    int clickBase = 0;
+    Listener onClick;
+
+    static Breadcrumb* New(Ctx* cx);
+    Breadcrumb* Item(Str s);
+    Breadcrumb* OnClick(Listener fn);
+    El* IntoEl();
+};
+
+} // namespace component
+} // namespace gpui

@@ -311,7 +311,7 @@ function needsCompile(src: string, obj: string, includes: string[]): boolean {
   return false;
 }
 
-// src/ui/Button.cpp and examples/showcase/button.cpp would both write
+// src/ui/button.cpp and examples/showcase/button.cpp would both write
 // button.o, so each group gets its own object directory.
 function objGroup(f: string): string {
   if (f.startsWith("ext/")) {

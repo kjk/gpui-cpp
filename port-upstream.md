@@ -18,11 +18,21 @@ See `gpuiComponent` in `cmd/versions.ts` for repo, SHA, date, subject, and crate
 
 Trees we actually translate:
 
-- `crates/base` → `src/ui/`
-- `crates/ui` → `src/component/`
+- `crates/base` → `src/base/`
+- `crates/ui` → `src/ui/`
 - `crates/story` → `examples/story/`
 - `crates/base/examples/showcase` → `examples/showcase/`
 - `examples/*` → `examples/*.cpp`
+
+A file under `src/base/` or `src/ui/` is named after the Rust module it ports,
+so the map is mechanical in both directions:
+
+- a file: `crates/base/src/actions.rs` → `src/base/actions.cpp`
+- a directory: `crates/base/src/input/` → `src/base/input.cpp`
+
+A Rust directory is one C++ file, however many modules it holds; `lib.rs` is
+`lib.h`, the umbrella header. Where we have code the crate has no module for,
+it takes the name of the nearest one (`element_ext.h`, `sizing.h`).
 
 One upstream file is checked in verbatim rather than translated:
 `README.md` → `assets/story/README.md`, which is what the Introduction page
@@ -51,4 +61,4 @@ We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Taffy, 
 
 `sysinfo`, `battery`, `smol`, `reqwest` (zed fork), ropey, tree-sitter, syntect, html5ever, resvg — C++ uses Win32 / our own code instead.
 
-`src/Base.h` / `src/Base.cpp` are SumatraPDF, not gpui-component.
+`src/base.h` / `src/base.cpp` are SumatraPDF, not gpui-component.

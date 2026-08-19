@@ -89,7 +89,7 @@ WM_PAINT / D2D →
 
 The tree is rebuilt every frame from app state (GPUI `Render` / `RenderOnce`). No retained widget objects except app state and table sort state.
 
-### 4.2 Element (`src/gpui/El.h`)
+### 4.2 Element (`src/gpui/el.h`)
 
 Arena-allocated node, sibling linked list (not `Vec<El*>` — `Vec` would heap-allocate per node):
 
@@ -153,7 +153,7 @@ Win32 + DWM:
 
 First CPU sample is 0 (same as sysinfo). Keep previous process times in a `Vec<ProcSample>` keyed by pid.
 
-### 4.7 Components (`src/ui`)
+### 4.7 Components (`src/ui/`)
 
 Implement only what the example calls, with Rust names:
 
@@ -171,7 +171,7 @@ Implement only what the example calls, with Rust names:
 | Phase | Commit | Done when |
 | --- | --- | --- |
 | 0 | docs: AGENTS.md, port.md, port-progress.md | Plan exists |
-| 1 | vendor `src/Base.h` + `cmd/build.ts` | A console or empty Win32 exe links Str/Vec |
+| 1 | vendor `src/base.h` + `cmd/build.ts` | A console or empty Win32 exe links Str/Vec |
 | 2 | D2D window + dark fill + title text | Empty 680×600 dark window, custom chrome |
 | 3 | flex layout + text + TitleBar + tabs | Can switch System/Processes |
 | 4 | AreaChart | Two live-looking (or dummy) charts |
@@ -206,8 +206,8 @@ Rust: `.work/gpui-component/examples/app_assets` — rust-embed `Assets` impleme
 
 C++:
 
-- `src/gpui/Assets.cpp` — search roots for `icons/<name>.svg` (cwd, exe dir, parents, `assets/<example>`, rust `examples/<example>/assets`)
-- `src/gpui/Svg.cpp` — Lucide subset (path including arcs, rect, polyline, line, circle, polygon) stroked with `currentColor`
+- `src/gpui/assets.cpp` — search roots for `icons/<name>.svg` (cwd, exe dir, parents, `assets/<example>`, rust `examples/<example>/assets`)
+- `src/gpui/svg.cpp` — Lucide subset (path including arcs, rect, polyline, line, circle, polygon) stroked with `currentColor`
 - `IconNamePath` maps `Inbox` → `icons/inbox.svg` (same as `icon_named!`)
 - `ThemeSet(Light)` — rust `gpui_component::init` defaults to light
 - Window `800×600`, title `App Assets`

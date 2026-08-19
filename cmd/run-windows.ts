@@ -301,7 +301,7 @@ function launchDetached(cmd: string[], cwd: string): ReturnType<typeof Bun.spawn
   return proc;
 }
 
-// All gpui2 apps share this WNDCLASS (src/gpui/Window.cpp). WinDbg's UI does not.
+// All gpui2 apps share this WNDCLASS (src/gpui/window_common.cpp). WinDbg's UI does not.
 const cppWndClass = "Gpui2SystemMonitor";
 
 async function placeHwnd(hwnd: number, side: "left" | "right", label: string): Promise<void> {

@@ -1,6 +1,6 @@
 # md4c
 
-Markdown parser used by `src/component/Text.cpp` (`component::TextView`).
+Markdown parser used by `src/ui/text.cpp` (`component::TextView`).
 
 - Upstream: https://github.com/mity/md4c
 - Version: **0.5.3** (tag `release-0.5.3`)
@@ -37,7 +37,7 @@ converting the `markdown` crate's mdast into `crates/ui/src/text/node.rs`.
 `cmd/build-dist.ts` amalgamates it along with `src/**`: `md4c.h` becomes the
 tail of `gpui.h` and `md4c.c` the tail of `gpui.cpp`, so it compiles as C++
 inside the one translation unit the library is. Nothing includes `md4c.h` by
-name any more — `src/component/Text.cpp` still says so, and the amalgamator
+name any more — `src/ui/text.cpp` still says so, and the amalgamator
 strips that the way it strips every other internal include.
 
 Two things follow from that, and both live in `cmd/build-dist.ts`, not here:

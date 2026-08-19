@@ -1,0 +1,39 @@
+/* Themed badge — crates/ui/src/badge.rs */
+
+#include "ui/sizing.h"
+
+namespace gpui {
+
+namespace component {
+
+enum class BadgeKind : uint8_t {
+    Number,
+    Dot,
+    Icon
+};
+
+struct Badge {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    int count = 0;
+    int max = 99;
+    BadgeKind kind = BadgeKind::Number;
+    IconName icon = IconName::None;
+    Rgba color = {};
+    bool hasColor = false;
+    UiSize size = UiSize::Medium;
+    El* child = nullptr;
+
+    static Badge* New(Ctx* cx);
+    Badge* Count(int n);
+    Badge* Max(int n);
+    Badge* Dot();
+    Badge* Icon(IconName n);
+    Badge* Color(Rgba c);
+    Badge* WithSize(UiSize s);
+    Badge* Child(El* c);
+    El* IntoEl();
+};
+
+} // namespace component
+} // namespace gpui

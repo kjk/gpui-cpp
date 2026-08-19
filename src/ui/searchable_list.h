@@ -1,0 +1,24 @@
+/* Themed searchable list — crates/ui/src/searchable_list */
+
+#include "ui/list.h"
+
+namespace gpui {
+
+namespace component {
+
+struct SearchableList {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    InputState* query = nullptr;
+    Str items[32] = {};
+    int n = 0;
+    Listener onSelect;
+
+    static SearchableList* New(Ctx* cx, InputState* query);
+    SearchableList* Item(Str s);
+    SearchableList* OnSelect(Listener fn);
+    El* IntoEl();
+};
+
+} // namespace component
+} // namespace gpui

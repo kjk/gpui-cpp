@@ -3,7 +3,7 @@
 //   bun cmd/format.ts                  # src/**/*.{cpp,h}, examples/, and cmd/*.ts
 //   bun cmd/format.ts -ts              # prettier only (cmd/*.ts)
 //   bun cmd/format.ts -cpp             # clang-format only (src + examples)
-//   bun cmd/format.ts src/gpui/Gpui.cpp cmd/build.ts
+//   bun cmd/format.ts src/gpui/gpui.cpp cmd/build.ts
 
 import { $, Glob } from "bun";
 import { existsSync } from "node:fs";
@@ -20,8 +20,8 @@ const cppGlobs = [
   "src/*.cpp",
   "src/*.h",
   "src/gpui/*.{cpp,h}",
+  "src/base/*.{cpp,h}",
   "src/ui/*.{cpp,h}",
-  "src/component/*.{cpp,h}",
   "src/sys/*.{cpp,h}",
   "examples/*.cpp",
   "examples/showcase/*.{cpp,h}",

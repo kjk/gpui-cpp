@@ -112,7 +112,7 @@ const osMacro: Record<Platform, string> = {
   mac: "GPUI_OS_MAC",
 };
 
-// src/Base.h defines all three, exactly one of them 1, so a plain #if is all a
+// src/base.h defines all three, exactly one of them 1, so a plain #if is all a
 // platform chunk needs to be there for its own platform and nowhere else.
 function guardFor(plats: Platform[]): string {
   return `#if ${plats.map((p) => osMacro[p]).join(" || ")}`;
@@ -289,15 +289,15 @@ function topoHeaders(headers: string[]): string[] {
     order.push(rel);
   };
   const preferred = [
-    "src/Base.h",
-    "src/gpui/Gpui.h",
-    "src/gpui/Assets.h",
-    "src/gpui/Svg.h",
-    "src/ui/Primitive.h",
-    "src/ui/Ui.h",
-    "src/component/Common.h",
-    "src/component/Component.h",
-    "src/sys/SysInfo.h",
+    "src/base.h",
+    "src/gpui/gpui.h",
+    "src/gpui/assets.h",
+    "src/gpui/svg.h",
+    "src/base/element_ext.h",
+    "src/base/lib.h",
+    "src/ui/sizing.h",
+    "src/ui/lib.h",
+    "src/sys/sysinfo.h",
   ];
   for (const p of preferred) {
     if (texts.has(p)) {
@@ -449,16 +449,16 @@ function renameIdents(src: string, names: Set<string>, prefix: string): string {
 
 function preferredCppOrder(cpps: string[]): string[] {
   const rank = (rel: string): number => {
-    if (rel === "src/Base.cpp") {
+    if (rel === "src/base.cpp") {
       return 0;
     }
     if (rel.startsWith("src/gpui/")) {
       return 1;
     }
-    if (rel.startsWith("src/ui/")) {
+    if (rel.startsWith("src/base/")) {
       return 2;
     }
-    if (rel.startsWith("src/component/")) {
+    if (rel.startsWith("src/ui/")) {
       return 3;
     }
     if (rel.startsWith("src/sys/")) {

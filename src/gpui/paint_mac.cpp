@@ -1,0 +1,757 @@
+/* Core Graphics + Core Text backend for Paint.h. Objective-C++: compiled with
+   -x objective-c++, which is how the mac half of the amalgam is built.
+
+   The view is flipped (GpuiView.isFlipped), so the context handed to a frame
+   is already y-down with the origin top-left, matching the element tree. Only
+   glyphs need the text matrix flipped back. */
+
+#include "gpui/paint.h"
+
+#import <AppKit/AppKit.h>
+#import <CoreText/CoreText.h>
+
+#include <math.h>
+
+namespace gpui {
+
+// A resolved font, keyed by the size and weight byte the element tree asks
+// for. Small and linear: a frame uses a handful of distinct fonts.
+struct FontSlot {
+    float size = 0;
+    uint8_t weight = 0;
+    CTFontRef font = nullptr;
+};
+
+enum {
+    kFontCacheCap = 32
+};
+
+struct PaintApp {
+    FontSlot fonts[kFontCacheCap] = {};
+    int nFonts = 0;
+};
+
+struct PaintTarget {
+    CGContextRef cg = nullptr;
+};
+
+// ─── lifecycle ────────────────────────────────────────────────────────────
+
+PaintApp* PaintAppNew() {
+    return new PaintApp();
+}
+
+void PaintAppFree(PaintApp* pa) {
+    if (!pa) {
+        return;
+    }
+    for (int i = 0; i < pa->nFonts; i++) {
+        if (pa->fonts[i].font) {
+            CFRelease(pa->fonts[i].font);
+        }
+    }
+    delete pa;
+}
+
+void PaintTargetFree(PaintCtx* ctx) {
+    if (!ctx || !ctx->rt) {
+        return;
+    }
+    delete ctx->rt;
+    ctx->rt = nullptr;
+}
+
+// `native` is the CGContextRef the view's drawRect handed us. It is only
+// valid for this frame, so the target is rebuilt every time.
+bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
+    (void)pxW;
+    (void)pxH;
+    if (!ctx || !ctx->pa || !native) {
+        return false;
+    }
+    PaintTargetFree(ctx);
+    auto* t = new PaintTarget();
+    t->cg = (CGContextRef)native;
+    ctx->rt = t;
+    CGContextSetShouldAntialias(t->cg, true);
+    // Upright glyphs in a y-down space.
+    CGContextSetTextMatrix(t->cg, CGAffineTransformMakeScale(1, -1));
+    return true;
+}
+
+bool PaintTargetEnd(PaintCtx* ctx) {
+    if (!ctx || !ctx->rt) {
+        return false;
+    }
+    PaintTargetFree(ctx);
+    return true;
+}
+
+// ─── canvas ───────────────────────────────────────────────────────────────
+
+static CGContextRef Cg(PaintCtx* ctx) {
+    return (ctx && ctx->rt) ? ctx->rt->cg : nullptr;
+}
+
+static void SetFill(CGContextRef cg, Rgba c) {
+    CGContextSetRGBFillColor(cg, c.r / 255.0, c.g / 255.0, c.b / 255.0,
+                             c.a / 255.0);
+}
+
+static void SetStroke(CGContextRef cg, Rgba c) {
+    CGContextSetRGBStrokeColor(cg, c.r / 255.0, c.g / 255.0, c.b / 255.0,
+                               c.a / 255.0);
+}
+
+// D2D measures a dash pattern in stroke widths; Core Graphics in user units.
+static void SetDash(CGContextRef cg, const float* dash, float stroke) {
+    if (!dash) {
+        CGContextSetLineDash(cg, 0, nullptr, 0);
+        return;
+    }
+    CGFloat d[2] = {dash[0] * stroke, dash[1] * stroke};
+    CGContextSetLineDash(cg, 0, d, 2);
+}
+
+static CGPathRef RoundRectPath(float x, float y, float w, float h, float r) {
+    CGRect rect = CGRectMake(x, y, w, h);
+    float rmax = (w < h ? w : h) * 0.5f;
+    if (r > rmax) {
+        r = rmax;
+    }
+    if (r <= 0) {
+        return CGPathCreateWithRect(rect, nullptr);
+    }
+    return CGPathCreateWithRoundedRect(rect, r, r, nullptr);
+}
+
+void CanvasClear(PaintCtx* ctx, Rgba c) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg) {
+        return;
+    }
+    SetFill(cg, c);
+    CGContextFillRect(cg, CGContextGetClipBoundingBox(cg));
+}
+
+void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || w <= 0 || h <= 0 || c.a == 0) {
+        return;
+    }
+    SetFill(cg, c);
+    CGContextFillRect(cg, CGRectMake(x, y, w, h));
+}
+
+void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
+                     Rgba c) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || w <= 0 || h <= 0 || c.a == 0) {
+        return;
+    }
+    CGPathRef path = RoundRectPath(x, y, w, h, r);
+    SetFill(cg, c);
+    CGContextAddPath(cg, path);
+    CGContextFillPath(cg);
+    CGPathRelease(path);
+}
+
+void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
+                       float r, float stroke, Rgba c, const float* dash) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || stroke <= 0 || w <= 0 || h <= 0) {
+        return;
+    }
+    // Inset by half the stroke: Core Graphics, like D2D, centers it.
+    CGPathRef path = RoundRectPath(x + stroke * 0.5f, y + stroke * 0.5f,
+                                   w - stroke, h - stroke, r);
+    SetStroke(cg, c);
+    CGContextSetLineWidth(cg, stroke);
+    SetDash(cg, dash, stroke);
+    CGContextAddPath(cg, path);
+    CGContextStrokePath(cg);
+    CGContextSetLineDash(cg, 0, nullptr, 0);
+    CGPathRelease(path);
+}
+
+void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
+                float stroke, Rgba c, const float* dash) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg) {
+        return;
+    }
+    SetStroke(cg, c);
+    CGContextSetLineWidth(cg, stroke);
+    SetDash(cg, dash, stroke);
+    CGContextBeginPath(cg);
+    CGContextMoveToPoint(cg, x1, y1);
+    CGContextAddLineToPoint(cg, x2, y2);
+    CGContextStrokePath(cg);
+    CGContextSetLineDash(cg, 0, nullptr, 0);
+}
+
+void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
+                   float stroke, Rgba c) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || rx <= 0 || ry <= 0) {
+        return;
+    }
+    CGRect box = CGRectMake(cx - rx, cy - ry, rx * 2, ry * 2);
+    CGContextBeginPath(cg);
+    CGContextAddEllipseInRect(cg, box);
+    if (stroke > 0) {
+        SetStroke(cg, c);
+        CGContextSetLineWidth(cg, stroke);
+        CGContextStrokePath(cg);
+    } else {
+        SetFill(cg, c);
+        CGContextFillPath(cg);
+    }
+}
+
+void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg) {
+        return;
+    }
+    CGContextSaveGState(cg);
+    CGContextClipToRect(cg, CGRectMake(x, y, w, h));
+}
+
+void CanvasPopClip(PaintCtx* ctx) {
+    CGContextRef cg = Cg(ctx);
+    if (cg) {
+        CGContextRestoreGState(cg);
+    }
+}
+
+// ─── paths ────────────────────────────────────────────────────────────────
+
+struct Path {
+    CGMutablePathRef path = nullptr;
+    bool winding = true;
+    bool fig = false;
+    float cx = 0, cy = 0; // current point, for the arc-without-a-figure case
+};
+
+Path* PathNew(PaintCtx* ctx, bool winding) {
+    if (!ctx) {
+        return nullptr;
+    }
+    auto* p = new Path();
+    p->path = CGPathCreateMutable();
+    p->winding = winding;
+    return p;
+}
+
+void PathFree(Path* p) {
+    if (!p) {
+        return;
+    }
+    if (p->path) {
+        CGPathRelease(p->path);
+    }
+    delete p;
+}
+
+void PathMoveTo(Path* p, float x, float y) {
+    if (!p) {
+        return;
+    }
+    CGPathMoveToPoint(p->path, nullptr, x, y);
+    p->fig = true;
+    p->cx = x;
+    p->cy = y;
+}
+
+void PathLineTo(Path* p, float x, float y) {
+    if (!p) {
+        return;
+    }
+    if (!p->fig) {
+        PathMoveTo(p, x, y);
+        return;
+    }
+    CGPathAddLineToPoint(p->path, nullptr, x, y);
+    p->cx = x;
+    p->cy = y;
+}
+
+void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
+                 float y) {
+    if (!p) {
+        return;
+    }
+    if (!p->fig) {
+        PathMoveTo(p, x, y);
+        return;
+    }
+    CGPathAddCurveToPoint(p->path, nullptr, x1, y1, x2, y2, x, y);
+    p->cx = x;
+    p->cy = y;
+}
+
+void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
+               bool clockwise) {
+    if (!p) {
+        return;
+    }
+    // CGPathAddArc sweeps toward increasing angle when its `clockwise` flag is
+    // false. Our angles grow clockwise on screen because this space is y-down,
+    // so the flag is inverted.
+    CGPathAddArc(p->path, nullptr, cx, cy, r, a0, a1, !clockwise);
+    p->fig = true;
+    p->cx = cx + r * cosf(a1);
+    p->cy = cy + r * sinf(a1);
+}
+
+void PathClose(Path* p) {
+    if (!p || !p->fig) {
+        return;
+    }
+    CGPathCloseSubpath(p->path);
+    p->fig = false;
+}
+
+void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || !p || CGPathIsEmpty(p->path)) {
+        return;
+    }
+    SetFill(cg, c);
+    CGContextAddPath(cg, p->path);
+    if (p->winding) {
+        CGContextFillPath(cg);
+    } else {
+        CGContextEOFillPath(cg);
+    }
+}
+
+void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
+                       Rgba bot) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || !p || CGPathIsEmpty(p->path)) {
+        return;
+    }
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGFloat comps[8] = {top.r / 255.0, top.g / 255.0, top.b / 255.0,
+                        top.a / 255.0, bot.r / 255.0, bot.g / 255.0,
+                        bot.b / 255.0, bot.a / 255.0};
+    CGFloat stops[2] = {0.0, 1.0};
+    CGGradientRef grad =
+        CGGradientCreateWithColorComponents(space, comps, stops, 2);
+    CGColorSpaceRelease(space);
+    if (!grad) {
+        PathFill(ctx, p, top);
+        return;
+    }
+    CGContextSaveGState(cg);
+    CGContextAddPath(cg, p->path);
+    if (p->winding) {
+        CGContextClip(cg);
+    } else {
+        CGContextEOClip(cg);
+    }
+    CGContextDrawLinearGradient(
+        cg, grad, CGPointMake(0, y0), CGPointMake(0, y1),
+        kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
+    CGContextRestoreGState(cg);
+    CGGradientRelease(grad);
+}
+
+void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || !p || CGPathIsEmpty(p->path)) {
+        return;
+    }
+    SetStroke(cg, c);
+    CGContextSetLineWidth(cg, stroke);
+    CGContextSetLineCap(cg, roundCaps ? kCGLineCapRound : kCGLineCapButt);
+    CGContextSetLineJoin(cg, roundCaps ? kCGLineJoinRound : kCGLineJoinMiter);
+    CGContextAddPath(cg, p->path);
+    CGContextStrokePath(cg);
+    CGContextSetLineCap(cg, kCGLineCapButt);
+    CGContextSetLineJoin(cg, kCGLineJoinMiter);
+}
+
+// ─── utf-8 / utf-16 offsets ───────────────────────────────────────────────
+//
+// Str is UTF-8 and Core Text indexes UTF-16, so the two have to be mapped the
+// way the DirectWrite backend does.
+
+// Decode one codepoint; returns the bytes consumed.
+static int Utf8Decode(const char* s, int len, uint32_t* out) {
+    if (len <= 0) {
+        return 0;
+    }
+    auto b = (const unsigned char*)s;
+    if (b[0] < 0x80) {
+        *out = b[0];
+        return 1;
+    }
+    if ((b[0] & 0xe0) == 0xc0 && len >= 2) {
+        *out = ((uint32_t)(b[0] & 0x1f) << 6) | (b[1] & 0x3f);
+        return 2;
+    }
+    if ((b[0] & 0xf0) == 0xe0 && len >= 3) {
+        *out = ((uint32_t)(b[0] & 0x0f) << 12) |
+               ((uint32_t)(b[1] & 0x3f) << 6) | (b[2] & 0x3f);
+        return 3;
+    }
+    if ((b[0] & 0xf8) == 0xf0 && len >= 4) {
+        *out = ((uint32_t)(b[0] & 0x07) << 18) |
+               ((uint32_t)(b[1] & 0x3f) << 12) |
+               ((uint32_t)(b[2] & 0x3f) << 6) | (b[3] & 0x3f);
+        return 4;
+    }
+    *out = 0xfffd;
+    return 1;
+}
+
+static int Utf8OffToU16(Str s, int u8off) {
+    if (!s.s || u8off <= 0) {
+        return 0;
+    }
+    if (u8off > s.len) {
+        u8off = s.len;
+    }
+    int i = 0;
+    int u16 = 0;
+    while (i < u8off) {
+        uint32_t cp = 0;
+        int adv = Utf8Decode(s.s + i, s.len - i, &cp);
+        if (adv <= 0) {
+            break;
+        }
+        i += adv;
+        u16 += cp >= 0x10000 ? 2 : 1;
+    }
+    return u16;
+}
+
+static int U16OffToUtf8(Str s, int u16off) {
+    if (!s.s || u16off <= 0) {
+        return 0;
+    }
+    int i = 0;
+    int u16 = 0;
+    while (i < s.len && u16 < u16off) {
+        uint32_t cp = 0;
+        int adv = Utf8Decode(s.s + i, s.len - i, &cp);
+        if (adv <= 0) {
+            break;
+        }
+        i += adv;
+        u16 += cp >= 0x10000 ? 2 : 1;
+    }
+    return i;
+}
+
+// ─── shaped text ──────────────────────────────────────────────────────────
+
+struct MacLine {
+    CTLineRef line = nullptr;
+    int start = 0; // UTF-16 index into the whole string
+    int len = 0;
+    float width = 0;
+};
+
+struct TextLayout {
+    int refs = 1;
+    CFAttributedStringRef attr = nullptr;
+    MacLine* lines = nullptr;
+    int nLines = 0;
+    // GPUI's line box and where the baseline sits inside it.
+    float box = 0;
+    float baseline = 0;
+    float width = 0;
+};
+
+static NSFontWeight WeightFor(uint8_t weight, float fontSize) {
+    switch (weight & kFontWeightMask) {
+        case kFontWeightBold:
+            return NSFontWeightBold;
+        case kFontWeightSemibold:
+            return NSFontWeightSemibold;
+        case kFontWeightMedium:
+            return NSFontWeightMedium;
+        default:
+            break;
+    }
+    // The 20 px and 24 px DirectWrite formats are created semibold, and a run
+    // that asks for no weight of its own inherits that. Match it.
+    return fontSize >= 18.f ? NSFontWeightSemibold : NSFontWeightRegular;
+}
+
+static CTFontRef FontFor(PaintApp* pa, float fontSize, uint8_t weight) {
+    for (int i = 0; i < pa->nFonts; i++) {
+        if (pa->fonts[i].size == fontSize && pa->fonts[i].weight == weight) {
+            return pa->fonts[i].font;
+        }
+    }
+    NSFontWeight w = WeightFor(weight, fontSize);
+    NSFont* font = nil;
+    if (weight & kFontMono) {
+        if (@available(macOS 10.15, *)) {
+            font = [NSFont monospacedSystemFontOfSize:fontSize weight:w];
+        }
+        if (!font) {
+            font = [NSFont fontWithName:@"Menlo" size:fontSize];
+        }
+    } else {
+        font = [NSFont systemFontOfSize:fontSize weight:w];
+    }
+    if (!font) {
+        font = [NSFont systemFontOfSize:fontSize];
+    }
+    if ((weight & kFontItalic) && font) {
+        NSFont* italic =
+            [[NSFontManager sharedFontManager] convertFont:font
+                                               toHaveTrait:NSItalicFontMask];
+        if (italic) {
+            font = italic;
+        }
+    }
+    if (!font) {
+        return nullptr;
+    }
+    auto ct = (CTFontRef)CFBridgingRetain(font);
+    if (pa->nFonts >= kFontCacheCap) {
+        // The cache is a fixed set of sizes in practice; if it ever fills up,
+        // drop the oldest rather than growing without bound.
+        CFRelease(pa->fonts[0].font);
+        for (int i = 1; i < kFontCacheCap; i++) {
+            pa->fonts[i - 1] = pa->fonts[i];
+        }
+        pa->nFonts = kFontCacheCap - 1;
+    }
+    pa->fonts[pa->nFonts].size = fontSize;
+    pa->fonts[pa->nFonts].weight = weight;
+    pa->fonts[pa->nFonts].font = ct;
+    pa->nFonts++;
+    return ct;
+}
+
+TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
+                          bool wrap, uint8_t weight, float lineH,
+                          Size* outSize) {
+    if (!ctx || !ctx->pa || !s.s || s.len <= 0) {
+        return nullptr;
+    }
+    if (fontSize <= 0) {
+        fontSize = 16.f;
+    }
+    CTFontRef font = FontFor(ctx->pa, fontSize, weight);
+    if (!font) {
+        return nullptr;
+    }
+    CFStringRef text = CFStringCreateWithBytes(
+        nullptr, (const UInt8*)s.s, s.len, kCFStringEncodingUTF8, false);
+    if (!text) {
+        return nullptr;
+    }
+    CFIndex u16Len = CFStringGetLength(text);
+    if (u16Len <= 0) {
+        CFRelease(text);
+        return nullptr;
+    }
+
+    CFMutableDictionaryRef attrs =
+        CFDictionaryCreateMutable(nullptr, 3, &kCFTypeDictionaryKeyCallBacks,
+                                  &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(attrs, kCTFontAttributeName, font);
+    // CTLine otherwise supplies its default black foreground and ignores the
+    // CGContext fill color selected by TextLayoutDraw.
+    CFDictionarySetValue(attrs, kCTForegroundColorFromContextAttributeName,
+                         kCFBooleanTrue);
+    if (weight & kFontUnderline) {
+        int32_t style = kCTUnderlineStyleSingle;
+        CFNumberRef n = CFNumberCreate(nullptr, kCFNumberSInt32Type, &style);
+        CFDictionarySetValue(attrs, kCTUnderlineStyleAttributeName, n);
+        CFRelease(n);
+    }
+    CFAttributedStringRef attr = CFAttributedStringCreate(nullptr, text, attrs);
+    CFRelease(attrs);
+    CFRelease(text);
+    if (!attr) {
+        return nullptr;
+    }
+
+    CTTypesetterRef ts = CTTypesetterCreateWithAttributedString(attr);
+    if (!ts) {
+        CFRelease(attr);
+        return nullptr;
+    }
+
+    // Hard newlines split paragraphs; inside a paragraph the typesetter picks
+    // the break. Both the DirectWrite and Pango backends behave this way.
+    auto* lines = (MacLine*)AllocArray<MacLine>((int)u16Len + 2);
+    int nLines = 0;
+    float width = 0;
+    CFIndex pos = 0;
+    UniChar buf[1];
+    while (pos < u16Len) {
+        CFIndex paraEnd = pos;
+        while (paraEnd < u16Len) {
+            CFStringGetCharacters(CFAttributedStringGetString(attr),
+                                  CFRangeMake(paraEnd, 1), buf);
+            if (buf[0] == '\n') {
+                break;
+            }
+            paraEnd++;
+        }
+        CFIndex lineStart = pos;
+        do {
+            CFIndex count = paraEnd - lineStart;
+            if (wrap && maxW > 0 && count > 0) {
+                CFIndex fits =
+                    CTTypesetterSuggestLineBreak(ts, lineStart, maxW);
+                if (fits > 0 && fits < count) {
+                    count = fits;
+                }
+            }
+            CTLineRef line =
+                CTTypesetterCreateLine(ts, CFRangeMake(lineStart, count));
+            if (line) {
+                CGFloat asc = 0, desc = 0, lead = 0;
+                double w = CTLineGetTypographicBounds(line, &asc, &desc, &lead);
+                lines[nLines].line = line;
+                lines[nLines].start = (int)lineStart;
+                lines[nLines].len = (int)count;
+                lines[nLines].width = (float)w;
+                if ((float)w > width) {
+                    width = (float)w;
+                }
+                nLines++;
+            }
+            lineStart += count;
+            // An empty paragraph still contributes one (empty) line.
+        } while (lineStart < paraEnd);
+        pos = paraEnd + 1;
+    }
+    CFRelease(ts);
+
+    if (nLines == 0) {
+        Free(nullptr, lines);
+        CFRelease(attr);
+        return nullptr;
+    }
+
+    auto* tl = new TextLayout();
+    tl->attr = attr;
+    tl->lines = lines;
+    tl->nLines = nLines;
+    tl->width = width;
+    tl->box = fontSize * (lineH > 0 ? lineH : kLineHeight);
+    // gpui text_system centers the glyphs in the box: half the leftover goes
+    // above the ascent.
+    CGFloat ascent = CTFontGetAscent(font);
+    CGFloat descent = CTFontGetDescent(font);
+    tl->baseline = (float)ascent + (tl->box - (float)(ascent + descent)) * 0.5f;
+
+    if (outSize) {
+        outSize->w = width;
+        outSize->h = tl->box * (float)nLines;
+    }
+    return tl;
+}
+
+void TextLayoutAddRef(TextLayout* tl) {
+    if (tl) {
+        tl->refs++;
+    }
+}
+
+void TextLayoutRelease(TextLayout* tl) {
+    if (!tl) {
+        return;
+    }
+    if (--tl->refs > 0) {
+        return;
+    }
+    for (int i = 0; i < tl->nLines; i++) {
+        if (tl->lines[i].line) {
+            CFRelease(tl->lines[i].line);
+        }
+    }
+    Free(nullptr, tl->lines);
+    if (tl->attr) {
+        CFRelease(tl->attr);
+    }
+    delete tl;
+}
+
+void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
+                    bool clip) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || !tl) {
+        return;
+    }
+    if (clip) {
+        CGContextSaveGState(cg);
+        CGContextClipToRect(
+            cg, CGRectMake(x, y, tl->width, tl->box * (float)tl->nLines));
+    }
+    SetFill(cg, c);
+    CGContextSetTextMatrix(cg, CGAffineTransformMakeScale(1, -1));
+    for (int i = 0; i < tl->nLines; i++) {
+        CGContextSetTextPosition(cg, x, y + (float)i * tl->box + tl->baseline);
+        CTLineDraw(tl->lines[i].line, cg);
+    }
+    if (clip) {
+        CGContextRestoreGState(cg);
+    }
+}
+
+int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
+    if (!tl || tl->nLines == 0) {
+        return 0;
+    }
+    int row = tl->box > 0 ? (int)(relY / tl->box) : 0;
+    if (row < 0) {
+        row = 0;
+    }
+    if (row >= tl->nLines) {
+        row = tl->nLines - 1;
+    }
+    const MacLine& ml = tl->lines[row];
+    CFIndex idx =
+        CTLineGetStringIndexForPosition(ml.line, CGPointMake(relX, 0));
+    if (idx == kCFNotFound) {
+        idx = ml.start + ml.len;
+    }
+    return U16OffToUtf8(s, (int)idx);
+}
+
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
+                         int max) {
+    if (!tl || !out || max <= 0 || u8a >= u8b) {
+        return 0;
+    }
+    int a = Utf8OffToU16(s, u8a);
+    int b = Utf8OffToU16(s, u8b);
+    int n = 0;
+    for (int i = 0; i < tl->nLines && n < max; i++) {
+        const MacLine& ml = tl->lines[i];
+        int lo = a > ml.start ? a : ml.start;
+        int hi = b < ml.start + ml.len ? b : ml.start + ml.len;
+        if (lo >= hi) {
+            continue;
+        }
+        CGFloat x0 = CTLineGetOffsetForStringIndex(ml.line, lo, nullptr);
+        CGFloat x1 = CTLineGetOffsetForStringIndex(ml.line, hi, nullptr);
+        if (x1 < x0) {
+            CGFloat t = x0;
+            x0 = x1;
+            x1 = t;
+        }
+        out[n].x = (float)x0;
+        out[n].y = (float)i * tl->box;
+        out[n].w = (float)(x1 - x0);
+        out[n].h = tl->box;
+        n++;
+    }
+    return n;
+}
+
+} // namespace gpui

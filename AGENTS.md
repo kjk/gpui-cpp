@@ -49,7 +49,7 @@ It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade,
 ## Hard rules
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
-2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/Base.h` / `src/Base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
+2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
 3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. The one vendored library is `ext/md4c` — the CommonMark parser behind `component::TextView`, a single C file with no dependencies, checked in with its version and refresh commands in `ext/md4c/readme.md` and amalgamated into `gpui.h` / `gpui.cpp` along with `src/**`. Adding a second one needs the same bar: no build system of its own, no transitive dependencies, and a reason the tree cannot write it itself.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
@@ -87,40 +87,43 @@ examples/system_monitor.cpp   MonitorApp: a view entity with Render(self, cx)
 src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root
         │
         ▼
-src/gpui/   App + Window + entity store, flex layout, hit-test, timer,
-            frame arena; paint through Paint.h, the OS window through
-            Platform.h
+src/base/   unstyled primitives the themed layer is built from
         │
         ▼
-src/gpui/Paint_win.cpp     Direct2D + DirectWrite
-src/gpui/Paint_linux.cpp   cairo + Pango
-src/gpui/Paint_mac.cpp     Core Graphics + Core Text
-src/gpui/Window_win.cpp    Win32 message loop
-src/gpui/Window_linux.cpp  X11 event loop
-src/gpui/Window_mac.cpp    Cocoa event loop
+src/gpui/   App + Window + entity store, flex layout, hit-test, timer,
+            frame arena; paint through paint.h, the OS window through
+            platform.h
+        │
+        ▼
+src/gpui/paint_win.cpp     Direct2D + DirectWrite
+src/gpui/paint_linux.cpp   cairo + Pango
+src/gpui/paint_mac.cpp     Core Graphics + Core Text
+src/gpui/window_win.cpp    Win32 message loop
+src/gpui/window_linux.cpp  X11 event loop
+src/gpui/window_mac.cpp    Cocoa event loop
         │
         ▼
 src/sys/    process/CPU/memory/disk/battery, per OS
         │
         ▼
-src/Base.h  Str, Vec, Arena, Geom, Color helpers
+src/base.h  Str, Vec, Arena, Geom, Color helpers
 ```
 
 ## Portability
 
-`src/Base.h` defines `GPUI_OS_WINDOWS`, `GPUI_OS_LINUX` and `GPUI_OS_MAC` from
+`src/base.h` defines `GPUI_OS_WINDOWS`, `GPUI_OS_LINUX` and `GPUI_OS_MAC` from
 the compiler's own predefines; exactly one is 1. They exist for one-expression differences
 (the path separator, `SRWLOCK` vs `pthread_mutex_t`). Everything bigger is a
 portable signature plus one implementation per platform:
 
 | Seam                                       | Shared header          | Windows                   | Linux                       | macOS                     |
 | ------------------------------------------ | ---------------------- | ------------------------- | --------------------------- | ------------------------- |
-| virtual memory, paths, strings, self usage | `src/Base.h` (`Plat*`) | `src/Base_win.cpp`        | `src/Base_linux.cpp`        | `src/Base_mac.cpp`        |
-| 2D drawing and shaped text                 | `src/gpui/Paint.h`     | `src/gpui/Paint_win.cpp`  | `src/gpui/Paint_linux.cpp`  | `src/gpui/Paint_mac.cpp`  |
-| the OS window and its event loop           | `src/gpui/Platform.h`  | `src/gpui/Window_win.cpp` | `src/gpui/Window_linux.cpp` | `src/gpui/Window_mac.cpp` |
-| system metrics                             | `src/sys/SysInfo.h`    | `src/sys/SysInfo_win.cpp` | `src/sys/SysInfo_linux.cpp` | `src/sys/SysInfo_mac.cpp` |
+| virtual memory, paths, strings, self usage | `src/base.h` (`Plat*`) | `src/base_win.cpp`        | `src/base_linux.cpp`        | `src/base_mac.cpp`        |
+| 2D drawing and shaped text                 | `src/gpui/paint.h`     | `src/gpui/paint_win.cpp`  | `src/gpui/paint_linux.cpp`  | `src/gpui/paint_mac.cpp`  |
+| the OS window and its event loop           | `src/gpui/platform.h`  | `src/gpui/window_win.cpp` | `src/gpui/window_linux.cpp` | `src/gpui/window_mac.cpp` |
+| system metrics                             | `src/sys/sysinfo.h`    | `src/sys/sysinfo_win.cpp` | `src/sys/sysinfo_linux.cpp` | `src/sys/sysinfo_mac.cpp` |
 
-`src/gpui/WindowCommon.cpp` holds everything a window does that is not the OS
+`src/gpui/window_common.cpp` holds everything a window does that is not the OS
 window — frame drawing, input dispatch, the app lifecycle — and all platform
 files call into it.
 
@@ -395,20 +398,20 @@ cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
-src/Base.h/.cpp        vendored SumatraPDF subset
-src/Base_win.cpp       Windows platform layer (memory, paths, strings)
-src/Base_linux.cpp     the same, on POSIX
-src/gpui/Gpui.h        App, Window, Entity, Ctx, El, theme, paint
-src/gpui/Paint.h       the portable 2D canvas and shaped-text API
-src/gpui/Paint_win.cpp / Paint_linux.cpp   its two backends
-src/gpui/Platform.h    the seam between WindowCommon.cpp and the OS window
-src/gpui/WindowCommon.cpp   frame drawing, input dispatch, App lifecycle
-src/gpui/Window_win.cpp / Window_linux.cpp  the two OS windows
-src/gpui/Entity.cpp    entity store, listeners, window subscriptions
+src/base.h/.cpp        vendored SumatraPDF subset
+src/base_win.cpp       Windows platform layer (memory, paths, strings)
+src/base_linux.cpp     the same, on POSIX
+src/gpui/gpui.h        App, Window, Entity, Ctx, El, theme, paint
+src/gpui/paint.h       the portable 2D canvas and shaped-text API
+src/gpui/paint_win.cpp / paint_linux.cpp   its two backends
+src/gpui/platform.h    the seam between window_common.cpp and the OS window
+src/gpui/window_common.cpp   frame drawing, input dispatch, App lifecycle
+src/gpui/window_win.cpp / window_linux.cpp  the two OS windows
+src/gpui/entity.cpp    entity store, listeners, window subscriptions
 src/gpui/              layout, paint, assets, SVG, element tree
 src/sys/               system metrics, portable + one file per OS
-src/ui/                gpui-base unstyled primitives (Button, …)
-src/component/         themed crates/ui façade (component::Button, Func0/Func1 callbacks)
+src/base/              crates/base unstyled primitives (Button, …)
+src/ui/                themed crates/ui façade (component::Button, Func0/Func1 callbacks)
 examples/              AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/
 assets/app_assets/     Lucide SVGs for the app_assets example
 assets/icons/          Lucide SVGs for sidebar
@@ -417,7 +420,7 @@ assets/markdown_table/ report.md for the markdown_table example
 
 ## How to extend after system_monitor
 
-Port **gpui-base unstyled primitives** into `src/ui/`, one Rust module at a time (`crates/base/src/<name>.rs`). Keep the type name (`Button`, `Checkbox`, `Accordion`, …).
+Port **gpui-base unstyled primitives** into `src/base/`, one Rust module at a time (`crates/base/src/<name>.rs`). Keep the type name (`Button`, `Checkbox`, `Accordion`, …).
 
 These primitives own interaction (click, focus, open/checked state wiring). They do **not** own paint: the showcase (or a later themed façade) applies `.Bg()`, `.Border()`, `.H()`, `.Child()`, matching how Rust `Button::new(id).bg(...).child(...)` works.
 
@@ -429,10 +432,10 @@ Button::New(cx, StrL("primary-button"), ClickSave)
     ->Child(TextEl(cx->a, StrL("Save changes")));
 ```
 
-Do not inline a styled `Div` tree in a showcase page when a primitive exists. `ButtonEl` in `src/gpui` is a _themed_ helper for older examples; new showcase pages use `src/ui`.
+Do not inline a styled `Div` tree in a showcase page when a primitive exists. `ButtonEl` in `src/gpui` is a _themed_ helper for older examples; new showcase pages use `src/base`.
 
 When a primitive needs a GPUI capability we do not have (text input, overlay), add the smallest piece in `src/gpui` first, then the widget.
 
 ## Updating the vendored base
 
-If `src/Base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/Base.h` / `src/Base.cpp`. Provide `log` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.
+If `src/base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/base.h` / `src/base.cpp`. Provide `log` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.

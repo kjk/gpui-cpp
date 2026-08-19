@@ -386,7 +386,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     flagsChanged = readFileSync(join(root, stampPath), "utf8") !== flagsKey;
   }
 
-  // Separate /Fo dirs so src/ui/Button.cpp and examples/showcase/button.cpp
+  // Separate /Fo dirs so src/ui/button.cpp and examples/showcase/button.cpp
   // do not both write button.obj.
   const objs: string[] = [];
   const includeMemo = new Map<string, string[]>();
