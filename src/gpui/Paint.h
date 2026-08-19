@@ -113,7 +113,7 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
 int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY);
 // The rectangles covering UTF-8 range [u8a, u8b), one per line. Returns how
 // many were written.
-int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Rect* out,
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
                          int max);
 
 } // namespace gpui

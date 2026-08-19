@@ -618,7 +618,7 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return index;
 }
 
-int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Rect* out,
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
                          int max) {
     if (!tl || !tl->layout || !out || max <= 0 || u8a >= u8b) {
         return 0;

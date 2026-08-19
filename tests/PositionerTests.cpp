@@ -10,12 +10,12 @@ static const float kMargin = 4.f;
 static const float kViewW = 500.f;
 static const float kViewH = 400.f;
 
-static Rect Trigger(float x, float y, float w, float h) {
-    Rect r = {x, y, w, h};
+static Bounds Trigger(float x, float y, float w, float h) {
+    Bounds r = {x, y, w, h};
     return r;
 }
 
-static Positioned Side(Rect trigger, const Placement* placement,
+static Positioned Side(Bounds trigger, const Placement* placement,
                        PopupAlign align, float popupW, float popupH) {
     return PositionSide(trigger, {popupW, popupH}, {kViewW, kViewH}, kMargin,
                         placement, align, 0);
@@ -49,7 +49,7 @@ static void ClampsIntoTheViewportWhileKeepingTheFlippedSide() {
 }
 
 static void AlignmentSelectsTheLeadingCenterOrTrailingEdge() {
-    Rect trigger = Trigger(200, 200, 100, 20);
+    Bounds trigger = Trigger(200, 200, 100, 20);
     Placement bottom = Placement::Bottom;
 
     Positioned start = Side(trigger, &bottom, PopupAlign::Start, 40, 30);
@@ -96,7 +96,7 @@ static void CornerPositioningClampsButDoesNotFlip() {
 
 static const float kWindowMargin = 4.f;
 
-static Positioned TooltipPlacement(Rect trigger, float popupW, float popupH,
+static Positioned TooltipPlacement(Bounds trigger, float popupW, float popupH,
                                    float viewW, float viewH, float margin,
                                    const Placement* placement) {
     return PositionSide(trigger, {popupW, popupH}, {viewW, viewH}, margin,
@@ -104,7 +104,7 @@ static Positioned TooltipPlacement(Rect trigger, float popupW, float popupH,
 }
 
 static void PrefersAboveWhenSpaceAllows() {
-    Rect trigger = Trigger(100, 80, 80, 24);
+    Bounds trigger = Trigger(100, 80, 80, 24);
     Positioned p = TooltipPlacement(trigger, 120, 30, 300, 200, kWindowMargin,
                                     nullptr);
 
@@ -129,7 +129,7 @@ static void FlipsAndClampsOnEachAxis() {
 }
 
 static void PlacesTooltipToTheRight() {
-    Rect trigger = Trigger(20, 60, 32, 32);
+    Bounds trigger = Trigger(20, 60, 32, 32);
     Placement right = Placement::Right;
     Positioned p = TooltipPlacement(trigger, 120, 30, 300, 200, kWindowMargin,
                                     &right);
@@ -140,7 +140,7 @@ static void PlacesTooltipToTheRight() {
 }
 
 static void RightPlacementClampsVerticalEdges() {
-    Rect trigger = Trigger(20, 2, 32, 20);
+    Bounds trigger = Trigger(20, 2, 32, 20);
     Placement right = Placement::Right;
     Positioned p = TooltipPlacement(trigger, 120, 40, 300, 200, kWindowMargin,
                                     &right);

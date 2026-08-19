@@ -1108,7 +1108,7 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
     }
     // One rect per line the selection covers; 32 is more lines than any
     // selectable text block here has.
-    Rect rects[32] = {};
+    Bounds rects[32] = {};
     int n = TextLayoutRangeRects(layout, s, u8a, u8b, rects, 32);
     for (int i = 0; i < n; i++) {
         CanvasFillRect(ctx, x + rects[i].x, y + rects[i].y, rects[i].w,
@@ -1378,7 +1378,7 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
         }
         return;
     }
-    Rect inner = RectInsetEdges(parent->Bounds(), parent->style.pad);
+    Bounds inner = parent->Bounds().Inset(parent->style.pad);
     ax = inner.x;
     ay = inner.y;
     float innerW = inner.w;
@@ -2379,7 +2379,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->style.trapId && e->style.focusId &&
         e->style.focusId == ctx->focusId) {
         // The ring sits 2 DIPs outside the element's own box.
-        Rect ring = RectInset(e->Bounds(), -2);
+        Bounds ring = e->Bounds().Inset(-2.f);
         DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
                         e->style.radius + 2, 2, ThemeNow().blue);
     }

@@ -151,8 +151,21 @@ struct Size {
     float h = 0;
 };
 
-// Bounds<Pixels>: an origin and a size, y growing down.
-struct Rect {
+// Edges<Pixels>: the four insets of a box, in Rust's field order. Ahead of
+// Bounds, which insets by one.
+struct Edges {
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+    float left = 0;
+
+    float Horizontal() const { return left + right; }
+    float Vertical() const { return top + bottom; }
+};
+
+// Bounds<Pixels>. Rust composes it from an origin and a size; here the four
+// floats are the struct, so there is no `.origin` or `.size` to reach for.
+struct Bounds {
     float x = 0, y = 0, w = 0, h = 0;
 
     float Right() const { return x + w; }
@@ -164,30 +177,18 @@ struct Rect {
     bool Contains(Point p) const {
         return p.x >= x && p.x < x + w && p.y >= y && p.y < y + h;
     }
-};
-
-// Edges<Pixels>: the four insets of a box, in Rust's field order.
-struct Edges {
-    float top = 0;
-    float right = 0;
-    float bottom = 0;
-    float left = 0;
-
-    float Horizontal() const { return left + right; }
-    float Vertical() const { return top + bottom; }
+    // Bounds::inset, which is Bounds::dilate with the amount negated, so a
+    // positive amount shrinks the box.
+    Bounds Inset(float d) const { return {x + d, y + d, w - d - d, h - d - d}; }
+    // Bounds::extend, negated the same way: the content box inside padding.
+    Bounds Inset(Edges e) const {
+        return {x + e.left, y + e.top, w - e.Horizontal(), h - e.Vertical()};
+    }
 };
 
 // Bounds::new(origin, size), for the callers that hold the two apart.
-inline Rect RectAt(Point origin, Size size) {
+inline Bounds BoundsAt(Point origin, Size size) {
     return {origin.x, origin.y, size.w, size.h};
-}
-// Bounds::inset / dilate, positive shrinking the box.
-inline Rect RectInset(Rect r, float d) {
-    return {r.x + d, r.y + d, r.w - d - d, r.h - d - d};
-}
-inline Rect RectInsetEdges(Rect r, Edges e) {
-    return {r.x + e.left, r.y + e.top, r.w - e.Horizontal(),
-            r.h - e.Vertical()};
 }
 
 // ─── entities ─────────────────────────────────────────────────────────────
@@ -401,7 +402,7 @@ struct ClickEvent {
     // The box that was hit, so a handler can place the click inside it — what
     // a slider needs to turn a press on its track into a value. This is also
     // KeyboardClickEvent::bounds, the only position a keyboard click has.
-    Rect el = {};
+    Bounds el = {};
     int clickCount = 1;
     Modifiers modifiers = {};
     // ClickEvent::Keyboard: Space or Enter on the focused element, with no
@@ -689,9 +690,10 @@ struct El {
     El* last = nullptr;
     El* next = nullptr;
     float x = 0, y = 0, w = 0, h = 0;
-    // The laid-out box as one value — Bounds<Pixels>. The fields stay flat
-    // because the layout pass writes them a component at a time.
-    Rect Bounds() const { return {x, y, w, h}; }
+    // The laid-out box as one value. The fields stay flat because the layout
+    // pass writes them a component at a time. The return type is qualified
+    // because this member hides `Bounds` inside El.
+    gpui::Bounds Bounds() const { return {x, y, w, h}; }
     float scrollY = 0;
     int scrollId = 0;
     float contentW = 0;
@@ -817,19 +819,19 @@ El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
 
 struct HitRect {
     int id = 0;
-    Rect bounds = {};
+    Bounds bounds = {};
     Func0 onClick;
     Listener listener;
 };
 
 struct ScrollRect {
     int id = 0;
-    Rect bounds = {};
+    Bounds bounds = {};
     float contentH = 0;
 };
 
 struct TextHit {
-    Rect bounds = {};
+    Bounds bounds = {};
     Str text;
     float font = 14;
     float maxW = 0;
@@ -874,7 +876,7 @@ struct PaintCtx {
 struct FocusRect {
     int id = 0;
     int trapId = 0;
-    Rect bounds = {};
+    Bounds bounds = {};
 };
 
 // gpui_component::input::InputEvent. Change is the only variant raised so

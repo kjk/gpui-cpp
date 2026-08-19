@@ -37,7 +37,7 @@ enum class Anchor : uint8_t {
 // Where the popup ended up, and the side it took. `hasPlacement` is false for
 // corner positioning, which has no notion of a side.
 struct Positioned {
-    Rect bounds;
+    Bounds bounds;
     Placement placement = Placement::Top;
     bool hasPlacement = false;
 };
@@ -49,7 +49,7 @@ constexpr float kPopupMargin = 4.f;
 // the popup fits there, otherwise the opposite side, otherwise whichever side
 // has more room; the result is then clamped into the viewport. `preferred` is
 // null for Rust's `None`, which prefers Top.
-Positioned PositionSide(Rect trigger, Size popup, Size view, float margin,
+Positioned PositionSide(Bounds trigger, Size popup, Size view, float margin,
                         const Placement* preferred, PopupAlign align,
                         float offset);
 
