@@ -37,6 +37,10 @@ int GpuiMain(int argc, char** argv) {
     TestTitleBar();
     TestTextBoundary();
     TestSlider();
+    TestRope();
+    TestMaskPattern();
+    TestUndoManager();
+    TestInputState();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

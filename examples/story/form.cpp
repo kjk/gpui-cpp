@@ -7,8 +7,10 @@ enum {
 };
 
 struct FormStory {
-    LineInput name = {};
-    LineInput email = {};
+    InputState name;
+    InputState email;
+    // TextareaState: the same engine, told it spans more than one line.
+    InputState bio;
     bool subscribe = false;
     bool futureEvents = false;
     bool horizontal = false;
@@ -55,10 +57,12 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->name.buf, (int)sizeof(self->name.buf), "Jason Lee");
-        self->name.len = (int)strlen(self->name.buf);
-        StrCopyZ(self->email.placeholder, (int)sizeof(self->email.placeholder),
-                 "Enter text here...");
+        InputSetValue(&self->name, StrL("Jason Lee"));
+        self->bio.kind = InputKind::Textarea;
+        InputSetValue(&self->bio,
+                      StrL("Hello \xe4\xb8\x96\xe7\x95\x8c\xef\xbc\x8cthis "
+                           "is GPUI component."));
+        InputSetPlaceholder(&self->email, StrL("Enter text here..."));
     }
     if (self->name.focused) {
         cx->win->input = &self->name;
@@ -103,10 +107,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
                         ->IntoEl())
             ->Required()
             ->Field(StrL("Bio"),
-                    component::Textarea::New(
-                        cx, StrL("form-bio"),
-                        "Hello \xe4\xb8\x96\xe7\x95\x8c\xef\xbc\x8cthis is "
-                        "GPUI component.")
+                    component::Textarea::New(cx, StrL("form-bio"), &self->bio)
                         ->Rows(5)
                         ->IntoEl())
             ->Description(StrL("Use at most 100 words to describe yourself."))

@@ -46,9 +46,9 @@ struct SettingsStory {
     bool darkMode = false;
     bool autoSwitch = false;
     bool resettable = true;
-    LineInput search = {};
-    LineInput fontSize = {};
-    LineInput lineHeight = {};
+    InputState search;
+    InputState fontSize;
+    InputState lineHeight;
     StoryToolbarState toolbar;
     bool seeded = false;
 
@@ -83,12 +83,9 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->search.placeholder,
-                 (int)sizeof(self->search.placeholder), "Search...");
-        StrCopyZ(self->fontSize.buf, (int)sizeof(self->fontSize.buf), "14");
-        self->fontSize.len = 2;
-        StrCopyZ(self->lineHeight.buf, (int)sizeof(self->lineHeight.buf), "12");
-        self->lineHeight.len = 2;
+        InputSetPlaceholder(&self->search, StrL("Search..."));
+        InputSetValue(&self->fontSize, StrL("14"));
+        InputSetValue(&self->lineHeight, StrL("12"));
     }
     if (self->search.focused) {
         cx->win->input = &self->search;
@@ -227,7 +224,7 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
                             ->IntoEl());
                     break;
                 case SetFieldNumber: {
-                    LineInput* state =
+                    InputState* state =
                         r == nRows - 1 ? &self->lineHeight : &self->fontSize;
                     line->Child(component::NumberInput::New(
                                     cx, StoryFmt(cx, "set-%d", r), state)

@@ -40,20 +40,18 @@ static void FocusNum(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 static void StepNum(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
                     intptr_t delta) {
     int n = 0;
-    if (!ParseNum(app->input.buf, &n)) {
+    if (!ParseNum(InputCStr(&app->input), &n)) {
         n = 0;
     }
     n += (int)delta;
-    snprintf(app->input.buf, sizeof(app->input.buf), "%d", n);
-    app->input.len = (int)strlen(app->input.buf);
-    app->input.cursor = app->input.len;
+    InputSetValue(&app->input, fmt("%d", n));
     Notify(cx);
 }
 
 El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     int dummy = 0;
-    bool valid = ParseNum(app->input.buf, &dummy);
+    bool valid = ParseNum(InputCStr(&app->input), &dummy);
     El* controls = Div(a)->FlexCol()->W(24)->Shrink0();
     controls->Child(
         ScButton(cx, StrL("inc"))

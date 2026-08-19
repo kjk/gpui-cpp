@@ -4,7 +4,7 @@ using namespace gpui;
 
 struct SelApp {
     static El* Render(SelApp* self, Ctx* cx);
-    LineInput in;
+    InputState in;
     char copied[2048];
     bool selecting;
     int selFrom;
@@ -110,8 +110,8 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
     col->Child(Div(frame)->Grow());
     col->Child(ButtonEl(frame, 1, StrL("Clicking me must not start selection"))
                    ->OnClick(Listen(cx, &ClearSelection)));
-    Str shown = app->in.len > 0 ? Str(app->in.buf, app->in.len)
-                                : Str(app->in.placeholder);
+    Str value = InputValue(&app->in);
+    Str shown = value.len > 0 ? value : app->in.placeholder;
     col->Child(Div(frame)
                    ->W(kFill)
                    ->H(36)
@@ -122,7 +122,7 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
                    ->OnClick(Listen(cx, &FocusField))
                    ->Child(TextEl(frame, shown)
                                ->Font(14)
-                               ->Fg(app->in.len ? th.foreground : th.mutedFg)));
+                               ->Fg(value.len ? th.foreground : th.mutedFg)));
     return col;
 }
 
@@ -134,8 +134,8 @@ int GpuiMain(int argc, char** argv) {
     SelApp* self = view.Get(app);
     (void)self;
     ThemeSet(app, ThemeMode::Light);
-    StrCopyZ(self->in.placeholder, (int)sizeof(self->in.placeholder),
-             "Type here (selection must NOT start from here)");
+    InputSetPlaceholder(&self->in,
+                        StrL("Type here (selection must NOT start from here)"));
     self->copied[0] = 0;
     self->selFrom = -1;
     self->selTo = -1;

@@ -84,6 +84,10 @@ static const char* kDecorationText =
 struct EditorStory {
     int tab = 0;
     bool readOnly = false;
+    // One EditorState per tab, the way the Rust story keeps one per document.
+    InputState code;
+    InputState decorations;
+    bool seeded = false;
 
     static El* Render(EditorStory* self, Ctx* cx);
 };
@@ -101,6 +105,15 @@ static void ToggleReadOnly(EditorStory* self, Ctx* cx, const ClickEvent*) {
 El* EditorStory::Render(EditorStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    if (!self->seeded) {
+        self->seeded = true;
+        self->code.kind = InputKind::Editor;
+        self->decorations.kind = InputKind::Editor;
+        InputSetValue(&self->code, Str(kEditorCode));
+        InputSetValue(&self->decorations, Str(kDecorationText));
+    }
+    self->code.readonly = self->readOnly;
+    self->decorations.readonly = self->readOnly;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     // The tab bar on the left, the read-only switch on the right.
@@ -126,7 +139,7 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
                   ->Radius(th.radius)
                   ->Border(1, th.border);
     box->Child(component::Highlighter::New(
-                   cx, self->tab == 0 ? kEditorCode : kDecorationText)
+                   cx, self->tab == 0 ? &self->code : &self->decorations)
                    ->IntoEl());
     page->Child(box);
     return page;

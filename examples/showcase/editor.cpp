@@ -44,22 +44,20 @@ static const char* kEditorDefault =
     "}\n";
 
 static void OnEditor(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
-    (void)app;
     app->editorOn = true;
     app->textareaOn = false;
-    app->input.focused = false;
+    InputFocus(&app->editor, cx);
     Notify(cx);
 }
 
 El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     if (!app->editorInited) {
-        StrCopyZ(app->editor, (int)sizeof(app->editor), kEditorDefault);
-        app->editorLen = (int)strlen(app->editor);
-        app->editorCursor = 0;
+        app->editor.kind = InputKind::Editor;
+        InputSetValue(&app->editor, Str(kEditorDefault));
+        InputMoveTo(&app->editor, cx, 0);
         app->editorInited = true;
     }
-    bool blink = app->editorOn && BlinkVisible(cx, app->editorCaret);
     return Div(a)
         ->FlexCol()
         ->W(320)
@@ -80,8 +78,7 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
                     ->FocusId(0)
                     ->Border(1, app->editorOn ? Rgb(0x17, 0x17, 0x17)
                                               : Rgb(0xd4, 0xd4, 0xd4))
-                    ->Child(Editor::New(cx, app->editor, app->editorCursor,
-                                        blink)));
+                    ->Child(Editor::New(cx, &app->editor)));
 }
 
 SHOWCASE_PAGE(CompEditor, ShowcaseEditor);

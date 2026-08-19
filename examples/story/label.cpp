@@ -3,7 +3,7 @@
 struct LabelStory {
     bool labelMasked = false;
     // The Highlighting section is driven by a search field.
-    LineInput search;
+    InputState search;
     bool seeded = false;
 
     static El* Render(LabelStory* self, Ctx* cx);
@@ -43,8 +43,7 @@ El* LabelStory::Render(LabelStory* self, Ctx* cx) {
                           "Find matching text across Latin and CJK content.");
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->search.placeholder,
-                 (int)sizeof(self->search.placeholder), "Search labels");
+        InputSetPlaceholder(&self->search, StrL("Search labels"));
     }
     if (self->search.focused) {
         cx->win->input = &self->search;

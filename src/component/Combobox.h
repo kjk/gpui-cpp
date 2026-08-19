@@ -20,7 +20,7 @@ struct Combobox {
     IconName icon = IconName::None;
     float width = 280;
     bool open = false;
-    LineInput* query = nullptr;
+    InputState* query = nullptr;
     Listener onChange;
     Listener onToggle;
 
@@ -33,7 +33,7 @@ struct Combobox {
     Combobox* Icon(IconName n);
     Combobox* W(float v);
     Combobox* Open(bool v);
-    Combobox* Query(LineInput* q);
+    Combobox* Query(InputState* q);
     Combobox* OnChange(Listener fn);
     Combobox* OnToggle(Listener fn);
     El* IntoEl();

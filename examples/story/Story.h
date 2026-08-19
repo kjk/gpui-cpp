@@ -93,7 +93,7 @@ struct StoryApp {
     float scrollY = 0;
     float sideScrollY = 0;
     bool collapsed = false;
-    LineInput search = {};
+    InputState search;
     int selA = -1;
     int selB = -1;
     bool selecting = false;

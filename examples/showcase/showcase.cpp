@@ -119,10 +119,11 @@ El* ScBtnLine(Ctx* cx, int id, Listener onClick, Str label) {
         ->Child(ScTxt(cx, label, 12, ScInk()));
 }
 
-El* ScField(Ctx* cx, LineInput* in, int clickId, float w, bool valid) {
+El* ScField(Ctx* cx, InputState* in, int clickId, float w, bool valid) {
     Arena* a = cx->a;
-    Str shown = in->len > 0 ? Str(in->buf, in->len) : Str(in->placeholder);
-    Rgba fg = in->len > 0 ? ScInk() : ScMutedC();
+    Str value = InputValue(in);
+    Str shown = value.len > 0 ? value : in->placeholder;
+    Rgba fg = value.len > 0 ? ScInk() : ScMutedC();
     Rgba border = ScBorder();
     if (!valid) {
         border = ScMutedC();
@@ -224,12 +225,18 @@ static void BindInput(ShowcaseApp* app, Window* win) {
                          app->component == CompColorPicker && app->colorOpen;
     app->textareaOn = app->textareaOn && app->component == CompTextarea;
     app->editorOn = app->editorOn && app->component == CompEditor;
+    app->textarea.focused = app->textareaOn;
+    app->editor.focused = app->editorOn;
     if (app->comboQuery.focused) {
         win->input = &app->comboQuery;
     } else if (app->hexIn.focused) {
         win->input = &app->hexIn;
     } else if (app->input.focused) {
         win->input = &app->input;
+    } else if (app->textareaOn) {
+        win->input = &app->textarea;
+    } else if (app->editorOn) {
+        win->input = &app->editor;
     }
 }
 
@@ -239,18 +246,6 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     WinSize size = WindowSize(win);
     app->hoverId = win->hoverId;
     BindInput(app, win);
-    // The runtime starts and stops the caret of whichever LineInput is
-    // focused; these two are not LineInputs, so they do it themselves.
-    if (app->textareaOn) {
-        BlinkStart(cx, &app->textareaCaret);
-    } else {
-        BlinkStop(cx, &app->textareaCaret);
-    }
-    if (app->editorOn) {
-        BlinkStart(cx, &app->editorCaret);
-    } else {
-        BlinkStop(cx, &app->editorCaret);
-    }
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 
     El* root = Div(frame)->FlexCol()->SizeFull()->Bg(ScWhite());
@@ -284,68 +279,24 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     return root;
 }
 
-static void InsertBuf(char* buf, int* len, int cap, uint32_t cp) {
-    if (cp != '\n' && (cp < 32 || cp > 126)) {
-        return;
-    }
-    if (*len >= cap - 1) {
+// The OTP page is a row of single-character cells, not a text field, so it
+// still keeps a plain buffer.
+static void OtpPush(char* buf, int* len, uint32_t cp) {
+    if (cp < '0' || cp > '9' || *len >= 6) {
         return;
     }
     buf[(*len)++] = (char)cp;
     buf[*len] = 0;
 }
 
-static void InsertAt(char* buf, int* len, int cap, int* cur, uint32_t cp) {
-    if (cp != '\n' && (cp < 32 || cp > 126)) {
-        return;
-    }
-    if (*len >= cap - 1) {
-        return;
-    }
-    int c = *cur;
-    if (c < 0) {
-        c = 0;
-    }
-    if (c > *len) {
-        c = *len;
-    }
-    memmove(buf + c + 1, buf + c, (size_t)(*len - c + 1));
-    buf[c] = (char)cp;
-    (*len)++;
-    *cur = c + 1;
-}
-
-static void BackspaceBuf(char* buf, int* len) {
+static void OtpPop(char* buf, int* len) {
     if (*len > 0) {
         buf[--(*len)] = 0;
     }
 }
 
-static void BackspaceAt(char* buf, int* len, int* cur) {
-    if (*cur <= 0 || *len <= 0) {
-        return;
-    }
-    memmove(buf + *cur - 1, buf + *cur, (size_t)(*len - *cur + 1));
-    (*len)--;
-    (*cur)--;
-}
-
-static int LineStartAt(const char* s, int cur) {
-    while (cur > 0 && s[cur - 1] != '\n') {
-        cur--;
-    }
-    return cur;
-}
-
-static int LineEndAt(const char* s, int len, int cur) {
-    while (cur < len && s[cur] != '\n') {
-        cur++;
-    }
-    return cur;
-}
-
 static void ParseHexIn(ShowcaseApp* app) {
-    const char* s = app->hexIn.buf;
+    const char* s = InputCStr(&app->hexIn);
     if (s[0] == '#') {
         s++;
     }
@@ -356,25 +307,11 @@ static void ParseHexIn(ShowcaseApp* app) {
 }
 
 void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp) {
-    // The textarea and the editor keep their own buffers, so the pause the
-    // runtime does for a LineInput edit has to be asked for here.
-    BlinkPause(win->app, win, &app->textareaCaret);
-    BlinkPause(win->app, win, &app->editorCaret);
+    (void)win;
+    // The window routes a typed character into whichever InputState has focus;
+    // only the OTP cells and the hex readout need anything on top of that.
     if (app->component == CompOtpInput && app->otpOn) {
-        if (cp >= '0' && cp <= '9' && app->otpLen < 6) {
-            app->otp[app->otpLen++] = (char)cp;
-            app->otp[app->otpLen] = 0;
-        }
-        return;
-    }
-    if (app->component == CompTextarea && app->textareaOn) {
-        InsertBuf(app->textarea, &app->textareaLen, (int)sizeof(app->textarea),
-                  cp);
-        return;
-    }
-    if (app->component == CompEditor && app->editorOn) {
-        InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor),
-                 &app->editorCursor, cp);
+        OtpPush(app->otp, &app->otpLen, cp);
         return;
     }
     if (app->component == CompColorPicker && app->hexIn.focused) {
@@ -383,70 +320,15 @@ void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp) {
 }
 
 void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
+    (void)win;
     if (!down) {
         return;
     }
     if (vk == KeyBack) {
         if (app->component == CompOtpInput && app->otpOn) {
-            BackspaceBuf(app->otp, &app->otpLen);
-        } else if (app->component == CompTextarea && app->textareaOn) {
-            BackspaceBuf(app->textarea, &app->textareaLen);
-        } else if (app->component == CompEditor && app->editorOn) {
-            BackspaceAt(app->editor, &app->editorLen, &app->editorCursor);
+            OtpPop(app->otp, &app->otpLen);
         }
         return;
-    }
-    if (app->component == CompEditor && app->editorOn) {
-        int cur = app->editorCursor;
-        int len = app->editorLen;
-        if (vk == KeyLeft && cur > 0) {
-            app->editorCursor = cur - 1;
-            return;
-        }
-        if (vk == KeyRight && cur < len) {
-            app->editorCursor = cur + 1;
-            return;
-        }
-        if (vk == KeyHome) {
-            app->editorCursor = LineStartAt(app->editor, cur);
-            return;
-        }
-        if (vk == KeyEnd) {
-            app->editorCursor = LineEndAt(app->editor, len, cur);
-            return;
-        }
-        if (vk == KeyUp) {
-            int start = LineStartAt(app->editor, cur);
-            int col = cur - start;
-            if (start > 0) {
-                int prevEnd = start - 1;
-                int prevStart = LineStartAt(app->editor, prevEnd);
-                app->editorCursor = prevStart + col;
-                if (app->editorCursor > prevEnd) {
-                    app->editorCursor = prevEnd;
-                }
-            }
-            return;
-        }
-        if (vk == KeyDown) {
-            int start = LineStartAt(app->editor, cur);
-            int col = cur - start;
-            int end = LineEndAt(app->editor, len, cur);
-            if (end < len) {
-                int nextStart = end + 1;
-                int nextEnd = LineEndAt(app->editor, len, nextStart);
-                app->editorCursor = nextStart + col;
-                if (app->editorCursor > nextEnd) {
-                    app->editorCursor = nextEnd;
-                }
-            }
-            return;
-        }
-        if (vk == KeyDelete && cur < len) {
-            app->editorCursor = cur + 1;
-            BackspaceAt(app->editor, &app->editorLen, &app->editorCursor);
-            return;
-        }
     }
     if (vk == KeyEscape) {
         app->colorOpen = false;
@@ -464,16 +346,6 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
             ParseHexIn(app);
             app->colorOpen = false;
             app->hexIn.focused = false;
-            return;
-        }
-        if (app->component == CompTextarea && app->textareaOn) {
-            InsertBuf(app->textarea, &app->textareaLen,
-                      (int)sizeof(app->textarea), '\n');
-            win->eatReturn = true;
-        } else if (app->component == CompEditor && app->editorOn) {
-            InsertAt(app->editor, &app->editorLen, (int)sizeof(app->editor),
-                     &app->editorCursor, '\n');
-            win->eatReturn = true;
         }
     }
 }
@@ -732,14 +604,10 @@ int GpuiMain(int argc, char** argv) {
     SliderSetValue(&self->slider, SliderSingle(64.f));
     self->navigationEnabled = (self->component == CompOverview);
 
-    StrCopyZ(self->input.placeholder, (int)sizeof(self->input.placeholder),
-             "Type something…");
-    if (self->component == CompNumberInput) {
-        StrCopyZ(self->input.buf, (int)sizeof(self->input.buf), "12");
-    } else {
-        StrCopyZ(self->input.buf, (int)sizeof(self->input.buf), "Hello GPUI");
-    }
-    self->input.len = (int)strlen(self->input.buf);
+    InputSetPlaceholder(&self->input, StrL("Type something…"));
+    InputSetValue(&self->input, self->component == CompNumberInput
+                                    ? StrL("12")
+                                    : StrL("Hello GPUI"));
     if (self->component == CompInput || self->component == CompNumberInput) {
         self->input.focused = true;
     } else if (self->component == CompEditor) {
@@ -747,13 +615,13 @@ int GpuiMain(int argc, char** argv) {
     } else if (self->component == CompOtpInput) {
         self->otpOn = true;
     }
-    StrCopyZ(self->comboQuery.placeholder,
-             (int)sizeof(self->comboQuery.placeholder), "Search frameworks…");
-    StrCopyZ(self->hexIn.placeholder, (int)sizeof(self->hexIn.placeholder),
-             "#2563EB");
-    StrCopyZ(self->hexIn.buf, (int)sizeof(self->hexIn.buf), "#2563EB");
-    self->hexIn.len = 7;
-    self->textareaLen = (int)strlen(self->textarea);
+    InputSetPlaceholder(&self->comboQuery, StrL("Search frameworks…"));
+    InputSetPlaceholder(&self->hexIn, StrL("#2563EB"));
+    InputSetValue(&self->hexIn, StrL("#2563EB"));
+    self->textarea.kind = InputKind::Textarea;
+    InputSetValue(&self->textarea,
+                  StrL("Build focused interfaces.\nKeep behavior composable."));
+    self->editor.kind = InputKind::Editor;
 
     Window* win = WindowOpenView(app, StrL("GPUI Base C++"), 840, 640, view.id,
                                  WinOpts{});

@@ -20,7 +20,7 @@ enum {
 
 struct PopoverStory {
     int open = PopDefaultOpen;
-    LineInput formInput = {};
+    InputState formInput;
     bool seeded = false;
 
     static El* Render(PopoverStory* self, Ctx* cx);
@@ -76,9 +76,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->formInput.buf, (int)sizeof(self->formInput.buf),
-                 "Hello");
-        self->formInput.len = (int)strlen(self->formInput.buf);
+        InputSetValue(&self->formInput, StrL("Hello"));
     }
     if (self->formInput.focused) {
         cx->win->input = &self->formInput;

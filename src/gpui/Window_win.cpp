@@ -525,6 +525,30 @@ void ClipboardSetText(Window* win, Str text) {
     CloseClipboard();
 }
 
+Str ClipboardGetText(Arena* a, Window* win) {
+    if (!OpenClipboard(Hwnd(win))) {
+        return {};
+    }
+    Str out = {};
+    HANDLE h = GetClipboardData(CF_UNICODETEXT);
+    auto* w = h ? (const WCHAR*)GlobalLock(h) : nullptr;
+    if (w) {
+        int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr,
+                                    nullptr);
+        if (n > 1) {
+            char* buf = (char*)Alloc(a, n);
+            if (buf) {
+                WideCharToMultiByte(CP_UTF8, 0, w, -1, buf, n, nullptr,
+                                    nullptr);
+                out = Str(buf, n - 1);
+            }
+        }
+        GlobalUnlock(h);
+    }
+    CloseClipboard();
+    return out;
+}
+
 // ─── app lifecycle ────────────────────────────────────────────────────────
 
 bool PlatInit(App* app) {

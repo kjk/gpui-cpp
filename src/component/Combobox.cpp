@@ -48,7 +48,7 @@ Combobox* Combobox::Open(bool v) {
     open = v;
     return this;
 }
-Combobox* Combobox::Query(LineInput* q) {
+Combobox* Combobox::Query(InputState* q) {
     query = q;
     return this;
 }

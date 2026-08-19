@@ -42,20 +42,48 @@ static const char* kAutoGrowText =
     "The third line: Here you can input other long text content that "
     "requires horizontal scrolling.\n";
 
+// One TextareaState per section, the way the Rust story makes one per
+// example. `submitOnEnter` is what makes the chat box send on a plain Enter.
 struct TextareaStory {
+    InputState notes;
+    InputState noWrap;
+    InputState autoGrow;
+    InputState both;
+    InputState chat;
+    bool seeded = false;
+
     static El* Render(TextareaStory* self, Ctx* cx);
 };
 
 static void NoOp(TextareaStory*, Ctx*, const ClickEvent*) {}
 
-El* TextareaStory::Render(TextareaStory*, Ctx* cx) {
+El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    if (!self->seeded) {
+        self->seeded = true;
+        InputState* all[] = {&self->notes, &self->noWrap, &self->autoGrow,
+                             &self->both, &self->chat};
+        for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) {
+            all[i]->kind = InputKind::Textarea;
+        }
+        InputSetValue(&self->notes, Str(kTextareaText));
+        InputSetValue(&self->noWrap, Str(kNoWrapText));
+        InputSetValue(&self->autoGrow, Str(kAutoGrowText));
+        InputSetValue(&self->both, StrL("Hello 世界，this is GPUI component."));
+        // auto_grow(1, 5).
+        self->autoGrow.mode.kind = LayoutModeKind::AutoGrow;
+        self->autoGrow.mode.minRows = 1;
+        self->autoGrow.mode.maxRows = 5;
+        self->chat.submitOnEnter = true;
+        InputSetPlaceholder(&self->chat, StrL("Type a message, Enter to send, "
+                                              "Shift+Enter for newline"));
+    }
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Textarea", nullptr);
     El* defCol = Div(a)->FlexCol()->W(560)->Gap(8);
-    defCol->Child(component::Textarea::New(cx, StrL("notes"), kTextareaText)
+    defCol->Child(component::Textarea::New(cx, StrL("notes"), &self->notes)
                       ->H(320)
                       ->IntoEl());
     // The action row: two xsmall outline buttons, and the cursor position at
@@ -81,18 +109,18 @@ El* TextareaStory::Render(TextareaStory*, Ctx* cx) {
     page->Child(def);
 
     El* nowrap = StorySection(cx, "No Wrap", nullptr);
-    StorySectionAdd(nowrap,
-                    component::Textarea::New(cx, StrL("notes-nw"), kNoWrapText)
-                        ->H(200)
-                        ->SoftWrap(false)
-                        ->IntoEl()
-                        ->W(560));
+    StorySectionAdd(
+        nowrap, component::Textarea::New(cx, StrL("notes-nw"), &self->noWrap)
+                    ->H(200)
+                    ->SoftWrap(false)
+                    ->IntoEl()
+                    ->W(560));
     page->Child(nowrap);
 
     // auto_grow(1, 5): five rows once the text is long enough to fill them.
     El* grow = StorySection(cx, "Auto Grow", nullptr);
     StorySectionAdd(
-        grow, component::Textarea::New(cx, StrL("notes-grow"), kAutoGrowText)
+        grow, component::Textarea::New(cx, StrL("notes-grow"), &self->autoGrow)
                   ->Rows(5)
                   ->IntoEl()
                   ->W(560));
@@ -100,8 +128,7 @@ El* TextareaStory::Render(TextareaStory*, Ctx* cx) {
 
     El* both = StorySection(cx, "Auto Grow with No Wrap", nullptr);
     StorySectionAdd(
-        both, component::Textarea::New(cx, StrL("notes-both"),
-                                       "Hello 世界，this is GPUI component.")
+        both, component::Textarea::New(cx, StrL("notes-both"), &self->both)
                   ->Rows(1)
                   ->SoftWrap(false)
                   ->IntoEl()
@@ -110,10 +137,8 @@ El* TextareaStory::Render(TextareaStory*, Ctx* cx) {
 
     El* chat = StorySection(cx, "Submit on Enter (Chat)", nullptr);
     StorySectionAdd(chat,
-                    component::Textarea::New(cx, StrL("chat"), "")
+                    component::Textarea::New(cx, StrL("chat"), &self->chat)
                         ->Rows(1)
-                        ->Placeholder(StrL("Type a message, Enter to send, "
-                                           "Shift+Enter for newline"))
                         ->IntoEl()
                         ->W(560));
     page->Child(chat);

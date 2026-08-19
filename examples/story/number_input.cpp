@@ -10,7 +10,7 @@ enum {
 };
 
 struct NumberInputStory {
-    LineInput fields[NumCount] = {};
+    InputState fields[NumCount];
     int focused = -1;
     StoryToolbarState toolbar;
     bool seeded = false;
@@ -23,18 +23,16 @@ static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
     int slot = (int)(packed >> 1);
     int dir = (packed & 1) ? 1 : -1;
     double v = 0;
-    sscanf(self->fields[slot].buf, "%lf", &v);
+    sscanf(InputCStr(&self->fields[slot]), "%lf", &v);
     // The format story steps by 0.01, the rest by one.
     double step = slot == NumFormat ? 0.01 : (slot == NumCustom ? 0.1 : 1);
     v += dir * step;
-    LineInput* f = &self->fields[slot];
+    InputState* f = &self->fields[slot];
     if (slot == NumFormat || slot == NumCustom) {
-        snprintf(f->buf, sizeof(f->buf), "%.2f", v);
+        InputSetValue(f, fmt("%.2f", v));
     } else {
-        snprintf(f->buf, sizeof(f->buf), "%d", (int)v);
+        InputSetValue(f, fmt("%d", (int)v));
     }
-    f->len = (int)strlen(f->buf);
-    f->cursor = f->len;
     Notify(cx);
 }
 static void FocusNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
@@ -64,12 +62,9 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
             {NumCustom, "0.9", "Styling"},
         };
         for (size_t i = 0; i < sizeof(seeds) / sizeof(seeds[0]); i++) {
-            LineInput* f = &self->fields[seeds[i].slot];
-            StrCopyZ(f->buf, (int)sizeof(f->buf), seeds[i].value);
-            f->len = (int)strlen(f->buf);
-            f->cursor = f->len;
-            StrCopyZ(f->placeholder, (int)sizeof(f->placeholder),
-                     seeds[i].placeholder);
+            InputState* f = &self->fields[seeds[i].slot];
+            InputSetValue(f, Str(seeds[i].value));
+            InputSetPlaceholder(f, Str(seeds[i].placeholder));
         }
     }
     if (self->focused >= 0) {

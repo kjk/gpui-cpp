@@ -10,9 +10,10 @@ namespace component {
 struct Highlighter {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    const char* text = nullptr;
+    // EditorState: the same engine again, with InputKind::Editor.
+    InputState* state = nullptr;
 
-    static Highlighter* New(Ctx* cx, const char* text);
+    static Highlighter* New(Ctx* cx, InputState* state);
     El* IntoEl();
 };
 

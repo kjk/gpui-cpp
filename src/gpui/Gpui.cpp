@@ -532,6 +532,25 @@ El* El::BindSliderBounds(SliderState* s) {
     sliderBounds = s;
     return this;
 }
+El* El::BindInput(InputState* s) {
+    input = s;
+    return this;
+}
+// InputElement paints the selection as a quad under the run and the caret as
+// one on top of it. Both are measured against the shaped line, so a caret
+// appearing and disappearing cannot shift the glyphs beside it.
+El* El::SelRange(int lo, int hi, Rgba color) {
+    selLo = lo;
+    selHi = hi;
+    selColor = color;
+    return this;
+}
+El* El::Caret(int off, Rgba color, float width) {
+    caretOff = off;
+    caretColor = color;
+    caretW = width;
+    return this;
+}
 
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
@@ -2195,6 +2214,53 @@ static void PaintOverlays(PaintCtx* ctx, El* e) {
     }
 }
 
+// InputElement's cursor_bounds: where the caret sits inside the run this
+// element painted. Rust measures it in prepaint from the shaped line and
+// paints a quad there; the shaped line is already in hand here, so the two
+// steps fold together. A run with no text puts the caret at its left edge,
+// which is where an empty field with a placeholder shows it.
+static void PaintCaret(PaintCtx* ctx, El* e, float font) {
+    if (e->caretOff < 0 || e->caretColor.a == 0) {
+        return;
+    }
+    float x = e->x;
+    float y = e->y;
+    float h = e->h;
+    if (e->text.s && e->text.len > 0) {
+        float maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
+        TextLayout* tl = TextMeasLayout(ctx, e->text, font, maxW, e->style.wrap,
+                                        0, 0, nullptr);
+        if (tl) {
+            Bounds r[32] = {};
+            int off = e->caretOff;
+            if (off > e->text.len) {
+                off = e->text.len;
+            }
+            int n = 0;
+            if (off > 0) {
+                // The trailing edge of everything before it.
+                n = TextLayoutRangeRects(tl, e->text, 0, off, r, 32);
+                if (n > 0) {
+                    x = e->x + r[n - 1].x + r[n - 1].w;
+                    y = e->y + r[n - 1].y;
+                    h = r[n - 1].h;
+                }
+            } else {
+                // Nothing before it, so the leading edge of the first
+                // character instead.
+                n = TextLayoutRangeRects(tl, e->text, 0, e->text.len, r, 32);
+                if (n > 0) {
+                    x = e->x + r[0].x;
+                    y = e->y + r[0].y;
+                    h = r[0].h;
+                }
+            }
+            TextLayoutRelease(tl);
+        }
+    }
+    CanvasFillRect(ctx, x, y, e->caretW, h, e->caretColor);
+}
+
 void PaintEl(PaintCtx* ctx, El* e) {
     PaintElNode(ctx, e, true);
     PaintOverlays(ctx, e);
@@ -2225,6 +2291,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.onDragMove = e->onDragMove;
         hr.slider = e->slider;
         hr.sliderAxis = e->sliderAxis;
+        hr.input = e->input;
         ctx->hits.Append(hr);
     }
     if (e->style.overflowY == OverflowY::Scroll) {
@@ -2303,10 +2370,27 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         CanvasPushClip(ctx, e->x, e->y, e->w, e->h);
     }
 
+    // InputElement's input_bounds: the box a press maps against. The
+    // outermost binding of the frame wins, so the themed field's whole
+    // bordered box counts and not just the run inside it.
+    if (e->input && e->kind != ElKind::Text) {
+        bool seen = false;
+        for (int i = 0; i < ctx->inputs.len && !seen; i++) {
+            seen = ctx->inputs[i] == e->input;
+        }
+        if (!seen) {
+            e->input->inputBounds = e->Bounds();
+            ctx->inputs.Append(e->input);
+        }
+    }
     if (e->kind == ElKind::Text) {
         float font = e->laidFont > 0
                          ? e->laidFont
                          : (e->style.fontSize > 0 ? e->style.fontSize : 14.f);
+        if (e->input) {
+            e->input->lastBounds = e->Bounds();
+            e->input->lastFont = font;
+        }
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
         int lo = e->selLo;
         int hi = e->selHi;
@@ -2340,7 +2424,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         if (lo >= 0 && hi > lo) {
             PaintTextRange(ctx, e->text, font,
                            e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
-                           e->x, e->y, lo, hi, Rgba8(0x6b, 0xb3, 0xf0, 90));
+                           e->x, e->y, lo, hi, e->selColor);
         }
         if (e->laidLayout) {
             TextLayoutDraw(ctx, e->laidLayout, e->x, e->y, c,
@@ -2350,6 +2434,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
                        e->style.truncate, e->style.wrap, e->laidMaxW,
                        ElTextWeight(e), e->style.lineHeight);
         }
+        PaintCaret(ctx, e, font);
     } else if (e->kind == ElKind::Icon) {
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
         float s = e->w > 0 ? e->w : 16;
@@ -2367,6 +2452,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         }
     } else if (e->kind == ElKind::Chart) {
         DrawChart(ctx, e);
+    }
+    if (e->kind != ElKind::Text) {
+        PaintCaret(ctx, e, e->laidFont > 0 ? e->laidFont : 14.f);
     }
     if (e->customPaint) {
         e->customPaint(ctx, e, e->customUser);
@@ -2437,6 +2525,16 @@ const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {
         const HitRect& h = ctx->hits[i];
         if (h.bounds.Contains({x, y})) {
             return &ctx->hits[i];
+        }
+    }
+    return nullptr;
+}
+
+InputState* InputAtPosition(PaintCtx* ctx, float x, float y) {
+    for (int i = ctx->inputs.len - 1; i >= 0; i--) {
+        InputState* s = ctx->inputs[i];
+        if (s->inputBounds.Contains({x, y})) {
+            return s;
         }
     }
     return nullptr;
@@ -2546,14 +2644,7 @@ int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
 // click on a letter takes the word, one on a space takes the run of spaces,
 // and one on punctuation or a CJK character takes just that character.
 
-enum class CharKind : uint8_t {
-    Word,
-    Whitespace,
-    Newline,
-    Other
-};
-
-static CharKind KindOf(uint32_t c) {
+CharKind CharKindOf(uint32_t c) {
     bool word = c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
                 (c >= 'A' && c <= 'Z') ||
                 // Latin-1 Supplement through Latin Extended-B, the combining
@@ -2578,7 +2669,7 @@ static CharKind KindOf(uint32_t c) {
 // The character at `i` and how many bytes it took. A byte that is not valid
 // UTF-8 counts as one character of its own value: the rules above only ask
 // which class it lands in, and every stray byte lands in the same one.
-static int Utf8At(Str s, int i, uint32_t* out) {
+int Utf8At(Str s, int i, uint32_t* out) {
     const uint8_t* p = (const uint8_t*)s.s + i;
     uint8_t c = p[0];
     if (c < 0x80) {
@@ -2606,7 +2697,7 @@ static int Utf8At(Str s, int i, uint32_t* out) {
 }
 
 // Where the character before `i` starts.
-static int Utf8Prev(Str s, int i) {
+int Utf8Prev(Str s, int i) {
     int j = i - 1;
     while (j > 0 && ((uint8_t)s.s[j] & 0xC0) == 0x80) {
         j--;
@@ -2615,7 +2706,7 @@ static int Utf8Prev(Str s, int i) {
 }
 
 // clip_offset_left: into the string, then back to a character boundary.
-static int Utf8ClipLeft(Str s, int off) {
+int Utf8ClipLeft(Str s, int off) {
     if (off > s.len) {
         off = s.len;
     }
@@ -2642,7 +2733,7 @@ bool TextWordRangeAt(Str s, int off, int* outA, int* outB) {
     }
     uint32_t c = 0;
     int clen = Utf8At(s, off, &c);
-    CharKind kind = KindOf(c);
+    CharKind kind = CharKindOf(c);
     bool joins = kind == CharKind::Word || kind == CharKind::Whitespace;
     int a = off;
     int b = off + clen;
@@ -2650,7 +2741,7 @@ bool TextWordRangeAt(Str s, int off, int* outA, int* outB) {
         int prev = Utf8Prev(s, a);
         uint32_t pc = 0;
         Utf8At(s, prev, &pc);
-        if (KindOf(pc) != kind) {
+        if (CharKindOf(pc) != kind) {
             break;
         }
         a = prev;
@@ -2658,7 +2749,7 @@ bool TextWordRangeAt(Str s, int off, int* outA, int* outB) {
     for (int i = 0; joins && b < s.len && i < kWordScanMax; i++) {
         uint32_t nc = 0;
         int nlen = Utf8At(s, b, &nc);
-        if (KindOf(nc) != kind) {
+        if (CharKindOf(nc) != kind) {
             break;
         }
         b += nlen;

@@ -18,7 +18,7 @@ struct SheetStory {
     int open = SheetNone;
     bool overlay = true;
     bool overlayClosable = true;
-    LineInput focusInput = {};
+    InputState focusInput;
     StoryToolbarState toolbar;
     bool seeded = false;
 
@@ -58,9 +58,8 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->focusInput.placeholder,
-                 (int)sizeof(self->focusInput.placeholder),
-                 "For test focus back on dialog close.");
+        InputSetPlaceholder(&self->focusInput,
+                            StrL("For test focus back on dialog close."));
     }
     if (self->focusInput.focused) {
         cx->win->input = &self->focusInput;

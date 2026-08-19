@@ -1,6 +1,6 @@
 #include "Story.h"
 
-// One LineInput per field on the page, in the order the sections use them.
+// One InputState per field on the page, in the order the sections use them.
 enum {
     InText = 0,
     InEmail,
@@ -98,7 +98,7 @@ static const ContentTypeRow kContentTypes[] = {
 };
 
 struct InputStory {
-    LineInput fields[InCount] = {};
+    InputState fields[InCount];
     // The fields whose value is hidden until the eye is clicked.
     bool revealed[InCount] = {};
     int focusedField = -1;
@@ -120,9 +120,7 @@ static void FocusField(InputStory* self, Ctx* cx, const ClickEvent*,
 }
 static void ClearField(InputStory* self, Ctx* cx, const ClickEvent*,
                        intptr_t slot) {
-    self->fields[slot].buf[0] = 0;
-    self->fields[slot].len = 0;
-    self->fields[slot].cursor = 0;
+    InputSetValue(&self->fields[slot], Str{});
     Notify(cx);
 }
 static void ToggleMask(InputStory* self, Ctx* cx, const ClickEvent*,
@@ -152,12 +150,9 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     if (!self->seeded) {
         self->seeded = true;
         for (size_t i = 0; i < sizeof(kSeeds) / sizeof(kSeeds[0]); i++) {
-            LineInput* f = &self->fields[kSeeds[i].slot];
-            StrCopyZ(f->buf, (int)sizeof(f->buf), kSeeds[i].value);
-            f->len = (int)strlen(f->buf);
-            f->cursor = f->len;
-            StrCopyZ(f->placeholder, (int)sizeof(f->placeholder),
-                     kSeeds[i].placeholder);
+            InputState* f = &self->fields[kSeeds[i].slot];
+            InputSetValue(f, Str(kSeeds[i].value));
+            InputSetPlaceholder(f, Str(kSeeds[i].placeholder));
         }
     }
     if (self->focusedField >= 0) {
@@ -291,10 +286,11 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                                 "Format currency while retaining its value.");
     El* currencyCol = Div(a)->FlexCol()->W(512)->Gap(16);
     currencyCol->Child(Field(self, cx, InCurrency, focus, clear)->IntoEl());
-    currencyCol->Child(Centered(
-        cx, StoryTxt(
-                cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InCurrency].buf),
-                16, th.foreground)));
+    currencyCol->Child(
+        Centered(cx, StoryTxt(cx,
+                              StoryFmt(cx, "Value: \"%s\"",
+                                       InputCStr(&self->fields[InCurrency])),
+                              16, th.foreground)));
     StorySectionAdd(currency, currencyCol);
     page->Child(currency);
 
@@ -303,12 +299,13 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     El* phoneCol = Div(a)->FlexCol()->W(512)->Gap(16);
     phoneCol->Child(Field(self, cx, InPhone, focus, clear)->IntoEl());
     El* phoneVals = Div(a)->FlexCol();
-    phoneVals->Child(
-        StoryTxt(cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InPhone].buf),
-                 16, th.foreground));
     phoneVals->Child(StoryTxt(
-        cx, StoryFmt(cx, "Unmask Value: \"%s\"", self->fields[InPhone].buf), 16,
-        th.foreground));
+        cx, StoryFmt(cx, "Value: \"%s\"", InputCStr(&self->fields[InPhone])),
+        16, th.foreground));
+    phoneVals->Child(StoryTxt(
+        cx,
+        StoryFmt(cx, "Unmask Value: \"%s\"", InputCStr(&self->fields[InPhone])),
+        16, th.foreground));
     phoneCol->Child(Centered(cx, phoneVals));
     StorySectionAdd(phone, phoneCol);
     page->Child(phone);
@@ -319,12 +316,14 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     patternCol->Child(Field(self, cx, InMaskPattern, focus, clear)->IntoEl());
     El* patternVals = Div(a)->FlexCol();
     patternVals->Child(StoryTxt(
-        cx, StoryFmt(cx, "Value: \"%s\"", self->fields[InMaskPattern].buf), 16,
-        th.foreground));
-    patternVals->Child(StoryTxt(
         cx,
-        StoryFmt(cx, "Unmask Value: \"%s\"", self->fields[InMaskPattern].buf),
+        StoryFmt(cx, "Value: \"%s\"", InputCStr(&self->fields[InMaskPattern])),
         16, th.foreground));
+    patternVals
+        ->Child(StoryTxt(cx,
+                         StoryFmt(cx, "Unmask Value: \"%s\"",
+                                  InputCStr(&self->fields[InMaskPattern])),
+                         16, th.foreground));
     patternCol->Child(Centered(cx, patternVals));
     StorySectionAdd(pattern, patternCol);
     page->Child(pattern);
@@ -345,10 +344,11 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* focusedSec = StorySection(cx, "Focused value",
                                   "Read the value of the focused input.");
-    Str focusedValue = self->focusedField >= 0
-                           ? StoryFmt(cx, "Value: Some(\"%s\")",
-                                      self->fields[self->focusedField].buf)
-                           : StoryDup(cx, "Value: None");
+    Str focusedValue =
+        self->focusedField >= 0
+            ? StoryFmt(cx, "Value: Some(\"%s\")",
+                       InputCStr(&self->fields[self->focusedField]))
+            : StoryDup(cx, "Value: None");
     StorySectionAdd(focusedSec,
                     Centered(cx, StoryTxt(cx, focusedValue, 16, th.foreground))
                         ->W(512));
@@ -390,9 +390,7 @@ void InputStory::OnKey(InputStory* self, Ctx* cx, const KeyEvent* ev) {
     if (ev->vk != KeyEscape) {
         return;
     }
-    self->fields[InEsc].buf[0] = 0;
-    self->fields[InEsc].len = 0;
-    self->fields[InEsc].cursor = 0;
+    InputSetValue(&self->fields[InEsc], Str{});
     Notify(cx);
 }
 

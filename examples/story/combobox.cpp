@@ -23,7 +23,7 @@ struct ComboSpec {
 
 struct ComboboxStory {
     int open = -1;
-    LineInput query = {};
+    InputState query;
     bool seeded = false;
 
     static El* Render(ComboboxStory* self, Ctx* cx);
@@ -41,8 +41,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->query.placeholder, (int)sizeof(self->query.placeholder),
-                 "Search…");
+        InputSetPlaceholder(&self->query, StrL("Search…"));
     }
     if (self->query.focused) {
         cx->win->input = &self->query;

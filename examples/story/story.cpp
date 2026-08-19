@@ -567,9 +567,7 @@ static void FocusSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
 }
 
 static void ClearSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
-    app->search.buf[0] = 0;
-    app->search.len = 0;
-    app->search.cursor = 0;
+    InputSetValue(&app->search, Str{});
     app->search.focused = false;
     cx->win->input = nullptr;
     Notify(cx);
@@ -579,7 +577,7 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* list = Div(a)->FlexCol()->Gap(2)->Pad(8);
-    const char* q = app->search.buf;
+    const char* q = InputCStr(&app->search);
     for (int i = 0; i < StoryCount; i++) {
         const StoryInfo* m = StoryMeta(i);
         if (!StoryMatches(m, q)) {
@@ -623,7 +621,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
                   ->OnClick(Listen(cx, &FocusSearch))
                   ->FocusId(ClickSearch);
     box->Child(::Input::New(cx, &app->search)->Grow());
-    if (app->search.len > 0) {
+    if (InputValue(&app->search).len > 0) {
         box->Child(Div(a)
                        ->W(16)
                        ->H(16)
@@ -993,12 +991,9 @@ int GpuiMain(int argc, char** argv) {
     // search box so the list filters to matching titles.
     if (slug[0]) {
         const StoryInfo* m = StoryMeta(self->story);
-        StrCopyZ(self->search.buf, (int)sizeof(self->search.buf), m->title);
-        self->search.len = (int)strlen(self->search.buf);
-        self->search.cursor = self->search.len;
+        InputSetValue(&self->search, Str(m->title));
     }
-    StrCopyZ(self->search.placeholder, (int)sizeof(self->search.placeholder),
-             "Search…");
+    InputSetPlaceholder(&self->search, StrL("Search…"));
     // create_new_window_with_size passes 1600x1200; WindowOpen caps it at
     // 85% of the display and centers it.
     WinOpts opts = {};

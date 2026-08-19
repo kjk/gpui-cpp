@@ -9,12 +9,12 @@ namespace component {
 struct SearchableList {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    LineInput* query = nullptr;
+    InputState* query = nullptr;
     Str items[32] = {};
     int n = 0;
     Listener onSelect;
 
-    static SearchableList* New(Ctx* cx, LineInput* query);
+    static SearchableList* New(Ctx* cx, InputState* query);
     SearchableList* Item(Str s);
     SearchableList* OnSelect(Listener fn);
     El* IntoEl();

@@ -391,7 +391,7 @@ void WindowMacKeyDown(Window* win, NSEvent* event) {
     if (key) {
         WindowKeyDown(win, key, shift, ctrl, alt);
     }
-    // Backspace arrives as a key only; the bound LineInput edits on the
+    // Backspace arrives as a key only; the bound InputState edits on the
     // control code the Windows window delivers through WM_CHAR.
     if (key == KeyBack) {
         WindowChar(win, 8, ctrl, alt);
@@ -518,6 +518,26 @@ void ClipboardSetText(Window* win, Str text) {
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     [pb clearContents];
     [pb setString:s forType:NSPasteboardTypeString];
+}
+
+Str ClipboardGetText(Arena* a, Window* win) {
+    (void)win;
+    NSPasteboard* pb = [NSPasteboard generalPasteboard];
+    NSString* s = [pb stringForType:NSPasteboardTypeString];
+    if (!s) {
+        return {};
+    }
+    const char* utf8 = [s UTF8String];
+    if (!utf8) {
+        return {};
+    }
+    int n = (int)strlen(utf8);
+    char* buf = (char*)Alloc(a, n + 1);
+    if (!buf) {
+        return {};
+    }
+    memcpy(buf, utf8, (size_t)n + 1);
+    return Str(buf, n);
 }
 
 // ─── app lifecycle ────────────────────────────────────────────────────────

@@ -105,7 +105,7 @@ struct ShowcaseApp {
     uint32_t colorHex = 0x2563eb;
     bool comboboxOpen = false;
     char comboboxSel[32] = "Select framework";
-    LineInput comboQuery = {};
+    InputState comboQuery;
     bool dateOpen = false;
     int calYear = 0; // 0 = fill from local date on first calendar render
     int calMonth = 0;
@@ -115,20 +115,14 @@ struct ShowcaseApp {
     bool popupOpen = false;
     int page = 3;
     SliderState slider = {};
-    LineInput input = {};
-    LineInput hexIn = {};
-    char textarea[2048] =
-        "Build focused interfaces.\nKeep behavior composable.";
-    int textareaLen = 0;
+    InputState input;
+    InputState hexIn;
+    // Both multi-line pages hold the same engine as the single-line one, told
+    // which kind it is: a TextareaState and an EditorState.
+    InputState textarea;
     bool textareaOn = false;
-    // Their own caret clocks. The LineInput fields carry theirs inside
-    // LineInput; these two keep plain char buffers, so they hold the handle.
-    EntityId textareaCaret = {};
-    char editor[4096] = {};
-    int editorLen = 0;
-    int editorCursor = 0;
+    InputState editor;
     bool editorOn = false;
-    EntityId editorCaret = {};
     bool editorInited = false;
     char otp[8] = "12";
     int otpLen = 2;
@@ -153,7 +147,7 @@ struct ShowcaseApp {
     int hoverId = 0;
 };
 
-El* ScField(Ctx* cx, LineInput* in, int clickId, float w, bool valid);
+El* ScField(Ctx* cx, InputState* in, int clickId, float w, bool valid);
 
 const char* CompSlug(int i);
 int CompFromSlug(const char* slug);

@@ -82,7 +82,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                        ->Child(Input::New(cx, &app->comboQuery)));
         El* list = Div(a)->FlexCol()->W(kFill)->PadT(4);
         for (int i = 0; i < 4; i++) {
-            if (!Matches(kFwCombo[i], app->comboQuery.buf)) {
+            if (!Matches(kFwCombo[i], InputCStr(&app->comboQuery))) {
                 continue;
             }
             list->Child(Div(a)

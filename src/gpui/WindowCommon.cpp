@@ -50,6 +50,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.hits.Clear();
     win->paint.scrolls.Clear();
     win->paint.texts.Clear();
+    win->paint.inputs.Clear();
     win->paint.textDocLen = 0;
     win->paint.selA = -1;
     win->paint.selB = -1;
@@ -59,11 +60,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.viewH = dipH;
     TextMeasBeginFrame(&win->paint);
 
-    El* root = EntityRender(win->app, win, win->frameArena, win->root);
-
     // Whatever the view pointed win->input at is the focused field. Start its
     // caret and stop the one that lost focus, so no app has to. Rust hangs
-    // this off InputState::on_focus / on_blur.
+    // this off InputState::on_focus / on_blur, which is where InputFocus does
+    // it too; this is the same handoff for a view that points win->input at a
+    // field itself rather than calling InputFocus.
     if (win->input != win->prevInput) {
         if (win->prevInput) {
             BlinkStop(win->app, win, &win->prevInput->blink);
@@ -73,6 +74,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         }
         win->prevInput = win->input;
     }
+
+    El* root = EntityRender(win->app, win, win->frameArena, win->root);
 
     const Theme& th = ThemeNow();
     CanvasClear(&win->paint, th.background);
@@ -125,11 +128,16 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         AppInvalidate(win);
         return;
     }
-    // Moving the caret is activity, so it stays solid then too.
-    if (win->input && (key == KeyLeft || key == KeyRight || key == KeyUp ||
-                       key == KeyDown || key == KeyHome || key == KeyEnd ||
-                       key == KeyBack || key == KeyDelete)) {
-        BlinkPause(win->app, win, &win->input->blink);
+    // The focused field gets the chord first, as GPUI dispatches an action to
+    // whatever has focus before anything else sees the key. The view's own
+    // subscription still hears it — that is Rust's cx.propagate(), which every
+    // action the input does not consume ends with — but a key the field ate is
+    // not also an Enter on the focused element.
+    bool eaten = false;
+    if (win->input && win->input->focused) {
+        InputAction action =
+            InputActionForKey(win->input, key, shift, ctrl, alt);
+        eaten = InputPerform(win->input, win->app, win, action, shift);
     }
     if (win->onKey.IsValid()) {
         KeyEvent ev = {};
@@ -142,7 +150,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     }
     // Enter activates the focused element: run that element's own listener,
     // the one a click on it would have run.
-    if (key == KeyReturn && win->focusId && !win->eatReturn) {
+    if (key == KeyReturn && win->focusId && !win->eatReturn && !eaten) {
         const HitRect* focused = HitRectById(win, win->focusId);
         // GPUI's ClickEvent::Keyboard: no pointer was involved, so the
         // position is the element's own box.
@@ -175,38 +183,19 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
         ev.alt = alt;
         ListenerCall(win->app, win, win->onKey, &ev);
     }
-    if (win->input && win->input->focused) {
-        LineInput* in = win->input;
-        bool changed = false;
-        if (ch == 8) {
-            if (in->len > 0) {
-                in->len--;
-                in->buf[in->len] = 0;
-                in->cursor = in->len;
-                changed = true;
-            }
-        } else if (ch >= 32 && ch < 127 && in->len < 511) {
-            in->buf[in->len++] = (char)ch;
-            in->buf[in->len] = 0;
-            in->cursor = in->len;
-            changed = true;
-        }
-        if (changed) {
-            // Solid while the keys are coming, the way Rust's
-            // pause_blink_cursor is called from every edit.
-            BlinkPause(win->app, win, &in->blink);
-        }
-        // InputEvent::Change, for the view that subscribed to it.
-        if (changed && in->onChange.IsValid()) {
-            InputEvent ev = {InputEventKind::Change};
-            ListenerCall(win->app, win, in->onChange, &ev);
-        }
+    // A typed character reaches the focused field the way GPUI hands one to
+    // the focused EntityInputHandler. The control codes are keys, not text:
+    // backspace, tab, return and escape all came through WindowKeyDown
+    // already, and Ctrl+letter arrives here as 1..26.
+    if (win->input && win->input->focused && ch >= 32 && ch != 127 && !ctrl &&
+        !alt) {
+        InputTypeChar(win->input, win->app, win, ch);
     }
     AppInvalidate(win);
 }
 
 // cx.emit(SliderEvent::..) — the subscription lives on the state, the way
-// LineInput::onChange does.
+// InputState::onChange does.
 static void SliderEmit(Window* win, SliderState* s, SliderEventKind kind) {
     if (!s->onChange.IsValid()) {
         return;
@@ -230,6 +219,37 @@ static void SliderPress(Window* win, const HitRect* hit, Point at) {
         SliderEmit(win, s, SliderEventKind::Change);
     }
     AppInvalidate(win);
+}
+
+// InputState::on_mouse_down. A press focuses the field, puts the caret where
+// it landed and opens a drag; shift extends the selection instead of dropping
+// it, a second press takes the word and a third the line. A press anywhere
+// else blurs whatever had focus, which is what GPUI's focus handle does.
+static void InputPress(Window* win, const MouseDownEvent& in) {
+    InputState* s = InputAtPosition(&win->paint, in.x, in.y);
+    if (!s) {
+        if (win->input) {
+            InputBlur(win->input, win->app, win);
+        }
+        return;
+    }
+    if (s->disabled) {
+        return;
+    }
+    if (!s->focused) {
+        InputFocus(s, win->app, win);
+    }
+    int offset = InputIndexForPosition(s, &win->paint, in.x, in.y);
+    if (in.clickCount >= 3) {
+        InputSelectLine(s, win->app, win, offset);
+    } else if (in.clickCount == 2) {
+        InputSelectWord(s, win->app, win, offset);
+    } else if (in.modifiers.shift) {
+        InputSelectTo(s, win->app, win, offset);
+    } else {
+        InputMoveTo(s, win->app, win, offset);
+    }
+    s->selecting = true;
 }
 
 static void SliderDrag(Window* win, const HitRect* hit, Point at) {
@@ -284,6 +304,14 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     }
     if (pressed && pressed->slider) {
         SliderDrag(win, pressed, {x, y});
+    }
+    // InputState::on_drag_move: the field that took the press keeps every move
+    // until the release, wherever the pointer has got to. The button being
+    // held is `win->mouseDown` rather than the move event's own flag, the same
+    // signal the slider drag and on_drag_move above go by.
+    if (win->input && win->input->selecting && win->mouseDown) {
+        InputSelectTo(win->input, win->app, win,
+                      InputIndexForPosition(win->input, &win->paint, x, y));
     }
     if (win->mouseDown) {
         AppInvalidate(win);
@@ -349,6 +377,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     if (hit && hit->slider) {
         SliderPress(win, hit, {x, y});
     }
+    InputPress(win, in);
     ClickEvent ev = {x, y, in.button, id};
     ev.clickCount = in.clickCount;
     ev.modifiers = in.modifiers;
@@ -395,6 +424,12 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
         ListenerCall(win->app, win, hit->onMouseUp, &in);
     }
     SliderRelease(win);
+    // InputState::on_mouse_up: the drag is over, and the word a double click
+    // pinned stops holding the selection open.
+    if (win->input && win->input->selecting) {
+        win->input->selecting = false;
+        win->input->hasSelectedWordRange = false;
+    }
     win->pressedId = 0;
     AppInvalidate(win);
 }

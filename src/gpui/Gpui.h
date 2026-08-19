@@ -34,6 +34,10 @@ Rgba RgbaMix(Rgba a, Rgba b, float t);
 // scene coordinates cannot wrap around into a different hue.
 Rgba RgbaHsla(float h, float s, float l, float a01);
 
+// The text-field engine, in the input section below. El and HitRect name one
+// before it is defined, the way they name SliderState.
+struct InputState;
+
 constexpr float kAuto = -1.f;
 constexpr float kFill = -2.f;
 constexpr float kPi = 3.14159265358979f;
@@ -445,8 +449,11 @@ enum {
     // Letters and digits are their ASCII uppercase / digit codes.
     KeyA = 65,
     KeyC = 67,
+    KeyE = 69,
     KeyV = 86,
-    KeyX = 88
+    KeyX = 88,
+    KeyY = 89,
+    KeyZ = 90
 };
 
 struct KeyEvent {
@@ -712,6 +719,11 @@ struct El {
     // element names the state and the window does what those closures do.
     SliderState* slider = nullptr;
     Axis sliderAxis = Axis::Horizontal;
+    // BindInput: this element is a text field's editor box, so a press in it
+    // places the caret and a drag extends the selection. The same trick as
+    // BindSlider — Rust's InputElement captures the state entity in the
+    // closures it installs, and an element here names the state instead.
+    InputState* input = nullptr;
     // BindSliderBounds: this element is the rail a value maps against, and
     // hands its box to the state once it has one — SliderIndicator's
     // `on_prepaint(|bounds| state.set_bounds(bounds))`. The box that catches
@@ -733,7 +745,15 @@ struct El {
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
     int selHi = -1;
+    Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
     bool selectable = false;
+    // The caret this run draws, as a UTF-8 offset into it; -1 for none. Rust's
+    // InputElement measures cursor_bounds in prepaint and paints a quad there,
+    // which is what this is — putting the bar between two text runs instead
+    // would shift the glyphs by its own width every time it appeared.
+    int caretOff = -1;
+    Rgba caretColor = {};
+    float caretW = 2;
     float laidFont = 0; // resolved font size from last LayoutEl
     float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
     // The shaped run LayoutEl measured, borrowed from the text cache so the
@@ -807,6 +827,10 @@ struct El {
     El* OnDragMove(Listener l);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
     El* BindSliderBounds(SliderState* s);
+    El* BindInput(InputState* s);
+    // The selection quad and the caret an input's text run paints over itself.
+    El* SelRange(int lo, int hi, Rgba color);
+    El* Caret(int off, Rgba color, float width = 2);
     El* Child(El* c);
     El* Bold();
     El* Semibold();
@@ -865,6 +889,7 @@ struct HitRect {
     Listener onDragMove;
     SliderState* slider = nullptr;
     Axis sliderAxis = Axis::Horizontal;
+    InputState* input = nullptr;
 };
 
 struct ScrollRect {
@@ -908,6 +933,12 @@ struct PaintCtx {
     Vec<HitRect> hits;
     Vec<ScrollRect> scrolls;
     Vec<TextHit> texts;
+    // The fields this frame painted, outermost box first, so a press can find
+    // the one it landed in. A hit rect would shadow the click on the box
+    // around it; these are a list of their own for the same reason GPUI
+    // installs the editor's mouse handlers beside the container's, not
+    // instead of them.
+    Vec<InputState*> inputs;
     int textDocLen = 0;
     int selA = -1;
     int selB = -1;
@@ -922,30 +953,430 @@ struct FocusRect {
     Bounds bounds = {};
 };
 
-// gpui_component::input::InputEvent. Change is the only variant raised so
-// far; PressEnter / Focus / Blur have no subscriber here yet.
+// ─── UTF-8 scanning ───────────────────────────────────────────────────────
+//
+// What text_boundary.rs and the input engine both walk the text with. A byte
+// that is not valid UTF-8 counts as one character of its own value: every
+// caller only asks which class it lands in, and every stray byte lands in the
+// same one.
+
+// crates/base/src/text_boundary.rs CharacterKind.
+enum class CharKind : uint8_t {
+    Word,
+    Whitespace,
+    Newline,
+    Other
+};
+
+CharKind CharKindOf(uint32_t c);
+// The codepoint at byte `i` and how many bytes it took.
+int Utf8At(Str s, int i, uint32_t* out);
+// Where the character before `i` starts.
+int Utf8Prev(Str s, int i);
+// clip_offset_left: into the string, then back to a character boundary.
+int Utf8ClipLeft(Str s, int off);
+
+// ─── rope ─────────────────────────────────────────────────────────────────
+//
+// crates/base/src/input/base/rope_ext.rs. Rust's input holds its document in a
+// `ropey::Rope` and reaches it through the `RopeExt` trait; here the document
+// is a flat UTF-8 buffer and the trait's methods are these functions over a
+// `Str`. An input holds a form field or a page of code, not a file, so the
+// piece table a rope buys is machinery with nothing to do.
+
+// sum_tree::Bias: which side of a character an offset that lands inside one
+// is pulled to.
+enum class Bias : uint8_t {
+    Left,
+    Right
+};
+
+// rope_ext.rs Point — a row and a byte column inside it, not a position on
+// screen. Named the way Rust names it; gpui::Point is the geometry one.
+struct RopePoint {
+    int row = 0;
+    int column = 0;
+};
+
+// Into the text, then to a character boundary on the named side.
+int RopeClipOffset(Str text, int offset, Bias bias);
+// char_at: the codepoint at `offset`, and how many bytes it took. 0 when the
+// offset is past the end — Rust's `None`.
+int RopeCharAt(Str text, int offset, uint32_t* out);
+int RopeLinesLen(Str text);
+int RopeLineStartOffset(Str text, int row);
+int RopeLineEndOffset(Str text, int row);
+// slice_line: the row without its newline.
+Str RopeSliceLine(Str text, int row);
+int RopeLineLen(Str text, int row);
+RopePoint RopeOffsetToPoint(Str text, int offset);
+int RopePointToOffset(Str text, RopePoint point);
+int RopeOffsetUtf16ToOffset(Str text, int offsetUtf16);
+int RopeOffsetToOffsetUtf16(Str text, int offset);
+int RopeCharIndexToOffset(Str text, int charIndex);
+int RopeOffsetToCharIndex(Str text, int offset);
+
+// ─── input ────────────────────────────────────────────────────────────────
+//
+// crates/base/src/input/base. Rust's engine is one `InputBaseState<M>`
+// parameterized by a compile-time mode marker (`InputMode`, `TextareaMode`,
+// `EditorMode`) so a method that only makes sense for one of them does not
+// exist on the others. There are no traits to bound here, so the marker is a
+// runtime `InputKind` and the methods that would not compile in Rust return
+// early instead — `InputMoveVertical` on a single-line field, say.
+
+// gpui_component::input::InputEvent.
 enum class InputEventKind : uint8_t {
-    Change
+    Change,
+    PressEnter,
+    Focus,
+    Blur
 };
 
 struct InputEvent {
     InputEventKind kind = InputEventKind::Change;
+    // PressEnter { secondary, shift }.
+    bool secondary = false;
+    bool shift = false;
 };
 
-// GPUI's InputState: the text a themed Input is bound to. `onChange` is what
-// Rust spells cx.subscribe(&input_state, |ev: &InputEvent| ...) — the window
-// fires it after an edit.
-struct LineInput {
-    char buf[512] = {};
-    int len = 0;
-    int cursor = 0;
-    char placeholder[128] = {};
-    bool focused = false;
-    Listener onChange = {};
-    // This field's caret clock, the counterpart of InputState::blink_cursor.
-    // Created on first use, so a LineInput stays a plain value.
-    EntityId blink = {};
+// cursor.rs Selection: a byte range into the text. Empty means the caret sits
+// at `start`, with nothing selected.
+struct Selection {
+    int start = 0;
+    int end = 0;
+
+    int Len() const { return end > start ? end - start : 0; }
+    bool IsEmpty() const { return start == end; }
+    bool Contains(int offset) const { return offset >= start && offset < end; }
 };
+
+inline Selection SelectionAt(int offset) {
+    return Selection{offset, offset};
+}
+
+// undo_manager.rs EditIntent. What kind of edit produced a change, which is
+// what decides whether two of them coalesce into one undo step.
+enum class EditIntent : uint8_t {
+    Typing,
+    Backspace,
+    DeleteForward,
+    Atomic
+};
+
+// change.rs Change. Rust's owns two `String`s; these are heap `Str`s the
+// transaction that holds them frees.
+struct Change {
+    Selection oldRange = {};
+    Str oldText = {};
+    Selection newRange = {};
+    Str newText = {};
+    Selection selBefore = {};
+    Selection selAfter = {};
+};
+
+// One undo step. Rust's holds a `Vec<Change>`; a `Vec<T>` here is memcpy-only
+// and this lives inside another `Vec`, so the change list is a plain owned
+// array the manager grows and frees by hand.
+struct UndoTransaction {
+    EditIntent intent = EditIntent::Atomic;
+    Change* changes = nullptr;
+    int len = 0;
+    int cap = 0;
+};
+
+// undo_manager.rs UndoManager. Every edit makes a transaction; adjacent
+// compatible ones coalesce until something breaks the run — a cursor move, a
+// paste, a blur. IME composition brackets its callbacks with Begin/Commit.
+struct UndoManager {
+    Vec<UndoTransaction> undos;
+    Vec<UndoTransaction> redos;
+    bool ignoring = false;
+    bool transactionOpen = false;
+    bool hasPending = false;
+    Change pending = {};
+    // pending_intent: what the next replace should record itself as. Taken by
+    // the edit that follows.
+    bool hasPendingIntent = false;
+    EditIntent pendingIntent = EditIntent::Atomic;
+    bool coalescingBoundary = false;
+
+    ~UndoManager();
+};
+
+void UndoRecordTransaction(UndoManager* m, Change change, EditIntent intent);
+void UndoBeginTransaction(UndoManager* m);
+void UndoCommitTransaction(UndoManager* m);
+void UndoBreakCoalescing(UndoManager* m);
+void UndoSetIgnoring(UndoManager* m, bool ignoring);
+bool UndoIsIgnoring(const UndoManager* m);
+void UndoClear(UndoManager* m);
+// undo() / redo(). Rust clones the change list out; the transaction lives on
+// the other stack either way, so these hand back the one that moved and the
+// caller walks it — backwards for an undo, forwards for a redo. Null when the
+// stack is empty.
+const UndoTransaction* UndoPopUndo(UndoManager* m);
+const UndoTransaction* UndoPopRedo(UndoManager* m);
+
+// mask_pattern.rs MaskToken. `Sep` carries its character, which the pattern
+// string holds, so this is the tag alone.
+enum class MaskToken : uint8_t {
+    Digit,         // 9  — [0-9]
+    Letter,        // A  — [a-zA-Z]
+    LetterOrDigit, // # — [a-zA-Z0-9]
+    Any,           // *  — any character
+    Sep            // anything else, matching only itself
+};
+
+enum class MaskKind : uint8_t {
+    None,
+    Pattern,
+    Number
+};
+
+// mask_pattern.rs MaskPattern. Rust keeps the parsed `Vec<MaskToken>` beside
+// the pattern; a token is a pure function of its character, so the pattern
+// string is the whole state and `MaskTokenAt` reads it.
+struct MaskPattern {
+    MaskKind kind = MaskKind::None;
+    // Pattern: owned, freed by MaskPatternFree.
+    Str pattern = {};
+    // Number: the group separator, 0 for None.
+    uint32_t separator = 0;
+    // Number: how many fraction digits to keep, -1 for None.
+    int fraction = -1;
+};
+
+// `(999)999-9999`, `AAAA-99-####`, `*999*`.
+MaskPattern MaskPatternNew(Str pattern);
+MaskPattern MaskPatternNumber(uint32_t separator);
+void MaskPatternFree(MaskPattern* p);
+// The token at character index `pos`, and its separator character. False when
+// the pattern has no token there.
+bool MaskTokenAt(const MaskPattern& p, int pos, MaskToken* out, uint32_t* sep);
+bool MaskIsNone(const MaskPattern& p);
+bool MaskIsValid(const MaskPattern& p, Str maskText);
+bool MaskIsValidAt(const MaskPattern& p, uint32_t ch, int pos);
+// mask(): 123456789 through `(999)999-999` is `(123)456-789`.
+Str MaskApply(Arena* a, const MaskPattern& p, Str text);
+// unmask(): the original text back out of a masked one.
+Str MaskUnapply(Arena* a, const MaskPattern& p, Str maskText);
+// The cue a pattern shows when empty: `(___) ___-____`. Empty for the other
+// two kinds, which is Rust's `None`.
+Str MaskPlaceholder(Arena* a, const MaskPattern& p);
+// normalize_number_input: full-width and CJK number characters folded to
+// their ASCII equivalents, so `123。5` reaches the parser as `123.5`.
+Str NormalizeNumberInput(Arena* a, Str text);
+
+// kind.rs. Which of the three states this is. Rust fixes it at the type level;
+// `InputIsMultiLine` is its `MULTI_LINE` associated constant.
+enum class InputKind : uint8_t {
+    Input,
+    Textarea,
+    Editor
+};
+
+// mode.rs LayoutMode. How the input lays its text out — rows and growth. Not
+// the same question as `InputKind`: an auto-growing textarea capped at one row
+// is still multi-line, which is the bug Rust split these two apart to fix.
+enum class LayoutModeKind : uint8_t {
+    PlainText,
+    AutoGrow,
+    CodeEditor
+};
+
+struct LayoutMode {
+    LayoutModeKind kind = LayoutModeKind::PlainText;
+    int rows = 1;
+    int minRows = 1;
+    int maxRows = 0; // 0 = usize::MAX
+    int tabSize = 4;
+    bool lineNumber = false;
+};
+
+void LayoutModeSetRows(LayoutMode* m, int rows);
+int LayoutModeRows(const LayoutMode& m);
+int LayoutModeMinRows(const LayoutMode& m);
+
+// state.rs InputBaseState. The text a themed Input is bound to, everything
+// that edits it, and the undo history behind it. `onChange` is what Rust
+// spells cx.subscribe(&input_state, |ev: &InputEvent| ...).
+struct InputState {
+    InputKind kind = InputKind::Input;
+    LayoutMode mode = {};
+    // Rust's `Rope`. NUL-terminated past `len` so a `const char*` reader still
+    // works; the terminator is not counted.
+    Vec<char> text;
+    Selection selectedRange = {};
+    bool selectionReversed = false;
+    // selected_word_range: what a double click took, kept so dragging out of
+    // it cannot shrink back inside the word.
+    bool hasSelectedWordRange = false;
+    Selection selectedWordRange = {};
+    UndoManager undo;
+    MaskPattern maskPattern = {};
+    bool maskPatternSet = false;
+    Str placeholder = {}; // owned
+    bool focused = false;
+    bool disabled = false;
+    bool readonly = false;
+    bool loading = false;
+    // A masked field draws one bullet per character. InputMode only.
+    bool masked = false;
+    bool cleanOnEscape = false;
+    bool submitOnEnter = false;
+    bool softWrap = true;
+    // text_align: 0 left, 1 center, 2 right.
+    int align = 0;
+    // A press is down and every move until the release extends the selection.
+    bool selecting = false;
+    // This field's caret clock, InputState::blink_cursor. Created on first
+    // use, so an InputState stays a plain value.
+    EntityId blink = {};
+    Listener onChange = {};
+    // validate: `Fn(&str, &mut App) -> bool`. A plain function pointer plus
+    // its captured value, the way Listener carries one.
+    bool (*validate)(Str text, intptr_t arg) = nullptr;
+    intptr_t validateArg = 0;
+    // The text run the element last painted, so a press can be turned into an
+    // offset. Rust keeps `last_bounds` + `last_layout` for the same reason;
+    // in a multi-line field this is the *first* row, and the ones under it are
+    // found by stepping `lastLineH` down from it.
+    Bounds lastBounds = {};
+    float lastFont = 0;
+    float lastLineH = 0;
+    // input_bounds: the whole field, what a press outside the run maps against.
+    Bounds inputBounds = {};
+    // Suppressed while set_value writes the text, so a programmatic write is
+    // not reported as the user having typed.
+    bool emitEvents = true;
+    // preferred_column: the column a vertical move aims for, so walking down
+    // past a short line and back up returns to where it started. -1 for none.
+    // Rust also remembers the x it measured; without a display map there is
+    // only the column.
+    int preferredColumn = -1;
+
+    ~InputState();
+};
+
+// value() / the NUL-terminated view of it. Neither allocates.
+Str InputValue(const InputState* s);
+const char* InputCStr(const InputState* s);
+// unmask_value(): the text with the mask's separators taken back out.
+Str InputUnmaskValue(Arena* a, const InputState* s);
+// selected_text().
+Str InputSelectedValue(const InputState* s);
+bool InputIsMultiLine(const InputState* s);
+bool InputIsSingleLine(const InputState* s);
+bool InputIsEditable(const InputState* s);
+// cursor(): the caret offset, which end of the selection depends on which way
+// it was dragged.
+int InputCursor(const InputState* s);
+// cursor_position(): the row and column the caret is on.
+RopePoint InputCursorPosition(const InputState* s);
+
+// set_value(): replaces the text, resets the selection to the end, and clears
+// the undo history — the programmatic write, not an edit.
+void InputSetValue(InputState* s, Str value);
+// replace_all(): the same replacement, but recorded so it can be undone.
+void InputReplaceAll(InputState* s, App* app, Window* win, Str value);
+void InputSetPlaceholder(InputState* s, Str value);
+void InputSetMaskPattern(InputState* s, MaskPattern pattern);
+// clean(): empties the field.
+void InputClean(InputState* s, App* app, Window* win);
+// insert() / replace(): a programmatic edit, recorded as one atomic step.
+void InputInsert(InputState* s, App* app, Window* win, Str value);
+
+// previous_boundary / next_boundary: one character either way.
+int InputPreviousBoundary(const InputState* s, int offset);
+int InputNextBoundary(const InputState* s, int offset);
+// start_of_line / end_of_line, and the two word boundaries movement.rs asks
+// for. A single-line field answers 0 and len for the first pair, as Rust does.
+int InputStartOfLine(const InputState* s);
+int InputEndOfLine(const InputState* s);
+int InputPreviousStartOfWord(const InputState* s);
+int InputNextEndOfWord(const InputState* s);
+
+// move_to(): drops the selection and puts the caret at `offset`.
+void InputMoveTo(InputState* s, App* app, Window* win, int offset);
+// select_to(): drags the live end of the selection to `offset`.
+void InputSelectTo(InputState* s, App* app, Window* win, int offset);
+void InputSelectAll(InputState* s, App* app, Window* win);
+void InputUnselect(InputState* s, App* app, Window* win);
+void InputSetSelectedRange(InputState* s, App* app, Window* win, int a, int b);
+// selection.rs: what a double and a triple click take.
+void InputSelectWord(InputState* s, App* app, Window* win, int offset);
+void InputSelectLine(InputState* s, App* app, Window* win, int offset);
+
+// The actions state.rs binds, one per `impl` method there. The window turns a
+// key chord into one of these with InputActionForKey and hands it over — which
+// is what GPUI's action dispatch does for the focused element.
+enum class InputAction : uint8_t {
+    None,
+    MoveLeft,
+    MoveRight,
+    MoveUp,
+    MoveDown,
+    MoveHome,
+    MoveEnd,
+    MoveToStart,
+    MoveToEnd,
+    MoveToPreviousWord,
+    MoveToNextWord,
+    MovePageUp,
+    MovePageDown,
+    SelectLeft,
+    SelectRight,
+    SelectUp,
+    SelectDown,
+    SelectAll,
+    SelectToStart,
+    SelectToEnd,
+    SelectToStartOfLine,
+    SelectToEndOfLine,
+    SelectToPreviousWordStart,
+    SelectToNextWordEnd,
+    Backspace,
+    Delete,
+    DeleteToBeginningOfLine,
+    DeleteToEndOfLine,
+    DeleteToPreviousWordStart,
+    DeleteToNextWordEnd,
+    Enter,
+    Escape,
+    Copy,
+    Cut,
+    Paste,
+    Undo,
+    Redo
+};
+
+InputAction InputActionForKey(const InputState* s, int vk, bool shift,
+                              bool ctrl, bool alt);
+// True when the input consumed it, so the window does not also treat Enter as
+// a click on the focused element. `shift` is Enter's modifier, which decides
+// whether a submit-on-enter textarea inserts a newline.
+bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
+                  bool shift);
+// replace_text_in_range: the one path every edit goes through. A null range is
+// the current selection. Returns false when the edit was rejected — readonly,
+// or a mask or validator that said no.
+bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
+                             const Selection* range, Str newText);
+// The typed character, once the platform has decoded it.
+void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch);
+
+// on_focus / on_blur. Points win->input at this field, starts its caret, and
+// emits the event; blurring commits the typing session, which is what makes a
+// later undo stop at the right place.
+void InputFocus(InputState* s, App* app, Window* win);
+void InputBlur(InputState* s, App* app, Window* win);
+
+// index_for_mouse_position: the offset a press at (x, y) lands on, against the
+// run the element last painted.
+int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y);
+// The field a press at (x, y) landed in, or null.
+InputState* InputAtPosition(PaintCtx* ctx, float x, float y);
 
 // crates/base/src/slider.rs. SliderValue is Rust's enum — `Single(f32)` or
 // `Range(f32, f32)` — flattened into the pair plus the flag that says which
@@ -990,10 +1421,10 @@ struct SliderEvent {
     SliderValue value = {};
 };
 
-// SliderState: what a slider is between frames, the way LineInput is what an
+// SliderState: what a slider is between frames, the way InputState is what an
 // input is. Rust keeps it in an `Entity<SliderState>` and the element closures
 // capture that handle; an element here names its state with `El::BindSlider`
-// and the window applies the same behavior, which is how LineInput works.
+// and the window applies the same behavior, which is how InputState works.
 // `onChange` is `cx.subscribe(&state, |ev: &SliderEvent| ...)`.
 struct SliderState {
     float min = 0;
@@ -1197,7 +1628,7 @@ struct Window {
     // GPUI's drag gives an element for free. 0 when nothing is held.
     int pressedId = 0;
     bool eatReturn = false;
-    LineInput* input = nullptr;
+    InputState* input = nullptr;
     Overlay overlay = {};
     MenuState menu = {};
     Vec<FocusRect> focusEls;
@@ -1214,9 +1645,9 @@ struct Window {
     // Armed timers, any number of them.
     Vec<TimerSub> timers;
     int nextTimerId = 1;
-    // Which LineInput had focus last frame, so the runtime can start and stop
+    // Which InputState had focus last frame, so the runtime can start and stop
     // its caret without every app wiring that up.
-    LineInput* prevInput = nullptr;
+    InputState* prevInput = nullptr;
     // Ring of the last kFrameTraceCap draw times; frameSeq counts every frame
     // ever drawn and is what a collector cursors on.
     FrameTiming frameTrace[kFrameTraceCap] = {};
@@ -1431,6 +1862,34 @@ inline bool BlinkVisible(Ctx* cx, EntityId handle) {
     return BlinkVisible(cx->app, handle);
 }
 
+// The input engine, when a Ctx is already in hand — which it is inside any
+// Render and any listener.
+inline void InputFocus(InputState* s, Ctx* cx) {
+    InputFocus(s, cx->app, cx->win);
+}
+inline void InputBlur(InputState* s, Ctx* cx) {
+    InputBlur(s, cx->app, cx->win);
+}
+inline void InputMoveTo(InputState* s, Ctx* cx, int offset) {
+    InputMoveTo(s, cx->app, cx->win, offset);
+}
+inline void InputSelectAll(InputState* s, Ctx* cx) {
+    InputSelectAll(s, cx->app, cx->win);
+}
+inline void InputClean(InputState* s, Ctx* cx) {
+    InputClean(s, cx->app, cx->win);
+}
+inline void InputReplaceAll(InputState* s, Ctx* cx, Str value) {
+    InputReplaceAll(s, cx->app, cx->win, value);
+}
+inline void InputInsert(InputState* s, Ctx* cx, Str value) {
+    InputInsert(s, cx->app, cx->win, value);
+}
+inline bool InputPerform(InputState* s, Ctx* cx, InputAction action,
+                         bool shift = false) {
+    return InputPerform(s, cx->app, cx->win, action, shift);
+}
+
 // Open a window whose root is a view entity, the WindowOpen + cx.new pair.
 Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,
                        WinOpts opts);
@@ -1461,6 +1920,9 @@ void AppFree(App* app);
 
 // Put UTF-8 text on the system clipboard.
 void ClipboardSetText(Window* win, Str text);
+// Take it back off. The result is arena-allocated and empty when the
+// clipboard holds no text.
+Str ClipboardGetText(Arena* a, Window* win);
 int AppRun(App* app);
 Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);
 void AppSetTitle(Window* win, Str title);

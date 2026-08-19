@@ -57,7 +57,7 @@ El* Slider::IntoEl() {
         low = hi;
         hi = t;
     }
-    // The subscription belongs to the state, the way LineInput's does: the
+    // The subscription belongs to the state, the way InputState's does: the
     // window raises the event, not the element.
     if (state && !disabled) {
         state->onChange = onChange;

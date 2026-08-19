@@ -55,7 +55,7 @@ static Str gClipboard = {};
 static Atom aWmDeleteWindow, aWmProtocols, aNetWmName, aUtf8String;
 static Atom aNetWmState, aNetWmStateMaxVert, aNetWmStateMaxHorz;
 static Atom aNetWmMoveResize, aMotifWmHints, aGtkShowWindowMenu;
-static Atom aClipboard, aTargets;
+static Atom aClipboard, aTargets, aClipTarget;
 
 double TimeNow() {
     static bool started = false;
@@ -314,7 +314,7 @@ static void OnKeyPress(Window* win, XKeyEvent* ke) {
     if (key) {
         WindowKeyDown(win, key, shift, ctrl, alt);
     }
-    // Windows delivers backspace as WM_CHAR 8, and the bound LineInput edits
+    // Windows delivers backspace as WM_CHAR 8, and the bound InputState edits
     // on that; X11 only reports the keysym, so raise it here.
     if (key == KeyBack) {
         WindowChar(win, 8, ctrl, alt);
@@ -481,6 +481,58 @@ void ClipboardSetText(Window* win, Str text) {
     gClipboard = StrDup(text);
     XSetSelectionOwner(gDpy, aClipboard, win->plat->xwin, CurrentTime);
     XFlush(gDpy);
+}
+
+// A paste on X11 is a round trip: ask the selection owner to write the text
+// into a property on our window, then wait for the SelectionNotify that says
+// it is there. Windows and Cocoa read the clipboard straight out, so this is
+// the one platform where the portable signature hides a wait — half a second,
+// after which an owner that never answered is given up on.
+Str ClipboardGetText(Arena* a, Window* win) {
+    if (!win || !win->plat || !gDpy) {
+        return {};
+    }
+    XWindow xwin = win->plat->xwin;
+    // We own the selection: no round trip, the text is already here.
+    if (XGetSelectionOwner(gDpy, aClipboard) == xwin) {
+        return StrDup(a, gClipboard);
+    }
+    XConvertSelection(gDpy, aClipboard, aUtf8String, aClipTarget, xwin,
+                      CurrentTime);
+    XFlush(gDpy);
+
+    XEvent ev = {};
+    bool got = false;
+    double deadline = TimeNow() + 0.5;
+    while (TimeNow() < deadline) {
+        if (XCheckTypedWindowEvent(gDpy, xwin, SelectionNotify, &ev)) {
+            got = true;
+            break;
+        }
+        struct timespec ts = {0, 2 * 1000 * 1000};
+        nanosleep(&ts, nullptr);
+    }
+    if (!got || ev.xselection.property == None) {
+        return {};
+    }
+    Atom type = 0;
+    int format = 0;
+    unsigned long items = 0;
+    unsigned long after = 0;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(gDpy, xwin, aClipTarget, 0, 1 << 20, True,
+                           AnyPropertyType, &type, &format, &items, &after,
+                           &data) != Success) {
+        return {};
+    }
+    Str out = {};
+    if (data && items > 0 && format == 8) {
+        out = StrDup(a, Str((char*)data, (int)items));
+    }
+    if (data) {
+        XFree(data);
+    }
+    return out;
 }
 
 static void OnSelectionRequest(XSelectionRequestEvent* req) {
@@ -855,6 +907,7 @@ bool PlatInit(App* app) {
     aGtkShowWindowMenu = XInternAtom(gDpy, "_GTK_SHOW_WINDOW_MENU", False);
     aClipboard = XInternAtom(gDpy, "CLIPBOARD", False);
     aTargets = XInternAtom(gDpy, "TARGETS", False);
+    aClipTarget = XInternAtom(gDpy, "GPUI_CLIPBOARD", False);
     return true;
 }
 

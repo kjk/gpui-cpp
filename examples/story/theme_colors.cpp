@@ -14,7 +14,7 @@ struct ThemeColorsStory {
     bool expandAll = false;
     bool optionsOpen = false;
     bool themeOpen = false;
-    LineInput filter = {};
+    InputState filter;
     bool seeded = false;
 
     static El* Render(ThemeColorsStory* self, Ctx* cx);
@@ -67,8 +67,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->filter.placeholder,
-                 (int)sizeof(self->filter.placeholder), "Search...");
+        InputSetPlaceholder(&self->filter, StrL("Search..."));
     }
     if (self->filter.focused) {
         cx->win->input = &self->filter;

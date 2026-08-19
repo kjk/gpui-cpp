@@ -61,7 +61,7 @@ struct ListStory {
     bool loading = false;
     bool lazyLoad = false;
     bool draggable = false;
-    LineInput search = {};
+    InputState search;
     bool seeded = false;
 
     static El* Render(ListStory* self, Ctx* cx);
@@ -110,8 +110,7 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->search.placeholder,
-                 (int)sizeof(self->search.placeholder), "Search...");
+        InputSetPlaceholder(&self->search, StrL("Search..."));
     }
     if (self->search.focused) {
         cx->win->input = &self->search;

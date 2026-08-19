@@ -18,8 +18,7 @@ static Rgba FromHex(uint32_t h) {
 }
 
 static void WriteHex(ShowcaseApp* app, uint32_t hex) {
-    snprintf(app->hexIn.buf, sizeof(app->hexIn.buf), "#%06X", hex & 0xffffff);
-    app->hexIn.len = (int)strlen(app->hexIn.buf);
+    InputSetValue(&app->hexIn, fmt("#%06X", hex & 0xffffff));
 }
 
 static void SetHexBuf(ShowcaseApp* app) {
@@ -76,7 +75,7 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                                   ->H(14)
                                   ->Bg(FromHex(shown))
                                   ->Border(1, Rgb(0x17, 0x17, 0x17)))
-                      ->Child(TextEl(a, Str(app->hexIn.buf, app->hexIn.len))
+                      ->Child(TextEl(a, InputValue(&app->hexIn))
                                   ->Font(12)
                                   ->Fg(Rgb(0x17, 0x17, 0x17)))
                       ->Child(Div(a)->Grow())

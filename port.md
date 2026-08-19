@@ -223,7 +223,7 @@ Each has a matching `examples/<name>.cpp` and `bun cmd/build.ts <name>` target:
 | `window_title` | In-client 34 px title strip + Hello World body |
 | `root_borderless` | Documents `Root::bordered(false)`; Win32 chrome kept |
 | `tooltip_top_edge` | Absolute top-edge trigger; tooltip flips below |
-| `input` | `LineInput` + `WM_CHAR`; `Hello, {name}!` |
+| `input` | `InputState` + `WM_CHAR`; `Hello, {name}!` |
 | `focus_trap` | Two Tab traps plus buttons outside |
 | `dialog_overlay` | Center dialog, bottom sheet, right-click menu |
 | `sidebar` | Collapsible icon/offcanvas/none + Lucide nav |

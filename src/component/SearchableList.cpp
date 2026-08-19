@@ -5,7 +5,7 @@ namespace gpui {
 
 namespace component {
 
-SearchableList* SearchableList::New(Ctx* cx, LineInput* query) {
+SearchableList* SearchableList::New(Ctx* cx, InputState* query) {
     Arena* a = cx->a;
     SearchableList* s = ArenaNew<SearchableList>(a);
     s->a = a;
@@ -26,7 +26,7 @@ SearchableList* SearchableList::OnSelect(Listener fn) {
 
 El* SearchableList::IntoEl() {
     List* list = List::New(cx);
-    const char* q = query && query->len ? query->buf : "";
+    const char* q = query ? InputCStr(query) : "";
     for (int i = 0; i < n; i++) {
         if (q[0] && items[i].s && !strstr(items[i].s, q)) {
             continue;

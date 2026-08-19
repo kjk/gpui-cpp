@@ -27,7 +27,7 @@ struct DialogStory {
     bool overlayClosable = true;
     bool closeButton = true;
     bool keyboard = true;
-    LineInput focusInput = {};
+    InputState focusInput;
     StoryToolbarState toolbar;
 
     static El* Render(DialogStory* self, Ctx* cx);

@@ -5,7 +5,7 @@ namespace gpui {
 
 namespace component {
 
-Input* Input::New(Ctx* cx, Str id, LineInput* state) {
+Input* Input::New(Ctx* cx, Str id, InputState* state) {
     Arena* a = cx->a;
     Input* i = ArenaNew<Input>(a);
     i->a = a;
@@ -118,6 +118,7 @@ El* Input::IntoEl() {
     editor.foreground = hasTextColor ? textColor : th.foreground;
     editor.mutedForeground = th.mutedFg;
     editor.caret = th.caret;
+    editor.selection = RgbaOpacity(th.accent, 0.45f);
     editor.fontSize = font;
     editor.mask = masked;
     editor.align = align == InputAlign::Center  ? 1
@@ -127,6 +128,7 @@ El* Input::IntoEl() {
         editor.foreground = th.mutedFg;
     }
     El* field = InputBase::New(cx, id, disabled ? 0 : HashClickId(id))
+                    ->BindInput(disabled ? nullptr : state)
                     ->FlexRow()
                     ->W(width)
                     ->H(h)
@@ -145,7 +147,7 @@ El* Input::IntoEl() {
         // `.pl_0()`: the prefix owns the space to the left of the editor.
         field->PadL(0)->Child(prefix);
     }
-    bool hasValue = state && state->len > 0;
+    bool hasValue = state && InputValue(state).len > 0;
     bool trailing = suffix || (cleanable && hasValue) || maskToggle;
     if (prefix || trailing) {
         field
@@ -183,13 +185,13 @@ El* Input::IntoEl() {
     return col;
 }
 
-Textarea* Textarea::New(Ctx* cx, Str id, const char* text) {
+Textarea* Textarea::New(Ctx* cx, Str id, InputState* state) {
     Arena* a = cx->a;
     Textarea* t = ArenaNew<Textarea>(a);
     t->a = a;
     t->cx = cx;
     t->id = id;
-    t->text = text;
+    t->state = state;
     return t;
 }
 Textarea* Textarea::Rows(int n) {
@@ -198,10 +200,6 @@ Textarea* Textarea::Rows(int n) {
 }
 Textarea* Textarea::H(float px) {
     height = px;
-    return this;
-}
-Textarea* Textarea::Placeholder(Str s) {
-    placeholder = s;
     return this;
 }
 Textarea* Textarea::SoftWrap(bool v) {
@@ -215,38 +213,40 @@ Textarea* Textarea::OnFocus(Listener fn) {
 
 El* Textarea::IntoEl() {
     const Theme& th = cx->theme();
+    bool focused = state && state->focused;
     InputEditorStyle editor;
     editor.foreground = th.foreground;
     editor.mutedForeground = th.mutedFg;
     editor.caret = th.caret;
+    editor.selection = RgbaOpacity(th.accent, 0.45f);
     editor.fontSize = kInputTextSize;
+    if (state) {
+        state->softWrap = softWrap;
+        if (rows > 0) {
+            LayoutModeSetRows(&state->mode, rows);
+        }
+    }
     // A row is one 1.25rem line box, like the single-line input; the border
     // sits outside the padded content, as in GPUI.
-    float h = height > 0 ? height
-              : rows > 0 ? (float)rows * 20.f + 2 * 8 + 2
-                         : 64;
-    bool empty = !text || !text[0];
-    const char* body = empty && placeholder.s ? placeholder.s : text;
-    if (empty && placeholder.s) {
-        editor.foreground = th.mutedFg;
-    }
-    El* box =
-        InputBase::New(cx, id, HashClickId(id))
-            ->W(kFill)
-            ->H(h)
-            ->Pad(8)
-            ->ClipY()
-            ->Radius(th.radius)
-            ->Bg(th.inputBg)
-            ->Border(1, th.inputBorder)
-            ->Child(gpui::Textarea::New(cx, body, editor, false, softWrap));
+    int shownRows = rows > 0 ? rows : state ? LayoutModeRows(state->mode) : 2;
+    float h = height > 0 ? height : (float)shownRows * 20.f + 2 * 8 + 2;
+    El* box = InputBase::New(cx, id, HashClickId(id))
+                  ->BindInput(state)
+                  ->W(kFill)
+                  ->H(h)
+                  ->Pad(8)
+                  ->ClipY()
+                  ->Radius(th.radius)
+                  ->Bg(th.inputBg)
+                  ->Border(1, focused ? th.ring : th.inputBorder)
+                  ->Child(gpui::Textarea::New(cx, state, editor));
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);
     }
     return box;
 }
 
-NumberInput* NumberInput::New(Ctx* cx, LineInput* state) {
+NumberInput* NumberInput::New(Ctx* cx, InputState* state) {
     Arena* a = cx->a;
     NumberInput* n = ArenaNew<NumberInput>(a);
     n->a = a;
@@ -254,7 +254,7 @@ NumberInput* NumberInput::New(Ctx* cx, LineInput* state) {
     n->state = state;
     return n;
 }
-NumberInput* NumberInput::New(Ctx* cx, Str id, LineInput* state) {
+NumberInput* NumberInput::New(Ctx* cx, Str id, InputState* state) {
     NumberInput* n = New(cx, state);
     n->id = id;
     return n;

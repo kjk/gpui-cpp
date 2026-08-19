@@ -16,7 +16,7 @@ struct Input {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    LineInput* state = nullptr;
+    InputState* state = nullptr;
     Str label = {};
     float width = kFill;
     El* prefix = nullptr;
@@ -36,7 +36,7 @@ struct Input {
     Listener onClear;
     Listener onToggleMask;
 
-    static Input* New(Ctx* cx, Str id, LineInput* state);
+    static Input* New(Ctx* cx, Str id, InputState* state);
     Input* Label(Str s);
     Input* WithSize(UiSize s);
     Input* Align(InputAlign v);
@@ -64,20 +64,20 @@ struct Textarea {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    const char* text = nullptr;
-    Str placeholder = {};
+    // Rust's is `Textarea::new(&state)` where the state is a TextareaState —
+    // the same engine as an Input's, with InputKind::Textarea.
+    InputState* state = nullptr;
     int rows = 0;
     float height = 0;
     bool softWrap = true;
     Listener onFocus;
 
-    static Textarea* New(Ctx* cx, Str id, const char* text);
+    static Textarea* New(Ctx* cx, Str id, InputState* state);
     // Rust sizes a textarea by rows (`auto_grow(min, max)`); without one it
     // keeps the two-row default. An explicit height wins, as `.h(px(..))`
     // does there.
     Textarea* Rows(int n);
     Textarea* H(float px);
-    Textarea* Placeholder(Str s);
     Textarea* SoftWrap(bool v);
     Textarea* OnFocus(Listener fn);
     El* IntoEl();
@@ -87,7 +87,7 @@ struct NumberInput {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    LineInput* state = nullptr;
+    InputState* state = nullptr;
     float width = kFill;
     UiSize size = UiSize::Medium;
     bool disabled = false;
@@ -101,8 +101,8 @@ struct NumberInput {
     Listener onDec;
     Listener onFocus;
 
-    static NumberInput* New(Ctx* cx, LineInput* state);
-    static NumberInput* New(Ctx* cx, Str id, LineInput* state);
+    static NumberInput* New(Ctx* cx, InputState* state);
+    static NumberInput* New(Ctx* cx, Str id, InputState* state);
     // Fills its parent unless the caller sizes it, as in Rust.
     NumberInput* W(float v);
     NumberInput* WithSize(UiSize s);

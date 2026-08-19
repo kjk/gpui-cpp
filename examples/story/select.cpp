@@ -36,7 +36,7 @@ struct SelectStory {
     int selected[SelCount] = {5, -1, -1, 0, 0, -1, -1, 0};
     int open = -1;
     bool disabled = false;
-    LineInput phone = {};
+    InputState phone;
     StoryToolbarState toolbar;
     bool seeded = false;
 
@@ -101,8 +101,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        StrCopyZ(self->phone.placeholder, (int)sizeof(self->phone.placeholder),
-                 "Your phone number");
+        InputSetPlaceholder(&self->phone, StrL("Your phone number"));
     }
     if (self->phone.focused) {
         cx->win->input = &self->phone;
