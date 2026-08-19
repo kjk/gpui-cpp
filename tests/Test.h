@@ -50,6 +50,7 @@ void TestResizable();
 void TestTree();
 void TestCalendar();
 void TestColorPicker();
+void TestToast();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();
