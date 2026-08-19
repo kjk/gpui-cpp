@@ -23,6 +23,8 @@ struct ComboSpec {
 
 struct ComboboxStory {
     int open = -1;
+    // The option the arrows are on inside the open combobox.
+    int highlight = -1;
     InputState query;
     bool seeded = false;
 
@@ -33,8 +35,13 @@ struct ComboboxStory {
 static void ToggleCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
                         intptr_t which) {
     self->open = self->open == (int)which ? -1 : (int)which;
+    self->highlight = -1;
     Notify(cx);
 }
+
+// How many options the combobox in this slot lists. Every section on this page
+// draws from one of four arrays.
+static int ComboOptionCount(int which);
 
 El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     Arena* a = cx->a;
@@ -104,6 +111,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
                 ->SearchPlaceholder(StrL("Search…"))
                 ->W(280)
                 ->Open(self->open == (int)i)
+                ->Highlight(self->open == (int)i ? self->highlight : -1)
                 ->Query(&self->query)
                 ->OnToggle(ListenerArg(toggle, (intptr_t)i));
         if (s.selected) {
@@ -129,12 +137,55 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
+// Every section here lists one of four arrays; the spec table above is built
+// inside Render, so the count is recovered from the same arrays.
+static int ComboOptionCount(int which) {
+    switch (which) {
+        case 2:
+            return COMBO_COUNT(kFruits);
+        case 3:
+            return COMBO_COUNT(kIndustries);
+        case 4:
+            return COMBO_COUNT(kUniversities);
+        default:
+            return COMBO_COUNT(kFrameworks);
+    }
+}
+
+// A combobox is a select in Rust — Combobox::render builds one and forwards
+// everything to it — so it answers to the same four keys.
 void ComboboxStory::OnKey(ComboboxStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
+    if (!ev->down) {
         return;
     }
-    self->open = -1;
+    bool open = self->open >= 0;
+    SelectAction act = SelectActionForKey(ev->vk, open, false);
+    if (act == SelectAction::Dismiss) {
+        self->open = -1;
+        self->highlight = -1;
+        Notify(cx);
+        return;
+    }
+    if (act == SelectAction::Confirm) {
+        // Rust's combobox confirms without closing: the caller decides what a
+        // confirmed value does, and a multi-select stays open.
+        cx->win->eatReturn = true;
+        Notify(cx);
+        return;
+    }
+    if (!open || (ev->vk != KeyUp && ev->vk != KeyDown)) {
+        return;
+    }
+    int count = ComboOptionCount(self->open);
+    int step = ev->vk == KeyDown ? 1 : -1;
+    int next = self->highlight < 0 ? (step > 0 ? 0 : count - 1)
+                                   : self->highlight + step;
+    if (next < 0) {
+        next = count - 1;
+    } else if (next >= count) {
+        next = 0;
+    }
+    self->highlight = next;
     Notify(cx);
 }
 

@@ -14,6 +14,7 @@ struct Combobox {
     int n = 0;
     // The trigger shows the selection, or the placeholder when there is none.
     Str selected = {};
+    int highlight = -1;
     Str placeholder = {};
     Str searchPlaceholder = {};
     // An optional icon before the title, as the icons story shows.
@@ -28,6 +29,8 @@ struct Combobox {
     Combobox* Option(Str s);
     Combobox* Options(const char* const* items, int count);
     Combobox* Selected(Str s);
+    // The option the keyboard is on, Rust's aria_active_descendant.
+    Combobox* Highlight(int i);
     Combobox* Placeholder(Str s);
     Combobox* SearchPlaceholder(Str s);
     Combobox* Icon(IconName n);

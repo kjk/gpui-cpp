@@ -28,6 +28,10 @@ Combobox* Combobox::Selected(Str s) {
     selected = s;
     return this;
 }
+Combobox* Combobox::Highlight(int i) {
+    highlight = i;
+    return this;
+}
 Combobox* Combobox::Placeholder(Str s) {
     placeholder = s;
     return this;
@@ -122,6 +126,10 @@ El* Combobox::IntoEl() {
                           ->JustifyBetween()
                           ->Radius(th.radius)
                           ->HoverBg(th.accent);
+            // The keyboard's option reads the same as a hover.
+            if (i == highlight) {
+                row->Bg(th.accent);
+            }
             row->Child(TextEl(a, options[i])->Font(14)->Fg(th.foreground));
             if (selected.s && StrEqI(options[i], selected)) {
                 row->Child(IconEl(a, IconName::Check, 14)->Fg(th.foreground));
