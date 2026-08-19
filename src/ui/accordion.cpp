@@ -68,8 +68,8 @@ El* Accordion::IntoEl() {
     }
     for (int i = 0; i < nItems; i++) {
         float font = UiFontPx(size);
-        El* trig = AccordionTrigger::New(
-            cx, items[i].title, disabled ? 0 : HashClickId(items[i].title));
+        El* trig = AccordionTrigger::New(cx, items[i].title, items[i].open,
+                                         disabled, ListenerArg(onToggle, i));
         // AccordionTrigger: py_2 px_3 at Medium, font_medium.
         trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(12)->PadY(8)->W(
             kFill);
@@ -110,9 +110,6 @@ El* Accordion::IntoEl() {
                    items[i].open ? IconName::ChevronUp : IconName::ChevronDown,
                    14)
                 ->Fg(th.mutedFg));
-        if (onToggle.IsValid() && !disabled) {
-            trig->OnClick(ListenerArg(onToggle, i));
-        }
         gpui::AccordionItem* it =
             gpui::AccordionItem::New(cx)
                 ->Open(items[i].open)

@@ -3,12 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickAcc0 = 200,
-    ClickAcc1 = 201,
-    ClickAcc2 = 202
-};
-
 static void ToggleAcc(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
                       intptr_t i) {
     app->accordionOpen[i] = !app->accordionOpen[i];
@@ -36,7 +30,7 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
         bool open = app->accordionOpen[i];
         El* trigger =
             AccordionTrigger::New(cx, DupFmt(cx, "accordion-trigger-%d", i),
-                                  ClickAcc0 + i)
+                                  open, false, Listen(cx, &ToggleAcc, i))
                 ->FlexRow()
                 ->W(kFill)
                 ->H(28)
@@ -44,7 +38,6 @@ El* ShowcaseAccordion(ShowcaseApp* app, Ctx* cx) {
                 ->JustifyBetween()
                 ->BorderB(1, Rgb(0xd4, 0xd4, 0xd4))
                 ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                ->OnClick(Listen(cx, &ToggleAcc, i))
                 ->Child(
                     TextEl(a, Str(qs[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
                 ->Child(TextEl(a, open ? StrL("−") : StrL("+"))

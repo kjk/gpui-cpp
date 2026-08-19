@@ -1,16 +1,20 @@
 #include "base/accordion.h"
-#include "base/element_ext.h"
 
 namespace gpui {
 
 El* Accordion::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id);
 }
 
-El* AccordionTrigger::New(Ctx* cx, Str id, int clickId) {
+El* AccordionTrigger::New(Ctx* cx, Str id, bool open, bool disabled,
+                          Listener onChange) {
     Arena* a = cx->a;
-    return UiRoot(a, id, clickId);
+    El* e = Div(a)->Id(id)->Click(HashClickId(id));
+    if (!disabled && onChange.IsValid()) {
+        e->OnClick(ListenerFill(onChange, !open));
+    }
+    return e;
 }
 
 El* AccordionHeader::New(Ctx* cx, El* trigger) {
@@ -35,13 +39,18 @@ AccordionItem* AccordionItem::Open(bool v) {
     return this;
 }
 
+AccordionItem* AccordionItem::KeepMounted(bool v) {
+    keepMounted = v;
+    return this;
+}
+
 AccordionItem* AccordionItem::Header(El* header) {
     root->Child(header);
     return this;
 }
 
 AccordionItem* AccordionItem::Panel(El* panel) {
-    if (open && panel) {
+    if (panel && (open || keepMounted)) {
         root->Child(panel);
     }
     return this;
