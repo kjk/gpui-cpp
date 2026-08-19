@@ -494,6 +494,8 @@ void PlatSetCursor(Window* win, CursorKind kind) {
         [[NSCursor IBeamCursor] set];
     } else if (kind == CursorKind::ColResize) {
         [[NSCursor resizeLeftRightCursor] set];
+    } else if (kind == CursorKind::RowResize) {
+        [[NSCursor resizeUpDownCursor] set];
     } else {
         [[NSCursor arrowCursor] set];
     }

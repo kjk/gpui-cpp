@@ -362,16 +362,11 @@ void TableState::OnSortClick(TableState* self, Ctx* cx, const ClickEvent*,
     TablePerformSort(self, cx, (int)col);
 }
 
-static bool SameStr(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
-}
-
 void TableState::OnResizeDrag(TableState* self, Ctx* cx,
                               const DragMoveEvent* ev) {
     // `match e.drag(cx) { ResizeColumn(..) }`: a drag carrying anything else
     // is not this handler's.
-    if (!SameStr(ev->drag.kind, kTableResizeDrag)) {
+    if (!StrSame(ev->drag.kind, kTableResizeDrag)) {
         return;
     }
     int col = ev->drag.ix;

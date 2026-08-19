@@ -375,6 +375,13 @@ struct MouseMoveEvent {
     }
 };
 
+// Two strings with the same bytes. `Str` is a pointer and a length, so a
+// kind that names a drag is compared by what it says, not by where it lives.
+inline bool StrSame(Str a, Str b) {
+    return a.len == b.len &&
+           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+}
+
 // What a drag carries. Rust's `on_drag(payload, ..)` takes a value of any
 // type and `DragMoveEvent<T>` only reaches the handlers that named that type;
 // there is no type to match on here, so the payload says what kind of thing
@@ -394,6 +401,19 @@ struct DragMoveEvent {
     // The dragged element's box, which is `bounds` on the entity the drag
     // names in Rust. It is the box the last frame laid out, so a handler that
     // moves the element reads its own answer back on the next move.
+    Bounds el = {};
+};
+
+// on_drop::<T>: a drag that let go over this element. Rust matches the drop
+// handler by the payload's type; here the element says which `kind` it takes,
+// and a drag carrying anything else passes over it as if it were not there.
+struct DropEvent {
+    DragPayload drag = {};
+    // Where the button came up, in window coordinates.
+    float x = 0;
+    float y = 0;
+    // The box of the element that took the drop, so a handler can work out
+    // where inside itself the drop landed.
     Bounds el = {};
 };
 
@@ -515,7 +535,10 @@ enum class CursorKind : uint8_t {
     Arrow,
     IBeam,
     // cursor_col_resize, which a table's column edge asks for.
-    ColResize
+    ColResize,
+    // cursor_row_resize: the handle between two panels stacked one over the
+    // other.
+    RowResize
 };
 
 // Fired by a window timer; GPUI does this with cx.spawn + Timer::after.
@@ -794,6 +817,19 @@ struct El {
     // Rust hears it wherever the pointer is, whether or not the press started
     // here, and so does this.
     Listener onMouseUpOut;
+    // on_drop::<T>(..) and drag_over::<T>(..): the kind of drag this element
+    // takes, and what to do when one lets go over it. `WindowDragOverId` says
+    // which element the drag is over right now, which is what a caller styles
+    // on — GPUI applies `drag_over` itself because the style is part of the
+    // element; an element here is rebuilt every frame and reads the answer
+    // back instead.
+    Str dropKind = {};
+    Listener onDrop;
+    // Where this element ended up, written at paint. GPUI's DockArea keeps
+    // its own `bounds` the same way, through an element whose only job is to
+    // report the box layout gave it; a caller that has to answer "what is
+    // under the pointer" needs last frame's boxes to do it.
+    Bounds* boundsOut = nullptr;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
     // their own closures; there are no closures on an element here, so the
@@ -913,6 +949,8 @@ struct El {
     El* OnDragMove(Listener l);
     El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
     El* OnMouseUpOut(Listener l);
+    El* OnDrop(Str acceptKind, Listener l);
+    El* BoundsOut(gpui::Bounds* out);
     El* Cursor(CursorKind c);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
     El* BindSliderBounds(SliderState* s);
@@ -981,6 +1019,8 @@ struct HitRect {
     Listener onDragMove;
     DragPayload drag = {};
     Listener onMouseUpOut;
+    Str dropKind = {};
+    Listener onDrop;
     CursorKind cursor = CursorKind::Arrow;
     // El::Tip. The overlay reads it when the pointer arrives, so it has to
     // survive the hit test rather than only the paint that drew it.
@@ -1642,6 +1682,10 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
 void PaintEl(PaintCtx* ctx, El* e);
 int HitTest(PaintCtx* ctx, float x, float y);
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
+// The topmost element under the pointer that takes a drag of this kind, of
+// those that asked for one at all. A drop target that does not want what is
+// being dragged is not in the way of one that does.
+const HitRect* HitTestDrop(PaintCtx* ctx, float x, float y, Str kind);
 const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y);
 int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest);
 int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
@@ -1745,6 +1789,11 @@ struct Window {
     // The element that took the press, until the button comes back up: what
     // GPUI's drag gives an element for free. 0 when nothing is held.
     int pressedId = 0;
+    // The drag in flight: what the press picked up, and which drop target the
+    // pointer is over right now. GPUI keeps the same pair — `active_drag` and
+    // the hitbox its drop handlers consult — on its Window.
+    DragPayload activeDrag = {};
+    int dragOverId = 0;
     bool eatReturn = false;
     // The scrollbar being dragged, and how far into its thumb the press
     // landed. GPUI keeps the same pair in ScrollbarState::drag_pos.
@@ -1955,6 +2004,15 @@ void WindowOnKey(Window* win, Listener l);
 // Fires for a click no element handled — the outside click that dismisses an
 // overlay. Elements carry their own listener; this is not a dispatch table.
 void WindowOnUnhandledClick(Window* win, Listener l);
+
+// window.active_drag: what a press picked up, or an invalid payload when
+// nothing is being dragged. A drop target reads it to decide whether to show
+// itself at all, the way Rust's `drag_over::<T>` only exists for a drag of
+// that type.
+const DragPayload* WindowActiveDrag(Ctx* cx);
+// Which element the drag is over, of those that take its kind — 0 for none.
+// `El::Click(id)` names an element, so this answers with that id.
+int WindowDragOverId(Ctx* cx);
 // One subscription per event type, which is what window.on_mouse_event::<T>
 // asks for in Rust. Each handler takes the matching event:
 // `void OnDown(T* self, Ctx* cx, const MouseDownEvent* ev)`.

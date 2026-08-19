@@ -62,3 +62,4 @@ void TestInputState();
 void TestList();
 void TestPopupMenu();
 void TestDataTable();
+void TestDock();

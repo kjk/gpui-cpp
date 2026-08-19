@@ -24,6 +24,7 @@ enum {
     StoryDatePicker,
     StoryDescriptionList,
     StoryDialog,
+    StoryDock,
     StoryDropdownButton,
     StoryEditor,
     StoryForm,

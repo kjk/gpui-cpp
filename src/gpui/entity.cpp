@@ -171,6 +171,17 @@ WinSize WindowSize(Window* win) {
     return ws;
 }
 
+const DragPayload* WindowActiveDrag(Ctx* cx) {
+    if (!cx || !cx->win || !cx->win->activeDrag.IsValid()) {
+        return nullptr;
+    }
+    return &cx->win->activeDrag;
+}
+
+int WindowDragOverId(Ctx* cx) {
+    return (cx && cx->win) ? cx->win->dragOverId : 0;
+}
+
 void WindowOnUnhandledClick(Window* win, Listener l) {
     if (win) {
         win->onClick = l;

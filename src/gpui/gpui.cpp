@@ -548,6 +548,15 @@ El* El::OnMouseUpOut(Listener l) {
     onMouseUpOut = l;
     return this;
 }
+El* El::OnDrop(Str acceptKind, Listener l) {
+    dropKind = acceptKind;
+    onDrop = l;
+    return this;
+}
+El* El::BoundsOut(gpui::Bounds* out) {
+    boundsOut = out;
+    return this;
+}
 El* El::Cursor(CursorKind c) {
     cursor = c;
     return this;
@@ -2354,10 +2363,13 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->sliderBounds) {
         SliderSetBounds(e->sliderBounds, e->Bounds());
     }
+    if (e->boundsOut) {
+        *e->boundsOut = e->Bounds();
+    }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->onHover.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
-        e->onMouseUpOut.IsValid() || e->drag.IsValid() ||
+        e->onMouseUpOut.IsValid() || e->drag.IsValid() || e->onDrop.IsValid() ||
         e->cursor != CursorKind::Arrow || e->slider) {
         HitRect hr;
         hr.id = e->clickId;
@@ -2371,6 +2383,8 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.onDragMove = e->onDragMove;
         hr.drag = e->drag;
         hr.onMouseUpOut = e->onMouseUpOut;
+        hr.dropKind = e->dropKind;
+        hr.onDrop = e->onDrop;
         hr.cursor = e->cursor;
         hr.slider = e->slider;
         hr.sliderAxis = e->sliderAxis;
@@ -2609,6 +2623,25 @@ void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {
     for (int i = ctx->hits.len - 1; i >= 0; i--) {
         const HitRect& h = ctx->hits[i];
+        if (h.bounds.Contains({x, y})) {
+            return &ctx->hits[i];
+        }
+    }
+    return nullptr;
+}
+
+const HitRect* HitTestDrop(PaintCtx* ctx, float x, float y, Str kind) {
+    if (kind.s == nullptr) {
+        return nullptr;
+    }
+    for (int i = ctx->hits.len - 1; i >= 0; i--) {
+        const HitRect& h = ctx->hits[i];
+        if (!h.onDrop.IsValid() || h.dropKind.s == nullptr) {
+            continue;
+        }
+        if (!StrSame(h.dropKind, kind)) {
+            continue;
+        }
         if (h.bounds.Contains({x, y})) {
             return &ctx->hits[i];
         }

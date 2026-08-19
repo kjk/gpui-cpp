@@ -427,6 +427,13 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     // the release, wherever the pointer has got to by then. The press picked
     // up whatever payload the element named with on_drag, and every move
     // carries it back the way DragMoveEvent<T> does.
+    // drag_over: which drop target the pointer is over, so an element that
+    // takes this kind of drag can show itself while one is in flight.
+    if (win->activeDrag.IsValid()) {
+        const HitRect* over =
+            HitTestDrop(&win->paint, x, y, win->activeDrag.kind);
+        win->dragOverId = over ? over->id : 0;
+    }
     const HitRect* pressed = HitRectById(win, win->pressedId);
     if (pressed && pressed->onDragMove.IsValid()) {
         DragMoveEvent ev = {pressed->drag, in, pressed->bounds};
@@ -517,6 +524,10 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     int id = hit ? hit->id : 0;
     win->mouseDown = true;
     win->pressedId = id;
+    // window.active_drag: a press on an element with a payload starts the
+    // drag, and it lasts until the button comes back up.
+    win->activeDrag = hit ? hit->drag : DragPayload{};
+    win->dragOverId = 0;
     // A press takes focus only where there is a focus handle to take. Rust
     // gives a disabled widget its element id all the same — `div().id(id)` is
     // what makes it hit-testable and hoverable — and hangs `track_focus` off
@@ -594,6 +605,19 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
         if (hr.onMouseUpOut.IsValid() && !hr.bounds.Contains({in.x, in.y})) {
             ListenerCall(win->app, win, hr.onMouseUpOut, &in);
         }
+    }
+    // on_drop: the element under the pointer that takes this drag hears where
+    // it landed. It runs after on_mouse_up_out, so a source that is winding
+    // its own drag down has already done so by the time the target acts.
+    if (win->activeDrag.IsValid()) {
+        const HitRect* target =
+            HitTestDrop(&win->paint, in.x, in.y, win->activeDrag.kind);
+        if (target) {
+            DropEvent ev = {win->activeDrag, in.x, in.y, target->bounds};
+            ListenerCall(win->app, win, target->onDrop, &ev);
+        }
+        win->activeDrag = {};
+        win->dragOverId = 0;
     }
     SliderRelease(win);
     // InputState::on_mouse_up: the drag is over, and the word a double click

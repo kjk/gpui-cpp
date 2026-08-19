@@ -493,6 +493,8 @@ void PlatSetCursor(Window* win, CursorKind kind) {
         name = IDC_IBEAM;
     } else if (kind == CursorKind::ColResize) {
         name = IDC_SIZEWE;
+    } else if (kind == CursorKind::RowResize) {
+        name = IDC_SIZENS;
     }
     win->plat->cursor = LoadCursorW(nullptr, name);
     SetCursor(win->plat->cursor);
