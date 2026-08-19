@@ -3,12 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickTab0 = 520,
-    ClickTab1 = 521,
-    ClickTab2 = 522
-};
-
 static void PickTab(ShowcaseApp* app, Ctx* cx, const ClickEvent*, intptr_t i) {
     app->tab = (int)i;
     Notify(cx);
@@ -31,13 +25,13 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
     for (int i = 0; i < 3; i++) {
         bool on = app->tab == i;
         El* tab =
-            Tab::New(cx, DupFmt(cx, "tab-%d", i), ClickTab0 + i)
+            Tab::New(cx, DupFmt(cx, "tab-%d", i), false,
+                     Listen(cx, &PickTab, i))
                 ->H(28)
                 ->PadX(8)
                 ->ItemsCenter()
                 ->BorderB(2, on ? Rgb(0x17, 0x17, 0x17) : Rgb(0xff, 0xff, 0xff))
-                ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                ->OnClick(Listen(cx, &PickTab, i));
+                ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
         El* lab =
             TextEl(a, Str(labels[i]))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17));
         if (on) {

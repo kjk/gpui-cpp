@@ -35,7 +35,7 @@ El* Tabs::IntoEl() {
     for (int i = 0; i < n; i++) {
         bool on = i == selected;
         El* tab =
-            gpui::Tab::New(cx, labels[i], HashClickId(labels[i]))
+            gpui::Tab::New(cx, labels[i], false, ListenerArg(onChange, i))
                 ->H(28)
                 ->PadX(8)
                 ->ItemsCenter()
@@ -43,9 +43,6 @@ El* Tabs::IntoEl() {
                 ->Child(TextEl(a, labels[i])->Font(13)->Fg(th.foreground));
         if (on) {
             tab->first->style.fontSemibold = true;
-        }
-        if (onChange.IsValid()) {
-            tab->OnClick(ListenerArg(onChange, i));
         }
         bar->Child(tab);
     }
