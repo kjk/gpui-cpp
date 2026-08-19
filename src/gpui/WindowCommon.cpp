@@ -93,6 +93,20 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->frameSeq++;
 }
 
+// The hit rect an element id painted, from the last frame. The tree is
+// rebuilt every frame, so an id is the only handle that survives one.
+static const HitRect* HitRectById(Window* win, int id) {
+    if (!win || !id) {
+        return nullptr;
+    }
+    for (int i = win->paint.hits.len - 1; i >= 0; i--) {
+        if (win->paint.hits[i].id == id) {
+            return &win->paint.hits[i];
+        }
+    }
+    return nullptr;
+}
+
 // ─── input ────────────────────────────────────────────────────────────────
 
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
@@ -129,13 +143,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // Enter activates the focused element: run that element's own listener,
     // the one a click on it would have run.
     if (key == KeyReturn && win->focusId && !win->eatReturn) {
-        const HitRect* focused = nullptr;
-        for (int i = win->paint.hits.len - 1; i >= 0; i--) {
-            if (win->paint.hits[i].id == win->focusId) {
-                focused = &win->paint.hits[i];
-                break;
-            }
-        }
+        const HitRect* focused = HitRectById(win, win->focusId);
         // GPUI's ClickEvent::Keyboard: no pointer was involved, so the
         // position is the element's own box.
         ClickEvent ev = {0, 0, MouseButton::Left, win->focusId};
@@ -219,6 +227,12 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     if (win->onMouseMove.IsValid()) {
         ListenerCall(win->app, win, win->onMouseMove, &in);
     }
+    // on_drag_move: the element that took the press hears every move until
+    // the release, wherever the pointer has got to by then.
+    const HitRect* pressed = HitRectById(win, win->pressedId);
+    if (pressed && pressed->onDragMove.IsValid()) {
+        ListenerCall(win->app, win, pressed->onDragMove, &in);
+    }
     if (win->mouseDown) {
         AppInvalidate(win);
     }
@@ -270,8 +284,15 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     const HitRect* hit = HitTestRect(&win->paint, x, y);
     int id = hit ? hit->id : 0;
     win->mouseDown = true;
+    win->pressedId = id;
     if (id) {
         win->focusId = id;
+    }
+    // on_mouse_down, ahead of the click: an element that wants the press
+    // itself — a slider jumping to it — gets the whole event, not the
+    // ClickEvent the click path builds.
+    if (hit && hit->onMouseDown.IsValid()) {
+        ListenerCall(win->app, win, hit->onMouseDown, &in);
     }
     ClickEvent ev = {x, y, in.button, id};
     ev.clickCount = in.clickCount;
@@ -309,6 +330,15 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     if (win->onMouseUp.IsValid()) {
         ListenerCall(win->app, win, win->onMouseUp, &in);
     }
+    // The element under the pointer hears the release, then the one that took
+    // the press stops being held. A drag that ended somewhere else leaves the
+    // first of those empty, which is what on_mouse_up_out is for.
+    const HitRect* hit = HitTestRect(&win->paint, in.x, in.y);
+    if (hit && hit->onMouseUp.IsValid()) {
+        ListenerCall(win->app, win, hit->onMouseUp, &in);
+    }
+    win->pressedId = 0;
+    AppInvalidate(win);
 }
 
 static void DispatchMouseExited(Window* win, const MouseExitEvent& in) {

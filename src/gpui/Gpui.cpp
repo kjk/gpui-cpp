@@ -511,6 +511,18 @@ El* El::OnClick(Listener l) {
     listener = l;
     return this;
 }
+El* El::OnMouseDown(Listener l) {
+    onMouseDown = l;
+    return this;
+}
+El* El::OnMouseUp(Listener l) {
+    onMouseUp = l;
+    return this;
+}
+El* El::OnDragMove(Listener l) {
+    onDragMove = l;
+    return this;
+}
 
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
@@ -2186,12 +2198,17 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (skipOverlay && IsOverlay(e)) {
         return;
     }
-    if (e->clickId || e->onClick.IsValid() || e->listener.IsValid()) {
+    if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
+        e->onMouseDown.IsValid() || e->onMouseUp.IsValid() ||
+        e->onDragMove.IsValid()) {
         HitRect hr;
         hr.id = e->clickId;
         hr.bounds = e->Bounds();
         hr.onClick = e->onClick;
         hr.listener = e->listener;
+        hr.onMouseDown = e->onMouseDown;
+        hr.onMouseUp = e->onMouseUp;
+        hr.onDragMove = e->onDragMove;
         ctx->hits.Append(hr);
     }
     if (e->style.overflowY == OverflowY::Scroll) {

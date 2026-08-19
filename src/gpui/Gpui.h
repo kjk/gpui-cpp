@@ -684,6 +684,17 @@ struct El {
     int clickId = 0;
     Func0 onClick;
     Listener listener;
+    // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
+    // what `div().on_mouse_down(..)` is. A press runs this before the click
+    // listener above; unlike the click, it carries the full MouseDownEvent.
+    Listener onMouseDown;
+    Listener onMouseUp;
+    // on_drag_move. GPUI carries a drag entity so the move can name what is
+    // being dragged; here the element that took the press keeps the moves
+    // until the button comes back up, which is the same thing without the
+    // entity. Needs a Click(id): the tree is rebuilt every frame, so the id
+    // is what finds the element again.
+    Listener onDragMove;
     void (*customPaint)(PaintCtx* ctx, El* e, void* user) = nullptr;
     void* customUser = nullptr;
     El* first = nullptr;
@@ -769,6 +780,9 @@ struct El {
     El* Click(int v);
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
+    El* OnMouseDown(Listener l);
+    El* OnMouseUp(Listener l);
+    El* OnDragMove(Listener l);
     El* Child(El* c);
     El* Bold();
     El* Semibold();
@@ -822,6 +836,9 @@ struct HitRect {
     Bounds bounds = {};
     Func0 onClick;
     Listener listener;
+    Listener onMouseDown;
+    Listener onMouseUp;
+    Listener onDragMove;
 };
 
 struct ScrollRect {
@@ -1042,6 +1059,9 @@ struct Window {
     float lastDownY = 0;
     MouseButton lastDownButton = MouseButton::Left;
     int clickRun = 0;
+    // The element that took the press, until the button comes back up: what
+    // GPUI's drag gives an element for free. 0 when nothing is held.
+    int pressedId = 0;
     bool eatReturn = false;
     LineInput* input = nullptr;
     Overlay overlay = {};
