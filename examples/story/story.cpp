@@ -556,7 +556,7 @@ static void OpenStory(StoryApp* app, Ctx* cx, const ClickEvent*,
     app->scrollY = 0;
     app->selA = -1;
     app->selB = -1;
-    app->selecting = false;
+    TextSelectionClear(&app->sel);
     Notify(cx);
 }
 
@@ -813,7 +813,10 @@ static El* Footer(StoryApp* app, Ctx* cx) {
 
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    cx->win->paint.selA = app->selA;
+    // did_hit_text gates the whole selection: a gesture that never touched a
+    // glyph shows nothing, however far it dragged.
+    bool publishes = TextSelectionPublishes(&app->sel);
+    cx->win->paint.selA = publishes ? app->selA : -1;
     cx->win->paint.selB = app->selB;
     // Pages that own a text field point the window at it from their Render.
     if (app->search.focused) {
@@ -877,7 +880,8 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     if (!down) {
         return;
     }
-    if (vk == KeyC && ev->ctrl && app->selA >= 0 && app->selA != app->selB) {
+    if (vk == KeyC && ev->ctrl && TextSelectionPublishes(&app->sel) &&
+        app->selA >= 0 && app->selA != app->selB) {
         char buf[8192];
         int n = CopyTextHits(&cx->win->paint, app->selA, app->selB, buf,
                              (int)sizeof(buf));
@@ -891,7 +895,7 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
         cx->win->input = nullptr;
         app->selA = -1;
         app->selB = -1;
-        app->selecting = false;
+        TextSelectionClear(&app->sel);
     }
     // Whatever the shell did not use is the page's. This is cx.propagate():
     // the shell handles its own chords first and then lets the action carry
@@ -926,13 +930,18 @@ static void OnWheel(StoryApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
 
 static void OnMouseUp(StoryApp* app, Ctx* cx, const MouseUpEvent*) {
     (void)cx;
-    app->selecting = false;
+    TextSelectionEnd(&app->sel);
 }
 
 static void OnMouseMove(StoryApp* app, Ctx* cx, const MouseMoveEvent* ev) {
-    if (!app->selecting) {
+    if (!app->sel.selecting) {
         return;
     }
+    // did_hit_text: whether *this* point is on a glyph, which is the strict
+    // hit; the offset the selection extends to is the nearest one either way,
+    // so a drag into the margin keeps running along the line.
+    TextSelectionExtend(
+        &app->sel, TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, false) >= 0);
     int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
     if (moveOff >= 0) {
         app->selB = moveOff;
@@ -953,19 +962,27 @@ static void OnMouseDown(StoryApp* app, Ctx* cx, const MouseDownEvent* ev) {
                             &wordB)) {
         app->selA = wordA;
         app->selB = wordB;
-        app->selecting = false;
+        // A multi-click lands on a word, so it has hit text by definition;
+        // Rust sets did_hit_text outright on that path.
+        TextSelectionBegin(&app->sel, true);
+        TextSelectionEnd(&app->sel);
         return;
     }
-    int off = TextHitOffsetAt(&cx->win->paint, x, y, false);
-    if (off >= 0) {
-        app->selA = off;
-        app->selB = off;
-        app->selecting = true;
+    // A press in the margin still begins a gesture: Rust takes the flag from
+    // `anchor.inside_text || endpoint.inside_text`, so dragging from beside a
+    // paragraph into it selects. The anchor is the nearest offset; whether it
+    // was on a glyph is what decides if anything is published.
+    int anchor = TextHitOffsetAt(&cx->win->paint, x, y, true);
+    if (anchor >= 0) {
+        app->selA = anchor;
+        app->selB = anchor;
+        TextSelectionBegin(&app->sel,
+                           TextHitOffsetAt(&cx->win->paint, x, y, false) >= 0);
         return;
     }
     app->selA = -1;
     app->selB = -1;
-    app->selecting = false;
+    TextSelectionClear(&app->sel);
 }
 
 // The story to open, if one was named on the command line.

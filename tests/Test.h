@@ -54,6 +54,7 @@ void TestToast();
 void TestVirtualList();
 void TestDatePicker();
 void TestPopup();
+void TestTextSelection();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();
