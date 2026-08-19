@@ -12,7 +12,7 @@ El* Switch::New(Ctx* cx, Str id, bool checked, bool disabled,
     }
     e->FocusId(clickId);
     if (onChange.IsValid()) {
-        e->OnClick(ListenerArg(onChange, !checked));
+        e->OnClick(ListenerFill(onChange, !checked));
     }
     return e;
 }

@@ -492,7 +492,12 @@ struct Listener {
     void* fn = nullptr;
     EntityId view = {};
     intptr_t arg = 0;
+    // The handler takes an argument at all.
     bool hasArg = false;
+    // The caller already said what it is. Rust hands a closure both what it
+    // captured and what the widget produced; there is one slot here, so a
+    // value the caller bound wins and ListenerFill leaves it alone.
+    bool argBound = false;
 
     bool IsValid() const { return fn != nullptr; }
 };
@@ -1731,6 +1736,7 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t),
     l.view = cx->self;
     l.arg = arg;
     l.hasArg = true;
+    l.argBound = true;
     return l;
 }
 
@@ -1750,6 +1756,19 @@ Listener Listen(Ctx* cx, void (*fn)(T*, Ctx*, const E*, intptr_t)) {
 inline Listener ListenerArg(Listener l, intptr_t arg) {
     if (l.IsValid()) {
         l.arg = arg;
+        l.hasArg = true;
+        l.argBound = true;
+    }
+    return l;
+}
+
+// The same, for the value a widget produces rather than one its caller chose:
+// which day of the calendar, the state a checkbox activation lands on. Rust
+// passes that beside whatever the closure captured, so a caller that already
+// bound its own — which of ten toggles this is — keeps it.
+inline Listener ListenerFill(Listener l, intptr_t v) {
+    if (l.IsValid() && !l.argBound) {
+        l.arg = v;
         l.hasArg = true;
     }
     return l;
@@ -1772,6 +1791,7 @@ Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t),
     l.view = e.id;
     l.arg = arg;
     l.hasArg = true;
+    l.argBound = true;
     return l;
 }
 

@@ -3,22 +3,18 @@
 
 using namespace gpui;
 
-enum {
-    ClickToggleB = 560,
-    ClickToggleI = 561,
-    ClickToggleU = 562
-};
-
-static void ToggleBold(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
-    app->toggleOn = !app->toggleOn;
+// The toggle reports the value its activation produces, the way Rust's
+// on_change hands the handler `!pressed`.
+static void ToggleBold(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                       intptr_t next) {
+    app->toggleOn = next != 0;
     Notify(cx);
 }
 
-static El* ToggleCell(Ctx* cx, Str id, Listener onClick, const char* label,
+static El* ToggleCell(Ctx* cx, Str id, Listener onChange, const char* label,
                       bool on) {
     Arena* a = cx->a;
-    El* b = Toggle::New(cx, id, 0)
-                ->OnClick(onClick)
+    El* b = Toggle::New(cx, id, on, false, onChange)
                 ->W(28)
                 ->H(28)
                 ->ItemsCenter()

@@ -19,7 +19,7 @@ El* Checkbox::New(Ctx* cx, Str id, CheckboxState state, bool disabled,
     }
     e->FocusId(clickId);
     if (onChange.IsValid()) {
-        e->OnClick(ListenerArg(onChange, (intptr_t)CheckboxActivated(state)));
+        e->OnClick(ListenerFill(onChange, (intptr_t)CheckboxActivated(state)));
     }
     return e;
 }

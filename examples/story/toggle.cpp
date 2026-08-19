@@ -22,8 +22,11 @@ static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
                       IconName icon, bool on, bool outline) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", slot)), 0)
-                ->OnClick(ListenerArg(onToggle, slot))
+    // The toggle takes the press itself; the page still needs to know which
+    // chip it was, so the slot rides on the listener the way Rust captures it
+    // in the closure.
+    El* t = Toggle::New(cx, StrDup(a, fmt("tog-%d", slot)), on, false,
+                        ListenerArg(onToggle, slot))
                 ->H(28)
                 ->PadX(label ? 10.f : 8.f)
                 ->ItemsCenter()
