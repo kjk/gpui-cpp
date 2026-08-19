@@ -291,6 +291,8 @@ El* DatePicker::IntoEl() {
                   ->OnDay(onDay)
                   ->IntoEl();
     }
+    // The themed picker has no disabled state of its own yet, so the root
+    // always takes focus.
     return gpui::DatePicker::New(cx, StrL("date-picker"))
         ->W(width)
         ->Child(

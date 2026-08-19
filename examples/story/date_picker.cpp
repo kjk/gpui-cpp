@@ -216,12 +216,21 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
 }
 
 // Esc closes what this page has open, like an overlay dismiss.
+// crates/base/src/date_picker.rs binds the same Confirm and Cancel actions a
+// select does, but Enter only opens: choosing a date is the calendar's, not
+// the root's, so it does nothing to a picker that is already open.
 void DatePickerStory::OnKey(DatePickerStory* self, Ctx* cx,
                             const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
+    if (!ev->down) {
         return;
     }
-    self->open = -1;
+    DatePickerAction act =
+        DatePickerActionForKey(ev->vk, self->open >= 0, false);
+    if (act == DatePickerAction::Dismiss) {
+        self->open = -1;
+    } else {
+        return;
+    }
     Notify(cx);
 }
 
