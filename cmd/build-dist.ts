@@ -14,16 +14,15 @@
 // here, each one asserted to match exactly once so an md4c refresh that moves
 // them fails loudly instead of silently.
 //
-// dist/gpui.h and dist/gpui.cpp are checked in, and this script run by hand is
-// the only thing that writes them. Nothing automatic may: the three platform
+// The published pair lives in a repo of its own and this script run by hand is
+// the only thing that writes it. Nothing automatic may: the three platform
 // builds, the test runner and CI all amalgamate into .work/, which is
-// gitignored, so an ordinary build never touches the published pair and never
-// leaves it dirty in a commit. `outDir` is required for that reason — there is
-// no default to fall into.
+// gitignored, so an ordinary build never touches what gets published. `outDir`
+// is required for that reason — there is no default to fall into.
 //
-//   bun cmd/build-dist.ts           # write dist/, then time dbg+rel compile
-//   bun cmd/build-dist.ts -work     # write .work/ instead of dist/
-//   bun cmd/build-dist.ts -no-bench # skip the compile timing
+//   bun cmd/build-dist.ts              # sync, build, check, readme, publish
+//   bun cmd/build-dist.ts -no-publish  # everything but the commit and push
+//   bun cmd/build-dist.ts -work        # just the .work/ pair a build compiles
 //
 // import { buildDist } from "./build-dist.ts";
 // buildDist({ outDir: ".work" });   // what a build script may do
@@ -49,7 +48,7 @@ export const srcBranch = "main";
 export const distRepoUrl = "https://github.com/kjk/gpui-cpp-dist.git";
 export const distRepoDir = ".work/gpui-cpp-dist";
 
-export type DistOutDir = "dist" | ".work" | typeof distRepoDir;
+export type DistOutDir = ".work" | typeof distRepoDir;
 
 // The amalgam a build compiles against. cmd/build-dist.ts sets
 // GPUI_AMALGAM_DIR to the dist repo checkout, so the examples get built
@@ -69,9 +68,9 @@ export const allPlatforms: Platform[] = ["win", "linux", "mac"];
 
 export type BuildDistOpts = {
   /**
-   * Destination directory relative to the repo root. Required: "dist" is the
-   * checked-in pair and only `bun cmd/build-dist.ts` may write it, so a build
-   * script has to say ".work" out loud.
+   * Destination directory relative to the repo root. Required: the dist repo
+   * checkout is what gets published and only `bun cmd/build-dist.ts` may write
+   * it, so a build script has to say ".work" out loud.
    */
   outDir: DistOutDir;
 };
@@ -838,17 +837,11 @@ function parseCli(argv: string[]): {
   let check = true;
   let sync = true;
   let publish = true;
-  const usage = "usage: bun cmd/build-dist.ts [-work | -in-repo] [-no-check] [-no-sync] [-no-publish]";
+  const usage = "usage: bun cmd/build-dist.ts [-work] [-no-check] [-no-sync] [-no-publish]";
   for (const raw of argv) {
     if (raw === "-work" || raw === "--work") {
       outDir = ".work";
       check = false;
-      sync = false;
-      publish = false;
-      continue;
-    }
-    if (raw === "-in-repo" || raw === "--in-repo") {
-      outDir = "dist";
       sync = false;
       publish = false;
       continue;

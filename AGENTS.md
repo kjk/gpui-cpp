@@ -142,9 +142,9 @@ gpui-cpp commit it came from and a compare link showing what it is behind by,
 then commits and pushes it. Never regenerate a published copy as part of a
 build, a test run or a commit; `buildDist()` takes a required `outDir` so an
 automatic caller has to say `.work` out loud. The two differ in what they do
-with the text: `dist/` is read as a document, so the comments come out, runs of
-blank lines collapse, and the `#include` lines are lifted to the top of
-`gpui.cpp` and de-duplicated — the portable ones first, then one guarded block
+with the text: the published copy is read as a document, so the comments come
+out, runs of blank lines collapse, and the `#include` lines are lifted to the
+top of `gpui.cpp` and de-duplicated — the portable ones first, then one guarded block
 per platform, which has to stay below the portable code because `<X11/Xlib.h>`
 defines `None` and `Window`. `.work/` is the sources concatenated and nothing
 else, comments and all, so a line in it is the line its `#line 1 "src/..."`
