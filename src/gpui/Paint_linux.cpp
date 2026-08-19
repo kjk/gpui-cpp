@@ -483,8 +483,8 @@ static PangoWeight PangoWeightFor(uint8_t weight, float fontSize) {
 }
 
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
-                          bool wrap, uint8_t weight, float lineH, float* outW,
-                          float* outH) {
+                          bool wrap, uint8_t weight, float lineH,
+                          Size* outSize) {
     if (!ctx || !ctx->pa || !ctx->pa->pango || !s.s || s.len <= 0) {
         return nullptr;
     }
@@ -540,11 +540,9 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
                                  (int)((tl->box - tl->natural) * PANGO_SCALE));
         pango_layout_get_pixel_size(l, &pw, &ph);
     }
-    if (outW) {
-        *outW = (float)pw;
-    }
-    if (outH) {
-        *outH = tl->box * (float)tl->lines;
+    if (outSize) {
+        outSize->w = (float)pw;
+        outSize->h = tl->box * (float)tl->lines;
     }
     return tl;
 }
@@ -620,7 +618,7 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return index;
 }
 
-int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, RectF* out,
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Rect* out,
                          int max) {
     if (!tl || !tl->layout || !out || max <= 0 || u8a >= u8b) {
         return 0;

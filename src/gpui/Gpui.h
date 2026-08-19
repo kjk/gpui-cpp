@@ -123,6 +123,73 @@ const Theme& ThemeNow();
 void ThemeSet(App* app, ThemeMode mode);
 ThemeMode ThemeGet();
 
+// ─── geometry ───────────────────────────────────────────────────────────
+//
+// crates/gpui/src/geometry.rs. Rust spells these `Point<T>`, `Size<T>`,
+// `Bounds<T>` and `Edges<T>`, where `T` is not an element type but a *unit* —
+// `Pixels`, `ScaledPixels`, `DevicePixels`, `Rems`, `Length` — so the compiler
+// refuses to add device pixels to logical ones. Everything above Paint.h here
+// is DIPs and always has been, which leaves that generic with one instantiation
+// (`Point<Pixels>` is 170 of the 185 `Point<T>` in gpui-component), so these
+// are plain float structs and the arithmetic is written out once. The units
+// that are not DIPs get their own named struct instead of a parameter:
+// `WinSize` carries both the DIP and the device-pixel size of a window, and the
+// backends scale on the way to Direct2D / cairo / Core Graphics.
+//
+// They are values: aggregates, no constructors, copied by the byte. Code that
+// reads or writes one component at a time — the layout pass over `El`, a mouse
+// event's position — keeps its flat fields; these are for what is produced,
+// returned or passed as a unit.
+
+struct Point {
+    float x = 0;
+    float y = 0;
+};
+
+struct Size {
+    float w = 0;
+    float h = 0;
+};
+
+// Bounds<Pixels>: an origin and a size, y growing down.
+struct Rect {
+    float x = 0, y = 0, w = 0, h = 0;
+
+    float Right() const { return x + w; }
+    float Bottom() const { return y + h; }
+    float CenterX() const { return x + w * 0.5f; }
+    float CenterY() const { return y + h * 0.5f; }
+    // Bounds::contains: the top and left edges are inside, the bottom and
+    // right ones are not, so abutting boxes never both claim a point.
+    bool Contains(Point p) const {
+        return p.x >= x && p.x < x + w && p.y >= y && p.y < y + h;
+    }
+};
+
+// Edges<Pixels>: the four insets of a box, in Rust's field order.
+struct Edges {
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+    float left = 0;
+
+    float Horizontal() const { return left + right; }
+    float Vertical() const { return top + bottom; }
+};
+
+// Bounds::new(origin, size), for the callers that hold the two apart.
+inline Rect RectAt(Point origin, Size size) {
+    return {origin.x, origin.y, size.w, size.h};
+}
+// Bounds::inset / dilate, positive shrinking the box.
+inline Rect RectInset(Rect r, float d) {
+    return {r.x + d, r.y + d, r.w - d - d, r.h - d - d};
+}
+inline Rect RectInsetEdges(Rect r, Edges e) {
+    return {r.x + e.left, r.y + e.top, r.w - e.Horizontal(),
+            r.h - e.Vertical()};
+}
+
 // ─── entities ─────────────────────────────────────────────────────────────
 //
 // GPUI keeps view state in `App` and hands out `Entity<T>` handles; a view
@@ -179,7 +246,9 @@ struct KeyedSlot {
 //   * `ScrollDelta::Pixels | Lines` is a delta plus `precise`. Rust defers the
 //     multiply to `pixel_delta(line_height)`; the three windows here turn a
 //     notch into DIPs at the seam, so nothing downstream needs a line height.
-//   * `Point<Pixels>` is `x` and `y`, as everywhere else here.
+//   * `Point<Pixels>` is `x` and `y`. There is a `Point` above, but an
+//     event's position is read a component at a time, and flattening it
+//     spares every handler a `.position`.
 // What is missing outright: touch, pinch and pressure, which none of these
 // three windows report.
 
@@ -332,10 +401,7 @@ struct ClickEvent {
     // The box that was hit, so a handler can place the click inside it — what
     // a slider needs to turn a press on its track into a value. This is also
     // KeyboardClickEvent::bounds, the only position a keyboard click has.
-    float elX = 0;
-    float elY = 0;
-    float elW = 0;
-    float elH = 0;
+    Rect el = {};
     int clickCount = 1;
     Modifiers modifiers = {};
     // ClickEvent::Keyboard: Space or Enter on the focused element, with no
@@ -551,7 +617,7 @@ struct Style {
     float maxH = 1e9f;
     float flexGrow = 0;
     float flexShrink = 1;
-    float padL = 0, padT = 0, padR = 0, padB = 0;
+    Edges pad = {};
     float gap = 0;
     float border = 0;
     float borderT = 0;
@@ -623,6 +689,9 @@ struct El {
     El* last = nullptr;
     El* next = nullptr;
     float x = 0, y = 0, w = 0, h = 0;
+    // The laid-out box as one value — Bounds<Pixels>. The fields stay flat
+    // because the layout pass writes them a component at a time.
+    Rect Bounds() const { return {x, y, w, h}; }
     float scrollY = 0;
     int scrollId = 0;
     float contentW = 0;
@@ -748,19 +817,19 @@ El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
 
 struct HitRect {
     int id = 0;
-    float x = 0, y = 0, w = 0, h = 0;
+    Rect bounds = {};
     Func0 onClick;
     Listener listener;
 };
 
 struct ScrollRect {
     int id = 0;
-    float x = 0, y = 0, w = 0, h = 0;
+    Rect bounds = {};
     float contentH = 0;
 };
 
 struct TextHit {
-    float x = 0, y = 0, w = 0, h = 0;
+    Rect bounds = {};
     Str text;
     float font = 14;
     float maxW = 0;
@@ -805,7 +874,7 @@ struct PaintCtx {
 struct FocusRect {
     int id = 0;
     int trapId = 0;
-    float x = 0, y = 0, w = 0, h = 0;
+    Rect bounds = {};
 };
 
 // gpui_component::input::InputEvent. Change is the only variant raised so
@@ -857,9 +926,8 @@ struct WinSize {
 float PxToDip(PaintCtx* ctx, int px);
 int DipToPx(PaintCtx* ctx, float dip);
 
-void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
-                 float* outH, bool wrap = false, int weight = 0,
-                 float lineH = 0);
+Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW,
+                 bool wrap = false, int weight = 0, float lineH = 0);
 void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);

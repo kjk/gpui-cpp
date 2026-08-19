@@ -87,7 +87,7 @@ void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y) {
     for (int i = 0; i < win->paint.hits.len; i++) {
         HitRect h = win->paint.hits[i];
         if (h.id == ClickSlider) {
-            float t = (x - h.x) / (h.w > 1 ? h.w : 1);
+            float t = (x - h.bounds.x) / (h.bounds.w > 1 ? h.bounds.w : 1);
             if (t < 0) {
                 t = 0;
             }

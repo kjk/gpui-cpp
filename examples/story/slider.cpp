@@ -20,12 +20,12 @@ struct SliderStory {
 // it hit, so the fraction is the offset within it; a vertical track counts
 // up from the bottom.
 static float ClickFraction(const ClickEvent* ev, bool vertical) {
-    float span = vertical ? ev->elH : ev->elW;
+    float span = vertical ? ev->el.h : ev->el.w;
     if (span <= 0) {
         return 0;
     }
     float at =
-        vertical ? (ev->elY + span - ev->y) / span : (ev->x - ev->elX) / span;
+        vertical ? (ev->el.y + span - ev->y) / span : (ev->x - ev->el.x) / span;
     return at < 0 ? 0 : (at > 1 ? 1 : at);
 }
 

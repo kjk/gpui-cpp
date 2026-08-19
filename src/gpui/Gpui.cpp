@@ -375,31 +375,31 @@ El* El::Gap(float v) {
     return this;
 }
 El* El::Pad(float v) {
-    style.padL = style.padT = style.padR = style.padB = v;
+    style.pad = {v, v, v, v};
     return this;
 }
 El* El::PadX(float v) {
-    style.padL = style.padR = v;
+    style.pad.left = style.pad.right = v;
     return this;
 }
 El* El::PadY(float v) {
-    style.padT = style.padB = v;
+    style.pad.top = style.pad.bottom = v;
     return this;
 }
 El* El::PadL(float v) {
-    style.padL = v;
+    style.pad.left = v;
     return this;
 }
 El* El::PadR(float v) {
-    style.padR = v;
+    style.pad.right = v;
     return this;
 }
 El* El::PadT(float v) {
-    style.padT = v;
+    style.pad.top = v;
     return this;
 }
 El* El::PadB(float v) {
-    style.padB = v;
+    style.pad.bottom = v;
     return this;
 }
 El* El::ItemsCenter() {
@@ -1020,16 +1020,14 @@ void TextMeasClear(PaintCtx* ctx) {
 // the run outlives the caller's; see El::laidLayout.
 static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
                                   float maxW, bool wrap, uint8_t weight,
-                                  float lineH, float* outW, float* outH,
+                                  float lineH, Size* outSize,
                                   bool* outCached = nullptr) {
     if (outCached) {
         *outCached = false;
     }
-    if (outW) {
-        *outW = 0;
-    }
-    if (outH) {
-        *outH =
+    if (outSize) {
+        outSize->w = 0;
+        outSize->h =
             fontSize > 0 ? fontSize * (lineH > 0 ? lineH : kLineHeight) : 16.f;
     }
     if (!ctx || !ctx->pa || !s.s || s.len <= 0) {
@@ -1043,51 +1041,45 @@ static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
         if (outCached) {
             *outCached = true;
         }
-        if (outW) {
-            *outW = hit->w;
-        }
-        if (outH) {
-            *outH = hit->h;
+        if (outSize) {
+            outSize->w = hit->w;
+            outSize->h = hit->h;
         }
         TextLayoutAddRef(hit->layout);
         return hit->layout;
     }
-    float w = 0;
-    float h = 0;
+    Size size = {};
     TextLayout* layout =
-        TextLayoutNew(ctx, s, fontSize, maxW, wrap, weight, lineH, &w, &h);
+        TextLayoutNew(ctx, s, fontSize, maxW, wrap, weight, lineH, &size);
     if (!layout) {
         return nullptr;
     }
-    if (outW) {
-        *outW = w;
-    }
-    if (outH) {
-        *outH = h;
+    if (outSize) {
+        *outSize = size;
     }
     TextMeasSlot* sl = TextMeasInsert(ctx, s, fontSize, maxW, wrap, weight,
-                                      lineH, w, h, layout);
+                                      lineH, size.w, size.h, layout);
     if (outCached) {
         *outCached = sl != nullptr;
     }
     return layout;
 }
 
-void MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, float* outW,
-                 float* outH, bool wrap, int weight, float lineH) {
-    *outW = 0;
-    *outH = fontSize > 0 ? fontSize * (lineH > 0 ? lineH : kLineHeight) : 16.f;
+Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
+                 int weight, float lineH) {
+    Size size = {};
     TextLayout* layout = TextMeasLayout(ctx, s, fontSize, maxW, wrap,
-                                        (uint8_t)weight, lineH, outW, outH);
+                                        (uint8_t)weight, lineH, &size);
     if (layout) {
         TextLayoutRelease(layout);
     }
+    return size;
 }
 
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                 float relX, float relY) {
     TextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr, nullptr);
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr);
     if (!layout) {
         return 0;
     }
@@ -1110,13 +1102,13 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
         return;
     }
     TextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr, nullptr);
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr);
     if (!layout) {
         return;
     }
     // One rect per line the selection covers; 32 is more lines than any
     // selectable text block here has.
-    RectF rects[32] = {};
+    Rect rects[32] = {};
     int n = TextLayoutRangeRects(layout, s, u8a, u8b, rects, 32);
     for (int i = 0; i < n; i++) {
         CanvasFillRect(ctx, x + rects[i].x, y + rects[i].y, rects[i].w,
@@ -1258,7 +1250,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         float measW = constrain && boxW > 0 ? boxW : 0;
         e->laidFont = font;
         e->laidMaxW = measW;
-        float tw = 0, th = 0;
+        Size text = {};
         // Same call MeasureText makes, but the shaped run is kept: paint would
         // otherwise hash and compare the whole string again to arrive at this
         // exact object. Releasing our reference is safe because a cached run
@@ -1266,13 +1258,13 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         bool cached = false;
         TextLayout* tl = TextMeasLayout(ctx, e->text, font, measW,
                                         e->style.wrap, (uint8_t)ElTextWeight(e),
-                                        e->style.lineHeight, &tw, &th, &cached);
+                                        e->style.lineHeight, &text, &cached);
         e->laidLayout = cached ? tl : nullptr;
         if (tl) {
             TextLayoutRelease(tl);
         }
-        e->w = wSpec > 0 ? wSpec : Clamp(tw, e->style.minW, e->style.maxW);
-        e->h = hSpec > 0 ? hSpec : Clamp(th, e->style.minH, e->style.maxH);
+        e->w = wSpec > 0 ? wSpec : Clamp(text.w, e->style.minW, e->style.maxW);
+        e->h = hSpec > 0 ? hSpec : Clamp(text.h, e->style.minH, e->style.maxH);
         LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
         return;
     }
@@ -1290,8 +1282,8 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     }
 
     // Container / chart: start with available or definite size
-    float padX = e->style.padL + e->style.padR;
-    float padY = e->style.padT + e->style.padB;
+    float padX = e->style.pad.Horizontal();
+    float padY = e->style.pad.Vertical();
     float innerW = (wSpec > 0 ? wSpec : availW) - padX;
     float innerH = (hSpec > 0 ? hSpec : availH) - padY;
     if (innerW < 0) {
@@ -1386,10 +1378,11 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
         }
         return;
     }
-    ax = parent->x + parent->style.padL;
-    ay = parent->y + parent->style.padT;
-    float innerW = parent->w - parent->style.padL - parent->style.padR;
-    float innerH = parent->h - parent->style.padT - parent->style.padB;
+    Rect inner = RectInsetEdges(parent->Bounds(), parent->style.pad);
+    ax = inner.x;
+    ay = inner.y;
+    float innerW = inner.w;
+    float innerH = inner.h;
     if (innerW < 0) {
         innerW = 0;
     }
@@ -1437,10 +1430,10 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
 
 static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                            Rgba inheritFg) {
-    float padL = e->style.padL;
-    float padT = e->style.padT;
-    float innerW = e->w - e->style.padL - e->style.padR;
-    float innerH = e->h - e->style.padT - e->style.padB;
+    float padL = e->style.pad.left;
+    float padT = e->style.pad.top;
+    float innerW = e->w - e->style.pad.Horizontal();
+    float innerH = e->h - e->style.pad.Vertical();
     if (innerW < 0) {
         innerW = 0;
     }
@@ -1821,8 +1814,8 @@ static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
     (void)w;
     (void)h;
     float keyW = wrap ? (measMaxW >= 0 ? measMaxW : (w > 0 ? w : 0)) : 0;
-    TextLayout* layout = TextMeasLayout(
-        ctx, s, fontSize, keyW, wrap, (uint8_t)weight, lineH, nullptr, nullptr);
+    TextLayout* layout = TextMeasLayout(ctx, s, fontSize, keyW, wrap,
+                                        (uint8_t)weight, lineH, nullptr);
     if (!layout) {
         return;
     }
@@ -2196,10 +2189,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid()) {
         HitRect hr;
         hr.id = e->clickId;
-        hr.x = e->x;
-        hr.y = e->y;
-        hr.w = e->w;
-        hr.h = e->h;
+        hr.bounds = e->Bounds();
         hr.onClick = e->onClick;
         hr.listener = e->listener;
         ctx->hits.Append(hr);
@@ -2207,10 +2197,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->style.overflowY == OverflowY::Scroll) {
         ScrollRect sr;
         sr.id = e->scrollId;
-        sr.x = e->x;
-        sr.y = e->y;
-        sr.w = e->w;
-        sr.h = e->h;
+        sr.bounds = e->Bounds();
         sr.contentH = e->contentH;
         ctx->scrolls.Append(sr);
     }
@@ -2293,10 +2280,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         if (e->selectable && e->text.s) {
             int docOff = ctx->textDocLen;
             TextHit th;
-            th.x = e->x;
-            th.y = e->y;
-            th.w = e->w;
-            th.h = e->h;
+            th.bounds = e->Bounds();
             th.text = e->text;
             th.font = font;
             th.maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
@@ -2394,31 +2378,31 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
 
     if (e->style.trapId && e->style.focusId &&
         e->style.focusId == ctx->focusId) {
-        DrawRoundStroke(ctx, e->x - 2, e->y - 2, e->w + 4, e->h + 4,
+        // The ring sits 2 DIPs outside the element's own box.
+        Rect ring = RectInset(e->Bounds(), -2);
+        DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
                         e->style.radius + 2, 2, ThemeNow().blue);
     }
     if (e->style.tooltip.s && e->clickId && e->clickId == ctx->hoverId) {
         const Theme& th = ThemeNow();
-        float tw = 0, thh = 0;
-        MeasureText(ctx, e->style.tooltip, 12, 280, &tw, &thh);
+        Size tip = MeasureText(ctx, e->style.tooltip, 12, 280);
         // TooltipPositioner: the shared positioner's side placement, with no
         // preferred side (which prefers above), centered on the trigger, no
         // gap, and the window margin.
-        Rect trigger = {e->x, e->y, e->w, e->h};
-        Positioned at =
-            PositionSide(trigger, tw + 16, thh + 10, ctx->viewW, ctx->viewH,
-                         kPopupMargin, nullptr, PopupAlign::Center, 0);
+        Positioned at = PositionSide(e->Bounds(), {tip.w + 16, tip.h + 10},
+                                     {ctx->viewW, ctx->viewH}, kPopupMargin,
+                                     nullptr, PopupAlign::Center, 0);
         FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
                   th.foreground);
         DrawTextAt(ctx, e->style.tooltip, at.bounds.x + 8, at.bounds.y + 5,
-                   tw + 4, thh, 12, th.background, false);
+                   tip.w + 4, tip.h, 12, th.background, false);
     }
 }
 
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {
     for (int i = ctx->hits.len - 1; i >= 0; i--) {
         const HitRect& h = ctx->hits[i];
-        if (x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h) {
+        if (h.bounds.Contains({x, y})) {
             return &ctx->hits[i];
         }
     }
@@ -2433,7 +2417,7 @@ int HitTest(PaintCtx* ctx, float x, float y) {
 const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y) {
     for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
         const ScrollRect& s = ctx->scrolls[i];
-        if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) {
+        if (s.bounds.Contains({x, y})) {
             return &ctx->scrolls[i];
         }
     }
@@ -2454,7 +2438,7 @@ static float DistToInterval(float v, float lo, float hi) {
 // `nearest` widens the search to the closest run when none contains the point,
 // which is what a drag past the end of a paragraph needs.
 static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
-                                  float* outRelX, float* outRelY) {
+                                  Point* outRel) {
     if (!ctx) {
         return nullptr;
     }
@@ -2462,7 +2446,7 @@ static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
     float bestScore = 1e9f;
     for (int i = ctx->texts.len - 1; i >= 0; i--) {
         const TextHit& h = ctx->texts[i];
-        if (x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h) {
+        if (h.bounds.Contains({x, y})) {
             best = &h;
             nearest = false;
             break;
@@ -2470,8 +2454,8 @@ static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
         if (!nearest) {
             continue;
         }
-        float dy = DistToInterval(y, h.y, h.y + h.h);
-        float dx = DistToInterval(x, h.x, h.x + h.w);
+        float dy = DistToInterval(y, h.bounds.y, h.bounds.Bottom());
+        float dx = DistToInterval(x, h.bounds.x, h.bounds.Right());
         float score = dy * 1000.f + dx;
         if (score < bestScore) {
             bestScore = score;
@@ -2481,32 +2465,30 @@ static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
     if (!best || !best->text.s) {
         return nullptr;
     }
-    float relX = x - best->x;
-    float relY = y - best->y;
+    Point rel = {x - best->bounds.x, y - best->bounds.y};
     if (nearest) {
-        if (relX < 0) {
-            relX = 0;
+        if (rel.x < 0) {
+            rel.x = 0;
         }
-        if (relY < 0) {
-            relY = 0;
+        if (rel.y < 0) {
+            rel.y = 0;
         }
-        if (relX > best->w) {
-            relX = best->w;
+        if (rel.x > best->bounds.w) {
+            rel.x = best->bounds.w;
         }
-        if (relY > best->h) {
-            relY = best->h;
+        if (rel.y > best->bounds.h) {
+            rel.y = best->bounds.h;
         }
     }
-    *outRelX = relX;
-    *outRelY = relY;
+    *outRel = rel;
     return best;
 }
 
-// The byte offset inside `h` that (relX, relY) points at, clamped into it.
-static int TextHitLocal(PaintCtx* ctx, const TextHit* h, float relX,
-                        float relY) {
-    int local = TextIndexAt(ctx, h->text, h->font, h->maxW > 0 ? h->maxW : h->w,
-                            h->wrap, relX, relY);
+// The byte offset inside `h` that `rel` points at, clamped into it.
+static int TextHitLocal(PaintCtx* ctx, const TextHit* h, Point rel) {
+    int local =
+        TextIndexAt(ctx, h->text, h->font, h->maxW > 0 ? h->maxW : h->bounds.w,
+                    h->wrap, rel.x, rel.y);
     if (local < 0) {
         local = 0;
     }
@@ -2517,13 +2499,12 @@ static int TextHitLocal(PaintCtx* ctx, const TextHit* h, float relX,
 }
 
 int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
-    float relX = 0;
-    float relY = 0;
-    const TextHit* h = TextHitFind(ctx, x, y, nearest, &relX, &relY);
+    Point rel = {};
+    const TextHit* h = TextHitFind(ctx, x, y, nearest, &rel);
     if (!h) {
         return -1;
     }
-    return h->docOff + TextHitLocal(ctx, h, relX, relY);
+    return h->docOff + TextHitLocal(ctx, h, rel);
 }
 
 // --- word and line boundaries -------------------------------------------
@@ -2684,13 +2665,12 @@ bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
     if (clickCount < 2) {
         return false;
     }
-    float relX = 0;
-    float relY = 0;
-    const TextHit* h = TextHitFind(ctx, x, y, false, &relX, &relY);
+    Point rel = {};
+    const TextHit* h = TextHitFind(ctx, x, y, false, &rel);
     if (!h) {
         return false;
     }
-    int local = TextHitLocal(ctx, h, relX, relY);
+    int local = TextHitLocal(ctx, h, rel);
     int a = 0;
     int b = 0;
     if (clickCount == 2) {
@@ -2753,10 +2733,7 @@ static void CollectFocus(El* e, Window* win) {
         FocusRect fr;
         fr.id = e->style.focusId;
         fr.trapId = e->style.trapId;
-        fr.x = e->x;
-        fr.y = e->y;
-        fr.w = e->w;
-        fr.h = e->h;
+        fr.bounds = e->Bounds();
         win->focusEls.Append(fr);
     }
     for (El* c = e->first; c; c = c->next) {

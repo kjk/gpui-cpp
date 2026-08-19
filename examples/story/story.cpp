@@ -910,7 +910,7 @@ static void OnWheel(StoryApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
         if (pane->id == 2) {
             off = &app->sideScrollY;
         }
-        maxS = pane->contentH - pane->h;
+        maxS = pane->contentH - pane->bounds.h;
         if (maxS < 0) {
             maxS = 0;
         }

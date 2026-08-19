@@ -141,12 +141,9 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         ClickEvent ev = {0, 0, MouseButton::Left, win->focusId};
         ev.keyboard = true;
         if (focused) {
-            ev.x = focused->x + focused->w * 0.5f;
-            ev.y = focused->y + focused->h * 0.5f;
-            ev.elX = focused->x;
-            ev.elY = focused->y;
-            ev.elW = focused->w;
-            ev.elH = focused->h;
+            ev.x = focused->bounds.CenterX();
+            ev.y = focused->bounds.CenterY();
+            ev.el = focused->bounds;
         }
         if (focused && focused->listener.IsValid()) {
             ListenerCall(win->app, win, focused->listener, &ev);
@@ -280,10 +277,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     ev.clickCount = in.clickCount;
     ev.modifiers = in.modifiers;
     if (hit) {
-        ev.elX = hit->x;
-        ev.elY = hit->y;
-        ev.elW = hit->w;
-        ev.elH = hit->h;
+        ev.el = hit->bounds;
     }
     if (hit && hit->listener.IsValid()) {
         ListenerCall(win->app, win, hit->listener, &ev);

@@ -77,7 +77,7 @@ void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y) {
         if (h.id == ClickResize) {
             // move left panel: new width is x relative to the 288 box
             // approximate: hit x is divider; delta from divider center
-            float boxLeft = h.x - app->resizeW;
+            float boxLeft = h.bounds.x - app->resizeW;
             float w = x - boxLeft;
             if (w < 116) {
                 w = 116;

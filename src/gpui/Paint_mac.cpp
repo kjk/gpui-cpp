@@ -533,8 +533,8 @@ static CTFontRef FontFor(PaintApp* pa, float fontSize, uint8_t weight) {
 }
 
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
-                          bool wrap, uint8_t weight, float lineH, float* outW,
-                          float* outH) {
+                          bool wrap, uint8_t weight, float lineH,
+                          Size* outSize) {
     if (!ctx || !ctx->pa || !s.s || s.len <= 0) {
         return nullptr;
     }
@@ -649,11 +649,9 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     CGFloat descent = CTFontGetDescent(font);
     tl->baseline = (float)ascent + (tl->box - (float)(ascent + descent)) * 0.5f;
 
-    if (outW) {
-        *outW = width;
-    }
-    if (outH) {
-        *outH = tl->box * (float)nLines;
+    if (outSize) {
+        outSize->w = width;
+        outSize->h = tl->box * (float)nLines;
     }
     return tl;
 }
@@ -725,7 +723,7 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return U16OffToUtf8(s, (int)idx);
 }
 
-int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, RectF* out,
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Rect* out,
                          int max) {
     if (!tl || !out || max <= 0 || u8a >= u8b) {
         return 0;

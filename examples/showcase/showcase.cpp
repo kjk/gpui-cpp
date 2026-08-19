@@ -536,7 +536,7 @@ static int TextSelParaAt(Window* win, float x, float y, bool nearest,
         if (h.id < 531 || h.id >= 535) {
             continue;
         }
-        if (x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h) {
+        if (h.bounds.Contains({x, y})) {
             best = &h;
             break;
         }
@@ -544,10 +544,10 @@ static int TextSelParaAt(Window* win, float x, float y, bool nearest,
             continue;
         }
         float cy = y;
-        if (y < h.y) {
-            cy = h.y;
-        } else if (y > h.y + h.h) {
-            cy = h.y + h.h;
+        if (y < h.bounds.y) {
+            cy = h.bounds.y;
+        } else if (y > h.bounds.Bottom()) {
+            cy = h.bounds.Bottom();
         }
         float d = y - cy;
         if (d < 0) {
@@ -564,8 +564,8 @@ static int TextSelParaAt(Window* win, float x, float y, bool nearest,
     int para = best->id - 531;
     float font = para == 0 ? 18.f : 14.f;
     int local = TextIndexAt(&win->paint, Str(kSelParas[para]), font,
-                            best->w > 0 ? best->w : 560.f, true, x - best->x,
-                            y - best->y);
+                            best->bounds.w > 0 ? best->bounds.w : 560.f, true,
+                            x - best->bounds.x, y - best->bounds.y);
     int plen = (int)strlen(kSelParas[para]);
     if (local < 0) {
         local = 0;

@@ -8,13 +8,6 @@
 
 namespace gpui {
 
-struct RectF {
-    float x = 0;
-    float y = 0;
-    float w = 0;
-    float h = 0;
-};
-
 // Text weight byte: the weight in the low bits plus family / decoration
 // flags, so the shaped-text cache keys mono and proportional runs apart on
 // its own. Both backends decode the same byte.
@@ -107,8 +100,8 @@ struct TextLayout;
 // Shape `s` and report its size. maxW <= 0 is unconstrained. Null if the text
 // is empty or shaping failed.
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
-                          bool wrap, uint8_t weight, float lineH, float* outW,
-                          float* outH);
+                          bool wrap, uint8_t weight, float lineH,
+                          Size* outSize);
 void TextLayoutAddRef(TextLayout* tl);
 void TextLayoutRelease(TextLayout* tl);
 // `clip` confines the glyphs to the layout box — text_overflow: clip. That
@@ -120,7 +113,7 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
 int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY);
 // The rectangles covering UTF-8 range [u8a, u8b), one per line. Returns how
 // many were written.
-int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, RectF* out,
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Rect* out,
                          int max);
 
 } // namespace gpui

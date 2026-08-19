@@ -569,8 +569,8 @@ static IDWriteTextLayout* Dw(TextLayout* tl) {
 }
 
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
-                          bool wrap, uint8_t weight, float lineH, float* outW,
-                          float* outH) {
+                          bool wrap, uint8_t weight, float lineH,
+                          Size* outSize) {
     if (!ctx || !ctx->pa || !ctx->pa->dwrite || !s.s || s.len <= 0) {
         return nullptr;
     }
@@ -608,11 +608,9 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     ApplyLineHeight(layout, fontSize, lineH);
     DWRITE_TEXT_METRICS m = {};
     layout->GetMetrics(&m);
-    if (outW) {
-        *outW = m.widthIncludingTrailingWhitespace;
-    }
-    if (outH) {
-        *outH = m.height;
+    if (outSize) {
+        outSize->w = m.widthIncludingTrailingWhitespace;
+        outSize->h = m.height;
     }
     return (TextLayout*)layout;
 }
@@ -663,7 +661,7 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return WideOffToUtf8(s, wpos);
 }
 
-int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, RectF* out,
+int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Rect* out,
                          int max) {
     if (!tl || !out || max <= 0 || u8a >= u8b) {
         return 0;

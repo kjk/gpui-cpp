@@ -10,15 +10,6 @@
 
 namespace gpui {
 
-struct Rect {
-    float x = 0, y = 0, w = 0, h = 0;
-
-    float Right() const { return x + w; }
-    float Bottom() const { return y + h; }
-    float CenterX() const { return x + w * 0.5f; }
-    float CenterY() const { return y + h * 0.5f; }
-};
-
 // The side of the trigger the popup is placed on.
 enum class Placement : uint8_t {
     Top,
@@ -58,13 +49,13 @@ constexpr float kPopupMargin = 4.f;
 // the popup fits there, otherwise the opposite side, otherwise whichever side
 // has more room; the result is then clamped into the viewport. `preferred` is
 // null for Rust's `None`, which prefers Top.
-Positioned PositionSide(Rect trigger, float popupW, float popupH, float viewW,
-                        float viewH, float margin, const Placement* preferred,
-                        PopupAlign align, float offset);
+Positioned PositionSide(Rect trigger, Size popup, Size view, float margin,
+                        const Placement* preferred, PopupAlign align,
+                        float offset);
 
-// Puts `anchor`'s corner of the popup at (x, y), then clamps into the
+// Puts `anchor`'s corner of the popup at `at`, then clamps into the
 // viewport. Never flips, and never reports a side.
-Positioned PositionCorner(Anchor anchor, float x, float y, float popupW,
-                          float popupH, float viewW, float viewH, float margin);
+Positioned PositionCorner(Anchor anchor, Point at, Size popup, Size view,
+                          float margin);
 
 } // namespace gpui

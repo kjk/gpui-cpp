@@ -17,7 +17,7 @@ static Rect Trigger(float x, float y, float w, float h) {
 
 static Positioned Side(Rect trigger, const Placement* placement,
                        PopupAlign align, float popupW, float popupH) {
-    return PositionSide(trigger, popupW, popupH, kViewW, kViewH, kMargin,
+    return PositionSide(trigger, {popupW, popupH}, {kViewW, kViewH}, kMargin,
                         placement, align, 0);
 }
 
@@ -63,15 +63,16 @@ static void AlignmentSelectsTheLeadingCenterOrTrailingEdge() {
 
 static void SideOffsetAddsAGapBetweenTriggerAndPopup() {
     Placement bottom = Placement::Bottom;
-    Positioned p = PositionSide(Trigger(200, 200, 40, 20), 40, 30, kViewW,
-                                kViewH, kMargin, &bottom, PopupAlign::Center, 8);
+    Positioned p =
+        PositionSide(Trigger(200, 200, 40, 20), {40, 30}, {kViewW, kViewH},
+                     kMargin, &bottom, PopupAlign::Center, 8);
 
     utassertnear(p.bounds.y, 228.f);
 }
 
 static void CornerPositioningPlacesTheNamedCornerAndNeverReportsASide() {
-    Positioned p = PositionCorner(Anchor::TopLeft, 100, 100, 40, 30, kViewW,
-                                  kViewH, kMargin);
+    Positioned p = PositionCorner(Anchor::TopLeft, {100, 100}, {40, 30},
+                                  {kViewW, kViewH}, kMargin);
 
     utassert(!p.hasPlacement);
     utassertnear(p.bounds.x, 100.f);
@@ -79,8 +80,8 @@ static void CornerPositioningPlacesTheNamedCornerAndNeverReportsASide() {
 }
 
 static void CornerPositioningClampsButDoesNotFlip() {
-    Positioned p = PositionCorner(Anchor::TopLeft, 480, 390, 40, 30, kViewW,
-                                  kViewH, kMargin);
+    Positioned p = PositionCorner(Anchor::TopLeft, {480, 390}, {40, 30},
+                                  {kViewW, kViewH}, kMargin);
 
     utassert(!p.hasPlacement);
     utassertnear(p.bounds.Right(), kViewW - kMargin);
@@ -98,7 +99,7 @@ static const float kWindowMargin = 4.f;
 static Positioned TooltipPlacement(Rect trigger, float popupW, float popupH,
                                    float viewW, float viewH, float margin,
                                    const Placement* placement) {
-    return PositionSide(trigger, popupW, popupH, viewW, viewH, margin,
+    return PositionSide(trigger, {popupW, popupH}, {viewW, viewH}, margin,
                         placement, PopupAlign::Center, 0);
 }
 
