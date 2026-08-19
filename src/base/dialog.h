@@ -24,13 +24,17 @@ enum class DialogAction : uint8_t {
     Confirm
 };
 
+// `keyboard` is what `close_on_escape` sets: Rust's setter assigns the
+// keyboard flag, so turning escape off takes Enter with it — the two share one
+// key context.
 DialogAction DialogActionForKey(int key, bool keyboard);
 
 // Whether a press on the backdrop dismisses. Rust checks four things in
 // on_any_mouse_down: the press is below the region reserved at the top — a
 // drag on the title bar is not a dismissal — the button is the left one, the
 // dialog is `overlay_closable`, and it is the topmost of a stack, so a press
-// only ever closes the one on top.
+// only ever closes the one on top. `overlayClosable` is what
+// `close_on_backdrop_press` sets.
 bool DialogBackdropCloses(bool overlayClosable, bool topmost,
                           MouseButton button, float pressY,
                           float dismissBelowY);

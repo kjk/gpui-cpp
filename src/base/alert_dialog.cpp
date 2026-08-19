@@ -19,13 +19,35 @@ El* AlertDialogDescription::New(Ctx* cx) {
     Arena* a = cx->a;
     return UiRoot(a, StrL("alert-dialog-description"), 0);
 }
-El* AlertDialogCancel::New(Ctx* cx) {
+// The two answer parts. Rust gives each a click that dispatches Cancel or
+// Confirm, which is the same action the escape and enter bindings raise, so
+// they end in the dialog's own handlers rather than in one of their own.
+El* AlertDialogCancel::New(Ctx* cx, Listener onCancel) {
     Arena* a = cx->a;
-    return UiRoot(a, StrL("alert-dialog-cancel"), 0);
+    Str id = StrL("alert-dialog-cancel");
+    El* e = Div(a)->Id(id)->Click(HashClickId(id))->FocusId(HashClickId(id));
+    if (onCancel.IsValid()) {
+        e->OnClick(onCancel);
+    }
+    return e;
 }
-El* AlertDialogAction::New(Ctx* cx) {
+El* AlertDialogAction::New(Ctx* cx, Listener onConfirm) {
     Arena* a = cx->a;
-    return UiRoot(a, StrL("alert-dialog-action"), 0);
+    Str id = StrL("alert-dialog-action");
+    El* e = Div(a)->Id(id)->Click(HashClickId(id))->FocusId(HashClickId(id));
+    if (onConfirm.IsValid()) {
+        e->OnClick(onConfirm);
+    }
+    return e;
+}
+// The trigger takes the press, not the click, as its Rust counterpart does.
+El* AlertDialogTrigger::New(Ctx* cx, Listener onOpen) {
+    Arena* a = cx->a;
+    El* e = Div(a);
+    if (onOpen.IsValid()) {
+        e->OnMouseDown(onOpen);
+    }
+    return e;
 }
 
 AlertDialog* AlertDialog::New(Ctx* cx) {
