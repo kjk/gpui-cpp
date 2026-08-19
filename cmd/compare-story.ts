@@ -192,11 +192,20 @@ if (!existsSync(rustExe(debug))) {
 const outDir = join(root, "out", "compare-story");
 mkdirSync(outDir, { recursive: true });
 
-for (const slug of pages) {
-  if (!(slugs as readonly string[]).includes(slug)) {
-    die(`Unknown story slug: ${slug}`);
-  }
-  console.log(`\n=== ${slug} ===`);
+type Pair = {
+  rustProc: Bun.Subprocess;
+  cppProc: Bun.Subprocess;
+  rustHwnd: number;
+  cppHwnd: number;
+};
+
+// Both apps take the page on the command line, so every page costs a launch,
+// and the Rust window takes ~300ms to appear -- a quarter of what a page needs
+// end to end. Start the next pair while this one is still being photographed.
+// An occluded window captures exactly the same picture as a visible one (the
+// shot comes from what DWM holds, not from the screen), so the new pair
+// landing on top of the pair being shot does not matter.
+async function launch(slug: string): Promise<Pair> {
   const rustProc = Bun.spawn([rustExe(debug), rustStoryArg(slug)], {
     cwd: rustDir(),
     stdout: "ignore",
@@ -209,9 +218,33 @@ for (const slug of pages) {
   });
   const rustHwnd = await waitForPidWindow(rustProc.pid ?? 0, 30000);
   const cppHwnd = await waitForPidWindow(cppProc.pid ?? 0, 15000);
+  return { rustProc, cppProc, rustHwnd, cppHwnd };
+}
+
+async function close(pair: Pair | null) {
+  if (pair) {
+    await Promise.all([killAndWait(pair.rustProc), killAndWait(pair.cppProc)]);
+  }
+}
+
+for (const slug of pages) {
+  if (!(slugs as readonly string[]).includes(slug)) {
+    die(`Unknown story slug: ${slug}`);
+  }
+}
+
+let pending: Promise<Pair> | null = pages.length ? launch(pages[0]!) : null;
+for (let i = 0; i < pages.length; i++) {
+  const slug = pages[i]!;
+  console.log(`
+=== ${slug} ===`);
+  const pair = await pending!;
+  const nextSlug = pages[i + 1];
+  pending = nextSlug ? launch(nextSlug) : null;
+  const { rustHwnd, cppHwnd } = pair;
   if (!rustHwnd || !cppHwnd) {
-    await killAndWait(rustProc);
-    await killAndWait(cppProc);
+    await close(pair);
+    await close(pending ? await pending.catch(() => null) : null);
     die(`window did not appear (rust=${!!rustHwnd} cpp=${!!cppHwnd})`);
   }
   placePair(rustHwnd, cppHwnd);
@@ -226,7 +259,5 @@ for (const slug of pages) {
   captureWindowToPng(cppHwnd, cppPng);
   console.log(`  ${rustPng}`);
   console.log(`  ${cppPng}`);
-  await killAndWait(rustProc);
-  await killAndWait(cppProc);
-  await sleep(150);
+  await close(pair);
 }

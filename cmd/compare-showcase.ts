@@ -187,9 +187,9 @@ async function openPair(slug: string, debug: boolean): Promise<Pair> {
 }
 
 async function closePair(p: Pair) {
-  await killAndWait(p.rustProc);
-  await killAndWait(p.cppProc);
-  await sleep(150);
+  // killAndWait waits for the process to actually go now, so there is nothing
+  // left for a trailing sleep to cover.
+  await Promise.all([killAndWait(p.rustProc), killAndWait(p.cppProc)]);
 }
 
 const { debug, keep, nobuild, pages } = parseArgs(Bun.argv.slice(2));
