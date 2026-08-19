@@ -355,6 +355,96 @@ MdNode* MdParse(Arena* a, Str source) {
     return doc;
 }
 
+// ─── parse cache ──────────────────────────────────────────────────────────
+//
+// The element tree is rebuilt from the frame arena every frame, but the
+// markdown behind it hardly ever changes. Re-parsing the story's 13 KB README
+// on every render cost 52us and 44 KB of frame arena for a tree identical to
+// the last one, so each window keeps a few parsed documents around, keyed on
+// the source text.
+//
+// A slot owns a copy of the source as well as the nodes, because the tree
+// points into the source instead of copying it (see AddText). That way a
+// caller may hand us a string that only lives for this frame, and comparing
+// the copy is what tells us the cached tree is still the right answer.
+
+struct MdCacheSlot {
+    Arena* a = nullptr; // owns `source` and `doc`
+    Str source = {};
+    MdNode* doc = nullptr;
+    uint64_t used = 0; // lookup stamp for LRU; 0 == empty
+};
+
+// One story page is on screen at a time and a page holds a handful of these.
+constexpr int kMdCacheSlots = 8;
+
+struct MdCache {
+    MdCacheSlot slots[kMdCacheSlots] = {};
+    uint64_t clock = 0;
+
+    ~MdCache() {
+        for (int i = 0; i < kMdCacheSlots; i++) {
+            if (slots[i].a) {
+                ArenaDelete(slots[i].a);
+            }
+        }
+    }
+};
+
+// The whole point is to be much cheaper than a parse. memcmp of the story's
+// 13 KB README costs 0.2us against 52us to parse it, so there is no hash to
+// reject with first: the length check throws out most misses and memcmp stops
+// at the first byte that differs.
+static bool MdSourceEq(Str a, Str b) {
+    if (a.len != b.len) {
+        return false;
+    }
+    return a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0;
+}
+
+// The tree for `source`, parsed only when it isn't cached already. Falls back
+// to the frame arena when there is no window to hang a cache off, which is
+// what the tests and any headless measuring pass see.
+static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source) {
+    MdCache* c = nullptr;
+    if (cx && cx->win) {
+        auto* slot = KeyedState<Entity<MdCache>>(
+            cx, (uint32_t)HashClickId(StrL("gpui-md-parse-cache")));
+        if (slot) {
+            if (!slot->IsValid()) {
+                *slot = EntityNewState<MdCache>(cx->app);
+            }
+            c = slot->Get(cx);
+        }
+    }
+    if (!c) {
+        return MdParse(frame, source);
+    }
+
+    c->clock++;
+    MdCacheSlot* lru = &c->slots[0];
+    for (int i = 0; i < kMdCacheSlots; i++) {
+        MdCacheSlot* s = &c->slots[i];
+        if (s->used != 0 && MdSourceEq(s->source, source)) {
+            s->used = c->clock;
+            return s->doc;
+        }
+        if (s->used < lru->used) {
+            lru = s;
+        }
+    }
+    // Evict the least recently looked up slot and reuse its arena.
+    if (!lru->a) {
+        lru->a = ArenaNew();
+    } else {
+        lru->a->Reset();
+    }
+    lru->source = StrDup(lru->a, source);
+    lru->doc = MdParse(lru->a, lru->source);
+    lru->used = c->clock;
+    return lru->doc;
+}
+
 // ─── render ───────────────────────────────────────────────────────────────
 
 // node.rs 2258: h1 2.0/BOLD, h2 1.5, h3 1.25, h4 1.125, h5 1.0/SEMIBOLD,
@@ -721,7 +811,7 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
 }
 
 El* TextView::IntoEl() {
-    MdNode* doc = MdParse(a, source);
+    MdNode* doc = MdParseCached(cx, a, source);
     return Blocks(Div(a)->FlexCol()->W(kFill), doc, 0, false);
 }
 
