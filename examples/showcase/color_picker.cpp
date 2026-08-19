@@ -94,8 +94,8 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
         El* sw = Div(a)->FlexRow()->Gap(4);
         for (int i = 0; i < 5; i++) {
             bool on = (app->colorHex & 0xffffff) == kSwatches[i];
-            sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i), 0)
-                          ->OnClick(Listen(cx, &PickSwatch, i))
+            sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i),
+                                       Listen(cx, &PickSwatch, i))
                           ->W(24)
                           ->H(24)
                           ->Bg(FromHex(kSwatches[i]))

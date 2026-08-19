@@ -49,6 +49,7 @@ void TestScrollbar();
 void TestResizable();
 void TestTree();
 void TestCalendar();
+void TestColorPicker();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();

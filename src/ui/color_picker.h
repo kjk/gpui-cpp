@@ -17,6 +17,10 @@ struct ColorPicker {
     bool open = false;
     Listener onChange;
     Listener onToggle;
+    // preview_color / clear_preview: a swatch under the pointer shows its
+    // color before anything is committed. The handler is told which one, and
+    // gets 0 when the pointer left.
+    Listener onPreview;
 
     static ColorPicker* New(Ctx* cx);
     ColorPicker* Hex(uint32_t h);
@@ -25,6 +29,7 @@ struct ColorPicker {
     ColorPicker* Open(bool v);
     ColorPicker* OnChange(Listener fn);
     ColorPicker* OnToggle(Listener fn);
+    ColorPicker* OnPreview(Listener fn);
     El* IntoEl();
 };
 

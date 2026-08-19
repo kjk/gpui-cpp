@@ -36,6 +36,10 @@ ColorPicker* ColorPicker::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
+ColorPicker* ColorPicker::OnPreview(Listener fn) {
+    onPreview = fn;
+    return this;
+}
 
 El* ColorPicker::IntoEl() {
     const Theme& th = cx->theme();
@@ -78,14 +82,14 @@ El* ColorPicker::IntoEl() {
             Rgba sc =
                 Rgb((uint8_t)((sw[i] >> 16) & 0xff),
                     (uint8_t)((sw[i] >> 8) & 0xff), (uint8_t)(sw[i] & 0xff));
-            El* cell = ColorSwatch::New(cx, StrDup(a, fmt("sw%d", i)))
+            // The swatch previews on hover and commits on click, which is
+            // the picker's whole interaction model in Rust.
+            El* cell = ColorSwatch::New(cx, StrDup(a, fmt("sw%d", i)),
+                                        ListenerArg(onChange, (intptr_t)sw[i]),
+                                        ListenerArg(onPreview, (intptr_t)sw[i]))
                            ->W(24)
                            ->H(24)
                            ->Bg(sc);
-            if (onChange.IsValid()) {
-                BindClick(cell, StrDup(a, fmt("sw%d", i)),
-                          ListenerArg(onChange, (intptr_t)sw[i]));
-            }
             pop->Child(cell);
         }
     }
