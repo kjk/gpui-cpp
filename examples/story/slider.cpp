@@ -1,63 +1,30 @@
 #include "Story.h"
 
-#include <math.h>
-
 struct SliderStory {
-    // The Color Picker's four channels, and the logarithmic speed slider.
-    float hsl[4] = {0.58f, 0.62f, 0.5f, 1.f};
-    float speed = 0.5f;
-    // The Default and Range sections track their own values too, so the
-    // sliders on this page all answer to a click.
-    float volume = 0.75f;
-    float priceLo = 0.12f;
-    float priceHi = 0.45f;
-    float storage = 0.5f;
+    // Every slider on the page is a SliderState the window writes to, so the
+    // page holds values in their own units and never sees a mouse event.
+    // The Color Picker's four channels, in degrees and percent.
+    SliderState hsl[4] = {
+        SliderStateNew(0, 360, SliderSingle(209)),
+        SliderStateNew(0, 100, SliderSingle(62)),
+        SliderStateNew(0, 100, SliderSingle(50)),
+        SliderStateNew(0, 100, SliderSingle(100)),
+    };
+    // 0.25x .. 4x on a logarithmic scale, so the midpoint of the track is 1x.
+    SliderState speed = SliderStateNew(0.25f, 4.f, SliderSingle(1.f), 0.01f,
+                                       SliderScale::Logarithmic);
+    SliderState volume = SliderStateNew(0, 100, SliderSingle(75));
+    SliderState price = SliderStateNew(0, 100, SliderRange(12, 45));
+    SliderState storage = SliderStateNew(0, 10, SliderSingle(5));
 
     static El* Render(SliderStory* self, Ctx* cx);
 };
 
-// Where a press landed along the track, as 0..1. ClickEvent carries the box
-// it hit, so the fraction is the offset within it; a vertical track counts
-// up from the bottom.
-static float ClickFraction(const ClickEvent* ev, bool vertical) {
-    float span = vertical ? ev->el.h : ev->el.w;
-    if (span <= 0) {
-        return 0;
-    }
-    float at =
-        vertical ? (ev->el.y + span - ev->y) / span : (ev->x - ev->el.x) / span;
-    return at < 0 ? 0 : (at > 1 ? 1 : at);
-}
-
-static void SetVolume(SliderStory* self, Ctx* cx, const ClickEvent* ev) {
-    self->volume = ClickFraction(ev, false);
-    Notify(cx);
-}
-static void SetStorage(SliderStory* self, Ctx* cx, const ClickEvent* ev) {
-    self->storage = ClickFraction(ev, false);
-    Notify(cx);
-}
-// A range slider moves whichever end the press is nearer.
-static void SetPrice(SliderStory* self, Ctx* cx, const ClickEvent* ev) {
-    float at = ClickFraction(ev, false);
-    float dLo = at - self->priceLo;
-    float dHi = at - self->priceHi;
-    if ((dLo < 0 ? -dLo : dLo) <= (dHi < 0 ? -dHi : dHi)) {
-        self->priceLo = at;
-    } else {
-        self->priceHi = at;
-    }
-    Notify(cx);
-}
-static void SetHsl(SliderStory* self, Ctx* cx, const ClickEvent* ev,
-                   intptr_t ch) {
-    if (ch >= 0 && ch < 4) {
-        self->hsl[ch] = ClickFraction(ev, true);
-    }
-    Notify(cx);
-}
-static void SetSpeed(SliderStory* self, Ctx* cx, const ClickEvent* ev) {
-    self->speed = ClickFraction(ev, false);
+// SliderEvent::Change. The state already holds the new value — which end of a
+// range moved, the step it snapped to, the logarithmic mapping — so the page
+// only asks for a repaint.
+static void OnSliderChange(SliderStory* self, Ctx* cx, const SliderEvent*) {
+    (void)self;
     Notify(cx);
 }
 
@@ -87,30 +54,30 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default",
                            "Adjust a single value within a defined range.");
-    StorySectionAdd(def,
-                    SliderCard(cx, "Output volume",
-                               StoryFmt(cx, "%.0f", self->volume * 100.f).s,
-                               component::Slider::New(cx, StrL("volume"))
-                                   ->Value(self->volume)
-                                   ->W(328)
-                                   ->OnChange(Listen(cx, &SetVolume))
-                                   ->IntoEl(),
-                               false));
+    StorySectionAdd(
+        def,
+        SliderCard(cx, "Output volume",
+                   StoryFmt(cx, "%.0f", self->volume.value.End()).s,
+                   component::Slider::New(cx, StrL("volume"), &self->volume)
+                       ->W(328)
+                       ->OnChange(Listen(cx, &OnSliderChange))
+                       ->IntoEl(),
+                   false));
     page->Child(def);
 
     El* range = StorySection(cx, "Range",
                              "Choose minimum and maximum values together.");
     StorySectionAdd(
-        range, SliderCard(cx, "Price range",
-                          StoryFmt(cx, "$%.0f..%.0f", self->priceLo * 100.f,
-                                   self->priceHi * 100.f)
-                              .s,
-                          component::Slider::New(cx, StrL("price"))
-                              ->Range(self->priceLo, self->priceHi)
-                              ->W(328)
-                              ->OnChange(Listen(cx, &SetPrice))
-                              ->IntoEl(),
-                          true));
+        range,
+        SliderCard(cx, "Price range",
+                   StoryFmt(cx, "$%.0f..%.0f", self->price.value.Start(),
+                            self->price.value.End())
+                       .s,
+                   component::Slider::New(cx, StrL("price"), &self->price)
+                       ->W(328)
+                       ->OnChange(Listen(cx, &OnSliderChange))
+                       ->IntoEl(),
+                   true));
     page->Child(range);
 
     El* rev = StorySection(
@@ -120,25 +87,25 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     revHead->Child(StoryTxt(cx, StrL("Storage remaining"), 16, th.foreground)
                        ->Semibold());
     revHead->Child(
-        StoryTxt(cx, StoryFmt(cx, "%.0f GB", (1.f - self->storage) * 10.f), 14,
-                 th.mutedFg));
+        StoryTxt(cx, StoryFmt(cx, "%.0f GB", 10.f - self->storage.value.End()),
+                 14, th.mutedFg));
     revCard->Child(revHead);
-    revCard->Child(component::Slider::New(cx, StrL("storage"))
-                       ->Value(self->storage)
+    revCard->Child(component::Slider::New(cx, StrL("storage"), &self->storage)
                        ->Reverse()
                        ->W(360)
-                       ->OnChange(Listen(cx, &SetStorage))
+                       ->OnChange(Listen(cx, &OnSliderChange))
                        ->IntoEl());
     StorySectionAdd(rev, revCard);
     page->Child(rev);
 
     // Color Picker: four vertical channels, with the color they make in the
     // section's sub-title beside a Clipboard copy.
-    Rgba picked =
-        RgbaHsla(self->hsl[0], self->hsl[1], self->hsl[2], self->hsl[3]);
+    Rgba picked = RgbaHsla(
+        self->hsl[0].value.End() / 360.f, self->hsl[1].value.End() / 100.f,
+        self->hsl[2].value.End() / 100.f, self->hsl[3].value.End() / 100.f);
     Str hslText =
-        StoryFmt(cx, "hsl(%.0f, %.0f%%, %.0f%%)", self->hsl[0] * 360.f,
-                 self->hsl[1] * 100.f, self->hsl[2] * 100.f);
+        StoryFmt(cx, "hsl(%.0f, %.0f%%, %.0f%%)", self->hsl[0].value.End(),
+                 self->hsl[1].value.End(), self->hsl[2].value.End());
     El* picker = StorySection(cx, "Color Picker", nullptr);
     El* sub = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     sub->Child(StoryTxt(cx, hslText, 14, picked));
@@ -149,16 +116,16 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     static const char* kChannelIds[4] = {"hsl-h", "hsl-s", "hsl-l", "hsl-a"};
     El* channels = Div(a)->FlexRow()->W(512)->Gap(24)->JustifyCenter();
     for (int i = 0; i < 4; i++) {
-        float shown = i == 0 ? self->hsl[i] * 360.f : self->hsl[i] * 100.f;
         El* col = Div(a)->FlexCol()->H(128)->Gap(12)->ItemsCenter();
-        col->Child(component::Slider::New(cx, Str(kChannelIds[i]))
-                       ->Vertical()
-                       ->Value(self->hsl[i])
-                       ->W(80)
-                       ->OnChange(Listen(cx, &SetHsl, i))
-                       ->IntoEl());
+        col->Child(
+            component::Slider::New(cx, Str(kChannelIds[i]), &self->hsl[i])
+                ->Vertical()
+                ->W(80)
+                ->OnChange(Listen(cx, &OnSliderChange))
+                ->IntoEl());
         col->Child(StoryTxt(cx, Str(kChannels[i]), 13, th.foreground));
-        col->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", shown), 13, th.mutedFg));
+        col->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", self->hsl[i].value.End()),
+                            13, th.mutedFg));
         channels->Child(col);
     }
     StorySectionAdd(picker, channels);
@@ -172,15 +139,13 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     El* speedHead =
         Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
     speedHead->Child(StoryTxt(cx, StrL("Speed"), 16, th.foreground)->Medium());
-    // 0.25x .. 4x, geometric, so the midpoint of the track is 1x.
-    float speedX = 0.25f * powf(16.f, self->speed);
     speedHead->Child(
-        StoryTxt(cx, StoryFmt(cx, "%.2f\xC3\x97", speedX), 14, th.mutedFg));
+        StoryTxt(cx, StoryFmt(cx, "%.2f\xC3\x97", self->speed.value.End()), 14,
+                 th.mutedFg));
     speedCard->Child(speedHead);
-    speedCard->Child(component::Slider::New(cx, StrL("speed"))
-                         ->Value(self->speed)
+    speedCard->Child(component::Slider::New(cx, StrL("speed"), &self->speed)
                          ->W(360)
-                         ->OnChange(Listen(cx, &SetSpeed))
+                         ->OnChange(Listen(cx, &OnSliderChange))
                          ->IntoEl());
     StorySectionAdd(playback, speedCard);
     page->Child(playback);

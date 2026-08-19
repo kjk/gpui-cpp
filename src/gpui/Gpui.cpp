@@ -523,6 +523,11 @@ El* El::OnDragMove(Listener l) {
     onDragMove = l;
     return this;
 }
+El* El::BindSlider(SliderState* s, Axis axis) {
+    slider = s;
+    sliderAxis = axis;
+    return this;
+}
 
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
@@ -2200,7 +2205,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->onMouseDown.IsValid() || e->onMouseUp.IsValid() ||
-        e->onDragMove.IsValid()) {
+        e->onDragMove.IsValid() || e->slider) {
         HitRect hr;
         hr.id = e->clickId;
         hr.bounds = e->Bounds();
@@ -2209,6 +2214,8 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.onMouseDown = e->onMouseDown;
         hr.onMouseUp = e->onMouseUp;
         hr.onDragMove = e->onDragMove;
+        hr.slider = e->slider;
+        hr.sliderAxis = e->sliderAxis;
         ctx->hits.Append(hr);
     }
     if (e->style.overflowY == OverflowY::Scroll) {

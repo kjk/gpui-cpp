@@ -12,28 +12,27 @@ struct Slider {
     // Each slider on a page needs its own click id, or they share a hover
     // and the hit test cannot tell them apart.
     Str id = {};
-    // 0..1. A range slider fills between lo and hi; a single one from the
-    // start of the track to `value`.
-    float value = 0;
-    float lo = 0;
-    bool range = false;
+    // The value, its limits and its scale, owned by the view — Rust's
+    // `Entity<SliderState>`. The widget reads the percentages it has already
+    // worked out and the window writes to it on a press or a drag.
+    SliderState* state = nullptr;
     // reverse(): the fill runs from the far end back toward the thumb, for
     // "remaining capacity" readings.
     bool reverse = false;
     bool disabled = false;
     // vertical(): the track runs bottom-to-top, and `width` is its length.
-    bool vertical = false;
+    Axis axis = Axis::Horizontal;
     float width = 224;
     Listener onChange;
 
-    static Slider* New(Ctx* cx);
-    static Slider* New(Ctx* cx, Str id);
-    Slider* Value(float v);
-    Slider* Range(float low, float high);
+    static Slider* New(Ctx* cx, Str id, SliderState* state);
     Slider* Reverse(bool v = true);
     Slider* Vertical(bool v = true);
+    Slider* WithAxis(Axis v);
     Slider* Disabled(bool v = true);
     Slider* W(float px);
+    // cx.subscribe(&state, ..): the view hears SliderEvent::Change while the
+    // slider moves and Release when the button comes back up.
     Slider* OnChange(Listener fn);
     El* IntoEl();
 };

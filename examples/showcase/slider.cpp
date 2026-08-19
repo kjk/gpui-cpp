@@ -7,15 +7,17 @@ enum {
     ClickSlider = 500
 };
 
-static void OnSlider(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
+// SliderEvent::Change, raised by the window while the track is pressed or
+// dragged. The state already holds the new value; the page only has to ask
+// for a repaint.
+static void OnSlider(ShowcaseApp* app, Ctx* cx, const SliderEvent*) {
     (void)app;
-    app->draggingSlider = true;
     Notify(cx);
 }
 
 El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    float p = app->slider;
+    float p = app->slider.pctHi;
     if (p < 0) {
         p = 0;
     }
@@ -33,7 +35,12 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
         thumbX = trackW - thumb;
     }
 
-    El* track = SliderTrack::New(cx)->W(trackW)->H(28);
+    // The track is what a press lands on, so the state is bound here and the
+    // window moves it — SliderTrack::on_mouse_down and its on_drag_move.
+    El* track = SliderTrack::New(cx, &app->slider)
+                    ->Click(ClickSlider)
+                    ->W(trackW)
+                    ->H(28);
     track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(trackW)->H(2)->Bg(
         Rgb(0xd4, 0xd4, 0xd4)));
     track->Child(SliderIndicator::New(cx)
@@ -52,6 +59,8 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                      ->Bg(Rgb(0xff, 0xff, 0xff))
                      ->Border(1, Rgb(0x17, 0x17, 0x17)));
 
+    app->slider.onChange = Listen(cx, &OnSlider);
+
     return Div(a)
         ->FlexCol()
         ->W(trackW)
@@ -66,38 +75,7 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("Drag to adjust"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(Slider::New(cx, ClickSlider)
-                    ->OnClick(Listen(cx, &OnSlider))
-                    ->W(trackW)
-                    ->H(28)
-                    ->Child(track));
-}
-
-void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y) {
-    (void)y;
-    if (!app->draggingSlider && !win->mouseDown) {
-        return;
-    }
-    if (!app->draggingSlider) {
-        return;
-    }
-    // track is centered; approximate using last painted hit? use mouse vs
-    // window. Host mouse is absolute. We store track by using a simple mapping:
-    // content is centered. Use the slider hit rect from last paint.
-    for (int i = 0; i < win->paint.hits.len; i++) {
-        HitRect h = win->paint.hits[i];
-        if (h.id == ClickSlider) {
-            float t = (x - h.bounds.x) / (h.bounds.w > 1 ? h.bounds.w : 1);
-            if (t < 0) {
-                t = 0;
-            }
-            if (t > 1) {
-                t = 1;
-            }
-            app->slider = t;
-            return;
-        }
-    }
+        ->Child(Slider::New(cx)->W(trackW)->H(28)->Child(track));
 }
 
 SHOWCASE_PAGE(CompSlider, ShowcaseSlider);

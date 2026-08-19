@@ -51,6 +51,19 @@ static void FixLogLimits(SliderState* s) {
     }
 }
 
+SliderState SliderStateNew(float min, float max, SliderValue value, float step,
+                           SliderScale scale) {
+    SliderState s = {};
+    s.min = min;
+    s.max = max;
+    s.step = step;
+    s.scale = scale;
+    FixLogLimits(&s);
+    s.value = value;
+    SliderUpdateThumbPos(&s);
+    return s;
+}
+
 void SliderSetLimits(SliderState* s, float min, float max) {
     s->min = min;
     s->max = max;
@@ -164,9 +177,13 @@ El* Slider::New(Ctx* cx, int clickId) {
     Arena* a = cx->a;
     return UiRoot(a, StrL("example-slider"), clickId);
 }
-El* SliderTrack::New(Ctx* cx) {
+El* SliderTrack::New(Ctx* cx, SliderState* state, Axis axis) {
     Arena* a = cx->a;
-    return Div(a);
+    El* e = Div(a);
+    if (state) {
+        e->BindSlider(state, axis);
+    }
+    return e;
 }
 El* SliderIndicator::New(Ctx* cx) {
     Arena* a = cx->a;

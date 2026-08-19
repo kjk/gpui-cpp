@@ -205,6 +205,37 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
     AppInvalidate(win);
 }
 
+// cx.emit(SliderEvent::..) — the subscription lives on the state, the way
+// LineInput::onChange does.
+static void SliderEmit(Window* win, SliderState* s, SliderEventKind kind) {
+    if (!s->onChange.IsValid()) {
+        return;
+    }
+    SliderEvent ev = {kind, s->value};
+    ListenerCall(win->app, win, s->onChange, &ev);
+}
+
+// SliderTrack::on_mouse_down and its on_drag_move: a press jumps the value to
+// where it landed and takes the nearer end of a range; every move until the
+// release keeps that end following the pointer.
+static void SliderPress(Window* win, const HitRect* hit, Point at) {
+    SliderState* s = hit->slider;
+    SliderSetBounds(s, hit->bounds);
+    s->dragStart = SliderIsStartAt(s, hit->sliderAxis, at);
+    if (SliderUpdateByPosition(s, hit->sliderAxis, at, s->dragStart)) {
+        SliderEmit(win, s, SliderEventKind::Change);
+    }
+    AppInvalidate(win);
+}
+
+static void SliderDrag(Window* win, const HitRect* hit, Point at) {
+    SliderState* s = hit->slider;
+    if (SliderUpdateByPosition(s, hit->sliderAxis, at, s->dragStart)) {
+        SliderEmit(win, s, SliderEventKind::Change);
+        AppInvalidate(win);
+    }
+}
+
 static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     float x = in.x;
     float y = in.y;
@@ -232,6 +263,9 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     const HitRect* pressed = HitRectById(win, win->pressedId);
     if (pressed && pressed->onDragMove.IsValid()) {
         ListenerCall(win->app, win, pressed->onDragMove, &in);
+    }
+    if (pressed && pressed->slider) {
+        SliderDrag(win, pressed, {x, y});
     }
     if (win->mouseDown) {
         AppInvalidate(win);
@@ -294,6 +328,9 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     if (hit && hit->onMouseDown.IsValid()) {
         ListenerCall(win->app, win, hit->onMouseDown, &in);
     }
+    if (hit && hit->slider) {
+        SliderPress(win, hit, {x, y});
+    }
     ClickEvent ev = {x, y, in.button, id};
     ev.clickCount = in.clickCount;
     ev.modifiers = in.modifiers;
@@ -302,7 +339,9 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     }
     if (hit && hit->listener.IsValid()) {
         ListenerCall(win->app, win, hit->listener, &ev);
-    } else if (win->onClick.IsValid()) {
+    } else if (win->onClick.IsValid() && !(hit && hit->slider)) {
+        // A press on a slider is handled by the slider, so it is not the
+        // outside click that dismisses an overlay.
         ListenerCall(win->app, win, win->onClick, &ev);
     }
     if (hit && hit->onClick.IsValid()) {

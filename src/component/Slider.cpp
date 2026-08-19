@@ -4,34 +4,25 @@ namespace gpui {
 
 namespace component {
 
-Slider* Slider::New(Ctx* cx) {
+Slider* Slider::New(Ctx* cx, Str id, SliderState* state) {
     Arena* a = cx->a;
     Slider* s = ArenaNew<Slider>(a);
     s->a = a;
     s->cx = cx;
-    return s;
-}
-Slider* Slider::New(Ctx* cx, Str id) {
-    Slider* s = New(cx);
     s->id = id;
+    s->state = state;
     return s;
-}
-Slider* Slider::Value(float v) {
-    value = v;
-    return this;
-}
-Slider* Slider::Range(float low, float high) {
-    lo = low;
-    value = high;
-    range = true;
-    return this;
 }
 Slider* Slider::Reverse(bool v) {
     reverse = v;
     return this;
 }
 Slider* Slider::Vertical(bool v) {
-    vertical = v;
+    axis = v ? Axis::Vertical : Axis::Horizontal;
+    return this;
+}
+Slider* Slider::WithAxis(Axis v) {
+    axis = v;
     return this;
 }
 Slider* Slider::Disabled(bool v) {
@@ -56,12 +47,20 @@ static float Clamp01f(float v) {
 
 El* Slider::IntoEl() {
     const Theme& th = cx->theme();
-    float hi = Clamp01f(value);
-    float low = range ? Clamp01f(lo) : 0.f;
+    // The percentages the state already worked out from the value; a
+    // single-value slider pins the low end at 0.
+    float low = state ? Clamp01f(state->pctLo) : 0.f;
+    float hi = state ? Clamp01f(state->pctHi) : 0.f;
+    bool range = state && state->value.range;
     if (low > hi) {
         float t = low;
         low = hi;
         hi = t;
+    }
+    // The subscription belongs to the state, the way LineInput's does: the
+    // window raises the event, not the element.
+    if (state && !disabled) {
+        state->onChange = onChange;
     }
     const float kBar = 4.f; // h_1: the rail
     const float kThumb = 14.f;
@@ -72,11 +71,15 @@ El* Slider::IntoEl() {
     Rgba railBg = th.secondary;
     Rgba fillBg = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
     Rgba thumbBorder = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
+    SliderState* bind = disabled ? nullptr : state;
 
-    if (vertical) {
+    if (axis == Axis::Vertical) {
         // The same three parts turned on their side, filling upward from the
         // bottom of the track.
-        El* vtrack = SliderTrack::New(cx)->W(kH)->H(w);
+        El* vtrack = SliderTrack::New(cx, bind, axis)
+                         ->W(kH)
+                         ->H(w)
+                         ->Click(HashClickId(id.s ? id : StrL("slider-v")));
         vtrack->Child(Div(a)
                           ->Absolute()
                           ->Left(mid)
@@ -107,18 +110,13 @@ El* Slider::IntoEl() {
                               ->Bg(th.background)
                               ->Border(1, thumbBorder));
         }
-        El* vroot =
-            gpui::Slider::New(cx, HashClickId(id.s ? id : StrL("slider-v")))
-                ->W(kH)
-                ->H(w)
-                ->Child(vtrack);
-        if (onChange.IsValid() && !disabled) {
-            vroot->OnClick(onChange);
-        }
-        return vroot;
+        return gpui::Slider::New(cx)->W(kH)->H(w)->Child(vtrack);
     }
 
-    El* track = SliderTrack::New(cx)->W(w)->H(kH);
+    El* track = SliderTrack::New(cx, bind, axis)
+                    ->W(w)
+                    ->H(kH)
+                    ->Click(HashClickId(id.s ? id : StrL("slider")));
     track->Child(Div(a)
                      ->Absolute()
                      ->Top(mid)
@@ -150,14 +148,7 @@ El* Slider::IntoEl() {
                          ->Bg(th.background)
                          ->Border(1, thumbBorder));
     }
-    El* root = gpui::Slider::New(cx, HashClickId(id.s ? id : StrL("slider")))
-                   ->W(w)
-                   ->H(kH)
-                   ->Child(track);
-    if (onChange.IsValid() && !disabled) {
-        root->OnClick(onChange);
-    }
-    return root;
+    return gpui::Slider::New(cx)->W(w)->H(kH)->Child(track);
 }
 
 } // namespace component

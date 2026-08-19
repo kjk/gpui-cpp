@@ -630,9 +630,7 @@ void ShowcaseMouseMove(ShowcaseApp* app, Window* win,
                        const MouseMoveEvent* ev) {
     float x = ev->x;
     float y = ev->y;
-    if (app->component == CompSlider) {
-        ShowcaseSliderDrag(app, win, x, y);
-    } else if (app->component == CompResizable) {
+    if (app->component == CompResizable) {
         ShowcaseResizeDrag(app, win, x, y);
     } else if (app->component == CompTextSelection && win->mouseDown) {
         int off = TextSelOffsetAt(win, x, y, true);
@@ -649,9 +647,7 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* win,
     }
     float x = ev->x;
     float y = ev->y;
-    if (app->component == CompSlider) {
-        ShowcaseSliderDrag(app, win, x, y);
-    } else if (app->component == CompResizable) {
+    if (app->component == CompResizable) {
         ShowcaseResizeDrag(app, win, x, y);
     } else if (app->component == CompTextSelection) {
         int wordA = 0;
@@ -672,7 +668,6 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* win,
 void ShowcaseMouseUp(ShowcaseApp* app, Window* win, const MouseUpEvent* ev) {
     (void)win;
     (void)ev;
-    app->draggingSlider = false;
     app->draggingResize = false;
 }
 
@@ -733,6 +728,8 @@ int GpuiMain(int argc, char** argv) {
     char slug[64] = {};
     ParseSlug(argc, argv, slug, 64);
     self->component = CompFromSlug(slug);
+    // 0..100 with the thumb where the page has always shown it.
+    SliderSetValue(&self->slider, SliderSingle(64.f));
     self->navigationEnabled = (self->component == CompOverview);
 
     StrCopyZ(self->input.placeholder, (int)sizeof(self->input.placeholder),

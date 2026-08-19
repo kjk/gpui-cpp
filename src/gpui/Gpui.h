@@ -141,6 +141,16 @@ ThemeMode ThemeGet();
 // event's position — keeps its flat fields; these are for what is produced,
 // returned or passed as a unit.
 
+// gpui::Axis, from the same file. `Along` is the field it picks out.
+enum class Axis : uint8_t {
+    Horizontal,
+    Vertical
+};
+
+inline bool AxisIsHorizontal(Axis a) {
+    return a == Axis::Horizontal;
+}
+
 struct Point {
     float x = 0;
     float y = 0;
@@ -203,6 +213,7 @@ inline Bounds BoundsAt(Point origin, Size size) {
 struct Window;
 struct Ctx;
 struct El;
+struct SliderState;
 // The shaped run a text element measured to; Paint.h owns the type.
 struct TextLayout;
 
@@ -695,6 +706,12 @@ struct El {
     // entity. Needs a Click(id): the tree is rebuilt every frame, so the id
     // is what finds the element again.
     Listener onDragMove;
+    // BindSlider: this element is a slider's track, and a press or a drag on
+    // it moves that state. GPUI's slider elements capture the state entity in
+    // their own closures; there are no closures on an element here, so the
+    // element names the state and the window does what those closures do.
+    SliderState* slider = nullptr;
+    Axis sliderAxis = Axis::Horizontal;
     void (*customPaint)(PaintCtx* ctx, El* e, void* user) = nullptr;
     void* customUser = nullptr;
     El* first = nullptr;
@@ -783,6 +800,7 @@ struct El {
     El* OnMouseDown(Listener l);
     El* OnMouseUp(Listener l);
     El* OnDragMove(Listener l);
+    El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
     El* Child(El* c);
     El* Bold();
     El* Semibold();
@@ -839,6 +857,8 @@ struct HitRect {
     Listener onMouseDown;
     Listener onMouseUp;
     Listener onDragMove;
+    SliderState* slider = nullptr;
+    Axis sliderAxis = Axis::Horizontal;
 };
 
 struct ScrollRect {
@@ -920,6 +940,114 @@ struct LineInput {
     // Created on first use, so a LineInput stays a plain value.
     EntityId blink = {};
 };
+
+// crates/base/src/slider.rs. SliderValue is Rust's enum — `Single(f32)` or
+// `Range(f32, f32)` — flattened into the pair plus the flag that says which
+// variant this is. `hi` is `end()`, the one a single-value slider uses.
+struct SliderValue {
+    float lo = 0;
+    float hi = 0;
+    bool range = false;
+
+    float Start() const { return range ? lo : hi; }
+    float End() const { return hi; }
+};
+
+inline SliderValue SliderSingle(float v) {
+    return {0, v, false};
+}
+inline SliderValue SliderRange(float lo, float hi) {
+    return {lo, hi, true};
+}
+// SliderValue::clamp.
+SliderValue SliderValueClamp(SliderValue v, float min, float max);
+// SliderValue::set_start / set_end: a range keeps its ends in order.
+void SliderValueSetStart(SliderValue* v, float value);
+void SliderValueSetEnd(SliderValue* v, float value);
+
+// SliderScale. Logarithmic gives finer control near the low end, which is what
+// a volume or a playback speed wants.
+enum class SliderScale : uint8_t {
+    Linear,
+    Logarithmic
+};
+
+// SliderEvent. Change comes on every press and every move that shifts the
+// value; Release comes once, when the button goes up after one of those.
+enum class SliderEventKind : uint8_t {
+    Change,
+    Release
+};
+
+struct SliderEvent {
+    SliderEventKind kind = SliderEventKind::Change;
+    SliderValue value = {};
+};
+
+// SliderState: what a slider is between frames, the way LineInput is what an
+// input is. Rust keeps it in an `Entity<SliderState>` and the element closures
+// capture that handle; an element here names its state with `El::BindSlider`
+// and the window applies the same behavior, which is how LineInput works.
+// `onChange` is `cx.subscribe(&state, |ev: &SliderEvent| ...)`.
+struct SliderState {
+    float min = 0;
+    float max = 100;
+    float step = 1;
+    SliderValue value = {};
+    // percentage: Range<f32>. A single-value slider only uses `hi`, with `lo`
+    // pinned at 0, which is what Rust's `0.0..percentage` says.
+    float pctLo = 0;
+    float pctHi = 0;
+    // The box the value maps against, recorded when the slider is pressed.
+    Bounds bounds = {};
+    SliderScale scale = SliderScale::Linear;
+    // Set by a press, cleared by the release, so a release with no press
+    // behind it emits nothing.
+    bool dragging = false;
+    // Which end of a range the press took, for the moves that follow. Rust
+    // carries it in the DragThumb payload, which a drag here has no room for.
+    bool dragStart = false;
+    Listener onChange = {};
+};
+
+// SliderState::new().min(..).max(..).step(..).scale(..).default_value(..),
+// which is a builder chain in Rust and one call here, so a view can write its
+// slider as a field initializer.
+SliderState SliderStateNew(float min, float max, SliderValue value,
+                           float step = 1,
+                           SliderScale scale = SliderScale::Linear);
+
+// `.min()` / `.max()`, which re-derive the thumb position. Rust panics when a
+// logarithmic slider is given a min <= 0 or a max <= min; there are no
+// exceptions here, so the limits are pushed to the nearest usable pair
+// instead — a widget that draws itself wrong is better than one that exits.
+void SliderSetLimits(SliderState* s, float min, float max);
+// `.step()`, the quantum a value snaps to.
+void SliderSetStep(SliderState* s, float step);
+// `.scale()`.
+void SliderSetScale(SliderState* s, SliderScale scale);
+// `.default_value()` / `set_value()`.
+void SliderSetValue(SliderState* s, SliderValue v);
+// set_bounds, the box a position maps against.
+inline void SliderSetBounds(SliderState* s, Bounds b) {
+    s->bounds = b;
+}
+
+// percentage_to_value / value_to_percentage.
+float SliderPctToValue(const SliderState* s, float pct);
+float SliderValueToPct(const SliderState* s, float value);
+// update_thumb_pos: the percentages that follow from the value.
+void SliderUpdateThumbPos(SliderState* s);
+
+// update_value_by_position. `isStart` moves the low end of a range. Rust ends
+// this with `cx.emit(SliderEvent::Change)`; the window here raises the event
+// instead, so this returns whether the value actually moved.
+bool SliderUpdateByPosition(SliderState* s, Axis axis, Point pos, bool isStart);
+// Which end of a range a press at `pos` takes, by the midpoint between the two
+// thumbs — the `is_start` arm of SliderTrack's mouse-down handler.
+bool SliderIsStartAt(const SliderState* s, Axis axis, Point pos);
+// handle_release: true when a Release event is due.
+bool SliderHandleRelease(SliderState* s);
 
 struct Overlay {
     int kind = 0; // 0 none, 1 dialog, 2 sheet

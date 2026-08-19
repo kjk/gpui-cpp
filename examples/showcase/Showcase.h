@@ -114,7 +114,7 @@ struct ShowcaseApp {
     bool popoverOpen = false;
     bool popupOpen = false;
     int page = 3;
-    float slider = 0.64f;
+    SliderState slider = {};
     LineInput input = {};
     LineInput hexIn = {};
     char textarea[2048] =
@@ -145,7 +145,6 @@ struct ShowcaseApp {
     float exampleScroll = 0;
     float virtualScroll = 0;
     float resizeW = 124;
-    bool draggingSlider = false;
     bool draggingResize = false;
     bool treeOpen[8] = {true, true, false, false, false, false, false, false};
     int treeSel = -1;
@@ -209,7 +208,6 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTree(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx);
 
-void ShowcaseSliderDrag(ShowcaseApp* app, Window* win, float x, float y);
 void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y);
 
 typedef El* (*ShowcaseRenderFn)(ShowcaseApp* app, Ctx* cx, WinSize size);
