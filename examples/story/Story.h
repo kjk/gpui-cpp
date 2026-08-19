@@ -48,6 +48,7 @@ enum {
     StoryRating,
     StoryResizable,
     StoryScrollbar,
+    StorySearchableList,
     StorySelect,
     StorySeparator,
     StorySettings,

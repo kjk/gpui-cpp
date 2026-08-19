@@ -65,3 +65,4 @@ void TestDataTable();
 void TestDock();
 void TestTab();
 void TestSetting();
+void TestSearchableList();
