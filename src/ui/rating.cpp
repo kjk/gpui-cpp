@@ -4,19 +4,53 @@ namespace gpui {
 
 namespace component {
 
-Rating* Rating::New(Ctx* cx) {
+void RatingState::OnStarHover(RatingState* self, Ctx* cx, const HoverEvent* ev,
+                              intptr_t ix) {
+    // Rust sets this from each star's on_mouse_move and clears it from the
+    // row's on_hover. A hover here is reported as a leave on the star being
+    // left before the enter on the one being reached, so the star can do
+    // both ends itself.
+    int v = ev->hovered ? (int)ix : 0;
+    if (self->hoveredValue == v) {
+        return;
+    }
+    self->hoveredValue = v;
+    Notify(cx);
+}
+
+void RatingState::OnStarClick(RatingState* self, Ctx* cx, const ClickEvent*,
+                              intptr_t ix) {
+    // Clicking the star the rating already reaches gives up that star, which
+    // is the only way to get back to none.
+    int v = self->value >= (int)ix ? (int)ix - 1 : (int)ix;
+    self->value = v;
+    Notify(cx);
+    if (self->onClick.IsValid()) {
+        ClickEvent ev = {};
+        ListenerCall(cx->app, cx->win, ListenerFill(self->onClick, v), &ev);
+    }
+}
+
+Rating* Rating::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Rating* r = ArenaNew<Rating>(a);
     r->a = a;
     r->cx = cx;
+    r->id = id;
     return r;
 }
 Rating* Rating::Value(int v) {
     value = v;
+    if (value > max) {
+        value = max;
+    }
     return this;
 }
 Rating* Rating::Max(int v) {
     max = v;
+    if (value > max) {
+        value = max;
+    }
     return this;
 }
 Rating* Rating::Disabled(bool v) {
@@ -32,29 +66,46 @@ Rating* Rating::WithSize(UiSize s) {
     size = s;
     return this;
 }
-Rating* Rating::OnChange(Listener fn) {
-    onChange = fn;
+Rating* Rating::OnClick(Listener fn) {
+    onClick = fn;
     return this;
 }
 
 El* Rating::IntoEl() {
     const Theme& th = cx->theme();
-    El* row = Div(a)->FlexRow()->Gap(4);
-    int n = max > 8 ? 8 : max;
-    for (int i = 1; i <= n; i++) {
-        bool on = i <= value;
-        Rgba onC = hasColor ? color : th.warning;
-        // Filled stars take the rating color; the rest are the same lucide
-        // star outline in the muted foreground, not a grey block.
-        El* star = IconEl(a, on ? IconName::StarFill : IconName::Star,
-                          UiSizePx(size) * 0.6f)
-                       ->Fg(on ? onC : th.mutedFg);
-        El* hit = Div(a)->Child(star);
-        if (onChange.IsValid() && !disabled) {
-            BindClick(hit, StrDup(a, fmt("star-%d", i)),
-                      ListenerArg(onChange, i));
+    Entity<RatingState> st =
+        KeyedEntity<RatingState>(cx, (uint32_t)HashClickId(id));
+    RatingState* s = st.Get(cx);
+    int shown = value;
+    if (s) {
+        // The caller's value wins whenever it moves, which is how two
+        // ratings over one field stay in step.
+        if (s->defaultValue != value) {
+            s->defaultValue = value;
+            s->value = value;
         }
-        row->Child(hit);
+        s->onClick = onClick;
+        shown = s->value;
+    }
+    int hovered = s ? s->hoveredValue : 0;
+    Rgba activeC = hasColor ? color : th.yellow;
+
+    El* row = Div(a)->FlexRow()->ItemsCenter();
+    for (int i = 1; i <= max; i++) {
+        bool filled = i <= shown;
+        // A hovered star and everything before it previews the value the
+        // pointer is offering, without committing to it.
+        bool lit = filled || hovered >= i;
+        El* star = Div(a)->Pad(2)->Shrink0()->Child(
+            IconEl(a, filled ? IconName::StarFill : IconName::Star,
+                   UiIconPx(size))
+                ->Fg(lit ? activeC : th.mutedFg));
+        if (!disabled) {
+            BindClick(star, StrDup(a, fmt("%s-%d", id, i)),
+                      ListenTo(st, &RatingState::OnStarClick, i));
+            star->OnHover(ListenTo(st, &RatingState::OnStarHover, i));
+        }
+        row->Child(star);
     }
     return row;
 }
