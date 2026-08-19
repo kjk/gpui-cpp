@@ -6,22 +6,134 @@ namespace gpui {
 
 namespace component {
 
+// SidebarCollapsible, the shadcn modes: collapse to icon width, slide out of
+// the layout entirely, or refuse to collapse at all.
+enum class SidebarCollapsible : uint8_t {
+    Icon,
+    Offcanvas,
+    None
+};
+
+// The keyed state behind one menu item that has children: whether its submenu
+// is open. Rust hangs it off `window.use_keyed_state(id)`, and the item's
+// click closure captures it along with the caller's handler — which is why
+// the handler and the two click rules live here too.
+struct SidebarMenuState {
+    bool open = false;
+    // default_open is what the first render says and nothing after it.
+    bool seeded = false;
+    bool clickToOpen = false;
+    bool clickToToggle = false;
+    Listener onClick = {};
+
+    static void OnItemClick(SidebarMenuState* self, Ctx* cx,
+                            const ClickEvent* ev);
+    static void OnCaretClick(SidebarMenuState* self, Ctx* cx,
+                             const ClickEvent* ev);
+};
+
+struct SidebarMenuItem {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    IconName icon = IconName::None;
+    Str label = {};
+    Listener onClick;
+    bool active = false;
+    bool disabled = false;
+    bool defaultOpen = false;
+    bool clickToOpen = false;
+    bool clickToToggle = false;
+    El* suffix = nullptr;
+    SidebarMenuItem* children[16] = {};
+    int nChildren = 0;
+    // Filled in by whatever holds it.
+    bool collapsed = false;
+
+    static SidebarMenuItem* New(Ctx* cx, Str label);
+    SidebarMenuItem* Icon(IconName v);
+    SidebarMenuItem* Active(bool v);
+    SidebarMenuItem* Disabled(bool v);
+    SidebarMenuItem* DefaultOpen(bool v);
+    SidebarMenuItem* ClickToOpen(bool v);
+    SidebarMenuItem* ClickToToggle(bool v);
+    SidebarMenuItem* Suffix(El* e);
+    SidebarMenuItem* Child(SidebarMenuItem* item);
+    SidebarMenuItem* OnClick(Listener fn);
+    // The id is the path through the sidebar, which is what keys the submenu
+    // state: "menu-0-2".
+    El* IntoEl(Str id);
+};
+
+struct SidebarMenu {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    SidebarMenuItem* items[24] = {};
+    int n = 0;
+    bool collapsed = false;
+
+    static SidebarMenu* New(Ctx* cx);
+    SidebarMenu* Child(SidebarMenuItem* item);
+    El* IntoEl(Str id);
+};
+
+struct SidebarGroup {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Str label = {};
+    SidebarMenu* menus[8] = {};
+    int n = 0;
+    bool collapsed = false;
+
+    static SidebarGroup* New(Ctx* cx, Str label);
+    SidebarGroup* Child(SidebarMenu* menu);
+    El* IntoEl(Str id);
+};
+
+// The header and the footer are the same box under two names: a full-width
+// row that lights up on hover and stays lit while selected.
+El* SidebarHeader(Ctx* cx, El* child, bool selected = false,
+                  Listener onClick = {});
+El* SidebarFooter(Ctx* cx, El* child, bool selected = false,
+                  Listener onClick = {});
+
+// The button that collapses the sidebar. The icon says which way it will go
+// and which edge it is on.
+struct SidebarToggleButton {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    bool collapsed = false;
+    Side side = Side::Left;
+    Listener onClick;
+
+    static SidebarToggleButton* New(Ctx* cx);
+    SidebarToggleButton* Collapsed(bool v);
+    SidebarToggleButton* WithSide(Side v);
+    SidebarToggleButton* OnClick(Listener fn);
+    El* IntoEl();
+};
+
 struct Sidebar {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    Str title = {};
-    Str items[8] = {};
+    Str id = {};
+    El* header = nullptr;
+    El* footer = nullptr;
+    SidebarGroup* groups[8] = {};
     int n = 0;
-    int selected = 0;
+    Side side = Side::Left;
+    SidebarCollapsible collapsible = SidebarCollapsible::Icon;
     bool collapsed = false;
-    Listener onSelect;
+    // DEFAULT_WIDTH; COLLAPSED_WIDTH is 48 and not the caller's to set.
+    float width = 255;
 
-    static Sidebar* New(Ctx* cx);
-    Sidebar* Title(Str s);
-    Sidebar* Item(Str s);
-    Sidebar* Selected(int i);
+    static Sidebar* New(Ctx* cx, Str id);
+    Sidebar* WithSide(Side v);
+    Sidebar* Collapsible(SidebarCollapsible v);
     Sidebar* Collapsed(bool v);
-    Sidebar* OnSelect(Listener fn);
+    Sidebar* Header(El* e);
+    Sidebar* Footer(El* e);
+    Sidebar* Child(SidebarGroup* group);
+    Sidebar* W(float px);
     El* IntoEl();
 };
 

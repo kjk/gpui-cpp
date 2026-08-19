@@ -91,6 +91,9 @@ struct Theme {
     Rgba sidebarFg;
     Rgba sidebarPrimary;
     Rgba sidebarPrimaryFg;
+    Rgba sidebarAccent;
+    Rgba sidebarAccentFg;
+    Rgba sidebarBorder;
     Rgba scrollbarThumb;
     Rgba info;
     Rgba infoFg;
@@ -150,6 +153,16 @@ enum class Axis : uint8_t {
     Horizontal,
     Vertical
 };
+
+// crates/base/src/geometry.rs: which edge of the window something hangs off.
+enum class Side : uint8_t {
+    Left,
+    Right
+};
+
+inline bool SideIsLeft(Side s) {
+    return s == Side::Left;
+}
 
 inline bool AxisIsHorizontal(Axis a) {
     return a == Axis::Horizontal;
@@ -578,6 +591,10 @@ enum class IconName : uint8_t {
     CircleUser,
     User,
     PanelLeft,
+    PanelLeftOpen,
+    PanelLeftClose,
+    PanelRightOpen,
+    PanelRightClose,
     Info,
     X,
     CircleCheck,

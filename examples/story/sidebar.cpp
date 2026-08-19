@@ -1,24 +1,31 @@
 #include "Story.h"
 
-// The two sidebar groups, in the order the Rust story lists them.
-struct SidebarItem {
+// The two sidebar groups, in the order the Rust story lists them, and the
+// children each Platform item opens onto.
+struct SidebarItemDef {
     const char* label;
     IconName icon;
-    bool expandable;
 };
 
-static const SidebarItem kPlatform[] = {
-    {"Playground", IconName::SquareTerminal, true},
-    {"Models", IconName::Bot, true},
-    {"Documentation", IconName::BookOpen, true},
-    {"Settings", IconName::Settings2, true},
+static const SidebarItemDef kPlatform[] = {
+    {"Playground", IconName::SquareTerminal},
+    {"Models", IconName::Bot},
+    {"Documentation", IconName::BookOpen},
+    {"Settings", IconName::Settings2},
 };
-static const SidebarItem kProjects[] = {
-    {"Design Engineering", IconName::Frame, false},
-    {"Sales and Marketing", IconName::ChartPie, false},
-    {"Travel", IconName::Map, false},
+static const SidebarItemDef kProjects[] = {
+    {"Design Engineering", IconName::Frame},
+    {"Sales and Marketing", IconName::ChartPie},
+    {"Travel", IconName::Map},
 };
-static const char* kPlaygroundSubs[] = {"History", "Starred", "Settings"};
+// Item::items(): one list per Platform item. Models' third child is the
+// disabled one.
+static const char* kSubs[4][4] = {
+    {"History", "Starred", "Settings", nullptr},
+    {"Genesis", "Explorer", "Quantum", nullptr},
+    {"Introduction", "Get Started", "Tutorial", "Changelog"},
+    {"General", "Team", "Billing", "Limits"},
+};
 
 enum {
     SidebarOptIcon = 600,
@@ -35,6 +42,7 @@ struct SidebarStory {
     bool optionsOpen = false;
     bool historySwitch = false;
     int collapsible = 0; // Icon
+    bool collapsed = false;
     bool rightSide = false;
     bool clickToOpen = false;
     bool dynamicChildren = false;
@@ -48,14 +56,21 @@ static void SidebarPick(SidebarStory* self, Ctx* cx, const ClickEvent*,
     self->activeSub = -1;
     Notify(cx);
 }
+// A sub-item click carries both which item and which child, which is the pair
+// Rust's SubItem::handler captures.
 static void SidebarPickSub(SidebarStory* self, Ctx* cx, const ClickEvent*,
-                           intptr_t ix) {
-    self->activeSub = (int)ix;
+                           intptr_t v) {
+    self->active = (int)(v >> 8);
+    self->activeSub = (int)(v & 0xff);
     Notify(cx);
 }
 static void ToggleSidebarOptions(SidebarStory* self, Ctx* cx,
                                  const ClickEvent*) {
     self->optionsOpen = !self->optionsOpen;
+    Notify(cx);
+}
+static void ToggleCollapsed(SidebarStory* self, Ctx* cx, const ClickEvent*) {
+    self->collapsed = !self->collapsed;
     Notify(cx);
 }
 static void SidebarOptionAct(SidebarStory* self, Ctx* cx, const ClickEvent*,
@@ -88,17 +103,20 @@ static void ToggleHistory(SidebarStory* self, Ctx* cx, const ClickEvent*) {
     Notify(cx);
 }
 
-static El* GroupLabel(Ctx* cx, const char* text) {
-    Arena* a = cx->a;
-    return Div(a)->PadX(8)->PadY(6)->Child(
-        StoryTxt(cx, Str(text), 12, cx->theme().mutedFg));
-}
+static const component::SidebarCollapsible kCollapsibles[3] = {
+    component::SidebarCollapsible::Icon,
+    component::SidebarCollapsible::Offcanvas,
+    component::SidebarCollapsible::None};
 
 El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     Listener pick = Listen(cx, &SidebarPick);
     Listener pickSub = Listen(cx, &SidebarPickSub);
+    component::SidebarCollapsible collapsible =
+        kCollapsibles[self->collapsible];
+    bool iconCollapsed =
+        self->collapsed && collapsible == component::SidebarCollapsible::Icon;
 
     El* frame = Div(a)
                     ->FlexRow()
@@ -107,134 +125,123 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                     ->Radius(th.radius)
                     ->Border(1, th.border);
 
-    // The sidebar: header, two groups, footer.
-    El* side =
-        Div(a)->FlexCol()->W(220)->H(kFill)->Pad(8)->BorderR(1, th.border);
-    El* header = Div(a)->FlexRow()->W(kFill)->Gap(8)->PadY(8)->ItemsCenter();
-    header->Child(Div(a)
-                      ->W(32)
-                      ->H(32)
-                      ->Shrink0()
-                      ->ItemsCenter()
-                      ->JustifyCenter()
-                      ->Radius(th.radius)
-                      ->Bg(th.success)
-                      ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)
-                                  ->Fg(th.successFg)));
-    El* company = Div(a)->FlexCol()->Grow();
-    company->Child(StoryTxt(cx, StrL("Company Name"), 14, th.foreground)
-                       ->LineHeight(1.25f));
-    company->Child(StoryTxt(cx, StrL("Enterprise"), 12, th.foreground)
-                       ->LineHeight(1.25f));
-    header->Child(company);
-    header->Child(
-        IconEl(a, IconName::ChevronsUpDown, 16)->Fg(th.foreground)->Shrink0());
-    side->Child(header);
+    // The header: the company the workspace belongs to.
+    El* brand = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+    brand->Child(Div(a)
+                     ->W(32)
+                     ->H(32)
+                     ->Shrink0()
+                     ->ItemsCenter()
+                     ->JustifyCenter()
+                     ->Radius(th.radius)
+                     ->Bg(th.success)
+                     ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)
+                                 ->Fg(th.successFg)));
+    if (!iconCollapsed) {
+        El* company = Div(a)->FlexCol()->Grow();
+        company->Child(StoryTxt(cx, StrL("Company Name"), 14, th.foreground)
+                           ->LineHeight(1.25f));
+        company->Child(StoryTxt(cx, StrL("Enterprise"), 12, th.foreground)
+                           ->LineHeight(1.25f));
+        brand->Child(company);
+        brand->Child(IconEl(a, IconName::ChevronsUpDown, 16)
+                         ->Fg(th.foreground)
+                         ->Shrink0());
+    }
 
-    side->Child(GroupLabel(cx, "Platform"));
+    component::SidebarMenu* platform = component::SidebarMenu::New(cx);
     for (int i = 0; i < 4; i++) {
-        const SidebarItem& item = kPlatform[i];
-        bool active = self->active == i;
-        El* row = Div(a)
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->H(32)
-                      ->PadX(8)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius)
-                      ->HoverBg(th.muted);
-        if (active) {
-            row->Bg(th.accent);
-        }
-        row->Child(IconEl(a, item.icon, 16)->Fg(th.foreground));
-        row->Child(Div(a)->Grow()->Child(
-            StoryTxt(cx, Str(item.label), 16, th.foreground)));
-        row->Child(
-            IconEl(a, active ? IconName::ChevronDown : IconName::ChevronRight,
-                   16)
-                ->Fg(th.mutedFg));
-        row->Click(HashClickId(StoryFmt(cx, "sidebar-%d", i)))
-            ->OnClick(ListenerArg(pick, i));
-        side->Child(row);
-        if (!active) {
-            continue;
-        }
-        // The open item shows its children against a rail.
-        El* subs = Div(a)->FlexRow()->W(kFill)->PadL(16);
-        subs->Child(Div(a)->W(1)->H(kFill)->Bg(th.border));
-        El* subCol = Div(a)->FlexCol()->Grow();
-        for (int j = 0; j < 3; j++) {
-            El* sub = Div(a)
-                          ->FlexRow()
-                          ->W(kFill)
-                          ->H(32)
-                          ->PadX(12)
-                          ->Gap(8)
-                          ->ItemsCenter()
-                          ->JustifyBetween()
-                          ->Radius(th.radius)
-                          ->HoverBg(th.muted);
-            sub->Child(
-                StoryTxt(cx, Str(kPlaygroundSubs[j]), 16, th.foreground));
-            if (j == 0) {
+        component::SidebarMenuItem* item =
+            component::SidebarMenuItem::New(cx, Str(kPlatform[i].label))
+                ->Icon(kPlatform[i].icon)
+                ->Active(self->active == i && self->activeSub < 0)
+                ->DefaultOpen(i == 0)
+                ->ClickToOpen(self->clickToOpen)
+                ->OnClick(ListenerArg(pick, i));
+        for (int j = 0; j < 4 && kSubs[i][j]; j++) {
+            component::SidebarMenuItem* sub =
+                component::SidebarMenuItem::New(cx, Str(kSubs[i][j]))
+                    ->Active(self->active == i && self->activeSub == j)
+                    // SubItem::Quantum is the disabled one.
+                    ->Disabled(i == 1 && j == 2)
+                    ->OnClick(ListenerArg(pickSub, (i << 8) | j));
+            if (i == 0 && j == 0) {
                 // The first child carries a switch, as the Rust story shows.
-                sub->Child(component::Switch::New(cx, StrL("sidebar-history"))
-                               ->Checked(self->historySwitch)
-                               ->WithSize(UiSize::XSmall)
-                               ->OnClick(Listen(cx, &ToggleHistory))
-                               ->IntoEl());
+                sub->Suffix(component::Switch::New(cx, StrL("sidebar-history"))
+                                ->Checked(self->historySwitch)
+                                ->WithSize(UiSize::XSmall)
+                                ->OnClick(Listen(cx, &ToggleHistory))
+                                ->IntoEl());
             }
-            sub->Click(HashClickId(StoryFmt(cx, "sidebar-sub-%d", j)))
-                ->OnClick(ListenerArg(pickSub, j));
-            subCol->Child(sub);
+            item->Child(sub);
         }
-        subs->Child(subCol);
-        side->Child(subs);
+        platform->Child(item);
     }
 
-    side->Child(GroupLabel(cx, "Projects"));
+    component::SidebarMenu* projects = component::SidebarMenu::New(cx);
     for (int i = 0; i < 3; i++) {
-        const SidebarItem& item = kProjects[i];
-        El* row = Div(a)
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->H(32)
-                      ->PadX(8)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius)
-                      ->HoverBg(th.muted);
-        Rgba fg = i == 2 ? th.mutedFg : th.foreground;
-        row->Child(IconEl(a, item.icon, 16)->Fg(fg));
-        row->Child(
-            Div(a)->Grow()->Child(StoryTxt(cx, Str(item.label), 16, fg)));
+        component::SidebarMenuItem* item =
+            component::SidebarMenuItem::New(cx, Str(kProjects[i].label))
+                ->Icon(kProjects[i].icon)
+                ->Active(self->active == 4 + i && self->activeSub < 0)
+                // Item::Travel is the disabled one.
+                ->Disabled(i == 2)
+                ->ClickToOpen(self->clickToOpen)
+                ->OnClick(ListenerArg(pick, 4 + i));
         if (i == 0) {
-            row->Child(component::Badge::New(cx)
-                           ->Dot()
-                           ->Child(IconEl(a, IconName::Bell, 16)->Fg(fg))
-                           ->IntoEl());
+            item->Suffix(component::Badge::New(cx)
+                             ->Dot()
+                             ->Child(IconEl(a, IconName::Bell, 16))
+                             ->IntoEl());
+            if (self->dynamicChildren) {
+                // The option that gives an item children it did not have.
+                item->DefaultOpen(true);
+                item->Child(
+                    component::SidebarMenuItem::New(cx, StrL("Child A")));
+                item->Child(
+                    component::SidebarMenuItem::New(cx, StrL("Child B")));
+            }
         } else if (i == 1) {
-            row->Child(IconEl(a, IconName::Settings2, 16)->Fg(fg));
+            item->Suffix(IconEl(a, IconName::Settings2, 16));
         }
-        side->Child(row);
+        projects->Child(item);
     }
 
-    side->Child(Div(a)->Grow());
-    El* footer =
-        Div(a)->FlexRow()->W(kFill)->H(40)->PadX(8)->Gap(8)->ItemsCenter();
-    footer->Child(IconEl(a, IconName::CircleUser, 16)->Fg(th.foreground));
-    footer->Child(Div(a)->Grow()->Child(
-        StoryTxt(cx, StrL("Jason Lee"), 16, th.foreground)));
-    footer->Child(IconEl(a, IconName::ChevronsUpDown, 16)->Fg(th.foreground));
-    side->Child(footer);
-    frame->Child(side);
+    El* user = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+    user->Child(IconEl(a, IconName::CircleUser, 16));
+    if (!iconCollapsed) {
+        user->Child(Div(a)->Grow()->Child(
+            StoryTxt(cx, StrL("Jason Lee"), 14, th.foreground)));
+        user->Child(IconEl(a, IconName::ChevronsUpDown, 16));
+    }
+
+    El* sidebar = component::Sidebar::New(cx, StrL("sidebar-story"))
+                      ->WithSide(self->rightSide ? Side::Right : Side::Left)
+                      ->Collapsible(collapsible)
+                      ->Collapsed(self->collapsed)
+                      ->W(220)
+                      ->Header(component::SidebarHeader(cx, brand))
+                      ->Footer(component::SidebarFooter(cx, user))
+                      ->Child(component::SidebarGroup::New(cx, StrL("Platform"))
+                                  ->Child(platform))
+                      ->Child(component::SidebarGroup::New(cx, StrL("Projects"))
+                                  ->Child(projects))
+                      ->IntoEl();
+    if (!self->rightSide) {
+        frame->Child(sidebar);
+    }
 
     // The content pane: breadcrumb, heading with the Options menu, metric
     // cards and the activity list.
     El* content = Div(a)->FlexCol()->Grow()->H(kFill)->Pad(16)->Gap(16);
     El* crumbs = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
-    crumbs->Child(IconEl(a, IconName::PanelLeft, 16)->Fg(th.foreground));
+    crumbs->Child(
+        component::SidebarToggleButton::New(cx)
+            ->WithSide(self->rightSide ? Side::Right : Side::Left)
+            ->Collapsed(self->collapsed &&
+                        collapsible != component::SidebarCollapsible::None)
+            ->OnClick(Listen(cx, &ToggleCollapsed))
+            ->IntoEl());
     crumbs->Child(component::Separator::Vertical(cx)->IntoEl()->H(16));
     crumbs->Child(component::Breadcrumb::New(cx)
                       ->Child(StrL("Breadcrumb"))
@@ -246,9 +253,11 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     El* headRow =
         Div(a)->FlexRow()->W(kFill)->Gap(16)->ItemsStart()->JustifyBetween();
     El* headText = Div(a)->FlexCol()->Gap(4);
-    headText->Child(
-        StoryTxt(cx, Str(kPlatform[self->active].label), 24, th.foreground)
-            ->Semibold());
+    const char* activeLabel = self->active < 4
+                                  ? kPlatform[self->active].label
+                                  : kProjects[self->active - 4].label;
+    headText
+        ->Child(StoryTxt(cx, Str(activeLabel), 24, th.foreground)->Semibold());
     headText->Child(StoryTxt(
         cx, StrL("A quick view of your workspace activity."), 14, th.mutedFg));
     headRow->Child(headText);
@@ -348,6 +357,10 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     }
     content->Child(activity);
     frame->Child(content);
+    // A right-side sidebar comes after the content it sits beside.
+    if (self->rightSide) {
+        frame->Child(sidebar);
+    }
 
     El* page = Div(a)->FlexCol()->W(kFill);
     page->Child(frame);

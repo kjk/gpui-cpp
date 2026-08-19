@@ -15,8 +15,9 @@ static Bounds Trigger(float x, float y, float w, float h) {
     return r;
 }
 
-static Positioned Side(Bounds trigger, const Placement* placement,
-                       PopupAlign align, float popupW, float popupH) {
+// Named apart from gpui::Side, the enum.
+static Positioned AtSide(Bounds trigger, const Placement* placement,
+                         PopupAlign align, float popupW, float popupH) {
     return PositionSide(trigger, {popupW, popupH}, {kViewW, kViewH}, kMargin,
                         placement, align, 0);
 }
@@ -24,7 +25,7 @@ static Positioned Side(Bounds trigger, const Placement* placement,
 static void PrefersTheRequestedSideWhenItFits() {
     Placement top = Placement::Top;
     Positioned p =
-        Side(Trigger(200, 200, 40, 20), &top, PopupAlign::Center, 80, 30);
+        AtSide(Trigger(200, 200, 40, 20), &top, PopupAlign::Center, 80, 30);
 
     utassert(p.hasPlacement && p.placement == Placement::Top);
     utassertnear(p.bounds.Bottom(), 200.f);
@@ -33,7 +34,7 @@ static void PrefersTheRequestedSideWhenItFits() {
 static void FlipsToTheOppositeSideWhenThePreferredSideDoesNotFit() {
     Placement top = Placement::Top;
     Positioned p =
-        Side(Trigger(200, 10, 40, 20), &top, PopupAlign::Center, 80, 60);
+        AtSide(Trigger(200, 10, 40, 20), &top, PopupAlign::Center, 80, 60);
 
     utassert(p.hasPlacement && p.placement == Placement::Bottom);
     utassertnear(p.bounds.y, 30.f);
@@ -42,7 +43,7 @@ static void FlipsToTheOppositeSideWhenThePreferredSideDoesNotFit() {
 static void ClampsIntoTheViewportWhileKeepingTheFlippedSide() {
     Placement bottom = Placement::Bottom;
     Positioned p =
-        Side(Trigger(480, 200, 40, 20), &bottom, PopupAlign::Center, 120, 30);
+        AtSide(Trigger(480, 200, 40, 20), &bottom, PopupAlign::Center, 120, 30);
 
     utassert(p.hasPlacement && p.placement == Placement::Bottom);
     utassertnear(p.bounds.Right(), kViewW - kMargin);
@@ -52,9 +53,9 @@ static void AlignmentSelectsTheLeadingCenterOrTrailingEdge() {
     Bounds trigger = Trigger(200, 200, 100, 20);
     Placement bottom = Placement::Bottom;
 
-    Positioned start = Side(trigger, &bottom, PopupAlign::Start, 40, 30);
-    Positioned center = Side(trigger, &bottom, PopupAlign::Center, 40, 30);
-    Positioned end = Side(trigger, &bottom, PopupAlign::End, 40, 30);
+    Positioned start = AtSide(trigger, &bottom, PopupAlign::Start, 40, 30);
+    Positioned center = AtSide(trigger, &bottom, PopupAlign::Center, 40, 30);
+    Positioned end = AtSide(trigger, &bottom, PopupAlign::End, 40, 30);
 
     utassertnear(start.bounds.x, 200.f);
     utassertnear(center.bounds.x, 230.f);
@@ -105,8 +106,8 @@ static Positioned TooltipPlacement(Bounds trigger, float popupW, float popupH,
 
 static void PrefersAboveWhenSpaceAllows() {
     Bounds trigger = Trigger(100, 80, 80, 24);
-    Positioned p = TooltipPlacement(trigger, 120, 30, 300, 200, kWindowMargin,
-                                    nullptr);
+    Positioned p =
+        TooltipPlacement(trigger, 120, 30, 300, 200, kWindowMargin, nullptr);
 
     utassert(p.placement == Placement::Top);
     utassertnear(p.bounds.x, 80.f);
@@ -131,8 +132,8 @@ static void FlipsAndClampsOnEachAxis() {
 static void PlacesTooltipToTheRight() {
     Bounds trigger = Trigger(20, 60, 32, 32);
     Placement right = Placement::Right;
-    Positioned p = TooltipPlacement(trigger, 120, 30, 300, 200, kWindowMargin,
-                                    &right);
+    Positioned p =
+        TooltipPlacement(trigger, 120, 30, 300, 200, kWindowMargin, &right);
 
     utassert(p.placement == Placement::Right);
     utassertnear(p.bounds.x, trigger.Right());
@@ -142,8 +143,8 @@ static void PlacesTooltipToTheRight() {
 static void RightPlacementClampsVerticalEdges() {
     Bounds trigger = Trigger(20, 2, 32, 20);
     Placement right = Placement::Right;
-    Positioned p = TooltipPlacement(trigger, 120, 40, 300, 200, kWindowMargin,
-                                    &right);
+    Positioned p =
+        TooltipPlacement(trigger, 120, 40, 300, 200, kWindowMargin, &right);
 
     utassert(p.placement == Placement::Right);
     utassertnear(p.bounds.y, kWindowMargin);
