@@ -3,6 +3,7 @@
 namespace gpui {
 
 const Str kTableResizeDrag = StrL("table-resize-col");
+const Str kTableColDrag = StrL("table-move-col");
 
 TableAction TableActionForKey(int key) {
     switch (key) {
@@ -362,6 +363,89 @@ void TableState::OnSortClick(TableState* self, Ctx* cx, const ClickEvent*,
     TablePerformSort(self, cx, (int)col);
 }
 
+void TableSeedColOrder(TableState* s, int colCount) {
+    int n = colCount > kMaxTableCols ? kMaxTableCols : colCount;
+    if (s->colOrderSeeded && n == s->colCount) {
+        return;
+    }
+    // The columns start in the order the caller declared them, and stay in
+    // whatever order the drags leave them.
+    for (int i = 0; i < n; i++) {
+        s->colOrder[i] = i;
+    }
+    s->colOrderSeeded = true;
+}
+
+int TableColAt(const TableState* s, int display) {
+    if (display < 0 || display >= s->colCount || display >= kMaxTableCols) {
+        return display;
+    }
+    return s->colOrderSeeded ? s->colOrder[display] : display;
+}
+
+int TableDisplayOfCol(const TableState* s, int col) {
+    for (int i = 0; i < s->colCount && i < kMaxTableCols; i++) {
+        if (TableColAt(s, i) == col) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool TableMoveColumn(TableState* s, int from, int to) {
+    int n = s->colCount < kMaxTableCols ? s->colCount : kMaxTableCols;
+    if (from < 0 || from >= n || to < 0 || to > n) {
+        return false;
+    }
+    // A column dropped into the gap either side of itself has not moved.
+    if (to == from || to == from + 1) {
+        return false;
+    }
+    TableSeedColOrder(s, s->colCount);
+    int col = s->colOrder[from];
+    for (int i = from; i < n - 1; i++) {
+        s->colOrder[i] = s->colOrder[i + 1];
+    }
+    // The gap was worked out before the column came out, so a gap after it
+    // has moved down one.
+    int at = to > from ? to - 1 : to;
+    for (int i = n - 1; i > at; i--) {
+        s->colOrder[i] = s->colOrder[i - 1];
+    }
+    s->colOrder[at] = col;
+    return true;
+}
+
+int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol) {
+    // The gap sits after the last column whose centre is left of `x`.
+    int gap = 0;
+    for (int i = 0; i < n; i++) {
+        if (x < colBounds[i].x + colBounds[i].w * 0.5f) {
+            break;
+        }
+        gap = i + 1;
+    }
+    if (gap == dragCol || gap == dragCol + 1) {
+        return -1;
+    }
+    return gap;
+}
+
+bool TableShouldLoadMore(const TableState* s, int visibleEnd) {
+    if (!s->hasMore || s->loading) {
+        return false;
+    }
+    return s->rowCount - visibleEnd <= s->loadMoreThreshold;
+}
+
+void TableScrollToRow(TableState* s, int row, ScrollStrategy strategy) {
+    if (s->viewportH <= 0) {
+        return;
+    }
+    s->scrollY = VirtualListScrollToRow(s->rowCount, s->rowH, row, s->scrollY,
+                                        s->viewportH, strategy);
+}
+
 void TableState::OnResizeDrag(TableState* self, Ctx* cx,
                               const DragMoveEvent* ev) {
     // `match e.drag(cx) { ResizeColumn(..) }`: a drag carrying anything else
@@ -395,6 +479,62 @@ void TableState::OnResizeEnd(TableState* self, Ctx* cx, const MouseUpEvent*) {
     if (self->onEvent.IsValid()) {
         ListenerCall(cx->app, cx->win, self->onEvent, &ev);
     }
+    Notify(cx);
+}
+
+void TableMoveColumnEvent(TableState* s, Ctx* cx, int from, int to) {
+    if (!TableMoveColumn(s, from, to)) {
+        return;
+    }
+    TableEvent ev = {TableEventKind::MoveColumn, -1, from};
+    ev.row = to;
+    if (s->onEvent.IsValid()) {
+        ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+    }
+    Notify(cx);
+}
+
+void TableState::OnColDragMove(TableState* self, Ctx* cx,
+                               const DragMoveEvent* ev) {
+    if (!StrSame(ev->drag.kind, kTableColDrag) || !self->colMovable) {
+        return;
+    }
+    int n = self->colCount < kMaxTableCols ? self->colCount : kMaxTableCols;
+    int gap = TableDragGapAt(self->colBounds, n, ev->event.x, ev->drag.ix);
+    if (self->draggingCol == ev->drag.ix && self->dropGap == gap) {
+        return;
+    }
+    self->draggingCol = ev->drag.ix;
+    self->dropGap = gap;
+    Notify(cx);
+}
+
+void TableState::OnColDrop(TableState* self, Ctx* cx, const DropEvent* ev) {
+    if (!StrSame(ev->drag.kind, kTableColDrag) || !self->colMovable) {
+        return;
+    }
+    int n = self->colCount < kMaxTableCols ? self->colCount : kMaxTableCols;
+    int gap = TableDragGapAt(self->colBounds, n, ev->x, ev->drag.ix);
+    self->draggingCol = -1;
+    self->dropGap = -1;
+    if (gap >= 0) {
+        TableMoveColumnEvent(self, cx, ev->drag.ix, gap);
+    } else {
+        Notify(cx);
+    }
+}
+
+void TableState::OnColDragEnd(TableState* self, Ctx* cx, const MouseUpEvent*) {
+    if (self->draggingCol < 0) {
+        return;
+    }
+    self->draggingCol = -1;
+    self->dropGap = -1;
+    Notify(cx);
+}
+
+void TableState::OnScroll(TableState* self, Ctx* cx, const ScrollEvent* ev) {
+    self->scrollY = ev->offsetY;
     Notify(cx);
 }
 

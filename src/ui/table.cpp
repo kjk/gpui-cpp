@@ -1,4 +1,5 @@
 #include "ui/table.h"
+#include "ui/skeleton.h"
 
 namespace gpui {
 
@@ -79,6 +80,14 @@ DataTable* DataTable::Rows(int n, void* d,
 }
 DataTable* DataTable::Stripe(bool v) {
     stripe = v;
+    return this;
+}
+DataTable* DataTable::H(float px) {
+    h = px;
+    return this;
+}
+DataTable* DataTable::Empty(El* e) {
+    empty = e;
     return this;
 }
 DataTable* DataTable::GroupHeader(El* el) {
@@ -163,6 +172,7 @@ El* DataTable::IntoEl() {
         // keys inside the rows and columns there actually are.
         s->rowCount = nRows;
         s->colCount = nColumns;
+        TableSeedColOrder(s, nColumns);
     }
     El* box = gpui::Table::New(cx, id)
                   ->FlexCol()
@@ -179,7 +189,10 @@ El* DataTable::IntoEl() {
                    ->FlexRow()
                    ->W(kFill)
                    ->BorderB(1, th.border);
-    for (int c = 0; c < nColumns; c++) {
+    for (int d = 0; d < nColumns; d++) {
+        // The columns are drawn in the order the table keeps, which is what a
+        // head drag rewrites.
+        int c = s ? TableColAt(s, d) : d;
         const TableColumn& col = columns[c];
         // A column is as wide as the caller declared it until a drag has said
         // otherwise, from which point the width is the table's own.
@@ -189,8 +202,20 @@ El* DataTable::IntoEl() {
         El* th_ = TableHead::New(cx, StrDup(a, fmt("%s-th-%d", id, c)))
                       ->FlexRow()
                       ->W(ColWidth(s, c));
-        if (c > 0) {
+        if (s && d < kMaxTableCols) {
+            // The box a drop position is worked out against, which Rust reads
+            // off its col_groups.
+            th_->BoundsOut(&s->colBounds[d]);
+        }
+        if (d > 0) {
             th_->BorderL(1, th.border);
+        }
+        // The gap the dragged head would drop into, drawn down the edge it
+        // would land on.
+        if (s && s->dropGap == d) {
+            th_->BorderL(2, th.primary);
+        } else if (s && s->dropGap == d + 1 && d == nColumns - 1) {
+            th_->BorderR(2, th.primary);
         }
         if (s && s->selectedCol == c && s->mode == TableSelectionMode::Column) {
             th_->Bg(th.accent);
@@ -211,6 +236,15 @@ El* DataTable::IntoEl() {
             BindClick(content, StrDup(a, fmt("%s-th-%d", id, c)),
                       ListenerArg(headClick, c));
         }
+        // on_drag(DragColumn(..)): a press on the head picks the column up,
+        // and the whole head is the drop target for another one.
+        if (s && s->colMovable) {
+            content->OnDrag(kTableColDrag, d);
+            content->OnDragMove(ListenTo(state, &TableState::OnColDragMove));
+            content->OnMouseUpOut(ListenTo(state, &TableState::OnColDragEnd));
+            content->OnMouseUp(ListenTo(state, &TableState::OnColDragEnd));
+            th_->OnDrop(kTableColDrag, ListenTo(state, &TableState::OnColDrop));
+        }
         if (col.sortable && s && s->sortable) {
             // The sort icon is its own hit box inside the head, so clicking it
             // sorts rather than selecting the column.
@@ -228,15 +262,61 @@ El* DataTable::IntoEl() {
     }
     box->Child(head);
 
+    // render_empty / render_loading: a table with no rows shows one of the
+    // two instead of a body.
+    if (s && s->loading) {
+        El* skeleton = Div(a)->FlexCol()->W(kFill)->Gap(8)->Pad(12);
+        for (int i = 0; i < 5; i++) {
+            skeleton->Child(Skeleton::New(cx)->W(kFill)->H(16)->IntoEl());
+        }
+        box->Child(skeleton);
+        return box;
+    }
+    if (nRows == 0) {
+        box->Child(empty
+                       ? empty
+                       : Div(a)
+                             ->FlexCol()
+                             ->W(kFill)
+                             ->H(h > 0 ? h : 160)
+                             ->ItemsCenter()
+                             ->JustifyCenter()
+                             ->Child(IconEl(a, IconName::Inbox, 48)
+                                         ->Fg(RgbaOpacity(th.mutedFg, 0.6f))));
+        return box;
+    }
+
     Listener rowClick = ListenTo(state, &TableState::OnRowClick, 0);
     Listener rowDown = ListenTo(state, &TableState::OnRowMouseDown, 0);
     El* body =
         TableBody::New(cx, StrDup(a, fmt("%s-body", id)))->FlexCol()->W(kFill);
-    for (int r = 0; r < nRows; r++) {
+    // The rows are virtualized when the caller gave the body a height: only
+    // the ones it can show are built, with a spacer at each end standing in
+    // for the rest. Without one every row is built, which is what a short
+    // table wants.
+    VirtualRange range = {0, nRows};
+    if (s && h > 0) {
+        s->viewportH = h;
+        range = VirtualListVisibleRows(nRows, s->rowH, s->scrollY, h);
+        body->H(h)
+            ->ClipY()
+            ->ScrollY(s->scrollY)
+            ->ScrollId(HashClickId(id))
+            ->OnScroll(ListenTo(state, &TableState::OnScroll));
+        if (range.first > 0) {
+            body->Child(Div(a)->W(kFill)->H((float)range.first * s->rowH));
+        }
+    }
+    for (int r = range.first; r < range.end; r++) {
         El* row = TableRow::New(cx, StrDup(a, fmt("%s-row-%d", id, r)))
                       ->FlexRow()
                       ->W(kFill)
                       ->BorderB(1, th.tableRowBorder);
+        if (s && h > 0) {
+            // uniform_list: every row the same height, which is what lets the
+            // two spacers stand in for the ones that were not built.
+            row->H(s->rowH);
+        }
         if (stripe && (r % 2) == 1) {
             row->Bg(th.tableEven);
         }
@@ -245,7 +325,8 @@ El* DataTable::IntoEl() {
         } else if (s && s->rightClickedRow == r) {
             row->Bg(RgbaOpacity(th.accent, 0.5f));
         }
-        for (int c = 0; c < nColumns; c++) {
+        for (int d = 0; d < nColumns; d++) {
+            int c = s ? TableColAt(s, d) : d;
             El* cellEl = cell ? cell(cx, data, r, c) : nullptr;
             El* td = TableCell::New(cx, StrDup(a, fmt("c%d", c)))
                          ->FlexRow()
@@ -256,7 +337,7 @@ El* DataTable::IntoEl() {
             if (columns[c].right) {
                 td->JustifyEnd();
             }
-            if (c > 0) {
+            if (d > 0) {
                 td->BorderL(1, th.tableRowBorder);
             }
             if (s && s->mode == TableSelectionMode::Column &&
@@ -280,7 +361,16 @@ El* DataTable::IntoEl() {
         }
         body->Child(row);
     }
+    if (s && h > 0 && range.end < nRows) {
+        body->Child(Div(a)->W(kFill)->H((float)(nRows - range.end) * s->rowH));
+    }
     box->Child(body);
+    // load_more_if_need: the last row built is near the end, and the delegate
+    // says there is more to come.
+    if (s && TableShouldLoadMore(s, range.end) && s->onLoadMore.IsValid()) {
+        TableEvent ev = {TableEventKind::SelectRow, s->rowCount, -1};
+        ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
+    }
     return box;
 }
 

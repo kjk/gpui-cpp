@@ -69,9 +69,76 @@ static void AResizeIsClamped() {
     utassert(TableClampColWidth(&s, 100) == 100);
 }
 
+// Four columns of a hundred, side by side.
+static void SeedCols(TableState* s, Bounds* b, int n) {
+    s->colCount = n;
+    TableSeedColOrder(s, n);
+    for (int i = 0; i < n; i++) {
+        b[i] = {(float)i * 100.f, 0, 100, 30};
+    }
+}
+
+static void TheGapIsAfterTheLastCentreLeftOfThePointer() {
+    TableState s;
+    Bounds b[4];
+    SeedCols(&s, b, 4);
+    // Dragging column 0: the pointer over the first half of column 1 is
+    // still the gap it came from, so nothing moves.
+    utassert(TableDragGapAt(b, 4, 120, 0) == -1);
+    // Past the centre of column 1 it is the gap after it.
+    utassert(TableDragGapAt(b, 4, 160, 0) == 2);
+    utassert(TableDragGapAt(b, 4, 260, 0) == 3);
+    utassert(TableDragGapAt(b, 4, 380, 0) == 4);
+    // Dragging column 2 back to the front.
+    utassert(TableDragGapAt(b, 4, 10, 2) == 0);
+    utassert(TableDragGapAt(b, 4, 120, 2) == 1);
+    // The two gaps either side of the dragged column are both a no-op.
+    utassert(TableDragGapAt(b, 4, 210, 2) == -1);
+    utassert(TableDragGapAt(b, 4, 260, 2) == -1);
+}
+
+static void AMovedColumnLandsInTheGap() {
+    TableState s;
+    Bounds b[4];
+    SeedCols(&s, b, 4);
+    // The first column into the gap after the second: everything before it
+    // shifts down one.
+    utassert(TableMoveColumn(&s, 0, 2));
+    utassert(TableColAt(&s, 0) == 1);
+    utassert(TableColAt(&s, 1) == 0);
+    utassert(TableColAt(&s, 2) == 2);
+    utassert(TableDisplayOfCol(&s, 0) == 1);
+
+    // And back the other way: the last column to the front.
+    utassert(TableMoveColumn(&s, 3, 0));
+    utassert(TableColAt(&s, 0) == 3);
+    utassert(TableColAt(&s, 1) == 1);
+    utassert(TableColAt(&s, 2) == 0);
+    utassert(TableColAt(&s, 3) == 2);
+
+    // The gaps either side of a column leave it where it is.
+    utassert(!TableMoveColumn(&s, 1, 1));
+    utassert(!TableMoveColumn(&s, 1, 2));
+    utassert(TableColAt(&s, 1) == 1);
+}
+
+static void LoadMoreAsksNearTheEnd() {
+    TableState s;
+    s.rowCount = 1000;
+    utassert(!TableShouldLoadMore(&s, 995));
+    s.hasMore = true;
+    utassert(!TableShouldLoadMore(&s, 500));
+    utassert(TableShouldLoadMore(&s, 980));
+    s.loading = true;
+    utassert(!TableShouldLoadMore(&s, 980));
+}
+
 void TestDataTable() {
     AColumnKeepsItsWidthOnceItHasOne();
     AResizeIsClamped();
+    TheGapIsAfterTheLastCentreLeftOfThePointer();
+    AMovedColumnLandsInTheGap();
+    LoadMoreAsksNearTheEnd();
     TheKeyTable();
     TheSortCycle();
     OnlyOneColumnCarriesTheSort();
