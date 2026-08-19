@@ -63,3 +63,4 @@ void TestList();
 void TestPopupMenu();
 void TestDataTable();
 void TestDock();
+void TestTab();
