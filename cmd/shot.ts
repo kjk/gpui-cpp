@@ -128,8 +128,11 @@ if (hover) {
 } else {
   // Nothing asked for a pointer, so make sure there isn't one over the window:
   // where it happens to rest is not something a screenshot should depend on.
-  parkCursorOutside(hwnd);
-  await sleep(150);
+  if (parkCursorOutside(hwnd)) {
+    // It was over the window: give the app a moment to repaint without a
+    // hover state before the shutter.
+    await sleep(150);
+  }
 }
 // The foreground can move away while the clicks and keys above play out, and
 // DWM composites a window that lost it with the inactive caption shade -- a

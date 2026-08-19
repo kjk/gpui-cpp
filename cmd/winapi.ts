@@ -183,12 +183,19 @@ export function getForegroundWindow(): number {
 // which reads as a diff in every screenshot comparison, so keep asking.
 export async function waitForForeground(hwnd: number, timeoutMs = 3000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
+  // A locked or disconnected session has no foreground window at all and will
+  // not grow one while the shot runs, so waiting out the full timeout there
+  // just adds seconds to every capture. A window that belongs to someone else
+  // may still be given up, so that one is worth waiting for.
+  const emptyDeadline = Date.now() + 400;
   for (;;) {
     setForegroundWindow(hwnd);
-    if (getForegroundWindow() === hwnd) {
+    const fg = getForegroundWindow();
+    if (fg === hwnd) {
       return true;
     }
-    if (Date.now() >= deadline) {
+    const now = Date.now();
+    if (now >= deadline || (fg === 0 && now >= emptyDeadline)) {
       return false;
     }
     await sleep(50);
@@ -210,8 +217,14 @@ export function getCursorPos(): { x: number; y: number } {
 // while a shot is up lands in the app and captures a scrolled pane instead of
 // the top of the page; a pointer resting on a control is an unasked-for hover
 // state in the same way.
-export function parkCursorOutside(hwnd: number): void {
+// Returns true when the pointer had to move, i.e. when the window needs a
+// moment to repaint without it.
+export function parkCursorOutside(hwnd: number): boolean {
   const r = getWindowRect(hwnd);
+  const at = getCursorPos();
+  if (at.x < r.left || at.x > r.right || at.y < r.top || at.y > r.bottom) {
+    return false;
+  }
   const wa = getWorkArea();
   const corners = [
     { x: wa.left + 1, y: wa.bottom - 1 },
@@ -221,6 +234,7 @@ export function parkCursorOutside(hwnd: number): void {
   ];
   const away = corners.find((p) => p.x < r.left || p.x > r.right || p.y < r.top || p.y > r.bottom);
   setCursorPos(away?.x ?? wa.right - 1, away?.y ?? wa.bottom - 1);
+  return true;
 }
 
 export function clientToScreen(hwnd: number, x: number, y: number): { x: number; y: number } {
@@ -376,8 +390,17 @@ export async function killAndWait(proc: Bun.Subprocess | undefined | null, timeo
   } catch {
     /* already gone */
   }
-  const deadline = Date.now() + timeoutMs;
-  while (proc.exitCode === null && Date.now() < deadline) {
-    await sleep(40);
+  // proc.exitCode never leaves null for a process we killed -- Bun reports the
+  // signal instead -- so polling it waited out the whole timeout on every
+  // single spawn. The promise settles as soon as the process is reaped.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    proc.exited,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs);
+    }),
+  ]);
+  if (timer !== undefined) {
+    clearTimeout(timer);
   }
 }
