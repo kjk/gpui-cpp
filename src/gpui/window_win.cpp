@@ -488,7 +488,12 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     if (!win || !win->plat) {
         return;
     }
-    LPCWSTR name = kind == CursorKind::IBeam ? IDC_IBEAM : IDC_ARROW;
+    LPCWSTR name = IDC_ARROW;
+    if (kind == CursorKind::IBeam) {
+        name = IDC_IBEAM;
+    } else if (kind == CursorKind::ColResize) {
+        name = IDC_SIZEWE;
+    }
     win->plat->cursor = LoadCursorW(nullptr, name);
     SetCursor(win->plat->cursor);
 }

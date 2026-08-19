@@ -147,6 +147,17 @@ static void OnTableEvent(DataTableStory* self, Ctx* cx, const TableEvent* ev) {
         case TableEventKind::DoubleClickedRow:
             self->message = StrDup(fmt("Double clicked row %d", ev->row));
             break;
+        case TableEventKind::ColumnWidthsChanged: {
+            // ColumnWidthsChanged carries every column's width, not just the
+            // one the drag moved.
+            StrBuilder sb;
+            sb.Append(StrL("Column widths"));
+            for (int i = 0; i < ev->nWidths; i++) {
+                sb.Append(fmt(" %d", (int)ev->widths[i]));
+            }
+            self->message = sb.TakeStr();
+            break;
+        }
         case TableEventKind::Sort:
             SortRows(self, ev->col, ev->sort);
             self->message = StrDup(
@@ -213,11 +224,10 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
         case 1:
             return StoryTxt(cx, Str(s.market), 16, th.blue)->LineHeight(1.f);
         case 2:
-            // The Rust cell hides its overflow; ours truncates the text.
+            // The table clips the cell to its column, so a long name is cut
+            // where the column ends however wide it has been dragged.
             return StoryTxt(cx, Str(s.name), 16, th.foreground)
-                ->LineHeight(1.f)
-                ->MaxW(160)
-                ->Truncate();
+                ->LineHeight(1.f);
         case 3:
             return StoryTxt(cx, Str(s.symbol), 16, th.foreground)
                 ->Medium()
@@ -311,33 +321,11 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
-    // Column widths, in the order the Rust delegate declares them.
+    // Column widths, in the order the Rust delegate declares them. They are
+    // what a column starts at; dragging its right edge makes the width the
+    // table's own.
     const float wId = 45, wMarket = 61, wName = 176, wSymbol = 101,
                 wPrice = 100, wChg = 100, wPct = 110;
-
-    // Two levels of grouped headers over the column row.
-    El* group1 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    group1->Child(Div(a)
-                      ->FlexRow()
-                      ->W(wId + wMarket + wName + wSymbol)
-                      ->PadY(6)
-                      ->JustifyCenter()
-                      ->BorderR(1, th.border)
-                      ->Child(StoryTxt(cx, StrL("Stock"), 16, th.foreground)
-                                  ->LineHeight(1.f)));
-    group1->Child(Div(a)->Grow()->PadY(6));
-    El* group2 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    group2->Child(Div(a)
-                      ->FlexRow()
-                      ->W(wId + wMarket + wName + wSymbol)
-                      ->PadY(6)
-                      ->JustifyCenter()
-                      ->BorderR(1, th.border)
-                      ->Child(StoryTxt(cx, StrL("Identity"), 16, th.foreground)
-                                  ->LineHeight(1.f)));
-    group2->Child(Div(a)->Grow()->FlexRow()->PadY(6)->JustifyCenter()->Child(
-        StoryTxt(cx, StrL("Price & Change"), 16, th.foreground)
-            ->LineHeight(1.f)));
 
     static const component::TableColumn kColumns[] = {
         {StrL("ID"), wId, false, false, false},
@@ -354,8 +342,42 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     if (st) {
         st->sortable = self->options[3];
         st->loopSelection = self->options[0];
+        st->colResizable = self->options[1];
         st->onEvent = Listen(cx, &OnTableEvent);
     }
+
+    // The grouped header spans the first four columns, so it has to follow
+    // them when one of them is dragged wider.
+    float wStock = 0;
+    for (int i = 0; i < 4; i++) {
+        wStock +=
+            st ? TableColWidth(st, i, kColumns[i].width) : kColumns[i].width;
+    }
+
+    // Two levels of grouped headers over the column row.
+    El* group1 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
+    group1->Child(Div(a)
+                      ->FlexRow()
+                      ->W(wStock)
+                      ->PadY(6)
+                      ->JustifyCenter()
+                      ->BorderR(1, th.border)
+                      ->Child(StoryTxt(cx, StrL("Stock"), 16, th.foreground)
+                                  ->LineHeight(1.f)));
+    group1->Child(Div(a)->Grow()->PadY(6));
+    El* group2 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
+    group2->Child(Div(a)
+                      ->FlexRow()
+                      ->W(wStock)
+                      ->PadY(6)
+                      ->JustifyCenter()
+                      ->BorderR(1, th.border)
+                      ->Child(StoryTxt(cx, StrL("Identity"), 16, th.foreground)
+                                  ->LineHeight(1.f)));
+    group2->Child(Div(a)->Grow()->FlexRow()->PadY(6)->JustifyCenter()->Child(
+        StoryTxt(cx, StrL("Price & Change"), 16, th.foreground)
+            ->LineHeight(1.f)));
+
     El* box = component::DataTable::New(cx, StrL("data-table"), self->table)
                   ->Columns(kColumns, nColumns)
                   ->Rows(nStocks, self, DtCellFor)

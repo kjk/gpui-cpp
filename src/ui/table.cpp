@@ -114,6 +114,47 @@ static El* SortIcon(Arena* a, const Theme& th, ColumnSort sort) {
                 ->Fg(on ? th.secondaryFg : RgbaOpacity(th.secondaryFg, 0.5f)));
 }
 
+float DataTable::ColWidth(const TableState* s, int col) const {
+    float declared = columns[col].width;
+    return s ? TableColWidth(s, col, declared) : declared;
+}
+
+// render_resize_handle: a two-pixel grab straddling the column's right edge
+// with a one-pixel line down it. Rust pulls the handle back over the edge with
+// ml(-HANDLE_SIZE) because the head's content is w_full; the content here
+// grows into whatever the handle leaves, which puts the same edge in the same
+// place — and that is what lets the drag work out where the column starts.
+static El* ResizeHandle(Ctx* cx, Str id, int col, Entity<TableState> state) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    TableState* s = state.Get(cx);
+    bool on = s && s->resizingCol == col;
+    // Nothing sets a height: a flex row stretches its children, so the handle
+    // and the line down it are as tall as the head, which is what h_full says
+    // in Rust.
+    El* e = Div(a)
+                ->Id(id)
+                ->Click(HashClickId(id))
+                ->FlexRow()
+                ->W(kTableResizeHandleW)
+                ->JustifyEnd()
+                ->Cursor(CursorKind::ColResize);
+    // group_hover: the line under the pointer, or under a drag, is the darker
+    // of the two borders.
+    e->Child(Div(a)->W(1)->Bg(on ? th.border : th.tableRowBorder));
+    e->HoverBg(th.border);
+    // on_drag(ResizeColumn((entity_id, ix))): the press picks the column up,
+    // and every move afterwards carries it back to the handler.
+    e->OnDrag(kTableResizeDrag, col);
+    e->OnDragMove(ListenTo(state, &TableState::OnResizeDrag));
+    // on_mouse_up_out ends the drag. A release back over the two pixels it
+    // started on is not "out", so the handle listens for that one too — the
+    // handler does nothing when no drag is going on.
+    e->OnMouseUpOut(ListenTo(state, &TableState::OnResizeEnd));
+    e->OnMouseUp(ListenTo(state, &TableState::OnResizeEnd));
+    return e;
+}
+
 El* DataTable::IntoEl() {
     const Theme& th = cx->theme();
     TableState* s = state.Get(cx);
@@ -140,23 +181,34 @@ El* DataTable::IntoEl() {
                    ->BorderB(1, th.border);
     for (int c = 0; c < nColumns; c++) {
         const TableColumn& col = columns[c];
+        // A column is as wide as the caller declared it until a drag has said
+        // otherwise, from which point the width is the table's own.
+        if (s) {
+            TableSeedColWidth(s, c, col.width);
+        }
         El* th_ = TableHead::New(cx, StrDup(a, fmt("%s-th-%d", id, c)))
                       ->FlexRow()
-                      ->W(col.width)
-                      ->PadX(8)
-                      ->PadY(6)
-                      ->ItemsCenter()
-                      ->JustifyBetween();
+                      ->W(ColWidth(s, c));
         if (c > 0) {
             th_->BorderL(1, th.border);
         }
         if (s && s->selectedCol == c && s->mode == TableSelectionMode::Column) {
             th_->Bg(th.accent);
         }
-        th_->Child(
+        // render_th: the head is the content and the resize handle beside it,
+        // and only the content carries the padding — the handle has to reach
+        // the column's edge.
+        El* content = Div(a)
+                          ->FlexRow()
+                          ->Grow()
+                          ->PadX(8)
+                          ->PadY(6)
+                          ->ItemsCenter()
+                          ->JustifyBetween();
+        content->Child(
             TextEl(a, col.title)->Font(14)->Fg(th.foreground)->LineHeight(1.f));
         if (col.selectable) {
-            BindClick(th_, StrDup(a, fmt("%s-th-%d", id, c)),
+            BindClick(content, StrDup(a, fmt("%s-th-%d", id, c)),
                       ListenerArg(headClick, c));
         }
         if (col.sortable && s && s->sortable) {
@@ -165,7 +217,12 @@ El* DataTable::IntoEl() {
             El* icon = SortIcon(a, th, TableSortOf(s, c));
             BindClick(icon, StrDup(a, fmt("%s-sort-%d", id, c)),
                       ListenerArg(sortClick, c));
-            th_->Child(icon);
+            content->Child(icon);
+        }
+        th_->Child(content);
+        if (s && s->colResizable && col.resizable) {
+            th_->Child(ResizeHandle(cx, StrDup(a, fmt("%s-resize-%d", id, c)),
+                                    c, state));
         }
         head->Child(th_);
     }
@@ -192,7 +249,7 @@ El* DataTable::IntoEl() {
             El* cellEl = cell ? cell(cx, data, r, c) : nullptr;
             El* td = TableCell::New(cx, StrDup(a, fmt("c%d", c)))
                          ->FlexRow()
-                         ->W(columns[c].width)
+                         ->W(ColWidth(s, c))
                          ->PadX(8)
                          ->PadY(6)
                          ->ItemsCenter();
@@ -207,6 +264,11 @@ El* DataTable::IntoEl() {
                 td->Bg(RgbaOpacity(th.accent, 0.5f));
             }
             if (cellEl) {
+                // render_td clips what it holds to the column. Dragging an
+                // edge in makes a column narrower than its text, and without
+                // this the text would spill over the next column.
+                float inner = ColWidth(s, c) - 16;
+                cellEl->MaxW(inner > 1 ? inner : 1)->Truncate();
                 td->Child(cellEl);
             }
             row->Child(td);
