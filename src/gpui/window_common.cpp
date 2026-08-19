@@ -306,7 +306,21 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     }
     int id = HitTest(&win->paint, x, y);
     if (id != win->hoverId) {
+        // div().on_hover(..): the element the pointer left hears false and the
+        // one it entered hears true. Both are read off the frame that is still
+        // on screen, before hoverId moves, so the leaving element is still
+        // findable.
+        HoverEvent left = {false};
+        HoverEvent entered = {true};
+        const HitRect* was = HitRectById(win, win->hoverId);
+        const HitRect* now = HitRectById(win, id);
         win->hoverId = id;
+        if (was && was->onHover.IsValid()) {
+            ListenerCall(win->app, win, was->onHover, &left);
+        }
+        if (now && now->onHover.IsValid()) {
+            ListenerCall(win->app, win, now->onHover, &entered);
+        }
         AppInvalidate(win);
     }
     if (win->onMouseMove.IsValid()) {

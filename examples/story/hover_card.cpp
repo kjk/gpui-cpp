@@ -4,18 +4,17 @@ struct HoverCardStory {
     static El* Render(HoverCardStory* self, Ctx* cx);
 };
 
-// A card is open while its trigger is hovered, which is what a HoverCard is
-// for. The window already tracks the hovered element, so the page reads that
-// rather than keeping a register of its own.
-static bool Hovered(Ctx* cx, Str id) {
-    return cx->win->hoverId == HashClickId(id);
+// The card runs on gpui_base::HoverCardState now, so the page asks whether
+// this one is showing rather than reading the hovered element itself. The
+// difference is the delays: the card waits before it opens, and stays up long
+// enough for the pointer to travel onto it.
+static bool Showing(Ctx* cx, Str id) {
+    return component::HoverCardOpen(cx, id);
 }
 
-// Gives a trigger a click id, so the runtime can report it as hovered. The
-// card opens on hover alone; there is nothing to click.
+// The trigger only needs a name; the card gives it hover of its own.
 static El* Trig(El* e, Str id) {
-    int cid = HashClickId(id);
-    return e->Id(id)->Click(cid);
+    return e->Id(id);
 }
 
 static El* Card(Ctx* cx, const char* title, const char* body) {
@@ -54,7 +53,7 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     El* def = StorySection(
         cx, "Default",
         "Shows supporting information without changing the current view.");
-    bool defOpen = Hovered(cx, StrL("hc-default"));
+    bool defOpen = Showing(cx, StrL("hc-default-card"));
     El* defTrig = Trig(StoryTxt(cx, StrL("Hover over me"), 13, th.primary),
                        StrL("hc-default"));
     StorySectionAdd(def,
@@ -65,7 +64,6 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
                                                  "when hovering over a "
                                                  "trigger element.")
                                           : nullptr)
-                        ->Open(defOpen)
                         ->IntoEl());
     page->Child(def);
 
@@ -74,7 +72,7 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
         "Cards can contain avatars, typography, and structured details.");
     El* richRow = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
     richRow->Child(StoryTxt(cx, StrL("Hover over"), 16, th.foreground));
-    bool richOpen = Hovered(cx, StrL("hc-rich"));
+    bool richOpen = Showing(cx, StrL("hc-rich-card"));
     El* link = Trig(StoryTxt(cx, StrL("@huacnlee"), 16, th.blue)->Underline(),
                     StrL("hc-rich"));
     El* profile = nullptr;
@@ -102,7 +100,6 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     richRow->Child(component::HoverCard::New(cx)
                        ->Trigger(link)
                        ->Content(profile)
-                       ->Open(richOpen)
                        ->IntoEl());
     richRow
         ->Child(StoryTxt(cx, StrL("to see their profile"), 16, th.foreground));
@@ -113,29 +110,29 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
         cx, "Timing",
         "Open and close delays can match the interaction context.");
     El* timingRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    timingRow->Child(component::HoverCard::New(cx)
+    timingRow->Child(component::HoverCard::New(cx, StrL("fast-card"))
+                         ->OpenDelay(200)
                          ->Trigger(component::Button::New(cx, StrL("fast"))
                                        ->Label(StrL("Fast Open (200ms)"))
                                        ->Outline()
                                        ->IntoEl())
-                         ->Content(Hovered(cx, StrL("fast"))
+                         ->Content(Showing(cx, StrL("fast-card"))
                                        ? Card(cx, "Fast open",
                                               "This hover card opens after "
                                               "200ms")
                                        : nullptr)
-                         ->Open(Hovered(cx, StrL("fast")))
                          ->IntoEl());
-    timingRow->Child(component::HoverCard::New(cx)
+    timingRow->Child(component::HoverCard::New(cx, StrL("slow-card"))
+                         ->OpenDelay(1000)
                          ->Trigger(component::Button::New(cx, StrL("slow"))
                                        ->Label(StrL("Slow Open (1000ms)"))
                                        ->Outline()
                                        ->IntoEl())
-                         ->Content(Hovered(cx, StrL("slow"))
+                         ->Content(Showing(cx, StrL("slow-card"))
                                        ? Card(cx, "Slow open",
                                               "This hover card opens after "
                                               "1000ms")
                                        : nullptr)
-                         ->Open(Hovered(cx, StrL("slow")))
                          ->IntoEl());
     StorySectionAdd(timing, timingRow);
     page->Child(timing);
@@ -160,7 +157,7 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
         El* row = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
         for (int i = 0; i < 3; i++) {
             Str id = Str(kAnchors[r][i].id);
-            bool on = Hovered(cx, id);
+            bool on = Showing(cx, id);
             row->Child(
                 component::HoverCard::New(cx, id)
                     ->Anchor(kAnchors[r][i].anchor)
@@ -172,7 +169,6 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
                         on ? PlainCard(cx, StoryFmt(cx, "Positioned at %s",
                                                     kAnchors[r][i].label))
                            : nullptr)
-                    ->Open(on)
                     ->IntoEl());
         }
         posCol->Child(row);

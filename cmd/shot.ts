@@ -1,6 +1,8 @@
 // Screenshot one example window: bun cmd/shot.ts [-dbg] <example> [out.png]
 //   -click=X,Y   click at client coords first
 //   -hover=X,Y   leave the pointer there, for capturing a hover state
+//   -settle=MS   wait that long after the input before the shutter, for a
+//                widget that answers on a timer (a hover card's open delay)
 //   -drag=X1,Y1,X2,Y2  press, move, release: a text selection drag
 //   -wheel=N     N notches of scroll at the window centre
 //   -key=VK      send a key down
@@ -38,6 +40,7 @@ const argv = Bun.argv.slice(2);
 let debug = false;
 const clicks: { x: number; y: number }[] = [];
 let hover: { x: number; y: number } | null = null;
+let settleMs = 0;
 let drag: { x1: number; y1: number; x2: number; y2: number } | null = null;
 const keys: number[] = [];
 let wheel = 0;
@@ -62,6 +65,8 @@ for (const a of argv) {
   } else if (a.startsWith("-drag=")) {
     const [x1, y1, x2, y2] = a.slice(6).split(",").map(Number);
     drag = { x1: x1 ?? 0, y1: y1 ?? 0, x2: x2 ?? 0, y2: y2 ?? 0 };
+  } else if (a.startsWith("-settle=")) {
+    settleMs = Number(a.slice(8)) || 0;
   } else if (a.startsWith("-hover=")) {
     const [x, y] = a.slice(7).split(",").map(Number);
     hover = { x: x ?? 0, y: y ?? 0 };
@@ -157,6 +162,11 @@ if (hover) {
     // hover state before the shutter.
     await sleep(150);
   }
+}
+// A widget whose answer is on a timer -- a hover card counting down its open
+// delay -- has not answered yet when the pointer stops moving.
+if (settleMs > 0) {
+  await sleep(settleMs);
 }
 // The foreground can move away while the clicks and keys above play out, and
 // DWM composites a window that lost it with the inactive caption shade -- a

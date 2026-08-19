@@ -20,8 +20,28 @@ HoverCard* HoverCard::Content(El* e) {
     return this;
 }
 HoverCard* HoverCard::Open(bool v) {
+    controlled = true;
     open = v;
     return this;
+}
+HoverCard* HoverCard::OpenDelay(int ms) {
+    openDelayMs = ms;
+    return this;
+}
+HoverCard* HoverCard::CloseDelay(int ms) {
+    closeDelayMs = ms;
+    return this;
+}
+
+// The keyed state behind one card id. Rust's
+// `window.use_keyed_state(self.id, ..)`, which is what makes the delays
+// survive the frame that armed them.
+static Entity<HoverCardState> CardState(Ctx* cx, Str id) {
+    return KeyedEntity<HoverCardState>(cx, (uint32_t)HashClickId(id));
+}
+
+bool HoverCardOpen(Ctx* cx, Str id) {
+    return HoverCardIsOpen(cx, CardState(cx, id));
 }
 HoverCard* HoverCard::New(Ctx* cx, Str id) {
     HoverCard* h = New(cx);
@@ -34,7 +54,12 @@ HoverCard* HoverCard::Anchor(HoverCardAnchor v) {
 }
 
 El* HoverCard::IntoEl() {
-    El* card = open ? content : nullptr;
+    Str cardId = id.s ? id : StrL("hover-card");
+    Entity<HoverCardState> st = CardState(cx, cardId);
+    // sync(open_delay, close_delay): the caller's numbers every frame.
+    HoverCardSetDelays(cx, st, openDelayMs, closeDelayMs);
+    bool isOpen = controlled ? open : HoverCardIsOpen(cx, st);
+    El* card = isOpen ? content : nullptr;
     if (card) {
         // The base card hangs bottom-left; the other five corners place
         // themselves. Deferred, so it draws over what follows it.
@@ -61,7 +86,7 @@ El* HoverCard::IntoEl() {
         }
         card->Deferred();
     }
-    return gpui::HoverCard::New(cx, id.s ? id : StrL("hover-card"))
+    return gpui::HoverCard::New(cx, cardId, st)
         ->Trigger(trigger)
         ->Content(card)
         ->IntoEl();

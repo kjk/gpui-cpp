@@ -258,13 +258,51 @@ void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop) {
     return s.ptr;
 }
 
+// window.use_keyed_state, when the state has to be an entity so timers and
+// listeners can be bound to it. `fresh` is a new T the caller allocated; it is
+// adopted on the first call for this key and deleted on every later one, which
+// is how a C++ caller says Rust's `|_, cx| HoverCardState::new(..)` without a
+// closure to defer it.
+EntityId WindowKeyedEntity(Window* win, App* app, uint32_t key, void* fresh,
+                           DropFn drop) {
+    if (!win || !app) {
+        if (fresh && drop) {
+            drop(fresh);
+        }
+        return {};
+    }
+    for (int i = 0; i < win->keyed.len; i++) {
+        if (win->keyed[i].key != key) {
+            continue;
+        }
+        // Still ours only while the entity is alive; a recycled slot starts
+        // over, the way a dropped keyed state does.
+        if (EntityGet(app, win->keyed[i].entity)) {
+            if (fresh && drop) {
+                drop(fresh);
+            }
+            return win->keyed[i].entity;
+        }
+        win->keyed[i].entity = EntityNewRaw(app, fresh, nullptr, drop);
+        return win->keyed[i].entity;
+    }
+    KeyedSlot s = {};
+    s.key = key;
+    s.entity = EntityNewRaw(app, fresh, nullptr, drop);
+    win->keyed.Append(s);
+    return s.entity;
+}
+
 void WindowKeyedFree(Window* win) {
     if (!win) {
         return;
     }
     for (int i = 0; i < win->keyed.len; i++) {
-        // AllocZero'd, so free the memory without running a destructor.
-        Free(nullptr, win->keyed[i].ptr);
+        // AllocZero'd, so free the memory without running a destructor. An
+        // entity slot holds no memory of its own — the app owns that.
+        if (win->keyed[i].ptr) {
+            Free(nullptr, win->keyed[i].ptr);
+        }
     }
     win->keyed.Reset();
 }

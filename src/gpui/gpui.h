@@ -251,6 +251,9 @@ struct KeyedSlot {
     uint32_t key = 0;
     void* ptr = nullptr;
     DropFn drop = nullptr;
+    // Set when the slot was taken through KeyedEntity: the app owns the
+    // memory then, and the window only remembers which entity the key means.
+    EntityId entity = {};
 };
 
 // ─── mouse input ──────────────────────────────────────────────────────────
@@ -476,6 +479,13 @@ enum class CursorKind : uint8_t {
 // Fired by a window timer; GPUI does this with cx.spawn + Timer::after.
 struct TickEvent {
     int ms = 0;
+};
+
+// What GPUI's `on_hover` hands its closure: a `&bool` saying whether the
+// pointer just entered the element or just left it. It fires on the change,
+// not on every move inside.
+struct HoverEvent {
+    bool hovered = false;
 };
 
 // cx.listener(...): a handler plus the entity it runs against. Dispatch looks
@@ -707,6 +717,9 @@ struct El {
     int clickId = 0;
     Func0 onClick;
     Listener listener;
+    // `div().on_hover(..)`. Fires with a HoverEvent when the pointer enters
+    // the element and again when it leaves, never in between.
+    Listener onHover;
     // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
     // what `div().on_mouse_down(..)` is. A press runs this before the click
     // listener above; unlike the click, it carries the full MouseDownEvent.
@@ -827,6 +840,7 @@ struct El {
     El* Click(int v);
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
+    El* OnHover(Listener l);
     El* OnMouseDown(Listener l);
     El* OnMouseUp(Listener l);
     El* OnDragMove(Listener l);
@@ -889,6 +903,7 @@ struct HitRect {
     Bounds bounds = {};
     Func0 onClick;
     Listener listener;
+    Listener onHover;
     Listener onMouseDown;
     Listener onMouseUp;
     Listener onDragMove;
@@ -1812,6 +1827,21 @@ template <typename T>
 T* KeyedState(Ctx* cx, uint32_t key) {
     void* p = WindowKeyedState(cx->win, key, (int)sizeof(T), &EntityDropT<T>);
     return (T*)p;
+}
+
+// The same window-keyed state, as an entity. `use_keyed_state` in Rust hands
+// back an `Entity<T>`, which is what lets the state own timers and listeners
+// of its own; KeyedState above is only a pointer, so nothing can be bound to
+// it. A widget whose behavior outlives one frame — a hover card counting down
+// to open — needs this one.
+EntityId WindowKeyedEntity(Window* win, App* app, uint32_t key, void* fresh,
+                           DropFn drop);
+
+template <typename T>
+Entity<T> KeyedEntity(Ctx* cx, uint32_t key) {
+    Entity<T> e;
+    e.id = WindowKeyedEntity(cx->win, cx->app, key, new T(), &EntityDropT<T>);
+    return e;
 }
 
 // Window-level subscriptions. GPUI spells these window.on_key_down and

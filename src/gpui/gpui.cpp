@@ -511,6 +511,10 @@ El* El::OnClick(Listener l) {
     listener = l;
     return this;
 }
+El* El::OnHover(Listener l) {
+    onHover = l;
+    return this;
+}
 El* El::OnMouseDown(Listener l) {
     onMouseDown = l;
     return this;
@@ -2279,13 +2283,14 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         SliderSetBounds(e->sliderBounds, e->Bounds());
     }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
-        e->onMouseDown.IsValid() || e->onMouseUp.IsValid() ||
-        e->onDragMove.IsValid() || e->slider) {
+        e->onHover.IsValid() || e->onMouseDown.IsValid() ||
+        e->onMouseUp.IsValid() || e->onDragMove.IsValid() || e->slider) {
         HitRect hr;
         hr.id = e->clickId;
         hr.bounds = e->Bounds();
         hr.onClick = e->onClick;
         hr.listener = e->listener;
+        hr.onHover = e->onHover;
         hr.onMouseDown = e->onMouseDown;
         hr.onMouseUp = e->onMouseUp;
         hr.onDragMove = e->onDragMove;
