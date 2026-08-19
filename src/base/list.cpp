@@ -39,6 +39,119 @@ int ListPrevIndex(const ListState* s) {
     return prev >= 0 ? prev : s->count - 1;
 }
 
+void ListSetSections(ListState* s, const int* counts, int n, bool headers,
+                     bool footers) {
+    if (n > kMaxListSections) {
+        n = kMaxListSections;
+    }
+    s->nSections = n < 0 ? 0 : n;
+    s->count = 0;
+    for (int i = 0; i < s->nSections; i++) {
+        int c = counts[i] < 0 ? 0 : counts[i];
+        s->sectionCounts[i] = c;
+        s->count += c;
+    }
+    s->sectionHeaders = headers;
+    s->sectionFooters = footers;
+}
+
+void ListSetCount(ListState* s, int count) {
+    int one = count < 0 ? 0 : count;
+    ListSetSections(s, &one, 1, false, false);
+}
+
+// How many flattened rows a section contributes. An empty one contributes
+// nothing — Rust skips its header and footer with it.
+static int SectionRows(const ListState* s, int section) {
+    int items = s->sectionCounts[section];
+    if (items <= 0) {
+        return 0;
+    }
+    return items + (s->sectionHeaders ? 1 : 0) + (s->sectionFooters ? 1 : 0);
+}
+
+int ListRowCount(const ListState* s) {
+    int total = 0;
+    for (int i = 0; i < s->nSections; i++) {
+        total += SectionRows(s, i);
+    }
+    return total;
+}
+
+ListRow ListRowAt(const ListState* s, int rowIx) {
+    ListRow r;
+    if (rowIx < 0) {
+        return r;
+    }
+    int at = 0;
+    int entry = 0;
+    for (int i = 0; i < s->nSections; i++) {
+        int rows = SectionRows(s, i);
+        if (rowIx >= at + rows) {
+            at += rows;
+            entry += s->sectionCounts[i];
+            continue;
+        }
+        int within = rowIx - at;
+        r.section = i;
+        if (s->sectionHeaders) {
+            if (within == 0) {
+                r.kind = ListRowKind::SectionHeader;
+                return r;
+            }
+            within--;
+        }
+        if (within < s->sectionCounts[i]) {
+            r.kind = ListRowKind::Entry;
+            r.row = within;
+            r.entry = entry + within;
+            return r;
+        }
+        r.kind = ListRowKind::SectionFooter;
+        return r;
+    }
+    return r;
+}
+
+int ListRowOfEntry(const ListState* s, int entry) {
+    if (entry < 0) {
+        return -1;
+    }
+    int at = 0;
+    int seen = 0;
+    for (int i = 0; i < s->nSections; i++) {
+        int items = s->sectionCounts[i];
+        if (items <= 0) {
+            continue;
+        }
+        if (entry < seen + items) {
+            return at + (s->sectionHeaders ? 1 : 0) + (entry - seen);
+        }
+        at += SectionRows(s, i);
+        seen += items;
+    }
+    return -1;
+}
+
+void ListScrollToItem(ListState* s, int entry, ScrollStrategy strategy) {
+    if (s->viewportH <= 0) {
+        return;
+    }
+    int row = ListRowOfEntry(s, entry);
+    if (row < 0) {
+        return;
+    }
+    s->scrollY = VirtualListScrollToRow(ListRowCount(s), s->rowH, row,
+                                        s->scrollY, s->viewportH, strategy);
+}
+
+bool ListShouldLoadMore(const ListState* s, int lastVisibleRow) {
+    if (!s->hasMore || s->loading) {
+        return false;
+    }
+    return ListRowCount(s) - lastVisibleRow <= s->loadMoreThreshold;
+}
+
 static void ListEmit(ListState* s, Ctx* cx, ListEventKind kind, int index,
                      bool secondary) {
     if (!s->onEvent.IsValid()) {
@@ -63,11 +176,15 @@ void ListPerform(ListState* s, Ctx* cx, ListAction act, bool secondary) {
         case ListAction::SelectPrev:
             if (s->count > 0) {
                 ListSelect(s, cx, ListPrevIndex(s));
+                // scroll_to_selected_item: a selection that moved off the
+                // bottom of the viewport brings the viewport with it.
+                ListScrollToItem(s, s->selected, ScrollStrategy::Top);
             }
             break;
         case ListAction::SelectNext:
             if (s->count > 0) {
                 ListSelect(s, cx, ListNextIndex(s));
+                ListScrollToItem(s, s->selected, ScrollStrategy::Bottom);
             }
             break;
         case ListAction::Confirm:
@@ -108,6 +225,11 @@ void ListRightClickRow(ListState* s, Ctx* cx, int ix) {
 void ListState::OnRowClick(ListState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t ix) {
     ListClickRow(self, cx, (int)ix, ev->modifiers.Secondary());
+}
+
+void ListState::OnScroll(ListState* self, Ctx* cx, const ScrollEvent* ev) {
+    self->scrollY = ev->offsetY;
+    Notify(cx);
 }
 
 void ListState::OnRowMouseDown(ListState* self, Ctx* cx,

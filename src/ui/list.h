@@ -26,37 +26,42 @@ struct ListItem {
     El* IntoEl(Str id, Listener onClick, Listener onMouseDown);
 };
 
-// A run of rows under a heading, which is what a delegate's section is.
-struct ListSection {
-    El* header = nullptr;
-    El* footer = nullptr;
-    ListItem* rows[64] = {};
-    int n = 0;
-};
-
-// The list itself, bound to the ListState that answers its keys and clicks
-// the way an Input is bound to an InputState.
+// The list, bound to the ListState that answers its keys and clicks the way
+// an Input is bound to an InputState. The rows come from the caller one at a
+// time rather than all at once: only the ones the viewport can show are ever
+// built, which is what `ListDelegate::render_item` over a virtual list is.
 struct List {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
     Entity<ListState> state = {};
-    ListSection sections[8] = {};
-    int nSections = 0;
-    // The row index the next Item() gets, which is what the state counts in.
-    int nRows = 0;
+    // The delegate. Rust's is a trait with closures over the view; an element
+    // here carries no closure, so it is a pointer to the caller's data and
+    // the three render functions that read it.
+    void* data = nullptr;
+    ListItem* (*item)(Ctx* cx, void* data, int section, int row,
+                      int entry) = nullptr;
+    El* (*header)(Ctx* cx, void* data, int section) = nullptr;
+    El* (*footer)(Ctx* cx, void* data, int section) = nullptr;
     // The search field, when the list is searchable.
     InputState* search = nullptr;
     Listener onSearchFocus;
-    bool loading = false;
-    float maxH = 0;
+    // render_empty: what to show when there is nothing in the list. Null
+    // takes Rust's own — a muted Inbox icon.
+    El* empty = nullptr;
+    float h = 320;
 
     static List* New(Ctx* cx, Str id, Entity<ListState> state);
-    List* Section(El* header, El* footer = nullptr);
-    List* Item(ListItem* item);
+    // The sections and their item counts, which the state flattens.
+    List* Sections(const int* counts, int n);
+    List* Count(int n);
+    List* Items(void* data,
+                ListItem* (*fn)(Ctx*, void*, int section, int row, int entry));
+    List* Headers(El* (*headerFn)(Ctx*, void*, int),
+                  El* (*footerFn)(Ctx*, void*, int) = nullptr);
     List* Searchable(InputState* search, Listener onFocus);
-    List* Loading(bool v);
-    List* MaxH(float px);
+    List* Empty(El* e);
+    List* H(float px);
     El* IntoEl();
 };
 

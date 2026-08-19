@@ -42,8 +42,85 @@ static void AnEmptyListHasNowhereToGo() {
     utassert(ListPrevIndex(&s) == -1);
 }
 
+static void TheFlattenedRowsAreHeaderItemsFooter() {
+    ListState s;
+    const int counts[] = {2, 3};
+    ListSetSections(&s, counts, 2, true, true);
+    // Two sections of two and three items, each with a header and a footer.
+    utassert(s.count == 5);
+    utassert(ListRowCount(&s) == 9);
+
+    ListRow r = ListRowAt(&s, 0);
+    utassert(r.kind == ListRowKind::SectionHeader && r.section == 0);
+    r = ListRowAt(&s, 1);
+    utassert(r.kind == ListRowKind::Entry && r.section == 0 && r.row == 0 &&
+             r.entry == 0);
+    r = ListRowAt(&s, 3);
+    utassert(r.kind == ListRowKind::SectionFooter && r.section == 0);
+    r = ListRowAt(&s, 4);
+    utassert(r.kind == ListRowKind::SectionHeader && r.section == 1);
+    r = ListRowAt(&s, 5);
+    // The second section's first item carries on the item numbering, which is
+    // what the selection is kept as.
+    utassert(r.kind == ListRowKind::Entry && r.section == 1 && r.row == 0 &&
+             r.entry == 2);
+    r = ListRowAt(&s, 8);
+    utassert(r.kind == ListRowKind::SectionFooter && r.section == 1);
+
+    // And back the other way.
+    utassert(ListRowOfEntry(&s, 0) == 1);
+    utassert(ListRowOfEntry(&s, 2) == 5);
+    utassert(ListRowOfEntry(&s, 4) == 7);
+    utassert(ListRowOfEntry(&s, 5) == -1);
+}
+
+static void AnEmptySectionTakesItsHeaderWithIt() {
+    ListState s;
+    const int counts[] = {2, 0, 1};
+    ListSetSections(&s, counts, 3, true, true);
+    // The middle section contributes nothing at all — not even its header and
+    // footer, which is what Rust's cache skips.
+    utassert(s.count == 3);
+    utassert(ListRowCount(&s) == 4 + 3);
+    ListRow r = ListRowAt(&s, 4);
+    utassert(r.kind == ListRowKind::SectionHeader && r.section == 2);
+    utassert(ListRowOfEntry(&s, 2) == 5);
+}
+
+static void AListWithNoSectionsIsOneSection() {
+    ListState s;
+    ListSetCount(&s, 4);
+    utassert(s.count == 4);
+    // No header, no footer: a row is an item and nothing else.
+    utassert(ListRowCount(&s) == 4);
+    ListRow r = ListRowAt(&s, 2);
+    utassert(r.kind == ListRowKind::Entry && r.entry == 2);
+    utassert(ListRowOfEntry(&s, 3) == 3);
+    // A row past the end is not an item.
+    utassert(ListRowAt(&s, 9).entry == -1);
+}
+
+static void LoadMoreAsksNearTheEnd() {
+    ListState s;
+    ListSetCount(&s, 100);
+    s.loadMoreThreshold = 20;
+    // Nothing to load: the delegate said there is no more.
+    utassert(!ListShouldLoadMore(&s, 95));
+    s.hasMore = true;
+    utassert(!ListShouldLoadMore(&s, 40));
+    utassert(ListShouldLoadMore(&s, 80));
+    utassert(ListShouldLoadMore(&s, 100));
+    // A list already loading does not ask twice.
+    s.loading = true;
+    utassert(!ListShouldLoadMore(&s, 100));
+}
+
 void TestList() {
     TheKeyTable();
     NextAndPrevWrap();
     AnEmptyListHasNowhereToGo();
+    TheFlattenedRowsAreHeaderItemsFooter();
+    AnEmptySectionTakesItsHeaderWithIt();
+    AListWithNoSectionsIsOneSection();
+    LoadMoreAsksNearTheEnd();
 }
