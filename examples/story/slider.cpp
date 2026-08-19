@@ -109,7 +109,9 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     El* picker = StorySection(cx, "Color Picker", nullptr);
     El* sub = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     sub->Child(StoryTxt(cx, hslText, 14, picked));
-    sub->Child(component::Clipboard::New(cx, hslText)->IntoEl());
+    sub->Child(component::Clipboard::New(cx, StrL("copy-hsl"))
+                   ->Value(hslText)
+                   ->IntoEl());
     StorySectionSubTitle(picker, sub);
     static const char* kChannels[4] = {"Hue", "Saturation", "Lightness",
                                        "Alpha"};

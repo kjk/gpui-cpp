@@ -77,9 +77,10 @@ El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     page->Child(tog);
 
     El* clip = StorySection(cx, "Clipboard", "Clarify the copy action.");
-    StorySectionAdd(clip, component::Clipboard::New(cx, StrL("Hello, World!"))
-                              ->IntoEl()
-                              ->Tip(StrL("Copy to clipboard")));
+    StorySectionAdd(clip, component::Clipboard::New(cx, StrL("clip1"))
+                              ->Value(StrL("Hello, World!"))
+                              ->Tooltip(StrL("Copy to clipboard"))
+                              ->IntoEl());
     page->Child(clip);
 
     El* custom = StorySection(cx, "Custom content",
