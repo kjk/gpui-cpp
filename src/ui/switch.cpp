@@ -61,7 +61,9 @@ El* Switch::IntoEl() {
         trackBg = RgbaOpacity(trackBg, 0.5f);
     }
     Rgba thumbBg = disabled ? RgbaOpacity(th.background, 0.35f) : th.background;
-    El* track = SwitchTrack::New(cx, id)
+    // Rust builds the track's id from `(id, "track")`, so the part is named
+    // apart from the switch it sits in.
+    El* track = SwitchTrack::New(cx, StrDup(a, fmt("%s-track", id)))
                     ->W(trackW)
                     ->H(trackH)
                     ->Pad(2)
@@ -78,13 +80,12 @@ El* Switch::IntoEl() {
                      ->H(thumb)
                      ->Radius(thumb * 0.5f)
                      ->Bg(thumbBg));
-    El* root = gpui::Switch::New(cx, id, disabled ? 0 : HashClickId(id))
+    // gpui_base::Switch owns identity, focus and activation, and hands the
+    // handler the value the activation produces.
+    El* root = gpui::Switch::New(cx, id, checked, disabled, onClick)
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8);
-    if (onClick.IsValid() && !disabled) {
-        root->OnClick(ListenerArg(onClick, !checked));
-    }
     root->Child(track);
     if (label.s) {
         root->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg

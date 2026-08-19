@@ -3,13 +3,11 @@
 
 using namespace gpui;
 
-enum {
-    ClickSwitch = 510
-};
-
-static void OnSwitch(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
-    (void)app;
-    app->switchOn = !app->switchOn;
+// The switch reports the value its activation produces, the way Rust's
+// on_change hands the handler `!checked`.
+static void OnSwitch(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                     intptr_t next) {
+    app->switchOn = next != 0;
     Notify(cx);
 }
 
@@ -44,8 +42,8 @@ El* ShowcaseSwitch(ShowcaseApp* app, Ctx* cx) {
                     TextEl(a, StrL("Install stable releases automatically."))
                         ->Font(12)
                         ->Fg(Rgb(0x73, 0x73, 0x73)))))
-        ->Child(Switch::New(cx, StrL("example-switch"), ClickSwitch)
-                    ->OnClick(Listen(cx, &OnSwitch))
+        ->Child(Switch::New(cx, StrL("example-switch"), on, false,
+                            Listen(cx, &OnSwitch))
                     ->Child(track));
 }
 
