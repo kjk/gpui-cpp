@@ -1,91 +1,144 @@
 #include "Story.h"
 
 struct StepperStory {
-    int stepper = 1;
+    // One step per stepper, the way the Rust story keeps four.
+    int step[4] = {1, 0, 2, 0};
+    bool disabled = false;
     StoryToolbarState toolbar;
 
     static El* Render(StepperStory* self, Ctx* cx);
 };
 
-static void SetStep(StepperStory* self, Ctx*, const ClickEvent*, intptr_t i) {
-    self->stepper = (int)i;
+// One handler per stepper, which is what the Rust story's four closures are:
+// the argument is the step the stepper reports.
+static void SetStep0(StepperStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t step) {
+    self->step[0] = (int)step;
+    Notify(cx);
+}
+static void SetStep1(StepperStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t step) {
+    self->step[1] = (int)step;
+    Notify(cx);
+}
+static void SetStep2(StepperStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t step) {
+    self->step[2] = (int)step;
+    Notify(cx);
+}
+static void SetStep3(StepperStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t step) {
+    self->step[3] = (int)step;
+    Notify(cx);
+}
+
+static void ToggleDisabled(StepperStory* self, Ctx* cx, const ClickEvent*) {
+    self->disabled = !self->disabled;
+    Notify(cx);
+}
+
+// The label under a step, and the description under that.
+static El* StepText(Ctx* cx, Str title, const char* desc, bool center) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* col = Div(a)->FlexCol();
+    if (center) {
+        col->ItemsCenter();
+    }
+    col->Child(StoryTxt(cx, title, 14, th.foreground));
+    if (desc) {
+        col->Child(StoryTxt(cx, Str(desc), 14, th.mutedFg));
+    }
+    return col;
 }
 
 El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
-    page->Child(StoryToolbar(cx, self));
+    El* bar = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+    bar->Child(StoryToolbar(cx, self)->Grow());
+    // Rust hangs this off the toolbar's Options dropdown; a checkbox says the
+    // same thing without a menu.
+    bar->Child(component::Checkbox::New(cx, StrL("stepper-disabled"))
+                   ->Label(StrL("Disabled"))
+                   ->Checked(self->disabled)
+                   ->OnClick(Listen(cx, &ToggleDisabled))
+                   ->IntoEl());
+    page->Child(bar);
 
     El* h = StorySection(cx, "Horizontal Stepper", nullptr);
-    StorySectionAdd(h, component::Stepper::New(cx)
-                           ->Step(StrL("Step 1"))
-                           ->Step(StrL("Step 2"))
-                           ->Step(StrL("Step 3"))
-                           ->Current(self->stepper)
-                           ->OnChange(Listen(cx, &SetStep))
-                           ->IntoEl());
+    StorySectionAdd(
+        h, component::Stepper::New(cx, StrL("stepper0"))
+               ->WithSize(self->toolbar.size)
+               ->Disabled(self->disabled)
+               ->SelectedIndex(self->step[0])
+               ->Item(component::StepperItem::New(cx)
+                          ->Child(StepText(cx, StrL("Step 1"), nullptr, false)))
+               ->Item(component::StepperItem::New(cx)
+                          ->Child(StepText(cx, StrL("Step 2"), nullptr, false)))
+               ->Item(component::StepperItem::New(cx)
+                          ->Child(StepText(cx, StrL("Step 3"), nullptr, false)))
+               ->OnClick(Listen(cx, &SetStep0))
+               ->IntoEl());
     page->Child(h);
 
     El* ic = StorySection(cx, "Icon Stepper", nullptr);
-    StorySectionAdd(ic, component::Stepper::New(cx)
-                            ->Step(StrL("Order Details"), IconName::Inbox)
-                            ->Step(StrL("Shipping"), IconName::Bot)
-                            ->Step(StrL("Preview"), IconName::Eye)
-                            ->Step(StrL("Finish"), IconName::CircleCheck)
-                            ->Current(self->stepper)
-                            ->OnChange(Listen(cx, &SetStep))
-                            ->IntoEl());
+    static const IconName kIcons[4] = {IconName::Calendar, IconName::Inbox,
+                                       IconName::Frame, IconName::Info};
+    static const char* kIconLabels[4] = {"Order Details", "Shipping", "Preview",
+                                         "Finish"};
+    component::Stepper* icons = component::Stepper::New(cx, StrL("stepper1"))
+                                    ->WithSize(self->toolbar.size)
+                                    ->Disabled(self->disabled)
+                                    ->SelectedIndex(self->step[1])
+                                    ->OnClick(Listen(cx, &SetStep1));
+    for (int i = 0; i < 4; i++) {
+        icons->Item(component::StepperItem::New(cx)->Icon(kIcons[i])->Child(
+            StepText(cx, Str(kIconLabels[i]), nullptr, false)));
+    }
+    StorySectionAdd(ic, icons->IntoEl());
     page->Child(ic);
 
     El* v = StorySection(cx, "Vertical Stepper", nullptr);
-    El* vCol = Div(a)->FlexCol()->Gap(0)->W(360);
-    const char* titles[] = {"Step 1", "Step 2", "Step 3", "Step 4"};
-    const char* descs[] = {"Description for step 1.", "Description for step 2.",
-                           "Description for step 3.",
-                           "Description for step 4."};
-    const Theme& th = cx->theme();
-    // A vertical stepper draws the connector down the marker column.
-    static const IconName kStepIcons[4] = {IconName::Building2,
-                                           IconName::Asterisk, IconName::Folder,
-                                           IconName::CircleCheck};
+    static const IconName kVIcons[4] = {IconName::Building2, IconName::Asterisk,
+                                        IconName::Folder,
+                                        IconName::CircleCheck};
+    static const char* kVTitles[4] = {"Step 1", "Step 2", "Step 3", "Step 4"};
+    static const char* kVDescs[4] = {
+        "Description for step 1.", "Description for step 2.",
+        "Description for step 3.", "Description for step 4."};
+    component::Stepper* vert = component::Stepper::New(cx, StrL("stepper3"))
+                                   ->Vertical()
+                                   ->WithSize(self->toolbar.size)
+                                   ->Disabled(self->disabled)
+                                   ->SelectedIndex(self->step[2])
+                                   ->OnClick(Listen(cx, &SetStep2));
     for (int i = 0; i < 4; i++) {
-        bool on = i == self->stepper;
-        bool done = i < self->stepper;
-        El* row = Div(a)->FlexRow()->Gap(12)->ItemsStart();
-        El* rail = Div(a)->FlexCol()->ItemsCenter()->W(24)->Shrink0();
-        El* dot = Div(a)
-                      ->W(24)
-                      ->H(24)
-                      ->Shrink0()
-                      ->Radius(12)
-                      ->ItemsCenter()
-                      ->JustifyCenter()
-                      ->Bg(on || done ? th.primary : th.secondary);
-        dot->Child(IconEl(a, kStepIcons[i], 14)
-                       ->Fg(on || done ? th.primaryFg : th.mutedFg));
-        rail->Child(dot);
+        // pb_8 on all but the last: the room the connector runs down.
+        El* text = StepText(cx, Str(kVTitles[i]), kVDescs[i], false);
         if (i < 3) {
-            rail->Child(Div(a)->W(1)->H(28)->Bg(done ? th.primary : th.border));
+            text->PadB(32);
         }
-        El* text = Div(a)->FlexCol()->Gap(2);
-        text->Child(
-            StoryTxt(cx, Str(titles[i]), 14, on ? th.foreground : th.mutedFg));
-        text->Child(StoryTxt(cx, Str(descs[i]), 14, th.mutedFg));
-        row->Child(rail);
-        row->Child(text);
-        vCol->Child(row);
+        vert->Item(
+            component::StepperItem::New(cx)->Icon(kVIcons[i])->Child(text));
     }
-    StorySectionAdd(v, vCol);
+    StorySectionAdd(v, vert->IntoEl());
     page->Child(v);
 
     El* tc = StorySection(cx, "Text Center", nullptr);
-    StorySectionAdd(tc, component::Stepper::New(cx)
-                            ->Step(StrL("Step 1"))
-                            ->Step(StrL("Step 2"))
-                            ->Step(StrL("Step 3"))
-                            ->Current(self->stepper)
-                            ->OnChange(Listen(cx, &SetStep))
-                            ->IntoEl());
+    static const char* kTcDescs[3] = {"Desc for step 1.", "Desc for step 2.",
+                                      "Desc for step 3."};
+    component::Stepper* center = component::Stepper::New(cx, StrL("stepper4"))
+                                     ->WithSize(self->toolbar.size)
+                                     ->Disabled(self->disabled)
+                                     ->TextCenter(true)
+                                     ->SelectedIndex(self->step[3])
+                                     ->OnClick(Listen(cx, &SetStep3));
+    for (int i = 0; i < 3; i++) {
+        center->Item(component::StepperItem::New(cx)->Child(
+            StepText(cx, StoryFmt(cx, "Step %d", i + 1), kTcDescs[i], true)));
+    }
+    StorySectionAdd(tc, center->IntoEl());
     page->Child(tc);
     return page;
 }

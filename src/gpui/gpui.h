@@ -694,6 +694,10 @@ struct Style {
     bool anchorCenterX = false; // absolute, centered on the parent box
     float anchorGap = 0;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
+    // left(relative(f)) / right(relative(f)): the offset is that fraction of
+    // the parent's width, added to the pixel one. A stepper's connector needs
+    // it to reach from the middle of one step to the middle of the next.
+    float absLeftRel = 0, absRightRel = 0;
     Rgba hoverBg = {};
     bool hasHoverBg = false;
     // hover(|style| style.text_color(..)): what the subtree under a hovered
@@ -876,6 +880,8 @@ struct El {
     El* Left(float v);
     El* Bottom(float v);
     El* Right(float v);
+    El* LeftRel(float frac);
+    El* RightRel(float frac);
     El* HoverBg(Rgba c);
     El* HoverFg(Rgba c);
     El* FocusId(int v);

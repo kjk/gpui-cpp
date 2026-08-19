@@ -6,24 +6,59 @@ namespace gpui {
 
 namespace component {
 
+// One step. Rust's StepperItem is an element of its own with the trigger
+// inside it, so the icon, the content and the disabled flag belong to the
+// step rather than to the row of them.
+struct StepperItem {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    IconName icon = IconName::None;
+    // Rust takes any number of children; one element is the same thing, since
+    // a caller that wants two nests them.
+    El* child = nullptr;
+    bool disabled = false;
+
+    // Filled in by Stepper, which is what knows them.
+    int step = 0;
+    int checkedStep = 0;
+    Axis layout = Axis::Horizontal;
+    bool isLast = false;
+    bool textCenter = false;
+    UiSize size = UiSize::Medium;
+    Listener onClick;
+
+    static StepperItem* New(Ctx* cx);
+    StepperItem* Icon(IconName v);
+    StepperItem* Child(El* e);
+    StepperItem* Disabled(bool v);
+    El* IntoEl();
+};
+
 struct Stepper {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    Str steps[8] = {};
-    IconName icons[8] = {};
+    Str id = {};
+    StepperItem* items[16] = {};
     int n = 0;
-    int current = 0;
-    // A horizontal stepper spreads its steps across the width it is given,
-    // with the connector lines taking the space between them.
+    int step = 0;
+    Axis layout = Axis::Horizontal;
+    bool disabled = false;
+    bool textCenter = false;
+    UiSize size = UiSize::Medium;
+    // A stepper fills the width it is given (w_full on the story's).
     float width = kFill;
-    Listener onChange;
+    Listener onClick;
 
-    static Stepper* New(Ctx* cx);
-    Stepper* Step(Str s);
-    Stepper* Step(Str s, IconName icon);
-    Stepper* Current(int i);
+    static Stepper* New(Ctx* cx, Str id);
+    Stepper* Item(StepperItem* item);
+    Stepper* SelectedIndex(int i);
+    Stepper* Layout(Axis v);
+    Stepper* Vertical();
+    Stepper* TextCenter(bool v);
+    Stepper* Disabled(bool v);
+    Stepper* WithSize(UiSize s);
     Stepper* W(float px);
-    Stepper* OnChange(Listener fn);
+    Stepper* OnClick(Listener fn);
     El* IntoEl();
 };
 

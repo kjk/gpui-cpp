@@ -645,6 +645,14 @@ El* El::Top(float v) {
     style.absTop = v;
     return this;
 }
+El* El::LeftRel(float frac) {
+    style.absLeftRel = frac;
+    return this;
+}
+El* El::RightRel(float frac) {
+    style.absRightRel = frac;
+    return this;
+}
 El* El::Left(float v) {
     style.absLeft = v;
     return this;
@@ -1438,10 +1446,26 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
     if (innerH < 0) {
         innerH = 0;
     }
+    // left(relative(f)) folds into the pixel offset before anything uses it.
+    float absL = c->style.absLeft;
+    float absR = c->style.absRight;
+    if (c->style.absLeftRel != 0) {
+        absL = (absL == kAuto ? 0.f : absL) + innerW * c->style.absLeftRel;
+    }
+    if (c->style.absRightRel != 0) {
+        absR = (absR == kAuto ? 0.f : absR) + innerW * c->style.absRightRel;
+    }
     if (c->style.width == kFill) {
         aw = innerW;
     } else if (c->style.width >= 0) {
         aw = c->style.width;
+    } else if (absL != kAuto && absR != kAuto && c->style.width == kAuto) {
+        // Both edges pinned and no width of its own: the box spans between
+        // them, which is CSS's stretch and what left_0().right_0() asks for.
+        aw = innerW - absL - absR;
+        if (aw < 0) {
+            aw = 0;
+        }
     } else {
         aw = 10000.f;
     }
@@ -1449,20 +1473,43 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
         ah = innerH;
     } else if (c->style.height >= 0) {
         ah = c->style.height;
+    } else if (c->style.absTop != kAuto && c->style.absBottom != kAuto &&
+               c->style.height == kAuto) {
+        ah = innerH - c->style.absTop - c->style.absBottom;
+        if (ah < 0) {
+            ah = 0;
+        }
     } else {
         ah = 10000.f;
     }
+    bool spanX = absL != kAuto && absR != kAuto && c->style.width == kAuto;
+    bool spanY = c->style.absTop != kAuto && c->style.absBottom != kAuto &&
+                 c->style.height == kAuto;
+    // A span is definite for this pass only: layout runs more than once and
+    // the first pass can see a parent that has no width yet, so writing the
+    // result back into the style would pin the box at what that pass made of
+    // it.
+    float savedW = c->style.width;
+    float savedH = c->style.height;
+    if (spanX) {
+        c->style.width = aw;
+    }
+    if (spanY) {
+        c->style.height = ah;
+    }
     LayoutEl(ctx, c, ax, ay, aw, ah, inheritFont, inheritFg);
-    if (c->style.absLeft != kAuto) {
-        ax = parent->x + c->style.absLeft;
+    c->style.width = savedW;
+    c->style.height = savedH;
+    if (absL != kAuto) {
+        ax = parent->x + absL;
     }
     if (c->style.absTop != kAuto) {
         ay = parent->y + c->style.absTop;
     }
-    if (c->style.absRight != kAuto) {
-        ax = parent->x + parent->w - c->style.absRight - c->w;
+    if (absR != kAuto && !spanX) {
+        ax = parent->x + parent->w - absR - c->w;
     }
-    if (c->style.absBottom != kAuto) {
+    if (c->style.absBottom != kAuto && !spanY) {
         ay = parent->y + parent->h - c->style.absBottom - c->h;
     }
     if (c->style.anchorBelow) {
