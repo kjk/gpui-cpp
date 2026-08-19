@@ -1,11 +1,17 @@
 #include "base/progress.h"
-#include "base/element_ext.h"
 
 namespace gpui {
 
+float ProgressClampValue(float value) {
+    if (value < 0) {
+        return 0;
+    }
+    return value > 100 ? 100 : value;
+}
+
 El* Progress::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id);
 }
 
 El* ProgressTrack::New(Ctx* cx) {

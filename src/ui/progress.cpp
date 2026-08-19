@@ -16,13 +16,7 @@ Progress* Progress::New(Ctx* cx) {
 }
 
 Progress* Progress::Value(float v) {
-    value = v;
-    if (value < 0) {
-        value = 0;
-    }
-    if (value > 100) {
-        value = 100;
-    }
+    value = ProgressClampValue(v);
     return this;
 }
 Progress* Progress::W(float v) {
@@ -61,7 +55,7 @@ ProgressCircle* ProgressCircle::New(Ctx* cx) {
     return p;
 }
 ProgressCircle* ProgressCircle::Value(float v) {
-    value = v;
+    value = ProgressClampValue(v);
     return this;
 }
 ProgressCircle* ProgressCircle::Size(float v) {
