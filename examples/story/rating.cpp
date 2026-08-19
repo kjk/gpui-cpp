@@ -7,8 +7,10 @@ struct RatingStory {
     static El* Render(RatingStory* self, Ctx* cx);
 };
 
-static void SetRating(RatingStory* self, Ctx*, const ClickEvent*, intptr_t v) {
+static void SetRating(RatingStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t v) {
     self->rating = (int)v;
+    Notify(cx);
 }
 
 El* RatingStory::Render(RatingStory* self, Ctx* cx) {
@@ -19,16 +21,16 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
 
     El* def =
         StorySection(cx, "Default", "Select a value directly from the rating.");
-    StorySectionAdd(def, component::Rating::New(cx)
+    StorySectionAdd(def, component::Rating::New(cx, StrL("rating-1"))
                              ->Value(self->rating)
                              ->Max(5)
                              ->WithSize(self->toolbar.size)
-                             ->OnChange(Listen(cx, &SetRating))
+                             ->OnClick(Listen(cx, &SetRating))
                              ->IntoEl());
     page->Child(def);
 
     El* dis = StorySection(cx, "Disabled", nullptr);
-    StorySectionAdd(dis, component::Rating::New(cx)
+    StorySectionAdd(dis, component::Rating::New(cx, StrL("rating-2"))
                              ->Value(2)
                              ->Max(5)
                              ->Color(th.green)
@@ -38,12 +40,12 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
     page->Child(dis);
 
     El* col = StorySection(cx, "Color", nullptr);
-    StorySectionAdd(col, component::Rating::New(cx)
+    StorySectionAdd(col, component::Rating::New(cx, StrL("rating-3"))
                              ->Value(self->rating)
                              ->Max(5)
                              ->Color(th.green)
                              ->WithSize(self->toolbar.size)
-                             ->OnChange(Listen(cx, &SetRating))
+                             ->OnClick(Listen(cx, &SetRating))
                              ->IntoEl());
     page->Child(col);
     return page;
