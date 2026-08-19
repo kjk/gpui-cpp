@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickOtp = 410
-};
-
 static void OnOtp(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     (void)app;
     app->otpOn = true;
@@ -20,7 +16,7 @@ El* ShowcaseOtpInput(ShowcaseApp* app, Ctx* cx) {
     if (active > 5) {
         active = 5;
     }
-    El* cells = OtpInput::New(cx, ClickOtp)
+    El* cells = OtpInput::New(cx, StrL("example-otp"))
                     ->OnClick(Listen(cx, &OnOtp))
                     ->FlexRow()
                     ->Gap(4);

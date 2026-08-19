@@ -41,6 +41,7 @@ void TestTextBoundary();
 void TestSlider();
 void TestPagination();
 void TestNumberInput();
+void TestOtpInput();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();

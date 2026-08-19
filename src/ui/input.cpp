@@ -433,7 +433,7 @@ El* OtpInput::IntoEl() {
     }
     Rgba fg = disabled ? th.mutedFg : th.secondaryFg;
     // gap_5 between the groups, gap_1 inside one.
-    El* row = gpui::OtpInput::New(cx, HashClickId(id.s ? id : StrL("otp")))
+    El* row = gpui::OtpInput::New(cx, id.s ? id : StrL("otp"))
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(20);
