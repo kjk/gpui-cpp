@@ -24,6 +24,7 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     bool open = app->collapsibleOpen;
     return Collapsible::New(cx)
+        ->FlexCol()
         ->Open(open)
         ->Child(Div(a)
                     ->W(256)

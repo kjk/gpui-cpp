@@ -5,8 +5,13 @@ namespace gpui {
 Collapsible* Collapsible::New(Ctx* cx) {
     Arena* a = cx->a;
     Collapsible* c = ArenaNew<Collapsible>(a);
-    c->root = Div(a)->FlexCol();
+    c->root = Div(a);
     return c;
+}
+
+Collapsible* Collapsible::FlexCol() {
+    root->FlexCol();
+    return this;
 }
 
 Collapsible* Collapsible::Open(bool v) {

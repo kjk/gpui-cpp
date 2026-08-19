@@ -26,7 +26,10 @@ Collapsible* Collapsible::Content(El* e) {
 }
 
 El* Collapsible::IntoEl() {
+    // The unstyled root has no direction of its own, as Rust's plain div()
+    // does not; a collapsible stacks its trigger over its content.
     return gpui::Collapsible::New(cx)
+        ->FlexCol()
         ->Open(open)
         ->Child(trigger)
         ->Content(content)
