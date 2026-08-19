@@ -39,6 +39,7 @@ void TestFrameSampler();
 void TestTitleBar();
 void TestTextBoundary();
 void TestSlider();
+void TestPagination();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();

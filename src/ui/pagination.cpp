@@ -39,65 +39,13 @@ Pagination* Pagination::OnChange(Listener fn) {
     return this;
 }
 
-// crates/base/src/pagination.rs calculate_items: the first and last page
-// always show, with the window around the current one and an ellipsis for
-// each gap.
-struct PageItem {
-    int page = 0; // 0 for an ellipsis
-    int from = 0; // the range an ellipsis stands for
-    int to = 0;
-};
-
-static int PageItems(int current, int total, int maxVisible, PageItem* out,
-                     int cap) {
-    int n = 0;
-    if (total <= 1) {
-        return 0;
-    }
-    if (maxVisible < 5) {
-        maxVisible = 5;
-    }
-    if (total <= maxVisible) {
-        for (int i = 1; i <= total && n < cap; i++) {
-            out[n].page = i;
-            n++;
-        }
-        return n;
-    }
-    out[n].page = 1;
-    n++;
-    int side = (maxVisible - 3) / 2;
-    int start = current <= side + 1          ? 2
-                : current > total - side - 1 ? total - side - 1
-                                             : current - side;
-    if (start > 2 && n < cap) {
-        out[n].page = 0;
-        out[n].from = 2;
-        out[n].to = start - 1;
-        n++;
-    }
-    int end = current >= total - side ? total - 1
-              : current <= side + 1   ? side + 2
-                                      : current + side;
-    for (int i = start; i <= end && n < cap; i++) {
-        out[n].page = i;
-        n++;
-    }
-    if (end < total - 1 && n < cap) {
-        out[n].page = 0;
-        out[n].from = end + 1;
-        out[n].to = total - 1;
-        n++;
-    }
-    if (n < cap) {
-        out[n].page = total;
-        n++;
-    }
-    return n;
-}
-
 El* Pagination::IntoEl() {
     Str base = id.s ? id : StrL("pagination");
+    // gpui_base::PaginationState owns the clamping, the bounds and the
+    // ellipsis window; this layer only paints what it is told.
+    PaginationState st = PaginationStateNew(page, total);
+    st.visiblePages = visiblePages;
+    st.disabled = disabled;
     El* row = gpui::Pagination::New(cx, base)
                   ->FlexRow()
                   ->PadX(8)
@@ -105,8 +53,10 @@ El* Pagination::IntoEl() {
                   ->Gap(4)
                   ->ItemsCenter();
     // The nav buttons are ghost and compact; only the icon shows when compact.
-    bool hasPrev = page > 1 && !disabled;
-    bool hasNext = page < total && !disabled;
+    int prevPage = PaginationPrevPage(&st);
+    int nextPage = PaginationNextPage(&st);
+    bool hasPrev = prevPage != 0;
+    bool hasNext = nextPage != 0;
     Button* prev = Button::New(cx, StrDup(a, fmt("%s-prev", base)))
                        ->Ghost()
                        ->Compact()
@@ -125,15 +75,15 @@ El* Pagination::IntoEl() {
         next->Label(StrL("Next"))->Extra(IconEl(a, IconName::ChevronRight, 16));
     }
     if (hasPrev && onChange.IsValid()) {
-        prev->OnClick(ListenerArg(onChange, page - 1));
+        prev->OnClick(ListenerArg(onChange, prevPage));
     }
     if (hasNext && onChange.IsValid()) {
-        next->OnClick(ListenerArg(onChange, page + 1));
+        next->OnClick(ListenerArg(onChange, nextPage));
     }
     row->Child(prev->IntoEl());
     if (!compact) {
-        PageItem items[32];
-        int n = PageItems(page, total, visiblePages, items, 32);
+        PaginationItem items[32];
+        int n = PaginationItems(&st, items, 32);
         for (int i = 0; i < n; i++) {
             if (items[i].page == 0) {
                 row->Child(
@@ -159,7 +109,8 @@ El* Pagination::IntoEl() {
             } else {
                 b->Ghost();
             }
-            if (!selected && !disabled && onChange.IsValid()) {
+            if (onChange.IsValid() &&
+                PaginationCanRequest(&st, items[i].page)) {
                 b->OnClick(ListenerArg(onChange, items[i].page));
             }
             row->Child(b->IntoEl());
