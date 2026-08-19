@@ -18,12 +18,12 @@ extern const char* gTestSuite;
 void TestFailed(const char* cond, const char* file, int line);
 void TestSuite(const char* name);
 
-#define utassert(cond)                                 \
-    do {                                               \
-        gTestChecks++;                                 \
-        if (!(cond)) {                                 \
-            TestFailed(#cond, __FILE__, __LINE__);     \
-        }                                              \
+#define utassert(cond)                             \
+    do {                                           \
+        gTestChecks++;                             \
+        if (!(cond)) {                             \
+            TestFailed(#cond, __FILE__, __LINE__); \
+        }                                          \
     } while (0)
 
 // Floats come out of layout arithmetic, so most comparisons are approximate.
@@ -59,3 +59,4 @@ void TestRope();
 void TestMaskPattern();
 void TestUndoManager();
 void TestInputState();
+void TestList();
