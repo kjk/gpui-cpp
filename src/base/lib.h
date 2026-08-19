@@ -22,6 +22,7 @@
 #include "base/popup.h"
 #include "base/progress.h"
 #include "base/radio.h"
+#include "base/radio_group.h"
 #include "base/resizable.h"
 #include "base/scrollbar.h"
 #include "base/select.h"

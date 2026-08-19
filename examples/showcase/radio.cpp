@@ -28,8 +28,7 @@ static El* RadioDot(Ctx* cx, bool on) {
 static El* RadioRow(Ctx* cx, Str id, Listener onClick, bool on,
                     const char* title, const char* sub, bool disabled) {
     Arena* a = cx->a;
-    El* row = Radio::New(cx, id, 0)
-                  ->OnClick(disabled ? Listener{} : onClick)
+    El* row = Radio::New(cx, id, on, disabled, onClick)
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);

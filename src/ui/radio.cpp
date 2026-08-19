@@ -65,13 +65,12 @@ El* Radio::IntoEl() {
         Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;
         dot->Child(IconEl(a, IconName::Check, box - 5)->Fg(tick));
     }
-    El* row = gpui::Radio::New(cx, id, disabled ? 0 : HashClickId(id))
+    // gpui_base::Radio owns identity, focus and activation, and refuses the
+    // click to the option that is already picked.
+    El* row = gpui::Radio::New(cx, id, checked, disabled, onClick)
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
-    if (onClick.IsValid() && !disabled) {
-        row->OnClick(ListenerArg(onClick, checked ? 0 : 1));
-    }
     row->Child(dot);
     if (label.s || hint.s) {
         // line_height(relative(1.2)) on the column, 1. on the label.
