@@ -38,3 +38,4 @@ void TestScale();
 void TestFrameSampler();
 void TestTitleBar();
 void TestTextBoundary();
+void TestSlider();
