@@ -11,6 +11,15 @@ Scrollable* Scrollable::New(Ctx* cx) {
     s->cx = cx;
     return s;
 }
+Scrollable* Scrollable::New(Ctx* cx, Str id) {
+    Scrollable* s = New(cx);
+    s->id = id;
+    return s;
+}
+Scrollable* Scrollable::OnScroll(Listener fn) {
+    onScroll = fn;
+    return this;
+}
 Scrollable* Scrollable::Child(El* e) {
     child = e;
     return this;
@@ -26,6 +35,10 @@ Scrollable* Scrollable::H(float v) {
 
 El* Scrollable::IntoEl() {
     El* box = Scrollbar::New(cx)->H(h)->ClipY()->ScrollY(scrollY)->W(kFill);
+    if (onScroll.IsValid()) {
+        box->ScrollId(HashClickId(id.s ? id : StrL("scrollable")))
+            ->OnScroll(onScroll);
+    }
     if (child) {
         box->Child(child);
     }

@@ -45,6 +45,7 @@ void TestOtpInput();
 void TestSelect();
 void TestDialog();
 void TestSheet();
+void TestScrollbar();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();

@@ -272,6 +272,80 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
     s->selecting = true;
 }
 
+// ─── scrollbar ────────────────────────────────────────────────────────────
+//
+// crates/base/src/scrollbar.rs installs a MouseDownEvent handler over the
+// bar's bounds and a MouseMoveEvent one for the drag. The arithmetic is in
+// src/base/scrollbar.cpp; this is the routing.
+
+// The scrolled box whose scrollbar band the pointer is in, or null. Innermost
+// first, the way the hit test reads its rects.
+static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y) {
+    for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
+        const ScrollRect& s = ctx->scrolls[i];
+        if (!s.onScroll.IsValid() || s.contentH <= s.bounds.h + 1.f) {
+            continue;
+        }
+        if (y < s.bounds.y || y > s.bounds.Bottom()) {
+            continue;
+        }
+        if (x >= s.bounds.Right() - kScrollbarBandW && x <= s.bounds.Right()) {
+            return &ctx->scrolls[i];
+        }
+    }
+    return nullptr;
+}
+
+static void ScrollbarEmit(Window* win, const ScrollRect* s, float offsetY) {
+    ScrollEvent ev = {s->id, offsetY};
+    ListenerCall(win->app, win, s->onScroll, &ev);
+    AppInvalidate(win);
+}
+
+// The press. Inside the thumb it opens a drag and keeps where it landed;
+// anywhere else on the track the thumb jumps its centre to the press, which
+// is Rust's two branches on `thumb_bounds.contains`.
+static void ScrollbarPress(Window* win, const ScrollRect* s, float y) {
+    float thumb = ScrollbarThumbSize(s->bounds.h, s->bounds.h, s->contentH);
+    float thumbTop =
+        s->bounds.y + ScrollbarThumbPos(s->bounds.h, thumb, s->scrollY,
+                                        s->bounds.h, s->contentH);
+    win->scrollDragId = s->id;
+    if (y >= thumbTop && y <= thumbTop + thumb) {
+        win->scrollDragGrab = y - thumbTop;
+        return;
+    }
+    // A track press grabs the thumb by its middle, so the drag that may
+    // follow carries on from where it just landed.
+    win->scrollDragGrab = thumb * 0.5f;
+    ScrollbarEmit(
+        win, s,
+        ScrollbarOffsetForTrackPress(y, s->bounds.y, s->bounds.h, thumb,
+                                     s->bounds.h, s->contentH));
+}
+
+// The scroll rect of an id, from the frame on screen.
+static const ScrollRect* ScrollRectById(Window* win, int id) {
+    for (int i = win->paint.scrolls.len - 1; i >= 0; i--) {
+        if (win->paint.scrolls[i].id == id) {
+            return &win->paint.scrolls[i];
+        }
+    }
+    return nullptr;
+}
+
+static void ScrollbarDrag(Window* win, float y) {
+    const ScrollRect* s = ScrollRectById(win, win->scrollDragId);
+    if (!s || !s->onScroll.IsValid()) {
+        return;
+    }
+    float thumb = ScrollbarThumbSize(s->bounds.h, s->bounds.h, s->contentH);
+    ScrollbarEmit(
+        win, s,
+        ScrollbarOffsetForDrag(y, win->scrollDragGrab, s->bounds.y, s->bounds.h,
+                               thumb, s->bounds.h, s->contentH));
+}
+
 static void SliderDrag(Window* win, const HitRect* hit, Point at) {
     SliderState* s = hit->slider;
     if (SliderUpdateByPosition(s, hit->sliderAxis, at, s->dragStart)) {
@@ -348,6 +422,11 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     if (pressed && pressed->slider) {
         SliderDrag(win, pressed, {x, y});
     }
+    // The bar keeps every move until the release, wherever the pointer has
+    // got to — the same rule the slider and on_drag_move go by.
+    if (win->scrollDragId && win->mouseDown) {
+        ScrollbarDrag(win, y);
+    }
     // InputState::on_drag_move: the field that took the press keeps every move
     // until the release, wherever the pointer has got to. The button being
     // held is `win->mouseDown` rather than the move event's own flag, the same
@@ -409,6 +488,16 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         AppInvalidate(win);
         return;
     }
+    // The scrollbar sits over whatever it scrolls, so it is asked first: a
+    // press on the bar is the bar's, not the row underneath it. Rust says the
+    // same with cx.stop_propagation().
+    const ScrollRect* bar = ScrollbarAt(&win->paint, x, y);
+    if (bar) {
+        win->mouseDown = true;
+        ScrollbarPress(win, bar, y);
+        AppInvalidate(win);
+        return;
+    }
     const HitRect* hit = HitTestRect(&win->paint, x, y);
     int id = hit ? hit->id : 0;
     win->mouseDown = true;
@@ -465,6 +554,10 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
 
 static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     win->mouseDown = false;
+    // with_unset_drag_pos: the release ends the scrollbar drag wherever it
+    // landed.
+    win->scrollDragId = 0;
+    win->scrollDragGrab = 0;
     if (win->onMouseUp.IsValid()) {
         ListenerCall(win->app, win, win->onMouseUp, &in);
     }

@@ -720,6 +720,7 @@ struct El {
     // `div().on_hover(..)`. Fires with a HoverEvent when the pointer enters
     // the element and again when it leaves, never in between.
     Listener onHover;
+    Listener onScroll;
     // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
     // what `div().on_mouse_down(..)` is. A press runs this before the click
     // listener above; unlike the click, it carries the full MouseDownEvent.
@@ -840,6 +841,10 @@ struct El {
     El* Click(int v);
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
+    // The scrollbar's own handler. Rust's scrollbar writes straight into the
+    // shared ScrollHandle; here the view owns the offset, so dragging the
+    // thumb or pressing the track reports one for it to store.
+    El* OnScroll(Listener l);
     El* OnHover(Listener l);
     El* OnMouseDown(Listener l);
     El* OnMouseUp(Listener l);
@@ -915,10 +920,30 @@ struct HitRect {
     InputState* input = nullptr;
 };
 
+// A scrolled box the frame painted, and the scrollbar drawn down its right
+// edge. Rust's scrollbar reaches its ScrollHandle directly; the offset here
+// belongs to whichever view passed it in through El::ScrollY, so a press on
+// the bar reports the offset it computed and the view stores it.
 struct ScrollRect {
     int id = 0;
     Bounds bounds = {};
     float contentH = 0;
+    float scrollY = 0;
+    Listener onScroll;
+};
+
+// The scrollbar as it is drawn: a 6-DIP thumb inset from the right edge. The
+// band a press counts in is the pair together, so the target is wide enough to
+// aim at without reaching into the content.
+const float kScrollbarThumbW = 6.f;
+const float kScrollbarThumbMargin = 4.f;
+const float kScrollbarBandW = kScrollbarThumbW + kScrollbarThumbMargin * 2.f;
+
+// What El::OnScroll hands its handler: the box that was scrolled and where it
+// should now be. Positive-down, as El::ScrollY takes it.
+struct ScrollEvent {
+    int id = 0;
+    float offsetY = 0;
 };
 
 struct TextHit {
@@ -1651,6 +1676,10 @@ struct Window {
     // GPUI's drag gives an element for free. 0 when nothing is held.
     int pressedId = 0;
     bool eatReturn = false;
+    // The scrollbar being dragged, and how far into its thumb the press
+    // landed. GPUI keeps the same pair in ScrollbarState::drag_pos.
+    int scrollDragId = 0;
+    float scrollDragGrab = 0;
     InputState* input = nullptr;
     // This window's one TooltipOverlay. Created on first use, the way a
     // field's blink cursor is.

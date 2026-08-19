@@ -28,6 +28,14 @@ struct ScrollbarStory {
     static El* Render(ScrollbarStory* self, Ctx* cx);
 };
 
+// The bar reports the offset it worked out; the view owns scrollY, so it is
+// the one that stores it. Rust's scrollbar writes into a shared ScrollHandle
+// instead, which comes to the same thing.
+static void ScrollTo(ScrollbarStory* self, Ctx* cx, const ScrollEvent* ev) {
+    self->scrollY = ev->offsetY;
+    Notify(cx);
+}
+
 static void ToggleDatasetMenu(ScrollbarStory* self, Ctx* cx,
                               const ClickEvent*) {
     self->menuOpen = !self->menuOpen;
@@ -75,7 +83,9 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                     ->PadY(4)
                     ->Border(1, th.border)
                     ->ClipY()
-                    ->ScrollY(self->scrollY);
+                    ->ScrollY(self->scrollY)
+                    ->ScrollId(HashClickId(StrL("scrollbar-list")))
+                    ->OnScroll(Listen(cx, &ScrollTo));
     int count = kDatasets[self->dataset].count;
     // Only what can show is built; the Rust list is virtualized.
     int visible = count < 40 ? count : 40;

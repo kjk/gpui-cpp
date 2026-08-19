@@ -1,4 +1,5 @@
 #include "gpui/gpui.h"
+#include "base/scrollbar.h"
 #include "gpui/paint.h"
 #include "gpui/svg.h"
 
@@ -509,6 +510,10 @@ El* El::OnClick(Func0 fn) {
 }
 El* El::OnClick(Listener l) {
     listener = l;
+    return this;
+}
+El* El::OnScroll(Listener l) {
+    onScroll = l;
     return this;
 }
 El* El::OnHover(Listener l) {
@@ -2305,6 +2310,8 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.id = e->scrollId;
         sr.bounds = e->Bounds();
         sr.contentH = e->contentH;
+        sr.scrollY = e->scrollY;
+        sr.onScroll = e->onScroll;
         ctx->scrolls.Append(sr);
     }
 
@@ -2476,29 +2483,13 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
 
     if (e->style.overflowY == OverflowY::Scroll && e->contentH > e->h + 1.f &&
         e->h > 0) {
-        float view = e->h;
-        float content = e->contentH;
-        float thumbH = view * (view / content);
-        if (thumbH < 48.f) {
-            thumbH = 48.f;
-        }
-        if (thumbH > view) {
-            thumbH = view;
-        }
-        float maxScroll = content - view;
-        if (maxScroll < 1.f) {
-            maxScroll = 1.f;
-        }
-        float t = e->scrollY / maxScroll;
-        if (t < 0) {
-            t = 0;
-        }
-        if (t > 1) {
-            t = 1;
-        }
-        float thumbW = 6.f;
-        float thumbX = e->x + e->w - thumbW - 4.f;
-        float thumbY = e->y + t * (view - thumbH);
+        // The same three numbers the press and drag arithmetic goes by, so
+        // what is drawn and what is grabbed cannot drift apart.
+        float thumbH = ScrollbarThumbSize(e->h, e->h, e->contentH);
+        float thumbW = kScrollbarThumbW;
+        float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
+        float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
+                                                e->contentH);
         FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
                   ThemeNow().scrollbarThumb);
     }
