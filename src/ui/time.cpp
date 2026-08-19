@@ -147,8 +147,7 @@ El* Calendar::IntoEl() {
             bool active = !muted && d == day;
             bool today = !muted && year == now.year && month == now.month &&
                          d == now.day;
-            El* cell = CalendarItem::New(
-                           cx, HashClickId(StrDup(a, fmt("d%d-%d", month, d))))
+            El* cell = CalendarItem::New(cx, StrDup(a, fmt("d%d-%d", month, d)))
                            ->W(kCell)
                            ->H(kCell)
                            ->ItemsCenter()

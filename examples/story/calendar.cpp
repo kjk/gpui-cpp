@@ -9,19 +9,26 @@ struct CalendarStory {
     static El* Render(CalendarStory* self, Ctx* cx);
 };
 
+// gpui_base::CalendarState carries the month a calendar is looking at, and
+// stepping off either end of the year carries into the next one — which is
+// the whole reason prev_month and next_month exist rather than `month += 1`.
+static CalendarState CalStateOf(const CalendarStory* self) {
+    CalendarState s;
+    s.currentYear = self->calYear;
+    s.currentMonth = self->calMonth;
+    return s;
+}
 static void CalPrev(CalendarStory* self, Ctx*, const ClickEvent*) {
-    self->calMonth--;
-    if (self->calMonth < 1) {
-        self->calMonth = 12;
-        self->calYear--;
-    }
+    CalendarState s = CalStateOf(self);
+    CalendarPrevMonth(&s);
+    self->calYear = s.currentYear;
+    self->calMonth = s.currentMonth;
 }
 static void CalNext(CalendarStory* self, Ctx*, const ClickEvent*) {
-    self->calMonth++;
-    if (self->calMonth > 12) {
-        self->calMonth = 1;
-        self->calYear++;
-    }
+    CalendarState s = CalStateOf(self);
+    CalendarNextMonth(&s);
+    self->calYear = s.currentYear;
+    self->calMonth = s.currentMonth;
 }
 static void CalDay(CalendarStory* self, Ctx*, const ClickEvent*, intptr_t d) {
     self->calDay = (int)d;

@@ -48,6 +48,7 @@ void TestSheet();
 void TestScrollbar();
 void TestResizable();
 void TestTree();
+void TestCalendar();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();
