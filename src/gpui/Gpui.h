@@ -182,6 +182,11 @@ struct ClickEvent {
     float elY = 0;
     float elW = 0;
     float elH = 0;
+    // How many presses this one is in an unbroken run: 1, 2, 3… GPUI's
+    // MouseDownEvent::click_count, and what Rust's on_double_click tests —
+    // `on_click(|ev, ..| if ev.click_count() == 2 { .. })`. A handler that
+    // does not look at it sees every press, as it did before.
+    int clickCount = 1;
 };
 
 // Portable key codes. The values are the Win32 VK_* ones, so the Windows
@@ -233,6 +238,8 @@ struct MouseEvent {
     float y = 0;
     int button = 1; // 1 left, 2 right, 0 for moves
     int id = 0;     // click id under the cursor, when there is one
+    // The press count, as on ClickEvent. 1 for a move or a release.
+    int clickCount = 1;
 };
 
 // The pointer shape the window asks the OS for. GPUI spells this
@@ -736,6 +743,18 @@ const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
 const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y);
 int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest);
 int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
+// crates/base/src/text_boundary.rs. The byte range of the word around `off`
+// — a run of word characters, or the run of spaces when the offset is in
+// one, or the single character otherwise. False when there is nothing there.
+bool TextWordRangeAt(Str s, int off, int* outA, int* outB);
+// The same for the line: back to the previous newline, on to the next.
+void TextLineRangeAt(Str s, int off, int* outA, int* outB);
+// points_for_multi_click: the document range a press of `clickCount` selects
+// under (x, y) — 2 takes the word, 3 or more the whole run — in the same
+// offsets TextHitOffsetAt and CopyTextHits speak. False for a single click,
+// or when no selectable text is there.
+bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
+                         int* outA, int* outB);
 int HashClickId(Str s);
 
 // Reserved click ids for custom window chrome (WM_NCHITTEST).
@@ -813,6 +832,14 @@ struct Window {
     bool running = true;
     bool anim = false;
     bool mouseDown = false;
+    // The multi-click run in progress: when the last press landed, where, and
+    // with which button, so WindowClickCount can tell the next press apart
+    // from a second click. GPUI keeps the same three in its platform layer.
+    double lastDownAt = 0;
+    float lastDownX = 0;
+    float lastDownY = 0;
+    int lastDownButton = 0;
+    int clickRun = 0;
     bool eatReturn = false;
     LineInput* input = nullptr;
     Overlay overlay = {};

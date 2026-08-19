@@ -464,6 +464,12 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     XFlush(gDpy);
 }
 
+int PlatDoubleClickMs() {
+    // X11 keeps no double-click interval of its own; 400 ms is what GTK and
+    // Qt default to.
+    return 400;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     if (!win || !win->plat || !text.s || text.len <= 0) {
         return;
@@ -592,12 +598,16 @@ static void HandleEvent(App* app, XEvent* ev) {
                     ShowWindowMenu(win, ev->xbutton.x_root, ev->xbutton.y_root);
                     break;
                 }
-                WindowMouseDown(win, x, y, 2);
+                WindowMouseDown(win, x, y, 2, WindowClickCount(win, x, y, 2));
                 break;
             }
             if (b != Button1) {
                 break;
             }
+            // Before the chrome, because the chrome needs the answer: the
+            // caption drags on the first press and zooms on the second, and
+            // handing the drag to the window manager first would swallow it.
+            int clicks = WindowClickCount(win, x, y, 1);
             // The resize band and the custom chrome are claimed before the
             // element tree sees the press, the way WM_NCHITTEST takes both
             // on Windows.
@@ -621,25 +631,14 @@ static void HandleEvent(App* app, XEvent* ev) {
                 break;
             }
             if (chrome == ClickWinCaption) {
-                StartMoveDrag(win, ev->xbutton.x_root, ev->xbutton.y_root);
+                if (clicks == 2) {
+                    AppToggleMaximize(win);
+                } else {
+                    StartMoveDrag(win, ev->xbutton.x_root, ev->xbutton.y_root);
+                }
                 break;
             }
-            // X11 has no double-click event; two presses inside 400 ms at
-            // roughly the same spot is what every toolkit calls one.
-            static Time lastPress = 0;
-            static int lastX = 0;
-            static int lastY = 0;
-            bool dbl = ev->xbutton.time - lastPress < 400 &&
-                       abs(ev->xbutton.x - lastX) < 4 &&
-                       abs(ev->xbutton.y - lastY) < 4;
-            lastPress = ev->xbutton.time;
-            lastX = ev->xbutton.x;
-            lastY = ev->xbutton.y;
-            if (dbl) {
-                WindowDoubleClick(win, x, y);
-                break;
-            }
-            WindowMouseDown(win, x, y, 1);
+            WindowMouseDown(win, x, y, 1, clicks);
             break;
         }
         case ButtonRelease:

@@ -135,7 +135,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_RBUTTONDOWN: {
             float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowMouseDown(win, x, y, 2);
+            WindowMouseDown(win, x, y, 2, WindowClickCount(win, x, y, 2));
             return 0;
         }
         case WM_NCCALCSIZE: {
@@ -254,23 +254,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_NCMOUSELEAVE:
             WindowMouseLeave(win);
             break;
-        case WM_LBUTTONDOWN: {
+        // The class has CS_DBLCLKS, so the second press of a run arrives as
+        // WM_LBUTTONDBLCLK instead of WM_LBUTTONDOWN. It is still a press and
+        // still has to reach the element under it — Win32 only renamed the
+        // message. WindowClickCount is what numbers it, and what numbers the
+        // third press, which Win32 has no message for at all.
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK: {
             win->paint.dpi = HostDpi(hwnd);
             float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowMouseDown(win, x, y, 1);
+            WindowMouseDown(win, x, y, 1, WindowClickCount(win, x, y, 1));
             return 0;
         }
         case WM_LBUTTONUP: {
             float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
             WindowMouseUp(win, x, y, 1);
-            return 0;
-        }
-        case WM_LBUTTONDBLCLK: {
-            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowDoubleClick(win, x, y);
             return 0;
         }
         case WM_NCLBUTTONDOWN:
@@ -390,6 +390,10 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     LPCWSTR name = kind == CursorKind::IBeam ? IDC_IBEAM : IDC_ARROW;
     win->plat->cursor = LoadCursorW(nullptr, name);
     SetCursor(win->plat->cursor);
+}
+
+int PlatDoubleClickMs() {
+    return (int)GetDoubleClickTime();
 }
 
 void ClipboardSetText(Window* win, Str text) {

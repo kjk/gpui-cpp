@@ -21,11 +21,19 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt);
 // A typed character, already decoded to a codepoint.
 void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt);
 void WindowMouseMove(Window* win, float x, float y);
-void WindowMouseDown(Window* win, float x, float y, int button);
+// `clickCount` is what WindowClickCount answered for this press. Every press
+// comes through here, whatever its count: a double click is two presses, the
+// way GPUI delivers two MouseDownEvents with click_count 1 then 2.
+void WindowMouseDown(Window* win, float x, float y, int button, int clickCount);
 void WindowMouseUp(Window* win, float x, float y, int button);
 void WindowMouseLeave(Window* win);
 void WindowWheel(Window* win, float x, float y, float delta);
-void WindowDoubleClick(Window* win, float x, float y);
+// Count this press against the run before it and answer 1, 2, 3… Called once
+// per press, before the platform decides what the press means — the title bar
+// has to tell a drag from a zoom, and only the count separates them. Windows
+// calls it for WM_LBUTTONDBLCLK too: that message replaces the second
+// WM_LBUTTONDOWN of a run, and there is no message at all for the third.
+int WindowClickCount(Window* win, float x, float y, int button);
 // The timer fired: run whatever is due — the caret flip and any armed
 // timers — repaint if that changed anything, and re-arm through PlatSetTimer
 // for the next deadline. The platform never computes an interval itself.
@@ -70,5 +78,9 @@ void PlatShutdown(App* app);
 void PlatSetTimer(Window* win, int ms);
 // Ask the OS for a pointer shape. Only called when it changes.
 void PlatSetCursor(Window* win, CursorKind kind);
+// The longest pause the OS allows inside one multi-click run, in ms:
+// GetDoubleClickTime() on Windows, [NSEvent doubleClickInterval] on macOS. X11
+// has no such setting, so Linux answers with the 400 ms every toolkit picks.
+int PlatDoubleClickMs();
 
 } // namespace gpui

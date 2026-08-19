@@ -242,6 +242,6 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down);
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta);
 void ShowcaseMouseMove(ShowcaseApp* app, Window* win, float x, float y);
 void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
-                       int button);
+                       int button, int clickCount);
 void ShowcaseMouseUp(ShowcaseApp* app, Window* win, float x, float y,
                      int button);

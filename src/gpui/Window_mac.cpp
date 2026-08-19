@@ -124,6 +124,9 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
     NSPoint p = [self gpuiPoint:event];
     float x = (float)p.x;
     float y = (float)p.y;
+    // Counted before the chrome is claimed: the caption drags on the first
+    // press and zooms on the second, so the chrome needs the answer.
+    int clicks = gpui::WindowClickCount(win, x, y, 1);
     // The custom chrome is claimed before the element tree sees the press,
     // the way WM_NCHITTEST takes it on Windows.
     int chrome = gpui::WindowChromeHit(win, x, y);
@@ -140,18 +143,14 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
         return;
     }
     if (chrome == gpui::ClickWinCaption) {
-        if ([event clickCount] == 2) {
-            gpui::WindowDoubleClick(win, x, y);
+        if (clicks == 2) {
+            gpui::AppToggleMaximize(win);
             return;
         }
         [[self window] performWindowDragWithEvent:event];
         return;
     }
-    if ([event clickCount] == 2) {
-        gpui::WindowDoubleClick(win, x, y);
-        return;
-    }
-    gpui::WindowMouseDown(win, x, y, 1);
+    gpui::WindowMouseDown(win, x, y, 1, clicks);
 }
 
 - (void)mouseUp:(NSEvent*)event {
@@ -161,7 +160,9 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
 
 - (void)rightMouseDown:(NSEvent*)event {
     NSPoint p = [self gpuiPoint:event];
-    gpui::WindowMouseDown(win, (float)p.x, (float)p.y, 2);
+    float x = (float)p.x;
+    float y = (float)p.y;
+    gpui::WindowMouseDown(win, x, y, 2, gpui::WindowClickCount(win, x, y, 2));
 }
 
 - (void)scrollWheel:(NSEvent*)event {
@@ -391,6 +392,13 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     } else {
         [[NSCursor arrowCursor] set];
     }
+}
+
+int PlatDoubleClickMs() {
+    // NSEvent tracks its own clickCount, but the window counts presses in
+    // shared code so all three platforms agree on what a run is; this is the
+    // one number the OS owns.
+    return (int)([NSEvent doubleClickInterval] * 1000);
 }
 
 void ClipboardSetText(Window* win, Str text) {

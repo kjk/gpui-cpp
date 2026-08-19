@@ -37,3 +37,4 @@ void TestPositioner();
 void TestScale();
 void TestFrameSampler();
 void TestTitleBar();
+void TestTextBoundary();

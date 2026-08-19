@@ -72,6 +72,19 @@ static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
         app->menuOpen = false;
         Notify(cx);
     }
+    // A double click takes the word under the pointer and a triple click the
+    // whole run, the way points_for_multi_click does in text_selection.rs.
+    // The button stays down on a word, but the drag does not extend it: the
+    // selection is already the unit the user asked for.
+    int wordA = 0;
+    int wordB = 0;
+    if (TextMultiClickRange(&cx->win->paint, ev->x, ev->y, ev->clickCount,
+                            &wordA, &wordB)) {
+        app->selA = wordA;
+        app->selB = wordB;
+        app->selecting = false;
+        return;
+    }
     int off = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, false);
     if (off >= 0) {
         app->selA = off;

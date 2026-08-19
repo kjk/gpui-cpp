@@ -2450,9 +2450,13 @@ static float DistToInterval(float v, float lo, float hi) {
     return 0.f;
 }
 
-int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
+// The selectable run under (x, y), plus where inside it the point landed.
+// `nearest` widens the search to the closest run when none contains the point,
+// which is what a drag past the end of a paragraph needs.
+static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
+                                  float* outRelX, float* outRelY) {
     if (!ctx) {
-        return -1;
+        return nullptr;
     }
     const TextHit* best = nullptr;
     float bestScore = 1e9f;
@@ -2475,7 +2479,7 @@ int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
         }
     }
     if (!best || !best->text.s) {
-        return -1;
+        return nullptr;
     }
     float relX = x - best->x;
     float relY = y - best->y;
@@ -2493,16 +2497,215 @@ int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
             relY = best->h;
         }
     }
-    int local = TextIndexAt(ctx, best->text, best->font,
-                            best->maxW > 0 ? best->maxW : best->w, best->wrap,
-                            relX, relY);
+    *outRelX = relX;
+    *outRelY = relY;
+    return best;
+}
+
+// The byte offset inside `h` that (relX, relY) points at, clamped into it.
+static int TextHitLocal(PaintCtx* ctx, const TextHit* h, float relX,
+                        float relY) {
+    int local = TextIndexAt(ctx, h->text, h->font, h->maxW > 0 ? h->maxW : h->w,
+                            h->wrap, relX, relY);
     if (local < 0) {
         local = 0;
     }
-    if (local > best->text.len) {
-        local = best->text.len;
+    if (local > h->text.len) {
+        local = h->text.len;
     }
-    return best->docOff + local;
+    return local;
+}
+
+int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
+    float relX = 0;
+    float relY = 0;
+    const TextHit* h = TextHitFind(ctx, x, y, nearest, &relX, &relY);
+    if (!h) {
+        return -1;
+    }
+    return h->docOff + TextHitLocal(ctx, h, relX, relY);
+}
+
+// --- word and line boundaries -------------------------------------------
+// crates/base/src/text_boundary.rs. Two characters join into one word only
+// when they are the same kind and that kind is Word or Whitespace, so a double
+// click on a letter takes the word, one on a space takes the run of spaces,
+// and one on punctuation or a CJK character takes just that character.
+
+enum class CharKind : uint8_t {
+    Word,
+    Whitespace,
+    Newline,
+    Other
+};
+
+static CharKind KindOf(uint32_t c) {
+    bool word = c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
+                (c >= 'A' && c <= 'Z') ||
+                // Latin-1 Supplement through Latin Extended-B, the combining
+                // marks, Cyrillic, and Latin Extended Additional: the ranges
+                // CharacterKind::from spells out.
+                (c >= 0x00C0 && c <= 0x024F) || (c >= 0x0300 && c <= 0x036F) ||
+                (c >= 0x0400 && c <= 0x04FF) || (c >= 0x1E00 && c <= 0x1EFF);
+    if (word) {
+        return CharKind::Word;
+    }
+    if (c == '\n' || c == '\r') {
+        return CharKind::Newline;
+    }
+    // Rust's char::is_whitespace, which is the Unicode White_Space property.
+    bool space = c == ' ' || c == '\t' || c == 0x0B || c == 0x0C || c == 0x85 ||
+                 c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200A) ||
+                 c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F ||
+                 c == 0x3000;
+    return space ? CharKind::Whitespace : CharKind::Other;
+}
+
+// The character at `i` and how many bytes it took. A byte that is not valid
+// UTF-8 counts as one character of its own value: the rules above only ask
+// which class it lands in, and every stray byte lands in the same one.
+static int Utf8At(Str s, int i, uint32_t* out) {
+    const uint8_t* p = (const uint8_t*)s.s + i;
+    uint8_t c = p[0];
+    if (c < 0x80) {
+        *out = c;
+        return 1;
+    }
+    int n = (c & 0xE0) == 0xC0   ? 2
+            : (c & 0xF0) == 0xE0 ? 3
+            : (c & 0xF8) == 0xF0 ? 4
+                                 : 1;
+    if (n == 1 || i + n > s.len) {
+        *out = c;
+        return 1;
+    }
+    uint32_t cp = (uint32_t)(c & (0xFF >> (n + 1)));
+    for (int k = 1; k < n; k++) {
+        if ((p[k] & 0xC0) != 0x80) {
+            *out = c;
+            return 1;
+        }
+        cp = (cp << 6) | (uint32_t)(p[k] & 0x3F);
+    }
+    *out = cp;
+    return n;
+}
+
+// Where the character before `i` starts.
+static int Utf8Prev(Str s, int i) {
+    int j = i - 1;
+    while (j > 0 && ((uint8_t)s.s[j] & 0xC0) == 0x80) {
+        j--;
+    }
+    return j < 0 ? 0 : j;
+}
+
+// clip_offset_left: into the string, then back to a character boundary.
+static int Utf8ClipLeft(Str s, int off) {
+    if (off > s.len) {
+        off = s.len;
+    }
+    if (off < 0) {
+        off = 0;
+    }
+    while (off > 0 && off < s.len && ((uint8_t)s.s[off] & 0xC0) == 0x80) {
+        off--;
+    }
+    return off;
+}
+
+// Rust stops after 128 characters in each direction; a word longer than that
+// is a wall of text, not something a double click should sweep up.
+static const int kWordScanMax = 128;
+
+bool TextWordRangeAt(Str s, int off, int* outA, int* outB) {
+    if (!s.s || s.len <= 0) {
+        return false;
+    }
+    off = Utf8ClipLeft(s, off);
+    if (off >= s.len) {
+        return false;
+    }
+    uint32_t c = 0;
+    int clen = Utf8At(s, off, &c);
+    CharKind kind = KindOf(c);
+    bool joins = kind == CharKind::Word || kind == CharKind::Whitespace;
+    int a = off;
+    int b = off + clen;
+    for (int i = 0; joins && a > 0 && i < kWordScanMax; i++) {
+        int prev = Utf8Prev(s, a);
+        uint32_t pc = 0;
+        Utf8At(s, prev, &pc);
+        if (KindOf(pc) != kind) {
+            break;
+        }
+        a = prev;
+    }
+    for (int i = 0; joins && b < s.len && i < kWordScanMax; i++) {
+        uint32_t nc = 0;
+        int nlen = Utf8At(s, b, &nc);
+        if (KindOf(nc) != kind) {
+            break;
+        }
+        b += nlen;
+    }
+    *outA = a;
+    *outB = b;
+    return true;
+}
+
+void TextLineRangeAt(Str s, int off, int* outA, int* outB) {
+    *outA = 0;
+    *outB = 0;
+    if (!s.s || s.len <= 0) {
+        return;
+    }
+    off = Utf8ClipLeft(s, off);
+    int a = 0;
+    for (int i = off - 1; i >= 0; i--) {
+        if (s.s[i] == '\n') {
+            a = i + 1;
+            break;
+        }
+    }
+    int b = s.len;
+    for (int i = off; i < s.len; i++) {
+        if (s.s[i] == '\n') {
+            b = i;
+            break;
+        }
+    }
+    *outA = a;
+    *outB = b;
+}
+
+bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
+                         int* outA, int* outB) {
+    if (clickCount < 2) {
+        return false;
+    }
+    float relX = 0;
+    float relY = 0;
+    const TextHit* h = TextHitFind(ctx, x, y, false, &relX, &relY);
+    if (!h) {
+        return false;
+    }
+    int local = TextHitLocal(ctx, h, relX, relY);
+    int a = 0;
+    int b = 0;
+    if (clickCount == 2) {
+        if (!TextWordRangeAt(h->text, local, &a, &b)) {
+            return false;
+        }
+    } else {
+        TextLineRangeAt(h->text, local, &a, &b);
+    }
+    if (a >= b) {
+        return false;
+    }
+    *outA = h->docOff + a;
+    *outB = h->docOff + b;
+    return true;
 }
 
 int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {

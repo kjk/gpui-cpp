@@ -226,13 +226,40 @@ void WindowMouseMove(Window* win, float x, float y) {
     }
 }
 
-void WindowMouseDown(Window* win, float x, float y, int button) {
+// How far the pointer may wander between two presses and still be one run.
+// Windows asks the OS with SM_CXDOUBLECLK, which is 4 px on every default
+// install; the other two have no setting to ask for.
+static const float kClickSlop = 4;
+// The title bar is 34 tall; a double click on empty chrome maximizes.
+static const float kCaptionH = 34;
+
+int WindowClickCount(Window* win, float x, float y, int button) {
+    if (!win) {
+        return 1;
+    }
+    double now = TimeNow();
+    float dx = x - win->lastDownX;
+    float dy = y - win->lastDownY;
+    bool sameRun = button == win->lastDownButton &&
+                   now - win->lastDownAt <= PlatDoubleClickMs() / 1000.0 &&
+                   dx * dx + dy * dy <= kClickSlop * kClickSlop;
+    win->clickRun = sameRun ? win->clickRun + 1 : 1;
+    win->lastDownAt = now;
+    win->lastDownX = x;
+    win->lastDownY = y;
+    win->lastDownButton = button;
+    return win->clickRun;
+}
+
+void WindowMouseDown(Window* win, float x, float y, int button,
+                     int clickCount) {
     if (!win) {
         return;
     }
     if (button == 2) {
         if (win->onMouse.IsValid()) {
             MouseEvent ev = {MouseKind::Down, x, y, 2, 0};
+            ev.clickCount = clickCount;
             ListenerCall(win->app, win, win->onMouse, &ev);
         }
         AppInvalidate(win);
@@ -246,9 +273,11 @@ void WindowMouseDown(Window* win, float x, float y, int button) {
     }
     if (win->onMouse.IsValid()) {
         MouseEvent ev = {MouseKind::Down, x, y, 1, id};
+        ev.clickCount = clickCount;
         ListenerCall(win->app, win, win->onMouse, &ev);
     }
     ClickEvent ev = {x, y, 1, id};
+    ev.clickCount = clickCount;
     if (hit) {
         ev.elX = hit->x;
         ev.elY = hit->y;
@@ -262,6 +291,20 @@ void WindowMouseDown(Window* win, float x, float y, int button) {
     }
     if (hit && hit->onClick.IsValid()) {
         hit->onClick.Call();
+    }
+    // TitleBar::on_double_click -> window.zoom_window(), in title_bar.rs. The
+    // press was dispatched first, so an element that put itself in the title
+    // bar still saw it — Rust bubbles the same way. The empty half of the band
+    // counts too, since the gap between a TitleBar's controls is no hit rect
+    // of its own — but only in a window that draws its own title bar: in one
+    // wearing the system caption the top of the client area is ordinary
+    // content, and a double click there is not a zoom. Windows answers
+    // WM_NCHITTEST with HTCAPTION over the caption and never sends that press
+    // here at all, so on that platform this is only the empty half.
+    bool caption = id == ClickWinCaption ||
+                   (id == 0 && win->opts.clientTitleBar && y < kCaptionH);
+    if (clickCount == 2 && caption) {
+        AppToggleMaximize(win);
     }
     AppInvalidate(win);
 }
@@ -294,17 +337,6 @@ void WindowWheel(Window* win, float x, float y, float delta) {
         ListenerCall(win->app, win, win->onWheel, &ev);
     }
     AppInvalidate(win);
-}
-
-void WindowDoubleClick(Window* win, float x, float y) {
-    if (!win) {
-        return;
-    }
-    int id = HitTest(&win->paint, x, y);
-    // The title bar is 34 tall; a double click on empty chrome maximizes.
-    if (id == ClickWinCaption || (id == 0 && y < 34)) {
-        AppToggleMaximize(win);
-    }
 }
 
 // blink_cursor.rs: INTERVAL and PAUSE_DELAY.

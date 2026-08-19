@@ -945,6 +945,17 @@ static void OnMouse(StoryApp* app, Ctx* cx, const MouseEvent* ev) {
     if (button != 1) {
         return;
     }
+    // Two clicks take the word under the pointer, three the whole run —
+    // points_for_multi_click, in text_selection.rs.
+    int wordA = 0;
+    int wordB = 0;
+    if (TextMultiClickRange(&cx->win->paint, x, y, ev->clickCount, &wordA,
+                            &wordB)) {
+        app->selA = wordA;
+        app->selB = wordB;
+        app->selecting = false;
+        return;
+    }
     int off = TextHitOffsetAt(&cx->win->paint, x, y, false);
     if (off >= 0) {
         app->selA = off;

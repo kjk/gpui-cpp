@@ -35,6 +35,7 @@ int GpuiMain(int argc, char** argv) {
     TestScale();
     TestFrameSampler();
     TestTitleBar();
+    TestTextBoundary();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);
