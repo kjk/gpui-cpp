@@ -20,7 +20,7 @@ static void ClosePopover(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 
 El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* trigger = Button::New(cx, StrL("popover-trigger"), 0)
+    El* trigger = Button::New(cx, StrL("popover-trigger"))
                       ->OnClick(Listen(cx, &TogglePopover))
                       ->H(28)
                       ->PadX(12)
@@ -46,7 +46,7 @@ El* ShowcasePopover(ShowcaseApp* app, Ctx* cx) {
                                   ->Font(12)
                                   ->Fg(Rgb(0x73, 0x73, 0x73)))
                       ->Child(Div(a)->FlexRow()->JustifyEnd()->Child(
-                          Button::New(cx, StrL("popover-done"), 0)
+                          Button::New(cx, StrL("popover-done"))
                               ->OnClick(Listen(cx, &ClosePopover))
                               ->H(28)
                               ->PadX(12)

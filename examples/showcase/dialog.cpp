@@ -4,9 +4,7 @@
 using namespace gpui;
 
 enum {
-    ClickDlgOpen = 350,
     ClickDlgCancel = 351,
-    ClickDlgSave = 352,
     ClickDlgField = 353
 };
 
@@ -30,7 +28,7 @@ static void FocusDlgField(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
-    root->Child(Button::New(cx, StrL("open-dialog"), 0)
+    root->Child(Button::New(cx, StrL("open-dialog"))
                     ->OnClick(Listen(cx, &OpenDlg))
                     ->H(28)
                     ->PadX(12)
@@ -82,21 +80,21 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                     // Cancel action. The button inside carries a click id of
                     // its own and the hit test takes the innermost rect, so
                     // it needs the handler too.
-                    ->Child(DialogClose::New(cx, ClickDlgCancel)
-                                ->OnClick(Listen(cx, &CloseDlg))
-                                ->Child(Button::New(cx, StrL("dialog-cancel"),
-                                                    ClickDlgCancel)
-                                            ->OnClick(Listen(cx, &CloseDlg))
-                                            ->H(28)
-                                            ->PadX(12)
-                                            ->ItemsCenter()
-                                            ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                                            ->Child(TextEl(a, StrL("Cancel"))
-                                                        ->Font(12)
-                                                        ->Fg(Rgb(0x17, 0x17,
-                                                                 0x17)))))
-                    ->Child(Button::New(cx, StrL("dialog-save"), ClickDlgSave)
-                                ->OnClick(Listen(cx, &CloseDlg))
+                    ->Child(
+                        DialogClose::New(cx, ClickDlgCancel)
+                            ->OnClick(Listen(cx, &CloseDlg))
+                            ->Child(
+                                Button::New(cx, StrL("dialog-cancel"), false,
+                                            Listen(cx, &CloseDlg))
+                                    ->H(28)
+                                    ->PadX(12)
+                                    ->ItemsCenter()
+                                    ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                                    ->Child(TextEl(a, StrL("Cancel"))
+                                                ->Font(12)
+                                                ->Fg(Rgb(0x17, 0x17, 0x17)))))
+                    ->Child(Button::New(cx, StrL("dialog-save"), false,
+                                        Listen(cx, &CloseDlg))
                                 ->H(28)
                                 ->PadX(12)
                                 ->ItemsCenter()

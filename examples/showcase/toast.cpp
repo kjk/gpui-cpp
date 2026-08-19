@@ -20,7 +20,7 @@ static void HideToast(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 
 El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* btn = Button::New(cx, StrL("show-toast"), 0)
+    El* btn = Button::New(cx, StrL("show-toast"))
                   ->OnClick(Listen(cx, &ShowToast))
                   ->H(28)
                   ->PadX(8)
@@ -54,7 +54,7 @@ El* ShowcaseToast(ShowcaseApp* app, Ctx* cx) {
                                     ->Font(12)
                                     ->Fg(Rgb(0x17, 0x17, 0x17))
                                     ->Semibold())
-                        ->Child(Button::New(cx, StrL("dismiss-toast"), 0)
+                        ->Child(Button::New(cx, StrL("dismiss-toast"))
                                     ->OnClick(Listen(cx, &HideToast))
                                     ->W(24)
                                     ->H(24)

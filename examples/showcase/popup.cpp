@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickPopup = 450
-};
-
 static void OnPopup(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     (void)app;
     app->popupOpen = !app->popupOpen;
@@ -15,17 +11,17 @@ static void OnPopup(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 
 El* ShowcasePopup(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* trigger = Button::New(cx, StrL("popup-trigger"), ClickPopup)
-                      ->OnClick(Listen(cx, &OnPopup))
-                      ->H(28)
-                      ->PadX(12)
-                      ->ItemsCenter()
-                      ->JustifyCenter()
-                      ->Bg(Rgb(0, 0, 0))
-                      ->Child(TextEl(a, app->popupOpen ? StrL("Close popup")
-                                                       : StrL("Open popup"))
-                                  ->Font(12)
-                                  ->Fg(Rgb(0xff, 0xff, 0xff)));
+    El* trigger =
+        Button::New(cx, StrL("popup-trigger"), false, Listen(cx, &OnPopup))
+            ->H(28)
+            ->PadX(12)
+            ->ItemsCenter()
+            ->JustifyCenter()
+            ->Bg(Rgb(0, 0, 0))
+            ->Child(TextEl(a, app->popupOpen ? StrL("Close popup")
+                                             : StrL("Open popup"))
+                        ->Font(12)
+                        ->Fg(Rgb(0xff, 0xff, 0xff)));
     El* content = nullptr;
     if (app->popupOpen) {
         content =

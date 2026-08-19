@@ -11,7 +11,7 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     // Rust wraps the button in a hover target; the button itself has no hover
     // fill.
-    El* btn = Button::New(cx, StrL("tooltip-anchor"), 0)
+    El* btn = Button::New(cx, StrL("tooltip-anchor"))
                   ->H(28)
                   ->PadX(8)
                   ->ItemsCenter()

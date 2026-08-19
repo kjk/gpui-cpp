@@ -15,7 +15,7 @@ static void GoPage(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
 
 static El* PageBtn(Ctx* cx, int p, bool on) {
     Arena* a = cx->a;
-    El* b = Button::New(cx, DupFmt(cx, "page-%d", p), 0)
+    El* b = Button::New(cx, DupFmt(cx, "page-%d", p))
                 ->OnClick(Listen(cx, &GoPage, p))
                 ->W(28)
                 ->H(28)

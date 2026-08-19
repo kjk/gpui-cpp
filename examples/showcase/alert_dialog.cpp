@@ -22,7 +22,7 @@ static void CloseAlert(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* root = Div(a)->FlexCol();
-    root->Child(Button::New(cx, StrL("open-alert-dialog"), 0)
+    root->Child(Button::New(cx, StrL("open-alert-dialog"))
                     ->OnClick(Listen(cx, &OpenAlert))
                     ->H(28)
                     ->PadX(12)
@@ -62,7 +62,7 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
                         ->JustifyEnd()
                         ->Gap(8)
                         ->Child(AlertDialogCancel::New(cx)->Child(
-                            Button::New(cx, StrL("cancel-delete"), 0)
+                            Button::New(cx, StrL("cancel-delete"))
                                 ->OnClick(Listen(cx, &CloseAlert))
                                 ->H(28)
                                 ->PadX(12)
@@ -72,7 +72,7 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
                                             ->Font(12)
                                             ->Fg(Rgb(0x17, 0x17, 0x17)))))
                         ->Child(AlertDialogAction::New(cx)->Child(
-                            Button::New(cx, StrL("confirm-delete"), 0)
+                            Button::New(cx, StrL("confirm-delete"))
                                 ->OnClick(Listen(cx, &CloseAlert))
                                 ->H(28)
                                 ->PadX(12)

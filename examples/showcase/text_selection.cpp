@@ -4,7 +4,6 @@
 using namespace gpui;
 
 enum {
-    ClickSelClear = 530,
     ClickPara = 531
 };
 
@@ -121,33 +120,32 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
                              12, ScGray()));
     }
 
-    El* footer =
-        Div(a)
-            ->H(150)
-            ->Shrink0()
-            ->Pad(12)
-            ->FlexCol()
-            ->Gap(8)
-            ->ItemsStart()
-            ->Bg(ScHover())
-            ->Border(1, ScLine())
-            ->Child(
-                ScTxt(cx,
-                      active ? StrL("Selection active") : StrL("No selection"),
-                      12, ScInk())
-                    ->Semibold())
-            ->Child(preview)
-            ->Child(Button::New(cx, StrL("clear-text-selection"), ClickSelClear)
-                        ->OnClick(Listen(cx, &OnSelClear))
-                        ->H(28)
-                        ->PadX(8)
-                        ->Shrink0()
-                        ->ItemsCenter()
-                        ->JustifyCenter()
-                        ->Border(1, Rgb(0x17, 0x17, 0x17))
-                        ->Child(TextEl(a, StrL("Clear selection"))
-                                    ->Font(12)
-                                    ->Fg(Rgb(0x17, 0x17, 0x17))));
+    El* footer = Div(a)
+                     ->H(150)
+                     ->Shrink0()
+                     ->Pad(12)
+                     ->FlexCol()
+                     ->Gap(8)
+                     ->ItemsStart()
+                     ->Bg(ScHover())
+                     ->Border(1, ScLine())
+                     ->Child(ScTxt(cx,
+                                   active ? StrL("Selection active")
+                                          : StrL("No selection"),
+                                   12, ScInk())
+                                 ->Semibold())
+                     ->Child(preview)
+                     ->Child(Button::New(cx, StrL("clear-text-selection"),
+                                         false, Listen(cx, &OnSelClear))
+                                 ->H(28)
+                                 ->PadX(8)
+                                 ->Shrink0()
+                                 ->ItemsCenter()
+                                 ->JustifyCenter()
+                                 ->Border(1, Rgb(0x17, 0x17, 0x17))
+                                 ->Child(TextEl(a, StrL("Clear selection"))
+                                             ->Font(12)
+                                             ->Fg(Rgb(0x17, 0x17, 0x17))));
 
     return Div(a)
         ->FlexCol()

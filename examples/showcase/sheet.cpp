@@ -24,7 +24,7 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
     // overlay mounts and the trigger jumps.
     El* root =
         Div(a)->FlexCol()->W(kFill)->MinH(256)->ItemsCenter()->JustifyCenter();
-    El* trigger = Button::New(cx, StrL("open-sheet"), 0)
+    El* trigger = Button::New(cx, StrL("open-sheet"))
                       ->OnClick(Listen(cx, &OpenSheet))
                       ->H(28)
                       ->PadX(8)
@@ -74,7 +74,7 @@ El* ShowcaseSheet(ShowcaseApp* app, Ctx* cx) {
                         ->Child(ScTxt(cx, StrL("Notifications  ·  Enabled"), 12,
                                       ScInk())))
             ->Child(Div(a)->PadT(12)->W(kFill)->FlexRow()->JustifyEnd()->Child(
-                Button::New(cx, StrL("close-sheet"), 0)
+                Button::New(cx, StrL("close-sheet"))
                     ->OnClick(Listen(cx, &CloseSheet))
                     ->H(28)
                     ->PadX(12)

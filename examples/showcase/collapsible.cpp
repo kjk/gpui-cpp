@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickCollapsible = 290
-};
-
 static void OnCollapsible(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     (void)app;
     app->collapsibleOpen = !app->collapsibleOpen;
@@ -37,9 +33,8 @@ El* ShowcaseCollapsible(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("@gpui/base · 3 repositories"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17)))
-                    ->Child(Button::New(cx, StrL("collapsible-trigger"),
-                                        ClickCollapsible)
-                                ->OnClick(Listen(cx, &OnCollapsible))
+                    ->Child(Button::New(cx, StrL("collapsible-trigger"), false,
+                                        Listen(cx, &OnCollapsible))
                                 ->W(28)
                                 ->H(28)
                                 ->ItemsCenter()
