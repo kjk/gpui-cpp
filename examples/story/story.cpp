@@ -137,6 +137,8 @@ static const StoryInfo kMeta[StoryCount] = {
     {"rating", "Rating", "A simple interactive star rating component."},
     {"resizable", "Resizable", "The resizable panels."},
     {"scrollbar", "Scrollbar", "Add scrollbar to a scrollable element."},
+    {"searchable-list", "SearchableList",
+     "The searchable, sectioned list behind a Select and a ComboBox."},
     {"select", "Select",
      "Displays a list of options for the user to pick "
      "from—triggered by a button."},
