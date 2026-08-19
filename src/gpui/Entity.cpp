@@ -153,9 +153,9 @@ void WindowOnKey(Window* win, Listener l) {
     }
 }
 
-void WindowOnWheel(Window* win, Listener l) {
+void WindowOnScrollWheel(Window* win, Listener l) {
     if (win) {
-        win->onWheel = l;
+        win->onScrollWheel = l;
     }
 }
 
@@ -177,9 +177,27 @@ void WindowOnUnhandledClick(Window* win, Listener l) {
     }
 }
 
-void WindowOnMouse(Window* win, Listener l) {
+void WindowOnMouseDown(Window* win, Listener l) {
     if (win) {
-        win->onMouse = l;
+        win->onMouseDown = l;
+    }
+}
+
+void WindowOnMouseUp(Window* win, Listener l) {
+    if (win) {
+        win->onMouseUp = l;
+    }
+}
+
+void WindowOnMouseMove(Window* win, Listener l) {
+    if (win) {
+        win->onMouseMove = l;
+    }
+}
+
+void WindowOnMouseExit(Window* win, Listener l) {
+    if (win) {
+        win->onMouseExit = l;
     }
 }
 

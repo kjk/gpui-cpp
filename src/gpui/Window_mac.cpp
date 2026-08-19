@@ -50,6 +50,51 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
 
 // ─── the view ─────────────────────────────────────────────────────────────
 
+namespace gpui {
+
+// GPUI's Modifiers, out of an NSEvent's flags. `platform` is Command, and
+// macOS is the one platform that reports Fn.
+static Modifiers ModsOf(NSEvent* event) {
+    NSEventModifierFlags f = [event modifierFlags];
+    Modifiers m;
+    m.control = (f & NSEventModifierFlagControl) != 0;
+    m.alt = (f & NSEventModifierFlagOption) != 0;
+    m.shift = (f & NSEventModifierFlagShift) != 0;
+    m.platform = (f & NSEventModifierFlagCommand) != 0;
+    m.function = (f & NSEventModifierFlagFunction) != 0;
+    return m;
+}
+
+// An NSEvent buttonNumber as a MouseButton.
+static MouseButton MouseButtonOf(NSInteger number) {
+    switch (number) {
+        case 0:
+            return MouseButton::Left;
+        case 1:
+            return MouseButton::Right;
+        case 2:
+            return MouseButton::Middle;
+        case 3:
+            return MouseButton::NavigateBack;
+        default:
+            return MouseButton::NavigateForward;
+    }
+}
+
+// Rust's Option<MouseButton> on a move: the first button currently held.
+static bool PressedButton(MouseButton* out) {
+    NSUInteger mask = [NSEvent pressedMouseButtons];
+    for (NSInteger i = 0; i < 5; i++) {
+        if (mask & (1u << i)) {
+            *out = MouseButtonOf(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace gpui
+
 @interface GpuiView : NSView {
   @public
     gpui::Window* win;
@@ -110,14 +155,28 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
 
 - (void)mouseMoved:(NSEvent*)event {
     NSPoint p = [self gpuiPoint:event];
-    gpui::WindowMouseMove(win, (float)p.x, (float)p.y);
+    gpui::MouseButton held = gpui::MouseButton::Left;
+    bool any = gpui::PressedButton(&held);
+    gpui::PlatformInput in = gpui::InputMouseMove((float)p.x, (float)p.y, any,
+                                                  held, gpui::ModsOf(event));
+    gpui::WindowDispatchInput(win, &in);
 }
 - (void)mouseDragged:(NSEvent*)event {
     [self mouseMoved:event];
 }
+- (void)rightMouseDragged:(NSEvent*)event {
+    [self mouseMoved:event];
+}
+- (void)otherMouseDragged:(NSEvent*)event {
+    [self mouseMoved:event];
+}
 - (void)mouseExited:(NSEvent*)event {
-    (void)event;
-    gpui::WindowMouseLeave(win);
+    NSPoint p = [self gpuiPoint:event];
+    gpui::MouseButton held = gpui::MouseButton::Left;
+    bool any = gpui::PressedButton(&held);
+    gpui::PlatformInput in = gpui::InputMouseExited((float)p.x, (float)p.y, any,
+                                                    held, gpui::ModsOf(event));
+    gpui::WindowDispatchInput(win, &in);
 }
 
 - (void)mouseDown:(NSEvent*)event {
@@ -126,7 +185,7 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
     float y = (float)p.y;
     // Counted before the chrome is claimed: the caption drags on the first
     // press and zooms on the second, so the chrome needs the answer.
-    int clicks = gpui::WindowClickCount(win, x, y, 1);
+    int clicks = gpui::WindowClickCount(win, x, y, gpui::MouseButton::Left);
     // The custom chrome is claimed before the element tree sees the press,
     // the way WM_NCHITTEST takes it on Windows.
     int chrome = gpui::WindowChromeHit(win, x, y);
@@ -150,30 +209,74 @@ void WindowMacKeyDown(Window* win, NSEvent* event);
         [[self window] performWindowDragWithEvent:event];
         return;
     }
-    gpui::WindowMouseDown(win, x, y, 1, clicks);
+    // first_mouse would be the press that activated the window; a Cocoa view
+    // does not accept the first mouse, so that press never reaches here.
+    gpui::PlatformInput in = gpui::InputMouseDown(
+        gpui::MouseButton::Left, x, y, gpui::ModsOf(event), clicks, false);
+    gpui::WindowDispatchInput(win, &in);
 }
 
-- (void)mouseUp:(NSEvent*)event {
-    NSPoint p = [self gpuiPoint:event];
-    gpui::WindowMouseUp(win, (float)p.x, (float)p.y, 1);
-}
-
-- (void)rightMouseDown:(NSEvent*)event {
+- (void)press:(NSEvent*)event button:(gpui::MouseButton)button {
     NSPoint p = [self gpuiPoint:event];
     float x = (float)p.x;
     float y = (float)p.y;
-    gpui::WindowMouseDown(win, x, y, 2, gpui::WindowClickCount(win, x, y, 2));
+    gpui::PlatformInput in =
+        gpui::InputMouseDown(button, x, y, gpui::ModsOf(event),
+                             gpui::WindowClickCount(win, x, y, button), false);
+    gpui::WindowDispatchInput(win, &in);
+}
+
+- (void)release:(NSEvent*)event button:(gpui::MouseButton)button {
+    NSPoint p = [self gpuiPoint:event];
+    gpui::PlatformInput in =
+        gpui::InputMouseUp(button, (float)p.x, (float)p.y, gpui::ModsOf(event),
+                           gpui::WindowCurrentClickCount(win));
+    gpui::WindowDispatchInput(win, &in);
+}
+
+- (void)mouseUp:(NSEvent*)event {
+    [self release:event button:gpui::MouseButton::Left];
+}
+
+- (void)rightMouseDown:(NSEvent*)event {
+    [self press:event button:gpui::MouseButton::Right];
+}
+
+- (void)rightMouseUp:(NSEvent*)event {
+    [self release:event button:gpui::MouseButton::Right];
+}
+
+// Everything that is not the left or right button: 2 is the middle one, 3 and
+// 4 are the thumb buttons GPUI calls MouseButton::Navigate.
+- (void)otherMouseDown:(NSEvent*)event {
+    [self press:event button:gpui::MouseButtonOf([event buttonNumber])];
+}
+
+- (void)otherMouseUp:(NSEvent*)event {
+    [self release:event button:gpui::MouseButtonOf([event buttonNumber])];
 }
 
 - (void)scrollWheel:(NSEvent*)event {
     NSPoint p = [self gpuiPoint:event];
     // A line of scroll is 48 DIPs, the step the other two windows use; a
-    // precise (trackpad) delta is already in points.
-    float delta = (float)[event scrollingDeltaY];
-    if (![event hasPreciseScrollingDeltas]) {
-        delta *= 48.f;
+    // precise (trackpad) delta is already in points, which is GPUI's
+    // ScrollDelta::Pixels.
+    bool precise = [event hasPreciseScrollingDeltas];
+    float scale = precise ? 1.f : 48.f;
+    float dx = (float)[event scrollingDeltaX] * scale;
+    float dy = (float)[event scrollingDeltaY] * scale;
+    gpui::TouchPhase phase = gpui::TouchPhase::Moved;
+    NSEventPhase ph = [event phase];
+    if (ph & NSEventPhaseBegan) {
+        phase = gpui::TouchPhase::Started;
+    } else if (ph & NSEventPhaseEnded) {
+        phase = gpui::TouchPhase::Ended;
+    } else if (ph & NSEventPhaseCancelled) {
+        phase = gpui::TouchPhase::Cancelled;
     }
-    gpui::WindowWheel(win, (float)p.x, (float)p.y, delta);
+    gpui::PlatformInput in = gpui::InputScrollWheel(
+        (float)p.x, (float)p.y, dx, dy, precise, gpui::ModsOf(event), phase);
+    gpui::WindowDispatchInput(win, &in);
 }
 
 - (void)keyDown:(NSEvent*)event {

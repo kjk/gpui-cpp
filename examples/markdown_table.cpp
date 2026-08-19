@@ -15,9 +15,9 @@ struct MdApp {
     char source[16000];
 };
 
-static void OnWheel(MdApp* app, Ctx* cx, const WheelEvent* ev) {
+static void OnWheel(MdApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
     (void)cx;
-    app->scroll -= ev->delta;
+    app->scroll -= ev->deltaY;
     if (app->scroll < 0) {
         app->scroll = 0;
     }
@@ -101,7 +101,7 @@ int GpuiMain(int argc, char** argv) {
 
     Window* win = WindowOpenView(app, StrL("Markdown Table C++"), 900, 700,
                                  view.id, WinOpts{});
-    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    WindowOnScrollWheel(win, ListenTo(view, &OnWheel));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

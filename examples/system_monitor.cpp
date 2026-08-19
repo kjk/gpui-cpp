@@ -54,11 +54,11 @@ static void OnTick(MonitorApp* app, Ctx*, const TickEvent*) {
     Collect(app);
 }
 
-static void OnWheel(MonitorApp* app, Ctx* cx, const WheelEvent* ev) {
+static void OnWheel(MonitorApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
     (void)cx;
     float x = ev->x;
     float y = ev->y;
-    float delta = ev->delta;
+    float delta = ev->deltaY;
     (void)x;
     if (app->tab != 1) {
         return;
@@ -368,7 +368,7 @@ int GpuiMain(int argc, char** argv) {
     opts.clientTitleBar = true;
     Window* win = WindowOpenView(app, StrL("System Monitor C++"), 680, 600,
                                  view.id, opts);
-    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    WindowOnScrollWheel(win, ListenTo(view, &OnWheel));
     WindowSetInterval(win, 500, ListenTo(view, &OnTick));
     int rc = AppRun(app);
     AppFree(app);

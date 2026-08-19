@@ -626,7 +626,10 @@ static bool TextSelRangeAt(Window* win, float x, float y, int clickCount,
     return true;
 }
 
-void ShowcaseMouseMove(ShowcaseApp* app, Window* win, float x, float y) {
+void ShowcaseMouseMove(ShowcaseApp* app, Window* win,
+                       const MouseMoveEvent* ev) {
+    float x = ev->x;
+    float y = ev->y;
     if (app->component == CompSlider) {
         ShowcaseSliderDrag(app, win, x, y);
     } else if (app->component == CompResizable) {
@@ -639,9 +642,13 @@ void ShowcaseMouseMove(ShowcaseApp* app, Window* win, float x, float y) {
     }
 }
 
-void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
-                       int button, int clickCount) {
-    (void)button;
+void ShowcaseMouseDown(ShowcaseApp* app, Window* win,
+                       const MouseDownEvent* ev) {
+    if (ev->button != MouseButton::Left) {
+        return;
+    }
+    float x = ev->x;
+    float y = ev->y;
     if (app->component == CompSlider) {
         ShowcaseSliderDrag(app, win, x, y);
     } else if (app->component == CompResizable) {
@@ -649,7 +656,7 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
     } else if (app->component == CompTextSelection) {
         int wordA = 0;
         int wordB = 0;
-        if (TextSelRangeAt(win, x, y, clickCount, &wordA, &wordB)) {
+        if (TextSelRangeAt(win, x, y, ev->clickCount, &wordA, &wordB)) {
             app->selA = wordA;
             app->selB = wordB;
             return;
@@ -662,12 +669,9 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
     }
 }
 
-void ShowcaseMouseUp(ShowcaseApp* app, Window* win, float x, float y,
-                     int button) {
+void ShowcaseMouseUp(ShowcaseApp* app, Window* win, const MouseUpEvent* ev) {
     (void)win;
-    (void)x;
-    (void)y;
-    (void)button;
+    (void)ev;
     app->draggingSlider = false;
     app->draggingResize = false;
 }
@@ -694,24 +698,21 @@ static void OnKey(ShowcaseApp* app, Ctx* cx, const KeyEvent* ev) {
     ShowcaseKey(app, cx->win, ev->vk, ev->down);
 }
 
-static void OnWheel(ShowcaseApp* app, Ctx* cx, const WheelEvent* ev) {
+static void OnWheel(ShowcaseApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
     (void)cx;
-    ShowcaseWheel(app, ev->x, ev->y, ev->delta);
+    ShowcaseWheel(app, ev->x, ev->y, ev->deltaY);
 }
 
-static void OnMouse(ShowcaseApp* app, Ctx* cx, const MouseEvent* ev) {
-    switch (ev->kind) {
-        case MouseKind::Move:
-            ShowcaseMouseMove(app, cx->win, ev->x, ev->y);
-            break;
-        case MouseKind::Down:
-            ShowcaseMouseDown(app, cx->win, ev->x, ev->y, ev->button,
-                              ev->clickCount);
-            break;
-        case MouseKind::Up:
-            ShowcaseMouseUp(app, cx->win, ev->x, ev->y, ev->button);
-            break;
-    }
+static void OnMouseDown(ShowcaseApp* app, Ctx* cx, const MouseDownEvent* ev) {
+    ShowcaseMouseDown(app, cx->win, ev);
+}
+
+static void OnMouseUp(ShowcaseApp* app, Ctx* cx, const MouseUpEvent* ev) {
+    ShowcaseMouseUp(app, cx->win, ev);
+}
+
+static void OnMouseMove(ShowcaseApp* app, Ctx* cx, const MouseMoveEvent* ev) {
+    ShowcaseMouseMove(app, cx->win, ev);
 }
 
 // The page to open, if one was named on the command line.
@@ -761,8 +762,10 @@ int GpuiMain(int argc, char** argv) {
                                  WinOpts{});
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
-    WindowOnWheel(win, ListenTo(view, &OnWheel));
-    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    WindowOnScrollWheel(win, ListenTo(view, &OnWheel));
+    WindowOnMouseDown(win, ListenTo(view, &OnMouseDown));
+    WindowOnMouseUp(win, ListenTo(view, &OnMouseUp));
+    WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

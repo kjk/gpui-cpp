@@ -136,7 +136,10 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
                 break;
             }
         }
-        ClickEvent ev = {0, 0, 1, win->focusId};
+        // GPUI's ClickEvent::Keyboard: no pointer was involved, so the
+        // position is the element's own box.
+        ClickEvent ev = {0, 0, MouseButton::Left, win->focusId};
+        ev.keyboard = true;
         if (focused) {
             ev.x = focused->x + focused->w * 0.5f;
             ev.y = focused->y + focused->h * 0.5f;
@@ -197,10 +200,9 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
     AppInvalidate(win);
 }
 
-void WindowMouseMove(Window* win, float x, float y) {
-    if (!win) {
-        return;
-    }
+static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
+    float x = in.x;
+    float y = in.y;
     win->mouseX = x;
     win->mouseY = y;
     // An I-beam over anything selectable, the way every text view does it.
@@ -217,9 +219,8 @@ void WindowMouseMove(Window* win, float x, float y) {
         win->hoverId = id;
         AppInvalidate(win);
     }
-    if (win->onMouse.IsValid()) {
-        MouseEvent ev = {MouseKind::Move, x, y, 0, id};
-        ListenerCall(win->app, win, win->onMouse, &ev);
+    if (win->onMouseMove.IsValid()) {
+        ListenerCall(win->app, win, win->onMouseMove, &in);
     }
     if (win->mouseDown) {
         AppInvalidate(win);
@@ -233,14 +234,14 @@ static const float kClickSlop = 4;
 // The title bar is 34 tall; a double click on empty chrome maximizes.
 static const float kCaptionH = 34;
 
-int WindowClickCount(Window* win, float x, float y, int button) {
+int WindowClickCount(Window* win, float x, float y, MouseButton button) {
     if (!win) {
         return 1;
     }
     double now = TimeNow();
     float dx = x - win->lastDownX;
     float dy = y - win->lastDownY;
-    bool sameRun = button == win->lastDownButton &&
+    bool sameRun = win->clickRun > 0 && button == win->lastDownButton &&
                    now - win->lastDownAt <= PlatDoubleClickMs() / 1000.0 &&
                    dx * dx + dy * dy <= kClickSlop * kClickSlop;
     win->clickRun = sameRun ? win->clickRun + 1 : 1;
@@ -251,17 +252,21 @@ int WindowClickCount(Window* win, float x, float y, int button) {
     return win->clickRun;
 }
 
-void WindowMouseDown(Window* win, float x, float y, int button,
-                     int clickCount) {
-    if (!win) {
-        return;
+int WindowCurrentClickCount(Window* win) {
+    return win && win->clickRun > 0 ? win->clickRun : 1;
+}
+
+static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
+    float x = in.x;
+    float y = in.y;
+    if (win->onMouseDown.IsValid()) {
+        ListenerCall(win->app, win, win->onMouseDown, &in);
     }
-    if (button == 2) {
-        if (win->onMouse.IsValid()) {
-            MouseEvent ev = {MouseKind::Down, x, y, 2, 0};
-            ev.clickCount = clickCount;
-            ListenerCall(win->app, win, win->onMouse, &ev);
-        }
+    // Only the left button clicks an element. GPUI routes a right press to
+    // whatever asked for MouseButton::Right and never turns it into a click;
+    // here that is the window's own subscription above, which a view uses to
+    // put up a context menu.
+    if (!in.IsFocusing()) {
         AppInvalidate(win);
         return;
     }
@@ -271,13 +276,9 @@ void WindowMouseDown(Window* win, float x, float y, int button,
     if (id) {
         win->focusId = id;
     }
-    if (win->onMouse.IsValid()) {
-        MouseEvent ev = {MouseKind::Down, x, y, 1, id};
-        ev.clickCount = clickCount;
-        ListenerCall(win->app, win, win->onMouse, &ev);
-    }
-    ClickEvent ev = {x, y, 1, id};
-    ev.clickCount = clickCount;
+    ClickEvent ev = {x, y, in.button, id};
+    ev.clickCount = in.clickCount;
+    ev.modifiers = in.modifiers;
     if (hit) {
         ev.elX = hit->x;
         ev.elY = hit->y;
@@ -303,40 +304,120 @@ void WindowMouseDown(Window* win, float x, float y, int button,
     // here at all, so on that platform this is only the empty half.
     bool caption = id == ClickWinCaption ||
                    (id == 0 && win->opts.clientTitleBar && y < kCaptionH);
-    if (clickCount == 2 && caption) {
+    if (in.clickCount == 2 && caption) {
         AppToggleMaximize(win);
     }
     AppInvalidate(win);
 }
 
-void WindowMouseUp(Window* win, float x, float y, int button) {
-    if (!win) {
-        return;
-    }
+static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     win->mouseDown = false;
-    if (win->onMouse.IsValid()) {
-        MouseEvent ev = {MouseKind::Up, x, y, button, 0};
-        ListenerCall(win->app, win, win->onMouse, &ev);
+    if (win->onMouseUp.IsValid()) {
+        ListenerCall(win->app, win, win->onMouseUp, &in);
     }
 }
 
-void WindowMouseLeave(Window* win) {
-    if (!win) {
-        return;
-    }
+static void DispatchMouseExited(Window* win, const MouseExitEvent& in) {
     win->hoverId = 0;
+    if (win->onMouseExit.IsValid()) {
+        ListenerCall(win->app, win, win->onMouseExit, &in);
+    }
     AppInvalidate(win);
 }
 
-void WindowWheel(Window* win, float x, float y, float delta) {
-    if (!win) {
-        return;
-    }
-    if (win->onWheel.IsValid()) {
-        WheelEvent ev = {x, y, delta};
-        ListenerCall(win->app, win, win->onWheel, &ev);
+static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
+    if (win->onScrollWheel.IsValid()) {
+        ListenerCall(win->app, win, win->onScrollWheel, &in);
     }
     AppInvalidate(win);
+}
+
+void WindowDispatchInput(Window* win, const PlatformInput* input) {
+    if (!win || !input) {
+        return;
+    }
+    switch (input->kind) {
+        case PlatformInputKind::MouseDown:
+            DispatchMouseDown(win, input->mouseDown);
+            break;
+        case PlatformInputKind::MouseUp:
+            DispatchMouseUp(win, input->mouseUp);
+            break;
+        case PlatformInputKind::MouseMove:
+            DispatchMouseMove(win, input->mouseMove);
+            break;
+        case PlatformInputKind::MouseExited:
+            DispatchMouseExited(win, input->mouseExited);
+            break;
+        case PlatformInputKind::ScrollWheel:
+            DispatchScrollWheel(win, input->scrollWheel);
+            break;
+    }
+}
+
+PlatformInput InputMouseDown(MouseButton button, float x, float y,
+                             Modifiers modifiers, int clickCount,
+                             bool firstMouse) {
+    PlatformInput in = {};
+    in.kind = PlatformInputKind::MouseDown;
+    in.mouseDown.button = button;
+    in.mouseDown.x = x;
+    in.mouseDown.y = y;
+    in.mouseDown.modifiers = modifiers;
+    in.mouseDown.clickCount = clickCount;
+    in.mouseDown.firstMouse = firstMouse;
+    return in;
+}
+
+PlatformInput InputMouseUp(MouseButton button, float x, float y,
+                           Modifiers modifiers, int clickCount) {
+    PlatformInput in = {};
+    in.kind = PlatformInputKind::MouseUp;
+    in.mouseUp.button = button;
+    in.mouseUp.x = x;
+    in.mouseUp.y = y;
+    in.mouseUp.modifiers = modifiers;
+    in.mouseUp.clickCount = clickCount;
+    return in;
+}
+
+PlatformInput InputMouseMove(float x, float y, bool pressed,
+                             MouseButton pressedButton, Modifiers modifiers) {
+    PlatformInput in = {};
+    in.kind = PlatformInputKind::MouseMove;
+    in.mouseMove.x = x;
+    in.mouseMove.y = y;
+    in.mouseMove.pressed = pressed;
+    in.mouseMove.pressedButton = pressedButton;
+    in.mouseMove.modifiers = modifiers;
+    return in;
+}
+
+PlatformInput InputMouseExited(float x, float y, bool pressed,
+                               MouseButton pressedButton, Modifiers modifiers) {
+    PlatformInput in = {};
+    in.kind = PlatformInputKind::MouseExited;
+    in.mouseExited.x = x;
+    in.mouseExited.y = y;
+    in.mouseExited.pressed = pressed;
+    in.mouseExited.pressedButton = pressedButton;
+    in.mouseExited.modifiers = modifiers;
+    return in;
+}
+
+PlatformInput InputScrollWheel(float x, float y, float deltaX, float deltaY,
+                               bool precise, Modifiers modifiers,
+                               TouchPhase phase) {
+    PlatformInput in = {};
+    in.kind = PlatformInputKind::ScrollWheel;
+    in.scrollWheel.x = x;
+    in.scrollWheel.y = y;
+    in.scrollWheel.deltaX = deltaX;
+    in.scrollWheel.deltaY = deltaY;
+    in.scrollWheel.precise = precise;
+    in.scrollWheel.modifiers = modifiers;
+    in.scrollWheel.phase = phase;
+    return in;
 }
 
 // blink_cursor.rs: INTERVAL and PAUSE_DELAY.

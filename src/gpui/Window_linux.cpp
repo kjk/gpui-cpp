@@ -36,9 +36,10 @@ struct PlatWindow {
     // Monotonic deadline for the next tick; 0 when the timer is off.
     double nextTick = 0;
     // -1, or the _NET_WM_MOVERESIZE direction the pointer is currently over.
-    // WindowMouseMove only asks for arrow or I-beam, so the edge cursor has
-    // to be put back by hand once the pointer leaves the band, and put back
-    // up again whenever that arrow/I-beam choice changed underneath it.
+    // The shared move handler only asks for arrow or I-beam, so the edge
+    // cursor has to be put back by hand once the pointer leaves the band, and
+    // put back up again whenever that arrow/I-beam choice changed underneath
+    // it.
     int edge = -1;
     CursorKind edgeUnder = CursorKind::Arrow;
 };
@@ -427,7 +428,7 @@ static void SetEdgeCursor(Window* win, int dir) {
     pw->edge = dir;
     pw->edgeUnder = win->cursor;
     if (dir < 0) {
-        // WindowMouseMove decided on this one before the band overrode it.
+        // The shared move handler picked this one before the band overrode it.
         PlatSetCursor(win, win->cursor);
         return;
     }
@@ -532,6 +533,68 @@ static void DestroyPlatWindow(Window* win) {
     }
 }
 
+// GPUI's Modifiers, out of an X state mask. Mod1 is Alt and Mod4 is Super,
+// which is what `platform` means off macOS; X11 reports no Fn key.
+static Modifiers ModsOf(unsigned state) {
+    Modifiers m;
+    m.control = (state & ControlMask) != 0;
+    m.alt = (state & Mod1Mask) != 0;
+    m.shift = (state & ShiftMask) != 0;
+    m.platform = (state & Mod4Mask) != 0;
+    return m;
+}
+
+// The X button number as a MouseButton. 4-7 are the two wheels, which are not
+// buttons in GPUI's sense, so they answer false.
+static bool ButtonOf(unsigned b, MouseButton* out) {
+    switch (b) {
+        case Button1:
+            *out = MouseButton::Left;
+            return true;
+        case Button2:
+            *out = MouseButton::Middle;
+            return true;
+        case Button3:
+            *out = MouseButton::Right;
+            return true;
+        case 8:
+            *out = MouseButton::NavigateBack;
+            return true;
+        case 9:
+            *out = MouseButton::NavigateForward;
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Rust's Option<MouseButton> on a move: the first button held in the mask.
+static bool PressedButton(unsigned state, MouseButton* out) {
+    if (state & Button1Mask) {
+        *out = MouseButton::Left;
+        return true;
+    }
+    if (state & Button2Mask) {
+        *out = MouseButton::Middle;
+        return true;
+    }
+    if (state & Button3Mask) {
+        *out = MouseButton::Right;
+        return true;
+    }
+    return false;
+}
+
+// A press of anything but the left button: it reaches the window's own
+// subscription and never becomes a click, the way GPUI only turns a left
+// press and release into one.
+static void PressButton(Window* win, MouseButton button, float x, float y,
+                        Modifiers mods) {
+    PlatformInput in = InputMouseDown(
+        button, x, y, mods, WindowClickCount(win, x, y, button), false);
+    WindowDispatchInput(win, &in);
+}
+
 static void HandleEvent(App* app, XEvent* ev) {
     if (ev->type == SelectionRequest) {
         OnSelectionRequest(&ev->xselectionrequest);
@@ -572,23 +635,42 @@ static void HandleEvent(App* app, XEvent* ev) {
         case KeyPress:
             OnKeyPress(win, &ev->xkey);
             break;
-        case MotionNotify:
-            WindowMouseMove(win, (float)ev->xmotion.x, (float)ev->xmotion.y);
+        case MotionNotify: {
+            MouseButton held = MouseButton::Left;
+            bool any = PressedButton(ev->xmotion.state, &held);
+            PlatformInput in =
+                InputMouseMove((float)ev->xmotion.x, (float)ev->xmotion.y, any,
+                               held, ModsOf(ev->xmotion.state));
+            WindowDispatchInput(win, &in);
             SetEdgeCursor(win, ResizeEdge(win, ev->xmotion.x, ev->xmotion.y));
             break;
-        case LeaveNotify:
-            WindowMouseLeave(win);
+        }
+        case LeaveNotify: {
+            MouseButton held = MouseButton::Left;
+            bool any = PressedButton(ev->xcrossing.state, &held);
+            PlatformInput in =
+                InputMouseExited((float)ev->xcrossing.x, (float)ev->xcrossing.y,
+                                 any, held, ModsOf(ev->xcrossing.state));
+            WindowDispatchInput(win, &in);
             // Whatever the pointer picks up outside, the band has to claim
             // the cursor again the next time it comes back.
             pw->edge = -1;
             break;
+        }
         case ButtonPress: {
             float x = (float)ev->xbutton.x;
             float y = (float)ev->xbutton.y;
             unsigned b = ev->xbutton.button;
-            if (b == Button4 || b == Button5) {
-                // One notch is 48 DIPs, the same step the Windows window uses.
-                WindowWheel(win, x, y, b == Button4 ? 48.f : -48.f);
+            Modifiers mods = ModsOf(ev->xbutton.state);
+            // X11 sends the wheel as buttons 4 and 5, and the horizontal wheel
+            // as 6 and 7. One notch is 48 DIPs, the same step the Windows
+            // window uses; positive scrolls the view up and left.
+            if (b >= Button4 && b <= 7) {
+                float dx = b == 6 ? 48.f : b == 7 ? -48.f : 0.f;
+                float dy = b == Button4 ? 48.f : b == Button5 ? -48.f : 0.f;
+                PlatformInput in = InputScrollWheel(x, y, dx, dy, false, mods,
+                                                    TouchPhase::Moved);
+                WindowDispatchInput(win, &in);
                 break;
             }
             if (b == Button3) {
@@ -598,7 +680,19 @@ static void HandleEvent(App* app, XEvent* ev) {
                     ShowWindowMenu(win, ev->xbutton.x_root, ev->xbutton.y_root);
                     break;
                 }
-                WindowMouseDown(win, x, y, 2, WindowClickCount(win, x, y, 2));
+                PressButton(win, MouseButton::Right, x, y, mods);
+                break;
+            }
+            if (b == Button2) {
+                PressButton(win, MouseButton::Middle, x, y, mods);
+                break;
+            }
+            // 8 and 9 are the thumb buttons, GPUI's MouseButton::Navigate.
+            if (b == 8 || b == 9) {
+                PressButton(win,
+                            b == 8 ? MouseButton::NavigateBack
+                                   : MouseButton::NavigateForward,
+                            x, y, mods);
                 break;
             }
             if (b != Button1) {
@@ -607,7 +701,7 @@ static void HandleEvent(App* app, XEvent* ev) {
             // Before the chrome, because the chrome needs the answer: the
             // caption drags on the first press and zooms on the second, and
             // handing the drag to the window manager first would swallow it.
-            int clicks = WindowClickCount(win, x, y, 1);
+            int clicks = WindowClickCount(win, x, y, MouseButton::Left);
             // The resize band and the custom chrome are claimed before the
             // element tree sees the press, the way WM_NCHITTEST takes both
             // on Windows.
@@ -638,15 +732,22 @@ static void HandleEvent(App* app, XEvent* ev) {
                 }
                 break;
             }
-            WindowMouseDown(win, x, y, 1, clicks);
+            PlatformInput in =
+                InputMouseDown(MouseButton::Left, x, y, mods, clicks, false);
+            WindowDispatchInput(win, &in);
             break;
         }
-        case ButtonRelease:
-            if (ev->xbutton.button == Button1) {
-                WindowMouseUp(win, (float)ev->xbutton.x, (float)ev->xbutton.y,
-                              1);
+        case ButtonRelease: {
+            MouseButton button = MouseButton::Left;
+            if (!ButtonOf(ev->xbutton.button, &button)) {
+                break;
             }
+            PlatformInput in = InputMouseUp(
+                button, (float)ev->xbutton.x, (float)ev->xbutton.y,
+                ModsOf(ev->xbutton.state), WindowCurrentClickCount(win));
+            WindowDispatchInput(win, &in);
             break;
+        }
         case ClientMessage:
             if (ev->xclient.message_type == aWmProtocols &&
                 (Atom)ev->xclient.data.l[0] == aWmDeleteWindow) {

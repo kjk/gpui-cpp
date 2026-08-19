@@ -20,20 +20,38 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt);
 // A typed character, already decoded to a codepoint.
 void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt);
-void WindowMouseMove(Window* win, float x, float y);
-// `clickCount` is what WindowClickCount answered for this press. Every press
-// comes through here, whatever its count: a double click is two presses, the
-// way GPUI delivers two MouseDownEvents with click_count 1 then 2.
-void WindowMouseDown(Window* win, float x, float y, int button, int clickCount);
-void WindowMouseUp(Window* win, float x, float y, int button);
-void WindowMouseLeave(Window* win);
-void WindowWheel(Window* win, float x, float y, float delta);
+// GPUI's Window::dispatch_event: every mouse event the platform produces
+// arrives here, and everything it then does — hit-testing, focus, listener
+// dispatch — is shared. Each press comes through whatever its click count: a
+// double click is two presses, the way GPUI delivers two MouseDownEvents with
+// click_count 1 then 2.
+void WindowDispatchInput(Window* win, const PlatformInput* input);
+
+// The tuple-variant constructors, which Rust writes as
+// PlatformInput::MouseDown(MouseDownEvent { .. }). A platform builds one and
+// hands it straight to WindowDispatchInput.
+PlatformInput InputMouseDown(MouseButton button, float x, float y,
+                             Modifiers modifiers, int clickCount,
+                             bool firstMouse);
+PlatformInput InputMouseUp(MouseButton button, float x, float y,
+                           Modifiers modifiers, int clickCount);
+PlatformInput InputMouseMove(float x, float y, bool pressed,
+                             MouseButton pressedButton, Modifiers modifiers);
+PlatformInput InputMouseExited(float x, float y, bool pressed,
+                               MouseButton pressedButton, Modifiers modifiers);
+PlatformInput InputScrollWheel(float x, float y, float deltaX, float deltaY,
+                               bool precise, Modifiers modifiers,
+                               TouchPhase phase);
+
 // Count this press against the run before it and answer 1, 2, 3… Called once
 // per press, before the platform decides what the press means — the title bar
 // has to tell a drag from a zoom, and only the count separates them. Windows
 // calls it for WM_LBUTTONDBLCLK too: that message replaces the second
 // WM_LBUTTONDOWN of a run, and there is no message at all for the third.
-int WindowClickCount(Window* win, float x, float y, int button);
+int WindowClickCount(Window* win, float x, float y, MouseButton button);
+// The count of the run in progress, for the release that ends it: a
+// MouseUpEvent carries the click_count of the press it completes.
+int WindowCurrentClickCount(Window* win);
 // The timer fired: run whatever is due — the caret flip and any armed
 // timers — repaint if that changed anything, and re-arm through PlatSetTimer
 // for the next deadline. The platform never computes an interval itself.

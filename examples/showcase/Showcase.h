@@ -240,8 +240,6 @@ El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size);
 void ShowcaseChar(ShowcaseApp* app, Window* win, uint32_t cp);
 void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down);
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta);
-void ShowcaseMouseMove(ShowcaseApp* app, Window* win, float x, float y);
-void ShowcaseMouseDown(ShowcaseApp* app, Window* win, float x, float y,
-                       int button, int clickCount);
-void ShowcaseMouseUp(ShowcaseApp* app, Window* win, float x, float y,
-                     int button);
+void ShowcaseMouseMove(ShowcaseApp* app, Window* win, const MouseMoveEvent* ev);
+void ShowcaseMouseDown(ShowcaseApp* app, Window* win, const MouseDownEvent* ev);
+void ShowcaseMouseUp(ShowcaseApp* app, Window* win, const MouseUpEvent* ev);

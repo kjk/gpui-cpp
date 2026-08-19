@@ -277,10 +277,7 @@ static void PaintCurves(PaintCtx* ctx, El* e, void* user) {
     }
 }
 
-static void OnMouseMove(FpsApp* app, Ctx* cx, const MouseEvent* ev) {
-    if (ev->kind != MouseKind::Move) {
-        return;
-    }
+static void OnMouseMove(FpsApp* app, Ctx* cx, const MouseMoveEvent* ev) {
     WinSize view = WindowSize(cx->win);
     // A zero-sized viewport would divide to infinity here, and the easing in
     // Render would then keep the tilt non-finite forever.
@@ -369,7 +366,7 @@ int GpuiMain(int argc, char** argv) {
     opts.timerMs = 16;
     Window* win =
         WindowOpenView(app, StrL("FPS Monitor C++"), 800, 600, view.id, opts);
-    WindowOnMouse(win, ListenTo(view, &OnMouseMove));
+    WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

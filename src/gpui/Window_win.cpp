@@ -18,6 +18,9 @@ struct PlatWindow {
     // WM_SETCURSOR fires on every move over the client area and has to put it
     // back, so the window remembers what it last asked for.
     HCURSOR cursor = nullptr;
+    // WM_MOUSEACTIVATE said this next press is the one that activated the
+    // window: MouseDownEvent::first_mouse.
+    bool firstMouse = false;
 };
 
 static HWND Hwnd(Window* win) {
@@ -108,6 +111,80 @@ static bool AltDown() {
     return (GetKeyState(VK_MENU) & 0x8000) != 0;
 }
 
+// GPUI's Modifiers. Windows reports no Fn key, so `function` stays false.
+static Modifiers ModsNow() {
+    Modifiers m;
+    m.control = CtrlDown();
+    m.alt = AltDown();
+    m.shift = ShiftDown();
+    m.platform = (GetKeyState(VK_LWIN) & 0x8000) != 0 ||
+                 (GetKeyState(VK_RWIN) & 0x8000) != 0;
+    return m;
+}
+
+// Rust's Option<MouseButton> on a move: the first button that is down, or
+// none. The MK_* bits in wParam say the same thing, but only for the messages
+// that carry them -- WM_NCMOUSEMOVE's wParam is a hit-test code -- so this
+// asks the keyboard state, which every path can.
+static bool PressedButton(MouseButton* out) {
+    struct {
+        int vk;
+        MouseButton button;
+    } kButtons[] = {
+        {VK_LBUTTON, MouseButton::Left},
+        {VK_RBUTTON, MouseButton::Right},
+        {VK_MBUTTON, MouseButton::Middle},
+        {VK_XBUTTON1, MouseButton::NavigateBack},
+        {VK_XBUTTON2, MouseButton::NavigateForward},
+    };
+    for (const auto& b : kButtons) {
+        if (GetKeyState(b.vk) & 0x8000) {
+            *out = b.button;
+            return true;
+        }
+    }
+    return false;
+}
+
+// One press, whichever button it came from. WM_LBUTTONDBLCLK arrives here too:
+// the class has CS_DBLCLKS, so that message replaces the second WM_LBUTTONDOWN
+// of a run. It is still a press and still has to reach the element under it --
+// Win32 only renamed the message. WindowClickCount is what numbers it, and
+// what numbers the third press, which Win32 has no message for at all.
+static void MouseDown(Window* win, MouseButton button, LPARAM lParam) {
+    win->paint.dpi = HostDpi(Hwnd(win));
+    float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+    float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+    bool first = win->plat->firstMouse;
+    win->plat->firstMouse = false;
+    PlatformInput in = InputMouseDown(
+        button, x, y, ModsNow(), WindowClickCount(win, x, y, button), first);
+    WindowDispatchInput(win, &in);
+}
+
+static void MouseUp(Window* win, MouseButton button, LPARAM lParam) {
+    float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
+    float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
+    PlatformInput in =
+        InputMouseUp(button, x, y, ModsNow(), WindowCurrentClickCount(win));
+    WindowDispatchInput(win, &in);
+}
+
+static void MouseMove(Window* win, float x, float y) {
+    MouseButton pressed = MouseButton::Left;
+    bool any = PressedButton(&pressed);
+    PlatformInput in = InputMouseMove(x, y, any, pressed, ModsNow());
+    WindowDispatchInput(win, &in);
+}
+
+static void MouseExited(Window* win) {
+    MouseButton pressed = MouseButton::Left;
+    bool any = PressedButton(&pressed);
+    PlatformInput in =
+        InputMouseExited(win->mouseX, win->mouseY, any, pressed, ModsNow());
+    WindowDispatchInput(win, &in);
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                                 LPARAM lParam) {
     Window* win = (Window*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -132,12 +209,38 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_CHAR:
             WindowChar(win, (uint32_t)wParam, CtrlDown(), AltDown());
             return 0;
-        case WM_RBUTTONDOWN: {
-            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowMouseDown(win, x, y, 2, WindowClickCount(win, x, y, 2));
+        case WM_MOUSEACTIVATE:
+            // The press that follows is the one that activated the window.
+            win->plat->firstMouse = true;
+            break;
+        case WM_RBUTTONDOWN:
+            MouseDown(win, MouseButton::Right, lParam);
             return 0;
-        }
+        case WM_RBUTTONUP:
+            MouseUp(win, MouseButton::Right, lParam);
+            return 0;
+        case WM_MBUTTONDOWN:
+            MouseDown(win, MouseButton::Middle, lParam);
+            return 0;
+        case WM_MBUTTONUP:
+            MouseUp(win, MouseButton::Middle, lParam);
+            return 0;
+        // The two thumb buttons, GPUI's MouseButton::Navigate. Win32 wants
+        // TRUE back rather than 0 from these two.
+        case WM_XBUTTONDOWN:
+            MouseDown(win,
+                      GET_XBUTTON_WPARAM(wParam) == XBUTTON1
+                          ? MouseButton::NavigateBack
+                          : MouseButton::NavigateForward,
+                      lParam);
+            return TRUE;
+        case WM_XBUTTONUP:
+            MouseUp(win,
+                    GET_XBUTTON_WPARAM(wParam) == XBUTTON1
+                        ? MouseButton::NavigateBack
+                        : MouseButton::NavigateForward,
+                    lParam);
+            return TRUE;
         case WM_NCCALCSIZE: {
             // The client title bar owns the top edge: keep the frame the
             // default handler puts on the other three sides but hand the
@@ -218,7 +321,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             win->paint.dpi = HostDpi(hwnd);
             float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
             float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowMouseMove(win, x, y);
+            MouseMove(win, x, y);
             TRACKMOUSEEVENT tme = {sizeof(tme)};
             tme.dwFlags = TME_LEAVE;
             tme.hwndTrack = hwnd;
@@ -226,7 +329,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_MOUSELEAVE:
-            WindowMouseLeave(win);
+            MouseExited(win);
             return 0;
         case WM_NCMOUSEMOVE: {
             // The title bar's own cells answer WM_NCHITTEST as HTMINBUTTON,
@@ -235,7 +338,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             // follow it. Falls through to the default handler afterwards,
             // which is what puts up the Windows 11 snap layout flyout.
             // Only those four: over a resize border the default handler owns
-            // the cursor, and WindowMouseMove would put the arrow back.
+            // the cursor, and a move event would put the arrow back.
             if (wParam != HTCAPTION && wParam != HTMINBUTTON &&
                 wParam != HTMAXBUTTON && wParam != HTCLOSE) {
                 break;
@@ -243,8 +346,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             win->paint.dpi = HostDpi(hwnd);
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
-            WindowMouseMove(win, PxToDip(&win->paint, pt.x),
-                            PxToDip(&win->paint, pt.y));
+            MouseMove(win, PxToDip(&win->paint, pt.x),
+                      PxToDip(&win->paint, pt.y));
             TRACKMOUSEEVENT tme = {sizeof(tme)};
             tme.dwFlags = TME_LEAVE | TME_NONCLIENT;
             tme.hwndTrack = hwnd;
@@ -252,27 +355,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             break;
         }
         case WM_NCMOUSELEAVE:
-            WindowMouseLeave(win);
+            MouseExited(win);
             break;
-        // The class has CS_DBLCLKS, so the second press of a run arrives as
-        // WM_LBUTTONDBLCLK instead of WM_LBUTTONDOWN. It is still a press and
-        // still has to reach the element under it — Win32 only renamed the
-        // message. WindowClickCount is what numbers it, and what numbers the
-        // third press, which Win32 has no message for at all.
         case WM_LBUTTONDOWN:
-        case WM_LBUTTONDBLCLK: {
-            win->paint.dpi = HostDpi(hwnd);
-            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowMouseDown(win, x, y, 1, WindowClickCount(win, x, y, 1));
+        case WM_LBUTTONDBLCLK:
+            MouseDown(win, MouseButton::Left, lParam);
             return 0;
-        }
-        case WM_LBUTTONUP: {
-            float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
-            float y = PxToDip(&win->paint, GET_Y_LPARAM(lParam));
-            WindowMouseUp(win, x, y, 1);
+        case WM_LBUTTONUP:
+            MouseUp(win, MouseButton::Left, lParam);
             return 0;
-        }
         case WM_NCLBUTTONDOWN:
             if (wParam == HTMINBUTTON) {
                 AppMinimize(win);
@@ -287,14 +378,24 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             break;
-        case WM_MOUSEWHEEL: {
+        // Both wheels report in WHEEL_DELTA detents; one notch is 48 DIPs.
+        // GPUI would carry that as ScrollDelta::Lines and multiply later --
+        // see the note on ScrollWheelEvent. The horizontal wheel counts the
+        // other way round, so its sign is flipped to match: positive scrolls
+        // the view left, as positive scrolls it up.
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
             float x = PxToDip(&win->paint, pt.x);
             float y = PxToDip(&win->paint, pt.y);
             float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) /
                           (float)WHEEL_DELTA * 48.f;
-            WindowWheel(win, x, y, delta);
+            bool horizontal = msg == WM_MOUSEHWHEEL;
+            PlatformInput in = InputScrollWheel(x, y, horizontal ? -delta : 0.f,
+                                                horizontal ? 0.f : delta, false,
+                                                ModsNow(), TouchPhase::Moved);
+            WindowDispatchInput(win, &in);
             return 0;
         }
         case WM_SETCURSOR:

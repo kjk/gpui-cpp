@@ -899,10 +899,10 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     }
 }
 
-static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
+static void OnWheel(StoryApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
     float x = ev->x;
     float y = ev->y;
-    float delta = ev->delta;
+    float delta = ev->deltaY;
     const ScrollRect* pane = HitScrollRect(&cx->win->paint, x, y);
     float* off = &app->scrollY;
     float maxS = 8000.f;
@@ -924,25 +924,25 @@ static void OnWheel(StoryApp* app, Ctx* cx, const WheelEvent* ev) {
     }
 }
 
-static void OnMouse(StoryApp* app, Ctx* cx, const MouseEvent* ev) {
+static void OnMouseUp(StoryApp* app, Ctx* cx, const MouseUpEvent*) {
+    (void)cx;
+    app->selecting = false;
+}
+
+static void OnMouseMove(StoryApp* app, Ctx* cx, const MouseMoveEvent* ev) {
+    if (!app->selecting) {
+        return;
+    }
+    int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
+    if (moveOff >= 0) {
+        app->selB = moveOff;
+    }
+}
+
+static void OnMouseDown(StoryApp* app, Ctx* cx, const MouseDownEvent* ev) {
     float x = ev->x;
     float y = ev->y;
-    int button = ev->button;
-    if (ev->kind == MouseKind::Up) {
-        app->selecting = false;
-        return;
-    }
-    if (ev->kind == MouseKind::Move) {
-        if (!app->selecting) {
-            return;
-        }
-        int moveOff = TextHitOffsetAt(&cx->win->paint, x, y, true);
-        if (moveOff >= 0) {
-            app->selB = moveOff;
-        }
-        return;
-    }
-    if (button != 1) {
+    if (ev->button != MouseButton::Left) {
         return;
     }
     // Two clicks take the word under the pointer, three the whole run —
@@ -1011,8 +1011,10 @@ int GpuiMain(int argc, char** argv) {
                                  view.id, opts);
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
-    WindowOnWheel(win, ListenTo(view, &OnWheel));
-    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    WindowOnScrollWheel(win, ListenTo(view, &OnWheel));
+    WindowOnMouseDown(win, ListenTo(view, &OnMouseDown));
+    WindowOnMouseUp(win, ListenTo(view, &OnMouseUp));
+    WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

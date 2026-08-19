@@ -51,11 +51,11 @@ static El* Thumb(Arena* a, float top, float h, Rgba c) {
     return Div(a)->Absolute()->Right(2)->Top(top)->W(6)->H(h)->Radius(3)->Bg(c);
 }
 
-static void OnWheel(TableApp* app, Ctx* cx, const WheelEvent* ev) {
+static void OnWheel(TableApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
     (void)cx;
     float x = ev->x;
     float y = ev->y;
-    float delta = ev->delta;
+    float delta = ev->deltaY;
     (void)x;
     float tableTop = app->tableTopPage - app->pageScroll;
     float tableBot = tableTop + kTableH;
@@ -212,7 +212,7 @@ int GpuiMain(int argc, char** argv) {
     WinOpts opts = {};
     Window* win = WindowOpenView(app, StrL("Table in Scrollable C++"), 700, 700,
                                  view.id, opts);
-    WindowOnWheel(win, ListenTo(view, &OnWheel));
+    WindowOnScrollWheel(win, ListenTo(view, &OnWheel));
     int rc = AppRun(app);
     AppFree(app);
     return rc;

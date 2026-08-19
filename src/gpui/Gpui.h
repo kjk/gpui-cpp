@@ -170,23 +170,177 @@ struct KeyedSlot {
     DropFn drop = nullptr;
 };
 
+// ─── mouse input ──────────────────────────────────────────────────────────
+// crates/gpui/src/interactive.rs, field for field, minus the four things a
+// C++ struct cannot say the same way:
+//   * `MouseButton::Navigate(NavigationDirection)` carries its direction; a
+//     C++ enumerator cannot, so the two directions are their own constants.
+//   * `Option<MouseButton>` on a move is a `pressed` flag plus the button.
+//   * `ScrollDelta::Pixels | Lines` is a delta plus `precise`. Rust defers the
+//     multiply to `pixel_delta(line_height)`; the three windows here turn a
+//     notch into DIPs at the seam, so nothing downstream needs a line height.
+//   * `Point<Pixels>` is `x` and `y`, as everywhere else here.
+// What is missing outright: touch, pinch and pressure, which none of these
+// three windows report.
+
+enum class MouseButton : uint8_t {
+    Left,
+    Right,
+    Middle,
+    NavigateBack,
+    NavigateForward
+};
+
+// GPUI's Modifiers. `platform` is the Windows key, X11's Super and macOS's
+// Command; `function` is Fn, which only macOS reports.
+struct Modifiers {
+    bool control = false;
+    bool alt = false;
+    bool shift = false;
+    bool platform = false;
+    bool function = false;
+
+    bool Modified() const {
+        return control || alt || shift || platform || function;
+    }
+    // The semantically secondary modifier: Command on macOS, Control on the
+    // other two — Modifiers::secondary().
+    bool Secondary() const {
+#if GPUI_OS_MAC
+        return platform;
+#else
+        return control;
+#endif
+    }
+    int Count() const {
+        return (int)control + (int)alt + (int)shift + (int)platform +
+               (int)function;
+    }
+};
+
+// The phase of a scroll gesture. A wheel notch is one Moved; a trackpad on
+// macOS runs Started -> Moved -> Ended.
+enum class TouchPhase : uint8_t {
+    Started,
+    Moved,
+    Ended,
+    Cancelled
+};
+
+struct MouseDownEvent {
+    MouseButton button = MouseButton::Left;
+    float x = 0;
+    float y = 0;
+    Modifiers modifiers = {};
+    // How many presses this one is in an unbroken run: 1, 2, 3… What Rust's
+    // on_double_click tests — `on_click(|ev, ..| ev.click_count() == 2)`.
+    int clickCount = 1;
+    // The press that also activated the window. Windows knows from
+    // WM_MOUSEACTIVATE; X11 has no such notion and a Cocoa view does not
+    // accept the first mouse, so it is false on those two.
+    bool firstMouse = false;
+
+    // MouseDownEvent::is_focusing.
+    bool IsFocusing() const { return button == MouseButton::Left; }
+};
+
+struct MouseUpEvent {
+    MouseButton button = MouseButton::Left;
+    float x = 0;
+    float y = 0;
+    Modifiers modifiers = {};
+    int clickCount = 1;
+
+    bool IsFocusing() const { return button == MouseButton::Left; }
+};
+
+struct MouseMoveEvent {
+    float x = 0;
+    float y = 0;
+    // Rust's Option<MouseButton>: `pressed` is the Some, `pressedButton` its
+    // value. With no button down, pressedButton means nothing.
+    bool pressed = false;
+    MouseButton pressedButton = MouseButton::Left;
+    Modifiers modifiers = {};
+
+    // MouseMoveEvent::dragging.
+    bool Dragging() const {
+        return pressed && pressedButton == MouseButton::Left;
+    }
+};
+
+// The pointer left the window. GPUI's MouseExitEvent is a MouseMoveEvent in
+// all but name — it derefs to one — so it carries the same three things.
+struct MouseExitEvent {
+    float x = 0;
+    float y = 0;
+    bool pressed = false;
+    MouseButton pressedButton = MouseButton::Left;
+    Modifiers modifiers = {};
+};
+
+struct ScrollWheelEvent {
+    float x = 0;
+    float y = 0;
+    // DIPs, already scaled: one wheel notch is 48. Positive scrolls the view
+    // up and left, which is the sign WM_MOUSEWHEEL reports.
+    float deltaX = 0;
+    float deltaY = 0;
+    // ScrollDelta::Pixels rather than ::Lines — a trackpad or another device
+    // that measures the gesture itself, not a wheel with detents.
+    bool precise = false;
+    Modifiers modifiers = {};
+    TouchPhase phase = TouchPhase::Moved;
+};
+
+// GPUI's PlatformInput: what a platform window hands to the window layer.
+// Rust's enum carries its payload; here a kind and a union of the same structs
+// do. Only the mouse variants exist — keys still arrive through WindowKeyDown
+// and WindowChar, whose KeyEvent is a merged key-and-character event rather
+// than GPUI's Keystroke, and nothing here produces a file drop or a gesture.
+enum class PlatformInputKind : uint8_t {
+    MouseDown,
+    MouseUp,
+    MouseMove,
+    MouseExited,
+    ScrollWheel
+};
+
+struct PlatformInput {
+    PlatformInputKind kind = PlatformInputKind::MouseMove;
+    union {
+        MouseDownEvent mouseDown = {};
+        MouseUpEvent mouseUp;
+        MouseMoveEvent mouseMove;
+        MouseExitEvent mouseExited;
+        ScrollWheelEvent scrollWheel;
+    };
+};
+
+// GPUI's ClickEvent is the down and up pair (ClickEvent::Mouse) or the Enter
+// or Space that activated a focused element (ClickEvent::Keyboard). This one
+// is flat, and carries the press rather than the pair: an element listener
+// fires on the press here, where Rust's on_click fires on release. It also
+// carries what our hit rect knows and a Rust hitbox does not have to — which
+// element this was, and where it is.
 struct ClickEvent {
     float x = 0;
     float y = 0;
-    int button = 1;
+    MouseButton button = MouseButton::Left;
     // The element's click id, when it has one. Lets one handler serve a list.
     int id = 0;
     // The box that was hit, so a handler can place the click inside it — what
-    // a slider needs to turn a press on its track into a value.
+    // a slider needs to turn a press on its track into a value. This is also
+    // KeyboardClickEvent::bounds, the only position a keyboard click has.
     float elX = 0;
     float elY = 0;
     float elW = 0;
     float elH = 0;
-    // How many presses this one is in an unbroken run: 1, 2, 3… GPUI's
-    // MouseDownEvent::click_count, and what Rust's on_double_click tests —
-    // `on_click(|ev, ..| if ev.click_count() == 2 { .. })`. A handler that
-    // does not look at it sees every press, as it did before.
     int clickCount = 1;
+    Modifiers modifiers = {};
+    // ClickEvent::Keyboard: Space or Enter on the focused element, with no
+    // pointer anywhere near it. ClickEvent::is_keyboard.
+    bool keyboard = false;
 };
 
 // Portable key codes. The values are the Win32 VK_* ones, so the Windows
@@ -226,34 +380,12 @@ struct KeyEvent {
     bool alt = false;
 };
 
-enum class MouseKind : uint8_t {
-    Down,
-    Up,
-    Move
-};
-
-struct MouseEvent {
-    MouseKind kind = MouseKind::Down;
-    float x = 0;
-    float y = 0;
-    int button = 1; // 1 left, 2 right, 0 for moves
-    int id = 0;     // click id under the cursor, when there is one
-    // The press count, as on ClickEvent. 1 for a move or a release.
-    int clickCount = 1;
-};
-
 // The pointer shape the window asks the OS for. GPUI spells this
 // CursorStyle and has a dozen; these are the two the element tree can tell
 // apart today.
 enum class CursorKind : uint8_t {
     Arrow,
     IBeam
-};
-
-struct WheelEvent {
-    float x = 0;
-    float y = 0;
-    float delta = 0;
 };
 
 // Fired by a window timer; GPUI does this with cx.spawn + Timer::after.
@@ -838,7 +970,7 @@ struct Window {
     double lastDownAt = 0;
     float lastDownX = 0;
     float lastDownY = 0;
-    int lastDownButton = 0;
+    MouseButton lastDownButton = MouseButton::Left;
     int clickRun = 0;
     bool eatReturn = false;
     LineInput* input = nullptr;
@@ -849,9 +981,12 @@ struct Window {
     WinOpts opts = {};
     // Window-level subscriptions bound to view entities.
     Listener onKey = {};
-    Listener onWheel = {};
     Listener onClick = {};
-    Listener onMouse = {};
+    Listener onMouseDown = {};
+    Listener onMouseUp = {};
+    Listener onMouseMove = {};
+    Listener onMouseExit = {};
+    Listener onScrollWheel = {};
     // Armed timers, any number of them.
     Vec<TimerSub> timers;
     int nextTimerId = 1;
@@ -1007,11 +1142,17 @@ T* KeyedState(Ctx* cx, uint32_t key) {
 // Window-level subscriptions. GPUI spells these window.on_key_down and
 // cx.spawn + Timer::after; here each one is a Listener bound to a view.
 void WindowOnKey(Window* win, Listener l);
-void WindowOnWheel(Window* win, Listener l);
 // Fires for a click no element handled — the outside click that dismisses an
 // overlay. Elements carry their own listener; this is not a dispatch table.
 void WindowOnUnhandledClick(Window* win, Listener l);
-void WindowOnMouse(Window* win, Listener l);
+// One subscription per event type, which is what window.on_mouse_event::<T>
+// asks for in Rust. Each handler takes the matching event:
+// `void OnDown(T* self, Ctx* cx, const MouseDownEvent* ev)`.
+void WindowOnMouseDown(Window* win, Listener l);
+void WindowOnMouseUp(Window* win, Listener l);
+void WindowOnMouseMove(Window* win, Listener l);
+void WindowOnMouseExit(Window* win, Listener l);
+void WindowOnScrollWheel(Window* win, Listener l);
 // Repeating timer; GPUI's system_monitor does the same with a spawned task
 // that sleeps and calls cx.notify(). Returns a handle, or 0. Any number may
 // be armed at once.

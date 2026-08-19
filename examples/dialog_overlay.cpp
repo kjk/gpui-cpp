@@ -41,31 +41,35 @@ struct DialogApp {
     bool selecting = false;
 };
 
-static void OnMouse(DialogApp* app, Ctx* cx, const MouseEvent* ev) {
-    if (ev->kind == MouseKind::Up) {
-        app->selecting = false;
+static void OnMouseUp(DialogApp* app, Ctx* cx, const MouseUpEvent*) {
+    (void)cx;
+    app->selecting = false;
+}
+
+static void OnMouseMove(DialogApp* app, Ctx* cx, const MouseMoveEvent* ev) {
+    if (!app->selecting) {
         return;
     }
-    if (ev->kind == MouseKind::Move) {
-        if (!app->selecting) {
-            return;
-        }
-        // `nearest` clamps to the closest selectable run, so dragging past
-        // the end of the dialog's text stops there instead of reaching the
-        // paragraph behind it.
-        int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
-        if (moveOff >= 0) {
-            app->selB = moveOff;
-        }
-        return;
+    // `nearest` clamps to the closest selectable run, so dragging past
+    // the end of the dialog's text stops there instead of reaching the
+    // paragraph behind it.
+    int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
+    if (moveOff >= 0) {
+        app->selB = moveOff;
     }
+}
+
+static void OnMouseDown(DialogApp* app, Ctx* cx, const MouseDownEvent* ev) {
     // The context menu belongs to the dashed area, so a right click anywhere
     // else just dismisses it.
-    if (ev->button == 2) {
+    if (ev->button == MouseButton::Right) {
         app->menuOpen = app->overlay == OverlayNone;
         app->menuX = ev->x;
         app->menuY = ev->y;
         Notify(cx);
+        return;
+    }
+    if (ev->button != MouseButton::Left) {
         return;
     }
     if (app->menuOpen) {
@@ -305,7 +309,9 @@ int GpuiMain(int argc, char** argv) {
     WinOpts opts = {};
     Window* win = WindowOpenView(app, StrL("Dialog Overlay C++"), 800, 600,
                                  view.id, opts);
-    WindowOnMouse(win, ListenTo(view, &OnMouse));
+    WindowOnMouseDown(win, ListenTo(view, &OnMouseDown));
+    WindowOnMouseUp(win, ListenTo(view, &OnMouseUp));
+    WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;
