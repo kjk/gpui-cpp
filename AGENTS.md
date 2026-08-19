@@ -362,6 +362,9 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
                        parks the pointer off the window unless -hover asked for one.
                        Set GPUI_TODAY=YYYY-MM-DD to pin what DateToday() returns, so a
                        calendar or date picker shot is reproducible on any day.
+                       -half=left|right sizes the window the way compare-story.ts does,
+                       so a baseline shot is the same pixels as the compare capture
+                       (-half=right is our side of the pair); sweep story pages with it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp

@@ -4,6 +4,8 @@
 //   -drag=X1,Y1,X2,Y2  press, move, release: a text selection drag
 //   -wheel=N     N notches of scroll at the window centre
 //   -key=VK      send a key down
+//   -half=left|right  size the window the way cmd/compare-story.ts does, so a
+//                     shot lines up with the Rust side-by-side pair
 import { dirname, join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
 import {
@@ -18,6 +20,7 @@ import {
   hoverClient,
   killAndWait,
   parkCursorOutside,
+  placeOnWorkAreaHalf,
   sendMessage,
   setCursorPos,
   setProcessDpiAware,
@@ -25,6 +28,7 @@ import {
   waitForForeground,
   waitForPidWindow,
 } from "./winapi.ts";
+import type { WorkAreaHalf } from "./winapi.ts";
 
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);
@@ -36,6 +40,7 @@ let hover: { x: number; y: number } | null = null;
 let drag: { x1: number; y1: number; x2: number; y2: number } | null = null;
 const keys: number[] = [];
 let wheel = 0;
+let half: WorkAreaHalf | null = null;
 const rest: string[] = [];
 for (const a of argv) {
   if (a === "-dbg") {
@@ -44,6 +49,13 @@ for (const a of argv) {
     debug = false;
   } else if (a.startsWith("-wheel=")) {
     wheel = Number(a.slice(7));
+  } else if (a.startsWith("-half=")) {
+    const side = a.slice(6);
+    if (side !== "left" && side !== "right") {
+      console.error("-half takes left or right");
+      process.exit(1);
+    }
+    half = side;
   } else if (a.startsWith("-key=")) {
     keys.push(Number(a.slice(5)));
   } else if (a.startsWith("-drag=")) {
@@ -83,6 +95,12 @@ if (!hwnd) {
   await killAndWait(proc);
   console.error("window did not appear");
   process.exit(1);
+}
+// Before anything reads client coordinates: compare-story places the two
+// windows on halves of the work area, and a shot meant to line up with that
+// pair has to be the same size. Same helper, so it is the same rect.
+if (half) {
+  placeOnWorkAreaHalf(hwnd, half);
 }
 // Clicks and keys below want an active window; the shot does too, but that is
 // checked again just before the capture.
