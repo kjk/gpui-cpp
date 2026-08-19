@@ -37,6 +37,11 @@ struct DataTable {
     // The extra head rows a caller stacks over the columns.
     El* groupHeaders[4] = {};
     int nGroupHeaders = 0;
+    // The height the body scrolls inside. 0 leaves every row built, which is
+    // what a table small enough not to need a viewport wants.
+    float h = 0;
+    // render_empty: what a table with no rows shows. Null takes Rust's own.
+    El* empty = nullptr;
 
     static DataTable* New(Ctx* cx, Str id, Entity<TableState> state);
     DataTable* Columns(const TableColumn* cols, int n);
@@ -44,6 +49,8 @@ struct DataTable {
                     El* (*cell)(Ctx* cx, void* data, int row, int col));
     DataTable* Stripe(bool v);
     DataTable* GroupHeader(El* el);
+    DataTable* H(float px);
+    DataTable* Empty(El* e);
     El* IntoEl();
     // The width a column is drawn at: the table's own once a drag has moved
     // it, and what the caller declared until then.

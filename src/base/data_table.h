@@ -1,6 +1,7 @@
 /* Unstyled data table — crates/ui/src/table/state.rs + table/data_table.rs */
 
 #include "gpui/gpui.h"
+#include "base/virtual_list.h"
 
 namespace gpui {
 
@@ -46,6 +47,8 @@ enum class TableEventKind : uint8_t {
     DoubleClickedCell,
     Sort,
     ColumnWidthsChanged,
+    // MoveColumn(from, to): a column head was dragged into another place.
+    MoveColumn,
     Cancel
 };
 
@@ -69,6 +72,10 @@ const int kMaxTableCols = 32;
 // The name a column-resize drag goes by, which is the `ResizeColumn` payload
 // type in Rust.
 extern const Str kTableResizeDrag;
+
+// What a press on a column head picks up, which is the `DragColumn` payload
+// in Rust.
+extern const Str kTableColDrag;
 
 // The resize handle's width, straddling the column's right edge.
 const float kTableResizeHandleW = 2;
@@ -120,7 +127,32 @@ struct TableState {
     // resizing_col: which edge is being dragged right now, and the flag that
     // decides whether a release has anything to report.
     int resizingCol = -1;
+    // col_groups, as the order the columns are shown in: `colOrder[i]` is the
+    // caller's column at display position i. Rust reorders the col_groups
+    // vector itself; the columns are the caller's array here, so the order is
+    // the table's own list of indices into it.
+    int colOrder[kMaxTableCols] = {};
+    bool colOrderSeeded = false;
+    // col_movable, and the drag in flight: which column was picked up and
+    // which gap it would drop into, or -1 for neither.
+    bool colMovable = true;
+    int draggingCol = -1;
+    int dropGap = -1;
+    // Where each head was last painted, which is what a drop position is
+    // worked out against — Rust reads the same bounds off its col_groups.
+    Bounds colBounds[kMaxTableCols] = {};
+
+    // The rows are virtualized, and uniform_list wants them all one height.
+    // `viewportH` is what the body was last laid out at.
+    float rowH = 32;
+    float scrollY = 0;
+    float viewportH = 0;
+    // delegate.loading() / has_more() / load_more_threshold().
+    bool loading = false;
+    bool hasMore = false;
+    int loadMoreThreshold = 20;
     Listener onEvent = {};
+    Listener onLoadMore = {};
 
     static void OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t row);
@@ -135,7 +167,33 @@ struct TableState {
     static void OnResizeDrag(TableState* self, Ctx* cx,
                              const DragMoveEvent* ev);
     static void OnResizeEnd(TableState* self, Ctx* cx, const MouseUpEvent* ev);
+    static void OnColDragMove(TableState* self, Ctx* cx,
+                              const DragMoveEvent* ev);
+    static void OnColDrop(TableState* self, Ctx* cx, const DropEvent* ev);
+    static void OnColDragEnd(TableState* self, Ctx* cx, const MouseUpEvent* ev);
+    static void OnScroll(TableState* self, Ctx* cx, const ScrollEvent* ev);
 };
+
+// The order the columns are shown in. `TableColAt(s, i)` is the caller's
+// column at display position i, which is what every render and every hit test
+// goes through.
+void TableSeedColOrder(TableState* s, int colCount);
+int TableColAt(const TableState* s, int display);
+// Where the caller's column `col` is being shown, or -1.
+int TableDisplayOfCol(const TableState* s, int col);
+// move_column: take the column at `from` out and put it back at `to`, where
+// `to` is a display position. Answers false when there was nothing to move.
+bool TableMoveColumn(TableState* s, int from, int to);
+void TableMoveColumnEvent(TableState* s, Ctx* cx, int from, int to);
+// drag_gap_at: the gap a head dropped at `x` would go into — the one after
+// the last column whose centre is left of `x` — or -1 when dropping there
+// would put the column back where it already is.
+int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol);
+// load_more_if_need: the last row built is within the threshold of the end,
+// and the delegate says there is more.
+bool TableShouldLoadMore(const TableState* s, int visibleEnd);
+// scroll_to_row, against the height the body was last laid out at.
+void TableScrollToRow(TableState* s, int row, ScrollStrategy strategy);
 
 // The width a column is being drawn at, which is the caller's until the table
 // has one of its own.

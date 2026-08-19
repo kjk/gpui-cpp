@@ -147,6 +147,10 @@ static void OnTableEvent(DataTableStory* self, Ctx* cx, const TableEvent* ev) {
         case TableEventKind::DoubleClickedRow:
             self->message = StrDup(fmt("Double clicked row %d", ev->row));
             break;
+        case TableEventKind::MoveColumn:
+            self->message =
+                StrDup(fmt("Moved column %d to %d", ev->col, ev->row));
+            break;
         case TableEventKind::ColumnWidthsChanged: {
             // ColumnWidthsChanged carries every column's width, not just the
             // one the drag moved.
@@ -197,7 +201,16 @@ static void DtMenuOpen(DataTableStory* self, Ctx* cx, const ClickEvent*,
 static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t act) {
     if (act >= DtActGoTo) {
-        // Scrolling is not wired up here.
+        // scroll_to_row: Top, the selected row, row 50, or the end.
+        TableState* st = self->table.Get(cx);
+        int which = (int)(act - DtActGoTo);
+        if (st) {
+            int row = which == 0   ? 0
+                      : which == 1 ? (st->selectedRow < 0 ? 0 : st->selectedRow)
+                      : which == 2 ? 50
+                                   : st->rowCount - 1;
+            TableScrollToRow(st, row, ScrollStrategy::Center);
+        }
     } else if (act >= DtActOption) {
         int i = (int)(act - DtActOption);
         self->options[i] = !self->options[i];
@@ -214,12 +227,14 @@ static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
 static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
     DataTableStory* self = (DataTableStory*)data;
     const Theme& th = cx->theme();
-    const Stock& s = kStocks[self->order[row]];
+    // The Rust story generates a row per index; ours repeats the fixed set,
+    // so a table of five thousand rows is five thousand rows to scroll.
+    const int nStocks = (int)(sizeof(kStocks) / sizeof(kStocks[0]));
+    const Stock& s = kStocks[self->order[row % nStocks]];
     Rgba trend = s.up ? th.green : th.red;
     switch (col) {
         case 0:
-            return StoryTxt(cx, StoryFmt(cx, "%d", self->order[row]), 16,
-                            th.mutedFg)
+            return StoryTxt(cx, StoryFmt(cx, "%d", row), 16, th.mutedFg)
                 ->LineHeight(1.f);
         case 1:
             return StoryTxt(cx, Str(s.market), 16, th.blue)->LineHeight(1.f);
@@ -337,12 +352,13 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         {StrL("Chg%"), wPct, true, true, true},
     };
     const int nColumns = (int)(sizeof(kColumns) / sizeof(kColumns[0]));
-    const int nStocks = (int)(sizeof(kStocks) / sizeof(kStocks[0]));
     TableState* st = self->table.Get(cx);
     if (st) {
         st->sortable = self->options[3];
         st->loopSelection = self->options[0];
         st->colResizable = self->options[1];
+        // col_movable: whether a head can be dragged into another place.
+        st->colMovable = self->options[2];
         st->onEvent = Listen(cx, &OnTableEvent);
     }
 
@@ -350,8 +366,9 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     // them when one of them is dragged wider.
     float wStock = 0;
     for (int i = 0; i < 4; i++) {
+        int c = st ? TableColAt(st, i) : i;
         wStock +=
-            st ? TableColWidth(st, i, kColumns[i].width) : kColumns[i].width;
+            st ? TableColWidth(st, c, kColumns[c].width) : kColumns[c].width;
     }
 
     // Two levels of grouped headers over the column row.
@@ -380,7 +397,8 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
 
     El* box = component::DataTable::New(cx, StrL("data-table"), self->table)
                   ->Columns(kColumns, nColumns)
-                  ->Rows(nStocks, self, DtCellFor)
+                  ->Rows(kRowCounts[self->rowCount], self, DtCellFor)
+                  ->H(520)
                   ->Stripe(self->options[4])
                   ->GroupHeader(group1)
                   ->GroupHeader(group2)
