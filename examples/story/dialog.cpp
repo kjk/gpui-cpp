@@ -228,12 +228,26 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
+// crates/base/src/dialog.rs binds escape to Cancel and enter to Confirm, both
+// inside a key context that only exists while `keyboard` is on. Either one
+// closes the dialog here; what separates them is the reason it closed, which
+// is what Rust reports beside the new open state.
 void DialogStory::OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != KeyEscape || !self->keyboard) {
+    if (!ev->down || self->open < 0) {
         return;
     }
+    DialogAction act = DialogActionForKey(ev->vk, self->keyboard);
+    if (act == DialogAction::None) {
+        return;
+    }
+    // Rust reports DialogChangeReason::Confirm or ::Cancel with the close;
+    // this page does the same thing either way, so it only needs which key.
     self->open = -1;
+    if (act == DialogAction::Confirm) {
+        // cx.stop_propagation(): the Enter was the dialog's, so it must not
+        // also activate whatever element still holds focus behind it.
+        cx->win->eatReturn = true;
+    }
     Notify(cx);
 }
 

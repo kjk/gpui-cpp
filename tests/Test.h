@@ -43,6 +43,7 @@ void TestPagination();
 void TestNumberInput();
 void TestOtpInput();
 void TestSelect();
+void TestDialog();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();

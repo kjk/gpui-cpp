@@ -3,6 +3,43 @@
 
 namespace gpui {
 
+DialogAction DialogActionForKey(int key, bool keyboard) {
+    // Rust hangs the key context off `keyboard`, so the bindings do not exist
+    // at all for a dialog that turned it off.
+    if (!keyboard) {
+        return DialogAction::None;
+    }
+    if (key == KeyEscape) {
+        return DialogAction::Cancel;
+    }
+    if (key == KeyReturn) {
+        return DialogAction::Confirm;
+    }
+    return DialogAction::None;
+}
+
+bool DialogBackdropCloses(bool overlayClosable, bool topmost,
+                          MouseButton button, float pressY,
+                          float dismissBelowY) {
+    // Above the reserved band the press is not the backdrop's — that is where
+    // a title bar a dialog was opened over still is.
+    if (pressY < dismissBelowY) {
+        return false;
+    }
+    // Rust computes `overlay_closable && topmost` once, so a dialog under
+    // another one never answers a backdrop press.
+    return button == MouseButton::Left && overlayClosable && topmost;
+}
+
+El* DialogTrigger::New(Ctx* cx, Listener onOpen) {
+    Arena* a = cx->a;
+    El* e = Div(a);
+    if (onOpen.IsValid()) {
+        e->OnMouseDown(onOpen);
+    }
+    return e;
+}
+
 El* DialogBackdrop::New(Ctx* cx) {
     Arena* a = cx->a;
     return UiRoot(a, StrL("dialog-backdrop"), 0);
