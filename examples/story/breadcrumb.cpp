@@ -1,13 +1,17 @@
 #include "Story.h"
 
+// The names the interactive trail is built from. Each Rust closure captures
+// its own string; here the listener carries the index into this table.
+static const char* kCrumbs[] = {"Home", "Documents", "Projects", "Current"};
+
 struct BreadcrumbStory {
-    int crumbClicked = -1;
+    int clickedItem = -1;
     static El* Render(BreadcrumbStory* self, Ctx* cx);
 };
 
 static void OnCrumb(BreadcrumbStory* self, Ctx*, const ClickEvent*,
                     intptr_t i) {
-    self->crumbClicked = (int)i;
+    self->clickedItem = (int)i;
 }
 
 El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
@@ -18,31 +22,27 @@ El* BreadcrumbStory::Render(BreadcrumbStory* self, Ctx* cx) {
     El* def = StorySection(cx, "Default",
                            "Shows the current location in a hierarchy.");
     StorySectionAdd(def, component::Breadcrumb::New(cx)
-                             ->Item(StrL("Home"))
-                             ->Item(StrL("Documents"))
-                             ->Item(StrL("Projects"))
+                             ->Child(StrL("Home"))
+                             ->Child(StrL("Documents"))
+                             ->Child(StrL("Projects"))
                              ->IntoEl());
     page->Child(def);
 
     El* inter = StorySection(
         cx, "Interactive", "Earlier levels can respond to navigation clicks.");
     El* col = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    col->Child(component::Breadcrumb::New(cx)
-                   ->Item(StrL("Home"))
-                   ->Item(StrL("Documents"))
-                   ->Item(StrL("Projects"))
-                   ->Item(StrL("Current"))
-                   ->OnClick(Listen(cx, &OnCrumb))
-                   ->IntoEl());
-    if (self->crumbClicked >= 0) {
-        static const char* kNames[] = {"Home", "Documents", "Projects",
-                                       "Current"};
-        int i = self->crumbClicked;
-        if (i > 3) {
-            i = 3;
-        }
-        col->Child(StoryTxt(cx, StoryFmt(cx, "Selected: %s", kNames[i]), 13,
-                            th.foreground));
+    // "Home" is a plain level: it names itself and takes no click.
+    component::Breadcrumb* trail = component::Breadcrumb::New(cx)
+                                       ->Child(StrL(kCrumbs[0]));
+    for (int i = 1; i < 4; i++) {
+        trail->Child(component::BreadcrumbItem::New(cx, Str(kCrumbs[i]))
+                         ->OnClick(Listen(cx, &OnCrumb, i)));
+    }
+    col->Child(trail->IntoEl());
+    if (self->clickedItem >= 0) {
+        col->Child(StoryTxt(
+            cx, StoryFmt(cx, "Selected: %s", kCrumbs[self->clickedItem]), 13,
+            th.foreground));
     }
     StorySectionAdd(inter, col);
     page->Child(inter);
