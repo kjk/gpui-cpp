@@ -60,3 +60,4 @@ void TestMaskPattern();
 void TestUndoManager();
 void TestInputState();
 void TestList();
+void TestPopupMenu();

@@ -136,17 +136,17 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     El* list = StorySection(cx, "List",
                             "Place a scrollable selection list in the "
                             "popover.");
-    StorySectionAdd(list,
-                    component::Popover::New(cx)
-                        ->Trigger(PopTrigger(self, cx, PopList, "pop-list",
-                                             "Popup List", toggle))
-                        ->Content(component::Menu::New(cx)
-                                      ->Item(StrL("Jason Lee"))
-                                      ->Item(StrL("Ada Lovelace"))
-                                      ->Item(StrL("Alan Turing"))
-                                      ->IntoEl())
-                        ->Open(self->open == PopList)
-                        ->IntoEl());
+    StorySectionAdd(
+        list, component::Popover::New(cx)
+                  ->Trigger(PopTrigger(self, cx, PopList, "pop-list",
+                                       "Popup List", toggle))
+                  ->Content(component::PopupMenu::New(cx, StrL("pop-list"))
+                                ->Menu(StrL("Jason Lee"))
+                                ->Menu(StrL("Ada Lovelace"))
+                                ->Menu(StrL("Alan Turing"))
+                                ->IntoEl())
+                  ->Open(self->open == PopList)
+                  ->IntoEl());
     page->Child(list);
 
     El* right = StorySection(cx, "Right click",
@@ -203,15 +203,15 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     El* async = StorySection(cx, "Async submenu",
                              "Rebuild submenu content after asynchronous "
                              "loading.");
-    StorySectionAdd(async,
-                    component::Popover::New(cx)
-                        ->Trigger(PopTrigger(self, cx, PopAsync, "async-menu",
-                                             "Async Menu", toggle))
-                        ->Content(component::Menu::New(cx)
-                                      ->Item(StrL("Loading..."))
-                                      ->IntoEl())
-                        ->Open(self->open == PopAsync)
-                        ->IntoEl());
+    StorySectionAdd(
+        async, component::Popover::New(cx)
+                   ->Trigger(PopTrigger(self, cx, PopAsync, "async-menu",
+                                        "Async Menu", toggle))
+                   ->Content(component::PopupMenu::New(cx, StrL("async-menu"))
+                                 ->Menu(StrL("Loading..."))
+                                 ->IntoEl())
+                   ->Open(self->open == PopAsync)
+                   ->IntoEl());
     page->Child(async);
 
     El* anchor = StorySection(cx, "Anchor",

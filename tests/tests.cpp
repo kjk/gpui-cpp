@@ -58,6 +58,7 @@ int GpuiMain(int argc, char** argv) {
     TestUndoManager();
     TestInputState();
     TestList();
+    TestPopupMenu();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

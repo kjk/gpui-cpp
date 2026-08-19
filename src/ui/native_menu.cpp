@@ -4,7 +4,7 @@ namespace gpui {
 
 namespace component {
 
-El* NativeMenu::New(Ctx* cx, Menu* menu) {
+El* NativeMenu::New(Ctx* cx, PopupMenu* menu) {
     Arena* a = cx->a;
     return menu ? menu->IntoEl() : Div(a);
 }

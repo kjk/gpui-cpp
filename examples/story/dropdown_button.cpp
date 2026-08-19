@@ -59,11 +59,11 @@ static void DropToolbarAct(DropdownButtonStory* self, Ctx* cx,
 }
 
 static El* DropMenu(Ctx* cx) {
-    return component::Menu::New(cx)
-        ->Item(StrL("Disabled"))
-        ->Item(StrL("Loading"))
-        ->Item(StrL("Selected"))
-        ->Item(StrL("Compact"))
+    return component::PopupMenu::New(cx, StrL("dropdown-menu"))
+        ->Menu(StrL("Disabled"))
+        ->Menu(StrL("Loading"))
+        ->Menu(StrL("Selected"))
+        ->Menu(StrL("Compact"))
         ->IntoEl();
 }
 
