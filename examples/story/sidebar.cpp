@@ -237,9 +237,9 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     crumbs->Child(IconEl(a, IconName::PanelLeft, 16)->Fg(th.foreground));
     crumbs->Child(component::Separator::Vertical(cx)->IntoEl()->H(16));
     crumbs->Child(component::Breadcrumb::New(cx)
-                      ->Item(StrL("Breadcrumb"))
-                      ->Item(StrL("Home"))
-                      ->Item(StrL("Playground"))
+                      ->Child(StrL("Breadcrumb"))
+                      ->Child(StrL("Home"))
+                      ->Child(StrL("Playground"))
                       ->IntoEl());
     content->Child(crumbs);
 

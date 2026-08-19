@@ -4,6 +4,36 @@ namespace gpui {
 
 namespace component {
 
+BreadcrumbItem* BreadcrumbItem::New(Ctx* cx, Str label) {
+    Arena* a = cx->a;
+    BreadcrumbItem* it = ArenaNew<BreadcrumbItem>(a);
+    it->a = a;
+    it->cx = cx;
+    it->label = label;
+    return it;
+}
+BreadcrumbItem* BreadcrumbItem::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+BreadcrumbItem* BreadcrumbItem::OnClick(Listener fn) {
+    onClick = fn;
+    return this;
+}
+
+El* BreadcrumbItem::IntoEl() {
+    const Theme& th = cx->theme();
+    // The last level is where you are, so it gets the foreground; a disabled
+    // one stays muted whatever its position.
+    bool lit = isLast && !disabled;
+    El* el = Div(a)->Child(
+        TextEl(a, label)->Font(14)->Fg(lit ? th.foreground : th.mutedFg));
+    if (!disabled && onClick.IsValid()) {
+        BindClick(el, StrDup(a, fmt("%d", ix)), onClick);
+    }
+    return el;
+}
+
 Breadcrumb* Breadcrumb::New(Ctx* cx) {
     Arena* a = cx->a;
     Breadcrumb* b = ArenaNew<Breadcrumb>(a);
@@ -11,15 +41,14 @@ Breadcrumb* Breadcrumb::New(Ctx* cx) {
     b->cx = cx;
     return b;
 }
-Breadcrumb* Breadcrumb::Item(Str s) {
-    if (n < 8) {
-        items[n++] = s;
+Breadcrumb* Breadcrumb::Child(BreadcrumbItem* item) {
+    if (n < 8 && item) {
+        items[n++] = item;
     }
     return this;
 }
-Breadcrumb* Breadcrumb::OnClick(Listener fn) {
-    onClick = fn;
-    return this;
+Breadcrumb* Breadcrumb::Child(Str label) {
+    return Child(BreadcrumbItem::New(cx, label));
 }
 
 El* Breadcrumb::IntoEl() {
@@ -27,19 +56,12 @@ El* Breadcrumb::IntoEl() {
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
     for (int i = 0; i < n; i++) {
         if (i) {
-            row->Child(IconEl(a, IconName::ChevronRight, 12)->Fg(th.mutedFg));
+            row->Child(IconEl(a, IconName::ChevronRight, 14)->Fg(th.mutedFg));
         }
-        bool last = i == n - 1;
-        El* t = TextEl(a, items[i])
-                    ->Font(13)
-                    ->Fg(last ? th.foreground : th.mutedFg);
-        if (onClick.IsValid()) {
-            El* hit = Div(a)->Child(t);
-            BindClick(hit, items[i], ListenerArg(onClick, i));
-            row->Child(hit);
-        } else {
-            row->Child(t);
-        }
+        BreadcrumbItem* it = items[i];
+        it->ix = i;
+        it->isLast = i == n - 1;
+        row->Child(it->IntoEl());
     }
     return row;
 }
