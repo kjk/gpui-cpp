@@ -42,6 +42,7 @@ int GpuiMain(int argc, char** argv) {
     TestOtpInput();
     TestSelect();
     TestDialog();
+    TestSheet();
     TestRope();
     TestMaskPattern();
     TestUndoManager();
