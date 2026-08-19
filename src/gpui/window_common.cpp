@@ -84,6 +84,10 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         FocusCollect(win, root);
         PaintEl(&win->paint, root);
     }
+    // Rust renders TooltipOverlay deferred with priority 2, so the tip is over
+    // everything the frame drew. It is the overlay's, not the trigger's: by
+    // the time the show countdown lands, the frame that asked for it is gone.
+    TooltipPaint(&win->paint, TooltipShowing(win));
 
     PaintTargetEnd(&win->paint);
     TextMeasEndFrame(&win->paint);
@@ -320,6 +324,15 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         }
         if (now && now->onHover.IsValid()) {
             ListenerCall(win->app, win, now->onHover, &entered);
+        }
+        // El::Tip is a tooltip trigger. Rust's triggers call request_show and
+        // request_hide on the window's one overlay; the hover change is where
+        // that happens here, since the trigger is a style flag rather than an
+        // element that could carry handlers of its own.
+        if (now && now->tooltip.s) {
+            TooltipRequestShow(win, now->tooltip, now->bounds);
+        } else {
+            TooltipRequestHide(win);
         }
         AppInvalidate(win);
     }
@@ -577,6 +590,124 @@ static const int kBlinkPauseMs = 300;
 
 static BlinkCursor* BlinkGet(App* app, EntityId handle) {
     return (BlinkCursor*)EntityGet(app, handle);
+}
+
+// ─── tooltip overlay ──────────────────────────────────────────────────────
+//
+// crates/base/src/tooltip.rs TooltipOverlay. One per window, driven by the
+// hover change above.
+
+static const int kTooltipShowDelayMs = 500;   // Rust's SHOW_DELAY
+static const int kTooltipGracePeriodMs = 300; // Rust's GRACE_PERIOD
+
+TooltipOverlay::~TooltipOverlay() {
+    StrFree(text);
+}
+
+static TooltipOverlay* TooltipGet(Window* win) {
+    if (!win || !win->app) {
+        return nullptr;
+    }
+    if (!win->tooltip.IsValid()) {
+        win->tooltip = EntityNewRaw(win->app, new TooltipOverlay(), nullptr,
+                                    &EntityDropT<TooltipOverlay>);
+    }
+    return (TooltipOverlay*)EntityGet(win->app, win->tooltip);
+}
+
+// The Listener a countdown calls back through, bound to the overlay's own
+// entity, so a timer dies with the window that owns it.
+static Listener TooltipListener(Window* win, void* fn) {
+    Listener l;
+    l.fn = fn;
+    l.view = win->tooltip;
+    return l;
+}
+
+// cancel_tasks. There is at most one countdown of each kind in flight, so
+// dropping it is what Rust's epoch guard achieves.
+static void TooltipCancel(Window* win, TooltipOverlay* t) {
+    if (t->showTimer) {
+        WindowCancelTimer(win, t->showTimer);
+        t->showTimer = 0;
+    }
+    if (t->hideTimer) {
+        WindowCancelTimer(win, t->hideTimer);
+        t->hideTimer = 0;
+    }
+}
+
+static void TooltipSetText(TooltipOverlay* t, Str text) {
+    StrFree(t->text);
+    t->text = StrDup(text);
+}
+
+void TooltipOverlay::OnShow(TooltipOverlay* self, Ctx* cx, const TickEvent*) {
+    self->showTimer = 0;
+    self->visible = true;
+    Notify(cx);
+}
+
+void TooltipOverlay::OnHide(TooltipOverlay* self, Ctx* cx, const TickEvent*) {
+    self->hideTimer = 0;
+    self->visible = false;
+    self->hadRecent = false;
+    StrFree(self->text);
+    self->text = {};
+    Notify(cx);
+}
+
+void TooltipRequestShow(Window* win, Str text, Bounds triggerBounds) {
+    TooltipOverlay* t = TooltipGet(win);
+    if (!t) {
+        return;
+    }
+    // Same trigger as the one already up: nothing to do, and re-arming would
+    // make it flicker.
+    if (t->visible && t->text.s && StrEqI(t->text, text)) {
+        TooltipCancel(win, t);
+        return;
+    }
+    bool wasVisible = t->visible;
+    TooltipCancel(win, t);
+    TooltipSetText(t, text);
+    t->triggerBounds = triggerBounds;
+    // Already reading one, or only just stopped: swap straight to the new one.
+    // Making someone wait out the delay again for a tip they were mid-way
+    // through is what had_recent_tooltip exists to prevent.
+    if (wasVisible || t->hadRecent) {
+        t->visible = true;
+        return;
+    }
+    t->showTimer =
+        WindowSetTimeout(win, kTooltipShowDelayMs,
+                         TooltipListener(win, (void*)&TooltipOverlay::OnShow));
+}
+
+void TooltipRequestHide(Window* win) {
+    TooltipOverlay* t = TooltipGet(win);
+    if (!t) {
+        return;
+    }
+    if (t->showTimer) {
+        // Left before it ever appeared; there is nothing to grant a grace to.
+        WindowCancelTimer(win, t->showTimer);
+        t->showTimer = 0;
+    }
+    if (!t->visible || t->hideTimer) {
+        return;
+    }
+    t->hadRecent = true;
+    t->hideTimer =
+        WindowSetTimeout(win, kTooltipGracePeriodMs,
+                         TooltipListener(win, (void*)&TooltipOverlay::OnHide));
+}
+
+const TooltipOverlay* TooltipShowing(Window* win) {
+    if (!win || !win->app || !win->tooltip.IsValid()) {
+        return nullptr;
+    }
+    return (const TooltipOverlay*)EntityGet(win->app, win->tooltip);
 }
 
 void BlinkCursor::OnFlip(BlinkCursor* self, Ctx* cx, const TickEvent*) {

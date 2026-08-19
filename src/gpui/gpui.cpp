@@ -2291,6 +2291,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.onClick = e->onClick;
         hr.listener = e->listener;
         hr.onHover = e->onHover;
+        hr.tooltip = e->style.tooltip;
         hr.onMouseDown = e->onMouseDown;
         hr.onMouseUp = e->onMouseUp;
         hr.onDragMove = e->onDragMove;
@@ -2509,20 +2510,27 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
                         e->style.radius + 2, 2, ThemeNow().blue);
     }
-    if (e->style.tooltip.s && e->clickId && e->clickId == ctx->hoverId) {
-        const Theme& th = ThemeNow();
-        Size tip = MeasureText(ctx, e->style.tooltip, 12, 280);
-        // TooltipPositioner: the shared positioner's side placement, with no
-        // preferred side (which prefers above), centered on the trigger, no
-        // gap, and the window margin.
-        Positioned at = PositionSide(e->Bounds(), {tip.w + 16, tip.h + 10},
-                                     {ctx->viewW, ctx->viewH}, kPopupMargin,
-                                     nullptr, PopupAlign::Center, 0);
-        FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
-                  th.foreground);
-        DrawTextAt(ctx, e->style.tooltip, at.bounds.x + 8, at.bounds.y + 5,
-                   tip.w + 4, tip.h, 12, th.background, false);
+}
+
+// TooltipOverlay::render. The overlay says what is showing and where its
+// trigger was, so the tip outlives the element that asked for it — which it
+// has to, since the countdown that revealed it lands frames later.
+void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
+    if (!tip || !tip->visible || !tip->text.s) {
+        return;
     }
+    const Theme& th = ThemeNow();
+    Size sz = MeasureText(ctx, tip->text, 12, 280);
+    // TooltipPositioner: the shared positioner's side placement, with no
+    // preferred side (which prefers above), centered on the trigger, no
+    // gap, and the window margin.
+    Positioned at = PositionSide(tip->triggerBounds, {sz.w + 16, sz.h + 10},
+                                 {ctx->viewW, ctx->viewH}, kPopupMargin,
+                                 nullptr, PopupAlign::Center, 0);
+    FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
+              th.foreground);
+    DrawTextAt(ctx, tip->text, at.bounds.x + 8, at.bounds.y + 5, sz.w + 4, sz.h,
+               12, th.background, false);
 }
 
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {

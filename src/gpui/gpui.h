@@ -907,6 +907,9 @@ struct HitRect {
     Listener onMouseDown;
     Listener onMouseUp;
     Listener onDragMove;
+    // El::Tip. The overlay reads it when the pointer arrives, so it has to
+    // survive the hit test rather than only the paint that drew it.
+    Str tooltip = {};
     SliderState* slider = nullptr;
     Axis sliderAxis = Axis::Horizontal;
     InputState* input = nullptr;
@@ -1649,6 +1652,9 @@ struct Window {
     int pressedId = 0;
     bool eatReturn = false;
     InputState* input = nullptr;
+    // This window's one TooltipOverlay. Created on first use, the way a
+    // field's blink cursor is.
+    EntityId tooltip = {};
     Overlay overlay = {};
     MenuState menu = {};
     Vec<FocusRect> focusEls;
@@ -1887,6 +1893,40 @@ struct BlinkCursor {
     static void OnFlip(BlinkCursor* self, Ctx* cx, const TickEvent* ev);
     static void OnResume(BlinkCursor* self, Ctx* cx, const TickEvent* ev);
 };
+
+// Port of TooltipOverlay in crates/base/src/tooltip.rs. One per window, the
+// way Rust keeps one overlay for every trigger in it, and an entity because it
+// owns timers — the same reason BlinkCursor below is one.
+//
+// A tooltip is not "the hovered element has text". It waits out SHOW_DELAY
+// before appearing, and on the way out it keeps a GRACE_PERIOD during which
+// `hadRecent` is set: a trigger entered inside that window shows at once
+// rather than making the reader wait again for a tip they were already
+// reading. Rust guards each countdown with an epoch; there is at most one in
+// flight here, so it is cancelled outright instead.
+struct TooltipOverlay {
+    // Heap-owned: the text came off a frame arena that is gone by the time the
+    // countdown lands.
+    Str text = {};
+    Bounds triggerBounds = {};
+    bool visible = false;
+    bool hadRecent = false;
+    int showTimer = 0;
+    int hideTimer = 0;
+
+    ~TooltipOverlay();
+
+    static void OnShow(TooltipOverlay* self, Ctx* cx, const TickEvent* ev);
+    static void OnHide(TooltipOverlay* self, Ctx* cx, const TickEvent* ev);
+};
+
+// request_show / request_hide, driven by the hover change in
+// window_common.cpp rather than by each trigger element.
+void TooltipRequestShow(Window* win, Str text, Bounds triggerBounds);
+void TooltipRequestHide(Window* win);
+// What the paint pass draws, or null when nothing is showing.
+const TooltipOverlay* TooltipShowing(Window* win);
+void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip);
 
 // Idempotent. Rust calls these from on_focus / on_blur.
 void BlinkStart(App* app, Window* win, EntityId* handle);
