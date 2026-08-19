@@ -356,7 +356,12 @@ cmd/run-windows.ts     build then run; same flags as build.ts plus -windbg / -co
 cmd/run-linux.ts       build then run; same flags plus -gdb / -compare
 cmd/wsl-run.ts         run cmd/run-linux.ts inside WSL from a Windows checkout
 cmd/ubuntu-install-deps.sh  non-interactive apt + bun + rustup setup for Linux
-cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords)
+cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords).
+                       Waits for the window to reach the foreground before the shutter
+                       (an inactive window is composited with the inactive caption) and
+                       parks the pointer off the window unless -hover asked for one.
+                       Set GPUI_TODAY=YYYY-MM-DD to pin what DateToday() returns, so a
+                       calendar or date picker shot is reproducible on any day.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp

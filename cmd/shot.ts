@@ -12,12 +12,17 @@ import {
   getClientRect,
   packCoords,
   clickClient,
+  getCursorPos,
+  getForegroundWindow,
+  getWindowText,
   hoverClient,
   killAndWait,
-  setForegroundWindow,
+  parkCursorOutside,
   sendMessage,
+  setCursorPos,
   setProcessDpiAware,
   sleep,
+  waitForForeground,
   waitForPidWindow,
 } from "./winapi.ts";
 
@@ -79,7 +84,10 @@ if (!hwnd) {
   console.error("window did not appear");
   process.exit(1);
 }
-setForegroundWindow(hwnd);
+// Clicks and keys below want an active window; the shot does too, but that is
+// checked again just before the capture.
+await waitForForeground(hwnd, 3000);
+const cursorWas = getCursorPos();
 await sleep(500);
 for (const c of clicks) {
   await clickClient(hwnd, c.x, c.y);
@@ -117,8 +125,23 @@ for (const vk of keys) {
 // Last, so the pointer is still on the element when the frame is captured.
 if (hover) {
   await hoverClient(hwnd, hover.x, hover.y);
+} else {
+  // Nothing asked for a pointer, so make sure there isn't one over the window:
+  // where it happens to rest is not something a screenshot should depend on.
+  parkCursorOutside(hwnd);
+  await sleep(150);
+}
+// The foreground can move away while the clicks and keys above play out, and
+// DWM composites a window that lost it with the inactive caption shade -- a
+// diff in every comparison that the picture itself does not explain. Take the
+// shot with the window active, or say why it isn't.
+if (!(await waitForForeground(hwnd, 2000))) {
+  const fg = getForegroundWindow();
+  const who = fg ? `"${getWindowText(fg)}" holds it` : "nothing holds it, the session is probably locked";
+  console.error(`warning: window never reached the foreground (${who}); the caption renders inactive`);
 }
 captureWindowToPng(hwnd, dst);
+setCursorPos(cursorWas.x, cursorWas.y);
 await killAndWait(proc);
 const logFile = Bun.file(logPath);
 if (await logFile.exists()) {

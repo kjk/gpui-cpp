@@ -20,6 +20,8 @@ const user32 = dlopen("user32.dll", {
   IsWindowVisible: { args: [FFIType.ptr], returns: FFIType.bool },
   ShowWindow: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.bool },
   SetForegroundWindow: { args: [FFIType.ptr], returns: FFIType.bool },
+  GetForegroundWindow: { args: [], returns: FFIType.ptr },
+  GetCursorPos: { args: [FFIType.ptr], returns: FFIType.bool },
   GetWindowDC: { args: [FFIType.ptr], returns: FFIType.u64 },
   ReleaseDC: { args: [FFIType.ptr, FFIType.u64], returns: FFIType.i32 },
   PrintWindow: { args: [FFIType.ptr, FFIType.u64, FFIType.u32], returns: FFIType.bool },
@@ -171,8 +173,54 @@ export function setForegroundWindow(hwnd: number): boolean {
   return user32.symbols.SetForegroundWindow(hwnd);
 }
 
+export function getForegroundWindow(): number {
+  return Number(user32.symbols.GetForegroundWindow() ?? 0);
+}
+
+// SetForegroundWindow is a request, not an order: Windows refuses it while
+// another process owns the foreground, and it says so only through the return
+// value. A window captured while inactive gets the inactive caption shade,
+// which reads as a diff in every screenshot comparison, so keep asking.
+export async function waitForForeground(hwnd: number, timeoutMs = 3000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    setForegroundWindow(hwnd);
+    if (getForegroundWindow() === hwnd) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    await sleep(50);
+  }
+}
+
 export function setCursorPos(x: number, y: number): boolean {
   return user32.symbols.SetCursorPos(x, y);
+}
+
+export function getCursorPos(): { x: number; y: number } {
+  const buf = new Int32Array(2);
+  user32.symbols.GetCursorPos(ptr(buf));
+  return { x: buf[0]!, y: buf[1]! };
+}
+
+// Put the pointer somewhere the window is not, at a work area corner. Windows
+// delivers a wheel notch to whatever sits under the cursor, so a stray scroll
+// while a shot is up lands in the app and captures a scrolled pane instead of
+// the top of the page; a pointer resting on a control is an unasked-for hover
+// state in the same way.
+export function parkCursorOutside(hwnd: number): void {
+  const r = getWindowRect(hwnd);
+  const wa = getWorkArea();
+  const corners = [
+    { x: wa.left + 1, y: wa.bottom - 1 },
+    { x: wa.right - 1, y: wa.bottom - 1 },
+    { x: wa.left + 1, y: wa.top + 1 },
+    { x: wa.right - 1, y: wa.top + 1 },
+  ];
+  const away = corners.find((p) => p.x < r.left || p.x > r.right || p.y < r.top || p.y > r.bottom);
+  setCursorPos(away?.x ?? wa.right - 1, away?.y ?? wa.bottom - 1);
 }
 
 export function clientToScreen(hwnd: number, x: number, y: number): { x: number; y: number } {

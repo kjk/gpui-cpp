@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstdarg>
 #include <locale.h>
+#include <stdlib.h>
 #include <time.h>
 
 namespace gpui {
@@ -476,7 +477,59 @@ void StrFree(Str s) {
     free(s.s);
 }
 
+// A page that draws "today" cannot be screenshot twice: the picture changes at
+// midnight. GPUI_TODAY=YYYY-MM-DD pins it, so a calendar or date picker can be
+// compared against a baseline taken on some other day. Read once; an
+// unparseable value is ignored and the real date used.
+static bool DateParseIso(const char* s, LocalDate* out) {
+    int part[3] = {0, 0, 0};
+    for (int i = 0; i < 3; i++) {
+        if (i > 0) {
+            if (*s != '-') {
+                return false;
+            }
+            s++;
+        }
+        int digits = 0;
+        while (*s >= '0' && *s <= '9') {
+            part[i] = part[i] * 10 + (*s - '0');
+            s++;
+            digits++;
+        }
+        if (digits == 0 || digits > 4) {
+            return false;
+        }
+    }
+    if (*s != 0) {
+        return false;
+    }
+    if (part[0] < 1 || part[1] < 1 || part[1] > 12 || part[2] < 1 ||
+        part[2] > 31) {
+        return false;
+    }
+    out->year = part[0];
+    out->month = part[1];
+    out->day = part[2];
+    return true;
+}
+
+static bool gTodayChecked = false;
+static LocalDate gTodayPinned = {};
+
 LocalDate DateToday() {
+    if (!gTodayChecked) {
+        gTodayChecked = true;
+        const char* env = getenv("GPUI_TODAY");
+        if (env) {
+            LocalDate pinned;
+            if (DateParseIso(env, &pinned)) {
+                gTodayPinned = pinned;
+            }
+        }
+    }
+    if (gTodayPinned.year != 0) {
+        return gTodayPinned;
+    }
     LocalDate out;
     time_t now = time(nullptr);
     struct tm* lt = localtime(&now);
