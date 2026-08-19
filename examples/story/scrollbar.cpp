@@ -85,6 +85,10 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                 ->H(kItemHeight)
                 ->W(kFill)
                 ->PadT(4)
+                // .items_center() in the Rust story: the row is 50px tall and
+                // the chip inside keeps its own height rather than stretching
+                // to fill it.
+                ->ItemsCenter()
                 ->Child(Div(a)
                             ->W(kFill)
                             ->Pad(8)

@@ -1139,6 +1139,34 @@ static float ResolveSize(float spec, float avail, float growAsFill) {
 static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                            Rgba inheritFg);
 
+// Move a laid-out subtree without re-running layout. Positions are absolute,
+// so shifting the origin shifts every descendant by the same delta; sizes are
+// unaffected. This is what LayoutChildren needs once it knows where a child
+// goes, and what a layout-memo hit replays.
+static void TranslateSubtree(El* e, float dx, float dy) {
+    for (El* c = e->first; c; c = c->next) {
+        c->x += dx;
+        c->y += dy;
+        TranslateSubtree(c, dx, dy);
+    }
+}
+
+// Move an element that has already been laid out to a new origin.
+static void MoveEl(El* c, float cx, float cy) {
+    float dx = cx - c->x;
+    float dy = cy - c->y;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    c->x = cx;
+    c->y = cy;
+    TranslateSubtree(c, dx, dy);
+}
+
+static bool RgbaEq(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
 // text_color cascades in GPUI, but here a Text or an Icon resolves its own
 // color when it paints. So a hovered element stamps its hover color onto the
 // descendants that set none — a child with a color of its own keeps it, and
@@ -1154,9 +1182,36 @@ static void StampFg(El* e, Rgba c) {
     }
 }
 
+// Records the result of a full layout so a later call with the same inputs can
+// replay it. See the memo* fields on El.
+static void LayoutMemoStore(El* e, float availW, float availH,
+                            float inheritFont, Rgba inheritFg) {
+    e->memoAvailW = availW;
+    e->memoAvailH = availH;
+    e->memoFont = inheritFont;
+    e->memoFg = inheritFg;
+    e->memoW = e->w;
+    e->memoH = e->h;
+    e->memoContentW = e->contentW;
+    e->memoContentH = e->contentH;
+    e->memoValid = true;
+}
+
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
               float availH, float inheritFont, Rgba inheritFg) {
     if (!e) {
+        return;
+    }
+    // Same inputs as last time: replay the recorded sizes and slide the
+    // subtree to the new origin. Everything below is a pure function of these
+    // four inputs within a frame, so this is the full-fidelity answer.
+    if (e->memoValid && e->memoAvailW == availW && e->memoAvailH == availH &&
+        e->memoFont == inheritFont && RgbaEq(e->memoFg, inheritFg)) {
+        e->w = e->memoW;
+        e->h = e->memoH;
+        e->contentW = e->memoContentW;
+        e->contentH = e->memoContentH;
+        MoveEl(e, x, y);
         return;
     }
     float font = e->style.fontSize > 0 ? e->style.fontSize : inheritFont;
@@ -1195,16 +1250,19 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
                     ElTextWeight(e), e->style.lineHeight);
         e->w = wSpec > 0 ? wSpec : Clamp(tw, e->style.minW, e->style.maxW);
         e->h = hSpec > 0 ? hSpec : Clamp(th, e->style.minH, e->style.maxH);
+        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
         return;
     }
     if (e->kind == ElKind::Icon) {
         e->w = wSpec > 0 ? wSpec : 16;
         e->h = hSpec > 0 ? hSpec : 16;
+        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
         return;
     }
     if (e->kind == ElKind::Progress) {
         e->w = wSpec > 0 ? wSpec : 48;
         e->h = hSpec > 0 ? hSpec : 8;
+        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
         return;
     }
 
@@ -1265,6 +1323,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     if (e->w != prevW || e->h != prevH) {
         LayoutChildren(ctx, e, font, fg);
     }
+    LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
 }
 
 static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
@@ -1350,11 +1409,7 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
     if (c->style.anchorCenterX) {
         ax = parent->x + (parent->w - c->w) * 0.5f;
     }
-    c->x = ax;
-    c->y = ay;
-    if (c->first) {
-        LayoutEl(ctx, c, ax, ay, c->w, c->h, inheritFont, inheritFg);
-    }
+    MoveEl(c, ax, ay);
 }
 
 static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
@@ -1547,12 +1602,7 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                     }
                     float cx = e->x + padL + x;
                     float cy = e->y + padT + lineY + cross - e->scrollY;
-                    c->x = cx;
-                    c->y = cy;
-                    if (c->first) {
-                        LayoutEl(ctx, c, cx, cy, c->w, c->h, inheritFont,
-                                 inheritFg);
-                    }
+                    MoveEl(c, cx, cy);
                     x += c->w + gap;
                 }
                 if (lineW > widest) {
@@ -1654,17 +1704,10 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
             cx = e->x + padL + cross;
             cy = e->y + padT + cursor - e->scrollY;
         }
-        float dx = cx - c->x;
-        float dy = cy - c->y;
-        c->x = cx;
-        c->y = cy;
-        // shift descendants
-        if (dx != 0 || dy != 0) {
-            // children already positioned relative to 0; re-layout at final pos
-            if (c->first) {
-                LayoutEl(ctx, c, cx, cy, c->w, c->h, inheritFont, inheritFg);
-            }
-        }
+        // The child was measured at the origin; slide it and its subtree to
+        // where it actually goes. Its size is already final, so nothing below
+        // has to be laid out again.
+        MoveEl(c, cx, cy);
 
         float step = (row ? c->w : c->h) + gap + betweenExtra;
         cursor += step;

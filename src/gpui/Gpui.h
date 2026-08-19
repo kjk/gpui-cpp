@@ -491,6 +491,21 @@ struct El {
     bool selectable = false;
     float laidFont = 0; // resolved font size from last LayoutEl
     float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
+    // Layout memo. LayoutEl runs a subtree up to three times per parent pass
+    // (measure, shrink-wrap, clamp) and LayoutChildren used to re-run one just
+    // to move it, which multiplies out to an exponential in tree depth. Layout
+    // is a pure function of (availW, availH, inherited font, inherited color)
+    // for a given frame, so the second call with the same inputs replays the
+    // recorded result and translates the subtree to its new origin instead.
+    float memoAvailW = 0;
+    float memoAvailH = 0;
+    float memoFont = 0;
+    Rgba memoFg = {};
+    float memoW = 0;
+    float memoH = 0;
+    float memoContentW = 0;
+    float memoContentH = 0;
+    bool memoValid = false;
 
     El* FlexRow();
     El* FlexCol();
