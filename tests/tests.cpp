@@ -62,6 +62,7 @@ int GpuiMain(int argc, char** argv) {
     TestDataTable();
     TestDock();
     TestTab();
+    TestSetting();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);
