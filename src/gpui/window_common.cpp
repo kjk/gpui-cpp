@@ -56,6 +56,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.selB = -1;
     win->paint.hoverId = win->hoverId;
     win->paint.focusId = win->focusId;
+    win->paint.mouseX = win->mouseX;
+    win->paint.mouseY = win->mouseY;
     win->paint.viewW = dipW;
     win->paint.viewH = dipH;
     TextMeasBeginFrame(&win->paint);
@@ -278,50 +280,87 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
 // bar's bounds and a MouseMoveEvent one for the drag. The arithmetic is in
 // src/base/scrollbar.cpp; this is the routing.
 
-// The scrolled box whose scrollbar band the pointer is in, or null. Innermost
-// first, the way the hit test reads its rects.
-static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y) {
+// Whether a box scrolls at all along one axis, which is what decides if it
+// has a bar to aim at.
+static bool ScrollsY(const ScrollRect& s) {
+    return s.contentH > s.bounds.h + 1.f;
+}
+static bool ScrollsX(const ScrollRect& s) {
+    return s.contentW > s.bounds.w + 1.f;
+}
+
+// An offset that stays inside the content, which is Rust's clamp on the
+// scroll handle rather than anything the wheel does.
+static float ClampScroll(float off, float content, float viewport) {
+    float most = content - viewport;
+    if (most < 0) {
+        most = 0;
+    }
+    if (off > most) {
+        off = most;
+    }
+    return off < 0 ? 0 : off;
+}
+
+// The scrolled box whose scrollbar band the pointer is in, or null, and which
+// of its two bars. Innermost first, the way the hit test reads its rects.
+static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
+                                     bool* horizontal) {
     for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
         const ScrollRect& s = ctx->scrolls[i];
-        if (!s.onScroll.IsValid() || s.contentH <= s.bounds.h + 1.f) {
+        if (!s.onScroll.IsValid()) {
             continue;
         }
-        if (y < s.bounds.y || y > s.bounds.Bottom()) {
-            continue;
+        if (ScrollsY(s) && y >= s.bounds.y && y <= s.bounds.Bottom() &&
+            x >= s.bounds.Right() - kScrollbarBandW && x <= s.bounds.Right()) {
+            *horizontal = false;
+            return &ctx->scrolls[i];
         }
-        if (x >= s.bounds.Right() - kScrollbarBandW && x <= s.bounds.Right()) {
+        if (ScrollsX(s) && x >= s.bounds.x && x <= s.bounds.Right() &&
+            y >= s.bounds.Bottom() - kScrollbarBandW &&
+            y <= s.bounds.Bottom()) {
+            *horizontal = true;
             return &ctx->scrolls[i];
         }
     }
     return nullptr;
 }
 
-static void ScrollbarEmit(Window* win, const ScrollRect* s, float offsetY) {
-    ScrollEvent ev = {s->id, offsetY};
+static void ScrollbarEmit(Window* win, const ScrollRect* s, float offsetX,
+                          float offsetY) {
+    ScrollEvent ev = {s->id, offsetY, offsetX};
     ListenerCall(win->app, win, s->onScroll, &ev);
     AppInvalidate(win);
 }
 
 // The press. Inside the thumb it opens a drag and keeps where it landed;
 // anywhere else on the track the thumb jumps its centre to the press, which
-// is Rust's two branches on `thumb_bounds.contains`.
-static void ScrollbarPress(Window* win, const ScrollRect* s, float y) {
-    float thumb = ScrollbarThumbSize(s->bounds.h, s->bounds.h, s->contentH);
-    float thumbTop =
-        s->bounds.y + ScrollbarThumbPos(s->bounds.h, thumb, s->scrollY,
-                                        s->bounds.h, s->contentH);
+// is Rust's two branches on `thumb_bounds.contains`. Both bars go through
+// this once, along whichever axis they are.
+static void ScrollbarPress(Window* win, const ScrollRect* s, float x, float y,
+                           bool horizontal) {
+    float track = horizontal ? s->bounds.w : s->bounds.h;
+    float content = horizontal ? s->contentW : s->contentH;
+    float origin = horizontal ? s->bounds.x : s->bounds.y;
+    float at = horizontal ? x : y;
+    float thumb = ScrollbarThumbSize(track, track, content);
+    float thumbStart =
+        origin + ScrollbarThumbPos(track, thumb,
+                                   horizontal ? s->scrollX : s->scrollY, track,
+                                   content);
     win->scrollDragId = s->id;
-    if (y >= thumbTop && y <= thumbTop + thumb) {
-        win->scrollDragGrab = y - thumbTop;
+    win->scrollDragHorizontal = horizontal;
+    if (at >= thumbStart && at <= thumbStart + thumb) {
+        win->scrollDragGrab = at - thumbStart;
         return;
     }
     // A track press grabs the thumb by its middle, so the drag that may
     // follow carries on from where it just landed.
     win->scrollDragGrab = thumb * 0.5f;
-    ScrollbarEmit(
-        win, s,
-        ScrollbarOffsetForTrackPress(y, s->bounds.y, s->bounds.h, thumb,
-                                     s->bounds.h, s->contentH));
+    float off =
+        ScrollbarOffsetForTrackPress(at, origin, track, thumb, track, content);
+    ScrollbarEmit(win, s, horizontal ? off : s->scrollX,
+                  horizontal ? s->scrollY : off);
 }
 
 // The scroll rect of an id, from the frame on screen.
@@ -334,16 +373,21 @@ static const ScrollRect* ScrollRectById(Window* win, int id) {
     return nullptr;
 }
 
-static void ScrollbarDrag(Window* win, float y) {
+static void ScrollbarDrag(Window* win, float x, float y) {
     const ScrollRect* s = ScrollRectById(win, win->scrollDragId);
     if (!s || !s->onScroll.IsValid()) {
         return;
     }
-    float thumb = ScrollbarThumbSize(s->bounds.h, s->bounds.h, s->contentH);
-    ScrollbarEmit(
-        win, s,
-        ScrollbarOffsetForDrag(y, win->scrollDragGrab, s->bounds.y, s->bounds.h,
-                               thumb, s->bounds.h, s->contentH));
+    bool horizontal = win->scrollDragHorizontal;
+    float track = horizontal ? s->bounds.w : s->bounds.h;
+    float content = horizontal ? s->contentW : s->contentH;
+    float origin = horizontal ? s->bounds.x : s->bounds.y;
+    float at = horizontal ? x : y;
+    float thumb = ScrollbarThumbSize(track, track, content);
+    float off = ScrollbarOffsetForDrag(at, win->scrollDragGrab, origin, track,
+                                       thumb, track, content);
+    ScrollbarEmit(win, s, horizontal ? off : s->scrollX,
+                  horizontal ? s->scrollY : off);
 }
 
 static void SliderDrag(Window* win, const HitRect* hit, Point at) {
@@ -445,7 +489,7 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     // The bar keeps every move until the release, wherever the pointer has
     // got to — the same rule the slider and on_drag_move go by.
     if (win->scrollDragId && win->mouseDown) {
-        ScrollbarDrag(win, y);
+        ScrollbarDrag(win, x, y);
     }
     // InputState::on_drag_move: the field that took the press keeps every move
     // until the release, wherever the pointer has got to. The button being
@@ -513,10 +557,11 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // The scrollbar sits over whatever it scrolls, so it is asked first: a
     // press on the bar is the bar's, not the row underneath it. Rust says the
     // same with cx.stop_propagation().
-    const ScrollRect* bar = ScrollbarAt(&win->paint, x, y);
+    bool barHorizontal = false;
+    const ScrollRect* bar = ScrollbarAt(&win->paint, x, y, &barHorizontal);
     if (bar) {
         win->mouseDown = true;
-        ScrollbarPress(win, bar, y);
+        ScrollbarPress(win, bar, x, y, barHorizontal);
         AppInvalidate(win);
         return;
     }
@@ -639,6 +684,43 @@ static void DispatchMouseExited(Window* win, const MouseExitEvent& in) {
 }
 
 static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
+    // The scrolled box under the pointer takes the wheel, which is what a
+    // `div().overflow_scroll()` does in GPUI — the offset is the view's here,
+    // so the box reports where it should now be rather than moving itself.
+    // Only a box that asked for the event gets it; anything else falls
+    // through to the window subscription, as it did before there were any.
+    for (int i = win->paint.scrolls.len - 1; i >= 0; i--) {
+        const ScrollRect& s = win->paint.scrolls[i];
+        if (!s.onScroll.IsValid() || !s.bounds.Contains({in.x, in.y})) {
+            continue;
+        }
+        bool canY = ScrollsY(s);
+        bool canX = ScrollsX(s);
+        if (!canY && !canX) {
+            continue;
+        }
+        // A wheel with no sideways delta over a box that only scrolls
+        // sideways scrolls it anyway, which is what a mouse without a tilt
+        // wheel needs.
+        float dx = in.deltaX;
+        float dy = in.deltaY;
+        if (canX && !canY && dx == 0) {
+            dx = dy;
+            dy = 0;
+        }
+        float offY = canY ? ClampScroll(s.scrollY - dy, s.contentH, s.bounds.h)
+                          : s.scrollY;
+        float offX = canX ? ClampScroll(s.scrollX - dx, s.contentW, s.bounds.w)
+                          : s.scrollX;
+        if (offX == s.scrollX && offY == s.scrollY) {
+            AppInvalidate(win);
+            return;
+        }
+        ScrollEvent ev = {s.id, offY, offX};
+        ListenerCall(win->app, win, s.onScroll, &ev);
+        AppInvalidate(win);
+        return;
+    }
     if (win->onScrollWheel.IsValid()) {
         ListenerCall(win->app, win, win->onScrollWheel, &in);
     }
