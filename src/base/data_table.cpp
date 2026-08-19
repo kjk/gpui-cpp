@@ -1,0 +1,322 @@
+#include "base/data_table.h"
+
+namespace gpui {
+
+TableAction TableActionForKey(int key) {
+    switch (key) {
+        case KeyEscape:
+            return TableAction::Cancel;
+        case KeyUp:
+            return TableAction::SelectPrev;
+        case KeyDown:
+            return TableAction::SelectNext;
+        case KeyLeft:
+            return TableAction::SelectPrevColumn;
+        case KeyRight:
+        case KeyTab:
+            // Rust binds tab to SelectNextColumn as well.
+            return TableAction::SelectNextColumn;
+        case KeyHome:
+            return TableAction::SelectFirst;
+        case KeyEnd:
+            return TableAction::SelectLast;
+        case KeyPageUp:
+            return TableAction::SelectPageUp;
+        case KeyPageDown:
+            return TableAction::SelectPageDown;
+        default:
+            return TableAction::None;
+    }
+}
+
+ColumnSort TableNextSort(ColumnSort s) {
+    switch (s) {
+        case ColumnSort::Ascending:
+            return ColumnSort::Default;
+        case ColumnSort::Descending:
+            return ColumnSort::Ascending;
+        default:
+            return ColumnSort::Descending;
+    }
+}
+
+ColumnSort TableSortOf(const TableState* s, int col) {
+    return s->sortCol == col ? s->sort : ColumnSort::Default;
+}
+
+static void TableEmit(TableState* s, Ctx* cx, TableEventKind kind, int row,
+                      int col, ColumnSort sort) {
+    if (!s->onEvent.IsValid()) {
+        return;
+    }
+    TableEvent ev = {kind, row, col, sort};
+    ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+}
+
+void TablePerformSort(TableState* s, Ctx* cx, int col) {
+    if (!s->sortable || col < 0 || col >= s->colCount) {
+        return;
+    }
+    ColumnSort next = TableNextSort(TableSortOf(s, col));
+    // Sorting a column resets every other one, which is what Rust's loop over
+    // the column groups does.
+    s->sortCol = col;
+    s->sort = next;
+    Notify(cx);
+    TableEmit(s, cx, TableEventKind::Sort, -1, col, next);
+}
+
+void TableSetSelectedRow(TableState* s, Ctx* cx, int row) {
+    if (!s->rowSelectable || row < 0 || row >= s->rowCount) {
+        return;
+    }
+    s->mode = TableSelectionMode::Row;
+    s->rightClickedRow = -1;
+    s->selectedRow = row;
+    s->selectedCellRow = -1;
+    s->selectedCellCol = -1;
+    Notify(cx);
+    TableEmit(s, cx, TableEventKind::SelectRow, row, -1, ColumnSort::Default);
+}
+
+void TableSetSelectedCol(TableState* s, Ctx* cx, int col) {
+    if (!s->colSelectable || col < 0 || col >= s->colCount) {
+        return;
+    }
+    s->mode = TableSelectionMode::Column;
+    s->selectedCol = col;
+    Notify(cx);
+    TableEmit(s, cx, TableEventKind::SelectCol, -1, col, ColumnSort::Default);
+}
+
+void TableSetSelectedCell(TableState* s, Ctx* cx, int row, int col) {
+    if (!s->cellSelectable || row < 0 || row >= s->rowCount || col < 0 ||
+        col >= s->colCount) {
+        return;
+    }
+    s->mode = TableSelectionMode::Cell;
+    s->selectedCellRow = row;
+    s->selectedCellCol = col;
+    Notify(cx);
+    TableEmit(s, cx, TableEventKind::SelectCell, row, col, ColumnSort::Default);
+}
+
+void TableClearSelection(TableState* s, Ctx* cx) {
+    s->mode = TableSelectionMode::None;
+    s->selectedRow = -1;
+    s->selectedCol = -1;
+    s->selectedCellRow = -1;
+    s->selectedCellCol = -1;
+    Notify(cx);
+    TableEmit(s, cx, TableEventKind::Cancel, -1, -1, ColumnSort::Default);
+}
+
+static bool TableHasSelection(const TableState* s) {
+    return s->selectedRow >= 0 || s->selectedCol >= 0 ||
+           s->selectedCellRow >= 0;
+}
+
+// The moves, each written the way its Rust handler is. Only up, down, left
+// and right consult loop_selection; a page move and Home/End clamp.
+static int RowPrev(const TableState* s) {
+    int from = s->selectedRow < 0 ? 0 : s->selectedRow;
+    if (from > 0) {
+        return from - 1;
+    }
+    return s->loopSelection ? s->rowCount - 1 : 0;
+}
+
+static int RowNext(const TableState* s) {
+    int last = s->rowCount - 1;
+    if (s->selectedRow < 0) {
+        return 0;
+    }
+    if (s->selectedRow < last) {
+        return s->selectedRow + 1;
+    }
+    return s->loopSelection ? 0 : last;
+}
+
+static int ColPrev(const TableState* s) {
+    int from = s->selectedCol < 0 ? 0 : s->selectedCol;
+    if (from > 0) {
+        return from - 1;
+    }
+    return s->loopSelection ? s->colCount - 1 : 0;
+}
+
+static int ColNext(const TableState* s) {
+    int last = s->colCount - 1;
+    if (s->selectedCol < 0) {
+        return 0;
+    }
+    if (s->selectedCol < last) {
+        return s->selectedCol + 1;
+    }
+    return s->loopSelection ? 0 : last;
+}
+
+// The same pair over the row of a selected cell.
+static int CellRowPrev(const TableState* s) {
+    int row = s->selectedCellRow;
+    if (row > 0) {
+        return row - 1;
+    }
+    return s->loopSelection ? s->rowCount - 1 : row;
+}
+
+static int CellRowNext(const TableState* s) {
+    int last = s->rowCount - 1;
+    if (s->selectedCellRow < last) {
+        return s->selectedCellRow + 1;
+    }
+    return s->loopSelection ? 0 : last;
+}
+
+static int CellColPrev(const TableState* s) {
+    int col = s->selectedCellCol;
+    if (col > 0) {
+        return col - 1;
+    }
+    return s->loopSelection ? s->colCount - 1 : col;
+}
+
+static int CellColNext(const TableState* s) {
+    int last = s->colCount - 1;
+    if (s->selectedCellCol < last) {
+        return s->selectedCellCol + 1;
+    }
+    return s->loopSelection ? 0 : last;
+}
+
+static int Clamp(int v, int lo, int hi) {
+    if (v < lo) {
+        return lo;
+    }
+    return v > hi ? hi : v;
+}
+
+void TablePerform(TableState* s, Ctx* cx, TableAction act) {
+    if (act == TableAction::Cancel) {
+        // action_cancel: Escape gives up the selection, and where there is
+        // none Rust propagates it to whatever encloses the table.
+        if (TableHasSelection(s)) {
+            TableClearSelection(s, cx);
+        }
+        return;
+    }
+    if (s->rowCount < 1) {
+        return;
+    }
+    bool cellMode = s->mode == TableSelectionMode::Cell;
+    // Every cell-mode handler starts the same way: with no cell selected, the
+    // first one is.
+    bool noCell = cellMode && s->selectedCellRow < 0;
+    if (noCell) {
+        int col = act == TableAction::SelectLast ? s->colCount - 1 : 0;
+        TableSetSelectedCell(s, cx, 0, col);
+        return;
+    }
+    int last = s->rowCount - 1;
+    switch (act) {
+        case TableAction::SelectPrev:
+            if (cellMode) {
+                TableSetSelectedCell(s, cx, CellRowPrev(s), s->selectedCellCol);
+            } else {
+                TableSetSelectedRow(s, cx, RowPrev(s));
+            }
+            break;
+        case TableAction::SelectNext:
+            if (cellMode) {
+                TableSetSelectedCell(s, cx, CellRowNext(s), s->selectedCellCol);
+            } else {
+                TableSetSelectedRow(s, cx, RowNext(s));
+            }
+            break;
+        case TableAction::SelectPrevColumn:
+            if (cellMode) {
+                TableSetSelectedCell(s, cx, s->selectedCellRow, CellColPrev(s));
+            } else {
+                TableSetSelectedCol(s, cx, ColPrev(s));
+            }
+            break;
+        case TableAction::SelectNextColumn:
+            if (cellMode) {
+                TableSetSelectedCell(s, cx, s->selectedCellRow, CellColNext(s));
+            } else {
+                TableSetSelectedCol(s, cx, ColNext(s));
+            }
+            break;
+        case TableAction::SelectFirst:
+            // Home and End are the first and last column, not the first and
+            // last row.
+            if (cellMode) {
+                TableSetSelectedCell(s, cx, s->selectedCellRow, 0);
+            } else {
+                TableSetSelectedCol(s, cx, 0);
+            }
+            break;
+        case TableAction::SelectLast:
+            if (cellMode) {
+                TableSetSelectedCell(s, cx, s->selectedCellRow,
+                                     s->colCount - 1);
+            } else {
+                TableSetSelectedCol(s, cx, s->colCount - 1);
+            }
+            break;
+        case TableAction::SelectPageUp:
+            if (cellMode) {
+                TableSetSelectedCell(
+                    s, cx, Clamp(s->selectedCellRow - s->pageRows, 0, last),
+                    s->selectedCellCol);
+            } else {
+                int cur = s->selectedRow < 0 ? 0 : s->selectedRow;
+                TableSetSelectedRow(s, cx, Clamp(cur - s->pageRows, 0, last));
+            }
+            break;
+        case TableAction::SelectPageDown:
+            if (cellMode) {
+                TableSetSelectedCell(
+                    s, cx, Clamp(s->selectedCellRow + s->pageRows, 0, last),
+                    s->selectedCellCol);
+            } else {
+                int cur = s->selectedRow < 0 ? 0 : s->selectedRow;
+                TableSetSelectedRow(s, cx, Clamp(cur + s->pageRows, 0, last));
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void TableState::OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
+                            intptr_t row) {
+    TableSetSelectedRow(self, cx, (int)row);
+    if (ev->clickCount == 2) {
+        TableEmit(self, cx, TableEventKind::DoubleClickedRow, (int)row, -1,
+                  ColumnSort::Default);
+    }
+}
+
+void TableState::OnRowMouseDown(TableState* self, Ctx* cx,
+                                const MouseDownEvent* ev, intptr_t row) {
+    if (ev->button != MouseButton::Right) {
+        return;
+    }
+    self->rightClickedRow = (int)row;
+    Notify(cx);
+}
+
+void TableState::OnHeadClick(TableState* self, Ctx* cx, const ClickEvent*,
+                             intptr_t col) {
+    // on_col_head_click selects the column; the sort icon beside it is what
+    // sorts, and it is its own hit box.
+    TableSetSelectedCol(self, cx, (int)col);
+}
+
+void TableState::OnSortClick(TableState* self, Ctx* cx, const ClickEvent*,
+                             intptr_t col) {
+    TablePerformSort(self, cx, (int)col);
+}
+
+} // namespace gpui

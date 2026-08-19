@@ -63,15 +63,120 @@ static const char* kDtOptions[] = {"Loop selection", "Col resize",
                                    "Stripe",         "Refresh data"};
 static const char* kGoToRows[] = {"Top", "Selected", "Row 50", "Bottom"};
 
+// The order the rows are shown in, which is what the delegate's perform_sort
+// rewrites. -1 means the table's own order.
 struct DataTableStory {
     int rowCount = 2; // 5000
     int extra = 0;    // 0 extra columns
     int openMenu = 0;
     bool options[6] = {false, true, true, true, false, false};
     StoryToolbarState toolbar;
+    // TableState is an entity in Rust too, which is what the row and head
+    // closures capture.
+    Entity<TableState> table = {};
+    bool seeded = false;
+    // What the last table event said, shown under the table.
+    Str message = {};
+    // The order the rows are shown in, which is what the delegate's
+    // perform_sort rewrites.
+    int order[17] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
 
+    ~DataTableStory() { StrFree(message); }
     static El* Render(DataTableStory* self, Ctx* cx);
+    static void OnKey(DataTableStory* self, Ctx* cx, const KeyEvent* ev);
 };
+
+// The delegate's perform_sort: the story reorders its own rows, which is the
+// whole point of the event.
+static float StockKey(const Stock& s, int col) {
+    switch (col) {
+        case 4:
+            return (float)atof(s.price);
+        case 5:
+            return (float)atof(s.chg);
+        default:
+            return (float)atof(s.pct);
+    }
+}
+
+static void SortRows(DataTableStory* self, int col, ColumnSort dir) {
+    const int n = (int)(sizeof(kStocks) / sizeof(kStocks[0]));
+    for (int i = 0; i < n; i++) {
+        self->order[i] = i;
+    }
+    if (dir == ColumnSort::Default) {
+        return;
+    }
+    bool asc = dir == ColumnSort::Ascending;
+    // An insertion sort: seventeen rows, and it keeps equal rows in the order
+    // the table had them.
+    for (int i = 1; i < n; i++) {
+        int v = self->order[i];
+        int j = i - 1;
+        while (j >= 0) {
+            bool swap;
+            if (col == 3) {
+                int c =
+                    strcmp(kStocks[self->order[j]].symbol, kStocks[v].symbol);
+                swap = asc ? c > 0 : c < 0;
+            } else {
+                float a = StockKey(kStocks[self->order[j]], col);
+                float b = StockKey(kStocks[v], col);
+                swap = asc ? a > b : a < b;
+            }
+            if (!swap) {
+                break;
+            }
+            self->order[j + 1] = self->order[j];
+            j--;
+        }
+        self->order[j + 1] = v;
+    }
+}
+
+// cx.subscribe(&table, ..): the story says what it was told.
+static void OnTableEvent(DataTableStory* self, Ctx* cx, const TableEvent* ev) {
+    StrFree(self->message);
+    switch (ev->kind) {
+        case TableEventKind::SelectRow:
+            self->message = StrDup(fmt("Selected row %d", ev->row));
+            break;
+        case TableEventKind::SelectCol:
+            self->message = StrDup(fmt("Selected column %d", ev->col));
+            break;
+        case TableEventKind::DoubleClickedRow:
+            self->message = StrDup(fmt("Double clicked row %d", ev->row));
+            break;
+        case TableEventKind::Sort:
+            SortRows(self, ev->col, ev->sort);
+            self->message = StrDup(
+                fmt("Sorted column %d %s", ev->col,
+                    Str(ev->sort == ColumnSort::Ascending    ? "ascending"
+                        : ev->sort == ColumnSort::Descending ? "descending"
+                                                             : "off")));
+            break;
+        default:
+            self->message = StrDup(StrL("Selection cleared"));
+            break;
+    }
+    Notify(cx);
+}
+
+// The table's key context: the arrows walk the selection, Home and End take
+// the first and last column, the page keys move a page, Escape gives up.
+void DataTableStory::OnKey(DataTableStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (!ev->down) {
+        return;
+    }
+    TableAction act = TableActionForKey(ev->vk);
+    if (act == TableAction::None) {
+        return;
+    }
+    TableState* st = self->table.Get(cx);
+    if (st) {
+        TablePerform(st, cx, act);
+    }
+}
 
 static void DtMenuOpen(DataTableStory* self, Ctx* cx, const ClickEvent*,
                        intptr_t which) {
@@ -94,13 +199,37 @@ static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-static El* DtCell(Ctx* cx, float w, bool right) {
-    Arena* a = cx->a;
-    El* c = Div(a)->FlexRow()->W(w)->PadX(8)->PadY(6)->ItemsCenter();
-    if (right) {
-        c->JustifyEnd();
+// render_td: the delegate's cell, which the table places and styles.
+static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
+    DataTableStory* self = (DataTableStory*)data;
+    const Theme& th = cx->theme();
+    const Stock& s = kStocks[self->order[row]];
+    Rgba trend = s.up ? th.green : th.red;
+    switch (col) {
+        case 0:
+            return StoryTxt(cx, StoryFmt(cx, "%d", self->order[row]), 16,
+                            th.mutedFg)
+                ->LineHeight(1.f);
+        case 1:
+            return StoryTxt(cx, Str(s.market), 16, th.blue)->LineHeight(1.f);
+        case 2:
+            // The Rust cell hides its overflow; ours truncates the text.
+            return StoryTxt(cx, Str(s.name), 16, th.foreground)
+                ->LineHeight(1.f)
+                ->MaxW(160)
+                ->Truncate();
+        case 3:
+            return StoryTxt(cx, Str(s.symbol), 16, th.foreground)
+                ->Medium()
+                ->LineHeight(1.f);
+        case 4:
+            return StoryTxt(cx, Str(s.price), 16, th.foreground)
+                ->LineHeight(1.f);
+        case 5:
+            return StoryTxt(cx, Str(s.chg), 16, trend)->LineHeight(1.f);
+        default:
+            return StoryTxt(cx, Str(s.pct), 16, trend)->LineHeight(1.f);
     }
-    return c;
 }
 
 El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
@@ -108,6 +237,10 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     Listener openMenu = Listen(cx, &DtMenuOpen);
     Listener act = Listen(cx, &DtMenuAct);
+    if (!self->seeded) {
+        self->seeded = true;
+        self->table = EntityNewState<TableState>(cx->app);
+    }
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
     // One group holding the size, rows, extra columns, options, go-to and
@@ -181,8 +314,6 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     // Column widths, in the order the Rust delegate declares them.
     const float wId = 45, wMarket = 61, wName = 176, wSymbol = 101,
                 wPrice = 100, wChg = 100, wPct = 110;
-    El* box =
-        Div(a)->FlexCol()->W(kFill)->Radius(th.radius)->Border(1, th.border);
 
     // Two levels of grouped headers over the column row.
     El* group1 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
@@ -195,7 +326,6 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
                       ->Child(StoryTxt(cx, StrL("Stock"), 16, th.foreground)
                                   ->LineHeight(1.f)));
     group1->Child(Div(a)->Grow()->PadY(6));
-    box->Child(group1);
     El* group2 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
     group2->Child(Div(a)
                       ->FlexRow()
@@ -208,80 +338,31 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     group2->Child(Div(a)->Grow()->FlexRow()->PadY(6)->JustifyCenter()->Child(
         StoryTxt(cx, StrL("Price & Change"), 16, th.foreground)
             ->LineHeight(1.f)));
-    box->Child(group2);
 
-    struct Column {
-        const char* title;
-        float w;
-        bool right;
-        bool sortable;
+    static const component::TableColumn kColumns[] = {
+        {StrL("ID"), wId, false, false, false},
+        {StrL("Market"), wMarket, false, false, true},
+        {StrL("Name"), wName, false, false, true},
+        {StrL("Symbol"), wSymbol, false, true, true},
+        {StrL("Price"), wPrice, true, true, true},
+        {StrL("Chg"), wChg, true, true, true},
+        {StrL("Chg%"), wPct, true, true, true},
     };
-    const Column columns[] = {
-        {"ID", wId, false, false},     {"Market", wMarket, false, false},
-        {"Name", wName, false, false}, {"Symbol", wSymbol, false, true},
-        {"Price", wPrice, true, true}, {"Chg", wChg, true, true},
-        {"Chg%", wPct, true, true},
-    };
-    El* head = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    for (size_t c = 0; c < sizeof(columns) / sizeof(columns[0]); c++) {
-        El* cell = DtCell(cx, columns[c].w, columns[c].right);
-        if (c > 0) {
-            cell->BorderL(1, th.border);
-        }
-        cell->Child(StoryTxt(cx, Str(columns[c].title), 14, th.foreground)
-                        ->LineHeight(1.f));
-        if (columns[c].sortable) {
-            cell->JustifyBetween();
-            cell->Child(IconEl(a, IconName::ChevronsUpDown, 12)
-                            ->Fg(th.mutedFg));
-        }
-        head->Child(cell);
-    }
-    box->Child(head);
-
+    const int nColumns = (int)(sizeof(kColumns) / sizeof(kColumns[0]));
     const int nStocks = (int)(sizeof(kStocks) / sizeof(kStocks[0]));
-    for (int i = 0; i < nStocks; i++) {
-        const Stock& s = kStocks[i];
-        Rgba trend = s.up ? th.green : th.red;
-        El* row = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-        El* idCell = DtCell(cx, wId, false);
-        idCell->Child(StoryTxt(cx, StoryFmt(cx, "%d", i), 16, th.mutedFg)
-                          ->LineHeight(1.f));
-        row->Child(idCell);
-        El* marketCell = DtCell(cx, wMarket, false);
-        marketCell->BorderL(1, th.border);
-        marketCell
-            ->Child(StoryTxt(cx, Str(s.market), 16, th.blue)->LineHeight(1.f));
-        row->Child(marketCell);
-        El* nameCell = DtCell(cx, wName, false);
-        nameCell->BorderL(1, th.border);
-        // The Rust cell hides its overflow; ours truncates the text instead.
-        nameCell->Child(StoryTxt(cx, Str(s.name), 16, th.foreground)
-                            ->LineHeight(1.f)
-                            ->MaxW(wName - 16)
-                            ->Truncate());
-        row->Child(nameCell);
-        El* symbolCell = DtCell(cx, wSymbol, false);
-        symbolCell->BorderL(1, th.border);
-        symbolCell->Child(StoryTxt(cx, Str(s.symbol), 16, th.foreground)
-                              ->Medium()
-                              ->LineHeight(1.f));
-        row->Child(symbolCell);
-        El* priceCell = DtCell(cx, wPrice, true);
-        priceCell->BorderL(1, th.border);
-        priceCell->Child(StoryTxt(cx, Str(s.price), 16, th.foreground)
-                             ->LineHeight(1.f));
-        row->Child(priceCell);
-        El* chgCell = DtCell(cx, wChg, true);
-        chgCell->BorderL(1, th.border);
-        chgCell->Child(StoryTxt(cx, Str(s.chg), 16, trend)->LineHeight(1.f));
-        row->Child(chgCell);
-        El* pctCell = DtCell(cx, wPct, true);
-        pctCell->BorderL(1, th.border)->Bg(RgbaOpacity(trend, 0.06f));
-        pctCell->Child(StoryTxt(cx, Str(s.pct), 16, trend)->LineHeight(1.f));
-        row->Child(pctCell);
-        box->Child(row);
+    TableState* st = self->table.Get(cx);
+    if (st) {
+        st->sortable = self->options[3];
+        st->loopSelection = self->options[0];
+        st->onEvent = Listen(cx, &OnTableEvent);
     }
+    El* box = component::DataTable::New(cx, StrL("data-table"), self->table)
+                  ->Columns(kColumns, nColumns)
+                  ->Rows(nStocks, self, DtCellFor)
+                  ->Stripe(self->options[4])
+                  ->GroupHeader(group1)
+                  ->GroupHeader(group2)
+                  ->IntoEl();
 
     // The status line under the table.
     El* status = Div(a)
@@ -298,9 +379,12 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         14, th.mutedFg));
     status->Child(StoryTxt(cx, StrL("Current · rows 0..21 · columns 0..10"), 14,
                            th.mutedFg));
-    box->Child(status);
     page->Child(box);
+    page->Child(status);
+    if (self->message.s) {
+        page->Child(StoryTxt(cx, self->message, 14, th.mutedFg));
+    }
     return page;
 }
 
-STORY_PAGE(StoryDataTable, DataTableStory);
+STORY_PAGE_KEYS(StoryDataTable, DataTableStory);
