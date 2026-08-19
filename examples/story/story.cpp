@@ -864,6 +864,11 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
         Div(frame)->Pad(16)->W(kFill)->Child(StoryRenderRegistered(app, cx)));
     main->Child(scroller);
     body->Child(main);
+    // The inspector docks on the right, as it does off Root in Rust.
+    // Ctrl+Shift+I toggles it.
+    if (El* inspector = component::Inspector::New(cx)->IntoEl()) {
+        body->Child(inspector);
+    }
     root->Child(body);
     root->Child(Footer(app, cx));
     return root;

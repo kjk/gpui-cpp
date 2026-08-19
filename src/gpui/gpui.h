@@ -1105,6 +1105,45 @@ struct TextMeasCache {
 struct PaintApp;
 struct PaintTarget;
 
+// What the inspector is looking at. GPUI's Inspector picks an element out of
+// the window and shows where it came from; an element here has no source
+// location — nothing takes `#[track_caller]` — so what it can say for itself
+// is its id, the box layout gave it, and the style it was built with.
+struct InspectorPick {
+    int id = 0;
+    Str elId = {};
+    Bounds bounds = {};
+    // The kind of element, as El::kind reads it.
+    int kind = 0;
+    int depth = 0;
+    bool hasBg = false;
+    Rgba bg = {};
+    float pad = 0;
+    float gap = 0;
+    float radius = 0;
+    float border = 0;
+    bool row = true;
+    float font = 0;
+    // The text a Text element holds, so a picked label says which one it is.
+    Str text = {};
+};
+
+// window.toggle_inspector / Inspector::is_picking. The panel is the caller's
+// to render — `component::Inspector` is the one this tree ships — and this is
+// the state it reads.
+struct InspectorState {
+    bool on = false;
+    bool picking = false;
+    bool hasPick = false;
+    InspectorPick pick = {};
+    // A press while picking names the element it landed on, but the frame
+    // that painted last was aimed at wherever the pointer was then. The pick
+    // is settled on the next frame instead, against the press itself.
+    bool pending = false;
+    float pendingX = 0;
+    float pendingY = 0;
+};
+
 struct PaintCtx {
     PaintApp* pa = nullptr;
     PaintTarget* rt = nullptr;
@@ -1116,6 +1155,12 @@ struct PaintCtx {
     // Where the pointer is, which is what a Hover-mode scrollbar consults.
     float mouseX = -1;
     float mouseY = -1;
+    // The inspector picking an element: every box under the pointer overwrites
+    // this as it paints, so the deepest one wins — which is the one a click
+    // would land on.
+    bool picking = false;
+    bool pickHit = false;
+    InspectorPick pick = {};
     Vec<HitRect> hits;
     Vec<ScrollRect> scrolls;
     Vec<TextHit> texts;
@@ -1834,6 +1879,7 @@ struct Window {
     // field's blink cursor is.
     EntityId tooltip = {};
     Overlay overlay = {};
+    InspectorState inspector = {};
     MenuState menu = {};
     Vec<FocusRect> focusEls;
     Vec<KeyedSlot> keyed;
@@ -2034,6 +2080,12 @@ void WindowOnKey(Window* win, Listener l);
 // Fires for a click no element handled — the outside click that dismisses an
 // overlay. Elements carry their own listener; this is not a dispatch table.
 void WindowOnUnhandledClick(Window* win, Listener l);
+
+// window.toggle_inspector, and the picking mode its magnifier button starts.
+// Ctrl+Shift+I toggles it, as it does in Rust on everything but macOS.
+void WindowToggleInspector(Window* win);
+void WindowInspectorPick(Window* win, bool picking);
+const InspectorState* WindowInspector(Ctx* cx);
 
 // window.active_drag: what a press picked up, or an invalid payload when
 // nothing is being dragged. A drop target reads it to decide whether to show

@@ -2394,6 +2394,29 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->boundsOut) {
         *e->boundsOut = e->Bounds();
     }
+    // The inspector picking an element: every box under the pointer is
+    // written down as it paints, so the deepest one — the one a click would
+    // land on — is the one left standing.
+    if (ctx->picking && e->w > 0 && e->h > 0 &&
+        e->Bounds().Contains({ctx->mouseX, ctx->mouseY})) {
+        InspectorPick p;
+        p.id = e->clickId;
+        p.elId = e->id;
+        p.bounds = e->Bounds();
+        p.kind = (int)e->kind;
+        p.hasBg = e->style.hasBg;
+        p.bg = e->style.bg;
+        p.pad = e->style.pad.left;
+        p.gap = e->style.gap;
+        p.radius = e->style.radius;
+        p.border = e->style.border;
+        p.row = e->style.dir == FlexDir::Row;
+        p.font = e->style.fontSize;
+        p.text = e->text;
+        p.depth = ctx->pick.depth + 1;
+        ctx->pick = p;
+        ctx->pickHit = true;
+    }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->onHover.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||

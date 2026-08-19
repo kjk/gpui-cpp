@@ -18,6 +18,7 @@
 #include "ui/description_list.h"
 #include "ui/dialog.h"
 #include "ui/dock.h"
+#include "ui/inspector.h"
 #include "ui/form.h"
 #include "ui/group_box.h"
 #include "ui/highlighter.h"

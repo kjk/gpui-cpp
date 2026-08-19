@@ -182,6 +182,32 @@ int WindowDragOverId(Ctx* cx) {
     return (cx && cx->win) ? cx->win->dragOverId : 0;
 }
 
+void WindowToggleInspector(Window* win) {
+    if (!win) {
+        return;
+    }
+    win->inspector.on = !win->inspector.on;
+    // Toggling it on starts in picking mode, which is what the magnifier is
+    // already pressed for in Rust.
+    win->inspector.picking = win->inspector.on;
+    if (!win->inspector.on) {
+        win->inspector.hasPick = false;
+    }
+    AppInvalidate(win);
+}
+
+void WindowInspectorPick(Window* win, bool picking) {
+    if (!win) {
+        return;
+    }
+    win->inspector.picking = picking;
+    AppInvalidate(win);
+}
+
+const InspectorState* WindowInspector(Ctx* cx) {
+    return (cx && cx->win) ? &cx->win->inspector : nullptr;
+}
+
 void WindowOnUnhandledClick(Window* win, Listener l) {
     if (win) {
         win->onClick = l;
