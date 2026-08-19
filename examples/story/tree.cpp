@@ -1,52 +1,59 @@
 #include "Story.h"
 
-// One row of the file tree; the Rust story reads ./ the same way.
-struct TreeEntry {
-    char name[128] = {};
-    bool folder = false;
-};
-
+// The Rust story (crates/story/src/tree_story.rs) walks the working directory
+// and puts it in a Tree. So does this: the top level, then one level under
+// each folder, which is enough rows for the list to be worth virtualizing.
 struct TreeStory {
-    TreeEntry entries[256] = {};
-    int n = 0;
-    int selected = -1;
+    Entity<TreeState> tree = {};
     bool loaded = false;
+    // What the last TreeEvent said, shown under the tree.
+    Str message = {};
 
     static El* Render(TreeStory* self, Ctx* cx);
     static void OnKey(TreeStory* self, Ctx* cx, const KeyEvent* ev);
+    static void OnTreeEvent(TreeStory* self, Ctx* cx, const TreeEvent* ev);
+    static void OnRevealRandom(TreeStory* self, Ctx* cx, const ClickEvent* ev);
 };
 
-// crates/base/src/tree.rs binds up, down, left and right. This page lists one
-// directory flat, so it has no folder to open and the left/right pair has
-// nothing to act on; the selection keys are the half that applies. Both wrap,
-// and both treat no selection as index 0 before stepping, so the first Up
-// lands on the last entry.
+// crates/base/src/tree.rs binds up, down, left, right and enter in the tree's
+// key context. The state does what each one means; this only has to name the
+// action and hand it over.
 void TreeStory::OnKey(TreeStory* self, Ctx* cx, const KeyEvent* ev) {
     if (!ev->down) {
         return;
     }
     TreeAction act = TreeActionForKey(ev->vk);
-    if (act == TreeAction::SelectPrev) {
-        self->selected = TreeSelectPrev(self->selected, self->n);
-    } else if (act == TreeAction::SelectNext) {
-        self->selected = TreeSelectNext(self->selected, self->n);
-    } else {
+    if (act == TreeAction::None) {
         return;
     }
+    TreeState* s = self->tree.Get(cx);
+    if (s) {
+        TreePerform(s, cx, act);
+    }
+}
+
+void TreeStory::OnTreeEvent(TreeStory* self, Ctx* cx, const TreeEvent* ev) {
+    if (self->message.s) {
+        StrFree(self->message);
+    }
+    Str what = ev->kind == TreeEventKind::Expanded ? StrL("Expanded")
+                                                   : StrL("Collapsed");
+    self->message = StrDup(fmt("%s %s", what, ev->id));
     Notify(cx);
 }
 
-static void SelectTreeItem(TreeStory* self, Ctx* cx, const ClickEvent*,
-                           intptr_t ix) {
-    self->selected = (int)ix;
-    Notify(cx);
-}
-static void SelectRandom(TreeStory* self, Ctx* cx, const ClickEvent*) {
-    if (self->n > 0) {
-        // No RNG here; the monotonic clock in milliseconds is random
-        // enough for "pick a node".
-        self->selected =
-            (int)((uint64_t)(TimeNow() * 1000.0) % (uint64_t)self->n);
+// reveal_item: open everything above an item and scroll it into view. No RNG
+// here; the monotonic clock in milliseconds is random enough for "pick one".
+void TreeStory::OnRevealRandom(TreeStory* self, Ctx* cx, const ClickEvent*) {
+    TreeState* s = self->tree.Get(cx);
+    if (!s || s->nItems == 0) {
+        return;
+    }
+    int item = (int)((uint64_t)(TimeNow() * 1000.0) % (uint64_t)s->nItems);
+    int ix = TreeRevealItem(s, s->items[item].id);
+    if (ix >= 0) {
+        s->selected = ix;
+        TreeScrollToItem(s, ix, ScrollStrategy::Center);
     }
     Notify(cx);
 }
@@ -62,34 +69,48 @@ static bool TreeSkip(const char* name) {
     return false;
 }
 
-static void LoadTree(TreeStory* self) {
-    static DirEntry found[256];
-    int got = PlatListDir(".", found, 256);
-    for (int i = 0; i < got && self->n < 256; i++) {
-        if (TreeSkip(found[i].name)) {
-            continue;
-        }
-        TreeEntry& e = self->entries[self->n];
-        StrCopyZ(e.name, (int)sizeof(e.name), found[i].name);
-        e.folder = found[i].isDir;
-        self->n++;
-    }
-    // Folders first, then by name.
-    for (int i = 1; i < self->n; i++) {
-        TreeEntry key = self->entries[i];
+// Folders first, then by name — the order a file tree is normally shown in.
+static void SortDir(DirEntry* e, int n) {
+    for (int i = 1; i < n; i++) {
+        DirEntry key = e[i];
         int j = i - 1;
         while (j >= 0) {
-            const TreeEntry& cur = self->entries[j];
-            bool after = cur.folder != key.folder
-                             ? (!cur.folder && key.folder)
-                             : strcmp(cur.name, key.name) > 0;
+            bool after = e[j].isDir != key.isDir
+                             ? (!e[j].isDir && key.isDir)
+                             : strcmp(e[j].name, key.name) > 0;
             if (!after) {
                 break;
             }
-            self->entries[j + 1] = self->entries[j];
+            e[j + 1] = e[j];
             j--;
         }
-        self->entries[j + 1] = key;
+        e[j + 1] = key;
+    }
+}
+
+static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
+    static DirEntry found[256];
+    int got = PlatListDir(path, found, 256);
+    SortDir(found, got);
+    for (int i = 0; i < got; i++) {
+        if (TreeSkip(found[i].name)) {
+            continue;
+        }
+        char child[512];
+        snprintf(child, sizeof(child), "%s/%s", path, found[i].name);
+        // The id has to be unique and stable, so it is the path; the label is
+        // the name.
+        int ix = TreeAddItem(s, StrDup(Str(child)), StrDup(Str(found[i].name)),
+                             parent);
+        if (ix < 0) {
+            return;
+        }
+        // A directory is a folder because it is one, not because its children
+        // happen to have been read in yet.
+        s->items[ix].folder = found[i].isDir;
+        if (found[i].isDir && depth > 0) {
+            LoadDir(s, child, ix, depth - 1);
+        }
     }
 }
 
@@ -98,69 +119,62 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->loaded) {
         self->loaded = true;
-        LoadTree(self);
+        self->tree = EntityNewState<TreeState>(cx->app);
+        TreeState* s = self->tree.Get(cx);
+        if (s) {
+            LoadDir(s, ".", -1, 2);
+            // The first folder starts open, so the page shows a tree rather
+            // than a list of roots.
+            for (int i = 0; i < s->nItems; i++) {
+                if (s->items[i].folder) {
+                    s->items[i].expanded = true;
+                    break;
+                }
+            }
+            TreeRebuild(s);
+            s->onEvent = Listen(cx, &TreeStory::OnTreeEvent);
+        }
     }
+    TreeState* s = self->tree.Get(cx);
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* btnRow = Div(a)->FlexRow()->Gap(12);
     btnRow->Child(component::Button::New(cx, StrL("select-item"))
-                      ->Label(StrL("Select Item"))
+                      ->Label(StrL("Reveal Item"))
                       ->Outline()
-                      ->OnClick(Listen(cx, &SelectRandom))
+                      ->OnClick(Listen(cx, &TreeStory::OnRevealRandom))
                       ->IntoEl());
     page->Child(btnRow);
 
     El* sec = StorySection(cx, "File tree", nullptr);
     StorySectionSubTitle(
         sec, StoryTxt(cx,
-                      StrL("Press `enter` to rename. Right-click for context "
-                           "menu."),
+                      StrL("Click a folder to open it. Arrow keys move, "
+                           "left and right fold."),
                       16, th.mutedFg));
     El* col = Div(a)->FlexCol()->W(480)->Gap(16);
-    El* box = Div(a)
-                  ->FlexCol()
-                  ->W(kFill)
-                  ->H(540)
-                  ->Pad(4)
-                  ->ClipY()
-                  ->Radius(th.radius)
-                  ->Border(1, th.border);
-    Listener pick = Listen(cx, &SelectTreeItem);
-    for (int i = 0; i < self->n; i++) {
-        const TreeEntry& e = self->entries[i];
-        El* row = Div(a)
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->H(34)
-                      ->PadR(12)
-                      // px_3 plus 16 per depth; every entry here is depth 0.
-                      ->PadL(12)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius)
-                      ->HoverBg(th.muted);
-        if (i == self->selected) {
-            row->Bg(th.accent);
-        }
-        row->Child(IconEl(a, e.folder ? IconName::Folder : IconName::File, 16)
-                       ->Fg(th.foreground));
-        row->Child(StoryTxt(cx, StoryDup(cx, e.name), 16, th.foreground));
-        row->Click(HashClickId(StoryFmt(cx, "tree-%d", i)))
-            ->OnClick(ListenerArg(pick, i));
-        box->Child(row);
-    }
+    El* box = Div(a)->FlexCol()->W(kFill)->Pad(4)->Radius(th.radius)->Border(
+        1, th.border);
+    box->Child(
+        component::Tree::New(cx, StrL("tree"), self->tree)->H(500)->IntoEl());
     col->Child(box);
+
     El* status = Div(a)->FlexRow()->W(kFill)->Gap(12)->JustifyBetween();
-    if (self->selected >= 0) {
-        status->Child(
-            StoryTxt(cx, StoryFmt(cx, "Selected Index: %d", self->selected), 16,
-                     th.foreground));
-        status->Child(
-            component::Label::New(cx, StrL("Selected:"))
-                ->Secondary(StoryDup(cx, self->entries[self->selected].name))
-                ->IntoEl());
+    if (s && s->selected >= 0) {
+        const TreeItem* it = TreeEntryItem(s, s->selected);
+        status->Child(StoryTxt(cx,
+                               StoryFmt(cx, "Selected Index: %d", s->selected),
+                               16, th.foreground));
+        if (it) {
+            status->Child(component::Label::New(cx, StrL("Selected:"))
+                              ->Secondary(it->label)
+                              ->IntoEl());
+        }
     }
     col->Child(status);
+    if (self->message.s) {
+        col->Child(StoryTxt(cx, self->message, 14, th.mutedFg));
+    }
     StorySectionAdd(sec, col);
     page->Child(sec);
     return page;

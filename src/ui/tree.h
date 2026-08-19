@@ -1,4 +1,9 @@
-/* Themed tree — crates/ui/src/tree.rs */
+/* Themed tree — crates/ui/src/tree.rs
+
+   crates/ui's Tree is the base tree with the gallery's row: an indent per
+   depth, a chevron for a folder, an icon and a label. The rows come from a
+   TreeState and only the visible ones are built, which is what makes it a
+   virtualized tree rather than a list of every node. */
 
 #include "ui/sizing.h"
 
@@ -6,25 +11,18 @@ namespace gpui {
 
 namespace component {
 
-struct TreeNode {
-    Str label = {};
-    int parent = -1;
-    bool folder = false;
-    bool open = false;
-};
-
 struct Tree {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    TreeNode nodes[16] = {};
-    int n = 0;
-    int selected = -1;
-    Listener onSelect;
+    Str id = {};
+    Entity<TreeState> state = {};
+    float h = 320;
+    // Whether a row shows a file / folder icon beside its chevron.
+    bool icons = true;
 
-    static Tree* New(Ctx* cx);
-    Tree* Node(Str label, int parent, bool folder, bool open);
-    Tree* Selected(int i);
-    Tree* OnSelect(Listener fn);
+    static Tree* New(Ctx* cx, Str id, Entity<TreeState> state);
+    Tree* H(float v);
+    Tree* Icons(bool v);
     El* IntoEl();
 };
 

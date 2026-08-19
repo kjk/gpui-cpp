@@ -31,20 +31,16 @@ VirtualList* VirtualList::Row(El* (*fn)(Arena*, int)) {
 
 El* VirtualList::IntoEl() {
     const Theme& th = cx->theme();
-    int first = (int)(scrollY / rowH);
-    if (first < 0) {
-        first = 0;
-    }
-    int visible = (int)(viewH / rowH) + 2;
+    // The rows the viewport can show, and a spacer at each end standing in
+    // for the ones that were not built — without the second one the list
+    // would scroll only as far as the last row it made.
+    VirtualRange range = VirtualListVisibleRows(count, rowH, scrollY, viewH);
+    int first = range.first;
     El* list = Div(a)->FlexCol();
     if (first > 0) {
         list->Child(Div(a)->H((float)first * rowH));
     }
-    for (int i = 0; i < visible; i++) {
-        int ix = first + i;
-        if (ix >= count) {
-            break;
-        }
+    for (int ix = first; ix < range.end; ix++) {
         if (row) {
             list->Child(row(a, ix));
         } else {
@@ -54,9 +50,13 @@ El* VirtualList::IntoEl() {
                     ->Fg(th.foreground)));
         }
     }
+    if (range.end < count) {
+        list->Child(Div(a)->H((float)(count - range.end) * rowH));
+    }
     return gpui::VirtualList::New(cx, StrL("vlist"))
         ->H(viewH)
         ->ClipY()
+        ->ScrollY(scrollY)
         ->Child(list);
 }
 

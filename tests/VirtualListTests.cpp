@@ -67,6 +67,54 @@ static void RowsOfDifferentHeightsStillLineUp() {
     utassert(r.end == 5);
 }
 
+static void UniformRowsAnswerTheSameRange() {
+    // Ten rows of fifty in a viewport of two hundred, worked out by division
+    // rather than by scanning: the same edges as the general scan.
+    VirtualRange r = VirtualListVisibleRows(10, 50, 0, 200);
+    utassert(r.first == 0 && r.end == 6);
+    r = VirtualListVisibleRows(10, 50, 100, 200);
+    utassert(r.first == 2 && r.end == 8);
+    r = VirtualListVisibleRows(10, 50, 25, 200);
+    utassert(r.first == 0 && r.end == 6);
+    // Past the bottom the spare cannot run off the end.
+    r = VirtualListVisibleRows(10, 50, 300, 200);
+    utassert(r.first == 6 && r.end == 10);
+    // A list shorter than its viewport is all of it, and an empty one is
+    // nothing.
+    r = VirtualListVisibleRows(3, 50, 0, 200);
+    utassert(r.first == 0 && r.end == 3);
+    r = VirtualListVisibleRows(0, 50, 0, 200);
+    utassert(r.first == 0 && r.end == 0);
+}
+
+static void ScrollToItemMovesAsLittleAsItCan() {
+    // Ten rows of fifty, a viewport of two hundred: rows 0..3 are on screen.
+    // A row already in view does not move the list at all.
+    utassertnear(VirtualListScrollToRow(10, 50, 2, 0, 200, ScrollStrategy::Top),
+                 0.f);
+    // One below the fold aligns with the bottom edge.
+    utassertnear(VirtualListScrollToRow(10, 50, 5, 0, 200, ScrollStrategy::Top),
+                 100.f);
+    // One above it aligns with the top.
+    utassertnear(
+        VirtualListScrollToRow(10, 50, 1, 200, 200, ScrollStrategy::Bottom),
+        50.f);
+    // Center puts the row's middle on the viewport's middle...
+    utassertnear(
+        VirtualListScrollToRow(10, 50, 5, 0, 200, ScrollStrategy::Center),
+        175.f);
+    // ...but never past either end of the list.
+    utassertnear(
+        VirtualListScrollToRow(10, 50, 0, 100, 200, ScrollStrategy::Center),
+        0.f);
+    utassertnear(
+        VirtualListScrollToRow(10, 50, 9, 0, 200, ScrollStrategy::Center),
+        300.f);
+    // A row that is not there leaves the offset where it was.
+    utassertnear(
+        VirtualListScrollToRow(10, 50, 20, 75, 200, ScrollStrategy::Top), 75.f);
+}
+
 void TestVirtualList() {
     TestSuite("virtual_list");
     TheTopOfTheListStartsAtZero();
@@ -75,4 +123,6 @@ void TestVirtualList() {
     AListShorterThanItsViewportIsAllVisible();
     AnEmptyListHasNothingToBuild();
     RowsOfDifferentHeightsStillLineUp();
+    UniformRowsAnswerTheSameRange();
+    ScrollToItemMovesAsLittleAsItCan();
 }

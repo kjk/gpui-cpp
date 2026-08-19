@@ -5,12 +5,14 @@
 
 #include "Test.h"
 
-static void TheFourKeysMapToTheFourActions() {
+static void TheKeysMapToTheActions() {
     utassert(TreeActionForKey(KeyUp) == TreeAction::SelectPrev);
     utassert(TreeActionForKey(KeyDown) == TreeAction::SelectNext);
     utassert(TreeActionForKey(KeyLeft) == TreeAction::Collapse);
     utassert(TreeActionForKey(KeyRight) == TreeAction::Expand);
-    utassert(TreeActionForKey(KeyReturn) == TreeAction::None);
+    // Confirm has a handler in the tree (on_action_confirm, which toggles the
+    // selected folder); enter is what carries it, as it does for the list.
+    utassert(TreeActionForKey(KeyReturn) == TreeAction::Confirm);
     utassert(TreeActionForKey(KeySpace) == TreeAction::None);
 }
 
@@ -49,11 +51,94 @@ static void LeftAndRightEachActInOneDirectionOnly() {
     utassert(!TreeExpands(false, false));
 }
 
+// A root with two children, the second of which has one of its own.
+static void Seed(TreeState* s) {
+    int root = TreeAddItem(s, StrL("root"), StrL("root"), -1);
+    TreeAddItem(s, StrL("a"), StrL("a"), root);
+    int b = TreeAddItem(s, StrL("b"), StrL("b"), root);
+    TreeAddItem(s, StrL("b1"), StrL("b1"), b);
+    int other = TreeAddItem(s, StrL("other"), StrL("other"), -1);
+    (void)other;
+    TreeRebuild(s);
+}
+
+static void OnlyOpenFoldersPutTheirChildrenOnScreen() {
+    TreeState s;
+    Seed(&s);
+    // Everything starts closed, so the two roots are the whole list.
+    utassert(s.nEntries == 2);
+    utassert(TreeIndexOf(&s, StrL("root")) == 0);
+    utassert(TreeIndexOf(&s, StrL("a")) == -1);
+    // An item something else calls its parent is a folder; the rest are not.
+    utassert(s.items[0].folder);
+    utassert(!s.items[1].folder);
+    utassert(s.items[3].depth == 2);
+
+    bool expanded = false;
+    utassert(TreeToggleExpandAt(&s, 0, &expanded));
+    utassert(expanded);
+    // The root's own children come in, but not the ones under the folder
+    // that is still closed.
+    utassert(s.nEntries == 4);
+    utassert(TreeIndexOf(&s, StrL("b")) == 2);
+    utassert(TreeIndexOf(&s, StrL("b1")) == -1);
+    utassert(TreeIndexOf(&s, StrL("other")) == 3);
+
+    utassert(TreeToggleExpandAt(&s, 2, &expanded));
+    utassert(expanded);
+    utassert(s.nEntries == 5);
+    utassert(TreeIndexOf(&s, StrL("b1")) == 3);
+
+    // Closing the root takes the whole subtree off screen at once.
+    utassert(TreeToggleExpandAt(&s, 0, &expanded));
+    utassert(!expanded);
+    utassert(s.nEntries == 2);
+}
+
+static void ALeafDoesNotToggle() {
+    TreeState s;
+    Seed(&s);
+    TreeToggleExpandAt(&s, 0, nullptr);
+    // Entry 1 is the leaf `a`.
+    utassert(!TreeToggleExpandAt(&s, 1, nullptr));
+    // And neither does a row that is not there.
+    utassert(!TreeToggleExpandAt(&s, 99, nullptr));
+    utassert(s.nEntries == 4);
+}
+
+static void RevealOpensEveryFolderAboveIt() {
+    TreeState s;
+    Seed(&s);
+    // `b1` is two folders deep and has no row at all to begin with.
+    utassert(TreeIndexOf(&s, StrL("b1")) == -1);
+    utassert(TreeRevealItem(&s, StrL("b1")) == 3);
+    utassert(s.items[0].expanded);
+    utassert(s.items[2].expanded);
+    // An id the tree does not hold reveals nothing.
+    utassert(TreeRevealItem(&s, StrL("nope")) == -1);
+}
+
+static void CollapsingPastTheSelectionPullsItBack() {
+    TreeState s;
+    Seed(&s);
+    TreeRevealItem(&s, StrL("b1"));
+    s.selected = 3;
+    // The rows the selection pointed at are gone, so it lands on the last
+    // one that is left rather than off the end.
+    TreeToggleExpandAt(&s, 0, nullptr);
+    utassert(s.nEntries == 2);
+    utassert(s.selected == 1);
+}
+
 void TestTree() {
     TestSuite("tree");
-    TheFourKeysMapToTheFourActions();
+    TheKeysMapToTheActions();
     TheSelectionWraps();
     NoSelectionCountsAsZeroBeforeStepping();
     AnEmptyTreeHasNothingToSelect();
     LeftAndRightEachActInOneDirectionOnly();
+    OnlyOpenFoldersPutTheirChildrenOnScreen();
+    ALeafDoesNotToggle();
+    RevealOpensEveryFolderAboveIt();
+    CollapsingPastTheSelectionPullsItBack();
 }
