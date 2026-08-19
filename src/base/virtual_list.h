@@ -26,9 +26,42 @@ struct VirtualRange {
 VirtualRange VirtualListVisibleRange(const float* sizes, int count,
                                      float offset, float viewport);
 
+// The same range for a list whose items are all one size — uniform_list,
+// which is what a tree renders through. Worked out by division rather than by
+// scanning, so a hundred thousand rows cost nothing to skip.
+VirtualRange VirtualListVisibleRows(int count, float rowSize, float offset,
+                                    float viewport);
+
 // The distance from the start of the list to item `ix` — Rust's running scan
 // over the sizes, which is where each item is placed.
 float VirtualListItemOrigin(const float* sizes, int count, int ix);
+
+// gpui::ScrollStrategy, which says where scroll_to_item leaves the item it
+// brought into view. The virtual list treats Top and Bottom alike — Rust
+// matches only Center and lets the rest fall into one branch that scrolls as
+// little as it can: an item above the view aligns with the top, one below
+// aligns with the bottom, and one already in view does not move at all.
+enum class ScrollStrategy : uint8_t {
+    Top,
+    Center,
+    Bottom
+};
+
+// scroll_to_item: the offset that brings the item at `origin` into a viewport
+// of `viewport`, from where it is now. Offsets run positive-down, as
+// El::ScrollY takes them, and the answer is clamped to the list — there is
+// nothing to see past either end.
+float VirtualListScrollTo(float origin, float size, float offset,
+                          float viewport, float contentSize,
+                          ScrollStrategy strategy);
+// The same, for the item at `ix` of a list whose items are `sizes`.
+float VirtualListScrollToItem(const float* sizes, int count, int ix,
+                              float offset, float viewport,
+                              ScrollStrategy strategy);
+// The same again, for a list whose items are all one size — which is what
+// uniform_list is, and what the tree renders through.
+float VirtualListScrollToRow(int count, float rowSize, int ix, float offset,
+                             float viewport, ScrollStrategy strategy);
 
 // Every item's length added up: the scrolled size of the whole list.
 float VirtualListContentSize(const float* sizes, int count);

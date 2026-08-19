@@ -56,8 +56,8 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         }
         int depth = Depth(i);
         bool sel = app->treeSel == i;
-        El* row = TreeItem::New(cx, DupFmt(cx, "tree-%d", i),
-                                Listen(cx, &PickTree, i))
+        El* row = TreeItemEl::New(cx, DupFmt(cx, "tree-%d", i),
+                                  Listen(cx, &PickTree, i))
                       ->H(32)
                       ->W(kFill)
                       ->PadX(8)
