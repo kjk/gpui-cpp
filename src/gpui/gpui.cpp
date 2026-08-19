@@ -1249,6 +1249,12 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
 // goes, and what a layout-memo hit replays.
 static void TranslateSubtree(El* e, float dx, float dy) {
     for (El* c = e->first; c; c = c->next) {
+        // A fixed element was placed against the window, not against whatever
+        // holds it, so sliding an ancestor into place must leave it where it
+        // is — and its own subtree with it.
+        if (c->style.fixed) {
+            continue;
+        }
         c->x += dx;
         c->y += dy;
         TranslateSubtree(c, dx, dy);

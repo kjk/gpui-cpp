@@ -1,5 +1,6 @@
 #include "ui/notification.h"
 #include "ui/alert.h"
+#include "ui/title_bar.h"
 
 namespace gpui {
 
@@ -37,6 +38,210 @@ Notification* Notification::OnClose(Listener fn) {
 Notification* Notification::OnClick(Listener fn) {
     onClick = fn;
     return this;
+}
+
+int NotificationIndexOf(const NotificationListState* s, int id) {
+    for (int i = 0; i < s->n; i++) {
+        if (s->items[i].id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void NotificationRemoveAt(NotificationListState* s, int ix) {
+    ToastRemove(&s->stack, s->items[ix].id);
+    for (int i = ix; i < s->n - 1; i++) {
+        s->items[i] = s->items[i + 1];
+    }
+    s->n--;
+}
+
+int NotificationPush(NotificationListState* s, NotificationItem item,
+                     int timeoutMs) {
+    // A push with an id already in the list replaces that one: Rust keys its
+    // notifications by NotificationId, so the same one never stacks twice.
+    if (item.id != 0) {
+        int at = NotificationIndexOf(s, item.id);
+        if (at >= 0) {
+            NotificationRemoveAt(s, at);
+        }
+    } else {
+        item.id = s->nextId++;
+    }
+    // max_items: the oldest goes to make room.
+    while (s->n >= s->maxItems || s->n >= kToastStackCap) {
+        NotificationRemoveAt(s, 0);
+    }
+    s->items[s->n++] = item;
+    ToastPush(&s->stack, item.id, timeoutMs);
+    return item.id;
+}
+
+void NotificationDismiss(NotificationListState* s, int id) {
+    for (int i = 0; i < s->stack.n; i++) {
+        if (s->stack.entries[i].id == id) {
+            // The card animates out first; advance drops it when it is done.
+            s->stack.entries[i].status = ToastStatus::Ending;
+            s->stack.entries[i].elapsedMs = 0;
+            return;
+        }
+    }
+}
+
+void NotificationClear(NotificationListState* s) {
+    for (int i = 0; i < s->n; i++) {
+        NotificationDismiss(s, s->items[i].id);
+    }
+}
+
+bool NotificationAdvance(NotificationListState* s, int deltaMs) {
+    bool changed = ToastAdvance(&s->stack, deltaMs, s->stack.IsExpanded());
+    if (!changed) {
+        return false;
+    }
+    // Whatever the stack dropped goes from the list with it.
+    for (int i = s->n - 1; i >= 0; i--) {
+        bool alive = false;
+        for (int j = 0; j < s->stack.n; j++) {
+            if (s->stack.entries[j].id == s->items[i].id) {
+                alive = true;
+                break;
+            }
+        }
+        if (!alive) {
+            for (int k = i; k < s->n - 1; k++) {
+                s->items[k] = s->items[k + 1];
+            }
+            s->n--;
+        }
+    }
+    return true;
+}
+
+void NotificationListState::OnCloseClick(NotificationListState* self, Ctx* cx,
+                                         const ClickEvent*, intptr_t id) {
+    NotificationDismiss(self, (int)id);
+    Notify(cx);
+}
+
+void NotificationListState::OnItemClick(NotificationListState* self, Ctx* cx,
+                                        const ClickEvent* ev, intptr_t id) {
+    int at = NotificationIndexOf(self, (int)id);
+    if (at >= 0 && self->items[at].onClick.IsValid()) {
+        ListenerCall(cx->app, cx->win, self->items[at].onClick, ev);
+    }
+    NotificationDismiss(self, (int)id);
+    Notify(cx);
+}
+
+void NotificationListState::OnHover(NotificationListState* self, Ctx* cx,
+                                    const HoverEvent* ev) {
+    // is_expanded: the pointer over the stack opens it out, and holds every
+    // timeout while it is there.
+    if (self->stack.hovered == ev->hovered) {
+        return;
+    }
+    self->stack.hovered = ev->hovered;
+    Notify(cx);
+}
+
+void NotificationListState::OnTick(NotificationListState* self, Ctx* cx,
+                                   const TickEvent*) {
+    if (NotificationAdvance(self, kNotificationTickMs)) {
+        Notify(cx);
+    }
+}
+
+NotificationList* NotificationList::New(Ctx* cx,
+                                        Entity<NotificationListState> state) {
+    Arena* a = cx->a;
+    NotificationList* l = ArenaNew<NotificationList>(a);
+    l->a = a;
+    l->cx = cx;
+    l->state = state;
+    return l;
+}
+
+El* NotificationList::IntoEl() {
+    NotificationListState* s = state.Get(cx);
+    if (!s || s->n == 0) {
+        return Div(a);
+    }
+    WinSize win = WindowSize(cx->win);
+    bool bottom = s->placement == NotificationAnchor::BottomLeft ||
+                  s->placement == NotificationAnchor::BottomCenter ||
+                  s->placement == NotificationAnchor::BottomRight;
+    bool expanded = s->stack.IsExpanded();
+
+    float heights[kToastStackCap];
+    float collapsedOff[kToastStackCap];
+    float expandedOff[kToastStackCap];
+    for (int i = 0; i < s->n; i++) {
+        heights[i] = s->itemH;
+    }
+    float expandedH = 0;
+    float collapsedH = ToastStackGeometry(
+        heights, s->n, kToastCollapsedPeek, kToastExpandedGap, bottom,
+        collapsedOff, expandedOff, &expandedH);
+    float stackH = expanded ? expandedH : collapsedH;
+
+    // The stack floats over the window in the corner its placement names.
+    El* layer = Div(a)->Absolute()->Fixed()->W(s->width)->H(stackH)->OnHover(
+        ListenTo(state, &NotificationListState::OnHover));
+    float margin = kNotificationMargin;
+    bool right = s->placement == NotificationAnchor::TopRight ||
+                 s->placement == NotificationAnchor::RightCenter ||
+                 s->placement == NotificationAnchor::BottomRight;
+    bool center = s->placement == NotificationAnchor::TopCenter ||
+                  s->placement == NotificationAnchor::BottomCenter;
+    float left = right ? win.dipW - s->width - margin
+                       : (center ? (win.dipW - s->width) * 0.5f : margin);
+    // The top margin clears the title bar, which is what Rust's default
+    // margins do.
+    float top = bottom ? win.dipH - stackH - margin : kTitleBarHeight + margin;
+    if (s->placement == NotificationAnchor::LeftCenter ||
+        s->placement == NotificationAnchor::RightCenter) {
+        top = (win.dipH - stackH) * 0.5f;
+    }
+    layer->Left(left)->Top(top);
+    // The stack needs a hit box of its own for the hover to reach it.
+    layer->Id(StrL("notification-stack"))
+        ->Click(HashClickId(StrL("notification-stack")));
+
+    for (int i = 0; i < s->n; i++) {
+        const NotificationItem& it = s->items[i];
+        int rank = s->n - 1 - i;
+        // collapsed_visible: only the front few show at all when the stack is
+        // closed.
+        if (!expanded && rank >= kToastCollapsedVisible) {
+            continue;
+        }
+        float off = expanded ? expandedOff[i] : collapsedOff[i];
+        // Each layer behind is a little narrower, which is what gives the
+        // closed stack its depth.
+        float shrink = expanded ? 0
+                                : s->width * kToastCollapsedScaleStep *
+                                      (float)(rank < kToastCollapsedVisible
+                                                  ? rank
+                                                  : kToastCollapsedVisible - 1);
+        El* card =
+            Notification::New(cx, it.title, it.message)
+                ->Kind(it.kind)
+                ->Content(it.content)
+                ->OnClose(ListenTo(state, &NotificationListState::OnCloseClick,
+                                   (intptr_t)it.id))
+                ->OnClick(ListenTo(state, &NotificationListState::OnItemClick,
+                                   (intptr_t)it.id))
+                ->IntoEl();
+        layer->Child(Div(a)
+                         ->Absolute()
+                         ->Top(off)
+                         ->Left(shrink * 0.5f)
+                         ->W(s->width - shrink)
+                         ->Child(card));
+    }
+    return layer;
 }
 
 El* Notification::IntoEl() {

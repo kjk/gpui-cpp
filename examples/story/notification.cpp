@@ -1,46 +1,161 @@
 #include "Story.h"
 
 struct NotificationStory {
-    bool notifyOn = false;
-    int selA = -1;
+    // NotificationList is a view in Rust, held by Root; here it is a state
+    // the page owns and renders over the window.
+    Entity<component::NotificationListState> list = {};
+    bool seeded = false;
+    int timer = 0;
 
     static El* Render(NotificationStory* self, Ctx* cx);
 };
 
+// What each button pushes. The id is 0 for a notification that stacks and a
+// fixed one for the unique and keyed ones, which is what NotificationId does
+// in Rust: the same id replaces rather than stacking a second copy.
+struct NotifySpec {
+    int id;
+    component::NotificationKind kind;
+    const char* title;
+    const char* message;
+    component::NotificationAnchor anchor;
+    // autohide(false) is a timeout of zero: it stays until it is dismissed.
+    int timeoutMs;
+};
+
+static const int kNotifyTimeout = 5000;
+
+static NotifySpec NotifySpecFor(int which) {
+    using K = component::NotificationKind;
+    using A = component::NotificationAnchor;
+    switch (which) {
+        case 0:
+            return {0,       K::Info,       nullptr, "This is a notification.",
+                    A::None, kNotifyTimeout};
+        case 1:
+            return {0,
+                    K::Info,
+                    nullptr,
+                    "You have been saved file "
+                    "successfully.",
+                    A::None,
+                    kNotifyTimeout};
+        case 2:
+            return {0,       K::Success,
+                    nullptr, "We have received your payment successfully.",
+                    A::None, kNotifyTimeout};
+        case 3:
+            return {0,
+                    K::Warning,
+                    nullptr,
+                    "The network is not stable, please check your connection.",
+                    A::None,
+                    kNotifyTimeout};
+        case 4:
+            return {0,
+                    K::Error,
+                    nullptr,
+                    "There have some error occurred. Please try again later.",
+                    A::None,
+                    kNotifyTimeout};
+        case 5:
+        case 6:
+        case 7:
+        case 8: {
+            K kind = which == 6   ? K::Success
+                     : which == 7 ? K::Warning
+                     : which == 8 ? K::Error
+                                  : K::Info;
+            return {0,
+                    kind,
+                    "All changes saved",
+                    "Your changes have been saved to the cloud and will sync "
+                    "across all of your devices.",
+                    A::None,
+                    kNotifyTimeout};
+        }
+        case 9:
+            return {900,     K::Info,
+                    nullptr, "Only one of these is ever on screen at a time.",
+                    A::None, kNotifyTimeout};
+        case 10:
+            return {910,     K::Info,       nullptr, "Notification A",
+                    A::None, kNotifyTimeout};
+        case 11:
+            return {911,     K::Info,       nullptr, "Notification B",
+                    A::None, kNotifyTimeout};
+        case 21:
+            return {0,
+                    K::Info,
+                    "on_click vs on_close",
+                    "Click the body to fire on_click; click the X to close. "
+                    "Watch the console.",
+                    A::None,
+                    kNotifyTimeout};
+        default:
+            return {0,
+                    K::Info,
+                    nullptr,
+                    "You can close this notification by clicking the Close "
+                    "button.",
+                    A::None,
+                    0};
+    }
+}
+
+static void ClickNote(NotificationStory*, Ctx*, const ClickEvent*) {
+    log(StrL("[notification] on_click fired\n"));
+}
+
 static void ShowNotify(NotificationStory* self, Ctx* cx, const ClickEvent*,
-                       intptr_t kind) {
-    self->notifyOn = true;
-    self->selA = (int)kind;
+                       intptr_t which) {
+    component::NotificationListState* st = self->list.Get(cx);
+    if (!st) {
+        return;
+    }
+    NotifySpec spec = NotifySpecFor((int)which);
+    component::NotificationItem item;
+    item.id = spec.id;
+    item.kind = spec.kind;
+    item.title = spec.title ? Str(spec.title) : Str{};
+    item.message = Str(spec.message);
+    if (which == 21) {
+        item.onClick = Listen(cx, &ClickNote);
+    }
+    // Placement per notification: the buttons in that section move the whole
+    // stack, which is the corner a notification without one of its own goes
+    // to as well.
+    if (which >= 30 && which < 38) {
+        st->placement =
+            (component::NotificationAnchor)((int)which - 30 +
+                                            (int)component::NotificationAnchor::
+                                                TopLeft);
+        item.message = StrL("This notification is at the new placement.");
+    }
+    NotificationPush(st, item, spec.timeoutMs);
     Notify(cx);
 }
 
-static void HideNote(NotificationStory* self, Ctx*, const ClickEvent*) {
-    self->notifyOn = false;
-}
-// The Action notification's Retry, and the body click the Lifecycle section
-// tells apart from the close. Both log, as the Rust story prints.
-static void RetryNote(NotificationStory* self, Ctx* cx, const ClickEvent*) {
-    log(StrL("You have clicked the try again action.\n"));
-    self->notifyOn = false;
-    Notify(cx);
-}
-static void ClickNote(NotificationStory*, Ctx* cx, const ClickEvent*) {
-    log(StrL("[notification] on_click fired\n"));
-    Notify(cx);
-}
-static void CloseNote(NotificationStory* self, Ctx* cx, const ClickEvent*) {
-    log(StrL("[notification] on_close fired\n"));
-    self->notifyOn = false;
-    Notify(cx);
-}
-// Manual close: the notification stays until Dismiss All takes it away.
+// Dismiss All: every notification starts on its way out.
 static void DismissAll(NotificationStory* self, Ctx* cx, const ClickEvent*) {
-    self->notifyOn = false;
+    component::NotificationListState* st = self->list.Get(cx);
+    if (st) {
+        NotificationClear(st);
+    }
     Notify(cx);
 }
 
 El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    if (!self->seeded) {
+        self->seeded = true;
+        self->list = EntityNewState<component::NotificationListState>(cx->app);
+        // Rust spawns a task that advances the list every 50 ms; a window
+        // timer is the same clock.
+        self->timer = WindowSetInterval(
+            cx->win, component::kNotificationTickMs,
+            ListenTo(self->list, &component::NotificationListState::OnTick));
+    }
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Default", "Show a short message.");
@@ -49,12 +164,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                              ->Outline()
                              ->Label(StrL("Show Notification"))
                              ->IntoEl());
-    if (self->notifyOn && self->selA == 0) {
-        StorySectionAdd(def, component::Notification::New(
-                                 cx, {}, StrL("This is a notification."))
-                                 ->OnClose(Listen(cx, &HideNote))
-                                 ->IntoEl());
-    }
     page->Child(def);
 
     El* types = StorySection(cx, "Types",
@@ -81,24 +190,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                        ->Label(StrL("Error"))
                        ->IntoEl());
     StorySectionAdd(types, typeRow);
-    if (self->notifyOn && self->selA >= 1 && self->selA <= 4) {
-        static const component::NotificationKind kKinds[] = {
-            component::NotificationKind::Info,
-            component::NotificationKind::Info,
-            component::NotificationKind::Success,
-            component::NotificationKind::Warning,
-            component::NotificationKind::Error};
-        static const char* kMsgs[] = {
-            "", "You have been saved file successfully.",
-            "We have received your payment successfully.",
-            "The network is not stable, please check your connection.",
-            "There have some error occurred. Please try again later."};
-        StorySectionAdd(
-            types, component::Notification::New(cx, {}, Str(kMsgs[self->selA]))
-                       ->Kind(kKinds[self->selA])
-                       ->OnClose(Listen(cx, &HideNote))
-                       ->IntoEl());
-    }
     page->Child(types);
 
     El* titled = StorySection(cx, "Title and description",
@@ -126,20 +217,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                          ->Label(StrL("Error"))
                          ->IntoEl());
     StorySectionAdd(titled, titledRow);
-    if (self->notifyOn && self->selA >= 5 && self->selA <= 8) {
-        StorySectionAdd(
-            titled,
-            component::Notification::New(
-                cx, StrL("All changes saved"),
-                StrL("Your changes have been saved to the cloud and will sync "
-                     "across all of your devices."))
-                ->Kind(self->selA == 6   ? component::NotificationKind::Success
-                       : self->selA == 7 ? component::NotificationKind::Warning
-                       : self->selA == 8 ? component::NotificationKind::Error
-                                         : component::NotificationKind::Info)
-                ->OnClose(Listen(cx, &HideNote))
-                ->IntoEl());
-    }
     page->Child(titled);
 
     El* unique =
@@ -149,14 +226,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                                 ->Outline()
                                 ->Label(StrL("Unique Notification"))
                                 ->IntoEl());
-    if (self->notifyOn && self->selA == 9) {
-        StorySectionAdd(
-            unique, component::Notification::New(
-                        cx, Str{},
-                        StrL("Only one of these is ever on screen at a time."))
-                        ->OnClose(Listen(cx, &HideNote))
-                        ->IntoEl());
-    }
     page->Child(unique);
 
     El* keyed = StorySection(cx, "Keyed",
@@ -173,14 +242,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                       ->Label(StrL("B Notification"))
                       ->IntoEl());
     StorySectionAdd(keyed, keyRow);
-    if (self->notifyOn && (self->selA == 10 || self->selA == 11)) {
-        StorySectionAdd(keyed, component::Notification::New(
-                                   cx, Str{},
-                                   self->selA == 10 ? StrL("Notification A")
-                                                    : StrL("Notification B"))
-                                   ->OnClose(Listen(cx, &HideNote))
-                                   ->IntoEl());
-    }
     page->Child(keyed);
 
     // Action: an inline button inside the notification.
@@ -192,20 +253,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                         ->Outline()
                         ->Label(StrL("Notification with Title"))
                         ->IntoEl());
-    if (self->notifyOn && self->selA == 20) {
-        StorySectionAdd(
-            actionSec,
-            component::Notification::New(
-                cx, StrL("Uh oh! Something went wrong."),
-                StrL("There was a problem with your request."))
-                ->Action(component::Button::New(cx, StrL("try-again"))
-                             ->Primary()
-                             ->Label(StrL("Retry"))
-                             ->OnClick(Listen(cx, &RetryNote))
-                             ->IntoEl())
-                ->OnClose(Listen(cx, &HideNote))
-                ->IntoEl());
-    }
     page->Child(actionSec);
 
     // Lifecycle: the body and the x report separately.
@@ -217,16 +264,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                         ->Outline()
                         ->Label(StrL("Click vs Close"))
                         ->IntoEl());
-    if (self->notifyOn && self->selA == 21) {
-        StorySectionAdd(
-            life, component::Notification::New(
-                      cx, StrL("on_click vs on_close"),
-                      StrL("Click the body to fire on_click; click the X to "
-                           "close. Watch the console."))
-                      ->OnClick(Listen(cx, &ClickNote))
-                      ->OnClose(Listen(cx, &CloseNote))
-                      ->IntoEl());
-    }
     page->Child(life);
 
     // Placement per notification: one button per anchor.
@@ -258,16 +295,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                         ->IntoEl());
     }
     StorySectionAdd(place, anchorRow);
-    if (self->notifyOn && self->selA >= 30 && self->selA < 38) {
-        const AnchorSpec& at = kAnchors[self->selA - 30];
-        StorySectionAdd(
-            place, component::Notification::New(
-                       cx, Str{},
-                       StoryFmt(cx, "This notification is at %s.", at.label))
-                       ->Placement(at.anchor)
-                       ->OnClose(Listen(cx, &HideNote))
-                       ->IntoEl());
-    }
     page->Child(place);
 
     // Custom content: markdown the application owns.
@@ -279,21 +306,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                         ->Outline()
                         ->Label(StrL("Show Custom Notification"))
                         ->IntoEl());
-    if (self->notifyOn && self->selA == 40) {
-        StorySectionAdd(
-            customSec,
-            component::Notification::New(cx, Str{}, Str{})
-                ->Content(component::TextView::New(
-                              cx, StrL("This is a custom notification.\n"
-                                       "- List item 1\n"
-                                       "- List item 2\n"
-                                       "- [Click here]"
-                                       "(https://github.com/longbridge/"
-                                       "gpui-component)\n"))
-                              ->IntoEl())
-                ->OnClose(Listen(cx, &HideNote))
-                ->IntoEl());
-    }
     page->Child(customSec);
 
     // Manual close: autohide(false), so only Dismiss All takes it away.
@@ -312,16 +324,10 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                          ->Label(StrL("Dismiss All"))
                          ->IntoEl());
     StorySectionAdd(manual, manualRow);
-    if (self->notifyOn && self->selA == 41) {
-        StorySectionAdd(manual,
-                        component::Notification::New(
-                            cx, Str{},
-                            StrL("You can close this notification by clicking "
-                                 "the Close button."))
-                            ->OnClose(Listen(cx, &HideNote))
-                            ->IntoEl());
-    }
     page->Child(manual);
+    // The stack itself, over the window in whichever corner its placement
+    // names — what Root renders in Rust.
+    page->Child(component::NotificationList::New(cx, self->list)->IntoEl());
     return page;
 }
 
