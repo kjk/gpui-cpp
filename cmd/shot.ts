@@ -1,5 +1,6 @@
 // Screenshot one example window: bun cmd/shot.ts [-dbg] <example> [out.png]
 //   -click=X,Y   click at client coords first
+//   -rclick=X,Y  the same with the secondary button
 //   -hover=X,Y   leave the pointer there, for capturing a hover state
 //   -settle=MS   wait that long after the input before the shutter, for a
 //                widget that answers on a timer (a hover card's open delay)
@@ -16,6 +17,7 @@ import {
   getClientRect,
   packCoords,
   clickClient,
+  rightClickClient,
   getCursorPos,
   getForegroundWindow,
   getWindowText,
@@ -38,7 +40,7 @@ process.chdir(root);
 
 const argv = Bun.argv.slice(2);
 let debug = false;
-const clicks: { x: number; y: number }[] = [];
+const clicks: { x: number; y: number; right?: boolean }[] = [];
 let hover: { x: number; y: number } | null = null;
 let settleMs = 0;
 let drag: { x1: number; y1: number; x2: number; y2: number } | null = null;
@@ -73,6 +75,9 @@ for (const a of argv) {
   } else if (a.startsWith("-click=")) {
     const [x, y] = a.slice(7).split(",").map(Number);
     clicks.push({ x: x ?? 0, y: y ?? 0 });
+  } else if (a.startsWith("-rclick=")) {
+    const [x, y] = a.slice(8).split(",").map(Number);
+    clicks.push({ x: x ?? 0, y: y ?? 0, right: true });
   } else {
     rest.push(a);
   }
@@ -119,7 +124,7 @@ await waitForForeground(hwnd, 3000);
 const cursorWas = getCursorPos();
 await sleep(500);
 for (const c of clicks) {
-  await clickClient(hwnd, c.x, c.y);
+  await (c.right ? rightClickClient(hwnd, c.x, c.y) : clickClient(hwnd, c.x, c.y));
 }
 // A selection drag: press, a few moves so the app sees the path, release.
 if (drag) {

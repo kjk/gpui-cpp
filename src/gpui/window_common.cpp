@@ -396,11 +396,16 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     if (win->onMouseDown.IsValid()) {
         ListenerCall(win->app, win, win->onMouseDown, &in);
     }
-    // Only the left button clicks an element. GPUI routes a right press to
-    // whatever asked for MouseButton::Right and never turns it into a click;
-    // here that is the window's own subscription above, which a view uses to
-    // put up a context menu.
+    // Only the left button clicks an element. GPUI routes a press of any
+    // button to whatever asked for that button, and never turns a right one
+    // into a click; so a non-left press reaches the element's own
+    // on_mouse_down — which is how a popover opens on the right button — and
+    // stops before the click path, the focus move and the caret below.
     if (!in.IsFocusing()) {
+        const HitRect* other = HitTestRect(&win->paint, x, y);
+        if (other && other->onMouseDown.IsValid()) {
+            ListenerCall(win->app, win, other->onMouseDown, &in);
+        }
         AppInvalidate(win);
         return;
     }

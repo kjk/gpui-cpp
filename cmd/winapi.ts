@@ -52,7 +52,10 @@ export const WM_CLOSE = 0x0010;
 export const WM_MOUSEMOVE = 0x0200;
 export const WM_LBUTTONDOWN = 0x0201;
 export const WM_LBUTTONUP = 0x0202;
+export const WM_RBUTTONDOWN = 0x0204;
+export const WM_RBUTTONUP = 0x0205;
 export const MK_LBUTTON = 0x0001;
+export const MK_RBUTTON = 0x0002;
 export const PW_RENDERFULLCONTENT = 0x00000002;
 
 export type Rect = { left: number; top: number; right: number; bottom: number };
@@ -332,6 +335,16 @@ export async function clickClient(hwnd: number, x: number, y: number, settleMs =
   const lp = packCoords(x, y);
   sendMessage(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lp);
   sendMessage(hwnd, WM_LBUTTONUP, 0, lp);
+  if (settleMs) {
+    await sleep(settleMs);
+  }
+}
+
+// The secondary button, for a context menu or a popover that opens on it.
+export async function rightClickClient(hwnd: number, x: number, y: number, settleMs = 200): Promise<void> {
+  const lp = packCoords(x, y);
+  sendMessage(hwnd, WM_RBUTTONDOWN, MK_RBUTTON, lp);
+  sendMessage(hwnd, WM_RBUTTONUP, 0, lp);
   if (settleMs) {
     await sleep(settleMs);
   }

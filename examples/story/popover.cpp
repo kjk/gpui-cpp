@@ -151,23 +151,30 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
 
     El* right = StorySection(cx, "Right click",
                              "Open from the secondary mouse button.");
-    El* rightCard = PopCard(cx, 600);
-    rightCard
-        ->Child(PopText(cx, "Hello, this is a Popover on the Bottom Right."));
-    rightCard->Child(component::Separator::Horizontal(cx)->IntoEl());
-    rightCard->Child(component::Button::New(cx, StrL("info1"))
-                         ->Label(StrL("Info"))
-                         ->Primary()
-                         ->IntoEl());
-    // Ours opens on the primary button: the window routes right-clicks to the
-    // whole page, not to the element under the cursor.
-    StorySectionAdd(
-        right, component::Popover::New(cx)
-                   ->Trigger(PopTrigger(self, cx, PopRightClick, "btn-right",
-                                        "Right Click Popover", toggle))
-                   ->Content(rightCard)
-                   ->Open(self->open == PopRightClick)
-                   ->IntoEl());
+    // Popover::mouse_button(Right), and uncontrolled: the popover keeps its
+    // own open state and the secondary press on the trigger toggles it, so
+    // there is no listener on this trigger at all.
+    Str rightId = StrL("btn-right-popover");
+    El* rightCard = nullptr;
+    if (component::PopoverOpen(cx, rightId)) {
+        rightCard = PopCard(cx, 600);
+        rightCard->Child(
+            PopText(cx, "Hello, this is a Popover on the Bottom Right."));
+        rightCard->Child(component::Separator::Horizontal(cx)->IntoEl());
+        rightCard->Child(component::Button::New(cx, StrL("info1"))
+                             ->Label(StrL("Info"))
+                             ->Primary()
+                             ->IntoEl());
+    }
+    StorySectionAdd(right,
+                    component::Popover::New(cx, rightId)
+                        ->Button(MouseButton::Right)
+                        ->Trigger(component::Button::New(cx, StrL("btn-right"))
+                                      ->Label(StrL("Right Click Popover"))
+                                      ->Outline()
+                                      ->IntoEl())
+                        ->Content(rightCard)
+                        ->IntoEl());
     page->Child(right);
 
     El* style = StorySection(cx, "Custom style",
