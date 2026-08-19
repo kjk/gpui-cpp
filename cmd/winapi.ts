@@ -154,19 +154,28 @@ export function showWindow(hwnd: number, cmd: number): boolean {
 
 export type WorkAreaHalf = "left" | "right";
 
-// Place on the left or right half of the primary work area (taskbar excluded).
-// Height is 80% of the work area; the window stays top-aligned.
+// The left or right half of the primary work area (taskbar excluded), 80% of
+// its height, top-aligned. Anything that wants a window this size asks here,
+// so a window moved into the rect and a window opened at it are the same rect.
+export function workAreaHalfRect(side: WorkAreaHalf): { x: number; y: number; w: number; h: number } {
+  const wa = getWorkArea();
+  const mid = wa.left + Math.floor((wa.right - wa.left) / 2);
+  return {
+    x: side === "left" ? wa.left : mid,
+    y: wa.top,
+    w: side === "left" ? mid - wa.left : wa.right - mid,
+    h: Math.floor((wa.bottom - wa.top) * 0.8),
+  };
+}
+
+// Place on the left or right half of the primary work area.
 export function placeOnWorkAreaHalf(hwnd: number, side: WorkAreaHalf): boolean {
   if (!hwnd) {
     return false;
   }
   showWindow(hwnd, SW_RESTORE);
-  const wa = getWorkArea();
-  const mid = wa.left + Math.floor((wa.right - wa.left) / 2);
-  const x = side === "left" ? wa.left : mid;
-  const w = side === "left" ? mid - wa.left : wa.right - mid;
-  const h = Math.floor((wa.bottom - wa.top) * 0.8);
-  return moveWindow(hwnd, x, wa.top, w, h);
+  const r = workAreaHalfRect(side);
+  return moveWindow(hwnd, r.x, r.y, r.w, r.h);
 }
 
 export function setForegroundWindow(hwnd: number): boolean {

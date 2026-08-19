@@ -573,5 +573,9 @@ int AppRun(App* app) {
 
 // The process entry point. Examples implement GpuiMain(argc, argv).
 int main(int argc, char** argv) {
+    // Strip the -gpui-* flags here too, so an example parses the same argv on
+    // every platform. -gpui-window itself is only honoured on Windows, where
+    // the screenshot harness runs.
+    argc = gpui::GpuiTakeRuntimeArgs(argc, argv);
     return GpuiMain(argc, argv);
 }

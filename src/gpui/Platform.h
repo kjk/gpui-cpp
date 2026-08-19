@@ -49,6 +49,17 @@ Window* WindowAlloc(App* app, WinOpts opts);
 // its platform reports.
 void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH);
 
+// -gpui-window=X,Y,W,H asks for a window at an exact place and size, in the
+// coordinates the platform's own create call takes -- on Windows the outer
+// window rect, the one GetWindowRect reports. cmd/shot.ts passes it so a
+// window opens at the size it will be photographed at, rather than being moved
+// there afterwards and laying out twice. False when the flag was not given.
+// Applied on Windows; the other platforms accept the flag and ignore it.
+bool WindowGeomRequested(int* x, int* y, int* w, int* h);
+// Takes the -gpui-* flags out of argv before the app parses it, so an example
+// that reads argv[1] never sees one. Returns the argument count that is left.
+int GpuiTakeRuntimeArgs(int argc, char** argv);
+
 // ─── implemented per platform ────────────────────────────────────────────
 
 // Process-wide setup: DPI awareness and the window class on Windows, the X11

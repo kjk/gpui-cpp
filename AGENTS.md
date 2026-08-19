@@ -365,6 +365,10 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
                        -half=left|right sizes the window the way compare-story.ts does,
                        so a baseline shot is the same pixels as the compare capture
                        (-half=right is our side of the pair); sweep story pages with it.
+                       It passes -gpui-window=X,Y,W,H, a runtime flag every example
+                       understands: the window opens at that outer rect instead of
+                       being moved into it, so the tree is laid out once. The runtime
+                       takes -gpui-* out of argv before the example parses it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp

@@ -576,6 +576,79 @@ void AppRequestAnim(Window* win, bool on) {
     PlatSetTimer(win, WindowTimerMs(win));
 }
 
+// ─── runtime command line ────────────────────────────────────────────────
+
+static bool gGeomAsked = false;
+static int gGeom[4] = {0, 0, 0, 0};
+
+// "12,-3,960,921" -> four ints. Anything else leaves the request unset rather
+// than opening a window somewhere surprising.
+static bool ParseGeom(const char* s, int out[4]) {
+    for (int i = 0; i < 4; i++) {
+        if (i > 0) {
+            if (*s != ',') {
+                return false;
+            }
+            s++;
+        }
+        bool neg = false;
+        if (*s == '-') {
+            neg = true;
+            s++;
+        }
+        int digits = 0;
+        int v = 0;
+        while (*s >= '0' && *s <= '9') {
+            v = v * 10 + (*s - '0');
+            s++;
+            digits++;
+            if (digits > 6) {
+                return false;
+            }
+        }
+        if (digits == 0) {
+            return false;
+        }
+        out[i] = neg ? -v : v;
+    }
+    return *s == 0 && out[2] > 0 && out[3] > 0;
+}
+
+bool WindowGeomRequested(int* x, int* y, int* w, int* h) {
+    if (!gGeomAsked) {
+        return false;
+    }
+    *x = gGeom[0];
+    *y = gGeom[1];
+    *w = gGeom[2];
+    *h = gGeom[3];
+    return true;
+}
+
+int GpuiTakeRuntimeArgs(int argc, char** argv) {
+    const char* kGeom = "-gpui-window=";
+    int keep = 0;
+    for (int i = 0; i < argc; i++) {
+        const char* a = argv[i];
+        size_t kGeomLen = strlen(kGeom);
+        if (i > 0 && a && strncmp(a, kGeom, kGeomLen) == 0) {
+            int g[4];
+            if (ParseGeom(a + kGeomLen, g)) {
+                gGeomAsked = true;
+                for (int k = 0; k < 4; k++) {
+                    gGeom[k] = g[k];
+                }
+            }
+            continue;
+        }
+        argv[keep++] = argv[i];
+    }
+    for (int i = keep; i <= argc; i++) {
+        argv[i] = nullptr;
+    }
+    return keep;
+}
+
 // crates/story/src/lib.rs create_new_window_with_size: a window never asks
 // for more than 85% of the display, however big the caller's default is.
 void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH) {

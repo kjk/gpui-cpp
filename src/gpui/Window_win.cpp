@@ -483,6 +483,10 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     int pxH = wr.bottom - wr.top;
     int x = (sx - pxW) / 2;
     int y = (sy - pxH) / 2;
+    // -gpui-window: open where the caller asked instead of centred at the
+    // caller's size. The numbers are the outer window rect, so they are the
+    // same ones MoveWindow and GetWindowRect use.
+    WindowGeomRequested(&x, &y, &pxW, &pxH);
 
     HWND hwnd =
         CreateWindowExW(0, kWndClass, ToCWstrTemp(title), style, x, y, pxW, pxH,
@@ -554,5 +558,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         argv[i] = buf;
     }
     LocalFree(wargv);
+    argc = gpui::GpuiTakeRuntimeArgs(argc, argv);
     return GpuiMain(argc, argv);
 }

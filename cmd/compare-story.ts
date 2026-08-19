@@ -23,6 +23,7 @@ import {
   setProcessDpiAware,
   sleep,
   waitForPidWindow,
+  workAreaHalfRect,
 } from "./winapi.ts";
 import { ensureRustTree, rustTreeDir } from "./versions.ts";
 
@@ -211,7 +212,10 @@ async function launch(slug: string): Promise<Pair> {
     stdout: "ignore",
     stderr: "ignore",
   });
-  const cppProc = Bun.spawn([cppExe(debug), slug], {
+  // Ours can open at the rect placePair would move it to; the Rust app has no
+  // such flag and gets moved as before.
+  const half = workAreaHalfRect("right");
+  const cppProc = Bun.spawn([cppExe(debug), `-gpui-window=${half.x},${half.y},${half.w},${half.h}`, slug], {
     cwd: join(root, "out", debug ? "dbg" : "rel"),
     stdout: "ignore",
     stderr: "ignore",
