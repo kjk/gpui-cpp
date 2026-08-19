@@ -1016,9 +1016,15 @@ void TextMeasClear(PaintCtx* ctx) {
 }
 
 // Create or reuse a cached shaped run. Caller must TextLayoutRelease.
+// `outCached` says whether the cache took a reference of its own, i.e. whether
+// the run outlives the caller's; see El::laidLayout.
 static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
                                   float maxW, bool wrap, uint8_t weight,
-                                  float lineH, float* outW, float* outH) {
+                                  float lineH, float* outW, float* outH,
+                                  bool* outCached = nullptr) {
+    if (outCached) {
+        *outCached = false;
+    }
     if (outW) {
         *outW = 0;
     }
@@ -1034,6 +1040,9 @@ static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
         TextMeasFind(c, s, fontSize, maxW, wrap, weight, lineH, nullptr);
     if (hit && hit->layout) {
         hit->lastUsed = c->frame;
+        if (outCached) {
+            *outCached = true;
+        }
         if (outW) {
             *outW = hit->w;
         }
@@ -1056,7 +1065,11 @@ static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     if (outH) {
         *outH = h;
     }
-    TextMeasInsert(ctx, s, fontSize, maxW, wrap, weight, lineH, w, h, layout);
+    TextMeasSlot* sl = TextMeasInsert(ctx, s, fontSize, maxW, wrap, weight,
+                                      lineH, w, h, layout);
+    if (outCached) {
+        *outCached = sl != nullptr;
+    }
     return layout;
 }
 
@@ -1246,8 +1259,18 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         e->laidFont = font;
         e->laidMaxW = measW;
         float tw = 0, th = 0;
-        MeasureText(ctx, e->text, font, measW, &tw, &th, e->style.wrap,
-                    ElTextWeight(e), e->style.lineHeight);
+        // Same call MeasureText makes, but the shaped run is kept: paint would
+        // otherwise hash and compare the whole string again to arrive at this
+        // exact object. Releasing our reference is safe because a cached run
+        // belongs to the cache until TextMeasEndFrame, well after paint.
+        bool cached = false;
+        TextLayout* tl = TextMeasLayout(ctx, e->text, font, measW,
+                                        e->style.wrap, (uint8_t)ElTextWeight(e),
+                                        e->style.lineHeight, &tw, &th, &cached);
+        e->laidLayout = cached ? tl : nullptr;
+        if (tl) {
+            TextLayoutRelease(tl);
+        }
         e->w = wSpec > 0 ? wSpec : Clamp(tw, e->style.minW, e->style.maxW);
         e->h = hSpec > 0 ? hSpec : Clamp(th, e->style.minH, e->style.maxH);
         LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
@@ -2302,9 +2325,14 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
                            e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
                            e->x, e->y, lo, hi, Rgba8(0x6b, 0xb3, 0xf0, 90));
         }
-        DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
-                   e->style.truncate, e->style.wrap, e->laidMaxW,
-                   ElTextWeight(e), e->style.lineHeight);
+        if (e->laidLayout) {
+            TextLayoutDraw(ctx, e->laidLayout, e->x, e->y, c,
+                           e->style.truncate);
+        } else {
+            DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
+                       e->style.truncate, e->style.wrap, e->laidMaxW,
+                       ElTextWeight(e), e->style.lineHeight);
+        }
     } else if (e->kind == ElKind::Icon) {
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
         float s = e->w > 0 ? e->w : 16;

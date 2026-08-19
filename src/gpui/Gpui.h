@@ -135,6 +135,8 @@ ThemeMode ThemeGet();
 struct Window;
 struct Ctx;
 struct El;
+// The shaped run a text element measured to; Paint.h owns the type.
+struct TextLayout;
 
 struct EntityId {
     int32_t index = -1;
@@ -491,6 +493,11 @@ struct El {
     bool selectable = false;
     float laidFont = 0; // resolved font size from last LayoutEl
     float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
+    // The shaped run LayoutEl measured, borrowed from the text cache so the
+    // paint pass can draw it without looking it up a second time. Owned by
+    // the cache, which cannot drop it before the frame ends; null when the
+    // element has no text or the run could not be cached.
+    TextLayout* laidLayout = nullptr;
     // Layout memo. LayoutEl runs a subtree up to three times per parent pass
     // (measure, shrink-wrap, clamp) and LayoutChildren used to re-run one just
     // to move it, which multiplies out to an exponential in tree depth. Layout
