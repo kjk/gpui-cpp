@@ -73,87 +73,52 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
-    El* tabs = StorySection(cx, "Tabs", nullptr);
-    component::Tabs* barTabs = component::Tabs::New(cx);
-    for (int i = 0; i < kTabCount; i++) {
-        barTabs->Tab(Str(kTabNames[i]));
-    }
-    StorySectionAdd(tabs, barTabs->Selected(self->tab)
-                              ->OnChange(Listen(cx, &SetTab))
-                              ->IntoEl());
-    page->Child(tabs);
-
-    El* under = StorySection(cx, "Underline Tabs", nullptr);
-    component::Tabs* underTabs = component::Tabs::New(cx);
-    for (int i = 0; i < kTabCount; i++) {
-        underTabs->Tab(Str(kTabNames[i]));
-    }
-    StorySectionAdd(under, underTabs->Selected(self->tab)
-                               ->OnChange(Listen(cx, &SetTab))
-                               ->IntoEl());
-    page->Child(under);
-
-    El* pill = StorySection(cx, "Pill Tabs", nullptr);
-    El* pillBar = Div(a)->FlexRow()->FlexWrap()->Gap(4);
-    const char** names = kTabNames;
-    for (int i = 0; i < kTabCount; i++) {
-        El* t = Div(a)
-                    ->H(28)
-                    ->PadX(12)
-                    ->ItemsCenter()
-                    ->Radius(14)
-                    ->OnClick(Listen(cx, &SetTab, i))
-                    ->Child(StoryTxt(
-                        cx, Str(names[i]), 13,
-                        i == self->tab ? th.primaryFg : th.foreground));
-        if (i == self->tab) {
-            t->Bg(th.primary);
-        } else {
-            t->HoverBg(th.muted);
+    // One bar per variant, all over the same eight tabs and the same
+    // selection — which is what the Rust story does.
+    struct VariantRow {
+        const char* title;
+        component::TabVariant variant;
+    };
+    static const VariantRow kVariants[] = {
+        {"Tabs", component::TabVariant::Tab},
+        {"Underline Tabs", component::TabVariant::Underline},
+        {"Pill Tabs", component::TabVariant::Pill},
+        {"Outline Tabs", component::TabVariant::Outline},
+        {"Segmented Tabs", component::TabVariant::Segmented},
+    };
+    for (size_t v = 0; v < sizeof(kVariants) / sizeof(kVariants[0]); v++) {
+        El* sec = StorySection(cx, kVariants[v].title, nullptr);
+        component::Tabs* bar =
+            component::Tabs::New(cx, StoryFmt(cx, "tabs-%d", (int)v))
+                ->Variant(kVariants[v].variant)
+                ->Size(self->toolbar.size);
+        for (int i = 0; i < kTabCount; i++) {
+            bar->Tab(Str(kTabNames[i]));
         }
-        pillBar->Child(t);
+        // Profile is disabled in every bar, as it is in the first Rust one.
+        bar->Disabled(1);
+        StorySectionAdd(sec, bar->Selected(self->tab)
+                                 ->OnChange(Listen(cx, &SetTab))
+                                 ->IntoEl());
+        page->Child(sec);
     }
-    StorySectionAdd(pill, pillBar);
-    page->Child(pill);
 
-    El* outline = StorySection(cx, "Outline Tabs", nullptr);
-    // Outline tabs are pills: a light border, the selected one in the
-    // foreground color.
-    El* outBar = Div(a)->FlexRow()->FlexWrap()->Gap(8);
-    for (int i = 0; i < kTabCount; i++) {
-        El* t =
-            Div(a)
-                ->H(32)
-                ->PadX(12)
-                ->ItemsCenter()
-                ->Radius(16)
-                ->Border(1, i == self->tab ? th.foreground : th.border)
-                ->OnClick(Listen(cx, &SetTab, i))
-                ->Child(StoryTxt(cx, Str(names[i]), 14,
-                                 i == self->tab ? th.foreground : th.mutedFg));
-        outBar->Child(t);
-    }
-    StorySectionAdd(outline, outBar);
-    page->Child(outline);
-
-    El* seg = StorySection(cx, "Segmented Tabs", nullptr);
-    El* segBar =
-        Div(a)->FlexRow()->Pad(2)->Gap(2)->Bg(th.muted)->Radius(th.radius);
-    for (int i = 0; i < 3; i++) {
-        El* t = Div(a)
-                    ->H(26)
-                    ->PadX(12)
-                    ->ItemsCenter()
-                    ->Radius(th.radius)
-                    ->OnClick(Listen(cx, &SetTab, i))
-                    ->Child(StoryTxt(cx, Str(names[i]), 13, th.foreground));
-        if (i == self->tab) {
-            t->Bg(th.background);
-        }
-        segBar->Child(t);
-    }
-    StorySectionAdd(seg, segBar);
-    page->Child(seg);
+    // A capped bar: the label is the one part that gives way, ellipsizing
+    // inside the width it is allowed.
+    El* capped = StorySection(cx, "Max Width",
+                              "A tab wider than max_width truncates its "
+                              "label rather than pushing the bar out.");
+    component::Tabs* cappedBar = component::Tabs::New(cx, StrL("tabs-capped"))
+                                     ->Underline()
+                                     ->Size(self->toolbar.size)
+                                     ->MaxWidth(90);
+    cappedBar->Tab(StrL("Account Settings & Preferences"));
+    cappedBar->Tab(StrL("Documents"));
+    cappedBar->Tab(StrL("Mail"), IconName::Inbox);
+    StorySectionAdd(capped, cappedBar->Selected(self->tab)
+                                ->OnChange(Listen(cx, &SetTab))
+                                ->IntoEl());
+    page->Child(capped);
 
     // Dynamic Tabs: a ButtonGroup that grows and shrinks the bar, and tabs
     // that carry a prefix icon and their own close button.
