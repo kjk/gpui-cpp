@@ -28,10 +28,13 @@
 // import { buildDist } from "./build-dist.ts";
 // buildDist({ outDir: ".work" });   // what a build script may do
 //
-// The two destinations differ in one way. dist/ is what a reader opens, so
-// runs of blank lines collapse to one; .work/ is byte-for-byte what the
-// amalgamator emits, because that is the copy every build compiles and its
-// line numbers line up with the `#line 1 "src/..."` markers above them.
+// The two destinations differ. dist/ is what a reader opens: the comments are
+// stripped, runs of blank lines collapse to one, and the #include lines are
+// lifted out of the chunks to the top of gpui.cpp and de-duplicated, since one
+// translation unit only needs each header once. .work/ is the copy every build
+// compiles, and it is the sources concatenated and nothing else -- comments and
+// all -- so a line in it is the line the `#line 1 "src/..."` marker above it
+// says, and a debugger or a compiler diagnostic lands where you expect.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -450,8 +453,43 @@ function preferredCppOrder(cpps: string[]): string[] {
   });
 }
 
-function finish(text: string): string {
-  return trimTrailingSpace(stripComments(text));
+function finish(text: string, strip: boolean): string {
+  return trimTrailingSpace(strip ? stripComments(text) : text);
+}
+
+const includeRe = /^[ \t]*#[ \t]*(?:include|import)[ \t]*[<"]/;
+const condOpenRe = /^[ \t]*#[ \t]*(?:if|ifdef|ifndef)\b/;
+const condCloseRe = /^[ \t]*#[ \t]*endif\b/;
+
+// The #include and #import lines a chunk asks for, taken out of it. Only the
+// ones at the top level of the file: an include inside a #if is there for a
+// reason, and hoisting it would answer a question the source meant to ask.
+function liftIncludes(body: string): { body: string; includes: string[] } {
+  const kept: string[] = [];
+  const includes: string[] = [];
+  let depth = 0;
+  for (const line of body.split("\n")) {
+    if (condOpenRe.test(line)) {
+      depth++;
+    } else if (condCloseRe.test(line)) {
+      depth--;
+    } else if (depth === 0 && includeRe.test(line)) {
+      includes.push(line.trim());
+      continue;
+    }
+    kept.push(line);
+  }
+  return { body: kept.join("\n"), includes };
+}
+
+// <sys/stat.h> before "md4c.h", each name once, so the block reads as a list.
+function sortedIncludes(lines: Iterable<string>): string[] {
+  const key = (l: string) => {
+    const angle = l.includes("<");
+    const name = l.replace(/^[^<"]*[<"]/, "").replace(/[>"].*$/, "");
+    return `${angle ? 0 : 1}${name}`;
+  };
+  return [...new Set(lines)].sort((a, b) => key(a).localeCompare(key(b)));
 }
 
 // Stripping the comments out of 100-odd files leaves runs of blank lines
@@ -525,6 +563,26 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     }
   }
 
+  // dist/ lifts the includes; .work/ leaves every chunk exactly as its file
+  // reads. Whatever is lifted lands in `lifted`, keyed by the guard it needs.
+  const tidy = outDir === "dist";
+  const portableIncludes = new Set<string>();
+  const platIncludes = new Map<string, { plats: Platform[]; lines: Set<string> }>();
+  const takeIncludes = (plats: Platform[], lines: string[]) => {
+    if (plats.length === 0) {
+      for (const l of lines) {
+        portableIncludes.add(l);
+      }
+      return;
+    }
+    const key = plats.join("+");
+    const group = platIncludes.get(key) ?? { plats, lines: new Set<string>() };
+    for (const l of lines) {
+      group.lines.add(l);
+    }
+    platIncludes.set(key, group);
+  };
+
   const chunkFor = (rel: string): string | null => {
     let body = cppTexts.get(rel) ?? "";
     const local = new Set((fileNames.get(rel) ?? []).filter((n) => colliding.has(n)));
@@ -533,28 +591,68 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
       return null;
     }
     const plats = filePlatforms(rel);
+    if (tidy) {
+      const lifted = liftIncludes(body);
+      body = lifted.body;
+      takeIncludes(plats, lifted.includes);
+    }
     if (plats.length === 0) {
       return [`#line 1 "${rel}"`, body, ""].join("\n");
     }
     return [guardFor(plats), `#line 1 "${rel}"`, body, "#endif", ""].join("\n");
   };
 
-  const chunks: string[] = ['#include "gpui.h"', ""];
-  for (const rel of [...cpps, ...platCpps]) {
+  // The portable chunks first, then the platform ones, which is what lets a
+  // platform's headers be lifted at all: <X11/Xlib.h> defines None and Window,
+  // and Cocoa brings its own crowd, so they must not stand in front of the
+  // portable code the way the truly portable headers can.
+  const portableChunks: string[] = [];
+  for (const rel of cpps) {
     const chunk = chunkFor(rel);
     if (chunk) {
-      chunks.push(chunk);
+      portableChunks.push(chunk);
     }
   }
-  chunks.push(md4cChunk(md4cSource, md4cCppFixes, false));
+  let md4c = md4cChunk(md4cSource, md4cCppFixes, false);
+  if (tidy) {
+    const lifted = liftIncludes(md4c);
+    md4c = lifted.body;
+    takeIncludes([], lifted.includes);
+  }
+  const platformChunks: string[] = [];
+  for (const rel of platCpps) {
+    const chunk = chunkFor(rel);
+    if (chunk) {
+      platformChunks.push(chunk);
+    }
+  }
 
-  const tidy = outDir === "dist";
+  // Comments do not survive into dist/, so the blocks below carry none: what
+  // they are is documented at the top of this script instead.
+  const chunks: string[] = ['#include "gpui.h"'];
+  if (portableIncludes.size > 0) {
+    chunks.push("", ...sortedIncludes(portableIncludes));
+  }
+  chunks.push("");
+  chunks.push(...portableChunks);
+  for (const group of platIncludes.values()) {
+    // A header the portable block already pulled in unconditionally does not
+    // need pulling in again behind a guard.
+    const lines = [...group.lines].filter((l) => !portableIncludes.has(l));
+    if (lines.length === 0) {
+      continue;
+    }
+    chunks.push(guardFor(group.plats), ...sortedIncludes(lines), "#endif", "");
+  }
+  chunks.push(...platformChunks);
+  chunks.push(md4c);
+
   const headerText = tidy
-    ? collapseBlankRuns(finish(headerChunks.join("\n")))
-    : finish(headerChunks.join("\n"));
+    ? collapseBlankRuns(finish(headerChunks.join("\n"), true))
+    : finish(headerChunks.join("\n"), false);
   const sourceText = tidy
-    ? collapseBlankRuns(finish(chunks.join("\n")))
-    : finish(chunks.join("\n"));
+    ? collapseBlankRuns(finish(chunks.join("\n"), true))
+    : finish(chunks.join("\n"), false);
 
   const absOut = join(root, outDir);
   mkdirSync(absOut, { recursive: true });

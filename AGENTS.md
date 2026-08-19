@@ -136,10 +136,14 @@ what every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go
 through it — while `dist/` is the checked-in pair, refreshed only by running
 `bun cmd/build-dist.ts` by hand. Never regenerate `dist/` as part of a build,
 a test run or a commit; `buildDist()` takes a required `outDir` so an
-automatic caller has to say `.work` out loud. The two differ in one respect:
-`dist/` collapses runs of blank lines, since it is read as a document, and
-`.work/` keeps them so its line numbers match the `#line 1 "src/..."` markers
-the compiler reports against. Each `_win.cpp` /
+automatic caller has to say `.work` out loud. The two differ in what they do
+with the text: `dist/` is read as a document, so the comments come out, runs of
+blank lines collapse, and the `#include` lines are lifted to the top of
+`gpui.cpp` and de-duplicated — the portable ones first, then one guarded block
+per platform, which has to stay below the portable code because `<X11/Xlib.h>`
+defines `None` and `Window`. `.work/` is the sources concatenated and nothing
+else, comments and all, so a line in it is the line its `#line 1 "src/..."`
+marker says and a diagnostic lands where you expect. Each `_win.cpp` /
 `_linux.cpp` / `_mac.cpp` / `_posix.cpp` sits in `gpui.cpp` inside its own `#if
 GPUI_OS_*`, so `<windows.h>`, `<X11/Xlib.h>` and `<Cocoa/Cocoa.h>` still never
 reach one translation unit — the preprocessor drops the other two halves before
