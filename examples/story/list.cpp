@@ -54,7 +54,10 @@ enum {
 };
 
 struct ListStory {
-    int selectedRow = -1;
+    // ListState is an entity in Rust too, which is what the row closures and
+    // cx.subscribe capture.
+    Entity<ListState> list = {};
+    int confirmedRow = -1;
     int openMenu = 0;
     bool selectable = true;
     bool searchable = true;
@@ -65,7 +68,36 @@ struct ListStory {
     bool seeded = false;
 
     static El* Render(ListStory* self, Ctx* cx);
+    static void OnKey(ListStory* self, Ctx* cx, const KeyEvent* ev);
 };
+
+// cx.subscribe(&list, ..): a Confirm is what the story acts on, and a Cancel
+// clears what it was showing.
+static void OnListEvent(ListStory* self, Ctx* cx, const ListEvent* ev) {
+    if (ev->kind == ListEventKind::Confirm) {
+        self->confirmedRow = ev->index;
+    } else if (ev->kind == ListEventKind::Cancel) {
+        self->confirmedRow = -1;
+    }
+    Notify(cx);
+}
+
+// The "List" key context: up and down walk the rows, Enter takes one, Escape
+// gives up the selection. A page with the search field focused leaves the
+// text keys to the field.
+void ListStory::OnKey(ListStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (!ev->down) {
+        return;
+    }
+    ListAction act = ListActionForKey(ev->vk);
+    if (act == ListAction::None) {
+        return;
+    }
+    ListState* st = self->list.Get(cx);
+    if (st) {
+        ListPerform(st, cx, act, ev->ctrl);
+    }
+}
 
 static void ListMenuOpen(ListStory* self, Ctx* cx, const ClickEvent*,
                          intptr_t which) {
@@ -96,10 +128,6 @@ static void ListMenuAct(ListStory* self, Ctx* cx, const ClickEvent*,
     self->openMenu = 0;
     Notify(cx);
 }
-static void PickRow(ListStory* self, Ctx* cx, const ClickEvent*, intptr_t ix) {
-    self->selectedRow = (int)ix;
-    Notify(cx);
-}
 static void FocusSearch(ListStory* self, Ctx* cx, const ClickEvent*) {
     self->search.focused = true;
     Notify(cx);
@@ -111,13 +139,18 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     if (!self->seeded) {
         self->seeded = true;
         InputSetPlaceholder(&self->search, StrL("Search..."));
+        self->list = EntityNewState<ListState>(cx->app);
+    }
+    ListState* st = self->list.Get(cx);
+    if (st) {
+        st->selectable = self->selectable;
+        st->onEvent = Listen(cx, &OnListEvent);
     }
     if (self->search.focused) {
         cx->win->input = &self->search;
     }
     Listener openMenu = Listen(cx, &ListMenuOpen);
     Listener act = Listen(cx, &ListMenuAct);
-    Listener pick = Listen(cx, &PickRow);
 
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
@@ -148,64 +181,49 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
-    // The list draws its own frame; the search field sits at the top of it.
-    El* frame =
-        Div(a)->FlexCol()->W(kFill)->Pad(8)->Gap(4)->Radius(th.radius)->Border(
-            1, th.border);
+    // The list is the component now: it owns the rows' identity, the search
+    // field, and what a click does to the selection.
+    component::List* list =
+        component::List::New(cx, StrL("list-story"), self->list)
+            ->Loading(self->loading);
     if (self->searchable) {
-        El* searchRow =
-            Div(a)->FlexRow()->W(kFill)->H(32)->PadX(8)->Gap(8)->ItemsCenter();
-        searchRow->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
-        searchRow->Child(Div(a)->Grow()->Child(
-            component::Input::New(cx, StrL("list-search"), &self->search)
-                ->Appearance(false)
-                ->OnFocus(Listen(cx, &FocusSearch))
-                ->IntoEl()));
-        frame->Child(searchRow);
+        list->Searchable(&self->search, Listen(cx, &FocusSearch));
     }
-
     int rowIx = 0;
-    for (size_t s = 0; s < sizeof(kSections) / sizeof(kSections[0]); s++) {
-        const ListSection& sec = kSections[s];
+    for (size_t sec = 0; sec < sizeof(kSections) / sizeof(kSections[0]);
+         sec++) {
+        const ListSection& s = kSections[sec];
         El* head = Div(a)->FlexRow()->PadX(8)->PadB(4)->Gap(8)->ItemsCenter();
         head->Child(IconEl(a, IconName::Folder, 16)->Fg(th.mutedFg));
-        head->Child(StoryTxt(cx, Str(sec.industry), 14, th.mutedFg));
-        head->Child(StoryTxt(cx, StoryFmt(cx, "(section: %d)", sec.section), 14,
+        head->Child(StoryTxt(cx, Str(s.industry), 14, th.mutedFg));
+        head->Child(StoryTxt(cx, StoryFmt(cx, "(section: %d)", s.section), 14,
                              th.mutedFg));
-        frame->Child(head);
+        El* foot = Div(a)->PadX(8)->PadT(4)->PadB(20)->Child(
+            StoryTxt(cx, StrL("Total 4 items in section."), 12, th.mutedFg));
+        list->Section(head, foot);
         for (int i = 0; i < 4; i++) {
-            const ListRow& r = sec.rows[i];
-            El* row = Div(a)
-                          ->FlexRow()
-                          ->W(kFill)
-                          ->PadX(8)
-                          ->PadY(4)
-                          ->Gap(8)
-                          ->ItemsCenter()
-                          ->JustifyBetween()
-                          ->Radius(th.radius)
-                          ->Border(1, Rgba8(0, 0, 0, 0));
-            if (self->selectable && self->selectedRow == rowIx) {
-                row->Bg(th.accent);
-            }
-            row->Click(HashClickId(StoryFmt(cx, "list-row-%d", rowIx)))
-                ->OnClick(ListenerArg(pick, rowIx));
-            row->Child(StoryTxt(cx, Str(r.name), 16, th.foreground));
+            const ListRow& r = s.rows[i];
+            El* line = Div(a)
+                           ->FlexRow()
+                           ->W(kFill)
+                           ->Gap(8)
+                           ->ItemsCenter()
+                           ->JustifyBetween();
+            line->Child(StoryTxt(cx, Str(r.name), 16, th.foreground));
             El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->JustifyEnd();
             right->Child(StoryTxt(cx, Str(r.price), 16, th.foreground)->W(65));
-            El* changeBox = Div(a)->FlexRow()->W(65)->JustifyEnd()->Child(
+            right->Child(Div(a)->FlexRow()->W(65)->JustifyEnd()->Child(
                 StoryTxt(cx, Str(r.change), 12, r.up ? th.green : th.red)
-                    ->PadX(4));
-            right->Child(changeBox);
-            row->Child(right);
-            frame->Child(row);
+                    ->PadX(4)));
+            line->Child(right);
+            list->Item(component::ListItem::New(cx, line)
+                           ->Confirmed(self->confirmedRow == rowIx));
             rowIx++;
         }
-        frame->Child(Div(a)->PadX(8)->PadT(4)->PadB(20)->Child(
-            StoryTxt(cx, StrL("Total 4 items in section."), 12, th.mutedFg)));
     }
+    El* frame = list->IntoEl();
     page->Child(frame);
     return page;
 }
 
-STORY_PAGE(StoryList, ListStory);
+STORY_PAGE_KEYS(StoryList, ListStory);
