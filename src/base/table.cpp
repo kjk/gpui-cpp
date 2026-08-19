@@ -1,30 +1,33 @@
 #include "base/table.h"
-#include "base/element_ext.h"
 
 namespace gpui {
 
 El* Table::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id);
 }
 El* TableHeader::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id);
 }
 El* TableBody::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id);
 }
 El* TableRow::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id)->Click(HashClickId(id));
 }
 El* TableHead::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id)->Click(HashClickId(id));
 }
 El* TableCell::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return UiRoot(a, id, 0);
+    return Div(a)->Id(id);
+}
+El* TableCaption::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
+    return Div(a)->Id(id);
 }
 } // namespace gpui
