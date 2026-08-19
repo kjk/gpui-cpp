@@ -185,9 +185,13 @@ El* SliderTrack::New(Ctx* cx, SliderState* state, Axis axis) {
     }
     return e;
 }
-El* SliderIndicator::New(Ctx* cx) {
+El* SliderIndicator::New(Ctx* cx, SliderState* state) {
     Arena* a = cx->a;
-    return Div(a);
+    El* e = Div(a);
+    if (state) {
+        e->BindSliderBounds(state);
+    }
+    return e;
 }
 El* SliderThumb::New(Ctx* cx) {
     Arena* a = cx->a;

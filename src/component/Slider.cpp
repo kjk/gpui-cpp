@@ -80,7 +80,7 @@ El* Slider::IntoEl() {
                          ->W(kH)
                          ->H(w)
                          ->Click(HashClickId(id.s ? id : StrL("slider-v")));
-        vtrack->Child(Div(a)
+        vtrack->Child(SliderIndicator::New(cx, bind)
                           ->Absolute()
                           ->Left(mid)
                           ->Top(0)
@@ -90,7 +90,7 @@ El* Slider::IntoEl() {
                           ->Bg(railBg));
         float vFrom = reverse ? hi : low;
         float vTo = reverse ? 1.f : hi;
-        vtrack->Child(SliderIndicator::New(cx)
+        vtrack->Child(Div(a)
                           ->Absolute()
                           ->Left(mid)
                           ->Top(w * (1.f - vTo))
@@ -117,7 +117,7 @@ El* Slider::IntoEl() {
                     ->W(w)
                     ->H(kH)
                     ->Click(HashClickId(id.s ? id : StrL("slider")));
-    track->Child(Div(a)
+    track->Child(SliderIndicator::New(cx, bind)
                      ->Absolute()
                      ->Top(mid)
                      ->Left(0)
@@ -128,7 +128,7 @@ El* Slider::IntoEl() {
     // Reversed, the filled part is what is left beyond the thumb.
     float fillFrom = reverse ? hi : low;
     float fillTo = reverse ? 1.f : hi;
-    track->Child(SliderIndicator::New(cx)
+    track->Child(Div(a)
                      ->Absolute()
                      ->Top(mid)
                      ->Left(w * fillFrom)

@@ -41,15 +41,15 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->Click(ClickSlider)
                     ->W(trackW)
                     ->H(28);
-    track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(trackW)->H(2)->Bg(
-        Rgb(0xd4, 0xd4, 0xd4)));
-    track->Child(SliderIndicator::New(cx)
+    track->Child(SliderIndicator::New(cx, &app->slider)
                      ->Absolute()
                      ->Top(13)
                      ->Left(0)
-                     ->W(fillW)
+                     ->W(trackW)
                      ->H(2)
-                     ->Bg(Rgb(0x17, 0x17, 0x17)));
+                     ->Bg(Rgb(0xd4, 0xd4, 0xd4)));
+    track->Child(Div(a)->Absolute()->Top(13)->Left(0)->W(fillW)->H(2)->Bg(
+        Rgb(0x17, 0x17, 0x17)));
     track->Child(SliderThumb::New(cx)
                      ->Absolute()
                      ->Top(7)

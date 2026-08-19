@@ -220,7 +220,11 @@ static void SliderEmit(Window* win, SliderState* s, SliderEventKind kind) {
 // release keeps that end following the pointer.
 static void SliderPress(Window* win, const HitRect* hit, Point at) {
     SliderState* s = hit->slider;
-    SliderSetBounds(s, hit->bounds);
+    // The rail reported its own box when it painted; a slider built without
+    // one maps against the box that took the press instead.
+    if (s->bounds.w <= 0 || s->bounds.h <= 0) {
+        SliderSetBounds(s, hit->bounds);
+    }
     s->dragStart = SliderIsStartAt(s, hit->sliderAxis, at);
     if (SliderUpdateByPosition(s, hit->sliderAxis, at, s->dragStart)) {
         SliderEmit(win, s, SliderEventKind::Change);

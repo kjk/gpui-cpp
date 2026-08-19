@@ -528,6 +528,10 @@ El* El::BindSlider(SliderState* s, Axis axis) {
     sliderAxis = axis;
     return this;
 }
+El* El::BindSliderBounds(SliderState* s) {
+    sliderBounds = s;
+    return this;
+}
 
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
@@ -2202,6 +2206,11 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     }
     if (skipOverlay && IsOverlay(e)) {
         return;
+    }
+    // SliderIndicator::on_prepaint. Layout is over by the time an element
+    // paints, so its box is final and the slider can map a position onto it.
+    if (e->sliderBounds) {
+        SliderSetBounds(e->sliderBounds, e->Bounds());
     }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->onMouseDown.IsValid() || e->onMouseUp.IsValid() ||

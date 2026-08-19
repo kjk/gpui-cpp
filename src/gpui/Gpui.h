@@ -712,6 +712,11 @@ struct El {
     // element names the state and the window does what those closures do.
     SliderState* slider = nullptr;
     Axis sliderAxis = Axis::Horizontal;
+    // BindSliderBounds: this element is the rail a value maps against, and
+    // hands its box to the state once it has one — SliderIndicator's
+    // `on_prepaint(|bounds| state.set_bounds(bounds))`. The box that catches
+    // the press is the taller track, so the two are not the same element.
+    SliderState* sliderBounds = nullptr;
     void (*customPaint)(PaintCtx* ctx, El* e, void* user) = nullptr;
     void* customUser = nullptr;
     El* first = nullptr;
@@ -801,6 +806,7 @@ struct El {
     El* OnMouseUp(Listener l);
     El* OnDragMove(Listener l);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
+    El* BindSliderBounds(SliderState* s);
     El* Child(El* c);
     El* Bold();
     El* Semibold();
