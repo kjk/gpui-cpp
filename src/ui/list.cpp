@@ -76,23 +76,35 @@ List* List::New(Ctx* cx, Str id, Entity<ListState> state) {
     l->state = state;
     return l;
 }
-List* List::Section(El* header, El* footer) {
-    if (nSections < 8) {
-        sections[nSections].header = header;
-        sections[nSections].footer = footer;
-        nSections++;
+List* List::Sections(const int* counts, int n) {
+    ListState* s = state.Get(cx);
+    if (s) {
+        ListSetSections(s, counts, n, header != nullptr, footer != nullptr);
     }
     return this;
 }
-List* List::Item(ListItem* item) {
-    if (nSections == 0) {
-        // A list with no section of its own still has one to put rows in.
-        Section(nullptr);
+List* List::Count(int n) {
+    ListState* s = state.Get(cx);
+    if (s) {
+        ListSetCount(s, n);
     }
-    ListSection& sec = sections[nSections - 1];
-    if (sec.n < 64 && item) {
-        sec.rows[sec.n++] = item;
-        nRows++;
+    return this;
+}
+List* List::Items(void* d, ListItem* (*fn)(Ctx*, void*, int, int, int)) {
+    data = d;
+    item = fn;
+    return this;
+}
+List* List::Headers(El* (*headerFn)(Ctx*, void*, int),
+                    El* (*footerFn)(Ctx*, void*, int)) {
+    header = headerFn;
+    footer = footerFn;
+    // The flattening depends on whether there are headers and footers at all,
+    // so a list that says so after its sections says it again.
+    ListState* s = state.Get(cx);
+    if (s) {
+        s->sectionHeaders = header != nullptr;
+        s->sectionFooters = footer != nullptr;
     }
     return this;
 }
@@ -101,23 +113,33 @@ List* List::Searchable(InputState* s, Listener onFocus) {
     onSearchFocus = onFocus;
     return this;
 }
-List* List::Loading(bool v) {
-    loading = v;
+List* List::Empty(El* e) {
+    empty = e;
     return this;
 }
-List* List::MaxH(float px) {
-    maxH = px;
+List* List::H(float px) {
+    h = px;
     return this;
+}
+
+// render_empty: an Inbox icon in muted_foreground at 60%, centred in what the
+// list would have filled.
+static El* DefaultEmpty(Ctx* cx, float h) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    return Div(a)
+        ->FlexCol()
+        ->W(kFill)
+        ->H(h)
+        ->ItemsCenter()
+        ->JustifyCenter()
+        ->Child(IconEl(a, IconName::Inbox, 48)
+                    ->Fg(RgbaOpacity(th.mutedFg, 0.6f)));
 }
 
 El* List::IntoEl() {
     const Theme& th = cx->theme();
     ListState* s = state.Get(cx);
-    if (s) {
-        // The row count is the caller's every frame, which is what keeps the
-        // arrow keys inside the rows there actually are.
-        s->count = nRows;
-    }
 
     El* root =
         Div(a)->FlexCol()->W(kFill)->Pad(8)->Gap(4)->Radius(th.radius)->Border(
@@ -134,13 +156,16 @@ El* List::IntoEl() {
                 ->IntoEl()));
         root->Child(searchRow);
     }
-
-    El* body = Div(a)->FlexCol()->W(kFill);
-    if (maxH > 0) {
-        body->MaxH(maxH);
+    if (!s) {
+        return root;
     }
-    if (loading) {
+    // The height the list was laid out at, which is what scroll_to_item and
+    // the visible range are worked out against.
+    s->viewportH = h;
+
+    if (s->loading) {
         // The delegate's loading state: skeleton rows in place of the list.
+        El* body = Div(a)->FlexCol()->W(kFill)->H(h);
         for (int i = 0; i < 5; i++) {
             body->Child(Div(a)->W(kFill)->PadX(8)->PadY(6)->Child(
                 Skeleton::New(cx)->W(kFill)->H(16)->IntoEl()));
@@ -148,33 +173,65 @@ El* List::IntoEl() {
         root->Child(body);
         return root;
     }
+    if (s->count == 0) {
+        root->Child(empty ? empty : DefaultEmpty(cx, h));
+        return root;
+    }
 
+    int total = ListRowCount(s);
+    VirtualRange range = VirtualListVisibleRows(total, s->rowH, s->scrollY, h);
+    El* body = Div(a)
+                   ->FlexCol()
+                   ->W(kFill)
+                   ->H(h)
+                   ->ClipY()
+                   ->ScrollY(s->scrollY)
+                   ->ScrollId(HashClickId(id))
+                   ->OnScroll(ListenTo(state, &ListState::OnScroll));
+    if (range.first > 0) {
+        body->Child(Div(a)->W(kFill)->H((float)range.first * s->rowH));
+    }
     Listener click = ListenTo(state, &ListState::OnRowClick, 0);
     Listener down = ListenTo(state, &ListState::OnRowMouseDown, 0);
-    int ix = 0;
-    for (int si = 0; si < nSections; si++) {
-        const ListSection& sec = sections[si];
-        if (sec.header) {
-            body->Child(sec.header);
-        }
-        for (int i = 0; i < sec.n; i++) {
-            ListItem* it = sec.rows[i];
-            if (s) {
-                it->selected = s->selectable && s->selected == ix;
-                it->secondarySelected = s->rightClicked == ix;
+    for (int r = range.first; r < range.end; r++) {
+        ListRow row = ListRowAt(s, r);
+        El* el = nullptr;
+        if (row.kind == ListRowKind::SectionHeader) {
+            el = header ? header(cx, data, row.section) : nullptr;
+        } else if (row.kind == ListRowKind::SectionFooter) {
+            el = footer ? footer(cx, data, row.section) : nullptr;
+        } else if (item) {
+            ListItem* it = item(cx, data, row.section, row.row, row.entry);
+            if (it) {
+                it->selected = s->selectable && s->selected == row.entry;
+                it->secondarySelected = s->rightClicked == row.entry;
+                // Each row names the state and carries its own index, which
+                // is what Rust's per-row closure captures.
+                el = it->IntoEl(StrDup(a, fmt("%s-row-%d", id, row.entry)),
+                                ListenerArg(click, row.entry),
+                                ListenerArg(down, row.entry));
             }
-            // Each row names the state and carries its own index, which is
-            // what Rust's per-row closure captures.
-            body->Child(it->IntoEl(StrDup(a, fmt("%s-row-%d", id, ix)),
-                                   ListenerArg(click, ix),
-                                   ListenerArg(down, ix)));
-            ix++;
         }
-        if (sec.footer) {
-            body->Child(sec.footer);
+        // Every row is the same height, which is what uniform_list asks for
+        // and what lets the two spacers stand in for the rest.
+        El* slot = Div(a)->FlexCol()->W(kFill)->H(s->rowH);
+        if (el) {
+            slot->Child(el);
         }
+        body->Child(slot);
+    }
+    if (range.end < total) {
+        body->Child(Div(a)->W(kFill)->H((float)(total - range.end) * s->rowH));
     }
     root->Child(body);
+
+    // load_more: coming within the threshold of the end asks the caller for
+    // more rows. Rust runs it as a background task; here it is a listener the
+    // caller answers on the next frame.
+    if (ListShouldLoadMore(s, range.end) && s->onLoadMore.IsValid()) {
+        ListEvent ev = {ListEventKind::Select, s->count, false};
+        ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
+    }
     return root;
 }
 

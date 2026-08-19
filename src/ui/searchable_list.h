@@ -17,6 +17,10 @@ struct SearchableList {
     Listener onQueryFocus;
     Str items[32] = {};
     int n = 0;
+    // Which of them the query left, which is what the list asks for by
+    // position.
+    int matches[32] = {};
+    int nMatches = 0;
 
     static SearchableList* New(Ctx* cx, Entity<ListState> state,
                                InputState* query);

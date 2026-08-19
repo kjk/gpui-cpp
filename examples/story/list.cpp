@@ -2,20 +2,20 @@
 
 // The Rust story fills its list with random companies; ours keeps a fixed
 // set with the same shape, grouped by industry.
-struct ListRow {
+struct ListQuote {
     const char* name;
     const char* price;
     const char* change;
     bool up;
 };
 
-struct ListSection {
+struct QuoteSection {
     const char* industry;
     int section; // the index the Rust delegate prints in the header
-    ListRow rows[4];
+    ListQuote rows[4];
 };
 
-static const ListSection kSections[] = {
+static const QuoteSection kSections[] = {
     {"Airlines / Aviation",
      1,
      {{"Daugherty and Sons", "422.23", "54.63%", true},
@@ -133,9 +133,47 @@ static void FocusSearch(ListStory* self, Ctx* cx, const ClickEvent*) {
     Notify(cx);
 }
 
-El* ListStory::Render(ListStory* self, Ctx* cx) {
+// render_section_header / render_section_footer / render_item: the three
+// halves of the delegate, over the story's own data.
+static El* SectionHeader(Ctx* cx, void*, int section) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    const QuoteSection& s = kSections[section];
+    El* head = Div(a)->FlexRow()->PadX(8)->PadT(8)->Gap(8)->ItemsCenter();
+    head->Child(IconEl(a, IconName::Folder, 16)->Fg(th.mutedFg));
+    head->Child(StoryTxt(cx, Str(s.industry), 14, th.mutedFg));
+    head->Child(
+        StoryTxt(cx, StoryFmt(cx, "(section: %d)", s.section), 14, th.mutedFg));
+    return head;
+}
+
+static El* SectionFooter(Ctx* cx, void*, int) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    return Div(a)->PadX(8)->PadT(4)->Child(
+        StoryTxt(cx, StrL("Total 4 items in section."), 12, th.mutedFg));
+}
+
+static component::ListItem* RenderQuote(Ctx* cx, void* data, int section,
+                                        int row, int entry) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    ListStory* self = (ListStory*)data;
+    const ListQuote& r = kSections[section].rows[row];
+    El* line =
+        Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter()->JustifyBetween();
+    line->Child(StoryTxt(cx, Str(r.name), 16, th.foreground));
+    El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->JustifyEnd();
+    right->Child(StoryTxt(cx, Str(r.price), 16, th.foreground)->W(65));
+    right->Child(Div(a)->FlexRow()->W(65)->JustifyEnd()->Child(
+        StoryTxt(cx, Str(r.change), 12, r.up ? th.green : th.red)->PadX(4)));
+    line->Child(right);
+    return component::ListItem::New(cx, line)
+        ->Confirmed(self->confirmedRow == entry);
+}
+
+El* ListStory::Render(ListStory* self, Ctx* cx) {
+    Arena* a = cx->a;
     if (!self->seeded) {
         self->seeded = true;
         InputSetPlaceholder(&self->search, StrL("Search..."));
@@ -182,44 +220,21 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     page->Child(toolbarRow);
 
     // The list is the component now: it owns the rows' identity, the search
-    // field, and what a click does to the selection.
+    // field, and what a click does to the selection. Only the rows the frame
+    // can show are ever built, which is what the delegate is for.
+    if (st) {
+        st->loading = self->loading;
+        st->rowH = 44;
+    }
     component::List* list =
         component::List::New(cx, StrL("list-story"), self->list)
-            ->Loading(self->loading);
+            ->H(520)
+            ->Headers(&SectionHeader, &SectionFooter)
+            ->Items(self, &RenderQuote);
+    static const int kCounts[] = {4, 4, 4};
+    list->Sections(kCounts, 3);
     if (self->searchable) {
         list->Searchable(&self->search, Listen(cx, &FocusSearch));
-    }
-    int rowIx = 0;
-    for (size_t sec = 0; sec < sizeof(kSections) / sizeof(kSections[0]);
-         sec++) {
-        const ListSection& s = kSections[sec];
-        El* head = Div(a)->FlexRow()->PadX(8)->PadB(4)->Gap(8)->ItemsCenter();
-        head->Child(IconEl(a, IconName::Folder, 16)->Fg(th.mutedFg));
-        head->Child(StoryTxt(cx, Str(s.industry), 14, th.mutedFg));
-        head->Child(StoryTxt(cx, StoryFmt(cx, "(section: %d)", s.section), 14,
-                             th.mutedFg));
-        El* foot = Div(a)->PadX(8)->PadT(4)->PadB(20)->Child(
-            StoryTxt(cx, StrL("Total 4 items in section."), 12, th.mutedFg));
-        list->Section(head, foot);
-        for (int i = 0; i < 4; i++) {
-            const ListRow& r = s.rows[i];
-            El* line = Div(a)
-                           ->FlexRow()
-                           ->W(kFill)
-                           ->Gap(8)
-                           ->ItemsCenter()
-                           ->JustifyBetween();
-            line->Child(StoryTxt(cx, Str(r.name), 16, th.foreground));
-            El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->JustifyEnd();
-            right->Child(StoryTxt(cx, Str(r.price), 16, th.foreground)->W(65));
-            right->Child(Div(a)->FlexRow()->W(65)->JustifyEnd()->Child(
-                StoryTxt(cx, Str(r.change), 12, r.up ? th.green : th.red)
-                    ->PadX(4)));
-            line->Child(right);
-            list->Item(component::ListItem::New(cx, line)
-                           ->Confirmed(self->confirmedRow == rowIx));
-            rowIx++;
-        }
     }
     El* frame = list->IntoEl();
     page->Child(frame);
