@@ -79,6 +79,56 @@ bool ToastAdvance(ToastStackState* s, int deltaMs, bool paused) {
     return changed;
 }
 
+float ToastStackGeometry(const float* heights, int n, float peek, float gap,
+                         bool anchoredBottom, float* collapsedOffsets,
+                         float* expandedOffsets, float* expandedHeight) {
+    if (n <= 0) {
+        if (expandedHeight) {
+            *expandedHeight = 0;
+        }
+        return 0;
+    }
+    float expanded = 0;
+    for (int i = 0; i < n; i++) {
+        expanded += heights[i];
+    }
+    expanded += gap * (float)(n - 1);
+
+    // Closed, the stack is as tall as the front toast plus a sliver of each
+    // one behind it — or as tall as a taller one behind, whichever wins.
+    float collapsed = heights[n - 1] + peek * (float)(n - 1);
+    for (int i = 0; i < n; i++) {
+        int rank = n - 1 - i;
+        float h = heights[i] + peek * (float)rank;
+        if (h > collapsed) {
+            collapsed = h;
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        int rank = n - 1 - i;
+        float newer = 0;
+        for (int j = i + 1; j < n; j++) {
+            newer += heights[j];
+        }
+        float e = anchoredBottom
+                      ? expanded - newer - gap * (float)rank - heights[i]
+                      : newer + gap * (float)rank;
+        float c = anchoredBottom ? collapsed - heights[i] - peek * (float)rank
+                                 : peek * (float)rank;
+        if (expandedOffsets) {
+            expandedOffsets[i] = e;
+        }
+        if (collapsedOffsets) {
+            collapsedOffsets[i] = c;
+        }
+    }
+    if (expandedHeight) {
+        *expandedHeight = expanded;
+    }
+    return collapsed;
+}
+
 El* Toast::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     return Div(a)->Id(id);
