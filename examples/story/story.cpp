@@ -892,9 +892,11 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
         app->selA = -1;
         app->selB = -1;
         app->selecting = false;
-        // Let the page close whatever it has open.
-        StoryKeyRegistered(app, cx, ev);
     }
+    // Whatever the shell did not use is the page's. This is cx.propagate():
+    // the shell handles its own chords first and then lets the action carry
+    // on, which is how a page's arrows and Enter reach it at all.
+    StoryKeyRegistered(app, cx, ev);
 }
 
 static void OnWheel(StoryApp* app, Ctx* cx, const ScrollWheelEvent* ev) {

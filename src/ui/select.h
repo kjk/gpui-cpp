@@ -26,6 +26,9 @@ struct Select {
     bool cleanable = false;
     bool appearance = true;
     bool open = false;
+    // The option the keyboard is on, which Rust marks with
+    // aria_active_descendant. -1 while the pointer is driving.
+    int highlight = -1;
     Listener onChange;
     Listener onToggle;
     Listener onClear;
@@ -46,6 +49,7 @@ struct Select {
     Select* Cleanable(bool v = true);
     Select* Appearance(bool v);
     Select* Open(bool v);
+    Select* Highlight(int i);
     Select* OnChange(Listener fn);
     Select* OnToggle(Listener fn);
     Select* OnClear(Listener fn);

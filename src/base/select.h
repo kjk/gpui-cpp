@@ -4,6 +4,30 @@
 
 namespace gpui {
 
+// What a keystroke asks a select to do. Rust binds up, down, enter and escape
+// to SelectUp, SelectDown, Confirm and Cancel in the select's key context;
+// this is the same table, read as an answer rather than dispatched as actions,
+// since there is no action system here to route them through.
+enum class SelectAction : uint8_t {
+    // The key was not one of the select's, or the select is disabled and Rust
+    // would have called cx.propagate() and done nothing itself.
+    None,
+    // Open it. Up and Down both open a closed select; so does Enter.
+    Open,
+    // Take the highlighted option. Enter, while open.
+    Confirm,
+    // Close it and put focus back on the trigger. Escape, while open —
+    // Escape on a closed select propagates instead.
+    Dismiss
+};
+
+// The rules, whole. `open` and `disabled` are the select's current state.
+//
+// Rust also moves focus to the content handle whenever Up, Down or Enter is
+// taken, and back to the trigger on Cancel. That is a pair of focus handles a
+// select does not have here, so the caller does the same with its own.
+SelectAction SelectActionForKey(int key, bool open, bool disabled);
+
 struct Select {
     static El* New(Ctx* cx, Str id);
 };

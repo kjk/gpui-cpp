@@ -35,6 +35,10 @@ static const char* kCodes[] = {"CN", "US", "HK", "JP", "KR"};
 struct SelectStory {
     int selected[SelCount] = {5, -1, -1, 0, 0, -1, -1, 0};
     int open = -1;
+    // The option the arrows are on inside the open select. Rust marks it with
+    // aria_active_descendant; here it is what the menu paints as the keyboard
+    // cursor.
+    int highlight = -1;
     bool disabled = false;
     InputState phone;
     StoryToolbarState toolbar;
@@ -60,8 +64,15 @@ static void SelToolbarAct(SelectStory* self, Ctx* cx, const ClickEvent*,
 static void ToggleSel(SelectStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t which) {
     self->open = self->open == (int)which ? -1 : (int)which;
+    // Opening starts the keyboard on whatever is already picked, so the first
+    // arrow steps from there rather than from the top.
+    self->highlight = self->open < 0 ? -1 : self->selected[self->open];
     Notify(cx);
 }
+
+// How many options the select in this slot has, so the arrows know where the
+// list ends.
+static int SelOptionCount(int which);
 static void PickSel(SelectStory* self, Ctx* cx, const ClickEvent*,
                     intptr_t index) {
     if (self->open >= 0) {
@@ -91,6 +102,7 @@ static component::Select* Sel(SelectStory* self, Ctx* cx, int which,
         ->WithSize(self->toolbar.size)
         ->Disabled(self->disabled)
         ->Open(self->open == which)
+        ->Highlight(self->open == which ? self->highlight : -1)
         ->OnToggle(ListenerArg(toggle, which))
         ->OnChange(pick)
         ->OnClear(ListenerArg(clear, which));
@@ -240,12 +252,67 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
+static int SelOptionCount(int which) {
+    switch (which) {
+        case SelCountry:
+            return (int)(sizeof(kCountries) / sizeof(char*));
+        case SelFruit:
+            return (int)(sizeof(kFruits) / sizeof(char*));
+        case SelUi1:
+        case SelMenuH:
+            return (int)(sizeof(kUi) / sizeof(char*));
+        case SelLanguage:
+            return (int)(sizeof(kLanguages) / sizeof(char*));
+        case SelAppearance:
+            return (int)(sizeof(kCodes) / sizeof(char*));
+        default:
+            return 0;
+    }
+}
+
+// gpui_base::SelectActionForKey is the table crates/base/src/select.rs binds
+// up, down, enter and escape to. The arrows walk the list once the select is
+// open, which is what Rust's content focus handle takes them for.
 void SelectStory::OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
+    if (!ev->down) {
         return;
     }
-    self->open = -1;
+    bool open = self->open >= 0;
+    SelectAction act = SelectActionForKey(ev->vk, open, self->disabled);
+    if (act == SelectAction::Dismiss) {
+        self->open = -1;
+        self->highlight = -1;
+        Notify(cx);
+        return;
+    }
+    if (act == SelectAction::Confirm && self->highlight >= 0) {
+        self->selected[self->open] = self->highlight;
+        self->open = -1;
+        self->highlight = -1;
+        // cx.stop_propagation(): the Enter was the select's, so it must not
+        // also reach the focused trigger and reopen what it just closed.
+        cx->win->eatReturn = true;
+        Notify(cx);
+        return;
+    }
+    if (!open || self->disabled) {
+        return;
+    }
+    // Once it is open the root has nothing left to do with an arrow, so the
+    // list takes it.
+    int count = SelOptionCount(self->open);
+    if (count <= 0 || (ev->vk != KeyUp && ev->vk != KeyDown)) {
+        return;
+    }
+    int step = ev->vk == KeyDown ? 1 : -1;
+    int next = self->highlight < 0 ? (step > 0 ? 0 : count - 1)
+                                   : self->highlight + step;
+    if (next < 0) {
+        next = count - 1;
+    } else if (next >= count) {
+        next = 0;
+    }
+    self->highlight = next;
     Notify(cx);
 }
 

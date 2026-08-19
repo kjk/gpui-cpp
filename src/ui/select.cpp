@@ -77,6 +77,10 @@ Select* Select::Open(bool v) {
     open = v;
     return this;
 }
+Select* Select::Highlight(int i) {
+    highlight = i;
+    return this;
+}
 Select* Select::OnChange(Listener fn) {
     onChange = fn;
     return this;
@@ -180,6 +184,11 @@ El* Select::IntoEl() {
                           ->JustifyBetween()
                           ->Radius(th.radius)
                           ->HoverBg(th.accent);
+            // The keyboard's option is painted the way a hover is, so the two
+            // cursors read the same.
+            if (i == highlight) {
+                row->Bg(th.accent);
+            }
             row->Child(TextEl(a, options[i])->Font(font)->Fg(th.foreground));
             if (i == selected) {
                 row->Child(IconEl(a, IconName::Check, 14)->Fg(th.foreground));
