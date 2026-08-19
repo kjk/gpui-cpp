@@ -45,6 +45,7 @@ int GpuiMain(int argc, char** argv) {
     TestSheet();
     TestScrollbar();
     TestResizable();
+    TestTree();
     TestRope();
     TestMaskPattern();
     TestUndoManager();

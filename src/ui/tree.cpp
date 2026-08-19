@@ -58,7 +58,7 @@ El* Tree::IntoEl() {
         if (!Visible(this, i)) {
             continue;
         }
-        El* row = TreeItem::New(cx, HashClickId(nodes[i].label))
+        El* row = TreeItem::New(cx, nodes[i].label)
                       ->H(28)
                       ->PadX(8)
                       ->ItemsCenter()

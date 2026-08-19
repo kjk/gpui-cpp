@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickTree = 580
-};
-
 struct TreeNode {
     const char* label;
     int parent; // -1 root
@@ -60,14 +56,14 @@ El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
         }
         int depth = Depth(i);
         bool sel = app->treeSel == i;
-        El* row = TreeItem::New(cx, ClickTree + i)
+        El* row = TreeItem::New(cx, DupFmt(cx, "tree-%d", i),
+                                Listen(cx, &PickTree, i))
                       ->H(32)
                       ->W(kFill)
                       ->PadX(8)
                       ->ItemsCenter()
                       ->Gap(4)
-                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
-                      ->OnClick(Listen(cx, &PickTree, i));
+                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
         if (sel) {
             row->Bg(Rgb(0xf0, 0xf0, 0xf0));
         }

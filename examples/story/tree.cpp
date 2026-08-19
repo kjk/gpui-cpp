@@ -13,7 +13,28 @@ struct TreeStory {
     bool loaded = false;
 
     static El* Render(TreeStory* self, Ctx* cx);
+    static void OnKey(TreeStory* self, Ctx* cx, const KeyEvent* ev);
 };
+
+// crates/base/src/tree.rs binds up, down, left and right. This page lists one
+// directory flat, so it has no folder to open and the left/right pair has
+// nothing to act on; the selection keys are the half that applies. Both wrap,
+// and both treat no selection as index 0 before stepping, so the first Up
+// lands on the last entry.
+void TreeStory::OnKey(TreeStory* self, Ctx* cx, const KeyEvent* ev) {
+    if (!ev->down) {
+        return;
+    }
+    TreeAction act = TreeActionForKey(ev->vk);
+    if (act == TreeAction::SelectPrev) {
+        self->selected = TreeSelectPrev(self->selected, self->n);
+    } else if (act == TreeAction::SelectNext) {
+        self->selected = TreeSelectNext(self->selected, self->n);
+    } else {
+        return;
+    }
+    Notify(cx);
+}
 
 static void SelectTreeItem(TreeStory* self, Ctx* cx, const ClickEvent*,
                            intptr_t ix) {
@@ -145,4 +166,4 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     return page;
 }
 
-STORY_PAGE(StoryTree, TreeStory);
+STORY_PAGE_KEYS(StoryTree, TreeStory);
