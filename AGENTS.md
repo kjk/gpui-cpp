@@ -130,12 +130,17 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
 `cmd/build-dist.ts` amalgamates `src/` plus `ext/md4c` into two files:
-`gpui.h` and `gpui.cpp`. Both are the same on every platform. It writes them
-into one of two places, and which one matters: `.work/` is gitignored and is
-what every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go
-through it — while `dist/` is the checked-in pair, refreshed only by running
-`bun cmd/build-dist.ts` by hand. Never regenerate `dist/` as part of a build,
-a test run or a commit; `buildDist()` takes a required `outDir` so an
+`gpui.h` and `gpui.cpp`. Both are the same on every platform. `.work/` is gitignored and is what
+every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
+it. The published copy is a repo of its own,
+[gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to
+`.work/gpui-cpp-dist` and refreshed only by running `bun cmd/build-dist.ts` by
+hand: that syncs the clone, writes the pair into it, builds every example
+against it (`GPUI_AMALGAM_DIR` points the platform build at that copy, and its
+objects go to their own `out/*_dist` tree), rewrites its readme with the
+gpui-cpp commit it came from and a compare link showing what it is behind by,
+then commits and pushes it. Never regenerate a published copy as part of a
+build, a test run or a commit; `buildDist()` takes a required `outDir` so an
 automatic caller has to say `.work` out loud. The two differ in what they do
 with the text: `dist/` is read as a document, so the comments come out, runs of
 blank lines collapse, and the `#include` lines are lifted to the top of
@@ -386,7 +391,7 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
-                       (`.work/` for builds; `dist/` only when run by hand)
+                       (`.work/` for builds; run by hand to publish gpui-cpp-dist)
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)

@@ -36,12 +36,32 @@
 // all -- so a line in it is the line the `#line 1 "src/..."` marker above it
 // says, and a debugger or a compiler diagnostic lands where you expect.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
 
-export type DistOutDir = "dist" | ".work";
+// Where the source lives, and where the published pair lives. The two files
+// are the whole of gpui-cpp-dist: it has no history of its own worth reading,
+// it is a snapshot of this repo you can drop into a project.
+export const srcRepoUrl = "https://github.com/kjk/gpui-cpp";
+export const srcBranch = "main";
+export const distRepoUrl = "https://github.com/kjk/gpui-cpp-dist.git";
+export const distRepoDir = ".work/gpui-cpp-dist";
+
+export type DistOutDir = "dist" | ".work" | typeof distRepoDir;
+
+// The amalgam a build compiles against. cmd/build-dist.ts sets
+// GPUI_AMALGAM_DIR to the dist repo checkout, so the examples get built
+// against the published copy as its correctness check; every other build
+// leaves it unset and uses .work/, which it regenerates itself.
+export function amalgamDir(): string {
+  return process.env.GPUI_AMALGAM_DIR ?? ".work";
+}
+
+export function amalgamIsWork(): boolean {
+  return amalgamDir() === ".work";
+}
 
 export type Platform = "win" | "linux" | "mac";
 
@@ -565,7 +585,8 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
 
   // dist/ lifts the includes; .work/ leaves every chunk exactly as its file
   // reads. Whatever is lifted lands in `lifted`, keyed by the guard it needs.
-  const tidy = outDir === "dist";
+  // .work/ is the copy a build compiles; every other destination is published.
+  const tidy = outDir !== ".work";
   const portableIncludes = new Set<string>();
   const platIncludes = new Map<string, { plats: Platform[]; lines: Set<string> }>();
   const takeIncludes = (plats: Platform[], lines: string[]) => {
@@ -650,9 +671,7 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const headerText = tidy
     ? collapseBlankRuns(finish(headerChunks.join("\n"), true))
     : finish(headerChunks.join("\n"), false);
-  const sourceText = tidy
-    ? collapseBlankRuns(finish(chunks.join("\n"), true))
-    : finish(chunks.join("\n"), false);
+  const sourceText = tidy ? collapseBlankRuns(finish(chunks.join("\n"), true)) : finish(chunks.join("\n"), false);
 
   const absOut = join(root, outDir);
   mkdirSync(absOut, { recursive: true });
@@ -679,66 +698,6 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
   };
 }
 
-export type CompileDistOpts = {
-  outDir: DistOutDir;
-  debug: boolean;
-};
-
-export type CompileDistResult = {
-  debug: boolean;
-  ms: number;
-  objPath: string;
-  exitCode: number;
-};
-
-function clFlags(debug: boolean, includeDir: string): string[] {
-  return [
-    "/nologo",
-    "/std:c++20",
-    "/EHsc",
-    "/utf-8",
-    "/I",
-    includeDir,
-    "/DUNICODE",
-    "/D_UNICODE",
-    "/W3",
-    "/wd4996",
-    "/wd4244",
-    "/wd4267",
-    "/c",
-    "/Zi",
-    ...(debug ? ["/Od", "/MTd", "/DDEBUG"] : ["/O2", "/MT", "/DNDEBUG"]),
-  ];
-}
-
-export function compileDist(opts: CompileDistOpts): CompileDistResult {
-  const outDir = opts.outDir;
-  const src = join(outDir, "gpui.cpp");
-  if (!existsSync(join(root, src))) {
-    throw new Error(`missing ${src}; run buildDist() first`);
-  }
-  const objDir = join("out", opts.debug ? "amalgam_dbg" : "amalgam_rel");
-  mkdirSync(join(root, objDir), { recursive: true });
-  const objPath = join(objDir, "gpui.obj");
-  const args = [...clFlags(opts.debug, outDir), `/Fo${objPath}`, `/Fd${objDir}\\`, src];
-  const t0 = performance.now();
-  const r = Bun.spawnSync(["cl", ...args], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const ms = performance.now() - t0;
-  const stdout = new TextDecoder().decode(r.stdout);
-  const stderr = new TextDecoder().decode(r.stderr);
-  if (stdout.trim()) {
-    console.log(stdout.trimEnd());
-  }
-  if (stderr.trim()) {
-    console.error(stderr.trimEnd());
-  }
-  return { debug: opts.debug, ms, objPath, exitCode: r.exitCode ?? 1 };
-}
-
 function formatBytes(n: number): string {
   if (n < 1024) {
     return `${n} b`;
@@ -749,66 +708,206 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function formatMs(ms: number): string {
-  if (ms < 1000) {
-    return `${Math.round(ms)} ms`;
-  }
-  return `${(ms / 1000).toFixed(2)} s`;
-}
-
 function die(msg: string): never {
   console.error(msg);
   process.exit(1);
 }
 
-function parseCli(argv: string[]): { outDir: DistOutDir; bench: boolean } {
-  let outDir: DistOutDir = "dist";
-  let bench = true;
-  const usage = "usage: bun cmd/build-dist.ts [-work] [-no-bench]";
+function run(cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }): number {
+  const r = Bun.spawnSync(cmd, {
+    cwd: opts?.cwd ?? root,
+    env: { ...process.env, ...(opts?.env ?? {}) },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  return r.exitCode ?? 1;
+}
+
+function capture(cmd: string[], cwd?: string): string {
+  const r = Bun.spawnSync(cmd, { cwd: cwd ?? root, stdout: "pipe", stderr: "pipe" });
+  return new TextDecoder().decode(r.stdout).trim();
+}
+
+// Clone the dist repo on the first run, fast-forward it after that. A failure
+// to reach GitHub is a warning, not the end: the amalgam still builds against
+// whatever is on disk.
+function syncDistRepo(): void {
+  const abs = join(root, distRepoDir);
+  if (!existsSync(join(abs, ".git"))) {
+    console.log(`cloning ${distRepoUrl} into ${distRepoDir}`);
+    mkdirSync(dirname(abs), { recursive: true });
+    if (run(["git", "clone", distRepoUrl, distRepoDir]) !== 0) {
+      die(`git clone ${distRepoUrl} failed`);
+    }
+    return;
+  }
+  console.log(`updating ${distRepoDir}`);
+  if (run(["git", "-C", distRepoDir, "pull", "--ff-only"]) !== 0) {
+    console.error(`warning: could not fast-forward ${distRepoDir}; using what is on disk`);
+  }
+}
+
+// Everything above this line in the readme is written once and left alone;
+// everything from it down says which commit this copy came from.
+const readmeMarker = "## This copy";
+
+const readmeHead = `# gpui-cpp-dist
+
+The single-file build of [gpui-cpp](${srcRepoUrl}): \`gpui.h\` and \`gpui.cpp\`,
+amalgamated from that repo's \`src/**\` plus the vendored md4c by its
+\`cmd/build-dist.ts\`. Nothing here is written by hand, so issues and pull
+requests belong in the source repo.
+
+## Use it
+
+Drop both files into your tree, \`#include "gpui.h"\` where you need the API,
+and compile \`gpui.cpp\` as one more source file. It is C++20, and the platform
+halves are already inside it behind \`GPUI_OS_*\` guards, so the same pair
+builds on all three:
+
+- **Windows** — \`cl /std:c++20 /EHsc /utf-8 /DUNICODE /D_UNICODE\`, static CRT;
+  links against the Win32, Direct2D and DirectWrite import libraries.
+- **Linux** — \`g++ -std=c++20\` with \`pkg-config --cflags --libs x11 cairo pangocairo\`.
+- **macOS** — \`clang++ -std=c++20 -x objective-c++\` with the Cocoa, CoreText and
+  IOKit frameworks. The file is Objective-C++ because the mac half is.
+
+No other dependencies, no build system, no STL containers.`;
+
+function writeDistReadme(sha: string, subject: string): string {
+  const abs = join(root, distRepoDir, "readme.md");
+  const short = sha.slice(0, 12);
+  const head = existsSync(abs) ? (readFileSync(abs, "utf8").split(readmeMarker)[0] ?? "").trimEnd() : readmeHead;
+  const body = [
+    readmeMarker,
+    "",
+    `Amalgamated from gpui-cpp [\`${short}\`](${srcRepoUrl}/commit/${sha}) — ${subject}`,
+    "",
+    `[What has changed in gpui-cpp since](${srcRepoUrl}/compare/${sha}...${srcBranch})`,
+    "shows every commit this copy is behind by; if that page is empty, it is current.",
+    "",
+  ].join("\n");
+  const text = `${head}\n\n${body}`;
+  writeFileSync(abs, text, "utf8");
+  return srcRel(abs);
+}
+
+// Build every example against the amalgam that was just written, which is the
+// only check that matters: it is what someone downloading these two files
+// does. GPUI_AMALGAM_DIR points the platform build at this copy instead of
+// .work/, and its objects go to their own out/ tree.
+function checkExamples(): void {
+  const script =
+    process.platform === "win32"
+      ? "cmd/build-windows.ts"
+      : process.platform === "darwin"
+        ? "cmd/build-mac.ts"
+        : "cmd/build-linux.ts";
+  console.log(`building every example against ${distRepoDir}`);
+  const code = run(["bun", script, "-rel", "-all"], { env: { GPUI_AMALGAM_DIR: distRepoDir } });
+  if (code !== 0) {
+    die(`the examples do not build against ${distRepoDir} (exit ${code})`);
+  }
+}
+
+// The commit that carries this snapshot. The message names the source commit
+// in full, so the dist repo's log reads as a list of what it is a copy of.
+function publishDistRepo(sha: string): void {
+  const cwd = join(root, distRepoDir);
+  const msg = `updating to ${srcRepoUrl} ${sha}`;
+  if (run(["git", "add", "-A"], { cwd }) !== 0) {
+    die("git add failed");
+  }
+  if (run(["git", "commit", "-m", msg], { cwd }) !== 0) {
+    die("git commit failed");
+  }
+  // -u origin HEAD, so the first push of a fresh clone sets its upstream and
+  // every push after it is the same command.
+  if (run(["git", "push", "-u", "origin", "HEAD"], { cwd }) !== 0) {
+    die("git push failed");
+  }
+  console.log(`published ${distRepoDir}: ${msg}`);
+}
+
+function parseCli(argv: string[]): {
+  outDir: DistOutDir;
+  check: boolean;
+  sync: boolean;
+  publish: boolean;
+} {
+  let outDir: DistOutDir = distRepoDir;
+  let check = true;
+  let sync = true;
+  let publish = true;
+  const usage = "usage: bun cmd/build-dist.ts [-work | -in-repo] [-no-check] [-no-sync] [-no-publish]";
   for (const raw of argv) {
     if (raw === "-work" || raw === "--work") {
       outDir = ".work";
+      check = false;
+      sync = false;
+      publish = false;
       continue;
     }
-    if (raw === "-no-bench" || raw === "--no-bench") {
-      bench = false;
+    if (raw === "-in-repo" || raw === "--in-repo") {
+      outDir = "dist";
+      sync = false;
+      publish = false;
       continue;
     }
-    if (raw === "-bench" || raw === "--bench") {
-      bench = true;
+    if (raw === "-no-publish" || raw === "--no-publish") {
+      publish = false;
+      continue;
+    }
+    if (raw === "-no-check" || raw === "--no-check") {
+      check = false;
+      continue;
+    }
+    if (raw === "-no-sync" || raw === "--no-sync") {
+      sync = false;
       continue;
     }
     const what = raw.startsWith("-") ? "unknown option" : "unknown argument";
     die(`${what}: ${raw}\n${usage}`);
   }
-  return { outDir, bench };
+  return { outDir, check, sync, publish };
 }
 
 function main(): void {
-  const { outDir, bench } = parseCli(Bun.argv.slice(2));
+  const { outDir, check, sync, publish } = parseCli(Bun.argv.slice(2));
+  if (sync) {
+    syncDistRepo();
+  }
   const built = buildDist({ outDir });
   console.log(`wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${built.headerCount} headers)`);
   console.log(
     `wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ` +
       `${built.sourceCount} + ${built.platformSourceCount} sources)`,
   );
-  if (!bench) {
+  if (check) {
+    checkExamples();
+  }
+  if (outDir !== distRepoDir) {
     return;
   }
-  if (process.platform !== "win32") {
-    console.log("skipping the compile bench: it shells out to cl.exe");
+  const sha = capture(["git", "rev-parse", "HEAD"]);
+  const subject = capture(["git", "log", "-1", "--pretty=%s"]);
+  const readme = writeDistReadme(sha, subject);
+  console.log(`wrote ${readme} for ${sha.slice(0, 12)}`);
+  if (capture(["git", "branch", "-r", "--contains", sha]) === "") {
+    console.error(
+      `warning: ${sha.slice(0, 12)} is not on any remote yet, so the links in ` +
+        "the readme stay broken until gpui-cpp is pushed",
+    );
+  }
+  const dirty = capture(["git", "status", "--porcelain"], join(root, distRepoDir));
+  if (dirty === "") {
+    console.log(`${distRepoDir} is unchanged; nothing to publish`);
     return;
   }
-  for (const debug of [true, false]) {
-    const label = debug ? "debug" : "release";
-    console.log(`compiling ${built.sourcePath} (${label})...`);
-    const r = compileDist({ outDir, debug });
-    if (r.exitCode !== 0) {
-      die(`cl.exe failed (${label}, exit ${r.exitCode})`);
-    }
-    const objBytes = existsSync(join(root, r.objPath)) ? statSync(join(root, r.objPath)).size : 0;
-    console.log(`  ${label}: ${formatMs(r.ms)}  -> ${r.objPath} (${formatBytes(objBytes)})`);
+  if (!publish) {
+    console.log(`${distRepoDir} is ready; -no-publish, so it is not committed`);
+    return;
   }
+  publishDistRepo(sha);
 }
 
 if (import.meta.main) {

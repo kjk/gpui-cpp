@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { buildDist } from "./build-dist.ts";
+import { amalgamDir, amalgamIsWork, buildDist } from "./build-dist.ts";
 import { printSizeTable } from "./sizes.ts";
 import { ensureRustTree } from "./versions.ts";
 
@@ -142,12 +142,15 @@ function parseArgs(argv: string[]): {
 
 function outDirName(debug: boolean, asan: boolean): string {
   const base = debug ? "dbg" : "rel";
-  return asan ? `${base}_asan` : base;
+  const name = asan ? `${base}_asan` : base;
+  // A build against a published amalgam keeps its own objects, so it neither
+  // clobbers an ordinary build nor makes the next one recompile everything.
+  return amalgamIsWork() ? name : `${name}_dist`;
 }
 
 // The whole library, the platform halves and md4c included; one file, see
 // cmd/build-dist.ts.
-const amalgamSrc = [".work/gpui.cpp"];
+const amalgamSrc = [`${amalgamDir()}/gpui.cpp`];
 
 function cppDir(rel: string): string[] {
   const dir = join(root, rel);
@@ -250,7 +253,7 @@ function groupSources(files: string[]): { key: string; files: string[] }[] {
   for (const f of files) {
     if (f.startsWith("ext/")) {
       buckets.ext.push(f);
-    } else if (f.startsWith(".work/gpui") || f.startsWith("src/gpui/")) {
+    } else if (f.startsWith(`${amalgamDir()}/gpui`) || f.startsWith("src/gpui/")) {
       buckets.gpui.push(f);
     } else if (f.startsWith("examples/showcase/")) {
       buckets.showcase.push(f);
@@ -305,7 +308,7 @@ function quotedIncludes(rel: string, memo: Map<string, string[]>): string[] {
   let m: RegExpExecArray | null;
   while ((m = includeRe.exec(text))) {
     const inc = m[1]!.replaceAll("\\", "/");
-    const candidates = [`${dir}/${inc}`, `.work/${inc}`, `src/${inc}`];
+    const candidates = [`${dir}/${inc}`, `${amalgamDir()}/${inc}`, `src/${inc}`];
     for (const raw of candidates) {
       const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
       if (!existsSync(join(root, norm))) {
@@ -355,7 +358,7 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "/EHsc",
     "/utf-8",
     "/I",
-    ".work",
+    amalgamDir(),
     "/DUNICODE",
     "/D_UNICODE",
     "/W4",
@@ -490,11 +493,24 @@ try {
   // clone must not stop a build.
   console.error(e instanceof Error ? e.message : e);
 }
-const amalgam = buildDist({ outDir: ".work" });
-console.log(
-  `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
-    `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources)`,
-);
+// A plain build regenerates .work/ and compiles that. When GPUI_AMALGAM_DIR
+// names another copy — cmd/build-dist.ts pointing at the dist repo — the build
+// compiles that copy exactly as it was published, and does not rewrite it.
+if (amalgamIsWork()) {
+  const amalgam = buildDist({ outDir: ".work" });
+  console.log(
+    `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
+      `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources)`,
+  );
+} else {
+  for (const f of ["gpui.h", "gpui.cpp"]) {
+    if (!existsSync(join(root, amalgamDir(), f))) {
+      console.error(`missing ${amalgamDir()}/${f}`);
+      process.exit(1);
+    }
+  }
+  console.log(`amalgam ${amalgamDir()}/gpui.h + ${amalgamDir()}/gpui.cpp (as published)`);
+}
 const outDir = join("out", outDirName(debug, asan));
 if (clean) {
   const abs = join(root, outDir);
