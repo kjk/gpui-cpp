@@ -58,6 +58,14 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.focusId = win->focusId;
     win->paint.mouseX = win->mouseX;
     win->paint.mouseY = win->mouseY;
+    win->paint.picking = win->inspector.picking;
+    win->paint.pickHit = false;
+    win->paint.pick = {};
+    if (win->inspector.pending) {
+        // The press is what this frame picks against, not the pointer.
+        win->paint.mouseX = win->inspector.pendingX;
+        win->paint.mouseY = win->inspector.pendingY;
+    }
     win->paint.viewW = dipW;
     win->paint.viewH = dipH;
     TextMeasBeginFrame(&win->paint);
@@ -91,8 +99,35 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // the time the show countdown lands, the frame that asked for it is gone.
     TooltipPaint(&win->paint, TooltipShowing(win));
 
+    // The element the pointer is over while picking, and the one already
+    // picked: GPUI paints the same two highlights over everything.
+    if (win->inspector.on) {
+        const Theme& ith = ThemeNow();
+        if ((win->inspector.picking || win->inspector.pending) &&
+            win->paint.pickHit) {
+            Bounds b = win->paint.pick.bounds;
+            FillRound(&win->paint, b.x, b.y, b.w, b.h, 0,
+                      RgbaOpacity(ith.blue, 0.2f));
+            DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1, ith.blue);
+        } else if (win->inspector.hasPick) {
+            Bounds b = win->inspector.pick.bounds;
+            DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1, ith.blue);
+        }
+    }
+
     PaintTargetEnd(&win->paint);
     TextMeasEndFrame(&win->paint);
+
+    // The pick a press asked for is settled against the frame it aimed at.
+    if (win->inspector.pending) {
+        if (win->paint.pickHit) {
+            win->inspector.pick = win->paint.pick;
+            win->inspector.hasPick = true;
+        }
+        win->inspector.pending = false;
+        win->inspector.picking = false;
+        AppInvalidate(win);
+    }
 
     // Record the frame for the trace. GPUI times Window::draw, which is this
     // whole function: build the element tree, lay it out, paint it.
@@ -115,6 +150,16 @@ static bool FocusIdIsFocusable(Window* win, int id) {
 }
 
 // rebuilt every frame, so an id is the only handle that survives one.
+// The inspector's key binding: ctrl-shift-i, which is what Rust binds on
+// everything but macOS.
+static bool InspectorKey(Window* win, const KeyEvent& ev) {
+    if (!ev.down || !ev.ctrl || !ev.shift || ev.vk != 'I') {
+        return false;
+    }
+    WindowToggleInspector(win);
+    return true;
+}
+
 static const HitRect* HitRectById(Window* win, int id) {
     if (!win || !id) {
         return nullptr;
@@ -132,6 +177,17 @@ static const HitRect* HitRectById(Window* win, int id) {
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     if (!win) {
         return;
+    }
+    {
+        KeyEvent chord = {};
+        chord.vk = key;
+        chord.down = true;
+        chord.shift = shift;
+        chord.ctrl = ctrl;
+        chord.alt = alt;
+        if (InspectorKey(win, chord)) {
+            return;
+        }
     }
     if (key == KeyTab) {
         int trap = 0;
@@ -557,6 +613,15 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // The scrollbar sits over whatever it scrolls, so it is asked first: a
     // press on the bar is the bar's, not the row underneath it. Rust says the
     // same with cx.stop_propagation().
+    // Inspector::is_picking: the press picks the element under the pointer
+    // and goes no further, so the page it is over is not clicked.
+    if (win->inspector.picking) {
+        win->inspector.pending = true;
+        win->inspector.pendingX = x;
+        win->inspector.pendingY = y;
+        AppInvalidate(win);
+        return;
+    }
     bool barHorizontal = false;
     const ScrollRect* bar = ScrollbarAt(&win->paint, x, y, &barHorizontal);
     if (bar) {
