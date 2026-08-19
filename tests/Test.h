@@ -51,6 +51,7 @@ void TestTree();
 void TestCalendar();
 void TestColorPicker();
 void TestToast();
+void TestVirtualList();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();
