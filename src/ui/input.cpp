@@ -329,17 +329,28 @@ El* NumberInput::IntoEl() {
     // Only their outer corners are rounded in Rust; ours are square, which
     // shows on hover alone.
     Rgba stepFg = disabled ? RgbaOpacity(th.secondaryFg, 0.5f) : th.secondaryFg;
-    El* dec = Div(a)->W(btn)->H(kFill)->ItemsCenter()->JustifyCenter()->Child(
-        IconEl(a, IconName::Minus, font)->Fg(stepFg));
-    El* inc = Div(a)->W(btn)->H(kFill)->ItemsCenter()->JustifyCenter()->Child(
-        IconEl(a, IconName::Plus, font)->Fg(stepFg));
+    // Both are gpui_base::Buttons that decline focus: pressing one must leave
+    // the editor focused, or the frame's ring flickers on every click. That is
+    // what number_input.rs pins with
+    // `pressing_a_step_button_never_takes_focus_off_the_editor`.
+    Str base = id.s ? id : StrL("number");
+    El* dec = gpui::Button::New(cx, StrDup(a, fmt("%s-dec", base)), disabled,
+                                onDec, false)
+                  ->W(btn)
+                  ->H(kFill)
+                  ->ItemsCenter()
+                  ->JustifyCenter()
+                  ->Child(IconEl(a, IconName::Minus, font)->Fg(stepFg));
+    El* inc = gpui::Button::New(cx, StrDup(a, fmt("%s-inc", base)), disabled,
+                                onInc, false)
+                  ->W(btn)
+                  ->H(kFill)
+                  ->ItemsCenter()
+                  ->JustifyCenter()
+                  ->Child(IconEl(a, IconName::Plus, font)->Fg(stepFg));
     if (!disabled) {
         dec->HoverBg(RgbaOpacity(th.inputBorder, 0.4f));
         inc->HoverBg(RgbaOpacity(th.inputBorder, 0.4f));
-        BindClick(dec, StrDup(a, fmt("%s-dec", id.s ? id : StrL("number"))),
-                  onDec);
-        BindClick(inc, StrDup(a, fmt("%s-inc", id.s ? id : StrL("number"))),
-                  onInc);
     }
     frame->Child(dec);
     // The editor sits between them, centered and without its own frame.

@@ -40,6 +40,7 @@ void TestTitleBar();
 void TestTextBoundary();
 void TestSlider();
 void TestPagination();
+void TestNumberInput();
 void TestRope();
 void TestMaskPattern();
 void TestUndoManager();

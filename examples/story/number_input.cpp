@@ -21,18 +21,20 @@ struct NumberInputStory {
 static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
                     intptr_t packed) {
     int slot = (int)(packed >> 1);
-    int dir = (packed & 1) ? 1 : -1;
-    double v = 0;
-    sscanf(InputCStr(&self->fields[slot]), "%lf", &v);
+    StepAction action =
+        (packed & 1) ? StepAction::Increment : StepAction::Decrement;
     // The format story steps by 0.01, the rest by one.
     double step = slot == NumFormat ? 0.01 : (slot == NumCustom ? 0.1 : 1);
-    v += dir * step;
     InputState* f = &self->fields[slot];
-    if (slot == NumFormat || slot == NumCustom) {
-        InputSetValue(f, fmt("%.2f", v));
-    } else {
-        InputSetValue(f, fmt("%d", (int)v));
+    // gpui_base::step_value works on the text, so "1.50" steps to "2.50" and
+    // the field keeps the precision the reader is looking at. It answers no
+    // when the step would not move the value.
+    char next[64];
+    if (!NumberStepValue(Str(InputCStr(f)), action, step, false, 0, false, 0,
+                         next, (int)sizeof(next))) {
+        return;
     }
+    InputSetValue(f, Str(next));
     Notify(cx);
 }
 static void FocusNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
