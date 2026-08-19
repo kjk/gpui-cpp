@@ -130,7 +130,16 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
 `cmd/build-dist.ts` amalgamates `src/` plus `ext/md4c` into two files:
-`gpui.h` and `gpui.cpp`. Both are the same on every platform. Each `_win.cpp` /
+`gpui.h` and `gpui.cpp`. Both are the same on every platform. It writes them
+into one of two places, and which one matters: `.work/` is gitignored and is
+what every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go
+through it — while `dist/` is the checked-in pair, refreshed only by running
+`bun cmd/build-dist.ts` by hand. Never regenerate `dist/` as part of a build,
+a test run or a commit; `buildDist()` takes a required `outDir` so an
+automatic caller has to say `.work` out loud. The two differ in one respect:
+`dist/` collapses runs of blank lines, since it is read as a document, and
+`.work/` keeps them so its line numbers match the `#line 1 "src/..."` markers
+the compiler reports against. Each `_win.cpp` /
 `_linux.cpp` / `_mac.cpp` / `_posix.cpp` sits in `gpui.cpp` inside its own `#if
 GPUI_OS_*`, so `<windows.h>`, `<X11/Xlib.h>` and `<Cocoa/Cocoa.h>` still never
 reach one translation unit — the preprocessor drops the other two halves before
@@ -373,6 +382,7 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
 cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
+                       (`.work/` for builds; `dist/` only when run by hand)
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)

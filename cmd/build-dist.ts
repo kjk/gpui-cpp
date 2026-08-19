@@ -14,13 +14,24 @@
 // here, each one asserted to match exactly once so an md4c refresh that moves
 // them fails loudly instead of silently.
 //
+// dist/gpui.h and dist/gpui.cpp are checked in, and this script run by hand is
+// the only thing that writes them. Nothing automatic may: the three platform
+// builds, the test runner and CI all amalgamate into .work/, which is
+// gitignored, so an ordinary build never touches the published pair and never
+// leaves it dirty in a commit. `outDir` is required for that reason — there is
+// no default to fall into.
+//
 //   bun cmd/build-dist.ts           # write dist/, then time dbg+rel compile
 //   bun cmd/build-dist.ts -work     # write .work/ instead of dist/
 //   bun cmd/build-dist.ts -no-bench # skip the compile timing
 //
 // import { buildDist } from "./build-dist.ts";
-// buildDist();                 // dist/gpui.h + dist/gpui.cpp
-// buildDist({ outDir: ".work" });
+// buildDist({ outDir: ".work" });   // what a build script may do
+//
+// The two destinations differ in one way. dist/ is what a reader opens, so
+// runs of blank lines collapse to one; .work/ is byte-for-byte what the
+// amalgamator emits, because that is the copy every build compiles and its
+// line numbers line up with the `#line 1 "src/..."` markers above them.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -34,8 +45,12 @@ export type Platform = "win" | "linux" | "mac";
 export const allPlatforms: Platform[] = ["win", "linux", "mac"];
 
 export type BuildDistOpts = {
-  /** Destination directory relative to the repo root. Default: "dist". */
-  outDir?: DistOutDir;
+  /**
+   * Destination directory relative to the repo root. Required: "dist" is the
+   * checked-in pair and only `bun cmd/build-dist.ts` may write it, so a build
+   * script has to say ".work" out loud.
+   */
+  outDir: DistOutDir;
 };
 
 export type BuildDistResult = {
@@ -439,8 +454,16 @@ function finish(text: string): string {
   return trimTrailingSpace(stripComments(text));
 }
 
-export function buildDist(opts?: BuildDistOpts): BuildDistResult {
-  const outDir = opts?.outDir ?? "dist";
+// Stripping the comments out of 100-odd files leaves runs of blank lines
+// behind. dist/ collapses them, since it is read as one document; .work/ keeps
+// them, so its line numbers stay in step with the `#line` markers the builds
+// compile against.
+function collapseBlankRuns(text: string): string {
+  return text.replace(/\n{3,}/g, "\n\n");
+}
+
+export function buildDist(opts: BuildDistOpts): BuildDistResult {
+  const outDir = opts.outDir;
   const headers = listSrc(".h");
   const allCpps = preferredCppOrder(listSrc(".cpp"));
   const cpps = allCpps.filter((f) => filePlatforms(f).length === 0);
@@ -525,8 +548,13 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
   }
   chunks.push(md4cChunk(md4cSource, md4cCppFixes, false));
 
-  const headerText = finish(headerChunks.join("\n"));
-  const sourceText = finish(chunks.join("\n"));
+  const tidy = outDir === "dist";
+  const headerText = tidy
+    ? collapseBlankRuns(finish(headerChunks.join("\n")))
+    : finish(headerChunks.join("\n"));
+  const sourceText = tidy
+    ? collapseBlankRuns(finish(chunks.join("\n")))
+    : finish(chunks.join("\n"));
 
   const absOut = join(root, outDir);
   mkdirSync(absOut, { recursive: true });
@@ -554,7 +582,7 @@ export function buildDist(opts?: BuildDistOpts): BuildDistResult {
 }
 
 export type CompileDistOpts = {
-  outDir?: DistOutDir;
+  outDir: DistOutDir;
   debug: boolean;
 };
 
@@ -586,7 +614,7 @@ function clFlags(debug: boolean, includeDir: string): string[] {
 }
 
 export function compileDist(opts: CompileDistOpts): CompileDistResult {
-  const outDir = opts.outDir ?? "dist";
+  const outDir = opts.outDir;
   const src = join(outDir, "gpui.cpp");
   if (!existsSync(join(root, src))) {
     throw new Error(`missing ${src}; run buildDist() first`);
