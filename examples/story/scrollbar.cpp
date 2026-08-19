@@ -24,6 +24,10 @@ struct ScrollbarStory {
     int dataset = 0;
     bool menuOpen = false;
     float scrollY = 0;
+    // The grid below the list scrolls both ways, which is what
+    // ScrollbarAxis::Both is for.
+    float gridX = 0;
+    float gridY = 0;
 
     static El* Render(ScrollbarStory* self, Ctx* cx);
 };
@@ -33,6 +37,14 @@ struct ScrollbarStory {
 // instead, which comes to the same thing.
 static void ScrollTo(ScrollbarStory* self, Ctx* cx, const ScrollEvent* ev) {
     self->scrollY = ev->offsetY;
+    Notify(cx);
+}
+
+// Both offsets at once: the box reports where it should now be, whichever bar
+// or wheel moved it.
+static void ScrollGrid(ScrollbarStory* self, Ctx* cx, const ScrollEvent* ev) {
+    self->gridX = ev->offsetX;
+    self->gridY = ev->offsetY;
     Notify(cx);
 }
 
@@ -87,9 +99,16 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                     ->ScrollId(HashClickId(StrL("scrollbar-list")))
                     ->OnScroll(Listen(cx, &ScrollTo));
     int count = kDatasets[self->dataset].count;
-    // Only what can show is built; the Rust list is virtualized.
-    int visible = count < 40 ? count : 40;
-    for (int i = 0; i < visible; i++) {
+    // The Rust list is virtualized, and so is this one: only the rows the
+    // frame can show are built, with a spacer at each end standing in for the
+    // rest — which is what makes half a million of them cost nothing.
+    float frameH = win.dipH - 230;
+    VirtualRange range =
+        VirtualListVisibleRows(count, kItemHeight, self->scrollY, frameH);
+    if (range.first > 0) {
+        frame->Child(Div(a)->W(kFill)->H((float)range.first * kItemHeight));
+    }
+    for (int i = range.first; i < range.end; i++) {
         frame->Child(
             Div(a)
                 ->H(kItemHeight)
@@ -106,7 +125,43 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                             ->Child(StoryTxt(cx, StoryFmt(cx, "Item %d", i), 14,
                                              th.foreground))));
     }
+    if (range.end < count) {
+        frame->Child(
+            Div(a)->W(kFill)->H((float)(count - range.end) * kItemHeight));
+    }
     page->Child(frame);
+
+    // ScrollbarAxis::Both: a grid wider and taller than its frame, with a bar
+    // down the side and another along the bottom.
+    El* grid = Div(a)->FlexCol();
+    for (int r = 0; r < 20; r++) {
+        El* row = Div(a)->FlexRow()->Gap(4)->PadY(2);
+        for (int c = 0; c < 12; c++) {
+            row->Child(Div(a)
+                           ->W(120)
+                           ->H(28)
+                           ->ItemsCenter()
+                           ->JustifyCenter()
+                           ->Bg(th.secondary)
+                           ->Radius(th.radius)
+                           ->Child(StoryTxt(cx, StoryFmt(cx, "%d:%d", r, c), 13,
+                                            th.foreground)));
+        }
+        grid->Child(row);
+    }
+    El* both = StorySection(cx, "Both Axes",
+                            "A scroll area with a bar on each axis. The "
+                            "wheel scrolls whichever box it is over.");
+    StorySectionAdd(both, component::Scrollable::New(cx, StrL("scrollbar-grid"))
+                              ->Axis(component::ScrollAxis::Both)
+                              ->H(200)
+                              ->ScrollX(self->gridX)
+                              ->ScrollY(self->gridY)
+                              ->OnScroll(Listen(cx, &ScrollGrid))
+                              ->Child(grid)
+                              ->IntoEl());
+    page->Child(both);
+
     return page;
 }
 

@@ -575,6 +575,18 @@ static void ClearSearch(StoryApp* app, Ctx* cx, const ClickEvent*) {
     Notify(cx);
 }
 
+// The pane that was scrolled reports where it should now be — by the wheel
+// over it, or by a press or a drag on its bar. The view owns the offsets, so
+// it is the one that stores them.
+static void OnPaneScroll(StoryApp* app, Ctx* cx, const ScrollEvent* ev) {
+    if (ev->id == 2) {
+        app->sideScrollY = ev->offsetY;
+    } else {
+        app->scrollY = ev->offsetY;
+    }
+    Notify(cx);
+}
+
 static El* SidebarList(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -691,6 +703,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
                        ->ClipY()
                        ->ScrollY(app->sideScrollY)
                        ->ScrollId(2)
+                       ->OnScroll(Listen(cx, &OnPaneScroll))
                        ->W(kFill);
     if (!app->collapsed) {
         scroller->Child(SidebarList(app, cx));
@@ -845,6 +858,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
                        ->ClipY()
                        ->ScrollY(app->scrollY)
                        ->ScrollId(1)
+                       ->OnScroll(Listen(cx, &OnPaneScroll))
                        ->W(kFill);
     scroller->Child(
         Div(frame)->Pad(16)->W(kFill)->Child(StoryRenderRegistered(app, cx)));
@@ -903,31 +917,6 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     // the shell handles its own chords first and then lets the action carry
     // on, which is how a page's arrows and Enter reach it at all.
     StoryKeyRegistered(app, cx, ev);
-}
-
-static void OnWheel(StoryApp* app, Ctx* cx, const ScrollWheelEvent* ev) {
-    float x = ev->x;
-    float y = ev->y;
-    float delta = ev->deltaY;
-    const ScrollRect* pane = HitScrollRect(&cx->win->paint, x, y);
-    float* off = &app->scrollY;
-    float maxS = 8000.f;
-    if (pane) {
-        if (pane->id == 2) {
-            off = &app->sideScrollY;
-        }
-        maxS = pane->contentH - pane->bounds.h;
-        if (maxS < 0) {
-            maxS = 0;
-        }
-    }
-    *off -= delta;
-    if (*off < 0) {
-        *off = 0;
-    }
-    if (*off > maxS) {
-        *off = maxS;
-    }
 }
 
 static void OnMouseUp(StoryApp* app, Ctx* cx, const MouseUpEvent*) {
@@ -1027,7 +1016,6 @@ int GpuiMain(int argc, char** argv) {
                                  view.id, opts);
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
-    WindowOnScrollWheel(win, ListenTo(view, &OnWheel));
     WindowOnMouseDown(win, ListenTo(view, &OnMouseDown));
     WindowOnMouseUp(win, ListenTo(view, &OnMouseUp));
     WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));

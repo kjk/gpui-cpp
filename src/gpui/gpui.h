@@ -614,10 +614,21 @@ enum class Justify : uint8_t {
     End,
     SpaceBetween
 };
-enum class OverflowY : uint8_t {
+// gpui's Overflow, per axis: `overflow_hidden` clips and
+// `overflow_x_scroll` / `overflow_y_scroll` scroll.
+enum class Overflow : uint8_t {
     Visible,
     Hidden,
     Scroll
+};
+
+// ScrollbarMode, crates/base/src/scrollbar.rs. Rust's default is Scrolling —
+// shown while scrolling, fading out after two idle seconds — which needs an
+// animation clock per area; it is not ported, and a caller that asks for it
+// gets the bar whenever the pointer is over the area.
+enum class ScrollbarMode : uint8_t {
+    Always,
+    Hover
 };
 
 enum class IconName : uint8_t {
@@ -708,7 +719,8 @@ struct Style {
     FlexDir dir = FlexDir::Row;
     Align align = Align::Stretch;
     Justify justify = Justify::Start;
-    OverflowY overflowY = OverflowY::Visible;
+    Overflow overflowY = Overflow::Visible;
+    Overflow overflowX = Overflow::Visible;
     float width = kAuto;
     float height = kAuto;
     // w_1_2 / w_2_3 / …: a fraction of the parent's content box, which GPUI
@@ -857,6 +869,10 @@ struct El {
     // because this member hides `Bounds` inside El.
     gpui::Bounds Bounds() const { return {x, y, w, h}; }
     float scrollY = 0;
+    // overflow_x_scroll: how far the content is slid to the left. Positive
+    // means the view has moved right over it, as scrollY is positive-down.
+    float scrollX = 0;
+    ScrollbarMode scrollMode = ScrollbarMode::Always;
     int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
@@ -935,6 +951,9 @@ struct El {
     El* Truncate();
     El* ClipY();
     El* ScrollY(float off);
+    El* ScrollX(float off);
+    El* ClipX();
+    El* ScrollMode(ScrollbarMode m);
     El* ScrollId(int v);
     El* Click(int v);
     El* OnClick(Func0 fn);
@@ -1039,6 +1058,9 @@ struct ScrollRect {
     Bounds bounds = {};
     float contentH = 0;
     float scrollY = 0;
+    float contentW = 0;
+    float scrollX = 0;
+    ScrollbarMode mode = ScrollbarMode::Always;
     Listener onScroll;
 };
 
@@ -1054,6 +1076,9 @@ const float kScrollbarBandW = kScrollbarThumbW + kScrollbarThumbMargin * 2.f;
 struct ScrollEvent {
     int id = 0;
     float offsetY = 0;
+    // The horizontal offset, for a box that scrolls both ways. A handler that
+    // only scrolls down can ignore it; it is whatever it already was.
+    float offsetX = 0;
 };
 
 struct TextHit {
@@ -1088,6 +1113,9 @@ struct PaintCtx {
     float viewH = 0;
     int hoverId = 0;
     int focusId = 0;
+    // Where the pointer is, which is what a Hover-mode scrollbar consults.
+    float mouseX = -1;
+    float mouseY = -1;
     Vec<HitRect> hits;
     Vec<ScrollRect> scrolls;
     Vec<TextHit> texts;
@@ -1799,6 +1827,8 @@ struct Window {
     // landed. GPUI keeps the same pair in ScrollbarState::drag_pos.
     int scrollDragId = 0;
     float scrollDragGrab = 0;
+    // Which of the box's two bars is being dragged.
+    bool scrollDragHorizontal = false;
     InputState* input = nullptr;
     // This window's one TooltipOverlay. Created on first use, the way a
     // field's blink cursor is.

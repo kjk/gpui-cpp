@@ -494,12 +494,25 @@ El* El::Truncate() {
     return this;
 }
 El* El::ClipY() {
-    style.overflowY = OverflowY::Hidden;
+    style.overflowY = Overflow::Hidden;
     return this;
 }
 El* El::ScrollY(float off) {
-    style.overflowY = OverflowY::Scroll;
+    style.overflowY = Overflow::Scroll;
     scrollY = off;
+    return this;
+}
+El* El::ScrollX(float off) {
+    style.overflowX = Overflow::Scroll;
+    scrollX = off;
+    return this;
+}
+El* El::ClipX() {
+    style.overflowX = Overflow::Hidden;
+    return this;
+}
+El* El::ScrollMode(ScrollbarMode m) {
+    scrollMode = m;
     return this;
 }
 El* El::ScrollId(int v) {
@@ -1403,7 +1416,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     }
     // Scroll views keep the viewport height and let children overflow.
     // Wrapping to contentH would make contentH == h and hide the thumb.
-    if (wrapH && e->style.overflowY != OverflowY::Scroll) {
+    if (wrapH && e->style.overflowY != Overflow::Scroll) {
         float needed = e->contentH + padY;
         float nh = Clamp(needed, e->style.minH, e->style.maxH);
         if (availH > 0 && nh > availH) {
@@ -1607,10 +1620,14 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     // content height as a definite block, and H(kFill) kids (blockquote
     // bar) would expand to the whole page and hide later siblings.
     bool shrinkWrapH = e->style.height == kAuto && e->style.flexGrow <= 0 &&
-                       e->style.overflowY != OverflowY::Scroll;
-    bool unconstrH = e->style.overflowY == OverflowY::Scroll || shrinkWrapH;
-    float childCross0 = (unconstrH && row) ? 0.f : crossAvail;
-    float childMain0 = (unconstrH && !row) ? 0.f : mainAvail;
+                       e->style.overflowY != Overflow::Scroll;
+    bool unconstrH = e->style.overflowY == Overflow::Scroll || shrinkWrapH;
+    // The same on the other axis: a box that scrolls sideways measures its
+    // children unconstrained across, so contentW can run past the viewport
+    // and leave the thumb something to travel over.
+    bool unconstrW = e->style.overflowX == Overflow::Scroll;
+    float childCross0 = ((row ? unconstrH : unconstrW)) ? 0.f : crossAvail;
+    float childMain0 = ((row ? unconstrW : unconstrH)) ? 0.f : mainAvail;
 
     // First pass: non-grow at the available size; grow+wrap at leftover
     // width so wrapping text is not measured as one infinite line.
@@ -1741,7 +1758,7 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                     } else if (e->style.align == Align::End) {
                         cross = lineH - c->h;
                     }
-                    float cx = e->x + padL + x;
+                    float cx = e->x + padL + x - e->scrollX;
                     float cy = e->y + padT + lineY + cross - e->scrollY;
                     MoveEl(c, cx, cy);
                     x += c->w + gap;
@@ -1817,14 +1834,19 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
         float cw = c->w;
         float ch = c->h;
         float cross = 0;
+        bool crossScrolls = row ? e->style.overflowY == Overflow::Scroll
+                                : e->style.overflowX == Overflow::Scroll;
         if (e->style.align == Align::Center) {
             cross = ((row ? innerH : innerW) - (row ? ch : cw)) * 0.5f;
         } else if (e->style.align == Align::End) {
             cross = (row ? innerH : innerW) - (row ? ch : cw);
-        } else if (e->style.align == Align::Stretch) {
+        } else if (e->style.align == Align::Stretch && !crossScrolls) {
             // Only stretch the cross axis when the parent already has a
             // definite size on that axis. Otherwise shrink-wrap measures
             // explode (a row header becomes as tall as the leftover column).
+            // A scrolled axis is not a size to stretch to either: stretching
+            // to the viewport would make the content exactly as big as the
+            // box, and there would be nothing left to scroll.
             if (row && e->style.height != kAuto) {
                 ch = innerH;
                 c->h = ch;
@@ -1839,10 +1861,10 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
 
         float cx, cy;
         if (row) {
-            cx = e->x + padL + cursor;
+            cx = e->x + padL + cursor - e->scrollX;
             cy = e->y + padT + cross - e->scrollY;
         } else {
-            cx = e->x + padL + cross;
+            cx = e->x + padL + cross - e->scrollX;
             cy = e->y + padT + cursor - e->scrollY;
         }
         // The child was measured at the origin; slide it and its subtree to
@@ -1860,7 +1882,7 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
 
     // Stretch kFill / align-stretch items to the line cross size without
     // re-LayoutEl (that would treat the used height as a definite block).
-    if (row && maxCross > 0) {
+    if (row && maxCross > 0 && e->style.overflowY != Overflow::Scroll) {
         for (El* c = e->first; c; c = c->next) {
             if (c->style.absolute) {
                 continue;
@@ -2391,12 +2413,16 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.input = e->input;
         ctx->hits.Append(hr);
     }
-    if (e->style.overflowY == OverflowY::Scroll) {
+    if (e->style.overflowY == Overflow::Scroll ||
+        e->style.overflowX == Overflow::Scroll) {
         ScrollRect sr;
         sr.id = e->scrollId;
         sr.bounds = e->Bounds();
         sr.contentH = e->contentH;
         sr.scrollY = e->scrollY;
+        sr.contentW = e->contentW;
+        sr.scrollX = e->scrollX;
+        sr.mode = e->scrollMode;
         sr.onScroll = e->onScroll;
         ctx->scrolls.Append(sr);
     }
@@ -2464,7 +2490,8 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
                  e->style.borderColor);
     }
 
-    bool clip = e->style.overflowY != OverflowY::Visible;
+    bool clip = e->style.overflowY != Overflow::Visible ||
+                e->style.overflowX != Overflow::Visible;
     if (clip) {
         CanvasPushClip(ctx, e->x, e->y, e->w, e->h);
     }
@@ -2577,8 +2604,12 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         CanvasPopClip(ctx);
     }
 
-    if (e->style.overflowY == OverflowY::Scroll && e->contentH > e->h + 1.f &&
-        e->h > 0) {
+    // ScrollbarMode: Always paints the bar whenever there is something to
+    // scroll, Hover only while the pointer is over the box it belongs to.
+    bool barVisible = e->scrollMode == ScrollbarMode::Always ||
+                      e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
+    if (barVisible && e->style.overflowY == Overflow::Scroll &&
+        e->contentH > e->h + 1.f && e->h > 0) {
         // The same three numbers the press and drag arithmetic goes by, so
         // what is drawn and what is grabbed cannot drift apart.
         float thumbH = ScrollbarThumbSize(e->h, e->h, e->contentH);
@@ -2586,6 +2617,19 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
         float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
                                                 e->contentH);
+        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
+                  ThemeNow().scrollbarThumb);
+    }
+    if (barVisible && e->style.overflowX == Overflow::Scroll &&
+        e->contentW > e->w + 1.f && e->w > 0) {
+        // The horizontal bar is the same arithmetic along the other axis,
+        // which is how Rust writes it: one path, `is_vertical` picking the
+        // pair of numbers it reads.
+        float thumbW = ScrollbarThumbSize(e->w, e->w, e->contentW);
+        float thumbH = kScrollbarThumbW;
+        float thumbY = e->y + e->h - thumbH - kScrollbarThumbMargin;
+        float thumbX = e->x + ScrollbarThumbPos(e->w, thumbW, e->scrollX, e->w,
+                                                e->contentW);
         FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
                   ThemeNow().scrollbarThumb);
     }
