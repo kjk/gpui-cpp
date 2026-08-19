@@ -60,6 +60,7 @@ int GpuiMain(int argc, char** argv) {
     TestList();
     TestPopupMenu();
     TestDataTable();
+    TestDock();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

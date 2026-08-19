@@ -455,6 +455,7 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     static ::Cursor arrow = 0;
     static ::Cursor ibeam = 0;
     static ::Cursor colResize = 0;
+    static ::Cursor rowResize = 0;
     if (!arrow) {
         arrow = XCreateFontCursor(gDpy, XC_left_ptr);
     }
@@ -464,11 +465,16 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     if (!colResize) {
         colResize = XCreateFontCursor(gDpy, XC_sb_h_double_arrow);
     }
+    if (!rowResize) {
+        rowResize = XCreateFontCursor(gDpy, XC_sb_v_double_arrow);
+    }
     ::Cursor want = arrow;
     if (kind == CursorKind::IBeam) {
         want = ibeam;
     } else if (kind == CursorKind::ColResize) {
         want = colResize;
+    } else if (kind == CursorKind::RowResize) {
+        want = rowResize;
     }
     XDefineCursor(gDpy, win->plat->xwin, want);
     XFlush(gDpy);

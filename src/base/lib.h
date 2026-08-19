@@ -11,6 +11,7 @@
 #include "base/color_picker.h"
 #include "base/combobox.h"
 #include "base/date_picker.h"
+#include "base/dock.h"
 #include "base/dialog.h"
 #include "base/hover_card.h"
 #include "base/input.h"

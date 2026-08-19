@@ -1,4 +1,8 @@
-/* Themed dock (simplified) — crates/ui/src/dock */
+/* Themed dock — crates/ui/src/dock
+
+   DockArea renders a DockState: the centre item, the three Docks around it,
+   and for every tab group a TabBar whose tabs can be dragged into another
+   group or onto its edge to split it. */
 
 #include "ui/sizing.h"
 
@@ -6,17 +10,18 @@ namespace gpui {
 
 namespace component {
 
-struct Dock {
+// The tab bar of a tab group (TabPanel::render_title_bar).
+const float kDockTabBarH = 30;
+// resize_handle: the grab between two panels, and along a Dock's inner edge.
+const float kDockHandleW = 4;
+
+struct DockArea {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    El* left = nullptr;
-    El* center = nullptr;
-    El* right = nullptr;
+    Str id = {};
+    Entity<DockState> state = {};
 
-    static Dock* New(Ctx* cx);
-    Dock* Left(El* e);
-    Dock* Center(El* e);
-    Dock* Right(El* e);
+    static DockArea* New(Ctx* cx, Str id, Entity<DockState> state);
     El* IntoEl();
 };
 

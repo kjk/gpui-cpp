@@ -2080,13 +2080,6 @@ static bool IsAdjacent(EditIntent intent, const Change& prev,
     return false;
 }
 
-static bool StrSame(Str a, Str b) {
-    if (a.len != b.len) {
-        return false;
-    }
-    return a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0;
-}
-
 static bool RangeSame(Selection a, Selection b) {
     return a.start == b.start && a.end == b.end;
 }
