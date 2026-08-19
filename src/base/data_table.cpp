@@ -2,6 +2,8 @@
 
 namespace gpui {
 
+const Str kTableResizeDrag = StrL("table-resize-col");
+
 TableAction TableActionForKey(int key) {
     switch (key) {
         case KeyEscape:
@@ -51,6 +53,47 @@ static void TableEmit(TableState* s, Ctx* cx, TableEventKind kind, int row,
     }
     TableEvent ev = {kind, row, col, sort};
     ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+}
+
+float TableColWidth(const TableState* s, int col, float declared) {
+    if (col < 0 || col >= kMaxTableCols || s->colWidth[col] <= 0) {
+        return declared;
+    }
+    return s->colWidth[col];
+}
+
+void TableSeedColWidth(TableState* s, int col, float declared) {
+    if (col < 0 || col >= kMaxTableCols) {
+        return;
+    }
+    if (s->colWidth[col] <= 0) {
+        s->colWidth[col] = declared;
+    }
+}
+
+float TableClampColWidth(const TableState* s, float width) {
+    if (width < s->colMinWidth) {
+        width = s->colMinWidth;
+    }
+    if (s->colMaxWidth > 0 && width > s->colMaxWidth) {
+        width = s->colMaxWidth;
+    }
+    return width;
+}
+
+void TableResizeCol(TableState* s, Ctx* cx, int col, float width) {
+    if (!s->colResizable || col < 0 || col >= s->colCount ||
+        col >= kMaxTableCols) {
+        return;
+    }
+    width = TableClampColWidth(s, width);
+    // Rust only lays the header out again and notifies when the clamp let
+    // something through.
+    if (s->colWidth[col] == width) {
+        return;
+    }
+    s->colWidth[col] = width;
+    Notify(cx);
 }
 
 void TablePerformSort(TableState* s, Ctx* cx, int col) {
@@ -317,6 +360,47 @@ void TableState::OnHeadClick(TableState* self, Ctx* cx, const ClickEvent*,
 void TableState::OnSortClick(TableState* self, Ctx* cx, const ClickEvent*,
                              intptr_t col) {
     TablePerformSort(self, cx, (int)col);
+}
+
+static bool SameStr(Str a, Str b) {
+    return a.len == b.len &&
+           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+}
+
+void TableState::OnResizeDrag(TableState* self, Ctx* cx,
+                              const DragMoveEvent* ev) {
+    // `match e.drag(cx) { ResizeColumn(..) }`: a drag carrying anything else
+    // is not this handler's.
+    if (!SameStr(ev->drag.kind, kTableResizeDrag)) {
+        return;
+    }
+    int col = ev->drag.ix;
+    if (col < 0 || col >= self->colCount || col >= kMaxTableCols) {
+        return;
+    }
+    self->resizingCol = col;
+    // col_group.bounds.left(). The handle straddles the column's right edge,
+    // so where the column starts is that edge less the width it has now — and
+    // the width it has now is what laid the handle out where it is.
+    float left = ev->el.Right() - self->colWidth[col];
+    TableResizeCol(self, cx, col, ev->event.x - kTableResizeHandleW - left);
+}
+
+void TableState::OnResizeEnd(TableState* self, Ctx* cx, const MouseUpEvent*) {
+    if (self->resizingCol < 0) {
+        return;
+    }
+    self->resizingCol = -1;
+    TableEvent ev = {TableEventKind::ColumnWidthsChanged,
+                     -1,
+                     -1,
+                     ColumnSort::Default,
+                     self->colWidth,
+                     self->colCount};
+    if (self->onEvent.IsValid()) {
+        ListenerCall(cx->app, cx->win, self->onEvent, &ev);
+    }
+    Notify(cx);
 }
 
 } // namespace gpui

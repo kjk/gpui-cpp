@@ -15,6 +15,8 @@ struct TableColumn {
     bool right = false;
     bool sortable = false;
     bool selectable = true;
+    // Column::resizable: whether this column's right edge takes a drag.
+    bool resizable = true;
 };
 
 // The themed data table. The rows are the caller's — a delegate renders a
@@ -43,6 +45,9 @@ struct DataTable {
     DataTable* Stripe(bool v);
     DataTable* GroupHeader(El* el);
     El* IntoEl();
+    // The width a column is drawn at: the table's own once a drag has moved
+    // it, and what the caller declared until then.
+    float ColWidth(const TableState* s, int col) const;
 };
 
 // The plain table of strings, which is what the simple story page shows.

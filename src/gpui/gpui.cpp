@@ -538,6 +538,20 @@ El* El::OnDragMove(Listener l) {
     onDragMove = l;
     return this;
 }
+El* El::OnDrag(Str dragKind, int ix, void* data) {
+    drag.kind = dragKind;
+    drag.ix = ix;
+    drag.data = data;
+    return this;
+}
+El* El::OnMouseUpOut(Listener l) {
+    onMouseUpOut = l;
+    return this;
+}
+El* El::Cursor(CursorKind c) {
+    cursor = c;
+    return this;
+}
 El* El::BindSlider(SliderState* s, Axis axis) {
     slider = s;
     sliderAxis = axis;
@@ -2342,7 +2356,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->onHover.IsValid() || e->onMouseDown.IsValid() ||
-        e->onMouseUp.IsValid() || e->onDragMove.IsValid() || e->slider) {
+        e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
+        e->onMouseUpOut.IsValid() || e->drag.IsValid() ||
+        e->cursor != CursorKind::Arrow || e->slider) {
         HitRect hr;
         hr.id = e->clickId;
         hr.bounds = e->Bounds();
@@ -2353,6 +2369,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.onMouseDown = e->onMouseDown;
         hr.onMouseUp = e->onMouseUp;
         hr.onDragMove = e->onDragMove;
+        hr.drag = e->drag;
+        hr.onMouseUpOut = e->onMouseUpOut;
+        hr.cursor = e->cursor;
         hr.slider = e->slider;
         hr.sliderAxis = e->sliderAxis;
         hr.input = e->input;
@@ -2487,6 +2506,13 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
                 }
             }
         }
+        // truncate: a run that does not wrap is the same size whatever width
+        // it was measured against, so the shaped run is cached without one and
+        // the box it was drawn for cannot do the cutting. This can.
+        bool clipText = e->style.truncate && e->laidMaxW > 0;
+        if (clipText) {
+            CanvasPushClip(ctx, e->x, e->y, e->laidMaxW, e->h);
+        }
         if (lo >= 0 && hi > lo) {
             PaintTextRange(ctx, e->text, font,
                            e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
@@ -2499,6 +2525,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
                        e->style.truncate, e->style.wrap, e->laidMaxW,
                        ElTextWeight(e), e->style.lineHeight);
+        }
+        if (clipText) {
+            CanvasPopClip(ctx);
         }
         PaintCaret(ctx, e, font);
     } else if (e->kind == ElKind::Icon) {

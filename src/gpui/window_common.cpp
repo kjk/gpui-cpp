@@ -375,9 +375,19 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     win->mouseY = y;
     // An I-beam over anything selectable, the way every text view does it.
     // TextHitOffsetAt only answers for text that asked to be Selectable().
-    CursorKind want = TextHitOffsetAt(&win->paint, x, y, false) >= 0
-                          ? CursorKind::IBeam
-                          : CursorKind::Arrow;
+    // Anything else, the element under the pointer says what shape it wants —
+    // and a drag keeps the shape it started with, so a column edge stays a
+    // resize cursor while the pointer runs off it.
+    CursorKind want = CursorKind::Arrow;
+    const HitRect* under = HitRectById(win, win->pressedId);
+    if (!under || !win->mouseDown) {
+        under = HitTestRect(&win->paint, x, y);
+    }
+    if (TextHitOffsetAt(&win->paint, x, y, false) >= 0) {
+        want = CursorKind::IBeam;
+    } else if (under) {
+        want = under->cursor;
+    }
     if (want != win->cursor) {
         win->cursor = want;
         PlatSetCursor(win, want);
@@ -414,10 +424,13 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         ListenerCall(win->app, win, win->onMouseMove, &in);
     }
     // on_drag_move: the element that took the press hears every move until
-    // the release, wherever the pointer has got to by then.
+    // the release, wherever the pointer has got to by then. The press picked
+    // up whatever payload the element named with on_drag, and every move
+    // carries it back the way DragMoveEvent<T> does.
     const HitRect* pressed = HitRectById(win, win->pressedId);
     if (pressed && pressed->onDragMove.IsValid()) {
-        ListenerCall(win->app, win, pressed->onDragMove, &in);
+        DragMoveEvent ev = {pressed->drag, in, pressed->bounds};
+        ListenerCall(win->app, win, pressed->onDragMove, &ev);
     }
     if (pressed && pressed->slider) {
         SliderDrag(win, pressed, {x, y});
@@ -571,6 +584,16 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     const HitRect* hit = HitTestRect(&win->paint, in.x, in.y);
     if (hit && hit->onMouseUp.IsValid()) {
         ListenerCall(win->app, win, hit->onMouseUp, &in);
+    }
+    // on_mouse_up_out: every element that asked for the release it did not
+    // get. Rust hears one wherever the pointer is, so this walks the frame
+    // rather than only the element that took the press — a drag that ended
+    // off the edge is the case it exists for.
+    for (int i = 0; i < win->paint.hits.len; i++) {
+        const HitRect& hr = win->paint.hits[i];
+        if (hr.onMouseUpOut.IsValid() && !hr.bounds.Contains({in.x, in.y})) {
+            ListenerCall(win->app, win, hr.onMouseUpOut, &in);
+        }
     }
     SliderRelease(win);
     // InputState::on_mouse_up: the drag is over, and the word a double click

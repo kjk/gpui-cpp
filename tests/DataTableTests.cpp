@@ -44,7 +44,34 @@ static void OnlyOneColumnCarriesTheSort() {
     utassert(TableSortOf(&s, 2) == ColumnSort::Default);
 }
 
+static void AColumnKeepsItsWidthOnceItHasOne() {
+    TableState s;
+    s.colCount = 3;
+    // Until a drag has moved it, a column is as wide as the caller declared.
+    utassert(TableColWidth(&s, 0, 120) == 120);
+    TableSeedColWidth(&s, 0, 120);
+    utassert(TableColWidth(&s, 0, 120) == 120);
+    // Seeding again does not undo a width the table has since taken.
+    s.colWidth[0] = 200;
+    TableSeedColWidth(&s, 0, 120);
+    utassert(TableColWidth(&s, 0, 120) == 200);
+    // Past the columns a table keeps widths for, the caller's is all there is.
+    utassert(TableColWidth(&s, kMaxTableCols, 120) == 120);
+}
+
+static void AResizeIsClamped() {
+    TableState s;
+    // Rust's defaults: 20px at the narrow end and no ceiling at all.
+    utassert(TableClampColWidth(&s, 5) == 20);
+    utassert(TableClampColWidth(&s, 4000) == 4000);
+    s.colMaxWidth = 450;
+    utassert(TableClampColWidth(&s, 4000) == 450);
+    utassert(TableClampColWidth(&s, 100) == 100);
+}
+
 void TestDataTable() {
+    AColumnKeepsItsWidthOnceItHasOne();
+    AResizeIsClamped();
     TheKeyTable();
     TheSortCycle();
     OnlyOneColumnCarriesTheSort();

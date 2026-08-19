@@ -375,6 +375,28 @@ struct MouseMoveEvent {
     }
 };
 
+// What a drag carries. Rust's `on_drag(payload, ..)` takes a value of any
+// type and `DragMoveEvent<T>` only reaches the handlers that named that type;
+// there is no type to match on here, so the payload says what kind of thing
+// is being dragged by name and which one of that kind by index.
+struct DragPayload {
+    Str kind = {};
+    int ix = 0;
+    void* data = nullptr;
+
+    bool IsValid() const { return kind.s != nullptr; }
+};
+
+// DragMoveEvent<T>: what is being dragged, and the move that carried it.
+struct DragMoveEvent {
+    DragPayload drag = {};
+    MouseMoveEvent event = {};
+    // The dragged element's box, which is `bounds` on the entity the drag
+    // names in Rust. It is the box the last frame laid out, so a handler that
+    // moves the element reads its own answer back on the next move.
+    Bounds el = {};
+};
+
 // The pointer left the window. GPUI's MouseExitEvent is a MouseMoveEvent in
 // all but name — it derefs to one — so it carries the same three things.
 struct MouseExitEvent {
@@ -491,7 +513,9 @@ struct KeyEvent {
 // apart today.
 enum class CursorKind : uint8_t {
     Arrow,
-    IBeam
+    IBeam,
+    // cursor_col_resize, which a table's column edge asks for.
+    ColResize
 };
 
 // Fired by a window timer; GPUI does this with cx.spawn + Timer::after.
@@ -758,6 +782,18 @@ struct El {
     // entity. Needs a Click(id): the tree is rebuilt every frame, so the id
     // is what finds the element again.
     Listener onDragMove;
+    // on_drag: what a press on this element picks up. The payload rides along
+    // on every DragMoveEvent the drag produces.
+    DragPayload drag = {};
+    // div().cursor_col_resize() and friends: the shape the pointer takes over
+    // this element. Rust hangs it off the style; it needs a Click(id) here for
+    // the same reason a hover does, since the hit rect is what the move
+    // consults.
+    CursorKind cursor = CursorKind::Arrow;
+    // on_mouse_up_out: a release that landed anywhere but on this element.
+    // Rust hears it wherever the pointer is, whether or not the press started
+    // here, and so does this.
+    Listener onMouseUpOut;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
     // their own closures; there are no closures on an element here, so the
@@ -875,6 +911,9 @@ struct El {
     El* OnMouseDown(Listener l);
     El* OnMouseUp(Listener l);
     El* OnDragMove(Listener l);
+    El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
+    El* OnMouseUpOut(Listener l);
+    El* Cursor(CursorKind c);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
     El* BindSliderBounds(SliderState* s);
     El* BindInput(InputState* s);
@@ -940,6 +979,9 @@ struct HitRect {
     Listener onMouseDown;
     Listener onMouseUp;
     Listener onDragMove;
+    DragPayload drag = {};
+    Listener onMouseUpOut;
+    CursorKind cursor = CursorKind::Arrow;
     // El::Tip. The overlay reads it when the pointer arrives, so it has to
     // survive the hit test rather than only the paint that drew it.
     Str tooltip = {};

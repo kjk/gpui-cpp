@@ -451,17 +451,26 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     if (!win || !win->plat || !gDpy) {
         return;
     }
-    // The server owns these; two per process is all this needs.
+    // The server owns these; one of each per process is all this needs.
     static ::Cursor arrow = 0;
     static ::Cursor ibeam = 0;
+    static ::Cursor colResize = 0;
     if (!arrow) {
         arrow = XCreateFontCursor(gDpy, XC_left_ptr);
     }
     if (!ibeam) {
         ibeam = XCreateFontCursor(gDpy, XC_xterm);
     }
-    XDefineCursor(gDpy, win->plat->xwin,
-                  kind == CursorKind::IBeam ? ibeam : arrow);
+    if (!colResize) {
+        colResize = XCreateFontCursor(gDpy, XC_sb_h_double_arrow);
+    }
+    ::Cursor want = arrow;
+    if (kind == CursorKind::IBeam) {
+        want = ibeam;
+    } else if (kind == CursorKind::ColResize) {
+        want = colResize;
+    }
+    XDefineCursor(gDpy, win->plat->xwin, want);
     XFlush(gDpy);
 }
 
