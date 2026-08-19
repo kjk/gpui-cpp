@@ -1,10 +1,18 @@
 #include "base/link.h"
-#include "base/element_ext.h"
 
 namespace gpui {
 
-El* Link::New(Ctx* cx, Str id, int clickId) {
+El* Link::New(Ctx* cx, Str id, bool disabled, Listener onActivate) {
     Arena* a = cx->a;
-    return UiRoot(a, id, clickId);
+    int clickId = HashClickId(id);
+    El* e = Div(a)->Id(id)->Click(clickId);
+    if (disabled) {
+        return e;
+    }
+    e->FocusId(clickId);
+    if (onActivate.IsValid()) {
+        e->OnClick(onActivate);
+    }
+    return e;
 }
 } // namespace gpui

@@ -32,10 +32,9 @@ Link* Link::OnOpen(Listener fn) {
 
 El* Link::IntoEl() {
     const Theme& th = cx->theme();
-    El* e = gpui::Link::New(cx, id, disabled ? 0 : HashClickId(id));
-    if (onOpen.IsValid() && !disabled) {
-        e->OnClick(onOpen);
-    }
+    // gpui_base::Link owns identity, focus and activation; the href is this
+    // layer's, which is where Rust's injected open strategy would read it.
+    El* e = gpui::Link::New(cx, id, disabled, onOpen);
     // text_decoration_1(): a link is underlined at rest, not only on hover.
     e->Child(TextEl(a, text.s ? text : href)
                  ->Font(14)

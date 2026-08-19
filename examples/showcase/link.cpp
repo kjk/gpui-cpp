@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickLink = 390
-};
-
 static void OnLink(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     (void)app;
     log("open /base/primitives/link");
@@ -23,8 +19,7 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
         ->Child(TextEl(a, StrL("Navigation is application-owned"))
                     ->Font(12)
                     ->Fg(Rgb(0x17, 0x17, 0x17)))
-        ->Child(Link::New(cx, StrL("example-link"), ClickLink)
-                    ->OnClick(Listen(cx, &OnLink))
+        ->Child(Link::New(cx, StrL("example-link"), false, Listen(cx, &OnLink))
                     ->W(kFill)
                     ->H(28)
                     ->PadX(12)
@@ -34,7 +29,7 @@ El* ShowcaseLink(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("Open Link documentation  →"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(Link::New(cx, StrL("disabled-link"))
+        ->Child(Link::New(cx, StrL("disabled-link"), true)
                     ->W(kFill)
                     ->H(28)
                     ->PadX(12)
