@@ -236,6 +236,20 @@ static void SliderDrag(Window* win, const HitRect* hit, Point at) {
     }
 }
 
+// Slider's on_mouse_up + on_mouse_up_out, which Rust puts on the root so a
+// release counts wherever it lands. Every slider the frame painted is asked;
+// handle_release clears the flag, so one that was not being dragged says
+// nothing and a state bound twice only answers once.
+static void SliderRelease(Window* win) {
+    for (int i = 0; i < win->paint.hits.len; i++) {
+        SliderState* s = win->paint.hits[i].slider;
+        if (s && SliderHandleRelease(s)) {
+            SliderEmit(win, s, SliderEventKind::Release);
+            AppInvalidate(win);
+        }
+    }
+}
+
 static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     float x = in.x;
     float y = in.y;
@@ -376,6 +390,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     if (hit && hit->onMouseUp.IsValid()) {
         ListenerCall(win->app, win, hit->onMouseUp, &in);
     }
+    SliderRelease(win);
     win->pressedId = 0;
     AppInvalidate(win);
 }
