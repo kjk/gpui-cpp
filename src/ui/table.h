@@ -42,12 +42,18 @@ struct DataTable {
     float h = 0;
     // render_empty: what a table with no rows shows. Null takes Rust's own.
     El* empty = nullptr;
+    // Size::table_row_height, which is what with_size(..) comes to here: 26 /
+    // 30 / 32 / 40, or an explicit pixel height.
+    float rowHeight = 32;
 
     static DataTable* New(Ctx* cx, Str id, Entity<TableState> state);
     DataTable* Columns(const TableColumn* cols, int n);
     DataTable* Rows(int n, void* data,
                     El* (*cell)(Ctx* cx, void* data, int row, int col));
     DataTable* Stripe(bool v);
+    DataTable* WithSize(UiSize s);
+    // Size::Size(px), which the story's 48px row offers.
+    DataTable* RowHeight(float px);
     DataTable* GroupHeader(El* el);
     DataTable* H(float px);
     DataTable* Empty(El* e);
