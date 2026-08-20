@@ -90,13 +90,13 @@ void ListStory::OnKey(ListStory* self, Ctx* cx, const KeyEvent* ev) {
     if (!ev->down) {
         return;
     }
-    ListAction act = ListActionForKey(ev->vk);
-    if (act == ListAction::None) {
+    ListKeyAction act = ListActionForKey(ev->vk, ev->ctrl);
+    if (act.action == ListAction::None) {
         return;
     }
     ListState* st = self->list.Get(cx);
     if (st) {
-        ListPerform(st, cx, act, ev->ctrl);
+        ListPerform(st, cx, act.action, act.secondary);
     }
 }
 

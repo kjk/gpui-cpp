@@ -10,12 +10,19 @@
 #include "Test.h"
 
 static void TheKeyTable() {
-    utassert(ListActionForKey(KeyUp) == ListAction::SelectPrev);
-    utassert(ListActionForKey(KeyDown) == ListAction::SelectNext);
-    utassert(ListActionForKey(KeyReturn) == ListAction::Confirm);
-    utassert(ListActionForKey(KeyEscape) == ListAction::Cancel);
-    utassert(ListActionForKey(KeySpace) == ListAction::None);
-    utassert(ListActionForKey(KeyTab) == ListAction::None);
+    utassert(ListActionForKey(KeyUp, false).action == ListAction::SelectPrev);
+    utassert(ListActionForKey(KeyDown, false).action == ListAction::SelectNext);
+    utassert(ListActionForKey(KeyReturn, false).action == ListAction::Confirm);
+    utassert(ListActionForKey(KeyEscape, false).action == ListAction::Cancel);
+    utassert(ListActionForKey(KeySpace, false).action == ListAction::None);
+    utassert(ListActionForKey(KeyTab, false).action == ListAction::None);
+
+    // `Confirm { secondary }` is bound twice: to enter and to secondary-enter.
+    // Nothing else in the list's context reads the modifier.
+    utassert(!ListActionForKey(KeyReturn, false).secondary);
+    ListKeyAction sec = ListActionForKey(KeyReturn, true);
+    utassert(sec.action == ListAction::Confirm && sec.secondary);
+    utassert(!ListActionForKey(KeyDown, true).secondary);
 }
 
 static void NextAndPrevWrap() {

@@ -2,19 +2,28 @@
 
 namespace gpui {
 
-ListAction ListActionForKey(int key) {
+ListKeyAction ListActionForKey(int key, bool secondary) {
+    ListKeyAction out;
     switch (key) {
         case KeyUp:
-            return ListAction::SelectPrev;
+            out.action = ListAction::SelectPrev;
+            break;
         case KeyDown:
-            return ListAction::SelectNext;
+            out.action = ListAction::SelectNext;
+            break;
         case KeyReturn:
-            return ListAction::Confirm;
+            out.action = ListAction::Confirm;
+            // Only the Confirm binding comes in two spellings; nothing else
+            // in the list's context reads the modifier.
+            out.secondary = secondary;
+            break;
         case KeyEscape:
-            return ListAction::Cancel;
+            out.action = ListAction::Cancel;
+            break;
         default:
-            return ListAction::None;
+            break;
     }
+    return out;
 }
 
 int ListNextIndex(const ListState* s) {

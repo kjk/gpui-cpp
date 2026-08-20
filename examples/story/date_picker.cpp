@@ -401,18 +401,15 @@ void DatePickerStory::OnKey(DatePickerStory* self, Ctx* cx,
     if (!ev->down) {
         return;
     }
-    if (ev->vk == KeyDelete || ev->vk == KeyBack) {
+    DatePickerAction action =
+        DatePickerActionForKey(ev->vk, self->open >= 0, false);
+    if (action == DatePickerAction::Clear) {
         PickerState& state = self->pickers[self->focused];
         state.start = {};
         state.end = {};
         self->open = -1;
         UpdateValue(self, self->focused);
-        Notify(cx);
-        return;
-    }
-    DatePickerAction action =
-        DatePickerActionForKey(ev->vk, self->open >= 0, false);
-    if (action == DatePickerAction::Open) {
+    } else if (action == DatePickerAction::Open) {
         self->open = self->focused;
     } else if (action == DatePickerAction::Dismiss) {
         self->open = -1;
