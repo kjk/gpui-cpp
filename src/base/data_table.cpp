@@ -80,13 +80,14 @@ ColumnSort TableSortOf(const TableState* s, int col) {
     return s->sortCol == col ? s->sort : ColumnSort::Default;
 }
 
+// cx.emit(TableEvent::..) — see the note on ListEmit.
 static void TableEmit(TableState* s, Ctx* cx, TableEventKind kind, int row,
                       int col, ColumnSort sort) {
-    if (!s->onEvent.IsValid()) {
-        return;
-    }
     TableEvent ev = {kind, row, col, sort};
-    ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+    if (s->onEvent.IsValid()) {
+        ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+    }
+    EntityEmit(cx->app, cx->win, s->self, &ev);
 }
 
 float TableColWidth(const TableState* s, int col, float declared) {

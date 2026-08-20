@@ -220,6 +220,7 @@ El* DataTable::IntoEl() {
     const Theme& th = cx->theme();
     TableState* s = state.Get(cx);
     if (s) {
+        s->self = state.id;
         // The counts are the caller's every frame, which is what keeps the
         // keys inside the rows and columns there actually are.
         s->rowCount = nRows;

@@ -6,6 +6,9 @@
 struct TreeStory {
     Entity<TreeState> tree = {};
     bool loaded = false;
+    // cx.subscribe's return: the page holds it for as long as it wants to
+    // hear the tree.
+    Subscription sub = {};
     // What the last TreeEvent said, shown under the tree.
     Str message = {};
 
@@ -121,7 +124,12 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
                 }
             }
             TreeRebuild(s);
-            s->onEvent = Listen(cx, &TreeStory::OnTreeEvent);
+            // cx.subscribe(&tree, ..) rather than the state's own listener:
+            // the same handler, hung off the entity, so anything else on the
+            // page could hear the tree too. `loaded` is what keeps the page
+            // from subscribing again on every frame — Rust keeps the
+            // Subscription in the view for the same reason.
+            self->sub = Subscribe(cx, self->tree, &TreeStory::OnTreeEvent);
         }
     }
     TreeState* s = self->tree.Get(cx);

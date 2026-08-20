@@ -2255,6 +2255,16 @@ enum {
 
 // Process-wide state: the Direct2D / DirectWrite factories, the shared font
 // cache, the entity store and the open windows. GPUI's `App`.
+// One live cx.subscribe. GPUI keys its subscriber lists by the emitter and
+// hands back a Subscription that unsubscribes when it drops; a handle here is
+// an id, and a subscription whose emitter or subscriber has gone stale is
+// swept the next time the emitter emits.
+struct EntitySub {
+    int id = 0;
+    EntityId emitter = {};
+    Listener handler = {};
+};
+
 struct App {
     PaintApp* paint = nullptr;
     ThemeMode themeMode = ThemeMode::Light;
@@ -2263,6 +2273,9 @@ struct App {
     // generation and goes stale instead of dangling.
     Vec<EntitySlot> entities;
     Vec<int32_t> freeSlots;
+    // cx.subscribe: every live subscription, in the order they were made.
+    Vec<EntitySub> subs;
+    int nextSubId = 1;
     int exitCode = 0;
 
     App() = default;
@@ -2544,6 +2557,63 @@ Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t),
     l.hasArg = true;
     l.argBound = true;
     return l;
+}
+
+// ─── EventEmitter (crates/gpui/src/app/entity_map.rs, subscriber lists) ───
+//
+// Rust marks what an entity emits with `impl EventEmitter<E> for T`, sends one
+// with `cx.emit(e)`, and hears it with `cx.subscribe(&entity, ..)`, which
+// hands back a Subscription that unsubscribes when it drops. There is no trait
+// to mark here: an emitter is an entity, an event is whatever struct the
+// emitter sends, and the subscriber's handler has to take that same type —
+// which is the one thing Rust checks and this cannot.
+//
+// A Subscription is a handle rather than a guard: nothing is destroyed on
+// scope exit in a tree of POD state, so it is dropped by asking. It rarely
+// has to be: a subscription whose subscriber has gone away is swept on the
+// next emit, which is the lifetime that mattered.
+struct Subscription {
+    int id = 0;
+
+    bool IsValid() const { return id != 0; }
+};
+
+Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler);
+void EntityUnsubscribe(App* app, Subscription sub);
+// cx.emit(ev): every live subscriber hears it, oldest first. `ev` is the
+// event struct the emitter sends, by pointer, and it does not outlive the
+// call.
+void EntityEmit(App* app, Window* win, EntityId emitter, const void* ev);
+// How many subscriptions the emitter has, stale ones swept first. For a
+// caller that has to know whether anybody is listening at all.
+int EntitySubscriberCount(App* app, EntityId emitter);
+
+// cx.subscribe(&emitter, cx.listener(..)): the handler belongs to whatever is
+// rendering, the way Listen's does, and runs whenever `emitter` emits an E.
+template <typename T, typename S, typename E>
+Subscription Subscribe(Ctx* cx, Entity<T> emitter,
+                       void (*fn)(S*, Ctx*, const E*)) {
+    Listener l;
+    l.fn = (void*)fn;
+    l.view = cx->self;
+    return EntitySubscribeRaw(cx->app, emitter.id, l);
+}
+
+// The same, for a subscriber that is not the one rendering.
+template <typename T, typename S, typename E>
+Subscription SubscribeTo(App* app, Entity<T> emitter, Entity<S> subscriber,
+                         void (*fn)(S*, Ctx*, const E*)) {
+    Listener l;
+    l.fn = (void*)fn;
+    l.view = subscriber.id;
+    return EntitySubscribeRaw(app, emitter.id, l);
+}
+
+// cx.emit(ev) from inside the emitter: `emitter` is the entity sending it,
+// which a state that does not know its own handle takes as an argument.
+template <typename E>
+void Emit(Ctx* cx, EntityId emitter, const E* ev) {
+    EntityEmit(cx->app, cx->win, emitter, ev);
 }
 
 // cx.notify(): the frame tree is rebuilt from scratch, so this just schedules

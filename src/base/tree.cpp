@@ -133,12 +133,14 @@ int TreeIndexOf(const TreeState* s, Str id) {
     return -1;
 }
 
+// cx.emit(TreeEvent::..) — see the note on ListEmit.
 static void TreeEmit(TreeState* s, Ctx* cx, TreeEventKind kind, Str id,
                      int ix) {
     TreeEvent ev = {kind, id, ix};
     if (s->onEvent.IsValid()) {
         ListenerCall(cx->app, cx->win, s->onEvent, &ev);
     }
+    EntityEmit(cx->app, cx->win, s->self, &ev);
 }
 
 bool TreeToggleExpandAt(TreeState* s, int entryIx, bool* expandedOut) {

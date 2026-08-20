@@ -179,13 +179,16 @@ bool ListShouldLoadMore(const ListState* s, int lastVisibleRow) {
     return ListRowCount(s) - lastVisibleRow <= s->loadMoreThreshold;
 }
 
+// cx.emit(ListEvent::..). Rust has only the subscriber list; the state's own
+// onEvent is the shorthand this port already had for the single-subscriber
+// case, so an event goes to it and to everything that has subscribed.
 static void ListEmit(ListState* s, Ctx* cx, ListEventKind kind, int index,
                      bool secondary) {
-    if (!s->onEvent.IsValid()) {
-        return;
-    }
     ListEvent ev = {kind, index, secondary};
-    ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+    if (s->onEvent.IsValid()) {
+        ListenerCall(cx->app, cx->win, s->onEvent, &ev);
+    }
+    EntityEmit(cx->app, cx->win, s->self, &ev);
 }
 
 // select_item: a list that is not selectable moves nothing.

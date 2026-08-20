@@ -151,6 +151,9 @@ static El* DefaultEmpty(Ctx* cx, float h) {
 El* List::IntoEl() {
     const Theme& th = cx->theme();
     ListState* s = state.Get(cx);
+    if (s) {
+        s->self = state.id;
+    }
 
     El* root =
         Div(a)->FlexCol()->W(kFill)->Pad(8)->Gap(4)->Radius(th.radius)->Border(
