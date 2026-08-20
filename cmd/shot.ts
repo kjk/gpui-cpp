@@ -6,7 +6,8 @@
 //                widget that answers on a timer (a hover card's open delay)
 //   -drag=X1,Y1,X2,Y2  press, move, release: a text selection drag
 //   -wheel=N     N notches of scroll at the window centre
-//   -key=VK      send a key down
+//   -key=VK      send a key: the down and the up, since Enter and Space
+//                activate a focused element from the release
 //   -half=left|right  size the window the way cmd/compare-story.ts does, so a
 //                     shot lines up with the Rust side-by-side pair
 import { dirname, join, resolve } from "node:path";
@@ -154,6 +155,9 @@ if (wheel !== 0) {
 }
 for (const vk of keys) {
   sendMessage(hwnd, 0x0100 /* WM_KEYDOWN */, vk, 0);
+  await sleep(40);
+  // Bit 31 of lParam is what a real WM_KEYUP carries.
+  sendMessage(hwnd, 0x0101 /* WM_KEYUP */, vk, 0xc0000001);
   await sleep(120);
 }
 // Last, so the pointer is still on the element when the frame is captured.

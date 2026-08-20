@@ -206,6 +206,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_KEYDOWN:
             WindowKeyDown(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown());
             return 0;
+        case WM_KEYUP:
+            WindowKeyUp(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown());
+            return 0;
         case WM_CHAR:
             WindowChar(win, (uint32_t)wParam, CtrlDown(), AltDown());
             return 0;

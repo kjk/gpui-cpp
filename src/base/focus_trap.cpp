@@ -42,7 +42,7 @@ bool FocusTrapEnter(Window* win, int trapId, bool backward) {
         if (win->focusEls[i].id == win->focusId) {
             return false;
         }
-        win->focusId = win->focusEls[i].id;
+        WindowSetFocusId(win, win->focusEls[i].id);
         return true;
     }
     return false;

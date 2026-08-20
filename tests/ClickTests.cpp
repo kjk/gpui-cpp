@@ -59,6 +59,41 @@ static void AReleaseWithNoPressWaitingIsNothing() {
                                MouseButton::Left));
 }
 
+// The keyboard half of the same rule, which div.rs arms on the enter or space
+// key down and fires from the key up. `enter_and_space_use_one_native_keyboard
+// _click_each` in button.rs sends each keystroke as a down and an up and
+// expects one click out of the pair.
+static void TheReleaseOfEnterOrSpaceOnTheFocusedElementIsAClick() {
+    utassert(ClickFromKeyRelease(true, 3, 3, KeyReturn, false));
+    utassert(ClickFromKeyRelease(true, 3, 3, KeySpace, false));
+    // Nothing armed the press — the focused field ate the space as text, or
+    // the chord ran an action — so the release makes nothing.
+    utassert(!ClickFromKeyRelease(false, 3, 3, KeyReturn, false));
+}
+
+// A key that does not activate anything, coming up mid-press: GPUI treats
+// that as an unclean activation and drops the pending press.
+static void AnotherKeyComingUpIsNoClick() {
+    utassert(!ClickFromKeyRelease(true, 3, 3, KeyEscape, false));
+    utassert(!ClickFromKeyRelease(true, 3, 3, KeyTab, false));
+}
+
+// `!stroke.modifiers.modified()`: Ctrl-Enter is a shortcut, not the button
+// being pressed.
+static void AModifierMakesItAShortcutRatherThanAnActivation() {
+    utassert(!ClickFromKeyRelease(true, 3, 3, KeyReturn, true));
+    utassert(!ClickFromKeyRelease(true, 3, 3, KeySpace, true));
+}
+
+// The focus generation, which is what GPUI stamps the pending press with
+// rather than the focus handle: focus that moved between the two halves — even
+// away and back to the same element — leaves the release with no click to
+// make.
+static void FocusThatMovedBetweenTheHalvesTakesTheClick() {
+    utassert(!ClickFromKeyRelease(true, 3, 4, KeyReturn, false));
+    utassert(!ClickFromKeyRelease(true, 4, 3, KeySpace, false));
+}
+
 void TestClick() {
     TestSuite("click");
     AReleaseOnTheElementThatTookThePressIsAClick();
@@ -66,4 +101,8 @@ void TestClick() {
     OnlyTheButtonThatWentDownMakesTheClick();
     ADragTakesTheReleaseFromTheClick();
     AReleaseWithNoPressWaitingIsNothing();
+    TheReleaseOfEnterOrSpaceOnTheFocusedElementIsAClick();
+    AnotherKeyComingUpIsNoClick();
+    AModifierMakesItAShortcutRatherThanAnActivation();
+    FocusThatMovedBetweenTheHalvesTakesTheClick();
 }

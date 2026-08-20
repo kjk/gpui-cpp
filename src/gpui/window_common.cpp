@@ -221,31 +221,58 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         ev.alt = alt;
         ListenerCall(win->app, win, win->onKey, &ev);
     }
-    // Enter and Space both activate the focused element: run that element's
-    // own listener, the one a click on it would have run. GPUI turns either
-    // keystroke on a focused clickable element into a click, which is what
-    // checkbox.rs's `enter_and_space_each_emit_once` pins. A focused field
-    // takes the space as text instead, so it never reaches the element.
+    // Enter and Space both activate the focused element, and the press only
+    // arms that: the click is made from the release, the same as the mouse's.
+    // GPUI keeps the focus generation the keystroke went down at as
+    // `pending_keyboard_down`, and its key-down listener clears it for every
+    // other key — a chord that ran an action is not half of an activation.
+    // A focused field takes the space as text instead, so it never arms.
     bool activates = (key == KeyReturn && !win->eatReturn) ||
                      (key == KeySpace && !(win->input && win->input->focused));
-    if (activates && win->focusId && !eaten) {
-        const HitRect* focused = HitRectById(win, win->focusId);
-        // GPUI's ClickEvent::Keyboard: no pointer was involved, so the
-        // position is the element's own box.
-        ClickEvent ev = {0, 0, MouseButton::Left, win->focusId};
-        ev.keyboard = true;
-        if (focused) {
-            ev.x = focused->bounds.CenterX();
-            ev.y = focused->bounds.CenterY();
-            ev.el = focused->bounds;
-        }
-        if (focused && focused->listener.IsValid()) {
-            ListenerCall(win->app, win, focused->listener, &ev);
-        } else if (win->onClick.IsValid()) {
-            ListenerCall(win->app, win, win->onClick, &ev);
-        }
-    }
+    bool modified = shift || ctrl || alt;
+    win->keyPressPending = activates && !modified && !eaten && win->focusId;
+    win->keyPressGen = win->focusGen;
     win->eatReturn = false;
+    AppInvalidate(win);
+}
+
+void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt) {
+    if (!win) {
+        return;
+    }
+    // The release consumes the pending press whatever it is: a clean
+    // activation makes the click, and anything else — another key coming up
+    // mid-press, a modifier that has since gone down — cancels it.
+    bool pending = win->keyPressPending;
+    int gen = win->keyPressGen;
+    win->keyPressPending = false;
+    if (!ClickFromKeyRelease(pending, gen, win->focusGen, key,
+                             shift || ctrl || alt)) {
+        return;
+    }
+    // GPUI registers the keyboard activation on the painted element, so a
+    // focus with nothing on screen behind it activates nothing.
+    const HitRect* focused = HitRectById(win, win->focusId);
+    if (!focused) {
+        return;
+    }
+    // ClickEvent::Keyboard: no pointer was involved, so the position is the
+    // element's own box, and there is no count or modifier to carry.
+    ClickEvent ev = {0, 0, MouseButton::Left, win->focusId};
+    ev.keyboard = true;
+    ev.keyboardKey = key;
+    ev.x = focused->bounds.CenterX();
+    ev.y = focused->bounds.CenterY();
+    ev.el = focused->bounds;
+    // Both halves of what a click on it would have run, and only those: a
+    // keyboard click reaches the element's own listeners, never the window's
+    // unhandled-click path — nothing was clicked outside anything.
+    if (focused->listener.IsValid()) {
+        ListenerCall(win->app, win, focused->listener, &ev);
+    }
+    if (focused->onClick.IsValid()) {
+        focused->onClick.Call();
+    }
     AppInvalidate(win);
 }
 
@@ -670,7 +697,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // what makes it hit-testable and hoverable — and hangs `track_focus` off
     // `when(!disabled)`, so pressing one leaves focus where it was.
     if (id && FocusIdIsFocusable(win, id)) {
-        win->focusId = id;
+        WindowSetFocusId(win, id);
     }
     // on_mouse_down, ahead of the click: an element that wants the press
     // itself — a slider jumping to it — gets the whole event, not the

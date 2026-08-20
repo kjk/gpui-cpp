@@ -494,6 +494,9 @@ struct ClickEvent {
     // ClickEvent::Keyboard: Space or Enter on the focused element, with no
     // pointer anywhere near it. ClickEvent::is_keyboard.
     bool keyboard = false;
+    // KeyboardClickEvent::button: which of the two activated it, KeyReturn or
+    // KeySpace. 0 when the pointer made this click.
+    int keyboardKey = 0;
 };
 
 // Portable key codes. The values are the Win32 VK_* ones, so the Windows
@@ -1191,6 +1194,9 @@ struct PaintCtx {
     float viewH = 0;
     int hoverId = 0;
     int focusId = 0;
+    // window.focus_generation: bumped every time the focus moves, so a
+    // keystroke can tell that it stayed put without holding onto the element.
+    int focusGen = 0;
     // Where the pointer is, which is what a Hover-mode scrollbar consults.
     float mouseX = -1;
     float mouseY = -1;
@@ -1861,6 +1867,16 @@ int HashClickId(Str s);
 bool ClickFromRelease(bool pending, int pressedId, MouseButton pressedButton,
                       bool dragged, int upId, MouseButton upButton);
 
+// The same for the keyboard: whether the release of Enter or Space makes a
+// click. GPUI arms on the key down — `pending_keyboard_down` is the focus
+// generation the keystroke went down at — and makes the click from the key
+// up, if that stamp still matches. A generation rather than the focused
+// element itself, because focus that left and came back is not the same
+// press; any other key in between clears the stamp, and a modifier held on
+// either half means the keystroke was a shortcut, not an activation.
+bool ClickFromKeyRelease(bool pending, int pendingGen, int focusGen, int key,
+                         bool modified);
+
 // Reserved click ids for custom window chrome (WM_NCHITTEST).
 // Widget click ids must not use these — 100/101/102/200 used to be
 // hardcoded here and collided with the showcase overview grid.
@@ -1928,6 +1944,9 @@ struct Window {
     EntityId root = {};
     int hoverId = 0;
     int focusId = 0;
+    // window.focus_generation: bumped every time the focus moves, so a
+    // keystroke can tell that it stayed put without holding onto the element.
+    int focusGen = 0;
     float mouseX = 0;
     float mouseY = 0;
     // What the pointer looks like right now; the OS is only told on a change.
@@ -1970,6 +1989,10 @@ struct Window {
     DragPayload activeDrag = {};
     int dragOverId = 0;
     bool eatReturn = false;
+    // pending_keyboard_down: an Enter or Space is down on the focused
+    // element, and the generation the focus was at when it went down.
+    bool keyPressPending = false;
+    int keyPressGen = 0;
     // The scrollbar being dragged, and how far into its thumb the press
     // landed. GPUI keeps the same pair in ScrollbarState::drag_pos.
     int scrollDragId = 0;
@@ -2369,6 +2392,9 @@ void AppRequestAnim(Window* win, bool on);
 // Collect focusable click targets from last paint for Tab cycling.
 void FocusCollect(Window* win, El* root);
 int FocusNext(Window* win, int trapId, bool backward);
+// Move the focus. Everything that focuses goes through here, so the
+// generation a keystroke is stamped with counts every move.
+void WindowSetFocusId(Window* win, int id);
 void AppQuit(Window* win);
 void AppInvalidate(Window* win);
 void AppMinimize(Window* win);
