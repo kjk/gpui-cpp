@@ -1399,9 +1399,41 @@ struct PaintTarget;
 // the window and shows where it came from; an element here has no source
 // location — nothing takes `#[track_caller]` — so what it can say for itself
 // is its id, the box layout gave it, and the style it was built with.
+// The style fields the inspector's editor can name. Rust serialises the whole
+// `StyleRefinement` with serde and parses it back; there is no reflection
+// table here, so this is the subset written out by hand — the ones the panel
+// already reports, plus the two colours and the opacity beside them.
+enum StyleField : uint32_t {
+    StyleFieldBg = 1u << 0,
+    StyleFieldColor = 1u << 1,
+    StyleFieldBorderColor = 1u << 2,
+    StyleFieldPad = 1u << 3,
+    StyleFieldGap = 1u << 4,
+    StyleFieldRadius = 1u << 5,
+    StyleFieldBorder = 1u << 6,
+    StyleFieldFontSize = 1u << 7,
+    StyleFieldWidth = 1u << 8,
+    StyleFieldHeight = 1u << 9,
+    StyleFieldOpacity = 1u << 10
+};
+
+// A live style override, which is what Rust's DivInspector writes back into
+// the `StyleRefinement` of the element it took over. The tree is rebuilt every
+// frame and its `El`s go with it, so the override is keyed by the element's
+// click id and applied on the way through layout. One table, since there is
+// one inspector.
+void StyleOverrideSet(int clickId, uint32_t fields, const Style& style);
+void StyleOverrideClear(int clickId);
+void StyleOverrideClearAll();
+// Patches `e->style` in place with whatever is on file for its click id.
+void StyleOverrideApply(El* e);
+
 struct InspectorPick {
     int id = 0;
     Str elId = {};
+    // The whole style the element was built with, which is what the editor
+    // serialises and what Reset puts back.
+    Style style = {};
     Bounds bounds = {};
     // The kind of element, as El::kind reads it.
     int kind = 0;
@@ -1462,6 +1494,14 @@ struct PaintCtx {
     // would land on.
     bool picking = false;
     bool pickHit = false;
+    // How deep in the tree the element being painted is, which is what the
+    // pick prefers on: an overlay layer painted last is not the element under
+    // the pointer just because it went down after everything else.
+    int paintDepth = 0;
+    // How good a candidate the pick so far was: 2 for an element with an id,
+    // 1 for one that draws something, so an unnamed label inside a button
+    // does not stand in front of the button.
+    int pickTier = 0;
     InspectorPick pick = {};
     Vec<HitRect> hits;
     Vec<ScrollRect> scrolls;

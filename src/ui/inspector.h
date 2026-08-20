@@ -1,11 +1,14 @@
 /* Themed inspector — crates/ui/src/inspector.rs
 
-   GPUI's inspector picks an element out of the window and shows what it is;
-   Rust then lets you edit its style live as Rust or JSON through an editor
-   with LSP completions, which needs `#[track_caller]` source locations and a
-   style reflection table this tree does not have. What is here is the panel
-   and the picking: the magnifier, the highlight, and what the element it
-   found can say for itself. */
+   GPUI's inspector picks an element out of the window and shows what it is,
+   and then lets you edit its style live. Rust offers two editors over the
+   same `StyleRefinement`, one spelling it as Rust source and one as JSON, both
+   with LSP completions; there is no reflection table here and no language
+   server, so what is ported is the JSON half over a subset written out by
+   hand — `StyleField` in gpui.h — with the same shape around it: the editor,
+   the parse error under it, and Reset. What is not ported is the Rust-source
+   editor and the `#[track_caller]` source location Rust leads the panel
+   with. */
 
 #include "ui/sizing.h"
 
@@ -15,6 +18,14 @@ namespace component {
 
 // The width Rust's inspector docks at.
 const float kInspectorWidth = 320;
+
+// The style of a picked element as the editor shows it, and the parse back.
+// Only the fields `StyleField` names are written; `fields` says which of them
+// the text actually named, so an override leaves the rest of the element's
+// own style alone.
+Str StyleToJson(Arena* a, const Style& style);
+bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
+                   Str* error);
 
 struct Inspector {
     Arena* a = nullptr;
