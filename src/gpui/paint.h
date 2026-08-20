@@ -85,6 +85,10 @@ void PathClose(Path* p);
 
 void PathFill(PaintCtx* ctx, Path* p, Rgba c);
 // A vertical linear gradient from `top` at y0 to `bot` at y1.
+// A linear gradient between two points, which is what a sankey ribbon wants:
+// its two ends are side by side, not one above the other.
+void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
+                      float y1, Rgba from, Rgba to);
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
                        Rgba bot);
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,

@@ -167,6 +167,29 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
                                  ->H(kFill),
                              true));
     page->Child(lastRow);
+
+    // A sankey: where a week of energy comes from and what it goes to, which
+    // is the shape the d3 example uses.
+    component::SankeyChart* sankey = component::SankeyChart::New(cx)
+                                         ->Node(StrL("Coal"))
+                                         ->Node(StrL("Gas"))
+                                         ->Node(StrL("Wind"))
+                                         ->Node(StrL("Solar"))
+                                         ->Node(StrL("Grid"))
+                                         ->Node(StrL("Homes"))
+                                         ->Node(StrL("Industry"))
+                                         ->Node(StrL("Transport"))
+                                         ->Link(0, 4, 30)
+                                         ->Link(1, 4, 25)
+                                         ->Link(2, 4, 20)
+                                         ->Link(3, 4, 15)
+                                         ->Link(4, 5, 40)
+                                         ->Link(4, 6, 32)
+                                         ->Link(4, 7, 18)
+                                         ->ShowValues()
+                                         ->NodeCornerRadius(2);
+    page->Child(ChartCard(cx, "Sankey Chart",
+                          sankey->IntoEl()->W(kFill)->H(kFill), false));
     return page;
 }
 

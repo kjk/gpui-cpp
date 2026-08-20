@@ -329,20 +329,25 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
                        Rgba bot) {
+    PathFillGradient(ctx, p, 0, y0, 0, y1, top, bot);
+}
+
+void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
+                      float y1, Rgba from, Rgba to) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
     }
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    CGFloat comps[8] = {top.r / 255.0, top.g / 255.0, top.b / 255.0,
-                        top.a / 255.0, bot.r / 255.0, bot.g / 255.0,
-                        bot.b / 255.0, bot.a / 255.0};
+    CGFloat comps[8] = {from.r / 255.0, from.g / 255.0, from.b / 255.0,
+                        from.a / 255.0, to.r / 255.0,   to.g / 255.0,
+                        to.b / 255.0,   to.a / 255.0};
     CGFloat stops[2] = {0.0, 1.0};
     CGGradientRef grad =
         CGGradientCreateWithColorComponents(space, comps, stops, 2);
     CGColorSpaceRelease(space);
     if (!grad) {
-        PathFill(ctx, p, top);
+        PathFill(ctx, p, from);
         return;
     }
     CGContextSaveGState(cg);
@@ -353,7 +358,7 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
         CGContextEOClip(cg);
     }
     CGContextDrawLinearGradient(
-        cg, grad, CGPointMake(0, y0), CGPointMake(0, y1),
+        cg, grad, CGPointMake(x0, y0), CGPointMake(x1, y1),
         kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
     CGContextRestoreGState(cg);
     CGGradientRelease(grad);
