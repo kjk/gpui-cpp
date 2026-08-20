@@ -211,7 +211,10 @@ El* Button::IntoEl() {
         padX = 0;
         h = 0;
     }
-    El* e = gpui::Button::New(cx, id, disabled ? 0 : HashClickId(id))
+    // The unstyled Button takes `disabled` here, and a click id of its own is
+    // not one: passing one made every enabled button non-focusable and gave
+    // disabled ones a focus handle, which is the opposite of both.
+    El* e = gpui::Button::New(cx, id, disabled)
                 ->H(h > 0 ? h : kAuto)
                 ->PadX(padX)
                 ->ItemsCenter()

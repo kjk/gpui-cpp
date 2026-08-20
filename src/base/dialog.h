@@ -62,9 +62,15 @@ struct DialogTrigger {
 };
 
 struct Dialog {
+    Ctx* cx = nullptr;
     El* root = nullptr;
+    // focus_trap("dialog-{layer}"): the popup keeps Tab inside itself while
+    // it is open. A stack of dialogs names one trap per layer, so the top one
+    // traps on its own rather than sharing with the dialog underneath.
+    Str trap = {};
 
     static Dialog* New(Ctx* cx);
+    Dialog* Trap(Str name);
     Dialog* Backdrop(El* backdrop);
     Dialog* Popup(El* popup);
     El* IntoEl();

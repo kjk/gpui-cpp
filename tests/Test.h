@@ -75,3 +75,4 @@ void TestRoot();
 void TestSankey();
 void TestJson();
 void TestDockState();
+void TestFocusTrap();

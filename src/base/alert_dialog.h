@@ -38,9 +38,14 @@ struct AlertDialogTrigger {
 };
 
 struct AlertDialog {
+    Ctx* cx = nullptr;
     El* root = nullptr;
+    // An alert is a Dialog, so it traps focus like one — under its own name,
+    // since an alert is what a dialog opens on top of.
+    Str trap = {};
 
     static AlertDialog* New(Ctx* cx);
+    AlertDialog* Trap(Str name);
     AlertDialog* Backdrop(El* backdrop);
     AlertDialog* Popup(El* popup);
     El* IntoEl();

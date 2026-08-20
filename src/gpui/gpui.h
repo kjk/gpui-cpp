@@ -1948,6 +1948,9 @@ struct Window {
     InspectorState inspector = {};
     MenuState menu = {};
     Vec<FocusRect> focusEls;
+    // The focus trap a container asked to hold focus this frame, settled
+    // after the focusables are collected. 0 when nothing asked.
+    int pendingTrap = 0;
     Vec<KeyedSlot> keyed;
     WinOpts opts = {};
     // Window-level subscriptions bound to view entities.

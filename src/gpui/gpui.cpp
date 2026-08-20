@@ -3292,25 +3292,33 @@ int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
     return n;
 }
 
-static void CollectFocus(El* e, Window* win) {
+// A trap is a property of the container, the way Rust hangs it off the one
+// focus handle the dialog tracks, so it reaches every focusable below it. The
+// resolved id is written back onto the element: the focus ring paints from it,
+// and nothing else has the tree to work it out again.
+static void CollectFocus(El* e, Window* win, int trap) {
     if (!e) {
         return;
     }
+    if (e->style.trapId) {
+        trap = e->style.trapId;
+    }
     if (e->style.focusId) {
+        e->style.trapId = trap;
         FocusRect fr;
         fr.id = e->style.focusId;
-        fr.trapId = e->style.trapId;
+        fr.trapId = trap;
         fr.bounds = e->Bounds();
         win->focusEls.Append(fr);
     }
     for (El* c = e->first; c; c = c->next) {
-        CollectFocus(c, win);
+        CollectFocus(c, win, trap);
     }
 }
 
 void FocusCollect(Window* win, El* root) {
     win->focusEls.Clear();
-    CollectFocus(root, win);
+    CollectFocus(root, win, 0);
 }
 
 int FocusNext(Window* win, int trapId, bool backward) {
