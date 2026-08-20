@@ -33,6 +33,7 @@ struct SettingsStory {
     // AppSettings::disabled: the Other group's first switch locks the rest.
     bool disabled = false;
     bool foo = false;
+    bool autoUpdates = true;
     InputState search;
     InputState fontSize;
     InputState lineHeight;
@@ -41,42 +42,6 @@ struct SettingsStory {
     static El* Render(SettingsStory* self, Ctx* cx);
 };
 
-static void ToggleDarkMode(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    self->darkMode = !self->darkMode;
-    Notify(cx);
-}
-static void ToggleAutoSwitch(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    self->autoSwitch = !self->autoSwitch;
-    Notify(cx);
-}
-static void ToggleResettable(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    self->resettable = !self->resettable;
-    Notify(cx);
-}
-// The select owns its selection now, so a toggle is all the page does.
-static void ToggleFontFamily(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    component::SelectToggleOpen(self->fontFamily.Get(cx), cx);
-}
-static void ToggleGroupVariant(SettingsStory* self, Ctx* cx,
-                               const ClickEvent*) {
-    component::SelectToggleOpen(self->groupVariant.Get(cx), cx);
-}
-static void ToggleGroupSize(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    component::SelectToggleOpen(self->groupSize.Get(cx), cx);
-}
-static void ToggleDisabled(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    self->disabled = !self->disabled;
-    Notify(cx);
-}
-static void ToggleFoo(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    self->foo = !self->foo;
-    Notify(cx);
-}
-// on_reset: the font size goes back to what it started at.
-static void ResetFontSize(SettingsStory* self, Ctx* cx, const ClickEvent*) {
-    InputSetValue(&self->fontSize, StrL("14"));
-    Notify(cx);
-}
 static void FocusSettingsSearch(SettingsStory* self, Ctx* cx,
                                 const ClickEvent*) {
     self->search.focused = true;
@@ -114,81 +79,50 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
             ->SidebarWidth(200)
             ->H(WindowSize(cx->win).dipH - 160);
 
-    s->Page(StrL("General"), IconName::Settings2);
+    // SettingPage::resettable: the story's own switch, which turns the reset
+    // buttons on this page off.
+    s->Page(StrL("General"), IconName::Settings2)
+        ->PageResettable(self->resettable);
     s->Group(StrL("Appearance"));
-    s->Item(StrL("Dark Mode"), StrL("Switch between light and dark themes."),
-            component::Switch::New(cx, StrL("set-dark"))
-                ->Checked(self->darkMode)
-                ->OnClick(Listen(cx, &ToggleDarkMode))
-                ->IntoEl());
+    s->Item(StrL("Dark Mode"), StrL("Switch between light and dark themes."));
+    s->SwitchField(&self->darkMode);
     s->Keywords(StrL("theme"), StrL("night"));
     s->Item(StrL("Auto Switch Theme"),
-            StrL("Automatically switch theme based on system settings."),
-            component::Checkbox::New(cx, StrL("set-auto"))
-                ->Checked(self->autoSwitch)
-                ->OnClick(Listen(cx, &ToggleAutoSwitch))
-                ->IntoEl());
+            StrL("Automatically switch theme based on system settings."));
+    s->CheckboxField(&self->autoSwitch);
     s->Keywords(StrL("theme"), StrL("system"));
     s->Item(StrL("resettable"),
-            StrL("Enable/Disable reset button for settings."),
-            component::Switch::New(cx, StrL("set-resettable"))
-                ->Checked(self->resettable)
-                ->OnClick(Listen(cx, &ToggleResettable))
-                ->IntoEl());
+            StrL("Enable/Disable reset button for settings."));
+    s->SwitchField(&self->resettable);
     s->Item(StrL("Group Variant"),
-            StrL("Select the variant for setting groups."),
-            component::Select::New(cx, StrL("set-variant"), self->groupVariant)
-                ->Items(kGroupVariants, 3)
-                ->W(140)
-                ->OnToggle(Listen(cx, &ToggleGroupVariant))
-                ->IntoEl());
-    s->Item(StrL("Group Size"), StrL("Select the size for the setting group."),
-            component::Select::New(cx, StrL("set-group-size"), self->groupSize)
-                ->Items(kGroupSizes, 3)
-                ->W(140)
-                ->OnToggle(Listen(cx, &ToggleGroupSize))
-                ->IntoEl());
+            StrL("Select the variant for setting groups."));
+    s->DropdownField(self->groupVariant, kGroupVariants, 3)->FieldWidth(140);
+    s->Item(StrL("Group Size"), StrL("Select the size for the setting group."));
+    s->DropdownField(self->groupSize, kGroupSizes, 3)->FieldWidth(140);
 
     s->Group(StrL("Font"));
-    s->Item(StrL("Font Family"), StrL("Select the font family for the story."),
-            component::Select::New(cx, StrL("set-family"), self->fontFamily)
-                ->Items(kFontFamilies, 3)
-                ->W(140)
-                ->OnToggle(Listen(cx, &ToggleFontFamily))
-                ->IntoEl());
+    s->Item(StrL("Font Family"), StrL("Select the font family for the story."));
+    s->DropdownField(self->fontFamily, kFontFamilies, 3)->FieldWidth(140);
     s->Keywords(StrL("typeface"));
+    // default_value("14"): a size that is no longer the default offers to go
+    // back to it, and the two steppers obey min, max and step. Rust's story
+    // says the same range in the description.
     s->Item(
         StrL("Font Size"),
-        StrL("Adjust the font size for better readability between 8 and 72."),
-        component::NumberInput::New(cx, StrL("set-font-size"), &self->fontSize)
-            ->W(140)
-            ->IntoEl());
-    // is_dirty / on_reset: a size that is no longer the default offers to go
-    // back to it, which is what the story's resettable switch turns on.
-    s->Resettable(
-        self->resettable && !StrSame(InputValue(&self->fontSize), StrL("14")),
-        Listen(cx, &ResetFontSize));
+        StrL("Adjust the font size for better readability between 8 and 72."));
+    s->NumberField(&self->fontSize, {8, 72, 1}, StrL("14"))->FieldWidth(140);
     s->Item(StrL("Line Height"),
             StrL("Adjust the line height for better readability between 0 and "
-                 "100."),
-            component::NumberInput::New(cx, StrL("set-line-height"),
-                                        &self->lineHeight)
-                ->W(140)
-                ->IntoEl());
+                 "100."));
+    s->NumberField(&self->lineHeight, {0, 100, 1})->FieldWidth(140);
 
     // The Other group: a switch that locks the rest, one that is only
     // findable by its keyword, and a row that is all content.
     s->Group(StrL("Other"));
-    s->Item(StrL("Disable Settings"), StrL("Lock the other settings."),
-            component::Switch::New(cx, StrL("set-disabled"))
-                ->Checked(self->disabled)
-                ->OnClick(Listen(cx, &ToggleDisabled))
-                ->IntoEl());
-    s->Item(StrL("Foo"), StrL("Find me by searching for my sibling"),
-            component::Switch::New(cx, StrL("set-foo"))
-                ->Checked(self->foo)
-                ->OnClick(Listen(cx, &ToggleFoo))
-                ->IntoEl());
+    s->Item(StrL("Disable Settings"), StrL("Lock the other settings."));
+    s->SwitchField(&self->disabled);
+    s->Item(StrL("Foo"), StrL("Find me by searching for my sibling"));
+    s->SwitchField(&self->foo)->Disabled(self->disabled);
     s->Keywords(StrL("Bar"));
     s->Item(StrL("View source, report issues, and follow project updates."),
             Str{},
@@ -201,10 +135,8 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     s->Page(StrL("Software Update"), IconName::Building2);
     s->Group(StrL("Updates"));
     s->Item(StrL("Automatic Updates"),
-            StrL("Download and install updates in the background."),
-            component::Switch::New(cx, StrL("set-updates"))
-                ->Checked(true)
-                ->IntoEl());
+            StrL("Download and install updates in the background."));
+    s->SwitchField(&self->autoUpdates);
 
     s->Page(StrL("About"), IconName::Info);
     s->Group(StrL("This build"));

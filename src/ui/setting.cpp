@@ -1,6 +1,11 @@
 #include "ui/setting.h"
 #include "ui/button.h"
+#include "ui/checkbox.h"
 #include "ui/input.h"
+#include "ui/select.h"
+#include "ui/switch.h"
+
+#include <stdlib.h>
 
 namespace gpui {
 
@@ -90,6 +95,126 @@ void SettingsState::OnGroupClick(SettingsState* self, Ctx* cx,
     self->page = (int)(packed / 64);
     self->group = (int)(packed % 64);
     Notify(cx);
+}
+
+// The one selected index, or -1. A setting dropdown is single-select, which
+// is what Rust's `SettingField<SharedString>::dropdown` is.
+static int DropdownIndex(const SearchableListState* st) {
+    return st && st->nSelected > 0 ? st->selected[0] : -1;
+}
+
+// f64 -> the text a NumberInput shows. Rust writes `value.to_string()`, which
+// prints an integral f64 without a fraction; %g does the same.
+static Str SettingNumStr(Arena* a, double v) {
+    return StrDup(a, fmt("%g", v));
+}
+
+static double SettingNumParse(Str s, double fallback) {
+    if (!s.s || s.len <= 0) {
+        return fallback;
+    }
+    char buf[64];
+    int n = s.len < (int)sizeof(buf) - 1 ? s.len : (int)sizeof(buf) - 1;
+    memcpy(buf, s.s, (size_t)n);
+    buf[n] = 0;
+    char* end = nullptr;
+    double v = strtod(buf, &end);
+    return end == buf ? fallback : v;
+}
+
+static SettingBinding* FieldAt(SettingsState* self, intptr_t ix) {
+    if (!self || ix < 0 || ix >= self->fields.len) {
+        return nullptr;
+    }
+    return &self->fields[(int)ix];
+}
+
+void SettingsState::OnFieldClick(SettingsState* self, Ctx* cx,
+                                 const ClickEvent*, intptr_t ix) {
+    SettingBinding* f = FieldAt(self, ix);
+    if (!f) {
+        return;
+    }
+    if (f->kind == SettingFieldKind::Switch ||
+        f->kind == SettingFieldKind::Checkbox) {
+        if (f->boolValue) {
+            *f->boolValue = !*f->boolValue;
+        }
+    } else if (f->kind == SettingFieldKind::Dropdown) {
+        SelectToggleOpen(f->list.Get(cx), cx);
+    }
+    Notify(cx);
+}
+
+void SettingsState::OnFieldReset(SettingsState* self, Ctx* cx,
+                                 const ClickEvent*, intptr_t ix) {
+    SettingBinding* f = FieldAt(self, ix);
+    if (!f) {
+        return;
+    }
+    switch (f->kind) {
+        case SettingFieldKind::Switch:
+        case SettingFieldKind::Checkbox:
+            if (f->boolValue) {
+                *f->boolValue = f->defBool;
+            }
+            break;
+        case SettingFieldKind::Input:
+        case SettingFieldKind::NumberInput:
+            if (f->input) {
+                InputSetValue(f->input, f->defStr);
+            }
+            break;
+        case SettingFieldKind::Dropdown:
+            if (SearchableListState* st = f->list.Get(cx)) {
+                st->nSelected = f->defIndex >= 0 ? 1 : 0;
+                st->selected[0] = f->defIndex;
+            }
+            break;
+        default:
+            break;
+    }
+    Notify(cx);
+}
+
+// NumberInputEvent::Step: the value plus or minus the field's step, clamped
+// to its min and max, which is what Rust's number field does on the way back
+// into the input.
+static void FieldStep(SettingsState* self, Ctx* cx, intptr_t ix, int dir) {
+    SettingBinding* f = FieldAt(self, ix);
+    if (!f || !f->input) {
+        return;
+    }
+    double v = SettingNumParse(InputValue(f->input), 0);
+    v += f->num.step * dir;
+    if (v < f->num.min) {
+        v = f->num.min;
+    }
+    if (v > f->num.max) {
+        v = f->num.max;
+    }
+    InputSetValue(f->input, SettingNumStr(cx->a, v));
+    Notify(cx);
+}
+
+void SettingsState::OnResetPage(SettingsState* self, Ctx* cx,
+                                const ClickEvent* ev, intptr_t) {
+    if (!self) {
+        return;
+    }
+    for (int i = 0; i < self->fields.len; i++) {
+        OnFieldReset(self, cx, ev, (intptr_t)i);
+    }
+}
+
+void SettingsState::OnFieldInc(SettingsState* self, Ctx* cx, const ClickEvent*,
+                               intptr_t ix) {
+    FieldStep(self, cx, ix, 1);
+}
+
+void SettingsState::OnFieldDec(SettingsState* self, Ctx* cx, const ClickEvent*,
+                               intptr_t ix) {
+    FieldStep(self, cx, ix, -1);
 }
 
 Settings* Settings::New(Ctx* cx, Str id, Entity<SettingsState> state) {
@@ -199,6 +324,78 @@ Settings* Settings::Layout(Axis axis) {
     return this;
 }
 
+Settings* Settings::SwitchField(bool* value, bool defValue, bool hasDefault) {
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->field = SettingFieldKind::Switch;
+        it->boolValue = value;
+        it->defBool = defValue;
+        it->hasDefault = hasDefault;
+    }
+    return this;
+}
+
+Settings* Settings::CheckboxField(bool* value, bool defValue, bool hasDefault) {
+    SwitchField(value, defValue, hasDefault);
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->field = SettingFieldKind::Checkbox;
+    }
+    return this;
+}
+
+Settings* Settings::InputField(InputState* input, Str defValue) {
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->field = SettingFieldKind::Input;
+        it->input = input;
+        it->defStr = defValue;
+        it->hasDefault = defValue.s != nullptr;
+    }
+    return this;
+}
+
+Settings* Settings::NumberField(InputState* input, NumberFieldOptions opts,
+                                Str defValue) {
+    InputField(input, defValue);
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->field = SettingFieldKind::NumberInput;
+        it->num = opts;
+    }
+    return this;
+}
+
+Settings* Settings::DropdownField(Entity<SearchableListState> list,
+                                  const SearchableItem* items, int nItems,
+                                  int defIndex) {
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->field = SettingFieldKind::Dropdown;
+        it->list = list;
+        it->items = items;
+        it->nItems = nItems;
+        it->defIndex = defIndex;
+        it->hasDefault = defIndex >= 0;
+    }
+    return this;
+}
+
+Settings* Settings::PageResettable(bool v) {
+    if (n > 0) {
+        pages[n - 1].resettable = v;
+    }
+    return this;
+}
+
+Settings* Settings::FieldWidth(float v) {
+    SettingItem* it = LastItem(this);
+    if (it) {
+        it->fieldW = v;
+    }
+    return this;
+}
+
 Settings* Settings::Searchable(InputState* s, Listener onFocus) {
     search = s;
     onSearchFocus = onFocus;
@@ -217,9 +414,113 @@ Settings* Settings::Bordered(bool v) {
     return this;
 }
 
+// The control a typed field renders as, and the two answers that come with
+// it: whether the value has left its default, and the index the field's
+// listeners bind. Rust's field renders itself out of the getter and the
+// setter; here the getter is the pointer the caller handed over.
+struct FieldEl {
+    El* el = nullptr;
+    bool dirty = false;
+    bool resettable = false;
+    Listener onReset = {};
+};
+
+static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
+                           bool pageResettable) {
+    FieldEl out;
+    SettingsState* st = s->state.Get(cx);
+    if (it.field == SettingFieldKind::Element || !st) {
+        out.el = it.control;
+        out.dirty = it.dirty;
+        out.resettable = it.onReset.IsValid();
+        out.onReset = it.onReset;
+        return out;
+    }
+
+    // The binding the listeners find this field again by, appended in the
+    // order the fields paint.
+    SettingBinding b;
+    b.kind = it.field;
+    b.boolValue = it.boolValue;
+    b.defBool = it.defBool;
+    b.input = it.input;
+    b.defStr = it.defStr;
+    b.num = it.num;
+    b.list = it.list;
+    b.defIndex = it.defIndex;
+    intptr_t ix = (intptr_t)st->fields.len;
+    st->fields.Append(b);
+
+    Listener click = ListenTo(s->state, &SettingsState::OnFieldClick, ix);
+    // layout(Axis): a field beside the text is w_32, one under it fills.
+    float w = it.fieldW > 0 ? it.fieldW
+                            : (it.layout == Axis::Horizontal ? 128.f : kFill);
+    switch (it.field) {
+        case SettingFieldKind::Switch:
+            out.el = Switch::New(cx, id)
+                         ->Checked(it.boolValue && *it.boolValue)
+                         ->Disabled(it.disabled)
+                         ->OnClick(click)
+                         ->IntoEl();
+            out.dirty = it.boolValue && *it.boolValue != it.defBool;
+            break;
+        case SettingFieldKind::Checkbox:
+            out.el = Checkbox::New(cx, id)
+                         ->Checked(it.boolValue && *it.boolValue)
+                         ->Disabled(it.disabled)
+                         ->OnClick(click)
+                         ->IntoEl();
+            out.dirty = it.boolValue && *it.boolValue != it.defBool;
+            break;
+        case SettingFieldKind::Input:
+            out.el = Input::New(cx, id, it.input)
+                         ->W(w)
+                         ->Disabled(it.disabled)
+                         ->WithSize(UiSize::Small)
+                         ->IntoEl();
+            out.dirty = it.input && !StrSame(InputValue(it.input), it.defStr);
+            break;
+        case SettingFieldKind::NumberInput:
+            out.el =
+                NumberInput::New(cx, id, it.input)
+                    ->W(w)
+                    ->Disabled(it.disabled)
+                    ->WithSize(UiSize::Small)
+                    ->OnInc(ListenTo(s->state, &SettingsState::OnFieldInc, ix))
+                    ->OnDec(ListenTo(s->state, &SettingsState::OnFieldDec, ix))
+                    ->IntoEl();
+            out.dirty = it.input && !StrSame(InputValue(it.input), it.defStr);
+            break;
+        case SettingFieldKind::Dropdown: {
+            out.el = Select::New(cx, id, it.list)
+                         ->Items(it.items, it.nItems)
+                         ->W(w)
+                         ->Disabled(it.disabled)
+                         ->OnToggle(click)
+                         ->IntoEl();
+            out.dirty = DropdownIndex(it.list.Get(cx)) != it.defIndex;
+            break;
+        }
+        default:
+            break;
+    }
+    // default_value: naming one is what puts the reset button behind the item.
+    out.resettable = it.hasDefault && pageResettable;
+    out.onReset = ListenTo(s->state, &SettingsState::OnFieldReset, ix);
+    if (it.onReset.IsValid()) {
+        // An explicit Resettable() still wins, the way Rust's reset_handler
+        // overrides the typed default.
+        out.resettable = pageResettable;
+        out.dirty = it.dirty;
+        out.onReset = it.onReset;
+    }
+    return out;
+}
+
 // One row: the title and description on the left, the field on the right —
 // or under it, when the item asked for a vertical layout.
-static El* RenderItem(Ctx* cx, const SettingItem& it, Str id, bool first) {
+static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
+                      bool first, bool pageResettable, bool* anyDirty) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* line = Div(a)->W(kFill)->PadX(16)->PadY(12)->Gap(16);
@@ -241,18 +542,22 @@ static El* RenderItem(Ctx* cx, const SettingItem& it, Str id, bool first) {
     }
     line->Child(text);
     El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    if (it.control) {
-        right->Child(it.control);
+    FieldEl f = RenderField(cx, s, it, id, pageResettable);
+    if (f.dirty && f.resettable && f.onReset.IsValid()) {
+        *anyDirty = true;
+    }
+    if (f.el) {
+        right->Child(f.el);
     }
     // The reset button, which is only there once the item has been changed.
-    if (it.dirty && it.onReset.IsValid()) {
+    if (f.dirty && f.resettable && f.onReset.IsValid()) {
         // Rust's reset button carries an Undo2 icon; the nearest one this
         // tree has is the arrow that points back.
         right->Child(Button::New(cx, StrDup(a, fmt("%s-reset", id)))
                          ->Icon(IconName::ArrowLeft)
                          ->Ghost()
                          ->WithSize(UiSize::XSmall)
-                         ->OnClick(it.onReset)
+                         ->OnClick(f.onReset)
                          ->IntoEl());
     }
     line->Child(right);
@@ -263,6 +568,13 @@ El* Settings::IntoEl() {
     const Theme& th = cx->theme();
     SettingsState* st = state.Get(cx);
     Str query = search ? InputValue(search) : Str{};
+    // The bindings are this frame's, in the order the fields paint. The
+    // listeners hung off the last frame's are still resolving against it
+    // until this one has painted, which is the same table with the same
+    // contents unless the tree itself changed.
+    if (st) {
+        st->fields.Clear();
+    }
 
     El* row = Div(a)->FlexRow()->W(kFill)->H(h)->ItemsStart();
 
@@ -354,17 +666,9 @@ El* Settings::IntoEl() {
     El* pane = Div(a)->FlexCol()->Grow()->H(kFill)->ClipY();
     if (selected >= 0 && selected < n) {
         const SettingPage& p = pages[selected];
-        El* head =
-            Div(a)->FlexCol()->W(kFill)->PadX(16)->PadY(12)->Gap(4)->BorderB(
-                1, th.border);
-        head->Child(
-            TextEl(a, p.title)->Font(20)->Semibold()->Fg(th.foreground));
-        if (p.description.s) {
-            head->Child(
-                TextEl(a, p.description)->Font(14)->Fg(th.mutedFg)->Wrap());
-        }
-        pane->Child(head);
-
+        // The body first: whether the page offers Reset All is whether
+        // anything on it came out dirty, which only the fields know.
+        bool anyDirty = false;
         El* body = Div(a)->FlexCol()->W(kFill)->Pad(16)->Gap(8);
         for (int g = 0; g < p.n; g++) {
             const SettingGroup& grp = p.groups[g];
@@ -386,12 +690,39 @@ El* Settings::IntoEl() {
                     continue;
                 }
                 card->Child(RenderItem(
-                    cx, it, StrDup(a, fmt("%s-%d-%d-%d", id, selected, g, i)),
-                    shown == 0));
+                    cx, this, it,
+                    StrDup(a, fmt("%s-%d-%d-%d", id, selected, g, i)),
+                    shown == 0, p.resettable, &anyDirty));
                 shown++;
             }
             body->Child(card);
         }
+
+        El* head =
+            Div(a)->FlexCol()->W(kFill)->PadX(16)->PadY(12)->Gap(4)->BorderB(
+                1, th.border);
+        El* titleRow =
+            Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+        titleRow->Child(
+            TextEl(a, p.title)->Font(20)->Semibold()->Fg(th.foreground));
+        // reset_all: the page's own button, there once anything on it has
+        // left its default.
+        if (anyDirty) {
+            titleRow->Child(
+                Button::New(cx, StrDup(a, fmt("%s-reset-all", id)))
+                    ->Icon(IconName::ArrowLeft)
+                    ->Tooltip(StrL("Reset All"))
+                    ->Ghost()
+                    ->WithSize(UiSize::Small)
+                    ->OnClick(ListenTo(state, &SettingsState::OnResetPage, 0))
+                    ->IntoEl());
+        }
+        head->Child(titleRow);
+        if (p.description.s) {
+            head->Child(
+                TextEl(a, p.description)->Font(14)->Fg(th.mutedFg)->Wrap());
+        }
+        pane->Child(head);
         pane->Child(body);
     }
     row->Child(pane);
