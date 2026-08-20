@@ -1,12 +1,10 @@
 #include "Story.h"
 
 struct NotificationStory {
-    // NotificationList is a view in Rust, held by Root; here it is a state
-    // the page owns and renders over the window.
-    Entity<component::NotificationListState> list = {};
-    bool seeded = false;
-    int timer = 0;
-
+    // NotificationList is a view in Rust, held by Root and reached through
+    // `window.notifications(cx)`. It is the app's here for the same reason:
+    // the page pushes into it, but a notification is the window's and outlives
+    // leaving this page.
     static El* Render(NotificationStory* self, Ctx* cx);
 };
 
@@ -107,9 +105,9 @@ static void ClickNote(NotificationStory*, Ctx*, const ClickEvent*) {
     log(StrL("[notification] on_click fired\n"));
 }
 
-static void ShowNotify(NotificationStory* self, Ctx* cx, const ClickEvent*,
+static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
                        intptr_t which) {
-    component::NotificationListState* st = self->list.Get(cx);
+    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
     if (!st) {
         return;
     }
@@ -137,25 +135,16 @@ static void ShowNotify(NotificationStory* self, Ctx* cx, const ClickEvent*,
 }
 
 // Dismiss All: every notification starts on its way out.
-static void DismissAll(NotificationStory* self, Ctx* cx, const ClickEvent*) {
-    component::NotificationListState* st = self->list.Get(cx);
+static void DismissAll(NotificationStory*, Ctx* cx, const ClickEvent*) {
+    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
     if (st) {
         NotificationClear(st);
     }
     Notify(cx);
 }
 
-El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
+El* NotificationStory::Render(NotificationStory*, Ctx* cx) {
     Arena* a = cx->a;
-    if (!self->seeded) {
-        self->seeded = true;
-        self->list = EntityNewState<component::NotificationListState>(cx->app);
-        // Rust spawns a task that advances the list every 50 ms; a window
-        // timer is the same clock.
-        self->timer = WindowSetInterval(
-            cx->win, component::kNotificationTickMs,
-            ListenTo(self->list, &component::NotificationListState::OnTick));
-    }
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Default", "Show a short message.");
@@ -327,7 +316,6 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     page->Child(manual);
     // The stack itself, over the window in whichever corner its placement
     // names — what Root renders in Rust.
-    page->Child(component::NotificationList::New(cx, self->list)->IntoEl());
     return page;
 }
 

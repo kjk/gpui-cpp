@@ -94,7 +94,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     const Theme& th = ThemeNow();
     CanvasClear(&win->paint, th.background);
     if (root) {
-        LayoutEl(&win->paint, root, 0, 0, dipW, dipH, 16.f, th.foreground);
+        LayoutEl(&win->paint, root, 0, 0, dipW, dipH, ThemeFontSize(),
+                 th.foreground);
         FocusCollect(win, root);
         // A dialog that has just opened takes focus into itself, which is what
         // Rust gets from tracking focus on the trap container.

@@ -132,6 +132,17 @@ enum class ThemeMode : uint8_t {
 
 const Theme& ThemeDark();
 const Theme& ThemeLight();
+// Theme::font_size and Theme::radius, which the story's Appearance menu
+// writes the way Rust writes `Theme::global_mut(cx).font_size`. The themes
+// here are shared statics rather than a per-app Global, so a change is the
+// process', not one window's. `radius_lg` follows Rust's rule: two more than
+// the radius, or nothing when the radius is nothing.
+void ThemeSetRadius(float radius);
+// The root font size every element inherits from, and what an explicit size
+// is measured against: a `Font(12)` is twelve at the default 16, and grows
+// with it, which is what Rust gets for free by spelling its sizes in rems.
+float ThemeFontSize();
+void ThemeSetFontSize(float px);
 // The theme belongs to App, the way Rust keeps it as a Global; read it with
 // cx->theme(). ThemeNow() is the paint-time fallback for code below Ctx.
 const Theme& ThemeNow();
@@ -642,6 +653,11 @@ enum class ScrollbarMode : uint8_t {
     Hover
 };
 
+// The default Theme::scrollbar_mode. An element that names its own wins, the
+// way `Scrollbar::new().mode(..)` overrides the theme's.
+ScrollbarMode ScrollbarModeNow();
+void ScrollbarModeSet(ScrollbarMode m);
+
 enum class IconName : uint8_t {
     None = 0,
     Inbox,
@@ -914,7 +930,11 @@ struct El {
     // overflow_x_scroll: how far the content is slid to the left. Positive
     // means the view has moved right over it, as scrollY is positive-down.
     float scrollX = 0;
+    // The bar this box shows, and whether the caller named it. Unnamed, it
+    // is the theme's — Rust's Scrollbar reads `cx.theme().scrollbar_mode`
+    // unless the caller passed one.
     ScrollbarMode scrollMode = ScrollbarMode::Always;
+    bool scrollModeSet = false;
     int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
@@ -2384,6 +2404,11 @@ void ClipboardSetText(Window* win, Str text);
 // Take it back off. The result is arena-allocated and empty when the
 // clipboard holds no text.
 Str ClipboardGetText(Arena* a, Window* win);
+
+// cx.open_url: hand a link to whatever the desktop opens links with. Rust's
+// takes an `&str` and answers nothing, and so does this — a browser that
+// refuses to start is not something a caller can do anything about.
+void OpenUrl(Str url);
 int AppRun(App* app);
 Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);
 void AppSetTitle(Window* win, Str title);

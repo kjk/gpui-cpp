@@ -692,6 +692,16 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     return selected;
 }
 
+// cx.open_url. ShellExecute with no verb runs the shell's default action for
+// the scheme, which is what the user has chosen as their browser.
+void OpenUrl(Str url) {
+    if (!url.s || url.len <= 0) {
+        return;
+    }
+    ShellExecuteW(nullptr, L"open", ToCWstrTemp(url), nullptr, nullptr,
+                  SW_SHOWNORMAL);
+}
+
 void ClipboardSetText(Window* win, Str text) {
     HWND hwnd = Hwnd(win);
     if (!text.s || text.len <= 0) {
