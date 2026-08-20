@@ -1,22 +1,47 @@
 #include "base/tree.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
-TreeAction TreeActionForKey(int key) {
-    switch (key) {
-        case KeyUp:
-            return TreeAction::SelectPrev;
-        case KeyDown:
-            return TreeAction::SelectNext;
-        case KeyLeft:
-            return TreeAction::Collapse;
-        case KeyRight:
-            return TreeAction::Expand;
-        case KeyReturn:
-            return TreeAction::Confirm;
-        default:
-            return TreeAction::None;
+Str TreeContext() {
+    return StrL("Tree");
+}
+
+void TreeInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
     }
+    bound = KeymapGeneration();
+    const char* ctx = "Tree";
+    KeyBinding bindings[] = {
+        {"up", action::SelectUp(), ctx},
+        {"down", action::SelectDown(), ctx},
+        {"left", action::SelectLeft(), ctx},
+        {"right", action::SelectRight(), ctx},
+        {"enter", action::Confirm(), ctx},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+TreeAction TreeActionOf(uint32_t id) {
+    if (id == action::SelectUp()) {
+        return TreeAction::SelectPrev;
+    }
+    if (id == action::SelectDown()) {
+        return TreeAction::SelectNext;
+    }
+    if (id == action::SelectLeft()) {
+        return TreeAction::Collapse;
+    }
+    if (id == action::SelectRight()) {
+        return TreeAction::Expand;
+    }
+    if (id == action::Confirm()) {
+        return TreeAction::Confirm;
+    }
+    return TreeAction::None;
 }
 
 int TreeSelectPrev(int selected, int count) {
@@ -264,4 +289,30 @@ El* TreeItemEl::New(Ctx* cx, Str id, Listener onClick) {
     }
     return e;
 }
+void TreeOnAction(TreeState* self, Ctx* cx, const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    TreeAction act = TreeActionOf(ev->action);
+    if (act == TreeAction::None) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    TreePerform(self, cx, act);
+}
+
+void TreeBindKeys(Ctx* cx, El* root, Entity<TreeState> state) {
+    if (!cx || !root || !state.IsValid()) {
+        return;
+    }
+    TreeInitKeys();
+    Listener onAction = ListenTo(state, &TreeOnAction);
+    root->KeyContext(TreeContext())
+        ->OnAction(action::SelectUp(), onAction)
+        ->OnAction(action::SelectDown(), onAction)
+        ->OnAction(action::SelectLeft(), onAction)
+        ->OnAction(action::SelectRight(), onAction)
+        ->OnAction(action::Confirm(), onAction);
+}
+
 } // namespace gpui

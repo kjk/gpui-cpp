@@ -5,15 +5,24 @@
 
 #include "Test.h"
 
-static void TheKeysMapToTheActions() {
-    utassert(TreeActionForKey(KeyUp) == TreeAction::SelectPrev);
-    utassert(TreeActionForKey(KeyDown) == TreeAction::SelectNext);
-    utassert(TreeActionForKey(KeyLeft) == TreeAction::Collapse);
-    utassert(TreeActionForKey(KeyRight) == TreeAction::Expand);
+// The chord, resolved in the tree's context, read as what the tree does.
+static TreeAction ForChord(const char* spec) {
+    TreeInitKeys();
+    KeyChord c = {};
+    utassert(KeyChordParse(Str(spec), &c));
+    uint32_t ctx = KeyContextOf(TreeContext());
+    return TreeActionOf(KeymapMatch(c, &ctx, 1).action);
+}
+
+static void TheKeyTable() {
+    utassert(ForChord("up") == TreeAction::SelectPrev);
+    utassert(ForChord("down") == TreeAction::SelectNext);
+    utassert(ForChord("left") == TreeAction::Collapse);
+    utassert(ForChord("right") == TreeAction::Expand);
     // Confirm has a handler in the tree (on_action_confirm, which toggles the
     // selected folder); enter is what carries it, as it does for the list.
-    utassert(TreeActionForKey(KeyReturn) == TreeAction::Confirm);
-    utassert(TreeActionForKey(KeySpace) == TreeAction::None);
+    utassert(ForChord("enter") == TreeAction::Confirm);
+    utassert(ForChord("space") == TreeAction::None);
 }
 
 static void TheSelectionWraps() {
@@ -132,7 +141,7 @@ static void CollapsingPastTheSelectionPullsItBack() {
 
 void TestTree() {
     TestSuite("tree");
-    TheKeysMapToTheActions();
+    TheKeyTable();
     TheSelectionWraps();
     NoSelectionCountsAsZeroBeforeStepping();
     AnEmptyTreeHasNothingToSelect();

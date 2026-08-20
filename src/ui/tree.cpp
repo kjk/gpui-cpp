@@ -109,6 +109,11 @@ El* Tree::IntoEl() {
                   ->ScrollId(HashClickId(id))
                   ->OnScroll(ListenTo(state, &TreeState::OnScroll));
     box->Child(list);
+    // The tree's own context and the four arrows in it. The rows are not
+    // focusable, so the box is: Rust tracks focus on the same element it
+    // declares the context on.
+    box->FocusId(HashClickId(id))->FocusRing(false);
+    TreeBindKeys(cx, box, state);
     return box;
 }
 

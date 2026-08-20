@@ -517,6 +517,11 @@ El* DataTable::IntoEl() {
         TableEvent ev = {TableEventKind::SelectRow, s->rowCount, -1};
         ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
     }
+    // data_table.rs declares its context on the element it tracks focus on,
+    // and binds tab to the column walk there — which is why the window's
+    // focus ring only takes a tab the table did not want.
+    box->FocusId(HashClickId(id))->FocusRing(false);
+    TableBindKeys(cx, box, state);
     return box;
 }
 

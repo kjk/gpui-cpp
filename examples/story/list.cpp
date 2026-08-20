@@ -85,7 +85,6 @@ struct ListStory {
     bool seeded = false;
 
     static El* Render(ListStory* self, Ctx* cx);
-    static void OnKey(ListStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 // cx.subscribe(&list, ..): a Confirm is what the story acts on, and a Cancel
@@ -97,23 +96,6 @@ static void OnListEvent(ListStory* self, Ctx* cx, const ListEvent* ev) {
         self->confirmedRow = -1;
     }
     Notify(cx);
-}
-
-// The "List" key context: up and down walk the rows, Enter takes one, Escape
-// gives up the selection. A page with the search field focused leaves the
-// text keys to the field.
-void ListStory::OnKey(ListStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    ListKeyAction act = ListActionForKey(ev->vk, ev->ctrl);
-    if (act.action == ListAction::None) {
-        return;
-    }
-    ListState* st = self->list.Get(cx);
-    if (st) {
-        ListPerform(st, cx, act.action, act.secondary);
-    }
 }
 
 static void ListMenuOpen(ListStory* self, Ctx* cx, const ClickEvent*,
@@ -266,4 +248,4 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     return page;
 }
 
-STORY_PAGE_KEYS(StoryList, ListStory);
+STORY_PAGE(StoryList, ListStory);
