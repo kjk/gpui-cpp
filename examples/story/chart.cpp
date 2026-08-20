@@ -1,16 +1,9 @@
 #include "Story.h"
+#include "ChartFixtures.h"
 
 struct ChartStory {
     static El* Render(ChartStory* self, Ctx* cx);
 };
-
-// The Rust story generates 90 days of random device counts; ours uses a
-// deterministic stand-in with the same shape.
-static float SeriesAt(int i, int seed) {
-    unsigned h = (unsigned)(i * 2654435761u + seed * 40503u);
-    h ^= h >> 13;
-    return 20.f + (float)(h % 100);
-}
 
 // chart_container(): a 400px card with the title, the range, the chart and
 // two lines of commentary.
@@ -19,6 +12,10 @@ static El* ChartCard(Ctx* cx, const char* title, El* chart, bool center) {
     const Theme& th = cx->theme();
     El* card = Div(a)
                    ->FlexCol()
+                   // flex_1. In Rust a wrapping row breaks its lines on each
+                   // card's min-content width, so two of these land per line;
+                   // layout here shares the row out first and wraps on what
+                   // is left, so more fit and the chart inside overflows.
                    ->Grow()
                    ->H(400)
                    ->Pad(16)
@@ -56,120 +53,149 @@ static El* ChartCard(Ctx* cx, const char* title, El* chart, bool center) {
     return card;
 }
 
+// h_flex().flex_wrap().gap_4(): the row each group of cards sits in.
+static El* ChartRow(Ctx* cx) {
+    return Div(cx->a)->FlexRow()->W(kFill)->Gap(16)->FlexWrap();
+}
+
 El* ChartStory::Render(ChartStory*, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    // `let color = cx.theme().chart_3`, which every pie and mixed bar tints
+    // by its own alpha.
+    Rgba color = th.chart3;
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
-    // Two stacked area series, desktop over mobile.
-    const int kDays = 90;
-    float* desktop = (float*)Alloc(a, (int)sizeof(float) * kDays);
-    float* mobile = (float*)Alloc(a, (int)sizeof(float) * kDays);
-    for (int i = 0; i < kDays; i++) {
-        desktop[i] = SeriesAt(i, 1);
-        mobile[i] = SeriesAt(i, 2) * 0.6f;
-    }
-    // The x axis is labelled by date, every eighth point.
-    const char** labels = (const char**)Alloc(a, (int)sizeof(char*) * kDays);
-    static const char* kMonths[] = {"Apr", "May", "Jun"};
-    for (int i = 0; i < kDays; i++) {
-        int m = i / 30;
-        labels[i] =
-            StrDup(a, fmt("%s %d", Str(kMonths[m < 3 ? m : 2]), i % 30 + 1)).s;
-    }
+    // Area Chart - Stacked: desktop over mobile, both from daily-devices.json.
     El* areaBox = Div(a)->W(kFill)->H(kFill);
-    El* area1 = component::AreaChart::New(cx, desktop, kDays)
+    El* area1 = component::AreaChart::New(cx, kDailyDesktop, kDailyDeviceCount)
                     ->Tooltip(StrL("Desktop"))
-                    ->Stroke(th.blue)
-                    ->Fill(RgbaOpacity(th.blue, 0.4f))
-                    ->Labels(labels)
+                    ->Stroke(th.chart1)
+                    ->Fill(RgbaOpacity(th.chart1, 0.4f),
+                           RgbaOpacity(th.background, 0.3f))
+                    ->Labels(kDailyDate)
                     ->TickMargin(8)
                     ->IntoEl();
-    El* area2 =
-        component::AreaChart::New(cx, mobile, kDays)
-            ->Stroke(RgbaMix(th.blue, th.background, 0.4f))
-            ->Fill(RgbaOpacity(RgbaMix(th.blue, th.background, 0.4f), 0.4f))
-            ->Overlay()
-            ->IntoEl();
+    El* area2 = component::AreaChart::New(cx, kDailyMobile, kDailyDeviceCount)
+                    ->Stroke(th.chart2)
+                    ->Fill(RgbaOpacity(th.chart2, 0.4f),
+                           RgbaOpacity(th.background, 0.3f))
+                    ->Overlay()
+                    ->IntoEl();
     areaBox->Child(area1->W(kFill)->H(kFill));
     areaBox->Child(area2->Absolute()->Left(0)->Top(0)->W(kFill)->H(kFill));
     page->Child(ChartCard(cx, "Area Chart - Stacked", areaBox, false));
 
-    // The pie row: a full pie and a donut, each of six slices.
-    static const float kValues[] = {186, 305, 237, 173, 209, 214};
-    El* pieRow = Div(a)->FlexRow()->W(kFill)->Gap(16)->FlexWrap();
+    // The four pies, all off monthly-devices.json.
+    El* pieRow = ChartRow(cx);
     component::PieChart* pie = component::PieChart::New(cx)->OuterRadius(100);
     component::PieChart* donut =
         component::PieChart::New(cx)->OuterRadius(100)->InnerRadius(60);
-    for (int i = 0; i < 6; i++) {
-        // The slices step from the chart color toward the background.
-        Rgba c = RgbaMix(th.blue, th.background, (float)i * 0.08f);
-        pie->Slice(kValues[i], c);
-        donut->Slice(kValues[i], c, (float)i * 4.f);
+    component::PieChart* padded = component::PieChart::New(cx)
+                                      ->OuterRadius(100)
+                                      ->InnerRadius(60)
+                                      ->PadAngle(4.f / 100.f);
+    component::PieChart* labelled =
+        component::PieChart::New(cx)->OuterRadius(80)->InnerRadius(50);
+    for (int i = 0; i < kMonthlyDeviceCount; i++) {
+        Rgba c = RgbaOpacity(color, kMonthlyAlpha[i]);
+        pie->Slice(kMonthlyDesktop[i], c);
+        // outer_radius_fn(|d| 100. - d.index * 4.).
+        donut->Slice(kMonthlyDesktop[i], c, (float)i * 4.f);
+        padded->Slice(kMonthlyDesktop[i], c);
+        labelled->Slice(kMonthlyDesktop[i], c);
     }
     pieRow->Child(ChartCard(cx, "Pie Chart", pie->IntoEl(), true));
     pieRow->Child(ChartCard(cx, "Pie Chart - Donut", donut->IntoEl(), true));
+    pieRow
+        ->Child(ChartCard(cx, "Pie Chart - Pad Angle", padded->IntoEl(), true));
+    pieRow->Child(ChartCard(cx, "Pie Chart - Label", labelled->IntoEl(), true));
     page->Child(pieRow);
+    page->Child(component::Separator::Horizontal(cx)->IntoEl());
 
-    // The bar and line row, over six months.
-    static const char* kMonthNames[] = {"January", "February", "March",
-                                        "April",   "May",      "June"};
-    static const float kMonthly[] = {186, 305, 237, 173, 209, 214};
-    El* barRow = Div(a)->FlexRow()->W(kFill)->Gap(16)->FlexWrap();
-    barRow->Child(ChartCard(cx, "Bar Chart",
-                            component::BarChart::New(cx, kMonthly, 6)
-                                ->Fill(th.blue)
-                                ->Labels(kMonthNames)
-                                ->Tooltip(StrL("Visitors"))
-                                ->TickMargin(1)
-                                ->IntoEl()
-                                ->W(kFill)
-                                ->H(kFill),
-                            false));
-    barRow->Child(ChartCard(cx, "Line Chart",
-                            component::LineChart::New(cx, kMonthly, 6)
-                                ->Stroke(th.blue)
-                                ->Labels(kMonthNames)
-                                ->Tooltip(StrL("Visitors"))
-                                ->TickMargin(1)
-                                ->IntoEl()
-                                ->W(kFill)
-                                ->H(kFill),
-                            false));
-    page->Child(barRow);
+    // The radars, off radar-devices.json.
+    El* radarRow = ChartRow(cx);
+    radarRow->Child(ChartCard(
+        cx, "Radar Chart",
+        component::RadarChart::New(cx, kRadarDesktop, kRadarDeviceCount)
+            ->Labels(kRadarMonth)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        true));
+    // Radar Chart - Lines Only: max_value(400) and no fill under the ring.
+    radarRow->Child(ChartCard(
+        cx, "Radar Chart - Lines Only",
+        component::RadarChart::New(cx, kRadarDesktop, kRadarDeviceCount)
+            ->Labels(kRadarMonth)
+            ->Stroke(th.chart3)
+            ->Fill(Rgba8(0, 0, 0, 0))
+            ->Domain(0, 400)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        true));
+    page->Child(radarRow);
+    page->Child(component::Separator::Horizontal(cx)->IntoEl());
 
-    // A fortnight of candles, and the same six months as a radar.
-    static const float kOpen[] = {120, 124, 118, 131, 128, 134, 129,
-                                  136, 142, 139, 145, 141, 149, 152};
-    static const float kClose[] = {124, 118, 131, 128, 134, 129, 136,
-                                   142, 139, 145, 141, 149, 152, 148};
-    static const float kHigh[] = {127, 126, 133, 134, 137, 136, 138,
-                                  145, 144, 147, 148, 151, 155, 154};
-    static const float kLow[] = {117, 115, 116, 126, 126, 127, 128,
-                                 134, 137, 137, 139, 140, 146, 146};
-    static const char* kDayNames[] = {"1", "2", "3",  "4",  "5",  "6",  "7",
-                                      "8", "9", "10", "11", "12", "13", "14"};
-    El* lastRow = Div(a)->FlexRow()->W(kFill)->Gap(16)->FlexWrap();
-    lastRow->Child(ChartCard(
-        cx, "Candlestick Chart",
-        component::CandlestickChart::New(cx, kOpen, kHigh, kLow, kClose, 14)
-            ->Labels(kDayNames)
-            ->TickMargin(2)
+    // The bars, off monthly-devices.json.
+    El* barRow = ChartRow(cx);
+    barRow->Child(ChartCard(
+        cx, "Bar Chart",
+        component::BarChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Fill(th.chart1)
+            ->Labels(kMonthlyMonth)
+            ->Tooltip(StrL("Desktop"))
+            ->TickMargin(1)
             ->IntoEl()
             ->W(kFill)
             ->H(kFill),
         false));
-    lastRow->Child(ChartCard(cx, "Radar Chart",
-                             component::RadarChart::New(cx, kMonthly, 6)
-                                 ->Labels(kMonthNames)
-                                 ->IntoEl()
-                                 ->W(kFill)
-                                 ->H(kFill),
-                             true));
-    page->Child(lastRow);
+    // Bar Chart - Rounded corners: corner_radii(px(8.)).
+    barRow->Child(ChartCard(
+        cx, "Bar Chart - Rounded corners",
+        component::BarChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Fill(th.chart1)
+            ->Labels(kMonthlyMonth)
+            ->TickMargin(1)
+            ->Radius(8)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    page->Child(barRow);
+    page->Child(component::Separator::Horizontal(cx)->IntoEl());
+
+    // The line chart, and the candlesticks off stock-prices.json.
+    El* lineRow = ChartRow(cx);
+    lineRow->Child(ChartCard(
+        cx, "Line Chart - Tooltip",
+        component::LineChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Stroke(th.chart1)
+            ->Labels(kMonthlyMonth)
+            ->Tooltip(StrL("Desktop"))
+            ->TickMargin(1)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    lineRow->Child(ChartCard(
+        cx, "Candlestick Chart",
+        component::CandlestickChart::New(cx, kStockOpen, kStockHigh, kStockLow,
+                                         kStockClose, kStockPriceCount)
+            ->Colors(th.chartBullish, th.chartBearish)
+            ->Labels(kStockDate)
+            ->TickMargin(1)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    page->Child(lineRow);
+    page->Child(component::Separator::Horizontal(cx)->IntoEl());
 
     // A sankey: where a week of energy comes from and what it goes to, which
-    // is the shape the d3 example uses.
+    // is the shape the d3 example uses. Rust's is a TSLA income statement out
+    // of a fixture with its own colors per node.
     component::SankeyChart* sankey = component::SankeyChart::New(cx)
                                          ->Node(StrL("Coal"))
                                          ->Node(StrL("Gas"))

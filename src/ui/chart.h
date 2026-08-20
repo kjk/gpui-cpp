@@ -45,6 +45,9 @@ struct AreaChart {
     bool overlay = false;
     Rgba stroke = {};
     Rgba fill = {};
+    // The bottom stop, when the caller gave the two-stop gradient Rust builds
+    // with linear_gradient(0., ..). Alpha 0 means "fade `fill` out".
+    Rgba fillBottom = {};
 
     static AreaChart* New(Ctx* cx, const float* ys, int n);
     // AreaChart::id: a chart with a name takes the pointer and shows a
@@ -52,6 +55,8 @@ struct AreaChart {
     AreaChart* Tooltip(Str name);
     AreaChart* Stroke(Rgba c);
     AreaChart* Fill(Rgba c);
+    // fill(linear_gradient(0., stop(bottom, 0.), stop(top, 1.))).
+    AreaChart* Fill(Rgba top, Rgba bottom);
     AreaChart* Labels(const char* const* l);
     AreaChart* TickMargin(int n);
     AreaChart* Overlay(bool v = true);
