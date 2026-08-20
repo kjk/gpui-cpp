@@ -186,7 +186,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"tree", "Tree", nullptr},
     {"virtual-list", "VirtualList",
      "Add vertical or horizontal, or both scrollbars to a "
-     "container, and use virtual_list to render a large number of "
+     "container, and use `virtual_list` to render a large number of "
      "items."},
 };
 
