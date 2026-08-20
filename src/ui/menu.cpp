@@ -231,6 +231,11 @@ El* PopupMenu::IntoEl() {
     PopupMenuInitKeys();
     int focusId = HashClickId(id);
     root->KeyContext(PopupMenuContext())->FocusId(focusId)->TrapId(focusId);
+    if (s) {
+        // The handle dismissal puts focus back from, named the same way every
+        // frame so a state that outlives the frame can still find it.
+        s->focusId = focusId;
+    }
     if (s && s->openSubmenu < 0) {
         FocusTrapArm(cx->win, focusId);
     }

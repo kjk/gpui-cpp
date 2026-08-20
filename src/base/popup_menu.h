@@ -76,6 +76,12 @@ struct PopupMenuState {
     // ScrollHandle offset for a scrollable menu. Kept with the menu entity so
     // rebuilding the frame does not jump a long menu back to the top.
     float scrollY = 0;
+    // The menu's own focus handle and where focus was before it came up.
+    // Rust's PopupMenu holds `previous_focus_handle` and puts focus back on
+    // dismiss; the element that renders the menu fills the first in, since
+    // that is where the id is known.
+    int focusId = 0;
+    int previousFocusId = 0;
     // A submenu dismisses through its parents after an item is confirmed,
     // just as Rust's dismiss_all walks parent_menu.
     Entity<PopupMenuState> parent = {};
