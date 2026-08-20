@@ -72,10 +72,10 @@ static const char* const kSizeLabels[] = {"48px", "Large", "Medium", "Small",
                                           "XSmall"};
 static const int kNSizes = 5;
 
-// The Options dropdown, in Rust's own order. Fixed Column is the one row not
-// here: the table has no frozen column to turn on.
+// The Options dropdown, in Rust's own order.
 enum {
     DtOptLoop = 0,
+    DtOptFixedColumn,
     DtOptColResize,
     DtOptColOrder,
     DtOptSortable,
@@ -91,10 +91,10 @@ enum {
     DtOptCount
 };
 static const char* const kDtOptions[DtOptCount] = {
-    "Loop Selection",    "Column Resize",  "Column Order",    "Sortable",
-    "Column Selectable", "Row Selectable", "Cell Selectable", "Row Header",
-    "Striped Rows",      "Loading",        "Lazy Load",       "Refresh Data",
-    "Group Headers"};
+    "Loop Selection", "Fixed Column",      "Column Resize",  "Column Order",
+    "Sortable",       "Column Selectable", "Row Selectable", "Cell Selectable",
+    "Row Header",     "Striped Rows",      "Loading",        "Lazy Load",
+    "Refresh Data",   "Group Headers"};
 static const char* const kGoToRows[] = {"Top", "Bottom", "Cell 5:3",
                                         "Cell 10:7"};
 static const int kNGoTo = 4;
@@ -106,8 +106,8 @@ struct DataTableStory {
     int extra = 0;    // no extra columns
     int size = 2;     // Medium
     int openMenu = 0;
-    bool options[DtOptCount] = {false, true,  true,  true,  true,  true, false,
-                                false, false, false, false, false, true};
+    bool options[DtOptCount] = {false, true,  true,  true,  true,  true,  true,
+                                false, false, false, false, false, false, true};
     StoryToolbarState toolbar;
     // TableState is an entity in Rust too, which is what the row and head
     // closures capture.
@@ -270,6 +270,56 @@ static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// The base columns' count, which is where the "Column N" extras start.
+static const int kBaseColumns = 45;
+
+// How a column past the sixth reads. Rust hangs a formatter off each field;
+// the fields are generated here, so the kind is the whole difference.
+enum class DtCell : uint8_t {
+    Compact, // compact(): 1.2M rather than 1234567
+    Fixed2,  // {:.2}
+    Int,     // {:.0}
+    Rate,    // {:.2}% off a 0..1 rate, in the plain colour
+    Percent, // render_percent: tinted over the cell
+    Change   // render_change: signed, in the trend colour
+};
+
+static const DtCell kCellKinds[kBaseColumns - 7] = {
+    DtCell::Compact, DtCell::Compact, DtCell::Compact, DtCell::Compact,
+    DtCell::Int,     DtCell::Int,     DtCell::Percent, DtCell::Fixed2,
+    DtCell::Compact, DtCell::Fixed2,  DtCell::Compact, DtCell::Fixed2,
+    DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Rate,
+    DtCell::Rate,    DtCell::Rate,    DtCell::Fixed2,  DtCell::Fixed2,
+    DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Fixed2,
+    DtCell::Compact, DtCell::Percent, DtCell::Change,  DtCell::Compact,
+    DtCell::Percent, DtCell::Change,  DtCell::Compact, DtCell::Compact,
+    DtCell::Compact, DtCell::Int,     DtCell::Int,     DtCell::Int,
+    DtCell::Int,     DtCell::Int};
+
+// The Rust delegate fakes every field per row; a hash of the cell does the
+// same job here, and gives the same cell the same value every frame.
+static float DtNoise(int row, int col) {
+    uint32_t h = (uint32_t)row * 2654435761u ^ (uint32_t)col * 2246822519u;
+    h ^= h >> 15;
+    h *= 2246822519u;
+    h ^= h >> 13;
+    return (float)(h % 100000u) / 100000.f;
+}
+
+// compact(): the shortest reading of a large number.
+static Str DtCompact(Ctx* cx, float v) {
+    if (v >= 1e9f) {
+        return StoryFmt(cx, "%.2fB", (double)(v / 1e9f));
+    }
+    if (v >= 1e6f) {
+        return StoryFmt(cx, "%.2fM", (double)(v / 1e6f));
+    }
+    if (v >= 1e3f) {
+        return StoryFmt(cx, "%.2fK", (double)(v / 1e3f));
+    }
+    return StoryFmt(cx, "%.2f", (double)v);
+}
+
 // render_td: the delegate's cell, which the table places and styles.
 static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
     DataTableStory* self = (DataTableStory*)data;
@@ -299,7 +349,7 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
                 ->LineHeight(1.f);
         case 5:
             return StoryTxt(cx, Str(s.chg), 16, trend)->LineHeight(1.f);
-        default:
+        case 6:
             // render_percent: the percentage is tinted over the whole cell,
             // the way a ticker table does, at 5% of the trend color.
             return Div(cx->a)
@@ -310,6 +360,50 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
                 ->JustifyEnd()
                 ->Bg(RgbaOpacity(trend, 0.05f))
                 ->Child(StoryTxt(cx, Str(s.pct), 16, trend)->LineHeight(1.f));
+        default:
+            break;
+    }
+    if (col >= kBaseColumns) {
+        // The delegate has no field for a "Column N", so every one of them
+        // reads the same.
+        return StoryTxt(cx, StrL("--"), 16, th.mutedFg)->LineHeight(1.f);
+    }
+    float n = DtNoise(row, col);
+    switch (kCellKinds[col - 7]) {
+        case DtCell::Compact:
+            return StoryTxt(cx, DtCompact(cx, n * 1e9f), 16, th.foreground)
+                ->LineHeight(1.f);
+        case DtCell::Int:
+            return StoryTxt(cx, StoryFmt(cx, "%.0f", (double)(n * 1000.f)), 16,
+                            th.foreground)
+                ->LineHeight(1.f);
+        case DtCell::Rate:
+            return StoryTxt(cx, StoryFmt(cx, "%.2f%%", (double)(n * 100.f)), 16,
+                            th.foreground)
+                ->LineHeight(1.f);
+        case DtCell::Change: {
+            float v = (n - 0.5f) * 200.f;
+            return StoryTxt(cx, StoryFmt(cx, "%+.2f", (double)v), 16,
+                            v >= 0 ? th.green : th.red)
+                ->LineHeight(1.f);
+        }
+        case DtCell::Percent: {
+            float v = (n - 0.5f) * 20.f;
+            Rgba c = v >= 0 ? th.green : th.red;
+            return Div(cx->a)
+                ->FlexRow()
+                ->W(kFill)
+                ->H(kFill)
+                ->ItemsCenter()
+                ->JustifyEnd()
+                ->Bg(RgbaOpacity(c, 0.05f))
+                ->Child(StoryTxt(cx, StoryFmt(cx, "%+.2f%%", (double)v), 16, c)
+                            ->LineHeight(1.f));
+        }
+        default:
+            return StoryTxt(cx, StoryFmt(cx, "%.2f", (double)(n * 1000.f)), 16,
+                            th.foreground)
+                ->LineHeight(1.f);
     }
 }
 
@@ -404,25 +498,76 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
-    // Column widths, in the order the Rust delegate declares them. They are
-    // what a column starts at; dragging its right edge makes the width the
-    // table's own.
-    const float wId = 45, wMarket = 61, wName = 176, wSymbol = 101,
-                wPrice = 100, wChg = 100, wPct = 110;
-
+    // The columns the Rust delegate declares, in its own order. The first
+    // four are .fixed(ColumnFixed::Left); everything after them scrolls. The
+    // width is what a column starts at — dragging its right edge makes the
+    // width the table's own. Fields: title, width, right, sortable,
+    // selectable, resizable, fixed.
     static const component::TableColumn kColumns[] = {
-        {StrL("ID"), wId, false, false, false},
-        {StrL("Market"), wMarket, false, false, true},
-        {StrL("Name"), wName, false, false, true},
-        {StrL("Symbol"), wSymbol, false, true, true},
-        {StrL("Price"), wPrice, true, true, true},
-        {StrL("Chg"), wChg, true, true, true},
-        {StrL("Chg%"), wPct, true, true, true},
+        {StrL("ID"), 60, false, false, false, true, true},
+        {StrL("Market"), 60, false, false, true, true, true},
+        {StrL("Name"), 180, false, false, true, true, true},
+        {StrL("Symbol"), 100, false, true, true, true, true},
+        {StrL("Price"), 100, true, true, true},
+        {StrL("Chg"), 100, true, true, true},
+        {StrL("Chg%"), 110, true, true, true},
+        {StrL("Volume"), 100, true, false, true},
+        {StrL("Turnover"), 100, true, false, true},
+        {StrL("Market Cap"), 110, true, false, true},
+        {StrL("TTM"), 100, true, false, true},
+        {StrL("5m Ranking"), 110, true, false, true},
+        {StrL("60d Ranking"), 110, true, false, true},
+        {StrL("Year Chg%"), 110, true, false, true},
+        {StrL("Bid"), 100, true, false, true},
+        {StrL("Bid Vol"), 100, true, false, true},
+        {StrL("Ask"), 100, true, false, true},
+        {StrL("Ask Vol"), 100, true, false, true},
+        {StrL("Open"), 100, true, false, true},
+        {StrL("Prev Close"), 110, true, false, true},
+        {StrL("High"), 100, true, false, true},
+        {StrL("Low"), 100, true, false, true},
+        {StrL("Turnover Rate"), 120, true, false, true},
+        {StrL("Rise Rate"), 100, true, false, true},
+        {StrL("Amplitude"), 110, true, false, true},
+        {StrL("P/E"), 100, true, false, true},
+        {StrL("P/B"), 100, true, false, true},
+        {StrL("Volume Ratio"), 120, true, false, true},
+        {StrL("Bid Ask Ratio"), 120, true, false, true},
+        {StrL("Latest Pre Close"), 140, true, false, true},
+        {StrL("Latest Post Close"), 140, true, false, true},
+        {StrL("Pre Mkt Cap"), 120, true, false, true},
+        {StrL("Pre Mkt%"), 100, true, false, true},
+        {StrL("Pre Mkt Chg"), 120, true, false, true},
+        {StrL("Post Mkt Cap"), 120, true, false, true},
+        {StrL("Post Mkt%"), 110, true, false, true},
+        {StrL("Post Mkt Chg"), 120, true, false, true},
+        {StrL("Float Cap"), 110, true, false, true},
+        {StrL("Shares"), 100, true, false, true},
+        {StrL("Float Shares"), 120, true, false, true},
+        {StrL("5d Ranking"), 110, true, false, true},
+        {StrL("10d Ranking"), 110, true, false, true},
+        {StrL("30d Ranking"), 110, true, false, true},
+        {StrL("120d Ranking"), 120, true, false, true},
+        {StrL("250d Ranking"), 120, true, false, true},
     };
-    const int nColumns = (int)(sizeof(kColumns) / sizeof(kColumns[0]));
+    const int nBase = (int)(sizeof(kColumns) / sizeof(kColumns[0]));
+    // columns_count(): the delegate's own plus however many extras the
+    // toolbar asked for, each of which the delegate names "Column N".
+    const int nExtra = kExtraCounts[self->extra];
+    const int nColumns = nBase + nExtra;
+    auto* cols = (component::TableColumn*)Alloc(
+        a, (int)sizeof(component::TableColumn) * nColumns);
+    for (int i = 0; i < nBase; i++) {
+        cols[i] = kColumns[i];
+    }
+    for (int i = 0; i < nExtra; i++) {
+        cols[nBase + i] = {StoryFmt(cx, "Column %d", i + 1), 100, false, false,
+                           true};
+    }
     TableState* st = self->table.Get(cx);
     if (st) {
         st->loopSelection = self->options[DtOptLoop];
+        st->colFixed = self->options[DtOptFixedColumn];
         st->colResizable = self->options[DtOptColResize];
         // col_movable: whether a head can be dragged into another place.
         st->colMovable = self->options[DtOptColOrder];
@@ -438,48 +583,33 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         st->onEvent = Listen(cx, &OnTableEvent);
     }
 
-    // The grouped header spans the first four columns, so it has to follow
-    // them when one of them is dragged wider.
-    float wStock = 0;
-    for (int i = 0; i < 4; i++) {
-        int c = st ? TableColAt(st, i) : i;
-        wStock +=
-            st ? TableColWidth(st, c, kColumns[c].width) : kColumns[c].width;
-    }
-
-    // Two levels of grouped headers over the column row.
-    El* group1 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    group1->Child(Div(a)
-                      ->FlexRow()
-                      ->W(wStock)
-                      ->PadY(6)
-                      ->JustifyCenter()
-                      ->BorderR(1, th.border)
-                      ->Child(StoryTxt(cx, StrL("Stock"), 16, th.foreground)
-                                  ->LineHeight(1.f)));
-    group1->Child(Div(a)->Grow()->PadY(6));
-    El* group2 = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    group2->Child(Div(a)
-                      ->FlexRow()
-                      ->W(wStock)
-                      ->PadY(6)
-                      ->JustifyCenter()
-                      ->BorderR(1, th.border)
-                      ->Child(StoryTxt(cx, StrL("Identity"), 16, th.foreground)
-                                  ->LineHeight(1.f)));
-    group2->Child(Div(a)->Grow()->FlexRow()->PadY(6)->JustifyCenter()->Child(
-        StoryTxt(cx, StrL("Price & Change"), 16, th.foreground)
-            ->LineHeight(1.f)));
+    // group_headers: two levels of bands, each spanning every column, the
+    // lower one subdividing the upper. The trailing band takes the extra
+    // "Column N" columns with it, so both rows still cover the table.
+    const int trailing = kExtraCounts[self->extra];
+    const component::TableGroupCell kGroup1[] = {
+        {StrL("Stock"), 4},          {StrL("Market Data"), 10},
+        {StrL("Quotes"), 8},         {StrL("Stats"), 7},
+        {StrL("Extended Hours"), 8}, {StrL("Shares & Rankings"), 8 + trailing},
+    };
+    const component::TableGroupCell kGroup2[] = {
+        {StrL("Identity"), 4},   {StrL("Price & Change"), 3},
+        {StrL("Turnover"), 4},   {StrL("Momentum"), 3},
+        {StrL("Order Book"), 4}, {StrL("Session"), 4},
+        {StrL("Activity"), 3},   {StrL("Valuation"), 2},
+        {StrL("Ratios"), 2},     {StrL("Pre & Post Market"), 8},
+        {StrL("Shares"), 3},     {StrL("Rankings"), 5 + trailing},
+    };
 
     component::DataTable* table =
         component::DataTable::New(cx, StrL("data-table"), self->table)
-            ->Columns(kColumns, nColumns)
+            ->Columns(cols, nColumns)
             ->Rows(kRowCounts[self->rowCount], self, DtCellFor)
             ->H(520)
             ->RowHeight(kSizeRowH[self->size])
             ->Stripe(self->options[DtOptStriped]);
     if (self->options[DtOptGroupHeaders]) {
-        table->GroupHeader(group1)->GroupHeader(group2);
+        table->GroupHeader(kGroup1, 6)->GroupHeader(kGroup2, 12);
     }
     El* box = table->IntoEl();
 
@@ -499,8 +629,7 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
                      ->Font(12)
                      ->Fg(th.mutedFg);
     status->Child(TextEl(a, StoryFmt(cx, "Total · %d rows · %d columns",
-                                     kRowCounts[self->rowCount],
-                                     nColumns + kExtraCounts[self->extra])));
+                                     kRowCounts[self->rowCount], nColumns)));
     El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->JustifyEnd();
     if (self->options[DtOptLoading]) {
         right->Child(

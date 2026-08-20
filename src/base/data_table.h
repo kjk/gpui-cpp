@@ -67,7 +67,7 @@ struct TableEvent {
 
 // How many columns a table keeps a width for. Rust's col_groups is a Vec;
 // past this the width a caller declared is the one a column keeps.
-const int kMaxTableCols = 32;
+const int kMaxTableCols = 96;
 
 // The name a column-resize drag goes by, which is the `ResizeColumn` payload
 // type in Rust.
@@ -147,6 +147,15 @@ struct TableState {
     float rowH = 32;
     float scrollY = 0;
     float viewportH = 0;
+    // How far the un-fixed columns are slid to the left, and the width they
+    // were last laid out in. A table wide enough to need it scrolls sideways
+    // under a head that goes with it.
+    float scrollX = 0;
+    float viewportW = 0;
+    // col_fixed: whether the columns that asked to be pinned actually are.
+    // Rust keeps the flag on the state rather than the column so one toggle
+    // releases all of them at once.
+    bool colFixed = true;
     // delegate.loading() / has_more() / load_more_threshold().
     bool loading = false;
     bool hasMore = false;
@@ -172,6 +181,9 @@ struct TableState {
     static void OnColDrop(TableState* self, Ctx* cx, const DropEvent* ev);
     static void OnColDragEnd(TableState* self, Ctx* cx, const MouseUpEvent* ev);
     static void OnScroll(TableState* self, Ctx* cx, const ScrollEvent* ev);
+    // The scrolling pane moves both ways; the pinned one only moves down, so
+    // it keeps the plain handler and never writes the sideways offset back.
+    static void OnScrollXY(TableState* self, Ctx* cx, const ScrollEvent* ev);
 };
 
 // The order the columns are shown in. `TableColAt(s, i)` is the caller's

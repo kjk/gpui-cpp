@@ -17,6 +17,17 @@ struct TableColumn {
     bool selectable = true;
     // Column::resizable: whether this column's right edge takes a drag.
     bool resizable = true;
+    // Column::fixed(ColumnFixed::Left): the column stays put while the rest
+    // scroll under the head. TableState::colFixed is the master switch.
+    bool fixed = false;
+};
+
+// ColumnGroup: one band of an upper head row, spanning that many columns of
+// the row under it. Every level has to span every column, so the bands line
+// up with the columns they name.
+struct TableGroupCell {
+    Str label = {};
+    int span = 1;
 };
 
 // The themed data table. The rows are the caller's — a delegate renders a
@@ -34,8 +45,10 @@ struct DataTable {
     void* data = nullptr;
     int nRows = 0;
     bool stripe = false;
-    // The extra head rows a caller stacks over the columns.
-    El* groupHeaders[4] = {};
+    // group_headers: the extra head rows a caller stacks over the columns,
+    // outermost first.
+    const TableGroupCell* groupRows[4] = {};
+    int groupRowLens[4] = {};
     int nGroupHeaders = 0;
     // The height the body scrolls inside. 0 leaves every row built, which is
     // what a table small enough not to need a viewport wants.
@@ -54,7 +67,7 @@ struct DataTable {
     DataTable* WithSize(UiSize s);
     // Size::Size(px), which the story's 48px row offers.
     DataTable* RowHeight(float px);
-    DataTable* GroupHeader(El* el);
+    DataTable* GroupHeader(const TableGroupCell* cells, int n);
     DataTable* H(float px);
     DataTable* Empty(El* e);
     El* IntoEl();

@@ -538,4 +538,10 @@ void TableState::OnScroll(TableState* self, Ctx* cx, const ScrollEvent* ev) {
     Notify(cx);
 }
 
+void TableState::OnScrollXY(TableState* self, Ctx* cx, const ScrollEvent* ev) {
+    self->scrollY = ev->offsetY;
+    self->scrollX = ev->offsetX;
+    Notify(cx);
+}
+
 } // namespace gpui
