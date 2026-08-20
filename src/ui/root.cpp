@@ -1,4 +1,5 @@
 #include "ui/root.h"
+#include "gpui/platform.h"
 #include "ui/window_border.h"
 
 namespace gpui {
@@ -43,6 +44,10 @@ Root* Root::New(Ctx* cx) {
     Root* r = ArenaNew<Root>(a);
     r->a = a;
     r->cx = cx;
+    // Root::new does this on macOS: the window forwards accessibility hit
+    // tests to the view, so what the page drew is reachable. The window only
+    // takes it once, however many frames build a Root.
+    PlatInstallAccessibilityHitTest(cx->win);
     return r;
 }
 Root* Root::Bordered(bool v) {

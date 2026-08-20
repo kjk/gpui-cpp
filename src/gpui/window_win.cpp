@@ -509,6 +509,12 @@ int PlatDoubleClickMs() {
     return (int)GetDoubleClickTime();
 }
 
+// Only macOS has an NSWindow to teach; VoiceOver reaches the tree here through
+// the platform's own means.
+void PlatInstallAccessibilityHitTest(Window* win) {
+    (void)win;
+}
+
 bool PlatHasMenu() {
     return true;
 }

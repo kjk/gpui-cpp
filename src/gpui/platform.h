@@ -101,6 +101,13 @@ void PlatSetCursor(Window* win, CursorKind kind);
 // has no such setting, so Linux answers with the 400 ms every toolkit picks.
 int PlatDoubleClickMs();
 
+// crates/base/src/macos_accessibility.rs. VoiceOver hit-tests the window, and
+// AppKit's NSWindow answers for itself rather than asking the view that drew
+// everything, so nothing inside is reachable. This adds an
+// accessibilityHitTest: to the window's class that forwards to the content
+// view. Only macOS has anything to do here; the other two are no-ops.
+void PlatInstallAccessibilityHitTest(Window* win);
+
 // ─── OS popup menus (crates/ui/src/native_menu) ──────────────────────────
 
 // One row of a menu the OS draws. A row with no label is a separator, and a
