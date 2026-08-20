@@ -11,11 +11,12 @@ El* ImageStory::Render(ImageStory*, Ctx* cx) {
 
     El* remote = StorySection(cx, "Remote SVG",
                               "Loads and renders an SVG from a remote URL.");
+    StorySectionBody(remote)->W(480);
     // The frame is the same; the image inside it is not fetched in this port,
     // as in the Rust window when the URL is unreachable.
     El* frame = Div(a)
                     ->FlexRow()
-                    ->W(480)
+                    ->W(kFill)
                     ->H(180)
                     ->ItemsCenter()
                     ->JustifyCenter()
