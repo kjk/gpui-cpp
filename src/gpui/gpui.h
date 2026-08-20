@@ -756,6 +756,7 @@ enum class IconName : uint8_t {
     Star,
     StarFill,
     Eye,
+    EyeOff,
     Heart,
     ArrowLeft,
     Building2,

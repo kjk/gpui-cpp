@@ -748,6 +748,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/building-2.svg");
         case IconName::Eye:
             return StrL("icons/eye.svg");
+        case IconName::EyeOff:
+            return StrL("icons/eye-off.svg");
         case IconName::Heart:
             return StrL("icons/heart.svg");
         case IconName::HeartOff:
