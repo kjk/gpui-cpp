@@ -1,14 +1,23 @@
 #include "Story.h"
 
+// ToggleDisabled: this page's one Options row.
+enum {
+    SliderActDisabled = 3600
+};
+
 struct SliderStory {
+    bool disabled = false;
+    StoryToolbarState toolbar;
     // Every slider on the page is a SliderState the window writes to, so the
     // page holds values in their own units and never sees a mouse event.
-    // The Color Picker's four channels, in degrees and percent.
+    // The Color Picker's four channels. Rust runs all four 0..1 at 0.01,
+    // seeded 0.38 / 0.5 / 0.5 / 0.5 — a half-transparent green — and reads
+    // them back as degrees and percent under the tracks.
     SliderState hsl[4] = {
-        SliderStateNew(0, 360, SliderSingle(209)),
-        SliderStateNew(0, 100, SliderSingle(62)),
-        SliderStateNew(0, 100, SliderSingle(50)),
-        SliderStateNew(0, 100, SliderSingle(100)),
+        SliderStateNew(0, 1, SliderSingle(0.38f), 0.01f),
+        SliderStateNew(0, 1, SliderSingle(0.5f), 0.01f),
+        SliderStateNew(0, 1, SliderSingle(0.5f), 0.01f),
+        SliderStateNew(0, 1, SliderSingle(0.5f), 0.01f),
     };
     // 0.25x .. 4x on a logarithmic scale, so the midpoint of the track is 1x.
     SliderState speed = SliderStateNew(0.25f, 4.f, SliderSingle(1.f), 0.01f,
@@ -26,6 +35,28 @@ struct SliderStory {
 static void OnSliderChange(SliderStory* self, Ctx* cx, const SliderEvent*) {
     (void)self;
     Notify(cx);
+}
+
+static void SliderAct(SliderStory* self, Ctx* cx, const ClickEvent*,
+                      intptr_t act) {
+    if (act == SliderActDisabled) {
+        self->disabled = !self->disabled;
+    }
+    Notify(cx);
+}
+
+// on_copied: window.push_notification("Color copied to clipboard.").
+static void OnColorCopied(SliderStory*, Ctx* cx,
+                          const component::ClipboardEvent*) {
+    StoryPushNotification(cx, StrL("Color copied to clipboard."));
+}
+
+// Colorize::to_hex: #RRGGBB, or #RRGGBBAA when the color is not opaque.
+static Str ColorHex(Ctx* cx, Rgba c) {
+    if (c.a < 255) {
+        return StoryFmt(cx, "#%02X%02X%02X%02X", c.r, c.g, c.b, c.a);
+    }
+    return StoryFmt(cx, "#%02X%02X%02X", c.r, c.g, c.b);
 }
 
 // Each section is a 360px card: a label and its reading above the track.
@@ -51,9 +82,13 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill)->ItemsCenter();
+    StoryToolbarOpt opts[1] = {{"Disabled", self->disabled, SliderActDisabled}};
+    page->Child(
+        StoryToolbarOptions(cx, self, opts, 1, Listen(cx, &SliderAct), false));
 
     El* def = StorySection(cx, "Default",
                            "Adjust a single value within a defined range.");
+    StorySectionBody(def)->W(512)->ItemsCenter();
     StorySectionAdd(
         def,
         SliderCard(cx, "Output volume",
@@ -67,6 +102,7 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
 
     El* range = StorySection(cx, "Range",
                              "Choose minimum and maximum values together.");
+    StorySectionBody(range)->W(512)->ItemsCenter();
     StorySectionAdd(
         range,
         SliderCard(cx, "Price range",
@@ -82,6 +118,7 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
 
     El* rev = StorySection(
         cx, "Reverse", "Reverse the fill direction for remaining capacity.");
+    StorySectionBody(rev)->W(512)->ItemsCenter();
     El* revCard = Div(a)->FlexCol()->W(360)->Gap(16);
     El* revHead = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
     revHead->Child(StoryTxt(cx, StrL("Storage remaining"), 16, th.foreground)
@@ -100,17 +137,16 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
 
     // Color Picker: four vertical channels, with the color they make in the
     // section's sub-title beside a Clipboard copy.
-    Rgba picked = RgbaHsla(
-        self->hsl[0].value.End() / 360.f, self->hsl[1].value.End() / 100.f,
-        self->hsl[2].value.End() / 100.f, self->hsl[3].value.End() / 100.f);
-    Str hslText =
-        StoryFmt(cx, "hsl(%.0f, %.0f%%, %.0f%%)", self->hsl[0].value.End(),
-                 self->hsl[1].value.End(), self->hsl[2].value.End());
+    Rgba picked = RgbaHsla(self->hsl[0].value.End(), self->hsl[1].value.End(),
+                           self->hsl[2].value.End(), self->hsl[3].value.End());
+    Str hslText = ColorHex(cx, picked);
     El* picker = StorySection(cx, "Color Picker", nullptr);
+    StorySectionBody(picker)->W(512)->ItemsCenter();
     El* sub = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     sub->Child(StoryTxt(cx, hslText, 14, picked));
     sub->Child(component::Clipboard::New(cx, StrL("copy-hsl"))
                    ->Value(hslText)
+                   ->OnCopied(Listen(cx, &OnColorCopied))
                    ->IntoEl());
     StorySectionSubTitle(picker, sub);
     static const char* kChannels[4] = {"Hue", "Saturation", "Lightness",
@@ -126,8 +162,9 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
                 ->OnChange(Listen(cx, &OnSliderChange))
                 ->IntoEl());
         col->Child(StoryTxt(cx, Str(kChannels[i]), 13, th.foreground));
-        col->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", self->hsl[i].value.End()),
-                            13, th.mutedFg));
+        // Hue reads in degrees, the other three in percent.
+        float shown = self->hsl[i].value.End() * (i == 0 ? 360.f : 100.f);
+        col->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", shown), 13, th.mutedFg));
         channels->Child(col);
     }
     StorySectionAdd(picker, channels);
@@ -137,6 +174,7 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     El* playback = StorySection(
         cx, "Playback speed",
         "Logarithmic scales provide finer control near common values.");
+    StorySectionBody(playback)->W(512)->ItemsCenter();
     El* speedCard = Div(a)->FlexCol()->W(360)->Gap(16);
     El* speedHead =
         Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
