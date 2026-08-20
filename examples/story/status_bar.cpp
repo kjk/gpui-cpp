@@ -9,9 +9,12 @@ El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
+    // Every section is .w(px(760.)), which is wider than the pane and so
+    // runs past it, exactly as it does in Rust at this window size.
     El* editor = StorySection(
         cx, "Editor",
         "Places repository state on the left and document state on the right.");
+    StorySectionBody(editor)->W(760);
     El* ed = Div(a)
                  ->FlexRow()
                  ->W(kFill)
@@ -24,7 +27,7 @@ El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
     El* left = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     left->Child(component::Button::New(cx, StrL("branch"))
                     ->Ghost()
-                    ->Icon(IconName::Folder)
+                    ->Icon(IconName::Github)
                     ->Label(StrL("main"))
                     ->Tooltip(StrL("Git branch"))
                     ->Compact()
@@ -45,6 +48,7 @@ El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
     El* appSec = StorySection(
         cx, "Application",
         "Combines connectivity, progress, save state, and notifications.");
+    StorySectionBody(appSec)->W(760);
     El* bar = Div(a)
                   ->FlexRow()
                   ->W(kFill)
@@ -79,7 +83,8 @@ El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
     El* align = StorySection(
         cx, "Alignment",
         "Center content adapts when either side is empty or populated.");
-    El* alignCol = Div(a)->FlexCol()->Gap(12)->W(kFill);
+    StorySectionBody(align)->W(760);
+    El* alignCol = Div(a)->FlexCol()->Gap(24)->W(kFill);
     alignCol->Child(component::StatusBar::New(cx)
                         ->Center(StrL("Center only → start-aligned"))
                         ->IntoEl());
