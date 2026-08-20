@@ -131,15 +131,14 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
                     ->IntoEl());
     page->Child(head);
 
-    El* box = Div(a)
-                  ->FlexCol()
-                  ->W(kFill)
-                  ->H(WindowSize(cx->win).dipH - 260)
-                  ->ClipY()
-                  ->Radius(th.radius)
-                  ->Border(1, th.border);
+    El* box =
+        Div(a)->FlexCol()->W(kFill)->Radius(th.radius)->Border(1, th.border);
+    // The editor owns the box its rows scroll inside, so the caret can bring
+    // the view with it.
     box->Child(component::Highlighter::New(
-                   cx, self->tab == 0 ? &self->code : &self->decorations)
+                   cx, StrL("editor"),
+                   self->tab == 0 ? &self->code : &self->decorations)
+                   ->H(WindowSize(cx->win).dipH - 262)
                    ->IntoEl());
     page->Child(box);
     return page;

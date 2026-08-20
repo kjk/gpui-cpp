@@ -149,6 +149,8 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     }
 
     int rows = RopeLinesLen(text);
+    // The scrolled height, which is what scroll_to clamps against.
+    state->contentH = (float)rows * kInputLineH;
     float numW = 0;
     if (lineNumbers) {
         numW = 12.f + 7.f * (rows >= 100 ? 3 : (rows >= 10 ? 2 : 1));
@@ -478,6 +480,70 @@ static void UpdatePreferredColumn(InputState* s) {
                              .column;
 }
 
+// RIGHT_MARGIN: how much of the run stays visible past the caret when the
+// field scrolls sideways to reach it.
+static const float kInputRightMargin = 5.f;
+
+void InputScrollToCaret(InputState* s, float caretX, float caretY,
+                        InputMoveDir dir) {
+    if (!s) {
+        return;
+    }
+    float wasY = s->scrollY;
+    float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
+
+    // Sideways: the caret keeps a margin from either edge of the box.
+    if (s->viewW > 0) {
+        if (caretX - kInputRightMargin < s->scrollX) {
+            s->scrollX = caretX - kInputRightMargin;
+        } else if (caretX + kInputRightMargin > s->scrollX + s->viewW) {
+            s->scrollX = caretX + kInputRightMargin - s->viewW;
+        }
+        float mostX = s->contentW - s->viewW;
+        if (s->scrollX > mostX) {
+            s->scrollX = mostX;
+        }
+        if (s->scrollX < 0) {
+            s->scrollX = 0;
+        }
+    }
+
+    // Down the page: the caret's whole line has to be inside the box, with a
+    // line's clearance at whichever edge it came in from.
+    if (s->viewH > 0) {
+        if (caretY - lineH < s->scrollY) {
+            s->scrollY = caretY - lineH;
+        } else if (caretY + lineH + lineH > s->scrollY + s->viewH) {
+            s->scrollY = caretY + lineH + lineH - s->viewH;
+        }
+        // A move that went up is never answered by scrolling down.
+        if (dir == InputMoveDir::Up && s->scrollY > wasY) {
+            s->scrollY = wasY;
+        } else if (dir == InputMoveDir::Down && s->scrollY < wasY) {
+            s->scrollY = wasY;
+        }
+        float mostY = s->contentH - s->viewH;
+        if (mostY < 0) {
+            mostY = 0;
+        }
+        if (s->scrollY > mostY) {
+            s->scrollY = mostY;
+        }
+        if (s->scrollY < 0) {
+            s->scrollY = 0;
+        }
+    }
+}
+
+void InputScrollToCursor(InputState* s, InputMoveDir dir) {
+    if (!s) {
+        return;
+    }
+    float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
+    int row = RopeOffsetToPoint(InputValue(s), InputCursor(s)).row;
+    InputScrollToCaret(s, s->caretX, (float)row * lineH, dir);
+}
+
 void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
     UndoBreakCoalescing(&s->undo);
     Str t = InputValue(s);
@@ -491,6 +557,8 @@ void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
     s->hasSelectedWordRange = false;
     PauseBlink(s, app, win);
     UpdatePreferredColumn(s);
+    // scroll_to: the caret takes the view with it.
+    InputScrollToCursor(s, InputMoveDir::None);
     Notify(app, win);
 }
 

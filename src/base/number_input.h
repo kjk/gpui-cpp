@@ -25,6 +25,11 @@ bool NumberStepValue(Str value, StepAction action, double step, bool hasMin,
                      double min, bool hasMax, double max, char* out,
                      int outCap);
 
+// The key table: crates/base/src/number_input.rs binds up to Increment and
+// down to Decrement in the "NumberInput" context. Answers false for anything
+// else, which is a key the field itself should keep.
+bool NumberStepForKey(int key, StepAction* out);
+
 // The frame around the editor and its two step buttons. Identity only; the
 // caller owns the parts, and the step buttons are Buttons that decline focus
 // so a press on one leaves the editor focused.

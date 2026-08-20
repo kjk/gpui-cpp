@@ -471,6 +471,80 @@ static void KindDoesNotFollowTheRowCount() {
     utassert(InputIsSingleLine(&one));
 }
 
+// A field twenty lines tall inside a box that shows five of them.
+static void SeedScroll(InputState* s) {
+    s->lastLineH = 20;
+    s->viewH = 100;
+    s->viewW = 200;
+    s->contentH = 400;
+    s->contentW = 600;
+}
+
+static void ScrollToBringsTheCaretIntoView() {
+    InputState s;
+    SeedScroll(&s);
+    // A caret inside the box moves nothing.
+    InputScrollToCaret(&s, 0, 40, InputMoveDir::None);
+    utassertnear(s.scrollY, 0.f);
+
+    // Past the bottom: the line comes in with a line's clearance under it.
+    InputScrollToCaret(&s, 0, 200, InputMoveDir::None);
+    utassertnear(s.scrollY, 140.f);
+
+    // Back above the top: a line's clearance over it.
+    InputScrollToCaret(&s, 0, 100, InputMoveDir::None);
+    utassertnear(s.scrollY, 80.f);
+}
+
+static void AVerticalWalkDoesNotFightItself() {
+    InputState s;
+    SeedScroll(&s);
+    s.scrollY = 140;
+    // Rust clamps the answer by the direction the caret went: a move up is
+    // never answered by scrolling down...
+    InputScrollToCaret(&s, 0, 300, InputMoveDir::Up);
+    utassertnear(s.scrollY, 140.f);
+    // ...and a move down is never answered by scrolling up.
+    InputScrollToCaret(&s, 0, 40, InputMoveDir::Down);
+    utassertnear(s.scrollY, 140.f);
+}
+
+static void TheOffsetStaysInsideTheContent() {
+    InputState s;
+    SeedScroll(&s);
+    // The last line cannot pull the view past the end of the text.
+    InputScrollToCaret(&s, 0, 10000, InputMoveDir::None);
+    utassertnear(s.scrollY, 300.f);
+    // Nor can the first pull it above the start.
+    InputScrollToCaret(&s, 0, 0, InputMoveDir::None);
+    utassertnear(s.scrollY, 0.f);
+}
+
+static void ASidewaysCaretPullsTheRunAcross() {
+    InputState s;
+    SeedScroll(&s);
+    // Past the right edge, with the margin Rust keeps.
+    InputScrollToCaret(&s, 400, 0, InputMoveDir::None);
+    utassertnear(s.scrollX, 205.f);
+    // And back to the left edge.
+    InputScrollToCaret(&s, 100, 0, InputMoveDir::None);
+    utassertnear(s.scrollX, 95.f);
+    // Never past the end of the run.
+    InputScrollToCaret(&s, 100000, 0, InputMoveDir::None);
+    utassertnear(s.scrollX, 400.f);
+}
+
+static void TheNumberKeysStepTheField() {
+    StepAction action = StepAction::Decrement;
+    utassert(NumberStepForKey(KeyUp, &action));
+    utassert(action == StepAction::Increment);
+    utassert(NumberStepForKey(KeyDown, &action));
+    utassert(action == StepAction::Decrement);
+    // Anything else is the field's own.
+    utassert(!NumberStepForKey(KeyLeft, &action));
+    utassert(!NumberStepForKey(KeyReturn, &action));
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -499,4 +573,9 @@ void TestInputState() {
     ActionForKey();
     LayoutModeRowsClamp();
     KindDoesNotFollowTheRowCount();
+    ScrollToBringsTheCaretIntoView();
+    AVerticalWalkDoesNotFightItself();
+    TheOffsetStaysInsideTheContent();
+    ASidewaysCaretPullsTheRunAcross();
+    TheNumberKeysStepTheField();
 }
