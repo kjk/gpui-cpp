@@ -31,9 +31,13 @@ SheetOverlayPress SheetOverlayPressAction(bool overlayInteractive,
 bool SheetClosesOnKey(int key);
 
 struct Sheet {
+    Ctx* cx = nullptr;
     El* root = nullptr;
+    // focus_trap("sheet"): the surface holds Tab while the sheet is open.
+    Str trap = {};
 
     static Sheet* New(Ctx* cx);
+    Sheet* Trap(Str name);
     Sheet* Overlay(El* overlay);
     Sheet* Surface(El* surface);
     El* IntoEl();

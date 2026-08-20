@@ -1,4 +1,5 @@
 #include "base/alert_dialog.h"
+#include "base/focus_trap.h"
 #include "base/element_ext.h"
 
 namespace gpui {
@@ -54,8 +55,15 @@ AlertDialog* AlertDialog::New(Ctx* cx) {
     Arena* a = cx->a;
     AlertDialog* d = ArenaNew<AlertDialog>(a);
     // Viewport host, like Rust Dialog's deferred+anchored overlay.
+    d->cx = cx;
+    d->trap = StrL("alert-dialog");
     d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill)->FlexCol();
     return d;
+}
+
+AlertDialog* AlertDialog::Trap(Str name) {
+    trap = name;
+    return this;
 }
 
 AlertDialog* AlertDialog::Backdrop(El* backdrop) {
@@ -67,6 +75,9 @@ AlertDialog* AlertDialog::Backdrop(El* backdrop) {
 
 AlertDialog* AlertDialog::Popup(El* popup) {
     if (popup) {
+        int id = FocusTrapId(trap);
+        popup->TrapId(id);
+        FocusTrapArm(cx->win, id);
         root->Child(popup);
     }
     return this;

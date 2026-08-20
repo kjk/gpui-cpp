@@ -1,5 +1,6 @@
 #include "base/dialog.h"
 #include "base/element_ext.h"
+#include "base/focus_trap.h"
 
 namespace gpui {
 
@@ -64,8 +65,15 @@ El* DialogClose::New(Ctx* cx, int clickId) {
 Dialog* Dialog::New(Ctx* cx) {
     Arena* a = cx->a;
     Dialog* d = ArenaNew<Dialog>(a);
+    d->cx = cx;
+    d->trap = StrL("dialog");
     d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     return d;
+}
+
+Dialog* Dialog::Trap(Str name) {
+    trap = name;
+    return this;
 }
 
 Dialog* Dialog::Backdrop(El* backdrop) {
@@ -77,6 +85,11 @@ Dialog* Dialog::Backdrop(El* backdrop) {
 
 Dialog* Dialog::Popup(El* popup) {
     if (popup) {
+        // The popup is the trap container, not the backdrop: a Tab inside a
+        // dialog reaches its own controls and nothing behind it.
+        int id = FocusTrapId(trap);
+        popup->TrapId(id);
+        FocusTrapArm(cx->win, id);
         root->Child(popup);
     }
     return this;

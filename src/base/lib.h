@@ -12,6 +12,7 @@
 #include "base/combobox.h"
 #include "base/date_picker.h"
 #include "base/dock.h"
+#include "base/focus_trap.h"
 #include "base/tiles.h"
 #include "base/sankey.h"
 #include "base/json.h"

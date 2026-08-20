@@ -4,6 +4,7 @@
 
 #include "gpui/platform.h"
 #include "gpui/paint.h"
+#include "base/focus_trap.h"
 
 namespace gpui {
 
@@ -69,6 +70,9 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.viewW = dipW;
     win->paint.viewH = dipH;
     TextMeasBeginFrame(&win->paint);
+    // Whatever a trap asked for last frame has been settled; this frame's
+    // containers ask again as they build.
+    win->pendingTrap = 0;
 
     // Whatever the view pointed win->input at is the focused field. Start its
     // caret and stop the one that lost focus, so no app has to. Rust hangs
@@ -92,6 +96,9 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     if (root) {
         LayoutEl(&win->paint, root, 0, 0, dipW, dipH, 16.f, th.foreground);
         FocusCollect(win, root);
+        // A dialog that has just opened takes focus into itself, which is what
+        // Rust gets from tracking focus on the trap container.
+        FocusTrapApplyPending(win);
         PaintEl(&win->paint, root);
     }
     // Rust renders TooltipOverlay deferred with priority 2, so the tip is over
@@ -190,14 +197,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         }
     }
     if (key == KeyTab) {
-        int trap = 0;
-        for (int i = 0; i < win->focusEls.len; i++) {
-            if (win->focusEls[i].id == win->focusId) {
-                trap = win->focusEls[i].trapId;
-                break;
-            }
-        }
-        FocusNext(win, trap, shift);
+        FocusTrapTab(win, shift);
         AppInvalidate(win);
         return;
     }

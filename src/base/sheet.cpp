@@ -1,4 +1,5 @@
 #include "base/sheet.h"
+#include "base/focus_trap.h"
 
 namespace gpui {
 
@@ -26,6 +27,8 @@ bool SheetClosesOnKey(int key) {
 Sheet* Sheet::New(Ctx* cx) {
     Arena* a = cx->a;
     Sheet* s = ArenaNew<Sheet>(a);
+    s->cx = cx;
+    s->trap = StrL("sheet");
     s->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     return s;
 }
@@ -37,8 +40,16 @@ Sheet* Sheet::Overlay(El* overlay) {
     return this;
 }
 
+Sheet* Sheet::Trap(Str name) {
+    trap = name;
+    return this;
+}
+
 Sheet* Sheet::Surface(El* surface) {
     if (surface) {
+        int id = FocusTrapId(trap);
+        surface->TrapId(id);
+        FocusTrapArm(cx->win, id);
         root->Child(surface);
     }
     return this;
