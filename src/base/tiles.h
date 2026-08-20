@@ -83,6 +83,15 @@ struct TilesState {
     // Where the tiles area was last painted, so a pointer position in the
     // window can be read in the area's own coordinates.
     Bounds bounds = {};
+    // How far the area has been scrolled. A tile can be dragged past the edge
+    // of the view, so the area scrolls to whatever the tiles cover — the
+    // coordinates the tiles are laid out in are the content's, not the
+    // view's.
+    float scrollX = 0;
+    float scrollY = 0;
+    // set_scrollbar_mode: whether the bars are always there or appear on
+    // hover. Rust leaves it None and falls back to the theme's.
+    ScrollbarMode scrollbarMode = ScrollbarMode::Always;
 
     // The history, and the flag that keeps an undo from recording itself.
     TileChange changes[kMaxTileChanges] = {};
@@ -101,6 +110,7 @@ struct TilesState {
     static void OnResizeDrag(TilesState* self, Ctx* cx,
                              const DragMoveEvent* ev);
     static void OnDragEnd(TilesState* self, Ctx* cx, const MouseUpEvent* ev);
+    static void OnScroll(TilesState* self, Ctx* cx, const ScrollEvent* ev);
 };
 
 // The tile and the side, as one number: what a resize handle's drag carries.
@@ -113,6 +123,12 @@ inline int TileResizeTile(int packed) {
 inline TileSide TileResizeSide(int packed) {
     return (TileSide)(packed % 8);
 }
+
+// How much room the tiles take between them, which is what the area scrolls
+// over: from the leftmost and topmost edge any of them reaches — never past
+// the origin — to the furthest right and bottom. Rust folds it out of the
+// panels' bounds and hands it to the Scrollbar as its scroll_size.
+Size TilesContentSize(const TilesState* s);
 
 // The tiles in the order they paint: by z-index, and by insertion where two
 // share one. Writes `n` indices into `out`.

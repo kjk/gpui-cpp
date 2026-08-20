@@ -22,6 +22,31 @@ void TilesPaintOrder(const TilesState* s, int* out) {
     }
 }
 
+Size TilesContentSize(const TilesState* s) {
+    // Rust folds from an empty box at the origin, so the origin is never
+    // positive and the size never smaller than the view's own corner.
+    float left = 0;
+    float top = 0;
+    float right = 0;
+    float bottom = 0;
+    for (int i = 0; i < s->n; i++) {
+        Bounds b = s->items[i].bounds;
+        if (b.x < left) {
+            left = b.x;
+        }
+        if (b.y < top) {
+            top = b.y;
+        }
+        if (b.Right() > right) {
+            right = b.Right();
+        }
+        if (b.Bottom() > bottom) {
+            bottom = b.Bottom();
+        }
+    }
+    return {right - left, bottom - top};
+}
+
 int TilesAdd(TilesState* s, int panel, Bounds bounds) {
     if (s->n >= kMaxTiles) {
         return -1;
@@ -265,7 +290,8 @@ void TilesBeginMove(TilesState* s, int ix, float x, float y) {
         return;
     }
     s->dragging = ix;
-    s->dragInitialMouse = {x - s->bounds.x, y - s->bounds.y};
+    s->dragInitialMouse = {x - s->bounds.x + s->scrollX,
+                           y - s->bounds.y + s->scrollY};
     s->dragInitialBounds = s->items[ix].bounds;
 }
 
@@ -275,7 +301,8 @@ void TilesBeginResize(TilesState* s, int ix, TileSide side, float x, float y) {
     }
     s->resizing = ix;
     s->side = side;
-    s->resizeInitialMouse = {x - s->bounds.x, y - s->bounds.y};
+    s->resizeInitialMouse = {x - s->bounds.x + s->scrollX,
+                             y - s->bounds.y + s->scrollY};
     s->resizeInitialBounds = s->items[ix].bounds;
 }
 
@@ -285,7 +312,8 @@ void TilesUpdatePosition(TilesState* s, float x, float y) {
         return;
     }
     Bounds previous = s->items[ix].bounds;
-    Point adjusted = {x - s->bounds.x, y - s->bounds.y};
+    Point adjusted = {x - s->bounds.x + s->scrollX,
+                      y - s->bounds.y + s->scrollY};
     Point origin = {
         s->dragInitialBounds.x + adjusted.x - s->dragInitialMouse.x,
         s->dragInitialBounds.y + adjusted.y - s->dragInitialMouse.y};
@@ -335,7 +363,7 @@ void TilesUpdateResize(TilesState* s, float x, float y) {
         }
     }
 
-    Point at = {x - s->bounds.x, y - s->bounds.y};
+    Point at = {x - s->bounds.x + s->scrollX, y - s->bounds.y + s->scrollY};
     Bounds init = s->resizeInitialBounds;
     float dx = at.x - s->resizeInitialMouse.x;
     float dy = at.y - s->resizeInitialMouse.y;
@@ -536,6 +564,12 @@ void TilesState::OnDragEnd(TilesState* self, Ctx* cx, const MouseUpEvent* ev) {
     if (moved >= 0) {
         TilesBringToFront(self, moved);
     }
+    Notify(cx);
+}
+
+void TilesState::OnScroll(TilesState* self, Ctx* cx, const ScrollEvent* ev) {
+    self->scrollX = ev->offsetX;
+    self->scrollY = ev->offsetY;
     Notify(cx);
 }
 
