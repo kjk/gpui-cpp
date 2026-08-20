@@ -39,6 +39,16 @@ static void AChordIsReadTheWayRustSpellsIt() {
     utassert(KeyChordParse(StrL("ctrl--"), &c));
     utassert(c.vk == 189 && c.ctrl);
 
+    // A binding may be written as a sequence, which reads as its chords.
+    KeyChord seq[kMaxStrokes] = {};
+    utassert(KeyChordsParse(StrL("ctrl-k ctrl-o"), seq, kMaxStrokes) == 2);
+    utassert(seq[0].vk == 'K' && seq[0].ctrl);
+    utassert(seq[1].vk == 'O' && seq[1].ctrl);
+    // Longer than the matcher can hold, and a chord it cannot read, are both
+    // specs it cannot read.
+    utassert(KeyChordsParse(StrL("a b c d"), seq, kMaxStrokes) == 0);
+    utassert(KeyChordsParse(StrL("ctrl-k nosuchkey"), seq, kMaxStrokes) == 0);
+
     // Nonsense is a programming mistake, not something to dispatch.
     utassert(!KeyChordParse(StrL("hyper-c"), &c));
     utassert(!KeyChordParse(StrL("ctrl-nosuchkey"), &c));
@@ -70,13 +80,13 @@ static void TheInnermostContextWins() {
 
     // A menu inside a dialog: the menu's binding is the one that answers.
     uint32_t stack[] = {menu, dialog};
-    utassert(KeymapMatch(Chord("escape"), stack, 2) == cancel);
+    utassert(KeymapMatch(Chord("escape"), stack, 2).action == cancel);
     // The dialog alone gets its own.
-    utassert(KeymapMatch(Chord("escape"), stack + 1, 1) == close);
+    utassert(KeymapMatch(Chord("escape"), stack + 1, 1).action == close);
     // Neither, and the unscoped binding is what is left.
-    utassert(KeymapMatch(Chord("escape"), nullptr, 0) == quit);
+    utassert(KeymapMatch(Chord("escape"), nullptr, 0).action == quit);
     // Nothing is bound to this one.
-    utassert(KeymapMatch(Chord("ctrl-j"), stack, 2) == 0);
+    utassert(KeymapMatch(Chord("ctrl-j"), stack, 2).action == 0);
     KeymapClear();
 }
 
@@ -90,7 +100,119 @@ static void TheLastBindingForAChordWins() {
     KeyBinding b[] = {{"ctrl-k", second, nullptr}};
     KeymapBind(a, 1);
     KeymapBind(b, 1);
-    utassert(KeymapMatch(Chord("ctrl-k"), nullptr, 0) == second);
+    utassert(KeymapMatch(Chord("ctrl-k"), nullptr, 0).action == second);
+    KeymapClear();
+}
+
+// A binding's context is a predicate, not just a name: it reads the
+// identifiers and the key=value pairs the innermost context carries.
+static void APredicateReadsTheInnermostContext() {
+    uint32_t fullEditor = KeyContextOf(StrL("Editor mode=full"));
+    uint32_t oneLine = KeyContextOf(StrL("Editor mode=single_line"));
+    uint32_t plain = KeyContextOf(StrL("Editor"));
+    uint32_t term = KeyContextOf(StrL("Terminal"));
+
+    KeymapClear();
+    uint32_t act = ActionOf(StrL("p::Act"));
+    KeyBinding b[] = {{"enter", act, "Editor && mode == full"}};
+    KeymapBind(b, 1);
+    utassert(KeymapMatch(Chord("enter"), &fullEditor, 1).action == act);
+    utassert(KeymapMatch(Chord("enter"), &oneLine, 1).action == 0);
+    // No mode at all is not the mode either.
+    utassert(KeymapMatch(Chord("enter"), &plain, 1).action == 0);
+
+    // `!=` is Rust's `context.get(k) != Some(v)`, so a context that does not
+    // carry the key at all satisfies it.
+    KeymapClear();
+    KeyBinding b2[] = {{"enter", act, "mode != full"}};
+    KeymapBind(b2, 1);
+    utassert(KeymapMatch(Chord("enter"), &fullEditor, 1).action == 0);
+    utassert(KeymapMatch(Chord("enter"), &oneLine, 1).action == act);
+    utassert(KeymapMatch(Chord("enter"), &plain, 1).action == act);
+
+    KeymapClear();
+    KeyBinding b3[] = {{"enter", act, "Editor || Terminal"}};
+    KeymapBind(b3, 1);
+    utassert(KeymapMatch(Chord("enter"), &plain, 1).action == act);
+    utassert(KeymapMatch(Chord("enter"), &term, 1).action == act);
+
+    KeymapClear();
+    KeyBinding b4[] = {{"enter", act, "!Editor"}};
+    KeymapBind(b4, 1);
+    utassert(KeymapMatch(Chord("enter"), &plain, 1).action == 0);
+    utassert(KeymapMatch(Chord("enter"), &term, 1).action == act);
+
+    // A predicate that cannot be read drops the binding, the same as a chord
+    // that cannot be read.
+    KeymapClear();
+    KeyBinding b5[] = {{"enter", act, "Editor &&"}, {"enter", act, "(Editor"}};
+    KeymapBind(b5, 2);
+    utassert(KeymapMatch(Chord("enter"), &plain, 1).action == 0);
+    KeymapClear();
+}
+
+// `a > b` is a b whose enclosing context is an a — the one immediately
+// outside it, which is what Rust evaluates the left half against.
+static void AChildPredicateNeedsTheEnclosingContext() {
+    uint32_t ws = KeyContextOf(StrL("Workspace"));
+    uint32_t ed = KeyContextOf(StrL("Editor"));
+    uint32_t pane = KeyContextOf(StrL("Pane"));
+
+    KeymapClear();
+    uint32_t act = ActionOf(StrL("c::Act"));
+    KeyBinding b[] = {{"ctrl-p", act, "Workspace > Editor"}};
+    KeymapBind(b, 1);
+
+    uint32_t inside[] = {ed, ws};
+    utassert(KeymapMatch(Chord("ctrl-p"), inside, 2).action == act);
+    // The editor on its own has nothing outside it.
+    utassert(KeymapMatch(Chord("ctrl-p"), &ed, 1).action == 0);
+    // Nor does a workspace with something else in between.
+    uint32_t nested[] = {ed, pane, ws};
+    utassert(KeymapMatch(Chord("ctrl-p"), nested, 3).action == 0);
+    // The halves are not interchangeable.
+    uint32_t upsideDown[] = {ws, ed};
+    utassert(KeymapMatch(Chord("ctrl-p"), upsideDown, 2).action == 0);
+    KeymapClear();
+}
+
+// A binding written as a sequence holds the first chord instead of
+// dispatching it, and a chord that continues nothing drops what was held.
+static void ASequenceIsHeldUntilItFinishes() {
+    KeymapClear();
+    uint32_t open = ActionOf(StrL("s::Open"));
+    KeyBinding b[] = {{"ctrl-k ctrl-o", open, nullptr}};
+    KeymapBind(b, 1);
+
+    KeyMatch m = KeymapMatch(Chord("ctrl-k"), nullptr, 0);
+    utassert(!m.action && m.pending);
+    utassert(KeymapPending());
+    m = KeymapMatch(Chord("ctrl-o"), nullptr, 0);
+    utassert(m.action == open && !m.pending);
+    utassert(!KeymapPending());
+
+    // Half of it, then something else: neither fires and nothing is left
+    // held, which is Rust's matcher clearing its pending keystrokes.
+    utassert(KeymapMatch(Chord("ctrl-k"), nullptr, 0).pending);
+    m = KeymapMatch(Chord("x"), nullptr, 0);
+    utassert(!m.action && !m.pending);
+    utassert(!KeymapPending());
+    KeymapClear();
+}
+
+// A complete binding beats one that is only begun, which is why "ctrl-k"
+// bound beside "ctrl-k ctrl-o" still fires at once.
+static void AWholeBindingBeatsOneThatIsOnlyBegun() {
+    KeymapClear();
+    uint32_t open = ActionOf(StrL("s::Open2"));
+    uint32_t split = ActionOf(StrL("s::Split"));
+    KeyBinding b[] = {
+        {"ctrl-k ctrl-o", open, nullptr},
+        {"ctrl-k", split, nullptr},
+    };
+    KeymapBind(b, 2);
+    utassert(KeymapMatch(Chord("ctrl-k"), nullptr, 0).action == split);
+    utassert(!KeymapPending());
     KeymapClear();
 }
 
@@ -135,9 +257,11 @@ static void AnActionWalksOutFromWhatHasFocus() {
     Window* win = new Window();
     win->app = &app;
     Entity<Recorder> rec = EntityNew<Recorder>(&app);
-    El* leaf = Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Stop));
+    El* leaf =
+        Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Stop));
     El* mid = Div(a)->KeyContext(StrL("Inner"))->Child(leaf);
-    El* root = Div(a)->OnAction(act, ListenTo(rec, &Recorder::Stop))->Child(mid);
+    El* root =
+        Div(a)->OnAction(act, ListenTo(rec, &Recorder::Stop))->Child(mid);
     FocusCollect(win, root);
     win->focusId = 5;
 
@@ -164,8 +288,10 @@ static void PropagateCarriesOnOutwards() {
     Window* win = new Window();
     win->app = &app;
     Entity<Recorder> rec = EntityNew<Recorder>(&app);
-    El* leaf = Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Pass));
-    El* root = Div(a)->OnAction(act, ListenTo(rec, &Recorder::Stop))->Child(leaf);
+    El* leaf =
+        Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Pass));
+    El* root =
+        Div(a)->OnAction(act, ListenTo(rec, &Recorder::Stop))->Child(leaf);
     FocusCollect(win, root);
     win->focusId = 5;
 
@@ -193,7 +319,8 @@ static void AContextOffThePathDoesNotMatch() {
     win->app = &app;
     Entity<Recorder> rec = EntityNew<Recorder>(&app);
     // The context is on a sibling, not on an ancestor.
-    El* leaf = Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Stop));
+    El* leaf =
+        Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Stop));
     El* root = Div(a)
                    ->Child(Div(a)->KeyContext(StrL("Elsewhere")))
                    ->Child(Div(a)->Child(leaf));
@@ -244,6 +371,10 @@ void TestKeymap() {
     AChordIsReadTheWayRustSpellsIt();
     TheInnermostContextWins();
     TheLastBindingForAChordWins();
+    APredicateReadsTheInnermostContext();
+    AChildPredicateNeedsTheEnclosingContext();
+    ASequenceIsHeldUntilItFinishes();
+    AWholeBindingBeatsOneThatIsOnlyBegun();
     AnActionIsItsName();
     AnActionWalksOutFromWhatHasFocus();
     PropagateCarriesOnOutwards();
