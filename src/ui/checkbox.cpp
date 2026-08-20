@@ -25,6 +25,10 @@ Checkbox* Checkbox::Hint(Str s) {
     hint = s;
     return this;
 }
+Checkbox* Checkbox::Child(El* e) {
+    child = e;
+    return this;
+}
 Checkbox* Checkbox::Checked(bool v) {
     checked = v;
     return this;
@@ -105,7 +109,7 @@ El* Checkbox::IntoEl() {
     if (w > 0) {
         row->W(w);
     }
-    if (label.s || hint.s) {
+    if (label.s || hint.s || child) {
         El* col = Div(a)->FlexCol()->Gap(2);
         if (label.s) {
             col->Child(TextEl(a, label)
@@ -115,6 +119,9 @@ El* Checkbox::IntoEl() {
         }
         if (hint.s) {
             col->Child(TextEl(a, hint)->Font(12)->Fg(th.mutedFg)->Wrap());
+        }
+        if (child) {
+            col->Child(child);
         }
         row->Child(col);
     }
