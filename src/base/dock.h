@@ -116,6 +116,10 @@ struct DockState {
     // can be drawn before the button comes up. -1 when no drag is in flight.
     int dropNode = -1;
     DockDrop dropAt = DockDrop::Center;
+    // Which group's ⋯ menu is open, so the row it reports lands on the right
+    // panel. Rust's menu is built by the TabPanel itself and closes over it;
+    // a menu here reports only which row was taken.
+    int menuNode = -1;
     // The side being resized, and the split handle being dragged.
     DockPlacement resizingSide = DockPlacement::Center;
     bool resizing = false;
@@ -135,6 +139,16 @@ struct DockState {
     static void OnTabDragEnd(DockState* self, Ctx* cx, const MouseUpEvent* ev);
     static void OnDropPanel(DockState* self, Ctx* cx, const DropEvent* ev,
                             intptr_t node);
+    // A drop on a tab, which names the place in the row the panel takes, and
+    // one on the empty space past the last tab, which appends. Rust's two
+    // `on_drop` closures on the tab bar.
+    static void OnDropTab(DockState* self, Ctx* cx, const DropEvent* ev,
+                          intptr_t nodeAndIx);
+    static void OnDropTabBar(DockState* self, Ctx* cx, const DropEvent* ev,
+                             intptr_t node);
+    // The ⋯ menu: Zoom In / Zoom Out and Close, over the active panel.
+    static void OnMenuItem(DockState* self, Ctx* cx, const ClickEvent* ev,
+                           intptr_t nodeAndIx);
     static void OnResizeDrag(DockState* self, Ctx* cx, const DragMoveEvent* ev);
     static void OnResizeEnd(DockState* self, Ctx* cx, const MouseUpEvent* ev);
 };
@@ -159,6 +173,9 @@ int DockNewSplit(DockState* s, Axis axis);
 // Add a panel to a tab group, or a child to a split. A child's size is its
 // extent along the split's axis.
 void DockTabsAdd(DockState* s, int node, int panelIx);
+// insert_panel_at: the same, at a place in the row rather than at the end,
+// and the inserted panel becomes the active one.
+void DockTabsInsert(DockState* s, int node, int panelIx, int at);
 void DockSplitAdd(DockState* s, int node, int childNode, float size);
 // The active tab of a group.
 void DockSetActive(DockState* s, Ctx* cx, int node, int ix);
@@ -168,11 +185,19 @@ void DockSetActive(DockState* s, Ctx* cx, int node, int ix);
 void DockClosePanel(DockState* s, Ctx* cx, int node, int ix);
 // The drag landed: merge into `to`'s tabs, or split `to` that way. Moving a
 // panel onto its own group is a no-op the way Rust's is.
-void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop);
+//
+// `atIx` is Rust's `ix: Option<usize>` — the tab the drop landed on, so the
+// panel takes that place in the row instead of the end. -1 is `None`: the
+// drop was on the body, or on the empty space past the last tab. A drop onto
+// a tab of the group the panel is already in is a reorder, which is the one
+// case a same-group drop is not a no-op.
+void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop,
+                   int atIx = -1);
 // The tree half of those two, with no window to notify: the listeners call
 // these and then emit, and a test drives them on their own.
 bool DockClosePanelAt(DockState* s, int node, int ix);
-bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop);
+bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
+                     int atIx = -1);
 // Dock::toggle_open, and the size a drag on its edge asks for.
 void DockToggleSide(DockState* s, Ctx* cx, DockPlacement p);
 void DockResizeSide(DockState* s, Ctx* cx, DockPlacement p, float x, float y);
@@ -182,5 +207,8 @@ void DockToggleZoom(DockState* s, Ctx* cx, int panelIx);
 DockSide* DockSideOf(DockState* s, DockPlacement p);
 // Which tab group holds this panel, or -1.
 int DockNodeOfPanel(const DockState* s, int panelIx);
+// Which Dock a node is in — the side whose tree it hangs under, or Center for
+// the area's own item. What a click on a collapsed dock's tab needs to know.
+DockPlacement DockPlacementOfNode(const DockState* s, int node);
 
 } // namespace gpui
