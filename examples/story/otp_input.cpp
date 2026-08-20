@@ -4,9 +4,28 @@ struct OtpInputStory {
     // The Options dropdown flips masking on every input at once.
     bool masked = true;
     StoryToolbarState toolbar;
+    // One state per field, the way the Rust story makes one OtpState each.
+    // The two that start with a value are Rust's `default_value`.
+    Entity<OtpState> otp = {};
+    Entity<OtpState> oneGroup = {};
+    Entity<OtpState> threeGroups = {};
+    Entity<OtpState> custom = {};
+    bool seeded = false;
 
     static El* Render(OtpInputStory* self, Ctx* cx);
 };
+
+static Entity<OtpState> SeedOtp(Ctx* cx, const char* value, int slots) {
+    Entity<OtpState> e = EntityNewState<OtpState>(cx->app);
+    OtpState* s = e.Get(cx);
+    if (s) {
+        s->length = slots;
+        for (int i = 0; value && value[i] && s->len < slots; i++) {
+            s->value[s->len++] = value[i];
+        }
+    }
+    return e;
+}
 
 enum {
     OtpOptMasked = ToolbarOptMultiple
@@ -24,6 +43,21 @@ static void OtpToolbarAct(OtpInputStory* self, Ctx* cx, const ClickEvent*,
 
 El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    if (!self->seeded) {
+        self->seeded = true;
+        self->otp = SeedOtp(cx, nullptr, 6);
+        self->oneGroup = SeedOtp(cx, "123456", 6);
+        self->threeGroups = SeedOtp(cx, "012345", 6);
+        self->custom = SeedOtp(cx, "654321", 4);
+    }
+    // The Options dropdown flips masking on every field at once, which is one
+    // write per state now rather than a flag the elements read.
+    for (Entity<OtpState> e :
+         {self->otp, self->oneGroup, self->threeGroups, self->custom}) {
+        if (OtpState* s = e.Get(cx)) {
+            s->masked = self->masked;
+        }
+    }
     El* page = Div(a)->FlexCol()->Gap(20)->W(kFill);
     StoryToolbarOpt opts[1] = {{"Masked", self->masked, OtpOptMasked}};
     page->Child(
@@ -31,9 +65,7 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default",
                            "Six cells with masking and value updates.");
-    StorySectionAdd(def, component::OtpInput::New(cx, "", 0)
-                             ->Id(StrL("otp"))
-                             ->Masked(self->masked)
+    StorySectionAdd(def, component::OtpInput::New(cx, StrL("otp"), self->otp)
                              ->WithSize(self->toolbar.size)
                              ->IntoEl());
     page->Child(def);
@@ -41,29 +73,25 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
     El* group = StorySection(cx, "Grouping",
                              "Cells can be shown as one or several groups.");
     El* groupCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    groupCol->Child(component::OtpInput::New(cx, "123456", 6)
-                        ->Id(StrL("otp-small"))
-                        ->Groups(1)
-                        ->Masked(self->masked)
-                        ->WithSize(self->toolbar.size)
-                        ->IntoEl());
-    groupCol->Child(component::OtpInput::New(cx, "012345", 6)
-                        ->Id(StrL("otp-large"))
-                        ->Groups(3)
-                        ->Masked(self->masked)
-                        ->WithSize(self->toolbar.size)
-                        ->IntoEl());
+    groupCol
+        ->Child(component::OtpInput::New(cx, StrL("otp-small"), self->oneGroup)
+                    ->Groups(1)
+                    ->WithSize(self->toolbar.size)
+                    ->IntoEl());
+    groupCol->Child(
+        component::OtpInput::New(cx, StrL("otp-large"), self->threeGroups)
+            ->Groups(3)
+            ->WithSize(self->toolbar.size)
+            ->IntoEl());
     StorySectionAdd(group, groupCol);
     page->Child(group);
 
     El* csz = StorySection(cx, "Custom size", "Custom cell dimensions.");
-    StorySectionAdd(csz, component::OtpInput::New(cx, "654321", 4)
-                             ->Id(StrL("otp-sized"))
-                             ->Slots(4)
-                             ->Groups(1)
-                             ->Masked(self->masked)
-                             ->CellSize(55)
-                             ->IntoEl());
+    StorySectionAdd(
+        csz, component::OtpInput::New(cx, StrL("otp-sized"), self->custom)
+                 ->Groups(1)
+                 ->CellSize(55)
+                 ->IntoEl());
     page->Child(csz);
 
     El* dis = StorySection(cx, "Disabled", "Disabled input with a value.");

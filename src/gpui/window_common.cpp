@@ -243,6 +243,25 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     if (!held && !eaten && key == KeyC && ctrl && !shift && !alt) {
         eaten = WindowSelectionCopy(win);
     }
+    // div().on_key_down: the focused element's own listener, and then the
+    // ones above it, before the keymap resolves the chord. A field that is
+    // not a text editor reads keys here — the keymap has no action to give it
+    // and `win->input` takes an InputState, which an OTP field is not.
+    if (!held && !eaten) {
+        KeyEvent kd = {};
+        kd.vk = key;
+        kd.down = true;
+        kd.shift = shift;
+        kd.ctrl = ctrl;
+        kd.alt = alt;
+        if (WindowDispatchKeyEvent(win, &kd)) {
+            // The character it also arrives as belongs to the handler that
+            // took the key, not to whatever is under it.
+            win->eatChar = true;
+            AppInvalidate(win);
+            return;
+        }
+    }
     // The keymap, once the focused field has had its go: a field's own
     // editing is Rust's innermost key context, so a binding further out
     // cannot take a keystroke away from it. An action that is handled ends
@@ -350,6 +369,19 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
     if (!ate && win->input && win->input->focused && ch >= 32 && ch != 127 &&
         !ctrl && !alt) {
         InputTypeChar(win->input, win->app, win, ch);
+        ate = true;
+    }
+    // The focused element's own key listener hears the character half too:
+    // a digit typed into an OTP field arrives as a WM_CHAR and never as a
+    // chord the keymap could resolve.
+    if (!ate && ch >= 32 && ch != 127 && !ctrl && !alt) {
+        KeyEvent kd = {};
+        kd.ch = ch;
+        kd.down = true;
+        if (WindowDispatchKeyEvent(win, &kd)) {
+            AppInvalidate(win);
+            return;
+        }
     }
     AppInvalidate(win);
 }

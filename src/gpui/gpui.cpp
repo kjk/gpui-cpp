@@ -1129,6 +1129,10 @@ El* El::KeyContext(Str name) {
     style.keyContext = KeyContextOf(name);
     return this;
 }
+El* El::OnKeyDown(Listener fn) {
+    return OnAction(ActionOf(StrL("gpui::KeyDown")), fn);
+}
+
 El* El::OnAction(uint32_t action, Listener fn) {
     if (!action || !fn.IsValid()) {
         return this;
@@ -4502,6 +4506,33 @@ static int DispatchAnchor(Window* win) {
         }
     }
     return win->dispatch.len;
+}
+
+// The reserved action a raw key listener is recorded under. No chord resolves
+// to it, so the keymap never reaches these; only WindowDispatchKeyEvent does.
+static uint32_t KeyDownAction() {
+    return ActionOf(StrL("gpui::KeyDown"));
+}
+
+bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev) {
+    if (!win || !ev) {
+        return false;
+    }
+    uint32_t action = KeyDownAction();
+    int ix = DispatchAnchor(win);
+    for (int i = ix - 1; i >= 0; i--) {
+        if (win->dispatch[i].subtreeEnd <= ix ||
+            win->dispatch[i].action != action ||
+            !win->dispatch[i].fn.IsValid()) {
+            continue;
+        }
+        ev->propagate = true;
+        ListenerCall(win->app, win, win->dispatch[i].fn, ev);
+        if (!ev->propagate) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,

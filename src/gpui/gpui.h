@@ -603,6 +603,10 @@ struct KeyEvent {
     bool shift = false;
     bool ctrl = false;
     bool alt = false;
+    // cx.propagate(): an `El::OnKeyDown` handler that leaves this true passes
+    // the keystroke on outwards, the way an action handler does. Unused by
+    // the window-level `WindowOnKey`, which is the last thing to see a key.
+    bool propagate = true;
 };
 
 // The pointer shape the window asks the OS for. GPUI spells this
@@ -1309,6 +1313,14 @@ struct El {
     // on_action::<A>(..). The listener is called with an ActionEvent; setting
     // its `propagate` passes the action on outwards, which is cx.propagate().
     El* OnAction(uint32_t action, Listener fn);
+    // div().on_key_down(..): the raw keystroke, offered to the focused element
+    // and then out through the elements above it, before the keymap resolves
+    // the chord to an action. It is what a field that is not a text editor
+    // reads — an OTP input takes a digit and a backspace and nothing else, so
+    // there is no action to bind and no `InputState` to hand the window. Both
+    // halves of a keystroke arrive here: the key itself, and the character it
+    // produced, with `ch` set and `vk` zero.
+    El* OnKeyDown(Listener fn);
     El* TabIndex(int v);
     El* TabStop(bool v);
     El* FocusRing(bool v);
@@ -3002,6 +3014,9 @@ bool WindowRestoreFocus(Window* win, int id);
 // `dispatch_action` plus the `cx.propagate()` that decides how far it goes.
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
                              bool alt);
+// The `El::OnKeyDown` handlers over the focused element, innermost first.
+// Answers true when one of them stopped propagating.
+bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev);
 // cx.on_action: a handler that belongs to the application rather than to any
 // element. Tried after the focused element's chain has passed on the action,
 // which is where Rust's App-level handlers sit too. A plain function pointer,

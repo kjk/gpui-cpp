@@ -12,6 +12,10 @@
 //   -wheel=N     N notches of scroll at the window centre
 //   -key=VK      send a key: the down and the up, since Enter and Space
 //                activate a focused element from the release
+//   -type=TEXT   type the characters: WM_CHAR each, which is how a digit or a
+//                letter reaches a field. -key carries the key, not the text it
+//                produced, so a printable character needs this one. Typed
+//                before -key, so `-type=42 -key=8` reads left to right.
 //   -half=left|right  size the window the way cmd/compare-story.ts does, so a
 //                     shot lines up with the Rust side-by-side pair
 import { dirname, join, resolve } from "node:path";
@@ -47,6 +51,7 @@ const argv = Bun.argv.slice(2);
 let debug = false;
 const clicks: { x: number; y: number; right?: boolean }[] = [];
 let hover: { x: number; y: number } | null = null;
+let typed = "";
 let settleMs = 0;
 let clickWaitMs = 200;
 let drag: { x1: number; y1: number; x2: number; y2: number } | null = null;
@@ -71,6 +76,8 @@ for (const a of argv) {
     half = side;
   } else if (a.startsWith("-key=")) {
     keys.push(Number(a.slice(5)));
+  } else if (a.startsWith("-type=")) {
+    typed = a.slice(6);
   } else if (a.startsWith("-drag=")) {
     const [x1, y1, x2, y2] = a.slice(6).split(",").map(Number);
     drag = { x1: x1 ?? 0, y1: y1 ?? 0, x2: x2 ?? 0, y2: y2 ?? 0 };
@@ -166,6 +173,13 @@ if (wheel !== 0) {
     await sleep(40);
   }
   await sleep(250);
+}
+// The text before the keys, so `-type=42 -key=8` reads left to right: a digit
+// or a letter reaches a field as a WM_CHAR, which is not what -key sends, and
+// -key is then the Enter or the backspace that follows what was typed.
+for (const chr of typed) {
+  sendMessage(hwnd, 0x0102 /* WM_CHAR */, chr.codePointAt(0) ?? 0, 1);
+  await sleep(60);
 }
 for (const vk of keys) {
   sendMessage(hwnd, 0x0100 /* WM_KEYDOWN */, vk, 0);

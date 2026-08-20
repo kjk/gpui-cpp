@@ -74,4 +74,47 @@ El* OtpInput::New(Ctx* cx, Str id) {
     }
     return e;
 }
+
+void OtpKeyDown(OtpState* self, Ctx* cx, const KeyEvent* ev) {
+    if (!self || self->disabled || !self->focused) {
+        return;
+    }
+    if (!OtpEditValue(self, ev->vk, ev->ch)) {
+        return;
+    }
+    // The keystroke was this field's; nothing above it hears it. The caret
+    // starts over from full, the way typing into a text field does.
+    const_cast<KeyEvent*>(ev)->propagate = false;
+    BlinkPause(cx->app, cx->win, &self->blink);
+    Notify(cx);
+}
+
+void OtpClick(OtpState* self, Ctx* cx, const ClickEvent*) {
+    if (!self || self->disabled || self->focused) {
+        return;
+    }
+    OtpFocus(self, cx->app, cx->win);
+    Notify(cx);
+}
+
+El* OtpInput::New(Ctx* cx, Str id, Entity<OtpState> state) {
+    El* e = New(cx, id);
+    OtpState* s = state.Get(cx);
+    if (!s || !id.s) {
+        return e;
+    }
+    // focused follows the window, so a click anywhere else blurs the field
+    // without every page having to say so.
+    bool has = WindowFocusedId(cx->win) == HashClickId(id);
+    if (has != s->focused) {
+        if (has) {
+            OtpFocus(s, cx->app, cx->win);
+        } else {
+            OtpBlur(s, cx->app, cx->win);
+        }
+    }
+    e->OnClick(ListenTo(state, &OtpClick));
+    e->OnKeyDown(ListenTo(state, &OtpKeyDown));
+    return e;
+}
 } // namespace gpui

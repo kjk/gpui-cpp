@@ -138,8 +138,13 @@ struct OtpInput {
     UiSize size = UiSize::Medium;
     float cellPx = 0; // with_size(px(..)): a custom cell edge
     Listener onFocus;
+    // The field's own state, when it has one: the value, the focus and the
+    // caret are its, and typing into it edits them. A caller with a fixed
+    // value passes none and gets the cells with nothing behind them.
+    Entity<OtpState> state = {};
 
     static OtpInput* New(Ctx* cx, const char* value, int len);
+    static OtpInput* New(Ctx* cx, Str id, Entity<OtpState> state);
     OtpInput* Id(Str s);
     OtpInput* Slots(int n);
     OtpInput* Groups(int n);
