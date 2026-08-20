@@ -7,6 +7,8 @@
 //   -clickwait=MS  how long to wait after each click before the next input
 //                (default 200) — lower it to catch an animation mid-flight
 //   -drag=X1,Y1,X2,Y2  press, move, release: a text selection drag
+//   -draghold=X1,Y1,X2,Y2  the same without the release, so the shutter
+//                catches what a drag looks like while it is in flight
 //   -wheel=N     N notches of scroll at the window centre
 //   -key=VK      send a key: the down and the up, since Enter and Space
 //                activate a focused element from the release
@@ -48,6 +50,7 @@ let hover: { x: number; y: number } | null = null;
 let settleMs = 0;
 let clickWaitMs = 200;
 let drag: { x1: number; y1: number; x2: number; y2: number } | null = null;
+let dragHold = false;
 const keys: number[] = [];
 let wheel = 0;
 let half: WorkAreaHalf | null = null;
@@ -71,6 +74,10 @@ for (const a of argv) {
   } else if (a.startsWith("-drag=")) {
     const [x1, y1, x2, y2] = a.slice(6).split(",").map(Number);
     drag = { x1: x1 ?? 0, y1: y1 ?? 0, x2: x2 ?? 0, y2: y2 ?? 0 };
+  } else if (a.startsWith("-draghold=")) {
+    const [x1, y1, x2, y2] = a.slice(10).split(",").map(Number);
+    drag = { x1: x1 ?? 0, y1: y1 ?? 0, x2: x2 ?? 0, y2: y2 ?? 0 };
+    dragHold = true;
   } else if (a.startsWith("-settle=")) {
     settleMs = Number(a.slice(8)) || 0;
   } else if (a.startsWith("-clickwait=")) {
@@ -143,7 +150,9 @@ if (drag) {
     sendMessage(hwnd, 0x0200 /* WM_MOUSEMOVE */, 1, packCoords(x, y));
     await sleep(20);
   }
-  sendMessage(hwnd, 0x0202 /* WM_LBUTTONUP */, 0, packCoords(drag.x2, drag.y2));
+  if (!dragHold) {
+    sendMessage(hwnd, 0x0202 /* WM_LBUTTONUP */, 0, packCoords(drag.x2, drag.y2));
+  }
   await sleep(200);
 }
 
@@ -168,6 +177,9 @@ for (const vk of keys) {
 // Last, so the pointer is still on the element when the frame is captured.
 if (hover) {
   await hoverClient(hwnd, hover.x, hover.y);
+} else if (dragHold) {
+  // The button is still down: moving the real cursor would send the window a
+  // move of its own and drag the held thing away from where it was left.
 } else {
   // Nothing asked for a pointer, so make sure there isn't one over the window:
   // where it happens to rest is not something a screenshot should depend on.

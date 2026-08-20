@@ -705,6 +705,10 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // drag, and it lasts until the button comes back up.
     win->activeDrag = hit ? hit->drag : DragPayload{};
     win->dragOverId = 0;
+    // cursor_offset, which GPUI takes as the drag starts: how far into the
+    // element the press was.
+    win->dragOffX = hit ? x - hit->bounds.x : 0;
+    win->dragOffY = hit ? y - hit->bounds.y : 0;
     // A press takes focus only where there is a focus handle to take. Rust
     // gives a disabled widget its element id all the same — `div().id(id)` is
     // what makes it hit-testable and hoverable — and hangs `track_focus` off

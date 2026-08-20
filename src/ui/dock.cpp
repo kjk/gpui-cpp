@@ -318,6 +318,43 @@ static El* RenderNode(Ctx* cx, Str id, Entity<DockState> st, int node,
     return RenderTabs(cx, id, st, node, node == toolbarNode);
 }
 
+// TabPanel::render_drag_panel: what follows the pointer while a tab is being
+// dragged. Rust hands GPUI a view to render as the drag's own; here the dock
+// draws it itself, over everything, at the point the press was inside the tab
+// so the label sits where it was picked up from.
+static El* RenderDragPreview(Ctx* cx, DockState* s) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    const DragPayload* drag = WindowActiveDrag(cx);
+    if (!drag || !StrSame(drag->kind, kDockPanelDrag)) {
+        return nullptr;
+    }
+    int panelIx = drag->ix;
+    if (panelIx < 0 || panelIx >= s->nPanels) {
+        return nullptr;
+    }
+    Point off = WindowDragOffset(cx);
+    // w_24, py_1, px_3, a border, the active tab's surface, and 0.75 of the
+    // opacity — the whole of Rust's `drag-panel`.
+    return Div(a)
+        ->Fixed()
+        ->Left(cx->win->mouseX - off.x)
+        ->Top(cx->win->mouseY - off.y)
+        ->W(96)
+        ->PadY(4)
+        ->PadX(12)
+        ->ClipX()
+        ->Radius(th.radius)
+        ->Border(1, th.border)
+        ->Bg(th.tabActiveBg)
+        ->Opacity(0.75f)
+        ->Child(TextEl(a, s->panels[panelIx].title)
+                    ->Font(13)
+                    ->Fg(th.tabFg)
+                    ->LineHeight(1.f))
+        ->Deferred();
+}
+
 // Which tab group carries the toggle buttons: the first one in the centre
 // item, which is where Rust's `toggle_button_panels` ends up for a plain
 // left-to-right layout.
@@ -391,6 +428,11 @@ El* DockArea::IntoEl() {
         row->Child(dock);
     }
     box->Child(row);
+    // The dragged tab's preview goes over everything, which is what a
+    // deferred child is for.
+    if (El* preview = RenderDragPreview(cx, s)) {
+        box->Child(preview);
+    }
 
     if (s->bottom.node >= 0) {
         // A closed bottom dock keeps its tab bar, so there is still something
