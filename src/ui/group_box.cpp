@@ -12,6 +12,10 @@ GroupBox* GroupBox::New(Ctx* cx, Str title) {
     g->title = title;
     return g;
 }
+GroupBox* GroupBox::Title(El* e) {
+    titleEl = e;
+    return this;
+}
 GroupBox* GroupBox::Child(El* e) {
     child = e;
     return this;
@@ -58,7 +62,10 @@ El* GroupBox::IntoEl() {
     // it spaces title and content further apart (gap_4 against gap_3).
     bool padded = filled || outline;
     El* box = Div(a)->FlexCol()->W(kFill)->Gap(padded ? 12.f : 16.f);
-    if (title.s && title.len > 0) {
+    if (titleEl) {
+        box->Child(titlePadX > 0 ? Div(a)->PadX(titlePadX)->Child(titleEl)
+                                 : titleEl);
+    } else if (title.s && title.len > 0) {
         El* text = TextEl(a, title)->Font(14)->Fg(th.mutedFg)->LineHeight(1.f);
         if (titleSemibold) {
             text->Semibold();
