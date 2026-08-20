@@ -227,6 +227,8 @@ static ThemeMode gThemeMode = ThemeMode::Light;
 static const float kDefaultFontSize = 16.f;
 static float gFontSize = kDefaultFontSize;
 static ScrollbarMode gScrollbarMode = ScrollbarMode::Always;
+// theme/mod.rs: `focus_ring: true`.
+static bool gFocusRing = true;
 
 void ThemeSetRadius(float radius) {
     // Both palettes, since a theme here is a static rather than one window's
@@ -252,6 +254,14 @@ void ThemeSetFontSize(float px) {
 // what they are measured against.
 static float ThemeFontScale() {
     return gFontSize / kDefaultFontSize;
+}
+
+bool ThemeFocusRing() {
+    return gFocusRing;
+}
+
+void ThemeSetFocusRing(bool on) {
+    gFocusRing = on;
 }
 
 ScrollbarMode ScrollbarModeNow() {
@@ -818,6 +828,10 @@ El* El::HoverFg(Rgba c) {
 }
 El* El::FocusId(int v) {
     style.focusId = v;
+    return this;
+}
+El* El::FocusRing(bool v) {
+    style.focusRing = v;
     return this;
 }
 El* El::TrapId(int v) {
@@ -2835,7 +2849,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // half Rust keeps when a theme turns the ring off. The element is this
     // frame's arena copy, so writing the colour onto it is what Rust's
     // `.border_color(cx.theme().ring)` does to the style it is building.
-    bool focused = e->style.focusId && e->style.focusId == ctx->focusId;
+    // `.when(is_focused && self.focus_ring_enabled, ..)`: the control's own
+    // opt-out drops the whole focus appearance, both halves of it.
+    bool focused = e->style.focusId && e->style.focusId == ctx->focusId &&
+                   e->style.focusRing;
     if (focused) {
         e->style.borderColor = ThemeNow().ring;
     }
@@ -3053,13 +3070,15 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                   ThemeNow().scrollbarThumb);
     }
 
-    if (focused) {
+    if (focused && ThemeFocusRing()) {
         // The other half of focus_ring_style: FOCUS_RING_WIDTH of the ring
         // colour at FOCUS_RING_OPACITY, in the three DIPs immediately outside
         // the element's border, with the corners widened to match. Rust hangs
         // it off `is_focused` alone — a control focused by a click shows it as
         // much as one reached with Tab — and paints it as an absolutely
         // placed child, which an ancestor that clips will cut off either way.
+        // Which is why `Theme::focus_ring` exists: an application that clips
+        // its containers turns the ring off and keeps the border above.
         Bounds ring = e->Bounds().Inset(-kFocusRingWidth);
         DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
                         e->style.radius + kFocusRingWidth, kFocusRingWidth,

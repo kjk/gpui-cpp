@@ -33,6 +33,7 @@ struct Button {
     bool compact = false;
     bool selected = false;
     bool dropdown = false;
+    bool focusRing = true;
     bool hasCustom = false;
     Rgba custom = {};
     Str tooltip = {};
@@ -67,6 +68,8 @@ struct Button {
     Button* Loading(bool v);
     Button* Disabled(bool v);
     Button* WithSize(UiSize s);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    Button* FocusRing(bool v);
     Button* Tooltip(Str s);
     Button* OnClick(Listener l);
     El* IntoEl();

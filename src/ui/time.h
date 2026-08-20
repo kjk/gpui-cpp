@@ -86,6 +86,7 @@ struct DatePicker {
     // cleanable swaps the calendar icon for a clear button once a date is set.
     bool cleanable = false;
     bool appearance = true;
+    bool focusRing = true;
     bool range = false;
     bool open = false;
     int numberOfMonths = 1;
@@ -121,6 +122,8 @@ struct DatePicker {
     DatePicker* W(float v);
     DatePicker* Cleanable(bool v = true);
     DatePicker* Appearance(bool v);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    DatePicker* FocusRing(bool v);
     DatePicker* Range(bool v = true);
     DatePicker* NumberOfMonths(int count);
     DatePicker* CalendarMode(CalendarView value);

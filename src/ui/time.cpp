@@ -451,6 +451,10 @@ DatePicker* DatePicker::Appearance(bool v) {
     appearance = v;
     return this;
 }
+DatePicker* DatePicker::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 DatePicker* DatePicker::Range(bool v) {
     range = v;
     return this;
@@ -591,6 +595,7 @@ El* DatePicker::IntoEl() {
     }
     if (!open) {
         BindClick(trigger, StrDup(a, fmt("%s-input", id)), onToggle);
+        trigger->FocusRing(focusRing);
     }
     El* popup = nullptr;
     if (open) {
@@ -637,11 +642,12 @@ El* DatePicker::IntoEl() {
                     ->OnMouseUpOut(onToggle)
                     ->Child(content);
     }
-    return gpui::DatePicker::New(cx, id)
-        ->W(width)
-        ->Child(Popup::New(cx, StrDup(a, fmt("%s-pop", id)), trigger)
-                    ->Content(popup)
-                    ->IntoEl());
+    // Both halves of the picker take focus — the outer element and the
+    // trigger inside it — so the opt-out has to reach both.
+    return gpui::DatePicker::New(cx, id)->FocusRing(focusRing)->W(width)->Child(
+        Popup::New(cx, StrDup(a, fmt("%s-pop", id)), trigger)
+            ->Content(popup)
+            ->IntoEl());
 }
 
 } // namespace component

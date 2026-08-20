@@ -68,6 +68,10 @@ Select* Select::Appearance(bool v) {
     appearance = v;
     return this;
 }
+Select* Select::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 Select* Select::Searchable(InputState* q, Listener onFocus) {
     query = q;
     onQueryFocus = onFocus;
@@ -197,6 +201,7 @@ El* Select::IntoEl() {
     }
     if (!disabled) {
         BindClick(trigger, id, onToggle);
+        trigger->FocusRing(focusRing);
     }
 
     El* menu = nullptr;

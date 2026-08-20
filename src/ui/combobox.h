@@ -27,6 +27,7 @@ struct Combobox {
     float menuMaxH = 0;
     bool disabled = false;
     bool cleanable = false;
+    bool focusRing = true;
     InputState* query = nullptr;
     Listener onQueryFocus = {};
     Listener onToggle;
@@ -44,6 +45,8 @@ struct Combobox {
     Combobox* MenuMaxH(float v);
     Combobox* Disabled(bool v);
     Combobox* Cleanable(bool v = true);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    Combobox* FocusRing(bool v);
     Combobox* Multiple(bool v = true);
     Combobox* OnQueryFocus(Listener fn);
     Combobox* OnToggle(Listener fn);

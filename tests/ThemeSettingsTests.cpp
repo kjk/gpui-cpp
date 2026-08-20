@@ -44,8 +44,34 @@ static void TheScrollbarModeIsTheThemesUntilAnElementSaysOtherwise() {
     ScrollbarModeSet(ScrollbarMode::Always);
 }
 
+// Theme::focus_ring: off drops the ring outside the border and leaves the
+// tinted border, which is the half that costs no room.
+static void TheFocusRingIsOnUntilAnApplicationTurnsItOff() {
+    utassert(ThemeFocusRing());
+    ThemeSetFocusRing(false);
+    utassert(!ThemeFocusRing());
+    ThemeSetFocusRing(true);
+    utassert(ThemeFocusRing());
+}
+
+// FocusableExt::focus_ring, which carries state and nothing else: the
+// element remembers the answer, and the paint is what reads it.
+static void AControlCanDeclineTheFocusAppearance() {
+    Arena* a = ArenaNew();
+    El* e = Div(a)->FocusId(7);
+    utassert(e->style.focusRing);
+    e->FocusRing(false);
+    utassert(!e->style.focusRing);
+    // Declining the appearance is not declining focus: the element keeps its
+    // handle, so Tab still reaches it and Enter still fires.
+    utassert(e->style.focusId == 7);
+    ArenaDelete(a);
+}
+
 void TestThemeSettings() {
     TestSuite("theme settings");
+    TheFocusRingIsOnUntilAnApplicationTurnsItOff();
+    AControlCanDeclineTheFocusAppearance();
     TheLargeRadiusFollowsTheSmallOne();
     TheFontSizeIsTheOneEverythingIsMeasuredAgainst();
     TheScrollbarModeIsTheThemesUntilAnElementSaysOtherwise();

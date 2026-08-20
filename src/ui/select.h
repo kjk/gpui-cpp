@@ -32,6 +32,7 @@ struct Select {
     bool disabled = false;
     bool cleanable = false;
     bool appearance = true;
+    bool focusRing = true;
     // searchable(true): a query field at the top of the list, which is what
     // makes a Select a ComboBox in all but name.
     InputState* query = nullptr;
@@ -53,6 +54,8 @@ struct Select {
     Select* Disabled(bool v);
     Select* Cleanable(bool v = true);
     Select* Appearance(bool v);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    Select* FocusRing(bool v);
     Select* Searchable(InputState* query, Listener onFocus);
     // Multiple: the list toggles rather than replaces, and the trigger says
     // how many are picked.

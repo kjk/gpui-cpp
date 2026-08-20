@@ -41,6 +41,10 @@ Checkbox* Checkbox::W(float v) {
     w = v;
     return this;
 }
+Checkbox* Checkbox::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 Checkbox* Checkbox::Tooltip(Str s) {
     tooltip = s;
     return this;
@@ -90,6 +94,7 @@ El* Checkbox::IntoEl() {
     CheckboxState state =
         checked ? CheckboxState::Checked : CheckboxState::Unchecked;
     El* row = gpui::Checkbox::New(cx, id, state, disabled, onClick)
+                  ->FocusRing(focusRing)
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(8);
