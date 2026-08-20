@@ -48,6 +48,12 @@ struct PopupMenuState {
     // the pointer, which is what Rust's ContextMenuState keeps as `position`.
     float x = 0;
     float y = 0;
+    // ScrollHandle offset for a scrollable menu. Kept with the menu entity so
+    // rebuilding the frame does not jump a long menu back to the top.
+    float scrollY = 0;
+    // A submenu dismisses through its parents after an item is confirmed,
+    // just as Rust's dismiss_all walks parent_menu.
+    Entity<PopupMenuState> parent = {};
     // What a confirmed item reports: the item's index, bound with
     // ListenerFill the way a component hands its caller the value it made.
     Listener onConfirm = {};
@@ -56,6 +62,11 @@ struct PopupMenuState {
                             intptr_t ix);
     static void OnItemHover(PopupMenuState* self, Ctx* cx, const HoverEvent* ev,
                             intptr_t ix);
+    static void OnSubmenuClick(PopupMenuState* self, Ctx* cx,
+                               const ClickEvent* ev, intptr_t ix);
+    static void OnSubmenuHover(PopupMenuState* self, Ctx* cx,
+                               const HoverEvent* ev, intptr_t ix);
+    static void OnScroll(PopupMenuState* self, Ctx* cx, const ScrollEvent* ev);
     // A trigger that opens and closes the menu, and a right press that opens
     // it where the pointer is — the two ways Rust puts a PopupMenu on screen
     // (DropdownMenu and ContextMenu).
@@ -69,6 +80,7 @@ struct PopupMenuState {
 // that closes forgets what was selected in it.
 void PopupMenuOpen(PopupMenuState* s, Ctx* cx);
 void PopupMenuDismiss(PopupMenuState* s, Ctx* cx);
+void PopupMenuDismissAll(PopupMenuState* s, Ctx* cx);
 
 // The action, applied. `clickable` is the mask over the items as the caller
 // built them this frame; `hasSubmenu` says which of them open onto one.

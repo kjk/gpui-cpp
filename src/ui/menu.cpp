@@ -24,7 +24,7 @@ PopupMenu* PopupMenu::New(Ctx* cx, Str id, Entity<PopupMenuState> state) {
 }
 
 static MenuItem* MenuAdd(PopupMenu* m, MenuItemKind kind) {
-    if (m->n >= 32) {
+    if (m->n >= kPopupMenuMaxItems) {
         return nullptr;
     }
     MenuItem* it = &m->items[m->n++];
@@ -57,7 +57,21 @@ PopupMenu* PopupMenu::MenuWithKbd(Str label, Str kbd) {
     }
     return this;
 }
+PopupMenu* PopupMenu::Link(Str label, Str href, IconName icon) {
+    MenuItem* it = MenuAdd(this, MenuItemKind::Item);
+    if (it) {
+        it->label = label;
+        it->icon = icon;
+        it->isLink = true;
+        it->href = href;
+    }
+    return this;
+}
 PopupMenu* PopupMenu::Separator() {
+    // Rust ignores a leading separator and coalesces consecutive ones.
+    if (n == 0 || items[n - 1].kind == MenuItemKind::Separator) {
+        return this;
+    }
     MenuAdd(this, MenuItemKind::Separator);
     return this;
 }
@@ -80,12 +94,34 @@ PopupMenu* PopupMenu::Submenu(Str label, PopupMenu* menu) {
     if (it) {
         it->label = label;
         it->submenu = menu;
+        PopupMenuState* child = menu ? menu->state.Get(cx) : nullptr;
+        if (child) {
+            child->parent = state;
+        }
     }
     return this;
 }
 PopupMenu* PopupMenu::Disabled(bool v) {
     if (n > 0) {
         items[n - 1].disabled = v;
+    }
+    return this;
+}
+PopupMenu* PopupMenu::Checked(bool v) {
+    if (n > 0) {
+        items[n - 1].checked = v;
+    }
+    return this;
+}
+PopupMenu* PopupMenu::Icon(IconName v) {
+    if (n > 0) {
+        items[n - 1].icon = v;
+    }
+    return this;
+}
+PopupMenu* PopupMenu::Kbd(Str v) {
+    if (n > 0) {
+        items[n - 1].kbd = v;
     }
     return this;
 }
@@ -97,19 +133,100 @@ PopupMenu* PopupMenu::MinW(float v) {
     minW = v;
     return this;
 }
+PopupMenu* PopupMenu::MaxH(float v) {
+    maxH = v;
+    return this;
+}
+PopupMenu* PopupMenu::Scrollable(bool v) {
+    scrollable = v;
+    return this;
+}
 PopupMenu* PopupMenu::CheckSide(Side s) {
     checkSide = s;
     return this;
+}
+PopupMenu* PopupMenu::ExternalLinkIcon(bool v) {
+    externalLinkIcon = v;
+    return this;
+}
+
+bool PopupMenu::PerformKey(int key) {
+    PopupMenuState* top = state.Get(cx);
+    if (!top || !top->open) {
+        return false;
+    }
+
+    PopupMenu* active = this;
+    PopupMenu* parentMenu = nullptr;
+    PopupMenuState* activeState = top;
+    while (activeState->openSubmenu >= 0 &&
+           activeState->openSubmenu < active->n) {
+        PopupMenu* child = active->items[activeState->openSubmenu].submenu;
+        if (!child) {
+            break;
+        }
+        PopupMenuState* childState = child->state.Get(cx);
+        if (!childState) {
+            break;
+        }
+        parentMenu = active;
+        active = child;
+        activeState = childState;
+    }
+
+    PopupMenuAction action = PopupMenuActionForKey(key, activeState->side);
+    // A submenu has no independent `open` flag in the element tree. Escape
+    // or the outward arrow with no deeper child closes the row that exposed
+    // it, one level per press.
+    if (parentMenu && activeState->openSubmenu < 0 &&
+        (action == PopupMenuAction::Cancel ||
+         action == PopupMenuAction::CloseSubmenu)) {
+        PopupMenuState* parentState = parentMenu->state.Get(cx);
+        if (parentState) {
+            parentState->openSubmenu = -1;
+            Notify(cx);
+        }
+        return true;
+    }
+
+    // Link rows are PopupMenuItem::ElementItem upstream. Their mouse handler
+    // opens the URL directly, so keyboard confirmation must do the same
+    // instead of forwarding an item index to the caller's action handler.
+    int selected = activeState->selected;
+    if (action == PopupMenuAction::Confirm && selected >= 0 &&
+        selected < active->n && active->items[selected].isLink &&
+        active->items[selected].href.s) {
+        OpenUrl(active->items[selected].href);
+        PopupMenuDismissAll(activeState, cx);
+        return true;
+    }
+
+    bool clickable[kPopupMenuMaxItems] = {};
+    bool submenu[kPopupMenuMaxItems] = {};
+    active->Masks(clickable, submenu);
+    PopupMenuPerform(activeState, cx, action, clickable, submenu, active->n);
+    return action != PopupMenuAction::None;
 }
 
 void PopupMenu::Masks(bool* clickable, bool* hasSubmenu) const {
     for (int i = 0; i < n; i++) {
         // is_clickable(): a separator and a label are stepped over, and so is
         // a disabled row.
-        clickable[i] = items[i].kind == MenuItemKind::Item && !items[i]
-                                                                   .disabled;
+        clickable[i] =
+            items[i].kind == MenuItemKind::Item && !items[i].disabled;
         hasSubmenu[i] = items[i].submenu != nullptr;
     }
+}
+
+static void OnPopupLinkClick(PopupMenuState* state, Ctx* cx, const ClickEvent*,
+                             intptr_t hrefPtr) {
+    const Str* href = (const Str*)hrefPtr;
+    if (href && href->s) {
+        OpenUrl(*href);
+    }
+    // A link has its own handler rather than an action. Dismiss the menu
+    // chain without reporting one of the caller's action indexes.
+    PopupMenuDismissAll(state, cx);
 }
 
 El* PopupMenu::IntoEl() {
@@ -126,6 +243,39 @@ El* PopupMenu::IntoEl() {
             leftGutter = true;
         }
     }
+    // min_w is a floor, not a fixed menu width. Shape the labels that are
+    // present and let a context menu or submenu grow up to Rust's default
+    // 500px maximum. Custom rows in the story already carry an explicit
+    // 250px minimum, so their own content fits within that floor.
+    float menuW = minW;
+    if (cx->win) {
+        for (int i = 0; i < n; i++) {
+            const MenuItem& it = items[i];
+            if (!it.label.s || it.kind == MenuItemKind::Separator) {
+                continue;
+            }
+            Size label = MeasureText(&cx->win->paint, it.label, 14, 0);
+            // Border + item-list padding + row padding.
+            float need = 26 + label.w;
+            if (leftGutter) {
+                need += 18;
+            }
+            if (it.kbd.s) {
+                Size key = MeasureText(&cx->win->paint, it.kbd, 12, 0);
+                need += (key.w + 8 > 20 ? key.w + 8 : 20) + 4;
+            }
+            if ((!SideIsLeft(checkSide) && it.checked) || it.submenu ||
+                (it.isLink && externalLinkIcon)) {
+                need += 18;
+            }
+            if (need > menuW) {
+                menuW = need;
+            }
+        }
+    }
+    if (menuW > 500) {
+        menuW = 500;
+    }
     float itemH = size == UiSize::Small ? 20.f : 26.f;
     float radius = size == UiSize::Small ? th.radius * 0.5f : th.radius;
 
@@ -133,19 +283,32 @@ El* PopupMenu::IntoEl() {
     // own is the width Rust's min_w asks for.
     El* root = Div(a)
                    ->FlexCol()
-                   ->W(minW)
-                   ->Pad(4)
+                   ->W(menuW)
                    ->Bg(th.background)
                    ->Border(1, th.border)
-                   ->Radius(th.radius);
+                   ->Radius(th.radius)
+                   ->ClipY();
+    El* rows = Div(a)->FlexCol()->W(kFill)->Pad(4)->Gap(2);
+    if (scrollable) {
+        rows->MaxH(maxH)
+            ->ScrollY(s ? s->scrollY : 0)
+            ->ScrollId(HashClickId(id))
+            ->OnScroll(ListenTo(state, &PopupMenuState::OnScroll));
+    }
     Listener click = ListenTo(state, &PopupMenuState::OnItemClick, 0);
+    Listener linkClick = ListenTo(state, &OnPopupLinkClick, 0);
     Listener hover = ListenTo(state, &PopupMenuState::OnItemHover, 0);
+    Listener submenuClick = ListenTo(state, &PopupMenuState::OnSubmenuClick, 0);
+    Listener submenuHover = ListenTo(state, &PopupMenuState::OnSubmenuHover, 0);
     for (int i = 0; i < n; i++) {
         const MenuItem& it = items[i];
         if (it.kind == MenuItemKind::Separator) {
+            if (i + 1 == n) {
+                continue;
+            }
             // my_0p5 border_b(2): a rule with a little air around it.
-            root->Child(Div(a)->W(kFill)->PadY(2)->Child(
-                Div(a)->W(kFill)->H(1)->Bg(th.border)));
+            rows->Child(Div(a)->W(kFill)->PadY(2)->Child(
+                Div(a)->W(kFill)->H(2)->Bg(th.border)));
             continue;
         }
         bool lit =
@@ -182,7 +345,19 @@ El* PopupMenu::IntoEl() {
         }
         row->Child(left);
         if (it.kbd.s) {
-            row->Child(Kbd::New(cx, it.kbd)->IntoEl());
+            // PopupMenu clears Kbd's background and border while retaining
+            // its compact padding and minimum width.
+            row->Child(
+                Div(a)
+                    ->PadX(4)
+                    ->PadY(2)
+                    ->MinW(20)
+                    ->ItemsCenter()
+                    ->JustifyCenter()
+                    ->Child(Kbd::New(cx, it.kbd)->Appearance(false)->IntoEl()));
+        }
+        if (it.isLink && externalLinkIcon) {
+            row->Child(IconEl(a, IconName::ExternalLink, 12)->Fg(th.mutedFg));
         }
         if (!SideIsLeft(checkSide) && it.checked) {
             row->Child(IconEl(a, IconName::Check, 14)->Fg(fg));
@@ -191,9 +366,19 @@ El* PopupMenu::IntoEl() {
             row->Child(IconEl(a, IconName::ChevronRight, 14)->Fg(fg));
         }
         if (it.kind == MenuItemKind::Item && !it.disabled) {
-            BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
-                      ListenerArg(click, i));
-            row->OnHover(ListenerArg(hover, i));
+            if (it.submenu) {
+                BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
+                          ListenerArg(submenuClick, i));
+                row->OnHover(ListenerArg(submenuHover, i));
+            } else if (it.isLink && it.href.s) {
+                BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
+                          ListenerArg(linkClick, (intptr_t)&it.href));
+                row->OnHover(ListenerArg(hover, i));
+            } else {
+                BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
+                          ListenerArg(click, i));
+                row->OnHover(ListenerArg(hover, i));
+            }
         }
         if (it.submenu && openSubmenu == i) {
             // The submenu hangs off the row it belongs to, on the side the
@@ -201,15 +386,16 @@ El* PopupMenu::IntoEl() {
             El* sub = it.submenu->IntoEl();
             sub->Absolute()->Top(-4);
             if (s && SideIsLeft(s->side)) {
-                sub->Right(minW - 8);
+                sub->Right(menuW - 8);
             } else {
-                sub->Left(minW - 8);
+                sub->Left(menuW - 8);
             }
             sub->Deferred();
             row->Child(sub);
         }
-        root->Child(row);
+        rows->Child(row);
     }
+    root->Child(rows);
     return root;
 }
 

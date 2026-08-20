@@ -76,13 +76,28 @@ void PopupMenuDismiss(PopupMenuState* s, Ctx* cx) {
     Notify(cx);
 }
 
+void PopupMenuDismissAll(PopupMenuState* s, Ctx* cx) {
+    Entity<PopupMenuState> parent = s->parent;
+    PopupMenuDismiss(s, cx);
+    while (parent.IsValid()) {
+        PopupMenuState* p = parent.Get(cx);
+        if (!p) {
+            break;
+        }
+        parent = p->parent;
+        PopupMenuDismiss(p, cx);
+    }
+}
+
 void PopupMenuConfirm(PopupMenuState* s, Ctx* cx, int ix) {
     if (s->onConfirm.IsValid()) {
         ClickEvent ev = {};
         ListenerCall(cx->app, cx->win, ListenerFill(s->onConfirm, ix), &ev);
     }
-    // The item ran, so the menu goes: Rust confirms and then dismisses.
-    PopupMenuDismiss(s, cx);
+    // The item ran, so this menu and every parent go. Rust spells this
+    // dismiss_all; without it, choosing a nested item leaves the top-level
+    // dropdown behind.
+    PopupMenuDismissAll(s, cx);
 }
 
 void PopupMenuPerform(PopupMenuState* s, Ctx* cx, PopupMenuAction act,
@@ -173,9 +188,34 @@ void PopupMenuState::OnItemHover(PopupMenuState* self, Ctx* cx,
     // submenu it opened.
     if (ev->hovered) {
         self->selected = (int)ix;
+        self->openSubmenu = -1;
     } else if (self->selected == (int)ix && self->openSubmenu != (int)ix) {
         self->selected = -1;
     }
+    Notify(cx);
+}
+
+void PopupMenuState::OnSubmenuClick(PopupMenuState* self, Ctx* cx,
+                                    const ClickEvent*, intptr_t ix) {
+    self->selected = (int)ix;
+    self->openSubmenu = (int)ix;
+    Notify(cx);
+}
+
+void PopupMenuState::OnSubmenuHover(PopupMenuState* self, Ctx* cx,
+                                    const HoverEvent* ev, intptr_t ix) {
+    // Rust renders a submenu as soon as its row becomes selected. Keep it
+    // selected while the pointer crosses from the row into the child menu.
+    if (ev->hovered) {
+        self->selected = (int)ix;
+        self->openSubmenu = (int)ix;
+        Notify(cx);
+    }
+}
+
+void PopupMenuState::OnScroll(PopupMenuState* self, Ctx* cx,
+                              const ScrollEvent* ev) {
+    self->scrollY = ev->offsetY;
     Notify(cx);
 }
 
