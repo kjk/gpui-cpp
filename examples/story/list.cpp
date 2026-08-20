@@ -50,8 +50,7 @@ enum {
     ListActSearchable,
     ListActLoading,
     ListActLazyLoad,
-    ListActDraggable,
-    ListActActiveHighlight
+    ListActDraggable
 };
 
 struct ListStory {
@@ -123,14 +122,6 @@ static void ListMenuAct(ListStory* self, Ctx* cx, const ClickEvent*,
         case ListActDraggable:
             self->draggable = !self->draggable;
             break;
-        case ListActActiveHighlight: {
-            // The story's settings menu toggles this in Rust; it belongs to
-            // the whole app, not to this page.
-            ListSettings ls = ListSettingsNow();
-            ls.activeHighlight = !ls.activeHighlight;
-            ListSettingsSet(ls);
-            break;
-        }
         default:
             break;
     }
@@ -214,19 +205,19 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
         cx, StrL("list-go-to"), StrL("Go To"), self->openMenu == ListMenuGoTo,
         ListenerArg(openMenu, ListMenuGoTo), goTo, 4, act));
     group->Child(StoryToolbarDivider(cx));
-    StoryToolbarOpt options[6] = {
+    // The five rows list_story's Options menu has. Active Highlight is not
+    // one of them — that setting lives in the gallery's Appearance menu.
+    StoryToolbarOpt options[5] = {
         {"Selectable", self->selectable, ListActSelectable},
         {"Searchable", self->searchable, ListActSearchable},
         {"Loading", self->loading, ListActLoading},
         {"Lazy Load", self->lazyLoad, ListActLazyLoad},
         {"Draggable", self->draggable, ListActDraggable},
-        {"Active Highlight", ListSettingsNow().activeHighlight,
-         ListActActiveHighlight},
     };
     group->Child(StoryToolbarDropdown(cx, StrL("list-options"), StrL("Options"),
                                       self->openMenu == ListMenuOptions,
                                       ListenerArg(openMenu, ListMenuOptions),
-                                      options, 6, act));
+                                      options, 5, act));
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
