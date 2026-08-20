@@ -36,7 +36,6 @@ struct DatePickerStory {
     bool seeded = false;
 
     static El* Render(DatePickerStory* self, Ctx* cx);
-    static void OnKey(DatePickerStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static component::DateRangePreset gSinglePresets[3];
@@ -398,27 +397,4 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     return page;
 }
 
-void DatePickerStory::OnKey(DatePickerStory* self, Ctx* cx,
-                            const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    DatePickerAction action =
-        DatePickerActionForKey(ev->vk, self->open >= 0, false);
-    if (action == DatePickerAction::Clear) {
-        PickerState& state = self->pickers[self->focused];
-        state.start = {};
-        state.end = {};
-        self->open = -1;
-        UpdateValue(self, self->focused);
-    } else if (action == DatePickerAction::Open) {
-        self->open = self->focused;
-    } else if (action == DatePickerAction::Dismiss) {
-        self->open = -1;
-    } else {
-        return;
-    }
-    Notify(cx);
-}
-
-STORY_PAGE_KEYS(StoryDatePicker, DatePickerStory);
+STORY_PAGE(StoryDatePicker, DatePickerStory);

@@ -23,7 +23,6 @@ struct SheetStory {
     bool seeded = false;
 
     static El* Render(SheetStory* self, Ctx* cx);
-    static void OnKey(SheetStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void SheetToolbarAct(SheetStory* self, Ctx* cx, const ClickEvent*,
@@ -153,13 +152,4 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
-void SheetStory::OnKey(SheetStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
-        return;
-    }
-    self->open = SheetNone;
-    Notify(cx);
-}
-
-STORY_PAGE_KEYS(StorySheet, SheetStory);
+STORY_PAGE(StorySheet, SheetStory);

@@ -6,48 +6,46 @@
 
 #include "Test.h"
 
+// The chord, resolved in the picker's context, read as what the picker does.
+static DatePickerAction ForChord(const char* spec, bool open, bool disabled) {
+    DatePickerInitKeys();
+    KeyChord c = {};
+    utassert(KeyChordParse(Str(spec), &c));
+    uint32_t ctx = KeyContextOf(DatePickerContext());
+    return DatePickerActionOf(KeymapMatch(c, &ctx, 1).action, open, disabled);
+}
+
 static void EnterOnlyOpens() {
-    utassert(DatePickerActionForKey(KeyReturn, false, false) ==
-             DatePickerAction::Open);
+    utassert(ForChord("enter", false, false) == DatePickerAction::Open);
     // Already open, Enter does nothing: choosing a date is the calendar's
     // business, not the root's. A select would confirm here.
-    utassert(DatePickerActionForKey(KeyReturn, true, false) ==
-             DatePickerAction::None);
+    utassert(ForChord("enter", true, false) == DatePickerAction::None);
 }
 
 static void EscapeOnlyCloses() {
-    utassert(DatePickerActionForKey(KeyEscape, true, false) ==
-             DatePickerAction::Dismiss);
+    utassert(ForChord("escape", true, false) == DatePickerAction::Dismiss);
     // Closed, Rust propagates it.
-    utassert(DatePickerActionForKey(KeyEscape, false, false) ==
-             DatePickerAction::None);
+    utassert(ForChord("escape", false, false) == DatePickerAction::None);
 }
 
 static void OnlyTheConfirmHandlerChecksDisabled() {
-    utassert(DatePickerActionForKey(KeyReturn, false, true) ==
-             DatePickerAction::None);
+    utassert(ForChord("enter", false, true) == DatePickerAction::None);
     // Rust's Cancel handler has no disabled check, so Escape still closes a
     // disabled picker rather than trapping it open.
-    utassert(DatePickerActionForKey(KeyEscape, true, true) ==
-             DatePickerAction::Dismiss);
+    utassert(ForChord("escape", true, true) == DatePickerAction::Dismiss);
 }
 
 // on_delete: Delete and Backspace clear the date, open or shut. Rust's
 // handler has no disabled check, and neither does this.
 static void DeleteClearsTheDate() {
-    utassert(DatePickerActionForKey(KeyDelete, false, false) ==
-             DatePickerAction::Clear);
-    utassert(DatePickerActionForKey(KeyBack, true, false) ==
-             DatePickerAction::Clear);
-    utassert(DatePickerActionForKey(KeyDelete, false, true) ==
-             DatePickerAction::Clear);
+    utassert(ForChord("delete", false, false) == DatePickerAction::Clear);
+    utassert(ForChord("backspace", true, false) == DatePickerAction::Clear);
+    utassert(ForChord("delete", false, true) == DatePickerAction::Clear);
 }
 
 static void OtherKeysAreNotThePickers() {
-    utassert(DatePickerActionForKey(KeyDown, false, false) ==
-             DatePickerAction::None);
-    utassert(DatePickerActionForKey(KeySpace, true, false) ==
-             DatePickerAction::None);
+    utassert(ForChord("down", false, false) == DatePickerAction::None);
+    utassert(ForChord("space", true, false) == DatePickerAction::None);
 }
 
 static LocalDate D(int year, int month, int day) {

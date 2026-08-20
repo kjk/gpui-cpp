@@ -24,7 +24,6 @@ struct PopoverStory {
     bool seeded = false;
 
     static El* Render(PopoverStory* self, Ctx* cx);
-    static void OnKey(PopoverStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void TogglePop(PopoverStory* self, Ctx* cx, const ClickEvent*,
@@ -97,6 +96,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                                   "Popover", toggle))
                              ->Content(defCard)
                              ->Open(self->open == PopDefault)
+                             ->OnClose(ListenerArg(toggle, PopDefault))
                              ->IntoEl());
     El* openCard = PopCard(cx, 600);
     openCard->Child(
@@ -107,6 +107,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                                   "Default Open", toggle))
                              ->Content(openCard)
                              ->Open(self->open == PopDefaultOpen)
+                             ->OnClose(ListenerArg(toggle, PopDefaultOpen))
                              ->IntoEl());
     page->Child(def);
 
@@ -130,6 +131,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                                    "Popup Form", toggle))
                               ->Content(formCard)
                               ->Open(self->open == PopForm)
+                             ->OnClose(ListenerArg(toggle, PopForm))
                               ->IntoEl());
     page->Child(form);
 
@@ -146,6 +148,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                 ->Menu(StrL("Alan Turing"))
                                 ->IntoEl())
                   ->Open(self->open == PopList)
+                             ->OnClose(ListenerArg(toggle, PopList))
                   ->IntoEl());
     page->Child(list);
 
@@ -197,6 +200,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                              "Style Popover", toggle))
                         ->Content(styleCard)
                         ->Open(self->open == PopStyle)
+                             ->OnClose(ListenerArg(toggle, PopStyle))
                         ->IntoEl());
     page->Child(style);
 
@@ -211,6 +215,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                  ->Menu(StrL("Loading..."))
                                  ->IntoEl())
                    ->Open(self->open == PopAsync)
+                             ->OnClose(ListenerArg(toggle, PopAsync))
                    ->IntoEl());
     page->Child(async);
 
@@ -253,13 +258,4 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
-void PopoverStory::OnKey(PopoverStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
-        return;
-    }
-    self->open = -1;
-    Notify(cx);
-}
-
-STORY_PAGE_KEYS(StoryPopover, PopoverStory);
+STORY_PAGE(StoryPopover, PopoverStory);

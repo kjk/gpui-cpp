@@ -35,4 +35,23 @@ uint32_t SelectPageDown();
 
 } // namespace action
 
+// An overlay whose only binding is escape — popover.rs, sheet.rs and
+// color_picker.rs each bind Cancel in a context of their own and close on it.
+// Rust's are views that own the flag they clear; the port's are builders
+// whose caller owns it, so the listener waits in a keyed entity where an
+// action arriving between frames can find it.
+struct CancelKeys {
+    Listener onCancel = {};
+
+    static void OnAction(CancelKeys* self, Ctx* cx, const ActionEvent* ev);
+};
+
+// Bind escape to ui::Cancel in `context`, once per context per keymap.
+void CancelInitKeys(const char* context);
+// Declare `context` on `root` and run `onCancel` for the escape in it.
+// `name` keys the entity the listener waits in, so two overlays of the same
+// kind keep their own.
+void CancelBindKeys(Ctx* cx, El* root, const char* context, Str name,
+                    Listener onCancel);
+
 } // namespace gpui

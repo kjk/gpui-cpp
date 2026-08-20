@@ -17,10 +17,35 @@ enum class DatePickerAction : uint8_t {
     Clear
 };
 
+// date_picker.rs::init: enter, escape and the two delete keys in the
+// "DatePicker" key context.
+void DatePickerInitKeys();
+Str DatePickerContext();
+
 // The three handlers, whole. Note that only the Confirm one checks `disabled`:
 // neither Rust's Cancel nor its Delete does, so Escape still closes a disabled
 // picker that somehow got opened rather than trapping it that way.
-DatePickerAction DatePickerActionForKey(int key, bool open, bool disabled);
+DatePickerAction DatePickerActionOf(uint32_t id, bool open, bool disabled);
+
+// Where a picker's two handlers wait between frames, the way DialogKeys does:
+// Rust's DatePicker is a view that owns its open flag and its date, and the
+// port's is a builder whose caller owns both.
+struct DatePickerKeys {
+    // on_toggle, which the trigger's click carries: it opens a closed picker
+    // and closes an open one, which is what Rust's Confirm and Cancel do one
+    // way each.
+    Listener onToggle = {};
+    // on_delete, which is the clear button's handler reached from the
+    // keyboard.
+    Listener onClear = {};
+    bool open = false;
+    bool disabled = false;
+
+    static void OnAction(DatePickerKeys* self, Ctx* cx, const ActionEvent* ev);
+};
+
+void DatePickerBindKeys(Ctx* cx, El* root, Str name, Listener onToggle,
+                        Listener onClear, bool open, bool disabled);
 
 // Calendar::Matcher, kept POD-friendly so a picker can copy it into its frame
 // element. Range disables dates inside its bounds; Interval disables dates

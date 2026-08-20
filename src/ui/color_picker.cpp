@@ -1,4 +1,5 @@
 #include "ui/color_picker.h"
+#include "base/actions.h"
 
 namespace gpui {
 
@@ -94,7 +95,13 @@ El* ColorPicker::IntoEl() {
         }
     }
     El* root = gpui::ColorPicker::New(cx, StrL("color-picker"))->Child(trigger);
-    return Popup::New(cx, StrL("color-pop"), root)->Content(pop)->IntoEl();
+    El* wrap = Popup::New(cx, StrL("color-pop"), root)->Content(pop)->IntoEl();
+    // color_picker.rs binds escape to Cancel in the "ColorPicker" context;
+    // the toggle the trigger carries is what closes an open one.
+    if (open) {
+        CancelBindKeys(cx, wrap, "ColorPicker", StrL("color-picker"), onToggle);
+    }
+    return wrap;
 }
 
 } // namespace component
