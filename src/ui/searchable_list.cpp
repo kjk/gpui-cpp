@@ -31,6 +31,16 @@ void SearchableListSearch(SearchableListState* s, const SearchableItem* items,
     s->list.count = s->matches.len;
 }
 
+void SearchableListSelectOnly(SearchableListState* s, int index) {
+    if (!s) {
+        return;
+    }
+    s->selected.Clear();
+    if (index >= 0) {
+        s->selected.Append(index);
+    }
+}
+
 static int SelectionIndexOfValue(const SearchableListState* s,
                                  const SearchableItem* items, int nItems,
                                  Str value) {

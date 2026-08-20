@@ -45,7 +45,6 @@ int PopupMenuPrevIndex(const bool* clickable, int n, int selected);
 
 // The most rows the keyboard reads off a menu. The themed menu builds at most
 // this many, and a menu longer than a screen scrolls rather than growing.
-constexpr int kPopupMenuMaxRows = 128;
 
 // What one row looks like to the keyboard. Rust's PopupMenu owns its items,
 // so select_down and confirm read them off itself; the rows belong to the
@@ -84,8 +83,9 @@ struct PopupMenuState {
     // ListenerFill the way a component hands its caller the value it made.
     Listener onConfirm = {};
     // The rows as they were last built, which is what an action reads.
-    PopupMenuRow rows[kPopupMenuMaxRows] = {};
-    int nRows = 0;
+    // The rows as the last frame built them, as many as it built. Rust's
+    // PopupMenu holds a Vec of menu items.
+    Vec<PopupMenuRow> rows;
 
     // The six actions, all through one handler. Rust has a method per action
     // because it dispatches on the type; there is one id to switch on here,
@@ -108,6 +108,8 @@ struct PopupMenuState {
                                const ClickEvent* ev);
     static void OnContextDown(PopupMenuState* self, Ctx* cx,
                               const MouseDownEvent* ev);
+
+    ~PopupMenuState() { rows.Reset(); }
 };
 
 // Open and close, which are `PopupMenu::show` and `dismiss(&Cancel)`. A menu

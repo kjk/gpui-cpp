@@ -17,9 +17,6 @@ enum class MenuItemKind : uint8_t {
 
 struct PopupMenu;
 
-// The keyboard reads the same rows off the state, so one bound covers both.
-constexpr int kPopupMenuMaxItems = kPopupMenuMaxRows;
-
 struct MenuItem {
     MenuItemKind kind = MenuItemKind::Item;
     Str label = {};
@@ -42,8 +39,8 @@ struct PopupMenu {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<PopupMenuState> state = {};
-    MenuItem items[kPopupMenuMaxItems] = {};
-    int n = 0;
+    // As many items as the caller adds; the builder is on the frame arena.
+    ArenaVec<MenuItem> items;
     UiSize size = UiSize::Medium;
     float minW = 128;
     float maxH = 450;

@@ -125,6 +125,24 @@ void SelectToggleOpen(SearchableListState* s, Ctx* cx) {
         return;
     }
     s->open = !s->open;
+    // The focus goes into the list that came up and comes back to the trigger
+    // when it goes away — `content_focus_handle.focus(..)` on the way in and
+    // `previous.focus(..)` on the way out, which is Rust's toggle. Focus that
+    // has moved somewhere else on purpose is left alone.
+    if (s->open) {
+        s->previousFocusId = WindowFocusedId(cx->win);
+        if (s->contentFocusId) {
+            WindowSetFocusId(cx->win, s->contentFocusId);
+        }
+    } else {
+        if (s->previousFocusId &&
+            WindowFocusWithin(cx->win, s->contentFocusId)) {
+            if (!WindowRestoreFocus(cx->win, s->previousFocusId)) {
+                WindowRestoreFocus(cx->win, s->triggerFocusId);
+            }
+        }
+        s->previousFocusId = 0;
+    }
     // Opening starts the keyboard on whatever is already picked, so the first
     // arrow steps from there rather than from the top.
     s->list.selected = -1;
@@ -143,7 +161,7 @@ void SelectClear(SearchableListState* s, Ctx* cx) {
     if (!s) {
         return;
     }
-    s->selected.len = 0;
+    s->selected.Clear();
     Notify(cx);
 }
 
@@ -221,6 +239,12 @@ El* Select::IntoEl() {
     if (!disabled) {
         BindClick(box, id, onToggle);
         box->FocusRing(focusRing);
+    }
+    // The two handles the toggle above moves focus between, named the same way
+    // every frame so a state that outlives the frame can still find them.
+    if (s) {
+        s->triggerFocusId = HashClickId(id);
+        s->contentFocusId = HashClickId(StrDup(a, fmt("%s-list", id)));
     }
 
     El* menu = nullptr;

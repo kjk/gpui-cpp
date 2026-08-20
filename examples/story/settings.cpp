@@ -65,7 +65,7 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
         for (Entity<component::SearchableListState> e :
              {self->fontFamily, self->groupVariant, self->groupSize}) {
             if (component::SearchableListState* st = e.Get(cx)) {
-                st->selected.len = 1;
+                component::SearchableListSelectOnly(st, 0);
             }
         }
     }

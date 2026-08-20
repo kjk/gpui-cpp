@@ -14,10 +14,10 @@ NativeMenu* NativeMenu::New(Ctx* cx) {
 }
 
 static NativeMenuItem* PushItem(NativeMenu* m) {
-    if (m->n >= kNativeMenuMaxItems) {
+    if (!m->items.Append(m->a, NativeMenuItem{})) {
         return nullptr;
     }
-    return &m->items[m->n++];
+    return &m->items[m->items.len - 1];
 }
 
 NativeMenu* NativeMenu::Menu(Str label, intptr_t id) {
@@ -81,7 +81,7 @@ int NativeMenuSelectable(const NativeMenu* m, const NativeMenuItem** out,
         return 0;
     }
     int n = 0;
-    for (int i = 0; i < m->n; i++) {
+    for (int i = 0; i < m->items.len; i++) {
         const NativeMenuItem& it = m->items[i];
         if (it.kind == NativeMenuItemKind::Separator) {
             continue;
@@ -109,12 +109,13 @@ int NativeMenuSelectable(const NativeMenu* m, const NativeMenuItem** out,
 // be chosen numbered by its place in the selectable order, so the id the OS
 // answers with is an index back into that table.
 static PlatMenuItem* ToPlat(Arena* a, const NativeMenu* m, int* nextId) {
-    if (!m || m->n == 0) {
+    if (!m || m->items.len == 0) {
         return nullptr;
     }
-    auto* out = (PlatMenuItem*)a->Push((uint64_t)m->n * sizeof(PlatMenuItem),
-                                       alignof(PlatMenuItem), true);
-    for (int i = 0; i < m->n; i++) {
+    auto* out = (PlatMenuItem*)a
+                    ->Push((uint64_t)m->items.len * sizeof(PlatMenuItem),
+                           alignof(PlatMenuItem), true);
+    for (int i = 0; i < m->items.len; i++) {
         const NativeMenuItem& it = m->items[i];
         PlatMenuItem& p = out[i];
         p.label = StrDup(a, it.label).s;
@@ -126,7 +127,7 @@ static PlatMenuItem* ToPlat(Arena* a, const NativeMenu* m, int* nextId) {
         }
         if (it.kind == NativeMenuItemKind::Submenu) {
             p.submenu = ToPlat(a, it.submenu, nextId);
-            p.submenuN = it.submenu ? it.submenu->n : 0;
+            p.submenuN = it.submenu ? it.submenu->items.len : 0;
             continue;
         }
         if (it.icon != IconName::None) {
@@ -140,7 +141,7 @@ static PlatMenuItem* ToPlat(Arena* a, const NativeMenu* m, int* nextId) {
 }
 
 bool NativeMenu::Show(float x, float y) {
-    if (n == 0 || !PlatHasMenu()) {
+    if (items.len == 0 || !PlatHasMenu()) {
         return false;
     }
     int nextId = 1;
@@ -148,12 +149,16 @@ bool NativeMenu::Show(float x, float y) {
     bool dark = cx->themeMode() == ThemeMode::Dark;
     // The OS runs its own tracking loop, so this comes back once the menu is
     // gone and the answer is in hand.
-    int chosen = PlatShowMenu(cx->win, plat, n, x, y, dark);
+    int chosen = PlatShowMenu(cx->win, plat, items.len, x, y, dark);
     if (chosen <= 0) {
         return true;
     }
-    const NativeMenuItem* table[kNativeMenuMaxItems * 4] = {};
-    int count = NativeMenuSelectable(this, table, kNativeMenuMaxItems * 4);
+    // As many rows as the whole tree can offer, counted first so the table
+    // that flattens it is exactly big enough.
+    int cap = NativeMenuSelectable(this, nullptr, 1 << 20);
+    auto** table =
+        (const NativeMenuItem**)Alloc(a, (int)sizeof(void*) * (cap + 1));
+    int count = NativeMenuSelectable(this, table, cap);
     if (chosen > count || !table[chosen - 1]) {
         return true;
     }
@@ -165,7 +170,7 @@ bool NativeMenu::Show(float x, float y) {
 
 PopupMenu* NativeMenu::IntoPopupMenu(Str id) const {
     PopupMenu* menu = PopupMenu::New(cx, id);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         const NativeMenuItem& it = items[i];
         if (it.kind == NativeMenuItemKind::Separator) {
             menu->Separator();

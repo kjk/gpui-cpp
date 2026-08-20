@@ -9,16 +9,33 @@ namespace gpui {
 // and a caller that wants to drive it calls PopoverSetOpen every frame.
 //
 // Rust's state also parks the previously focused handle and restores it on
-// close, and holds a dismiss subscription while open. Focus restoration needs
-// a focus handle per popover, which the runtime has no room for yet; the
-// subscription is the window's single unhandled-click slot, so it is the
-// caller's for now — see the note on PopoverDismissOnOutsideClick.
+// close; so does this one. The dismiss subscription is the window's single
+// unhandled-click slot, so that half is still the caller's — see the note on
+// PopoverDismissOnOutsideClick.
 struct PopoverState {
     bool open = false;
     // Whether default_open has been applied yet. Rust passes it to
     // PopoverState::new, which only runs the first time the key is seen.
     bool seeded = false;
+    // The popover's own focus handle — Rust hangs it off the content — and
+    // `tracked_focus_handle`, what it focuses instead, which is how a select
+    // hands focus to the query field inside it. `Popover::New` fills the
+    // first in from the id. Focus that has since moved on to something
+    // *inside* the content does not read as the popover's, so a popover the
+    // reader tabbed into is left alone on close rather than pulled back;
+    // Rust's handle answers for its whole subtree.
+    int focusId = 0;
+    int trackedFocusId = 0;
+    // previous_focus_handle: where focus was when it opened, put back on
+    // close if the popover still holds it.
+    int previousFocusId = 0;
 };
+
+// Open or close, doing what Rust's `toggle_open` does around it: the focus
+// goes into the popover (or into whatever it tracks) and comes back out to
+// where it was. A widget that is a popover in all but name — a select, a
+// dropdown menu — can call this with a state of its own.
+void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open);
 
 bool PopoverIsOpen(Ctx* cx, Entity<PopoverState> state);
 void PopoverSetOpen(Ctx* cx, Entity<PopoverState> state, bool open);
@@ -33,12 +50,17 @@ void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent* ev);
 // popover is. `overlayClosable` is Rust's on_mouse_down_out.
 struct Popover {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* root = nullptr;
     Entity<PopoverState> state = {};
+    int focusId = 0;
     MouseButton button = MouseButton::Left;
 
     static Popover* New(Ctx* cx, Str id, Entity<PopoverState> state = {},
                         MouseButton button = MouseButton::Left);
+    // Popover::tracked_focus_handle: what takes focus when it opens, instead
+    // of the popover itself.
+    Popover* TrackedFocus(int trackedId);
     Popover* Trigger(El* trigger);
     Popover* Content(El* content);
     El* IntoEl();

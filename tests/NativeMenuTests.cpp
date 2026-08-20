@@ -13,11 +13,13 @@ using namespace gpui::component;
 // test_native_menu_builder_accepts_icon: the row carries what it was built
 // with, icon included.
 static void ARowCarriesWhatItWasBuiltWith() {
+    Arena* ta = ArenaNew();
     NativeMenu m;
+    m.a = ta;
     utassert(m.IsEmpty());
     m.MenuWithIcon(StrL("Github"), IconName::Github, 7);
     utassert(!m.IsEmpty());
-    utassert(m.n == 1);
+    utassert(m.items.len == 1);
     utassert(m.items[0].kind == NativeMenuItemKind::Item);
     utassert(StrEqI(m.items[0].label, StrL("Github")));
     utassert(!m.items[0].disabled);
@@ -35,31 +37,39 @@ static void ARowCarriesWhatItWasBuiltWith() {
     utassert(m.items[3].kind == NativeMenuItemKind::Separator);
 
     NativeMenu sub;
+    sub.a = ta;
     sub.Menu(StrL("Copy"), 10);
     m.Submenu(StrL("Edit"), &sub);
     utassert(m.items[4].kind == NativeMenuItemKind::Submenu);
     utassert(m.items[4].submenu == &sub);
-    utassert(m.n == 5);
+    utassert(m.items.len == 5);
+    ArenaDelete(ta);
 }
 
-// A menu only holds so many rows; the ones past that are dropped rather than
-// written past the end of it.
-static void TheRowsPastTheEndAreDropped() {
+// There is no cap to drop rows past any more; what this pins is that there is
+// not one. A hundred rows go in and a hundred come back out.
+static void EveryRowAddedIsKept() {
+    Arena* ta = ArenaNew();
     NativeMenu m;
-    for (int i = 0; i < kNativeMenuMaxItems + 4; i++) {
+    m.a = ta;
+    for (int i = 0; i < 100; i++) {
         m.Menu(StrL("Item"), i);
     }
-    utassert(m.n == kNativeMenuMaxItems);
-    utassert(m.items[kNativeMenuMaxItems - 1].id == kNativeMenuMaxItems - 1);
+    utassert(m.items.len == 100);
+    utassert(m.items[99].id == 99);
+    ArenaDelete(ta);
 }
 
 // The table the id maps back through: 1-based over what can be chosen, in the
 // order the rows are built, with a submenu's rows taken where it sits.
 static void OnlyTheRowsThatCanBeChosenAreNumbered() {
+    Arena* ta = ArenaNew();
     NativeMenu sub;
+    sub.a = ta;
     sub.Menu(StrL("Copy"), 20);
     sub.Menu(StrL("Cut"), 21);
     NativeMenu m;
+    m.a = ta;
     m.Menu(StrL("New"), 1);
     m.Separator();
     m.MenuWithDisabled(StrL("Save"), true, 2);
@@ -78,35 +88,43 @@ static void OnlyTheRowsThatCanBeChosenAreNumbered() {
     // there has nothing to count.
     utassert(NativeMenuSelectable(&m, nullptr, 0) == 4);
     utassert(NativeMenuSelectable(nullptr, table, 8) == 0);
+    ArenaDelete(ta);
 }
 
 // A greyed submenu row still has its rows numbered: Win32 greys the row that
 // opens the submenu, not what is inside it.
 static void AGreyedSubmenuStillNumbersItsRows() {
+    Arena* ta = ArenaNew();
     NativeMenu sub;
+    sub.a = ta;
     sub.Menu(StrL("Copy"), 30);
     NativeMenu m;
+    m.a = ta;
     m.Submenu(StrL("Edit"), &sub);
     m.items[0].disabled = true;
     const NativeMenuItem* table[4] = {};
     utassert(NativeMenuSelectable(&m, table, 4) == 1);
     utassert(table[0]->id == 30);
+    ArenaDelete(ta);
 }
 
 // An empty menu has nothing to show, which is what keeps `show` from opening
 // a popup with no rows in it.
 static void AnEmptyMenuShowsNothing() {
+    Arena* ta = ArenaNew();
     NativeMenu m;
+    m.a = ta;
     utassert(m.IsEmpty());
     utassert(!m.Show(0, 0));
     const NativeMenuItem* table[4] = {};
     utassert(NativeMenuSelectable(&m, table, 4) == 0);
+    ArenaDelete(ta);
 }
 
 void TestNativeMenu() {
     TestSuite("native_menu");
     ARowCarriesWhatItWasBuiltWith();
-    TheRowsPastTheEndAreDropped();
+    EveryRowAddedIsKept();
     OnlyTheRowsThatCanBeChosenAreNumbered();
     AGreyedSubmenuStillNumbersItsRows();
     AnEmptyMenuShowsNothing();

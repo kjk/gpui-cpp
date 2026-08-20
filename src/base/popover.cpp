@@ -14,6 +14,32 @@ void PopoverSetOpen(Ctx* cx, Entity<PopoverState> state, bool open) {
     }
 }
 
+// toggle_open's focus half, which is the same for every widget that opens
+// something over the page. On the way in the previously focused element is
+// parked and the popover — or whatever it tracks — takes focus; on the way
+// out focus goes back, but only if the popover still has it, since a click
+// somewhere else has already moved it on purpose.
+void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
+    if (!s || s->open == open) {
+        return;
+    }
+    if (open) {
+        s->previousFocusId = WindowFocusedId(cx->win);
+        int take = s->trackedFocusId ? s->trackedFocusId : s->focusId;
+        if (take) {
+            WindowSetFocusId(cx->win, take);
+        }
+    } else {
+        if (s->previousFocusId &&
+            (WindowFocusWithin(cx->win, s->focusId) ||
+             WindowFocusWithin(cx->win, s->trackedFocusId))) {
+            WindowRestoreFocus(cx->win, s->previousFocusId);
+        }
+        s->previousFocusId = 0;
+    }
+    s->open = open;
+}
+
 // toggle_open, off the trigger's press. Rust stops propagation here so the
 // press does not also reach whatever the popover sits in; the hit test only
 // reports the innermost rect, so that is already true.
@@ -22,7 +48,7 @@ void PopoverToggle(PopoverState* self, Ctx* cx, const MouseDownEvent* ev,
     if (ev->button != (MouseButton)button) {
         return;
     }
-    self->open = !self->open;
+    PopoverSetOpenFocused(self, cx, !self->open);
     Notify(cx);
 }
 
@@ -30,7 +56,7 @@ void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent*) {
     if (!self->open) {
         return;
     }
-    self->open = false;
+    PopoverSetOpenFocused(self, cx, false);
     Notify(cx);
 }
 
@@ -39,10 +65,25 @@ Popover* Popover::New(Ctx* cx, Str id, Entity<PopoverState> state,
     Arena* a = cx->a;
     Popover* p = ArenaNew<Popover>(a);
     p->a = a;
+    p->cx = cx;
     p->state = state;
     p->button = button;
     p->root = Div(a)->Id(id);
+    // The popover's own focus handle. Rust hangs it off the content, not off
+    // the trigger's container, so opening moves focus into what came up and
+    // Tab from the trigger still walks the page.
+    p->focusId = HashClickId(id) * 31 + 1;
+    if (PopoverState* st = state.Get(cx)) {
+        st->focusId = p->focusId;
+    }
     return p;
+}
+
+Popover* Popover::TrackedFocus(int trackedId) {
+    if (PopoverState* st = state.Get(cx)) {
+        st->trackedFocusId = trackedId;
+    }
+    return this;
 }
 
 Popover* Popover::Trigger(El* trigger) {
@@ -61,7 +102,7 @@ Popover* Popover::Trigger(El* trigger) {
 
 Popover* Popover::Content(El* content) {
     if (content) {
-        content->Absolute()->Top(28)->Left(0);
+        content->Absolute()->Top(28)->Left(0)->FocusId(focusId);
         root->Child(content);
     }
     return this;

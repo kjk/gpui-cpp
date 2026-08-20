@@ -181,13 +181,13 @@ void PopupMenuPerform(PopupMenuState* s, Ctx* cx, PopupMenuAction act,
 
 void PopupMenuBeginRows(PopupMenuState* s) {
     if (s) {
-        s->nRows = 0;
+        s->rows.Clear();
     }
 }
 
 void PopupMenuAddRow(PopupMenuState* s, const PopupMenuRow& row) {
-    if (s && s->nRows < kPopupMenuMaxRows) {
-        s->rows[s->nRows++] = row;
+    if (s) {
+        s->rows.Append(row);
     }
 }
 
@@ -195,7 +195,7 @@ void PopupMenuPerformRows(PopupMenuState* s, Ctx* cx, PopupMenuAction act) {
     if (!s) {
         return;
     }
-    int n = s->nRows;
+    int n = s->rows.len;
     // Escape, or the arrow that steps out, inside a submenu: the row that
     // opened it lives in the parent, so that is who closes it. Rust dismisses
     // the submenu entity, which its parent is watching; here the parent holds
@@ -220,8 +220,9 @@ void PopupMenuPerformRows(PopupMenuState* s, Ctx* cx, PopupMenuAction act) {
         PopupMenuDismissAll(s, cx);
         return;
     }
-    bool clickable[kPopupMenuMaxRows];
-    bool hasSubmenu[kPopupMenuMaxRows];
+    Arena* ta = GetTempArena();
+    bool* clickable = (bool*)Alloc(ta, n + 1);
+    bool* hasSubmenu = (bool*)Alloc(ta, n + 1);
     for (int i = 0; i < n; i++) {
         clickable[i] = s->rows[i].clickable;
         hasSubmenu[i] = s->rows[i].submenu;

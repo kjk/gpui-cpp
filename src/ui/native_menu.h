@@ -34,13 +34,11 @@ struct NativeMenuItem {
     NativeMenu* submenu = nullptr;
 };
 
-const int kNativeMenuMaxItems = 32;
-
 struct NativeMenu {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    NativeMenuItem items[kNativeMenuMaxItems] = {};
-    int n = 0;
+    // As many rows as the caller adds; the builder is on the frame arena.
+    ArenaVec<NativeMenuItem> items;
     // What a chosen row reports, bound with ListenerFill the way a component
     // hands its caller the value it made.
     Listener onSelect = {};
@@ -53,7 +51,7 @@ struct NativeMenu {
     NativeMenu* Separator();
     NativeMenu* Submenu(Str label, NativeMenu* menu);
     NativeMenu* OnSelect(Listener l);
-    bool IsEmpty() const { return n == 0; }
+    bool IsEmpty() const { return items.len == 0; }
 
     // Show the menu at (x, y) in the window, in logical pixels, and run
     // onSelect for the row that was chosen. False means this platform has no
