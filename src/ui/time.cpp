@@ -596,6 +596,14 @@ El* DatePicker::IntoEl() {
     if (!open) {
         BindClick(trigger, StrDup(a, fmt("%s-input", id)), onToggle);
         trigger->FocusRing(focusRing);
+    } else {
+        // The trigger stops taking the press while the calendar is up — the
+        // popup's own mouse-out is what closes it — but it keeps the focus
+        // handle it was given when it was pressed. Rust's track_focus is
+        // unconditional for the same reason: the picker's key context has to
+        // stay over whatever has the focus, or escape belongs to nobody.
+        trigger->FocusId(HashClickId(StrDup(a, fmt("%s-input", id))))
+            ->FocusRing(false);
     }
     El* popup = nullptr;
     if (open) {
