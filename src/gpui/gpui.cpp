@@ -2509,6 +2509,11 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(10, 7, 6, 12);
             line(10, 17, 6, 12);
             break;
+        case IconName::ArrowRight:
+            line(6, 12, 18, 12);
+            line(14, 7, 18, 12);
+            line(14, 17, 18, 12);
+            break;
         case IconName::Building2:
             DrawRoundStroke(ctx, x + s * 0.18f, y + s * 0.18f, s * 0.38f,
                             s * 0.64f, 1, sw, c);

@@ -740,6 +740,8 @@ Str IconNamePath(IconName name) {
     switch (name) {
         case IconName::ArrowLeft:
             return StrL("icons/arrow-left.svg");
+        case IconName::ArrowRight:
+            return StrL("icons/arrow-right.svg");
         case IconName::Asterisk:
             return StrL("icons/asterisk.svg");
         case IconName::Bell:
