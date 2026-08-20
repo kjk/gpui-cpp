@@ -13,7 +13,17 @@ Form* Form::New(Ctx* cx) {
 }
 Form* Form::Field(Str label, El* control) {
     if (n < 12) {
+        fields[n] = FormField{};
         fields[n].label = label;
+        fields[n].control = control;
+        n++;
+    }
+    return this;
+}
+Form* Form::FieldEl(El* label, El* control) {
+    if (n < 12) {
+        fields[n] = FormField{};
+        fields[n].labelEl = label;
         fields[n].control = control;
         n++;
     }
@@ -34,10 +44,42 @@ Form* Form::Description(Str s) {
     }
     return this;
 }
+Form* Form::DescriptionEl(El* e) {
+    if (n > 0) {
+        fields[n - 1].descriptionEl = e;
+    }
+    return this;
+}
 Form* Form::SpanAll(bool v) {
     if (n > 0) {
         fields[n - 1].spanAll = v;
     }
+    return this;
+}
+Form* Form::Visible(bool v) {
+    if (n > 0) {
+        fields[n - 1].visible = v;
+    }
+    return this;
+}
+Form* Form::LabelIndent(bool v) {
+    if (n > 0) {
+        fields[n - 1].labelIndent = v;
+    }
+    return this;
+}
+Form* Form::Align(FieldAlign v) {
+    if (n > 0) {
+        fields[n - 1].align = v;
+    }
+    return this;
+}
+Form* Form::WithSize(UiSize v) {
+    size = v;
+    return this;
+}
+Form* Form::LabelTextSize(float px) {
+    labelTextSize = px;
     return this;
 }
 
@@ -56,10 +98,12 @@ Form* Form::LabelWidth(float w) {
 
 El* Form::IntoEl() {
     const Theme& th = cx->theme();
-    // Medium: the form gaps by 8 (24 between columns), a field by 4.
+    // The gap comes from the size: eight at Large, four otherwise, and a
+    // vertical field halves it between the label and the control.
     const float kGap = 8;
-    const float kFieldGap = 4;
-    float inner = horizontal ? kFieldGap : kFieldGap * 0.5f;
+    float fieldGap = size == UiSize::Large ? 8.f : 4.f;
+    float inner = horizontal ? fieldGap : fieldGap * 0.5f;
+    float labelFont = labelTextSize > 0 ? labelTextSize : 14.f;
     float lw = labelWidth > 0 ? labelWidth : (columns > 1 ? 100.f : 140.f);
 
     El* col = Div(a)->FlexCol()->W(kFill)->Gap(kGap);
@@ -67,20 +111,39 @@ El* Form::IntoEl() {
     int inRow = 0;
     for (int i = 0; i < n; i++) {
         const FormField& fld = fields[i];
-        El* f = Div(a)->FlexCol()->W(kFill)->Gap(kFieldGap * 0.5f);
+        // visible(false): the field is left out of the form entirely.
+        if (!fld.visible) {
+            continue;
+        }
+        El* f = Div(a)->FlexCol()->W(kFill)->Gap(fieldGap * 0.5f);
 
         El* head = Div(a)->W(kFill)->Gap(inner);
         if (horizontal) {
-            head->FlexRow()->ItemsCenter();
+            head->FlexRow();
+            if (fld.align == FieldAlign::Start) {
+                head->ItemsStart();
+            } else if (fld.align == FieldAlign::End) {
+                head->ItemsEnd();
+            } else {
+                head->ItemsCenter();
+            }
         } else {
             head->FlexCol();
         }
-        if (fld.label.s) {
+        bool hasLabel = fld.labelIndent && (fld.label.s || fld.labelEl);
+        if (hasLabel) {
             El* label = Div(a)->FlexRow()->W(lw)->Gap(4)->ItemsCenter();
-            label->Child(
-                TextEl(a, fld.label)->Font(14)->Medium()->Fg(th.foreground));
+            if (fld.labelEl) {
+                label->Child(fld.labelEl);
+            } else {
+                label->Child(TextEl(a, fld.label)
+                                 ->Font(labelFont)
+                                 ->Medium()
+                                 ->Fg(th.foreground));
+            }
             if (fld.required) {
-                label->Child(TextEl(a, StrL("*"))->Font(14)->Fg(th.danger));
+                label->Child(
+                    TextEl(a, StrL("*"))->Font(labelFont)->Fg(th.danger));
             }
             head->Child(label);
         }
@@ -94,12 +157,17 @@ El* Form::IntoEl() {
         // Rust always adds the description row, so a field without one is
         // still a half-gap taller.
         El* desc = Div(a)->FlexRow()->W(kFill)->Gap(inner);
-        if (fld.description.s) {
+        if (fld.description.s || fld.descriptionEl) {
             // Horizontal, the description lines up under the control.
-            if (horizontal && fld.label.s) {
+            if (horizontal && hasLabel) {
                 desc->Child(Div(a)->W(lw));
             }
-            desc->Child(TextEl(a, fld.description)->Font(12)->Fg(th.mutedFg));
+            if (fld.descriptionEl) {
+                desc->Child(fld.descriptionEl);
+            } else {
+                desc->Child(
+                    TextEl(a, fld.description)->Font(12)->Fg(th.mutedFg));
+            }
         }
         f->Child(desc);
 
