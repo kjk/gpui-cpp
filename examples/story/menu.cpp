@@ -1,5 +1,14 @@
 #include "Story.h"
 
+// Kbd::format: a menu shows the shortcut the way the platform spells it,
+// rather than a string that only reads right on one of them.
+static Str Chord(Ctx* cx, const char* key) {
+    component::Keystroke k;
+    k.ctrl = true;
+    k.key = Str(key);
+    return component::KbdFormatStr(cx, k);
+}
+
 // The rows of the Edit menu, in the order the Rust story builds them. The
 // listener carries the row, and the page says what each one means.
 enum {
@@ -72,9 +81,9 @@ static component::PopupMenu* EditMenu(MenuStory* self, Ctx* cx) {
     m->Separator();
     m->Menu(StrL("Handle Click"));
     m->Separator();
-    m->MenuWithKbd(StrL("Copy"), StrL("Ctrl+C"));
-    m->MenuWithKbd(StrL("Cut"), StrL("Ctrl+X"));
-    m->MenuWithKbd(StrL("Paste"), StrL("Ctrl+V"));
+    m->MenuWithKbd(StrL("Copy"), Chord(cx, "c"));
+    m->MenuWithKbd(StrL("Cut"), Chord(cx, "x"));
+    m->MenuWithKbd(StrL("Paste"), Chord(cx, "v"));
     m->Separator();
     m->MenuWithCheck(self->checkSideRight ? StrL("Check Side Right")
                                           : StrL("Check Side Left"),
@@ -100,9 +109,9 @@ static component::PopupMenu* EditMenu(MenuStory* self, Ctx* cx) {
 // The three-row menu each context area opens.
 static component::PopupMenu* ContextMenu(Ctx* cx, int area) {
     return component::PopupMenu::New(cx, StoryFmt(cx, "context-menu-%d", area))
-        ->MenuWithKbd(StrL("Cut"), StrL("Ctrl+X"))
-        ->MenuWithKbd(StrL("Copy"), StrL("Ctrl+C"))
-        ->MenuWithKbd(StrL("Paste"), StrL("Ctrl+V"));
+        ->MenuWithKbd(StrL("Cut"), Chord(cx, "x"))
+        ->MenuWithKbd(StrL("Copy"), Chord(cx, "c"))
+        ->MenuWithKbd(StrL("Paste"), Chord(cx, "v"));
 }
 
 // The "PopupMenu" key context: the arrows walk the rows, Enter takes one,
@@ -189,14 +198,14 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     component::AppMenuBar* bar =
         component::AppMenuBar::New(cx, StrL("app-menu-bar"), self->bar);
     bar->Menu(StrL("File"), component::PopupMenu::New(cx, StrL("bar-file"))
-                                ->MenuWithKbd(StrL("New"), StrL("Ctrl+N"))
-                                ->MenuWithKbd(StrL("Open"), StrL("Ctrl+O"))
+                                ->MenuWithKbd(StrL("New"), Chord(cx, "n"))
+                                ->MenuWithKbd(StrL("Open"), Chord(cx, "o"))
                                 ->Separator()
-                                ->MenuWithKbd(StrL("Quit"), StrL("Ctrl+Q")));
+                                ->MenuWithKbd(StrL("Quit"), Chord(cx, "q")));
     bar->Menu(StrL("Edit"), component::PopupMenu::New(cx, StrL("bar-edit"))
-                                ->MenuWithKbd(StrL("Copy"), StrL("Ctrl+C"))
-                                ->MenuWithKbd(StrL("Cut"), StrL("Ctrl+X"))
-                                ->MenuWithKbd(StrL("Paste"), StrL("Ctrl+V")));
+                                ->MenuWithKbd(StrL("Copy"), Chord(cx, "c"))
+                                ->MenuWithKbd(StrL("Cut"), Chord(cx, "x"))
+                                ->MenuWithKbd(StrL("Paste"), Chord(cx, "v")));
     bar->Menu(StrL("View"), component::PopupMenu::New(cx, StrL("bar-view"))
                                 ->MenuWithCheck(StrL("Status Bar"), true)
                                 ->MenuWithCheck(StrL("Sidebar"), false));
