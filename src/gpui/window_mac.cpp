@@ -11,6 +11,7 @@
 #include "gpui/paint.h"
 
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 
 #include <time.h>
 
@@ -28,6 +29,10 @@ struct PlatWindow {
     bool dirty = true;
     // Monotonic deadline for the next tick; 0 when the timer is off.
     double nextTick = 0;
+    // Whether the window's class has been taught accessibilityHitTest:. Rust
+    // installs it once, when the Root view is created; a Root here is built
+    // every frame, so the window remembers instead.
+    bool a11yInstalled = false;
 };
 
 double TimeNow() {
@@ -516,6 +521,37 @@ int PlatDoubleClickMs() {
     // shared code so all three platforms agree on what a run is; this is the
     // one number the OS owns.
     return (int)([NSEvent doubleClickInterval] * 1000);
+}
+
+// macos_accessibility.rs hit_test_forwarder: the window hands the point to
+// its content view, which is the one thing in the tree that knows what was
+// drawn where. class_addMethod leaves an existing implementation alone, so a
+// window that already answers keeps its own.
+static id GpuiAccessibilityHitTest(id self, SEL cmd, NSPoint point) {
+    (void)cmd;
+    NSView* view = [(NSWindow*)self contentView];
+    if (!view) {
+        return nil;
+    }
+    return [view accessibilityHitTest:point];
+}
+
+void PlatInstallAccessibilityHitTest(Window* win) {
+    if (!win || !win->plat || !win->plat->window) {
+        return;
+    }
+    if (win->plat->a11yInstalled) {
+        return;
+    }
+    win->plat->a11yInstalled = true;
+    Class cls = object_getClass(win->plat->window);
+    if (!cls) {
+        return;
+    }
+    // "@@:{CGPoint=dd}": returns an object, takes self, the selector and a
+    // point of two doubles — the encoding Rust builds from the same pieces.
+    class_addMethod(cls, @selector(accessibilityHitTest:),
+                    (IMP)GpuiAccessibilityHitTest, "@@:{CGPoint=dd}");
 }
 
 bool PlatHasMenu() {

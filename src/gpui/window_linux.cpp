@@ -479,6 +479,12 @@ int PlatDoubleClickMs() {
     return 400;
 }
 
+// Only macOS has an NSWindow to teach; VoiceOver reaches the tree here through
+// the platform's own means.
+void PlatInstallAccessibilityHitTest(Window* win) {
+    (void)win;
+}
+
 bool PlatHasMenu() {
     // X11 has no popup menu of its own — a toolkit draws its own. The caller
     // falls back to the drawn menu, which is what Rust does here too.
