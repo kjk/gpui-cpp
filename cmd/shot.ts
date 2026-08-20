@@ -9,7 +9,8 @@
 //   -drag=X1,Y1,X2,Y2  press, move, release: a text selection drag
 //   -draghold=X1,Y1,X2,Y2  the same without the release, so the shutter
 //                catches what a drag looks like while it is in flight
-//   -wheel=N     N notches of scroll at the window centre
+//   -wheel=N     N notches of scroll at the window centre. Runs before the
+//                clicks, so a click coordinate is read off the scrolled page
 //   -key=VK      send a key: the down and the up, since Enter and Space
 //                activate a focused element from the release
 //   -type=TEXT   type the characters: WM_CHAR each, which is how a digit or a
@@ -143,6 +144,17 @@ if (half) {
 await waitForForeground(hwnd, 3000);
 const cursorWas = getCursorPos();
 await sleep(500);
+// Scroll before keys/capture: notches of WM_MOUSEWHEEL at the window centre.
+if (wheel !== 0) {
+  const r = getClientRect(hwnd);
+  const pt = clientToScreen(hwnd, Math.floor(r.right / 2), Math.floor(r.bottom / 2));
+  const step = wheel > 0 ? 120 : -120;
+  for (let i = 0; i < Math.abs(wheel); i++) {
+    sendMessage(hwnd, 0x020a /* WM_MOUSEWHEEL */, (step << 16) >>> 0, packCoords(pt.x, pt.y));
+    await sleep(40);
+  }
+  await sleep(250);
+}
 for (const c of clicks) {
   await (c.right ? rightClickClient(hwnd, c.x, c.y, clickWaitMs) : clickClient(hwnd, c.x, c.y, clickWaitMs));
 }
@@ -163,17 +175,6 @@ if (drag) {
   await sleep(200);
 }
 
-// Scroll before keys/capture: notches of WM_MOUSEWHEEL at the window centre.
-if (wheel !== 0) {
-  const r = getClientRect(hwnd);
-  const pt = clientToScreen(hwnd, Math.floor(r.right / 2), Math.floor(r.bottom / 2));
-  const step = wheel > 0 ? 120 : -120;
-  for (let i = 0; i < Math.abs(wheel); i++) {
-    sendMessage(hwnd, 0x020a /* WM_MOUSEWHEEL */, (step << 16) >>> 0, packCoords(pt.x, pt.y));
-    await sleep(40);
-  }
-  await sleep(250);
-}
 // The text before the keys, so `-type=42 -key=8` reads left to right: a digit
 // or a letter reaches a field as a WM_CHAR, which is not what -key sends, and
 // -key is then the Enter or the backspace that follows what was typed.
