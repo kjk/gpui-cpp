@@ -35,7 +35,17 @@ void OtpFocus(OtpState* s, App* app, Window* win);
 void OtpBlur(OtpState* s, App* app, Window* win);
 bool OtpCursorVisible(OtpState* s, App* app);
 
+// The state's own key handler, which is what `El::OnKeyDown` hands the
+// keystroke to: a digit or a backspace edits the value, and everything else
+// propagates. Rust hangs `on_key_down` off the OtpInput element the same way.
+void OtpKeyDown(OtpState* self, Ctx* cx, const KeyEvent* ev);
+// The press that focuses the field, which is `on_mouse_down` in Rust.
+void OtpClick(OtpState* self, Ctx* cx, const ClickEvent* ev);
+
 struct OtpInput {
     static El* New(Ctx* cx, Str id = {});
+    // The same, bound to a state: the element takes focus, hears the keys and
+    // edits the value.
+    static El* New(Ctx* cx, Str id, Entity<OtpState> state);
 };
 } // namespace gpui

@@ -414,6 +414,20 @@ OtpInput* OtpInput::New(Ctx* cx, const char* value, int len) {
     o->len = len;
     return o;
 }
+OtpInput* OtpInput::New(Ctx* cx, Str id, Entity<OtpState> state) {
+    OtpInput* o = New(cx, nullptr, 0);
+    o->id = id;
+    o->state = state;
+    if (OtpState* s = state.Get(cx)) {
+        o->value = s->value;
+        o->len = s->len;
+        o->slots = s->length;
+        o->masked = s->masked;
+        o->disabled = s->disabled;
+    }
+    return o;
+}
+
 OtpInput* OtpInput::Id(Str s) {
     id = s;
     return this;
@@ -471,7 +485,9 @@ El* OtpInput::IntoEl() {
     }
     Rgba fg = disabled ? th.mutedFg : th.secondaryFg;
     // gap_5 between the groups, gap_1 inside one.
-    El* row = gpui::OtpInput::New(cx, id.s ? id : StrL("otp"))
+    Str rowId = id.s ? id : StrL("otp");
+    El* row = (state.IsValid() ? gpui::OtpInput::New(cx, rowId, state)
+                               : gpui::OtpInput::New(cx, rowId))
                   ->FocusRing(focusRing)
                   ->FlexRow()
                   ->ItemsCenter()
@@ -493,6 +509,13 @@ El* OtpInput::IntoEl() {
                       ->Radius(th.radius)
                       ->Bg(disabled ? th.muted : th.inputBg)
                       ->Border(1, th.inputBorder);
+        // The caret sits in the first empty cell of a focused field, which is
+        // where the next digit lands.
+        OtpState* st = state.Get(cx);
+        if (st && st->focused && i == st->len && !disabled &&
+            OtpCursorVisible(st, cx->app)) {
+            box->Border(1, th.ring);
+        }
         if (value && i < len) {
             if (masked) {
                 box->Child(IconEl(a, IconName::Asterisk, text)->Fg(fg));
