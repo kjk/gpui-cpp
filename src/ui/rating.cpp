@@ -90,7 +90,7 @@ El* Rating::IntoEl() {
     int hovered = s ? s->hoveredValue : 0;
     Rgba activeC = hasColor ? color : th.yellow;
 
-    El* row = Div(a)->FlexRow()->ItemsCenter();
+    El* row = Div(a)->Id(id)->FlexRow()->ItemsCenter();
     for (int i = 1; i <= max; i++) {
         bool filled = i <= shown;
         // A hovered star and everything before it previews the value the
@@ -99,7 +99,7 @@ El* Rating::IntoEl() {
         El* star = Div(a)->Pad(2)->Shrink0()->Child(
             IconEl(a, filled ? IconName::StarFill : IconName::Star,
                    UiIconPx(size))
-                ->Fg(lit ? activeC : th.mutedFg));
+                ->Fg(lit ? activeC : th.foreground));
         if (!disabled) {
             BindClick(star, StrDup(a, fmt("%s-%d", id, i)),
                       ListenTo(st, &RatingState::OnStarClick, i));
