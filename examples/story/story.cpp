@@ -933,6 +933,72 @@ static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// create_new_window_with_size: everything one gallery window is, so the menu
+// item below and GpuiMain open the same thing. Rust passes 1600x1200 and lets
+// GPUI cap it at 85% of the display and centre it, which is what WindowOpen
+// does here.
+static void OnUnhandledClick(StoryApp* app, Ctx* cx, const ClickEvent* ev);
+static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev);
+
+static Window* StoryOpenWindow(App* app, int story) {
+    Entity<StoryApp> view = EntityNew<StoryApp>(app);
+    StoryApp* self = view.Get(app);
+    if (!self) {
+        return nullptr;
+    }
+    self->story = story;
+    InputSetPlaceholder(&self->search, StrL("Search…"));
+    WinOpts opts = {};
+    // TitleBar::window_options(): the story owns its title bar on every
+    // platform. macOS keeps the traffic lights over a transparent one,
+    // Windows and X11 have none, so component::TitleBar draws the minimize /
+    // maximize / close controls there itself.
+    opts.clientTitleBar = true;
+    Window* win = WindowOpenView(app, StrL("GPUI Component C++"), 1600, 1200,
+                                 view.id, opts);
+    if (!win) {
+        return nullptr;
+    }
+    WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
+    WindowOnKey(win, ListenTo(view, &OnKey));
+    return win;
+}
+
+// The Window menu. Rust's has one item, Toggle Search; these two are what a
+// second window needs to be reachable at all — `App` has held a window list
+// and ended its loop with the last one for a while, and nothing opened one.
+static void OnWindowMenuItem(StoryApp*, Ctx* cx, const ClickEvent*,
+                             intptr_t ix) {
+    if (ix == 0) {
+        StoryOpenWindow(cx->app, StoryFromSlug(""));
+    } else if (ix == 1) {
+        AppClose(cx->win);
+    }
+}
+
+static El* WindowMenu(Ctx* cx) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("story-window-menu"));
+    menu->Menu(StrL("New Window"));
+    menu->Menu(StrL("Close Window"));
+    if (PopupMenuState* st = menu->state.Get(cx)) {
+        st->onConfirm = Listen(cx, &OnWindowMenuItem);
+    }
+    return component::DropdownMenu::New(cx, StrL("story-window"))
+        ->Trigger(Div(a)
+                      ->H(28)
+                      ->PadX(8)
+                      ->ItemsCenter()
+                      ->Radius(th.radius)
+                      ->HoverBg(th.muted)
+                      ->Cursor(CursorKind::Pointer)
+                      ->Child(StoryTxt(cx, StrL("Window"), 14, th.foreground)))
+        ->Menu(menu)
+        ->IntoEl();
+}
+
 static El* AppearanceMenu(StoryApp* app, Ctx* cx) {
     component::PopupMenu* menu =
         component::PopupMenu::New(cx, StrL("story-appearance-menu"));
@@ -989,7 +1055,7 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
                     ->ItemsCenter()
                     ->Child(StoryTitleMenuItem(cx, "GPUI Component", true))
                     ->Child(StoryTitleMenuItem(cx, "Edit", false))
-                    ->Child(StoryTitleMenuItem(cx, "Window", false))
+                    ->Child(WindowMenu(cx))
                     ->Child(StoryTitleMenuItem(cx, "Help", false));
     El* tools =
         Div(a)
@@ -1187,30 +1253,22 @@ int GpuiMain(int argc, char** argv) {
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));
 
-    Entity<StoryApp> view = EntityNew<StoryApp>(app);
-    StoryApp* self = view.Get(app);
     char slug[64] = {};
     ParseSlug(argc, argv, slug, 64);
-    self->story = StoryFromSlug(slug);
+    Window* win = StoryOpenWindow(app, StoryFromSlug(slug));
+    if (!win) {
+        AppFree(app);
+        return 1;
+    }
     // Rust Gallery::set_active_story puts the launch name in the sidebar
     // search box so the list filters to matching titles.
     if (slug[0]) {
+        Entity<StoryApp> view;
+        view.id = win->root;
+        StoryApp* self = view.Get(app);
         const StoryInfo* m = StoryMeta(self->story);
         InputSetValue(&self->search, Str(m->title));
     }
-    InputSetPlaceholder(&self->search, StrL("Search…"));
-    // create_new_window_with_size passes 1600x1200; WindowOpen caps it at
-    // 85% of the display and centers it.
-    WinOpts opts = {};
-    // TitleBar::window_options(): the story owns its title bar on every
-    // platform. macOS keeps the traffic lights over a transparent one,
-    // Windows and X11 have none, so component::TitleBar draws the minimize /
-    // maximize / close controls there itself.
-    opts.clientTitleBar = true;
-    Window* win = WindowOpenView(app, StrL("GPUI Component C++"), 1600, 1200,
-                                 view.id, opts);
-    WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
-    WindowOnKey(win, ListenTo(view, &OnKey));
     int rc = AppRun(app);
     AppFree(app);
     return rc;
