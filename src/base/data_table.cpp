@@ -388,6 +388,23 @@ void TableState::OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
     }
 }
 
+void TableState::OnCellClick(TableState* self, Ctx* cx, const ClickEvent* ev,
+                             intptr_t packed) {
+    if (!self->cellSelectable) {
+        return;
+    }
+    int row = TableCellRow(packed);
+    int col = TableCellCol(packed);
+    // A second click on the cell that is already selected: set_selected_cell
+    // sees no change and says nothing, so the double click is emitted here
+    // whether or not the selection moved.
+    TableSetSelectedCell(self, cx, row, col);
+    if (ev->clickCount == 2) {
+        TableEmit(self, cx, TableEventKind::DoubleClickedCell, row, col,
+                  ColumnSort::Default);
+    }
+}
+
 void TableState::OnRowMouseDown(TableState* self, Ctx* cx,
                                 const MouseDownEvent* ev, intptr_t row) {
     if (ev->button != MouseButton::Right) {

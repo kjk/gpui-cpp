@@ -403,6 +403,7 @@ El* DataTable::IntoEl() {
 
     Listener rowClick = ListenTo(state, &TableState::OnRowClick, 0);
     Listener rowDown = ListenTo(state, &TableState::OnRowMouseDown, 0);
+    Listener cellClick = ListenTo(state, &TableState::OnCellClick, 0);
     El* bodyFixed = TableBody::New(cx, StrDup(a, fmt("%s-body-f", id)))
                         ->FlexCol()
                         ->Shrink0();
@@ -489,6 +490,23 @@ El* DataTable::IntoEl() {
                 s->selectedCol == c) {
                 td->Bg(RgbaOpacity(th.accent, 0.5f));
             }
+            // The selected cell, painted the way the selected row is: the
+            // table's own active pair rather than a plain accent block.
+            if (s && s->mode == TableSelectionMode::Cell &&
+                s->selectedCellRow == r && s->selectedCellCol == c) {
+                ListActiveStyle sel = ListActiveStyleOf(
+                    th.tableActive, th.tableActiveBorder, th.accent, true);
+                td->Bg(sel.bg);
+                if (sel.hasBorder) {
+                    td->Child(ListActiveOverlay(a, sel.border, 0));
+                }
+            }
+            // A cell takes the click when the table is cell-selectable, which
+            // is what `SelectCell` and `DoubleClickedCell` come from.
+            if (s && s->cellSelectable) {
+                BindClick(td, StrDup(a, fmt("%s-cell-%d-%d", id, r, c)),
+                          ListenerArg(cellClick, TableCellPack(r, c)));
+            }
             if (cellEl) {
                 // render_td clips what it holds to the column. Dragging an
                 // edge in makes a column narrower than its text, and without
@@ -499,7 +517,7 @@ El* DataTable::IntoEl() {
             }
             (d < nFixed ? rowFixed : rowScroll)->Child(td);
         }
-        if (s && s->rowSelectable) {
+        if (s && s->rowSelectable && !s->cellSelectable) {
             BindClick(rowScroll, StrDup(a, fmt("%s-row-%d", id, r)),
                       ListenerArg(rowClick, r));
             rowScroll->OnMouseDown(ListenerArg(rowDown, r));

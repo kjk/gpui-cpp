@@ -177,6 +177,12 @@ struct TableState {
 
     static void OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t row);
+    // A click on one cell, when the table is cell-selectable: `packed` is the
+    // row and the column together, the way every listener that carries two
+    // numbers does here. A second click on the same cell is
+    // `DoubleClickedCell`, which `state.rs` emits beside the row's.
+    static void OnCellClick(TableState* self, Ctx* cx, const ClickEvent* ev,
+                            intptr_t packed);
     static void OnRowMouseDown(TableState* self, Ctx* cx,
                                const MouseDownEvent* ev, intptr_t row);
     static void OnHeadClick(TableState* self, Ctx* cx, const ClickEvent* ev,
@@ -217,6 +223,17 @@ int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol);
 // one Vec of structs; these are three, since a column's width, its place in
 // the order and where its head was painted are written at different moments.
 void TableEnsureCols(TableState* s, int n);
+
+// A row and a column as one number, which is what a cell's listener carries.
+inline intptr_t TableCellPack(int row, int col) {
+    return ((intptr_t)row << 12) | (intptr_t)(col & 0xfff);
+}
+inline int TableCellRow(intptr_t packed) {
+    return (int)(packed >> 12);
+}
+inline int TableCellCol(intptr_t packed) {
+    return (int)(packed & 0xfff);
+}
 // load_more_if_need: the last row built is within the threshold of the end,
 // and the delegate says there is more.
 bool TableShouldLoadMore(const TableState* s, int visibleEnd);

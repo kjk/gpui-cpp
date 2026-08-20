@@ -147,7 +147,20 @@ static void LoadMoreAsksNearTheEnd() {
     utassert(!TableShouldLoadMore(&s, 980));
 }
 
+// A cell's listener carries the row and the column as one number, which is
+// what every listener that has two of them does here.
+static void ACellIsOneNumber() {
+    utassert(TableCellRow(TableCellPack(0, 0)) == 0);
+    utassert(TableCellCol(TableCellPack(0, 0)) == 0);
+    utassert(TableCellRow(TableCellPack(4999, 44)) == 4999);
+    utassert(TableCellCol(TableCellPack(4999, 44)) == 44);
+    // A million rows and four thousand columns still come back whole.
+    utassert(TableCellRow(TableCellPack(1000000, 4095)) == 1000000);
+    utassert(TableCellCol(TableCellPack(1000000, 4095)) == 4095);
+}
+
 void TestDataTable() {
+    ACellIsOneNumber();
     AColumnKeepsItsWidthOnceItHasOne();
     AResizeIsClamped();
     TheGapIsAfterTheLastCentreLeftOfThePointer();
