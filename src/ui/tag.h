@@ -25,6 +25,7 @@ struct Tag {
     Str text = {};
     Rgba customBg = {};
     Rgba customFg = {};
+    Rgba customBorder = {};
     bool hasCustom = false;
 
     static Tag* New(Ctx* cx, Str text);
@@ -37,7 +38,9 @@ struct Tag {
     Tag* Outline();
     Tag* WithSize(UiSize s);
     Tag* Radius(float v);
-    Tag* Custom(Rgba bg, Rgba fg);
+    // Tag::custom(color, foreground, border) — and Tag::color(name), which
+    // is the same three off a Tailwind scale.
+    Tag* Custom(Rgba bg, Rgba fg, Rgba border = {});
     El* IntoEl();
 };
 

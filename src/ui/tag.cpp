@@ -49,9 +49,10 @@ Tag* Tag::Radius(float v) {
     radius = v;
     return this;
 }
-Tag* Tag::Custom(Rgba bg, Rgba fg) {
+Tag* Tag::Custom(Rgba bg, Rgba fg, Rgba border) {
     customBg = bg;
     customFg = fg;
+    customBorder = border.a ? border : bg;
     hasCustom = true;
     return this;
 }
@@ -91,7 +92,7 @@ El* Tag::IntoEl() {
     if (hasCustom) {
         bg = customBg;
         fg = customFg;
-        bd = customFg;
+        bd = customBorder;
     }
     if (outline) {
         fg = bd;
