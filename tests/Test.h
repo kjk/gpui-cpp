@@ -70,3 +70,4 @@ void TestSidebar();
 void TestWindowBorder();
 void TestKbd();
 void TestNativeMenu();
+void TestTiles();
