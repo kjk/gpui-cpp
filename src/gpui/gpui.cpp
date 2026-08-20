@@ -2492,6 +2492,12 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             ring(12, 12, s * 0.38f, s * 0.22f);
             ring(12, 12, s * 0.12f, s * 0.12f);
             break;
+        case IconName::EyeOff:
+            // The same eye with the stroke through it.
+            ring(12, 12, s * 0.38f, s * 0.22f);
+            ring(12, 12, s * 0.12f, s * 0.12f);
+            line(3, 3, 21, 21);
+            break;
         case IconName::Heart:
             ring(8.5f, 9, s * 0.16f, s * 0.16f);
             ring(15.5f, 9, s * 0.16f, s * 0.16f);
