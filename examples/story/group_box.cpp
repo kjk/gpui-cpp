@@ -4,7 +4,7 @@ struct GroupBoxStory {
     bool email[3] = {false, false, false};
     bool profilePrivate = true;
     bool privateContrib = false;
-    bool compactPrivate = false;
+    bool compactPrivate = true;
     int theme = 2;
 
     static El* Render(GroupBoxStory* self, Ctx* cx);
@@ -68,13 +68,12 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
     mail->Child(component::Button::New(cx, StrL("ok"))
                     ->Primary()
                     ->Label(StrL("Save preferences"))
-                    ->IntoEl()
-                    ->W(kFill));
-    StorySectionAdd(
-        def, Div(a)->W(512)->Child(
-                 component::GroupBox::New(cx, StrL("Email notifications"))
-                     ->Child(mail)
-                     ->IntoEl()));
+                    ->IntoEl());
+    StorySectionBody(def)->W(512);
+    StorySectionAdd(def,
+                    component::GroupBox::New(cx, StrL("Email notifications"))
+                        ->Child(mail)
+                        ->IntoEl());
     page->Child(def);
 
     // Filled: two switch rows and a Save.
@@ -91,67 +90,68 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
     activity->Child(component::Button::New(cx, StrL("btn-1"))
                         ->Primary()
                         ->Label(StrL("Save"))
-                        ->IntoEl()
-                        ->W(kFill));
+                        ->IntoEl());
+    StorySectionBody(filled)->W(512);
     StorySectionAdd(
-        filled, Div(a)->W(512)->Child(component::GroupBox::New(
-                                          cx, StrL("Contributions & activity"))
-                                          ->Filled(true)
-                                          ->Child(activity)
-                                          ->IntoEl()));
+        filled, component::GroupBox::New(cx, StrL("Contributions & activity"))
+                    ->Filled(true)
+                    ->Child(activity)
+                    ->IntoEl());
     page->Child(filled);
 
     // Outlined: a vertical radio group.
     El* outlined = StorySection(cx, "Outlined", nullptr);
-    El* themes = Div(a)->FlexCol()->W(kFill)->Gap(8);
-    static const char* kThemes[3] = {"Light", "Dark", "System"};
-    for (int i = 0; i < 3; i++) {
-        themes->Child(component::Radio::New(cx, Str(kThemes[i]))
-                          ->Label(Str(kThemes[i]))
-                          ->Checked(self->theme == i)
-                          ->OnClick(Listen(cx, &PickTheme, i))
-                          ->IntoEl());
-    }
-    StorySectionAdd(outlined, Div(a)->W(512)->Child(component::GroupBox::New(
-                                                        cx, StrL("Appearance"))
-                                                        ->Outline()
-                                                        ->Child(themes)
-                                                        ->IntoEl()));
+    // RadioGroup::vertical("theme"): the group owns the selection and reports
+    // which index was clicked.
+    El* themes = component::RadioGroup::Vertical(cx, StrL("theme"))
+                     ->Child(component::Radio::New(cx, StrL("light"))
+                                 ->Label(StrL("Light")))
+                     ->Child(component::Radio::New(cx, StrL("dark"))
+                                 ->Label(StrL("Dark")))
+                     ->Child(component::Radio::New(cx, StrL("system"))
+                                 ->Label(StrL("System")))
+                     ->Selected(self->theme)
+                     ->OnClick(Listen(cx, &PickTheme))
+                     ->IntoEl();
+    StorySectionBody(outlined)->W(512);
+    StorySectionAdd(outlined, component::GroupBox::New(cx, StrL("Appearance"))
+                                  ->Outline()
+                                  ->Child(themes)
+                                  ->IntoEl());
     page->Child(outlined);
 
     El* untitled = StorySection(cx, "Without Title", nullptr);
-    StorySectionAdd(
-        untitled,
-        Div(a)->W(512)->Child(
-            component::GroupBox::New(cx, Str{})
-                ->Outline()
-                ->Child(SwitchRow(
-                    cx, StrL("Make profile private and hide activity"),
-                    StrL("compact-private"), self->compactPrivate,
-                    Listen(cx, &ToggleCompact)))
-                ->IntoEl()));
+    StorySectionBody(untitled)->W(512);
+    StorySectionAdd(untitled,
+                    component::GroupBox::New(cx, Str{})
+                        ->Outline()
+                        ->Child(SwitchRow(
+                            cx, StrL("Make profile private and hide activity"),
+                            StrL("compact-private"), self->compactPrivate,
+                            Listen(cx, &ToggleCompact)))
+                        ->IntoEl());
     page->Child(untitled);
 
     // Custom Style: title_style and content_style, refined independently.
     El* custom = StorySection(cx, "Custom Style", nullptr);
+    StorySectionBody(custom)->W(512);
     StorySectionAdd(
         custom,
-        Div(a)->W(512)->Child(
-            component::GroupBox::New(cx, StrL("This is a custom style"))
-                ->Outline()
-                ->TitleSemibold()
-                ->TitlePadX(12)
-                ->ContentBg(cx->theme().groupBox)
-                ->ContentRadius(12)
-                ->ContentPad(16)
-                ->ContentBorder(2)
-                ->Child(component::TextView::New(
-                            cx, StrL("You can use `title_style` to customize "
-                                     "the style of the title. And any style in "
-                                     "`GroupBox` will apply to the content "
-                                     "container."))
-                            ->IntoEl())
-                ->IntoEl()));
+        (component::GroupBox::New(cx, StrL("This is a custom style"))
+             ->Outline()
+             ->TitleSemibold()
+             ->TitlePadX(12)
+             ->ContentBg(cx->theme().groupBox)
+             ->ContentRadius(12)
+             ->ContentPad(16)
+             ->ContentBorder(2)
+             ->Child(component::TextView::New(
+                         cx, StrL("You can use `title_style` to customize "
+                                  "the style of the title. And any style in "
+                                  "`GroupBox` will apply to the content "
+                                  "container."))
+                         ->IntoEl())
+             ->IntoEl()));
     page->Child(custom);
     return page;
 }
