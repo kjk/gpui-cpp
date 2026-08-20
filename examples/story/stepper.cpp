@@ -32,8 +32,18 @@ static void SetStep3(StepperStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
-static void ToggleDisabled(StepperStory* self, Ctx* cx, const ClickEvent*) {
-    self->disabled = !self->disabled;
+// ToggleDisabled: the page's one Options row.
+enum {
+    StepperActDisabled = 3700
+};
+
+static void StepperAct(StepperStory* self, Ctx* cx, const ClickEvent*,
+                       intptr_t act) {
+    if (act == StepperActDisabled) {
+        self->disabled = !self->disabled;
+    } else {
+        StoryToolbarApply(&self->toolbar, nullptr, (int)act);
+    }
     Notify(cx);
 }
 
@@ -55,18 +65,13 @@ static El* StepText(Ctx* cx, Str title, const char* desc, bool center) {
 El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
-    El* bar = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
-    bar->Child(StoryToolbar(cx, self)->Grow());
-    // Rust hangs this off the toolbar's Options dropdown; a checkbox says the
-    // same thing without a menu.
-    bar->Child(component::Checkbox::New(cx, StrL("stepper-disabled"))
-                   ->Label(StrL("Disabled"))
-                   ->Checked(self->disabled)
-                   ->OnClick(Listen(cx, &ToggleDisabled))
-                   ->IntoEl());
-    page->Child(bar);
+    StoryToolbarOpt opts[1] = {
+        {"Disabled", self->disabled, StepperActDisabled}};
+    page->Child(
+        StoryToolbarOptions(cx, self, opts, 1, Listen(cx, &StepperAct)));
 
     El* h = StorySection(cx, "Horizontal Stepper", nullptr);
+    StorySectionBody(h)->FlexCol()->W(480);
     StorySectionAdd(
         h, component::Stepper::New(cx, StrL("stepper0"))
                ->WithSize(self->toolbar.size)
@@ -83,6 +88,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     page->Child(h);
 
     El* ic = StorySection(cx, "Icon Stepper", nullptr);
+    StorySectionBody(ic)->FlexCol()->W(480);
     static const IconName kIcons[4] = {IconName::Calendar, IconName::Inbox,
                                        IconName::Frame, IconName::Info};
     static const char* kIconLabels[4] = {"Order Details", "Shipping", "Preview",
@@ -100,6 +106,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     page->Child(ic);
 
     El* v = StorySection(cx, "Vertical Stepper", nullptr);
+    StorySectionBody(v)->FlexCol()->W(480);
     static const IconName kVIcons[4] = {IconName::Building2, IconName::Asterisk,
                                         IconName::Folder,
                                         IconName::CircleCheck};
@@ -126,6 +133,7 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
     page->Child(v);
 
     El* tc = StorySection(cx, "Text Center", nullptr);
+    StorySectionBody(tc)->FlexCol()->W(480);
     static const char* kTcDescs[3] = {"Desc for step 1.", "Desc for step 2.",
                                       "Desc for step 3."};
     component::Stepper* center = component::Stepper::New(cx, StrL("stepper4"))
