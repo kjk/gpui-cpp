@@ -1,4 +1,5 @@
 #include "ui/button.h"
+#include "ui/menu.h"
 
 namespace gpui {
 
@@ -358,6 +359,116 @@ El* Button::IntoEl() {
         e->Child(IconEl(a, IconName::ChevronDown, 12)->Fg(fg));
     }
     return e;
+}
+
+DropdownButton* DropdownButton::New(Ctx* cx, Str id) {
+    DropdownButton* d = ArenaNew<DropdownButton>(cx->a);
+    d->a = cx->a;
+    d->cx = cx;
+    d->id = id;
+    return d;
+}
+DropdownButton* DropdownButton::Button_(Button* b) {
+    button = b;
+    return this;
+}
+DropdownButton* DropdownButton::Menu(PopupMenu* m) {
+    menu = m;
+    return this;
+}
+DropdownButton* DropdownButton::Selected(bool v) {
+    selected = v;
+    return this;
+}
+DropdownButton* DropdownButton::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+DropdownButton* DropdownButton::Compact() {
+    compact = true;
+    return this;
+}
+DropdownButton* DropdownButton::Outline() {
+    outline = true;
+    return this;
+}
+DropdownButton* DropdownButton::Loading(bool v) {
+    loading = v;
+    return this;
+}
+DropdownButton* DropdownButton::WithVariant(ButtonVariant v) {
+    hasVariant = true;
+    variant = v;
+    return this;
+}
+DropdownButton* DropdownButton::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+DropdownButton* DropdownButton::Tooltip(Str s) {
+    tooltip = s;
+    return this;
+}
+
+// The two buttons share the props and the seam between them. A ghost button
+// that is not selected keeps both ends rounded — there is no filled block for
+// a square corner to sit against — so the pair is not joined at all.
+static void DropdownApply(Button* b, const DropdownButton& d) {
+    b->Loading(d.loading)
+        ->Selected(d.selected)
+        ->Disabled(d.disabled || d.loading);
+    if (d.compact) {
+        b->Compact();
+    }
+    if (d.outline) {
+        b->Outline();
+    }
+    b->WithSize(d.size);
+    if (d.hasVariant) {
+        b->variant = d.variant;
+    }
+}
+
+El* DropdownButton::IntoEl() {
+    const Theme& th = cx->theme();
+    if (!button) {
+        return Div(a);
+    }
+    bool rounded = variant == ButtonVariant::Ghost && !selected;
+    El* row = Div(a)->Id(id)->FlexRow()->ItemsCenter();
+    if (!rounded) {
+        // Joined: the two ends are rounded by the wrapper and the seam is one
+        // border, the way the Corners/Edges pair asks for.
+        row->Radius(th.radius)->ClipX()->ClipY();
+    }
+    DropdownApply(button, *this);
+    if (!rounded) {
+        button->joined = true;
+    }
+    row->Child(button->IntoEl());
+
+    Button* caret = Button::New(cx, StrDup(a, fmt("%s-popup", id)))
+                        ->DropdownCaret();
+    DropdownApply(caret, *this);
+    caret->Loading(false);
+    if (!rounded) {
+        caret->joined = true;
+        caret->edgeL = false;
+    }
+    El* trigger = caret->IntoEl();
+    if (menu && !(disabled || loading)) {
+        row->Child(DropdownMenu::New(cx, StrDup(a, fmt("%s-menu", id)))
+                       ->Trigger(trigger)
+                       ->Menu(menu)
+                       ->AnchorRight(anchorRight)
+                       ->IntoEl());
+    } else {
+        row->Child(trigger);
+    }
+    if (tooltip.s) {
+        row->Tip(tooltip);
+    }
+    return row;
 }
 
 ButtonGroup* ButtonGroup::New(Ctx* cx, Str id) {
