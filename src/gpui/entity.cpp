@@ -194,6 +194,13 @@ int WindowDragOverId(Ctx* cx) {
     return (cx && cx->win) ? cx->win->dragOverId : 0;
 }
 
+Point WindowDragOffset(Ctx* cx) {
+    if (!cx || !cx->win) {
+        return {};
+    }
+    return {cx->win->dragOffX, cx->win->dragOffY};
+}
+
 void WindowToggleInspector(Window* win) {
     if (!win) {
         return;

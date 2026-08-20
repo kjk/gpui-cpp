@@ -2044,6 +2044,11 @@ struct Window {
     // the hitbox its drop handlers consult — on its Window.
     DragPayload activeDrag = {};
     int dragOverId = 0;
+    // AnyDrag::cursor_offset: where inside the dragged element the press
+    // landed, so whatever is drawn under the pointer sits where the element
+    // was rather than jumping its corner to the cursor.
+    float dragOffX = 0;
+    float dragOffY = 0;
     bool eatReturn = false;
     // pending_keyboard_down: an Enter or Space is down on the focused
     // element, and the generation the focus was at when it went down.
@@ -2305,6 +2310,8 @@ void WindowSetActive(Window* win, bool active);
 // Which element the drag is over, of those that take its kind — 0 for none.
 // `El::Click(id)` names an element, so this answers with that id.
 int WindowDragOverId(Ctx* cx);
+// The same cursor offset, for whoever draws the thing being dragged.
+Point WindowDragOffset(Ctx* cx);
 // One subscription per event type, which is what window.on_mouse_event::<T>
 // asks for in Rust. Each handler takes the matching event:
 // `void OnDown(T* self, Ctx* cx, const MouseDownEvent* ev)`.
