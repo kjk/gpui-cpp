@@ -691,18 +691,32 @@ enum class Overflow : uint8_t {
 };
 
 // ScrollbarMode, crates/base/src/scrollbar.rs. Rust's default is Scrolling —
-// shown while scrolling, fading out after two idle seconds — which needs an
-// animation clock per area; it is not ported, and a caller that asks for it
-// gets the bar whenever the pointer is over the area.
+// the bar is up while the offset moves, holds for FADE_OUT_DELAY idle seconds
+// and then fades over the rest of FADE_OUT_DURATION. It needs a clock per
+// scroll area, which is keyed off `El::ScrollId` the way Rust keys its state
+// off the element id; an area with no id of its own has nowhere to keep the
+// clock and stays up. Our theme default is still Always — a story shot of a
+// scrollable page should show its bar — and the story's Appearance menu
+// offers all three.
 enum class ScrollbarMode : uint8_t {
     Always,
-    Hover
+    Hover,
+    Scrolling
 };
+
+// FADE_OUT_DELAY / FADE_OUT_DURATION, in seconds. The curve between them is
+// Rust's `1 - (elapsed - delay)^10`: flat for most of the second, then a
+// drop off the end.
+const float kScrollbarFadeDelay = 2.f;
+const float kScrollbarFadeDuration = 3.f;
 
 // The default Theme::scrollbar_mode. An element that names its own wins, the
 // way `Scrollbar::new().mode(..)` overrides the theme's.
 ScrollbarMode ScrollbarModeNow();
 void ScrollbarModeSet(ScrollbarMode m);
+// Drops what the Scrolling bars remember. The app's own teardown; a caller
+// has no reason to.
+void ScrollFadeClear();
 
 enum class IconName : uint8_t {
     None = 0,
@@ -1438,6 +1452,11 @@ struct PaintCtx {
     // Where the pointer is, which is what a Hover-mode scrollbar consults.
     float mouseX = -1;
     float mouseY = -1;
+    // Something painted this frame is part-way through a transition and wants
+    // the window back: a Scrolling scrollbar fading out. The window asks for
+    // an animation frame once, after the tree has painted, rather than each
+    // fading bar asking for itself.
+    bool wantsAnimFrame = false;
     // The inspector picking an element: every box under the pointer overwrites
     // this as it paints, so the deepest one wins — which is the one a click
     // would land on.
