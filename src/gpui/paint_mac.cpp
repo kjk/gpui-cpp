@@ -79,6 +79,61 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     return true;
 }
 
+// The offscreen target: a bitmap context rather than the window's, kept here
+// until the pixels are read back out of it.
+static CGContextRef gOffscreenCg = nullptr;
+static int gOffscreenW = 0;
+static int gOffscreenH = 0;
+
+bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    if (!ctx || !ctx->pa || pxW <= 0 || pxH <= 0) {
+        return false;
+    }
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef cg = CGBitmapContextCreate(
+        nullptr, (size_t)pxW, (size_t)pxH, 8, (size_t)pxW * 4, space,
+        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGColorSpaceRelease(space);
+    if (!cg) {
+        return false;
+    }
+    // The window's view is flipped, so an offscreen target is flipped too and
+    // everything drawn into it lands the same way up.
+    CGContextTranslateCTM(cg, 0, (CGFloat)pxH);
+    CGContextScaleCTM(cg, 1, -1);
+    if (!PaintTargetBegin(ctx, cg, pxW, pxH)) {
+        CGContextRelease(cg);
+        return false;
+    }
+    gOffscreenCg = cg;
+    gOffscreenW = pxW;
+    gOffscreenH = pxH;
+    return true;
+}
+
+bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
+    if (!ctx || !gOffscreenCg) {
+        return false;
+    }
+    if (outBgra) {
+        const uint8_t* src =
+            (const uint8_t*)CGBitmapContextGetData(gOffscreenCg);
+        size_t stride = CGBitmapContextGetBytesPerRow(gOffscreenCg);
+        if (src) {
+            for (int y = 0; y < gOffscreenH; y++) {
+                memcpy(outBgra + (size_t)y * (size_t)gOffscreenW * 4,
+                       src + (size_t)y * stride, (size_t)gOffscreenW * 4);
+            }
+        }
+    }
+    PaintTargetFree(ctx);
+    CGContextRelease(gOffscreenCg);
+    gOffscreenCg = nullptr;
+    gOffscreenW = 0;
+    gOffscreenH = 0;
+    return true;
+}
+
 bool PaintTargetEnd(PaintCtx* ctx) {
     if (!ctx || !ctx->rt) {
         return false;

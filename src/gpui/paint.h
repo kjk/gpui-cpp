@@ -38,6 +38,13 @@ void PaintAppFree(PaintApp* pa);
 // Bind `native` — the HDC on Windows, the cairo surface on Linux — as this
 // frame's target and open a drawing batch. False means skip the frame.
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH);
+// An offscreen square of pixels rather than a window: transparent to start
+// with, and read back as premultiplied BGRA, top-down, by
+// PaintTargetEndOffscreen. What a menu icon is rasterized through — the OS
+// wants a bitmap of one, not an element that draws it.
+bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH);
+// `outBgra` takes pxW * pxH * 4 bytes.
+bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra);
 // Close the batch. Returns false if the device was lost and the target was
 // dropped; the next frame recreates it.
 bool PaintTargetEnd(PaintCtx* ctx);

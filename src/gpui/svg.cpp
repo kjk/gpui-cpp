@@ -851,4 +851,23 @@ Str IconNamePath(IconName name) {
             return {};
     }
 }
+
+bool SvgRasterize(PaintApp* pa, Str assetPath, int px, Rgba color,
+                  uint8_t* outBgra) {
+    if (!pa || px <= 0 || !outBgra) {
+        return false;
+    }
+    PaintCtx ctx = {};
+    ctx.pa = pa;
+    ctx.dpi = 96;
+    ctx.viewW = (float)px;
+    ctx.viewH = (float)px;
+    if (!PaintTargetBeginOffscreen(&ctx, px, px)) {
+        return false;
+    }
+    bool drew = SvgDraw(&ctx, assetPath, 0, 0, (float)px, color);
+    bool ok = PaintTargetEndOffscreen(&ctx, outBgra);
+    return drew && ok;
+}
+
 } // namespace gpui

@@ -140,6 +140,110 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     return true;
 }
 
+// The offscreen target, which the window target is not: a DIB the render
+// target draws into with its alpha kept, so what comes out can be blended
+// over whatever the OS puts behind it.
+struct OffscreenTarget {
+    HBITMAP bmp = nullptr;
+    HDC dc = nullptr;
+    HGDIOBJ oldBmp = nullptr;
+    void* bits = nullptr;
+    int w = 0;
+    int h = 0;
+};
+static OffscreenTarget gOffscreen;
+
+bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    if (!ctx || !ctx->pa || pxW <= 0 || pxH <= 0) {
+        return false;
+    }
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = pxW;
+    // Negative: the rows run top down, the way every caller reads them.
+    bi.bmiHeader.biHeight = -pxH;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp =
+        CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp || !bits) {
+        return false;
+    }
+    memset(bits, 0, (size_t)pxW * (size_t)pxH * 4);
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (!dc) {
+        DeleteObject(bmp);
+        return false;
+    }
+    HGDIOBJ oldBmp = SelectObject(dc, bmp);
+
+    // A target of its own: the window's ignores alpha, and this one must not.
+    PaintTargetFree(ctx);
+    auto* t = new PaintTarget();
+    D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                          D2D1_ALPHA_MODE_PREMULTIPLIED),
+        96.f, 96.f);
+    HRESULT hr = ctx->pa->d2d->CreateDCRenderTarget(&rtp, &t->dcRt);
+    if (SUCCEEDED(hr)) {
+        t->rt = t->dcRt;
+        hr = t->rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &t->brush);
+    }
+    if (FAILED(hr)) {
+        Rel(&t->brush);
+        Rel(&t->dcRt);
+        delete t;
+        SelectObject(dc, oldBmp);
+        DeleteDC(dc);
+        DeleteObject(bmp);
+        return false;
+    }
+    ctx->rt = t;
+    RECT rc = {0, 0, pxW, pxH};
+    hr = t->dcRt->BindDC(dc, &rc);
+    if (FAILED(hr)) {
+        PaintTargetFree(ctx);
+        SelectObject(dc, oldBmp);
+        DeleteDC(dc);
+        DeleteObject(bmp);
+        return false;
+    }
+    gOffscreen.bmp = bmp;
+    gOffscreen.dc = dc;
+    gOffscreen.oldBmp = oldBmp;
+    gOffscreen.bits = bits;
+    gOffscreen.w = pxW;
+    gOffscreen.h = pxH;
+    t->rt->BeginDraw();
+    t->rt->SetTransform(D2D1::Matrix3x2F::Identity());
+    t->rt->Clear(D2D1::ColorF(0, 0.f));
+    return true;
+}
+
+bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
+    if (!ctx || !ctx->rt || !gOffscreen.bmp) {
+        return false;
+    }
+    HRESULT hr = ctx->rt->rt->EndDraw();
+    bool ok = SUCCEEDED(hr);
+    if (ok && outBgra) {
+        // The render target wrote through the DC; GDI has to be flushed
+        // before the DIB's own bytes are read.
+        GdiFlush();
+        memcpy(outBgra, gOffscreen.bits,
+               (size_t)gOffscreen.w * (size_t)gOffscreen.h * 4);
+    }
+    PaintTargetFree(ctx);
+    SelectObject(gOffscreen.dc, gOffscreen.oldBmp);
+    DeleteDC(gOffscreen.dc);
+    DeleteObject(gOffscreen.bmp);
+    gOffscreen = OffscreenTarget{};
+    return ok;
+}
+
 bool PaintTargetEnd(PaintCtx* ctx) {
     if (!ctx || !ctx->rt) {
         return false;
