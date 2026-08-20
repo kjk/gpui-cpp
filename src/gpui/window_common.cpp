@@ -38,6 +38,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         return;
     }
     double drawStart = TimeNow();
+    // One instant for the whole frame, which is what every transition in it
+    // measures against, and the frame that has just been asked for: whatever
+    // still has somewhere to go asks again below.
+    win->frameNow = drawStart;
+    win->animFrame = false;
     if (!PaintTargetBegin(&win->paint, native, pxW, pxH)) {
         return;
     }
@@ -1226,7 +1231,7 @@ void WindowTimerTick(Window* win) {
     }
     win->timers.len = keep;
 
-    if (win->anim || repaint) {
+    if (win->anim || win->animFrame || repaint) {
         AppInvalidate(win);
     }
     PlatSetTimer(win, WindowTimerMs(win));
@@ -1252,7 +1257,7 @@ int WindowTimerMs(Window* win) {
     // if nothing does.
     double now = TimeNow();
     double soonest = -1;
-    if (win->anim || win->opts.anim) {
+    if (win->anim || win->opts.anim || win->animFrame) {
         soonest = now + 0.016;
     }
     for (int i = 0; i < win->timers.len; i++) {
@@ -1342,6 +1347,19 @@ void AppFree(App* app) {
     PlatShutdown(app);
     delete app;
     DestroyTempArena();
+}
+
+// window.request_animation_frame(). The flag is cleared as the next frame
+// starts, so a caller that still has somewhere to go asks again while it
+// renders, and one that has arrived stops.
+void WindowRequestAnimationFrame(Window* win) {
+    if (!win || win->animFrame) {
+        return;
+    }
+    win->animFrame = true;
+    // Nothing else may be keeping the window awake: arm the clock now, the
+    // way AppRequestAnim does.
+    PlatSetTimer(win, WindowTimerMs(win));
 }
 
 void AppRequestAnim(Window* win, bool on) {

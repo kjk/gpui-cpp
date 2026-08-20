@@ -698,6 +698,15 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
 
 // cx.open_url. NSWorkspace hands the URL to whichever application is
 // registered for its scheme.
+// The macOS switch is Accessibility ▸ Display ▸ Reduce motion, which
+// NSWorkspace answers for directly.
+bool PlatReduceMotion() {
+    return
+        [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion]
+            ? true
+            : false;
+}
+
 void OpenUrl(Str url) {
     if (!url.s || url.len <= 0) {
         return;

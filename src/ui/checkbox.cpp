@@ -1,8 +1,12 @@
 #include "ui/checkbox.h"
+#include "base/motion.h"
 
 namespace gpui {
 
 namespace component {
+
+// checkbox.rs: the tick takes 0.25 s to arrive, and as long to leave.
+static const float kCheckboxMotionMs = 250.f;
 
 Checkbox* Checkbox::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -65,8 +69,20 @@ El* Checkbox::IntoEl() {
                   ->Border(1, mark)
                   ->Radius(radius);
     if (checked) {
+        ind->Bg(mark);
+    }
+    // checkbox.rs fades the tick in over 0.25 s, and back out again when the
+    // box is cleared. There is no element opacity here, so the fade is the
+    // tick's own alpha — the mark is the only thing it paints.
+    float on = checked ? 1.f : 0.f;
+    if (!disabled) {
+        on = MotionValue(cx, MotionId(id, StrL("checkbox-tick")), on,
+                         MotionNew(kCheckboxMotionMs));
+    }
+    if (on > 0.01f) {
         Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;
-        ind->Bg(mark)->Child(IconEl(a, IconName::Check, box - 4)->Fg(tick));
+        ind->Child(IconEl(a, IconName::Check, box - 4)
+                       ->Fg(RgbaOpacity(tick, on)));
     }
     // gpui_base::Checkbox owns identity, focus and activation. It hands the
     // handler the state the activation produces; the themed checkbox is

@@ -531,6 +531,12 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
 // cx.open_url. xdg-open is the desktop's own answer to "what opens this";
 // the fork keeps a browser that takes its time from holding up the frame, and
 // the child replaces itself so nothing here waits on it.
+// X11 has nothing to ask. GNOME keeps `gtk-enable-animations` in its own
+// settings daemon, which is not something this window talks to.
+bool PlatReduceMotion() {
+    return false;
+}
+
 void OpenUrl(Str url) {
     if (!url.s || url.len <= 0) {
         return;

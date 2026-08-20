@@ -780,7 +780,8 @@ enum class ApKind : uint8_t {
     Radius,
     Scroll,
     ListHighlight,
-    Fps
+    Fps,
+    Reduce
 };
 
 struct ApRow {
@@ -811,6 +812,10 @@ static const ApRow kAppearance[] = {
     {ApKind::Sep, nullptr, 0},
     {ApKind::ListHighlight, "List Active Highlight", 0},
     {ApKind::Fps, "FPS Monitor", 0},
+    // Not a row Rust's menu has. `cx.reduce_motion()` is the desktop's own
+    // setting, which a gallery of components that move is the one place you
+    // would want to try both ways without leaving to change it.
+    {ApKind::Reduce, "Reduce Motion", 0},
 };
 
 static const int kAppearanceRows = (int)(sizeof(kAppearance) / sizeof(ApRow));
@@ -828,6 +833,8 @@ static bool ApChecked(const StoryApp* app, const ApRow& r) {
             return ListSettingsNow().activeHighlight;
         case ApKind::Fps:
             return app->fpsMonitor;
+        case ApKind::Reduce:
+            return MotionReduced();
         default:
             return false;
     }
@@ -857,6 +864,9 @@ static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
         }
         case ApKind::Fps:
             app->fpsMonitor = !app->fpsMonitor;
+            break;
+        case ApKind::Reduce:
+            MotionSetReduced(!MotionReduced());
             break;
         default:
             break;

@@ -16,6 +16,11 @@ namespace gpui {
 void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
                      float dipH);
 
+// cx.reduce_motion(): whether the desktop has asked for less animation.
+// Windows and macOS each have a switch to read; X11 has no such setting, so
+// it answers false.
+bool PlatReduceMotion();
+
 // `key` is one of the Key* codes in Gpui.h.
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt);
 // The release of one. Only Enter and Space do anything with it — they make
