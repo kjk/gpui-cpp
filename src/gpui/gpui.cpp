@@ -597,6 +597,14 @@ El* El::Radius(float r) {
     style.radius = r;
     return this;
 }
+El* El::Corners(float tl, float tr, float br, float bl) {
+    style.corners = {tl, tr, br, bl};
+    style.hasCorners = true;
+    // `radius` stays what the uniform case reads, so anything that only knows
+    // about one number — the focus ring's own corners — still lands near it.
+    style.radius = tl > tr ? tl : tr;
+    return this;
+}
 El* El::Fg(Rgba c) {
     style.color = c;
     style.hasColor = true;
@@ -2563,6 +2571,73 @@ static void FillRound(PaintCtx* ctx, float x, float y, float w, float h,
     CanvasFillRound(ctx, x, y, w, h, r, c);
 }
 
+// The four corners of a box, as one path: a quarter turn at each corner that
+// asked for one and a plain corner where it did not. Built here rather than in
+// the two backends because the path API is already portable and a rounded box
+// is nothing but four arcs — D2D's own rounded rectangle takes one radius, and
+// so does cairo's and Core Graphics'.
+static void CornersPath(Path* p, float x, float y, float w, float h,
+                        const Corners& c) {
+    // No corner larger than half the box, the way Rust clamps a radius.
+    float lim = (w < h ? w : h) * 0.5f;
+    float tl = c.tl < lim ? c.tl : lim;
+    float tr = c.tr < lim ? c.tr : lim;
+    float br = c.br < lim ? c.br : lim;
+    float bl = c.bl < lim ? c.bl : lim;
+    float r = x + w;
+    float b = y + h;
+    PathMoveTo(p, x + tl, y);
+    PathLineTo(p, r - tr, y);
+    if (tr > 0) {
+        PathArcTo(p, r - tr, y + tr, tr, -kPi * 0.5f, 0.f, true);
+    }
+    PathLineTo(p, r, b - br);
+    if (br > 0) {
+        PathArcTo(p, r - br, b - br, br, 0.f, kPi * 0.5f, true);
+    }
+    PathLineTo(p, x + bl, b);
+    if (bl > 0) {
+        PathArcTo(p, x + bl, b - bl, bl, kPi * 0.5f, kPi, true);
+    }
+    PathLineTo(p, x, y + tl);
+    if (tl > 0) {
+        PathArcTo(p, x + tl, y + tl, tl, kPi, kPi * 1.5f, true);
+    }
+    PathClose(p);
+}
+
+// The same two calls as FillRound / DrawRoundStroke, for a box whose corners
+// differ. `Style::hasCorners` is what picks between them.
+static void FillCorners(PaintCtx* ctx, float x, float y, float w, float h,
+                        const Corners& c, Rgba col) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    if (c.IsUniform()) {
+        CanvasFillRound(ctx, x, y, w, h, c.tl, col);
+        return;
+    }
+    Path* p = PathNew(ctx, true);
+    CornersPath(p, x, y, w, h, c);
+    PathFill(ctx, p, col);
+    PathFree(p);
+}
+
+static void StrokeCorners(PaintCtx* ctx, float x, float y, float w, float h,
+                          const Corners& c, float stroke, Rgba col) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    if (c.IsUniform()) {
+        CanvasStrokeRound(ctx, x, y, w, h, c.tl, stroke, col);
+        return;
+    }
+    Path* p = PathNew(ctx, true);
+    CornersPath(p, x, y, w, h, c);
+    PathStroke(ctx, p, stroke, col);
+    PathFree(p);
+}
+
 // styled.rs FOCUS_RING_WIDTH and FOCUS_RING_OPACITY.
 static const float kFocusRingWidth = 3.f;
 static const float kFocusRingOpacity = 0.5f;
@@ -3706,10 +3781,21 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // The hover background needs a click id of its own: without one the
     // element would match hoverId 0, which means nothing is hovered.
     if (e->style.hasHoverBg && e->clickId && e->clickId == ctx->hoverId) {
-        FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
-                  e->style.hoverBg);
+        if (e->style.hasCorners) {
+            FillCorners(ctx, e->x, e->y, e->w, e->h, e->style.corners,
+                        e->style.hoverBg);
+        } else {
+            FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
+                      e->style.hoverBg);
+        }
     } else if (e->style.hasBg) {
-        FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius, e->style.bg);
+        if (e->style.hasCorners) {
+            FillCorners(ctx, e->x, e->y, e->w, e->h, e->style.corners,
+                        e->style.bg);
+        } else {
+            FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
+                      e->style.bg);
+        }
     }
     if (e->style.border > 0) {
         if (e->style.borderDashed) {
@@ -3738,6 +3824,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                 CanvasStrokeRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
                                   e->style.border, e->style.borderColor, dash);
             }
+        } else if (e->style.hasCorners) {
+            StrokeCorners(ctx, e->x, e->y, e->w, e->h, e->style.corners,
+                          e->style.border, e->style.borderColor);
         } else {
             DrawRoundStroke(ctx, e->x, e->y, e->w, e->h, e->style.radius,
                             e->style.border, e->style.borderColor);
