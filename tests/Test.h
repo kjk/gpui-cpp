@@ -78,3 +78,4 @@ void TestDockState();
 void TestFocusTrap();
 void TestListSettings();
 void TestStateStyle();
+void TestClick();

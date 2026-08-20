@@ -468,6 +468,11 @@ static void SliderRelease(Window* win) {
     }
 }
 
+// How far the pointer travels before a press counts as a drag rather than a
+// click. GPUI starts the drag from the first move that leaves the press
+// behind; a few DIPs of slack is what a mouse gives a firm click.
+static const float kDragThreshold = 4.f;
+
 static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     float x = in.x;
     float y = in.y;
@@ -523,6 +528,16 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     if (win->onMouseMove.IsValid()) {
         ListenerCall(win->app, win, win->onMouseMove, &in);
     }
+    // Whether this press has become a drag: GPUI starts one from the move
+    // that leaves the press behind, not from the press itself.
+    if (win->mouseDown && !win->pressedMoved) {
+        float dx = x - win->pressedX;
+        float dy = y - win->pressedY;
+        if (dx * dx + dy * dy > kDragThreshold * kDragThreshold) {
+            win->pressedMoved = true;
+        }
+    }
+
     // on_drag_move: the element that took the press hears every move until
     // the release, wherever the pointer has got to by then. The press picked
     // up whatever payload the element named with on_drag, and every move
@@ -589,6 +604,14 @@ int WindowCurrentClickCount(Window* win) {
     return win && win->clickRun > 0 ? win->clickRun : 1;
 }
 
+// A press that something else took: whatever was pending stops being so, and
+// the release that follows makes no click.
+static void ClearPendingClick(Window* win) {
+    win->pressPending = false;
+    win->pressedId = 0;
+    win->pressedMoved = false;
+}
+
 static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     float x = in.x;
     float y = in.y;
@@ -607,6 +630,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
             ev.el = other->bounds;
             ListenerCall(win->app, win, other->onMouseDown, &ev);
         }
+        ClearPendingClick(win);
         AppInvalidate(win);
         return;
     }
@@ -619,6 +643,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         win->inspector.pending = true;
         win->inspector.pendingX = x;
         win->inspector.pendingY = y;
+        ClearPendingClick(win);
         AppInvalidate(win);
         return;
     }
@@ -627,6 +652,8 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     if (bar) {
         win->mouseDown = true;
         ScrollbarPress(win, bar, x, y, barHorizontal);
+        // The bar took the press, so nothing is waiting to become a click.
+        ClearPendingClick(win);
         AppInvalidate(win);
         return;
     }
@@ -657,22 +684,16 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         SliderPress(win, hit, {x, y});
     }
     InputPress(win, in);
-    ClickEvent ev = {x, y, in.button, id};
-    ev.clickCount = in.clickCount;
-    ev.modifiers = in.modifiers;
-    if (hit) {
-        ev.el = hit->bounds;
-    }
-    if (hit && hit->listener.IsValid()) {
-        ListenerCall(win->app, win, hit->listener, &ev);
-    } else if (win->onClick.IsValid() && !(hit && hit->slider)) {
-        // A press on a slider is handled by the slider, so it is not the
-        // outside click that dismisses an overlay.
-        ListenerCall(win->app, win, win->onClick, &ev);
-    }
-    if (hit && hit->onClick.IsValid()) {
-        hit->onClick.Call();
-    }
+    // The click itself is not here: GPUI holds the press and fires on_click
+    // from the release, on the element that took both. DispatchMouseUp does
+    // that; what the press leaves behind is pressedId and the count.
+    win->pressPending = true;
+    win->pressedCount = in.clickCount;
+    win->pressedX = x;
+    win->pressedY = y;
+    win->pressedMoved = false;
+    win->pressedButton = in.button;
+    win->pressedModifiers = in.modifiers;
     // TitleBar::on_double_click -> window.zoom_window(), in title_bar.rs. The
     // press was dispatched first, so an element that put itself in the title
     // bar still saw it — Rust bubbles the same way. The empty half of the band
@@ -719,7 +740,11 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     // on_drop: the element under the pointer that takes this drag hears where
     // it landed. It runs after on_mouse_up_out, so a source that is winding
     // its own drag down has already done so by the time the target acts.
-    if (win->activeDrag.IsValid()) {
+    // A drag that actually happened takes the release: GPUI hands the up to
+    // the drop and the click never runs. A press that picked a payload up and
+    // never went anywhere is still a click.
+    bool dragged = win->activeDrag.IsValid() && win->pressedMoved;
+    if (dragged) {
         const HitRect* target =
             HitTestDrop(&win->paint, in.x, in.y, win->activeDrag.kind);
         if (target) {
@@ -736,7 +761,32 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
         win->input->selecting = false;
         win->input->hasSelectedWordRange = false;
     }
-    win->pressedId = 0;
+    // The click, last: GPUI's on_click fires from the release, and only when
+    // the same button that went down comes up over the element that took it.
+    // A press that slid off somewhere else is no click at all — which is what
+    // lets a reader change their mind by moving off the button before
+    // letting go.
+    int upId = hit ? hit->id : 0;
+    if (ClickFromRelease(win->pressPending, win->pressedId, win->pressedButton,
+                         dragged, upId, in.button)) {
+        ClickEvent ev = {in.x, in.y, in.button, win->pressedId};
+        ev.clickCount = win->pressedCount;
+        ev.modifiers = win->pressedModifiers;
+        if (hit) {
+            ev.el = hit->bounds;
+        }
+        if (hit && hit->listener.IsValid()) {
+            ListenerCall(win->app, win, hit->listener, &ev);
+        } else if (win->onClick.IsValid() && !(hit && hit->slider)) {
+            // A press on a slider is handled by the slider, so it is not the
+            // outside click that dismisses an overlay.
+            ListenerCall(win->app, win, win->onClick, &ev);
+        }
+        if (hit && hit->onClick.IsValid()) {
+            hit->onClick.Call();
+        }
+    }
+    ClearPendingClick(win);
     AppInvalidate(win);
 }
 
