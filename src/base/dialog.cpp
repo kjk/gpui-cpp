@@ -67,8 +67,9 @@ void DialogBindKeys(Ctx* cx, El* popup, Str name, Listener onCancel,
         return;
     }
     DialogInitKeys();
-    Entity<DialogKeys> keys =
-        KeyedEntity<DialogKeys>(cx, (uint32_t)HashClickId(name));
+    Entity<DialogKeys> keys = KeyedEntity<DialogKeys>(
+        cx, KeyedKey((uint32_t)HashClickId(name),
+                     (uint32_t)HashClickId(StrL("gpui::DialogKeys"))));
     if (DialogKeys* k = keys.Get(cx)) {
         k->onCancel = onCancel;
         k->onOk = onOk;

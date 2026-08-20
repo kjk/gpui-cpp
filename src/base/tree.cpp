@@ -284,7 +284,17 @@ El* TreeItemEl::New(Ctx* cx, Str id, Listener onClick) {
     Arena* a = cx->a;
     El* e = Div(a);
     if (id.s) {
-        e->Id(id)->Click(HashClickId(id));
+        // The row takes focus on a press, which is what puts the tree's key
+        // context on the focused ancestry — a tree with a row selected is one
+        // the arrows can walk. Not a tab stop: Tab reaches the tree itself,
+        // not each of its hundreds of rows.
+        e->Id(id)
+            ->Click(HashClickId(id))
+            ->FocusId(HashClickId(id))
+            ->TabStop(false)
+            // The selected row is drawn by the tree itself; a ring around the
+            // last one pressed is not something Rust's tree shows.
+            ->FocusRing(false);
     }
     if (onClick.IsValid()) {
         e->OnClick(onClick);

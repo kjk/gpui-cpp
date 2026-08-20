@@ -2652,6 +2652,17 @@ T* KeyedState(Ctx* cx, uint32_t key) {
 EntityId WindowKeyedEntity(Window* win, App* app, uint32_t key, void* fresh,
                            DropFn drop);
 
+// A keyed slot is remembered by its key alone, so two different states under
+// one name are one slot — and the second would read the first's memory as its
+// own. `kind` is a constant per state type (the hash of its name is what the
+// callers pass), which is what keeps, say, a popover's own state and the
+// listeners its escape runs apart.
+inline uint32_t KeyedKey(uint32_t name, uint32_t kind) {
+    uint32_t h = name * 2654435761u;
+    h ^= kind + 0x9e3779b9u + (h << 6) + (h >> 2);
+    return h ? h : 1u;
+}
+
 template <typename T>
 Entity<T> KeyedEntity(Ctx* cx, uint32_t key) {
     Entity<T> e;
