@@ -640,7 +640,12 @@ enum class ElKind : uint8_t {
     Text,
     Chart,
     Progress,
-    Icon
+    Icon,
+    // gpui's img(..): a decoded bitmap, sized by its own pixels unless the
+    // caller says otherwise. An image whose source cannot be decoded — a
+    // remote URL, a format the platform does not read — paints its `text`
+    // instead, which is the alt text a document gave it.
+    Image
 };
 
 enum class FlexDir : uint8_t {
@@ -926,6 +931,9 @@ struct El {
     Str text;
     IconName icon = IconName::None;
     Str iconPath;
+    // ElKind::Image: what the document called the image. gpui/image.h says
+    // what that may name.
+    Str imgSrc;
     ChartSeries chart = {};
     float progress = 0; // 0..100
     int clickId = 0;
@@ -1181,6 +1189,11 @@ El* Div(Arena* a);
 El* TextEl(Arena* a, Str s);
 El* IconEl(Arena* a, IconName name);
 El* IconEl(Arena* a, IconName name, float size);
+// gpui's img(src): `alt` is what paints when the source will not decode.
+// The size is the image's own unless W() / H() overrides it, and it is
+// scaled down to fit the width it is given — object_fit(Contain) with
+// max_w(relative(1.)), which is how node.rs renders a markdown image.
+El* ImageEl(Arena* a, Str src, Str alt = {});
 El* ProgressEl(Arena* a, float value01to100, float barW, float barH);
 El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
             Rgba fillBot, int tickMargin);

@@ -276,6 +276,69 @@ static void TestHtmlBreak(Arena* a) {
     utassert(TextIs(a, Child(doc, 0), "one\ntwo"));
 }
 
+// The run covering `needle`, or the first image run when `needle` is null.
+static MdRun* ImageRunOf(MdNode* n) {
+    for (MdRun* r = n ? n->runFirst : nullptr; r; r = r->next) {
+        if (r->imgSrc.len > 0) {
+            return r;
+        }
+    }
+    return nullptr;
+}
+
+// node.rs InlineNode::image: a markdown image is a run of its own, carrying
+// the source and the alt text beside the words.
+static void TestMarkdownImage(Arena* a) {
+    MdNode* doc = MdParse(a, StrL("see ![a cat](cat.png) here\n"));
+    MdNode* p = Child(doc, 0);
+    MdRun* img = ImageRunOf(p);
+    utassert(img != nullptr);
+    utassert(StrIs(img->imgSrc, "cat.png"));
+    utassert(StrIs(img->text, "a cat"));
+    // The words around it are still their own runs, in order.
+    utassert(TextIs(a, p, "see a cat here"));
+    // An image inside a link is a link, the way ImageNode::link is.
+    MdNode* linked = MdParse(a, StrL("[![alt](c.png)](https://x/)\n"));
+    MdRun* r = ImageRunOf(Child(linked, 0));
+    utassert(r != nullptr);
+    utassert((r->marks & MdLink) != 0);
+    utassert(StrIs(r->href, "https://x/"));
+}
+
+// html.rs attr_width_height: the size the tag gives, in pixels. A percentage
+// is not a size this layout can use, so it reads as none.
+static void TestHtmlImage(Arena* a) {
+    MdNode* doc = HtmlParse(
+        a, StrL("<p>a <img src=\"x.png\" alt=\"alt\" width=\"60\" "
+                "height=\"40\"> b</p>"));
+    MdRun* img = ImageRunOf(Child(doc, 0));
+    utassert(img != nullptr);
+    utassert(StrIs(img->imgSrc, "x.png"));
+    utassert(StrIs(img->text, "alt"));
+    utassert(img->imgW == 60 && img->imgH == 40);
+
+    MdNode* pct =
+        HtmlParse(a, StrL("<img src=\"y.png\" style=\"width: 50%\">"));
+    MdRun* r = ImageRunOf(Child(pct, 0));
+    utassert(r != nullptr);
+    utassert(r->imgW == 0);
+
+    // html.rs drops an image with no src; so does this.
+    MdNode* nosrc = HtmlParse(a, StrL("<p><img alt=\"x\"></p>"));
+    utassert(ImageRunOf(Child(nosrc, 0)) == nullptr);
+}
+
+// gpui/image.h: what a src may name. A URL is somewhere this tree cannot
+// reach, so it never reaches the cache.
+static void TestImageSrc() {
+    utassert(ImageSrcIsLocal(StrL("logo.png")));
+    utassert(ImageSrcIsLocal(StrL("icons/logo.png")));
+    utassert(ImageSrcIsLocal(StrL("data:image/png;base64,iVBORw0KGgo=")));
+    utassert(!ImageSrcIsLocal(StrL("https://example.com/a.png")));
+    utassert(!ImageSrcIsLocal(StrL("http://example.com/a.png")));
+    utassert(!ImageSrcIsLocal(StrL("")));
+}
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
@@ -283,6 +346,7 @@ void TestTextView() {
     TestMarkdownTableAlign(a);
     TestMarkdownInlineHtml(a);
     TestMarkdownHtmlBlock(a);
+    TestMarkdownImage(a);
     TestHtmlBlocks(a);
     TestHtmlInlineMarks(a);
     TestHtmlNestedMarks(a);
@@ -295,5 +359,7 @@ void TestTextView() {
     TestHtmlUnbalanced(a);
     TestHtmlComments(a);
     TestHtmlBreak(a);
+    TestHtmlImage(a);
+    TestImageSrc();
     ArenaDelete(a);
 }

@@ -516,6 +516,74 @@ static int U16OffToUtf8(Str s, int u16off) {
     return i;
 }
 
+// ─── images ───────────────────────────────────────────────────────────────
+//
+// NSBitmapImageRep decodes everything the system has a codec for — PNG,
+// JPEG, GIF, TIFF, HEIC — and hands out a CGImage, so this needs no
+// framework the build does not already link. ImageIO would do the same job
+// one layer down.
+
+struct Image {
+    CGImageRef image = nullptr;
+    int w = 0;
+    int h = 0;
+};
+
+Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+    (void)pa;
+    if (!bytes || len <= 0) {
+        return nullptr;
+    }
+    NSData* data = [NSData dataWithBytes:bytes length:(NSUInteger)len];
+    NSBitmapImageRep* rep = [NSBitmapImageRep imageRepWithData:data];
+    if (!rep) {
+        return nullptr;
+    }
+    CGImageRef cg = [rep CGImage];
+    if (!cg) {
+        return nullptr;
+    }
+    auto* img = new Image();
+    img->image = CGImageRetain(cg);
+    img->w = (int)CGImageGetWidth(cg);
+    img->h = (int)CGImageGetHeight(cg);
+    return img;
+}
+
+void ImageFree(Image* img) {
+    if (!img) {
+        return;
+    }
+    if (img->image) {
+        CGImageRelease(img->image);
+    }
+    delete img;
+}
+
+Size ImageSizePx(const Image* img) {
+    if (!img) {
+        return {};
+    }
+    return {(float)img->w, (float)img->h};
+}
+
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+    CGContextRef cg = Cg(ctx);
+    if (!cg || !img || !img->image || b.w <= 0 || b.h <= 0) {
+        return;
+    }
+    CGContextSaveGState(cg);
+    if (ctx->opacity < 1.f) {
+        CGContextSetAlpha(cg, ctx->opacity < 0 ? 0 : ctx->opacity);
+    }
+    // The context is y-down for everything else here, and CGContextDrawImage
+    // is the one call that reads y-up, so the box is flipped about itself.
+    CGContextTranslateCTM(cg, b.x, b.y + b.h);
+    CGContextScaleCTM(cg, 1, -1);
+    CGContextDrawImage(cg, CGRectMake(0, 0, b.w, b.h), img->image);
+    CGContextRestoreGState(cg);
+}
+
 // ─── shaped text ──────────────────────────────────────────────────────────
 
 struct MacLine {

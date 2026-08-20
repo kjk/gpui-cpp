@@ -118,6 +118,27 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
                 bool roundCaps = false);
 
+// ─── images ───────────────────────────────────────────────────────────────
+//
+// A decoded bitmap. GPUI hands an `img(..)` element's source to its asset
+// system, which decodes with the `image` crate; there is no such crate here
+// and no room for one, so the decode is the platform's own: WIC on Windows,
+// NSBitmapImageRep on macOS, and cairo's PNG loader on Linux — which is why
+// Linux reads PNG and nothing else. gpui/image.h caches what comes back and
+// is what the element tree talks to.
+
+struct Image;
+
+// Decode `bytes`. Null when the format is not one this platform reads, which
+// the caller shows as the image's alt text.
+Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len);
+void ImageFree(Image* img);
+// The image's own size in pixels.
+Size ImageSizePx(const Image* img);
+// Draw it scaled into `b`. The caller has already picked the box, so this is
+// a straight stretch — object_fit is decided above.
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b);
+
 // ─── shaped text ──────────────────────────────────────────────────────────
 //
 // A TextLayout is one shaped run, refcounted so the measurement cache in

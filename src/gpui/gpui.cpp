@@ -1,6 +1,7 @@
 #include "gpui/gpui.h"
 #include "gpui/keymap.h"
 #include "base/scrollbar.h"
+#include "gpui/image.h"
 #include "gpui/paint.h"
 #include "gpui/svg.h"
 
@@ -318,6 +319,14 @@ El* IconEl(Arena* a, IconName name, float size) {
     e->iconPath = IconNamePath(name);
     e->style.width = size;
     e->style.height = size;
+    e->style.flexShrink = 0;
+    return e;
+}
+
+El* ImageEl(Arena* a, Str src, Str alt) {
+    El* e = NewEl(a, ElKind::Image);
+    e->imgSrc = src;
+    e->text = alt;
     e->style.flexShrink = 0;
     return e;
 }
@@ -1502,6 +1511,46 @@ static void StampFg(El* e, Rgba c) {
 
 // Records the result of a full layout so a later call with the same inputs can
 // replay it. See the memo* fields on El.
+// gpui img(..): the box an image takes. Its own pixels are the natural
+// size, at one DIP per pixel; a width or a height given by the document wins
+// and the other side follows the aspect ratio, which is what html.rs reads
+// out of the width / height attributes. Wider than the space it has, it
+// shrinks to fit — max_w(relative(1.)) with object_fit(Contain), the pair
+// node.rs gives a markdown image.
+//
+// An image that will not decode is its alt text instead, measured here so
+// the line it sits in is the right height for it.
+static void LayoutImage(PaintCtx* ctx, El* e, float wSpec, float hSpec,
+                        float availW, float font, Rgba inheritFg) {
+    (void)inheritFg;
+    Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
+    if (!img) {
+        Size text = MeasureText(ctx, e->text, font, availW > 0 ? availW : 0,
+                                e->style.wrap, ElTextWeight(e),
+                                e->style.lineHeight);
+        e->w = wSpec > 0 ? wSpec : text.w;
+        e->h = hSpec > 0 ? hSpec : text.h;
+        return;
+    }
+    Size px = ImageSizePx(img);
+    if (px.w <= 0 || px.h <= 0) {
+        e->w = wSpec > 0 ? wSpec : 0;
+        e->h = hSpec > 0 ? hSpec : 0;
+        return;
+    }
+    float aspect = px.h / px.w;
+    float w = wSpec > 0 ? wSpec : (hSpec > 0 ? hSpec / aspect : px.w);
+    if (wSpec <= 0 && availW > 0 && w > availW) {
+        w = availW;
+    }
+    float h = hSpec > 0 ? hSpec : w * aspect;
+    if (wSpec > 0 && hSpec > 0) {
+        h = hSpec;
+    }
+    e->w = w;
+    e->h = h;
+}
+
 static void LayoutMemoStore(El* e, float availW, float availH,
                             float inheritFont, Rgba inheritFg) {
     e->memoAvailW = availW;
@@ -1588,6 +1637,11 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     if (e->kind == ElKind::Icon) {
         e->w = wSpec > 0 ? wSpec : 16;
         e->h = hSpec > 0 ? hSpec : 16;
+        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
+        return;
+    }
+    if (e->kind == ElKind::Image) {
+        LayoutImage(ctx, e, wSpec, hSpec, availW, font, inheritFg);
         LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
         return;
     }
@@ -3104,6 +3158,21 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             CanvasPopClip(ctx);
         }
         PaintCaret(ctx, e, font);
+    } else if (e->kind == ElKind::Image) {
+        Image* img = ImageForSrc(ctx->pa, e->imgSrc);
+        if (img) {
+            ImageDraw(ctx, img, e->Bounds());
+        } else if (e->text.s && e->text.len > 0) {
+            // The alt text, in the color the text around it uses.
+            float font = e->laidFont > 0 ? e->laidFont
+                                         : (e->style.fontSize > 0
+                                                ? e->style.fontSize
+                                                : 14.f);
+            Rgba c = e->style.hasColor ? e->style.color : ThemeNow().mutedFg;
+            DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c, false,
+                       e->style.wrap, e->laidMaxW, ElTextWeight(e),
+                       e->style.lineHeight);
+        }
     } else if (e->kind == ElKind::Icon) {
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
         float s = e->w > 0 ? e->w : 16;
@@ -3807,3 +3876,4 @@ int FocusNext(Window* win, int trapId, bool backward) {
     return win->focusId;
 }
 } // namespace gpui
+

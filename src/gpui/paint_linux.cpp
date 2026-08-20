@@ -504,6 +504,94 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
 }
 
+// ─── images ───────────────────────────────────────────────────────────────
+//
+// cairo reads PNG and nothing else, and the tree takes no library that reads
+// the rest (hard rule 3: X11, cairo and Pango are the system libraries the
+// Linux build has). So on Linux a JPEG in a document comes out as its alt
+// text, where Windows and macOS decode it — a difference the caller cannot
+// see beyond ImageDecode returning null.
+
+struct Image {
+    cairo_surface_t* surface = nullptr;
+    int w = 0;
+    int h = 0;
+};
+
+// cairo reads through a callback rather than from a pointer.
+struct PngRead {
+    const uint8_t* bytes;
+    int len;
+    int at;
+};
+
+static cairo_status_t PngReadFn(void* closure, unsigned char* out,
+                                unsigned int len) {
+    auto* r = (PngRead*)closure;
+    if (r->at + (int)len > r->len) {
+        return CAIRO_STATUS_READ_ERROR;
+    }
+    memcpy(out, r->bytes + r->at, len);
+    r->at += (int)len;
+    return CAIRO_STATUS_SUCCESS;
+}
+
+Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+    (void)pa;
+    if (!bytes || len <= 0) {
+        return nullptr;
+    }
+    PngRead r{bytes, len, 0};
+    cairo_surface_t* surface =
+        cairo_image_surface_create_from_png_stream(PngReadFn, &r);
+    if (!surface) {
+        return nullptr;
+    }
+    if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(surface);
+        return nullptr;
+    }
+    auto* img = new Image();
+    img->surface = surface;
+    img->w = cairo_image_surface_get_width(surface);
+    img->h = cairo_image_surface_get_height(surface);
+    return img;
+}
+
+void ImageFree(Image* img) {
+    if (!img) {
+        return;
+    }
+    if (img->surface) {
+        cairo_surface_destroy(img->surface);
+    }
+    delete img;
+}
+
+Size ImageSizePx(const Image* img) {
+    if (!img) {
+        return {};
+    }
+    return {(float)img->w, (float)img->h};
+}
+
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+    cairo_t* cr = Cr(ctx);
+    if (!cr || !img || !img->surface || img->w <= 0 || img->h <= 0 ||
+        b.w <= 0 || b.h <= 0) {
+        return;
+    }
+    cairo_save(cr);
+    cairo_translate(cr, b.x, b.y);
+    cairo_scale(cr, b.w / (double)img->w, b.h / (double)img->h);
+    cairo_set_source_surface(cr, img->surface, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+    cairo_rectangle(cr, 0, 0, img->w, img->h);
+    cairo_clip(cr);
+    cairo_paint_with_alpha(cr, ctx->opacity < 0 ? 0 : ctx->opacity);
+    cairo_restore(cr);
+}
+
 // ─── shaped text ──────────────────────────────────────────────────────────
 //
 // Pango indexes by UTF-8 byte, which is what Str carries, so unlike the

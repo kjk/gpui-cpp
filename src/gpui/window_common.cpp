@@ -3,6 +3,7 @@
    here; nothing here calls back out except through Platform.h. */
 
 #include "gpui/platform.h"
+#include "gpui/image.h"
 #include "gpui/paint.h"
 #include "base/focus_trap.h"
 
@@ -1347,6 +1348,9 @@ void AppFree(App* app) {
         delete w;
     }
     app->windows.Reset();
+    // The decoded images outlive a window but not the backend that made
+    // them, so they go before it does.
+    ImageCacheClear();
     PaintAppFree(app->paint);
     app->paint = nullptr;
     PlatShutdown(app);

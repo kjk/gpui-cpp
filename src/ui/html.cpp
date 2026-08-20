@@ -422,6 +422,52 @@ static uint8_t HtmlAlign(Arena* a, Str attrs) {
     return MdAlignDefault;
 }
 
+// html.rs attr_width_height: the number in a width / height attribute or in
+// the style beside it. A percentage is relative to something this layout
+// cannot ask about here, so it reads as "no size given" and the image takes
+// its own, which is what an unsized one does anyway.
+static float HtmlLength(Arena* a, Str attrs, const char* name) {
+    Str v = HtmlAttrValue(a, attrs, name);
+    if (v.len <= 0) {
+        Str style = HtmlAttrValue(a, attrs, "style");
+        int nameLen = (int)strlen(name);
+        for (int i = 0; i + nameLen <= style.len; i++) {
+            if (memcmp(style.s + i, name, (size_t)nameLen) != 0) {
+                continue;
+            }
+            int at = i + nameLen;
+            while (at < style.len &&
+                   (HtmlIsSpace(style.s[at]) || style.s[at] == ':')) {
+                at++;
+            }
+            v = Str(style.s + at, style.len - at);
+            break;
+        }
+    }
+    float n = 0;
+    int i = 0;
+    bool any = false;
+    while (i < v.len && v.s[i] >= '0' && v.s[i] <= '9') {
+        n = n * 10 + (float)(v.s[i] - '0');
+        any = true;
+        i++;
+    }
+    if (i < v.len && v.s[i] == '.') {
+        i++;
+        float scale = 0.1f;
+        while (i < v.len && v.s[i] >= '0' && v.s[i] <= '9') {
+            n += (float)(v.s[i] - '0') * scale;
+            scale *= 0.1f;
+            any = true;
+            i++;
+        }
+    }
+    if (!any || (i < v.len && v.s[i] == '%')) {
+        return 0;
+    }
+    return n;
+}
+
 HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag) {
     HtmlInlineTag t;
     HtmlLex l;
@@ -441,6 +487,9 @@ HtmlInlineTag HtmlParseInlineTag(Arena* a, Str tag) {
         t.isImage = t.known;
         if (t.known) {
             t.alt = HtmlAttrValue(a, l.attrs, "alt");
+            t.src = HtmlAttrValue(a, l.attrs, "src");
+            t.width = HtmlLength(a, l.attrs, "width");
+            t.height = HtmlLength(a, l.attrs, "height");
         }
         return t;
     }
@@ -570,6 +619,30 @@ static bool HtmlTargetEmpty(HtmlBuild* b) {
     return !b->para || b->para->runFirst == nullptr;
 }
 
+// html.rs push_image: an ImageNode in the paragraph, carrying whatever marks
+// are in force — an <img> inside an <a> is a link, the way image.link is
+// there.
+static void HtmlAddImage(HtmlBuild* b, Str src, Str alt, float w, float h) {
+    if (src.len <= 0) {
+        // html.rs warns and drops an image with no src; so does this.
+        return;
+    }
+    MdNode* n = HtmlTextTarget(b);
+    MdRun* r = ArenaNew<MdRun>(b->a);
+    r->imgSrc = src;
+    r->text = alt;
+    r->imgW = w;
+    r->imgH = h;
+    r->marks = b->marks;
+    r->href = b->href;
+    if (n->runLast) {
+        n->runLast->next = r;
+    } else {
+        n->runFirst = r;
+    }
+    n->runLast = r;
+}
+
 static void HtmlText(HtmlBuild* b, Str raw) {
     Str s = HtmlDecodeText(b->a, raw, b->raw);
     if (s.len <= 0) {
@@ -658,9 +731,10 @@ static void HtmlStart(HtmlBuild* b, HtmlLex* l) {
         return;
     }
     if (HtmlNameIs(l->name, "img")) {
-        // No image loader here — Rust builds an ImageNode and paints it; this
-        // contributes the alt text, the way a markdown ![alt](url) does.
-        HtmlAddRun(b, HtmlAttrValue(b->a, l->attrs, "alt"));
+        HtmlAddImage(b, HtmlAttrValue(b->a, l->attrs, "src"),
+                     HtmlAttrValue(b->a, l->attrs, "alt"),
+                     HtmlLength(b->a, l->attrs, "width"),
+                     HtmlLength(b->a, l->attrs, "height"));
         return;
     }
     if (HtmlNameIs(l->name, "thead") || HtmlNameIs(l->name, "tbody") ||

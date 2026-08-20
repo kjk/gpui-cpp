@@ -37,9 +37,12 @@ struct HtmlInlineTag {
     bool known = false;
     // <br>: a hard break rather than a mark.
     bool isBreak = false;
-    // <a href>, and <img alt> — the text an image contributes.
+    // <a href>, and an <img>'s source, alt text and given size.
     Str href = {};
     Str alt = {};
+    Str src = {};
+    float width = 0;
+    float height = 0;
     bool isImage = false;
 };
 
