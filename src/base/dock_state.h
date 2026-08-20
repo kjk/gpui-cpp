@@ -1,0 +1,98 @@
+/* The serialised dock layout — crates/ui/src/dock/state.rs
+
+   A DockArea can be written out and read back: the centre item, the three
+   docks around it, and for every node what kind it is — a split with its
+   sizes and axis, a tab group with its active index, a leaf panel, or a set
+   of tiles with a TileMeta each. Rust does it with serde; this does it over
+   the small JSON reader in base. */
+
+#include "base/json.h"
+#include "base/dock.h"
+#include "base/tiles.h"
+
+namespace gpui {
+
+// PanelInfo: which of the four a node is.
+enum class PanelInfoKind : uint8_t {
+    Panel,
+    Stack,
+    Tabs,
+    Tiles
+};
+
+// TileMeta: where a tile sits and how high it stacks. Rust's Default is a
+// 200x200 box ten pixels in, which is what a tile with no saved place gets.
+struct TileMeta {
+    Bounds bounds = {10, 10, 200, 200};
+    int zIndex = 0;
+};
+
+const int kMaxPanelStateNodes = 64;
+const int kMaxPanelStateChildren = 16;
+
+// PanelState: one node of the tree. Rust nests them by ownership; the nodes
+// here live in one array and name their children by index, the way the dock's
+// own tree does.
+struct PanelStateNode {
+    Str panelName = {};
+    int children[kMaxPanelStateChildren] = {};
+    int nChild = 0;
+    PanelInfoKind kind = PanelInfoKind::Panel;
+    // Stack: the size of each child, and which way they are laid out.
+    float sizes[kMaxPanelStateChildren] = {};
+    int nSize = 0;
+    Axis axis = Axis::Horizontal;
+    // Tabs.
+    int activeIndex = 0;
+    // Tiles: one meta per child.
+    TileMeta metas[kMaxPanelStateChildren] = {};
+    int nMeta = 0;
+    // Panel: whatever the panel itself wrote, kept as it was so a round trip
+    // does not lose it. Rust holds a serde_json::Value here.
+    Str info = {};
+};
+
+// DockState: one of the three docks around the centre.
+struct DockSideState {
+    bool present = false;
+    int node = -1;
+    DockPlacement placement = DockPlacement::Left;
+    float size = 0;
+    bool open = true;
+};
+
+struct DockAreaState {
+    // The version a layout was written with, so a reader can refuse one it
+    // does not understand. Rust leaves it None when there is none.
+    bool hasVersion = false;
+    int version = 0;
+    PanelStateNode nodes[kMaxPanelStateNodes] = {};
+    int n = 0;
+    int center = -1;
+    DockSideState left = {};
+    DockSideState right = {};
+    DockSideState bottom = {};
+
+    int NewNode(Str panelName);
+};
+
+// The layout as JSON, and back. The parse answers false for text that is not
+// a layout at all; a member that is not there leaves its default behind, the
+// way serde's #[serde(default)] does.
+bool DockAreaStateParse(Arena* a, Str json, DockAreaState* out);
+// `out` takes the text; it is not pretty-printed, which is what serde_json's
+// to_string writes too.
+void DockAreaStateWrite(const DockAreaState* s, StrBuilder* out);
+
+// The tiles' own half of it: the metas a TilesState is saved as, and a
+// TilesState built back from them. `panels` is the caller's panel for each
+// tile, which is what Rust's children list carries beside the metas — the
+// tiles are reordered as they come to the front, so a meta on its own does
+// not say which panel it belongs to.
+int TilesToMetas(const TilesState* s, TileMeta* out, int* outPanels, int cap);
+// The tiles are put back in the order they were saved in, each with its own
+// panel, which is what makes a restore after a reorder land right.
+void TilesFromMetas(TilesState* s, const TileMeta* metas, const int* panels,
+                    int n);
+
+} // namespace gpui

@@ -73,3 +73,5 @@ void TestNativeMenu();
 void TestTiles();
 void TestRoot();
 void TestSankey();
+void TestJson();
+void TestDockState();
