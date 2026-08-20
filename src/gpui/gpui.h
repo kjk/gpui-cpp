@@ -787,6 +787,24 @@ enum class ChartKind : uint8_t {
     Radar
 };
 
+// plot::StrokeStyle. How a run of points is joined: the Catmull-Rom curve
+// GPUI draws by default, straight segments, or a stair that steps after each
+// point.
+enum class ChartStroke : uint8_t {
+    Natural,
+    Linear,
+    StepAfter
+};
+
+// BarAlignment: which edge of the plot a bar grows from. Bottom is the usual
+// column; Left and Right lay the bands down the side and make it a row chart.
+enum class BarAlign : uint8_t {
+    Bottom,
+    Top,
+    Left,
+    Right
+};
+
 struct ChartSeries {
     ChartKind kind = ChartKind::Area;
     const float* ys = nullptr;
@@ -814,6 +832,29 @@ struct ChartSeries {
     // Bar: ScaleBand's inner padding, and how round the top of a bar is.
     float bandPadding = 0.2f;
     float barRadius = 4;
+    BarAlign barAlign = BarAlign::Bottom;
+    // Stack: where each bar starts, so a series drawn over another one sits
+    // on top of it rather than in front of it. Null starts every bar at zero.
+    const float* bases = nullptr;
+    // BarChart::label: the value written at the bar's growing end.
+    bool barLabels = false;
+    // BarChart::fill(|d, ..|): a colour per bar rather than one for the lot.
+    const Rgba* barFills = nullptr;
+    // BarChart::fill_gradient: the two stops a bar is filled between. Run
+    // across the chart's own range by default, or down each bar on its own
+    // when barGradientPerBar is set.
+    bool barGradient = false;
+    bool barGradientPerBar = false;
+    Rgba barFillFrom = {};
+    Rgba barFillTo = {};
+    // StrokeStyle and LineChart::dot, both of which the area chart shares.
+    ChartStroke strokeStyle = ChartStroke::Natural;
+    bool dot = false;
+    // CandlestickChart::body_width_ratio: how much of a band the body takes.
+    float bodyWidthRatio = 0.8f;
+    // RadarChart::outer_radius / grid_levels, and its own dot flag.
+    float radarRadius = 0;
+    int gridLevels = 4;
     // AreaChart::id in Rust: a chart with one takes the pointer, and shows a
     // crosshair and a tooltip for whatever it is over.
     bool tooltip = false;

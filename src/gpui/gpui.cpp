@@ -2044,6 +2044,27 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
             items[nItems++] = c;
         }
         if (!tooMany) {
+            // Flexbox breaks lines on each item's hypothetical main size —
+            // the width it would take unconstrained — and only then hands the
+            // leftover to the growing items *of that line*. The passes above
+            // grew first, against the whole row, so a wrapping row of cards
+            // that all grow fitted every one of them on one line however many
+            // there were. Measure the growing ones again with no main
+            // constraint, so the break comes out of what they actually want.
+            for (int k = 0; k < nItems; k++) {
+                El* c = items[k];
+                if (c->style.flexGrow <= 0) {
+                    continue;
+                }
+                // An auto width only shrink-wraps to its content when the
+                // element is not growing, so the hint comes off for the
+                // length of the measurement and goes straight back on.
+                float grow = c->style.flexGrow;
+                c->style.flexGrow = 0;
+                LayoutEl(ctx, c, 0, 0, 0.f, childCross0, inheritFont,
+                         inheritFg);
+                c->style.flexGrow = grow;
+            }
             float lineY = 0;
             float widest = 0;
             int i = 0;
@@ -2058,10 +2079,38 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                         break;
                     }
                     lineW = next;
-                    if (items[j]->h > lineH) {
-                        lineH = items[j]->h;
-                    }
                     j++;
+                }
+                // The line's own leftover, shared out by flex_grow.
+                float lineGrow = 0;
+                for (int k = i; k < j; k++) {
+                    lineGrow += items[k]->style.flexGrow;
+                }
+                float lineLeft = mainAvail - lineW;
+                if (lineGrow > 0 && lineLeft > 0) {
+                    for (int k = i; k < j; k++) {
+                        El* c = items[k];
+                        if (c->style.flexGrow <= 0) {
+                            continue;
+                        }
+                        float cw =
+                            c->w + lineLeft * (c->style.flexGrow / lineGrow);
+                        if (cw < c->style.minW) {
+                            cw = c->style.minW;
+                        }
+                        LayoutEl(ctx, c, 0, 0, cw, crossAvail, inheritFont,
+                                 inheritFg);
+                        c->w = cw;
+                    }
+                    lineW = 0;
+                    for (int k = i; k < j; k++) {
+                        lineW += (k > i ? gap : 0) + items[k]->w;
+                    }
+                }
+                for (int k = i; k < j; k++) {
+                    if (items[k]->h > lineH) {
+                        lineH = items[k]->h;
+                    }
                 }
                 float x = 0;
                 if (e->style.justify == Justify::Center) {
@@ -2606,6 +2655,151 @@ static void ChartDomain(const ChartSeries& c, float* outMin, float* outMax) {
     *outMax = hi;
 }
 
+// StrokeStyle, as the run of segments after the opening move_to. Natural is
+// the Catmull-Rom the plot draws by default, turned into the cubic Beziers a
+// path can carry; StepAfter holds each value until the next point's x, and
+// leaves off the last riser the way Rust's windows(2) loop does.
+template <typename FX, typename FY>
+static void ChartRun(Path* p, const ChartSeries& c, FX Xat, FY Yat,
+                     const float* ys, int n) {
+    if (n < 2) {
+        return;
+    }
+    if (c.strokeStyle == ChartStroke::Linear) {
+        for (int i = 1; i < n; i++) {
+            PathLineTo(p, Xat(i), Yat(ys[i]));
+        }
+        return;
+    }
+    if (c.strokeStyle == ChartStroke::StepAfter) {
+        for (int i = 0; i + 1 < n; i++) {
+            PathLineTo(p, Xat(i + 1), Yat(ys[i]));
+            if (i < n - 2) {
+                PathLineTo(p, Xat(i + 1), Yat(ys[i + 1]));
+            }
+        }
+        return;
+    }
+    for (int i = 0; i + 1 < n; i++) {
+        int i0 = i == 0 ? 0 : i - 1;
+        int i3 = i + 2 < n ? i + 2 : n - 1;
+        float x0 = Xat(i0), y0 = Yat(ys[i0]);
+        float x1 = Xat(i), y1 = Yat(ys[i]);
+        float x2 = Xat(i + 1), y2 = Yat(ys[i + 1]);
+        float x3 = Xat(i3), y3 = Yat(ys[i3]);
+        PathCubicTo(p, x1 + (x2 - x0) / 6.f, y1 + (y2 - y0) / 6.f,
+                    x2 - (x3 - x1) / 6.f, y2 - (y3 - y1) / 6.f, x2, y2);
+    }
+}
+
+// A row chart writes its band names down one side and its values at the far
+// end of each bar, so the value axis gives up a gutter at each end. Rust
+// measures the widest of each; a fixed pair is close enough at these sizes.
+const float kBarRowBandGap = 52.f;
+const float kBarRowValueGap = 36.f;
+
+// One bar: which edge it grows from, what it is filled with, and the value
+// written at its growing end.
+static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
+                    float bw, float x, float y, float w, float plotH, float lo,
+                    float hi, const Theme& th) {
+    float t = hi > lo ? (c.ys[i] - lo) / (hi - lo) : 0.f;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    // Where the bar starts, which is the bottom unless a stack put it on top
+    // of the series below.
+    float t0 = 0;
+    if (c.bases) {
+        t0 = hi > lo ? (c.bases[i] - lo) / (hi - lo) : 0.f;
+        t0 = t0 < 0 ? 0 : (t0 > 1 ? 1 : t0);
+    }
+    bool horizontal =
+        c.barAlign == BarAlign::Left || c.barAlign == BarAlign::Right;
+    // The band runs across the plot for a column chart and down it for a row
+    // one, so the two sides of the box swap with the alignment.
+    float rx = 0, ry = 0, rw = 0, rh = 0;
+    if (horizontal) {
+        float bandY = y + (bx - x) * (plotH / (w > 0 ? w : 1));
+        float bandH = bw * (plotH / (w > 0 ? w : 1));
+        // The value axis runs between the two gutters, from the side the
+        // bars are anchored to.
+        float ax = x + (c.barAlign == BarAlign::Left ? kBarRowBandGap
+                                                     : kBarRowValueGap);
+        float aw = w - kBarRowBandGap - kBarRowValueGap;
+        if (aw < 1) {
+            aw = 1;
+        }
+        float len = aw * (t - t0);
+        if (len < 1) {
+            len = 1;
+        }
+        rx = c.barAlign == BarAlign::Left ? ax + aw * t0
+                                          : ax + aw - aw * t0 - len;
+        ry = bandY;
+        rw = len;
+        rh = bandH < 1 ? 1 : bandH;
+    } else {
+        float span = plotH - 10.f;
+        float len = span * (t - t0);
+        if (len < 1) {
+            len = 1;
+        }
+        rx = bx;
+        rw = bw;
+        rh = len;
+        ry = c.barAlign == BarAlign::Top ? y + 10.f + span * t0
+                                         : y + plotH - span * t0 - len;
+    }
+    Rgba fill = c.barFills ? c.barFills[i] : c.stroke;
+    if (c.barGradient) {
+        // fill_gradient: across the chart's own range by default, so a tall
+        // bar reaches further up the ramp than a short one; per-bar runs the
+        // whole ramp inside every bar.
+        Rgba from = c.barFillFrom;
+        Rgba to = c.barFillTo;
+        if (!c.barGradientPerBar) {
+            // The stop the bar actually reaches, as a mix of the two ends.
+            Rgba hit = RgbaMix(from, to, t);
+            to = hit;
+        }
+        // The ramp runs along the bar, which is top-to-bottom for a column
+        // and left-to-right for a row.
+        Path* box = PathNew(ctx, true);
+        if (box) {
+            PathMoveTo(box, rx, ry);
+            PathLineTo(box, rx + rw, ry);
+            PathLineTo(box, rx + rw, ry + rh);
+            PathLineTo(box, rx, ry + rh);
+            PathClose(box);
+            if (horizontal) {
+                PathFillGradient(ctx, box, rx, ry, rx + rw, ry,
+                                 c.barAlign == BarAlign::Left ? from : to,
+                                 c.barAlign == BarAlign::Left ? to : from);
+            } else {
+                PathFillGradientV(ctx, box, ry, ry + rh,
+                                  c.barAlign == BarAlign::Top ? to : from,
+                                  c.barAlign == BarAlign::Top ? from : to);
+            }
+            PathFree(box);
+        }
+    } else {
+        FillRound(ctx, rx, ry, rw, rh, c.barRadius, fill);
+    }
+    if (!c.barLabels) {
+        return;
+    }
+    // label(..): the value at the end the bar grew to, just inside it.
+    Str text = fmt("%.0f", (double)c.ys[i]);
+    if (horizontal) {
+        float tx = c.barAlign == BarAlign::Left ? rx + rw + 4 : rx - 34;
+        DrawTextAt(ctx, text, tx, ry + rh * 0.5f - 7.f, 30, 14, 10, th.mutedFg,
+                   c.barAlign != BarAlign::Left);
+    } else {
+        float ty = c.barAlign == BarAlign::Top ? ry + rh + 2 : ry - 14.f;
+        DrawTextAt(ctx, text, rx + rw * 0.5f - 20.f, ty, 40, 14, 10, th.mutedFg,
+                   true);
+    }
+}
+
 static void DrawChart(PaintCtx* ctx, El* e) {
     const Theme& th = ThemeNow();
     float x = e->x;
@@ -2633,12 +2827,19 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         float cx = x + w * 0.5f;
         float cy = y + h * 0.5f;
         float radius = (w < h ? w : h) * 0.5f - 16.f;
+        // outer_radius(..): a chart whose labels need more room pulls the
+        // ring in rather than letting them run off the card.
+        if (c.radarRadius > 0 && c.radarRadius < radius) {
+            radius = c.radarRadius;
+        }
         if (radius < 8) {
             return;
         }
-        // The rings, and a spoke out to every axis.
-        for (int ring = 1; ring <= 4; ring++) {
-            float rr = radius * (float)ring / 4.f;
+        int levels = c.gridLevels > 0 ? c.gridLevels : 4;
+        // The rings, and a spoke out to every axis. An overlaid series draws
+        // on the rings the first one put down.
+        for (int ring = 1; ring <= (c.overlay ? 0 : levels); ring++) {
+            float rr = radius * (float)ring / (float)levels;
             Path* p = PathNew(ctx, false);
             if (!p) {
                 break;
@@ -2656,7 +2857,7 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             PathStroke(ctx, p, 1.f, th.border);
             PathFree(p);
         }
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < (c.overlay ? 0 : n); i++) {
             float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
             DrawLine(ctx, cx, cy, cx + radius * cosf(a), cy + radius * sinf(a),
                      1.f, th.border);
@@ -2686,7 +2887,18 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             PathStroke(ctx, shape, 2.f, c.stroke);
             PathFree(shape);
         }
-        if (c.labels) {
+        // dot(): a mark on every vertex of the ring.
+        if (c.dot) {
+            for (int i = 0; i < n; i++) {
+                float t = hi > lo ? (ys[i] - lo) / (hi - lo) : 0.f;
+                t = t < 0 ? 0 : (t > 1 ? 1 : t);
+                float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
+                float px = cx + radius * t * cosf(a);
+                float py = cy + radius * t * sinf(a);
+                FillRound(ctx, px - 3.f, py - 3.f, 6.f, 6.f, 3.f, c.stroke);
+            }
+        }
+        if (c.labels && !c.overlay) {
             for (int i = 0; i < n; i++) {
                 float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
                 float px = cx + (radius + 12.f) * cosf(a);
@@ -2698,14 +2910,27 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         return;
     }
 
+    // A row chart's value axis runs across rather than up, so its grid and
+    // its band names turn with it.
+    bool barRow = c.kind == ChartKind::Bar && (c.barAlign == BarAlign::Left ||
+                                               c.barAlign == BarAlign::Right);
+
     // An overlay series draws over the grid and axis the first one drew.
     if (!c.overlay) {
         const float kGridDash[2] = {4.f, 2.f};
-        for (int i = 0; i <= 3; i++) {
-            float gy = y + plotH * (i / 4.f);
-            CanvasLine(ctx, x, gy, x + w, gy, 1.f, th.border, kGridDash);
+        if (barRow) {
+            for (int i = 1; i <= 4; i++) {
+                float gx = x + w * (i / 4.f);
+                CanvasLine(ctx, gx, y, gx, y + plotH, 1.f, th.border,
+                           kGridDash);
+            }
+        } else {
+            for (int i = 0; i <= 3; i++) {
+                float gy = y + plotH * (i / 4.f);
+                CanvasLine(ctx, x, gy, x + w, gy, 1.f, th.border, kGridDash);
+            }
+            DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
         }
-        DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
     }
 
     if (!ys || n <= 0) {
@@ -2750,13 +2975,7 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             }
             bx += x;
             if (c.kind == ChartKind::Bar) {
-                float top = Yat(ys[i]);
-                float base = Yat(lo > 0 ? lo : 0);
-                float bh = base - top;
-                if (bh < 1) {
-                    bh = 1;
-                }
-                FillRound(ctx, bx, top, bw, bh, c.barRadius, c.stroke);
+                DrawBar(ctx, c, i, bx, bw, x, y, w, plotH, lo, hi, th);
                 continue;
             }
             // A candle: the wick from low to high, and the body between open
@@ -2774,7 +2993,14 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             if (bh < 1) {
                 bh = 1;
             }
-            FillRound(ctx, bx, top, bw, bh, 1.f, color);
+            // body_width_ratio: the body is that much of the band, centred
+            // on the wick.
+            float ratio = c.bodyWidthRatio > 0 ? c.bodyWidthRatio : 0.8f;
+            float bodyW = bw * ratio;
+            if (bodyW < 1) {
+                bodyW = 1;
+            }
+            FillRound(ctx, mid - bodyW * 0.5f, top, bodyW, bh, 1.f, color);
         }
     } else {
         // Area and line are the same run of points; only the area fills what
@@ -2784,9 +3010,7 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             if (area) {
                 PathMoveTo(area, Xat(0), y + plotH);
                 PathLineTo(area, Xat(0), Yat(ys[0]));
-                for (int i = 1; i < n; i++) {
-                    PathLineTo(area, Xat(i), Yat(ys[i]));
-                }
+                ChartRun(area, c, Xat, Yat, ys, n);
                 PathLineTo(area, Xat(n - 1), y + plotH);
                 PathClose(area);
                 PathFillGradientV(ctx, area, y, y + plotH, c.fillTop,
@@ -2796,10 +3020,21 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         }
         if (n == 1) {
             DrawLine(ctx, x, Yat(ys[0]), x + w, Yat(ys[0]), 2.f, c.stroke);
+        } else {
+            Path* line = PathNew(ctx, false);
+            if (line) {
+                PathMoveTo(line, Xat(0), Yat(ys[0]));
+                ChartRun(line, c, Xat, Yat, ys, n);
+                PathStroke(ctx, line, 2.f, c.stroke);
+                PathFree(line);
+            }
         }
-        for (int i = 1; i < n; i++) {
-            DrawLine(ctx, Xat(i - 1), Yat(ys[i - 1]), Xat(i), Yat(ys[i]), 2.f,
-                     c.stroke);
+        // dot(): a filled mark on every point.
+        if (c.dot) {
+            for (int i = 0; i < n; i++) {
+                FillRound(ctx, Xat(i) - 3.f, Yat(ys[i]) - 3.f, 6.f, 6.f, 3.f,
+                          c.stroke);
+            }
         }
     }
 
@@ -2867,23 +3102,42 @@ static void DrawChart(PaintCtx* ctx, El* e) {
     }
     for (int i = 0; i < n; i += step) {
         float lx = Xat(i) - 16;
+        float ly = y + plotH + 2;
+        float lw = 60;
+        bool centered = false;
         if (c.kind == ChartKind::Bar || c.kind == ChartKind::Candlestick) {
-            // A band's label sits under the band, not under a point.
+            // A band's name sits under the band, not under a point — or in
+            // the gutter beside it, when the bands run down the side.
             const float range[2] = {0.f, w};
             component::ScaleBand band = component::ScaleBand::New(n, range, 2);
             band.paddingInner = c.bandPadding;
             band.paddingOuter = c.bandPadding * 0.5f;
             float bx = 0;
             if (band.Tick(i, &bx)) {
-                lx = x + bx + band.BandWidth() * 0.5f - 16.f;
+                if (barRow) {
+                    lw = kBarRowBandGap - 6.f;
+                    lx = c.barAlign == BarAlign::Left
+                             ? x
+                             : x + w - kBarRowBandGap + 6.f;
+                    ly = y +
+                         (bx + band.BandWidth() * 0.5f) *
+                             (plotH / (w > 0 ? w : 1)) -
+                         7.f;
+                    // A left-anchored row's names end right up against the
+                    // bars, so they are centred in the gutter rather than
+                    // starting at its left edge.
+                    centered = c.barAlign == BarAlign::Left;
+                } else {
+                    lx = x + bx + band.BandWidth() * 0.5f - 16.f;
+                }
             }
         }
         if (c.labels) {
-            DrawTextAt(ctx, Str(c.labels[i]), lx, y + plotH + 2, 60, 16, 10,
-                       th.mutedFg, false);
+            DrawTextAt(ctx, Str(c.labels[i]), lx, ly, lw, 16, 10, th.mutedFg,
+                       centered);
         } else {
-            DrawTextAt(ctx, fmt("%ds", i), lx, y + plotH + 2, 60, 16, 10,
-                       th.mutedFg, false);
+            DrawTextAt(ctx, fmt("%ds", i), lx, ly, lw, 16, 10, th.mutedFg,
+                       centered);
         }
     }
 }

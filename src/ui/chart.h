@@ -48,6 +48,7 @@ struct AreaChart {
     // The bottom stop, when the caller gave the two-stop gradient Rust builds
     // with linear_gradient(0., ..). Alpha 0 means "fade `fill` out".
     Rgba fillBottom = {};
+    ChartStroke strokeStyle = ChartStroke::Natural;
 
     static AreaChart* New(Ctx* cx, const float* ys, int n);
     // AreaChart::id: a chart with a name takes the pointer and shows a
@@ -60,6 +61,9 @@ struct AreaChart {
     AreaChart* Labels(const char* const* l);
     AreaChart* TickMargin(int n);
     AreaChart* Overlay(bool v = true);
+    // StrokeStyle: Natural is the default Catmull-Rom curve.
+    AreaChart* Linear();
+    AreaChart* StepAfter();
     El* IntoEl();
 };
 
@@ -77,6 +81,8 @@ struct LineChart {
     Rgba stroke = {};
     float domainMin = 0;
     float domainMax = 0;
+    ChartStroke strokeStyle = ChartStroke::Natural;
+    bool dot = false;
 
     static LineChart* New(Ctx* cx, const float* ys, int n);
     // AreaChart::id: a chart with a name takes the pointer and shows a
@@ -86,6 +92,9 @@ struct LineChart {
     LineChart* Labels(const char* const* l);
     LineChart* TickMargin(int n);
     LineChart* Domain(float lo, float hi);
+    LineChart* Linear();
+    LineChart* StepAfter();
+    LineChart* Dot(bool v = true);
     El* IntoEl();
 };
 
@@ -105,6 +114,19 @@ struct BarChart {
     float radius = 4;
     float domainMin = 0;
     float domainMax = 0;
+    BarAlign align = BarAlign::Bottom;
+    // Stack: the value each bar starts at, one per band.
+    const float* bases = nullptr;
+    // A series drawn over the grid another one already put down.
+    bool overlay = false;
+    bool labelValues = false;
+    // fill(|d, ..|): one colour per bar. The array is the caller's and has to
+    // outlive the frame.
+    const Rgba* fills = nullptr;
+    bool gradient = false;
+    bool gradientPerBar = false;
+    Rgba gradientFrom = {};
+    Rgba gradientTo = {};
 
     static BarChart* New(Ctx* cx, const float* ys, int n);
     // AreaChart::id: a chart with a name takes the pointer and shows a
@@ -116,6 +138,15 @@ struct BarChart {
     BarChart* Padding(float v);
     BarChart* Radius(float v);
     BarChart* Domain(float lo, float hi);
+    BarChart* Alignment(BarAlign v);
+    BarChart* Base(const float* y0);
+    BarChart* Overlay(bool v = true);
+    // BarChart::label(|d| d.desktop.to_string()).
+    BarChart* LabelValues(bool v = true);
+    BarChart* Fills(const Rgba* colors);
+    // fill_gradient: `perBar` runs the whole ramp inside every bar rather
+    // than across the chart's range.
+    BarChart* FillGradient(Rgba from, Rgba to, bool perBar = false);
     El* IntoEl();
 };
 
@@ -134,6 +165,7 @@ struct CandlestickChart {
     Rgba up = {};
     Rgba down = {};
     float padding = 0.3f;
+    float bodyWidthRatio = 0.8f;
 
     static CandlestickChart* New(Ctx* cx, const float* opens,
                                  const float* highs, const float* lows,
@@ -142,6 +174,7 @@ struct CandlestickChart {
     CandlestickChart* Labels(const char* const* l);
     CandlestickChart* TickMargin(int n);
     CandlestickChart* Padding(float v);
+    CandlestickChart* BodyWidthRatio(float v);
     El* IntoEl();
 };
 
@@ -156,12 +189,22 @@ struct RadarChart {
     Rgba fill = {};
     float domainMin = 0;
     float domainMax = 0;
+    // A second ring over the first one's grid, the way a stacked area chart
+    // overlays its series.
+    bool overlay = false;
+    bool dot = false;
+    float outerRadius = 0;
+    int gridLevels = 4;
 
     static RadarChart* New(Ctx* cx, const float* values, int n);
     RadarChart* Stroke(Rgba c);
     RadarChart* Fill(Rgba c);
     RadarChart* Labels(const char* const* l);
     RadarChart* Domain(float lo, float hi);
+    RadarChart* Overlay(bool v = true);
+    RadarChart* Dot(bool v = true);
+    RadarChart* OuterRadius(float v);
+    RadarChart* GridLevels(int v);
     El* IntoEl();
 };
 
@@ -187,6 +230,10 @@ struct SankeyChartNode {
     Str label = {};
     // The value shown above the name, when the caller asked for one.
     Str value = {};
+    // labels(): a line between the value and the name, in its own colour —
+    // the year-over-year change the TSLA statement carries.
+    Str note = {};
+    Rgba noteColor = {};
     Rgba color = {};
     bool hasColor = false;
 };
@@ -215,6 +262,9 @@ struct SankeyChart {
     // A node, by the order they are added — a link names them by index.
     SankeyChart* Node(Str label);
     SankeyChart* NodeColored(Str label, Rgba color);
+    // The value and the note of the node just added.
+    SankeyChart* NodeValue(Str text);
+    SankeyChart* NodeNote(Str text, Rgba color);
     SankeyChart* Link(int source, int target, double value);
     SankeyChart* NodeWidth(float v);
     SankeyChart* NodePadding(float v);

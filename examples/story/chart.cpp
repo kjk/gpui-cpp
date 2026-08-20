@@ -123,6 +123,70 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->W(kFill)
             ->H(kFill),
         true));
+    // Radar Chart - Multiple: a second ring over the first one's grid.
+    El* radarMulti = Div(a)->W(kFill)->H(kFill);
+    radarMulti
+        ->Child(component::RadarChart::New(cx, kRadarDesktop, kRadarDeviceCount)
+                    ->Labels(kRadarMonth)
+                    ->IntoEl()
+                    ->W(kFill)
+                    ->H(kFill));
+    radarMulti
+        ->Child(component::RadarChart::New(cx, kRadarMobile, kRadarDeviceCount)
+                    ->Stroke(th.chart2)
+                    ->Fill(RgbaOpacity(th.chart2, 0.3f))
+                    ->Overlay()
+                    ->IntoEl()
+                    ->Absolute()
+                    ->Left(0)
+                    ->Top(0)
+                    ->W(kFill)
+                    ->H(kFill));
+    radarRow->Child(ChartCard(cx, "Radar Chart - Multiple", radarMulti, true));
+    // Radar Chart - Dots: an element label — the month over a grade badge —
+    // so the ring pulls in to outer_radius(64.) to leave it room.
+    El* radarDots = Div(a)->W(kFill)->H(kFill);
+    radarDots
+        ->Child(component::RadarChart::New(cx, kRadarDesktop, kRadarDeviceCount)
+                    ->Stroke(th.chart2)
+                    ->Fill(RgbaOpacity(th.chart2, 0.3f))
+                    ->Dot()
+                    ->OuterRadius(64)
+                    ->IntoEl()
+                    ->W(kFill)
+                    ->H(kFill));
+    // The badges ride over the ring, one per axis, where a text label would
+    // have gone.
+    for (int i = 0; i < kRadarDeviceCount; i++) {
+        float ang = -1.5707963f + 6.2831853f * (float)i / kRadarDeviceCount;
+        const char* grade = kRadarDesktop[i] >= 250.f   ? "A"
+                            : kRadarDesktop[i] >= 200.f ? "B"
+                                                        : "C";
+        El* badge = Div(a)->FlexCol()->ItemsCenter()->Gap(4);
+        badge->Child(StoryTxt(cx, Str(kRadarMonth[i]), 12, th.mutedFg));
+        badge->Child(Div(a)
+                         ->FlexRow()
+                         ->W(24)
+                         ->H(24)
+                         ->ItemsCenter()
+                         ->JustifyCenter()
+                         ->Radius(99)
+                         ->Bg(RgbaOpacity(th.chart2, 0.1f))
+                         ->Child(StoryTxt(cx, Str(grade), 14, th.chart2)
+                                     ->Semibold()
+                                     ->LineHeight(1.f)));
+        // The card's body is 368 x 268 or so; the ring is centred in it, and
+        // a badge sits just outside the 64px radius.
+        radarDots->Child(Div(a)
+                             ->Absolute()
+                             ->Left(154.f + 82.f * cosf(ang) - 40.f)
+                             ->Top(120.f + 82.f * sinf(ang) - 20.f)
+                             ->W(80)
+                             ->FlexRow()
+                             ->JustifyCenter()
+                             ->Child(badge));
+    }
+    radarRow->Child(ChartCard(cx, "Radar Chart - Dots", radarDots, true));
     // Radar Chart - Lines Only: max_value(400) and no fill under the ring.
     radarRow->Child(ChartCard(
         cx, "Radar Chart - Lines Only",
@@ -131,6 +195,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->Stroke(th.chart3)
             ->Fill(Rgba8(0, 0, 0, 0))
             ->Domain(0, 400)
+            ->GridLevels(5)
             ->IntoEl()
             ->W(kFill)
             ->H(kFill),
@@ -151,6 +216,70 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->W(kFill)
             ->H(kFill),
         false));
+    // Bar Chart - Mixed: fill(|d, ..| d.color(color)), a tint per bar.
+    static Rgba mixed[kMonthlyDeviceCount];
+    for (int i = 0; i < kMonthlyDeviceCount; i++) {
+        mixed[i] = RgbaOpacity(color, kMonthlyAlpha[i]);
+    }
+    barRow->Child(ChartCard(
+        cx, "Bar Chart - Mixed",
+        component::BarChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Fills(mixed)
+            ->Labels(kMonthlyMonth)
+            ->TickMargin(1)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+
+    // Bar Chart - Stacked: Stack::keys(desktop, mobile, tablet, watch) over
+    // the first eight days, drawn as four series each sitting on the running
+    // total of the ones below it.
+    const int kStackDays = 8;
+    const float* kStackSeries[4] = {kDailyDesktop, kDailyMobile, kDailyTablet,
+                                    kDailyWatch};
+    Rgba kStackColors[4] = {th.chart4, th.chart3, th.chart2, th.chart1};
+    El* stacked = Div(a)->W(kFill)->H(kFill);
+    auto* bases = (float*)Alloc(a, (int)sizeof(float) * kStackDays * 5);
+    for (int d = 0; d < kStackDays; d++) {
+        bases[d] = 0;
+    }
+    for (int k = 0; k < 4; k++) {
+        float* base = bases + k * kStackDays;
+        float* next = bases + (k + 1) * kStackDays;
+        auto* tops = (float*)Alloc(a, (int)sizeof(float) * kStackDays);
+        for (int d = 0; d < kStackDays; d++) {
+            tops[d] = base[d] + kStackSeries[k][d];
+            next[d] = tops[d];
+        }
+        component::BarChart* bar =
+            component::BarChart::New(cx, tops, kStackDays)
+                ->Fill(kStackColors[k])
+                ->Base(base)
+                ->Padding(0.4f)
+                ->Radius(0)
+                ->TickMargin(1)
+                ->Labels(kDailyDate);
+        // Every series is scaled against the full stack, so they line up.
+        bar->Domain(0, bases[4 * kStackDays]);
+        float top = 0;
+        for (int d = 0; d < kStackDays; d++) {
+            if (bases[4 * kStackDays + d] > top) {
+                top = bases[4 * kStackDays + d];
+            }
+        }
+        bar->Domain(0, top);
+        if (k > 0) {
+            bar->Overlay();
+        }
+        El* el = bar->IntoEl()->W(kFill)->H(kFill);
+        if (k > 0) {
+            el->Absolute()->Left(0)->Top(0);
+        }
+        stacked->Child(el);
+    }
+    barRow->Child(ChartCard(cx, "Bar Chart - Stacked", stacked, false));
+
     // Bar Chart - Rounded corners: corner_radii(px(8.)).
     barRow->Child(ChartCard(
         cx, "Bar Chart - Rounded corners",
@@ -159,10 +288,69 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->Labels(kMonthlyMonth)
             ->TickMargin(1)
             ->Radius(8)
+            ->LabelValues()
             ->IntoEl()
             ->W(kFill)
             ->H(kFill),
         false));
+
+    // The four alignments, all with the value written at the growing end.
+    struct AlignCard {
+        const char* title;
+        BarAlign align;
+    };
+    static const AlignCard kAligns[] = {
+        {"Bar Chart - Bottom aligned", BarAlign::Bottom},
+        {"Bar Chart - Top aligned", BarAlign::Top},
+        {"Bar Chart - Left aligned", BarAlign::Left},
+        {"Bar Chart - Right aligned", BarAlign::Right},
+    };
+    for (const AlignCard& ac : kAligns) {
+        barRow->Child(ChartCard(
+            cx, ac.title,
+            component::BarChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+                ->Fill(th.chart1)
+                ->Labels(kMonthlyMonth)
+                ->TickMargin(1)
+                ->Alignment(ac.align)
+                ->LabelValues()
+                ->IntoEl()
+                ->W(kFill)
+                ->H(kFill),
+            false));
+    }
+
+    // fill_gradient: four alignments of the chart-wide ramp, then the per-bar
+    // one. Rust has a sixth that runs a diagonal across the whole chart; the
+    // gradient here runs along the bar, so that one is the per-bar ramp under
+    // another name and is left out.
+    struct GradCard {
+        const char* title;
+        BarAlign align;
+        bool perBar;
+    };
+    static const GradCard kGrads[] = {
+        {"Bar Chart - Gradient (Bottom)", BarAlign::Bottom, false},
+        {"Bar Chart - Gradient (Top)", BarAlign::Top, false},
+        {"Bar Chart - Gradient (Left)", BarAlign::Left, false},
+        {"Bar Chart - Gradient (Right)", BarAlign::Right, false},
+        {"Bar Chart - Gradient (Per-bar)", BarAlign::Bottom, true},
+    };
+    for (const GradCard& gc : kGrads) {
+        barRow->Child(ChartCard(
+            cx, gc.title,
+            component::BarChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+                ->Labels(kMonthlyMonth)
+                ->TickMargin(1)
+                ->Alignment(gc.align)
+                ->LabelValues()
+                ->FillGradient(RgbaOpacity(th.chart1, 0.3f), th.chart1,
+                               gc.perBar)
+                ->IntoEl()
+                ->W(kFill)
+                ->H(kFill),
+            false));
+    }
     page->Child(barRow);
     page->Child(component::Separator::Horizontal(cx)->IntoEl());
 
@@ -180,6 +368,81 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->H(kFill),
         false));
     lineRow->Child(ChartCard(
+        cx, "Line Chart - Linear",
+        component::LineChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Stroke(th.chart1)
+            ->Labels(kMonthlyMonth)
+            ->TickMargin(1)
+            ->Linear()
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    lineRow->Child(ChartCard(
+        cx, "Line Chart - Step After",
+        component::LineChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Stroke(th.chart1)
+            ->Labels(kMonthlyMonth)
+            ->TickMargin(1)
+            ->StepAfter()
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    lineRow->Child(ChartCard(
+        cx, "Line Chart - Dots",
+        component::LineChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Stroke(th.chart5)
+            ->Labels(kMonthlyMonth)
+            ->TickMargin(1)
+            ->Dot()
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    page->Child(lineRow);
+    page->Child(component::Separator::Horizontal(cx)->IntoEl());
+
+    // The four single-series area charts, which differ only in how the run of
+    // points is joined and what is under it.
+    El* areaRow = ChartRow(cx);
+    struct AreaCard {
+        const char* title;
+        int stroke; // 0 natural, 1 linear, 2 step-after
+        bool gradient;
+    };
+    static const AreaCard kAreas[] = {
+        {"Area Chart", 0, false},
+        {"Area Chart - Linear", 1, false},
+        {"Area Chart - Step After", 2, false},
+        {"Area Chart - Linear Gradient", 0, true},
+    };
+    for (const AreaCard& ac : kAreas) {
+        component::AreaChart* ch =
+            component::AreaChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+                ->Stroke(th.chart1)
+                ->Labels(kMonthlyMonth)
+                ->TickMargin(1);
+        if (ac.stroke == 1) {
+            ch->Linear();
+        } else if (ac.stroke == 2) {
+            ch->StepAfter();
+        }
+        if (ac.gradient) {
+            ch->Fill(RgbaOpacity(th.chart1, 0.4f),
+                     RgbaOpacity(th.background, 0.3f));
+        } else {
+            ch->Fill(RgbaOpacity(th.chart1, 0.2f));
+        }
+        areaRow->Child(
+            ChartCard(cx, ac.title, ch->IntoEl()->W(kFill)->H(kFill), false));
+    }
+    page->Child(areaRow);
+    page->Child(component::Separator::Horizontal(cx)->IntoEl());
+
+    // The candlesticks, off stock-prices.json.
+    El* candleRow = ChartRow(cx);
+    candleRow->Child(ChartCard(
         cx, "Candlestick Chart",
         component::CandlestickChart::New(cx, kStockOpen, kStockHigh, kStockLow,
                                          kStockClose, kStockPriceCount)
@@ -190,32 +453,74 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->W(kFill)
             ->H(kFill),
         false));
-    page->Child(lineRow);
+    // body_width_ratio: half a band, then the whole of it.
+    struct CandleCard {
+        const char* title;
+        float ratio;
+        int tickMargin;
+    };
+    static const CandleCard kCandles[] = {
+        {"Candlestick Chart - Narrow", 0.5f, 1},
+        {"Candlestick Chart - Wide", 1.0f, 1},
+        {"Candlestick Chart - Tick Margin", 0.8f, 2},
+    };
+    for (const CandleCard& cc : kCandles) {
+        candleRow
+            ->Child(ChartCard(cx, cc.title,
+                              component::CandlestickChart::New(
+                                  cx, kStockOpen, kStockHigh, kStockLow,
+                                  kStockClose, kStockPriceCount)
+                                  ->Colors(th.chartBullish, th.chartBearish)
+                                  ->Labels(kStockDate)
+                                  ->TickMargin(cc.tickMargin)
+                                  ->BodyWidthRatio(cc.ratio)
+                                  ->IntoEl()
+                                  ->W(kFill)
+                                  ->H(kFill),
+                              false));
+    }
+    page->Child(candleRow);
     page->Child(component::Separator::Horizontal(cx)->IntoEl());
 
-    // A sankey: where a week of energy comes from and what it goes to, which
-    // is the shape the d3 example uses. Rust's is a TSLA income statement out
-    // of a fixture with its own colors per node.
-    component::SankeyChart* sankey = component::SankeyChart::New(cx)
-                                         ->Node(StrL("Coal"))
-                                         ->Node(StrL("Gas"))
-                                         ->Node(StrL("Wind"))
-                                         ->Node(StrL("Solar"))
-                                         ->Node(StrL("Grid"))
-                                         ->Node(StrL("Homes"))
-                                         ->Node(StrL("Industry"))
-                                         ->Node(StrL("Transport"))
-                                         ->Link(0, 4, 30)
-                                         ->Link(1, 4, 25)
-                                         ->Link(2, 4, 20)
-                                         ->Link(3, 4, 15)
-                                         ->Link(4, 5, 40)
-                                         ->Link(4, 6, 32)
-                                         ->Link(4, 7, 18)
-                                         ->ShowValues()
-                                         ->NodeCornerRadius(2);
-    page->Child(ChartCard(cx, "Sankey Chart",
-                          sankey->IntoEl()->W(kFill)->H(kFill), false));
+    // The two TSLA income statements, each a sankey of its own. A sqrt
+    // value scale keeps the revenue flow from dwarfing the small profit and
+    // expense ones, and the nodes carry the fixture's own colours.
+    El* sankeyRow = ChartRow(cx);
+    const TslaNode* kTslaNodes[kTslaStatementCount] = {kTsla0Nodes,
+                                                       kTsla1Nodes};
+    const TslaLink* kTslaLinks[kTslaStatementCount] = {kTsla0Links,
+                                                       kTsla1Links};
+    for (int st = 0; st < kTslaStatementCount; st++) {
+        component::SankeyChart* sk = component::SankeyChart::New(cx)
+                                         ->NodeAlign(SankeyAlign::Center)
+                                         ->NodePadding(40)
+                                         ->ValueScale(SankeyValueScale::Sqrt);
+        for (int i = 0; i < kTslaNodeCount; i++) {
+            const TslaNode& node = kTslaNodes[st][i];
+            sk->NodeColored(Str(node.name), node.color);
+            sk->NodeValue(StoryFmt(cx, "$%.2fB", node.value / 1000000000.0));
+            // The first statement's labels carry the year-over-year change
+            // between the value and the name; the second keeps the two
+            // default lines.
+            if (st == 0 && node.growth != kTslaNoGrowth) {
+                bool up = node.growth >= 0;
+                sk->NodeNote(StoryFmt(cx, "%s %+.2f%%",
+                                      up ? "\xE2\x96\xB2" : "\xE2\x96\xBC",
+                                      (double)node.growth),
+                             up ? th.success : th.danger);
+            }
+        }
+        for (int i = 0; i < kTslaLinkCount; i++) {
+            const TslaLink& link = kTslaLinks[st][i];
+            sk->Link(link.source, link.target, link.value);
+        }
+        sankeyRow->Child(ChartCard(
+            cx,
+            StoryArg(cx,
+                     StoryFmt(cx, "Sankey Chart - TSLA %s", kTslaPeriods[st])),
+            sk->IntoEl()->W(kFill)->H(kFill), false));
+    }
+    page->Child(sankeyRow);
     return page;
 }
 

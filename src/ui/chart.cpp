@@ -50,9 +50,18 @@ AreaChart* AreaChart::Tooltip(Str name) {
     tooltip = true;
     return this;
 }
+AreaChart* AreaChart::Linear() {
+    strokeStyle = ChartStroke::Linear;
+    return this;
+}
+AreaChart* AreaChart::StepAfter() {
+    strokeStyle = ChartStroke::StepAfter;
+    return this;
+}
 El* AreaChart::IntoEl() {
     El* e = ChartEl(a, ys, n, stroke, fill, fillBottom, tickMargin);
     e->chart.labels = labels;
+    e->chart.strokeStyle = strokeStyle;
     e->chart.overlay = overlay;
     e->chart.tooltip = tooltip;
     e->chart.name = tooltipName;
@@ -91,11 +100,25 @@ LineChart* LineChart::Tooltip(Str name) {
     tooltip = true;
     return this;
 }
+LineChart* LineChart::Linear() {
+    strokeStyle = ChartStroke::Linear;
+    return this;
+}
+LineChart* LineChart::StepAfter() {
+    strokeStyle = ChartStroke::StepAfter;
+    return this;
+}
+LineChart* LineChart::Dot(bool v) {
+    dot = v;
+    return this;
+}
 El* LineChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, stroke, none, none, tickMargin);
     e->chart.kind = ChartKind::Line;
     e->chart.labels = labels;
+    e->chart.strokeStyle = strokeStyle;
+    e->chart.dot = dot;
     e->chart.domainMin = domainMin;
     e->chart.domainMax = domainMax;
     e->chart.tooltip = tooltip;
@@ -143,11 +166,47 @@ BarChart* BarChart::Tooltip(Str name) {
     tooltip = true;
     return this;
 }
+BarChart* BarChart::Alignment(BarAlign v) {
+    align = v;
+    return this;
+}
+BarChart* BarChart::Base(const float* y0) {
+    bases = y0;
+    return this;
+}
+BarChart* BarChart::Overlay(bool v) {
+    overlay = v;
+    return this;
+}
+BarChart* BarChart::LabelValues(bool v) {
+    labelValues = v;
+    return this;
+}
+BarChart* BarChart::Fills(const Rgba* colors) {
+    fills = colors;
+    return this;
+}
+BarChart* BarChart::FillGradient(Rgba from, Rgba to, bool perBar) {
+    gradient = true;
+    gradientFrom = from;
+    gradientTo = to;
+    gradientPerBar = perBar;
+    return this;
+}
 El* BarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, fill, none, none, tickMargin);
     e->chart.kind = ChartKind::Bar;
     e->chart.labels = labels;
+    e->chart.barAlign = align;
+    e->chart.bases = bases;
+    e->chart.overlay = overlay;
+    e->chart.barLabels = labelValues;
+    e->chart.barFills = fills;
+    e->chart.barGradient = gradient;
+    e->chart.barGradientPerBar = gradientPerBar;
+    e->chart.barFillFrom = gradientFrom;
+    e->chart.barFillTo = gradientTo;
     e->chart.bandPadding = padding;
     e->chart.barRadius = radius;
     e->chart.domainMin = domainMin;
@@ -190,6 +249,10 @@ CandlestickChart* CandlestickChart::Padding(float v) {
     padding = v;
     return this;
 }
+CandlestickChart* CandlestickChart::BodyWidthRatio(float v) {
+    bodyWidthRatio = v;
+    return this;
+}
 El* CandlestickChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     // The closes are the series; the other three ride along beside them.
@@ -202,6 +265,7 @@ El* CandlestickChart::IntoEl() {
     e->chart.up = up;
     e->chart.down = down;
     e->chart.bandPadding = padding;
+    e->chart.bodyWidthRatio = bodyWidthRatio;
     return e;
 }
 
@@ -233,11 +297,31 @@ RadarChart* RadarChart::Domain(float lo, float hi) {
     domainMax = hi;
     return this;
 }
+RadarChart* RadarChart::Overlay(bool v) {
+    overlay = v;
+    return this;
+}
+RadarChart* RadarChart::Dot(bool v) {
+    dot = v;
+    return this;
+}
+RadarChart* RadarChart::OuterRadius(float v) {
+    outerRadius = v;
+    return this;
+}
+RadarChart* RadarChart::GridLevels(int v) {
+    gridLevels = v;
+    return this;
+}
 El* RadarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, values, n, stroke, fill, none, 1);
     e->chart.kind = ChartKind::Radar;
     e->chart.labels = labels;
+    e->chart.overlay = overlay;
+    e->chart.dot = dot;
+    e->chart.radarRadius = outerRadius;
+    e->chart.gridLevels = gridLevels;
     e->chart.domainMin = domainMin;
     e->chart.domainMax = domainMax;
     return e;
@@ -420,8 +504,8 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
                 continue;
             }
             float labelW = 0;
-            Str lines[2] = {values[i], c->nodes[i].label};
-            for (int k = 0; k < 2; k++) {
+            Str lines[3] = {values[i], c->nodes[i].note, c->nodes[i].label};
+            for (int k = 0; k < 3; k++) {
                 if (!lines[k].s) {
                     continue;
                 }
@@ -537,10 +621,12 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     }
     for (int i = 0; i < g.nodes.len; i++) {
         const SankeyNodeLayout& node = g.nodes[i];
-        Str lines[2] = {values[node.index], c->nodes[node.index].label};
-        Rgba lineColors[2] = {th.foreground, th.mutedFg};
+        Str lines[3] = {values[node.index], c->nodes[node.index].note,
+                        c->nodes[node.index].label};
+        Rgba lineColors[3] = {th.foreground, c->nodes[node.index].noteColor,
+                              th.mutedFg};
         float block = 0;
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < 3; k++) {
             if (lines[k].s) {
                 block += lineH;
             }
@@ -586,7 +672,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
         } else {
             y = node.y0 - block - kPlotTextGap;
         }
-        for (int k = 0; k < 2; k++) {
+        for (int k = 0; k < 3; k++) {
             if (!lines[k].s) {
                 continue;
             }
@@ -608,6 +694,19 @@ SankeyChart* SankeyChart::Node(Str label) {
     if (n < kMaxSankeyChartNodes) {
         nodes[n].label = label;
         n++;
+    }
+    return this;
+}
+SankeyChart* SankeyChart::NodeValue(Str text) {
+    if (n > 0) {
+        nodes[n - 1].value = text;
+    }
+    return this;
+}
+SankeyChart* SankeyChart::NodeNote(Str text, Rgba color) {
+    if (n > 0) {
+        nodes[n - 1].note = text;
+        nodes[n - 1].noteColor = color;
     }
     return this;
 }
