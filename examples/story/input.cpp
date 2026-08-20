@@ -154,6 +154,17 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
             InputSetValue(f, Str(kSeeds[i].value));
             InputSetPlaceholder(f, Str(kSeeds[i].placeholder));
         }
+        // The three masked fields, with the patterns the Rust story names.
+        // `mask_pattern()` also puts the derived cue in as the placeholder,
+        // which is what shows `(___)-___-____` in an empty phone field.
+        InputSetMaskPattern(&self->fields[InPhone],
+                            MaskPatternNew(StrL("(999)-999-9999")));
+        InputSetMaskPattern(&self->fields[InMaskPattern],
+                            MaskPatternNew(StrL("AAA-###-AAA")));
+        // MaskPattern::Number { separator: Some(','), fraction: Some(3) }.
+        MaskPattern num = MaskPatternNumber(',');
+        num.fraction = 3;
+        InputSetMaskPattern(&self->fields[InCurrency], num);
     }
     if (self->focusedField >= 0) {
         cx->win->input = &self->fields[self->focusedField];
@@ -302,9 +313,12 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     phoneVals->Child(StoryTxt(
         cx, StoryFmt(cx, "Value: \"%s\"", InputCStr(&self->fields[InPhone])),
         16, th.foreground));
+    // unmask_value(): the digits without the pattern around them, which is
+    // the other half of what the Rust story shows under the field.
     phoneVals->Child(StoryTxt(
         cx,
-        StoryFmt(cx, "Unmask Value: \"%s\"", InputCStr(&self->fields[InPhone])),
+        StoryFmt(cx, "Unmask Value: \"%s\"",
+                 StrDup(a, InputUnmaskValue(a, &self->fields[InPhone]))),
         16, th.foreground));
     phoneCol->Child(Centered(cx, phoneVals));
     StorySectionAdd(phone, phoneCol);
@@ -319,11 +333,11 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         cx,
         StoryFmt(cx, "Value: \"%s\"", InputCStr(&self->fields[InMaskPattern])),
         16, th.foreground));
-    patternVals
-        ->Child(StoryTxt(cx,
-                         StoryFmt(cx, "Unmask Value: \"%s\"",
-                                  InputCStr(&self->fields[InMaskPattern])),
-                         16, th.foreground));
+    patternVals->Child(StoryTxt(
+        cx,
+        StoryFmt(cx, "Unmask Value: \"%s\"",
+                 StrDup(a, InputUnmaskValue(a, &self->fields[InMaskPattern]))),
+        16, th.foreground));
     patternCol->Child(Centered(cx, patternVals));
     StorySectionAdd(pattern, patternCol);
     page->Child(pattern);
