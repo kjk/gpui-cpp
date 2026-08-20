@@ -6,13 +6,22 @@ enum {
     FormOptColumns = ToolbarOptColumns,
 };
 
+// The four titles the Name field's prefix select offers.
+static const component::SearchableItem kNamePrefixes[] = {
+    {StrL("Mr."), StrL("Mr."), 0, false, IconName::None},
+    {StrL("Mrs."), StrL("Mrs."), 0, false, IconName::None},
+    {StrL("Ms."), StrL("Ms."), 0, false, IconName::None},
+    {StrL("Dr."), StrL("Dr."), 0, false, IconName::None},
+};
+
 struct FormStory {
+    Entity<component::SearchableListState> namePrefix = {};
     InputState name;
     InputState email;
     // TextareaState: the same engine, told it spans more than one line.
     InputState bio;
+    // Rust binds both the switch and the checkbox to this one field.
     bool subscribe = false;
-    bool futureEvents = false;
     bool horizontal = false;
     bool twoColumns = false;
     StoryToolbarState toolbar;
@@ -47,8 +56,8 @@ static void ToggleSubscribe(FormStory* self, Ctx* cx, const ClickEvent*) {
     self->subscribe = !self->subscribe;
     Notify(cx);
 }
-static void ToggleFuture(FormStory* self, Ctx* cx, const ClickEvent*) {
-    self->futureEvents = !self->futureEvents;
+static void TogglePrefix(FormStory* self, Ctx* cx, const ClickEvent*) {
+    component::SelectToggleOpen(self->namePrefix.Get(cx), cx);
     Notify(cx);
 }
 
@@ -57,6 +66,12 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
+        self->namePrefix =
+            EntityNewState<component::SearchableListState>(cx->app);
+        if (component::SearchableListState* st = self->namePrefix.Get(cx)) {
+            st->selected[0] = 0;
+            st->nSelected = 1;
+        }
         InputSetValue(&self->name, StrL("Jason Lee"));
         self->bio.kind = InputKind::Textarea;
         InputSetValue(&self->bio,
@@ -79,21 +94,21 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
         StoryToolbarOptions(cx, self, opts, 2, Listen(cx, &FormToolbarAct)));
     page->Child(component::Separator::Horizontal(cx)->IntoEl());
 
-    // Name carries a title select inside the input, like Rust's
-    // `Input::prefix(Select::appearance(false))`.
-    El* prefix =
-        Div(a)
-            ->FlexRow()
+    // Name carries a title select inside the input: Rust's
+    // `Input::pl_0().prefix(div().w(px(90.)).child(Select::pr_0()
+    // .appearance(false)))`.
+    El* prefix = Div(a)->W(90)->Child(
+        component::Select::New(cx, StrL("name-prefix"), self->namePrefix)
+            ->Items(kNamePrefixes, 4)
+            ->Appearance(false)
+            ->WithSize(self->toolbar.size)
             ->W(90)
-            ->PadL(10)
-            ->Gap(4)
-            ->ItemsCenter()
-            ->JustifyBetween()
-            ->Child(StoryTxt(cx, StrL("Mr."), 14, th.foreground))
-            ->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.mutedFg));
+            ->OnToggle(Listen(cx, &TogglePrefix))
+            ->IntoEl());
 
     component::Form* form =
         component::Form::New(cx)
+            ->WithSize(self->toolbar.size)
             ->Horizontal(self->horizontal)
             ->Columns(self->twoColumns ? 2 : 1)
             ->Field(StrL("Name"),
@@ -121,10 +136,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
             ->LabelIndent(false)
             ->SpanAll()
             ->Field(StrL("Please select your birthday"),
-                    component::DatePicker::New(cx)
-                        ->Day(0)
-                        ->Placeholder(StrL("Select date"))
-                        ->IntoEl())
+                    component::DatePicker::New(cx)->Day(0)->IntoEl())
             ->Description(
                 StrL("Select your birthday, we will send you a gift."))
             ->Field(Str{}, component::Switch::New(cx, StrL("subscribe"))
@@ -132,23 +144,19 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
                                ->Checked(self->subscribe)
                                ->OnClick(Listen(cx, &ToggleSubscribe))
                                ->IntoEl())
-            ->LabelIndent(false)
-            // visible(false) takes a field out without changing the rest.
-            ->Field(StrL("Hidden"),
-                    StoryTxt(cx, StrL("Never rendered."), 14, th.mutedFg))
-            ->Visible(false)
+            ->LabelIndent(!self->horizontal || !self->twoColumns)
             ->Field(Str{}, component::ColorPicker::New(cx)
                                ->WithSize(UiSize::Small)
                                ->Label(StrL("Theme color"))
                                ->IntoEl())
-            ->LabelIndent(false)
+            ->LabelIndent(!self->horizontal || !self->twoColumns)
             ->Field(Str{}, component::Checkbox::New(cx, StrL("future-events"))
                                ->Label(StrL("Use this color for future "
                                             "events"))
-                               ->Checked(self->futureEvents)
-                               ->OnClick(Listen(cx, &ToggleFuture))
+                               ->Checked(self->subscribe)
+                               ->OnClick(Listen(cx, &ToggleSubscribe))
                                ->IntoEl())
-            ->LabelIndent(false);
+            ->LabelIndent(!self->horizontal || !self->twoColumns);
     page->Child(form->IntoEl());
     return page;
 }
