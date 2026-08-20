@@ -360,8 +360,14 @@ El* NumberInput::IntoEl() {
         frame->Opacity(0.5f);
     }
     // The step buttons are transparent until hovered, and fill the frame.
-    // Only their outer corners are rounded in Rust; ours are square, which
-    // shows on hover alone.
+    // `rounded_tl`/`rounded_bl` on the one and `rounded_tr`/`rounded_br` on
+    // the other: only the outer corners are rounded, to follow the frame. The
+    // border is a hairline inside the frame's own, so the button's radius is
+    // the frame's less that.
+    float stepR = appearance ? th.radius - 1.f : th.radius;
+    if (stepR < 0) {
+        stepR = 0;
+    }
     Rgba stepFg = disabled ? RgbaOpacity(th.secondaryFg, 0.5f) : th.secondaryFg;
     // Both are gpui_base::Buttons that decline focus: pressing one must leave
     // the editor focused, or the frame's ring flickers on every click. That is
@@ -372,6 +378,7 @@ El* NumberInput::IntoEl() {
                                 onDec, false)
                   ->W(btn)
                   ->H(kFill)
+                  ->Corners(stepR, 0, 0, stepR)
                   ->ItemsCenter()
                   ->JustifyCenter()
                   ->Child(IconEl(a, IconName::Minus, font)->Fg(stepFg));
@@ -379,6 +386,7 @@ El* NumberInput::IntoEl() {
                                 onInc, false)
                   ->W(btn)
                   ->H(kFill)
+                  ->Corners(0, stepR, stepR, 0)
                   ->ItemsCenter()
                   ->JustifyCenter()
                   ->Child(IconEl(a, IconName::Plus, font)->Fg(stepFg));

@@ -929,6 +929,20 @@ struct ChartSeries {
     Str name = {};
 };
 
+// Corners<Pixels>: a radius per corner, which is what `rounded_tl(..)` and its
+// three siblings build. `Style::radius` is the four of them at once and stays
+// what almost everything says; this is for a box whose corners differ, which
+// is a control butted up against its neighbour — a NumberInput's step buttons
+// round only the outer pair, to follow the frame around them.
+struct Corners {
+    float tl = 0;
+    float tr = 0;
+    float br = 0;
+    float bl = 0;
+
+    bool IsUniform() const { return tl == tr && tr == br && br == bl; }
+};
+
 struct Style {
     FlexDir dir = FlexDir::Row;
     Align align = Align::Stretch;
@@ -954,6 +968,10 @@ struct Style {
     float borderL = 0;
     float borderR = 0;
     float radius = 0;
+    // The four corners, when they are not all `radius`. `hasCorners` is what
+    // says to read them at all, so the ordinary case costs one bool.
+    Corners corners = {};
+    bool hasCorners = false;
     Rgba bg = {};
     Rgba borderColor = {};
     Rgba color = {};
@@ -1242,6 +1260,9 @@ struct El {
     El* BorderL(float width, Rgba c);
     El* BorderR(float width, Rgba c);
     El* Radius(float r);
+    // rounded_tl / rounded_tr / rounded_br / rounded_bl, as one call. A corner
+    // left at 0 is square, which is what `rounded_none` does to all four.
+    El* Corners(float tl, float tr, float br, float bl);
     El* Fg(Rgba c);
     El* Font(float px);
     El* LineHeight(float mult);
