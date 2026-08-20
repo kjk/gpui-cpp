@@ -6,13 +6,38 @@ namespace gpui {
 
 namespace component {
 
+// The slice of StyleRefinement an item refines onto its title row and its
+// content box. Rust hands `AccordionItem::title_style` / `content_style` a
+// whole StyleRefinement; these are the fields anything actually sets.
+// A negative padding is "leave it", and a zero alpha leaves the color alone.
+struct AccordionStyle {
+    float padT = -1;
+    float padB = -1;
+    float padL = -1;
+    float padR = -1;
+    Rgba fg = {};
+};
+
+// crates/ui's AccordionItem: a title element, an icon before it, and any
+// element as its content.
 struct AccordionItem {
-    Str title = {};
-    Str body = {};
+    Ctx* cx = nullptr;
+    El* title = nullptr;
+    El* content = nullptr;
     bool open = false;
     IconName icon = IconName::None;
-    Str tag = {};
-    bool settings = false;
+    AccordionStyle titleStyle = {};
+    AccordionStyle contentStyle = {};
+
+    static AccordionItem* New(Ctx* cx);
+    AccordionItem* Title(El* t);
+    AccordionItem* Title(Str s);
+    AccordionItem* Icon(IconName i);
+    AccordionItem* Open(bool v);
+    AccordionItem* Child(El* c);
+    AccordionItem* Child(Str s);
+    AccordionItem* TitleStyle(const AccordionStyle& s);
+    AccordionItem* ContentStyle(const AccordionStyle& s);
 };
 
 struct Accordion {
@@ -23,7 +48,7 @@ struct Accordion {
     bool bordered = true;
     bool disabled = false;
     UiSize size = UiSize::Medium;
-    AccordionItem items[8] = {};
+    AccordionItem* items[8] = {};
     int nItems = 0;
     Listener onToggle;
 
@@ -32,9 +57,7 @@ struct Accordion {
     Accordion* Bordered(bool v);
     Accordion* Disabled(bool v);
     Accordion* WithSize(UiSize s);
-    Accordion* Item(Str title, Str body, bool open);
-    Accordion* SettingsItem(Str title, Str body, bool open, IconName icon,
-                            Str tag);
+    Accordion* Item(AccordionItem* it);
     Accordion* OnToggle(Listener fn);
     El* IntoEl();
 };

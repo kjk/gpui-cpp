@@ -1,6 +1,5 @@
 #include "ui/accordion.h"
 #include "base/motion.h"
-#include "ui/tag.h"
 
 namespace gpui {
 
@@ -8,6 +7,113 @@ namespace component {
 
 // accordion.rs: ANIMATION_DURATION, along ease_out_cubic.
 static const float kAccordionMotionMs = 200.f;
+
+// AccordionItem::render's text_size: rems(0.8125) / rems(0.875) / rems(1.).
+// Not UiFontPx — the accordion runs its own scale, and Small shares Medium's.
+static float AccordionFontPx(UiSize s) {
+    switch (s) {
+        case UiSize::XSmall:
+            return 13;
+        case UiSize::Large:
+            return 16;
+        default:
+            return 14;
+    }
+}
+
+// The trigger's py_1/px_1p5 … py_3/px_4 ladder. The panel uses the same x and
+// the same number for its pb, so one table serves both.
+static void AccordionPad(UiSize s, float* padY, float* padX) {
+    switch (s) {
+        case UiSize::XSmall:
+            *padY = 4;
+            *padX = 6;
+            return;
+        case UiSize::Small:
+            *padY = 6;
+            *padX = 8;
+            return;
+        case UiSize::Large:
+            *padY = 12;
+            *padX = 16;
+            return;
+        default:
+            *padY = 8;
+            *padX = 12;
+            return;
+    }
+}
+
+// The gap between the icon and the title: gap_1 while small, gap_2 above.
+static float AccordionTitleGap(UiSize s) {
+    return (s == UiSize::XSmall || s == UiSize::Small) ? 4.f : 8.f;
+}
+
+// StyleRefinement::refine over the fields AccordionStyle names.
+static El* AccordionRefine(El* e, const AccordionStyle& s) {
+    if (s.padT >= 0) {
+        e->PadT(s.padT);
+    }
+    if (s.padB >= 0) {
+        e->PadB(s.padB);
+    }
+    if (s.padL >= 0) {
+        e->PadL(s.padL);
+    }
+    if (s.padR >= 0) {
+        e->PadR(s.padR);
+    }
+    if (s.fg.a != 0) {
+        e->Fg(s.fg);
+    }
+    return e;
+}
+
+AccordionItem* AccordionItem::New(Ctx* cx) {
+    AccordionItem* it = ArenaNew<AccordionItem>(cx->a);
+    it->cx = cx;
+    return it;
+}
+
+AccordionItem* AccordionItem::Title(El* t) {
+    title = t;
+    return this;
+}
+
+AccordionItem* AccordionItem::Title(Str s) {
+    title = TextEl(cx->a, s);
+    return this;
+}
+
+AccordionItem* AccordionItem::Icon(IconName i) {
+    icon = i;
+    return this;
+}
+
+AccordionItem* AccordionItem::Open(bool v) {
+    open = v;
+    return this;
+}
+
+AccordionItem* AccordionItem::Child(El* c) {
+    content = c;
+    return this;
+}
+
+AccordionItem* AccordionItem::Child(Str s) {
+    content = TextEl(cx->a, s)->Wrap();
+    return this;
+}
+
+AccordionItem* AccordionItem::TitleStyle(const AccordionStyle& s) {
+    titleStyle = s;
+    return this;
+}
+
+AccordionItem* AccordionItem::ContentStyle(const AccordionStyle& s) {
+    contentStyle = s;
+    return this;
+}
 
 Accordion* Accordion::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -34,25 +140,9 @@ Accordion* Accordion::WithSize(UiSize s) {
     size = s;
     return this;
 }
-Accordion* Accordion::Item(Str title, Str body, bool open) {
-    if (nItems < 8) {
-        items[nItems].title = title;
-        items[nItems].body = body;
-        items[nItems].open = open;
-        nItems++;
-    }
-    return this;
-}
-Accordion* Accordion::SettingsItem(Str title, Str body, bool open,
-                                   IconName icon, Str tag) {
-    if (nItems < 8) {
-        items[nItems].title = title;
-        items[nItems].body = body;
-        items[nItems].open = open;
-        items[nItems].icon = icon;
-        items[nItems].tag = tag;
-        items[nItems].settings = true;
-        nItems++;
+Accordion* Accordion::Item(AccordionItem* it) {
+    if (it && nItems < 8) {
+        items[nItems++] = it;
     }
     return this;
 }
@@ -70,63 +160,61 @@ El* Accordion::IntoEl() {
     if (bordered) {
         root->Border(1, th.border)->Radius(th.radiusLg)->ClipY();
     }
+    float font = AccordionFontPx(size);
+    float padY = 0, padX = 0;
+    AccordionPad(size, &padY, &padX);
     for (int i = 0; i < nItems; i++) {
-        float font = UiFontPx(size);
-        El* trig = AccordionTrigger::New(cx, items[i].title, items[i].open,
-                                         disabled, ListenerArg(onToggle, i));
-        // AccordionTrigger: py_2 px_3 at Medium, font_medium.
-        trig->FlexRow()->ItemsCenter()->JustifyBetween()->PadX(12)->PadY(8)->W(
-            kFill);
-        if (items[i].settings) {
-            El* left = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Grow();
-            if (items[i].icon != IconName::None) {
-                left->Child(
-                    Div(a)
-                        ->W(32)
-                        ->H(32)
-                        ->Radius(8)
-                        ->Bg(RgbaOpacity(th.secondary, 0.5f))
-                        ->ItemsCenter()
-                        ->JustifyCenter()
-                        ->Shrink0()
-                        ->Child(IconEl(a, items[i].icon, 16)->Fg(th.mutedFg)));
-            }
-            left->Child(TextEl(a, items[i].title)
-                            ->Font(font)
-                            ->Fg(th.foreground)
-                            ->Semibold());
-            if (items[i].tag.s) {
-                left->Child(Tag::New(cx, items[i].tag)
-                                ->Success()
-                                ->Outline()
-                                ->WithSize(UiSize::Small)
-                                ->IntoEl());
-            }
-            trig->Child(left);
-        } else {
-            trig->Child(TextEl(a, items[i].title)
-                            ->Font(font)
-                            ->Fg(th.foreground)
-                            ->Semibold());
+        AccordionItem* item = items[i];
+        El* trig = AccordionTrigger::New(cx, StrDup(a, fmt("trigger-%d", i)),
+                                         item->open, disabled,
+                                         ListenerArg(onToggle, i));
+        // AccordionTrigger: h_flex justify_between gap_3 font_medium, and the
+        // open one paints its title in foreground.
+        trig->FlexRow()
+            ->ItemsCenter()
+            ->JustifyBetween()
+            ->Gap(12)
+            ->PadX(padX)
+            ->PadY(padY)
+            ->W(kFill)
+            ->Medium();
+        if (item->open) {
+            trig->Fg(th.foreground);
         }
-        trig->Child(
-            IconEl(a,
-                   items[i].open ? IconName::ChevronUp : IconName::ChevronDown,
-                   14)
-                ->Fg(th.mutedFg));
+        AccordionRefine(trig, item->titleStyle);
+        // flex_1 min_w_0: the title column gives before the chevron does.
+        El* left = Div(a)
+                       ->FlexRow()
+                       ->ItemsCenter()
+                       ->Gap(AccordionTitleGap(size))
+                       ->Grow()
+                       ->MinW(0);
+        if (item->icon != IconName::None) {
+            left->Child(IconEl(a, item->icon, UiIconPx(size)));
+        }
+        if (item->title) {
+            left->Child(item->title);
+        }
+        trig->Child(left);
+        // A disabled accordion has no chevron at all — Rust skips the whole
+        // `when(!disabled)` block, the change handler with it.
+        if (!disabled) {
+            trig->Child(
+                IconEl(a, IconName::ChevronDown, UiIconPx(UiSize::XSmall))
+                    ->Shrink0()
+                    ->Fg(th.mutedFg)
+                    ->Rotate(item->open ? 0.5f : 0.f));
+        }
         gpui::AccordionItem* it =
             gpui::AccordionItem::New(cx)
-                ->Open(items[i].open)
+                ->Open(item->open)
                 ->Header(gpui::AccordionHeader::New(cx, trig));
         El* panel = gpui::AccordionPanel::New(cx);
-        if (items[i].settings) {
-            panel->PadL(52)->PadR(8)->PadT(0)->PadB(12);
-        } else {
-            // AccordionPanel: pb_2 px_3 at Medium.
-            panel->PadX(12)->PadT(0)->PadB(8);
+        panel->PadX(padX)->PadT(0)->PadB(padY);
+        AccordionRefine(panel, item->contentStyle);
+        if (item->content) {
+            panel->Child(item->content);
         }
-        panel->Child(
-            TextEl(a, items[i].body)->Font(font)->Fg(th.mutedFg)->Wrap());
         // AnimatedAccordionPanel: the panel's height is its natural one times
         // the progress, and the box around it clips what does not fit. The
         // natural height is what the last frame measured — Rust keeps it in
@@ -137,7 +225,7 @@ El* Accordion::IntoEl() {
         Motion motion = MotionNew(kAccordionMotionMs);
         motion.ease = EaseOutCubic;
         float progress = MotionValue(cx, MotionId(StrL("accordion"), key),
-                                     items[i].open ? 1.f : 0.f, motion);
+                                     item->open ? 1.f : 0.f, motion);
         auto* natural = (Bounds*)MotionSlot(
             cx, MotionId(StrL("accordion-h"), key), (int)sizeof(Bounds));
         if (progress > 0.001f) {
@@ -154,7 +242,7 @@ El* Accordion::IntoEl() {
         }
         // The separator belongs to the item, so it lands under the panel and
         // not between the trigger and its body.
-        El* itEl = it->IntoEl();
+        El* itEl = it->IntoEl()->Font(font);
         if (i + 1 < nItems) {
             itEl->BorderB(1, th.border);
         }
