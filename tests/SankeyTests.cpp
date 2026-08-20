@@ -235,7 +235,7 @@ static void TheSqrtScaleStillFillsEveryNode() {
     // the square roots, not of the values.
     float ratio = (g.nodes[3].y1 - g.nodes[3].y0) /
                   (g.nodes[2].y1 - g.nodes[2].y0);
-    float want = sqrtf(50.f / 40.f);
+    float want = (float)sqrt(50.0 / 40.0);
     utassert((ratio - want < 0.02f) && (want - ratio < 0.02f));
 }
 
