@@ -68,3 +68,4 @@ void TestSetting();
 void TestSearchableList();
 void TestSidebar();
 void TestWindowBorder();
+void TestKbd();
