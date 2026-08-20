@@ -10,6 +10,9 @@ struct GroupBox {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str title = {};
+    // GroupBox::title takes `impl IntoElement`, not a string: the usage card
+    // gives it a row with a label and a button in it.
+    El* titleEl = nullptr;
     El* child = nullptr;
     // GroupBoxVariant: Normal by default, with fill() and outline() as the
     // other two.
@@ -27,6 +30,7 @@ struct GroupBox {
     float contentBorder = -1;
 
     static GroupBox* New(Ctx* cx, Str title);
+    GroupBox* Title(El* e);
     GroupBox* Child(El* e);
     GroupBox* Outline();
     GroupBox* Filled(bool v);
