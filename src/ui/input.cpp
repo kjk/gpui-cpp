@@ -174,14 +174,18 @@ El* Input::IntoEl() {
                          ->Text()
                          ->WithSize(UiSize::XSmall)
                          ->Icon(IconName::Eye)
+                         ->TabStop(false)
                          ->OnClick(onToggleMask)
                          ->IntoEl());
     }
     if (cleanable && hasValue && !disabled) {
+        // clear_button.rs: `.tab_stop(false)`. The X belongs to the field, and
+        // Tab should move to the next field rather than stop at it.
         field->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
                          ->Text()
                          ->WithSize(UiSize::XSmall)
                          ->Icon(IconName::X)
+                         ->TabStop(false)
                          ->OnClick(onClear)
                          ->IntoEl());
     }

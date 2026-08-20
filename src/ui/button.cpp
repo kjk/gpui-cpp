@@ -104,6 +104,14 @@ Button* Button::WithSize(UiSize s) {
     size = s;
     return this;
 }
+Button* Button::TabIndex(int v) {
+    tabIndex = v;
+    return this;
+}
+Button* Button::TabStop(bool v) {
+    tabStop = v;
+    return this;
+}
 Button* Button::FocusRing(bool v) {
     focusRing = v;
     return this;
@@ -249,6 +257,8 @@ El* Button::IntoEl() {
     // disabled ones a focus handle, which is the opposite of both.
     bool interactive = !(disabled || loading);
     El* e = gpui::Button::New(cx, id, disabled)
+                ->TabIndex(tabIndex)
+                ->TabStop(tabStop)
                 ->FocusRing(focusRing)
                 ->H(h > 0 ? h : kAuto)
                 ->PadX(padX)

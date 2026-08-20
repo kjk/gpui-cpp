@@ -36,7 +36,7 @@ bool FocusTrapEnter(Window* win, int trapId, bool backward) {
     int n = win->focusEls.len;
     for (int k = 0; k < n; k++) {
         int i = backward ? n - 1 - k : k;
-        if (win->focusEls[i].trapId != trapId) {
+        if (win->focusEls[i].trapId != trapId || !win->focusEls[i].tabStop) {
             continue;
         }
         if (win->focusEls[i].id == win->focusId) {

@@ -34,6 +34,8 @@ struct Button {
     bool selected = false;
     bool dropdown = false;
     bool focusRing = true;
+    int tabIndex = 0;
+    bool tabStop = true;
     bool hasCustom = false;
     Rgba custom = {};
     Str tooltip = {};
@@ -69,6 +71,10 @@ struct Button {
     Button* Disabled(bool v);
     Button* WithSize(UiSize s);
     // FocusableExt::focus_ring: no focus appearance on this control.
+    // FocusHandle::tab_index / tab_stop: where this control sits in the
+    // Tab order, and whether Tab stops on it at all.
+    Button* TabIndex(int v);
+    Button* TabStop(bool v);
     Button* FocusRing(bool v);
     Button* Tooltip(Str s);
     Button* OnClick(Listener l);

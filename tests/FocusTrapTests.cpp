@@ -1,9 +1,11 @@
 /* Ported from crates/base/src/focus_trap.rs and the Tab actions that read it
- * in crates/ui/src/root.rs.
+ * in crates/ui/src/root.rs, plus FocusHandle::tab_index / tab_stop.
  *
  * A trap is a container that Tab cannot leave. The rules are: focus inside a
  * trap cycles within it, focus outside every trap never wanders into one, and
- * a container that has just opened takes focus into itself. */
+ * a container that has just opened takes focus into itself. On top of that,
+ * the traversal visits the lowest tab index first and skips anything that is
+ * focusable without being a stop. */
 
 #include "Test.h"
 
@@ -121,6 +123,67 @@ static void ATrapIsNamedNotNumbered() {
     utassert(FocusTrapId(StrL("dialog")) != 0);
 }
 
+
+// FocusHandle::tab_stop(false): still focusable, still shows its ring when it
+// is clicked, simply not somewhere Tab stops. An input's clear button and a
+// dock tab bar's tools are what Rust turns it off for.
+static void TabSkipsWhatIsNotAStop() {
+    int ids[] = {1, 2, 3};
+    int traps[] = {0, 0, 0};
+    Window* win = WindowWithFocusables(ids, traps, 3);
+    win->focusEls[1].tabStop = false;
+
+    win->focusId = 1;
+    utassert(FocusTrapTab(win, false) == 3);
+    utassert(FocusTrapTab(win, true) == 1);
+    delete win;
+}
+
+// A trap made only of non-stops leaves focus where it is rather than spinning.
+static void ATrapOfNonStopsLeavesFocusAlone() {
+    int ids[] = {1, 11, 12};
+    int traps[] = {0, 7, 7};
+    Window* win = WindowWithFocusables(ids, traps, 3);
+    win->focusEls[1].tabStop = false;
+    win->focusEls[2].tabStop = false;
+
+    win->focusId = 11;
+    utassert(FocusTrapTab(win, false) == 11);
+    // Nor does arming the trap put focus on one of them.
+    win->focusId = 1;
+    utassert(!FocusTrapEnter(win, 7));
+    utassert(win->focusId == 1);
+    delete win;
+}
+
+// tab_index: the traversal is by index first and by paint order inside it, so
+// a control can be reached before one laid out above it. The sort is stable,
+// which is what keeps everything at the default index in tree order.
+static void TheTabIndexGroupsTheTraversal() {
+    Arena* a = ArenaNew();
+    Window* win = new Window();
+    // Painted 1, 2, 3, 4 — but 3 asks to come first and 1 to come last.
+    El* root = Div(a)
+                   ->Child(Div(a)->FocusId(1)->TabIndex(2))
+                   ->Child(Div(a)->FocusId(2))
+                   ->Child(Div(a)->FocusId(3)->TabIndex(-1))
+                   ->Child(Div(a)->FocusId(4));
+    FocusCollect(win, root);
+    utassert(win->focusEls.len == 4);
+    utassert(win->focusEls[0].id == 3);
+    utassert(win->focusEls[1].id == 2);
+    utassert(win->focusEls[2].id == 4);
+    utassert(win->focusEls[3].id == 1);
+
+    win->focusId = 3;
+    utassert(FocusTrapTab(win, false) == 2);
+    utassert(FocusTrapTab(win, false) == 4);
+    utassert(FocusTrapTab(win, false) == 1);
+    utassert(FocusTrapTab(win, false) == 3);
+    delete win;
+    ArenaDelete(a);
+}
+
 void TestFocusTrap() {
     TestSuite("focus_trap");
     TabInsideATrapCyclesWithinIt();
@@ -130,4 +193,7 @@ void TestFocusTrap() {
     ATrapWithNothingFocusableLeavesFocusAlone();
     NothingArmedTouchesNothing();
     ATrapIsNamedNotNumbered();
+    TabSkipsWhatIsNotAStop();
+    ATrapOfNonStopsLeavesFocusAlone();
+    TheTabIndexGroupsTheTraversal();
 }
