@@ -982,8 +982,10 @@ struct Style {
     // reaches through the thing they belong to rather than one at a time.
     int tabIndex = 0;
     bool tabStop = true;
-    // div().key_context(".."): the name a keystroke is resolved against while
-    // focus is anywhere in this subtree. Hashed, since that is all an id is.
+    // div().key_context(".."): the context a keystroke is resolved against
+    // while focus is anywhere in this subtree, which a binding's predicate
+    // reads — "Editor", or "Editor mode=full". Hashed, since that is all an
+    // id is; KeyContextOf keeps the parse behind the hash.
     uint32_t keyContext = 0;
     // FocusableExt::focus_ring: whether a focused element shows the focus
     // appearance at all. Rust gates the whole `focus_ring_style` call on it,
@@ -2344,6 +2346,10 @@ struct Window {
     float dragOffX = 0;
     float dragOffY = 0;
     bool eatReturn = false;
+    // The keystroke the keymap took also arrives as a character, and a
+    // character the keymap took is not text. Set on the key, read and cleared
+    // on the character that follows it.
+    bool eatChar = false;
     // pending_keyboard_down: an Enter or Space is down on the focused
     // element, and the generation the focus was at when it went down.
     bool keyPressPending = false;

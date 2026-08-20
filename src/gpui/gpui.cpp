@@ -4281,10 +4281,17 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
     chord.shift = shift;
     chord.ctrl = ctrl;
     chord.alt = alt;
-    uint32_t action = KeymapMatch(chord, contexts, nContexts);
-    if (!action) {
+    KeyMatch m = KeymapMatch(chord, contexts, nContexts);
+    if (m.pending) {
+        // Half of a sequence. Rust holds the keystroke on the matcher and
+        // dispatches nothing; here that is "eaten", so nothing under the
+        // keymap sees it either.
+        return true;
+    }
+    if (!m.action) {
         return false;
     }
+    uint32_t action = m.action;
 
     // The same chain again, this time for the handlers. A handler that
     // propagates lets the search carry on outwards.

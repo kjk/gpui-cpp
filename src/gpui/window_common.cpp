@@ -3,6 +3,7 @@
    here; nothing here calls back out except through Platform.h. */
 
 #include "gpui/platform.h"
+#include "gpui/keymap.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
 #include "base/focus_trap.h"
@@ -201,8 +202,15 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // subscription still hears it — that is Rust's cx.propagate(), which every
     // action the input does not consume ends with — but a key the field ate is
     // not also an Enter on the focused element.
+    //
+    // Unless a sequence is half-finished: the rest of a binding written as
+    // "ctrl-k ctrl-o" belongs to the keymap and to nothing else, which is
+    // what GPUI's matcher running ahead of the text input buys. Both the
+    // field and the page's own Copy stand aside for it.
+    bool held = KeymapPending();
+    win->eatChar = false;
     bool eaten = false;
-    if (win->input && win->input->focused) {
+    if (!held && win->input && win->input->focused) {
         InputAction action =
             InputActionForKey(win->input, key, shift, ctrl, alt);
         eaten = InputPerform(win->input, win->app, win, action, shift);
@@ -211,7 +219,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // of its own copied that, and this is the page's selection — Rust's
     // TextSelection::selected_text, on the same chord. Nothing selected
     // leaves the key to whatever else wants it.
-    if (!eaten && key == KeyC && ctrl && !shift && !alt) {
+    if (!held && !eaten && key == KeyC && ctrl && !shift && !alt) {
         eaten = WindowSelectionCopy(win);
     }
     // The keymap, once the focused field has had its go: a field's own
@@ -219,6 +227,10 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // cannot take a keystroke away from it. An action that is handled ends
     // the keystroke here.
     if (!eaten && WindowDispatchKeyAction(win, key, shift, ctrl, alt)) {
+        // The character the keystroke also arrives as is the keymap's now:
+        // the second chord of a sequence is an ordinary letter, and typing it
+        // into the field underneath is what the binding was there to stop.
+        win->eatChar = true;
         win->eatReturn = false;
         AppInvalidate(win);
         return;
@@ -312,8 +324,10 @@ void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt) {
     // the focused EntityInputHandler. The control codes are keys, not text:
     // backspace, tab, return and escape all came through WindowKeyDown
     // already, and Ctrl+letter arrives here as 1..26.
-    if (win->input && win->input->focused && ch >= 32 && ch != 127 && !ctrl &&
-        !alt) {
+    bool ate = win->eatChar;
+    win->eatChar = false;
+    if (!ate && win->input && win->input->focused && ch >= 32 && ch != 127 &&
+        !ctrl && !alt) {
         InputTypeChar(win->input, win->app, win, ch);
     }
     AppInvalidate(win);
