@@ -65,8 +65,11 @@ static void AMenuWithNoRows() {
 }
 
 static void ALongStoryMenuFitsWithoutTruncation() {
-    // Label + 100 items + a separator before every group of five.
-    utassert(gpui::component::kPopupMenuMaxItems >= 1 + 100 + 20);
+    // Label + 100 items + a separator before every group of five. The claim
+    // is about a constant, so it is one the compiler can settle — and has to
+    // be: a runtime `if` on a constant is a warning, and warnings are errors.
+    static_assert(gpui::component::kPopupMenuMaxItems >= 1 + 100 + 20,
+                  "the story's longest menu has to fit in a PopupMenu");
 }
 
 static void TheMenuBarWrapsBothWays() {

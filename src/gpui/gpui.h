@@ -955,6 +955,11 @@ struct El {
     // unless the caller passed one.
     ScrollbarMode scrollMode = ScrollbarMode::Always;
     bool scrollModeSet = false;
+    // A box that scrolls without showing a bar. In Rust the scrolling
+    // container and the Scrollbar are two elements, so a container with no
+    // Scrollbar beside it simply has none; the box paints its own bar here,
+    // and this is how it says not to — a tab bar scrolls, and shows nothing.
+    bool noScrollbar = false;
     int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
@@ -1001,6 +1006,8 @@ struct El {
     El* WFrac(float f);
     // percentage(delta) turns clockwise, which is what a spinner is made of.
     El* Rotate(float turns);
+    // Scroll without a bar: the box still takes the wheel and still clips.
+    El* HideScrollbar();
     // opacity(f): this element and everything under it, faded together.
     // Nested opacities multiply, as GPUI's do.
     El* Opacity(float f);

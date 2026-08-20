@@ -219,6 +219,125 @@ static void ANodeKnowsWhichDockItIsIn() {
     utassert(DockPlacementOfNode(&s, inner) == DockPlacement::Left);
 }
 
+// ScrollHandle::scroll_to_item: a tab off either end of the bar is brought
+// just inside it, and one already inside asks for nothing.
+static void ATabOffTheEndIsBroughtIntoView() {
+    Bounds strip = {100, 0, 200, 30};
+    // Already inside.
+    utassertnear(DockTabScrollTo(40, strip, Bounds{120, 0, 60, 30}), 40.f);
+    // Off the right edge by 50: the offset grows by exactly that.
+    utassertnear(DockTabScrollTo(40, strip, Bounds{260, 0, 90, 30}), 90.f);
+    // Off the left edge by 30: the offset shrinks by exactly that.
+    utassertnear(DockTabScrollTo(40, strip, Bounds{70, 0, 60, 30}), 10.f);
+    // Nothing measured yet is nothing to scroll to.
+    utassertnear(DockTabScrollTo(40, strip, Bounds{}), 40.f);
+}
+
+// DockArea::dump and load: the tree written out and built back, with the
+// panels matched by the name they were registered under.
+static void ALayoutSurvivesDumpAndLoad() {
+    Arena* arena = ArenaNew();
+    DockState s;
+    static const char* kNames[] = {"AlphaPanel", "BetaPanel", "GammaPanel"};
+    for (int i = 0; i < 3; i++) {
+        DockPanelDef def;
+        def.name = Str(kNames[i]);
+        def.title = Str(kNames[i]);
+        DockAddPanelDef(&s, def);
+    }
+    int tabs = DockNewTabs(&s);
+    DockTabsAdd(&s, tabs, 0);
+    DockTabsAdd(&s, tabs, 1);
+    s.nodes[tabs].activeIx = 1;
+    int other = DockNewTabs(&s);
+    DockTabsAdd(&s, other, 2);
+    int split = DockNewSplit(&s, Axis::Vertical);
+    DockSplitAdd(&s, split, tabs, 240);
+    DockSplitAdd(&s, split, other, 160);
+    s.center = split;
+    int sideNode = DockNewTabs(&s);
+    DockTabsAdd(&s, sideNode, 2);
+    s.left.node = sideNode;
+    s.left.size = 210;
+    s.left.open = false;
+
+    DockAreaState state;
+    DockDump(&s, &state);
+    // The tree is PanelStates: a split is a StackPanel, a group a TabPanel,
+    // and a panel a leaf under its registered name.
+    utassert(StrEqI(state.nodes[state.center].panelName, StrL("StackPanel")));
+    utassert(state.nodes[state.center].kind == PanelInfoKind::Stack);
+    utassertnear(state.nodes[state.center].sizes[0], 240.f);
+    utassert(!AxisIsHorizontal(state.nodes[state.center].axis));
+    const PanelStateNode& first =
+        state.nodes[state.nodes[state.center].children[0]];
+    utassert(first.kind == PanelInfoKind::Tabs);
+    utassert(first.activeIndex == 1);
+    utassert(StrEqI(state.nodes[first.children[0]].panelName,
+                    StrL("AlphaPanel")));
+    utassert(state.left.present && !state.left.open);
+    utassertnear(state.left.size, 210.f);
+
+    // Loaded back into a dock that knows the same panels: the same tree.
+    DockState back;
+    for (int i = 0; i < 3; i++) {
+        DockPanelDef def;
+        def.name = Str(kNames[i]);
+        def.title = Str(kNames[i]);
+        DockAddPanelDef(&back, def);
+    }
+    utassert(DockLoad(&back, &state, arena));
+    utassert(back.nodes[back.center].split);
+    utassert(back.nodes[back.center].nChild == 2);
+    utassertnear(back.nodes[back.center].size[0], 240.f);
+    int loadedTabs = back.nodes[back.center].child[0];
+    utassert(back.nodes[loadedTabs].nPanel == 2);
+    utassert(back.nodes[loadedTabs].panel[0] == 0);
+    utassert(back.nodes[loadedTabs].activeIx == 1);
+    utassert(back.left.node >= 0 && !back.left.open);
+    utassertnear(back.left.size, 210.f);
+    // Nothing new was registered: every name was one it already had.
+    utassert(back.nPanels == 3);
+    ArenaDelete(arena);
+}
+
+// PanelRegistry::build_panel answering with an InvalidPanel: the layout keeps
+// its shape, and dumping it again writes the name it could not build.
+static void APanelNothingAnswersToBecomesInvalid() {
+    Arena* arena = ArenaNew();
+    DockAreaState state;
+    int tabs = state.NewNode(StrL("TabPanel"));
+    state.nodes[tabs].kind = PanelInfoKind::Tabs;
+    int known = state.NewNode(StrL("AlphaPanel"));
+    int missing = state.NewNode(StrL("GitGraphPanel"));
+    state.nodes[tabs].nChild = 2;
+    state.nodes[tabs].children[0] = known;
+    state.nodes[tabs].children[1] = missing;
+    state.nodes[tabs].activeIndex = 1;
+    state.center = tabs;
+
+    DockState s;
+    DockPanelDef def;
+    def.name = StrL("AlphaPanel");
+    def.title = StrL("Alpha");
+    DockAddPanelDef(&s, def);
+    utassert(DockLoad(&s, &state, arena));
+    // The missing one was registered on the spot, under the name asked for.
+    utassert(s.nPanels == 2);
+    utassert(StrEqI(s.panels[1].name, StrL("GitGraphPanel")));
+    utassert(s.nodes[s.center].nPanel == 2);
+    utassert(s.nodes[s.center].activeIx == 1);
+
+    // Written out again, the layout still names it — Rust's InvalidPanel
+    // dumps the state it came from rather than losing the panel.
+    DockAreaState again;
+    DockDump(&s, &again);
+    const PanelStateNode& group = again.nodes[again.center];
+    utassert(StrEqI(again.nodes[group.children[1]].panelName,
+                    StrL("GitGraphPanel")));
+    ArenaDelete(arena);
+}
+
 static void ALockedDockMovesNothing() {
     DockState s;
     int a = 0, b = 0;
@@ -239,5 +358,8 @@ void TestDock() {
     AReorderCountsFromBeforeTheDetach();
     ADropOnItsOwnGroupNeedsATabOrAnEdge();
     ANodeKnowsWhichDockItIsIn();
+    ATabOffTheEndIsBroughtIntoView();
+    ALayoutSurvivesDumpAndLoad();
+    APanelNothingAnswersToBecomesInvalid();
     ALockedDockMovesNothing();
 }

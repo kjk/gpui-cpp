@@ -84,6 +84,32 @@ bool DockAreaStateParse(Arena* a, Str json, DockAreaState* out);
 // to_string writes too.
 void DockAreaStateWrite(const DockAreaState* s, StrBuilder* out);
 
+// ─── the live tree and the saved one ──────────────────────────────────────
+
+// DockArea::dump: the tree as it stands, written as PanelStates. A tab group
+// is a "TabPanel" whose children are its panels, a split is a "StackPanel"
+// with its sizes and axis, and a panel is a leaf under the name it was
+// registered with.
+void DockDump(const DockState* s, DockAreaState* out);
+
+// What an InvalidPanel is handed: the name the layout asked for and nothing
+// answered to. Rust builds a view that says so and keeps the state it came
+// from, so a round trip does not lose the panel it could not build.
+struct DockInvalidPanel {
+    Str name = {};
+};
+
+// DockArea::load. Panels are matched by name against the ones already
+// registered — PanelRegistry::build_panel — and a name nothing answers to is
+// registered as an InvalidPanel rendered by `invalidRender`, under the name
+// it was asked for so dumping it again writes the same layout back.
+//
+// `a` holds the strings the new panels keep, so it has to outlive the dock;
+// it is the arena the state was parsed into. False when the state has no
+// centre to build from, which leaves the dock as it was.
+bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
+              El* (*invalidRender)(Ctx* cx, void* data) = nullptr);
+
 // The tiles' own half of it: the metas a TilesState is saved as, and a
 // TilesState built back from them. `panels` is the caller's panel for each
 // tile, which is what Rust's children list carries beside the metas — the

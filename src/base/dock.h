@@ -55,6 +55,10 @@ const int kMaxDockChildren = 8;
 // One panel the host handed the dock. Rust's `Arc<dyn PanelView>` is a title,
 // a render and the two questions the tab bar asks it.
 struct DockPanelDef {
+    // Panel::panel_name(): what a saved layout stores and what the registry
+    // is asked for on the way back. Not the title — that is what the tab
+    // shows, and it can change while the name cannot.
+    Str name = {};
     Str title = {};
     El* (*render)(Ctx* cx, void* data) = nullptr;
     void* data = nullptr;
@@ -78,6 +82,18 @@ struct DockNode {
     // Where the node was last painted. The drop zone under the pointer can
     // only be worked out against boxes, and the boxes are last frame's.
     Bounds bounds = {};
+    // The tab bar's own scroll, for a row of tabs wider than the bar, and the
+    // tab it has been asked to bring into view — Rust's `tab_bar_scroll_handle`
+    // and `pending_scroll_to_ix`. The two boxes are last frame's, which is
+    // what the offset is worked out from.
+    float tabScrollX = 0;
+    int pendingScrollIx = -1;
+    Bounds tabStripBounds = {};
+    Bounds activeTabBounds = {};
+    // Which tab `activeTabBounds` was measured for. A tab just made active
+    // has no box yet — the frame that shows it is the one that measures it —
+    // so the scroll waits for the frame after that.
+    int activeTabBoundsIx = -1;
 };
 
 // A Dock: the fixed container on one side of the area.
@@ -149,6 +165,9 @@ struct DockState {
     // The ⋯ menu: Zoom In / Zoom Out and Close, over the active panel.
     static void OnMenuItem(DockState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t nodeAndIx);
+    // The tab bar scrolled sideways, which a row of tabs too wide for it does.
+    static void OnTabBarScroll(DockState* self, Ctx* cx, const ScrollEvent* ev,
+                               intptr_t node);
     static void OnResizeDrag(DockState* self, Ctx* cx, const DragMoveEvent* ev);
     static void OnResizeEnd(DockState* self, Ctx* cx, const MouseUpEvent* ev);
 };
@@ -198,6 +217,11 @@ void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop,
 bool DockClosePanelAt(DockState* s, int node, int ix);
 bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
                      int atIx = -1);
+// ScrollHandle::scroll_to_item: the sideways offset that brings `tab` inside
+// `strip`, from where the strip is scrolled now. A tab already inside asks for
+// nothing; one off either end is brought just inside that edge.
+float DockTabScrollTo(float scrollX, Bounds strip, Bounds tab);
+
 // Dock::toggle_open, and the size a drag on its edge asks for.
 void DockToggleSide(DockState* s, Ctx* cx, DockPlacement p);
 void DockResizeSide(DockState* s, Ctx* cx, DockPlacement p, float x, float y);
@@ -207,6 +231,9 @@ void DockToggleZoom(DockState* s, Ctx* cx, int panelIx);
 DockSide* DockSideOf(DockState* s, DockPlacement p);
 // Which tab group holds this panel, or -1.
 int DockNodeOfPanel(const DockState* s, int panelIx);
+// PanelRegistry::build_panel's lookup half: the panel registered under this
+// name, or -1.
+int DockPanelByName(const DockState* s, Str name);
 // Which Dock a node is in — the side whose tree it hangs under, or Center for
 // the area's own item. What a click on a collapsed dock's tab needs to know.
 DockPlacement DockPlacementOfNode(const DockState* s, int node);

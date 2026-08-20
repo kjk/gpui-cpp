@@ -48,6 +48,18 @@ static void DockEmit(DockState* s, Ctx* cx) {
     Notify(cx);
 }
 
+int DockPanelByName(const DockState* s, Str name) {
+    if (!name.s || name.len <= 0) {
+        return -1;
+    }
+    for (int i = 0; i < s->nPanels; i++) {
+        if (StrSame(s->panels[i].name, name)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 int DockAddPanelDef(DockState* s, DockPanelDef def) {
     if (s->nPanels >= kMaxDockPanels) {
         return -1;
@@ -110,6 +122,7 @@ void DockTabsInsert(DockState* s, int node, int panelIx, int at) {
     // insert_panel_at ends with set_active_ix(ix): what was dropped is what
     // the group shows.
     n.activeIx = at;
+    n.pendingScrollIx = at;
 }
 
 void DockSplitAdd(DockState* s, int node, int childNode, float size) {
@@ -255,6 +268,9 @@ void DockSetActive(DockState* s, Ctx* cx, int node, int ix) {
         return;
     }
     n.activeIx = ix;
+    // pending_scroll_to_ix: the tab that was just made active is brought into
+    // view on the next frame, where its box is known.
+    n.pendingScrollIx = ix;
     Notify(cx);
 }
 
@@ -408,6 +424,23 @@ void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop,
     if (DockMovePanelTo(s, panelIx, to, drop, atIx)) {
         DockEmit(s, cx);
     }
+}
+
+float DockTabScrollTo(float scrollX, Bounds strip, Bounds tab) {
+    if (strip.w <= 0 || tab.w <= 0) {
+        return scrollX;
+    }
+    // The boxes are where they were painted, so what is asked for is the
+    // change to the offset rather than the offset itself.
+    if (tab.x < strip.x) {
+        return scrollX - (strip.x - tab.x);
+    }
+    float tabRight = tab.x + tab.w;
+    float stripRight = strip.x + strip.w;
+    if (tabRight > stripRight) {
+        return scrollX + (tabRight - stripRight);
+    }
+    return scrollX;
 }
 
 DockPlacement DockPlacementOfNode(const DockState* s, int node) {
@@ -623,6 +656,15 @@ void DockState::OnMenuItem(DockState* self, Ctx* cx, const ClickEvent*,
     } else {
         DockClosePanel(self, cx, node, n.activeIx);
     }
+}
+
+void DockState::OnTabBarScroll(DockState* self, Ctx* cx, const ScrollEvent* ev,
+                               intptr_t node) {
+    if (node < 0 || node >= kMaxDockNodes || !self->nodes[node].used) {
+        return;
+    }
+    self->nodes[node].tabScrollX = ev->offsetX;
+    Notify(cx);
 }
 
 void DockState::OnResizeDrag(DockState* self, Ctx* cx,
