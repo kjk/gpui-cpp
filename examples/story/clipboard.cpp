@@ -5,19 +5,14 @@ struct ClipboardStory {
     InputState url;
     bool masked = false;
     bool seeded = false;
-    // Rust's on_copied pushes a window notification; there is no window-level
-    // notification list here, so the page shows what it was handed instead.
-    Str copied = {};
 
-    ~ClipboardStory() { StrFree(copied); }
     static El* Render(ClipboardStory* self, Ctx* cx);
 };
 
-static void OnCopied(ClipboardStory* self, Ctx* cx,
+// on_copied: window.push_notification(format!("Copied value: {}", value)).
+static void OnCopied(ClipboardStory*, Ctx* cx,
                      const component::ClipboardEvent* ev) {
-    StrFree(self->copied);
-    self->copied = StrDup(ev->value);
-    Notify(cx);
+    StoryPushNotification(cx, StoryFmt(cx, "Copied value: %s", ev->value));
 }
 
 static void FocusUrl(ClipboardStory* self, Ctx* cx, const ClickEvent*) {
@@ -27,16 +22,16 @@ static void FocusUrl(ClipboardStory* self, Ctx* cx, const ClickEvent*) {
 
 El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
         InputSetValue(&self->url, StrL("https://github.com"));
     }
-    El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
+    El* page = Div(a)->FlexCol()->JustifyStart()->Gap(12)->W(kFill);
     Listener copied = Listen(cx, &OnCopied);
 
     El* def = StorySection(cx, "Default",
                            "Copies a value supplied by the application.");
+    StorySectionBody(def)->W(480);
     El* defRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     defRow->Child(component::Label::New(cx, StrL("A clipboard button"))
                       ->IntoEl());
@@ -52,6 +47,7 @@ El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
 
     El* input =
         StorySection(cx, "With Input", "Copies the field's current value.");
+    StorySectionBody(input)->W(480);
     StorySectionAdd(
         input, component::Input::New(cx, StrL("url"), &self->url)
                    ->OnFocus(Listen(cx, &FocusUrl))
@@ -61,13 +57,6 @@ El* ClipboardStory::Render(ClipboardStory* self, Ctx* cx) {
                                 ->IntoEl())
                    ->IntoEl());
     page->Child(input);
-
-    if (self->copied.s) {
-        page->Child(StoryTxt(cx,
-                             StoryFmt(cx, "Copied value: %.*s",
-                                      self->copied.len, self->copied.s),
-                             13, th.mutedFg));
-    }
     return page;
 }
 
