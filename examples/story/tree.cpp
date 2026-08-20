@@ -96,8 +96,15 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
         if (TreeSkip(found[i].name)) {
             continue;
         }
-        char child[512];
-        snprintf(child, sizeof(child), "%s/%s", path, found[i].name);
+        // The path this row stands for. A name is at most 260 bytes and the
+        // walk is two deep, so the buffer is the sum rather than a guess —
+        // which is also what keeps the compiler from calling it a truncation.
+        char child[1024];
+        int wrote = snprintf(child, sizeof(child), "%.*s/%.*s", 500, path,
+                             (int)sizeof(found[i].name), found[i].name);
+        if (wrote <= 0) {
+            continue;
+        }
         // The id has to be unique and stable, so it is the path; the label is
         // the name.
         int ix = TreeAddItem(s, StrDup(Str(child)), StrDup(Str(found[i].name)),

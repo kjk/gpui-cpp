@@ -65,6 +65,7 @@ int GpuiMain(int argc, char** argv) {
     TestSetting();
     TestSearchableList();
     TestSidebar();
+    TestWindowBorder();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

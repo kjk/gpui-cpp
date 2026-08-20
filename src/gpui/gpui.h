@@ -841,7 +841,7 @@ struct El {
     // its own `bounds` the same way, through an element whose only job is to
     // report the box layout gave it; a caller that has to answer "what is
     // under the pointer" needs last frame's boxes to do it.
-    Bounds* boundsOut = nullptr;
+    gpui::Bounds* boundsOut = nullptr;
     // BindSlider: this element is a slider's track, and a press or a drag on
     // it moves that state. GPUI's slider elements capture the state entity in
     // their own closures; there are no closures on an element here, so the
@@ -1880,6 +1880,9 @@ struct Window {
     // What the pointer looks like right now; the OS is only told on a change.
     CursorKind cursor = CursorKind::Arrow;
     bool maximized = false;
+    // is_window_active: whether this window has the focus. A client-decorated
+    // frame dims its border when it does not.
+    bool active = true;
     bool running = true;
     bool anim = false;
     bool mouseDown = false;
@@ -2124,6 +2127,10 @@ const InspectorState* WindowInspector(Ctx* cx);
 // itself at all, the way Rust's `drag_over::<T>` only exists for a drag of
 // that type.
 const DragPayload* WindowActiveDrag(Ctx* cx);
+// window.is_window_active().
+bool WindowIsActive(Ctx* cx);
+// What the platform calls when the window takes or loses the focus.
+void WindowSetActive(Window* win, bool active);
 // Which element the drag is over, of those that take its kind — 0 for none.
 // `El::Click(id)` names an element, so this answers with that id.
 int WindowDragOverId(Ctx* cx);

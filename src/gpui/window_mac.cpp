@@ -310,6 +310,16 @@ static bool PressedButton(MouseButton* out) {
     gpui::WindowClosed(win);
 }
 
+- (void)windowDidBecomeKey:(NSNotification*)note {
+    (void)note;
+    gpui::WindowSetActive(win, true);
+}
+
+- (void)windowDidResignKey:(NSNotification*)note {
+    (void)note;
+    gpui::WindowSetActive(win, false);
+}
+
 - (void)windowDidResize:(NSNotification*)note {
     (void)note;
     gpui::AppInvalidate(win);
