@@ -41,6 +41,10 @@ Combobox* Combobox::Icon(IconName n) {
     icon = n;
     return this;
 }
+Combobox* Combobox::CheckIcon(IconName n) {
+    checkIcon = n;
+    return this;
+}
 Combobox* Combobox::W(float v) {
     width = v;
     return this;
@@ -95,6 +99,7 @@ El* Combobox::IntoEl() {
                       ->Empty(empty)
                       ->W(width)
                       ->Icon(icon)
+                      ->CheckIcon(checkIcon)
                       ->Disabled(disabled)
                       ->Cleanable(cleanable)
                       ->FocusRing(focusRing)

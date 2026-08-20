@@ -29,6 +29,8 @@ struct Select {
     float menuMaxH = 0;
     UiSize size = UiSize::Medium;
     IconName icon = IconName::None; // replaces the caret when set
+    // Combobox::check_icon, which the Select forwards to its list.
+    IconName checkIcon = IconName::Check;
     bool disabled = false;
     bool cleanable = false;
     bool appearance = true;
@@ -51,6 +53,7 @@ struct Select {
     Select* MenuMaxH(float v);
     Select* WithSize(UiSize s);
     Select* Icon(IconName n);
+    Select* CheckIcon(IconName n);
     Select* Disabled(bool v);
     Select* Cleanable(bool v = true);
     Select* Appearance(bool v);

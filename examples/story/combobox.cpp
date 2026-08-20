@@ -1,46 +1,72 @@
 #include "Story.h"
 
-// The items each section lists. A SearchableList keeps a pointer to them, so
-// they are static rather than built on the frame arena.
+// The items each section lists, straight out of combobox_story.rs. A
+// SearchableList keeps a pointer to them, so they are static rather than
+// built on the frame arena.
 static const component::SearchableItem kFrameworks[] = {
-    {StrL("GPUI"), StrL("gpui"), 0, false},
-    {StrL("Iced"), StrL("iced"), 0, false},
-    {StrL("egui"), StrL("egui"), 0, false},
-    {StrL("Slint"), StrL("slint"), 0, false},
-    {StrL("Tauri"), StrL("tauri"), 0, false},
-    {StrL("Dioxus"), StrL("dioxus"), 0, false},
+    {StrL("Next.js"), StrL("Next.js"), 0, false, IconName::None},
+    {StrL("SvelteKit"), StrL("SvelteKit"), 0, false, IconName::None},
+    {StrL("Nuxt.js"), StrL("Nuxt.js"), 0, false, IconName::None},
+    {StrL("Remix"), StrL("Remix"), 0, false, IconName::None},
+    {StrL("Astro"), StrL("Astro"), 0, false, IconName::None},
 };
-// Two groups, which is what the grouped section shows.
-static const Str kFruitGroups[] = {StrL("Pome"), StrL("Citrus")};
-static const component::SearchableItem kFruits[] = {
-    {StrL("Apples"), StrL("apples"), 0, false},
-    {StrL("Cherries"), StrL("cherries"), 0, false},
-    {StrL("Oranges"), StrL("oranges"), 1, false},
-    {StrL("Lemons"), StrL("lemons"), 1, false},
+static const component::SearchableItem kMultiFrameworks[] = {
+    {StrL("React"), StrL("React"), 0, false, IconName::None},
+    {StrL("Nextjs"), StrL("Nextjs"), 0, false, IconName::None},
+    {StrL("Angular"), StrL("Angular"), 0, false, IconName::None},
+    {StrL("VueJS"), StrL("VueJS"), 0, false, IconName::None},
+    {StrL("Django"), StrL("Django"), 0, false, IconName::None},
+    {StrL("Astro"), StrL("Astro"), 0, false, IconName::None},
+    {StrL("Remix"), StrL("Remix"), 0, false, IconName::None},
+    {StrL("Svelte"), StrL("Svelte"), 0, false, IconName::None},
+    {StrL("SolidJS"), StrL("SolidJS"), 0, false, IconName::None},
+    {StrL("Qwik"), StrL("Qwik"), 0, false, IconName::None},
 };
-// One of them is unavailable, and stays visible.
+// food_groups(): three groups, with one item disabled in two of them.
+static const Str kFoodGroups[] = {StrL("Fruits"), StrL("Vegetables"),
+                                  StrL("Beverages")};
+static const component::SearchableItem kFoods[] = {
+    {StrL("Apples"), StrL("Apples"), 0, false, IconName::None},
+    {StrL("Bananas"), StrL("Bananas"), 0, false, IconName::None},
+    {StrL("Cherries"), StrL("Cherries"), 0, false, IconName::None},
+    {StrL("Carrots"), StrL("Carrots"), 1, false, IconName::None},
+    {StrL("Broccoli"), StrL("Broccoli"), 1, true, IconName::None},
+    {StrL("Spinach"), StrL("Spinach"), 1, false, IconName::None},
+    {StrL("Tea"), StrL("Tea"), 2, false, IconName::None},
+    {StrL("Coffee"), StrL("Coffee"), 2, true, IconName::None},
+    {StrL("Juice"), StrL("Juice"), 2, false, IconName::None},
+};
 static const component::SearchableItem kDisabledItems[] = {
-    {StrL("Apples"), StrL("apples"), 0, false},
-    {StrL("Bananas"), StrL("bananas"), 0, true},
-    {StrL("Cherries"), StrL("cherries"), 0, false},
-    {StrL("Oranges"), StrL("oranges"), 0, true},
+    {StrL("Apples"), StrL("Apples"), 0, false, IconName::None},
+    {StrL("Bananas"), StrL("Bananas"), 0, true, IconName::None},
+    {StrL("Cherries"), StrL("Cherries"), 0, false, IconName::None},
+    {StrL("Carrots"), StrL("Carrots"), 0, false, IconName::None},
+    {StrL("Broccoli"), StrL("Broccoli"), 0, true, IconName::None},
 };
+// industries(): each row draws its own icon.
 static const component::SearchableItem kIndustries[] = {
-    {StrL("Airlines / Aviation"), StrL("aviation"), 0, false},
-    {StrL("Automotive"), StrL("automotive"), 0, false},
-    {StrL("Think Tanks"), StrL("think-tanks"), 0, false},
-    {StrL("Education"), StrL("education"), 0, false},
+    {StrL("Information Technology"), StrL("Information Technology"), 0, false,
+     IconName::Cpu},
+    {StrL("Healthcare"), StrL("Healthcare"), 0, false, IconName::Heart},
+    {StrL("Finance"), StrL("Finance"), 0, false, IconName::Globe},
+    {StrL("Education"), StrL("Education"), 0, false, IconName::BookOpen},
+    {StrL("Entertainment"), StrL("Entertainment"), 0, false, IconName::Star},
 };
 static const component::SearchableItem kUniversities[] = {
-    {StrL("MIT"), StrL("mit"), 0, false},
-    {StrL("Stanford"), StrL("stanford"), 0, false},
-    {StrL("Oxford"), StrL("oxford"), 0, false},
-    {StrL("Cambridge"), StrL("cambridge"), 0, false},
+    {StrL("Harvard University"), StrL("Harvard University"), 0, false,
+     IconName::None},
+    {StrL("MIT"), StrL("MIT"), 0, false, IconName::None},
+    {StrL("Stanford"), StrL("Stanford"), 0, false, IconName::None},
+    {StrL("Cambridge"), StrL("Cambridge"), 0, false, IconName::None},
 };
 
 #define COMBO_COUNT(a) (int)(sizeof(a) / sizeof(a[0]))
 
-// One combobox per section, in the order the Rust story renders them.
+// One combobox per section, in the order the Rust story renders them. The
+// four it also has — Custom trigger, Badges, Maximum selections, Pinned
+// items, Rich items and Overflow — all hang off `render_trigger`,
+// `is_item_checked`, `render_item` and `on_will_change`, delegate hooks the
+// port does not have a surface for yet.
 struct ComboSpec {
     const char* id;
     const char* title;
@@ -51,35 +77,44 @@ struct ComboSpec {
     const Str* groups;
     int nGroups;
     bool multiple;
-    bool icon;
+    // Which items start selected, as a bit per index.
+    unsigned selected;
+    // check_icon(Icon::new(IconName::CircleCheck)).
+    IconName checkIcon;
 };
 
 static const ComboSpec kSpecs[] = {
     {"basic", "Default", "Search and choose one option.", "Select framework...",
-     kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0, false, false},
+     kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0, false, 0,
+     IconName::Check},
     {"basic-multi", "Multiple", "Select more than one option.",
      "Select frameworks...", kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0,
-     true, false},
+     true, 0, IconName::Check},
     {"grouped", "Groups", "Organize results into groups.", "Select item...",
-     kFruits, COMBO_COUNT(kFruits), kFruitGroups, 2, false, false},
+     kFoods, COMBO_COUNT(kFoods), kFoodGroups, 3, false, 1u << 0,
+     IconName::Check},
     {"disabled-items", "Disabled items", "Keep unavailable options visible.",
      "Select item...", kDisabledItems, COMBO_COUNT(kDisabledItems), nullptr, 0,
-     false, false},
+     false, 0, IconName::Check},
     {"with-icon", "Icons", "Show icons in options and the trigger.",
      "Select industry category", kIndustries, COMBO_COUNT(kIndustries), nullptr,
-     0, false, true},
-    {"footer", "Cleanable", "Clear the value from the trigger.",
+     0, false, 0, IconName::Check},
+    {"custom-check", "Check icon", "Replace the default selection mark.",
+     "Select framework...", kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0,
+     false, 0, IconName::CircleCheck},
+    {"with-footer", "Footer", "Add an action below the option list.",
      "Select university", kUniversities, COMBO_COUNT(kUniversities), nullptr, 0,
-     false, false},
-    {"count", "Count", "Summarize selections as a count.", "Select frameworks",
-     kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0, true, false},
+     false, 1u << 0, IconName::Check},
+    {"multi-count", "Count", "Summarize selections as a count.",
+     "Select frameworks", kMultiFrameworks, COMBO_COUNT(kMultiFrameworks),
+     nullptr, 0, true, 0x3f, IconName::Check},
 };
 static const int kNSpecs = (int)(sizeof(kSpecs) / sizeof(kSpecs[0]));
 
 struct ComboboxStory {
     // One list per combobox: the items, the query, the selection and whether
     // it is open are all its own.
-    Entity<component::SearchableListState> combo[8] = {};
+    Entity<component::SearchableListState> combo[kNSpecs] = {};
     InputState query;
     bool seeded = false;
 
@@ -133,13 +168,15 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
         for (int i = 0; i < kNSpecs; i++) {
             self->combo[i] =
                 EntityNewState<component::SearchableListState>(cx->app);
-        }
-        // The grouped section opens with a value picked, as the Rust story
-        // does.
-        component::SearchableListState* grouped = self->combo[2].Get(cx);
-        if (grouped) {
-            grouped->selected[0] = 0;
-            grouped->nSelected = 1;
+            component::SearchableListState* s = self->combo[i].Get(cx);
+            if (!s) {
+                continue;
+            }
+            for (int k = 0; k < kSpecs[i].count; k++) {
+                if (kSpecs[i].selected & (1u << k)) {
+                    s->selected[s->nSelected++] = k;
+                }
+            }
         }
     }
     if (self->query.focused) {
@@ -152,12 +189,14 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     for (int i = 0; i < kNSpecs; i++) {
         const ComboSpec& s = kSpecs[i];
         El* sec = StorySection(cx, s.title, s.description);
+        StorySectionBody(sec)->W(280);
         component::Combobox* cb =
             component::Combobox::New(cx, Str(s.id), self->combo[i],
                                      &self->query)
                 ->Items(s.items, s.count)
                 ->Placeholder(Str(s.placeholder))
                 ->SearchPlaceholder(StrL("Search…"))
+                ->CheckIcon(s.checkIcon)
                 ->W(280)
                 ->OnQueryFocus(Listen(cx, &FocusQuery))
                 ->OnToggle(ListenerArg(toggle, (intptr_t)i))
@@ -168,25 +207,25 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
         if (s.multiple) {
             cb->Multiple();
         }
-        if (s.icon) {
-            cb->Icon(IconName::Building2);
-        }
-        if (i == 5) {
-            cb->Cleanable();
-        }
+        // Rust's Icons section draws the *selected* item's icon before the
+        // label and keeps its caret; Combobox::Icon here replaces the caret,
+        // which is not the same thing, so the trigger is left alone and only
+        // the rows carry icons.
         StorySectionAdd(sec, cb->IntoEl());
         page->Child(sec);
     }
 
     // The last section reads back what each list holds.
     El* values =
-        StorySection(cx, "Values", "Read selected values from each list.");
-    El* valueCol = Div(a)->FlexCol()->W(280)->Gap(8);
-    for (int i = 0; i < 3; i++) {
+        StorySection(cx, "Values", "Read selected values from each delegate.");
+    El* valueCol = Div(a)->FlexCol()->W(kFill)->Gap(8);
+    static const int kShown[] = {0, 2, 7};
+    for (int k = 0; k < 3; k++) {
+        int i = kShown[k];
         component::SearchableListState* s = self->combo[i].Get(cx);
-        Str line = StoryFmt(cx, "%s: None", kSpecs[i].id);
+        Str line = StoryFmt(cx, "%s: []", kSpecs[i].id);
         if (s && s->nSelected == 1) {
-            line = StoryFmt(cx, "%s: Some(\"%s\")", kSpecs[i].id,
+            line = StoryFmt(cx, "%s: [\"%s\"]", kSpecs[i].id,
                             kSpecs[i].items[s->selected[0]].title);
         } else if (s && s->nSelected > 1) {
             line = StoryFmt(cx, "%s: %d selected", kSpecs[i].id, s->nSelected);

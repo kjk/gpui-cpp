@@ -23,6 +23,8 @@ struct Combobox {
     Str empty = {};
     // An optional icon before the title, as the icons story shows.
     IconName icon = IconName::None;
+    // Combobox::check_icon: what marks a selected row.
+    IconName checkIcon = IconName::Check;
     float width = 280;
     float menuMaxH = 0;
     bool disabled = false;
@@ -41,6 +43,7 @@ struct Combobox {
     Combobox* SearchPlaceholder(Str s);
     Combobox* Empty(Str s);
     Combobox* Icon(IconName n);
+    Combobox* CheckIcon(IconName n);
     Combobox* W(float v);
     Combobox* MenuMaxH(float v);
     Combobox* Disabled(bool v);
