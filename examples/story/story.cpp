@@ -843,7 +843,9 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
         cx->win->input = &app->search;
     }
     const Theme& th = cx->theme();
-    El* root = Div(frame)->FlexCol()->SizeFull()->Bg(th.background);
+    // The window's outermost view is a Root, which is what Rust puts under
+    // every window: the page, and over it the layers the window owns.
+    El* root = Div(frame)->FlexCol()->SizeFull();
     if (cx->win->opts.clientTitleBar) {
         root->Child(StoryTitleBar(cx));
     }
@@ -876,7 +878,12 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     }
     root->Child(body);
     root->Child(Footer(app, cx));
-    return root;
+    // Bordered only where the window is client-decorated; a system frame
+    // draws its own, and Rust's window_border is the Linux CSD wrapper.
+    return component::Root::New(cx)
+        ->Bordered(cx->win->opts.clientTitleBar)
+        ->Child(root)
+        ->IntoEl();
 }
 
 static void OnUnhandledClick(StoryApp* app, Ctx* cx, const ClickEvent* ev) {
