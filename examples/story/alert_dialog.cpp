@@ -19,7 +19,6 @@ struct AlertDialogStory {
     int open = -1;
 
     static El* Render(AlertDialogStory* self, Ctx* cx);
-    static void OnKey(AlertDialogStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void OpenAlert(AlertDialogStory* self, Ctx* cx, const ClickEvent*,
@@ -222,8 +221,11 @@ static component::Dialog* Alert(AlertDialogStory* self, Ctx* cx) {
                 ->FooterStretch()
                 ->FooterMuted();
         case AlertKeyboard:
-            // keyboard(false): Esc is ignored, and there is nothing to cancel.
-            return d->Title(StrL("Important Notice"))
+            // keyboard(false): Esc is ignored, and there is nothing to
+            // cancel. Rust hangs the key context off the flag, so the alert
+            // simply does not declare it and neither binding exists.
+            return d->Keyboard(false)
+                ->Title(StrL("Important Notice"))
                 ->Description(StrL("Please read this important notice "
                                    "carefully before proceeding."))
                 ->OkText(StrL("Got It"));
@@ -274,18 +276,4 @@ El* AlertDialogStory::Render(AlertDialogStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, except the alert that turns keyboard
-// dismissal off and the one whose callbacks refuse to close.
-void AlertDialogStory::OnKey(AlertDialogStory* self, Ctx* cx,
-                             const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
-        return;
-    }
-    if (self->open == AlertKeyboard || self->open == AlertPreventClose) {
-        return;
-    }
-    self->open = -1;
-    Notify(cx);
-}
-
-STORY_PAGE_KEYS(StoryAlertDialog, AlertDialogStory);
+STORY_PAGE(StoryAlertDialog, AlertDialogStory);

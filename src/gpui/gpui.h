@@ -2371,6 +2371,8 @@ struct Window {
     // The focus trap a container asked to hold focus this frame, settled
     // after the focusables are collected. 0 when nothing asked.
     int pendingTrap = 0;
+    // The trap container's own focus id, for a trap that holds no tab stop.
+    int pendingTrapHost = 0;
     Vec<KeyedSlot> keyed;
     // The frame's key contexts and action handlers, in tree order.
     Vec<DispatchNode> dispatch;

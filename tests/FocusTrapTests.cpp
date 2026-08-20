@@ -123,7 +123,6 @@ static void ATrapIsNamedNotNumbered() {
     utassert(FocusTrapId(StrL("dialog")) != 0);
 }
 
-
 // FocusHandle::tab_stop(false): still focusable, still shows its ring when it
 // is clicked, simply not somewhere Tab stops. An input's clear button and a
 // dock tab bar's tools are what Rust turns it off for.
@@ -152,6 +151,39 @@ static void ATrapOfNonStopsLeavesFocusAlone() {
     // Nor does arming the trap put focus on one of them.
     win->focusId = 1;
     utassert(!FocusTrapEnter(win, 7));
+    utassert(win->focusId == 1);
+    delete win;
+}
+
+// A dialog that is all text: the trap holds nothing that takes tab, so the
+// container itself is what focus goes to — Rust tracks focus on the trap
+// container, which is what leaves such a dialog able to hear escape.
+static void ATrapWithNoStopFallsBackToItsOwnContainer() {
+    int ids[] = {1, 7, 12};
+    int traps[] = {0, 7, 7};
+    Window* win = WindowWithFocusables(ids, traps, 3);
+    // The container tracks focus without taking tab, and so does the one
+    // control inside it.
+    win->focusEls[1].tabStop = false;
+    win->focusEls[2].tabStop = false;
+
+    win->focusId = 1;
+    FocusTrapArm(win, 7, 7);
+    FocusTrapApplyPending(win);
+    utassert(win->focusId == 7);
+
+    // With a real stop in it, the stop wins and the container is skipped.
+    win->focusEls[2].tabStop = true;
+    win->focusId = 1;
+    FocusTrapArm(win, 7, 7);
+    FocusTrapApplyPending(win);
+    utassert(win->focusId == 12);
+
+    // A host that is not on screen leaves focus where it was.
+    win->focusEls[2].tabStop = false;
+    win->focusId = 1;
+    FocusTrapArm(win, 7, 99);
+    FocusTrapApplyPending(win);
     utassert(win->focusId == 1);
     delete win;
 }
@@ -195,5 +227,6 @@ void TestFocusTrap() {
     ATrapIsNamedNotNumbered();
     TabSkipsWhatIsNotAStop();
     ATrapOfNonStopsLeavesFocusAlone();
+    ATrapWithNoStopFallsBackToItsOwnContainer();
     TheTabIndexGroupsTheTraversal();
 }

@@ -48,14 +48,16 @@ bool FocusTrapEnter(Window* win, int trapId, bool backward) {
     return false;
 }
 
-void FocusTrapArm(Window* win, int trapId) {
+void FocusTrapArm(Window* win, int trapId, int hostFocusId) {
     if (win) {
         win->pendingTrap = trapId;
+        win->pendingTrapHost = hostFocusId;
     }
 }
 
 void FocusTrapApplyPending(Window* win) {
     int trap = win->pendingTrap;
+    int host = win->pendingTrapHost;
     if (!trap) {
         return;
     }
@@ -64,7 +66,18 @@ void FocusTrapApplyPending(Window* win) {
     if (FocusTrapActive(win) == trap) {
         return;
     }
-    FocusTrapEnter(win, trap);
+    if (FocusTrapEnter(win, trap) || !host) {
+        return;
+    }
+    // Nothing in it takes tab — a dialog that is all text. Rust tracks focus
+    // on the trap's own container, so focus goes there rather than staying
+    // outside, which is what leaves such a dialog able to hear escape.
+    for (int i = 0; i < win->focusEls.len; i++) {
+        if (win->focusEls[i].id == host) {
+            WindowSetFocusId(win, host);
+            return;
+        }
+    }
 }
 
 } // namespace gpui

@@ -1,22 +1,89 @@
 #include "base/dialog.h"
 #include "base/element_ext.h"
 #include "base/focus_trap.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
-DialogAction DialogActionForKey(int key, bool keyboard) {
-    // Rust hangs the key context off `keyboard`, so the bindings do not exist
-    // at all for a dialog that turned it off.
-    if (!keyboard) {
-        return DialogAction::None;
+Str DialogContext() {
+    return StrL("Dialog");
+}
+
+void DialogInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
     }
-    if (key == KeyEscape) {
+    bound = KeymapGeneration();
+    const char* ctx = "Dialog";
+    KeyBinding bindings[] = {
+        {"escape", action::Cancel(), ctx},
+        {"enter", action::Confirm(), ctx},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+DialogAction DialogActionOf(uint32_t id) {
+    if (id == action::Cancel()) {
         return DialogAction::Cancel;
     }
-    if (key == KeyReturn) {
+    if (id == action::Confirm()) {
         return DialogAction::Confirm;
     }
     return DialogAction::None;
+}
+
+void DialogKeys::OnAction(DialogKeys* self, Ctx* cx, const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    Listener l = {};
+    switch (DialogActionOf(ev->action)) {
+        case DialogAction::Cancel:
+            l = self->onCancel.IsValid() ? self->onCancel : self->onClose;
+            break;
+        case DialogAction::Confirm:
+            l = self->onOk;
+            break;
+        default:
+            break;
+    }
+    if (!l.IsValid()) {
+        // Nothing to run. Rust's handler still consumes the keystroke — the
+        // dialog is modal — so this does too, rather than propagating into
+        // whatever is behind the backdrop.
+        return;
+    }
+    // `let event = ClickEvent::default(); confirm(&event, window, cx)`: the
+    // keyboard runs the same handler the button does.
+    ClickEvent click = {};
+    ListenerCall(cx->app, cx->win, l, &click);
+}
+
+void DialogBindKeys(Ctx* cx, El* popup, Str name, Listener onCancel,
+                    Listener onOk, Listener onClose) {
+    if (!cx || !popup) {
+        return;
+    }
+    DialogInitKeys();
+    Entity<DialogKeys> keys =
+        KeyedEntity<DialogKeys>(cx, (uint32_t)HashClickId(name));
+    if (DialogKeys* k = keys.Get(cx)) {
+        k->onCancel = onCancel;
+        k->onOk = onOk;
+        k->onClose = onClose;
+    }
+    // track_focus(&self.focus): the host is focusable so that a dialog with
+    // nothing focusable inside it still has somewhere for focus to be — and
+    // not a tab stop, so Tab still visits the controls rather than the box
+    // around them.
+    Listener onAction = ListenTo(keys, &DialogKeys::OnAction);
+    popup->KeyContext(DialogContext())
+        ->FocusId(HashClickId(name))
+        ->TabStop(false)
+        ->OnAction(action::Cancel(), onAction)
+        ->OnAction(action::Confirm(), onAction);
 }
 
 bool DialogBackdropCloses(bool overlayClosable, bool topmost,
@@ -89,7 +156,9 @@ Dialog* Dialog::Popup(El* popup) {
         // dialog reaches its own controls and nothing behind it.
         int id = FocusTrapId(trap);
         popup->TrapId(id);
-        FocusTrapArm(cx->win, id);
+        // The popup is also the host DialogBindKeys made focusable, under the
+        // same name, so a dialog with no control in it still takes the focus.
+        FocusTrapArm(cx->win, id, id);
         root->Child(popup);
     }
     return this;
