@@ -1419,10 +1419,67 @@ Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
     return size;
 }
 
+bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
+                 int off, float* outX, float* outY, float* outH, bool mono,
+                 float lineHeight) {
+    if (!ctx) {
+        return false;
+    }
+    // An empty line has no layout to measure, and asking for one would fail;
+    // the only point in it is its start.
+    if (s.len <= 0) {
+        *outX = 0;
+        *outY = 0;
+        *outH = fontSize;
+        return true;
+    }
+    uint8_t weight = mono ? (uint8_t)kFontMono : (uint8_t)0;
+    if (off < 0) {
+        off = 0;
+    }
+    if (off > s.len) {
+        off = s.len;
+    }
+    TextLayout* tl = TextMeasLayout(ctx, s, fontSize, maxW, wrap, weight,
+                                    lineHeight, nullptr);
+    if (!tl) {
+        return false;
+    }
+    Bounds r[32] = {};
+    bool ok = false;
+    if (s.len == 0) {
+        *outX = 0;
+        *outY = 0;
+        *outH = fontSize;
+        ok = true;
+    } else if (off > 0) {
+        // The trailing edge of everything before it, the way the caret is
+        // placed.
+        int n = TextLayoutRangeRects(tl, s, 0, off, r, 32);
+        if (n > 0) {
+            *outX = r[n - 1].x + r[n - 1].w;
+            *outY = r[n - 1].y;
+            *outH = r[n - 1].h;
+            ok = true;
+        }
+    } else {
+        int n = TextLayoutRangeRects(tl, s, 0, s.len, r, 32);
+        if (n > 0) {
+            *outX = r[0].x;
+            *outY = r[0].y;
+            *outH = r[0].h;
+            ok = true;
+        }
+    }
+    TextLayoutRelease(tl);
+    return ok;
+}
+
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
-                float relX, float relY) {
-    TextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr);
+                float relX, float relY, bool mono, float lineHeight) {
+    TextLayout* layout = TextMeasLayout(ctx, s, fontSize, maxW, wrap,
+                                        mono ? (uint8_t)kFontMono : (uint8_t)0,
+                                        lineHeight, nullptr);
     if (!layout) {
         return 0;
     }

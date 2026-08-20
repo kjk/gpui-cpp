@@ -61,6 +61,7 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
     float lineMult = kInputLineH / font;
     state->lastLineH = kInputLineH;
+    state->lastMono = style.mono;
     Str text = InputValue(state);
     bool masked = style.mask || state->masked;
     // show_cursor: focused, not disabled, and this half of the blink is the
@@ -145,14 +146,22 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
     float lineMult = kInputLineH / font;
     state->lastLineH = kInputLineH;
+    state->lastMono = style.mono;
     Str text = InputValue(state);
     bool caret =
         state->focused && !state->disabled && BlinkVisible(cx, state->blink);
     int cursor = InputCursor(state);
     Selection sel = state->selectedRange;
 
+    // soft_wrap: a row is as tall as the wrapped text in it rather than one
+    // line, so the map of where the rows are cannot be arithmetic.
+    bool wrap = state->softWrap;
     El* col = Div(a)->FlexCol()->W(kFill)->BindInput(state);
+    if (wrap) {
+        col->BoundsOut(&state->contentBox);
+    }
     if (text.len == 0) {
+        state->rowBoxes.Clear();
         if (caret) {
             col->Caret(0, style.caret);
         }
@@ -167,8 +176,28 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     }
 
     int rows = RopeLinesLen(text);
-    // The scrolled height, which is what scroll_to clamps against.
+    // The scrolled height, which is what scroll_to clamps against. A wrapping
+    // editor takes it off the box the rows were laid out in last frame, since
+    // nothing here can tell how many times a line will break; until there is
+    // one, a line apiece is the estimate.
     state->contentH = (float)rows * kInputLineH;
+    if (wrap && state->contentBox.h > 0) {
+        state->contentH = state->contentBox.h;
+    }
+    // The boxes the rows will report into. Sized here, before any of them is
+    // built, so the pointers handed out stay put for the frame. The values
+    // are last frame's until this frame paints — clearing them would leave
+    // every reader with zeros for the length of a frame.
+    if (!wrap) {
+        state->rowBoxes.Clear();
+    } else if (state->rowBoxes.len != rows) {
+        state->rowBoxes.Clear();
+        if (Bounds* slots = state->rowBoxes.AppendBlanks(rows)) {
+            for (int i = 0; i < rows; i++) {
+                slots[i] = Bounds{};
+            }
+        }
+    }
     float numW = 0;
     if (lineNumbers) {
         numW = 12.f + 7.f * (rows >= 100 ? 3 : (rows >= 10 ? 2 : 1));
@@ -234,7 +263,13 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             }
         }
         if (state->softWrap) {
+            // flex_1: the run is bounded by what the gutter leaves, so it
+            // breaks at the text column's edge and its second line starts
+            // under its first rather than under the line number.
             el->Wrap();
+            if (lineNumbers) {
+                el->Grow();
+            }
         }
         // The first row is the one the state measures against; every row below
         // it is a whole lastLineH further down.
@@ -279,15 +314,30 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             }
         }
         if (!lineNumbers) {
+            El* only = el;
             if (guides) {
-                col->Child(
-                    Div(a)->W(kFill)->H(kInputLineH)->Child(guides)->Child(el));
-                continue;
+                only = Div(a)->W(kFill)->Child(guides)->Child(el);
+                if (!wrap) {
+                    only->H(kInputLineH);
+                }
             }
-            col->Child(el);
+            if (wrap && row < state->rowBoxes.len) {
+                only->BoundsOut(&state->rowBoxes[row]);
+            }
+            col->Child(only);
             continue;
         }
-        El* band = Div(a)->FlexRow()->W(kFill)->H(kInputLineH)->Gap(8);
+        El* band = Div(a)->FlexRow()->W(kFill)->Gap(8);
+        if (wrap) {
+            // A wrapped row is as tall as its own text, and its line number
+            // sits at the top of it rather than in the middle.
+            band->MinH(kInputLineH)->ItemsStart();
+            if (row < state->rowBoxes.len) {
+                band->BoundsOut(&state->rowBoxes[row]);
+            }
+        } else {
+            band->H(kInputLineH);
+        }
         // active_line: the wash under the row the caret is on, gutter and all.
         if (row == caretRow) {
             band->Bg(style.activeLine);
@@ -301,7 +351,11 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         }
         band->Child(Div(a)->W(numW)->JustifyEnd()->Child(num));
         if (guides) {
-            band->Child(Div(a)->Grow()->H(kFill)->Child(guides)->Child(el));
+            El* pane = Div(a)->Grow()->Child(guides)->Child(el);
+            if (!wrap) {
+                pane->H(kFill);
+            }
+            band->Child(pane);
         } else {
             band->Child(el);
         }
@@ -590,6 +644,9 @@ static void PauseBlink(InputState* s, App* app, Window* win) {
 static void UpdatePreferredColumn(InputState* s) {
     s->preferredColumn = RopeOffsetToPoint(InputValue(s), InputCursor(s))
                              .column;
+    // The x a display-row walk aims at only survives the walk, so any other
+    // move drops it. MoveVertical puts its own back afterwards.
+    s->preferredX = -1;
 }
 
 // RIGHT_MARGIN: how much of the run stays visible past the caret when the
@@ -653,7 +710,13 @@ void InputScrollToCursor(InputState* s, InputMoveDir dir) {
     }
     float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
     int row = RopeOffsetToPoint(InputValue(s), InputCursor(s)).row;
-    InputScrollToCaret(s, s->caretX, (float)row * lineH, dir);
+    // Where that row actually starts: a wrapping editor's rows are uneven, so
+    // the arithmetic only holds when nothing wrapped.
+    float caretY = (float)row * lineH;
+    if (row < s->rowBoxes.len && s->rowBoxes.len > 0) {
+        caretY = s->rowBoxes[row].y - s->rowBoxes[0].y;
+    }
+    InputScrollToCaret(s, s->caretX, caretY, dir);
 }
 
 void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
@@ -1172,11 +1235,88 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
 
 // move_vertical, on logical lines. Rust walks the display map so a soft-wrapped
 // row counts as its own line; without one, a wrapped line moves as a whole.
+// How tall a logical line was laid out. The rows reported their boxes last
+// frame; without them every line is one row high.
+static float DisplayLineH(const InputState* s, int row, float lineH) {
+    if (row >= 0 && row < s->rowBoxes.len && s->rowBoxes[row].h > 0) {
+        return s->rowBoxes[row].h;
+    }
+    return lineH;
+}
+
+// display_map.rs: an arrow walks *display* rows, so a wrapped line takes as
+// many presses to cross as it has visual rows. The caret's point comes off
+// the shaped run, the walk moves it a row at a time through the lines around
+// it, and the point maps back to an offset. False when there is nothing laid
+// out to measure against, which leaves the logical-line walk below.
+static bool MoveVerticalDisplay(InputState* s, App* app, Window* win, int lines,
+                                Str t) {
+    if (!win || !s->softWrap) {
+        return false;
+    }
+    PaintCtx* ctx = &win->paint;
+    float maxW = s->lastBounds.w;
+    float font = s->lastFont;
+    float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
+    if (maxW <= 0 || font <= 0 || lineH <= 0) {
+        return false;
+    }
+    int cursor = InputCursor(s);
+    RopePoint p = RopeOffsetToPoint(t, cursor);
+    Str line = RopeSliceLine(t, p.row);
+    int start = RopeLineStartOffset(t, p.row);
+    float cx = 0, cy = 0, ch = lineH;
+    float lineMult = lineH / font;
+    if (!TextPointAt(ctx, line, font, maxW, true, cursor - start, &cx, &cy, &ch,
+                     s->lastMono, lineMult)) {
+        return false;
+    }
+    // The x the whole walk aims at, so crossing a short row and coming back
+    // lands where it started.
+    float wantX = s->preferredX >= 0 ? s->preferredX : cx;
+    int maxRow = RopeLinesLen(t) - 1;
+    int row = p.row;
+    float y = cy + (float)lines * lineH;
+    while (y < 0 && row > 0) {
+        row--;
+        y += DisplayLineH(s, row, lineH);
+    }
+    float h = DisplayLineH(s, row, lineH);
+    while (y >= h && row < maxRow) {
+        y -= h;
+        row++;
+        h = DisplayLineH(s, row, lineH);
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    // Aim at the middle of the visual row rather than at its top edge: a hit
+    // test exactly on the boundary between two rows could answer either.
+    y = ((float)(int)(y / lineH) + 0.5f) * lineH;
+    if (y > h - 1) {
+        y = h - 1;
+    }
+    Str target = RopeSliceLine(t, row);
+    int targetStart = RopeLineStartOffset(t, row);
+    int offset = targetStart;
+    if (target.len > 0) {
+        offset += TextIndexAt(ctx, target, font, maxW, true, wantX, y,
+                              s->lastMono, lineMult);
+    }
+    PauseBlink(s, app, win);
+    InputMoveTo(s, app, win, offset);
+    s->preferredX = wantX;
+    return true;
+}
+
 static void MoveVertical(InputState* s, App* app, Window* win, int lines) {
     if (InputIsSingleLine(s)) {
         return;
     }
     Str t = InputValue(s);
+    if (MoveVerticalDisplay(s, app, win, lines, t)) {
+        return;
+    }
     RopePoint p = RopeOffsetToPoint(t, InputCursor(s));
     int column = s->preferredColumn >= 0 ? s->preferredColumn : p.column;
     int maxRow = RopeLinesLen(t) - 1;
@@ -1657,16 +1797,37 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
         if (x <= b.x) {
             return 0;
         }
-        return TextIndexAt(ctx, t, font, 0, false, x - b.x, 0);
+        return TextIndexAt(ctx, t, font, 0, false, x - b.x, 0, s->lastMono);
     }
     float lineH = s->lastLineH > 0 ? s->lastLineH : b.h;
     int rows = RopeLinesLen(t);
-    int row = lineH > 0 ? (int)((y - b.y) / lineH) : 0;
-    if (row < 0) {
-        row = 0;
-    }
-    if (row > rows - 1) {
+    int row = 0;
+    // How far down its own row the press landed, which is which of a wrapped
+    // line's visual rows it wanted.
+    float relY = 0;
+    if (s->rowBoxes.len == rows && rows > 0) {
+        // The rows are uneven, so the one under the press is found by walking
+        // them rather than by dividing.
         row = rows - 1;
+        for (int i = 0; i < rows; i++) {
+            const Bounds& rb = s->rowBoxes[i];
+            if (y < rb.y + rb.h) {
+                row = i > 0 ? i : 0;
+                break;
+            }
+        }
+        relY = y - s->rowBoxes[row].y;
+        if (relY < 0) {
+            relY = 0;
+        }
+    } else {
+        row = lineH > 0 ? (int)((y - b.y) / lineH) : 0;
+        if (row < 0) {
+            row = 0;
+        }
+        if (row > rows - 1) {
+            row = rows - 1;
+        }
     }
     Str line = RopeSliceLine(t, row);
     int start = RopeLineStartOffset(t, row);
@@ -1674,7 +1835,8 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
         return start;
     }
     return start + TextIndexAt(ctx, line, font, s->softWrap ? b.w : 0,
-                               s->softWrap, x - b.x, 0);
+                               s->softWrap, x - b.x, relY, s->lastMono,
+                               s->lastLineH > 0 ? s->lastLineH / font : 0);
 }
 
 /* Port of crates/base/src/input/base/mask_pattern.rs.

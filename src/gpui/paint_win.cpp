@@ -783,16 +783,31 @@ static void ApplyLineHeight(IDWriteTextLayout* layout, float fontSize,
     if (!layout || fontSize <= 0) {
         return;
     }
-    DWRITE_LINE_METRICS lm = {};
+    // Every line of one layout has the same metrics, so only the first is
+    // wanted — but DirectWrite answers a buffer shorter than the line count
+    // with E_NOT_SUFFICIENT_BUFFER and writes nothing, so a wrapped run has
+    // to be asked for in full. Without this the spacing was left alone on
+    // exactly the runs that have more than one line, and a wrapped paragraph
+    // came out at the font's natural leading instead of GPUI's phi box.
     UINT32 n = 0;
-    // Returns E_NOT_SUFFICIENT_BUFFER past the first line, which still fills
-    // it; every line has the same metrics here, so one is enough.
-    layout->GetLineMetrics(&lm, 1, &n);
-    if (n == 0 || lm.height <= 0) {
+    layout->GetLineMetrics(nullptr, 0, &n);
+    if (n == 0) {
+        return;
+    }
+    enum {
+        kMaxLines = 256
+    };
+    if (n > kMaxLines) {
+        n = kMaxLines;
+    }
+    DWRITE_LINE_METRICS lm[kMaxLines] = {};
+    UINT32 got = 0;
+    if (FAILED(layout->GetLineMetrics(lm, n, &got)) || got == 0 ||
+        lm[0].height <= 0) {
         return;
     }
     float box = fontSize * (mult > 0 ? mult : kLineHeight);
-    float baseline = lm.baseline + (box - lm.height) * 0.5f;
+    float baseline = lm[0].baseline + (box - lm[0].height) * 0.5f;
     layout->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, box, baseline);
 }
 
