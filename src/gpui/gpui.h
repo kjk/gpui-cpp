@@ -747,6 +747,7 @@ enum class IconName : uint8_t {
     Building2,
     Asterisk,
     Sun,
+    Moon,
     Maximize,
     Minimize,
     Map,

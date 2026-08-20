@@ -1525,9 +1525,9 @@ static void LayoutImage(PaintCtx* ctx, El* e, float wSpec, float hSpec,
     (void)inheritFg;
     Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
     if (!img) {
-        Size text = MeasureText(ctx, e->text, font, availW > 0 ? availW : 0,
-                                e->style.wrap, ElTextWeight(e),
-                                e->style.lineHeight);
+        Size text =
+            MeasureText(ctx, e->text, font, availW > 0 ? availW : 0,
+                        e->style.wrap, ElTextWeight(e), e->style.lineHeight);
         e->w = wSpec > 0 ? wSpec : text.w;
         e->h = hSpec > 0 ? hSpec : text.h;
         return;
@@ -2469,6 +2469,11 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(6, 8, 18, 16);
             line(18, 8, 6, 16);
             break;
+        case IconName::Moon:
+            // The fallback has no arcs to cut a crescent with, so the moon
+            // is its disc. moon.svg is the real one.
+            ring(12, 12, s * 0.34f, s * 0.34f);
+            break;
         case IconName::Sun:
             ring(12, 12, s * 0.16f, s * 0.16f);
             line(12, 3, 12, 6);
@@ -3171,10 +3176,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             ImageDraw(ctx, img, e->Bounds());
         } else if (e->text.s && e->text.len > 0) {
             // The alt text, in the color the text around it uses.
-            float font = e->laidFont > 0 ? e->laidFont
-                                         : (e->style.fontSize > 0
-                                                ? e->style.fontSize
-                                                : 14.f);
+            float font =
+                e->laidFont > 0
+                    ? e->laidFont
+                    : (e->style.fontSize > 0 ? e->style.fontSize : 14.f);
             Rgba c = e->style.hasColor ? e->style.color : ThemeNow().mutedFg;
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c, false,
                        e->style.wrap, e->laidMaxW, ElTextWeight(e),
@@ -3913,4 +3918,3 @@ int FocusNext(Window* win, int trapId, bool backward) {
     return win->focusId;
 }
 } // namespace gpui
-
