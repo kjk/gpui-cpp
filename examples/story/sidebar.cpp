@@ -203,6 +203,14 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
             }
         } else if (i == 1) {
             item->Suffix(IconEl(a, IconName::Settings2, 16));
+            // context_menu(..): the row's own right-click actions, which the
+            // Rust story hangs off this item too.
+            item->ContextMenu(
+                component::PopupMenu::New(cx, StrL("sidebar-project-menu"))
+                    ->Menu(StrL("Rename"))
+                    ->Menu(StrL("Duplicate"))
+                    ->Separator()
+                    ->Menu(StrL("Delete")));
         }
         projects->Child(item);
     }
