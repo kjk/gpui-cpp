@@ -2213,6 +2213,18 @@ Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*)) {
     return l;
 }
 
+// The same fill-me-in handler as the third Listen above, bound to another
+// entity: the component supplies the value — which menu row was taken —
+// rather than the caller having captured one.
+template <typename T, typename E>
+Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t)) {
+    Listener l;
+    l.fn = (void*)fn;
+    l.view = e.id;
+    l.hasArg = true;
+    return l;
+}
+
 template <typename T, typename E>
 Listener ListenTo(Entity<T> e, void (*fn)(T*, Ctx*, const E*, intptr_t),
                   intptr_t arg) {

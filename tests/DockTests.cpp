@@ -142,6 +142,83 @@ static void ARootGroupStays() {
     utassert(s.left.node == node);
 }
 
+// insert_panel_at: a drop that landed on a tab takes that tab's place in the
+// row, which is what reorders a group's own tabs.
+static void ADropOnATabTakesItsPlace() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    // The second tab of A dropped on the first: it goes in front of it.
+    utassert(DockMovePanelTo(&s, 1, a, DockDrop::Center, 0));
+    utassert(s.nodes[a].nPanel == 2);
+    utassert(s.nodes[a].panel[0] == 1);
+    utassert(s.nodes[a].panel[1] == 0);
+    // insert_panel_at ends with set_active_ix: what was dropped is showing.
+    utassert(s.nodes[a].activeIx == 0);
+
+    // A panel from another group inserted at a place in this one.
+    utassert(DockMovePanelTo(&s, 2, a, DockDrop::Center, 1));
+    utassert(s.nodes[a].nPanel == 3);
+    utassert(s.nodes[a].panel[1] == 2);
+    utassert(DockNodeOfPanel(&s, 2) == a);
+    // Its old group emptied and left the split, so the split is gone with it.
+    utassert(!s.nodes[b].used);
+}
+
+// The index is worked out before the panel is detached, which is Rust's
+// order: a tab dragged rightwards inside its own row lands one place short of
+// where it was let go.
+static void AReorderCountsFromBeforeTheDetach() {
+    DockState s;
+    for (int i = 0; i < 4; i++) {
+        DockPanelDef def;
+        def.title = StrL("panel");
+        DockAddPanelDef(&s, def);
+    }
+    int node = DockNewTabs(&s);
+    for (int i = 0; i < 4; i++) {
+        DockTabsAdd(&s, node, i);
+    }
+    s.center = node;
+    // The first tab dropped on the third: 0 comes out, and 2 is where 3 was.
+    utassert(DockMovePanelTo(&s, 0, node, DockDrop::Center, 2));
+    utassert(s.nodes[node].panel[0] == 1);
+    utassert(s.nodes[node].panel[1] == 2);
+    utassert(s.nodes[node].panel[2] == 0);
+    utassert(s.nodes[node].panel[3] == 3);
+}
+
+// The two same-group rules: a drop with no tab named is nothing, and a group
+// of one dropped on its own edge is the layout it already has.
+static void ADropOnItsOwnGroupNeedsATabOrAnEdge() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    utassert(!DockMovePanelTo(&s, 0, a, DockDrop::Center));
+    // B holds one panel, so splitting it with itself is refused.
+    utassert(!DockMovePanelTo(&s, 2, b, DockDrop::Right));
+    // A holds two, so one of them can split it.
+    utassert(DockMovePanelTo(&s, 1, a, DockDrop::Right));
+}
+
+// Which Dock a node belongs to, which is what a click on a collapsed one has
+// to know before it can open it again.
+static void ANodeKnowsWhichDockItIsIn() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    int side = DockNewTabs(&s);
+    s.bottom.node = side;
+    utassert(DockPlacementOfNode(&s, a) == DockPlacement::Center);
+    utassert(DockPlacementOfNode(&s, side) == DockPlacement::Bottom);
+    // A group inside a split inside a Dock is still in that Dock.
+    int inner = DockNewTabs(&s);
+    int split = DockNewSplit(&s, Axis::Vertical);
+    DockSplitAdd(&s, split, inner, 100);
+    s.left.node = split;
+    utassert(DockPlacementOfNode(&s, inner) == DockPlacement::Left);
+}
+
 static void ALockedDockMovesNothing() {
     DockState s;
     int a = 0, b = 0;
@@ -158,5 +235,9 @@ void TestDock() {
     ADropOnAnEdgeSplits();
     AnEmptyGroupLeavesTheSplit();
     ARootGroupStays();
+    ADropOnATabTakesItsPlace();
+    AReorderCountsFromBeforeTheDetach();
+    ADropOnItsOwnGroupNeedsATabOrAnEdge();
+    ANodeKnowsWhichDockItIsIn();
     ALockedDockMovesNothing();
 }

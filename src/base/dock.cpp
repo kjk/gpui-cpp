@@ -91,6 +91,27 @@ void DockTabsAdd(DockState* s, int node, int panelIx) {
     n.panel[n.nPanel++] = panelIx;
 }
 
+void DockTabsInsert(DockState* s, int node, int panelIx, int at) {
+    if (node < 0 || node >= kMaxDockNodes || panelIx < 0) {
+        return;
+    }
+    DockNode& n = s->nodes[node];
+    if (n.split || n.nPanel >= kMaxDockPanels) {
+        return;
+    }
+    if (at < 0 || at > n.nPanel) {
+        at = n.nPanel;
+    }
+    for (int i = n.nPanel; i > at; i--) {
+        n.panel[i] = n.panel[i - 1];
+    }
+    n.panel[at] = panelIx;
+    n.nPanel++;
+    // insert_panel_at ends with set_active_ix(ix): what was dropped is what
+    // the group shows.
+    n.activeIx = at;
+}
+
 void DockSplitAdd(DockState* s, int node, int childNode, float size) {
     if (node < 0 || node >= kMaxDockNodes || childNode < 0) {
         return;
@@ -273,7 +294,8 @@ void DockClosePanel(DockState* s, Ctx* cx, int node, int ix) {
     }
 }
 
-bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop) {
+bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
+                     int atIx) {
     if (s->locked || to < 0 || to >= kMaxDockNodes || !s->nodes[to].used) {
         return false;
     }
@@ -281,12 +303,15 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop) {
     if (from < 0) {
         return false;
     }
-    if (from == to && drop == DockDrop::Center) {
+    // `is_same_tab && ix.is_none()`: a panel dropped back on its own group,
+    // with no tab named to put it at, has nowhere to go. A tab named is a
+    // reorder, which is a real move.
+    if (from == to && drop == DockDrop::Center && atIx < 0) {
         return false;
     }
     // A group of one dropped on its own edge would split with itself, which
     // is the layout it already has.
-    if (from == to && s->nodes[from].nPanel <= 1) {
+    if (from == to && drop != DockDrop::Center && s->nodes[from].nPanel <= 1) {
         return false;
     }
     int at = -1;
@@ -302,8 +327,16 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop) {
     DockDetach(s, from, at);
 
     if (drop == DockDrop::Center) {
-        DockTabsAdd(s, to, panelIx);
-        s->nodes[to].activeIx = s->nodes[to].nPanel - 1;
+        if (atIx >= 0) {
+            // Rust inserts at the index the drop named, worked out before the
+            // panel was detached — so dragging a tab rightwards inside its own
+            // group lands it one place short of where it was let go, and this
+            // does the same.
+            DockTabsInsert(s, to, panelIx, atIx);
+        } else {
+            DockTabsAdd(s, to, panelIx);
+            s->nodes[to].activeIx = s->nodes[to].nPanel - 1;
+        }
         DockPrune(s, from);
         return true;
     }
@@ -370,10 +403,36 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop) {
     return true;
 }
 
-void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop) {
-    if (DockMovePanelTo(s, panelIx, to, drop)) {
+void DockMovePanel(DockState* s, Ctx* cx, int panelIx, int to, DockDrop drop,
+                   int atIx) {
+    if (DockMovePanelTo(s, panelIx, to, drop, atIx)) {
         DockEmit(s, cx);
     }
+}
+
+DockPlacement DockPlacementOfNode(const DockState* s, int node) {
+    if (node < 0 || node >= kMaxDockNodes) {
+        return DockPlacement::Center;
+    }
+    // Up to the root of whichever tree it is in, and then which one that was.
+    int root = node;
+    for (int guard = 0; guard < kMaxDockNodes; guard++) {
+        int parent = s->nodes[root].parent;
+        if (parent < 0) {
+            break;
+        }
+        root = parent;
+    }
+    if (root == s->left.node) {
+        return DockPlacement::Left;
+    }
+    if (root == s->right.node) {
+        return DockPlacement::Right;
+    }
+    if (root == s->bottom.node) {
+        return DockPlacement::Bottom;
+    }
+    return DockPlacement::Center;
 }
 
 void DockToggleSide(DockState* s, Ctx* cx, DockPlacement p) {
@@ -440,7 +499,15 @@ void DockToggleZoom(DockState* s, Ctx* cx, int panelIx) {
 
 void DockState::OnTabClick(DockState* self, Ctx* cx, const ClickEvent*,
                            intptr_t nodeAndIx) {
-    DockSetActive(self, cx, DockUnpackNode(nodeAndIx), DockUnpackIx(nodeAndIx));
+    int node = DockUnpackNode(nodeAndIx);
+    DockSetActive(self, cx, node, DockUnpackIx(nodeAndIx));
+    // "Open dock if clicked on the collapsed bottom dock": its tab bar is all
+    // that is left of it, so a click there is what opens it again.
+    DockPlacement p = DockPlacementOfNode(self, node);
+    DockSide* side = DockSideOf(self, p);
+    if (side && !side->open) {
+        DockToggleSide(self, cx, p);
+    }
 }
 
 void DockState::OnCloseClick(DockState* self, Ctx* cx, const ClickEvent*,
@@ -506,6 +573,56 @@ void DockState::OnDropPanel(DockState* self, Ctx* cx, const DropEvent* ev,
     DockDrop at = DockDropAt(ev->el, ev->x, ev->y);
     self->dropNode = -1;
     DockMovePanel(self, cx, ev->drag.ix, (int)node, at);
+}
+
+void DockState::OnDropTab(DockState* self, Ctx* cx, const DropEvent* ev,
+                          intptr_t nodeAndIx) {
+    if (!StrSame(ev->drag.kind, kDockPanelDrag)) {
+        return;
+    }
+    // `will_split_placement = None`: a drop on a tab is always a move into
+    // that row, whatever zone of the body the pointer had been over.
+    self->dropNode = -1;
+    DockMovePanel(self, cx, ev->drag.ix, DockUnpackNode(nodeAndIx),
+                  DockDrop::Center, DockUnpackIx(nodeAndIx));
+}
+
+void DockState::OnDropTabBar(DockState* self, Ctx* cx, const DropEvent* ev,
+                             intptr_t node) {
+    if (!StrSame(ev->drag.kind, kDockPanelDrag)) {
+        return;
+    }
+    self->dropNode = -1;
+    int to = (int)node;
+    // The empty space past the last tab. Rust names the last index when the
+    // panel is already in this row — which is what moves a tab to the end —
+    // and leaves it unnamed otherwise, so the panel is appended.
+    int at = -1;
+    if (DockNodeOfPanel(self, ev->drag.ix) == to) {
+        at = self->nodes[to].nPanel - 1;
+    }
+    DockMovePanel(self, cx, ev->drag.ix, to, DockDrop::Center, at);
+}
+
+void DockState::OnMenuItem(DockState* self, Ctx* cx, const ClickEvent*,
+                           intptr_t item) {
+    // The menu reports which of its rows was taken; which panel that is about
+    // is the group whose menu was open when it did.
+    int node = self->menuNode;
+    if (node < 0 || node >= kMaxDockNodes || !self->nodes[node].used) {
+        return;
+    }
+    DockNode& n = self->nodes[node];
+    if (n.nPanel <= 0) {
+        return;
+    }
+    // Row 0 is ToggleZoom; the separator is row 1, so anything past it is
+    // ClosePanel on the active one.
+    if (item == 0) {
+        DockToggleZoom(self, cx, n.panel[n.activeIx]);
+    } else {
+        DockClosePanel(self, cx, node, n.activeIx);
+    }
 }
 
 void DockState::OnResizeDrag(DockState* self, Ctx* cx,
