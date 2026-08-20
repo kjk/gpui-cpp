@@ -50,7 +50,9 @@ Spinner* Spinner::Id(Str v) {
 
 El* Spinner::IntoEl() {
     const Theme& th = cx->theme();
-    float dim = px > 0 ? px : UiSizePx(size);
+    // Spinner::with_size sizes the Icon inside it, so it walks the icon
+    // scale — 12 / 14 / 16 / 24 — and not the control-height one.
+    float dim = px > 0 ? px : UiIconPx(size);
     // Animation::new(speed).repeat(), whose delta is a whole turn:
     // `Transformation::rotate(percentage(delta))`.
     float turn = MotionRepeat(cx, MotionId(StrL("spinner"), id),
