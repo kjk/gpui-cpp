@@ -78,6 +78,7 @@ int GpuiMain(int argc, char** argv) {
     TestSankey();
     TestJson();
     TestInspector();
+    TestThemeColor();
     TestDockState();
     TestFocusTrap();
     TestKeymap();
