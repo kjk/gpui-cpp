@@ -234,6 +234,10 @@ Tabs* Tabs::Suffix(El* e) {
     suffix = e;
     return this;
 }
+Tabs* Tabs::Menu(bool v) {
+    menu = v;
+    return this;
+}
 
 // Nothing painted: `a == 0` is what says a style leaves this part alone,
 // which is Rust's `theme.transparent`.
@@ -361,6 +365,44 @@ static TabStyle TabDisabled(TabVariant v, bool selected, const Theme& th) {
     return s;
 }
 
+// TabBar::menu's "more" button: an xsmall ghost with a caret, whose dropdown
+// is the tab list itself. The rows are the tabs in order, so the index the
+// menu confirms is the index the bar's on_click wants.
+static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
+    Ctx* cx = tabs->cx;
+    Str menuId = StrDup(cx->a, fmt("%s-menu", tabs->id));
+    Entity<PopupMenuState> st = PopupMenuStateFor(cx, menuId);
+    if (PopupMenuState* s = st.Get(cx)) {
+        s->onConfirm = tabs->onChange;
+    }
+    PopupMenu* menu = PopupMenu::New(cx, menuId, st)->Scrollable();
+    for (int i = 0; i < tabs->n; i++) {
+        const TabItem& it = tabs->items[i];
+        // A tab with no label is an icon-only one; Rust puts the icon in the
+        // row, and falls back to "Unnamed" when there is neither.
+        if (it.label.s) {
+            menu->MenuWithCheck(it.label, i == tabs->selected);
+        } else if (it.icon != IconName::None) {
+            menu->Element(IconEl(cx->a, it.icon, 16));
+            menu->Checked(i == tabs->selected);
+        } else {
+            menu->MenuWithCheck(StrL("Unnamed"), i == tabs->selected);
+        }
+        if (it.disabled) {
+            menu->Disabled(true);
+        }
+    }
+    return DropdownMenu::New(cx, StrDup(cx->a, fmt("%s-more", tabs->id)))
+        ->Trigger(Button::New(cx, StrDup(cx->a, fmt("%s-more-btn", tabs->id)))
+                      ->Ghost()
+                      ->WithSize(UiSize::XSmall)
+                      ->DropdownCaret()
+                      ->IntoEl())
+        ->Menu(menu)
+        ->AnchorRight()
+        ->IntoEl();
+}
+
 El* Tabs::IntoEl() {
     const Theme& th = cx->theme();
     float h = TabHeight(variant, size);
@@ -397,7 +439,10 @@ El* Tabs::IntoEl() {
         bar->Child(prefix);
     }
 
-    El* strip = Div(a)->FlexRow()->ItemsCenter()->Grow()->H(kFill);
+    // h_flex().id("tabs").flex_1().overflow_x_hidden(): the strip gives way
+    // before the bar does, so a suffix and the overflow menu keep their place
+    // when there are more tabs than fit.
+    El* strip = Div(a)->FlexRow()->ItemsCenter()->Grow()->H(kFill)->ClipX();
     if (gap > 0) {
         strip->Gap(gap);
     }
@@ -539,6 +584,9 @@ El* Tabs::IntoEl() {
         }
     }
     bar->Child(strip);
+    if (menu) {
+        bar->Child(TabMenuButton(this, th, font));
+    }
     if (suffix) {
         bar->Child(suffix);
     }
