@@ -1,9 +1,19 @@
 #include "ui/dialog.h"
+#include "base/motion.h"
 #include "ui/button.h"
 
 namespace gpui {
 
 namespace component {
+
+// dialog.rs: ANIMATION_DURATION, and the curve the panel comes down along.
+// Rust names it inline as `cubic_bezier(0.32, 0.72, 0., 1.)`; an easing here
+// is a function pointer, so the curve is a function.
+static const float kDialogMotionMs = 250.f;
+
+static float DialogEase(float t) {
+    return CubicBezier(0.32f, 0.72f, 0.f, 1.f, t);
+}
 
 Dialog* Dialog::New(Ctx* cx) {
     Arena* a = cx->a;
@@ -280,10 +290,18 @@ El* Dialog::IntoEl(WinSize size) {
     // Fixed, not absolute: Rust hangs the dialog off the window Root, so it
     // covers and centers on the window rather than on whatever page element
     // happens to contain it.
+    // "fade-in" and "slide-down": the overlay arrives over a quarter of a
+    // second, and the panel comes down from the top edge as it does. Rust
+    // fades the whole layer with `opacity(delta)` and fades the panel's shadow
+    // with it; there is no element opacity here, so what fades is the backdrop
+    // itself — the part of that fade there is to see.
+    float delta = MotionAppear(
+        cx, MotionId(StrL("dialog"), StrDup(a, fmt("%d", layerIx))),
+        kDialogMotionMs, DialogEase);
     El* backdrop =
         DialogBackdrop::New(cx)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     if (overlay) {
-        backdrop->Bg(th.overlay);
+        backdrop->Bg(RgbaOpacity(th.overlay, delta));
     }
     if (overlayClosable && onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
@@ -298,7 +316,7 @@ El* Dialog::IntoEl(WinSize size) {
                     ->H(kFill)
                     ->FlexCol()
                     ->ItemsCenter()
-                    ->PadT(size.dipH * 0.1f + layerIx * 16.f)
+                    ->PadT((size.dipH * 0.1f + layerIx * 16.f) * delta)
                     ->Child(panel);
     Str trap = StrDup(a, fmt("dialog-%d", layerIx));
     return gpui::Dialog::New(cx)

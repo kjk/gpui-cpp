@@ -1,9 +1,13 @@
 #include "ui/sheet.h"
+#include "base/motion.h"
 #include "ui/button.h"
 
 namespace gpui {
 
 namespace component {
+
+// sheet.rs: the surface takes 0.15 s to slide in.
+static const float kSheetMotionMs = 150.f;
 
 Sheet* Sheet::New(Ctx* cx) {
     Arena* a = cx->a;
@@ -57,18 +61,23 @@ El* Sheet::IntoEl(WinSize win) {
                       ->Gap(12)
                       ->Bg(th.background)
                       ->Border(1, th.border);
+    // sheet.rs's "slide": 0.15 s from a hundred pixels off its own edge to
+    // where it belongs. GPUI's default easing is linear, and the offset is
+    // whichever way the sheet came in from.
+    float delta = MotionAppear(cx, MotionId(StrL("sheet")), kSheetMotionMs);
+    float off = -100.f + delta * 100.f;
     switch (placement) {
         case SheetPlacement::Left:
-            surface->Top(0)->Left(0);
+            surface->Top(0)->Left(off);
             break;
         case SheetPlacement::Top:
-            surface->Top(0)->Left(0);
+            surface->Top(off)->Left(0);
             break;
         case SheetPlacement::Bottom:
-            surface->Top(win.dipH - size)->Left(0);
+            surface->Top(win.dipH - size - off)->Left(0);
             break;
         default:
-            surface->Top(0)->Left(win.dipW - size);
+            surface->Top(0)->Left(win.dipW - size - off);
             break;
     }
     El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();

@@ -1,8 +1,15 @@
 #include "ui/tab.h"
+#include "base/motion.h"
 
 namespace gpui {
 
 namespace component {
+
+// tab_bar.rs: the indicator slides to the selected tab over 200 ms along
+// ease_in_out_cubic. Rust keeps the box it is coming from in an epoch-stamped
+// state; a transition here remembers where it had got to on its own, so what
+// the bar has to keep is only the box it is going to.
+static const float kTabIndicatorMotionMs = 200.f;
 
 float TabHeight(TabVariant v, UiSize size) {
     bool under = v == TabVariant::Underline;
@@ -394,12 +401,40 @@ El* Tabs::IntoEl() {
     if (gap > 0) {
         strip->Gap(gap);
     }
+    // Where the selected tab was last frame, and where the indicator has got
+    // to on its way there. Both outlive the frame, so both are motion slots.
+    auto* selBox = (Bounds*)MotionSlot(cx, MotionId(StrL("tab-sel"), id),
+                                       (int)sizeof(Bounds));
+    auto* stripBox = (Bounds*)MotionSlot(cx, MotionId(StrL("tab-strip"), id),
+                                         (int)sizeof(Bounds));
+    strip->BoundsOut(stripBox);
+    Motion indMotion = MotionNew(kTabIndicatorMotionMs);
+    indMotion.ease = EaseInOutCubic;
+    float indX = 0;
+    float indW = 0;
+    bool sliding = false;
+    if (selBox && selBox->w > 0) {
+        indX = MotionValue(cx, MotionId(StrL("tab-ind-x"), id), selBox->x,
+                           indMotion);
+        indW = MotionValue(cx, MotionId(StrL("tab-ind-w"), id), selBox->w,
+                           indMotion);
+        // In flight: the tab it belongs to holds back its own selected look
+        // while the indicator is on its way, which is what Rust does too.
+        float dx = indX - selBox->x;
+        float dw = indW - selBox->w;
+        sliding = (dx < -0.5f || dx > 0.5f) || (dw < -0.5f || dw > 0.5f);
+    }
     for (int i = 0; i < n; i++) {
         const TabItem& item = items[i];
         bool on = i == selected;
-        TabStyle st = item.disabled ? TabDisabled(variant, on, th)
-                      : on          ? TabSelected(variant, th)
-                                    : TabNormal(variant, th);
+        TabStyle st = item.disabled      ? TabDisabled(variant, on, th)
+                      : (on && !sliding) ? TabSelected(variant, th)
+                                         : TabNormal(variant, th);
+        if (on && sliding && !item.disabled) {
+            // The label keeps the colour it is going to end up with; it is the
+            // box behind it that the indicator is carrying.
+            st.fg = TabSelected(variant, th).fg;
+        }
         Str tabId = StrDup(a, fmt("%s-%d", id, i));
         El* tab = gpui::Tab::New(
                       cx, tabId, item.disabled,
@@ -469,7 +504,39 @@ El* Tabs::IntoEl() {
         if (maxWidth > 0 && item.icon == IconName::None) {
             tab->MaxW(maxWidth);
         }
+        if (on && selBox) {
+            // The box the indicator is heading for, measured where it is.
+            tab->BoundsOut(selBox);
+        }
         strip->Child(tab);
+    }
+    if (sliding && stripBox) {
+        // The indicator itself, which is whatever the selected tab would have
+        // painted: the raised inner box for a folder or a segmented strip, the
+        // filled pill, or the two-pixel rule under an underline tab.
+        float x = indX - stripBox->x;
+        El* ind = Div(a)->Absolute()->Left(x)->W(indW);
+        switch (variant) {
+            case TabVariant::Underline:
+                ind->Bottom(0)->H(2)->Bg(th.primary);
+                break;
+            case TabVariant::Pill:
+                ind->Top(0)->H(kFill)->Radius(99)->Bg(th.primary);
+                break;
+            case TabVariant::Segmented:
+            case TabVariant::Tab:
+                ind->Top((h - innerH) * 0.5f)
+                    ->H(innerH)
+                    ->Radius(innerRadius)
+                    ->Bg(th.background);
+                break;
+            default:
+                ind = nullptr;
+                break;
+        }
+        if (ind) {
+            strip->Child(ind);
+        }
     }
     bar->Child(strip);
     if (suffix) {

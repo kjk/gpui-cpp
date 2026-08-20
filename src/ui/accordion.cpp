@@ -1,9 +1,13 @@
 #include "ui/accordion.h"
+#include "base/motion.h"
 #include "ui/tag.h"
 
 namespace gpui {
 
 namespace component {
+
+// accordion.rs: ANIMATION_DURATION, along ease_out_cubic.
+static const float kAccordionMotionMs = 200.f;
 
 Accordion* Accordion::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -121,8 +125,33 @@ El* Accordion::IntoEl() {
             // AccordionPanel: pb_2 px_3 at Medium.
             panel->PadX(12)->PadT(0)->PadB(8);
         }
-        it->Panel(panel->Child(
-            TextEl(a, items[i].body)->Font(font)->Fg(th.mutedFg)->Wrap()));
+        panel->Child(
+            TextEl(a, items[i].body)->Font(font)->Fg(th.mutedFg)->Wrap());
+        // AnimatedAccordionPanel: the panel's height is its natural one times
+        // the progress, and the box around it clips what does not fit. The
+        // natural height is what the last frame measured — Rust keeps it in
+        // the element's state from its prepaint; here the panel reports its
+        // own box, into a slot that is asked for whether or not the panel is
+        // mounted so a closed item still knows how tall it will be.
+        Str key = StrDup(a, fmt("%s-%d", id, i));
+        Motion motion = MotionNew(kAccordionMotionMs);
+        motion.ease = EaseOutCubic;
+        float progress = MotionValue(cx, MotionId(StrL("accordion"), key),
+                                     items[i].open ? 1.f : 0.f, motion);
+        auto* natural = (Bounds*)MotionSlot(
+            cx, MotionId(StrL("accordion-h"), key), (int)sizeof(Bounds));
+        if (progress > 0.001f) {
+            El* clip = Div(a)->W(kFill)->ClipY();
+            if (natural && natural->h > 0) {
+                clip->H(natural->h * progress);
+            }
+            if (natural) {
+                panel->BoundsOut(natural);
+            }
+            // The item mounts its panel while it is open or on its way shut,
+            // which is what keeps a collapse animating rather than vanishing.
+            it->KeepMounted(true)->Panel(clip->Child(panel));
+        }
         // The separator belongs to the item, so it lands under the panel and
         // not between the trigger and its body.
         El* itEl = it->IntoEl();

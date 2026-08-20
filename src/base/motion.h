@@ -142,6 +142,17 @@ void MotionWantsFrame(Ctx* cx);
 float MotionRepeat(Ctx* cx, uint32_t key, float periodMs,
                    EaseFn ease = nullptr);
 
+// with_animation, the one-shot kind: how far into a `durationMs` run the
+// element is, from the frame it first appeared in. GPUI keeps that clock in
+// the element's own state and drops it with the element, which is why the
+// slots here are swept — something that goes away and comes back plays its
+// entrance again.
+//
+// Under reduced motion an entrance is over before it starts, which is the
+// same answer `transition` gives.
+float MotionAppear(Ctx* cx, uint32_t key, float durationMs,
+                   EaseFn ease = nullptr);
+
 // motion::transition: the value to draw now, on its way to `target`.
 template <typename T>
 T MotionValue(Ctx* cx, uint32_t key, T target, const Motion& m) {

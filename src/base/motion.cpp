@@ -46,12 +46,38 @@ void MotionSetReduced(bool on) {
     gReduced = on;
 }
 
-// The clock a loop runs on: when it started, and nothing else — a loop has no
-// target to leave from.
+// The clock a loop or a one-shot runs on: when it started, and nothing else —
+// neither has a target to leave from.
 struct MotionLoopState {
     double startedAt = 0;
     bool init = false;
 };
+
+float MotionAppear(Ctx* cx, uint32_t key, float durationMs, EaseFn ease) {
+    if (durationMs <= 0 || MotionReduced()) {
+        return 1.f;
+    }
+    auto* st =
+        (MotionLoopState*)MotionSlot(cx, key, (int)sizeof(MotionLoopState));
+    if (!st) {
+        return 1.f;
+    }
+    double now = MotionNow(cx);
+    if (!st->init) {
+        st->init = true;
+        st->startedAt = now;
+    }
+    float elapsedMs = (float)((now - st->startedAt) * 1000.0);
+    float t = elapsedMs / durationMs;
+    if (t >= 1.f) {
+        return 1.f;
+    }
+    if (t < 0.f) {
+        t = 0.f;
+    }
+    MotionWantsFrame(cx);
+    return ease ? ease(t) : t;
+}
 
 float MotionRepeat(Ctx* cx, uint32_t key, float periodMs, EaseFn ease) {
     if (periodMs <= 0) {
@@ -88,7 +114,7 @@ double MotionNow(Ctx* cx) {
 }
 
 void* MotionSlot(Ctx* cx, uint32_t key, int size) {
-    return cx ? WindowKeyedState(cx->win, key, size, nullptr) : nullptr;
+    return cx ? WindowMotionState(cx->win, key, size) : nullptr;
 }
 
 void MotionWantsFrame(Ctx* cx) {
