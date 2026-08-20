@@ -766,6 +766,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/sun.svg");
         case IconName::Moon:
             return StrL("icons/moon.svg");
+        case IconName::Play:
+            return StrL("icons/play.svg");
         case IconName::Map:
             return StrL("icons/map.svg");
         case IconName::Globe:

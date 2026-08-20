@@ -10,7 +10,8 @@ enum {
     ProgActValue25,
     ProgActValue75,
     ProgActValue100,
-    ProgActLoading
+    ProgActLoading,
+    ProgMenuSize = 3
 };
 
 struct ProgressStory {
@@ -18,10 +19,32 @@ struct ProgressStory {
     float value = 25;
     bool loading = false;
     int openMenu = ProgMenuNone;
+    // The play button's animation: value climbs by 2 every 15ms until it
+    // reaches 100, which is Rust's `start_animation` spawn.
+    int animTimer = 0;
     StoryToolbarState toolbar;
 
     static El* Render(ProgressStory* self, Ctx* cx);
 };
+
+static void ProgTick(ProgressStory* self, Ctx* cx, const TickEvent*) {
+    self->value += 2;
+    if (self->value >= 100) {
+        self->value = 100;
+        WindowCancelTimer(cx->win, self->animTimer);
+        self->animTimer = 0;
+    }
+    Notify(cx);
+}
+
+static void ProgPlay(ProgressStory* self, Ctx* cx, const ClickEvent*) {
+    self->value = 0;
+    if (self->animTimer) {
+        WindowCancelTimer(cx->win, self->animTimer);
+    }
+    self->animTimer = WindowSetInterval(cx->win, 15, Listen(cx, &ProgTick));
+    Notify(cx);
+}
 
 static void ProgMenuOpen(ProgressStory* self, Ctx* cx, const ClickEvent*,
                          intptr_t which) {
@@ -63,6 +86,22 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     Listener act = Listen(cx, &ProgMenuAct);
     El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
     El* group = StoryToolbarGroup(cx);
+    // story_toolbar(self.size) puts the size menu first.
+    StoryToolbarOpt sizes[4] = {
+        {"XSmall", self->toolbar.size == UiSize::XSmall, ToolbarSizeXs},
+        {"Small", self->toolbar.size == UiSize::Small, ToolbarSizeSm},
+        {"Medium", self->toolbar.size == UiSize::Medium, ToolbarSizeMd},
+        {"Large", self->toolbar.size == UiSize::Large, ToolbarSizeLg},
+    };
+    const char* sizeName = self->toolbar.size == UiSize::XSmall  ? "XSmall"
+                           : self->toolbar.size == UiSize::Small ? "Small"
+                           : self->toolbar.size == UiSize::Large ? "Large"
+                                                                 : "Medium";
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("progress-size"), StoryFmt(cx, "Size: %s", sizeName),
+        self->openMenu == ProgMenuSize, ListenerArg(openMenu, ProgMenuSize),
+        sizes, 4, act));
+    group->Child(StoryToolbarDivider(cx));
     StoryToolbarOpt presets[4] = {
         {"0%", self->value == 0, ProgActValue0},
         {"25%", self->value == 25, ProgActValue25},
@@ -79,11 +118,24 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
         cx, StrL("progress-options"), StrL("Options"),
         self->openMenu == ProgMenuOptions,
         ListenerArg(openMenu, ProgMenuOptions), options, 1, act));
+    group->Child(StoryToolbarDivider(cx));
+    // The play button: value back to zero, then a step every 15ms.
+    El* play = Div(a)
+                   ->H(24)
+                   ->PadX(8)
+                   ->ItemsCenter()
+                   ->JustifyCenter()
+                   ->HoverBg(th.muted)
+                   ->Child(IconEl(a, IconName::Play, 14)->Fg(th.foreground));
+    play->Click(HashClickId(StrL("progress-play")))
+        ->OnClick(Listen(cx, &ProgPlay));
+    group->Child(play);
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
     El* upload = StorySection(
         cx, "Upload", "Pair progress with a clear label, value, and status.");
+    StorySectionBody(upload)->W(560)->ItemsCenter();
     El* card = Div(a)
                    ->FlexCol()
                    ->Gap(12)
