@@ -325,9 +325,9 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
     }
 
     // fill_gradient: four alignments of the chart-wide ramp, then the per-bar
-    // one. Rust has a sixth that runs a diagonal across the whole chart; the
-    // gradient here runs along the bar, so that one is the per-bar ramp under
-    // another name and is left out.
+    // one. The sixth is fill(|_, bar, chart, _|) instead — one ramp across
+    // the whole plot's diagonal, each bar showing its own slice of it — so it
+    // is built below rather than in this table.
     struct GradCard {
         const char* title;
         BarAlign align;
@@ -355,6 +355,17 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
                 ->H(kFill),
             false));
     }
+    barRow->Child(ChartCard(
+        cx, "Bar Chart - Gradient (Diagonal, across bars)",
+        component::BarChart::New(cx, kMonthlyDesktop, kMonthlyDeviceCount)
+            ->Labels(kMonthlyMonth)
+            ->TickMargin(1)
+            ->LabelValues()
+            ->FillGradientDiagonal(th.chart1, th.chart5)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
     page->Child(barRow);
     page->Child(component::Separator::Horizontal(cx)->IntoEl());
 

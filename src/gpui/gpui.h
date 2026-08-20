@@ -867,6 +867,11 @@ struct ChartSeries {
     // when barGradientPerBar is set.
     bool barGradient = false;
     bool barGradientPerBar = false;
+    // fill(|_, bar, chart, _|): one ramp across the whole plot, on its
+    // bottom-left to top-right diagonal, with every bar filled by the slice
+    // of it that falls under its own footprint. The stops then differ from
+    // bar to bar, which the other two modes' single pair cannot express.
+    bool barGradientDiagonal = false;
     Rgba barFillFrom = {};
     Rgba barFillTo = {};
     // StrokeStyle and LineChart::dot, both of which the area chart shares.

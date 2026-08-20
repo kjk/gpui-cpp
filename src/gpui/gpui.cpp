@@ -2818,7 +2818,7 @@ static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
         // whole ramp inside every bar.
         Rgba from = c.barFillFrom;
         Rgba to = c.barFillTo;
-        if (!c.barGradientPerBar) {
+        if (!c.barGradientPerBar && !c.barGradientDiagonal) {
             // The stop the bar actually reaches, as a mix of the two ends.
             Rgba hit = RgbaMix(from, to, t);
             to = hit;
@@ -2832,7 +2832,22 @@ static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
             PathLineTo(box, rx + rw, ry + rh);
             PathLineTo(box, rx, ry + rh);
             PathClose(box);
-            if (horizontal) {
+            if (c.barGradientDiagonal) {
+                // Where the bar's two corners fall along the plot's
+                // bottom-left to top-right diagonal, as a fraction of it.
+                float pw = w > 1e-6f ? w : 1e-6f;
+                float ph = plotH > 1e-6f ? plotH : 1e-6f;
+                float denom = pw * pw + ph * ph;
+                auto project = [&](float px, float py) {
+                    return ((px - x) * pw + (ph - (py - y)) * ph) / denom;
+                };
+                // RgbaMix(a, b, t) is a*t + b*(1-t), so sampling a ramp that
+                // runs `from` to `to` at p means mixing the far stop in at p.
+                auto sample = [&](float pos) { return RgbaMix(to, from, pos); };
+                PathFillGradient(ctx, box, rx, ry + rh, rx + rw, ry,
+                                 sample(project(rx, ry + rh)),
+                                 sample(project(rx + rw, ry)));
+            } else if (horizontal) {
                 PathFillGradient(ctx, box, rx, ry, rx + rw, ry,
                                  c.barAlign == BarAlign::Left ? from : to,
                                  c.barAlign == BarAlign::Left ? to : from);

@@ -193,6 +193,13 @@ BarChart* BarChart::FillGradient(Rgba from, Rgba to, bool perBar) {
     gradientPerBar = perBar;
     return this;
 }
+BarChart* BarChart::FillGradientDiagonal(Rgba from, Rgba to) {
+    gradient = true;
+    gradientFrom = from;
+    gradientTo = to;
+    gradientDiagonal = true;
+    return this;
+}
 El* BarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, fill, none, none, tickMargin);
@@ -205,6 +212,7 @@ El* BarChart::IntoEl() {
     e->chart.barFills = fills;
     e->chart.barGradient = gradient;
     e->chart.barGradientPerBar = gradientPerBar;
+    e->chart.barGradientDiagonal = gradientDiagonal;
     e->chart.barFillFrom = gradientFrom;
     e->chart.barFillTo = gradientTo;
     e->chart.bandPadding = padding;
