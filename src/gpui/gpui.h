@@ -575,6 +575,10 @@ struct KeyEvent {
 enum class CursorKind : uint8_t {
     Arrow,
     IBeam,
+    // cursor_pointer: the hand, which says a thing is there to be clicked.
+    // GPUI's own default for a div is the arrow, so this is opt-in; Rust asks
+    // for it on links and on the button variants that look like one.
+    Pointer,
     // cursor_col_resize, which a table's column edge asks for.
     ColResize,
     // cursor_row_resize: the handle between two panels stacked one over the

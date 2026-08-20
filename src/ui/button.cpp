@@ -247,6 +247,7 @@ El* Button::IntoEl() {
     // The unstyled Button takes `disabled` here, and a click id of its own is
     // not one: passing one made every enabled button non-focusable and gave
     // disabled ones a focus handle, which is the opposite of both.
+    bool interactive = !(disabled || loading);
     El* e = gpui::Button::New(cx, id, disabled)
                 ->FocusRing(focusRing)
                 ->H(h > 0 ? h : kAuto)
@@ -267,6 +268,13 @@ El* Button::IntoEl() {
         if (onClick.IsValid()) {
             e->OnClick(onClick);
         }
+    }
+    // button.rs: `cursor_default`, and the hand only for the two variants that
+    // look like a link rather than a button. A ghost button is still a button,
+    // so it keeps the arrow.
+    if (interactive &&
+        (variant == ButtonVariant::Link || variant == ButtonVariant::Text)) {
+        e->Cursor(CursorKind::Pointer);
     }
     if (tooltip.s) {
         e->Tip(tooltip);

@@ -916,7 +916,8 @@ static El* AppearanceMenu(StoryApp* app, Ctx* cx) {
                       ->Compact()
                       ->WithSize(UiSize::Small)
                       ->Tooltip(StrL("Appearance"))
-                      ->IntoEl())
+                      ->IntoEl()
+                      ->Cursor(CursorKind::Pointer))
         ->Menu(menu)
         // Anchor::TopRight: the menu's right edge lines up with the button's,
         // which is what keeps it on screen at the corner of the window.
@@ -928,6 +929,10 @@ static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
     OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
 }
 
+// The three tools at the right of the title bar. They are ghost buttons, and
+// button.rs gives a ghost button the arrow — the hand is for the variants that
+// look like a link. Over a title bar there is nothing else to say an icon is a
+// control rather than an ornament, so these three ask for it themselves.
 static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
 
@@ -954,7 +959,8 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
                         ->WithSize(UiSize::Small)
                         ->Tooltip(StrL("GitHub"))
                         ->OnClick(Listen(cx, &OnGithub))
-                        ->IntoEl())
+                        ->IntoEl()
+                        ->Cursor(CursorKind::Pointer))
             // Badge::count: how many notifications are up, capped at 99. The
             // bell itself has nothing to do in Rust either — the count is the
             // whole of it.
@@ -968,7 +974,8 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
                                 ->Compact()
                                 ->WithSize(UiSize::Small)
                                 ->Tooltip(StrL("Notifications"))
-                                ->IntoEl())
+                                ->IntoEl()
+                                ->Cursor(CursorKind::Pointer))
                     ->IntoEl());
 
     return component::TitleBar::New(cx)->Child(menus)->Child(tools)->IntoEl();
