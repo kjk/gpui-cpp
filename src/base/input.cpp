@@ -156,10 +156,14 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         if (caret) {
             col->Caret(0, style.caret);
         }
-        return col->Child(TextEl(a, state->placeholder)
-                              ->Font(font)
-                              ->LineHeight(lineMult)
-                              ->Fg(style.mutedForeground));
+        El* ph = TextEl(a, state->placeholder)
+                     ->Font(font)
+                     ->LineHeight(lineMult)
+                     ->Fg(style.mutedForeground);
+        if (style.mono) {
+            ph->Mono();
+        }
+        return col->Child(ph);
     }
 
     int rows = RopeLinesLen(text);
@@ -174,6 +178,9 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         Str line = RopeSliceLine(text, row);
         El* el = TextEl(a, line)->Font(font)->LineHeight(lineMult)->Fg(
             style.foreground);
+        if (style.mono) {
+            el->Mono();
+        }
         if (state->softWrap) {
             el->Wrap();
         }
@@ -201,11 +208,14 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             continue;
         }
         El* band = Div(a)->FlexRow()->W(kFill)->H(kInputLineH)->Gap(8);
-        band->Child(Div(a)->W(numW)->JustifyEnd()->Child(
-            TextEl(a, StrDup(a, fmt("%d", row + 1)))
-                ->Font(font - 1)
-                ->LineHeight(lineMult)
-                ->Fg(style.mutedForeground)));
+        El* num = TextEl(a, StrDup(a, fmt("%d", row + 1)))
+                      ->Font(font - 1)
+                      ->LineHeight(lineMult)
+                      ->Fg(style.mutedForeground);
+        if (style.mono) {
+            num->Mono();
+        }
+        band->Child(Div(a)->W(numW)->JustifyEnd()->Child(num));
         band->Child(el);
         col->Child(band);
     }
