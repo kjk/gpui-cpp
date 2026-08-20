@@ -30,6 +30,9 @@ struct Dialog {
     // DialogProps::overlay. The alert story's dialogs never tint the page.
     bool overlay = true;
     bool overlayClosable = true;
+    // Root assigns one layer index per active dialog. Each successive layer
+    // sits 16px lower and owns a distinct focus trap.
+    int layerIx = 0;
     float radius = 0;
     Rgba background = {};
     Rgba foreground = {};
@@ -72,6 +75,7 @@ struct Dialog {
     Dialog* H(float px);
     Dialog* Overlay(bool v);
     Dialog* OverlayClosable(bool v);
+    Dialog* Layer(int ix);
     Dialog* Radius(float px);
     Dialog* Bg(Rgba color);
     Dialog* Fg(Rgba color);
