@@ -22,6 +22,13 @@ AreaChart* AreaChart::Stroke(Rgba c) {
 }
 AreaChart* AreaChart::Fill(Rgba c) {
     fill = c;
+    fillBottom = RgbaOpacity(c, 0.f);
+    return this;
+}
+
+AreaChart* AreaChart::Fill(Rgba top, Rgba bottom) {
+    fill = top;
+    fillBottom = bottom;
     return this;
 }
 
@@ -44,8 +51,7 @@ AreaChart* AreaChart::Tooltip(Str name) {
     return this;
 }
 El* AreaChart::IntoEl() {
-    El* e =
-        ChartEl(a, ys, n, stroke, fill, RgbaOpacity(fill, 0.0f), tickMargin);
+    El* e = ChartEl(a, ys, n, stroke, fill, fillBottom, tickMargin);
     e->chart.labels = labels;
     e->chart.overlay = overlay;
     e->chart.tooltip = tooltip;
