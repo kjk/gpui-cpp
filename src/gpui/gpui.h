@@ -777,6 +777,28 @@ enum class IconName : uint8_t {
 
 struct PaintCtx;
 
+// A run of a text element painted differently from the rest of it: GPUI's
+// HighlightStyle over a range, which is what a syntax highlighter's captures
+// and an editor's TextDecorations both come to. The runs are UTF-8 offsets
+// into the element's own text and must not overlap; whatever they leave over
+// paints in the element's own colour.
+//
+// Weight and slant are not here. A run drawn in another face would shape to
+// other widths, and every run of an element shares one shaped layout — the
+// colour, the wash behind it and the rule under it are what can change
+// without re-shaping.
+struct TextSpan {
+    int lo = 0;
+    int hi = 0;
+    Rgba color = {};
+    // The wash behind the run, painted before the glyphs. Alpha 0 is none,
+    // which is what a run that only recolours its glyphs wants — and the
+    // reason it is spelled out: an Rgba defaults to opaque.
+    Rgba bg = {0, 0, 0, 0};
+    // UnderlineStyle: a rule under the run in its own colour.
+    bool underline = false;
+};
+
 // Which of crates/ui/src/chart's charts this series is. They share the axis,
 // the grid and the labels; what differs is the shape drawn over them.
 enum class ChartKind : uint8_t {
@@ -1085,6 +1107,11 @@ struct El {
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
     int selHi = -1;
+    // The highlighted runs inside this text, in order. The array is the
+    // caller's — the frame arena, in practice — and outlives the frame the
+    // element was built in.
+    const TextSpan* spans = nullptr;
+    int nSpans = 0;
     Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
     // The input method's provisional run, underlined the way Rust gives the
     // marked range its own UnderlineStyle. Same offsets, same -1 for none.
@@ -1194,6 +1221,7 @@ struct El {
     El* BindInput(InputState* s);
     // The selection quad and the caret an input's text run paints over itself.
     El* SelRange(int lo, int hi, Rgba color);
+    El* Spans(const TextSpan* runs, int n);
     // The marked range, which is drawn underlined in the text's own colour.
     El* MarkRange(int lo, int hi);
     El* Caret(int off, Rgba color, float width = 2);
