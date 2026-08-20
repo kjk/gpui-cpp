@@ -54,8 +54,15 @@ El* Separator::IntoEl() {
         }
         root->Child(lineEl);
     } else {
-        root->W(kFill)->H(label.s ? 24.f : 1.f);
-        El* lineEl = Div(a)->H(1)->W(kFill);
+        root->FlexRow()->W(kFill)->H(label.s ? 24.f : 1.f);
+        // With a label beside it the rule gives way, so the pair together is
+        // as wide as the separator and no wider.
+        El* lineEl = Div(a)->H(1);
+        if (label.s) {
+            lineEl->Grow()->MinW(0);
+        } else {
+            lineEl->W(kFill);
+        }
         if (line == SeparatorStyle::Dashed) {
             // PathBuilder::stroke(1).dash_array([4, 2]) in separator.rs.
             lineEl->Dashed()->DashArray(4, 2)->Border(1, c);
