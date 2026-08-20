@@ -1477,23 +1477,24 @@ static bool IndentReady(const InputState* s) {
     return InputIsMultiLine(s) && ModeIsIndentable(s);
 }
 
-// indent(). With a selection every line it touches is pushed over by one tab;
-// with none, one tab goes in at the caret. Rust walks the lines one
+// indent(). With a selection every line it touches is pushed over by one tab.
+// With none, the inline variant puts one tab in at the caret and the block
+// variant puts it at the start of the caret's line. Rust walks the lines one
 // replace_text_in_range each and Rust's history brackets them; ours records a
 // change per call and merges an open bracket first-old-to-last-new, which is
 // right for an IME composition and wrong for edits at growing offsets — so
 // the whole span is rewritten in one edit instead, which is also one undo
-// step and one Change event. Rust's `block` variant, bound to ctrl-], is not
-// ported: only the inline one tab carries.
-static bool DoIndent(InputState* s, App* app, Window* win) {
+// step and one Change event.
+static bool DoIndent(InputState* s, App* app, Window* win, bool block) {
     if (!IndentReady(s)) {
         return false;
     }
     Str tab = TabIndent(s);
     Selection sel = s->selectedRange;
+    bool isSelected = !sel.IsEmpty();
     s->undo.hasPendingIntent = true;
     s->undo.pendingIntent = EditIntent::Atomic;
-    if (sel.IsEmpty()) {
+    if (!isSelected && !block) {
         Selection at = SelectionAt(sel.start);
         InputReplaceTextInRange(s, app, win, &at, tab);
         s->selectedRange = SelectionAt(sel.start + tab.len);
@@ -1502,7 +1503,9 @@ static bool DoIndent(InputState* s, App* app, Window* win) {
         return true;
     }
     // The lines the selection touches, from the start of the first one, each
-    // with a tab in front of it.
+    // with a tab in front of it. With no selection that span is the caret's
+    // own line back to its start, which is where the block variant puts the
+    // tab whatever column the caret is in.
     int startOffset = StartOfLineOfSelection(s);
     Str before = InputValue(s);
     Str src = Str(before.s + startOffset, sel.end - startOffset);
@@ -1531,7 +1534,11 @@ static bool DoIndent(InputState* s, App* app, Window* win) {
     }
     Selection r = {startOffset, sel.end};
     InputReplaceTextInRange(s, app, win, &r, out);
-    s->selectedRange = Selection{startOffset, sel.end + added};
+    // A selection keeps the lines it grew to cover; a bare caret rides along
+    // with the text it sits in.
+    s->selectedRange = isSelected
+                           ? Selection{startOffset, sel.end + added}
+                           : Selection{sel.start + added, sel.end + added};
     s->selectionReversed = false;
     PauseBlink(s, app, win);
     Notify(app, win);
@@ -1543,7 +1550,9 @@ static int SatSub(int a, int b) {
 }
 
 // outdent(). One tab comes off the front of every line that has one; a line
-// that does not is left alone. Same one-edit shape as DoIndent.
+// that does not is left alone. Same one-edit shape as DoIndent. There is no
+// block variant of it to write: Rust's two differ only in where an unselected
+// indent starts, and outdent starts at the line either way.
 static bool DoOutdent(InputState* s, App* app, Window* win) {
     if (!IndentReady(s)) {
         return false;
@@ -1810,8 +1819,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return handled;
         }
         case InputAction::IndentInline:
-            return DoIndent(s, app, win);
+            return DoIndent(s, app, win, false);
+        case InputAction::Indent:
+            return DoIndent(s, app, win, true);
         case InputAction::OutdentInline:
+        case InputAction::Outdent:
             return DoOutdent(s, app, win);
 
         case InputAction::Escape:
@@ -1918,6 +1930,12 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
             }
             return shift ? InputAction::OutdentInline
                          : InputAction::IndentInline;
+        case KeyRightBracket:
+            // ctrl-] / ctrl-[, which macOS spells cmd-] / cmd-[ and the
+            // window folds onto ctrl on the way in. The block pair.
+            return ctrl ? InputAction::Indent : InputAction::None;
+        case KeyLeftBracket:
+            return ctrl ? InputAction::Outdent : InputAction::None;
         case KeyEscape:
             return InputAction::Escape;
         case KeyA:

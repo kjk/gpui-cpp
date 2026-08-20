@@ -571,7 +571,11 @@ enum {
     KeyV = 86,
     KeyX = 88,
     KeyY = 89,
-    KeyZ = 90
+    KeyZ = 90,
+    // The two OEM keys a field binds: VK_OEM_4 and VK_OEM_6, which the X11
+    // and Cocoa windows map their bracket keys onto.
+    KeyLeftBracket = 219,
+    KeyRightBracket = 221
 };
 
 struct KeyEvent {
@@ -1936,6 +1940,11 @@ enum class InputAction : uint8_t {
     // leaves the keystroke to the window's focus ring.
     IndentInline,
     OutdentInline,
+    // The block pair, ctrl-] / ctrl-[. They work on whole lines: a caret
+    // sitting halfway along one still moves the line, where the inline pair
+    // would have put the tab where the caret is.
+    Indent,
+    Outdent,
     Copy,
     Cut,
     Paste,
