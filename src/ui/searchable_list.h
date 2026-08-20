@@ -23,6 +23,9 @@ struct SearchableItem {
     // The section it belongs to. Items are given in section order.
     int section = 0;
     bool disabled = false;
+    // SearchableListItem::render: the story's Industry rows draw a small
+    // muted icon before the label, which is all any of them add.
+    IconName icon = IconName::None;
 };
 
 // Single replaces the selection, Multi toggles the row that was clicked.
@@ -116,6 +119,8 @@ struct SearchableList {
     El* empty = nullptr;
     float w = 240;
     float maxH = 320;
+    // Combobox::check_icon: what marks a selected row.
+    IconName checkIcon = IconName::Check;
 
     static SearchableList* New(Ctx* cx, Str id, Entity<SearchableListState> st,
                                InputState* query);
@@ -125,6 +130,7 @@ struct SearchableList {
     SearchableList* Empty(El* e);
     SearchableList* W(float v);
     SearchableList* MaxH(float v);
+    SearchableList* CheckIcon(IconName n);
     El* IntoEl();
 };
 

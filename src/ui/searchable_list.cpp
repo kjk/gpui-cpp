@@ -180,6 +180,10 @@ SearchableList* SearchableList::MaxH(float v) {
     maxH = v;
     return this;
 }
+SearchableList* SearchableList::CheckIcon(IconName n) {
+    checkIcon = n;
+    return this;
+}
 
 El* SearchableList::IntoEl() {
     const Theme& th = cx->theme();
@@ -254,12 +258,20 @@ El* SearchableList::IntoEl() {
         if (m == s->list.selected) {
             row->Bg(th.accent);
         }
-        row->Child(TextEl(a, it.title)
-                       ->Font(14)
-                       ->Fg(it.disabled ? th.mutedFg : th.foreground));
+        // SearchableListItem::render: an icon before the label when the item
+        // gave one.
+        El* label = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->MinW(0);
+        if (it.icon != IconName::None) {
+            label->Child(IconEl(a, it.icon, UiIconPx(UiSize::Small))
+                             ->Fg(th.mutedFg));
+        }
+        label->Child(TextEl(a, it.title)
+                         ->Font(14)
+                         ->Fg(it.disabled ? th.mutedFg : th.foreground));
+        row->Child(label);
         // The trailing check the adapter adds for a selected row.
         if (checked) {
-            row->Child(IconEl(a, IconName::Check, 16)->Fg(th.foreground));
+            row->Child(IconEl(a, checkIcon, 16)->Fg(th.foreground));
         }
         if (!it.disabled) {
             BindClick(row, StrDup(a, fmt("%s-row-%d", id, ix)),

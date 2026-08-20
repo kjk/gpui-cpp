@@ -56,6 +56,10 @@ Select* Select::Icon(IconName i) {
     icon = i;
     return this;
 }
+Select* Select::CheckIcon(IconName n) {
+    checkIcon = n;
+    return this;
+}
 Select* Select::Disabled(bool v) {
     disabled = v;
     return this;
@@ -211,7 +215,8 @@ El* Select::IntoEl() {
         SearchableList* list =
             SearchableList::New(cx, StrDup(a, fmt("%s-list", id)), state, query)
                 ->Items(items, nItems)
-                ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width : 240));
+                ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width : 240))
+                ->CheckIcon(checkIcon);
         if (sections) {
             list->Sections(sections, nSections);
         }
