@@ -99,6 +99,13 @@ const Theme& ThemeDark() {
         t.tableHeadFg = Rgb(0x52, 0x52, 0x52);
         t.tableRowBorder = Rgba8(0x26, 0x26, 0x26, 0xb3);
         t.tableEven = Rgba8(0x17, 0x17, 0x17, 0x66);
+        // default-theme.json dark: list.active.background #1e40af33,
+        // list.active.border #1d4ed8. table.active has no entry of its own, so
+        // it falls back to the list pair.
+        t.listActive = Rgba8(0x1e, 0x40, 0xaf, 0x33);
+        t.listActiveBorder = Rgb(0x1d, 0x4e, 0xd8);
+        t.tableActive = t.listActive;
+        t.tableActiveBorder = t.listActiveBorder;
         t.progress = Rgb(0xf5, 0xf5, 0xf5);
         t.red = Rgb(0xf8, 0x71, 0x71);
         t.green = Rgb(0x4a, 0xde, 0x80);
@@ -166,6 +173,11 @@ const Theme& ThemeLight() {
         t.tableHeadFg = Rgb(0x73, 0x73, 0x73);
         t.tableRowBorder = Rgba8(0xe5, 0xe5, 0xe5, 0xb3);
         t.tableEven = Rgb(0xfa, 0xfa, 0xfa);
+        // default-theme.json light: the same blue for the list and the table.
+        t.listActive = Rgba8(0xbf, 0xdb, 0xfe, 0x33);
+        t.listActiveBorder = Rgb(0x60, 0xa5, 0xfa);
+        t.tableActive = t.listActive;
+        t.tableActiveBorder = t.listActiveBorder;
         t.progress = Rgb(0x17, 0x17, 0x17);
         t.red = Rgb(0xdc, 0x26, 0x26);
         t.green = Rgb(0x16, 0xa3, 0x4a);

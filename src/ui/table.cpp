@@ -1,4 +1,5 @@
 #include "ui/table.h"
+#include "base/list_settings.h"
 #include "ui/skeleton.h"
 
 namespace gpui {
@@ -321,7 +322,14 @@ El* DataTable::IntoEl() {
             row->Bg(th.tableEven);
         }
         if (s && s->selectedRow == r && s->mode == TableSelectionMode::Row) {
-            row->Bg(th.accent);
+            // state.rs paints the selected row the same way a list item does,
+            // off the table's own pair of colors.
+            ListActiveStyle sel = ListActiveStyleOf(
+                th.tableActive, th.tableActiveBorder, th.accent, true);
+            row->Bg(sel.bg);
+            if (sel.hasBorder) {
+                row->Child(ListActiveOverlay(a, sel.border, 0));
+            }
         } else if (s && s->rightClickedRow == r) {
             row->Bg(RgbaOpacity(th.accent, 0.5f));
         }

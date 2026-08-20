@@ -70,6 +70,14 @@ struct Theme {
     Rgba tableHeadFg;
     Rgba tableRowBorder;
     Rgba tableEven;
+    // list.active.background / list.active.border, and the table pair that
+    // falls back to them (theme/schema.rs). What ListSettings::active_highlight
+    // picks instead of plain `accent` for a selected row: a translucent tint
+    // with a solid rule around it, rather than a filled block.
+    Rgba listActive;
+    Rgba listActiveBorder;
+    Rgba tableActive;
+    Rgba tableActiveBorder;
     Rgba progress;
     Rgba red;
     Rgba green;

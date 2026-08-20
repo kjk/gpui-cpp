@@ -74,6 +74,7 @@ int GpuiMain(int argc, char** argv) {
     TestJson();
     TestDockState();
     TestFocusTrap();
+    TestListSettings();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);
