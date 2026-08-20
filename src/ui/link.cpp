@@ -35,6 +35,10 @@ El* Link::IntoEl() {
     // gpui_base::Link owns identity, focus and activation; the href is this
     // layer's, which is where Rust's injected open strategy would read it.
     El* e = gpui::Link::New(cx, id, disabled, onOpen);
+    // link.rs sets cursor_pointer on the div itself rather than inside the
+    // `when(!disabled)` beside it, so a disabled link keeps the hand there
+    // too; this keeps that.
+    e->Cursor(CursorKind::Pointer);
     // text_decoration_1(): a link is underlined at rest, not only on hover.
     e->Child(TextEl(a, text.s ? text : href)
                  ->Font(14)

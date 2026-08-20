@@ -499,6 +499,8 @@ void PlatSetCursor(Window* win, CursorKind kind) {
     LPCWSTR name = IDC_ARROW;
     if (kind == CursorKind::IBeam) {
         name = IDC_IBEAM;
+    } else if (kind == CursorKind::Pointer) {
+        name = IDC_HAND;
     } else if (kind == CursorKind::ColResize) {
         name = IDC_SIZEWE;
     } else if (kind == CursorKind::RowResize) {

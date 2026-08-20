@@ -29,6 +29,9 @@ El* BreadcrumbItem::IntoEl() {
     El* el = Div(a)->Child(
         TextEl(a, label)->Font(14)->Fg(lit ? th.foreground : th.mutedFg));
     if (!disabled && onClick.IsValid()) {
+        // breadcrumb.rs asks for the hand in the same `when_some(on_click)`
+        // that binds the click: a level with nowhere to go is not a link.
+        el->Cursor(CursorKind::Pointer);
         BindClick(el, StrDup(a, fmt("%d", ix)), onClick);
     }
     return el;
