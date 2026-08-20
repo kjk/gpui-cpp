@@ -438,17 +438,9 @@ void MenuStory::OnKey(MenuStory* self, Ctx* cx, const KeyEvent* ev) {
         return;
     }
 
-    component::PopupMenu* menus[] = {
-        PopupStoryMenu(self, cx),      MainContextMenu(self, cx),
-        OtherContextMenu(self, cx, 0), OtherContextMenu(self, cx, 1),
-        ScrollableMenu(self, cx, 100), ScrollableMenu(self, cx, 5),
-    };
-    for (int i = 0; i < (int)(sizeof(menus) / sizeof(menus[0])); i++) {
-        if (menus[i]->PerformKey(ev->vk)) {
-            return;
-        }
-    }
-
+    // The menus answer their own keys now: each declares the "PopupMenu" key
+    // context and hears the actions bound in it, so the page no longer has to
+    // rebuild every menu on every keystroke to offer it the chord.
     if (!ev->ctrl) {
         return;
     }

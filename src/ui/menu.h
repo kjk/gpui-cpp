@@ -17,7 +17,8 @@ enum class MenuItemKind : uint8_t {
 
 struct PopupMenu;
 
-constexpr int kPopupMenuMaxItems = 128;
+// The keyboard reads the same rows off the state, so one bound covers both.
+constexpr int kPopupMenuMaxItems = kPopupMenuMaxRows;
 
 struct MenuItem {
     MenuItemKind kind = MenuItemKind::Item;
@@ -75,12 +76,7 @@ struct PopupMenu {
     PopupMenu* Scrollable(bool v = true);
     PopupMenu* CheckSide(Side s);
     PopupMenu* ExternalLinkIcon(bool v);
-    // Route a PopupMenu key to the deepest submenu currently showing.
-    bool PerformKey(int key);
     El* IntoEl();
-
-    // The two masks the key handling needs, over the rows as built.
-    void Masks(bool* clickable, bool* hasSubmenu) const;
 };
 
 // The same keyed state, for a page that has to drive the menu itself — the

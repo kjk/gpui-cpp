@@ -4226,11 +4226,11 @@ static void ToggleInspectorAction(Window* win, ActionEvent*) {
 }
 
 static void KeymapDefaults() {
-    static bool done = false;
-    if (done) {
+    static uint32_t done = 0;
+    if (done == KeymapGeneration()) {
         return;
     }
-    done = true;
+    done = KeymapGeneration();
     uint32_t toggle = ActionOf(StrL("inspector::ToggleInspector"));
     KeyBinding bindings[] = {
 #ifdef __APPLE__

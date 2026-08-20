@@ -1,28 +1,55 @@
 #include "base/popup_menu.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
-PopupMenuAction PopupMenuActionForKey(int key, Side side) {
-    switch (key) {
-        case KeyUp:
-            return PopupMenuAction::SelectPrev;
-        case KeyDown:
-            return PopupMenuAction::SelectNext;
-        case KeyReturn:
-            return PopupMenuAction::Confirm;
-        case KeyEscape:
-            return PopupMenuAction::Cancel;
-        case KeyLeft:
-            // A menu whose submenus open to the right is stepped out of with
-            // Left; one that opens to the left reaches in with it.
-            return SideIsLeft(side) ? PopupMenuAction::OpenSubmenu
-                                    : PopupMenuAction::CloseSubmenu;
-        case KeyRight:
-            return SideIsLeft(side) ? PopupMenuAction::CloseSubmenu
-                                    : PopupMenuAction::OpenSubmenu;
-        default:
-            return PopupMenuAction::None;
+Str PopupMenuContext() {
+    return StrL("PopupMenu");
+}
+
+void PopupMenuInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
     }
+    bound = KeymapGeneration();
+    const char* ctx = "PopupMenu";
+    KeyBinding bindings[] = {
+        {"enter", action::Confirm(), ctx},
+        {"escape", action::Cancel(), ctx},
+        {"up", action::SelectUp(), ctx},
+        {"down", action::SelectDown(), ctx},
+        {"left", action::SelectLeft(), ctx},
+        {"right", action::SelectRight(), ctx},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+PopupMenuAction PopupMenuActionOf(uint32_t id, Side side) {
+    if (id == action::SelectUp()) {
+        return PopupMenuAction::SelectPrev;
+    }
+    if (id == action::SelectDown()) {
+        return PopupMenuAction::SelectNext;
+    }
+    if (id == action::Confirm()) {
+        return PopupMenuAction::Confirm;
+    }
+    if (id == action::Cancel()) {
+        return PopupMenuAction::Cancel;
+    }
+    if (id == action::SelectLeft()) {
+        // A menu whose submenus open to the right is stepped out of with
+        // Left; one that opens to the left reaches in with it.
+        return SideIsLeft(side) ? PopupMenuAction::OpenSubmenu
+                                : PopupMenuAction::CloseSubmenu;
+    }
+    if (id == action::SelectRight()) {
+        return SideIsLeft(side) ? PopupMenuAction::CloseSubmenu
+                                : PopupMenuAction::OpenSubmenu;
+    }
+    return PopupMenuAction::None;
 }
 
 int PopupMenuNextIndex(const bool* clickable, int n, int selected) {
@@ -150,6 +177,67 @@ void PopupMenuPerform(PopupMenuState* s, Ctx* cx, PopupMenuAction act,
         default:
             break;
     }
+}
+
+void PopupMenuBeginRows(PopupMenuState* s) {
+    if (s) {
+        s->nRows = 0;
+    }
+}
+
+void PopupMenuAddRow(PopupMenuState* s, const PopupMenuRow& row) {
+    if (s && s->nRows < kPopupMenuMaxRows) {
+        s->rows[s->nRows++] = row;
+    }
+}
+
+void PopupMenuPerformRows(PopupMenuState* s, Ctx* cx, PopupMenuAction act) {
+    if (!s) {
+        return;
+    }
+    int n = s->nRows;
+    // Escape, or the arrow that steps out, inside a submenu: the row that
+    // opened it lives in the parent, so that is who closes it. Rust dismisses
+    // the submenu entity, which its parent is watching; here the parent holds
+    // the flag, and focus follows it back on the next frame.
+    if ((act == PopupMenuAction::Cancel ||
+         act == PopupMenuAction::CloseSubmenu) &&
+        s->openSubmenu < 0 && s->parent.IsValid()) {
+        PopupMenuState* parent = s->parent.Get(cx);
+        if (parent) {
+            parent->openSubmenu = -1;
+            Notify(cx);
+            return;
+        }
+    }
+    // A link row is PopupMenuItem::ElementItem upstream, and its handler
+    // opens the URL rather than reporting an index — so Enter on one has to
+    // do what the click does.
+    int sel = s->selected;
+    if (act == PopupMenuAction::Confirm && sel >= 0 && sel < n &&
+        s->rows[sel].link && s->rows[sel].href.s) {
+        OpenUrl(s->rows[sel].href);
+        PopupMenuDismissAll(s, cx);
+        return;
+    }
+    bool clickable[kPopupMenuMaxRows];
+    bool hasSubmenu[kPopupMenuMaxRows];
+    for (int i = 0; i < n; i++) {
+        clickable[i] = s->rows[i].clickable;
+        hasSubmenu[i] = s->rows[i].submenu;
+    }
+    PopupMenuPerform(s, cx, act, clickable, hasSubmenu, n);
+}
+
+void PopupMenuState::OnAction(PopupMenuState* self, Ctx* cx,
+                              const ActionEvent* ev) {
+    if (!self || !self->open) {
+        // Not on screen: the action belongs to whatever is, which is
+        // cx.propagate().
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    PopupMenuPerformRows(self, cx, PopupMenuActionOf(ev->action, self->side));
 }
 
 void PopupMenuState::OnItemClick(PopupMenuState* self, Ctx* cx,

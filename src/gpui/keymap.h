@@ -97,6 +97,12 @@ struct KeyBinding {
 void KeymapBind(const KeyBinding* bindings, int n);
 void KeymapClear();
 
+// Which keymap this is. A component binds its own keys once and then leaves
+// them alone; this is how it tells that the map it bound into is gone — which
+// is what clearing does, and what a test that clears it needs a component to
+// notice. Never 0, so a "never bound" of 0 is always different.
+uint32_t KeymapGeneration();
+
 // KeyMatch. A chord either resolves to an action, or is the first half of a
 // binding written as a sequence — `pending`, which means the matcher is
 // holding it and the keystroke belongs to nobody else.
