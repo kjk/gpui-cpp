@@ -28,6 +28,19 @@ struct InputEditorStyle {
     // either one turning it on is enough.
     bool mask = false;
     int align = 0;
+    // The highlighted runs over the whole document, in order, as UTF-8
+    // offsets into it: a syntax highlighter's captures and an editor's
+    // TextDecorations both arrive this way. The rows slice what falls inside
+    // them out of it, so a run may span more than one.
+    const TextSpan* spans = nullptr;
+    int nSpans = 0;
+    // Editor's active-line wash and its indent guides. Alpha 0 and 0 are off,
+    // which is what a plain textarea wants.
+    Rgba activeLine = {};
+    Rgba indentGuide = {};
+    // How many columns an indent guide stands every, which is the language's
+    // tab size.
+    int indentWidth = 4;
 };
 
 struct Input {

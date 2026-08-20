@@ -75,11 +75,11 @@ static const char* kEditorCode =
     "}\n"
     "\n";
 
-// The decorations tab shows a short document instead. Rust hangs four
-// TextDecorations off it — a bold red marker on a warning wash, a bold italic
-// green run, an italic info run and a wavy warning underline. There is no
-// per-range decoration list on InputState here, so the text is the text and
-// the styles are not drawn.
+// The decorations tab shows a short document instead, with four
+// TextDecorations hung off it. Weight and slant are not among the things a
+// span can change — every run of a line shares one shaped layout — so the
+// bold and the italic Rust also asks for are not drawn; the colour, the wash
+// and the wavy rule are.
 static const char* kDecorationText =
     "Decoration styles\n"
     "Color highlights important text.\n"
@@ -142,11 +142,50 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
         Div(a)->FlexCol()->W(kFill)->Radius(th.radius)->Border(1, th.border);
     // The editor owns the box its rows scroll inside, so the caret can bring
     // the view with it.
-    box->Child(component::Highlighter::New(
-                   cx, StrL("editor"),
-                   self->tab == 0 ? &self->code : &self->decorations)
-                   ->H(WindowSize(cx->win).dipH - 262)
-                   ->IntoEl());
+    component::Highlighter* ed = component::Highlighter::New(
+        cx, StrL("editor"), self->tab == 0 ? &self->code : &self->decorations);
+    ed->H(WindowSize(cx->win).dipH - 262)->ActiveLine()->IndentGuides();
+    if (self->tab == 0) {
+        ed->Language(StrL("rust"));
+    } else {
+        // create_decorations_collection: the four runs, found in the text by
+        // the words they cover, as Rust finds them.
+        Str text = Str(kDecorationText);
+        static const char* const kWords[4] = {"Decoration styles", "Color",
+                                              "Italic", "Underline"};
+        auto* runs = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * 4);
+        int n = 0;
+        for (int i = 0; i < 4; i++) {
+            const char* at = strstr(text.s, kWords[i]);
+            if (!at) {
+                continue;
+            }
+            TextSpan& sp = runs[n];
+            sp.lo = (int)(at - text.s);
+            sp.hi = sp.lo + (int)strlen(kWords[i]);
+            sp.bg = Rgba8(0, 0, 0, 0);
+            sp.underline = false;
+            switch (i) {
+                case 0:
+                    sp.color = th.danger;
+                    sp.bg = RgbaOpacity(th.warning, 0.2f);
+                    break;
+                case 1:
+                    sp.color = th.success;
+                    break;
+                case 2:
+                    sp.color = th.info;
+                    break;
+                default:
+                    sp.color = th.warning;
+                    sp.underline = true;
+                    break;
+            }
+            n++;
+        }
+        ed->Decorations(runs, n);
+    }
+    box->Child(ed->IntoEl());
     page->Child(box);
     return page;
 }

@@ -739,6 +739,11 @@ El* El::SelRange(int lo, int hi, Rgba color) {
     selColor = color;
     return this;
 }
+El* El::Spans(const TextSpan* runs, int n) {
+    spans = runs;
+    nSpans = n;
+    return this;
+}
 int Utf8OffsetToUtf16(Str s, int u8) {
     if (u8 > s.len) {
         u8 = s.len;
@@ -2800,6 +2805,75 @@ static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
     }
 }
 
+// One shaped layout, painted a run at a time: every span's range is clipped
+// to the rects it covers and the whole run is drawn inside that clip in the
+// span's colour, so each glyph is drawn exactly once and no two colours
+// overlap on the same pixels. What the spans leave over is drawn the same way
+// in the element's own colour.
+static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
+    float maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
+    TextLayout* layout =
+        TextMeasLayout(ctx, e->text, font, maxW, e->style.wrap, ElTextWeight(e),
+                       e->style.lineHeight, nullptr, nullptr);
+    if (!layout) {
+        DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, base,
+                   e->style.truncate, e->style.wrap, e->laidMaxW,
+                   ElTextWeight(e), e->style.lineHeight);
+        return;
+    }
+    Bounds rects[32] = {};
+    // The washes go under every glyph, so they all go down first.
+    for (int i = 0; i < e->nSpans; i++) {
+        const TextSpan& sp = e->spans[i];
+        if (sp.bg.a == 0 || sp.hi <= sp.lo) {
+            continue;
+        }
+        int n = TextLayoutRangeRects(layout, e->text, sp.lo, sp.hi, rects, 32);
+        for (int r = 0; r < n; r++) {
+            CanvasFillRect(ctx, e->x + rects[r].x, e->y + rects[r].y,
+                           rects[r].w, rects[r].h, sp.bg);
+        }
+    }
+    // The glyphs, one partition at a time.
+    int at = 0;
+    for (int i = 0; i <= e->nSpans; i++) {
+        int lo = i < e->nSpans ? e->spans[i].lo : e->text.len;
+        int hi = i < e->nSpans ? e->spans[i].hi : e->text.len;
+        if (lo > at) {
+            // What the spans left over, in the element's own colour.
+            int n = TextLayoutRangeRects(layout, e->text, at, lo, rects, 32);
+            for (int r = 0; r < n; r++) {
+                CanvasPushClip(ctx, e->x + rects[r].x, e->y + rects[r].y,
+                               rects[r].w, rects[r].h);
+                TextLayoutDraw(ctx, layout, e->x, e->y, base, false);
+                CanvasPopClip(ctx);
+            }
+        }
+        if (i >= e->nSpans || hi <= lo) {
+            at = lo > at ? lo : at;
+            continue;
+        }
+        int n = TextLayoutRangeRects(layout, e->text, lo, hi, rects, 32);
+        for (int r = 0; r < n; r++) {
+            CanvasPushClip(ctx, e->x + rects[r].x, e->y + rects[r].y,
+                           rects[r].w, rects[r].h);
+            TextLayoutDraw(ctx, layout, e->x, e->y, e->spans[i].color, false);
+            CanvasPopClip(ctx);
+        }
+        at = hi;
+    }
+    // The rules last, so nothing paints over them.
+    for (int i = 0; i < e->nSpans; i++) {
+        const TextSpan& sp = e->spans[i];
+        if (!sp.underline || sp.hi <= sp.lo) {
+            continue;
+        }
+        PaintTextUnderline(ctx, e->text, font, maxW, e->style.wrap, e->x, e->y,
+                           sp.lo, sp.hi, sp.color);
+    }
+    TextLayoutRelease(layout);
+}
+
 static void DrawChart(PaintCtx* ctx, El* e) {
     const Theme& th = ThemeNow();
     float x = e->x;
@@ -3478,7 +3552,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                 ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
                 e->style.wrap, e->x, e->y, e->markLo, e->markHi, c);
         }
-        if (e->laidLayout) {
+        if (e->nSpans > 0 && e->text.s) {
+            PaintTextSpans(ctx, e, font, c);
+        } else if (e->laidLayout) {
             TextLayoutDraw(ctx, e->laidLayout, e->x, e->y, c,
                            e->style.truncate);
         } else {

@@ -173,6 +173,19 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     if (lineNumbers) {
         numW = 12.f + 7.f * (rows >= 100 ? 3 : (rows >= 10 ? 2 : 1));
     }
+    // The row the caret is on, which is the one the active-line wash covers.
+    int caretRow = -1;
+    if (style.activeLine.a != 0) {
+        caretRow = RopeOffsetToPoint(text, cursor).row;
+    }
+    // A monospace column, for the indent guides. The glyphs are all one width
+    // in the family the editor asks for, so one measurement does.
+    float colW = 0;
+    if (style.indentGuide.a != 0 && style.indentWidth > 0) {
+        colW = font * 0.6f;
+    }
+    // The document's runs, sliced per row below.
+    int spanAt = 0;
     for (int row = 0; row < rows; row++) {
         int start = RopeLineStartOffset(text, row);
         Str line = RopeSliceLine(text, row);
@@ -180,6 +193,45 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             style.foreground);
         if (style.mono) {
             el->Mono();
+        }
+        // The runs that fall inside this row, rebased onto it. The document's
+        // are in order, so the walk carries on where the last row left off.
+        if (style.nSpans > 0) {
+            while (spanAt < style.nSpans && style.spans[spanAt].hi <= start) {
+                spanAt++;
+            }
+            int first = spanAt;
+            int count = 0;
+            while (first + count < style.nSpans &&
+                   style.spans[first + count].lo < start + line.len) {
+                count++;
+            }
+            if (count > 0) {
+                auto* rowSpans =
+                    (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * count);
+                int nRowSpans = 0;
+                for (int k = 0; k < count; k++) {
+                    const TextSpan& sp = style.spans[first + k];
+                    int lo = sp.lo - start;
+                    int hi = sp.hi - start;
+                    if (lo < 0) {
+                        lo = 0;
+                    }
+                    if (hi > line.len) {
+                        hi = line.len;
+                    }
+                    if (hi <= lo) {
+                        continue;
+                    }
+                    rowSpans[nRowSpans] = sp;
+                    rowSpans[nRowSpans].lo = lo;
+                    rowSpans[nRowSpans].hi = hi;
+                    nRowSpans++;
+                }
+                if (nRowSpans > 0) {
+                    el->Spans(rowSpans, nRowSpans);
+                }
+            }
         }
         if (state->softWrap) {
             el->Wrap();
@@ -203,11 +255,43 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         if (caret && cursor >= start && cursor <= start + line.len) {
             el->Caret(cursor - start, style.caret);
         }
+        // indent_guides: a hairline every tab stop of the row's own leading
+        // whitespace, drawn behind the text.
+        El* guides = nullptr;
+        if (colW > 0) {
+            int lead = 0;
+            while (lead < line.len && line.s[lead] == ' ') {
+                lead++;
+            }
+            int stops = lead / style.indentWidth;
+            if (stops > 0) {
+                guides = Div(a)->Absolute()->Left(0)->Top(0)->H(kFill);
+                for (int g = 0; g < stops; g++) {
+                    guides->Child(
+                        Div(a)
+                            ->Absolute()
+                            ->Left(colW * (float)(g * style.indentWidth))
+                            ->Top(0)
+                            ->W(1)
+                            ->H(kFill)
+                            ->Bg(style.indentGuide));
+                }
+            }
+        }
         if (!lineNumbers) {
+            if (guides) {
+                col->Child(
+                    Div(a)->W(kFill)->H(kInputLineH)->Child(guides)->Child(el));
+                continue;
+            }
             col->Child(el);
             continue;
         }
         El* band = Div(a)->FlexRow()->W(kFill)->H(kInputLineH)->Gap(8);
+        // active_line: the wash under the row the caret is on, gutter and all.
+        if (row == caretRow) {
+            band->Bg(style.activeLine);
+        }
         El* num = TextEl(a, StrDup(a, fmt("%d", row + 1)))
                       ->Font(font - 1)
                       ->LineHeight(lineMult)
@@ -216,7 +300,11 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             num->Mono();
         }
         band->Child(Div(a)->W(numW)->JustifyEnd()->Child(num));
-        band->Child(el);
+        if (guides) {
+            band->Child(Div(a)->Grow()->H(kFill)->Child(guides)->Child(el));
+        } else {
+            band->Child(el);
+        }
         col->Child(band);
     }
     return col;
