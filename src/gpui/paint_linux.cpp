@@ -93,6 +93,53 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     return true;
 }
 
+// The offscreen target: an image surface rather than the window's, kept here
+// until the pixels are read back out of it.
+static cairo_surface_t* gOffscreenSurface = nullptr;
+
+bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    if (!ctx || !ctx->pa || pxW <= 0 || pxH <= 0) {
+        return false;
+    }
+    cairo_surface_t* surf =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, pxW, pxH);
+    if (!surf || cairo_surface_status(surf) != CAIRO_STATUS_SUCCESS) {
+        if (surf) {
+            cairo_surface_destroy(surf);
+        }
+        return false;
+    }
+    if (!PaintTargetBegin(ctx, surf, pxW, pxH)) {
+        cairo_surface_destroy(surf);
+        return false;
+    }
+    gOffscreenSurface = surf;
+    return true;
+}
+
+bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
+    if (!ctx || !ctx->rt || !gOffscreenSurface) {
+        return false;
+    }
+    cairo_surface_flush(gOffscreenSurface);
+    if (outBgra) {
+        int w = cairo_image_surface_get_width(gOffscreenSurface);
+        int h = cairo_image_surface_get_height(gOffscreenSurface);
+        int stride = cairo_image_surface_get_stride(gOffscreenSurface);
+        const uint8_t* src = cairo_image_surface_get_data(gOffscreenSurface);
+        // CAIRO_FORMAT_ARGB32 is already premultiplied BGRA on a little
+        // endian machine; the rows are copied without their padding.
+        for (int y = 0; y < h; y++) {
+            memcpy(outBgra + (size_t)y * (size_t)w * 4,
+                   src + (size_t)y * (size_t)stride, (size_t)w * 4);
+        }
+    }
+    PaintTargetFree(ctx);
+    cairo_surface_destroy(gOffscreenSurface);
+    gOffscreenSurface = nullptr;
+    return true;
+}
+
 bool PaintTargetEnd(PaintCtx* ctx) {
     if (!ctx || !ctx->rt || !ctx->rt->cr) {
         return false;

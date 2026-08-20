@@ -551,32 +551,93 @@ static void ApplyMenuTheme(HWND hwnd, bool dark) {
     }
 }
 
+// MENU_IMAGE_SIZE: the side a menu item's image is scaled to, in logical
+// pixels. The physical bitmap is this times the window's scale, so the icon
+// stays sharp on a high-DPI display.
+static const int kMenuImageSize = 16;
+
+// One icon as a bitmap the menu can show: the SVG rasterized into a 32-bit
+// top-down DIB, premultiplied, so Windows blends it over whatever it draws
+// behind the row.
+static HBITMAP MenuIconBitmap(Window* win, const char* path, int px,
+                              Rgba color) {
+    if (!win || !path || !path[0] || px <= 0) {
+        return nullptr;
+    }
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = px;
+    bi.bmiHeader.biHeight = -px;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp =
+        CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp || !bits) {
+        if (bmp) {
+            DeleteObject(bmp);
+        }
+        return nullptr;
+    }
+    if (!SvgRasterize(win->paint.pa, Str(path), px, color, (uint8_t*)bits)) {
+        DeleteObject(bmp);
+        return nullptr;
+    }
+    return bmp;
+}
+
+// The bitmaps a menu is showing. They have to outlive the menu, so they are
+// kept until it has been destroyed.
+static Vec<HBITMAP> gMenuBitmaps;
+
 // The rows, as an HMENU. A submenu is built the same way and attached with
 // MF_POPUP; destroying the menu destroys them with it.
-static HMENU BuildMenu(const PlatMenuItem* items, int n) {
+static HMENU BuildMenu(Window* win, const PlatMenuItem* items, int n,
+                       int iconPx, Rgba iconColor) {
     HMENU menu = CreatePopupMenu();
     if (!menu) {
         return nullptr;
     }
+    // The position of the next row appended, which is how a bitmap is
+    // attached — separators and submenus advance it too.
+    UINT position = 0;
     for (int i = 0; i < n; i++) {
         const PlatMenuItem& it = items[i];
         if (it.separator) {
             AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            position++;
             continue;
         }
         WCHAR* label = ToCWstrTemp(Str(it.label ? it.label : ""));
         if (it.submenu && it.submenuN > 0) {
-            HMENU sub = BuildMenu(it.submenu, it.submenuN);
+            HMENU sub =
+                BuildMenu(win, it.submenu, it.submenuN, iconPx, iconColor);
             if (!sub) {
                 continue;
             }
             UINT flags = MF_POPUP | (it.disabled ? MF_GRAYED : 0u);
             AppendMenuW(menu, flags, (UINT_PTR)sub, label);
+            position++;
             continue;
         }
         UINT flags = MF_STRING | (it.disabled ? MF_GRAYED : 0u) |
                      (it.checked ? MF_CHECKED : 0u);
         AppendMenuW(menu, flags, (UINT_PTR)it.id, label);
+        if (it.iconPath) {
+            HBITMAP bmp = MenuIconBitmap(win, it.iconPath, iconPx, iconColor);
+            if (bmp) {
+                // The item's content bitmap, not its check mark: it sits
+                // beside the label the way an icon does.
+                MENUITEMINFOW info = {};
+                info.cbSize = sizeof(info);
+                info.fMask = MIIM_BITMAP;
+                info.hbmpItem = bmp;
+                SetMenuItemInfoW(menu, position, TRUE, &info);
+                gMenuBitmaps.Append(bmp);
+            }
+        }
+        position++;
     }
     return menu;
 }
@@ -587,13 +648,22 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     if (!hwnd || !items || n <= 0) {
         return 0;
     }
-    HMENU menu = BuildMenu(items, n);
-    if (!menu) {
-        return 0;
-    }
     // The position is in logical pixels; Win32 wants physical ones, and on
     // the screen rather than in the client area.
     float scale = win->paint.dpi / 96.f;
+    // The menu draws an item's bitmap at its own pixel size, so it is
+    // rasterized at the device size to stay sharp on a high-DPI display.
+    int iconPx = (int)((float)kMenuImageSize * scale + 0.5f);
+    if (iconPx < 1) {
+        iconPx = 1;
+    }
+    // An icon takes the colour the menu writes its text in, which is what
+    // makes it read as part of the row in either theme.
+    Rgba iconColor = dark ? Rgb(255, 255, 255) : Rgb(0, 0, 0);
+    HMENU menu = BuildMenu(win, items, n, iconPx, iconColor);
+    if (!menu) {
+        return 0;
+    }
     POINT pt = {(LONG)(x * scale + 0.5f), (LONG)(y * scale + 0.5f)};
     ClientToScreen(hwnd, &pt);
     // Without this the menu does not dismiss when the click lands elsewhere.
@@ -605,6 +675,11 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     int selected =
         (int)TrackPopupMenuEx(menu, flags, pt.x, pt.y, hwnd, nullptr);
     DestroyMenu(menu);
+    // The menu is gone, so nothing refers to the bitmaps any more.
+    for (int i = 0; i < gMenuBitmaps.len; i++) {
+        DeleteObject(gMenuBitmaps[i]);
+    }
+    gMenuBitmaps.Reset();
     return selected;
 }
 

@@ -17,18 +17,18 @@ struct NativeMenuStory {
 static component::NativeMenu* DemoMenu(Ctx* cx, NativeMenuStory* self) {
     component::NativeMenu* sub =
         component::NativeMenu::New(cx)
-            ->Menu(StrL("Copy"), 10)
+            ->MenuWithIcon(StrL("Copy"), IconName::Copy, 10)
             ->Menu(StrL("Cut"), 11)
             ->MenuWithDisabled(StrL("Paste"), true, 12);
     return component::NativeMenu::New(cx)
-        ->Menu(StrL("New"), 1)
-        ->Menu(StrL("Open..."), 2)
+        ->MenuWithIcon(StrL("New"), IconName::Plus, 1)
+        ->MenuWithIcon(StrL("Open..."), IconName::FolderOpen, 2)
         ->MenuWithCheck(StrL("Word Wrap"), self->picked == 3, 3)
         ->Separator()
         ->Submenu(StrL("Edit"), sub)
         ->Separator()
         ->MenuWithDisabled(StrL("Save"), true, 4)
-        ->Menu(StrL("Quit"), 5);
+        ->MenuWithIcon(StrL("Quit"), IconName::X, 5);
 }
 
 static void OnMenuSelect(NativeMenuStory* self, Ctx* cx, const ClickEvent*,

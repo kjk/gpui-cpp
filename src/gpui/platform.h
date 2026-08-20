@@ -114,6 +114,10 @@ struct PlatMenuItem {
     bool separator = false;
     bool disabled = false;
     bool checked = false;
+    // The icon beside the label, as an asset path — Rust hands the platform
+    // the icon's path too, and each backend turns it into whatever kind of
+    // bitmap its menus take.
+    const char* iconPath = nullptr;
     const PlatMenuItem* submenu = nullptr;
     int submenuN = 0;
 };

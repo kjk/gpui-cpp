@@ -129,6 +129,9 @@ static PlatMenuItem* ToPlat(Arena* a, const NativeMenu* m, int* nextId) {
             p.submenuN = it.submenu ? it.submenu->n : 0;
             continue;
         }
+        if (it.icon != IconName::None) {
+            p.iconPath = StrDup(a, IconNamePath(it.icon)).s;
+        }
         if (!it.disabled) {
             p.id = (*nextId)++;
         }

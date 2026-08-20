@@ -543,7 +543,47 @@ namespace gpui {
 
 // The rows as an NSMenu. A row's tag is the id it reports; a submenu row
 // carries no tag and opens onto a menu built the same way.
-static NSMenu* BuildMenu(const PlatMenuItem* items, int n,
+// MENU_IMAGE_SIZE: the side a menu item's image is scaled to, in points.
+static const int kMenuImageSize = 16;
+
+// One icon as an image the menu can show. It is loaded as a template image,
+// which is what makes AppKit tint it with the row's text — so it reads right
+// in either appearance and while the row is highlighted.
+static NSImage* MenuIconImage(Window* win, const char* path) {
+    if (!win || !path || !path[0]) {
+        return nil;
+    }
+    // Rasterized at twice the point size, so it stays sharp on a Retina
+    // display; the image is then told it measures the point size.
+    const int px = kMenuImageSize * 2;
+    Vec<uint8_t> buf;
+    buf.AppendBlanks(px * px * 4);
+    // The colour does not matter for a template image, only the coverage.
+    if (!SvgRasterize(win->paint.pa, Str(path), px, Rgb(0, 0, 0), buf.els)) {
+        return nil;
+    }
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef bmp = CGBitmapContextCreate(
+        buf.els, (size_t)px, (size_t)px, 8, (size_t)px * 4, space,
+        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGColorSpaceRelease(space);
+    if (!bmp) {
+        return nil;
+    }
+    CGImageRef cgImage = CGBitmapContextCreateImage(bmp);
+    CGContextRelease(bmp);
+    if (!cgImage) {
+        return nil;
+    }
+    NSImage* image = [[NSImage alloc]
+        initWithCGImage:cgImage
+                   size:NSMakeSize(kMenuImageSize, kMenuImageSize)];
+    CGImageRelease(cgImage);
+    [image setTemplate:YES];
+    return image;
+}
+
+static NSMenu* BuildMenu(Window* win, const PlatMenuItem* items, int n,
                          GpuiMenuTarget* target) {
     NSMenu* menu = [[NSMenu alloc] init];
     // Without this AppKit greys every row whose target does not answer
@@ -561,8 +601,14 @@ static NSMenu* BuildMenu(const PlatMenuItem* items, int n,
                                                       action:nil
                                                keyEquivalent:@""];
         [item setEnabled:(it.disabled ? NO : YES)];
+        if (it.iconPath) {
+            NSImage* image = MenuIconImage(win, it.iconPath);
+            if (image) {
+                [item setImage:image];
+            }
+        }
         if (it.submenu && it.submenuN > 0) {
-            [item setSubmenu:BuildMenu(it.submenu, it.submenuN, target)];
+            [item setSubmenu:BuildMenu(win, it.submenu, it.submenuN, target)];
         } else {
             [item setTag:it.id];
             [item setState:(it.checked ? NSControlStateValueOn
@@ -584,7 +630,7 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
         return 0;
     }
     GpuiMenuTarget* target = [[GpuiMenuTarget alloc] init];
-    NSMenu* menu = BuildMenu(items, n, target);
+    NSMenu* menu = BuildMenu(win, items, n, target);
     gMenuChoice = 0;
     // The view is flipped, so the position is the one the window works in.
     NSPoint at = NSMakePoint(x, y);
