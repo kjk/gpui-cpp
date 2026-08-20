@@ -450,6 +450,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             EndPaint(hwnd, &ps);
             return 0;
         }
+        case WM_CAPTURECHANGED: {
+            // The capture went somewhere else — a title-bar drag handing off
+            // to DefWindowProc, or the system taking it — so the button
+            // coming back up will never reach this window. End the press
+            // where it was rather than leaving it down for good.
+            if (win->mouseDown) {
+                PlatformInput in =
+                    InputMouseUp(win->pressedButton, win->mouseX, win->mouseY,
+                                 ModsNow(), WindowCurrentClickCount(win));
+                WindowDispatchInput(win, &in);
+            }
+            return 0;
+        }
         case WM_MOUSEMOVE: {
             win->paint.dpi = HostDpi(hwnd);
             float x = PxToDip(&win->paint, GET_X_LPARAM(lParam));
@@ -614,6 +627,23 @@ void PlatSetTimer(Window* win, int ms) {
         SetTimer(hwnd, 1, (UINT)ms, nullptr);
     } else {
         KillTimer(hwnd, 1);
+    }
+}
+
+void PlatSetMouseCapture(Window* win, bool capture) {
+    HWND hwnd = Hwnd(win);
+    if (!hwnd) {
+        return;
+    }
+    if (capture) {
+        SetCapture(hwnd);
+        return;
+    }
+    // Only ours to release. A title-bar drag hands the capture to the system
+    // (AppDrag releases it and lets DefWindowProc take over), so the button
+    // coming up afterwards must not take somebody else's.
+    if (GetCapture() == hwnd) {
+        ReleaseCapture();
     }
 }
 

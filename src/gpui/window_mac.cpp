@@ -713,6 +713,14 @@ void PlatSetTimer(Window* win, int ms) {
     win->plat->nextTick = ms > 0 ? TimeNow() + ms / 1000.0 : 0;
 }
 
+void PlatSetMouseCapture(Window* win, bool capture) {
+    // Cocoa already routes mouseDragged: and mouseUp: to the window that took
+    // the mouseDown:, wherever the pointer has got to, so there is nothing to
+    // grab and nothing to give back.
+    (void)win;
+    (void)capture;
+}
+
 void PlatSetCursor(Window* win, CursorKind kind) {
     (void)win;
     if (kind == CursorKind::IBeam) {
