@@ -12,6 +12,7 @@
 #include "base/combobox.h"
 #include "base/date_picker.h"
 #include "base/dock.h"
+#include "base/tiles.h"
 #include "base/dialog.h"
 #include "base/hover_card.h"
 #include "base/input.h"

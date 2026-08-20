@@ -65,6 +65,7 @@ enum {
     StoryTag,
     StoryTextarea,
     StoryThemeColors,
+    StoryTiles,
     StoryToggle,
     StoryTooltip,
     StoryTree,
