@@ -50,13 +50,14 @@ static const NamedKey kNamedKeys[] = {
     {"right", KeyRight},
     {"down", KeyDown},
     {"delete", KeyDelete},
-    // The OEM keys, which only Windows reports; a binding on one is simply
-    // never matched on the other two, the way a binding on a key the keyboard
-    // does not have is never matched anywhere.
+    // The OEM keys. Only the brackets are reported on all three — the X11 and
+    // Cocoa windows map those two, because a field binds them; a binding on
+    // any of the rest is simply never matched off Windows, the way a binding
+    // on a key the keyboard does not have is never matched anywhere.
     {"-", 189},
     {"=", 187},
-    {"[", 219},
-    {"]", 221},
+    {"[", KeyLeftBracket},
+    {"]", KeyRightBracket},
     {"\\", 220},
     {";", 186},
     {"'", 222},

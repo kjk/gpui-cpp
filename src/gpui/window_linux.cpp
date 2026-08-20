@@ -252,6 +252,10 @@ static int KeyFor(KeySym ks) {
             return KeyDown;
         case XK_Delete:
             return KeyDelete;
+        case XK_bracketleft:
+            return KeyLeftBracket;
+        case XK_bracketright:
+            return KeyRightBracket;
         default:
             break;
     }

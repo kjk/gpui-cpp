@@ -550,6 +550,10 @@ static int KeyFor(unichar c) {
             return KeyEscape;
         case ' ':
             return KeySpace;
+        case '[':
+            return KeyLeftBracket;
+        case ']':
+            return KeyRightBracket;
         default:
             break;
     }

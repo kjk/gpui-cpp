@@ -466,6 +466,38 @@ static void TabIndentsEveryLineOfASelection() {
     utassert(ValueIs(s, "one\ntwo\nthree"));
 }
 
+// The block pair on ctrl-] / ctrl-[ moves whole lines: a caret halfway
+// along one still indents the line, where tab would have put the tab where
+// the caret is.
+static void TheBlockPairMovesTheWholeLine() {
+    InputState s;
+    s.kind = InputKind::Textarea;
+    InputSetValue(&s, StrL("one\ntwo"));
+    InputSetSelectedRange(&s, nullptr, nullptr, 6, 6);
+    utassert(InputPerform(&s, nullptr, nullptr, InputAction::Indent, false));
+    utassert(ValueIs(s, "one\n    two"));
+    // The caret rode along with the text it sits in.
+    utassert(RangeIs(s, 10, 10));
+
+    utassert(InputPerform(&s, nullptr, nullptr, InputAction::Outdent, false));
+    utassert(ValueIs(s, "one\ntwo"));
+    utassert(RangeIs(s, 6, 6));
+
+    // A selection is the same for both pairs.
+    InputSetSelectedRange(&s, nullptr, nullptr, 1, 6);
+    utassert(InputPerform(&s, nullptr, nullptr, InputAction::Indent, false));
+    utassert(ValueIs(s, "    one\n    two"));
+    utassert(RangeIs(s, 0, 14));
+
+    // And a single-line field has nothing to indent, whichever pair asks.
+    InputState one;
+    Type(&one, "ab");
+    utassert(!InputPerform(&one, nullptr, nullptr, InputAction::Indent, false));
+    utassert(
+        !InputPerform(&one, nullptr, nullptr, InputAction::Outdent, false));
+    utassert(ValueIs(one, "ab"));
+}
+
 // A mask rejects a character it has no room for and reformats as it fills.
 static void MaskFormatsWhileTyping() {
     InputState s;
@@ -525,6 +557,13 @@ static void ActionForKey() {
              InputAction::OutdentInline);
     // A modified tab belongs to whatever is outside the field.
     utassert(InputActionForKey(&s, KeyTab, false, true, false) ==
+             InputAction::None);
+    utassert(InputActionForKey(&s, KeyRightBracket, false, true, false) ==
+             InputAction::Indent);
+    utassert(InputActionForKey(&s, KeyLeftBracket, false, true, false) ==
+             InputAction::Outdent);
+    // Without ctrl a bracket is text.
+    utassert(InputActionForKey(&s, KeyLeftBracket, false, false, false) ==
              InputAction::None);
 }
 
@@ -738,6 +777,7 @@ void TestInputState() {
     MaskFormatsWhileTyping();
     TabIndentsOnlyWhereThereIsSomethingToIndent();
     TabIndentsEveryLineOfASelection();
+    TheBlockPairMovesTheWholeLine();
     ActionForKey();
     LayoutModeRowsClamp();
     KindDoesNotFollowTheRowCount();
