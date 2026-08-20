@@ -104,6 +104,13 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         {"Base", "Magenta", th.magenta},
         {"Base", "Red", th.red},
         {"Base", "Yellow", th.yellow},
+        {"Chart", "Chart 1", th.chart1},
+        {"Chart", "Chart 2", th.chart2},
+        {"Chart", "Chart 3", th.chart3},
+        {"Chart", "Chart 4", th.chart4},
+        {"Chart", "Chart 5", th.chart5},
+        {"Chart", "Bearish", th.chartBearish},
+        {"Chart", "Bullish", th.chartBullish},
         {"Danger", "Background", th.danger},
         {"Danger", "Foreground", th.dangerFg},
         {"Info", "Background", th.info},
@@ -125,15 +132,10 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
 
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
-    // The theme picker, then the Options group at the far end.
-    El* top = Div(a)
-                  ->FlexRow()
-                  ->W(kFill)
-                  ->Gap(12)
-                  ->ItemsCenter()
-                  ->JustifyBetween()
-                  ->FlexWrap();
-    El* pick = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    // The theme picker on one row and the Options group on the next, the way
+    // the Rust story stacks them.
+    El* top = Div(a)->FlexCol()->W(kFill)->Gap(12);
+    El* pick = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
     pick->Child(component::Select::New(cx, StrL("theme-select"), self->themes)
                     ->Items(kThemeItems, 2)
                     ->W(300)
@@ -144,6 +146,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                     ->Primary()
                     ->IntoEl());
     top->Child(pick);
+    El* optRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd();
     El* group = StoryToolbarGroup(cx);
     StoryToolbarOpt opts[2] = {
         {"Inherited Colors", self->showInherited, ThemeActInherited},
@@ -152,7 +155,8 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     group->Child(StoryToolbarDropdown(
         cx, StrL("theme-options"), StrL("Options"), self->optionsOpen,
         Listen(cx, &ThemeOptionsToggle), opts, 2, Listen(cx, &ThemeOptionAct)));
-    top->Child(group);
+    optRow->Child(group);
+    top->Child(optRow);
     page->Child(top);
 
     El* body = Div(a)->FlexRow()->W(kFill)->Gap(16)->ItemsStart();
