@@ -16,6 +16,11 @@ static const component::SearchableItem kGroupVariants[] = {
     {StrL("Fill"), StrL("fill"), 0, false},
     {StrL("Plain"), StrL("plain"), 0, false},
 };
+static const component::SearchableItem kGroupSizes[] = {
+    {StrL("Medium"), StrL("medium"), 0, false},
+    {StrL("Small"), StrL("small"), 0, false},
+    {StrL("XSmall"), StrL("xsmall"), 0, false},
+};
 
 struct SettingsStory {
     Entity<component::SettingsState> settings = {};
@@ -24,6 +29,10 @@ struct SettingsStory {
     bool resettable = true;
     Entity<component::SearchableListState> fontFamily = {};
     Entity<component::SearchableListState> groupVariant = {};
+    Entity<component::SearchableListState> groupSize = {};
+    // AppSettings::disabled: the Other group's first switch locks the rest.
+    bool disabled = false;
+    bool foo = false;
     InputState search;
     InputState fontSize;
     InputState lineHeight;
@@ -52,6 +61,17 @@ static void ToggleGroupVariant(SettingsStory* self, Ctx* cx,
                                const ClickEvent*) {
     component::SelectToggleOpen(self->groupVariant.Get(cx), cx);
 }
+static void ToggleGroupSize(SettingsStory* self, Ctx* cx, const ClickEvent*) {
+    component::SelectToggleOpen(self->groupSize.Get(cx), cx);
+}
+static void ToggleDisabled(SettingsStory* self, Ctx* cx, const ClickEvent*) {
+    self->disabled = !self->disabled;
+    Notify(cx);
+}
+static void ToggleFoo(SettingsStory* self, Ctx* cx, const ClickEvent*) {
+    self->foo = !self->foo;
+    Notify(cx);
+}
 // on_reset: the font size goes back to what it started at.
 static void ResetFontSize(SettingsStory* self, Ctx* cx, const ClickEvent*) {
     InputSetValue(&self->fontSize, StrL("14"));
@@ -75,13 +95,13 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
             EntityNewState<component::SearchableListState>(cx->app);
         self->groupVariant =
             EntityNewState<component::SearchableListState>(cx->app);
-        component::SearchableListState* ff = self->fontFamily.Get(cx);
-        component::SearchableListState* gv = self->groupVariant.Get(cx);
-        if (ff) {
-            ff->nSelected = 1;
-        }
-        if (gv) {
-            gv->nSelected = 1;
+        self->groupSize =
+            EntityNewState<component::SearchableListState>(cx->app);
+        for (Entity<component::SearchableListState> e :
+             {self->fontFamily, self->groupVariant, self->groupSize}) {
+            if (component::SearchableListState* st = e.Get(cx)) {
+                st->nSelected = 1;
+            }
         }
     }
     if (self->search.focused) {
@@ -122,6 +142,12 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
                 ->W(140)
                 ->OnToggle(Listen(cx, &ToggleGroupVariant))
                 ->IntoEl());
+    s->Item(StrL("Group Size"), StrL("Select the size for the setting group."),
+            component::Select::New(cx, StrL("set-group-size"), self->groupSize)
+                ->Items(kGroupSizes, 3)
+                ->W(140)
+                ->OnToggle(Listen(cx, &ToggleGroupSize))
+                ->IntoEl());
 
     s->Group(StrL("Font"));
     s->Item(StrL("Font Family"), StrL("Select the font family for the story."),
@@ -148,6 +174,28 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
             component::NumberInput::New(cx, StrL("set-line-height"),
                                         &self->lineHeight)
                 ->W(140)
+                ->IntoEl());
+
+    // The Other group: a switch that locks the rest, one that is only
+    // findable by its keyword, and a row that is all content.
+    s->Group(StrL("Other"));
+    s->Item(StrL("Disable Settings"), StrL("Lock the other settings."),
+            component::Switch::New(cx, StrL("set-disabled"))
+                ->Checked(self->disabled)
+                ->OnClick(Listen(cx, &ToggleDisabled))
+                ->IntoEl());
+    s->Item(StrL("Foo"), StrL("Find me by searching for my sibling"),
+            component::Switch::New(cx, StrL("set-foo"))
+                ->Checked(self->foo)
+                ->OnClick(Listen(cx, &ToggleFoo))
+                ->IntoEl());
+    s->Keywords(StrL("Bar"));
+    s->Item(StrL("View source, report issues, and follow project updates."),
+            Str{},
+            component::Button::New(cx, StrL("action"))
+                ->Icon(IconName::Globe)
+                ->Label(StrL("Repository..."))
+                ->Outline()
                 ->IntoEl());
 
     s->Page(StrL("Software Update"), IconName::Building2);
