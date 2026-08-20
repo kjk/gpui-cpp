@@ -70,6 +70,7 @@ int GpuiMain(int argc, char** argv) {
     TestSearchableList();
     TestSidebar();
     TestWindowBorder();
+    TestAvatar();
     TestKbd();
     TestNativeMenu();
     TestTiles();

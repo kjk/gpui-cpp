@@ -251,21 +251,32 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
                         ->LineHeight(1.f)
                         ->Wrap());
     }
-    // section(): h_flex().w_full().flex_wrap().justify_center().items_center()
-    // .gap_4() inside the pane.
-    El* body = Div(a)
-                   ->FlexRow()
-                   ->FlexWrap()
+    // GroupBox's content pane, with StorySection's content_style on it:
+    // bordered, p_4, rounded radius_lg, and centering the one child it has.
+    El* pane = Div(a)
+                   ->FlexCol()
                    ->Gap(16)
                    ->Pad(16)
                    ->W(kFill)
                    ->Border(1, th.border)
-                   ->Radius(th.radius)
+                   ->Radius(th.radiusLg)
+                   ->ClipX()
                    ->ItemsCenter()
                    ->JustifyCenter();
+    // section(): h_flex().w_full().flex_wrap().justify_center().items_center()
+    // .gap_4() inside the pane. This is the element a page styles when it
+    // says .w_128() or .v_flex() on its section.
+    El* body = Div(a)
+                   ->FlexRow()
+                   ->FlexWrap()
+                   ->Gap(16)
+                   ->W(kFill)
+                   ->ItemsCenter()
+                   ->JustifyCenter();
+    pane->Child(body);
     headRow->Child(head);
     wrap->Child(headRow);
-    wrap->Child(body);
+    wrap->Child(pane);
     return wrap;
 }
 
@@ -277,15 +288,21 @@ El* StorySectionSubTitle(El* section, El* sub) {
     return section;
 }
 
+El* StorySectionBody(El* section) {
+    if (!section || !section->first) {
+        return nullptr;
+    }
+    // wrap = [headRow, pane]; pane = [body].
+    El* pane = section->first;
+    while (pane->next) {
+        pane = pane->next;
+    }
+    return pane->first;
+}
+
 El* StorySectionAdd(El* section, El* child) {
-    if (!section || !child) {
-        return section;
-    }
-    El* body = section->first;
-    while (body && body->next) {
-        body = body->next;
-    }
-    if (body) {
+    El* body = StorySectionBody(section);
+    if (body && child) {
         body->Child(child);
     }
     return section;

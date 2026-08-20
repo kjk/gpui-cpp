@@ -131,6 +131,10 @@ Str StoryFmt(Ctx* cx, const char* f, ...);
 El* StoryTxt(Ctx* cx, Str s, float px, Rgba c);
 El* StorySection(Ctx* cx, const char* title, const char* desc);
 El* StorySectionAdd(El* section, El* child);
+// The row inside the section's pane — what `section()` returns in Rust, and
+// so what a page styles when it writes `.w_128()`, `.v_flex()` or `.gap_5()`
+// on its section.
+El* StorySectionBody(El* section);
 // section().sub_title(..): sits opposite the title, in the header row.
 El* StorySectionSubTitle(El* section, El* sub);
 El* StoryComingSoon(Ctx* cx, int story);

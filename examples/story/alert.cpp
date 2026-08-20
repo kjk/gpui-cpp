@@ -16,10 +16,11 @@ static void InfoClosed(AlertStory*, Ctx*, const ClickEvent*) {
     logf("Info alert closed\n");
 }
 
-// Every Alert section is .w_2_3(): the width lands on what the section
-// centers, not on the pane around it.
-static El* AlertW(Ctx* cx, El* child) {
-    return Div(cx->a)->WFrac(2.f / 3.f)->Child(child);
+// Every Alert section is .w_2_3(), which lands on the row inside the pane.
+static El* AlertSection(Ctx* cx, const char* title, const char* desc) {
+    El* sec = StorySection(cx, title, desc);
+    StorySectionBody(sec)->WFrac(2.f / 3.f);
+    return sec;
 }
 
 El* AlertStory::Render(AlertStory* self, Ctx* cx) {
@@ -29,20 +30,20 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
     page->Child(StoryToolbar(cx, self));
 
     El* def =
-        StorySection(cx, "Default", "Title, icon, and rich text content.");
-    StorySectionAdd(
-        def, AlertW(cx, component::Alert::New(
-                            cx, StrL("alert-default"),
-                            StrL("Your workspace is ready for the team.\n"
-                                 "- **12 members** have access\n"
-                                 "- Billing remains with the workspace owner"))
-                            ->Markdown()
-                            ->WithSize(size)
-                            ->Title(StrL("Workspace settings saved"))
-                            ->IntoEl()));
+        AlertSection(cx, "Default", "Title, icon, and rich text content.");
+    StorySectionAdd(def,
+                    (component::Alert::New(
+                         cx, StrL("alert-default"),
+                         StrL("Your workspace is ready for the team.\n"
+                              "- **12 members** have access\n"
+                              "- Billing remains with the workspace owner"))
+                         ->Markdown()
+                         ->WithSize(size)
+                         ->Title(StrL("Workspace settings saved"))
+                         ->IntoEl()));
     page->Child(def);
 
-    El* vars = StorySection(cx, "Variants",
+    El* vars = AlertSection(cx, "Variants",
                             "Info, success, warning, and error states.");
     El* col = Div(a)->FlexCol()->Gap(12)->W(kFill);
     col->Child(
@@ -78,10 +79,10 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
             ->WithSize(size)
             ->Title(StrL("Unable to process your payment."))
             ->IntoEl());
-    StorySectionAdd(vars, AlertW(cx, col));
+    StorySectionAdd(vars, (col));
     page->Child(vars);
 
-    El* ban = StorySection(cx, "Banner", "Full-width and closable alerts.");
+    El* ban = AlertSection(cx, "Banner", "Full-width and closable alerts.");
     El* bcol = Div(a)->FlexCol()->Gap(8)->W(kFill);
     bcol->Child(
         component::Alert::New(
@@ -119,22 +120,21 @@ El* AlertStory::Render(AlertStory* self, Ctx* cx) {
                     ->Banner()
                     ->WithSize(size)
                     ->IntoEl());
-    StorySectionAdd(ban, AlertW(cx, bcol));
+    StorySectionAdd(ban, (bcol));
     page->Child(ban);
 
     El* custom =
-        StorySection(cx, "Custom icon", "Custom icon and long content.");
-    StorySectionAdd(
-        custom,
-        AlertW(cx, component::Alert::New(
-                       cx, StrL("other-1"),
-                       StrL("The quarterly planning review overlaps with the "
-                            "APAC operations call. Move one event or invite "
-                            "another owner before sending the agenda."))
-                       ->Title(StrL("Two events overlap by 30 minutes"))
-                       ->WithSize(size)
-                       ->Icon(IconName::Calendar)
-                       ->IntoEl()));
+        AlertSection(cx, "Custom icon", "Custom icon and long content.");
+    StorySectionAdd(custom,
+                    (component::Alert::New(
+                         cx, StrL("other-1"),
+                         StrL("The quarterly planning review overlaps with the "
+                              "APAC operations call. Move one event or invite "
+                              "another owner before sending the agenda."))
+                         ->Title(StrL("Two events overlap by 30 minutes"))
+                         ->WithSize(size)
+                         ->Icon(IconName::Calendar)
+                         ->IntoEl()));
     page->Child(custom);
     return page;
 }

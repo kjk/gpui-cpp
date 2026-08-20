@@ -9,6 +9,11 @@ namespace component {
 // crates/ui/src/avatar/mod.rs avatar_size()
 float AvatarSizePx(UiSize s);
 
+// avatar.rs extract_text_initials: the first letter of each of the first two
+// words, upper-cased; a single-word name gives its first two letters instead.
+// Writes at most 8 bytes plus a NUL into `out` and answers it.
+Str AvatarInitials(char* out, int cap, Str name);
+
 struct Avatar {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -26,6 +31,9 @@ struct Avatar {
     IconName placeholder = IconName::User;
 
     static Avatar* New(Ctx* cx);
+    // Avatar::name: the whole name, of which the fallback shows the initials
+    // and off which its color is picked.
+    Avatar* Name(Str s);
     Avatar* Initials(Str s);
     Avatar* Bg(Rgba c);
     Avatar* Size(float v);
@@ -33,6 +41,25 @@ struct Avatar {
     Avatar* Radius(float v);
     Avatar* Border(float w, Rgba c);
     Avatar* Placeholder(IconName n);
+    El* IntoEl();
+};
+
+// crates/ui/src/avatar/avatar_group.rs: overlapping avatars, at most `limit`
+// of them, with an optional ⋯ chip for the rest.
+struct AvatarGroup {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Avatar* avatars[16] = {};
+    int n = 0;
+    UiSize size = UiSize::Medium;
+    int limit = 3;
+    bool ellipsis = false;
+
+    static AvatarGroup* New(Ctx* cx);
+    AvatarGroup* Child(Avatar* av);
+    AvatarGroup* WithSize(UiSize s);
+    AvatarGroup* Limit(int v);
+    AvatarGroup* Ellipsis();
     El* IntoEl();
 };
 
