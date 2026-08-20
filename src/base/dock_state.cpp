@@ -257,6 +257,204 @@ void DockAreaStateWrite(const DockAreaState* s, StrBuilder* out) {
     w.EndObject();
 }
 
+// ─── the live tree and the saved one ──────────────────────────────────────
+
+// One node of the live tree, written out. Answers the state node's index.
+static int DumpNode(const DockState* s, DockAreaState* out, int node) {
+    if (node < 0 || node >= kMaxDockNodes || !s->nodes[node].used) {
+        return -1;
+    }
+    const DockNode& n = s->nodes[node];
+    if (n.split) {
+        int ix = out->NewNode(StrL("StackPanel"));
+        if (ix < 0) {
+            return -1;
+        }
+        int children[kMaxPanelStateChildren];
+        int count = 0;
+        for (int i = 0; i < n.nChild && count < kMaxPanelStateChildren; i++) {
+            int child = DumpNode(s, out, n.child[i]);
+            if (child >= 0) {
+                children[count] = child;
+                out->nodes[ix].sizes[count] = n.size[i];
+                count++;
+            }
+        }
+        PanelStateNode& sn = out->nodes[ix];
+        sn.kind = PanelInfoKind::Stack;
+        sn.nChild = count;
+        sn.nSize = count;
+        sn.axis = n.axis;
+        for (int i = 0; i < count; i++) {
+            sn.children[i] = children[i];
+        }
+        return ix;
+    }
+    int ix = out->NewNode(StrL("TabPanel"));
+    if (ix < 0) {
+        return -1;
+    }
+    // A panel is a leaf under the name it was registered with, which is what
+    // the registry is asked for when this is read back.
+    int children[kMaxPanelStateChildren];
+    int count = 0;
+    for (int i = 0; i < n.nPanel && count < kMaxPanelStateChildren; i++) {
+        int panelIx = n.panel[i];
+        if (panelIx < 0 || panelIx >= s->nPanels) {
+            continue;
+        }
+        int leaf = out->NewNode(s->panels[panelIx].name);
+        if (leaf < 0) {
+            break;
+        }
+        out->nodes[leaf].kind = PanelInfoKind::Panel;
+        children[count++] = leaf;
+    }
+    PanelStateNode& sn = out->nodes[ix];
+    sn.kind = PanelInfoKind::Tabs;
+    sn.nChild = count;
+    sn.activeIndex = n.activeIx < count ? n.activeIx : 0;
+    for (int i = 0; i < count; i++) {
+        sn.children[i] = children[i];
+    }
+    return ix;
+}
+
+static void DumpSide(const DockState* s, DockAreaState* out,
+                     const DockSide& side, DockPlacement placement,
+                     DockSideState* to) {
+    if (side.node < 0) {
+        return;
+    }
+    to->node = DumpNode(s, out, side.node);
+    if (to->node < 0) {
+        return;
+    }
+    to->present = true;
+    to->placement = placement;
+    to->size = side.size;
+    to->open = side.open;
+}
+
+void DockDump(const DockState* s, DockAreaState* out) {
+    *out = DockAreaState{};
+    out->center = DumpNode(s, out, s->center);
+    DumpSide(s, out, s->left, DockPlacement::Left, &out->left);
+    DumpSide(s, out, s->right, DockPlacement::Right, &out->right);
+    DumpSide(s, out, s->bottom, DockPlacement::Bottom, &out->bottom);
+}
+
+// PanelRegistry::build_panel: the panel this name means, or an InvalidPanel
+// registered on the spot so the layout keeps its shape and says what is
+// missing from it.
+static int PanelForName(DockState* s, Str name, Arena* a,
+                        El* (*invalidRender)(Ctx* cx, void* data)) {
+    int found = DockPanelByName(s, name);
+    if (found >= 0) {
+        return found;
+    }
+    DockPanelDef def;
+    def.name = StrDup(a, name);
+    def.title = def.name;
+    def.render = invalidRender;
+    auto* info = ArenaNew<DockInvalidPanel>(a);
+    if (info) {
+        info->name = def.name;
+    }
+    def.data = info;
+    return DockAddPanelDef(s, def);
+}
+
+// One saved node, built into the live tree. Answers the live node, or -1.
+static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
+                    El* (*invalidRender)(Ctx* cx, void* data)) {
+    if (ix < 0 || ix >= st->n) {
+        return -1;
+    }
+    const PanelStateNode& sn = st->nodes[ix];
+    if (sn.kind == PanelInfoKind::Stack) {
+        int node = DockNewSplit(s, sn.axis);
+        if (node < 0) {
+            return -1;
+        }
+        for (int i = 0; i < sn.nChild; i++) {
+            int child = LoadNode(s, st, sn.children[i], a, invalidRender);
+            if (child >= 0) {
+                DockSplitAdd(s, node, child,
+                             i < sn.nSize ? sn.sizes[i] : kDockPanelMinSize);
+            }
+        }
+        return node;
+    }
+    // Tabs, or a leaf panel on its own: either way the live tree wants a tab
+    // group, since a panel here is never a node of its own.
+    int node = DockNewTabs(s);
+    if (node < 0) {
+        return -1;
+    }
+    if (sn.kind == PanelInfoKind::Tabs) {
+        for (int i = 0; i < sn.nChild; i++) {
+            const PanelStateNode& leaf = st->nodes[sn.children[i]];
+            // Rust flattens a tab group's children into their panels and
+            // ignores anything that is not one.
+            if (leaf.kind != PanelInfoKind::Panel) {
+                continue;
+            }
+            int panelIx = PanelForName(s, leaf.panelName, a, invalidRender);
+            if (panelIx >= 0) {
+                DockTabsAdd(s, node, panelIx);
+            }
+        }
+        s->nodes[node].activeIx =
+            sn.activeIndex < s->nodes[node].nPanel ? sn.activeIndex : 0;
+        return node;
+    }
+    int panelIx = PanelForName(s, sn.panelName, a, invalidRender);
+    if (panelIx >= 0) {
+        DockTabsAdd(s, node, panelIx);
+    }
+    return node;
+}
+
+static void LoadSide(DockState* s, const DockAreaState* st,
+                     const DockSideState& from, Arena* a,
+                     El* (*invalidRender)(Ctx* cx, void* data), DockSide* to) {
+    *to = DockSide{};
+    if (!from.present) {
+        to->node = -1;
+        return;
+    }
+    to->node = LoadNode(s, st, from.node, a, invalidRender);
+    to->size = from.size > 0 ? from.size : to->size;
+    to->open = from.open;
+}
+
+bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
+              El* (*invalidRender)(Ctx* cx, void* data)) {
+    if (!s || !st || st->center < 0) {
+        return false;
+    }
+    // The panels the host registered stay; the tree they were in does not.
+    for (int i = 0; i < kMaxDockNodes; i++) {
+        s->nodes[i] = DockNode{};
+    }
+    s->center = -1;
+    s->zoomPanel = -1;
+    s->dropNode = -1;
+    s->menuNode = -1;
+    s->left = DockSide{};
+    s->right = DockSide{};
+    s->bottom = DockSide{};
+    s->left.node = -1;
+    s->right.node = -1;
+    s->bottom.node = -1;
+    s->center = LoadNode(s, st, st->center, a, invalidRender);
+    LoadSide(s, st, st->left, a, invalidRender, &s->left);
+    LoadSide(s, st, st->right, a, invalidRender, &s->right);
+    LoadSide(s, st, st->bottom, a, invalidRender, &s->bottom);
+    return s->center >= 0;
+}
+
 int TilesToMetas(const TilesState* s, TileMeta* out, int* outPanels, int cap) {
     int n = 0;
     for (int i = 0; i < s->n && n < cap; i++) {

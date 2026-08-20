@@ -572,6 +572,11 @@ El* El::Rotate(float turns) {
     return this;
 }
 
+El* El::HideScrollbar() {
+    noScrollbar = true;
+    return this;
+}
+
 El* El::Opacity(float f) {
     style.opacity = f < 0 ? 0 : (f > 1 ? 1 : f);
     return this;
@@ -3019,8 +3024,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
 
     // ScrollbarMode: Always paints the bar whenever there is something to
     // scroll, Hover only while the pointer is over the box it belongs to.
-    bool barVisible = ElScrollMode(e) == ScrollbarMode::Always ||
-                      e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
+    bool barVisible =
+        !e->noScrollbar && (ElScrollMode(e) == ScrollbarMode::Always ||
+                            e->Bounds().Contains({ctx->mouseX, ctx->mouseY}));
     if (barVisible && e->style.overflowY == Overflow::Scroll &&
         e->contentH > e->h + 1.f && e->h > 0) {
         // The same three numbers the press and drag arithmetic goes by, so

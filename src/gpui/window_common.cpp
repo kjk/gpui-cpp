@@ -795,9 +795,13 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
             DropEvent ev = {win->activeDrag, in.x, in.y, target->bounds};
             ListenerCall(win->app, win, target->onDrop, &ev);
         }
-        win->activeDrag = {};
-        win->dragOverId = 0;
     }
+    // active_drag.take(): the drag is over whether or not it went anywhere.
+    // A press that picked a payload up and let go without moving used to
+    // leave it behind, and whatever draws from it — the dragged tab's
+    // preview, a drop target's highlight — kept drawing.
+    win->activeDrag = {};
+    win->dragOverId = 0;
     SliderRelease(win);
     // InputState::on_mouse_up: the drag is over, and the word a double click
     // pinned stops holding the selection open.

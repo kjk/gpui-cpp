@@ -12,6 +12,9 @@ static Str Chord(Ctx* cx, const char* key, bool shift = false, bool alt = false,
         k.ctrl = true;
     }
 #else
+    // Everywhere else the platform shortcut is Ctrl, so the flag has nothing
+    // left to choose between.
+    (void)platformShortcut;
     k.ctrl = true;
 #endif
     k.shift = shift;

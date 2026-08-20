@@ -5,6 +5,25 @@ namespace gpui {
 
 namespace component {
 
+El* DockInvalidPanelRender(Ctx* cx, void* data) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    auto* info = (DockInvalidPanel*)data;
+    Str name = info ? info->name : StrL("");
+    // my_6, centred, muted: Rust's sentence, with the name it was asked for.
+    return Div(a)
+        ->SizeFull()
+        ->PadY(24)
+        ->FlexCol()
+        ->ItemsCenter()
+        ->JustifyCenter()
+        ->Child(TextEl(a, StrDup(a, fmt("The `%s` panel type is not "
+                                        "registered in PanelRegistry.",
+                                        name)))
+                    ->Font(13)
+                    ->Fg(th.mutedFg));
+}
+
 DockArea* DockArea::New(Ctx* cx, Str id, Entity<DockState> state) {
     Arena* a = cx->a;
     DockArea* d = ArenaNew<DockArea>(a);
@@ -114,13 +133,49 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     if (toolbar) {
         bar->Child(RenderToolbar(cx, id, st, false));
     }
+    // TabBar::track_scroll: a row of tabs wider than the bar scrolls sideways
+    // rather than being squeezed, and the wheel over it moves it. The tab
+    // just made active is brought into view from where last frame put it,
+    // which is scroll_to_item.
+    if (n.pendingScrollIx >= 0) {
+        if (n.activeTabBoundsIx == n.pendingScrollIx) {
+            n.tabScrollX = DockTabScrollTo(n.tabScrollX, n.tabStripBounds,
+                                           n.activeTabBounds);
+            n.pendingScrollIx = -1;
+        } else {
+            // Its box is measured by this frame; the scroll is worked out on
+            // the next one, which is why one is asked for.
+            WindowRequestAnimationFrame(cx->win);
+        }
+    }
+    Str scrollId = StrDup(a, fmt("%s-tabscroll-%d", id, node));
+    El* strip = Div(a)
+                    ->FlexRow()
+                    ->ItemsCenter()
+                    ->Grow()
+                    ->H(kFill)
+                    ->MinW(0)
+                    ->ClipX()
+                    ->ScrollX(n.tabScrollX)
+                    ->HideScrollbar()
+                    ->ScrollId(HashClickId(scrollId))
+                    ->OnScroll(ListenTo(st, &DockState::OnTabBarScroll,
+                                        (intptr_t)node));
+    strip->BoundsOut(&n.tabStripBounds);
     for (int i = 0; i < n.nPanel; i++) {
         int panelIx = n.panel[i];
         const DockPanelDef& def = s->panels[panelIx];
         bool on = i == n.activeIx;
-        El* tab =
-            Div(a)->FlexRow()->ItemsCenter()->Gap(4)->PadX(10)->H(kFill)->Bg(
-                on ? th.tabActiveBg : th.tabBar);
+        // A tab keeps its own width: a row too wide for the bar scrolls
+        // rather than squeezing its labels.
+        El* tab = Div(a)
+                      ->FlexRow()
+                      ->ItemsCenter()
+                      ->Shrink0()
+                      ->Gap(4)
+                      ->PadX(10)
+                      ->H(kFill)
+                      ->Bg(on ? th.tabActiveBg : th.tabBar);
         if (i > 0) {
             tab->BorderL(1, th.border);
         }
@@ -164,11 +219,16 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                 ListenTo(st, &DockState::OnCloseClick, DockPack(node, i)));
             tab->Child(x);
         }
-        bar->Child(tab);
+        if (on) {
+            tab->BoundsOut(&n.activeTabBounds);
+            n.activeTabBoundsIx = i;
+        }
+        strip->Child(tab);
     }
     // last_empty_space: the run of bar past the last tab, which takes a drop
     // as "put it at the end" and lights up while a panel is over it.
     El* rest = Div(a)->Grow()->H(kFill)->MinW(64);
+    (void)0;
     if (!s->locked) {
         Str restId = StrDup(a, fmt("%s-tabrest-%d", id, node));
         rest->Id(restId)
@@ -180,7 +240,8 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
             rest->Bg(RgbaOpacity(th.primary, 0.2f));
         }
     }
-    bar->Child(rest);
+    strip->Child(rest);
+    bar->Child(strip);
     if (!collapsed && n.nPanel > 0 && s->panels[n.panel[n.activeIx]].zoomable) {
         int panelIx = n.panel[n.activeIx];
         El* zoom =

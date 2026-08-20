@@ -4,27 +4,31 @@
 // that each render a different widget; ours fills it with labelled boxes, so
 // the page is about the dock and not about what is inside it.
 struct DockPanelData {
+    // Panel::panel_name(), which is what a saved layout stores. The Rust
+    // story's panels are all "StoryContainer"; each of these is its own kind,
+    // so a layout read back knows which is which.
+    const char* name;
     const char* title;
     const char* body;
 };
 
 static DockPanelData kPanels[] = {
-    {"Explorer",
+    {"ExplorerPanel", "Explorer",
      "The left Dock. Drag its inner edge to resize it, or use the "
      "toggle button in the tab bar to close it."},
-    {"Outline", "A second panel in the left Dock's tab group."},
-    {"main.cpp",
+    {"OutlinePanel", "Outline", "A second panel in the left Dock's tab group."},
+    {"EditorPanel", "main.cpp",
      "Drag a tab onto another group to merge it, or onto an edge "
      "of one to split that group."},
-    {"README.md",
+    {"ReadmePanel", "README.md",
      "The centre item is a split of two tab groups. The handle "
      "between them resizes both."},
-    {"Preview", "The right half of the centre split."},
-    {"Terminal",
+    {"PreviewPanel", "Preview", "The right half of the centre split."},
+    {"TerminalPanel", "Terminal",
      "The bottom Dock keeps its tab bar when it is closed, so "
      "there is still something to click."},
-    {"Problems", "A second panel in the bottom Dock."},
-    {"Properties", "The right Dock."},
+    {"ProblemsPanel", "Problems", "A second panel in the bottom Dock."},
+    {"PropertiesPanel", "Properties", "The right Dock."},
 };
 
 const int kNPanels = (int)(sizeof(kPanels) / sizeof(kPanels[0]));
@@ -36,9 +40,17 @@ struct DockStory {
     Str message = {};
     bool locked = false;
 
+    // The layout as JSON, which is what DockArea::dump answers with — the
+    // story keeps it in hand rather than on disk.
+    Str saved = {};
+    Arena* savedArena = nullptr;
+
     static El* Render(DockStory* self, Ctx* cx);
     static void OnDockEvent(DockStory* self, Ctx* cx, const DockEvent* ev);
     static void OnToggleLock(DockStory* self, Ctx* cx, const ClickEvent* ev);
+    static void OnSaveLayout(DockStory* self, Ctx* cx, const ClickEvent* ev);
+    static void OnLoadLayout(DockStory* self, Ctx* cx, const ClickEvent* ev);
+    static void OnLoadStale(DockStory* self, Ctx* cx, const ClickEvent* ev);
 };
 
 static El* RenderPanel(Ctx* cx, void* data) {
@@ -78,6 +90,7 @@ static void Seed(DockStory* self, Ctx* cx) {
     int panel[kNPanels];
     for (int i = 0; i < kNPanels; i++) {
         DockPanelDef def;
+        def.name = Str(kPanels[i].name);
         def.title = Str(kPanels[i].title);
         def.render = RenderPanel;
         def.data = &kPanels[i];
@@ -110,6 +123,68 @@ static void Seed(DockStory* self, Ctx* cx) {
     DockTabsAdd(s, rightTabs, panel[7]);
     s->right.node = rightTabs;
     s->right.size = 180;
+}
+
+// DockArea::dump: the tree as JSON.
+void DockStory::OnSaveLayout(DockStory* self, Ctx* cx, const ClickEvent*) {
+    DockState* s = self->dock.Get(cx);
+    if (!s) {
+        return;
+    }
+    DockAreaState state;
+    DockDump(s, &state);
+    StrBuilder sb;
+    DockAreaStateWrite(&state, &sb);
+    if (self->saved.s) {
+        StrFree(self->saved);
+    }
+    self->saved = sb.TakeStr();
+    if (self->message.s) {
+        StrFree(self->message);
+    }
+    self->message = StrDup(StrL("Layout saved"));
+    Notify(cx);
+}
+
+// DockArea::load, with the panels matched by name.
+static void LoadFrom(DockStory* self, Ctx* cx, Str json) {
+    DockState* s = self->dock.Get(cx);
+    if (!s || !json.s) {
+        return;
+    }
+    // The strings the loaded panels keep have to outlive the frame, so the
+    // story holds the arena the state is parsed into.
+    if (self->savedArena) {
+        ArenaDelete(self->savedArena);
+    }
+    self->savedArena = ArenaNew();
+    DockAreaState state;
+    if (!DockAreaStateParse(self->savedArena, json, &state)) {
+        return;
+    }
+    DockLoad(s, &state, self->savedArena, component::DockInvalidPanelRender);
+    if (self->message.s) {
+        StrFree(self->message);
+    }
+    self->message = StrDup(StrL("Layout loaded"));
+    Notify(cx);
+}
+
+void DockStory::OnLoadLayout(DockStory* self, Ctx* cx, const ClickEvent*) {
+    LoadFrom(self, cx, self->saved);
+}
+
+// A layout written by an older build, naming a panel this one does not have:
+// the dock keeps its shape and says which type is missing, which is what
+// Rust's InvalidPanel is for.
+void DockStory::OnLoadStale(DockStory* self, Ctx* cx, const ClickEvent*) {
+    LoadFrom(self, cx,
+             StrL("{\"center\":{\"panel_name\":\"TabPanel\",\"children\":["
+                  "{\"panel_name\":\"EditorPanel\",\"children\":[],"
+                  "\"info\":{\"panel\":null}},"
+                  "{\"panel_name\":\"GitGraphPanel\",\"children\":[],"
+                  "\"info\":{\"panel\":null}}],"
+                  "\"info\":{\"tabs\":{\"active_index\":1}}}}"));
 }
 
 El* DockStory::Render(DockStory* self, Ctx* cx) {
@@ -146,6 +221,22 @@ El* DockStory::Render(DockStory* self, Ctx* cx) {
             ->Compact()
             ->OnClick(Listen(cx, &DockStory::OnToggleLock))
             ->IntoEl());
+    row->Child(component::Button::New(cx, StrL("dock-save"))
+                   ->Label(StrL("Save layout"))
+                   ->Compact()
+                   ->OnClick(Listen(cx, &DockStory::OnSaveLayout))
+                   ->IntoEl());
+    row->Child(component::Button::New(cx, StrL("dock-load"))
+                   ->Label(StrL("Load layout"))
+                   ->Compact()
+                   ->Disabled(!self->saved.s)
+                   ->OnClick(Listen(cx, &DockStory::OnLoadLayout))
+                   ->IntoEl());
+    row->Child(component::Button::New(cx, StrL("dock-stale"))
+                   ->Label(StrL("Load stale layout"))
+                   ->Compact()
+                   ->OnClick(Listen(cx, &DockStory::OnLoadStale))
+                   ->IntoEl());
     if (self->message.s) {
         row->Child(StoryTxt(cx, self->message, 13, th.mutedFg));
     }
