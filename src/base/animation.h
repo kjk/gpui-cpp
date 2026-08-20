@@ -31,6 +31,24 @@ float EaseInCubic(float t);
 // Slow at both ends. For something moving from one place to another.
 float EaseInOutCubic(float t);
 
+// GPUI's own easings, from crates/gpui/src/elements/animation.rs, which are
+// what the components that loop are written against rather than the cubics
+// above. Rust does not clamp these — the doc comment says so, to leave room
+// for a curve that overshoots — so neither do these.
+float EaseQuadratic(float t);
+// gpui's ease_in_out: the quadratic pair, not the cubic one above it.
+float EaseInOutQuad(float t);
+float EaseOutQuint(float t);
+// bounce(easing): the curve forwards over the first half and backwards over
+// the second, which is what turns a loop into a pulse.
+float EaseBounce(EaseFn e, float t);
+// bounce(ease_in_out), which is the skeleton's.
+float EaseBounceInOut(float t);
+
+// 0..1, which is what an easing's parameter has to be. Rust spells it
+// `.clamp(0., 1.)` at each site.
+float ClampF01(float t);
+
 // The Lerp trait. Rust implements it for f32, Pixels, Point<Pixels> and Hsla;
 // Pixels is a float here, and the two aggregates are these overloads.
 float Lerp(float a, float b, float t);

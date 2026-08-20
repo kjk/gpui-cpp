@@ -6,8 +6,11 @@
 
 namespace gpui {
 
+// `turns` rotates the icon clockwise about the middle of its box, 1 being a
+// whole turn — Transformation::rotate(percentage(..)), applied as the path is
+// built rather than by the backend.
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
-             Rgba color);
+             Rgba color, float turns = 0);
 
 // The same icon, drawn into a square of pixels instead of onto a window:
 // `outBgra` takes px * px * 4 bytes of premultiplied BGRA, top down. What a

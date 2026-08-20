@@ -669,7 +669,7 @@ static const SvgIcon* GetIcon(Str assetPath) {
 }
 
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
-             Rgba color) {
+             Rgba color, float turns) {
     if (!ctx || !ctx->rt || size <= 0) {
         return false;
     }
@@ -683,8 +683,29 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
     // for the sake of this one caller.
     float sx = size / (ic->vbW > 0 ? ic->vbW : 24.f);
     float sy = size / (ic->vbH > 0 ? ic->vbH : 24.f);
-    auto TX = [&](float u) { return x + (u - ic->vbX) * sx; };
-    auto TY = [&](float v) { return y + (v - ic->vbY) * sy; };
+    // Transformation::rotate, folded into the same walk: the icon turns about
+    // the middle of the box it was given, clockwise in this y-down space.
+    float ang = turns * 6.28318530718f;
+    float ca = turns != 0 ? cosf(ang) : 1.f;
+    float sa = turns != 0 ? sinf(ang) : 0.f;
+    float mx = x + size * 0.5f;
+    float my = y + size * 0.5f;
+    auto TX = [&](float u, float v) {
+        float px = x + (u - ic->vbX) * sx;
+        if (turns == 0) {
+            return px;
+        }
+        float py = y + (v - ic->vbY) * sy;
+        return mx + (px - mx) * ca - (py - my) * sa;
+    };
+    auto TY = [&](float u, float v) {
+        float py = y + (v - ic->vbY) * sy;
+        if (turns == 0) {
+            return py;
+        }
+        float px = x + (u - ic->vbX) * sx;
+        return my + (px - mx) * sa + (py - my) * ca;
+    };
 
     Path* path = PathNew(ctx, true);
     if (!path) {
@@ -693,12 +714,12 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
     for (int i = 0; i < ic->nOps; i++) {
         const SvgOp& o = ic->ops[i];
         if (o.cmd == kMove) {
-            PathMoveTo(path, TX(o.x), TY(o.y));
+            PathMoveTo(path, TX(o.x, o.y), TY(o.x, o.y));
         } else if (o.cmd == kLine) {
-            PathLineTo(path, TX(o.x), TY(o.y));
+            PathLineTo(path, TX(o.x, o.y), TY(o.x, o.y));
         } else if (o.cmd == kCubic) {
-            PathCubicTo(path, TX(o.x1), TY(o.y1), TX(o.x2), TY(o.y2), TX(o.x),
-                        TY(o.y));
+            PathCubicTo(path, TX(o.x1, o.y1), TY(o.x1, o.y1), TX(o.x2, o.y2),
+                        TY(o.x2, o.y2), TX(o.x, o.y), TY(o.x, o.y));
         } else if (o.cmd == kClose) {
             PathClose(path);
         }

@@ -1,8 +1,12 @@
 #include "ui/spinner.h"
+#include "base/motion.h"
 
 namespace gpui {
 
 namespace component {
+
+// spinner.rs: `speed`, the time one turn takes. Rust's default is 0.8 s.
+static const float kSpinnerPeriodMs = 800.f;
 
 Spinner* Spinner::New(Ctx* cx) {
     Arena* a = cx->a;
@@ -31,11 +35,27 @@ Spinner* Spinner::Color(Rgba c) {
     hasColor = true;
     return this;
 }
+Spinner* Spinner::Speed(float ms) {
+    speed = ms;
+    return this;
+}
+Spinner* Spinner::Ease(EaseFn fn) {
+    ease = fn;
+    return this;
+}
+Spinner* Spinner::Id(Str v) {
+    id = v;
+    return this;
+}
 
 El* Spinner::IntoEl() {
     const Theme& th = cx->theme();
     float dim = px > 0 ? px : UiSizePx(size);
-    El* ic = IconEl(a, icon, dim);
+    // Animation::new(speed).repeat(), whose delta is a whole turn:
+    // `Transformation::rotate(percentage(delta))`.
+    float turn = MotionRepeat(cx, MotionId(StrL("spinner"), id),
+                              speed > 0 ? speed : kSpinnerPeriodMs, ease);
+    El* ic = IconEl(a, icon, dim)->Rotate(turn);
     if (hasColor) {
         ic->Fg(color);
     } else {

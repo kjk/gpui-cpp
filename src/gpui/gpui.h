@@ -801,6 +801,10 @@ struct Style {
     Rgba bg = {};
     Rgba borderColor = {};
     Rgba color = {};
+    // Transformation::rotate: turns clockwise about the element's own centre,
+    // where 1 is a whole one. Only an icon reads it — a rotated box would want
+    // the whole element tree in on it, and nothing in the port asks for one.
+    float rotate = 0;
     float fontSize = 0; // 0 = inherit
     // line_height as a multiple of the font size. 0 = GPUI's default, phi.
     float lineHeight = 0;
@@ -979,6 +983,8 @@ struct El {
     El* Shrink0();
     El* W(float v);
     El* WFrac(float f);
+    // percentage(delta) turns clockwise, which is what a spinner is made of.
+    El* Rotate(float turns);
     El* H(float v);
     El* SizeFull();
     El* MinH(float v);

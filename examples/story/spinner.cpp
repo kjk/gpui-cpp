@@ -54,12 +54,23 @@ El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
 
     El* ease =
         StorySection(cx, "Easing", "Customize the rotation timing curve.");
-    // Three spinners, one per easing curve; ours all spin linearly.
+    // The three curves the Rust story shows: linear, bounce(ease_in_out) —
+    // which turns one way and then back — and ease_out_quint. Each spinner
+    // names itself, so they keep their own phase rather than sharing one.
+    struct EaseSpec {
+        const char* id;
+        EaseFn fn;
+    };
+    static const EaseSpec kEases[3] = {{"spin-linear", EaseLinear},
+                                       {"spin-bounce", EaseBounceInOut},
+                                       {"spin-quint", EaseOutQuint}};
     El* easeRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     for (int i = 0; i < 3; i++) {
         easeRow->Child(component::Spinner::New(cx)
                            ->WithSize(self->toolbar.size)
                            ->Icon(IconName::Loader)
+                           ->Id(Str(kEases[i].id))
+                           ->Ease(kEases[i].fn)
                            ->IntoEl());
     }
     StorySectionAdd(ease, easeRow);

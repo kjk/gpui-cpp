@@ -43,6 +43,38 @@ float EaseInOutCubic(float t) {
     return 1.f - (u * u * u) / 2.f;
 }
 
+float ClampF01(float t) {
+    return ClampF(t, 0.f, 1.f);
+}
+
+float EaseQuadratic(float t) {
+    return t * t;
+}
+
+float EaseInOutQuad(float t) {
+    if (t < 0.5f) {
+        return 2.f * t * t;
+    }
+    float x = -2.f * t + 2.f;
+    return 1.f - x * x / 2.f;
+}
+
+float EaseOutQuint(float t) {
+    float u = 1.f - t;
+    return 1.f - u * u * u * u * u;
+}
+
+float EaseBounce(EaseFn e, float t) {
+    if (!e) {
+        e = EaseLinear;
+    }
+    return t < 0.5f ? e(t * 2.f) : e((1.f - t) * 2.f);
+}
+
+float EaseBounceInOut(float t) {
+    return EaseBounce(EaseInOutQuad, t);
+}
+
 float Lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
