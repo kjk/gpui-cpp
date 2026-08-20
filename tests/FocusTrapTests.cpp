@@ -216,6 +216,37 @@ static void TheTabIndexGroupsTheTraversal() {
     ArenaDelete(a);
 }
 
+
+// FocusHandle's three questions, which are what a popover, a select and a
+// popup menu ask when they open and close: which element has focus, whether
+// focus is theirs, and putting back what they parked.
+static void AHandleParksFocusAndPutsItBack() {
+    // A trigger, and a container with two things inside it.
+    int ids[] = {1, 2, 7, 11, 12};
+    int traps[] = {0, 0, 0, 7, 7};
+    Window* win = WindowWithFocusables(ids, traps, 5);
+
+    win->focusId = 2;
+    utassert(WindowFocusedId(win) == 2);
+    // The container takes focus, and says focus is its own — both when it is
+    // on the container itself and when it is on something inside it.
+    WindowSetFocusId(win, 7);
+    utassert(WindowFocusWithin(win, 7));
+    win->focusId = 12;
+    utassert(WindowFocusWithin(win, 7));
+    utassert(!WindowFocusWithin(win, 2));
+    utassert(!WindowFocusWithin(win, 0));
+
+    // And back to what was parked.
+    utassert(WindowRestoreFocus(win, 2));
+    utassert(WindowFocusedId(win) == 2);
+    // A handle whose element is no longer on screen is nothing to do, which
+    // is what Rust's weak handle answers.
+    utassert(!WindowRestoreFocus(win, 99));
+    utassert(WindowFocusedId(win) == 2);
+    delete win;
+}
+
 void TestFocusTrap() {
     TestSuite("focus_trap");
     TabInsideATrapCyclesWithinIt();
@@ -229,4 +260,5 @@ void TestFocusTrap() {
     ATrapOfNonStopsLeavesFocusAlone();
     ATrapWithNoStopFallsBackToItsOwnContainer();
     TheTabIndexGroupsTheTraversal();
+    AHandleParksFocusAndPutsItBack();
 }

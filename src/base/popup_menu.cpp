@@ -90,6 +90,12 @@ int PopupMenuPrevIndex(const bool* clickable, int n, int selected) {
 }
 
 void PopupMenuOpen(PopupMenuState* s, Ctx* cx) {
+    if (!s->open) {
+        // previous_focus_handle: where focus was, so dismissing can put it
+        // back. A submenu opening does not park anything — the menu it came
+        // out of already has focus, and it is what focus goes back to.
+        s->previousFocusId = WindowFocusedId(cx->win);
+    }
     s->open = true;
     s->selected = -1;
     s->openSubmenu = -1;
@@ -97,6 +103,13 @@ void PopupMenuOpen(PopupMenuState* s, Ctx* cx) {
 }
 
 void PopupMenuDismiss(PopupMenuState* s, Ctx* cx) {
+    // The menu takes focus while it is up, so it is the one giving it back.
+    // Focus that has already moved somewhere else is left where it is.
+    if (s->open && s->previousFocusId &&
+        WindowFocusWithin(cx->win, s->focusId)) {
+        WindowRestoreFocus(cx->win, s->previousFocusId);
+    }
+    s->previousFocusId = 0;
     s->open = false;
     s->selected = -1;
     s->openSubmenu = -1;
