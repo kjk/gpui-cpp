@@ -59,11 +59,13 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default",
                            "Text and icon toggles with clear selected states.");
+    StorySectionBody(def)->FlexCol()->W(512)->ItemsCenter()->Gap(12);
     El* defRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    // Neither of the two says .outline(), so both are ghost.
     defRow->Child(ToggleChip(cx, onToggle, -1, "Preview", IconName::None,
-                             self->toggleSel == 1, true));
+                             self->toggleSel == 1, false));
     defRow->Child(ToggleChip(cx, onToggle, 0, nullptr, IconName::Star,
-                             self->toggles[0], true));
+                             self->toggles[0], false));
     StorySectionAdd(def, defRow);
     page->Child(def);
 
