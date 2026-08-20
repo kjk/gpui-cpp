@@ -77,3 +77,4 @@ void TestJson();
 void TestDockState();
 void TestFocusTrap();
 void TestListSettings();
+void TestStateStyle();
