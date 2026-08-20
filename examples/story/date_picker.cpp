@@ -317,38 +317,39 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
-    El* defaults =
-        StorySection(cx, "Default",
-                     "Single-date selection with presets and clear action.")
-            ->W(512);
-    El* defaultContent = Div(a)->FlexCol()->Gap(12);
-    defaultContent
-        ->Child(Picker(self, cx, DpDefault, StrL("date-picker-default"))
-                    ->Cleanable()
-                    ->Presets(gSinglePresets, 3, Listen(cx, &SelectPreset))
-                    ->IntoEl());
-    defaultContent->Child(
+    // .w_128().v_flex().gap_3(): the section is the column.
+    El* defaults = StorySection(
+        cx, "Default", "Single-date selection with presets and clear action.");
+    StorySectionBody(defaults)->FlexCol()->W(512)->Gap(12);
+    StorySectionAdd(defaults,
+                    Picker(self, cx, DpDefault, StrL("date-picker-default"))
+                        ->Cleanable()
+                        ->Presets(gSinglePresets, 3, Listen(cx, &SelectPreset))
+                        ->IntoEl());
+    StorySectionAdd(
+        defaults,
         StoryTxt(cx, StoryFmt(cx, "Value: %s", self->value), 14, th.mutedFg));
-    StorySectionAdd(defaults, defaultContent);
     page->Child(defaults);
 
     El* disabled =
         StorySection(cx, "Disabled dates",
-                     "Matchers can block intervals, ranges, or custom dates.")
-            ->W(512);
-    El* disabledContent = Div(a)->FlexCol()->Gap(12);
-    disabledContent
-        ->Child(Picker(self, cx, DpSmall, StrL("date-picker-small"))->IntoEl());
-    disabledContent->Child(Picker(self, cx, DpLarge, StrL("date-picker-large"))
-                               ->Format(component::DateFormat::Dash)
-                               ->IntoEl());
-    disabledContent->Child(
-        Picker(self, cx, DpCustom, StrL("date-picker-custom"))->IntoEl());
-    StorySectionAdd(disabled, disabledContent);
+                     "Matchers can block intervals, ranges, or custom dates.");
+    StorySectionBody(disabled)->FlexCol()->W(512)->Gap(12);
+    StorySectionAdd(disabled,
+                    Picker(self, cx, DpSmall, StrL("date-picker-small"))
+                        ->IntoEl());
+    StorySectionAdd(disabled,
+                    Picker(self, cx, DpLarge, StrL("date-picker-large"))
+                        ->Format(component::DateFormat::Dash)
+                        ->IntoEl());
+    StorySectionAdd(disabled,
+                    Picker(self, cx, DpCustom, StrL("date-picker-custom"))
+                        ->IntoEl());
     page->Child(disabled);
 
-    El* range = StorySection(cx, "Date range", "Two months with range presets.")
-                    ->W(512);
+    El* range =
+        StorySection(cx, "Date range", "Two months with range presets.");
+    StorySectionBody(range)->W(512);
     for (int i = 0; i < 4; i++) {
         gRangePresets[i].arg = DpDateRange * 16 + i;
     }
@@ -360,8 +361,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(range);
 
-    El* empty = StorySection(cx, "Empty range", "Empty range with presets.")
-                    ->W(512);
+    El* empty = StorySection(cx, "Empty range", "Empty range with presets.");
+    StorySectionBody(empty)->W(512);
     for (int i = 0; i < 4; i++) {
         gRangePresets[i].arg = DpEmptyRange * 16 + i;
     }
@@ -373,7 +374,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                    ->IntoEl());
     page->Child(empty);
 
-    El* birthday = StorySection(cx, "Year range", "Custom year range.")->W(512);
+    El* birthday = StorySection(cx, "Year range", "Custom year range.");
+    StorySectionBody(birthday)->W(512);
     StorySectionAdd(birthday,
                     Picker(self, cx, DpBirthday, StrL("date-picker-birthday"))
                         ->Placeholder(StrL("Select birthday"))
@@ -381,8 +383,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(birthday);
 
-    El* custom = StorySection(cx, "Custom style", "Appearance-free input.")
-                     ->W(512);
+    El* custom = StorySection(cx, "Custom style", "Appearance-free input.");
+    StorySectionBody(custom)->W(512);
     StorySectionAdd(custom,
                     Div(a)
                         ->W(280)
