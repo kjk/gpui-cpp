@@ -386,11 +386,10 @@ El* Editor::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
    `InputKind::Input` is the compile error Rust would have raised.
 
    What is deliberately not ported, because it needs machinery this tree does
-   not have: the IME marked range, the display map (soft wrap, folding, wrapped
-   line movement), the LSP and code-editor features, the search session,
-   scroll_to and the scrollbars, syntax highlighting, and number stepping. Line
-   movement therefore works on logical lines, and start_of_line / end_of_line
-   have no "first press goes to the visual line" branch. */
+   not have: code folding, the LSP and code-editor features, and the search
+   session. The display map is here, so vertical movement walks display rows;
+   start_of_line / end_of_line still take the logical line, which is the one
+   branch of Rust's that has no "first press goes to the visual line" here. */
 
 // ─── the document ─────────────────────────────────────────────────────────
 //
