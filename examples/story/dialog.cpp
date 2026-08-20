@@ -43,16 +43,6 @@ struct DialogStory {
 
 static component::SearchableItem gDialogOptions[3];
 
-static void PushDialogNotification(Ctx* cx, Str message) {
-    component::NotificationListState* state = StoryNotifications(cx).Get(cx);
-    if (!state) {
-        return;
-    }
-    component::NotificationItem item;
-    item.message = message;
-    component::NotificationPush(state, item, 5000);
-}
-
 static void DlgToolbarAct(DialogStory* self, Ctx* cx, const ClickEvent*,
                           intptr_t act) {
     switch (act) {
@@ -98,7 +88,7 @@ static void CloseDialog(DialogStory* self, Ctx* cx, const ClickEvent*) {
 }
 
 static void ConfirmBasicDialog(DialogStory* self, Ctx* cx, const ClickEvent*) {
-    PushDialogNotification(cx, StrL("You have pressed confirm."));
+    StoryPushNotification(cx, StrL("You have pressed confirm."));
     ResetDialogState(self, cx);
     Notify(cx);
 }
@@ -114,19 +104,19 @@ static void CloseOtherDialog(DialogStory* self, Ctx* cx, const ClickEvent*) {
 }
 
 static void PressLater(DialogStory* self, Ctx* cx, const ClickEvent*) {
-    PushDialogNotification(cx, StrL("You have pressed later."));
+    StoryPushNotification(cx, StrL("You have pressed later."));
     ResetDialogState(self, cx);
     Notify(cx);
 }
 
 static void PressRestart(DialogStory* self, Ctx* cx, const ClickEvent*) {
-    PushDialogNotification(cx, StrL("You have pressed restart."));
+    StoryPushNotification(cx, StrL("You have pressed restart."));
     ResetDialogState(self, cx);
     Notify(cx);
 }
 
 static void RunTestAction(DialogStory*, Ctx* cx, const ClickEvent*) {
-    PushDialogNotification(cx, StrL("You have clicked the TestAction."));
+    StoryPushNotification(cx, StrL("You have clicked the TestAction."));
     Notify(cx);
 }
 
@@ -739,11 +729,11 @@ void DialogStory::OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev) {
 
     int open = self->open;
     if (open == DlgDefault && action == DialogAction::Confirm) {
-        PushDialogNotification(cx, StrL("You have pressed confirm."));
+        StoryPushNotification(cx, StrL("You have pressed confirm."));
     } else if (open == DlgCustomButtons) {
-        PushDialogNotification(cx, action == DialogAction::Confirm
-                                       ? StrL("You have pressed restart.")
-                                       : StrL("You have pressed later."));
+        StoryPushNotification(cx, action == DialogAction::Confirm
+                                      ? StrL("You have pressed restart.")
+                                      : StrL("You have pressed later."));
     }
     ResetDialogState(self, cx);
     if (action == DialogAction::Confirm) {
