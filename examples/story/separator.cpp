@@ -12,7 +12,8 @@ El* SeparatorStory::Render(SeparatorStory*, Ctx* cx) {
     El* h = StorySection(
         cx, "Horizontal",
         "Separates stacked content, with optional labels and dashed rules.");
-    El* col = Div(a)->FlexCol()->Gap(16)->W(520);
+    StorySectionBody(h)->W(520);
+    El* col = Div(a)->FlexCol()->Gap(16)->W(kFill)->PadT(16);
     col->Child(component::Separator::Horizontal(cx)->IntoEl());
     col->Child(component::Separator::Horizontal(cx)
                    ->Label(StrL("With Label"))
@@ -27,6 +28,7 @@ El* SeparatorStory::Render(SeparatorStory*, Ctx* cx) {
 
     El* v = StorySection(cx, "Vertical",
                          "Separates actions or values arranged in a row.");
+    StorySectionBody(v)->W(520);
     El* row = Div(a)->FlexRow()->Gap(16)->H(100)->ItemsCenter();
     row->Child(component::Separator::Vertical(cx)->IntoEl());
     row->Child(
@@ -42,16 +44,19 @@ El* SeparatorStory::Render(SeparatorStory*, Ctx* cx) {
     El* ctx = StorySection(
         cx, "In Context",
         "Horizontal and vertical rules can structure compact content.");
-    El* box = Div(a)->FlexCol()->Gap(16)->W(480);
-    box->Child(StoryTxt(cx, StrL("Hello GPUI Component"), 14, th.foreground));
-    box->Child(
+    StorySectionBody(ctx)->W(520);
+    El* box = Div(a)->FlexCol()->Gap(16)->W(kFill);
+    El* head = Div(a)->FlexCol()->Gap(8)->W(kFill);
+    head->Child(StoryTxt(cx, StrL("Hello GPUI Component"), 16, th.foreground));
+    head->Child(
         StoryTxt(cx,
                  StrL("GPUI Component is a Rust GUI components for building "
                       "fantastic cross-platform desktop application by using "
                       "GPUI."),
-                 13, th.mutedFg)
+                 14, th.mutedFg)
             ->Wrap()
-            ->MaxW(460));
+            ->W(kFill));
+    box->Child(head);
     box->Child(component::Separator::Horizontal(cx)->IntoEl());
     El* links = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
     links->Child(StoryTxt(cx, StrL("Docs"), 14, th.foreground));
