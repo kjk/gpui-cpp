@@ -32,6 +32,12 @@ struct PlatWindow {
     cairo_surface_t* surf = nullptr; // the window itself
     cairo_surface_t* back = nullptr; // what a frame is drawn into
     XIC xic = nullptr;
+    // The preedit string as the input method has built it up so far. XIM
+    // hands over edits to it rather than the whole thing, so the client is
+    // the one that keeps it. 512 bytes is more than anybody composes at once.
+    char preedit[512] = {};
+    int preeditLen = 0;
+    int preeditCaret = 0;
     int pxW = 0;
     int pxH = 0;
     bool dirty = true;
@@ -289,6 +295,148 @@ static int Utf8Next(const char* s, int len, uint32_t* out) {
     }
     *out = b[0];
     return 1;
+}
+
+// --- input method ---------------------------------------------------------
+//
+// On-the-spot preedit: the input method hands over what it is composing and
+// the field draws it, so the candidate lands in the field's own font and
+// scrolls with the rest of the document. XIM builds the string by edits
+// rather than sending it whole, so the window keeps it and replays the whole
+// of it into the field on every change — which is what the mark is for.
+
+// One code point, encoded. XIM may hand the preedit over as wide characters.
+static int PreeditUtf8Encode(uint32_t cp, char* out) {
+    if (cp < 0x80) {
+        out[0] = (char)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+// The byte offset of character `chars` into a UTF-8 run. XIM counts in
+// characters; everything above here counts in bytes.
+static int Utf8ByteOfChar(const char* s, int len, int chars) {
+    int i = 0;
+    int c = 0;
+    while (i < len && c < chars) {
+        uint32_t cp = 0;
+        int adv = Utf8Next(s + i, len - i, &cp);
+        if (adv <= 0) {
+            break;
+        }
+        i += adv;
+        c++;
+    }
+    return i;
+}
+
+// Push what the window has accumulated into the focused field.
+static void PreeditApply(Window* win) {
+    PlatWindow* pw = win->plat;
+    InputState* in = win->input;
+    if (!in || !in->focused) {
+        return;
+    }
+    if (pw->preeditLen == 0) {
+        InputReplaceAndMarkText(in, win->app, win, nullptr, Str{}, nullptr);
+    } else {
+        int caret =
+            Utf8ByteOfChar(pw->preedit, pw->preeditLen, pw->preeditCaret);
+        Selection sel = {caret, caret};
+        InputReplaceAndMarkText(in, win->app, win, nullptr,
+                                Str(pw->preedit, pw->preeditLen), &sel);
+    }
+    AppInvalidate(win);
+}
+
+static int PreeditStart(XIC, XPointer, XPointer) {
+    // -1: no limit on how long the composition may get.
+    return -1;
+}
+
+static void PreeditDone(XIC, XPointer client, XPointer) {
+    Window* win = (Window*)client;
+    if (!win || !win->plat) {
+        return;
+    }
+    win->plat->preeditLen = 0;
+    win->plat->preeditCaret = 0;
+    if (win->input) {
+        InputUnmarkText(win->input, win->app, win);
+        AppInvalidate(win);
+    }
+}
+
+static void PreeditDraw(XIC, XPointer client, XPointer call) {
+    Window* win = (Window*)client;
+    auto* d = (XIMPreeditDrawCallbackStruct*)call;
+    if (!win || !win->plat || !d) {
+        return;
+    }
+    PlatWindow* pw = win->plat;
+    // The replacement, decoded to UTF-8. A multibyte text is already in the
+    // locale's encoding, which XSetLocaleModifiers has made UTF-8.
+    char ins[512];
+    int insLen = 0;
+    if (d->text && d->text->length > 0) {
+        if (d->text->encoding_is_wchar) {
+            const wchar_t* w = d->text->string.wide_char;
+            for (int i = 0;
+                 w && i < d->text->length && insLen < (int)sizeof(ins) - 8;
+                 i++) {
+                insLen += PreeditUtf8Encode((uint32_t)w[i], ins + insLen);
+            }
+        } else if (d->text->string.multi_byte) {
+            const char* m = d->text->string.multi_byte;
+            insLen = (int)strlen(m);
+            if (insLen > (int)sizeof(ins)) {
+                insLen = (int)sizeof(ins);
+            }
+            memcpy(ins, m, (size_t)insLen);
+        }
+    }
+    int from = Utf8ByteOfChar(pw->preedit, pw->preeditLen, d->chg_first);
+    int to = Utf8ByteOfChar(pw->preedit, pw->preeditLen,
+                            d->chg_first + d->chg_length);
+    if (to < from) {
+        to = from;
+    }
+    int tail = pw->preeditLen - to;
+    if (from + insLen + tail > (int)sizeof(pw->preedit)) {
+        // More than anybody composes; drop the change rather than overrun.
+        return;
+    }
+    memmove(pw->preedit + from + insLen, pw->preedit + to, (size_t)tail);
+    memcpy(pw->preedit + from, ins, (size_t)insLen);
+    pw->preeditLen = from + insLen + tail;
+    pw->preeditCaret = d->caret;
+    PreeditApply(win);
+}
+
+static void PreeditCaret(XIC, XPointer client, XPointer call) {
+    Window* win = (Window*)client;
+    auto* c = (XIMPreeditCaretCallbackStruct*)call;
+    if (!win || !win->plat || !c) {
+        return;
+    }
+    win->plat->preeditCaret = c->position;
+    PreeditApply(win);
 }
 
 static void OnKeyPress(Window* win, XKeyEvent* ke) {
@@ -1072,9 +1220,34 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
     AppSetTitle(win, title);
 
     if (gXim) {
-        pw->xic = XCreateIC(
-            gXim, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
-            XNClientWindow, pw->xwin, XNFocusWindow, pw->xwin, nullptr);
+        // On-the-spot first: the field draws the composition itself, in its
+        // own font and in the right place. Not every input method offers the
+        // style, and the ones that do not get the older arrangement where the
+        // method shows its own window — which is what this did before.
+        // XIMCallback holds every preedit callback in one XIMProc, which
+        // none of the four actually has the shape of — Xlib's own headers
+        // spell them differently. The cast is through void* so the compiler
+        // takes the mismatch as deliberate, which it is.
+        XIMCallback cbStart = {(XPointer)win, (XIMProc)(void*)PreeditStart};
+        XIMCallback cbDone = {(XPointer)win, (XIMProc)(void*)PreeditDone};
+        XIMCallback cbDraw = {(XPointer)win, (XIMProc)(void*)PreeditDraw};
+        XIMCallback cbCaret = {(XPointer)win, (XIMProc)(void*)PreeditCaret};
+        XVaNestedList preedit = XVaCreateNestedList(
+            0, XNPreeditStartCallback, &cbStart, XNPreeditDoneCallback, &cbDone,
+            XNPreeditDrawCallback, &cbDraw, XNPreeditCaretCallback, &cbCaret,
+            nullptr);
+        if (preedit) {
+            pw->xic = XCreateIC(
+                gXim, XNInputStyle, XIMPreeditCallbacks | XIMStatusNothing,
+                XNClientWindow, pw->xwin, XNFocusWindow, pw->xwin,
+                XNPreeditAttributes, preedit, nullptr);
+            XFree(preedit);
+        }
+        if (!pw->xic) {
+            pw->xic = XCreateIC(
+                gXim, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+                XNClientWindow, pw->xwin, XNFocusWindow, pw->xwin, nullptr);
+        }
     }
 
     XMapWindow(gDpy, pw->xwin);

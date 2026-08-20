@@ -678,6 +678,34 @@ El* El::SelRange(int lo, int hi, Rgba color) {
     selColor = color;
     return this;
 }
+int Utf8OffsetToUtf16(Str s, int u8) {
+    if (u8 > s.len) {
+        u8 = s.len;
+    }
+    int u16 = 0;
+    int i = 0;
+    while (i < u8) {
+        unsigned char c = (unsigned char)s.s[i];
+        int len = c < 0x80 ? 1 : (c < 0xE0 ? 2 : (c < 0xF0 ? 3 : 4));
+        // Everything outside the basic plane is a surrogate pair over there.
+        u16 += len == 4 ? 2 : 1;
+        i += len;
+    }
+    return u16;
+}
+
+int Utf16OffsetToUtf8(Str s, int u16) {
+    int at = 0;
+    int i = 0;
+    while (i < s.len && at < u16) {
+        unsigned char c = (unsigned char)s.s[i];
+        int len = c < 0x80 ? 1 : (c < 0xE0 ? 2 : (c < 0xF0 ? 3 : 4));
+        at += len == 4 ? 2 : 1;
+        i += len;
+    }
+    return i;
+}
+
 El* El::MarkRange(int lo, int hi) {
     markLo = lo;
     markHi = hi;

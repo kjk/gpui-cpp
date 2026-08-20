@@ -49,7 +49,7 @@ double TimeNow() {
 }
 
 // Defined below, once NSEvent is in scope for the whole file.
-void WindowMacKeyDown(Window* win, NSEvent* event);
+bool WindowMacKeyDown(Window* win, NSEvent* event);
 void WindowMacKeyUp(Window* win, NSEvent* event);
 
 } // namespace gpui
@@ -101,7 +101,7 @@ static bool PressedButton(MouseButton* out) {
 
 } // namespace gpui
 
-@interface GpuiView : NSView {
+@interface GpuiView : NSView <NSTextInputClient> {
   @public
     gpui::Window* win;
 }
@@ -286,7 +286,183 @@ static bool PressedButton(MouseButton* out) {
 }
 
 - (void)keyDown:(NSEvent*)event {
-    gpui::WindowMacKeyDown(win, event);
+    // The keys are the window's, as they have always been. The *text* half
+    // goes to the input method when a field has the keyboard: that is what
+    // makes marked text possible, and it is what GPUI's own view does.
+    if (gpui::WindowMacKeyDown(win, event)) {
+        [self interpretKeyEvents:@[ event ]];
+    }
+}
+
+// --- NSTextInputClient ---------------------------------------------------
+//
+// The focused InputState is the document, the way GPUI answers these against
+// the window's focused EntityInputHandler. Cocoa counts in UTF-16 and the
+// field counts in bytes, so every range crosses through Utf16 helpers.
+
+- (gpui::InputState*)gpuiInput {
+    gpui::InputState* in = win ? win->input : nullptr;
+    return (in && in->focused) ? in : nullptr;
+}
+
+- (BOOL)hasMarkedText {
+    gpui::InputState* in = [self gpuiInput];
+    return (in && gpui::InputMarkedRange(in, nullptr)) ? YES : NO;
+}
+
+- (NSRange)markedRange {
+    gpui::InputState* in = [self gpuiInput];
+    gpui::Selection m = {};
+    if (!in || !gpui::InputMarkedRange(in, &m)) {
+        return NSMakeRange(NSNotFound, 0);
+    }
+    gpui::Str text = gpui::InputValue(in);
+    NSUInteger lo = (NSUInteger)gpui::Utf8OffsetToUtf16(text, m.start);
+    NSUInteger hi = (NSUInteger)gpui::Utf8OffsetToUtf16(text, m.end);
+    return NSMakeRange(lo, hi - lo);
+}
+
+- (NSRange)selectedRange {
+    gpui::InputState* in = [self gpuiInput];
+    if (!in) {
+        return NSMakeRange(NSNotFound, 0);
+    }
+    gpui::Str text = gpui::InputValue(in);
+    NSUInteger lo =
+        (NSUInteger)gpui::Utf8OffsetToUtf16(text, in->selectedRange.start);
+    NSUInteger hi =
+        (NSUInteger)gpui::Utf8OffsetToUtf16(text, in->selectedRange.end);
+    return NSMakeRange(lo, hi - lo);
+}
+
+- (void)setMarkedText:(id)string
+        selectedRange:(NSRange)selected
+     replacementRange:(NSRange)replacement {
+    gpui::InputState* in = [self gpuiInput];
+    if (!in) {
+        return;
+    }
+    NSString* str = [string isKindOfClass:[NSAttributedString class]]
+                        ? [(NSAttributedString*)string string]
+                        : (NSString*)string;
+    const char* utf8 = [str UTF8String];
+    gpui::Str text = utf8 ? gpui::Str(utf8, (int)strlen(utf8)) : gpui::Str{};
+    gpui::Str doc = gpui::InputValue(in);
+    gpui::Selection range = {};
+    bool hasRange = replacement.location != NSNotFound;
+    if (hasRange) {
+        range.start = gpui::Utf16OffsetToUtf8(doc, (int)replacement.location);
+        range.end = gpui::Utf16OffsetToUtf8(
+            doc, (int)(replacement.location + replacement.length));
+    }
+    // The selection Cocoa reports is inside the new text, in UTF-16 units.
+    gpui::Selection sel = {};
+    bool hasSel = selected.location != NSNotFound;
+    if (hasSel) {
+        sel.start = gpui::Utf16OffsetToUtf8(text, (int)selected.location);
+        sel.end = gpui::Utf16OffsetToUtf8(
+            text, (int)(selected.location + selected.length));
+    }
+    gpui::InputReplaceAndMarkText(in, win->app, win,
+                                  hasRange ? &range : nullptr, text,
+                                  hasSel ? &sel : nullptr);
+    gpui::AppInvalidate(win);
+}
+
+- (void)unmarkText {
+    gpui::InputState* in = [self gpuiInput];
+    if (in) {
+        gpui::InputUnmarkText(in, win->app, win);
+        gpui::AppInvalidate(win);
+    }
+}
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacement {
+    gpui::InputState* in = [self gpuiInput];
+    if (!in) {
+        return;
+    }
+    NSString* str = [string isKindOfClass:[NSAttributedString class]]
+                        ? [(NSAttributedString*)string string]
+                        : (NSString*)string;
+    const char* utf8 = [str UTF8String];
+    if (!utf8 || !*utf8) {
+        // An empty commit ends the composition without leaving anything.
+        gpui::InputReplaceAndMarkText(in, win->app, win, nullptr, gpui::Str{},
+                                      nullptr);
+        gpui::AppInvalidate(win);
+        return;
+    }
+    gpui::Str doc = gpui::InputValue(in);
+    gpui::Selection range = {};
+    bool hasRange = replacement.location != NSNotFound;
+    if (hasRange) {
+        range.start = gpui::Utf16OffsetToUtf8(doc, (int)replacement.location);
+        range.end = gpui::Utf16OffsetToUtf8(
+            doc, (int)(replacement.location + replacement.length));
+    }
+    // A null range is the marked run, which is what a commit replaces.
+    gpui::InputReplaceTextInRange(in, win->app, win,
+                                  hasRange ? &range : nullptr,
+                                  gpui::Str(utf8, (int)strlen(utf8)));
+    gpui::AppInvalidate(win);
+}
+
+- (void)doCommandBySelector:(SEL)selector {
+    // Every command key — Return, Tab, the arrows, Backspace — has already
+    // gone through WindowKeyDown, which is where this port binds them. Taking
+    // them again here would run them twice, and letting NSView have them
+    // would make Cocoa beep.
+    (void)selector;
+}
+
+- (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
+                                               actualRange:
+                                                   (NSRangePointer)actual {
+    gpui::InputState* in = [self gpuiInput];
+    if (!in || range.location == NSNotFound) {
+        return nil;
+    }
+    gpui::Str doc = gpui::InputValue(in);
+    int lo = gpui::Utf16OffsetToUtf8(doc, (int)range.location);
+    int hi = gpui::Utf16OffsetToUtf8(doc, (int)(range.location + range.length));
+    if (lo < 0 || hi > doc.len || hi < lo) {
+        return nil;
+    }
+    if (actual) {
+        *actual = range;
+    }
+    NSString* str = [[NSString alloc] initWithBytes:doc.s + lo
+                                             length:(NSUInteger)(hi - lo)
+                                           encoding:NSUTF8StringEncoding];
+    return str ? [[NSAttributedString alloc] initWithString:str] : nil;
+}
+
+- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText {
+    return @[];
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range
+                         actualRange:(NSRangePointer)actual {
+    (void)range;
+    if (actual) {
+        *actual = range;
+    }
+    gpui::InputState* in = [self gpuiInput];
+    if (!in) {
+        return NSZeroRect;
+    }
+    // Where the candidate list hangs from: the caret, in screen space.
+    float x = in->lastBounds.x + in->caretX - in->scrollX;
+    float y = in->lastBounds.y - in->scrollY;
+    NSRect local = NSMakeRect(x, y, 1, in->lastLineH);
+    NSRect inWindow = [self convertRect:local toView:nil];
+    return [[self window] convertRectToScreen:inWindow];
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point {
+    (void)point;
+    return NSNotFound;
 }
 
 - (void)keyUp:(NSEvent*)event {
@@ -408,9 +584,12 @@ void WindowMacKeyUp(Window* win, NSEvent* event) {
         (mods & NSEventModifierFlagOption) != 0);
 }
 
-void WindowMacKeyDown(Window* win, NSEvent* event) {
+// True when the caller should hand the event to the input method for its
+// text: a field has the keyboard and this keystroke was not a chord the
+// window took for itself.
+bool WindowMacKeyDown(Window* win, NSEvent* event) {
     if (!win) {
-        return;
+        return false;
     }
     NSEventModifierFlags mods = [event modifierFlags];
     bool shift = (mods & NSEventModifierFlagShift) != 0;
@@ -430,10 +609,16 @@ void WindowMacKeyDown(Window* win, NSEvent* event) {
     // control code the Windows window delivers through WM_CHAR.
     if (key == KeyBack) {
         WindowChar(win, 8, ctrl, alt);
-        return;
+        return false;
     }
     if (ctrl || alt || key == KeyReturn || key == KeyTab || key == KeyEscape) {
-        return;
+        return false;
+    }
+    // A focused field's text is the input method's to deliver, through
+    // insertText: and setMarkedText:. Everywhere else the codepoints go
+    // straight through, which is what the window's own key listener reads.
+    if (win->input && win->input->focused) {
+        return true;
     }
     NSString* text = [event characters];
     NSUInteger n = [text length];
@@ -452,6 +637,7 @@ void WindowMacKeyDown(Window* win, NSEvent* event) {
             WindowChar(win, cp, ctrl, alt);
         }
     }
+    return false;
 }
 
 // ─── drawing ──────────────────────────────────────────────────────────────

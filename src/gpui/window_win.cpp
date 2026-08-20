@@ -60,20 +60,6 @@ static int ImeStringUtf8(HIMC imc, DWORD which, char* out, int cap) {
     return n;
 }
 
-// The bytes of `text` up to the UTF-16 offset the IME reported its caret at,
-// which is where the selection inside the marked run goes.
-static int ImeUtf16ToUtf8Offset(Str text, int utf16) {
-    int u16 = 0;
-    int i = 0;
-    while (i < text.len && u16 < utf16) {
-        unsigned char c = (unsigned char)text.s[i];
-        int len = c < 0x80 ? 1 : (c < 0xE0 ? 2 : (c < 0xF0 ? 3 : 4));
-        u16 += len == 4 ? 2 : 1;
-        i += len;
-    }
-    return i;
-}
-
 // Put the candidate list under the caret. Without this it lands at the
 // window's origin, which on a tall field is nowhere near what is being typed.
 static void ImeMoveCandidateWindow(Window* win, HIMC imc) {
@@ -127,7 +113,7 @@ static bool ImeComposition(Window* win, LPARAM lParam) {
             Selection sel = {};
             bool hasSel = caret >= 0;
             if (hasSel) {
-                int off = ImeUtf16ToUtf8Offset(text, (int)caret);
+                int off = Utf16OffsetToUtf8(text, (int)caret);
                 sel = Selection{off, off};
             }
             InputReplaceAndMarkText(in, win->app, win, nullptr, text,

@@ -1755,6 +1755,12 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
 // or a mask or validator that said no.
 bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
                              const Selection* range, Str newText);
+// Input methods count in UTF-16 on both platforms that have one to talk to;
+// a field counts in bytes. These are the two directions across. An offset
+// past the end clamps to it, which is what a platform handing over a stale
+// range needs.
+int Utf8OffsetToUtf16(Str s, int u8);
+int Utf16OffsetToUtf8(Str s, int u16);
 // marked_text_range(): what the input method is still deciding, if anything.
 bool InputMarkedRange(const InputState* s, Selection* out);
 // replace_and_mark_text_in_range(): the input method's provisional insert.
