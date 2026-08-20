@@ -200,8 +200,6 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseTree(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseVirtualList(ShowcaseApp* app, Ctx* cx);
 
-void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y);
-
 typedef El* (*ShowcaseRenderFn)(ShowcaseApp* app, Ctx* cx, WinSize size);
 void ShowcaseRegister(int comp, ShowcaseRenderFn render);
 El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size);

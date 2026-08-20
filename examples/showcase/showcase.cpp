@@ -502,9 +502,7 @@ void ShowcaseMouseMove(ShowcaseApp* app, Window* win,
                        const MouseMoveEvent* ev) {
     float x = ev->x;
     float y = ev->y;
-    if (app->component == CompResizable) {
-        ShowcaseResizeDrag(app, win, x, y);
-    } else if (app->component == CompTextSelection && win->mouseDown) {
+    if (app->component == CompTextSelection && win->mouseDown) {
         int off = TextSelOffsetAt(win, x, y, true);
         if (off >= 0) {
             app->selB = off;
@@ -519,9 +517,7 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* win,
     }
     float x = ev->x;
     float y = ev->y;
-    if (app->component == CompResizable) {
-        ShowcaseResizeDrag(app, win, x, y);
-    } else if (app->component == CompTextSelection) {
+    if (app->component == CompTextSelection) {
         int wordA = 0;
         int wordB = 0;
         if (TextSelRangeAt(win, x, y, ev->clickCount, &wordA, &wordB)) {
@@ -538,9 +534,9 @@ void ShowcaseMouseDown(ShowcaseApp* app, Window* win,
 }
 
 void ShowcaseMouseUp(ShowcaseApp* app, Window* win, const MouseUpEvent* ev) {
+    (void)app;
     (void)win;
     (void)ev;
-    app->draggingResize = false;
 }
 
 // A click no element claimed dismisses whatever is open, the way GPUI closes

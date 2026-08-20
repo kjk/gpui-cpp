@@ -7,9 +7,46 @@ enum {
     ClickResize = 470
 };
 
-static void OnResize(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
-    (void)app;
+// The divider's own press, moves and release. GPUI's `div().on_mouse_down`,
+// `on_drag_move` and `on_mouse_up`: the element that took the press keeps the
+// moves until the button comes back up, so nothing here consults the window's
+// pointer or walks last frame's hit rects to find itself again.
+static void OnResizeDown(ShowcaseApp* app, Ctx* cx, const MouseDownEvent* ev) {
+    if (ev->button != MouseButton::Left) {
+        return;
+    }
     app->draggingResize = true;
+    Notify(cx);
+}
+
+// The width the divider has been dragged to. `ev->el` is the divider's own box
+// as the last frame laid it out, so the panel's left edge is that less the
+// width it had — and a handler that moves the divider reads its own answer
+// back on the next move.
+static void OnResizeDrag(ShowcaseApp* app, Ctx* cx, const DragMoveEvent* ev) {
+    if (!app->draggingResize) {
+        return;
+    }
+    float boxLeft = ev->el.x - app->resizeW;
+    float w = ev->event.x - boxLeft;
+    if (w < 116) {
+        w = 116;
+    }
+    if (w > 210) {
+        w = 210;
+    }
+    if (w == app->resizeW) {
+        return;
+    }
+    app->resizeW = w;
+    Notify(cx);
+}
+
+static void OnResizeUp(ShowcaseApp* app, Ctx* cx, const MouseUpEvent*) {
+    if (!app->draggingResize) {
+        return;
+    }
+    app->draggingResize = false;
     Notify(cx);
 }
 
@@ -39,7 +76,11 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
     El* split = Div(a)
                     ->W(4)
                     ->H(kFill)
-                    ->OnClick(Listen(cx, &OnResize))
+                    ->Click(ClickResize)
+                    ->Cursor(CursorKind::ColResize)
+                    ->OnMouseDown(Listen(cx, &OnResizeDown))
+                    ->OnDragMove(Listen(cx, &OnResizeDrag))
+                    ->OnMouseUp(Listen(cx, &OnResizeUp))
                     ->FocusId(ClickResize);
     split->Child(Div(a)->W(1)->H(kFill)->Bg(Rgb(0x17, 0x17, 0x17)));
     El* main =
@@ -65,30 +106,6 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
         ->Child(nav)
         ->Child(split)
         ->Child(main);
-}
-
-void ShowcaseResizeDrag(ShowcaseApp* app, Window* win, float x, float y) {
-    (void)y;
-    if (!app->draggingResize) {
-        return;
-    }
-    for (int i = 0; i < win->paint.hits.len; i++) {
-        HitRect h = win->paint.hits[i];
-        if (h.id == ClickResize) {
-            // move left panel: new width is x relative to the 288 box
-            // approximate: hit x is divider; delta from divider center
-            float boxLeft = h.bounds.x - app->resizeW;
-            float w = x - boxLeft;
-            if (w < 116) {
-                w = 116;
-            }
-            if (w > 210) {
-                w = 210;
-            }
-            app->resizeW = w;
-            return;
-        }
-    }
 }
 
 SHOWCASE_PAGE(CompResizable, ShowcaseResizable);
