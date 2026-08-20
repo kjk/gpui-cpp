@@ -1,0 +1,36 @@
+/* List presentation settings — crates/base/src/list_settings.rs
+
+   Rust keeps this on the theme (`cx.theme().list`) and the story toggles it
+   from its settings menu. The themes here are immutable statics, so it lives
+   beside the theme mode instead — one global, read where a row decides how a
+   selection looks. */
+
+#include "gpui/gpui.h"
+
+namespace gpui {
+
+struct ListSettings {
+    // Whether a selected row takes the active highlight — the translucent
+    // list.active tint with a list.active.border rule around it — or the plain
+    // `accent` block. Rust defaults it on.
+    bool activeHighlight = true;
+};
+
+const ListSettings& ListSettingsNow();
+void ListSettingsSet(ListSettings s);
+
+// The pair a selected row paints with: the fill, and the rule drawn over the
+// row's own box so the highlight does not move anything. `active` is the theme
+// pair for a list or for a table, which fall back to the same colors.
+struct ListActiveStyle {
+    Rgba bg = {};
+    Rgba border = {};
+    bool hasBorder = false;
+};
+ListActiveStyle ListActiveStyleOf(Rgba active, Rgba activeBorder, Rgba accent,
+                                  bool selected);
+
+// The rule itself: an absolutely positioned child that covers the row.
+El* ListActiveOverlay(Arena* a, Rgba border, float radius);
+
+} // namespace gpui

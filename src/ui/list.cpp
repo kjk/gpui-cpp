@@ -1,4 +1,5 @@
 #include "ui/list.h"
+#include "base/list_settings.h"
 #include "ui/input.h"
 #include "ui/skeleton.h"
 
@@ -45,12 +46,22 @@ El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
     if (!disabled) {
         row->HoverBg(th.accent);
     }
-    if (selected) {
-        row->Bg(th.accent);
-    } else if (secondarySelected) {
-        // secondary_selected: the row a right press marked, outlined rather
-        // than filled, so it is not mistaken for the selection.
-        row->Border(1, th.border);
+    if (selected || secondarySelected) {
+        // list_item.rs: the selection takes the active highlight when the
+        // setting is on — the list.active tint, ruled with list.active.border
+        // — and plain `accent` when it is off. A row a right press marked is
+        // outlined rather than filled, so it is not mistaken for the
+        // selection.
+        ListActiveStyle st = ListActiveStyleOf(
+            th.listActive, th.listActiveBorder, th.accent, selected);
+        if (!secondarySelected) {
+            row->Bg(st.bg);
+        }
+        if (st.hasBorder) {
+            row->Child(ListActiveOverlay(a, st.border, th.radius));
+        } else if (secondarySelected) {
+            row->Border(1, th.border);
+        }
     }
     if (child) {
         row->Child(child);

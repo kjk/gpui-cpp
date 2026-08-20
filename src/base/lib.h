@@ -21,6 +21,7 @@
 #include "base/hover_card.h"
 #include "base/input.h"
 #include "base/link.h"
+#include "base/list_settings.h"
 #include "base/number_input.h"
 #include "base/otp_input.h"
 #include "base/pagination.h"
