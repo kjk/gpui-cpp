@@ -2462,6 +2462,60 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         }
     }
 
+    // The crosshair and the tooltip: a chart that asked for them shows what
+    // the pointer is over. Rust hangs this off a hover state; the pointer's
+    // position is already in the paint context here, so the chart reads it.
+    if (c.tooltip && ctx->mouseX >= x && ctx->mouseX <= x + w &&
+        ctx->mouseY >= y && ctx->mouseY <= y + plotH) {
+        int index = 0;
+        float lineX = ctx->mouseX;
+        if (c.kind == ChartKind::Bar || c.kind == ChartKind::Candlestick) {
+            const float range[2] = {0.f, w};
+            component::ScaleBand band = component::ScaleBand::New(n, range, 2);
+            band.paddingInner = c.bandPadding;
+            band.paddingOuter = c.bandPadding * 0.5f;
+            index = band.LeastIndex(ctx->mouseX - x);
+            float bx = 0;
+            if (band.Tick(index, &bx)) {
+                lineX = x + bx + band.BandWidth() * 0.5f;
+            }
+        } else {
+            float t = n > 1 ? (ctx->mouseX - x) / (w / (float)(n - 1)) : 0.f;
+            index = (int)(t + 0.5f);
+            if (index < 0) {
+                index = 0;
+            }
+            if (index > n - 1) {
+                index = n - 1;
+            }
+            lineX = Xat(index);
+        }
+        // CrossLine: a dashed hairline down the plot, and a dot on the value.
+        const float kCrossDash[2] = {4.f, 3.f};
+        CanvasLine(ctx, lineX, y, lineX, y + plotH, 1.f, th.border, kCrossDash);
+        float dotY = Yat(ys[index]);
+        FillRound(ctx, lineX - 3.f, dotY - 3.f, 6.f, 6.f, 3.f, c.stroke);
+
+        // The box hugs the cursor and flips toward the middle past halfway,
+        // which is what keeps it inside the plot.
+        Str title = c.labels ? Str(c.labels[index]) : fmt("%d", index);
+        Str value = c.name.s ? fmt("%s  %.1f", c.name, (double)ys[index])
+                             : fmt("%.1f", (double)ys[index]);
+        Size titleSz = MeasureText(ctx, title, 11, 200);
+        Size valueSz = MeasureText(ctx, value, 11, 200);
+        float boxW = (titleSz.w > valueSz.w ? titleSz.w : valueSz.w) + 16.f;
+        float boxH = titleSz.h + valueSz.h + 12.f;
+        Point at = component::PlotTooltipPlace(
+            {ctx->mouseX - x, ctx->mouseY - y}, {w, plotH}, {boxW, boxH}, 8.f);
+        FillRound(ctx, x + at.x, y + at.y, boxW, boxH, 6.f, th.background);
+        DrawRoundStroke(ctx, x + at.x, y + at.y, boxW, boxH, 6.f, 1.f,
+                        th.border);
+        DrawTextAt(ctx, title, x + at.x + 8, y + at.y + 4, boxW, titleSz.h, 11,
+                   th.foreground, false);
+        DrawTextAt(ctx, value, x + at.x + 8, y + at.y + 6 + titleSz.h, boxW,
+                   valueSz.h, 11, th.mutedFg, false);
+    }
+
     // x labels every tickMargin
     int step = c.tickMargin;
     if (step < 1) {

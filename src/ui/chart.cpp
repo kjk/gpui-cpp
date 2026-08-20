@@ -38,11 +38,18 @@ AreaChart* AreaChart::Overlay(bool v) {
     return this;
 }
 
+AreaChart* AreaChart::Tooltip(Str name) {
+    tooltipName = name;
+    tooltip = true;
+    return this;
+}
 El* AreaChart::IntoEl() {
     El* e =
         ChartEl(a, ys, n, stroke, fill, RgbaOpacity(fill, 0.0f), tickMargin);
     e->chart.labels = labels;
     e->chart.overlay = overlay;
+    e->chart.tooltip = tooltip;
+    e->chart.name = tooltipName;
     return e;
 }
 
@@ -73,6 +80,11 @@ LineChart* LineChart::Domain(float lo, float hi) {
     domainMax = hi;
     return this;
 }
+LineChart* LineChart::Tooltip(Str name) {
+    tooltipName = name;
+    tooltip = true;
+    return this;
+}
 El* LineChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, stroke, none, none, tickMargin);
@@ -80,6 +92,8 @@ El* LineChart::IntoEl() {
     e->chart.labels = labels;
     e->chart.domainMin = domainMin;
     e->chart.domainMax = domainMax;
+    e->chart.tooltip = tooltip;
+    e->chart.name = tooltipName;
     return e;
 }
 
@@ -118,6 +132,11 @@ BarChart* BarChart::Domain(float lo, float hi) {
     domainMax = hi;
     return this;
 }
+BarChart* BarChart::Tooltip(Str name) {
+    tooltipName = name;
+    tooltip = true;
+    return this;
+}
 El* BarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, ys, n, fill, none, none, tickMargin);
@@ -127,6 +146,8 @@ El* BarChart::IntoEl() {
     e->chart.barRadius = radius;
     e->chart.domainMin = domainMin;
     e->chart.domainMax = domainMax;
+    e->chart.tooltip = tooltip;
+    e->chart.name = tooltipName;
     return e;
 }
 
