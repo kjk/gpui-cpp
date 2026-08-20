@@ -26,6 +26,14 @@ struct SearchableItem {
     // SearchableListItem::render: the story's Industry rows draw a small
     // muted icon before the label, which is all any of them add.
     IconName icon = IconName::None;
+    // is_item_checked / is_item_enabled: a row whose check is somebody else's
+    // to decide. It always reads as selected and never answers a click, which
+    // is what a delegate that pins an item does with the two hooks.
+    bool pinned = false;
+    // render_item: the pill a row draws after its label. Rust's delegate
+    // returns a whole element for the row; the only thing any of them add is
+    // this badge, so the item carries the text instead.
+    Str badge = {};
 };
 
 // Single replaces the selection, Multi toggles the row that was clicked.
@@ -70,6 +78,10 @@ struct SearchableListState {
     // a static array, not one built on the frame arena.
     const SearchableItem* items = nullptr;
     int nItems = 0;
+    // on_will_change: how many values the selection will hold. A Select past
+    // the limit is dropped rather than applied, and the rows that are not
+    // already in it stop answering. 0 is no limit.
+    int maxSelected = 0;
     // What the caller hears once a click has been applied, carrying the item
     // it was about. Rust's `on_confirm`.
     Listener onChange = {};
@@ -92,8 +104,15 @@ int SearchableListChangesFor(const SearchableListState* s,
 void SearchableListApply(SearchableListState* s, const SearchableItem* items,
                          int nItems, const SearchableListChange* changes,
                          int n);
-// Whether the item at `index` carries a value that is selected.
+// Whether the item at `index` carries a value that is selected. A pinned
+// item always does — that is what is_item_checked returning true for it means.
 bool SearchableListIsChecked(const SearchableListState* s,
+                             const SearchableItem* items, int nItems,
+                             int index);
+// is_item_enabled: whether a click on the row does anything. A disabled item
+// never answers, a pinned one never answers, and once the selection is at its
+// limit only the rows already in it do.
+bool SearchableListIsEnabled(const SearchableListState* s,
                              const SearchableItem* items, int nItems,
                              int index);
 // A click on the item at `index`: the changes its mode comes to, applied.
@@ -117,6 +136,8 @@ struct SearchableList {
     InputState* query = nullptr;
     Listener onQueryFocus = {};
     El* empty = nullptr;
+    // Combobox::footer: an action under the option list.
+    El* footer = nullptr;
     float w = 240;
     float maxH = 320;
     // Combobox::check_icon: what marks a selected row.
@@ -128,6 +149,7 @@ struct SearchableList {
     SearchableList* Sections(const Str* titles, int n);
     SearchableList* OnQueryFocus(Listener fn);
     SearchableList* Empty(El* e);
+    SearchableList* Footer(El* e);
     SearchableList* W(float v);
     SearchableList* MaxH(float v);
     SearchableList* CheckIcon(IconName n);

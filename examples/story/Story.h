@@ -126,7 +126,29 @@ const StoryInfo* StoryMeta(int i);
 int StoryFromSlug(const char* slug);
 
 Str StoryDup(Ctx* cx, const char* s);
-Str StoryFmt(Ctx* cx, const char* f, ...);
+// vsnprintf under a template, because a Str is a { pointer, length } pair and
+// varargs would hand printf the pair rather than the text. Every argument
+// goes through StoryArg first; a Str comes back as a null-terminated copy on
+// the frame arena, and everything else is passed straight through.
+Str StoryFmtV(Ctx* cx, const char* f, ...);
+const char* StoryArg(Ctx* cx, Str s);
+inline const char* StoryArg(Ctx*, const char* s) {
+    return s;
+}
+inline const char* StoryArg(Ctx*, char* s) {
+    return s;
+}
+template <typename T>
+inline T StoryArg(Ctx*, T v) {
+    return v;
+}
+template <typename... TArgs>
+inline Str StoryFmt(Ctx* cx, const char* f, TArgs... args) {
+    return StoryFmtV(cx, f, StoryArg(cx, args)...);
+}
+inline Str StoryFmt(Ctx* cx, const char* f) {
+    return StoryFmtV(cx, f);
+}
 
 El* StoryTxt(Ctx* cx, Str s, float px, Rgba c);
 El* StorySection(Ctx* cx, const char* title, const char* desc);

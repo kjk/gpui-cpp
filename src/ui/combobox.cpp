@@ -86,6 +86,21 @@ Combobox* Combobox::OnClear(Listener fn) {
     return this;
 }
 
+Combobox* Combobox::Trigger(El* e) {
+    trigger = e;
+    return this;
+}
+Combobox* Combobox::Footer(El* e) {
+    footer = e;
+    return this;
+}
+Combobox* Combobox::MaxSelected(int n) {
+    if (SearchableListState* s = state.Get(cx)) {
+        s->maxSelected = n;
+    }
+    return this;
+}
+
 El* Combobox::IntoEl() {
     // A ComboBox is a Select that is always searchable, so it is one: the
     // trigger, the list and the popup are all the Select's, and the query
@@ -111,6 +126,12 @@ El* Combobox::IntoEl() {
     }
     if (menuMaxH > 0) {
         sel->MenuMaxH(menuMaxH);
+    }
+    if (trigger) {
+        sel->Trigger(trigger);
+    }
+    if (footer) {
+        sel->Footer(footer);
     }
     return sel->IntoEl();
 }

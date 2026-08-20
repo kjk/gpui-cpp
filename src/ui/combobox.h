@@ -32,6 +32,10 @@ struct Combobox {
     bool focusRing = true;
     InputState* query = nullptr;
     Listener onQueryFocus = {};
+    // Combobox::render_trigger / Combobox::footer, both forwarded to the
+    // Select underneath.
+    El* trigger = nullptr;
+    El* footer = nullptr;
     Listener onToggle;
     Listener onClear;
 
@@ -51,6 +55,11 @@ struct Combobox {
     // FocusableExt::focus_ring: no focus appearance on this control.
     Combobox* FocusRing(bool v);
     Combobox* Multiple(bool v = true);
+    Combobox* Trigger(El* e);
+    Combobox* Footer(El* e);
+    // ComboboxState::max_selected, which the Max2 delegate's on_will_change
+    // comes to here.
+    Combobox* MaxSelected(int n);
     Combobox* OnQueryFocus(Listener fn);
     Combobox* OnToggle(Listener fn);
     Combobox* OnClear(Listener fn);

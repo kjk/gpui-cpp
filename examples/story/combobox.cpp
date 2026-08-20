@@ -52,6 +52,24 @@ static const component::SearchableItem kIndustries[] = {
     {StrL("Education"), StrL("Education"), 0, false, IconName::BookOpen},
     {StrL("Entertainment"), StrL("Entertainment"), 0, false, IconName::Star},
 };
+// PinnedDelegate: is_item_checked is true for the first two whatever the
+// selection holds, and is_item_enabled is false for them.
+static const component::SearchableItem kPinnedFrameworks[] = {
+    {StrL("Next.js"), StrL("Next.js"), 0, false, IconName::None, true},
+    {StrL("SvelteKit"), StrL("SvelteKit"), 0, false, IconName::None, true},
+    {StrL("Nuxt.js"), StrL("Nuxt.js"), 0, false, IconName::None},
+    {StrL("Remix"), StrL("Remix"), 0, false, IconName::None},
+    {StrL("Astro"), StrL("Astro"), 0, false, IconName::None},
+};
+// FeaturedDelegate: render_item gives the first row a badge after its check.
+static const component::SearchableItem kFeaturedFrameworks[] = {
+    {StrL("Next.js"), StrL("Next.js"), 0, false, IconName::None, false,
+     StrL("Featured")},
+    {StrL("SvelteKit"), StrL("SvelteKit"), 0, false, IconName::None},
+    {StrL("Nuxt.js"), StrL("Nuxt.js"), 0, false, IconName::None},
+    {StrL("Remix"), StrL("Remix"), 0, false, IconName::None},
+    {StrL("Astro"), StrL("Astro"), 0, false, IconName::None},
+};
 static const component::SearchableItem kUniversities[] = {
     {StrL("Harvard University"), StrL("Harvard University"), 0, false,
      IconName::None},
@@ -62,11 +80,18 @@ static const component::SearchableItem kUniversities[] = {
 
 #define COMBO_COUNT(a) (int)(sizeof(a) / sizeof(a[0]))
 
-// One combobox per section, in the order the Rust story renders them. The
-// four it also has — Custom trigger, Badges, Maximum selections, Pinned
-// items, Rich items and Overflow — all hang off `render_trigger`,
-// `is_item_checked`, `render_item` and `on_will_change`, delegate hooks the
-// port does not have a surface for yet.
+// render_trigger: which of the story's five custom triggers a section uses,
+// or the plain one the Select builds for itself.
+enum class ComboTrigger : uint8_t {
+    Default,
+    Icon,     // the selected industry's icon before its title
+    Palette,  // a palette glyph and the selection as a pill
+    Badges,   // the first selection as a removable badge, then "+N"
+    Overflow, // up to two bordered chips, then "+N more"
+    Count     // a red count bubble and "frameworks selected"
+};
+
+// One combobox per section, in the order the Rust story renders them.
 struct ComboSpec {
     const char* id;
     const char* title;
@@ -81,33 +106,63 @@ struct ComboSpec {
     unsigned selected;
     // check_icon(Icon::new(IconName::CircleCheck)).
     IconName checkIcon;
+    ComboTrigger trigger;
+    // on_will_change's cap, or 0 for none.
+    int maxSelected;
+    // Combobox::footer.
+    bool footer;
 };
 
 static const ComboSpec kSpecs[] = {
     {"basic", "Default", "Search and choose one option.", "Select framework...",
      kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0, false, 0,
-     IconName::Check},
+     IconName::Check, ComboTrigger::Default, 0, false},
     {"basic-multi", "Multiple", "Select more than one option.",
      "Select frameworks...", kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0,
-     true, 0, IconName::Check},
+     true, 0, IconName::Check, ComboTrigger::Default, 0, false},
     {"grouped", "Groups", "Organize results into groups.", "Select item...",
      kFoods, COMBO_COUNT(kFoods), kFoodGroups, 3, false, 1u << 0,
-     IconName::Check},
+     IconName::Check, ComboTrigger::Default, 0, false},
     {"disabled-items", "Disabled items", "Keep unavailable options visible.",
      "Select item...", kDisabledItems, COMBO_COUNT(kDisabledItems), nullptr, 0,
-     false, 0, IconName::Check},
+     false, 0, IconName::Check, ComboTrigger::Default, 0, false},
     {"with-icon", "Icons", "Show icons in options and the trigger.",
      "Select industry category", kIndustries, COMBO_COUNT(kIndustries), nullptr,
-     0, false, 0, IconName::Check},
+     0, false, 0, IconName::Check, ComboTrigger::Icon, 0, false},
     {"custom-check", "Check icon", "Replace the default selection mark.",
      "Select framework...", kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0,
-     false, 0, IconName::CircleCheck},
+     false, 0, IconName::CircleCheck, ComboTrigger::Default, 0, false},
     {"with-footer", "Footer", "Add an action below the option list.",
      "Select university", kUniversities, COMBO_COUNT(kUniversities), nullptr, 0,
-     false, 1u << 0, IconName::Check},
+     false, 1u << 0, IconName::Check, ComboTrigger::Default, 0, true},
+    {"custom-trigger", "Custom trigger", "Render custom trigger content.",
+     "Select framework", kFrameworks, COMBO_COUNT(kFrameworks), nullptr, 0,
+     false, 0, IconName::Check, ComboTrigger::Palette, 0, false},
+    {"multi-badges", "Badges", "Show removable selected badges.",
+     "Select frameworks", kMultiFrameworks, COMBO_COUNT(kMultiFrameworks),
+     nullptr, 0, true, (1u << 0) | (1u << 2), IconName::Check,
+     ComboTrigger::Badges, 0, false},
+    {"custom-max2", "Maximum selections",
+     "Limit how many items can be "
+     "selected.",
+     "Select up to 2 frameworks", kMultiFrameworks,
+     COMBO_COUNT(kMultiFrameworks), nullptr, 0, true, 0, IconName::Check,
+     ComboTrigger::Default, 2, false},
+    {"pinned", "Pinned items", "Keep required items selected.",
+     "Select framework...", kPinnedFrameworks, COMBO_COUNT(kPinnedFrameworks),
+     nullptr, 0, false, 0, IconName::Check, ComboTrigger::Default, 0, false},
+    {"featured", "Rich items", "Render supporting content in option rows.",
+     "Select framework...", kFeaturedFrameworks,
+     COMBO_COUNT(kFeaturedFrameworks), nullptr, 0, false, 0, IconName::Check,
+     ComboTrigger::Default, 0, false},
+    {"multi-expand", "Overflow", "Collapse selections after a visible limit.",
+     "Select frameworks", kMultiFrameworks, COMBO_COUNT(kMultiFrameworks),
+     nullptr, 0, true,
+     (1u << 0) | (1u << 2) | (1u << 5) | (1u << 8) | (1u << 9), IconName::Check,
+     ComboTrigger::Overflow, 0, false},
     {"multi-count", "Count", "Summarize selections as a count.",
      "Select frameworks", kMultiFrameworks, COMBO_COUNT(kMultiFrameworks),
-     nullptr, 0, true, 0x3f, IconName::Check},
+     nullptr, 0, true, 0x3f, IconName::Check, ComboTrigger::Count, 0, false},
 };
 static const int kNSpecs = (int)(sizeof(kSpecs) / sizeof(kSpecs[0]));
 
@@ -144,9 +199,187 @@ static void ClearCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
                        intptr_t which) {
     component::SelectClear(self->combo[which].Get(cx), cx);
 }
+// The badge trigger's ✕: remove_selected_index on the one it sits on, which
+// is always the first of the selection here.
+static void RemoveComboBadge(ComboboxStory* self, Ctx* cx, const ClickEvent*,
+                             intptr_t which) {
+    component::SearchableListState* s = self->combo[which].Get(cx);
+    if (!s || s->nSelected == 0) {
+        return;
+    }
+    for (int i = 0; i + 1 < s->nSelected; i++) {
+        s->selected[i] = s->selected[i + 1];
+    }
+    s->nSelected--;
+    Notify(cx);
+}
 static void FocusQuery(ComboboxStory* self, Ctx* cx, const ClickEvent*) {
     self->query.focused = true;
     Notify(cx);
+}
+
+// Caret::new(trigger.size()), which every custom trigger ends with.
+static El* ComboCaret(Ctx* cx) {
+    return IconEl(cx->a, IconName::ChevronDown, 16)
+        ->Fg(cx->theme().mutedFg)
+        ->Shrink0();
+}
+
+// A bordered chip, which the badge and overflow triggers are both made of.
+static El* ComboChip(Ctx* cx, Str label, Rgba fg) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    return Div(a)
+        ->FlexRow()
+        ->ItemsCenter()
+        ->Gap(2)
+        ->PadX(4)
+        ->Radius(th.radius * 0.5f)
+        ->Border(1, th.border)
+        ->MinW(0)
+        ->Child(TextEl(a, label)->Font(12)->Fg(fg)->Truncate());
+}
+
+// render_trigger, one per shape the Rust story builds. Null leaves the
+// Select to draw its own title and caret.
+static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    const ComboSpec& spec = kSpecs[i];
+    if (spec.trigger == ComboTrigger::Default) {
+        return nullptr;
+    }
+    component::SearchableListState* st = self->combo[i].Get(cx);
+    int n = st ? st->nSelected : 0;
+    El* row = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->Gap(8)->MinW(0);
+    switch (spec.trigger) {
+        case ComboTrigger::Icon: {
+            // The selected industry's own icon, then its title.
+            if (n == 1) {
+                const component::SearchableItem& it =
+                    spec.items[st->selected[0]];
+                if (it.icon != IconName::None) {
+                    row->Child(IconEl(a, it.icon, 16)->Fg(th.mutedFg));
+                }
+                row->Child(TextEl(a, it.title)
+                               ->Font(14)
+                               ->Fg(th.foreground)
+                               ->Truncate());
+            } else if (n > 1) {
+                row->Child(TextEl(a, StoryFmt(cx, "%d selected", n))
+                               ->Font(14)
+                               ->Fg(th.foreground));
+            } else {
+                row->Child(TextEl(a, Str(spec.placeholder))
+                               ->Font(14)
+                               ->Fg(th.mutedFg)
+                               ->Truncate());
+            }
+            row->Child(Div(a)->Grow());
+            row->Child(ComboCaret(cx));
+            return row;
+        }
+        case ComboTrigger::Palette: {
+            El* left = Div(a)->FlexRow()->ItemsCenter()->Gap(8)->MinW(0);
+            left->Child(IconEl(a, IconName::Palette, 16)->Fg(th.primary));
+            if (n > 0) {
+                Str label = n == 1 ? spec.items[st->selected[0]].title
+                                   : StoryFmt(cx, "%d selected", n);
+                left->Child(Div(a)
+                                ->PadX(8)
+                                ->PadY(2)
+                                ->Radius(99)
+                                ->Bg(th.primary)
+                                ->Child(TextEl(a, label)
+                                            ->Font(12)
+                                            ->Fg(th.primaryFg)
+                                            ->LineHeight(1.4f)));
+            } else {
+                left->Child(
+                    TextEl(a, Str(spec.placeholder))->Font(14)->Fg(th.mutedFg));
+            }
+            row->JustifyBetween()->Child(left)->Child(ComboCaret(cx));
+            return row;
+        }
+        case ComboTrigger::Badges: {
+            if (n == 0) {
+                row->Child(TextEl(a, StrL("Select frameworks"))
+                               ->Font(14)
+                               ->Fg(th.mutedFg));
+                return row;
+            }
+            // The first selection as a chip with a remove button, and a count
+            // of whatever else is picked.
+            El* left = Div(a)->FlexRow()->ItemsCenter()->Gap(4)->MinW(0);
+            El* chip =
+                ComboChip(cx, spec.items[st->selected[0]].title, th.foreground);
+            chip->Child(component::Button::New(
+                            cx, StoryFmt(cx, "remove-%d", st->selected[0]))
+                            ->Ghost()
+                            ->WithSize(UiSize::XSmall)
+                            ->Icon(IconName::X)
+                            ->OnClick(ListenerArg(Listen(cx, &RemoveComboBadge),
+                                                  (intptr_t)i))
+                            ->IntoEl());
+            left->Child(chip);
+            if (n > 1) {
+                left->Child(TextEl(a, StoryFmt(cx, "+%d", n - 1))
+                                ->Font(12)
+                                ->Fg(th.mutedFg)
+                                ->Shrink0());
+            }
+            row->JustifyBetween()
+                ->Child(left)
+                ->Child(Div(a)->Shrink0()->Child(ComboCaret(cx)));
+            return row;
+        }
+        case ComboTrigger::Overflow: {
+            if (n == 0) {
+                row->Child(TextEl(a, StrL("Select frameworks"))
+                               ->Font(14)
+                               ->Fg(th.mutedFg));
+                return row;
+            }
+            const int kMaxShown = 2;
+            row->FlexWrap()->Gap(4);
+            for (int k = 0; k < n && k < kMaxShown; k++) {
+                row->Child(ComboChip(cx, spec.items[st->selected[k]].title,
+                                     th.foreground));
+            }
+            if (n > kMaxShown) {
+                row->Child(ComboChip(
+                    cx, StoryFmt(cx, "+%d more", n - kMaxShown), th.mutedFg));
+            }
+            return row;
+        }
+        default: {
+            if (n == 0) {
+                row->Child(TextEl(a, StrL("Select frameworks"))
+                               ->Font(14)
+                               ->Fg(th.mutedFg));
+                return row;
+            }
+            row->Gap(6);
+            row->Child(Div(a)
+                           ->FlexRow()
+                           ->JustifyCenter()
+                           ->ItemsCenter()
+                           ->MinW(16)
+                           ->H(16)
+                           ->PadX(4)
+                           ->Radius(99)
+                           ->Bg(th.red)
+                           ->Child(TextEl(a, n > 99 ? StrL("99+")
+                                                    : StoryFmt(cx, "%d", n))
+                                       ->Font(10)
+                                       ->Fg(Rgb(255, 255, 255))
+                                       ->LineHeight(1.f)));
+            row->Child(TextEl(a, StrL("frameworks selected"))
+                           ->Font(14)
+                           ->Fg(th.foreground));
+            return row;
+        }
+    }
 }
 
 static component::SearchableListState* OpenCombo(ComboboxStory* self, Ctx* cx) {
@@ -207,10 +440,21 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
         if (s.multiple) {
             cb->Multiple();
         }
-        // Rust's Icons section draws the *selected* item's icon before the
-        // label and keeps its caret; Combobox::Icon here replaces the caret,
-        // which is not the same thing, so the trigger is left alone and only
-        // the rows carry icons.
+        cb->MaxSelected(s.maxSelected);
+        if (El* trig = ComboTriggerEl(self, cx, i)) {
+            cb->Trigger(trig);
+        }
+        if (s.footer) {
+            // footer(..): a ghost button under the list, full width and
+            // left-aligned, which adds whatever the query says.
+            cb->Footer(component::Button::New(cx, StrL("add-new"))
+                           ->Ghost()
+                           ->Label(StrL("New university"))
+                           ->Icon(IconName::Plus)
+                           ->IntoEl()
+                           ->W(kFill)
+                           ->JustifyStart());
+        }
         StorySectionAdd(sec, cb->IntoEl());
         page->Child(sec);
     }
@@ -219,8 +463,8 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     El* values =
         StorySection(cx, "Values", "Read selected values from each delegate.");
     El* valueCol = Div(a)->FlexCol()->W(kFill)->Gap(8);
-    static const int kShown[] = {0, 2, 7};
-    for (int k = 0; k < 3; k++) {
+    static const int kShown[] = {0, 2, 8, 13};
+    for (int k = 0; k < 4; k++) {
         int i = kShown[k];
         component::SearchableListState* s = self->combo[i].Get(cx);
         Str line = StoryFmt(cx, "%s: []", kSpecs[i].id);

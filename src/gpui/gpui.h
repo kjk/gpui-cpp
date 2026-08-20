@@ -751,6 +751,7 @@ enum class IconName : uint8_t {
     Search,
     Minus,
     Plus,
+    Palette,
     Copy,
     Bell,
     Star,

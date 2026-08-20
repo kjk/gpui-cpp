@@ -39,6 +39,13 @@ struct Select {
     // makes a Select a ComboBox in all but name.
     InputState* query = nullptr;
     Listener onQueryFocus = {};
+    // render_trigger: what the trigger box holds instead of the title and the
+    // caret. Rust hands the closure the selection and lets it build the lot,
+    // including its own Caret; a caller here builds the same element and the
+    // trigger box only supplies the border, the size and the click.
+    El* trigger = nullptr;
+    // Combobox::footer: an action under the option list.
+    El* footer = nullptr;
     Listener onToggle;
     Listener onClear;
 
@@ -60,6 +67,8 @@ struct Select {
     // FocusableExt::focus_ring: no focus appearance on this control.
     Select* FocusRing(bool v);
     Select* Searchable(InputState* query, Listener onFocus);
+    Select* Trigger(El* e);
+    Select* Footer(El* e);
     // Multiple: the list toggles rather than replaces, and the trigger says
     // how many are picked.
     Select* Multiple(bool v = true);
