@@ -1244,13 +1244,24 @@ static float DisplayLineH(const InputState* s, int row, float lineH) {
     return lineH;
 }
 
-// display_map.rs: an arrow walks *display* rows, so a wrapped line takes as
-// many presses to cross as it has visual rows. The caret's point comes off
-// the shaped run, the walk moves it a row at a time through the lines around
-// it, and the point maps back to an offset. False when there is nothing laid
-// out to measure against, which leaves the logical-line walk below.
-static bool MoveVerticalDisplay(InputState* s, App* app, Window* win, int lines,
-                                Str t) {
+// Where a vertical move of `lines` rows from `from` lands, and what to aim
+// at on the next one — move_to and select_to both recompute the aim from
+// where the caret ended up, and the whole point of a walk is to keep aiming
+// at where it started. Exactly one of the two aims is set: the x when the
+// display map answered, the column when it did not.
+struct VerticalTarget {
+    int offset = 0;
+    float preferredX = -1;
+    int preferredColumn = -1;
+};
+
+// display_map.rs: a vertical move walks *display* rows, so a wrapped line
+// takes as many presses to cross as it has visual rows. The caret's point
+// comes off the shaped run, the walk moves it a row at a time through the
+// lines around it, and the point maps back to an offset. False when there is
+// nothing laid out to measure against, which leaves the logical-line walk.
+static bool VerticalTargetDisplay(const InputState* s, Window* win, int lines,
+                                  Str t, int from, VerticalTarget* out) {
     if (!win || !s->softWrap) {
         return false;
     }
@@ -1261,13 +1272,12 @@ static bool MoveVerticalDisplay(InputState* s, App* app, Window* win, int lines,
     if (maxW <= 0 || font <= 0 || lineH <= 0) {
         return false;
     }
-    int cursor = InputCursor(s);
-    RopePoint p = RopeOffsetToPoint(t, cursor);
+    RopePoint p = RopeOffsetToPoint(t, from);
     Str line = RopeSliceLine(t, p.row);
     int start = RopeLineStartOffset(t, p.row);
     float cx = 0, cy = 0, ch = lineH;
     float lineMult = lineH / font;
-    if (!TextPointAt(ctx, line, font, maxW, true, cursor - start, &cx, &cy, &ch,
+    if (!TextPointAt(ctx, line, font, maxW, true, from - start, &cx, &cy, &ch,
                      s->lastMono, lineMult)) {
         return false;
     }
@@ -1298,26 +1308,24 @@ static bool MoveVerticalDisplay(InputState* s, App* app, Window* win, int lines,
     }
     Str target = RopeSliceLine(t, row);
     int targetStart = RopeLineStartOffset(t, row);
-    int offset = targetStart;
+    out->offset = targetStart;
     if (target.len > 0) {
-        offset += TextIndexAt(ctx, target, font, maxW, true, wantX, y,
-                              s->lastMono, lineMult);
+        out->offset += TextIndexAt(ctx, target, font, maxW, true, wantX, y,
+                                   s->lastMono, lineMult);
     }
-    PauseBlink(s, app, win);
-    InputMoveTo(s, app, win, offset);
-    s->preferredX = wantX;
+    out->preferredX = wantX;
     return true;
 }
 
-static void MoveVertical(InputState* s, App* app, Window* win, int lines) {
-    if (InputIsSingleLine(s)) {
-        return;
+// The same move without a display map: whole lines, at the column the walk
+// started from.
+static VerticalTarget VerticalTargetFor(const InputState* s, Window* win,
+                                        int lines, Str t, int from) {
+    VerticalTarget out;
+    if (VerticalTargetDisplay(s, win, lines, t, from, &out)) {
+        return out;
     }
-    Str t = InputValue(s);
-    if (MoveVerticalDisplay(s, app, win, lines, t)) {
-        return;
-    }
-    RopePoint p = RopeOffsetToPoint(t, InputCursor(s));
+    RopePoint p = RopeOffsetToPoint(t, from);
     int column = s->preferredColumn >= 0 ? s->preferredColumn : p.column;
     int maxRow = RopeLinesLen(t) - 1;
     int row = p.row + lines;
@@ -1329,31 +1337,43 @@ static void MoveVertical(InputState* s, App* app, Window* win, int lines) {
     }
     int lineLen = RopeLineLen(t, row);
     int want = column < lineLen ? column : lineLen;
-    int offset =
+    out.offset =
         RopeClipOffset(t, RopeLineStartOffset(t, row) + want, Bias::Left);
-    PauseBlink(s, app, win);
-    InputMoveTo(s, app, win, offset);
-    // move_to recomputed it from where the caret landed; the whole point is to
-    // keep aiming at the column the run started from.
-    s->preferredColumn = column;
+    out.preferredColumn = column;
+    return out;
 }
 
+static void MoveVertical(InputState* s, App* app, Window* win, int lines) {
+    if (InputIsSingleLine(s)) {
+        return;
+    }
+    Str t = InputValue(s);
+    VerticalTarget to = VerticalTargetFor(s, win, lines, t, InputCursor(s));
+    PauseBlink(s, app, win);
+    InputMoveTo(s, app, win, to.offset);
+    s->preferredX = to.preferredX;
+    s->preferredColumn = to.preferredColumn;
+}
+
+// select_up / select_down: the caret goes where the arrow alone would have
+// taken it and the selection follows, rather than swallowing the whole line
+// either side of it. Same walk, same aim kept across it — so shift+Down over
+// a wrapped line takes one visual row at a time, and holding it and coming
+// back leaves the selection where it was.
 static void SelectVertical(InputState* s, App* app, Window* win, int lines) {
     if (InputIsSingleLine(s)) {
         return;
     }
     UndoBreakCoalescing(&s->undo);
     Str t = InputValue(s);
-    if (lines < 0) {
-        int offset = InputStartOfLine(s);
-        InputSelectTo(s, app, win, InputPreviousBoundary(s, offset));
-    } else {
-        int offset = InputEndOfLine(s) + 1;
-        if (offset > t.len) {
-            offset = t.len;
-        }
-        InputSelectTo(s, app, win, InputNextBoundary(s, offset));
-    }
+    VerticalTarget to = VerticalTargetFor(s, win, lines, t, InputCursor(s));
+    PauseBlink(s, app, win);
+    InputSelectTo(s, app, win, to.offset);
+    s->preferredX = to.preferredX;
+    s->preferredColumn = to.preferredColumn;
+    // scroll_to: the moving end of the selection takes the view with it, the
+    // way move_to does for the caret.
+    InputScrollToCursor(s, lines < 0 ? InputMoveDir::Up : InputMoveDir::Down);
 }
 
 // ─── actions ──────────────────────────────────────────────────────────────
