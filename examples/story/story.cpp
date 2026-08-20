@@ -262,7 +262,6 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
                    ->W(kFill)
                    ->Border(1, th.border)
                    ->Radius(th.radiusLg)
-                   ->ClipX()
                    ->ItemsCenter()
                    ->JustifyCenter();
     // section(): h_flex().w_full().flex_wrap().justify_center().items_center()
