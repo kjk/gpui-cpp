@@ -11,7 +11,7 @@ static const component::Keystroke kStrokes[] = {
     {false, false, true, true, StrL("p")},
     {true, false, false, true, StrL("t")},
     {false, false, false, true, StrL("-")},
-    {false, false, false, true, StrL("=")},
+    {false, false, false, true, StrL("+")},
     {false, false, false, false, StrL("escape")},
     {false, false, false, false, StrL("backspace")},
     {false, false, false, false, StrL("/")},
@@ -20,10 +20,11 @@ static const component::Keystroke kStrokes[] = {
 
 El* KbdStory::Render(KbdStory*, Ctx* cx) {
     Arena* a = cx->a;
-    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+    El* page = Div(a)->FlexCol()->W(kFill)->ItemsCenter()->Gap(24);
     El* def = StorySection(cx, "Default",
                            "Displays single keys and multi-key shortcuts.");
-    El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    StorySectionBody(def)->W(560);
+    El* row = Div(a)->FlexRow()->W(kFill)->JustifyCenter()->Gap(8)->FlexWrap();
     for (int i = 0; i < 8; i++) {
         row->Child(component::Kbd::New(cx, kStrokes[i])->IntoEl());
     }
@@ -33,7 +34,8 @@ El* KbdStory::Render(KbdStory*, Ctx* cx) {
     El* out =
         StorySection(cx, "Outlined",
                      "An outlined treatment adds emphasis on dense surfaces.");
-    El* row2 = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
+    StorySectionBody(out)->W(560);
+    El* row2 = Div(a)->FlexRow()->W(kFill)->JustifyCenter()->Gap(8)->FlexWrap();
     for (int i = 0; i < 3; i++) {
         row2->Child(component::Kbd::New(cx, kStrokes[i == 2 ? 7 : i])
                         ->Outline()
@@ -42,20 +44,6 @@ El* KbdStory::Render(KbdStory*, Ctx* cx) {
     StorySectionAdd(out, row2);
     page->Child(out);
 
-    El* named =
-        StorySection(cx, "Named keys",
-                     "Arrows, paging and the editing keys have names of their "
-                     "own.");
-    El* row3 = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->FlexWrap();
-    static const char* kNamed[] = {"left",   "right",    "up",     "down",
-                                   "pageup", "pagedown", "delete", "space"};
-    for (int i = 0; i < 8; i++) {
-        component::Keystroke k;
-        k.key = Str(kNamed[i]);
-        row3->Child(component::Kbd::New(cx, k)->IntoEl());
-    }
-    StorySectionAdd(named, row3);
-    page->Child(named);
     return page;
 }
 
