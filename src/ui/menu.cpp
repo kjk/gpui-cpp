@@ -26,13 +26,12 @@ PopupMenu* PopupMenu::New(Ctx* cx, Str id, Entity<PopupMenuState> state) {
 }
 
 static MenuItem* MenuAdd(PopupMenu* m, MenuItemKind kind) {
-    if (m->n >= kPopupMenuMaxItems) {
+    MenuItem fresh;
+    fresh.kind = kind;
+    if (!m->items.Append(m->a, fresh)) {
         return nullptr;
     }
-    MenuItem* it = &m->items[m->n++];
-    *it = MenuItem{};
-    it->kind = kind;
-    return it;
+    return &m->items[m->items.len - 1];
 }
 
 PopupMenu* PopupMenu::Menu(Str label, IconName icon) {
@@ -71,7 +70,8 @@ PopupMenu* PopupMenu::Link(Str label, Str href, IconName icon) {
 }
 PopupMenu* PopupMenu::Separator() {
     // Rust ignores a leading separator and coalesces consecutive ones.
-    if (n == 0 || items[n - 1].kind == MenuItemKind::Separator) {
+    if (items.len == 0 || items[items.len - 1]
+                                  .kind == MenuItemKind::Separator) {
         return this;
     }
     MenuAdd(this, MenuItemKind::Separator);
@@ -104,26 +104,26 @@ PopupMenu* PopupMenu::Submenu(Str label, PopupMenu* menu) {
     return this;
 }
 PopupMenu* PopupMenu::Disabled(bool v) {
-    if (n > 0) {
-        items[n - 1].disabled = v;
+    if (items.len > 0) {
+        items[items.len - 1].disabled = v;
     }
     return this;
 }
 PopupMenu* PopupMenu::Checked(bool v) {
-    if (n > 0) {
-        items[n - 1].checked = v;
+    if (items.len > 0) {
+        items[items.len - 1].checked = v;
     }
     return this;
 }
 PopupMenu* PopupMenu::Icon(IconName v) {
-    if (n > 0) {
-        items[n - 1].icon = v;
+    if (items.len > 0) {
+        items[items.len - 1].icon = v;
     }
     return this;
 }
 PopupMenu* PopupMenu::Kbd(Str v) {
-    if (n > 0) {
-        items[n - 1].kbd = v;
+    if (items.len > 0) {
+        items[items.len - 1].kbd = v;
     }
     return this;
 }
@@ -171,7 +171,7 @@ El* PopupMenu::IntoEl() {
     // has_left_icon: the gutter exists only if some row needs it, so a menu
     // of plain labels is not indented for nothing.
     bool leftGutter = false;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         if (items[i].icon != IconName::None ||
             (SideIsLeft(checkSide) && items[i].checked)) {
             leftGutter = true;
@@ -183,7 +183,7 @@ El* PopupMenu::IntoEl() {
     // 250px minimum, so their own content fits within that floor.
     float menuW = minW;
     if (cx->win) {
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < items.len; i++) {
             const MenuItem& it = items[i];
             if (!it.label.s || it.kind == MenuItemKind::Separator) {
                 continue;
@@ -244,7 +244,7 @@ El* PopupMenu::IntoEl() {
     // The rows, as the keyboard sees them. Rust's menu owns its items; here
     // they are the caller's, so what an action needs is copied across.
     PopupMenuBeginRows(s);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         PopupMenuRow row;
         row.clickable = items[i].kind == MenuItemKind::Item && !items[i]
                                                                     .disabled;
@@ -265,10 +265,10 @@ El* PopupMenu::IntoEl() {
     Listener hover = ListenTo(state, &PopupMenuState::OnItemHover, 0);
     Listener submenuClick = ListenTo(state, &PopupMenuState::OnSubmenuClick, 0);
     Listener submenuHover = ListenTo(state, &PopupMenuState::OnSubmenuHover, 0);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         const MenuItem& it = items[i];
         if (it.kind == MenuItemKind::Separator) {
-            if (i + 1 == n) {
+            if (i + 1 == items.len) {
                 continue;
             }
             // my_0p5 border_b(2): a rule with a little air around it.

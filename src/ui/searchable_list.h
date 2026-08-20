@@ -82,6 +82,14 @@ struct SearchableListState {
     // What the caller hears once a click has been applied, carrying the item
     // it was about. Rust's `on_confirm`.
     Listener onChange = {};
+    // The select's focus handles. Rust's Select focuses its `content` handle
+    // when the list comes up — `tracked_focus_handle` — and puts focus back
+    // on the trigger when it goes away; these are the ids that stand in for
+    // the two handles, filled in by whatever renders the select, plus where
+    // focus was before it opened.
+    int triggerFocusId = 0;
+    int contentFocusId = 0;
+    int previousFocusId = 0;
 
     static void OnRowClick(SearchableListState* self, Ctx* cx,
                            const ClickEvent* ev, intptr_t match);
@@ -102,6 +110,10 @@ struct SearchableListState {
         matches.Reset();
     }
 };
+
+// The selection replaced by the one index, which is what a single-select list
+// holds and what a caller seeding one wants. A negative index selects nothing.
+void SearchableListSelectOnly(SearchableListState* s, int index);
 
 // The changes a click on `index` comes to under this mode. Single deselects
 // whatever was selected and selects the one clicked; Multi toggles it — by

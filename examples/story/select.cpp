@@ -146,14 +146,12 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
         // carry a title prefix.
         component::SearchableListState* country = self->sel[SelCountry].Get(cx);
         if (country) {
-            country->selected[0] = 5;
-            country->selected.len = 1;
+            component::SearchableListSelectOnly(country, 5);
         }
         for (int which : {SelUi1, SelMenuH}) {
             component::SearchableListState* st = self->sel[which].Get(cx);
             if (st) {
-                st->selected[0] = 0;
-                st->selected.len = 1;
+                component::SearchableListSelectOnly(st, 0);
             }
         }
     }

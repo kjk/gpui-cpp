@@ -2986,6 +2986,17 @@ int FocusNext(Window* win, int trapId, bool backward);
 // Move the focus. Everything that focuses goes through here, so the
 // generation a keystroke is stamped with counts every move.
 void WindowSetFocusId(Window* win, int id);
+// window.focused(cx): which element has focus, or 0. What a widget stashes
+// before it takes focus for itself.
+int WindowFocusedId(const Window* win);
+// FocusHandle::contains_focused: focus is on this element, or inside the trap
+// it hosts — which is how a container that is not itself focusable asks
+// whether what it opened still holds the focus.
+bool WindowFocusWithin(const Window* win, int id);
+// `previous.focus(window, cx)` on a handle a widget stashed. An element that
+// is no longer on screen is a handle whose view has gone, which Rust treats as
+// nothing to do; answers whether focus moved.
+bool WindowRestoreFocus(Window* win, int id);
 // The action a keystroke resolves to for whatever has focus, and the handlers
 // it is then offered to. Answers true when one of them kept it — Rust's
 // `dispatch_action` plus the `cx.propagate()` that decides how far it goes.

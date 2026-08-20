@@ -79,11 +79,18 @@ static void AMenuWithNoRows() {
 }
 
 static void ALongStoryMenuFitsWithoutTruncation() {
-    // Label + 100 items + a separator before every group of five. The claim
-    // is about a constant, so it is one the compiler can settle — and has to
-    // be: a runtime `if` on a constant is a warning, and warnings are errors.
-    static_assert(gpui::component::kPopupMenuMaxItems >= 1 + 100 + 20,
-                  "the story's longest menu has to fit in a PopupMenu");
+    // There is no cap to fit inside any more; what this pins is that there
+    // is not one. A hundred rows go in and a hundred come back out.
+    PopupMenuState s;
+    PopupMenuBeginRows(&s);
+    for (int i = 0; i < 100; i++) {
+        PopupMenuRow row;
+        row.clickable = true;
+        PopupMenuAddRow(&s, row);
+    }
+    utassert(s.rows.len == 100);
+    PopupMenuBeginRows(&s);
+    utassert(s.rows.len == 0);
 }
 
 // The whole path, as the element lays it out: a focusable root inside the

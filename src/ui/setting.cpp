@@ -167,8 +167,7 @@ void SettingsState::OnFieldReset(SettingsState* self, Ctx* cx,
             break;
         case SettingFieldKind::Dropdown:
             if (SearchableListState* st = f->list.Get(cx)) {
-                st->selected.len = f->defIndex >= 0 ? 1 : 0;
-                st->selected[0] = f->defIndex;
+                SearchableListSelectOnly(st, f->defIndex);
             }
             break;
         default:

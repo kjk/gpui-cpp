@@ -4602,6 +4602,38 @@ void WindowSetFocusId(Window* win, int id) {
     win->focusGen++;
 }
 
+int WindowFocusedId(const Window* win) {
+    return win ? win->focusId : 0;
+}
+
+bool WindowFocusWithin(const Window* win, int id) {
+    if (!win || !id) {
+        return false;
+    }
+    if (win->focusId == id) {
+        return true;
+    }
+    for (int i = 0; i < win->focusEls.len; i++) {
+        if (win->focusEls[i].id == win->focusId) {
+            return win->focusEls[i].trapId == id;
+        }
+    }
+    return false;
+}
+
+bool WindowRestoreFocus(Window* win, int id) {
+    if (!win || !id) {
+        return false;
+    }
+    for (int i = 0; i < win->focusEls.len; i++) {
+        if (win->focusEls[i].id == id) {
+            WindowSetFocusId(win, id);
+            return true;
+        }
+    }
+    return false;
+}
+
 int FocusNext(Window* win, int trapId, bool backward) {
     int n = win->focusEls.len;
     if (n == 0) {

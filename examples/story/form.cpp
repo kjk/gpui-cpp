@@ -69,8 +69,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
         self->namePrefix =
             EntityNewState<component::SearchableListState>(cx->app);
         if (component::SearchableListState* st = self->namePrefix.Get(cx)) {
-            st->selected[0] = 0;
-            st->selected.len = 1;
+            component::SearchableListSelectOnly(st, 0);
         }
         InputSetValue(&self->name, StrL("Jason Lee"));
         self->bio.kind = InputKind::Textarea;

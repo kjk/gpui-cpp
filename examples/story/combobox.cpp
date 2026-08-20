@@ -396,7 +396,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
             }
             for (int k = 0; k < kSpecs[i].count; k++) {
                 if (kSpecs[i].selected & (1u << k)) {
-                    s->selected[s->selected.len++] = k;
+                    s->selected.Append(k);
                 }
             }
         }
