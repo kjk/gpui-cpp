@@ -71,6 +71,9 @@ static El* ToggleButton(Ctx* cx, Str bid, Entity<DockState> st, DockPlacement p,
                 ->HoverBg(th.secondary)
                 ->Child(IconEl(a, icon, 14)->Fg(th.mutedFg));
     BindClick(e, bid, ListenTo(st, &DockState::OnToggleSide, (intptr_t)p));
+    // tab_panel.rs marks every tool on the bar `.tab_stop(false)`: the panel
+    // is what Tab moves between, not the four buttons hung off its edge.
+    e->TabStop(false);
     return e;
 }
 
@@ -256,6 +259,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                             ->Fg(th.mutedFg));
         BindClick(zoom, StrDup(a, fmt("%s-zoom-%d", id, node)),
                   ListenTo(st, &DockState::OnZoomClick, (intptr_t)panelIx));
+        zoom->TabStop(false);
         bar->Child(zoom);
     }
     // TabPanel::render_toolbar's menu button: the same two actions the
@@ -288,6 +292,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                                      ->Ghost()
                                      ->Compact()
                                      ->WithSize(UiSize::XSmall)
+                                     ->TabStop(false)
                                      ->IntoEl())
                        ->Menu(menu)
                        ->AnchorRight()

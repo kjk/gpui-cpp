@@ -863,6 +863,14 @@ El* El::FocusId(int v) {
     style.focusId = v;
     return this;
 }
+El* El::TabIndex(int v) {
+    style.tabIndex = v;
+    return this;
+}
+El* El::TabStop(bool v) {
+    style.tabStop = v;
+    return this;
+}
 El* El::FocusRing(bool v) {
     style.focusRing = v;
     return this;
@@ -3537,6 +3545,8 @@ static void CollectFocus(El* e, Window* win, int trap) {
         FocusRect fr;
         fr.id = e->style.focusId;
         fr.trapId = trap;
+        fr.tabIndex = e->style.tabIndex;
+        fr.tabStop = e->style.tabStop;
         fr.bounds = e->Bounds();
         win->focusEls.Append(fr);
     }
@@ -3548,6 +3558,19 @@ static void CollectFocus(El* e, Window* win, int trap) {
 void FocusCollect(Window* win, El* root) {
     win->focusEls.Clear();
     CollectFocus(root, win, 0);
+    // The traversal order is the tab index first and the paint order within
+    // it, so the sort has to be a stable one: an insertion sort over a list
+    // this size, where almost every element is already index zero and nothing
+    // moves at all.
+    for (int i = 1; i < win->focusEls.len; i++) {
+        FocusRect fr = win->focusEls[i];
+        int j = i - 1;
+        while (j >= 0 && win->focusEls[j].tabIndex > fr.tabIndex) {
+            win->focusEls[j + 1] = win->focusEls[j];
+            j--;
+        }
+        win->focusEls[j + 1] = fr;
+    }
 }
 
 void WindowSetFocusId(Window* win, int id) {
@@ -3576,6 +3599,10 @@ int FocusNext(Window* win, int trapId, bool backward) {
     int i = cur;
     for (int k = 0; k < n; k++) {
         i = (i + step + n) % n;
+        if (!win->focusEls[i].tabStop) {
+            // Focusable, but not somewhere Tab stops.
+            continue;
+        }
         if (trapId && win->focusEls[i].trapId != trapId) {
             continue;
         }

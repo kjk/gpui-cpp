@@ -875,6 +875,15 @@ struct Style {
     Rgba hoverFg = {};
     bool hasHoverFg = false;
     int focusId = 0;
+    // FocusHandle::tab_index / tab_stop. The index groups the traversal: Tab
+    // visits every element of the lowest index in the order they were painted,
+    // then the next index, and so on, which is how a control can be reached
+    // before one that is laid out above it. A handle that is not a tab stop
+    // keeps its focus and its ring and is simply skipped by the traversal —
+    // an input's clear button, or a dock tab bar's tools, which the keyboard
+    // reaches through the thing they belong to rather than one at a time.
+    int tabIndex = 0;
+    bool tabStop = true;
     // FocusableExt::focus_ring: whether a focused element shows the focus
     // appearance at all. Rust gates the whole `focus_ring_style` call on it,
     // so turning it off drops the tinted border along with the ring — a
@@ -1119,6 +1128,8 @@ struct El {
     El* HoverBg(Rgba c);
     El* HoverFg(Rgba c);
     El* FocusId(int v);
+    El* TabIndex(int v);
+    El* TabStop(bool v);
     El* FocusRing(bool v);
     El* TrapId(int v);
     El* Tip(Str s);
@@ -1305,6 +1316,8 @@ struct PaintCtx {
 struct FocusRect {
     int id = 0;
     int trapId = 0;
+    int tabIndex = 0;
+    bool tabStop = true;
     Bounds bounds = {};
 };
 
