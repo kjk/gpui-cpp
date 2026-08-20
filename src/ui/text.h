@@ -26,9 +26,9 @@
    written for the web holds: fetching an http(s) URL needs a socket and a
    TLS stack this tree does not have.
 
-   Where it stops short of Rust: selection is still per element
-   (base/text_selection.cpp), not the window-wide one
-   text/window_selection.rs runs. */
+   Selection is the window's: say Selectable() on the text and a drag runs
+   from one paragraph into the next, across every element between them
+   (base/text_selection.h WindowSelection). */
 
 #include "ui/sizing.h"
 #include "ui/syntax.h"

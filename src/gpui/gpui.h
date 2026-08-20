@@ -1261,6 +1261,10 @@ struct TextHit {
     float maxW = 0;
     bool wrap = false;
     int docOff = 0;
+    // TextSelectionScopeId: the focus trap this run sits inside, 0 for the
+    // page itself. A selection belongs to one scope, so a drag that started
+    // in a dialog does not run on into the page behind it.
+    int scope = 0;
 };
 
 // Two-generation shaped-text cache (see TextMeas* in Gpui.cpp). Opaque slots.
@@ -1353,6 +1357,9 @@ struct PaintCtx {
     int textDocLen = 0;
     int selA = -1;
     int selB = -1;
+    // Which scope the range above belongs to; -1 paints it wherever it
+    // falls, which is what a caller that knows of no scopes wants.
+    int selScope = -1;
     TextMeasCache textCache;
 
     PaintCtx() = default;
@@ -2021,7 +2028,13 @@ const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
 const HitRect* HitTestDrop(PaintCtx* ctx, float x, float y, Str kind);
 const ScrollRect* HitScrollRect(PaintCtx* ctx, float x, float y);
 int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest);
+// The same, confined to one selection scope (-1 for any), and reporting the
+// scope the point landed in.
+int TextHitOffsetIn(PaintCtx* ctx, float x, float y, bool nearest, int scope,
+                    int* outScope);
 int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
+int CopyTextHitsIn(PaintCtx* ctx, int selA, int selB, int scope, char* out,
+                   int cap);
 // crates/base/src/text_boundary.rs. The byte range of the word around `off`
 // — a run of word characters, or the run of spaces when the offset is in
 // one, or the single character otherwise. False when there is nothing there.
@@ -2034,6 +2047,8 @@ void TextLineRangeAt(Str s, int off, int* outA, int* outB);
 // or when no selectable text is there.
 bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
                          int* outA, int* outB);
+bool TextMultiClickRangeIn(PaintCtx* ctx, float x, float y, int clickCount,
+                           int scope, int* outA, int* outB, int* outScope);
 int HashClickId(Str s);
 
 // Whether a release makes a click. GPUI holds the press as
@@ -2118,11 +2133,17 @@ struct App {
 // The OS window: an HWND wrapper on Windows, an X11 Window on Linux.
 struct PlatWindow;
 
+// crates/base/src/text_selection.rs WindowSelectionState, one per window.
+struct WindowSelection;
+
 struct Window {
     App* app = nullptr;
     PlatWindow* plat = nullptr;
     PaintCtx paint = {};
     Arena* frameArena = nullptr;
+    // The selection over this window's selectable runs. Made on the first
+    // press that lands on text and dropped with the window.
+    WindowSelection* sel = nullptr;
     // The view this window renders. GPUI's Window holds a root view too.
     EntityId root = {};
     int hoverId = 0;

@@ -37,4 +37,54 @@ void TextSelectionClear(TextSelectionGesture* g);
 struct TextSelection {
     static El* New(Ctx* cx, Str id, int clickId = 0);
 };
+
+// ─── the window's selection ───────────────────────────────────────────────
+//
+// WindowSelectionState. Rust keeps one per window in a global keyed by
+// WindowId: every selectable run registers with it as it paints, and the
+// window's own mouse handlers — not the application's — drive the gesture,
+// so a drag runs from a paragraph into the one below it without either of
+// them knowing about the other. Here the registrations are the `TextHit`s
+// the frame already collects, and the endpoints are offsets into that same
+// document order, so this is the state and the handlers around it.
+//
+// The runtime calls the three gestures and TextSelectionApply; an
+// application only has to say `Selectable()` on the text.
+struct WindowSelection {
+    TextSelectionGesture gesture;
+    // SelectionEndpoint::anchor / cursor, as document offsets. -1 is none.
+    int anchor = -1;
+    int cursor = -1;
+    // TextSelectionScopeId: the trap the gesture began in. Extending stays
+    // inside it, and so does what gets painted and copied.
+    int scope = 0;
+};
+
+// The window's selection, made on first use.
+WindowSelection* WindowSelectionOf(Window* win);
+void WindowSelectionFree(Window* win);
+
+// The press. `clickCount` is GPUI's — 2 takes the word, 3 the line — and
+// `extend` is a shift-click, which moves the cursor and keeps the anchor.
+void WindowSelectionPress(Window* win, float x, float y, int clickCount,
+                          bool extend);
+// A move with the button down.
+void WindowSelectionDrag(Window* win, float x, float y);
+// The release. What was selected stands until the next press.
+void WindowSelectionRelease(Window* win);
+
+// TextSelection::has_selection.
+bool WindowSelectionHas(const Window* win);
+// TextSelection::clear.
+void WindowSelectionClear(Window* win);
+// TextSelection::selected_text, written into `out`. Answers its length.
+int WindowSelectionText(Window* win, char* out, int cap);
+// The window's copy: the selection to the clipboard. False when there is
+// nothing selected, which is what lets a Ctrl+C fall through to whatever
+// else wants it.
+bool WindowSelectionCopy(Window* win);
+
+// Hand the range to the frame being built, which is what makes it paint.
+// The runtime calls this before the view renders.
+void WindowSelectionApply(Window* win);
 } // namespace gpui

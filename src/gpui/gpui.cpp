@@ -3111,10 +3111,17 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             th.maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
             th.wrap = e->style.wrap;
             th.docOff = docOff;
+            // The trap this run sits in — a dialog, a sheet — which is the
+            // TextSelectionScopeId a gesture inside it stays within.
+            th.scope = e->style.trapId;
             ctx->texts.Append(th);
             ctx->textDocLen += e->text.len + 1;
             int a = ctx->selA;
             int b = ctx->selB;
+            if (ctx->selScope >= 0 && ctx->selScope != e->style.trapId) {
+                a = -1;
+                b = -1;
+            }
             if (a >= 0 && b >= 0 && a != b) {
                 if (a > b) {
                     int t = a;
@@ -3343,8 +3350,11 @@ static float DistToInterval(float v, float lo, float hi) {
 // The selectable run under (x, y), plus where inside it the point landed.
 // `nearest` widens the search to the closest run when none contains the point,
 // which is what a drag past the end of a paragraph needs.
+// `scope` is a TextSelectionScopeId — the trap the run sits in — and -1 is
+// every one of them. A drag that began inside a dialog cannot reach the page
+// behind it, which is what Rust's activate_scope arranges.
 static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
-                                  Point* outRel) {
+                                  Point* outRel, int scope = -1) {
     if (!ctx) {
         return nullptr;
     }
@@ -3352,6 +3362,9 @@ static const TextHit* TextHitFind(PaintCtx* ctx, float x, float y, bool nearest,
     float bestScore = 1e9f;
     for (int i = ctx->texts.len - 1; i >= 0; i--) {
         const TextHit& h = ctx->texts[i];
+        if (scope >= 0 && h.scope != scope) {
+            continue;
+        }
         if (h.bounds.Contains({x, y})) {
             best = &h;
             nearest = false;
@@ -3405,10 +3418,18 @@ static int TextHitLocal(PaintCtx* ctx, const TextHit* h, Point rel) {
 }
 
 int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest) {
+    return TextHitOffsetIn(ctx, x, y, nearest, -1, nullptr);
+}
+
+int TextHitOffsetIn(PaintCtx* ctx, float x, float y, bool nearest, int scope,
+                    int* outScope) {
     Point rel = {};
-    const TextHit* h = TextHitFind(ctx, x, y, nearest, &rel);
+    const TextHit* h = TextHitFind(ctx, x, y, nearest, &rel, scope);
     if (!h) {
         return -1;
+    }
+    if (outScope) {
+        *outScope = h->scope;
     }
     return h->docOff + TextHitLocal(ctx, h, rel);
 }
@@ -3561,11 +3582,17 @@ void TextLineRangeAt(Str s, int off, int* outA, int* outB) {
 
 bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
                          int* outA, int* outB) {
+    return TextMultiClickRangeIn(ctx, x, y, clickCount, -1, outA, outB,
+                                 nullptr);
+}
+
+bool TextMultiClickRangeIn(PaintCtx* ctx, float x, float y, int clickCount,
+                           int scope, int* outA, int* outB, int* outScope) {
     if (clickCount < 2) {
         return false;
     }
     Point rel = {};
-    const TextHit* h = TextHitFind(ctx, x, y, false, &rel);
+    const TextHit* h = TextHitFind(ctx, x, y, false, &rel, scope);
     if (!h) {
         return false;
     }
@@ -3582,12 +3609,19 @@ bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
     if (a >= b) {
         return false;
     }
+    if (outScope) {
+        *outScope = h->scope;
+    }
     *outA = h->docOff + a;
     *outB = h->docOff + b;
     return true;
 }
 
 int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
+    return CopyTextHitsIn(ctx, a, b, -1, out, cap);
+}
+
+int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap) {
     if (!out || cap <= 0) {
         return 0;
     }
@@ -3603,6 +3637,9 @@ int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
     int n = 0;
     for (int i = 0; i < ctx->texts.len && n < cap - 1; i++) {
         const TextHit& t = ctx->texts[i];
+        if (scope >= 0 && t.scope != scope) {
+            continue;
+        }
         int pos = t.docOff;
         int plen = t.text.len;
         int lo = a > pos ? a : pos;

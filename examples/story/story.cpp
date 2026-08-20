@@ -561,9 +561,7 @@ static void OpenStory(StoryApp* app, Ctx* cx, const ClickEvent*,
     cx->win->input = nullptr;
     app->story = (int)story;
     app->scrollY = 0;
-    app->selA = -1;
-    app->selB = -1;
-    TextSelectionClear(&app->sel);
+    WindowSelectionClear(cx->win);
     Notify(cx);
 }
 
@@ -1019,11 +1017,6 @@ static El* Footer(StoryApp* app, Ctx* cx) {
 
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    // did_hit_text gates the whole selection: a gesture that never touched a
-    // glyph shows nothing, however far it dragged.
-    bool publishes = TextSelectionPublishes(&app->sel);
-    cx->win->paint.selA = publishes ? app->selA : -1;
-    cx->win->paint.selB = app->selB;
     // Pages that own a text field point the window at it from their Render.
     if (app->search.focused) {
         cx->win->input = &app->search;
@@ -1116,22 +1109,12 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     if (!down) {
         return;
     }
-    if (vk == KeyC && ev->ctrl && TextSelectionPublishes(&app->sel) &&
-        app->selA >= 0 && app->selA != app->selB) {
-        char buf[8192];
-        int n = CopyTextHits(&cx->win->paint, app->selA, app->selB, buf,
-                             (int)sizeof(buf));
-        if (n > 0) {
-            ClipboardSetText(cx->win, Str(buf, n));
-        }
-        return;
-    }
+    // Ctrl+C is the window's now — WindowKeyDown copies the selection before
+    // this handler runs — so the shell only has Escape left to answer.
     if (vk == KeyEscape) {
         app->search.focused = false;
         cx->win->input = nullptr;
-        app->selA = -1;
-        app->selB = -1;
-        TextSelectionClear(&app->sel);
+        WindowSelectionClear(cx->win);
     }
     // Whatever the shell did not use is the page's. This is cx.propagate():
     // the shell handles its own chords first and then lets the action carry
@@ -1139,62 +1122,6 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     StoryKeyRegistered(app, cx, ev);
 }
 
-static void OnMouseUp(StoryApp* app, Ctx* cx, const MouseUpEvent*) {
-    (void)cx;
-    TextSelectionEnd(&app->sel);
-}
-
-static void OnMouseMove(StoryApp* app, Ctx* cx, const MouseMoveEvent* ev) {
-    if (!app->sel.selecting) {
-        return;
-    }
-    // did_hit_text: whether *this* point is on a glyph, which is the strict
-    // hit; the offset the selection extends to is the nearest one either way,
-    // so a drag into the margin keeps running along the line.
-    TextSelectionExtend(
-        &app->sel, TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, false) >= 0);
-    int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
-    if (moveOff >= 0) {
-        app->selB = moveOff;
-    }
-}
-
-static void OnMouseDown(StoryApp* app, Ctx* cx, const MouseDownEvent* ev) {
-    float x = ev->x;
-    float y = ev->y;
-    if (ev->button != MouseButton::Left) {
-        return;
-    }
-    // Two clicks take the word under the pointer, three the whole run —
-    // points_for_multi_click, in text_selection.rs.
-    int wordA = 0;
-    int wordB = 0;
-    if (TextMultiClickRange(&cx->win->paint, x, y, ev->clickCount, &wordA,
-                            &wordB)) {
-        app->selA = wordA;
-        app->selB = wordB;
-        // A multi-click lands on a word, so it has hit text by definition;
-        // Rust sets did_hit_text outright on that path.
-        TextSelectionBegin(&app->sel, true);
-        TextSelectionEnd(&app->sel);
-        return;
-    }
-    // A press in the margin still begins a gesture: Rust takes the flag from
-    // `anchor.inside_text || endpoint.inside_text`, so dragging from beside a
-    // paragraph into it selects. The anchor is the nearest offset; whether it
-    // was on a glyph is what decides if anything is published.
-    int anchor = TextHitOffsetAt(&cx->win->paint, x, y, true);
-    if (anchor >= 0) {
-        app->selA = anchor;
-        app->selB = anchor;
-        TextSelectionBegin(&app->sel,
-                           TextHitOffsetAt(&cx->win->paint, x, y, false) >= 0);
-        return;
-    }
-    app->selA = -1;
-    app->selB = -1;
-    TextSelectionClear(&app->sel);
-}
 
 // The story to open, if one was named on the command line.
 static void ParseSlug(int argc, char** argv, char* out, int cap) {
@@ -1236,9 +1163,6 @@ int GpuiMain(int argc, char** argv) {
                                  view.id, opts);
     WindowOnUnhandledClick(win, ListenTo(view, &OnUnhandledClick));
     WindowOnKey(win, ListenTo(view, &OnKey));
-    WindowOnMouseDown(win, ListenTo(view, &OnMouseDown));
-    WindowOnMouseUp(win, ListenTo(view, &OnMouseUp));
-    WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;
