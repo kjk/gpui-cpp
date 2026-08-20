@@ -156,15 +156,15 @@ static void ScalePointLeastIndexBasic() {
     utassert(s.LeastIndex(50) == 1);
     utassert(s.LeastIndex(100) == 2);
 
-    utassert(s.LeastIndex(24) == 0);  // closer to 0
-    utassert(s.LeastIndex(25) == 1);  // equidistant, rounds up
-    utassert(s.LeastIndex(26) == 1);  // closer to 50
-    utassert(s.LeastIndex(74) == 1);  // closer to 50
-    utassert(s.LeastIndex(75) == 2);  // equidistant, rounds up
-    utassert(s.LeastIndex(76) == 2);  // closer to 100
+    utassert(s.LeastIndex(24) == 0); // closer to 0
+    utassert(s.LeastIndex(25) == 1); // equidistant, rounds up
+    utassert(s.LeastIndex(26) == 1); // closer to 50
+    utassert(s.LeastIndex(74) == 1); // closer to 50
+    utassert(s.LeastIndex(75) == 2); // equidistant, rounds up
+    utassert(s.LeastIndex(76) == 2); // closer to 100
 
-    utassert(s.LeastIndex(-10) == 0);  // below the range
-    utassert(s.LeastIndex(150) == 2);  // above it
+    utassert(s.LeastIndex(-10) == 0); // below the range
+    utassert(s.LeastIndex(150) == 2); // above it
 }
 
 static void ScalePointLeastIndexWithOffset() {
@@ -220,9 +220,9 @@ static void ScaleOrdinalCycles() {
     utassert(s.Map(0) == 0);
     utassert(s.Map(1) == 1);
     utassert(s.Map(2) == 2);
-    utassert(s.Map(3) == 0);  // cycles back to the first
+    utassert(s.Map(3) == 0); // cycles back to the first
     utassert(s.Map(4) == 1);
-    utassert(s.Map(-1) == -1);  // not in the domain, and no unknown set
+    utassert(s.Map(-1) == -1); // not in the domain, and no unknown set
 }
 
 static void ScaleOrdinalUnknown() {
@@ -242,6 +242,67 @@ static void ScaleOrdinalEmptyRange() {
     utassert(s.Map(3) == -1);
 }
 
+// crates/ui/src/plot/scale/band.rs: test_scale_band.
+static void ScaleBandThirds() {
+    const float range[2] = {0.f, 90.f};
+    ScaleBand b = ScaleBand::New(3, range, 2);
+    float t = 0;
+    utassert(b.Tick(0, &t) && TestNear(t, 0.f));
+    utassert(b.Tick(1, &t) && TestNear(t, 30.f));
+    utassert(b.Tick(2, &t) && TestNear(t, 60.f));
+    utassertnear(b.BandWidth(), 30.f);
+}
+
+// test_scale_band_zero: an empty domain has no bands, and an empty range has
+// no width to give them.
+static void ScaleBandEmpty() {
+    const float range[2] = {0.f, 90.f};
+    ScaleBand none = ScaleBand::New(0, range, 2);
+    float t = 0;
+    utassert(!none.Tick(0, &t));
+    utassert(!none.Tick(1, &t));
+    utassertnear(none.BandWidth(), 0.f);
+
+    ScaleBand noRange = ScaleBand::New(3, nullptr, 0);
+    utassert(noRange.Tick(0, &t) && TestNear(t, 0.f));
+    utassert(noRange.Tick(1, &t) && TestNear(t, 0.f));
+    utassert(noRange.Tick(2, &t) && TestNear(t, 0.f));
+    utassertnear(noRange.BandWidth(), 0.f);
+}
+
+static void ScaleBandPadding() {
+    const float range[2] = {0.f, 100.f};
+    ScaleBand b = ScaleBand::New(4, range, 2);
+    b.paddingInner = 0.2f;
+    // A band gives a fifth of itself to the gap beside it.
+    utassertnear(b.BandWidth(), 20.f);
+    float t = 0;
+    utassert(b.Tick(0, &t) && TestNear(t, 0.f));
+    // The rest are spread by the ratio the inner padding works out to: a
+    // quarter of the range each, stretched by 1 + 0.2/3.
+    utassert(b.Tick(3, &t) && TestNear(t, 80.f));
+}
+
+static void ScaleBandSingle() {
+    const float range[2] = {0.f, 90.f};
+    ScaleBand b = ScaleBand::New(1, range, 2);
+    float t = 0;
+    // One band sits in the middle: the width is capped at thirty, so it
+    // starts thirty in.
+    utassert(b.Tick(0, &t) && TestNear(t, 30.f));
+    utassert(b.LeastIndex(80.f) == 0);
+}
+
+static void ScaleBandLeastIndex() {
+    const float range[2] = {0.f, 90.f};
+    ScaleBand b = ScaleBand::New(3, range, 2);
+    utassert(b.LeastIndex(0.f) == 0);
+    utassert(b.LeastIndex(31.f) == 1);
+    utassert(b.LeastIndex(59.f) == 2);
+    // And it never runs off either end.
+    utassert(b.LeastIndex(-40.f) == 0);
+    utassert(b.LeastIndex(400.f) == 2);
+}
 void TestScale() {
     TestSuite("scale/linear");
     ScaleLinearBasics();
@@ -262,4 +323,11 @@ void TestScale() {
     ScaleOrdinalCycles();
     ScaleOrdinalUnknown();
     ScaleOrdinalEmptyRange();
+
+    TestSuite("scale/band");
+    ScaleBandThirds();
+    ScaleBandEmpty();
+    ScaleBandPadding();
+    ScaleBandSingle();
+    ScaleBandLeastIndex();
 }

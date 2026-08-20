@@ -154,6 +154,84 @@ int ScalePoint::LeastIndex(float tick) const {
     }
     return (int)index;
 }
+// The width of one band before the padding between them comes off, which is
+// what Rust's `avg_width` is.
+ScaleBand ScaleBand::New(int domainN, const float* range, int rangeN) {
+    ScaleBand b;
+    b.domainLen = domainN < 0 ? 0 : domainN;
+    float lo = 0;
+    float hi = 0;
+    for (int i = 0; i < rangeN; i++) {
+        if (i == 0 || range[i] < lo) {
+            lo = range[i];
+        }
+        if (i == 0 || range[i] > hi) {
+            hi = range[i];
+        }
+    }
+    b.rangeDiff = rangeN > 0 ? hi - lo : 0;
+    b.avgWidth = b.domainLen > 0 ? b.rangeDiff / (float)b.domainLen : 0;
+    return b;
+}
+
+float ScaleBand::BandWidth() const {
+    float w = avgWidth * (1.f - paddingInner);
+    return w < 30.f ? w : 30.f;
+}
+
+// The gap the inner padding opens between bands, spread over the ones that
+// are left.
+static float ScaleBandRatio(const ScaleBand& b) {
+    if (b.domainLen <= 1) {
+        return 1.f;
+    }
+    return 1.f + b.paddingInner / (float)(b.domainLen - 1);
+}
+
+// display_avg_width: what one band takes once the outer padding is off both
+// ends.
+static float ScaleBandDisplayAvgWidth(const ScaleBand& b) {
+    if (b.domainLen <= 0) {
+        return 0;
+    }
+    float outer = b.avgWidth * b.paddingOuter;
+    return (b.rangeDiff - outer * 2.f) / (float)b.domainLen;
+}
+
+bool ScaleBand::Tick(int index, float* out) const {
+    if (index < 0 || index >= domainLen) {
+        return false;
+    }
+    if (domainLen == 1) {
+        // One band sits in the middle of the range.
+        *out = (rangeDiff - BandWidth()) / 2.f;
+        return true;
+    }
+    float avg = ScaleBandDisplayAvgWidth(*this);
+    float outer = avgWidth * paddingOuter;
+    *out = (float)index * avg * ScaleBandRatio(*this) + outer;
+    return true;
+}
+
+int ScaleBand::LeastIndex(float tick) const {
+    if (domainLen <= 1) {
+        return 0;
+    }
+    float avg = ScaleBandDisplayAvgWidth(*this);
+    float outer = avgWidth * paddingOuter;
+    float step = avg * ScaleBandRatio(*this);
+    if (step == 0) {
+        return 0;
+    }
+    int index = (int)((tick - outer) / step + 0.5f);
+    if (index < 0) {
+        index = 0;
+    }
+    if (index > domainLen - 1) {
+        index = domainLen - 1;
+    }
+    return index;
+}
 
 int ScaleOrdinal::Map(int domainIndex) const {
     if (domainIndex < 0) {

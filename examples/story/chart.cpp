@@ -109,6 +109,61 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
     pieRow->Child(ChartCard(cx, "Pie Chart", pie->IntoEl(), true));
     pieRow->Child(ChartCard(cx, "Pie Chart - Donut", donut->IntoEl(), true));
     page->Child(pieRow);
+
+    // The bar and line row, over six months.
+    static const char* kMonthNames[] = {"January", "February", "March",
+                                        "April",   "May",      "June"};
+    static const float kMonthly[] = {186, 305, 237, 173, 209, 214};
+    El* barRow = Div(a)->FlexRow()->W(kFill)->Gap(16)->FlexWrap();
+    barRow->Child(ChartCard(cx, "Bar Chart",
+                            component::BarChart::New(cx, kMonthly, 6)
+                                ->Fill(th.blue)
+                                ->Labels(kMonthNames)
+                                ->TickMargin(1)
+                                ->IntoEl()
+                                ->W(kFill)
+                                ->H(kFill),
+                            false));
+    barRow->Child(ChartCard(cx, "Line Chart",
+                            component::LineChart::New(cx, kMonthly, 6)
+                                ->Stroke(th.blue)
+                                ->Labels(kMonthNames)
+                                ->TickMargin(1)
+                                ->IntoEl()
+                                ->W(kFill)
+                                ->H(kFill),
+                            false));
+    page->Child(barRow);
+
+    // A fortnight of candles, and the same six months as a radar.
+    static const float kOpen[] = {120, 124, 118, 131, 128, 134, 129,
+                                  136, 142, 139, 145, 141, 149, 152};
+    static const float kClose[] = {124, 118, 131, 128, 134, 129, 136,
+                                   142, 139, 145, 141, 149, 152, 148};
+    static const float kHigh[] = {127, 126, 133, 134, 137, 136, 138,
+                                  145, 144, 147, 148, 151, 155, 154};
+    static const float kLow[] = {117, 115, 116, 126, 126, 127, 128,
+                                 134, 137, 137, 139, 140, 146, 146};
+    static const char* kDayNames[] = {"1", "2", "3",  "4",  "5",  "6",  "7",
+                                      "8", "9", "10", "11", "12", "13", "14"};
+    El* lastRow = Div(a)->FlexRow()->W(kFill)->Gap(16)->FlexWrap();
+    lastRow->Child(ChartCard(
+        cx, "Candlestick Chart",
+        component::CandlestickChart::New(cx, kOpen, kHigh, kLow, kClose, 14)
+            ->Labels(kDayNames)
+            ->TickMargin(2)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill),
+        false));
+    lastRow->Child(ChartCard(cx, "Radar Chart",
+                             component::RadarChart::New(cx, kMonthly, 6)
+                                 ->Labels(kMonthNames)
+                                 ->IntoEl()
+                                 ->W(kFill)
+                                 ->H(kFill),
+                             true));
+    page->Child(lastRow);
     return page;
 }
 

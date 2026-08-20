@@ -54,6 +54,29 @@ struct ScalePoint {
     int LeastIndex(float tick) const;
 };
 
+// ScaleBand — https://d3js.org/d3-scale/band
+//
+// A bar chart's x axis: the domain's entries each take a band of the range,
+// with padding between them and at the ends. Rust's domain is a vector of
+// values; here it is a count, since a band is picked by index — which is what
+// a caller walking its data already has.
+struct ScaleBand {
+    int domainLen = 0;
+    float rangeDiff = 0;
+    float avgWidth = 0;
+    float paddingInner = 0;
+    float paddingOuter = 0;
+
+    static ScaleBand New(int domainN, const float* range, int rangeN);
+    // band_width: what one band is drawn at, which Rust caps at thirty.
+    float BandWidth() const;
+    // The range position of the band at `index`, or false when it is not one
+    // of them. A one-band domain sits in the middle of the range.
+    bool Tick(int index, float* out) const;
+    // The band nearest `tick`, clamped to the domain.
+    int LeastIndex(float tick) const;
+};
+
 // ScaleOrdinal — https://d3js.org/d3-scale/ordinal
 //
 // Rust maps a domain value to a range value; this maps the domain *index*,
