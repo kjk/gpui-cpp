@@ -1768,10 +1768,24 @@ struct InputState {
     // The text run the element last painted, so a press can be turned into an
     // offset. Rust keeps `last_bounds` + `last_layout` for the same reason;
     // in a multi-line field this is the *first* row, and the ones under it are
-    // found by stepping `lastLineH` down from it.
+    // found by stepping `lastLineH` down from it — unless soft wrap made them
+    // different heights, which is what `rowBoxes` is for.
     Bounds lastBounds = {};
     float lastFont = 0;
     float lastLineH = 0;
+    // Whether those rows were drawn in the monospace family, so a press is
+    // measured against the same advances they were laid out with.
+    bool lastMono = false;
+    // display_map.rs: the box each logical line was last laid out in. Soft
+    // wrap makes them uneven — a line that wrapped is two of those boxes tall
+    // or more — so a press cannot be turned into a row by arithmetic, and
+    // neither can the caret's y. Empty when nothing wrapped, where the
+    // arithmetic is right and cheaper. Sized before the rows are built, so
+    // the pointers the elements are handed stay put for the frame.
+    Vec<Bounds> rowBoxes;
+    // The box the rows were laid out in as a whole, which is the scrolled
+    // height once soft wrap has had its say.
+    Bounds contentBox = {};
     // input_bounds: the whole field, what a press outside the run maps against.
     Bounds inputBounds = {};
     // scroll_handle: how far the field has scrolled under its own box, and
@@ -1796,9 +1810,11 @@ struct InputState {
     bool imeMarking = false;
     // preferred_column: the column a vertical move aims for, so walking down
     // past a short line and back up returns to where it started. -1 for none.
-    // Rust also remembers the x it measured; without a display map there is
-    // only the column.
     int preferredColumn = -1;
+    // The x Rust remembers beside it, which is what a walk over *display*
+    // rows aims at — a column means nothing halfway through a wrapped line.
+    // -1 for none; cleared by every move that is not part of the walk.
+    float preferredX = -1;
 
     ~InputState();
 };
@@ -2098,8 +2114,21 @@ Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW,
 void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);
+// The inverse of TextIndexAt: where a UTF-8 offset sits in a run once it has
+// been laid out and wrapped. `outY` is the top of the visual row the offset
+// is on and `outH` that row's height. False when there was nothing to
+// measure against.
+//
+// `mono` and `lineHeight` have to be the ones the run was painted with:
+// Consolas advances differently from the proportional face, so measuring a
+// code editor's row without them answers for a line of text that was never
+// drawn.
+bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
+                 int off, float* outX, float* outY, float* outH,
+                 bool mono = false, float lineHeight = 0);
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
-                float relX, float relY);
+                float relX, float relY, bool mono = false,
+                float lineHeight = 0);
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                     float x, float y, int u8a, int u8b, Rgba color);
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
