@@ -66,6 +66,52 @@ float VirtualListScrollToRow(int count, float rowSize, int ix, float offset,
 // Every item's length added up: the scrolled size of the whole list.
 float VirtualListContentSize(const float* sizes, int count);
 
+// VirtualListScrollHandle. Rust's handle is what a caller outside the list
+// holds: it knows the axis and how many items there are, it carries the
+// viewport and the offset of the list it is attached to, and a request to
+// scroll to an item waits on it until the list is next laid out — at the
+// moment the request is made nothing knows where the item is.
+struct VirtualListScrollHandle {
+    Axis axis = Axis::Vertical;
+    int itemsCount = 0;
+    // The base handle: where the list has scrolled to, how much of it is
+    // showing, and how long the whole of it is. Offsets run positive-down,
+    // as El::ScrollY takes them.
+    float offset = 0;
+    float viewport = 0;
+    float contentSize = 0;
+    // deferred_scroll_to_item: the request, until a layout can answer it.
+    bool pending = false;
+    int pendingIx = 0;
+    // scroll_to_item_with_offset: how many items past the one named to bring
+    // into view instead.
+    int pendingOffset = 0;
+    ScrollStrategy pendingStrategy = ScrollStrategy::Top;
+};
+
+// scroll_to_item / scroll_to_item_with_offset: the request is recorded and
+// answered at the next layout.
+void VirtualListScrollToItemDeferred(VirtualListScrollHandle* h, int ix,
+                                     ScrollStrategy strategy);
+void VirtualListScrollToItemDeferredWithOffset(VirtualListScrollHandle* h,
+                                               int ix, ScrollStrategy strategy,
+                                               int offset);
+// scroll_to_bottom: the last item, at the top of the view — which is as far
+// as the list goes.
+void VirtualListScrollToBottomDeferred(VirtualListScrollHandle* h);
+
+// What the list does with the handle when it lays out: the item sizes and the
+// viewport it measured, then the pending request if there is one, and last
+// the clamp that keeps the offset inside the list. `sizes` may be null for a
+// list whose items are all `itemSize` long. Answers whether the offset moved.
+bool VirtualListHandleLayout(VirtualListScrollHandle* h, const float* sizes,
+                             int count, float itemSize, float viewport);
+
+// The range the handle's offset makes visible, for the same pair of lists.
+VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
+                                    const float* sizes, int count,
+                                    float itemSize);
+
 struct VirtualList {
     static El* New(Ctx* cx, Str id);
 };

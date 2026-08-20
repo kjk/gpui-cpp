@@ -118,6 +118,79 @@ float VirtualListScrollToRow(int count, float rowSize, int ix, float offset,
                                (float)count * rowSize, strategy);
 }
 
+void VirtualListScrollToItemDeferred(VirtualListScrollHandle* h, int ix,
+                                     ScrollStrategy strategy) {
+    VirtualListScrollToItemDeferredWithOffset(h, ix, strategy, 0);
+}
+
+void VirtualListScrollToItemDeferredWithOffset(VirtualListScrollHandle* h,
+                                               int ix, ScrollStrategy strategy,
+                                               int offset) {
+    if (!h) {
+        return;
+    }
+    h->pending = true;
+    h->pendingIx = ix;
+    h->pendingStrategy = strategy;
+    h->pendingOffset = offset;
+}
+
+void VirtualListScrollToBottomDeferred(VirtualListScrollHandle* h) {
+    if (!h) {
+        return;
+    }
+    // saturating_sub: an empty list scrolls to item 0, which is nowhere.
+    int last = h->itemsCount > 0 ? h->itemsCount - 1 : 0;
+    VirtualListScrollToItemDeferred(h, last, ScrollStrategy::Top);
+}
+
+bool VirtualListHandleLayout(VirtualListScrollHandle* h, const float* sizes,
+                             int count, float itemSize, float viewport) {
+    if (!h) {
+        return false;
+    }
+    float before = h->offset;
+    h->itemsCount = count;
+    h->viewport = viewport;
+    h->contentSize =
+        sizes ? VirtualListContentSize(sizes, count) : (float)count * itemSize;
+    if (h->pending) {
+        // The request is taken, whether or not there is an item to answer it
+        // with: Rust's `take()` clears it either way.
+        h->pending = false;
+        int ix = h->pendingIx + h->pendingOffset;
+        if (ix >= 0 && ix < count) {
+            h->offset =
+                sizes ? VirtualListScrollToItem(sizes, count, ix, h->offset,
+                                                viewport, h->pendingStrategy)
+                      : VirtualListScrollToRow(count, itemSize, ix, h->offset,
+                                               viewport, h->pendingStrategy);
+        }
+    }
+    // The clamp: there is nothing to see past either end, however the offset
+    // got there — a list that shrank under a scrolled view comes back.
+    float most = h->contentSize - viewport;
+    if (h->offset > most) {
+        h->offset = most;
+    }
+    if (h->offset < 0) {
+        h->offset = 0;
+    }
+    return h->offset != before;
+}
+
+VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
+                                    const float* sizes, int count,
+                                    float itemSize) {
+    if (!h) {
+        return {};
+    }
+    if (sizes) {
+        return VirtualListVisibleRange(sizes, count, h->offset, h->viewport);
+    }
+    return VirtualListVisibleRows(count, itemSize, h->offset, h->viewport);
+}
+
 El* VirtualList::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     return Div(a)->Id(id);
