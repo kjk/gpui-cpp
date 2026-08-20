@@ -50,6 +50,7 @@ double TimeNow() {
 
 // Defined below, once NSEvent is in scope for the whole file.
 void WindowMacKeyDown(Window* win, NSEvent* event);
+void WindowMacKeyUp(Window* win, NSEvent* event);
 
 } // namespace gpui
 
@@ -289,7 +290,7 @@ static bool PressedButton(MouseButton* out) {
 }
 
 - (void)keyUp:(NSEvent*)event {
-    (void)event;
+    gpui::WindowMacKeyUp(win, event);
 }
 
 // Cocoa beeps on an unhandled key equivalent; the app handles its own keys.
@@ -386,6 +387,25 @@ static int KeyFor(unichar c) {
         return (int)c;
     }
     return 0;
+}
+
+// The release of a key. Only the activation keys do anything with one, and
+// they need no text, so this is the modifier and code half of the press.
+void WindowMacKeyUp(Window* win, NSEvent* event) {
+    if (!win) {
+        return;
+    }
+    NSEventModifierFlags mods = [event modifierFlags];
+    NSString* bare = [event charactersIgnoringModifiers];
+    unichar first = [bare length] > 0 ? [bare characterAtIndex:0] : 0;
+    int key = KeyFor(first);
+    if (!key) {
+        return;
+    }
+    WindowKeyUp(
+        win, key, (mods & NSEventModifierFlagShift) != 0,
+        (mods & (NSEventModifierFlagControl | NSEventModifierFlagCommand)) != 0,
+        (mods & NSEventModifierFlagOption) != 0);
 }
 
 void WindowMacKeyDown(Window* win, NSEvent* event) {

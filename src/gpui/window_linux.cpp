@@ -340,6 +340,30 @@ static void OnKeyPress(Window* win, XKeyEvent* ke) {
     }
 }
 
+static void OnKeyRelease(Window* win, XKeyEvent* ke) {
+    // X11 spells auto-repeat as a release and a press at the same timestamp,
+    // so a held Enter would otherwise make a click per repeat. The pair is
+    // dropped here rather than by asking XKB for detectable auto-repeat, which
+    // not every server has.
+    if (XPending(gDpy) > 0) {
+        XEvent next;
+        XPeekEvent(gDpy, &next);
+        if (next.type == KeyPress && next.xkey.time == ke->time &&
+            next.xkey.keycode == ke->keycode) {
+            return;
+        }
+    }
+    char buf[8] = {};
+    KeySym ks = 0;
+    XLookupString(ke, buf, (int)sizeof(buf) - 1, &ks, nullptr);
+    int key = KeyFor(ks);
+    if (key) {
+        WindowKeyUp(win, key, (ke->state & ShiftMask) != 0,
+                    (ke->state & ControlMask) != 0,
+                    (ke->state & Mod1Mask) != 0);
+    }
+}
+
 // _NET_WM_MOVERESIZE: the window manager takes the pointer grab and runs the
 // drag. Directions 0..7 go clockwise from the top-left corner; 8 is a move.
 static const int kMoveResizeMove = 8;
@@ -717,6 +741,9 @@ static void HandleEvent(App* app, XEvent* ev) {
             break;
         case KeyPress:
             OnKeyPress(win, &ev->xkey);
+            break;
+        case KeyRelease:
+            OnKeyRelease(win, &ev->xkey);
             break;
         case MotionNotify: {
             MouseButton held = MouseButton::Left;

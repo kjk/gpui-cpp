@@ -629,6 +629,19 @@ bool ClickFromRelease(bool pending, int pressedId, MouseButton pressedButton,
     return upId == pressedId;
 }
 
+bool ClickFromKeyRelease(bool pending, int pendingGen, int focusGen, int key,
+                         bool modified) {
+    if (!pending || modified) {
+        return false;
+    }
+    if (key != KeyReturn && key != KeySpace) {
+        return false;
+    }
+    // The focus moved between the two halves, so the element that would take
+    // the click is not the one the key went down on.
+    return pendingGen == focusGen;
+}
+
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
     if (s.s) {
@@ -3347,6 +3360,16 @@ void FocusCollect(Window* win, El* root) {
     CollectFocus(root, win, 0);
 }
 
+void WindowSetFocusId(Window* win, int id) {
+    if (!win || win->focusId == id) {
+        return;
+    }
+    win->focusId = id;
+    // focus_generation: what a pending keystroke is stamped with, so the move
+    // is what tells it the element under it changed.
+    win->focusGen++;
+}
+
 int FocusNext(Window* win, int trapId, bool backward) {
     int n = win->focusEls.len;
     if (n == 0) {
@@ -3375,7 +3398,7 @@ int FocusNext(Window* win, int trapId, bool backward) {
                 continue;
             }
         }
-        win->focusId = win->focusEls[i].id;
+        WindowSetFocusId(win, win->focusEls[i].id);
         return win->focusId;
     }
     return win->focusId;

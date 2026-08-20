@@ -18,6 +18,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
 
 // `key` is one of the Key* codes in Gpui.h.
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt);
+// The release of one. Only Enter and Space do anything with it — they make
+// the click on a focused element from the release, the way a mouse click is
+// made from the button coming back up — so a platform that has no key-up to
+// give loses nothing else.
+void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt);
 // A typed character, already decoded to a codepoint.
 void WindowChar(Window* win, uint32_t ch, bool ctrl, bool alt);
 // GPUI's Window::dispatch_event: every mouse event the platform produces
