@@ -135,7 +135,7 @@ Settings* Settings::Item(Str title, Str description, El* control) {
     }
     SettingGroup& g = p.groups[p.n - 1];
     if (g.n < kMaxSettingItems) {
-        g.items[g.n] = {};
+        g.items[g.n] = SettingItem{};
         g.items[g.n].title = title;
         g.items[g.n].description = description;
         g.items[g.n].control = control;

@@ -209,6 +209,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_CHAR:
             WindowChar(win, (uint32_t)wParam, CtrlDown(), AltDown());
             return 0;
+        case WM_ACTIVATE:
+            // is_window_active: the frame dims while another window has the
+            // focus.
+            WindowSetActive(win, LOWORD(wParam) != WA_INACTIVE);
+            break;
         case WM_MOUSEACTIVATE:
             // The press that follows is the one that activated the window.
             win->plat->firstMouse = true;

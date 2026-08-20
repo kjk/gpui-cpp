@@ -67,3 +67,4 @@ void TestTab();
 void TestSetting();
 void TestSearchableList();
 void TestSidebar();
+void TestWindowBorder();

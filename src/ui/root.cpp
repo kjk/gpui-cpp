@@ -1,4 +1,5 @@
 #include "ui/root.h"
+#include "ui/window_border.h"
 
 namespace gpui {
 
@@ -23,13 +24,16 @@ Root* Root::Child(El* e) {
 El* Root::IntoEl() {
     const Theme& th = cx->theme();
     El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.background);
-    if (bordered) {
-        e->Border(1, th.border);
-    }
     if (child) {
         e->Child(child);
     }
-    return e;
+    if (!bordered) {
+        return e;
+    }
+    // Root::bordered(true) wraps the view in the window border: the shadow
+    // padding a client-decorated window keeps, and the frame inside it that
+    // dims while another window has the focus.
+    return WindowBorder::New(cx)->Child(e)->IntoEl();
 }
 
 } // namespace component

@@ -391,33 +391,26 @@ static void ShowWindowMenu(Window* win, int rootX, int rootY) {
     XFlush(gDpy);
 }
 
-// An undecorated window has no frame to grab, so the outer band of the client
-// area is the resize handle — the same job WM_NCHITTEST does on Windows.
-static const int kResizeBand = 6;
-
 static bool ClientDecorated(Window* win) {
     return win->opts.clientTitleBar || win->opts.borderless;
 }
 
+// An undecorated window has no frame to grab, so the band around the client
+// area is the resize handle — the same job WM_NCHITTEST does on Windows. The
+// rule is window_border.rs's `resize_edge`, and its answers are numbered the
+// way _NET_WM_MOVERESIZE numbers its directions.
 static int ResizeEdge(Window* win, int x, int y) {
     PlatWindow* pw = win->plat;
     if (!pw || !ClientDecorated(win) || win->maximized) {
         return -1;
     }
-    bool l = x < kResizeBand;
-    bool r = x >= pw->pxW - kResizeBand;
-    bool t = y < kResizeBand;
-    bool b = y >= pw->pxH - kResizeBand;
-    if (t) {
-        return l ? 0 : r ? 2 : 1;
-    }
-    if (b) {
-        return l ? 6 : r ? 4 : 5;
-    }
-    if (l) {
-        return 7;
-    }
-    return r ? 3 : -1;
+    // No shadow padding here: the frame is the window, so the inner frame is
+    // its whole box and the band straddles the edge.
+    component::WindowTiling tiling;
+    Edges insets = component::WindowBorderInsets(0, tiling);
+    return (int)component::WindowResizeEdge((float)x, (float)y, (float)pw->pxW,
+                                            (float)pw->pxH, insets, tiling,
+                                            component::kWindowResizeHitSize);
 }
 
 static void SetEdgeCursor(Window* win, int dir) {
@@ -815,6 +808,12 @@ static void HandleEvent(App* app, XEvent* ev) {
             WindowDispatchInput(win, &in);
             break;
         }
+        case FocusIn:
+            WindowSetActive(win, true);
+            break;
+        case FocusOut:
+            WindowSetActive(win, false);
+            break;
         case ClientMessage:
             if (ev->xclient.message_type == aWmProtocols &&
                 (Atom)ev->xclient.data.l[0] == aWmDeleteWindow) {

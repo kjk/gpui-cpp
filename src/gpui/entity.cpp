@@ -178,6 +178,18 @@ const DragPayload* WindowActiveDrag(Ctx* cx) {
     return &cx->win->activeDrag;
 }
 
+bool WindowIsActive(Ctx* cx) {
+    return (cx && cx->win) ? cx->win->active : true;
+}
+
+void WindowSetActive(Window* win, bool active) {
+    if (!win || win->active == active) {
+        return;
+    }
+    win->active = active;
+    AppInvalidate(win);
+}
+
 int WindowDragOverId(Ctx* cx) {
     return (cx && cx->win) ? cx->win->dragOverId : 0;
 }
