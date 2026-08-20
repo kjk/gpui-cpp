@@ -1971,6 +1971,10 @@ static void FillRound(PaintCtx* ctx, float x, float y, float w, float h,
     CanvasFillRound(ctx, x, y, w, h, r, c);
 }
 
+// styled.rs FOCUS_RING_WIDTH and FOCUS_RING_OPACITY.
+static const float kFocusRingWidth = 3.f;
+static const float kFocusRingOpacity = 0.5f;
+
 static void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
                             float r, float stroke, Rgba c) {
     CanvasStrokeRound(ctx, x, y, w, h, r, stroke, c);
@@ -2743,6 +2747,16 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         ctx->scrolls.Append(sr);
     }
 
+    // focus_ring_style: a focused control's own border takes the ring colour.
+    // That is the half of the focus appearance that costs no room, and the
+    // half Rust keeps when a theme turns the ring off. The element is this
+    // frame's arena copy, so writing the colour onto it is what Rust's
+    // `.border_color(cx.theme().ring)` does to the style it is building.
+    bool focused = e->style.focusId && e->style.focusId == ctx->focusId;
+    if (focused) {
+        e->style.borderColor = ThemeNow().ring;
+    }
+
     // The hover background needs a click id of its own: without one the
     // element would match hoverId 0, which means nothing is hovered.
     if (e->style.hasHoverBg && e->clickId && e->clickId == ctx->hoverId) {
@@ -2953,12 +2967,17 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
                   ThemeNow().scrollbarThumb);
     }
 
-    if (e->style.trapId && e->style.focusId &&
-        e->style.focusId == ctx->focusId) {
-        // The ring sits 2 DIPs outside the element's own box.
-        Bounds ring = e->Bounds().Inset(-2.f);
+    if (focused) {
+        // The other half of focus_ring_style: FOCUS_RING_WIDTH of the ring
+        // colour at FOCUS_RING_OPACITY, in the three DIPs immediately outside
+        // the element's border, with the corners widened to match. Rust hangs
+        // it off `is_focused` alone — a control focused by a click shows it as
+        // much as one reached with Tab — and paints it as an absolutely
+        // placed child, which an ancestor that clips will cut off either way.
+        Bounds ring = e->Bounds().Inset(-kFocusRingWidth);
         DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
-                        e->style.radius + 2, 2, ThemeNow().blue);
+                        e->style.radius + kFocusRingWidth, kFocusRingWidth,
+                        RgbaOpacity(ThemeNow().ring, kFocusRingOpacity));
     }
 }
 
