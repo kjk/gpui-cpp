@@ -856,6 +856,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/frame.svg");
         case IconName::ChartPie:
             return StrL("icons/chart-pie.svg");
+        case IconName::Palette:
+            return StrL("icons/palette.svg");
         case IconName::File:
             return StrL("icons/file.svg");
         case IconName::FolderOpen:

@@ -147,6 +147,15 @@ void SelectClear(SearchableListState* s, Ctx* cx) {
     Notify(cx);
 }
 
+Select* Select::Trigger(El* e) {
+    trigger = e;
+    return this;
+}
+Select* Select::Footer(El* e) {
+    footer = e;
+    return this;
+}
+
 El* Select::IntoEl() {
     const Theme& th = cx->theme();
     SearchableListState* s = state.Get(cx);
@@ -169,43 +178,49 @@ El* Select::IntoEl() {
     bool open = s && s->open && !disabled;
     bool hasValue = s && s->nSelected > 0;
     Str title = SelectTriggerTitle(s, placeholder, titlePrefix, a);
-    El* trigger = Div(a)
-                      ->FlexRow()
-                      ->W(width)
-                      ->H(h)
-                      ->PadX(padX)
-                      ->Gap(4)
-                      ->ItemsCenter()
-                      ->JustifyBetween();
+    El* box = Div(a)
+                  ->FlexRow()
+                  ->W(width)
+                  ->H(h)
+                  ->PadX(padX)
+                  ->Gap(4)
+                  ->ItemsCenter()
+                  ->JustifyBetween();
     if (appearance) {
-        trigger->Radius(th.radius)
+        box->Radius(th.radius)
             ->Bg(disabled ? th.muted : th.inputBg)
             ->Border(1, open ? th.ring : th.inputBorder);
         // select.rs: a disabled trigger is the whole control at half
         // strength, over and above the muted surface it already takes.
         if (disabled) {
-            trigger->Opacity(0.5f);
+            box->Opacity(0.5f);
         }
     }
     Rgba fg = disabled ? th.mutedFg : th.foreground;
-    trigger
-        ->Child(TextEl(a, title)->Font(font)->Fg(hasValue ? fg : th.mutedFg));
-    if (cleanable && hasValue && !disabled) {
-        trigger->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
+    if (this->trigger) {
+        // render_trigger: the caller's element is the whole of the trigger's
+        // content, caret included, so nothing else goes in beside it.
+        box->Child(this->trigger->W(kFill)->MinW(0));
+    } else {
+        box->Child(
+            TextEl(a, title)->Font(font)->Fg(hasValue ? fg : th.mutedFg));
+        if (cleanable && hasValue && !disabled) {
+            box->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
                            ->Text()
                            ->WithSize(UiSize::XSmall)
                            ->Icon(IconName::X)
                            ->OnClick(onClear)
                            ->IntoEl());
-    } else if (icon != IconName::None) {
-        // A custom icon replaces the caret, at xsmall.
-        trigger->Child(IconEl(a, icon, 12)->Fg(th.mutedFg));
-    } else {
-        trigger->Child(IconEl(a, IconName::ChevronDown, caret)->Fg(th.mutedFg));
+        } else if (icon != IconName::None) {
+            // A custom icon replaces the caret, at xsmall.
+            box->Child(IconEl(a, icon, 12)->Fg(th.mutedFg));
+        } else {
+            box->Child(IconEl(a, IconName::ChevronDown, caret)->Fg(th.mutedFg));
+        }
     }
     if (!disabled) {
-        BindClick(trigger, id, onToggle);
-        trigger->FocusRing(focusRing);
+        BindClick(box, id, onToggle);
+        box->FocusRing(focusRing);
     }
 
     El* menu = nullptr;
@@ -226,6 +241,9 @@ El* Select::IntoEl() {
         if (menuMaxH > 0) {
             list->MaxH(menuMaxH);
         }
+        if (footer) {
+            list->Footer(footer);
+        }
         if (empty.s) {
             list->Empty(
                 Div(a)->H(96)->W(kFill)->ItemsCenter()->JustifyCenter()->Child(
@@ -238,7 +256,7 @@ El* Select::IntoEl() {
         SearchableListSearch(s, items, nItems,
                              query ? InputValue(query) : Str{});
     }
-    El* root = gpui::Select::New(cx, id)->W(width)->Child(trigger);
+    El* root = gpui::Select::New(cx, id)->W(width)->Child(box);
     return Popup::New(cx, StrDup(a, fmt("%s-popup", id)), root)
         ->Content(menu)
         ->IntoEl();

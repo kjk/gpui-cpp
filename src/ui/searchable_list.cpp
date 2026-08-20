@@ -45,7 +45,25 @@ bool SearchableListIsChecked(const SearchableListState* s,
     if (index < 0 || index >= nItems) {
         return false;
     }
+    if (items[index].pinned) {
+        return true;
+    }
     return SelectionIndexOfValue(s, items, nItems, items[index].value) >= 0;
+}
+
+bool SearchableListIsEnabled(const SearchableListState* s,
+                             const SearchableItem* items, int nItems,
+                             int index) {
+    if (index < 0 || index >= nItems) {
+        return false;
+    }
+    if (items[index].disabled || items[index].pinned) {
+        return false;
+    }
+    if (s->maxSelected > 0 && s->nSelected >= s->maxSelected) {
+        return SelectionIndexOfValue(s, items, nItems, items[index].value) >= 0;
+    }
+    return true;
 }
 
 int SearchableListChangesFor(const SearchableListState* s,
@@ -93,6 +111,11 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
         Str value = items[ch.index].value;
         int at = SelectionIndexOfValue(s, items, nItems, value);
         if (ch.kind == SearchableListChangeKind::Select) {
+            // on_will_change: a Select that would take the selection past its
+            // limit is dropped, rather than pushing something else out.
+            if (s->maxSelected > 0 && s->nSelected >= s->maxSelected) {
+                continue;
+            }
             // A value already in the selection is not added twice.
             if (at < 0 && s->nSelected < kMaxSearchableSelection) {
                 s->selected[s->nSelected++] = ch.index;
@@ -153,6 +176,10 @@ SearchableList* SearchableList::New(Ctx* cx, Str id,
     s->state = st;
     s->query = query;
     return s;
+}
+SearchableList* SearchableList::Footer(El* e) {
+    footer = e;
+    return this;
 }
 SearchableList* SearchableList::Items(const SearchableItem* it, int n) {
     items = it;
@@ -252,7 +279,8 @@ El* SearchableList::IntoEl() {
                       ->ItemsCenter()
                       ->JustifyBetween()
                       ->Radius(th.radius);
-        if (!it.disabled) {
+        bool enabled = SearchableListIsEnabled(s, items, nItems, ix);
+        if (enabled) {
             row->HoverBg(th.accent);
         }
         if (m == s->list.selected) {
@@ -267,19 +295,38 @@ El* SearchableList::IntoEl() {
         }
         label->Child(TextEl(a, it.title)
                          ->Font(14)
-                         ->Fg(it.disabled ? th.mutedFg : th.foreground));
+                         ->Fg(enabled || checked ? th.foreground : th.mutedFg));
         row->Child(label);
+        El* trail = Div(a)->FlexRow()->Gap(4)->ItemsCenter()->Shrink0();
         // The trailing check the adapter adds for a selected row.
         if (checked) {
-            row->Child(IconEl(a, checkIcon, 16)->Fg(th.foreground));
+            trail->Child(IconEl(a, checkIcon, 16)->Fg(th.foreground));
         }
-        if (!it.disabled) {
+        // render_item's badge, after the check, as the story's delegate puts
+        // its "Featured" pill.
+        if (it.badge.s) {
+            trail->Child(Div(a)
+                             ->PadX(4)
+                             ->Radius(th.radius * 0.5f)
+                             ->Bg(th.primary)
+                             ->Child(TextEl(a, it.badge)
+                                         ->Font(12)
+                                         ->Fg(th.primaryFg)
+                                         ->LineHeight(1.4f)));
+        }
+        row->Child(trail);
+        if (enabled) {
             BindClick(row, StrDup(a, fmt("%s-row-%d", id, ix)),
                       ListenerArg(click, m));
         }
         rows->Child(row);
     }
     box->Child(rows);
+    if (footer) {
+        // Combobox::footer: an action under the list, ruled off from it.
+        box->Child(
+            Div(a)->W(kFill)->BorderT(1, th.border)->Pad(4)->Child(footer));
+    }
     return box;
 }
 

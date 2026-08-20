@@ -215,7 +215,13 @@ Str StoryDup(Ctx* cx, const char* s) {
     return StrDup(a, Str(s));
 }
 
-Str StoryFmt(Ctx* cx, const char* f, ...) {
+const char* StoryArg(Ctx* cx, Str s) {
+    // A Str need not be null-terminated, so printf gets a copy that is.
+    const char* z = StrDup(cx->a, s).s;
+    return z ? z : "";
+}
+
+Str StoryFmtV(Ctx* cx, const char* f, ...) {
     Arena* a = cx->a;
     char buf[512];
     va_list args;
