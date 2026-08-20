@@ -162,11 +162,10 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     page->Child(toolbarRow);
 
     // The rows the last layout built, which is the range the list reports.
-    page->Child(
-        StoryTxt(cx,
-                 StoryFmt(cx, "Visible: %d..%d", self->visible.first,
-                          self->visible.end),
-                 16, th.foreground));
+    page->Child(StoryTxt(
+        cx,
+        StoryFmt(cx, "Visible: %d..%d", self->visible.first, self->visible.end),
+        16, th.foreground));
 
     gVlColumns = kVlColumns[self->dataset];
     int rows = kVlRows[self->dataset];
