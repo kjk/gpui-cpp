@@ -1,6 +1,7 @@
 /* Themed sidebar — crates/ui/src/sidebar */
 
 #include "ui/sizing.h"
+#include "ui/menu.h"
 
 namespace gpui {
 
@@ -13,6 +14,38 @@ enum class SidebarCollapsible : uint8_t {
     Offcanvas,
     None
 };
+
+// SidebarWrapperLayout: what the box around the sidebar does with its width.
+// Rust animates between the two widths; there is no animation here, so a
+// width that would have been animated to is simply used.
+enum class SidebarWrapperKind : uint8_t {
+    // The sidebar sizes itself and the wrapper stays out of the way.
+    None,
+    // A fixed width, which is what an offcanvas sidebar with no width of its
+    // own collapses to.
+    Static,
+    // The width the wrapper is heading for.
+    Animated
+};
+
+// SidebarLayout::new, whole: what a collapsible mode and a collapsed flag come
+// to. `expandedWidth` of 0 is Rust's `None` — a sidebar whose width is not in
+// pixels, which leaves the wrapper alone.
+struct SidebarLayout {
+    bool iconCollapsed = false;
+    bool offcanvasCollapsed = false;
+    // Which end of the wrapper the sidebar sits at, so a sidebar sliding out
+    // on one side does not drag its content across.
+    bool alignChildToEnd = false;
+    SidebarWrapperKind wrapper = SidebarWrapperKind::None;
+    float wrapperWidth = 0;
+};
+
+SidebarLayout SidebarLayoutFor(SidebarCollapsible collapsible, bool collapsed,
+                               float expandedWidth, Side side);
+
+// COLLAPSED_WIDTH: the width an icon-collapsed sidebar keeps.
+const float kSidebarCollapsedWidth = 48;
 
 // The keyed state behind one menu item that has children: whether its submenu
 // is open. Rust hangs it off `window.use_keyed_state(id)`, and the item's
@@ -45,6 +78,7 @@ struct SidebarMenuItem {
     bool clickToToggle = false;
     El* suffix = nullptr;
     SidebarMenuItem* children[16] = {};
+    PopupMenu* contextMenu = nullptr;
     int nChildren = 0;
     // Filled in by whatever holds it.
     bool collapsed = false;
@@ -59,6 +93,8 @@ struct SidebarMenuItem {
     SidebarMenuItem* Suffix(El* e);
     SidebarMenuItem* Child(SidebarMenuItem* item);
     SidebarMenuItem* OnClick(Listener fn);
+    // context_menu(..): the menu a right press on this row opens.
+    SidebarMenuItem* ContextMenu(PopupMenu* menu);
     // The id is the path through the sidebar, which is what keys the submenu
     // state: "menu-0-2".
     El* IntoEl(Str id);

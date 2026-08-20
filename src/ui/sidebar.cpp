@@ -6,7 +6,6 @@ namespace gpui {
 namespace component {
 
 // DEFAULT_WIDTH is the caller's; COLLAPSED_WIDTH is not.
-static const float kCollapsedWidth = 48;
 
 void SidebarMenuState::OnItemClick(SidebarMenuState* self, Ctx* cx,
                                    const ClickEvent* ev) {
@@ -157,6 +156,14 @@ El* SidebarMenuItem::IntoEl(Str id) {
             isSubmenu ? ListenTo(st, &SidebarMenuState::OnItemClick) : onClick;
         BindClick(row, id, l);
     }
+    // context_menu(..): a right press on the row opens the caller's menu
+    // where the pointer is.
+    if (contextMenu) {
+        row = ContextMenu::New(cx, StrDup(a, fmt("%s-ctx", id)))
+                  ->Child(row)
+                  ->Menu(contextMenu)
+                  ->IntoEl();
+    }
     root->Child(row);
 
     if (isOpen) {
@@ -169,6 +176,11 @@ El* SidebarMenuItem::IntoEl(Str id) {
         root->Child(sub);
     }
     return root;
+}
+
+SidebarMenuItem* SidebarMenuItem::ContextMenu(PopupMenu* menu) {
+    contextMenu = menu;
+    return this;
 }
 
 SidebarMenu* SidebarMenu::New(Ctx* cx) {
@@ -342,24 +354,62 @@ Sidebar* Sidebar::W(float px) {
     return this;
 }
 
+SidebarLayout SidebarLayoutFor(SidebarCollapsible collapsible, bool collapsed,
+                               float expandedWidth, Side side) {
+    SidebarLayout out;
+    // A collapsible of None ignores the flag entirely.
+    bool isCollapsed = collapsed && collapsible != SidebarCollapsible::None;
+    bool hasWidth = expandedWidth > 0;
+    switch (collapsible) {
+        case SidebarCollapsible::None:
+            break;
+        case SidebarCollapsible::Icon:
+            if (hasWidth) {
+                out.wrapper = SidebarWrapperKind::Animated;
+                out.wrapperWidth =
+                    isCollapsed ? kSidebarCollapsedWidth : expandedWidth;
+            }
+            break;
+        case SidebarCollapsible::Offcanvas:
+            if (hasWidth) {
+                out.wrapper = SidebarWrapperKind::Animated;
+                out.wrapperWidth = isCollapsed ? 0.f : expandedWidth;
+            } else if (isCollapsed) {
+                out.wrapper = SidebarWrapperKind::Static;
+                out.wrapperWidth = 0;
+            }
+            break;
+    }
+    // Offcanvas on the left and everything else on the right: the side the
+    // content is pinned to while the width changes under it.
+    out.alignChildToEnd = collapsible == SidebarCollapsible::Offcanvas
+                              ? SideIsLeft(side)
+                              : !SideIsLeft(side);
+    out.iconCollapsed = isCollapsed && collapsible == SidebarCollapsible::Icon;
+    out.offcanvasCollapsed =
+        isCollapsed && collapsible == SidebarCollapsible::Offcanvas;
+    return out;
+}
+
 El* Sidebar::IntoEl() {
     const Theme& th = cx->theme();
-    // SidebarLayout::new: a collapsible of None ignores the flag, Icon
-    // narrows to the icon width, Offcanvas takes the whole thing out of the
-    // layout. Rust animates the width between the two; there is no animation
-    // here, so it snaps.
-    bool isCollapsed = collapsed && collapsible != SidebarCollapsible::None;
-    bool iconCollapsed = isCollapsed && collapsible == SidebarCollapsible::Icon;
-    bool offcanvas =
-        isCollapsed && collapsible == SidebarCollapsible::Offcanvas;
-    if (offcanvas) {
-        return Div(a)->W(0)->H(kFill)->Shrink0();
+    // SidebarLayout::new says what the mode and the flag come to: the width
+    // the wrapper takes, which rendering the rows use, and which end the
+    // content is pinned to. Rust animates between the two widths; there is no
+    // animation here, so the width it is heading for is the width it takes.
+    SidebarLayout layout =
+        SidebarLayoutFor(collapsible, collapsed, width, side);
+    bool iconCollapsed = layout.iconCollapsed;
+    if (layout.offcanvasCollapsed) {
+        return Div(a)->W(layout.wrapperWidth)->H(kFill)->Shrink0();
     }
 
     El* root = Div(a)
                    ->FlexCol()
                    ->Shrink0()
-                   ->W(iconCollapsed ? kCollapsedWidth : width)
+                   ->W(layout.wrapper == SidebarWrapperKind::None
+                           ? width
+                           : layout.wrapperWidth)
                    ->H(kFill)
                    ->Bg(th.sidebar)
                    ->Fg(th.sidebarFg);
