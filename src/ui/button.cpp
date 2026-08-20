@@ -266,6 +266,12 @@ El* Button::IntoEl() {
     if (tooltip.s) {
         e->Tip(tooltip);
     }
+    // button.rs fades the whole button while it loads rather than dimming its
+    // colours one by one, and says why: Ghost, Link and Text have no
+    // background for an alpha to show up on.
+    if (loading && !disabled) {
+        e->Opacity(0.8f);
+    }
     if (extra) {
         e->Child(extra);
     } else if (loading) {

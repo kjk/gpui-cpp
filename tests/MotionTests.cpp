@@ -232,6 +232,46 @@ static void AChannelKeepsTwoValuesOfOneElementApart() {
              MotionId(StrL("other"), StrL("fill")));
 }
 
+// Style::opacity, which is what a fade is made of: GPUI multiplies every
+// colour a primitive paints by the opacity in force, and nested opacities
+// multiply, so a subtree fades as one thing rather than each box separately.
+static void OpacityMultipliesEveryColourItPaints() {
+    PaintCtx ctx;
+    utassert(ctx.opacity == 1.f);
+    // Untouched at 1, whatever the colour's own alpha is.
+    Rgba c = Rgba8(10, 20, 30, 200);
+    Rgba same = PaintFade(&ctx, c);
+    utassert(same.a == 200 && same.r == 10);
+
+    // Half of a colour's alpha, with the channels left alone — the same thing
+    // `Hsla::opacity` does to a colour, done to the primitive instead.
+    ctx.opacity = 0.5f;
+    Rgba half = PaintFade(&ctx, c);
+    utassert(half.a == 100);
+    utassert(half.r == 10 && half.g == 20 && half.b == 30);
+
+    // A colour that was already translucent fades from where it was.
+    Rgba faint = PaintFade(&ctx, Rgba8(0, 0, 0, 20));
+    utassert(faint.a == 10);
+
+    // Nothing at zero, everything back at one.
+    ctx.opacity = 0.f;
+    utassert(PaintFade(&ctx, c).a == 0);
+    ctx.opacity = 1.f;
+    utassert(PaintFade(&ctx, c).a == 200);
+
+    // El::Opacity clamps rather than letting a stray value through: a
+    // transition that overshoots cannot make something more opaque than it is.
+    Arena* a = ArenaNew();
+    El* e = Div(a)->Opacity(1.5f);
+    utassertnear(e->style.opacity, 1.f);
+    e->Opacity(-0.2f);
+    utassertnear(e->style.opacity, 0.f);
+    e->Opacity(0.25f);
+    utassertnear(e->style.opacity, 0.25f);
+    ArenaDelete(a);
+}
+
 void TestMotion() {
     TestSuite("motion");
     TheEasingsAreTheCurvesRustNames();
@@ -247,4 +287,5 @@ void TestMotion() {
     ReducedMotionTakesTheTargetOutright();
     TheSameRuleCarriesAPointAndAColor();
     AChannelKeepsTwoValuesOfOneElementApart();
+    OpacityMultipliesEveryColourItPaints();
 }

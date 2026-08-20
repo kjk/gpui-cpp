@@ -158,7 +158,10 @@ static cairo_t* Cr(PaintCtx* ctx) {
     return (ctx && ctx->rt) ? ctx->rt->cr : nullptr;
 }
 
-static void SetColor(cairo_t* cr, Rgba c) {
+// element_opacity: the colour is faded by the opacity in force on its way to
+// cairo, which is the one place every colour passes through.
+static void SetColor(PaintCtx* ctx, cairo_t* cr, Rgba c) {
+    c = PaintFade(ctx, c);
     cairo_set_source_rgba(cr, c.r / 255.0, c.g / 255.0, c.b / 255.0,
                           c.a / 255.0);
 }
@@ -198,7 +201,7 @@ void CanvasClear(PaintCtx* ctx, Rgba c) {
     }
     cairo_save(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_paint(cr);
     cairo_restore(cr);
 }
@@ -208,7 +211,7 @@ void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
     if (!cr || w <= 0 || h <= 0 || c.a == 0) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_rectangle(cr, x, y, w, h);
     cairo_fill(cr);
 }
@@ -219,7 +222,7 @@ void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
     if (!cr || w <= 0 || h <= 0 || c.a == 0) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     RoundRectPath(cr, x, y, w, h, r);
     cairo_fill(cr);
 }
@@ -230,7 +233,7 @@ void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
     if (!cr || stroke <= 0 || w <= 0 || h <= 0) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_set_line_width(cr, stroke);
     SetDash(cr, dash, stroke);
     // Inset by half the stroke: cairo, like D2D, centers it on the path.
@@ -246,7 +249,7 @@ void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
     if (!cr) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_set_line_width(cr, stroke);
     SetDash(cr, dash, stroke);
     cairo_move_to(cr, x1, y1);
@@ -261,7 +264,7 @@ void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
     if (!cr || rx <= 0 || ry <= 0) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_save(cr);
     cairo_translate(cr, cx, cy);
     cairo_scale(cr, rx, ry);
@@ -453,7 +456,7 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     if (!Replay(cr, p)) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_fill(cr);
 }
 
@@ -470,10 +473,12 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
     }
     cairo_pattern_t* pat = cairo_pattern_create_linear(x0, y0, x1, y1);
     if (!pat) {
-        SetColor(cr, from);
+        SetColor(ctx, cr, from);
         cairo_fill(cr);
         return;
     }
+    from = PaintFade(ctx, from);
+    to = PaintFade(ctx, to);
     cairo_pattern_add_color_stop_rgba(pat, 0, from.r / 255.0, from.g / 255.0,
                                       from.b / 255.0, from.a / 255.0);
     cairo_pattern_add_color_stop_rgba(pat, 1, to.r / 255.0, to.g / 255.0,
@@ -488,7 +493,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
     if (!Replay(cr, p)) {
         return;
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_set_line_width(cr, stroke);
     cairo_set_line_cap(cr,
                        roundCaps ? CAIRO_LINE_CAP_ROUND : CAIRO_LINE_CAP_BUTT);
@@ -638,7 +643,7 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
         cairo_rectangle(cr, x, y, boxW, tl->box * (float)tl->lines);
         cairo_clip(cr);
     }
-    SetColor(cr, c);
+    SetColor(ctx, cr, c);
     cairo_move_to(cr, x, y + BoxPad(tl));
     pango_cairo_show_layout(cr, tl->layout);
     if (clip) {

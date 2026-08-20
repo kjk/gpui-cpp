@@ -262,7 +262,9 @@ static ID2D1SolidColorBrush* Brush(PaintCtx* ctx, Rgba c) {
     if (!ctx || !ctx->rt || !ctx->rt->brush) {
         return nullptr;
     }
-    ctx->rt->brush->SetColor(ToD2D(c));
+    // element_opacity: every colour the backend is handed is faded by the
+    // opacity in force, which is the one place all of them pass through.
+    ctx->rt->brush->SetColor(ToD2D(PaintFade(ctx, c)));
     return ctx->rt->brush;
 }
 
@@ -546,9 +548,9 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
     }
     D2D1_GRADIENT_STOP gs[2];
     gs[0].position = 0.f;
-    gs[0].color = ToD2D(from);
+    gs[0].color = ToD2D(PaintFade(ctx, from));
     gs[1].position = 1.f;
-    gs[1].color = ToD2D(to);
+    gs[1].color = ToD2D(PaintFade(ctx, to));
     ID2D1GradientStopCollection* stops = nullptr;
     ctx->rt->rt->CreateGradientStopCollection(gs, 2, &stops);
     bool filled = false;

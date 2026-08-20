@@ -637,10 +637,11 @@ El* DatePicker::IntoEl() {
                     ->OnMouseUpOut(onToggle)
                     ->Child(content);
     }
-    return gpui::DatePicker::New(cx, id)->W(width)->Child(
-        Popup::New(cx, StrDup(a, fmt("%s-pop", id)), trigger)
-            ->Content(popup)
-            ->IntoEl());
+    return gpui::DatePicker::New(cx, id)
+        ->W(width)
+        ->Child(Popup::New(cx, StrDup(a, fmt("%s-pop", id)), trigger)
+                    ->Content(popup)
+                    ->IntoEl());
 }
 
 } // namespace component

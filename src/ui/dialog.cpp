@@ -290,18 +290,15 @@ El* Dialog::IntoEl(WinSize size) {
     // Fixed, not absolute: Rust hangs the dialog off the window Root, so it
     // covers and centers on the window rather than on whatever page element
     // happens to contain it.
-    // "fade-in" and "slide-down": the overlay arrives over a quarter of a
-    // second, and the panel comes down from the top edge as it does. Rust
-    // fades the whole layer with `opacity(delta)` and fades the panel's shadow
-    // with it; there is no element opacity here, so what fades is the backdrop
-    // itself — the part of that fade there is to see.
+    // "fade-in" and "slide-down": the whole layer fades in over a quarter of a
+    // second while the panel comes down from the top edge.
     float delta = MotionAppear(
         cx, MotionId(StrL("dialog"), StrDup(a, fmt("%d", layerIx))),
         kDialogMotionMs, DialogEase);
     El* backdrop =
         DialogBackdrop::New(cx)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     if (overlay) {
-        backdrop->Bg(RgbaOpacity(th.overlay, delta));
+        backdrop->Bg(th.overlay);
     }
     if (overlayClosable && onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
@@ -323,7 +320,10 @@ El* Dialog::IntoEl(WinSize size) {
         ->Trap(trap)
         ->Backdrop(backdrop)
         ->Popup(popup)
-        ->IntoEl();
+        ->IntoEl()
+        // `.with_animation("fade-in", .., |this, delta| this.opacity(delta))`:
+        // the backdrop and the panel fade in together, as one layer.
+        ->Opacity(delta);
 }
 
 } // namespace component

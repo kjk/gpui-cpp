@@ -254,24 +254,24 @@ static void InitializeStory(DatePickerStory* self) {
         self->pickers[i].viewMonth = now.month;
         self->pickers[i].yearMin = now.year - 50;
         self->pickers[i].yearMax = now.year + 50;
-        self->pickers[i].yearPageStart =
-            self->pickers[i].yearMin +
-            ((now.year - self->pickers[i].yearMin) / 20) * 20;
+        self->pickers[i]
+            .yearPageStart = self->pickers[i].yearMin +
+                             ((now.year - self->pickers[i].yearMin) / 20) * 20;
     }
 
     self->pickers[DpDefault].start = now;
-    self->pickers[DpDefault].disabled =
-        DateMatcherWeekdays((1u << 0) | (1u << 6));
+    self->pickers[DpDefault]
+        .disabled = DateMatcherWeekdays((1u << 0) | (1u << 6));
 
     self->pickers[DpSmall].start = now;
-    self->pickers[DpSmall].disabled =
-        DateMatcherInterval(now, DateAddDays(now, 5));
+    self->pickers[DpSmall]
+        .disabled = DateMatcherInterval(now, DateAddDays(now, 5));
 
     self->pickers[DpLarge].start = DateAddDays(now, -1);
     self->pickers[DpLarge].viewYear = self->pickers[DpLarge].start.year;
     self->pickers[DpLarge].viewMonth = self->pickers[DpLarge].start.month;
-    self->pickers[DpLarge].disabled =
-        DateMatcherRange(now, DateAddDays(now, 7));
+    self->pickers[DpLarge]
+        .disabled = DateMatcherRange(now, DateAddDays(now, 7));
 
     self->pickers[DpCustom].start = now;
     self->pickers[DpCustom].disabled = DateMatcherCustom(&FirstFiveDays);
@@ -322,11 +322,11 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                      "Single-date selection with presets and clear action.")
             ->W(512);
     El* defaultContent = Div(a)->FlexCol()->Gap(12);
-    defaultContent->Child(
-        Picker(self, cx, DpDefault, StrL("date-picker-default"))
-            ->Cleanable()
-            ->Presets(gSinglePresets, 3, Listen(cx, &SelectPreset))
-            ->IntoEl());
+    defaultContent
+        ->Child(Picker(self, cx, DpDefault, StrL("date-picker-default"))
+                    ->Cleanable()
+                    ->Presets(gSinglePresets, 3, Listen(cx, &SelectPreset))
+                    ->IntoEl());
     defaultContent->Child(
         StoryTxt(cx, StoryFmt(cx, "Value: %s", self->value), 14, th.mutedFg));
     StorySectionAdd(defaults, defaultContent);
@@ -337,8 +337,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                      "Matchers can block intervals, ranges, or custom dates.")
             ->W(512);
     El* disabledContent = Div(a)->FlexCol()->Gap(12);
-    disabledContent->Child(
-        Picker(self, cx, DpSmall, StrL("date-picker-small"))->IntoEl());
+    disabledContent
+        ->Child(Picker(self, cx, DpSmall, StrL("date-picker-small"))->IntoEl());
     disabledContent->Child(Picker(self, cx, DpLarge, StrL("date-picker-large"))
                                ->Format(component::DateFormat::Dash)
                                ->IntoEl());
@@ -360,8 +360,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(range);
 
-    El* empty =
-        StorySection(cx, "Empty range", "Empty range with presets.")->W(512);
+    El* empty = StorySection(cx, "Empty range", "Empty range with presets.")
+                    ->W(512);
     for (int i = 0; i < 4; i++) {
         gRangePresets[i].arg = DpEmptyRange * 16 + i;
     }
@@ -381,8 +381,8 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(birthday);
 
-    El* custom =
-        StorySection(cx, "Custom style", "Appearance-free input.")->W(512);
+    El* custom = StorySection(cx, "Custom style", "Appearance-free input.")
+                     ->W(512);
     StorySectionAdd(custom,
                     Div(a)
                         ->W(280)

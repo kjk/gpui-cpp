@@ -817,6 +817,9 @@ struct Style {
     // where 1 is a whole one. Only an icon reads it — a rotated box would want
     // the whole element tree in on it, and nothing in the port asks for one.
     float rotate = 0;
+    // Style::opacity. 1 is untouched; anything less fades this element and
+    // everything under it.
+    float opacity = 1;
     float fontSize = 0; // 0 = inherit
     // line_height as a multiple of the font size. 0 = GPUI's default, phi.
     float lineHeight = 0;
@@ -997,6 +1000,9 @@ struct El {
     El* WFrac(float f);
     // percentage(delta) turns clockwise, which is what a spinner is made of.
     El* Rotate(float turns);
+    // opacity(f): this element and everything under it, faded together.
+    // Nested opacities multiply, as GPUI's do.
+    El* Opacity(float f);
     El* H(float v);
     El* SizeFull();
     El* MinH(float v);
@@ -1227,6 +1233,10 @@ struct InspectorState {
 struct PaintCtx {
     PaintApp* pa = nullptr;
     PaintTarget* rt = nullptr;
+    // Window::element_opacity: the Style::opacity of everything this element
+    // is inside, multiplied together. Every colour painted is faded by it, so
+    // a subtree fades as one thing rather than each of its boxes separately.
+    float opacity = 1;
     float dpi = 96;
     float viewW = 0;
     float viewH = 0;

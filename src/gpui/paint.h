@@ -51,6 +51,19 @@ bool PaintTargetEnd(PaintCtx* ctx);
 // Drop the cached target: a DPI change, a resize, or a lost device.
 void PaintTargetFree(PaintCtx* ctx);
 
+// The colour to actually paint: what the caller asked for, faded by the
+// opacity in force. GPUI multiplies every primitive's colour by
+// `element_opacity()` the same way, at the same moment — as the primitive is
+// handed to the backend, not when the style was built.
+inline Rgba PaintFade(const PaintCtx* ctx, Rgba c) {
+    if (!ctx || ctx->opacity >= 1.f) {
+        return c;
+    }
+    float a = (float)c.a * (ctx->opacity < 0 ? 0 : ctx->opacity);
+    c.a = (uint8_t)(a <= 0 ? 0 : (a >= 255 ? 255 : a + 0.5f));
+    return c;
+}
+
 // ─── canvas ───────────────────────────────────────────────────────────────
 
 void CanvasClear(PaintCtx* ctx, Rgba c);
