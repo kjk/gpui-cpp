@@ -2530,6 +2530,11 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             // is its disc. moon.svg is the real one.
             ring(12, 12, s * 0.34f, s * 0.34f);
             break;
+        case IconName::Play:
+            line(7, 4, 20, 12);
+            line(20, 12, 7, 20);
+            line(7, 20, 7, 4);
+            break;
         case IconName::Sun:
             ring(12, 12, s * 0.16f, s * 0.16f);
             line(12, 3, 12, 6);
