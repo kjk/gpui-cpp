@@ -1,4 +1,5 @@
 #include "gpui/gpui.h"
+#include "gpui/keymap.h"
 #include "base/scrollbar.h"
 #include "gpui/paint.h"
 #include "gpui/svg.h"
@@ -292,6 +293,7 @@ const Theme& ThemeNow() {
 
 static El* NewEl(Arena* a, ElKind k) {
     El* e = ArenaNew<El>(a);
+    e->arena = a;
     e->kind = k;
     return e;
 }
@@ -861,6 +863,23 @@ El* El::HoverFg(Rgba c) {
 }
 El* El::FocusId(int v) {
     style.focusId = v;
+    return this;
+}
+El* El::KeyContext(Str name) {
+    style.keyContext = KeyContextOf(name);
+    return this;
+}
+El* El::OnAction(uint32_t action, Listener fn) {
+    if (!action || !fn.IsValid()) {
+        return this;
+    }
+    // Newest first, which reads the same way as adding a handler to a builder
+    // and having it seen before the ones already there.
+    ActionSlot* slot = ArenaNew<ActionSlot>(arena);
+    slot->action = action;
+    slot->fn = fn;
+    slot->next = actions;
+    actions = slot;
     return this;
 }
 El* El::TabIndex(int v) {
@@ -3540,6 +3559,21 @@ static void CollectFocus(El* e, Window* win, int trap) {
     if (e->style.trapId) {
         trap = e->style.trapId;
     }
+    // The context comes before this element's own handlers, so a walk out
+    // from here finds the handlers first and then the context they sit in,
+    // which is the order Rust reads them.
+    int first = win->dispatch.len;
+    if (e->style.keyContext) {
+        DispatchNode n;
+        n.context = e->style.keyContext;
+        win->dispatch.Append(n);
+    }
+    for (ActionSlot* slot = e->actions; slot; slot = slot->next) {
+        DispatchNode n;
+        n.action = slot->action;
+        n.fn = slot->fn;
+        win->dispatch.Append(n);
+    }
     if (e->style.focusId) {
         e->style.trapId = trap;
         FocusRect fr;
@@ -3547,16 +3581,161 @@ static void CollectFocus(El* e, Window* win, int trap) {
         fr.trapId = trap;
         fr.tabIndex = e->style.tabIndex;
         fr.tabStop = e->style.tabStop;
+        // A marker of its own, so the element has a position inside its own
+        // subtree whether or not it declared a context or a handler. Without
+        // one, an element that declares neither would share an index with the
+        // end of the subtree beside it and pick up that sibling's context.
+        DispatchNode marker;
+        fr.dispatchIx = win->dispatch.len;
+        win->dispatch.Append(marker);
         fr.bounds = e->Bounds();
         win->focusEls.Append(fr);
     }
     for (El* c = e->first; c; c = c->next) {
         CollectFocus(c, win, trap);
     }
+    // The subtree is closed: everything from here down was written between
+    // `first` and now, so anything focused in it sits inside this span.
+    for (int i = first; i < win->dispatch.len; i++) {
+        if (win->dispatch[i].subtreeEnd == 0) {
+            win->dispatch[i].subtreeEnd = win->dispatch.len;
+        }
+    }
+}
+
+// --- action dispatch ------------------------------------------------------
+//
+// Rust walks the focused handle's ancestry twice: once up, gathering the key
+// contexts a keystroke is matched against, and once down again, offering the
+// action to each `on_action` until one keeps it. The tree here is gone by the
+// time a key arrives, so `win->dispatch` is that walk recorded in tree order
+// with a depth on every node: the ancestors of a node are the ones before it
+// with a strictly smaller depth, taken smallest-so-far first.
+
+// cx.on_action's table. Small and fixed: these are the framework's own
+// handlers, not an application's, which hangs its own off its elements.
+struct AppAction {
+    uint32_t action = 0;
+    ActionFn fn = nullptr;
+};
+
+static const int kMaxAppActions = 32;
+static AppAction gAppActions[kMaxAppActions];
+static int gNAppActions = 0;
+
+void AppOnAction(uint32_t action, ActionFn fn) {
+    if (!action || !fn || gNAppActions >= kMaxAppActions) {
+        return;
+    }
+    gAppActions[gNAppActions].action = action;
+    gAppActions[gNAppActions].fn = fn;
+    gNAppActions++;
+}
+
+// inspector::init. Rust registers this from `gpui_component::init(cx)`, which
+// an application calls once; there is no such call here, so the framework's
+// own bindings go in the first time a keystroke looks for one.
+static void ToggleInspectorAction(Window* win, ActionEvent*) {
+    WindowToggleInspector(win);
+}
+
+static void KeymapDefaults() {
+    static bool done = false;
+    if (done) {
+        return;
+    }
+    done = true;
+    uint32_t toggle = ActionOf(StrL("inspector::ToggleInspector"));
+    KeyBinding bindings[] = {
+#ifdef __APPLE__
+        {"cmd-alt-i", toggle, nullptr},
+#else
+        {"ctrl-shift-i", toggle, nullptr},
+#endif
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+    AppOnAction(toggle, &ToggleInspectorAction);
+}
+
+// Where in the dispatch list the focused element sits. Nothing focused is
+// the end of the list, which leaves the root's chain — every node whose
+// subtree is still open there, which is the window itself.
+static int DispatchAnchor(Window* win) {
+    if (win->focusId) {
+        for (int i = 0; i < win->focusEls.len; i++) {
+            if (win->focusEls[i].id == win->focusId) {
+                return win->focusEls[i].dispatchIx;
+            }
+        }
+    }
+    return win->dispatch.len;
+}
+
+bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
+                             bool alt) {
+    if (!win || !vk) {
+        return false;
+    }
+    int ix = DispatchAnchor(win);
+
+    // The contexts stacked over the focused element, innermost first. Deeper
+    // than eight nested key contexts is not a tree anybody builds.
+    uint32_t contexts[8];
+    int nContexts = 0;
+    for (int i = ix - 1; i >= 0 && nContexts < 8; i--) {
+        if (win->dispatch[i].subtreeEnd <= ix || !win->dispatch[i].context) {
+            continue;
+        }
+        contexts[nContexts++] = win->dispatch[i].context;
+    }
+
+    KeymapDefaults();
+    KeyChord chord;
+    chord.vk = vk;
+    chord.shift = shift;
+    chord.ctrl = ctrl;
+    chord.alt = alt;
+    uint32_t action = KeymapMatch(chord, contexts, nContexts);
+    if (!action) {
+        return false;
+    }
+
+    // The same chain again, this time for the handlers. A handler that
+    // propagates lets the search carry on outwards.
+    for (int i = ix - 1; i >= 0; i--) {
+        if (win->dispatch[i].subtreeEnd <= ix ||
+            win->dispatch[i].action != action ||
+            !win->dispatch[i].fn.IsValid()) {
+            continue;
+        }
+        ActionEvent ev;
+        ev.action = action;
+        ListenerCall(win->app, win, win->dispatch[i].fn, &ev);
+        if (!ev.propagate) {
+            return true;
+        }
+    }
+    // Then the application's own, which is where the framework keeps the
+    // handlers that belong to no element.
+    for (int i = gNAppActions - 1; i >= 0; i--) {
+        if (gAppActions[i].action != action) {
+            continue;
+        }
+        ActionEvent ev;
+        ev.action = action;
+        gAppActions[i].fn(win, &ev);
+        if (!ev.propagate) {
+            return true;
+        }
+    }
+    // Bound but unhandled. Rust leaves the keystroke to whatever is under the
+    // action dispatch, and so does this: the caller carries on.
+    return false;
 }
 
 void FocusCollect(Window* win, El* root) {
     win->focusEls.Clear();
+    win->dispatch.Clear();
     CollectFocus(root, win, 0);
     // The traversal order is the tab index first and the paint order within
     // it, so the sort has to be a stable one: an insertion sort over a list

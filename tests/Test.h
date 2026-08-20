@@ -78,6 +78,7 @@ void TestSankey();
 void TestJson();
 void TestDockState();
 void TestFocusTrap();
+void TestKeymap();
 void TestListSettings();
 void TestStateStyle();
 void TestClick();

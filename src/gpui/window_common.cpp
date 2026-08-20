@@ -170,15 +170,6 @@ static bool FocusIdIsFocusable(Window* win, int id) {
 }
 
 // rebuilt every frame, so an id is the only handle that survives one.
-// The inspector's key binding: ctrl-shift-i, which is what Rust binds on
-// everything but macOS.
-static bool InspectorKey(Window* win, const KeyEvent& ev) {
-    if (!ev.down || !ev.ctrl || !ev.shift || ev.vk != 'I') {
-        return false;
-    }
-    WindowToggleInspector(win);
-    return true;
-}
 
 static const HitRect* HitRectById(Window* win, int id) {
     if (!win || !id) {
@@ -198,17 +189,6 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     if (!win) {
         return;
     }
-    {
-        KeyEvent chord = {};
-        chord.vk = key;
-        chord.down = true;
-        chord.shift = shift;
-        chord.ctrl = ctrl;
-        chord.alt = alt;
-        if (InspectorKey(win, chord)) {
-            return;
-        }
-    }
     if (key == KeyTab) {
         FocusTrapTab(win, shift);
         AppInvalidate(win);
@@ -224,6 +204,15 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         InputAction action =
             InputActionForKey(win->input, key, shift, ctrl, alt);
         eaten = InputPerform(win->input, win->app, win, action, shift);
+    }
+    // The keymap, once the focused field has had its go: a field's own
+    // editing is Rust's innermost key context, so a binding further out
+    // cannot take a keystroke away from it. An action that is handled ends
+    // the keystroke here.
+    if (!eaten && WindowDispatchKeyAction(win, key, shift, ctrl, alt)) {
+        win->eatReturn = false;
+        AppInvalidate(win);
+        return;
     }
     if (win->onKey.IsValid()) {
         KeyEvent ev = {};
