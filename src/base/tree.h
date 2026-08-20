@@ -86,6 +86,10 @@ struct TreeState {
     // measures against.
     float viewportH = 0;
     Listener onEvent;
+    // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
+    // The element stamps this as it builds, so a state can send an event to
+    // its subscribers without the caller carrying its handle around.
+    EntityId self = {};
 
     static void OnRowClick(TreeState* self, Ctx* cx, const ClickEvent* ev,
                            intptr_t entryIx);

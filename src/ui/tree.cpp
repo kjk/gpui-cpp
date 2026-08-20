@@ -28,6 +28,7 @@ El* Tree::IntoEl() {
     if (!s) {
         return Div(a)->H(h);
     }
+    s->self = state.id;
     // The height the list was laid out at is what scroll_to_item measures
     // against, and the caller is the one that knows it.
     s->viewportH = h;

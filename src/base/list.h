@@ -110,6 +110,10 @@ struct ListState {
     int loadMoreThreshold = 20;
     Listener onEvent = {};
     Listener onLoadMore = {};
+    // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
+    // The element stamps this as it builds, so a state can send an event to
+    // its subscribers without the caller carrying its handle around.
+    EntityId self = {};
 
     // Rust's ListState is an Entity, which is what lets the item closures
     // capture it; here the row elements name these handlers instead, so a

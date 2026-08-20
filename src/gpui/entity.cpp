@@ -419,4 +419,97 @@ void WindowKeyedFree(Window* win) {
     win->keyed.Reset();
 }
 
+// ─── EventEmitter ─────────────────────────────────────────────────────────
+
+// Vec is POD storage with no removal of its own; a subscription list is
+// short and ordered, so the tail slides down.
+static void SubRemoveAt(App* app, int ix) {
+    for (int k = ix; k + 1 < app->subs.len; k++) {
+        app->subs[k] = app->subs[k + 1];
+    }
+    app->subs.len--;
+}
+
+Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler) {
+    Subscription sub;
+    if (!app || !emitter.IsValid() || !handler.IsValid()) {
+        return sub;
+    }
+    EntitySub s;
+    s.id = app->nextSubId++;
+    s.emitter = emitter;
+    s.handler = handler;
+    app->subs.Append(s);
+    sub.id = s.id;
+    return sub;
+}
+
+void EntityUnsubscribe(App* app, Subscription sub) {
+    if (!app || !sub.IsValid()) {
+        return;
+    }
+    for (int i = 0; i < app->subs.len; i++) {
+        if (app->subs[i].id == sub.id) {
+            SubRemoveAt(app, i);
+            return;
+        }
+    }
+}
+
+// A subscription is dead once either end of it is: Rust drops the whole list
+// with the emitter, and a Subscription with the subscriber.
+static void SweepSubs(App* app) {
+    for (int i = app->subs.len - 1; i >= 0; i--) {
+        const EntitySub& s = app->subs[i];
+        if (!EntityGet(app, s.emitter) || !EntityGet(app, s.handler.view)) {
+            SubRemoveAt(app, i);
+        }
+    }
+}
+
+void EntityEmit(App* app, Window* win, EntityId emitter, const void* ev) {
+    if (!app || !emitter.IsValid()) {
+        return;
+    }
+    SweepSubs(app);
+    // Oldest first, and over a copy of the handles: a handler is allowed to
+    // subscribe or unsubscribe, and the list moving under the walk would
+    // otherwise skip or repeat one.
+    int n = app->subs.len;
+    if (n <= 0) {
+        return;
+    }
+    Subscription ids[64];
+    int nIds = 0;
+    for (int i = 0; i < n && nIds < 64; i++) {
+        if (app->subs[i].emitter == emitter) {
+            ids[nIds++].id = app->subs[i].id;
+        }
+    }
+    for (int k = 0; k < nIds; k++) {
+        for (int i = 0; i < app->subs.len; i++) {
+            if (app->subs[i].id != ids[k].id) {
+                continue;
+            }
+            Listener l = app->subs[i].handler;
+            ListenerCall(app, win, l, ev);
+            break;
+        }
+    }
+}
+
+int EntitySubscriberCount(App* app, EntityId emitter) {
+    if (!app || !emitter.IsValid()) {
+        return 0;
+    }
+    SweepSubs(app);
+    int n = 0;
+    for (int i = 0; i < app->subs.len; i++) {
+        if (app->subs[i].emitter == emitter) {
+            n++;
+        }
+    }
+    return n;
+}
+
 } // namespace gpui

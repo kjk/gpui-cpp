@@ -80,6 +80,7 @@ int GpuiMain(int argc, char** argv) {
     TestDockState();
     TestFocusTrap();
     TestKeymap();
+    TestEventEmitter();
     TestListSettings();
     TestStateStyle();
     TestClick();

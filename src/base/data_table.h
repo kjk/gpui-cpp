@@ -167,6 +167,10 @@ struct TableState {
     bool hasMore = false;
     int loadMoreThreshold = 20;
     Listener onEvent = {};
+    // cx.emit needs to know who is emitting, and Rust's Context<Self> does.
+    // The element stamps this as it builds, so a state can send an event to
+    // its subscribers without the caller carrying its handle around.
+    EntityId self = {};
     Listener onLoadMore = {};
 
     static void OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
