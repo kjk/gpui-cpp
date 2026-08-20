@@ -475,10 +475,10 @@ struct PlatformInput {
 
 // GPUI's ClickEvent is the down and up pair (ClickEvent::Mouse) or the Enter
 // or Space that activated a focused element (ClickEvent::Keyboard). This one
-// is flat, and carries the press rather than the pair: an element listener
-// fires on the press here, where Rust's on_click fires on release. It also
-// carries what our hit rect knows and a Rust hitbox does not have to — which
-// element this was, and where it is.
+// is flat: it fires from the release, like Rust's, and carries the position
+// the release landed at with the count and the modifiers the press had. It
+// also carries what our hit rect knows and a Rust hitbox does not have to —
+// which element this was, and where it is.
 struct ClickEvent {
     float x = 0;
     float y = 0;
@@ -1847,6 +1847,20 @@ bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
                          int* outA, int* outB);
 int HashClickId(Str s);
 
+// Whether a release makes a click. GPUI holds the press as
+// `pending_mouse_down` and fires on_click from the mouse-up handler, where it
+// asks three things: that a press is waiting at all, that the button coming
+// up is the one that went down, and that the element under the pointer is the
+// one the press landed on. A press that slid off somewhere else is no click,
+// and a drag takes the release the click would have had.
+//
+// `pending` is Rust's Option being Some: a press the scrollbar, the inspector
+// or a non-focusing button took is nobody's pending click. `upId` and
+// `pressedId` are 0 for the page itself, which is a click too — that is the
+// outside press an overlay dismisses on.
+bool ClickFromRelease(bool pending, int pressedId, MouseButton pressedButton,
+                      bool dragged, int upId, MouseButton upButton);
+
 // Reserved click ids for custom window chrome (WM_NCHITTEST).
 // Widget click ids must not use these — 100/101/102/200 used to be
 // hardcoded here and collided with the showcase overview grid.
@@ -1936,6 +1950,20 @@ struct Window {
     // The element that took the press, until the button comes back up: what
     // GPUI's drag gives an element for free. 0 when nothing is held.
     int pressedId = 0;
+    // What the press that is still down looked like: GPUI keeps the whole
+    // MouseDownEvent as `pending_mouse_down` and hands it to the click it
+    // makes on release, which is where the count and the modifiers come from.
+    int pressedCount = 1;
+    // pending_mouse_down being Some: a press is waiting to become a click.
+    bool pressPending = false;
+    // Where the press landed, and whether the pointer has since travelled far
+    // enough to call it a drag. GPUI starts a drag from the move rather than
+    // the press, and a drag takes the release the click would have had.
+    float pressedX = 0;
+    float pressedY = 0;
+    bool pressedMoved = false;
+    MouseButton pressedButton = MouseButton::Left;
+    Modifiers pressedModifiers = {};
     // The drag in flight: what the press picked up, and which drop target the
     // pointer is over right now. GPUI keeps the same pair — `active_drag` and
     // the hitbox its drop handlers consult — on its Window.

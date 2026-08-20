@@ -615,6 +615,20 @@ El* El::Caret(int off, Rgba color, float width) {
     return this;
 }
 
+bool ClickFromRelease(bool pending, int pressedId, MouseButton pressedButton,
+                      bool dragged, int upId, MouseButton upButton) {
+    if (!pending) {
+        return false;
+    }
+    if (dragged) {
+        return false;
+    }
+    if (upButton != pressedButton) {
+        return false;
+    }
+    return upId == pressedId;
+}
+
 int HashClickId(Str s) {
     uint32_t h = 2166136261u;
     if (s.s) {
