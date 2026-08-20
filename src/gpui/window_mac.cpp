@@ -563,9 +563,11 @@ static NSImage* MenuIconImage(Window* win, const char* path) {
         return nil;
     }
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    CGContextRef bmp = CGBitmapContextCreate(
-        buf.els, (size_t)px, (size_t)px, 8, (size_t)px * 4, space,
-        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGBitmapInfo bitmapInfo =
+        (CGBitmapInfo)((uint32_t)kCGImageAlphaPremultipliedFirst |
+                       (uint32_t)kCGBitmapByteOrder32Little);
+    CGContextRef bmp = CGBitmapContextCreate(buf.els, (size_t)px, (size_t)px, 8,
+                                             (size_t)px * 4, space, bitmapInfo);
     CGColorSpaceRelease(space);
     if (!bmp) {
         return nil;

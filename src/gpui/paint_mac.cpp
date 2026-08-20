@@ -90,9 +90,12 @@ bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
         return false;
     }
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    CGContextRef cg = CGBitmapContextCreate(
-        nullptr, (size_t)pxW, (size_t)pxH, 8, (size_t)pxW * 4, space,
-        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGBitmapInfo bitmapInfo =
+        (CGBitmapInfo)((uint32_t)kCGImageAlphaPremultipliedFirst |
+                       (uint32_t)kCGBitmapByteOrder32Little);
+    CGContextRef cg =
+        CGBitmapContextCreate(nullptr, (size_t)pxW, (size_t)pxH, 8,
+                              (size_t)pxW * 4, space, bitmapInfo);
     CGColorSpaceRelease(space);
     if (!cg) {
         return false;
