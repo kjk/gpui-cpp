@@ -38,6 +38,11 @@ struct Button {
     Str tooltip = {};
     El* extra = nullptr;
     Listener onClick;
+    // ButtonStyles: what the caller wants a selected or a disabled button to
+    // look like, over what the variant computed. resolve_style's order is
+    // fixed — the value state first, disabled last.
+    StateStyle selectedStyle = {};
+    StateStyle disabledStyle = {};
 
     static Button* New(Ctx* cx, Str id);
     Button* Label(Str s);
@@ -54,6 +59,8 @@ struct Button {
     Button* Outline();
     Button* Compact();
     Button* Selected(bool v);
+    Button* SelectedStyle(const StateStyle& s);
+    Button* DisabledStyle(const StateStyle& s);
     Button* DropdownCaret(bool v = true);
     Button* Custom(Rgba c);
     Button* Extra(El* e);

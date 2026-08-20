@@ -75,6 +75,7 @@ int GpuiMain(int argc, char** argv) {
     TestDockState();
     TestFocusTrap();
     TestListSettings();
+    TestStateStyle();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

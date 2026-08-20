@@ -69,6 +69,16 @@ Button* Button::Selected(bool v) {
     selected = v;
     return this;
 }
+
+Button* Button::SelectedStyle(const StateStyle& s) {
+    selectedStyle = s;
+    return this;
+}
+
+Button* Button::DisabledStyle(const StateStyle& s) {
+    disabledStyle = s;
+    return this;
+}
 Button* Button::DropdownCaret(bool v) {
     dropdown = v;
     return this;
@@ -194,6 +204,25 @@ El* Button::IntoEl() {
     if (disabled) {
         fg = th.mutedFg;
     }
+    // state_style.rs resolve_style: whatever the caller asked for goes on last
+    // and only for the fields it named — the value state, then disabled.
+    const StateStyle* active[2] = {selected ? &selectedStyle : nullptr,
+                                   disabled ? &disabledStyle : nullptr};
+    StateStyle resolved = StateStyleResolve(StateStyle{}, active, 2);
+    float borderW = 1;
+    if (resolved.Has(StateFieldBg)) {
+        bg = resolved.style.bg;
+    }
+    if (resolved.Has(StateFieldFg)) {
+        fg = resolved.style.color;
+    }
+    if (resolved.Has(StateFieldBorder)) {
+        borderW = resolved.style.border;
+        bd = resolved.style.borderColor;
+    }
+    if (resolved.Has(StateFieldHoverBg)) {
+        hover = resolved.style.hoverBg;
+    }
     // crates/ui/src/button: h_5/px_1, h_6/px_2, h_8/px_2p5, h_8/px_3, with a
     // tighter px when compact. Buttons do not use the generic control height.
     float h = 32.f;
@@ -220,9 +249,10 @@ El* Button::IntoEl() {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Gap(6)
-                ->Radius(th.radius);
+                ->Radius(resolved.Has(StateFieldRadius) ? resolved.style.radius
+                                                        : th.radius);
     if (bd.a) {
-        e->Border(1, bd);
+        e->Border(borderW, bd);
     }
     if (bg.a) {
         e->Bg(bg);
