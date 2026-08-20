@@ -768,6 +768,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/globe.svg");
         case IconName::Github:
             return StrL("icons/github.svg");
+        case IconName::ExternalLink:
+            return StrL("icons/external-link.svg");
         case IconName::Inbox:
             return StrL("icons/inbox.svg");
         case IconName::Bot:

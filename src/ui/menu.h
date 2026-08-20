@@ -17,6 +17,8 @@ enum class MenuItemKind : uint8_t {
 
 struct PopupMenu;
 
+constexpr int kPopupMenuMaxItems = 128;
+
 struct MenuItem {
     MenuItemKind kind = MenuItemKind::Item;
     Str label = {};
@@ -26,6 +28,8 @@ struct MenuItem {
     Str kbd = {};
     bool checked = false;
     bool disabled = false;
+    bool isLink = false;
+    Str href = {};
     // A row that opens onto another menu instead of running.
     PopupMenu* submenu = nullptr;
     // An item that renders its own content (PopupMenuItem::ElementItem).
@@ -37,10 +41,13 @@ struct PopupMenu {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<PopupMenuState> state = {};
-    MenuItem items[32] = {};
+    MenuItem items[kPopupMenuMaxItems] = {};
     int n = 0;
     UiSize size = UiSize::Medium;
-    float minW = 180;
+    float minW = 128;
+    float maxH = 450;
+    bool scrollable = false;
+    bool externalLinkIcon = true;
     // check_side: which edge a checked row's tick sits on.
     Side checkSide = Side::Left;
 
@@ -52,15 +59,24 @@ struct PopupMenu {
     PopupMenu* Menu(Str label, IconName icon = IconName::None);
     PopupMenu* MenuWithCheck(Str label, bool checked);
     PopupMenu* MenuWithKbd(Str label, Str kbd);
+    PopupMenu* Link(Str label, Str href, IconName icon = IconName::None);
     PopupMenu* Separator();
     PopupMenu* Label(Str label);
     PopupMenu* Element(El* el);
     PopupMenu* Submenu(Str label, PopupMenu* menu);
     // Applies to the last row added.
     PopupMenu* Disabled(bool v);
+    PopupMenu* Checked(bool v);
+    PopupMenu* Icon(IconName v);
+    PopupMenu* Kbd(Str v);
     PopupMenu* WithSize(UiSize s);
     PopupMenu* MinW(float v);
+    PopupMenu* MaxH(float v);
+    PopupMenu* Scrollable(bool v = true);
     PopupMenu* CheckSide(Side s);
+    PopupMenu* ExternalLinkIcon(bool v);
+    // Route a PopupMenu key to the deepest submenu currently showing.
+    bool PerformKey(int key);
     El* IntoEl();
 
     // The two masks the key handling needs, over the rows as built.

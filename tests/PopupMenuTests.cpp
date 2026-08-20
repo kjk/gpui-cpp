@@ -64,6 +64,11 @@ static void AMenuWithNoRows() {
     utassert(PopupMenuPrevIndex(nullptr, 0, -1) == -1);
 }
 
+static void ALongStoryMenuFitsWithoutTruncation() {
+    // Label + 100 items + a separator before every group of five.
+    utassert(gpui::component::kPopupMenuMaxItems >= 1 + 100 + 20);
+}
+
 static void TheMenuBarWrapsBothWays() {
     using namespace gpui::component;
     // on_move_right / on_move_left, over three titles.
@@ -84,5 +89,6 @@ void TestPopupMenu() {
     TheWalkStepsOverWhatCannotBeClicked();
     NothingSelectedYet();
     AMenuWithNoRows();
+    ALongStoryMenuFitsWithoutTruncation();
     TheMenuBarWrapsBothWays();
 }

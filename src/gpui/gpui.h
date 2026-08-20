@@ -736,6 +736,7 @@ enum class IconName : uint8_t {
     Map,
     Globe,
     Github,
+    ExternalLink,
     HeartOff,
 };
 
