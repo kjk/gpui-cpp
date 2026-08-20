@@ -123,7 +123,9 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
 
     // The tab bar on the left, the read-only switch on the right.
     El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+    // TabBar::new(..).w_64().underline()
     head->Child(Div(a)->W(256)->Child(component::Tabs::New(cx)
+                                          ->Underline()
                                           ->Tab(StrL("Code"))
                                           ->Tab(StrL("Decorations"))
                                           ->Selected(self->tab)

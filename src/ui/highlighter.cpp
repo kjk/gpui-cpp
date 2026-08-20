@@ -30,6 +30,8 @@ El* Highlighter::IntoEl() {
     style.caret = th.caret;
     style.selection = RgbaOpacity(th.accent, 0.45f);
     style.fontSize = 12;
+    // .font_family(theme.mono_font_family).text_size(theme.mono_font_size)
+    style.mono = true;
     El* editor = gpui::Editor::New(cx, state, style);
     if (h <= 0) {
         return editor;
