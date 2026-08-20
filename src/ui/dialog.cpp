@@ -28,12 +28,38 @@ Dialog* Dialog::Body(El* e) {
     body = e;
     return this;
 }
+Dialog* Dialog::Surface(El* e) {
+    surface = e;
+    return this;
+}
 Dialog* Dialog::W(float px) {
     width = px;
     return this;
 }
+Dialog* Dialog::H(float px) {
+    height = px;
+    return this;
+}
 Dialog* Dialog::Overlay(bool v) {
     overlay = v;
+    return this;
+}
+Dialog* Dialog::OverlayClosable(bool v) {
+    overlayClosable = v;
+    return this;
+}
+Dialog* Dialog::Radius(float px) {
+    radius = px;
+    return this;
+}
+Dialog* Dialog::Bg(Rgba color) {
+    background = color;
+    hasBackground = true;
+    return this;
+}
+Dialog* Dialog::Fg(Rgba color) {
+    foreground = color;
+    hasForeground = true;
     return this;
 }
 Dialog* Dialog::Icon(IconName n, Rgba color, float size) {
@@ -215,19 +241,30 @@ El* Dialog::IntoEl(WinSize size) {
     El* panel = Div(a)
                     ->W(width)
                     ->FlexCol()
-                    ->Bg(th.background)
+                    ->MinH(96)
+                    ->Bg(hasBackground ? background : th.background)
                     ->Border(1, th.border)
-                    ->Radius(th.radius)
+                    ->Radius(radius > 0 ? radius : th.radiusLg)
                     ->ClipY();
-    panel->Child(Header());
-    panel->Child(Actions());
+    if (height > 0) {
+        panel->H(height);
+    }
+    if (hasForeground) {
+        panel->Fg(foreground);
+    }
+    if (surface) {
+        panel->Child(surface);
+    } else {
+        panel->Child(Header());
+        panel->Child(Actions());
+    }
     if (closeButton) {
         El* x = Div(a)
                     ->Absolute()
-                    ->Top(12)
-                    ->Right(12)
-                    ->W(20)
-                    ->H(20)
+                    ->Top(8)
+                    ->Right(8)
+                    ->W(24)
+                    ->H(24)
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Radius(th.radius)
@@ -244,7 +281,7 @@ El* Dialog::IntoEl(WinSize size) {
     if (overlay) {
         backdrop->Bg(th.overlay);
     }
-    if (onClose.IsValid()) {
+    if (overlayClosable && onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
     }
     // DialogProps::margin_top: a tenth of the viewport down from the top,
