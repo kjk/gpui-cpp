@@ -7,7 +7,7 @@
 //   bun cmd/run.ts -rel -lldb showcase
 //   bun cmd/run.ts -rel -compare hello_world
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { printSizeTable } from "./sizes.ts";
 import { ensureRustTree, rustTreeDir } from "./versions.ts";
@@ -42,7 +42,7 @@ const usage = `Usage: bun cmd/run.ts [-rel|-dbg] [-asan] [-clean] [-lldb] [-comp
   -lldb     run the binary under lldb instead of detaching it
   -compare  also cargo-build and launch the Rust example from .work/gpui-component
             (cloned at the SHA in cmd/versions.ts if missing); prints both
-            binary sizes, then launches both
+            binary sizes, then launches Rust left and C++ right
 
 Builds with cmd/build.ts, then launches out/mac/<cfg>/<target> and exits.
 The example name is the last argument.
@@ -162,9 +162,10 @@ function run(cmd: string[], cwd: string): number {
 
 // A detached, unreferenced process outlives this script and the shell that
 // started it. Bun handles the new process group; macOS does not ship setsid.
-function launchDetached(cmd: string[], cwd: string): ReturnType<typeof Bun.spawn> {
+function launchDetached(cmd: string[], cwd: string, env?: Record<string, string>): ReturnType<typeof Bun.spawn> {
   const proc = Bun.spawn(cmd, {
     cwd,
+    env,
     stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
@@ -172,6 +173,40 @@ function launchDetached(cmd: string[], cwd: string): ReturnType<typeof Bun.spawn
   });
   proc.unref();
   return proc;
+}
+
+// Neither GPUI implementation exposes its NSWindow through macOS
+// Accessibility. Inject this tiny Cocoa shim into each locally-built process
+// so it can place its own first window when it becomes visible.
+function ensureCompareWindowPlacer(): string {
+  const source = join(root, "cmd/mac-window-place.m");
+  const outputDir = join(root, ".work/mac-window-place");
+  const output = join(outputDir, "mac-window-place.dylib");
+  const needsBuild = !existsSync(output) || statSync(source).mtimeMs > statSync(output).mtimeMs;
+  if (!needsBuild) {
+    return output;
+  }
+
+  mkdirSync(outputDir, { recursive: true });
+  console.log("Building macOS compare window placer");
+  const exit = run(["xcrun", "clang", "-fobjc-arc", "-dynamiclib", "-framework", "Cocoa", "-o", output, source], root);
+  if (exit !== 0 || !existsSync(output)) {
+    die("Could not build the macOS compare window placer. Install the command line tools: xcode-select --install");
+  }
+  return output;
+}
+
+function compareWindowEnv(placer: string, half: "left" | "right"): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    if (value !== undefined) {
+      env[name] = value;
+    }
+  }
+  const oldInsert = env["DYLD_INSERT_LIBRARIES"];
+  env["DYLD_INSERT_LIBRARIES"] = oldInsert ? `${placer}:${oldInsert}` : placer;
+  env["GPUI_COMPARE_WINDOW_HALF"] = half;
+  return env;
 }
 
 function findCargo(): string | null {
@@ -278,10 +313,14 @@ if (lldb) {
   process.exit(run(["lldb", "-o", "run", "--", exe], cwd));
 }
 
-console.log(`Launching ${exe}`);
-launchDetached([exe], cwd);
 if (rustExe) {
-  console.log(`Launching rust ${rustExe}`);
-  launchDetached([rustExe], rustTreeDir(root));
+  const placer = ensureCompareWindowPlacer();
+  console.log(`Launching rust ${rustExe} (left)`);
+  launchDetached([rustExe], rustTreeDir(root), compareWindowEnv(placer, "left"));
+  console.log(`Launching ${exe} (right)`);
+  launchDetached([exe], cwd, compareWindowEnv(placer, "right"));
+} else {
+  console.log(`Launching ${exe}`);
+  launchDetached([exe], cwd);
 }
 process.exit(0);
