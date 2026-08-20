@@ -115,6 +115,90 @@ static void ScrollToItemMovesAsLittleAsItCan() {
         VirtualListScrollToRow(10, 50, 20, 75, 200, ScrollStrategy::Top), 75.f);
 }
 
+
+// VirtualListScrollHandle: a request to scroll to an item waits on the handle
+// until the list is laid out, which is the moment anything knows where the
+// item is.
+static void AScrollRequestWaitsForTheLayout() {
+    VirtualListScrollHandle h;
+    VirtualListScrollToItemDeferred(&h, 5, ScrollStrategy::Top);
+    utassert(h.pending);
+    // Nothing has moved yet: the handle does not know the sizes.
+    utassertnear(h.offset, 0.f);
+
+    utassert(VirtualListHandleLayout(&h, nullptr, 10, 50, 200));
+    utassert(!h.pending);
+    utassert(h.itemsCount == 10);
+    utassertnear(h.viewport, 200.f);
+    utassertnear(h.contentSize, 500.f);
+    // Row 5 is below the view, so it comes to the bottom of it.
+    utassertnear(h.offset, 100.f);
+
+    // A layout with nothing pending leaves the offset alone.
+    utassert(!VirtualListHandleLayout(&h, nullptr, 10, 50, 200));
+    utassertnear(h.offset, 100.f);
+}
+
+// scroll_to_item_with_offset scrolls to the item that many past the one it
+// names.
+static void AnOffsetScrollsToALaterItem() {
+    VirtualListScrollHandle h;
+    VirtualListScrollToItemDeferredWithOffset(&h, 3, ScrollStrategy::Top, 2);
+    VirtualListHandleLayout(&h, nullptr, 10, 50, 200);
+    // Item 5, at the bottom of the view.
+    utassertnear(h.offset, 100.f);
+}
+
+// scroll_to_bottom is the last item at the top of the view, which is as far
+// as the list goes.
+static void ScrollToBottomGoesAsFarAsThereIs() {
+    VirtualListScrollHandle h;
+    VirtualListHandleLayout(&h, nullptr, 10, 50, 200);
+    VirtualListScrollToBottomDeferred(&h);
+    VirtualListHandleLayout(&h, nullptr, 10, 50, 200);
+    utassertnear(h.offset, 300.f);
+
+    // An empty list has nowhere to go, and the request is still taken.
+    VirtualListScrollHandle empty;
+    VirtualListScrollToBottomDeferred(&empty);
+    VirtualListHandleLayout(&empty, nullptr, 0, 50, 200);
+    utassert(!empty.pending);
+    utassertnear(empty.offset, 0.f);
+}
+
+// The clamp at the end of the layout: a list that shrank under a scrolled
+// view comes back rather than showing nothing.
+static void TheOffsetIsClampedToTheList() {
+    VirtualListScrollHandle h;
+    h.offset = 300;
+    VirtualListHandleLayout(&h, nullptr, 10, 50, 200);
+    utassertnear(h.offset, 300.f);
+    // Four rows left, so 200px of content and nothing to scroll.
+    VirtualListHandleLayout(&h, nullptr, 4, 50, 200);
+    utassertnear(h.offset, 0.f);
+}
+
+// The handle answers the same range the list builds from.
+static void TheHandleAnswersTheVisibleRange() {
+    VirtualListScrollHandle h;
+    VirtualListScrollToItemDeferred(&h, 5, ScrollStrategy::Top);
+    VirtualListHandleLayout(&h, nullptr, 10, 50, 200);
+    VirtualRange r = VirtualListHandleRange(&h, nullptr, 10, 50);
+    VirtualRange want = VirtualListVisibleRows(10, 50, h.offset, 200);
+    utassert(r.first == want.first && r.end == want.end);
+
+    // And the same for a list whose rows are not all one height.
+    const float sizes[] = {30, 40, 50, 60, 70};
+    VirtualListScrollHandle var;
+    VirtualListScrollToItemDeferred(&var, 4, ScrollStrategy::Top);
+    VirtualListHandleLayout(&var, sizes, 5, 0, 100);
+    utassertnear(var.contentSize, 250.f);
+    utassertnear(var.offset, 150.f);
+    r = VirtualListHandleRange(&var, sizes, 5, 0);
+    want = VirtualListVisibleRange(sizes, 5, var.offset, 100);
+    utassert(r.first == want.first && r.end == want.end);
+}
+
 void TestVirtualList() {
     TestSuite("virtual_list");
     TheTopOfTheListStartsAtZero();
@@ -125,4 +209,11 @@ void TestVirtualList() {
     RowsOfDifferentHeightsStillLineUp();
     UniformRowsAnswerTheSameRange();
     ScrollToItemMovesAsLittleAsItCan();
+
+    TestSuite("virtual_list/handle");
+    AScrollRequestWaitsForTheLayout();
+    AnOffsetScrollsToALaterItem();
+    ScrollToBottomGoesAsFarAsThereIs();
+    TheOffsetIsClampedToTheList();
+    TheHandleAnswersTheVisibleRange();
 }
