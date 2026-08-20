@@ -75,11 +75,16 @@ static const char* kEditorCode =
     "}\n"
     "\n";
 
-// The decorations tab shows a short document instead.
+// The decorations tab shows a short document instead. Rust hangs four
+// TextDecorations off it — a bold red marker on a warning wash, a bold italic
+// green run, an italic info run and a wavy warning underline. There is no
+// per-range decoration list on InputState here, so the text is the text and
+// the styles are not drawn.
 static const char* kDecorationText =
     "Decoration styles\n"
-    "Color\n"
-    "Italic\n";
+    "Color highlights important text.\n"
+    "Italic adds emphasis.\n"
+    "Underline marks a review range.";
 
 struct EditorStory {
     int tab = 0;
