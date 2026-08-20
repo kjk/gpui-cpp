@@ -589,10 +589,21 @@ bool KeymapPending() {
     return gNPending > 0;
 }
 
+// Bumped by every clear. An init that bound into an older one binds again.
+static uint32_t gGeneration = 1;
+
+uint32_t KeymapGeneration() {
+    return gGeneration;
+}
+
 void KeymapClear() {
     gNBindings = 0;
     gNPreds = 0;
     gNPending = 0;
+    gGeneration++;
+    if (!gGeneration) {
+        gGeneration = 1;
+    }
 }
 
 void KeymapBind(const KeyBinding* bindings, int n) {

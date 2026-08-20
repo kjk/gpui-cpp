@@ -20,9 +20,20 @@ enum class PopupMenuAction : uint8_t {
     CloseSubmenu
 };
 
-// `side` is the side submenus open towards: Right is the usual left-to-right
-// menu, where Right reaches in and Left steps out.
-PopupMenuAction PopupMenuActionForKey(int key, Side side);
+// popup_menu.rs::init. The six chords Rust binds in the "PopupMenu" key
+// context, bound here the same way; the element declares the context and the
+// dispatch finds them while focus is in the menu. Called as a menu builds,
+// and does its work once.
+void PopupMenuInitKeys();
+
+// The name of that context, for the element that declares it.
+Str PopupMenuContext();
+
+// The action the keymap resolved, read as something to do. `side` is the side
+// submenus open towards, which decides which arrow reaches into one and which
+// steps out — Rust reads the same off submenu_anchor inside select_left and
+// select_right.
+PopupMenuAction PopupMenuActionOf(uint32_t id, Side side);
 
 // select_down / select_up over the clickable items. A separator or a label is
 // not clickable and is stepped over; both ends wrap. Rust's select_down with
@@ -31,6 +42,21 @@ PopupMenuAction PopupMenuActionForKey(int key, Side side);
 // both, quirk included.
 int PopupMenuNextIndex(const bool* clickable, int n, int selected);
 int PopupMenuPrevIndex(const bool* clickable, int n, int selected);
+
+// The most rows the keyboard reads off a menu. The themed menu builds at most
+// this many, and a menu longer than a screen scrolls rather than growing.
+constexpr int kPopupMenuMaxRows = 128;
+
+// What one row looks like to the keyboard. Rust's PopupMenu owns its items,
+// so select_down and confirm read them off itself; the rows belong to the
+// caller here, so the element copies the part the actions need onto the state
+// as it builds.
+struct PopupMenuRow {
+    bool clickable = false;
+    bool submenu = false;
+    bool link = false;
+    Str href = {};
+};
 
 // What a menu is between frames. Rust keeps this in the PopupMenu entity
 // along with its items; the items are the caller's here, so this is the part
@@ -57,6 +83,14 @@ struct PopupMenuState {
     // What a confirmed item reports: the item's index, bound with
     // ListenerFill the way a component hands its caller the value it made.
     Listener onConfirm = {};
+    // The rows as they were last built, which is what an action reads.
+    PopupMenuRow rows[kPopupMenuMaxRows] = {};
+    int nRows = 0;
+
+    // The six actions, all through one handler. Rust has a method per action
+    // because it dispatches on the type; there is one id to switch on here,
+    // and one place that switches on it.
+    static void OnAction(PopupMenuState* self, Ctx* cx, const ActionEvent* ev);
 
     static void OnItemClick(PopupMenuState* self, Ctx* cx, const ClickEvent* ev,
                             intptr_t ix);
@@ -86,6 +120,16 @@ void PopupMenuDismissAll(PopupMenuState* s, Ctx* cx);
 // built them this frame; `hasSubmenu` says which of them open onto one.
 void PopupMenuPerform(PopupMenuState* s, Ctx* cx, PopupMenuAction act,
                       const bool* clickable, const bool* hasSubmenu, int n);
+
+// The same, over the rows the element recorded. This is the one the actions
+// take, and it is where the two things a row can be — a link, and a submenu
+// whose parent is the menu that has to close it — are answered.
+void PopupMenuPerformRows(PopupMenuState* s, Ctx* cx, PopupMenuAction act);
+
+// What the element records as it builds, in row order. Rust's menu owns its
+// items; this is the copy the keyboard reads.
+void PopupMenuBeginRows(PopupMenuState* s);
+void PopupMenuAddRow(PopupMenuState* s, const PopupMenuRow& row);
 
 // confirm: run the item and dismiss the menu, which is what Rust does for
 // both a keyboard Enter and a click.

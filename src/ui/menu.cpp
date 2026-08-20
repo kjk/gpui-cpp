@@ -1,4 +1,6 @@
 #include "ui/menu.h"
+#include "base/actions.h"
+#include "base/focus_trap.h"
 #include "ui/kbd.h"
 
 namespace gpui {
@@ -150,74 +152,6 @@ PopupMenu* PopupMenu::ExternalLinkIcon(bool v) {
     return this;
 }
 
-bool PopupMenu::PerformKey(int key) {
-    PopupMenuState* top = state.Get(cx);
-    if (!top || !top->open) {
-        return false;
-    }
-
-    PopupMenu* active = this;
-    PopupMenu* parentMenu = nullptr;
-    PopupMenuState* activeState = top;
-    while (activeState->openSubmenu >= 0 && activeState
-                                                    ->openSubmenu < active->n) {
-        PopupMenu* child = active->items[activeState->openSubmenu].submenu;
-        if (!child) {
-            break;
-        }
-        PopupMenuState* childState = child->state.Get(cx);
-        if (!childState) {
-            break;
-        }
-        parentMenu = active;
-        active = child;
-        activeState = childState;
-    }
-
-    PopupMenuAction action = PopupMenuActionForKey(key, activeState->side);
-    // A submenu has no independent `open` flag in the element tree. Escape
-    // or the outward arrow with no deeper child closes the row that exposed
-    // it, one level per press.
-    if (parentMenu && activeState->openSubmenu < 0 &&
-        (action == PopupMenuAction::Cancel ||
-         action == PopupMenuAction::CloseSubmenu)) {
-        PopupMenuState* parentState = parentMenu->state.Get(cx);
-        if (parentState) {
-            parentState->openSubmenu = -1;
-            Notify(cx);
-        }
-        return true;
-    }
-
-    // Link rows are PopupMenuItem::ElementItem upstream. Their mouse handler
-    // opens the URL directly, so keyboard confirmation must do the same
-    // instead of forwarding an item index to the caller's action handler.
-    int selected = activeState->selected;
-    if (action == PopupMenuAction::Confirm && selected >= 0 &&
-        selected < active->n && active->items[selected].isLink &&
-        active->items[selected].href.s) {
-        OpenUrl(active->items[selected].href);
-        PopupMenuDismissAll(activeState, cx);
-        return true;
-    }
-
-    bool clickable[kPopupMenuMaxItems] = {};
-    bool submenu[kPopupMenuMaxItems] = {};
-    active->Masks(clickable, submenu);
-    PopupMenuPerform(activeState, cx, action, clickable, submenu, active->n);
-    return action != PopupMenuAction::None;
-}
-
-void PopupMenu::Masks(bool* clickable, bool* hasSubmenu) const {
-    for (int i = 0; i < n; i++) {
-        // is_clickable(): a separator and a label are stepped over, and so is
-        // a disabled row.
-        clickable[i] = items[i].kind == MenuItemKind::Item && !items[i]
-                                                                   .disabled;
-        hasSubmenu[i] = items[i].submenu != nullptr;
-    }
-}
-
 static void OnPopupLinkClick(PopupMenuState* state, Ctx* cx, const ClickEvent*,
                              intptr_t hrefPtr) {
     const Str* href = (const Str*)hrefPtr;
@@ -288,6 +222,37 @@ El* PopupMenu::IntoEl() {
                    ->Border(1, th.border)
                    ->Radius(th.radius)
                    ->ClipY();
+    // .key_context(CONTEXT).track_focus(&self.focus_handle) and the six
+    // on_action handlers behind it. The menu is its own focus trap and the
+    // only focusable inside it, so arming the trap while it is the deepest
+    // menu on screen is `focus_handle.focus(window)` — and a submenu that
+    // opens takes the focus off its parent, which is what makes escape close
+    // one level at a time without anything walking the tree.
+    PopupMenuInitKeys();
+    int focusId = HashClickId(id);
+    root->KeyContext(PopupMenuContext())->FocusId(focusId)->TrapId(focusId);
+    if (s && s->openSubmenu < 0) {
+        FocusTrapArm(cx->win, focusId);
+    }
+    Listener onAction = ListenTo(state, &PopupMenuState::OnAction);
+    root->OnAction(action::Confirm(), onAction)
+        ->OnAction(action::Cancel(), onAction)
+        ->OnAction(action::SelectUp(), onAction)
+        ->OnAction(action::SelectDown(), onAction)
+        ->OnAction(action::SelectLeft(), onAction)
+        ->OnAction(action::SelectRight(), onAction);
+    // The rows, as the keyboard sees them. Rust's menu owns its items; here
+    // they are the caller's, so what an action needs is copied across.
+    PopupMenuBeginRows(s);
+    for (int i = 0; i < n; i++) {
+        PopupMenuRow row;
+        row.clickable = items[i].kind == MenuItemKind::Item && !items[i]
+                                                                    .disabled;
+        row.submenu = items[i].submenu != nullptr;
+        row.link = items[i].isLink;
+        row.href = items[i].href;
+        PopupMenuAddRow(s, row);
+    }
     El* rows = Div(a)->FlexCol()->W(kFill)->Pad(4)->Gap(2);
     if (scrollable) {
         rows->MaxH(maxH)
@@ -382,7 +347,15 @@ El* PopupMenu::IntoEl() {
         }
         if (it.submenu && openSubmenu == i) {
             // The submenu hangs off the row it belongs to, on the side the
-            // menu opens towards.
+            // menu opens towards. It is open because this row says so, so it
+            // is this menu that escape inside it has to reach — Rust keeps
+            // the same link as parent_menu.
+            PopupMenuState* subState = it.submenu->state.Get(cx);
+            if (subState && s) {
+                subState->parent = state;
+                subState->open = true;
+                subState->side = s->side;
+            }
             El* sub = it.submenu->IntoEl();
             sub->Absolute()->Top(-4);
             if (s && SideIsLeft(s->side)) {
