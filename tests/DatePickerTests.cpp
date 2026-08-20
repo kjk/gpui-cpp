@@ -39,10 +39,63 @@ static void OtherKeysAreNotThePickers() {
              DatePickerAction::None);
 }
 
+static LocalDate D(int year, int month, int day) {
+    return {year, month, day};
+}
+
+static bool FirstFiveDays(LocalDate date) {
+    return date.day <= 5;
+}
+
+static void MatchersKeepTheirRustSemantics() {
+    DateMatcher weekends = DateMatcherWeekdays((1u << 0) | (1u << 6));
+    utassert(DateMatcherMatches(weekends, D(2025, 2, 9))); // Sunday
+    utassert(!DateMatcherMatches(weekends, D(2025, 2, 10)));
+
+    DateMatcher interval = DateMatcherInterval(D(2025, 2, 10), D(2025, 2, 15));
+    utassert(DateMatcherMatches(interval, D(2025, 2, 9)));
+    utassert(!DateMatcherMatches(interval, D(2025, 2, 12)));
+    utassert(DateMatcherMatches(interval, D(2025, 2, 16)));
+
+    DateMatcher range = DateMatcherRange(D(2025, 2, 10), D(2025, 2, 15));
+    utassert(!DateMatcherMatches(range, D(2025, 2, 9)));
+    utassert(DateMatcherMatches(range, D(2025, 2, 12)));
+    utassert(!DateMatcherMatches(range, D(2025, 2, 16)));
+
+    DateMatcher first = DateMatcherCustom(&FirstFiveDays);
+    utassert(DateMatcherMatches(first, D(2025, 2, 5)));
+    utassert(!DateMatcherMatches(first, D(2025, 2, 6)));
+}
+
+static void RangeSelectionRestartsAndCompletes() {
+    LocalDate start = {};
+    LocalDate end = {};
+    DateMatcher none;
+    utassert(DatePickerSelectDate(true, D(2025, 2, 10), &start, &end, none) ==
+             DateSelectionResult::Partial);
+    utassert(DatePickerSelectDate(true, D(2025, 2, 12), &start, &end, none) ==
+             DateSelectionResult::Complete);
+    utassert(start.day == 10 && end.day == 12);
+    utassert(DatePickerSelectDate(true, D(2025, 2, 11), &start, &end, none) ==
+             DateSelectionResult::Partial);
+    utassert(start.day == 11 && end.day == 0);
+
+    start = D(2025, 2, 12);
+    utassert(DatePickerSelectDate(true, D(2025, 2, 10), &start, &end, none) ==
+             DateSelectionResult::Partial);
+    utassert(start.day == 10 && end.day == 0);
+
+    DateMatcher disabled = DateMatcherRange(D(2025, 2, 1), D(2025, 2, 28));
+    utassert(DatePickerSelectDate(false, D(2025, 2, 15), &start, &end,
+                                  disabled) == DateSelectionResult::Rejected);
+}
+
 void TestDatePicker() {
     TestSuite("date_picker");
     EnterOnlyOpens();
     EscapeOnlyCloses();
     OnlyTheConfirmHandlerChecksDisabled();
     OtherKeysAreNotThePickers();
+    MatchersKeepTheirRustSemantics();
+    RangeSelectionRestartsAndCompletes();
 }
