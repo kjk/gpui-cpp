@@ -106,6 +106,12 @@ void PlatShutdown(App* app);
 void PlatSetTimer(Window* win, int ms);
 // Ask the OS for a pointer shape. Only called when it changes.
 void PlatSetCursor(Window* win, CursorKind kind);
+// GPUI holds the pointer for the length of a press, so a drag that leaves the
+// window still delivers its moves and, above all, its release. Windows has
+// SetCapture, X11 an active pointer grab; Cocoa already sends dragged and up
+// to the window the press went to, so its half has nothing to do. Called with
+// true as a press is taken and false as it is let go, never nested.
+void PlatSetMouseCapture(Window* win, bool capture);
 // The longest pause the OS allows inside one multi-click run, in ms:
 // GetDoubleClickTime() on Windows, [NSEvent doubleClickInterval] on macOS. X11
 // has no such setting, so Linux answers with the 400 ms every toolkit picks.

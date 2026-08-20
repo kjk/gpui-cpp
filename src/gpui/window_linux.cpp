@@ -618,6 +618,24 @@ static void SetEdgeCursor(Window* win, int dir) {
 
 // ─── clipboard ────────────────────────────────────────────────────────────
 
+void PlatSetMouseCapture(Window* win, bool capture) {
+    if (!win || !win->plat || !gDpy) {
+        return;
+    }
+    if (!capture) {
+        XUngrabPointer(gDpy, CurrentTime);
+        XFlush(gDpy);
+        return;
+    }
+    // owner_events True keeps the ordinary delivery for events inside the
+    // window and adds the ones outside it, which is the whole point: a drag
+    // that leaves still reports its moves and its release.
+    XGrabPointer(gDpy, win->plat->xwin, True,
+                 ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+                 GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
+    XFlush(gDpy);
+}
+
 void PlatSetCursor(Window* win, CursorKind kind) {
     if (!win || !win->plat || !gDpy) {
         return;

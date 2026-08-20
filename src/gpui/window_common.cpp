@@ -193,6 +193,17 @@ static const HitRect* HitRectById(Window* win, int id) {
 
 // ─── input ────────────────────────────────────────────────────────────────
 
+// The press is this window's for as long as the button is down: GPUI grabs
+// the pointer so a drag can leave the window and still be heard, and the
+// release that ends it is the one that must never go missing.
+static void SetMouseDown(Window* win, bool down) {
+    if (win->mouseDown == down) {
+        return;
+    }
+    win->mouseDown = down;
+    PlatSetMouseCapture(win, down);
+}
+
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     if (!win) {
         return;
@@ -714,7 +725,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     bool barHorizontal = false;
     const ScrollRect* bar = ScrollbarAt(&win->paint, x, y, &barHorizontal);
     if (bar) {
-        win->mouseDown = true;
+        SetMouseDown(win, true);
         ScrollbarPress(win, bar, x, y, barHorizontal);
         // The bar took the press, so nothing is waiting to become a click.
         ClearPendingClick(win);
@@ -729,7 +740,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
 
     const HitRect* hit = HitTestRect(&win->paint, x, y);
     int id = hit ? hit->id : 0;
-    win->mouseDown = true;
+    SetMouseDown(win, true);
     win->pressedId = id;
     // window.active_drag: a press on an element with a payload starts the
     // drag, and it lasts until the button comes back up.
@@ -786,7 +797,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
 }
 
 static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
-    win->mouseDown = false;
+    SetMouseDown(win, false);
     // with_unset_drag_pos: the release ends the scrollbar drag wherever it
     // landed.
     win->scrollDragId = 0;
