@@ -23,6 +23,9 @@ struct DescriptionList {
     int columns = 3;
     float labelWidth = 120;
     bool bordered = true;
+    // DescriptionList::layout: Horizontal puts the label beside the value,
+    // Vertical stacks it above.
+    bool vertical = false;
     UiSize size = UiSize::Medium;
 
     static DescriptionList* New(Ctx* cx);
@@ -33,6 +36,7 @@ struct DescriptionList {
     DescriptionList* Columns(int n);
     DescriptionList* LabelWidth(float w);
     DescriptionList* Bordered(bool v);
+    DescriptionList* Vertical(bool v = true);
     DescriptionList* WithSize(UiSize s);
     El* IntoEl();
 };
