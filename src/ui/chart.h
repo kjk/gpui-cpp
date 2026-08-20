@@ -125,6 +125,7 @@ struct BarChart {
     const Rgba* fills = nullptr;
     bool gradient = false;
     bool gradientPerBar = false;
+    bool gradientDiagonal = false;
     Rgba gradientFrom = {};
     Rgba gradientTo = {};
 
@@ -147,6 +148,9 @@ struct BarChart {
     // fill_gradient: `perBar` runs the whole ramp inside every bar rather
     // than across the chart's range.
     BarChart* FillGradient(Rgba from, Rgba to, bool perBar = false);
+    // fill(|_, bar, chart, _|): one ramp across the whole plot's diagonal,
+    // each bar showing the slice of it under its own footprint.
+    BarChart* FillGradientDiagonal(Rgba from, Rgba to);
     El* IntoEl();
 };
 
