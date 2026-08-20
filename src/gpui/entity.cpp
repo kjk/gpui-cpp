@@ -342,6 +342,49 @@ EntityId WindowKeyedEntity(Window* win, App* app, uint32_t key, void* fresh,
     return s.entity;
 }
 
+void* WindowMotionState(Window* win, uint32_t key, int size) {
+    if (!win || size <= 0) {
+        return nullptr;
+    }
+    for (int i = 0; i < win->motionSlots.len; i++) {
+        if (win->motionSlots[i].key == key) {
+            win->motionSlots[i].frame = win->frameSeq;
+            return win->motionSlots[i].ptr;
+        }
+    }
+    MotionSlotRec s = {};
+    s.key = key;
+    s.frame = win->frameSeq;
+    s.ptr = AllocZero(1, size);
+    win->motionSlots.Append(s);
+    return s.ptr;
+}
+
+void WindowMotionSweep(Window* win) {
+    if (!win) {
+        return;
+    }
+    int keep = 0;
+    for (int i = 0; i < win->motionSlots.len; i++) {
+        if (win->motionSlots[i].frame == win->frameSeq) {
+            win->motionSlots[keep++] = win->motionSlots[i];
+            continue;
+        }
+        Free(nullptr, win->motionSlots[i].ptr);
+    }
+    win->motionSlots.len = keep;
+}
+
+void WindowMotionFree(Window* win) {
+    if (!win) {
+        return;
+    }
+    for (int i = 0; i < win->motionSlots.len; i++) {
+        Free(nullptr, win->motionSlots[i].ptr);
+    }
+    win->motionSlots.Reset();
+}
+
 void WindowKeyedFree(Window* win) {
     if (!win) {
         return;

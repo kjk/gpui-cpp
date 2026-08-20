@@ -1,10 +1,23 @@
 #include "ui/notification.h"
+#include "base/motion.h"
 #include "ui/alert.h"
 #include "ui/title_bar.h"
 
 namespace gpui {
 
 namespace component {
+
+// toast.rs: every offset the stack works out is transitioned rather than
+// taken, over ToastMotion::duration and along CSS's `ease`.
+static float ToastEase(float t) {
+    return CubicBezier(0.25f, 0.1f, 0.25f, 1.f, t);
+}
+
+static Motion ToastMotionPolicy() {
+    Motion m = MotionNew((float)kToastTransitionMs);
+    m.ease = ToastEase;
+    return m;
+}
 
 Notification* Notification::New(Ctx* cx, Str title, Str message) {
     Arena* a = cx->a;
@@ -184,7 +197,12 @@ El* NotificationList::IntoEl() {
     float collapsedH = ToastStackGeometry(
         heights, s->n, kToastCollapsedPeek, kToastExpandedGap, bottom,
         collapsedOff, expandedOff, &expandedH);
-    float stackH = expanded ? expandedH : collapsedH;
+    Motion policy = ToastMotionPolicy();
+    // The stack's own height, which is what opens the space the cards move
+    // into rather than snapping the whole layer taller.
+    float stackH =
+        MotionValue(cx, MotionId(StrL("notification-stack"), StrL("height")),
+                    expanded ? expandedH : collapsedH, policy);
 
     // The stack floats over the window in the corner its placement names.
     El* layer = Div(a)->Absolute()->Fixed()->W(s->width)->H(stackH)->OnHover(
@@ -217,14 +235,22 @@ El* NotificationList::IntoEl() {
         if (!expanded && rank >= kToastCollapsedVisible) {
             continue;
         }
-        float off = expanded ? expandedOff[i] : collapsedOff[i];
-        // Each layer behind is a little narrower, which is what gives the
-        // closed stack its depth.
-        float shrink = expanded ? 0
-                                : s->width * kToastCollapsedScaleStep *
-                                      (float)(rank < kToastCollapsedVisible
-                                                  ? rank
-                                                  : kToastCollapsedVisible - 1);
+        // "offset" and "inset": where this card sits, and how much narrower
+        // it is than the front one. Both are the card's own transitions, keyed
+        // on its id, so a stack that opens moves each of them from wherever it
+        // had got to.
+        Str key = StrDup(a, fmt("%d", it.id));
+        float off =
+            MotionValue(cx, MotionId(StrL("toast-offset"), key),
+                        expanded ? expandedOff[i] : collapsedOff[i], policy);
+        float shrink = MotionValue(
+            cx, MotionId(StrL("toast-inset"), key),
+            expanded ? 0.f
+                     : s->width * kToastCollapsedScaleStep *
+                           (float)(rank < kToastCollapsedVisible
+                                       ? rank
+                                       : kToastCollapsedVisible - 1),
+            policy);
         El* card =
             Notification::New(cx, it.title, it.message)
                 ->Kind(it.kind)

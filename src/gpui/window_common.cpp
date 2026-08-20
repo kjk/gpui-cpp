@@ -142,6 +142,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         AppInvalidate(win);
     }
 
+    // The transitions of anything the frame did not build are dropped, which
+    // is GPUI's element state going with the element. Something that comes
+    // back on screen starts its entrance again rather than resuming one.
+    WindowMotionSweep(win);
+
     // Record the frame for the trace. GPUI times Window::draw, which is this
     // whole function: build the element tree, lay it out, paint it.
     FrameTiming timing;
@@ -1339,6 +1344,7 @@ void AppFree(App* app) {
         PaintTargetFree(&w->paint);
         w->timers.Reset();
         WindowKeyedFree(w);
+        WindowMotionFree(w);
         delete w;
     }
     app->windows.Reset();

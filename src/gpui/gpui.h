@@ -277,6 +277,18 @@ struct EntitySlot {
     DropFn drop = nullptr;
 };
 
+// Where one transition has got to, kept per window and per id. Separate from
+// KeyedSlot because the lifetime is GPUI's element state rather than Rust's
+// keyed state: a slot nothing asked for while the frame was built is dropped,
+// so a dialog that closes and opens again animates its way in a second time.
+struct MotionSlotRec {
+    uint32_t key = 0;
+    // The frame that last asked for it. `frameSeq` at the time, so the sweep
+    // is a comparison rather than a flag to clear.
+    uint64_t frame = 0;
+    void* ptr = nullptr;
+};
+
 // window.use_keyed_state: per-window state owned by a RenderOnce element that
 // has nowhere else to keep it.
 struct KeyedSlot {
@@ -2045,6 +2057,7 @@ struct Window {
     // after the focusables are collected. 0 when nothing asked.
     int pendingTrap = 0;
     Vec<KeyedSlot> keyed;
+    Vec<MotionSlotRec> motionSlots;
     WinOpts opts = {};
     // Window-level subscriptions bound to view entities.
     Listener onKey = {};
@@ -2214,6 +2227,15 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id);
 // window.use_keyed_state(key, cx, init)
 void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop);
 void WindowKeyedFree(Window* win);
+
+// The transition state behind one id, created zeroed on first ask and marked
+// as wanted by this frame. Everything about it is in base/motion.h; this is
+// the store, which has to live with the window.
+void* WindowMotionState(Window* win, uint32_t key, int size);
+// Drop what this frame did not ask for, which is what GPUI does with the
+// state of an element it no longer renders.
+void WindowMotionSweep(Window* win);
+void WindowMotionFree(Window* win);
 
 template <typename T>
 T* KeyedState(Ctx* cx, uint32_t key) {
