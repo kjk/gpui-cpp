@@ -1,6 +1,10 @@
 #include "Story.h"
 #include "ChartFixtures.h"
 
+// cosf and sinf, for the radar chart's badge labels: MSVC hands them over
+// with the rest of the runtime, gcc does not.
+#include <math.h>
+
 struct ChartStory {
     static El* Render(ChartStory* self, Ctx* cx);
 };
