@@ -36,7 +36,13 @@ enum class TableAction : uint8_t {
     Cancel
 };
 
-TableAction TableActionForKey(int key);
+// data_table.rs::init: escape, the four arrows, home, end, the page keys and
+// tab / shift-tab in the "DataTable" key context. Tab is the table's there,
+// and it is the table's here too — the window's focus ring only takes a tab
+// nothing else wanted.
+void TableInitKeys();
+Str TableContext();
+TableAction TableActionOf(uint32_t id);
 
 // TableEvent, what the table tells whoever is listening.
 enum class TableEventKind : uint8_t {
@@ -237,5 +243,8 @@ void TableClearSelection(TableState* s, Ctx* cx);
 
 // The action, applied.
 void TablePerform(TableState* s, Ctx* cx, TableAction act);
+
+void TableOnAction(TableState* self, Ctx* cx, const ActionEvent* ev);
+void TableBindKeys(Ctx* cx, El* root, Entity<TableState> state);
 
 } // namespace gpui

@@ -1,7 +1,8 @@
 /* Ported from crates/ui/src/list/list.rs and list/cache.rs.
  *
- * Rust binds up, down, enter and escape in the "List" key context and hangs
- * an on_action off each; ListActionForKey is that table. The moves themselves
+ * Rust binds up, down, enter, secondary-enter and escape in the "List" key
+ * context and hangs an on_action off each; this walks a chord in through the
+ * keymap and pins what the list makes of it. The moves themselves
  * are rows_cache.next / .prev, which wrap at both ends and start from the
  * first or the last row when nothing is selected. The row walk here is over a
  * flat count rather than an IndexPath through sections, so the section
@@ -9,20 +10,30 @@
 
 #include "Test.h"
 
+// The chord, resolved in the list's context, read as what the list does.
+static ListKeyAction ForChord(const char* spec) {
+    ListInitKeys();
+    KeyChord c = {};
+    utassert(KeyChordParse(Str(spec), &c));
+    uint32_t ctx = KeyContextOf(ListContext());
+    return ListActionOf(KeymapMatch(c, &ctx, 1).action);
+}
+
 static void TheKeyTable() {
-    utassert(ListActionForKey(KeyUp, false).action == ListAction::SelectPrev);
-    utassert(ListActionForKey(KeyDown, false).action == ListAction::SelectNext);
-    utassert(ListActionForKey(KeyReturn, false).action == ListAction::Confirm);
-    utassert(ListActionForKey(KeyEscape, false).action == ListAction::Cancel);
-    utassert(ListActionForKey(KeySpace, false).action == ListAction::None);
-    utassert(ListActionForKey(KeyTab, false).action == ListAction::None);
+    utassert(ForChord("up").action == ListAction::SelectPrev);
+    utassert(ForChord("down").action == ListAction::SelectNext);
+    utassert(ForChord("enter").action == ListAction::Confirm);
+    utassert(ForChord("escape").action == ListAction::Cancel);
+    utassert(ForChord("space").action == ListAction::None);
+    utassert(ForChord("tab").action == ListAction::None);
 
     // `Confirm { secondary }` is bound twice: to enter and to secondary-enter.
-    // Nothing else in the list's context reads the modifier.
-    utassert(!ListActionForKey(KeyReturn, false).secondary);
-    ListKeyAction sec = ListActionForKey(KeyReturn, true);
+    // There is no payload on an action here, so the second binding is its own
+    // name and the flag comes back beside the answer.
+    utassert(!ForChord("enter").secondary);
+    ListKeyAction sec = ForChord("secondary-enter");
     utassert(sec.action == ListAction::Confirm && sec.secondary);
-    utassert(!ListActionForKey(KeyDown, true).secondary);
+    utassert(!ForChord("down").secondary);
 }
 
 static void NextAndPrevWrap() {

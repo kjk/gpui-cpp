@@ -121,7 +121,6 @@ struct DataTableStory {
 
     ~DataTableStory() { StrFree(message); }
     static El* Render(DataTableStory* self, Ctx* cx);
-    static void OnKey(DataTableStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 // The delegate's perform_sort: the story reorders its own rows, which is the
@@ -213,22 +212,6 @@ static void OnTableEvent(DataTableStory* self, Ctx* cx, const TableEvent* ev) {
             break;
     }
     Notify(cx);
-}
-
-// The table's key context: the arrows walk the selection, Home and End take
-// the first and last column, the page keys move a page, Escape gives up.
-void DataTableStory::OnKey(DataTableStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    TableAction act = TableActionForKey(ev->vk);
-    if (act == TableAction::None) {
-        return;
-    }
-    TableState* st = self->table.Get(cx);
-    if (st) {
-        TablePerform(st, cx, act);
-    }
 }
 
 static void DtMenuOpen(DataTableStory* self, Ctx* cx, const ClickEvent*,
@@ -653,4 +636,4 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     return page;
 }
 
-STORY_PAGE_KEYS(StoryDataTable, DataTableStory);
+STORY_PAGE(StoryDataTable, DataTableStory);

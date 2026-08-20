@@ -1,27 +1,45 @@
 #include "base/list.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
-ListKeyAction ListActionForKey(int key, bool secondary) {
+Str ListContext() {
+    return StrL("List");
+}
+
+void ListInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
+    }
+    bound = KeymapGeneration();
+    const char* ctx = "List";
+    KeyBinding bindings[] = {
+        {"escape", action::Cancel(), ctx},
+        {"enter", action::Confirm(), ctx},
+        {"secondary-enter", action::ConfirmSecondary(), ctx},
+        {"up", action::SelectUp(), ctx},
+        {"down", action::SelectDown(), ctx},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+ListKeyAction ListActionOf(uint32_t id) {
     ListKeyAction out;
-    switch (key) {
-        case KeyUp:
-            out.action = ListAction::SelectPrev;
-            break;
-        case KeyDown:
-            out.action = ListAction::SelectNext;
-            break;
-        case KeyReturn:
-            out.action = ListAction::Confirm;
-            // Only the Confirm binding comes in two spellings; nothing else
-            // in the list's context reads the modifier.
-            out.secondary = secondary;
-            break;
-        case KeyEscape:
-            out.action = ListAction::Cancel;
-            break;
-        default:
-            break;
+    if (id == action::SelectUp()) {
+        out.action = ListAction::SelectPrev;
+    } else if (id == action::SelectDown()) {
+        out.action = ListAction::SelectNext;
+    } else if (id == action::Confirm()) {
+        out.action = ListAction::Confirm;
+    } else if (id == action::ConfirmSecondary()) {
+        // The second binding of the same Rust action, carrying the flag its
+        // payload would have.
+        out.action = ListAction::Confirm;
+        out.secondary = true;
+    } else if (id == action::Cancel()) {
+        out.action = ListAction::Cancel;
     }
     return out;
 }
@@ -248,6 +266,32 @@ void ListState::OnRowMouseDown(ListState* self, Ctx* cx,
     if (ev->button == MouseButton::Right) {
         ListRightClickRow(self, cx, (int)ix);
     }
+}
+
+void ListOnAction(ListState* self, Ctx* cx, const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    ListKeyAction act = ListActionOf(ev->action);
+    if (act.action == ListAction::None) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    ListPerform(self, cx, act.action, act.secondary);
+}
+
+void ListBindKeys(Ctx* cx, El* root, Entity<ListState> state) {
+    if (!cx || !root || !state.IsValid()) {
+        return;
+    }
+    ListInitKeys();
+    Listener onAction = ListenTo(state, &ListOnAction);
+    root->KeyContext(ListContext())
+        ->OnAction(action::Cancel(), onAction)
+        ->OnAction(action::Confirm(), onAction)
+        ->OnAction(action::ConfirmSecondary(), onAction)
+        ->OnAction(action::SelectUp(), onAction)
+        ->OnAction(action::SelectDown(), onAction);
 }
 
 } // namespace gpui

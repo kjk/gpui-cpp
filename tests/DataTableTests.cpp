@@ -8,19 +8,31 @@
 
 #include "Test.h"
 
+// The chord, resolved in the table's context, read as what the table does.
+static TableAction ForChord(const char* spec) {
+    TableInitKeys();
+    KeyChord c = {};
+    utassert(KeyChordParse(Str(spec), &c));
+    uint32_t ctx = KeyContextOf(TableContext());
+    return TableActionOf(KeymapMatch(c, &ctx, 1).action);
+}
+
 static void TheKeyTable() {
-    utassert(TableActionForKey(KeyUp) == TableAction::SelectPrev);
-    utassert(TableActionForKey(KeyDown) == TableAction::SelectNext);
-    utassert(TableActionForKey(KeyLeft) == TableAction::SelectPrevColumn);
-    utassert(TableActionForKey(KeyRight) == TableAction::SelectNextColumn);
-    // Tab is bound to the same action as Right.
-    utassert(TableActionForKey(KeyTab) == TableAction::SelectNextColumn);
-    utassert(TableActionForKey(KeyHome) == TableAction::SelectFirst);
-    utassert(TableActionForKey(KeyEnd) == TableAction::SelectLast);
-    utassert(TableActionForKey(KeyPageUp) == TableAction::SelectPageUp);
-    utassert(TableActionForKey(KeyPageDown) == TableAction::SelectPageDown);
-    utassert(TableActionForKey(KeyEscape) == TableAction::Cancel);
-    utassert(TableActionForKey(KeySpace) == TableAction::None);
+    utassert(ForChord("up") == TableAction::SelectPrev);
+    utassert(ForChord("down") == TableAction::SelectNext);
+    utassert(ForChord("left") == TableAction::SelectPrevColumn);
+    utassert(ForChord("right") == TableAction::SelectNextColumn);
+    // Tab is bound to the same action as Right, and shift-tab to Left — in
+    // the table's own context, so the window's focus ring only ever sees a
+    // tab the table did not want.
+    utassert(ForChord("tab") == TableAction::SelectNextColumn);
+    utassert(ForChord("shift-tab") == TableAction::SelectPrevColumn);
+    utassert(ForChord("home") == TableAction::SelectFirst);
+    utassert(ForChord("end") == TableAction::SelectLast);
+    utassert(ForChord("pageup") == TableAction::SelectPageUp);
+    utassert(ForChord("pagedown") == TableAction::SelectPageDown);
+    utassert(ForChord("escape") == TableAction::Cancel);
+    utassert(ForChord("space") == TableAction::None);
 }
 
 static void TheSortCycle() {

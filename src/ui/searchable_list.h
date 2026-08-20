@@ -95,6 +95,10 @@ struct SearchableListState {
     // the select share a state here.
     static void OnAction(SearchableListState* self, Ctx* cx,
                          const ActionEvent* ev);
+    // The same, for a list that is not inside a select: the five "List"
+    // bindings, over the row highlight this state already holds.
+    static void OnListAction(SearchableListState* self, Ctx* cx,
+                             const ActionEvent* ev);
 };
 
 // The changes a click on `index` comes to under this mode. Single deselects
@@ -149,6 +153,11 @@ struct SearchableList {
     float maxH = 320;
     // Combobox::check_icon: what marks a selected row.
     IconName checkIcon = IconName::Check;
+    // Whether a Select encloses this list. One inside a select leaves the
+    // keyboard to the select's own context — escape there closes the popup
+    // rather than clearing the highlight — while one standing on its own
+    // declares the "List" context and answers for itself.
+    bool inSelect = false;
 
     static SearchableList* New(Ctx* cx, Str id, Entity<SearchableListState> st,
                                InputState* query);
@@ -160,6 +169,7 @@ struct SearchableList {
     SearchableList* W(float v);
     SearchableList* MaxH(float v);
     SearchableList* CheckIcon(IconName n);
+    SearchableList* InSelect(bool v);
     El* IntoEl();
 };
 

@@ -1,35 +1,68 @@
 #include "base/data_table.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
 const Str kTableResizeDrag = StrL("table-resize-col");
 const Str kTableColDrag = StrL("table-move-col");
 
-TableAction TableActionForKey(int key) {
-    switch (key) {
-        case KeyEscape:
-            return TableAction::Cancel;
-        case KeyUp:
-            return TableAction::SelectPrev;
-        case KeyDown:
-            return TableAction::SelectNext;
-        case KeyLeft:
-            return TableAction::SelectPrevColumn;
-        case KeyRight:
-        case KeyTab:
-            // Rust binds tab to SelectNextColumn as well.
-            return TableAction::SelectNextColumn;
-        case KeyHome:
-            return TableAction::SelectFirst;
-        case KeyEnd:
-            return TableAction::SelectLast;
-        case KeyPageUp:
-            return TableAction::SelectPageUp;
-        case KeyPageDown:
-            return TableAction::SelectPageDown;
-        default:
-            return TableAction::None;
+Str TableContext() {
+    return StrL("DataTable");
+}
+
+void TableInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
     }
+    bound = KeymapGeneration();
+    const char* ctx = "DataTable";
+    KeyBinding bindings[] = {
+        {"escape", action::Cancel(), ctx},
+        {"up", action::SelectUp(), ctx},
+        {"down", action::SelectDown(), ctx},
+        {"left", action::SelectPrevColumn(), ctx},
+        {"right", action::SelectNextColumn(), ctx},
+        {"home", action::SelectFirst(), ctx},
+        {"end", action::SelectLast(), ctx},
+        {"pageup", action::SelectPageUp(), ctx},
+        {"pagedown", action::SelectPageDown(), ctx},
+        {"tab", action::SelectNextColumn(), ctx},
+        {"shift-tab", action::SelectPrevColumn(), ctx},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+TableAction TableActionOf(uint32_t id) {
+    if (id == action::SelectUp()) {
+        return TableAction::SelectPrev;
+    }
+    if (id == action::SelectDown()) {
+        return TableAction::SelectNext;
+    }
+    if (id == action::SelectPrevColumn()) {
+        return TableAction::SelectPrevColumn;
+    }
+    if (id == action::SelectNextColumn()) {
+        return TableAction::SelectNextColumn;
+    }
+    if (id == action::SelectFirst()) {
+        return TableAction::SelectFirst;
+    }
+    if (id == action::SelectLast()) {
+        return TableAction::SelectLast;
+    }
+    if (id == action::SelectPageUp()) {
+        return TableAction::SelectPageUp;
+    }
+    if (id == action::SelectPageDown()) {
+        return TableAction::SelectPageDown;
+    }
+    if (id == action::Cancel()) {
+        return TableAction::Cancel;
+    }
+    return TableAction::None;
 }
 
 ColumnSort TableNextSort(ColumnSort s) {
@@ -542,6 +575,36 @@ void TableState::OnScrollXY(TableState* self, Ctx* cx, const ScrollEvent* ev) {
     self->scrollY = ev->offsetY;
     self->scrollX = ev->offsetX;
     Notify(cx);
+}
+
+void TableOnAction(TableState* self, Ctx* cx, const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    TableAction act = TableActionOf(ev->action);
+    if (act == TableAction::None) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    TablePerform(self, cx, act);
+}
+
+void TableBindKeys(Ctx* cx, El* root, Entity<TableState> state) {
+    if (!cx || !root || !state.IsValid()) {
+        return;
+    }
+    TableInitKeys();
+    Listener onAction = ListenTo(state, &TableOnAction);
+    root->KeyContext(TableContext())
+        ->OnAction(action::Cancel(), onAction)
+        ->OnAction(action::SelectUp(), onAction)
+        ->OnAction(action::SelectDown(), onAction)
+        ->OnAction(action::SelectPrevColumn(), onAction)
+        ->OnAction(action::SelectNextColumn(), onAction)
+        ->OnAction(action::SelectFirst(), onAction)
+        ->OnAction(action::SelectLast(), onAction)
+        ->OnAction(action::SelectPageUp(), onAction)
+        ->OnAction(action::SelectPageDown(), onAction);
 }
 
 } // namespace gpui

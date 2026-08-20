@@ -229,6 +229,7 @@ El* Select::IntoEl() {
         // and the empty state are all its own.
         SearchableList* list =
             SearchableList::New(cx, StrDup(a, fmt("%s-list", id)), state, query)
+                ->InSelect(true)
                 ->Items(items, nItems)
                 ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width : 240))
                 ->CheckIcon(checkIcon);

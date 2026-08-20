@@ -10,27 +10,9 @@ struct TreeStory {
     Str message = {};
 
     static El* Render(TreeStory* self, Ctx* cx);
-    static void OnKey(TreeStory* self, Ctx* cx, const KeyEvent* ev);
     static void OnTreeEvent(TreeStory* self, Ctx* cx, const TreeEvent* ev);
     static void OnRevealRandom(TreeStory* self, Ctx* cx, const ClickEvent* ev);
 };
-
-// crates/base/src/tree.rs binds up, down, left, right and enter in the tree's
-// key context. The state does what each one means; this only has to name the
-// action and hand it over.
-void TreeStory::OnKey(TreeStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    TreeAction act = TreeActionForKey(ev->vk);
-    if (act == TreeAction::None) {
-        return;
-    }
-    TreeState* s = self->tree.Get(cx);
-    if (s) {
-        TreePerform(s, cx, act);
-    }
-}
 
 void TreeStory::OnTreeEvent(TreeStory* self, Ctx* cx, const TreeEvent* ev) {
     if (self->message.s) {
@@ -188,4 +170,4 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     return page;
 }
 
-STORY_PAGE_KEYS(StoryTree, TreeStory);
+STORY_PAGE(StoryTree, TreeStory);

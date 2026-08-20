@@ -1,5 +1,6 @@
 #include "ui/searchable_list.h"
 #include "base/actions.h"
+#include "base/list.h"
 #include "base/select.h"
 #include "ui/select.h"
 #include "ui/input.h"
@@ -210,6 +211,10 @@ SearchableList* SearchableList::MaxH(float v) {
     maxH = v;
     return this;
 }
+SearchableList* SearchableList::InSelect(bool v) {
+    inSelect = v;
+    return this;
+}
 SearchableList* SearchableList::CheckIcon(IconName n) {
     checkIcon = n;
     return this;
@@ -330,6 +335,21 @@ El* SearchableList::IntoEl() {
         box->Child(
             Div(a)->W(kFill)->BorderT(1, th.border)->Pad(4)->Child(footer));
     }
+    // The list's own key context, for one that is not inside a select. The
+    // rows are focusable, and so is the box, so a chord finds it whether a
+    // row was clicked or the list was tabbed to.
+    if (!inSelect) {
+        ListInitKeys();
+        Listener onAction = ListenTo(state, &SearchableListState::OnListAction);
+        box->FocusId(HashClickId(id))
+            ->FocusRing(false)
+            ->KeyContext(ListContext())
+            ->OnAction(action::Cancel(), onAction)
+            ->OnAction(action::Confirm(), onAction)
+            ->OnAction(action::ConfirmSecondary(), onAction)
+            ->OnAction(action::SelectUp(), onAction)
+            ->OnAction(action::SelectDown(), onAction);
+    }
     return box;
 }
 
@@ -394,6 +414,26 @@ void SelectBindKeys(Ctx* cx, El* root, Entity<SearchableListState> state) {
         ->OnAction(action::Confirm(), onAction)
         ->OnAction(action::ConfirmSecondary(), onAction)
         ->OnAction(action::Cancel(), onAction);
+}
+
+void SearchableListState::OnListAction(SearchableListState* self, Ctx* cx,
+                                       const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    ListKeyAction act = ListActionOf(ev->action);
+    if (act.action == ListAction::None) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    if (act.action == ListAction::Confirm) {
+        if (self->list.selected >= 0 && self->list.selected < self->nMatches) {
+            OnRowClick(self, cx, nullptr, self->list.selected);
+        }
+        return;
+    }
+    ListPerform(&self->list, cx, act.action, act.secondary);
+    Notify(cx);
 }
 
 } // namespace component

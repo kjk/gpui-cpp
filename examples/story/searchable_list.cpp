@@ -26,7 +26,6 @@ struct SearchableListStory {
     bool seeded = false;
 
     static El* Render(SearchableListStory* self, Ctx* cx);
-    static void OnKey(SearchableListStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 // on_confirm: the list has already applied the change; this is only what the
@@ -44,31 +43,6 @@ static void FocusMultiQuery(SearchableListStory* self, Ctx* cx,
                             const ClickEvent*) {
     self->multiQuery.focused = true;
     self->singleQuery.focused = false;
-    Notify(cx);
-}
-
-// The list's own key context: up and down walk the rows, Enter takes one.
-void SearchableListStory::OnKey(SearchableListStory* self, Ctx* cx,
-                                const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    ListKeyAction act = ListActionForKey(ev->vk, ev->ctrl);
-    if (act.action == ListAction::None) {
-        return;
-    }
-    component::SearchableListState* s =
-        self->multiQuery.focused ? self->multi.Get(cx) : self->single.Get(cx);
-    if (!s) {
-        return;
-    }
-    if (act.action == ListAction::Confirm) {
-        if (s->list.selected >= 0 && s->list.selected < s->nMatches) {
-            component::SearchableListClick(s, s->matches[s->list.selected]);
-        }
-    } else {
-        ListPerform(&s->list, cx, act.action, act.secondary);
-    }
     Notify(cx);
 }
 
@@ -152,4 +126,4 @@ El* SearchableListStory::Render(SearchableListStory* self, Ctx* cx) {
     return page;
 }
 
-STORY_PAGE_KEYS(StorySearchableList, SearchableListStory);
+STORY_PAGE(StorySearchableList, SearchableListStory);

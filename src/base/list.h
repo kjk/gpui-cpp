@@ -45,7 +45,15 @@ struct ListKeyAction {
     bool secondary = false;
 };
 
-ListKeyAction ListActionForKey(int key, bool secondary);
+// list.rs::init: escape, enter, secondary-enter, up and down in the "List"
+// key context.
+void ListInitKeys();
+Str ListContext();
+
+// The action, read as what the list does about it. Rust's Confirm carries a
+// field — `Confirm { secondary }`, bound twice — so the two bindings are two
+// names here and the flag comes back beside the answer.
+ListKeyAction ListActionOf(uint32_t id);
 
 const int kMaxListSections = 16;
 
@@ -142,6 +150,14 @@ int ListPrevIndex(const ListState* s);
 
 // The action, applied to the state and reported through `onEvent`.
 void ListPerform(ListState* s, Ctx* cx, ListAction act, bool secondary);
+
+// The five bindings, arriving as actions on the element that declares the
+// context. Rust hangs one on_action per action off the list; there is one id
+// to switch on here.
+void ListOnAction(ListState* self, Ctx* cx, const ActionEvent* ev);
+
+// Declare the "List" key context on `root` and hang the handlers off it.
+void ListBindKeys(Ctx* cx, El* root, Entity<ListState> state);
 
 // A click on a row. Rust's on_click clears the right-clicked row, selects
 // this one and confirms it in one go — a click is a Select and a Confirm.

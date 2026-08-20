@@ -17,7 +17,11 @@ enum class TreeAction : uint8_t {
     Confirm
 };
 
-TreeAction TreeActionForKey(int key);
+// tree.rs::init: up, down, left and right in the "Tree" key context, plus
+// the enter its on_action_confirm answers to.
+void TreeInitKeys();
+Str TreeContext();
+TreeAction TreeActionOf(uint32_t id);
 
 // Where Up and Down move the selection. Both wrap, and both treat an unset
 // selection as 0 before stepping — which is why Up from nothing lands on the
@@ -117,6 +121,9 @@ void TreeSetSelected(TreeState* s, Ctx* cx, int entryIx);
 // opens it and a press on a leaf only selects.
 void TreeClickEntry(TreeState* s, Ctx* cx, int entryIx);
 void TreePerform(TreeState* s, Ctx* cx, TreeAction act);
+
+void TreeOnAction(TreeState* self, Ctx* cx, const ActionEvent* ev);
+void TreeBindKeys(Ctx* cx, El* root, Entity<TreeState> state);
 
 struct Tree {
     static El* New(Ctx* cx);
