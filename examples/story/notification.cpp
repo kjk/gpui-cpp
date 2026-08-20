@@ -1,12 +1,62 @@
 #include "Story.h"
 
+// The toolbar's two dropdowns, and what each of their rows does.
+enum {
+    NotifMenuPlacement = 1,
+    NotifMenuMaxItems
+};
+enum {
+    NotifActPlacement = 3500,
+    NotifActMaxItems = 3520
+};
+
+// ANCHORS, and MAX_ITEMS.
+static const component::NotificationAnchor kAnchors[] = {
+    component::NotificationAnchor::TopLeft,
+    component::NotificationAnchor::TopCenter,
+    component::NotificationAnchor::TopRight,
+    component::NotificationAnchor::LeftCenter,
+    component::NotificationAnchor::RightCenter,
+    component::NotificationAnchor::BottomLeft,
+    component::NotificationAnchor::BottomCenter,
+    component::NotificationAnchor::BottomRight,
+};
+static const char* const kAnchorNames[] = {
+    "TopLeft",     "TopCenter",  "TopRight",     "LeftCenter",
+    "RightCenter", "BottomLeft", "BottomCenter", "BottomRight"};
+static const int kNAnchors = 8;
+static const int kMaxItems[] = {1, 2, 3, 5, 10};
+static const int kNMaxItems = 5;
+
 struct NotificationStory {
     // NotificationList is a view in Rust, held by Root and reached through
     // `window.notifications(cx)`. It is the app's here for the same reason:
     // the page pushes into it, but a notification is the window's and outlives
     // leaving this page.
+    int openMenu = 0;
+
     static El* Render(NotificationStory* self, Ctx* cx);
 };
+
+static void NotifMenuOpen(NotificationStory* self, Ctx* cx, const ClickEvent*,
+                          intptr_t which) {
+    self->openMenu = self->openMenu == (int)which ? 0 : (int)which;
+    Notify(cx);
+}
+
+// Both dropdowns write into the list itself, which is where Rust keeps them
+// (Theme::notification.placement / max_items).
+static void NotifMenuAct(NotificationStory* self, Ctx* cx, const ClickEvent*,
+                         intptr_t act) {
+    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
+    if (st && act >= NotifActMaxItems) {
+        st->maxItems = kMaxItems[act - NotifActMaxItems];
+    } else if (st && act >= NotifActPlacement) {
+        st->placement = kAnchors[act - NotifActPlacement];
+    }
+    self->openMenu = 0;
+    Notify(cx);
+}
 
 // What each button pushes. The id is 0 for a notification that stacks and a
 // fixed one for the unique and keyed ones, which is what NotificationId does
@@ -143,9 +193,55 @@ static void DismissAll(NotificationStory*, Ctx* cx, const ClickEvent*) {
     Notify(cx);
 }
 
-El* NotificationStory::Render(NotificationStory*, Ctx* cx) {
+El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     Arena* a = cx->a;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
+
+    // story_toolbar_group(): the placement and max-items dropdowns.
+    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
+    int placementIx = 2, maxIx = 4;
+    for (int i = 0; i < kNAnchors; i++) {
+        if (st && st->placement == kAnchors[i]) {
+            placementIx = i;
+        }
+    }
+    for (int i = 0; i < kNMaxItems; i++) {
+        if (st && st->maxItems == kMaxItems[i]) {
+            maxIx = i;
+        }
+    }
+    Listener openMenu = Listen(cx, &NotifMenuOpen);
+    Listener act = Listen(cx, &NotifMenuAct);
+    El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+    El* group = StoryToolbarGroup(cx);
+    StoryToolbarOpt anchorRows[kNAnchors];
+    for (int i = 0; i < kNAnchors; i++) {
+        anchorRows[i].label = kAnchorNames[i];
+        anchorRows[i].checked = placementIx == i;
+        anchorRows[i].act = NotifActPlacement + i;
+    }
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("placement"),
+        StoryFmt(cx, "Placement: %s", kAnchorNames[placementIx]),
+        self->openMenu == NotifMenuPlacement,
+        ListenerArg(openMenu, NotifMenuPlacement), anchorRows, kNAnchors, act));
+    group->Child(StoryToolbarDivider(cx));
+    StoryToolbarOpt maxRows[kNMaxItems];
+    for (int i = 0; i < kNMaxItems; i++) {
+        maxRows[i].label = i == 0   ? "1"
+                           : i == 1 ? "2"
+                           : i == 2 ? "3"
+                           : i == 3 ? "5"
+                                    : "10";
+        maxRows[i].checked = maxIx == i;
+        maxRows[i].act = NotifActMaxItems + i;
+    }
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("max-items"), StoryFmt(cx, "Max items: %d", kMaxItems[maxIx]),
+        self->openMenu == NotifMenuMaxItems,
+        ListenerArg(openMenu, NotifMenuMaxItems), maxRows, kNMaxItems, act));
+    toolbarRow->Child(group);
+    page->Child(toolbarRow);
 
     El* def = StorySection(cx, "Default", "Show a short message.");
     StorySectionAdd(def, component::Button::New(cx, StrL("show-notify-0"))
@@ -259,28 +355,14 @@ El* NotificationStory::Render(NotificationStory*, Ctx* cx) {
     El* place = StorySection(cx, "Placement per notification",
                              "Override the global placement for a single "
                              "notification.");
-    struct AnchorSpec {
-        const char* label;
-        component::NotificationAnchor anchor;
-    };
-    static const AnchorSpec kAnchors[] = {
-        {"TopLeft", component::NotificationAnchor::TopLeft},
-        {"TopCenter", component::NotificationAnchor::TopCenter},
-        {"TopRight", component::NotificationAnchor::TopRight},
-        {"LeftCenter", component::NotificationAnchor::LeftCenter},
-        {"RightCenter", component::NotificationAnchor::RightCenter},
-        {"BottomLeft", component::NotificationAnchor::BottomLeft},
-        {"BottomCenter", component::NotificationAnchor::BottomCenter},
-        {"BottomRight", component::NotificationAnchor::BottomRight},
-    };
     El* anchorRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
-    for (size_t i = 0; i < sizeof(kAnchors) / sizeof(kAnchors[0]); i++) {
+    for (int i = 0; i < kNAnchors; i++) {
         anchorRow
             ->Child(component::Button::New(
-                        cx, StoryFmt(cx, "show-notify-%s", kAnchors[i].label))
-                        ->OnClick(Listen(cx, &ShowNotify, 30 + (int)i))
+                        cx, StoryFmt(cx, "show-notify-%s", kAnchorNames[i]))
+                        ->OnClick(Listen(cx, &ShowNotify, 30 + i))
                         ->Outline()
-                        ->Label(Str(kAnchors[i].label))
+                        ->Label(Str(kAnchorNames[i]))
                         ->IntoEl());
     }
     StorySectionAdd(place, anchorRow);
