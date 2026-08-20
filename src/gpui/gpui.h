@@ -884,6 +884,9 @@ struct Style {
     // reaches through the thing they belong to rather than one at a time.
     int tabIndex = 0;
     bool tabStop = true;
+    // div().key_context(".."): the name a keystroke is resolved against while
+    // focus is anywhere in this subtree. Hashed, since that is all an id is.
+    uint32_t keyContext = 0;
     // FocusableExt::focus_ring: whether a focused element shows the focus
     // appearance at all. Rust gates the whole `focus_ring_style` call on it,
     // so turning it off drops the tinted border along with the ring — a
@@ -893,8 +896,29 @@ struct Style {
     Str tooltip;
 };
 
+// One `on_action` handler. The tree is frame-arena, so a handful of these
+// chained off an element costs a pointer each and dies with the frame.
+struct ActionSlot {
+    uint32_t action = 0;
+    Listener fn = {};
+    ActionSlot* next = nullptr;
+};
+
+// What an action handler is called with. Rust hands over the action itself,
+// which carries whatever fields it was declared with; an action here is a
+// name, so this is the name and the one thing a handler answers back.
+struct ActionEvent {
+    uint32_t action = 0;
+    // cx.propagate(): the handler looked and did not want it, so the search
+    // carries on outwards. Not setting it is Rust's default, which stops.
+    bool propagate = false;
+};
+
 struct El {
     ElKind kind = ElKind::Div;
+    // The frame arena this was built on, so a builder that has to allocate —
+    // an action handler's slot — has one without being handed it again.
+    Arena* arena = nullptr;
     Style style;
     Str id;
     Str text;
@@ -909,6 +933,7 @@ struct El {
     // the element and again when it leaves, never in between.
     Listener onHover;
     Listener onScroll;
+    ActionSlot* actions = nullptr;
     // window.on_mouse_event::<MouseDownEvent> bound to one element, which is
     // what `div().on_mouse_down(..)` is. A press runs this before the click
     // listener above; unlike the click, it carries the full MouseDownEvent.
@@ -1128,6 +1153,10 @@ struct El {
     El* HoverBg(Rgba c);
     El* HoverFg(Rgba c);
     El* FocusId(int v);
+    El* KeyContext(Str name);
+    // on_action::<A>(..). The listener is called with an ActionEvent; setting
+    // its `propagate` passes the action on outwards, which is cx.propagate().
+    El* OnAction(uint32_t action, Listener fn);
     El* TabIndex(int v);
     El* TabStop(bool v);
     El* FocusRing(bool v);
@@ -1318,7 +1347,26 @@ struct FocusRect {
     int trapId = 0;
     int tabIndex = 0;
     bool tabStop = true;
+    // Where this element sits in the frame's dispatch list. Rust walks the
+    // real tree to find what is above a focused handle; the tree here is gone
+    // by the time a key arrives, so the walk is recorded while it is still
+    // there — see DispatchNode.
+    int dispatchIx = 0;
     Bounds bounds = {};
+};
+
+// One key context or one action handler, recorded in tree order. `subtreeEnd`
+// is one past the last node of the element's whole subtree, so a node is
+// above position `p` exactly when it was written before `p` and its subtree
+// still has not closed: that is an ancestor test that does not care whether
+// the elements in between contributed nodes of their own. Walking backwards
+// from `p` visits them innermost first, which is the order Rust reads a
+// dispatch path in.
+struct DispatchNode {
+    int subtreeEnd = 0;
+    uint32_t context = 0;
+    uint32_t action = 0;
+    Listener fn = {};
 };
 
 // ─── UTF-8 scanning ───────────────────────────────────────────────────────
@@ -2143,6 +2191,8 @@ struct Window {
     // after the focusables are collected. 0 when nothing asked.
     int pendingTrap = 0;
     Vec<KeyedSlot> keyed;
+    // The frame's key contexts and action handlers, in tree order.
+    Vec<DispatchNode> dispatch;
     Vec<MotionSlotRec> motionSlots;
     WinOpts opts = {};
     // Window-level subscriptions bound to view entities.
@@ -2558,6 +2608,17 @@ int FocusNext(Window* win, int trapId, bool backward);
 // Move the focus. Everything that focuses goes through here, so the
 // generation a keystroke is stamped with counts every move.
 void WindowSetFocusId(Window* win, int id);
+// The action a keystroke resolves to for whatever has focus, and the handlers
+// it is then offered to. Answers true when one of them kept it — Rust's
+// `dispatch_action` plus the `cx.propagate()` that decides how far it goes.
+bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
+                             bool alt);
+// cx.on_action: a handler that belongs to the application rather than to any
+// element. Tried after the focused element's chain has passed on the action,
+// which is where Rust's App-level handlers sit too. A plain function pointer,
+// since these are the framework's own and have no view to update.
+using ActionFn = void (*)(Window* win, ActionEvent* ev);
+void AppOnAction(uint32_t action, ActionFn fn);
 void AppQuit(Window* win);
 void AppInvalidate(Window* win);
 void AppMinimize(Window* win);
