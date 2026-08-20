@@ -153,12 +153,20 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
                    (int)(sizeof(kLanguages) / sizeof(char*)));
         BuildItems(SelAppearance, kCodes,
                    (int)(sizeof(kCodes) / sizeof(char*)));
-        // The first select opens with a value already picked, as the Rust
-        // story does.
+        // The three selects Rust seeds with `Some(IndexPath::default())`
+        // open with a value already picked: the country, and the two that
+        // carry a title prefix.
         component::SearchableListState* country = self->sel[SelCountry].Get(cx);
         if (country) {
             country->selected[0] = 5;
             country->nSelected = 1;
+        }
+        for (int which : {SelUi1, SelMenuH}) {
+            component::SearchableListState* st = self->sel[which].Get(cx);
+            if (st) {
+                st->selected[0] = 0;
+                st->nSelected = 1;
+            }
         }
     }
     if (self->phone.focused) {
