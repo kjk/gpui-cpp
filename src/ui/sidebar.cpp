@@ -177,7 +177,9 @@ El* SidebarMenuItem::IntoEl(Str id) {
             children[i]->collapsed = collapsed;
             sub->Child(children[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
         }
-        root->Child(sub);
+        // ml_3p5: the rule down the submenu sits in from the parent's edge,
+        // under the icon column rather than beside it.
+        root->Child(Div(a)->PadL(14)->W(kFill)->Child(sub));
     }
     return root;
 }
