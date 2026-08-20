@@ -12,6 +12,47 @@ Avatar* Avatar::New(Ctx* cx) {
     return v;
 }
 
+Str AvatarInitials(char* out, int cap, Str name) {
+    // The first letter of each of the first two words.
+    int n = 0;
+    bool atWord = true;
+    for (int i = 0; i < name.len && n < 2; i++) {
+        char c = name.s[i];
+        if (c == ' ') {
+            atWord = true;
+            continue;
+        }
+        if (atWord) {
+            out[n++] = c;
+            atWord = false;
+        }
+    }
+    // One word only: its first two letters instead.
+    if (n == 1) {
+        n = 0;
+        for (int i = 0; i < name.len && n < 2; i++) {
+            out[n++] = name.s[i];
+        }
+    }
+    if (n > cap - 1) {
+        n = cap - 1;
+    }
+    for (int i = 0; i < n; i++) {
+        if (out[i] >= 'a' && out[i] <= 'z') {
+            out[i] = (char)(out[i] - 'a' + 'A');
+        }
+    }
+    out[n] = 0;
+    return Str{out, n};
+}
+
+Avatar* Avatar::Name(Str s) {
+    char buf[8];
+    Str sh = AvatarInitials(buf, (int)sizeof(buf), s);
+    initials = StrDup(a, sh);
+    return this;
+}
+
 Avatar* Avatar::Initials(Str s) {
     initials = s;
     return this;
@@ -73,18 +114,20 @@ Avatar* Avatar::Placeholder(IconName n) {
     return this;
 }
 
-static Rgba AvatarHue(Str initials) {
+// avatar.rs default_color: the theme's blue turned to one of 360/15 hues,
+// picked by hashing the initials. Rust hashes with gpui::hash, which is
+// FxHash and not something to reproduce, so the same name lands on a
+// different one of the same 24 hues.
+static const uint32_t kAvatarColorCount = 360 / 15;
+
+static Rgba AvatarHue(const Theme& th, Str initials) {
     uint32_t h = 2166136261u;
     for (int i = 0; i < initials.len; i++) {
         h ^= (uint8_t)initials.s[i];
         h *= 16777619u;
     }
-    static const Rgba kCols[] = {
-        Rgb(0x3b, 0x82, 0xf6), Rgb(0x22, 0xc5, 0x5e), Rgb(0xa8, 0x55, 0xf7),
-        Rgb(0xf9, 0x73, 0x16), Rgb(0x06, 0xb6, 0xd4), Rgb(0xec, 0x48, 0x99),
-        Rgb(0xe1, 0x1d, 0x48), Rgb(0x65, 0x43, 0xd9),
-    };
-    return kCols[h % (sizeof(kCols) / sizeof(kCols[0]))];
+    float deg = (float)((h % kAvatarColorCount) * 15);
+    return RgbaWithHue(th.blue, deg / 360.f);
 }
 
 El* Avatar::IntoEl() {
@@ -96,18 +139,18 @@ El* Avatar::IntoEl() {
     float innerSize = size - inset * 2;
     bool named = initials.s && initials.len > 0;
     Rgba fill = th.secondary;
-    Rgba fg = th.mutedFg;
+    Rgba text = th.mutedFg;
     if (hasBg) {
         fill = bg;
-        fg = th.foreground;
+        text = th.foreground;
     } else if (named) {
-        Rgba hue = AvatarHue(initials);
+        Rgba hue = AvatarHue(th, initials);
         fill = RgbaOpacity(hue, 0.2f);
-        fg = hue;
+        text = hue;
     }
     float txt = textPx > 0 ? textPx : size * 0.35f;
-    El* inner = named ? TextEl(a, initials)->Font(txt)->Fg(fg)->Semibold()
-                      : IconEl(a, placeholder, size * 0.6f)->Fg(fg);
+    El* inner = named ? TextEl(a, initials)->Font(txt)->Fg(text)->Semibold()
+                      : IconEl(a, placeholder, size * 0.6f)->Fg(text);
     El* fb = AvatarFallback::New(cx)
                  ->W(innerSize)
                  ->H(innerSize)
@@ -129,6 +172,61 @@ El* Avatar::IntoEl() {
         el->Pad(inset)->Border(borderW, bd);
     }
     return el;
+}
+
+AvatarGroup* AvatarGroup::New(Ctx* cx) {
+    AvatarGroup* g = ArenaNew<AvatarGroup>(cx->a);
+    g->a = cx->a;
+    g->cx = cx;
+    return g;
+}
+AvatarGroup* AvatarGroup::Child(Avatar* av) {
+    if (av && n < 16) {
+        avatars[n++] = av;
+    }
+    return this;
+}
+AvatarGroup* AvatarGroup::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+AvatarGroup* AvatarGroup::Limit(int v) {
+    limit = v;
+    return this;
+}
+AvatarGroup* AvatarGroup::Ellipsis() {
+    ellipsis = true;
+    return this;
+}
+
+El* AvatarGroup::IntoEl() {
+    float sz = AvatarSizePx(size);
+    // item_ml = -avatar_size * 0.3, so each avatar past the first overlaps
+    // the one before it by that much; the ⋯ chip sits ml_1 past the last.
+    float step = sz - sz * 0.3f;
+    int shown = n < limit ? n : limit;
+    bool more = ellipsis && n > limit;
+    float chipLeft = shown * step + 4;
+    float w = more ? chipLeft + sz : sz + (shown > 0 ? (shown - 1) * step : 0);
+    El* box = Div(a)->H(sz)->W(w);
+    // flex_row_reverse: the row is built right to left, so the leftmost
+    // avatar is the last child and paints over its neighbour. Absolute
+    // placement gets the same stack without a reversed row or a margin.
+    if (more) {
+        box->Child(Avatar::New(cx)
+                       // Avatar::name("⋯"): a name, so the chip is
+                       // tinted and lettered like any other fallback.
+                       ->Initials(StrL("⋯"))
+                       ->WithSize(size)
+                       ->IntoEl()
+                       ->Absolute()
+                       ->Left(chipLeft));
+    }
+    for (int i = shown - 1; i >= 0; i--) {
+        box->Child(
+            avatars[i]->WithSize(size)->IntoEl()->Absolute()->Left(i * step));
+    }
+    return box;
 }
 
 } // namespace component

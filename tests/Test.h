@@ -72,6 +72,7 @@ void TestSetting();
 void TestSearchableList();
 void TestSidebar();
 void TestWindowBorder();
+void TestAvatar();
 void TestKbd();
 void TestNativeMenu();
 void TestTiles();

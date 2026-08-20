@@ -1,113 +1,82 @@
 #include "Story.h"
 
+// AVATARS in avatar_story.rs is eleven github URLs. Fetching an https URL
+// needs a socket and a TLS stack this tree does not have, so each one is a
+// name instead and the avatar falls back to its initials — which is the same
+// path Rust takes for the two entries in Fallback.
+static const char* kNames[] = {
+    "Jason Lee", "huacnlee",  "Tim Wang",     "Alice Brown",
+    "Chen Dan",  "Eve Fox",   "Grace Hopper", "Ivan Jones",
+    "Kim Lu",    "Mia Novak", "Omar Perez",
+};
+static const int kNameCount = (int)(sizeof(kNames) / sizeof(kNames[0]));
+
 struct AvatarStory {
     StoryToolbarState toolbar;
 
     static El* Render(AvatarStory* self, Ctx* cx);
 };
 
-static El* Face(Ctx* cx, AvatarStory* self, const char* initials) {
-    return component::Avatar::New(cx)
-        ->Initials(Str(initials))
-        ->WithSize(self->toolbar.size)
-        ->IntoEl();
-}
-
-static El* FacePx(Ctx* cx, const char* initials, float px, float radius,
-                  float borderW, Rgba borderC) {
-    component::Avatar* av =
-        component::Avatar::New(cx)->Initials(Str(initials))->Size(px);
-    if (radius >= 0) {
-        av->Radius(radius);
-    }
-    if (borderW > 0) {
-        av->Border(borderW, borderC);
-    }
-    return av->IntoEl();
-}
-
-static El* AvatarRow(Ctx* cx, AvatarStory* self, const char** names, int n,
-                     int limit, bool ellipsis) {
-    Arena* a = cx->a;
-    float sz = component::AvatarSizePx(self->toolbar.size);
-    int shown = n;
-    if (limit > 0 && n > limit) {
-        shown = limit;
-    }
-    // AvatarGroup: item_ml = -avatar_size * 0.3, and the ⋯ chip adds ml_1.
-    float step = sz * 0.7f;
-    int extra = (ellipsis && n > shown) ? 1 : 0;
-    float extraLeft = shown * step + 4;
-    El* box =
-        Div(a)->H(sz)->W(extra ? extraLeft + sz : sz + (shown - 1) * step);
-    // flex_row_reverse lays the row right to left, so the leftmost avatar
-    // paints last and sits on top.
-    if (extra) {
-        // AvatarGroup asks for the secondary background, but naming the chip
-        // ⋯ puts it back on the tinted initials path, as any other name does.
-        box->Child(component::Avatar::New(cx)
-                       ->Initials(StrL("\xE2\x8B\xAF"))
-                       ->WithSize(self->toolbar.size)
-                       ->IntoEl()
-                       ->Absolute()
-                       ->Left(extraLeft));
-    }
-    for (int i = shown - 1; i >= 0; i--) {
-        box->Child(component::Avatar::New(cx)
-                       ->Initials(Str(names[i]))
-                       ->WithSize(self->toolbar.size)
-                       ->IntoEl()
-                       ->Absolute()
-                       ->Left(i * step));
-    }
-    return box;
+static component::Avatar* Face(Ctx* cx, const char* name) {
+    return component::Avatar::New(cx)->Name(Str(name));
 }
 
 El* AvatarStory::Render(AvatarStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    UiSize size = self->toolbar.size;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
+    // Image and Fallback are both .w_128().
     El* img = StorySection(cx, "Image", "Use an image when one is available.");
-    El* imgRow = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
-    imgRow->Child(Face(cx, self, "JL"));
-    imgRow->Child(Face(cx, self, "HU"));
-    StorySectionAdd(img, imgRow);
+    StorySectionBody(img)->W(512);
+    StorySectionAdd(img, Face(cx, kNames[0])->WithSize(size)->IntoEl());
+    StorySectionAdd(img, Face(cx, kNames[1])->WithSize(size)->IntoEl());
     page->Child(img);
 
     El* fb = StorySection(
         cx, "Fallback", "Show initials or an icon when no image is available.");
-    El* fbRow = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
-    fbRow->Child(Face(cx, self, "JL"));
-    fbRow->Child(
-        component::Avatar::New(cx)->WithSize(self->toolbar.size)->IntoEl());
-    fbRow->Child(component::Avatar::New(cx)
-                     ->Placeholder(IconName::Building2)
-                     ->WithSize(self->toolbar.size)
-                     ->IntoEl());
-    StorySectionAdd(fb, fbRow);
+    StorySectionBody(fb)->W(512);
+    StorySectionAdd(fb, Face(cx, kNames[0])->WithSize(size)->IntoEl());
+    StorySectionAdd(fb, component::Avatar::New(cx)->WithSize(size)->IntoEl());
+    StorySectionAdd(fb, component::Avatar::New(cx)
+                            ->Placeholder(IconName::Building2)
+                            ->WithSize(size)
+                            ->IntoEl());
     page->Child(fb);
 
-    static const char* kGroupA[] = {"JL", "HU", "TW", "AB", "CD", "EF"};
-    static const char* kGroupB[] = {"JL", "HU", "TW", "AB", "CD", "EF",
-                                    "GH", "IJ", "KL", "MN", "OP"};
+    // Group is .v_flex().w_128().items_center().gap_5().
     El* grp = StorySection(
         cx, "Group", "Groups can limit visible avatars and show overflow.");
-    El* grpCol = Div(a)->FlexCol()->Gap(20)->ItemsCenter();
-    grpCol->Child(AvatarRow(cx, self, kGroupA, 6, 3, false));
-    grpCol->Child(AvatarRow(cx, self, kGroupB, 11, 5, true));
-    StorySectionAdd(grp, grpCol);
+    StorySectionBody(grp)->FlexCol()->W(512)->ItemsCenter()->Gap(20);
+    // No limit: AvatarGroup's own default of 3 still applies, so six
+    // avatars show three.
+    component::AvatarGroup* g1 = component::AvatarGroup::New(cx)
+                                     ->WithSize(size);
+    for (int i = 0; i < 6; i++) {
+        g1->Child(Face(cx, kNames[i]));
+    }
+    StorySectionAdd(grp, g1->IntoEl());
+    component::AvatarGroup* g2 =
+        component::AvatarGroup::New(cx)->WithSize(size)->Limit(5)->Ellipsis();
+    for (int i = 0; i < kNameCount; i++) {
+        g2->Child(Face(cx, kNames[i]));
+    }
+    StorySectionAdd(grp, g2->IntoEl());
     page->Child(grp);
 
     El* shape = StorySection(cx, "Custom shape",
                              "Set an explicit size and corner radius.");
-    StorySectionAdd(shape, FacePx(cx, "JL", 100, 20, 1, cx->theme().border));
+    StorySectionAdd(shape,
+                    Face(cx, kNames[0])->Size(100)->Radius(20)->IntoEl());
     page->Child(shape);
 
     El* style = StorySection(cx, "Custom style",
                              "Add borders and shadows to the image.");
-    StorySectionAdd(style,
-                    FacePx(cx, "TW", 100, -1, 3, cx->theme().foreground));
+    StorySectionAdd(
+        style,
+        Face(cx, kNames[2])->Size(100)->Border(3, th.foreground)->IntoEl());
     page->Child(style);
     return page;
 }

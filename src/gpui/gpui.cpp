@@ -78,6 +78,42 @@ Rgba RgbaHsla(float h, float s, float l, float a01) {
                 (uint8_t)(Clamp01(a01) * 255.f + 0.5f)};
 }
 
+void RgbaToHsla(Rgba c, float* h, float* s, float* l) {
+    float r = c.r / 255.f, g = c.g / 255.f, b = c.b / 255.f;
+    float mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    float mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    float d = mx - mn;
+    float hh = 0;
+    if (d > 0) {
+        if (mx == r) {
+            hh = fmodf((g - b) / d, 6.f);
+        } else if (mx == g) {
+            hh = (b - r) / d + 2.f;
+        } else {
+            hh = (r - g) / d + 4.f;
+        }
+        hh /= 6.f;
+        if (hh < 0) {
+            hh += 1.f;
+        }
+    }
+    float ll = (mx + mn) * 0.5f;
+    float ss = 0;
+    if (d > 0) {
+        float den = 1.f - fabsf(2.f * ll - 1.f);
+        ss = den > 0 ? d / den : 0;
+    }
+    *h = hh;
+    *s = ss;
+    *l = ll;
+}
+
+Rgba RgbaWithHue(Rgba c, float h01) {
+    float h = 0, s = 0, l = 0;
+    RgbaToHsla(c, &h, &s, &l);
+    return RgbaHsla(Clamp01(h01), s, l, c.a / 255.f);
+}
+
 const Theme& ThemeDark() {
     static Theme t;
     static bool init = false;

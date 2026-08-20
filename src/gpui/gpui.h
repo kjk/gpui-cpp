@@ -33,6 +33,11 @@ Rgba RgbaMix(Rgba a, Rgba b, float t);
 // gpui::hsla. h/s/l/a are 0..1 and are clamped, so a lightness computed from
 // scene coordinates cannot wrap around into a different hue.
 Rgba RgbaHsla(float h, float s, float l, float a01);
+// The other direction. h/s/l come back 0..1, the way gpui::Hsla holds them.
+void RgbaToHsla(Rgba c, float* h, float* s, float* l);
+// Colorize::hue: the same color turned to a new hue, keeping its saturation,
+// lightness and alpha.
+Rgba RgbaWithHue(Rgba c, float h01);
 
 // The text-field engine, in the input section below. El and HitRect name one
 // before it is defined, the way they name SliderState.
