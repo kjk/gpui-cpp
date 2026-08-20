@@ -147,7 +147,7 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
 
     El* btnRow = Div(a)->FlexRow()->Gap(12);
     btnRow->Child(component::Button::New(cx, StrL("select-item"))
-                      ->Label(StrL("Reveal Item"))
+                      ->Label(StrL("Select Item"))
                       ->Outline()
                       ->OnClick(Listen(cx, &TreeStory::OnRevealRandom))
                       ->IntoEl());
@@ -156,10 +156,11 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     El* sec = StorySection(cx, "File tree", nullptr);
     StorySectionSubTitle(
         sec, StoryTxt(cx,
-                      StrL("Click a folder to open it. Arrow keys move, "
-                           "left and right fold."),
+                      StrL("Press `enter` to rename. Right-click for context "
+                           "menu."),
                       16, th.mutedFg));
-    El* col = Div(a)->FlexCol()->W(480)->Gap(16);
+    StorySectionBody(sec)->W(480);
+    El* col = Div(a)->FlexCol()->W(kFill)->Gap(16);
     El* box = Div(a)->FlexCol()->W(kFill)->Pad(4)->Radius(th.radius)->Border(
         1, th.border);
     box->Child(
