@@ -81,3 +81,70 @@ static const float kStockOpen[] = {100.f, 110.f, 111.f, 116.f, 110.f, 115.f};
 static const float kStockHigh[] = {112.f, 112.f, 118.f, 120.f, 118.f, 125.f};
 static const float kStockLow[] = {95.f, 108.f, 110.f, 108.f, 105.f, 113.f};
 static const float kStockClose[] = {110.f, 111.f, 116.f, 110.f, 115.f, 123.f};
+
+// A node whose fixture row had no growth figure.
+static const float kTslaNoGrowth = 1e30f;
+
+// tsla-income-statement.json: two fiscal years of a TSLA income
+// statement, as the sankey the Rust story draws twice.
+struct TslaNode {
+    const char* name;
+    double value;
+    // The year-over-year change, or NaN where the fixture has none.
+    float growth;
+    Rgba color;
+};
+struct TslaLink {
+    int source;
+    int target;
+    double value;
+};
+
+static const TslaNode kTsla0Nodes[] = {
+    {"Automotive", 82056000000.0, -6.33304f, Rgb(0x5A, 0x74, 0xFF)},
+    {"Energy Generation and Storage", 12771000000.0, 26.62106f,
+     Rgb(0x5A, 0x74, 0xFF)},
+    {"Total Revenue", 94827000000.0, -2.93070f, Rgb(0x5A, 0x74, 0xFF)},
+    {"Gross Profit", 17094000000.0, -2.04011f, Rgb(0x35, 0xC1, 0x5C)},
+    {"Cost Of Revenues", 77733000000.0, -3.12438f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"Other", 862000000.0, kTslaNoGrowth, Rgb(0x35, 0xC1, 0x5C)},
+    {"Operating Income", 4355000000.0, -43.13879f, Rgb(0x35, 0xC1, 0x5C)},
+    {"Operating Exp.", 12739000000.0, 30.10928f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"Net Income", 3794000000.0, -46.49556f, Rgb(0x35, 0xC1, 0x5C)},
+    {"Income Tax Exp.", 1423000000.0, -22.53674f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"SG& A Exp.", 5834000000.0, 13.28155f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"R&D Exp.", 6411000000.0, 41.21145f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"Other", 494000000.0, kTslaNoGrowth, Rgb(0xFF, 0xA6, 0x1F)},
+};
+static const TslaLink kTsla0Links[] = {
+    {0, 2, 82056000000.0}, {1, 2, 12771000000.0}, {2, 3, 17094000000.0},
+    {2, 4, 77733000000.0}, {3, 6, 4355000000.0},  {3, 7, 12739000000.0},
+    {5, 8, 862000000.0},   {6, 8, 2932000000.0},  {6, 9, 1423000000.0},
+    {7, 10, 5834000000.0}, {7, 11, 6411000000.0}, {7, 12, 494000000.0},
+};
+static const TslaNode kTsla1Nodes[] = {
+    {"Automotive", 87604000000.0, -3.45390f, Rgb(0x5A, 0x74, 0xFF)},
+    {"Energy Generation and Storage", 10086000000.0, 67.12510f,
+     Rgb(0x5A, 0x74, 0xFF)},
+    {"Total Revenue", 97690000000.0, 0.94758f, Rgb(0x5A, 0x74, 0xFF)},
+    {"Gross Profit", 17450000000.0, -1.18913f, Rgb(0x35, 0xC1, 0x5C)},
+    {"Cost Of Revenues", 80240000000.0, 1.42454f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"Other", 1269000000.0, kTslaNoGrowth, Rgb(0x35, 0xC1, 0x5C)},
+    {"Operating Income", 7659000000.0, -13.85671f, Rgb(0x35, 0xC1, 0x5C)},
+    {"Operating Exp.", 9791000000.0, 11.65469f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"Net Income", 7091000000.0, -52.71721f, Rgb(0x35, 0xC1, 0x5C)},
+    {"Income Tax Exp.", 1837000000.0, 136.73265f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"SG& A Exp.", 5150000000.0, 7.29167f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"R&D Exp.", 4540000000.0, 14.38650f, Rgb(0xFF, 0xA6, 0x1F)},
+    {"Other", 101000000.0, kTslaNoGrowth, Rgb(0xFF, 0xA6, 0x1F)},
+};
+static const TslaLink kTsla1Links[] = {
+    {0, 2, 87604000000.0}, {1, 2, 10086000000.0}, {2, 3, 17450000000.0},
+    {2, 4, 80240000000.0}, {3, 6, 7659000000.0},  {3, 7, 9791000000.0},
+    {5, 8, 1269000000.0},  {6, 8, 5822000000.0},  {6, 9, 1837000000.0},
+    {7, 10, 5150000000.0}, {7, 11, 4540000000.0}, {7, 12, 101000000.0},
+};
+static const char* const kTslaPeriods[] = {"FY 2025", "FY 2024"};
+static const int kTslaStatementCount = 2;
+static const int kTslaNodeCount = 13;
+static const int kTslaLinkCount = 12;
