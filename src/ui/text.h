@@ -6,13 +6,21 @@
    and TextView::IntoEl walks it. md4c runs in the GitHub dialect, so tables,
    strikethrough, task lists and bare-URL autolinks all work.
 
-   This is the one markdown renderer in the tree. Rust has exactly one too —
-   everything that shows markdown goes through TextView — so a page that needs
-   it should come here rather than grow another parser.
+   Raw HTML is the other half. Rust parses it with html5ever and folds the
+   DOM into the same BlockNode tree (text/format/html.rs); here ui/html.cpp is
+   a small tokenizer that folds tags into the same MdNode tree, so an HTML
+   block inside markdown, an inline <b> or <a>, and a whole HTML document all
+   render through the one walk below.
+
+   This is the one rich-text renderer in the tree. Rust has exactly one too —
+   everything that shows markdown or HTML goes through TextView — so a page
+   that needs it should come here rather than grow another parser.
 
    Where it stops short of Rust: no syntax highlighting inside code blocks (no
-   tree-sitter here), no images, no link click handler, no strikethrough and
-   no table column alignment. */
+   tree-sitter here) and no images — an <img> or a ![]() contributes its alt
+   text, since nothing in this tree decodes a PNG or fetches a URL. Selection
+   is still per element (base/text_selection.cpp), not the window-wide one
+   text/window_selection.rs runs. */
 
 #include "ui/sizing.h"
 
@@ -20,8 +28,7 @@ namespace gpui {
 
 namespace component {
 
-// text/node.rs TextMark. The paint layer has no strikethrough, so `del` is
-// drawn in muted_foreground instead of struck through.
+// text/node.rs TextMark.
 enum MdMark : uint8_t {
     MdBold = 1 << 0,
     MdItalic = 1 << 1,
@@ -29,6 +36,9 @@ enum MdMark : uint8_t {
     MdDel = 1 << 3,
     MdUnderline = 1 << 4,
     MdLink = 1 << 5,
+    // <mark>: TextMark::highlight, painted with the theme's yellow behind it.
+    // Rust reads a color off the tag; this takes the default one.
+    MdHighlight = 1 << 6,
 };
 
 // One styled piece of a paragraph: node.rs's (text, TextMark) pair.
@@ -55,9 +65,22 @@ enum class MdKind : uint8_t {
     Row,
     Cell,
     Rule,
-    // A raw HTML block. Rust folds these to BlockNode::Unknown and renders an
-    // empty div; so does this.
+    // A raw HTML block inside markdown. Its children are what ui/html.cpp
+    // made of the raw text; Rust reaches the same place through
+    // markdown_ext.rs handing the html node to format::html.
     Html,
+    // An HTML container that is not a block of its own — div, section, li's
+    // wrapper, <figure>. BlockNode::Root in Rust: it contributes its
+    // children and no box.
+    Group,
+};
+
+// MD_ALIGN, repeated so ui/html.cpp does not have to include md4c.h.
+enum MdAlign : uint8_t {
+    MdAlignDefault = 0,
+    MdAlignLeft = 1,
+    MdAlignCenter = 2,
+    MdAlignRight = 3,
 };
 
 struct MdNode {
@@ -99,17 +122,30 @@ struct TextView {
     // Whether the text can be dragged over. Rust's TextView is selectable
     // through its own selection machinery; here it is El::Selectable.
     bool selectable = false;
+    // Whether `source` is HTML rather than markdown — TextView::html().
+    bool html = false;
+    // text_view.rs link_click_handler.
+    Listener onLink;
     // node.rs min_w_16: the floor a table column shrinks to. Above the floor
     // a column's width is a fraction of the table, proportional to the length
     // of its content, the way render_wrap_table distributes the space.
     float tableColW = 64;
 
+    // text_view.rs TextView::markdown / TextView::html.
     static TextView* New(Ctx* cx, Str source);
+    static TextView* NewHtml(Ctx* cx, Str source);
     TextView* Font(float px);
     TextView* HeadingFont(float px);
     TextView* Selectable(bool on = true);
     TextView* TableColumnWidth(float px);
     TextView* ParagraphGap(float px);
+    // text_view::LinkClickHandlerFn. The handler's intptr_t is the link's
+    // href as a NUL-terminated `const char*`; it points into the parse the
+    // frame was built from and is good for the length of the call, which is
+    // the same rule every other hit-test payload follows. Without a handler
+    // a link opens in the desktop's browser, which is what Rust's
+    // handle_link_click falls back to (cx.open_url).
+    TextView* OnLink(Listener fn);
     El* IntoEl();
 
   private:
@@ -120,13 +156,22 @@ struct TextView {
     El* Item(MdNode* n, Str marker, int depth);
     El* Table(MdNode* n);
     El* CodeBlock(MdNode* n);
+    // One styled word of a flow, with its marks applied and — for a link —
+    // the click that opens it.
+    El* Word(Str w, float font, Rgba color, uint8_t marks, int weight,
+             Str href);
     // The inline flow of a block, as a column of wrapping rows — a hard break
     // starts a new row. `weight` is 0 normal, 1 medium, 2 semibold, 3 bold.
-    El* Inline(MdNode* n, float font, Rgba color, int weight);
+    El* Inline(MdNode* n, float font, Rgba color, int weight,
+               uint8_t align = MdAlignDefault);
 };
 
 // Parses `source` into a block tree allocated from `a`. Exposed for tests.
 MdNode* MdParse(Arena* a, Str source);
+
+// "&amp;" -> "&", for the entities that show up in prose. Returns the text
+// unchanged when it is not an entity we know. Shared with ui/html.cpp.
+Str MdDecodeEntity(Arena* a, Str e);
 
 } // namespace component
 } // namespace gpui

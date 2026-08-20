@@ -29,6 +29,7 @@ const simpleExamples = [
   "table_in_scrollable",
   "text_selection",
   "markdown_table",
+  "rich_text",
 ];
 
 const knownTargets = ["system_monitor", "app_assets", "showcase", "story", "tests", ...simpleExamples] as const;

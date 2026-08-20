@@ -1,5 +1,7 @@
 #include "ui/text.h"
 
+#include "ui/html.h"
+
 #include "md4c.h"
 
 namespace gpui {
@@ -140,7 +142,8 @@ static uint32_t ParseDec(Str s) {
 }
 
 // "&amp;" -> "&". Returns the entity unchanged when it is not one we know.
-static Str DecodeEntity(Arena* a, Str e) {
+// ui/html.cpp decodes the entities in an attribute and in HTML text with it.
+Str MdDecodeEntity(Arena* a, Str e) {
     if (e.len < 3 || e.s[0] != '&' || e.s[e.len - 1] != ';') {
         return e;
     }
@@ -306,6 +309,43 @@ static int OnLeaveSpan(MD_SPANTYPE type, void* detail, void* ud) {
     return 0;
 }
 
+// One inline tag inside a paragraph. md4c hands `<b>` over as raw text and
+// leaves the meaning to us; Rust reaches the same tags through html5ever,
+// since markdown_ext.rs sends an mdast::Html node to format::html. A raw
+// HTML *block* is a node of its own and is parsed whole, below.
+static void MdInlineHtml(MdBuild* b, Str tag) {
+    if (b->cur->kind == MdKind::Html) {
+        // Inside a raw HTML block every byte is source, tags included.
+        AddText(b, tag);
+        return;
+    }
+    HtmlInlineTag t = HtmlParseInlineTag(b->a, tag);
+    if (!t.known) {
+        // An unknown tag is dropped, the way Rust drops what its own
+        // vocabulary does not cover.
+        return;
+    }
+    if (t.isBreak) {
+        AddText(b, StrL("\n"));
+        return;
+    }
+    if (t.isImage) {
+        AddText(b, t.alt);
+        return;
+    }
+    if (t.close) {
+        b->marks = (uint8_t)(b->marks & ~t.mark);
+        if (t.mark & MdLink) {
+            b->href = {};
+        }
+        return;
+    }
+    b->marks = (uint8_t)(b->marks | t.mark);
+    if (t.mark & MdLink) {
+        b->href = t.href;
+    }
+}
+
 static int OnText(MD_TEXTTYPE type, const MD_CHAR* txt, MD_SIZE size,
                   void* ud) {
     MdBuild* b = (MdBuild*)ud;
@@ -321,16 +361,46 @@ static int OnText(MD_TEXTTYPE type, const MD_CHAR* txt, MD_SIZE size,
             AddText(b, StrL(" "));
             break;
         case MD_TEXT_ENTITY:
-            AddText(b, DecodeEntity(b->a, s));
+            AddText(b, MdDecodeEntity(b->a, s));
             break;
         case MD_TEXT_HTML:
-            // Inline tags are dropped the way Rust drops mdast::Html.
+            MdInlineHtml(b, s);
             break;
         default:
             AddText(b, s);
             break;
     }
     return 0;
+}
+
+// A raw HTML block arrives as source text on an MdKind::Html node. Turning
+// it into children here rather than at render time means the parse cache
+// holds the finished tree, and it is the same hand-off Rust makes when
+// markdown_ext.rs gives an mdast::Html node to format::html.
+static void MdExpandHtml(Arena* a, MdNode* n) {
+    for (MdNode* c = n->first; c; c = c->next) {
+        MdExpandHtml(a, c);
+    }
+    if (n->kind != MdKind::Html || !n->runFirst) {
+        return;
+    }
+    int len = 0;
+    for (MdRun* r = n->runFirst; r; r = r->next) {
+        len += r->text.len;
+    }
+    char* buf = (char*)Alloc(a, len + 1);
+    if (!buf) {
+        return;
+    }
+    int at = 0;
+    for (MdRun* r = n->runFirst; r; r = r->next) {
+        memcpy(buf + at, r->text.s, (size_t)r->text.len);
+        at += r->text.len;
+    }
+    buf[at] = 0;
+    n->runFirst = nullptr;
+    n->runLast = nullptr;
+    HtmlParseInto(a, n, Str(buf, at));
 }
 
 MdNode* MdParse(Arena* a, Str source) {
@@ -352,6 +422,7 @@ MdNode* MdParse(Arena* a, Str source) {
     p.leave_span = OnLeaveSpan;
     p.text = OnText;
     md_parse(source.s, (MD_SIZE)source.len, &p, &b);
+    MdExpandHtml(a, doc);
     return doc;
 }
 
@@ -373,6 +444,9 @@ struct MdCacheSlot {
     Str source = {};
     MdNode* doc = nullptr;
     uint64_t used = 0; // lookup stamp for LRU; 0 == empty
+    // Which parser made `doc`. The same bytes are a different tree read as
+    // HTML than read as markdown, so it is part of the key.
+    bool html = false;
 };
 
 // One story page is on screen at a time and a page holds a handful of these.
@@ -405,7 +479,7 @@ static bool MdSourceEq(Str a, Str b) {
 // The tree for `source`, parsed only when it isn't cached already. Falls back
 // to the frame arena when there is no window to hang a cache off, which is
 // what the tests and any headless measuring pass see.
-static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source) {
+static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source, bool html) {
     MdCache* c = nullptr;
     if (cx && cx->win) {
         auto* slot = KeyedState<Entity<MdCache>>(
@@ -418,14 +492,14 @@ static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source) {
         }
     }
     if (!c) {
-        return MdParse(frame, source);
+        return html ? HtmlParse(frame, source) : MdParse(frame, source);
     }
 
     c->clock++;
     MdCacheSlot* lru = &c->slots[0];
     for (int i = 0; i < kMdCacheSlots; i++) {
         MdCacheSlot* s = &c->slots[i];
-        if (s->used != 0 && MdSourceEq(s->source, source)) {
+        if (s->used != 0 && s->html == html && MdSourceEq(s->source, source)) {
             s->used = c->clock;
             return s->doc;
         }
@@ -440,12 +514,21 @@ static MdNode* MdParseCached(Ctx* cx, Arena* frame, Str source) {
         lru->a->Reset();
     }
     lru->source = StrDup(lru->a, source);
-    lru->doc = MdParse(lru->a, lru->source);
+    lru->html = html;
+    lru->doc =
+        html ? HtmlParse(lru->a, lru->source) : MdParse(lru->a, lru->source);
     lru->used = c->clock;
     return lru->doc;
 }
 
 // ─── render ───────────────────────────────────────────────────────────────
+
+// The fallback handle_link_click takes when no handler was given: cx.open_url.
+static void MdOpenHref(char* href) {
+    if (href) {
+        OpenUrl(Str(href));
+    }
+}
 
 // node.rs 2258: h1 2.0/BOLD, h2 1.5, h3 1.25, h4 1.125, h5 1.0/SEMIBOLD,
 // h6 1.0/MEDIUM.
@@ -516,14 +599,25 @@ static Str OrderedMarker(Arena* a, int n, int depth) {
     return StrDup(a, Str(buf));
 }
 
-static El* MdWord(Arena* a, const Theme& th, Str w, float font, Rgba color,
-                  uint8_t marks, int weight, bool selectable) {
+// `<mark>`: html.rs takes yellow(200) — a fixed Tailwind step, not a theme
+// color — and leaves the ink alone, which works because the foreground it
+// runs against there is dark. Ours is near-white in the dark theme, so the
+// ink is pinned to the same near-black the light theme already paints with
+// and the highlight reads the same in both.
+static const Rgba kMarkBg = {0xfe, 0xf0, 0x8a, 0xff};
+static const Rgba kMarkFg = {0x0a, 0x0a, 0x0a, 0xff};
+
+// One styled word. Everything a TextMark can say about a run, applied to the
+// element that carries it — node.rs 1390 builds the same HighlightStyle.
+El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
+                   Str href) {
+    const Theme& th = cx->theme();
     Rgba c = color;
     if (marks & MdLink) {
         c = th.primary;
-    } else if (marks & MdDel) {
-        // No strikethrough in the paint layer; muted stands in for it.
-        c = th.mutedFg;
+    }
+    if (marks & MdHighlight) {
+        c = kMarkFg;
     }
     float px = (marks & MdCode) ? font - 1 : font;
     El* t = TextEl(a, w)->Font(px)->Fg(c);
@@ -534,12 +628,30 @@ static El* MdWord(Arena* a, const Theme& th, Str w, float font, Rgba color,
     if (marks & (MdLink | MdUnderline)) {
         t->Underline();
     }
-    if (marks & MdCode) {
+    if (marks & MdDel) {
+        t->Strikethrough();
+    }
+    if (marks & MdHighlight) {
+        t->Bg(kMarkBg);
+    } else if (marks & MdCode) {
         // TextViewStyle::inline_code_highlight falls back to theme.accent.
         t->Mono()->Bg(th.accent);
     }
     if (selectable) {
         t->Selectable();
+    }
+    if ((marks & MdLink) && href.len > 0) {
+        // handle_link_click: the handler if one was given, the desktop's
+        // browser otherwise. The href is NUL-terminated in the arena the
+        // parse lives in, so the handler gets a `const char*` it can read for
+        // the length of the call — the same rule every hit-test payload
+        // follows.
+        t->Cursor(CursorKind::Pointer);
+        if (onLink.IsValid()) {
+            t->OnClick(ListenerArg(onLink, (intptr_t)href.s));
+        } else {
+            t->OnClick(MkFunc0(MdOpenHref, href.s));
+        }
     }
     return t;
 }
@@ -556,8 +668,22 @@ static bool IsPlainRun(MdRun* r) {
     return true;
 }
 
-El* TextView::Inline(MdNode* n, float font, Rgba color, int weight) {
-    const Theme& th = cx->theme();
+// A cell's text-align. Rust gives the flow itself the alignment (node.rs
+// render_wrap_table); here the row of words is a flex line, so the line is
+// what justifies. A left-aligned or default flow still fills the cell, which
+// is what lets a long one wrap.
+static El* AlignRow(El* row, uint8_t align) {
+    if (align == MdAlignCenter) {
+        return row->JustifyCenter();
+    }
+    if (align == MdAlignRight) {
+        return row->JustifyEnd();
+    }
+    return row;
+}
+
+El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
+                     uint8_t align) {
     // The common case is one unmarked stretch of source. Keeping it as a
     // single TextEl lets the text engine break the line on its own metrics,
     // which is both better looking and cheaper than a row of word elements.
@@ -567,6 +693,10 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight) {
         if (selectable) {
             t->Selectable();
         }
+        if (align == MdAlignCenter || align == MdAlignRight) {
+            // The text shrink-wraps so the box around it can push it over.
+            return AlignRow(Div(a)->FlexRow()->W(kFill), align)->Child(t);
+        }
         return t->W(kFill);
     }
     // Otherwise the flow is a column of wrapping rows — a hard break ends a
@@ -575,27 +705,29 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight) {
     // space between an emphasis run and the punctuation after it ("**bold**:"
     // reads as "bold :") and would loosen wrapped-line leading.
     El* col = Div(a)->FlexCol()->W(kFill);
-    El* row = Div(a)->FlexRow()->FlexWrap();
+    El* row = AlignRow(Div(a)->FlexRow()->FlexWrap()->W(kFill), align);
     char word[512];
     int len = 0;
     uint8_t marks = 0;
+    Str href = {};
     auto flush = [&]() {
         if (len <= 0) {
             return;
         }
-        row->Child(MdWord(a, th, StrDup(a, Str(word, len)), font, color, marks,
-                          weight, selectable));
+        row->Child(
+            Word(StrDup(a, Str(word, len)), font, color, marks, weight, href));
         len = 0;
     };
     for (MdRun* r = n->runFirst; r; r = r->next) {
         flush();
         marks = r->marks;
+        href = r->href;
         for (int i = 0; i < r->text.len; i++) {
             char c = r->text.s[i];
             if (c == '\n') {
                 flush();
                 col->Child(row);
-                row = Div(a)->FlexRow()->FlexWrap();
+                row = AlignRow(Div(a)->FlexRow()->FlexWrap()->W(kFill), align);
                 continue;
             }
             if (len < (int)sizeof(word) - 1) {
@@ -659,8 +791,9 @@ El* TextView::CodeBlock(MdNode* n) {
 // floors do not fit is clipped rather than scrolled — this tree has no
 // horizontal scroll area.
 //
-// Column alignment (`|:--:|`) is parsed but not applied; the paint layer has
-// no text-align.
+// Column alignment is the delimiter row's (`|:--:|`) or, for an HTML table,
+// the cell's align attribute. A body cell with none of its own takes the
+// header cell's, which is how a markdown table says it once.
 El* TextView::Table(MdNode* n) {
     enum {
         kMaxCols = 32,
@@ -669,10 +802,14 @@ El* TextView::Table(MdNode* n) {
     };
     const Theme& th = cx->theme();
     int colLen[kMaxCols] = {};
+    uint8_t colAlign[kMaxCols] = {};
     int nCols = 0;
     for (MdNode* r = n->first; r; r = r->next) {
         int ix = 0;
         for (MdNode* c = r->first; c && ix < kMaxCols; c = c->next, ix++) {
+            if (colAlign[ix] == MdAlignDefault) {
+                colAlign[ix] = c->align;
+            }
             int len = RunsLen(c);
             if (len > kMaxLen) {
                 len = kMaxLen;
@@ -711,7 +848,12 @@ El* TextView::Table(MdNode* n) {
             if (c->next) {
                 cell->BorderR(1, th.border);
             }
-            cell->Child(Inline(c, baseFont, th.foreground, r->head ? 2 : 0));
+            uint8_t align = c->align;
+            if (align == MdAlignDefault && ix < nCols) {
+                align = colAlign[ix];
+            }
+            cell->Child(
+                Inline(c, baseFont, th.foreground, r->head ? 2 : 0, align));
             row->Child(cell);
         }
         table->Child(row);
@@ -802,6 +944,17 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
             return Blocks(box, n, depth, inList);
         }
         case MdKind::Html:
+        case MdKind::Group: {
+            // BlockNode::Root: the children in the parent's flow, no box.
+            // The gap goes on the group rather than on its last child, so a
+            // <div> of paragraphs sits the same distance from what follows it
+            // as a paragraph would.
+            if (!n->first) {
+                return nullptr;
+            }
+            El* box = Div(a)->FlexCol()->W(kFill)->PadB(mb);
+            return Blocks(box, n, depth, inList);
+        }
         case MdKind::Doc:
         case MdKind::Row:
         case MdKind::Cell:
@@ -811,7 +964,7 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
 }
 
 El* TextView::IntoEl() {
-    MdNode* doc = MdParseCached(cx, a, source);
+    MdNode* doc = MdParseCached(cx, a, source, html);
     return Blocks(Div(a)->FlexCol()->W(kFill), doc, 0, false);
 }
 
@@ -824,6 +977,17 @@ TextView* TextView::New(Ctx* cx, Str source) {
     t->cx = cx;
     t->source = source;
     return t;
+}
+
+TextView* TextView::NewHtml(Ctx* cx, Str source) {
+    TextView* t = TextView::New(cx, source);
+    t->html = true;
+    return t;
+}
+
+TextView* TextView::OnLink(Listener fn) {
+    onLink = fn;
+    return this;
 }
 
 TextView* TextView::Font(float px) {
