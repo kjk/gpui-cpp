@@ -676,6 +676,103 @@ void ScrollFadeClear() {
     gScrollFades.Reset();
 }
 
+// ─── the inspector's live style overrides ────────────────────────────────
+
+struct StyleOverride {
+    int clickId = 0;
+    uint32_t fields = 0;
+    Style style = {};
+};
+
+static Vec<StyleOverride> gStyleOverrides;
+
+void StyleOverrideSet(int clickId, uint32_t fields, const Style& style) {
+    if (clickId == 0) {
+        return;
+    }
+    if (fields == 0) {
+        StyleOverrideClear(clickId);
+        return;
+    }
+    for (int i = 0; i < gStyleOverrides.len; i++) {
+        if (gStyleOverrides[i].clickId == clickId) {
+            gStyleOverrides[i].fields = fields;
+            gStyleOverrides[i].style = style;
+            return;
+        }
+    }
+    StyleOverride o;
+    o.clickId = clickId;
+    o.fields = fields;
+    o.style = style;
+    gStyleOverrides.Append(o);
+}
+
+void StyleOverrideClear(int clickId) {
+    for (int i = 0; i < gStyleOverrides.len; i++) {
+        if (gStyleOverrides[i].clickId == clickId) {
+            for (int j = i + 1; j < gStyleOverrides.len; j++) {
+                gStyleOverrides[j - 1] = gStyleOverrides[j];
+            }
+            gStyleOverrides.len--;
+            return;
+        }
+    }
+}
+
+void StyleOverrideClearAll() {
+    gStyleOverrides.Reset();
+}
+
+void StyleOverrideApply(El* e) {
+    // Nothing picked, nothing edited: the common case costs one compare.
+    if (gStyleOverrides.len == 0 || !e || e->clickId == 0) {
+        return;
+    }
+    for (int i = 0; i < gStyleOverrides.len; i++) {
+        const StyleOverride& o = gStyleOverrides[i];
+        if (o.clickId != e->clickId) {
+            continue;
+        }
+        if (o.fields & StyleFieldBg) {
+            e->style.bg = o.style.bg;
+            e->style.hasBg = true;
+        }
+        if (o.fields & StyleFieldColor) {
+            e->style.color = o.style.color;
+            e->style.hasColor = true;
+        }
+        if (o.fields & StyleFieldBorderColor) {
+            e->style.borderColor = o.style.borderColor;
+        }
+        if (o.fields & StyleFieldPad) {
+            e->style.pad = o.style.pad;
+        }
+        if (o.fields & StyleFieldGap) {
+            e->style.gap = o.style.gap;
+        }
+        if (o.fields & StyleFieldRadius) {
+            e->style.radius = o.style.radius;
+        }
+        if (o.fields & StyleFieldBorder) {
+            e->style.border = o.style.border;
+        }
+        if (o.fields & StyleFieldFontSize) {
+            e->style.fontSize = o.style.fontSize;
+        }
+        if (o.fields & StyleFieldWidth) {
+            e->style.width = o.style.width;
+        }
+        if (o.fields & StyleFieldHeight) {
+            e->style.height = o.style.height;
+        }
+        if (o.fields & StyleFieldOpacity) {
+            e->style.opacity = o.style.opacity;
+        }
+        return;
+    }
+}
+
 // How opaque a Scrolling bar is right now, and whether the window has to come
 // back for the rest of the fade. `held` is the pointer resting on the bar,
 // which Rust answers by stamping the time again.
@@ -1748,6 +1845,10 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     if (!e) {
         return;
     }
+    // The inspector's live edit, before anything is measured against the
+    // style: this is the frame's copy of the element, so patching it is what
+    // Rust's `StyleRefinement` takeover amounts to.
+    StyleOverrideApply(e);
     // Same inputs as last time: replay the recorded sizes and slide the
     // subtree to the new origin. Everything below is a pure function of these
     // four inputs within a frame, so this is the full-fidelity answer.
@@ -3469,14 +3570,26 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->boundsOut) {
         *e->boundsOut = e->Bounds();
     }
-    // The inspector picking an element: every box under the pointer is
-    // written down as it paints, so the deepest one — the one a click would
-    // land on — is the one left standing.
-    if (ctx->picking && e->w > 0 && e->h > 0 &&
+    // The inspector picking an element. GPUI offers the topmost *hitbox*
+    // under the pointer; the nearest thing to a hitbox here is an element
+    // that draws something or answers to an id, which is what keeps an
+    // invisible layout container — or the full-window layer the overlays are
+    // painted into, which goes down after everything else — from standing in
+    // front of the button you aimed at. Among those, the deepest wins, and a
+    // tie goes to the one painted later.
+    int tier = e->clickId != 0 ? 2
+                               : (e->style.hasBg || e->style.border > 0 ||
+                                          e->kind != ElKind::Div
+                                      ? 1
+                                      : 0);
+    bool better = !ctx->pickHit || tier > ctx->pickTier ||
+                  (tier == ctx->pickTier && ctx->paintDepth >= ctx->pick.depth);
+    if (ctx->picking && tier > 0 && better && e->w > 0 && e->h > 0 &&
         e->Bounds().Contains({ctx->mouseX, ctx->mouseY})) {
         InspectorPick p;
         p.id = e->clickId;
         p.elId = e->id;
+        p.style = e->style;
         p.bounds = e->Bounds();
         p.kind = (int)e->kind;
         p.hasBg = e->style.hasBg;
@@ -3488,8 +3601,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         p.row = e->style.dir == FlexDir::Row;
         p.font = e->style.fontSize;
         p.text = e->text;
-        p.depth = ctx->pick.depth + 1;
+        p.depth = ctx->paintDepth;
         ctx->pick = p;
+        ctx->pickTier = tier;
         ctx->pickHit = true;
     }
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
@@ -3747,9 +3861,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->customPaint(ctx, e, e->customUser);
     }
 
+    ctx->paintDepth++;
     for (El* c = e->first; c; c = c->next) {
         PaintElNode(ctx, c, skipOverlay);
     }
+    ctx->paintDepth--;
 
     if (clip) {
         CanvasPopClip(ctx);

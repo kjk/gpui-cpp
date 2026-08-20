@@ -79,6 +79,7 @@ void TestTiles();
 void TestRoot();
 void TestSankey();
 void TestJson();
+void TestInspector();
 void TestDockState();
 void TestFocusTrap();
 void TestKeymap();

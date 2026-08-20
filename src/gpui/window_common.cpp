@@ -72,6 +72,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.picking = win->inspector.picking;
     win->paint.wantsAnimFrame = false;
     win->paint.pickHit = false;
+    win->paint.paintDepth = 0;
+    win->paint.pickTier = 0;
     win->paint.pick = {};
     if (win->inspector.pending) {
         // The press is what this frame picks against, not the pointer.
@@ -1412,6 +1414,7 @@ void AppFree(App* app) {
     // them, so they go before it does.
     ImageCacheClear();
     ScrollFadeClear();
+    StyleOverrideClearAll();
     PaintAppFree(app->paint);
     app->paint = nullptr;
     PlatShutdown(app);
