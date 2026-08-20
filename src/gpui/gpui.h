@@ -759,6 +759,7 @@ enum class IconName : uint8_t {
     EyeOff,
     Heart,
     ArrowLeft,
+    ArrowRight,
     Building2,
     Asterisk,
     Sun,

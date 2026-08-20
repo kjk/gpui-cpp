@@ -1,7 +1,21 @@
 #include "Story.h"
 
+// MAX_WIDTHS and the toolbar row that picks one.
+static const float kTabMaxWidths[] = {0, 80, 120, 200};
+static const char* const kTabMaxWidthLabels[] = {"Unlimited", "80px", "120px",
+                                                 "200px"};
+static const int kNTabMaxWidths = 4;
+enum {
+    TabsMenuMaxWidth = 1
+};
+enum {
+    TabsActMaxWidth = 3800
+};
+
 struct TabsStory {
     int tab = 0;
+    int maxWidthIx = 0;
+    int openMenu = 0;
     // The Dynamic Tabs section keeps its own bar: ids that keep counting up
     // as tabs come and go, and which of them is selected.
     int dynamicIds[12] = {1, 2, 3};
@@ -12,6 +26,22 @@ struct TabsStory {
 
     static El* Render(TabsStory* self, Ctx* cx);
 };
+
+static void TabsMenuOpen(TabsStory* self, Ctx* cx, const ClickEvent*,
+                         intptr_t which) {
+    self->openMenu = self->openMenu == (int)which ? 0 : (int)which;
+    Notify(cx);
+}
+static void TabsMenuAct(TabsStory* self, Ctx* cx, const ClickEvent*,
+                        intptr_t act) {
+    if (act >= TabsActMaxWidth) {
+        self->maxWidthIx = (int)(act - TabsActMaxWidth);
+    } else {
+        StoryToolbarApply(&self->toolbar, nullptr, (int)act);
+    }
+    self->openMenu = 0;
+    Notify(cx);
+}
 
 static void SetTab(TabsStory* self, Ctx* cx, const ClickEvent*, intptr_t ix) {
     self->tab = (int)ix;
@@ -71,54 +101,123 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
-    page->Child(StoryToolbar(cx, self));
+    Listener openMenu = Listen(cx, &TabsMenuOpen);
+    Listener act = Listen(cx, &TabsMenuAct);
+    El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+    El* group = StoryToolbarGroup(cx);
+    StoryToolbarOpt sizes[4] = {
+        {"XSmall", self->toolbar.size == UiSize::XSmall, ToolbarSizeXs},
+        {"Small", self->toolbar.size == UiSize::Small, ToolbarSizeSm},
+        {"Medium", self->toolbar.size == UiSize::Medium, ToolbarSizeMd},
+        {"Large", self->toolbar.size == UiSize::Large, ToolbarSizeLg},
+    };
+    const char* sizeName = self->toolbar.size == UiSize::XSmall  ? "XSmall"
+                           : self->toolbar.size == UiSize::Small ? "Small"
+                           : self->toolbar.size == UiSize::Large ? "Large"
+                                                                 : "Medium";
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("tabs-size"), StoryFmt(cx, "Size: %s", sizeName),
+        self->toolbar.sizeMenuOpen, ListenerArg(openMenu, 0), sizes, 4, act));
+    group->Child(StoryToolbarDivider(cx));
+    StoryToolbarOpt widths[kNTabMaxWidths];
+    for (int i = 0; i < kNTabMaxWidths; i++) {
+        widths[i].label = kTabMaxWidthLabels[i];
+        widths[i].checked = self->maxWidthIx == i;
+        widths[i].act = TabsActMaxWidth + i;
+    }
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("tabs-max-width"),
+        StoryFmt(cx, "Max width: %s", kTabMaxWidthLabels[self->maxWidthIx]),
+        self->openMenu == TabsMenuMaxWidth,
+        ListenerArg(openMenu, TabsMenuMaxWidth), widths, kNTabMaxWidths, act));
+    // Rust has a third dropdown here — an Options menu whose one row turns
+    // TabBar::menu on, the overflow "more" button a bar too narrow for its
+    // tabs grows. There is no such menu on this port's TabBar.
+    toolbarRow->Child(group);
+    page->Child(toolbarRow);
+    float maxWidth = kTabMaxWidths[self->maxWidthIx];
 
     // One bar per variant, all over the same eight tabs and the same
-    // selection — which is what the Rust story does.
+    // selection — which is what the Rust story does. Profile is disabled in
+    // the folder, pill and outline bars; the pill and outline ones spell the
+    // third tab out in full.
     struct VariantRow {
         const char* title;
         component::TabVariant variant;
+        bool disabledProfile;
+        bool longLabel;
     };
     static const VariantRow kVariants[] = {
-        {"Tabs", component::TabVariant::Tab},
-        {"Underline Tabs", component::TabVariant::Underline},
-        {"Pill Tabs", component::TabVariant::Pill},
-        {"Outline Tabs", component::TabVariant::Outline},
-        {"Segmented Tabs", component::TabVariant::Segmented},
+        {"Tabs", component::TabVariant::Tab, true, false},
+        {"Underline Tabs", component::TabVariant::Underline, false, false},
+        {"Pill Tabs", component::TabVariant::Pill, true, true},
+        {"Outline Tabs", component::TabVariant::Outline, true, true},
+        {"Segmented Tabs", component::TabVariant::Segmented, false, false},
     };
+    static const IconName kSegmentedIcons[3] = {
+        IconName::Bot, IconName::Calendar, IconName::Map};
     for (size_t v = 0; v < sizeof(kVariants) / sizeof(kVariants[0]); v++) {
-        El* sec = StorySection(cx, kVariants[v].title, nullptr);
+        const VariantRow& row = kVariants[v];
+        El* sec = StorySection(cx, row.title, nullptr);
         component::Tabs* bar =
             component::Tabs::New(cx, StoryFmt(cx, "tabs-%d", (int)v))
-                ->Variant(kVariants[v].variant)
+                ->Variant(row.variant)
                 ->Size(self->toolbar.size);
-        for (int i = 0; i < kTabCount; i++) {
-            bar->Tab(Str(kTabNames[i]));
+        if (maxWidth > 0) {
+            bar->MaxWidth(maxWidth);
         }
-        // Profile is disabled in every bar, as it is in the first Rust one.
-        bar->Disabled(1);
+        if (row.variant == component::TabVariant::Segmented) {
+            // The segmented bar is three icon-only tabs and the last four
+            // names — no Profile, Documents or Mail.
+            for (int i = 0; i < 3; i++) {
+                bar->Tab(Str{}, kSegmentedIcons[i]);
+            }
+            for (int i = 4; i < kTabCount; i++) {
+                bar->Tab(Str(kTabNames[i]));
+            }
+        } else {
+            for (int i = 0; i < kTabCount; i++) {
+                Str label = (row.longLabel && i == 2)
+                                ? StrL("Documents & Files")
+                                : Str(kTabNames[i]);
+                bar->Tab(label);
+            }
+        }
+        if (row.disabledProfile) {
+            bar->Disabled(1);
+        }
+        // The first bar carries navigation before its tabs and two actions
+        // after them.
+        if (v == 0) {
+            El* pre = Div(a)->FlexRow()->PadX(4);
+            pre->Child(component::Button::New(cx, StrL("back"))
+                           ->Ghost()
+                           ->WithSize(UiSize::XSmall)
+                           ->Icon(IconName::ArrowLeft)
+                           ->IntoEl());
+            pre->Child(component::Button::New(cx, StrL("forward"))
+                           ->Ghost()
+                           ->WithSize(UiSize::XSmall)
+                           ->Icon(IconName::ArrowRight)
+                           ->IntoEl());
+            El* suf = Div(a)->FlexRow()->PadX(4);
+            suf->Child(component::Button::New(cx, StrL("inbox"))
+                           ->Ghost()
+                           ->WithSize(UiSize::XSmall)
+                           ->Icon(IconName::Inbox)
+                           ->IntoEl());
+            suf->Child(component::Button::New(cx, StrL("more"))
+                           ->Ghost()
+                           ->WithSize(UiSize::XSmall)
+                           ->Icon(IconName::Ellipsis)
+                           ->IntoEl());
+            bar->Prefix(pre)->Suffix(suf);
+        }
         StorySectionAdd(sec, bar->Selected(self->tab)
                                  ->OnChange(Listen(cx, &SetTab))
                                  ->IntoEl());
         page->Child(sec);
     }
-
-    // A capped bar: the label is the one part that gives way, ellipsizing
-    // inside the width it is allowed.
-    El* capped = StorySection(cx, "Max Width",
-                              "A tab wider than max_width truncates its "
-                              "label rather than pushing the bar out.");
-    component::Tabs* cappedBar = component::Tabs::New(cx, StrL("tabs-capped"))
-                                     ->Underline()
-                                     ->Size(self->toolbar.size)
-                                     ->MaxWidth(90);
-    cappedBar->Tab(StrL("Account Settings & Preferences"));
-    cappedBar->Tab(StrL("Documents"));
-    cappedBar->Tab(StrL("Mail"), IconName::Inbox);
-    StorySectionAdd(capped, cappedBar->Selected(self->tab)
-                                ->OnChange(Listen(cx, &SetTab))
-                                ->IntoEl());
-    page->Child(capped);
 
     // Dynamic Tabs: a ButtonGroup that grows and shrinks the bar, and tabs
     // that carry a prefix icon and their own close button.
