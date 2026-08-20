@@ -159,8 +159,8 @@ bool PopupMenu::PerformKey(int key) {
     PopupMenu* active = this;
     PopupMenu* parentMenu = nullptr;
     PopupMenuState* activeState = top;
-    while (activeState->openSubmenu >= 0 &&
-           activeState->openSubmenu < active->n) {
+    while (activeState->openSubmenu >= 0 && activeState
+                                                    ->openSubmenu < active->n) {
         PopupMenu* child = active->items[activeState->openSubmenu].submenu;
         if (!child) {
             break;
@@ -212,8 +212,8 @@ void PopupMenu::Masks(bool* clickable, bool* hasSubmenu) const {
     for (int i = 0; i < n; i++) {
         // is_clickable(): a separator and a label are stepped over, and so is
         // a disabled row.
-        clickable[i] =
-            items[i].kind == MenuItemKind::Item && !items[i].disabled;
+        clickable[i] = items[i].kind == MenuItemKind::Item && !items[i]
+                                                                   .disabled;
         hasSubmenu[i] = items[i].submenu != nullptr;
     }
 }

@@ -1,4 +1,5 @@
 #include "ui/alert.h"
+#include "ui/text.h"
 
 namespace gpui {
 
@@ -45,6 +46,10 @@ Alert* Alert::Title(Str s) {
 }
 Alert* Alert::Icon(IconName n) {
     icon = n;
+    return this;
+}
+Alert* Alert::Markdown(bool v) {
+    markdown = v;
     return this;
 }
 Alert* Alert::Content(El* e) {
@@ -98,35 +103,88 @@ El* Alert::IntoEl() {
         default:
             break;
     }
+    // (radius, padding_x, padding_y, gap) by size — the banner shares them,
+    // it only drops the rounding.
+    float radius = th.radius, padX = 16, padY = 10, gap = 12;
+    switch (size) {
+        case UiSize::XSmall:
+            padX = 12;
+            padY = 6;
+            gap = 6;
+            break;
+        case UiSize::Small:
+            padX = 12;
+            padY = 8;
+            gap = 6;
+            break;
+        case UiSize::Large:
+            radius = th.radiusLg;
+            padX = 20;
+            padY = 14;
+            gap = 12;
+            break;
+        default:
+            break;
+    }
+    // h_flex, so a banner keeps its parts centred; a card aligns them to the
+    // top instead. text_sm whatever the size is.
     El* row = Div(a)
                   ->FlexRow()
-                  ->Gap(8)
-                  ->Pad(banner ? 8.f : 12.f)
-                  ->ItemsStart()
-                  ->Bg(bg);
-    if (!banner) {
-        row->Border(1, bd)->Radius(th.radius);
+                  ->W(kFill)
+                  ->Gap(gap)
+                  ->PadX(padX)
+                  ->PadY(padY)
+                  ->JustifyBetween()
+                  ->Font(14)
+                  ->Fg(fg)
+                  ->Bg(bg)
+                  ->Border(1, bd);
+    if (banner) {
+        row->ItemsCenter();
+    } else {
+        row->ItemsStart()->Radius(radius);
     }
-    row->Child(IconEl(a, icon, 16)->Fg(fg)->Shrink0());
-    El* col = Div(a)->FlexCol()->Gap(4)->Grow();
+    El* inner = Div(a)->FlexRow()->Grow()->Gap(gap)->ClipX();
+    if (banner) {
+        inner->ItemsCenter();
+    }
+    // mt_5 on the card's icon, so it sits on the first line rather than above
+    // it — a pad here, the box has nothing to paint. The banner is centred.
+    El* iconBox = Div(a)->Shrink0()->Child(IconEl(a, icon, 16)->Fg(fg));
+    if (!banner) {
+        iconBox->PadT(5);
+    }
+    inner->Child(iconBox);
+    // The title and the message stack with nothing between them: the div
+    // Rust puts them in is a block, so its gap_3 never applies.
+    El* col = Div(a)->FlexCol()->Grow()->ClipX();
+    // A banner never shows its title.
     if (title.s && !banner) {
-        col->Child(TextEl(a, title)->Font(14)->Semibold()->Fg(fg));
+        col->Child(TextEl(a, title)->Semibold()->Truncate());
     }
     if (content) {
         col->Child(content);
+    } else if (markdown) {
+        // TextViewStyle::default().paragraph_gap(rems(0.2)).
+        col->Child(
+            TextView::New(cx, message)->Font(14)->ParagraphGap(3.2f)->IntoEl());
     } else {
-        col->Child(TextEl(a, message)->Font(UiFontPx(size))->Fg(fg)->Wrap());
+        col->Child(TextEl(a, message)->Wrap());
     }
-    row->Child(col);
+    inner->Child(col);
+    row->Child(inner);
     if (onClose.IsValid()) {
         // p_0p5 + rounded, icon at max(size, Medium) in the alert's color.
+        float closeIcon =
+            UiIconPx(size < UiSize::Medium ? UiSize::Medium : size);
         El* x = Div(a)
                     ->Pad(2)
                     ->Radius(th.radius)
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Shrink0()
-                    ->Child(IconEl(a, IconName::X, 16)->Fg(fg));
+                    ->HoverBg(RgbaOpacity(bg, 0.8f))
+                    ->Child(IconEl(a, IconName::X, closeIcon)->Fg(fg));
         BindClick(x, StrL("alert-close"), onClose);
         row->Child(x);
     }

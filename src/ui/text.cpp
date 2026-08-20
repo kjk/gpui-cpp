@@ -1005,7 +1005,7 @@ El* TextView::Table(MdNode* n) {
 
 El* TextView::Item(MdNode* n, Str marker, int depth) {
     const Theme& th = cx->theme();
-    El* content = Div(a)->FlexCol()->Grow();
+    El* content = Div(a)->FlexCol()->Grow()->MinW(0)->ClipX();
     // md4c omits MD_BLOCK_P inside a tight list (md4c.c 4842), so an item's
     // first paragraph arrives as runs on the item itself.
     if (n->runFirst) {
@@ -1016,7 +1016,9 @@ El* TextView::Item(MdNode* n, Str marker, int depth) {
         ->FlexRow()
         ->W(kFill)
         ->ItemsStart()
-        ->Child(TextEl(a, marker)->Font(baseFont)->Fg(th.mutedFg)->Shrink0())
+        // list_item_prefix is a plain string child: it takes the color the
+        // list inherits, so a bullet inside a red alert is red.
+        ->Child(TextEl(a, marker)->Font(baseFont)->Shrink0())
         ->Child(content);
 }
 

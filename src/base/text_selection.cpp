@@ -117,9 +117,8 @@ void WindowSelectionPress(Window* win, float x, float y, int clickCount,
         s->scope = scope;
         s->anchor = anchor;
         s->cursor = anchor;
-        TextSelectionBegin(&s->gesture,
-                           TextHitOffsetIn(ctx, x, y, false, scope, nullptr) >=
-                               0);
+        TextSelectionBegin(&s->gesture, TextHitOffsetIn(ctx, x, y, false, scope,
+                                                        nullptr) >= 0);
         return;
     }
     WindowSelectionClear(win);
