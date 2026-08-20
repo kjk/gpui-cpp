@@ -8,12 +8,19 @@ struct ColorRow {
     Rgba color;
 };
 
+// The two themes the picker offers. A SearchableList keeps a pointer to the
+// items, so they outlive the frame.
+static const component::SearchableItem kThemeItems[] = {
+    {StrL("Default Light"), StrL("light"), 0, false},
+    {StrL("Default Dark"), StrL("dark"), 0, false},
+};
+
 struct ThemeColorsStory {
+    Entity<component::SearchableListState> themes = {};
     int openGroup = 0;
     bool showInherited = false;
     bool expandAll = false;
     bool optionsOpen = false;
-    bool themeOpen = false;
     InputState filter;
     bool seeded = false;
 
@@ -47,8 +54,7 @@ static void ToggleColorGroup(ThemeColorsStory* self, Ctx* cx, const ClickEvent*,
 }
 static void ToggleThemeSelect(ThemeColorsStory* self, Ctx* cx,
                               const ClickEvent*) {
-    self->themeOpen = !self->themeOpen;
-    Notify(cx);
+    component::SelectToggleOpen(self->themes.Get(cx), cx);
 }
 static void FocusFilter(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
     self->filter.focused = true;
@@ -68,6 +74,13 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     if (!self->seeded) {
         self->seeded = true;
         InputSetPlaceholder(&self->filter, StrL("Search..."));
+        self->themes = EntityNewState<component::SearchableListState>(cx->app);
+        component::SearchableListState* t = self->themes.Get(cx);
+        if (t) {
+            // The picker opens on the theme that is showing.
+            t->selected[0] = 0;
+            t->nSelected = 1;
+        }
     }
     if (self->filter.focused) {
         cx->win->input = &self->filter;
@@ -121,12 +134,9 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                   ->JustifyBetween()
                   ->FlexWrap();
     El* pick = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    pick->Child(component::Select::New(cx, StrL("theme-select"))
-                    ->Option(StrL("Default Light"))
-                    ->Option(StrL("Default Dark"))
-                    ->Selected(0)
+    pick->Child(component::Select::New(cx, StrL("theme-select"), self->themes)
+                    ->Items(kThemeItems, 2)
                     ->W(300)
-                    ->Open(self->themeOpen)
                     ->OnToggle(Listen(cx, &ToggleThemeSelect))
                     ->IntoEl());
     pick->Child(component::Button::New(cx, StrL("set_theme"))

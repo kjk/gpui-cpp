@@ -32,15 +32,33 @@ static const char* kUi[] = {"GPUI", "Iced",  "egui",  "Makepad", "Slint",
 static const char* kLanguages[] = {"Rust", "Go", "C++", "JavaScript"};
 static const char* kCodes[] = {"CN", "US", "HK", "JP", "KR"};
 
+// The items each select shows. A SearchableList keeps a pointer to them, so
+// they have to outlive the frame — which is what makes these static rather
+// than built on the frame arena.
+static component::SearchableItem gItems[SelCount][16];
+static int gCounts[SelCount];
+
+static void BuildItems(int which, const char* const* names, int n) {
+    if (n > 16) {
+        n = 16;
+    }
+    for (int i = 0; i < n; i++) {
+        gItems[which][i].title = Str(names[i]);
+        // The title is the value here: nothing on this page has an id of its
+        // own behind what it shows.
+        gItems[which][i].value = Str(names[i]);
+    }
+    gCounts[which] = n;
+}
+
 struct SelectStory {
-    int selected[SelCount] = {5, -1, -1, 0, 0, -1, -1, 0};
-    int open = -1;
-    // The option the arrows are on inside the open select. Rust marks it with
-    // aria_active_descendant; here it is what the menu paints as the keyboard
-    // cursor.
-    int highlight = -1;
+    // SelectState is an entity in Rust too — it is the SearchableList under
+    // the trigger, and it holds the selection, the query and whether the list
+    // is open.
+    Entity<component::SearchableListState> sel[SelCount] = {};
     bool disabled = false;
     InputState phone;
+    InputState search;
     StoryToolbarState toolbar;
     bool seeded = false;
 
@@ -61,51 +79,58 @@ static void SelToolbarAct(SelectStory* self, Ctx* cx, const ClickEvent*,
     }
     Notify(cx);
 }
+
+// Only one select is open at a time, which is what closing the rest does.
 static void ToggleSel(SelectStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t which) {
-    self->open = self->open == (int)which ? -1 : (int)which;
-    // Opening starts the keyboard on whatever is already picked, so the first
-    // arrow steps from there rather than from the top.
-    self->highlight = self->open < 0 ? -1 : self->selected[self->open];
-    Notify(cx);
-}
-
-// How many options the select in this slot has, so the arrows know where the
-// list ends.
-static int SelOptionCount(int which);
-static void PickSel(SelectStory* self, Ctx* cx, const ClickEvent*,
-                    intptr_t index) {
-    if (self->open >= 0) {
-        self->selected[self->open] = (int)index;
-        self->open = -1;
+    for (int i = 0; i < SelCount; i++) {
+        component::SearchableListState* s = self->sel[i].Get(cx);
+        if (!s) {
+            continue;
+        }
+        if (i == (int)which) {
+            component::SelectToggleOpen(s, cx);
+        } else {
+            s->open = false;
+        }
     }
     Notify(cx);
 }
 static void ClearSel(SelectStory* self, Ctx* cx, const ClickEvent*,
                      intptr_t which) {
-    self->selected[which] = -1;
-    Notify(cx);
+    component::SelectClear(self->sel[which].Get(cx), cx);
 }
 static void FocusPhone(SelectStory* self, Ctx* cx, const ClickEvent*) {
     self->phone.focused = true;
+    self->search.focused = false;
+    Notify(cx);
+}
+static void FocusSearch(SelectStory* self, Ctx* cx, const ClickEvent*) {
+    self->search.focused = true;
+    self->phone.focused = false;
     Notify(cx);
 }
 
 static component::Select* Sel(SelectStory* self, Ctx* cx, int which,
-                              const char* id, const char* const* items,
-                              int count, Listener toggle, Listener pick,
-                              Listener clear) {
-    return component::Select::New(cx, Str(id))
-        ->Options(items, count)
-        ->Selected(self->selected[which])
+                              const char* id, Listener toggle, Listener clear) {
+    return component::Select::New(cx, Str(id), self->sel[which])
+        ->Items(gItems[which], gCounts[which])
         ->W(280)
         ->WithSize(self->toolbar.size)
         ->Disabled(self->disabled)
-        ->Open(self->open == which)
-        ->Highlight(self->open == which ? self->highlight : -1)
         ->OnToggle(ListenerArg(toggle, which))
-        ->OnChange(pick)
         ->OnClear(ListenerArg(clear, which));
+}
+
+// The select whose list is open, or null.
+static component::SearchableListState* OpenSel(SelectStory* self, Ctx* cx) {
+    for (int i = 0; i < SelCount; i++) {
+        component::SearchableListState* s = self->sel[i].Get(cx);
+        if (s && s->open) {
+            return s;
+        }
+    }
+    return nullptr;
 }
 
 El* SelectStory::Render(SelectStory* self, Ctx* cx) {
@@ -114,12 +139,34 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     if (!self->seeded) {
         self->seeded = true;
         InputSetPlaceholder(&self->phone, StrL("Your phone number"));
+        InputSetPlaceholder(&self->search, StrL("Search..."));
+        for (int i = 0; i < SelCount; i++) {
+            self->sel[i] =
+                EntityNewState<component::SearchableListState>(cx->app);
+        }
+        BuildItems(SelCountry, kCountries,
+                   (int)(sizeof(kCountries) / sizeof(char*)));
+        BuildItems(SelFruit, kFruits, (int)(sizeof(kFruits) / sizeof(char*)));
+        BuildItems(SelUi1, kUi, (int)(sizeof(kUi) / sizeof(char*)));
+        BuildItems(SelMenuH, kUi, (int)(sizeof(kUi) / sizeof(char*)));
+        BuildItems(SelLanguage, kLanguages,
+                   (int)(sizeof(kLanguages) / sizeof(char*)));
+        BuildItems(SelAppearance, kCodes,
+                   (int)(sizeof(kCodes) / sizeof(char*)));
+        // The first select opens with a value already picked, as the Rust
+        // story does.
+        component::SearchableListState* country = self->sel[SelCountry].Get(cx);
+        if (country) {
+            country->selected[0] = 5;
+            country->nSelected = 1;
+        }
     }
     if (self->phone.focused) {
         cx->win->input = &self->phone;
+    } else if (self->search.focused) {
+        cx->win->input = &self->search;
     }
     Listener toggle = Listen(cx, &ToggleSel);
-    Listener pick = Listen(cx, &PickSel);
     Listener clear = Listen(cx, &ClearSel);
 
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill)->ItemsCenter();
@@ -129,25 +176,24 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
 
     El* search = StorySection(cx, "Search and clear",
                               "Search options and clear the value.");
-    StorySectionAdd(search, Sel(self, cx, SelCountry, "country", kCountries,
-                                (int)(sizeof(kCountries) / sizeof(char*)),
-                                toggle, pick, clear)
-                                ->Cleanable()
-                                ->IntoEl());
+    StorySectionAdd(search,
+                    Sel(self, cx, SelCountry, "country", toggle, clear)
+                        ->Cleanable()
+                        ->Searchable(&self->search, Listen(cx, &FocusSearch))
+                        ->IntoEl());
     page->Child(search);
 
     El* width = StorySection(cx, "Menu width",
                              "Set trigger and menu widths independently.");
-    StorySectionAdd(
-        width, Sel(self, cx, SelFruit, "fruit", kFruits,
-                   (int)(sizeof(kFruits) / sizeof(char*)), toggle, pick, clear)
-                   ->Icon(IconName::Search)
-                   ->MenuWidth(400)
-                   ->IntoEl());
+    StorySectionAdd(width, Sel(self, cx, SelFruit, "fruit", toggle, clear)
+                               ->Icon(IconName::Search)
+                               ->MenuWidth(400)
+                               ->IntoEl());
     page->Child(width);
 
     El* dis = StorySection(cx, "Disabled", "Keep the selected value visible.");
-    StorySectionAdd(dis, component::Select::New(cx, StrL("select-disabled"))
+    StorySectionAdd(dis, component::Select::New(cx, StrL("select-disabled"),
+                                                self->sel[SelDisabled])
                              ->W(280)
                              ->WithSize(self->toolbar.size)
                              ->Disabled(true)
@@ -155,42 +201,35 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     page->Child(dis);
 
     El* prefix = StorySection(cx, "Title prefix", "Prefix the selected value.");
-    StorySectionAdd(prefix,
-                    Sel(self, cx, SelUi1, "ui1", kUi,
-                        (int)(sizeof(kUi) / sizeof(char*)), toggle, pick, clear)
-                        ->Placeholder(StrL("UI"))
-                        ->TitlePrefix(StrL("UI: "))
-                        ->IntoEl());
+    StorySectionAdd(prefix, Sel(self, cx, SelUi1, "ui1", toggle, clear)
+                                ->Placeholder(StrL("UI"))
+                                ->TitlePrefix(StrL("UI: "))
+                                ->IntoEl());
     page->Child(prefix);
 
     El* menuH = StorySection(cx, "Menu height", "Limit the popup height.");
-    StorySectionAdd(menuH,
-                    Sel(self, cx, SelMenuH, "menu-h", kUi,
-                        (int)(sizeof(kUi) / sizeof(char*)), toggle, pick, clear)
-                        ->Placeholder(StrL("UI"))
-                        ->TitlePrefix(StrL("UI: "))
-                        ->MenuMaxH(96)
-                        ->IntoEl());
+    StorySectionAdd(menuH, Sel(self, cx, SelMenuH, "menu-h", toggle, clear)
+                               ->Placeholder(StrL("UI"))
+                               ->TitlePrefix(StrL("UI: "))
+                               ->MenuMaxH(96)
+                               ->IntoEl());
     page->Child(menuH);
 
-    El* searchSec =
-        StorySection(cx, "Search", "Filter options from the popup.");
-    StorySectionAdd(
-        searchSec,
-        Sel(self, cx, SelLanguage, "language", kLanguages,
-            (int)(sizeof(kLanguages) / sizeof(char*)), toggle, pick, clear)
-            ->Placeholder(StrL("Language"))
-            ->TitlePrefix(StrL("Language: "))
-            ->IntoEl());
-    page->Child(searchSec);
+    El* multi = StorySection(cx, "Multiple",
+                             "Pick more than one; the trigger says how many.");
+    StorySectionAdd(multi, Sel(self, cx, SelLanguage, "language", toggle, clear)
+                               ->Placeholder(StrL("Language"))
+                               ->Multiple()
+                               ->IntoEl());
+    page->Child(multi);
 
     El* empty = StorySection(cx, "Empty", "Render a custom empty state.");
-    StorySectionAdd(empty, component::Select::New(cx, StrL("select-empty"))
+    StorySectionAdd(empty, component::Select::New(cx, StrL("select-empty"),
+                                                  self->sel[SelEmpty])
                                ->W(280)
                                ->WithSize(self->toolbar.size)
                                ->Disabled(self->disabled)
                                ->Empty(StrL("No Data"))
-                               ->Open(self->open == SelEmpty)
                                ->OnToggle(ListenerArg(toggle, SelEmpty))
                                ->IntoEl());
     page->Child(empty);
@@ -208,15 +247,12 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
                   ->Radius(th.radiusLg)
                   ->Border(1, th.inputBorder);
     row->Child(Div(a)->W(140)->Child(
-        component::Select::New(cx, StrL("appearance"))
-            ->Options(kCodes, (int)(sizeof(kCodes) / sizeof(char*)))
-            ->Selected(self->selected[SelAppearance])
+        component::Select::New(cx, StrL("appearance"), self->sel[SelAppearance])
+            ->Items(gItems[SelAppearance], gCounts[SelAppearance])
             ->W(140)
             ->WithSize(self->toolbar.size)
             ->Appearance(false)
-            ->Open(self->open == SelAppearance)
             ->OnToggle(ListenerArg(toggle, SelAppearance))
-            ->OnChange(pick)
             ->IntoEl()));
     row->Child(component::Separator::Vertical(cx)->IntoEl()->H(20));
     row->Child(Div(a)->Grow()->Child(
@@ -237,12 +273,13 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     El* valueCol = Div(a)->FlexCol()->W(512)->Gap(12);
     const char* labels[] = {"Country", "fruit", "UI", "Language"};
     int slots[] = {SelCountry, SelFruit, SelUi1, SelLanguage};
-    const char* const* lists[] = {kCountries, kFruits, kUi, kLanguages};
     for (int i = 0; i < 4; i++) {
-        int sel = self->selected[slots[i]];
-        Str line = sel >= 0 ? StoryFmt(cx, "%s: Some(\"%s\")", labels[i],
-                                       lists[i][sel])
-                            : StoryFmt(cx, "%s: None", labels[i]);
+        component::SearchableListState* s = self->sel[slots[i]].Get(cx);
+        Str line = StoryFmt(cx, "%s: None", labels[i]);
+        if (s && s->nSelected > 0) {
+            line = StoryFmt(cx, "%s: Some(\"%s\")", labels[i],
+                            gItems[slots[i]][s->selected[0]].title);
+        }
         valueCol->Child(StoryTxt(cx, line, 16, th.foreground));
     }
     valueCol
@@ -252,24 +289,6 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     return page;
 }
 
-static int SelOptionCount(int which) {
-    switch (which) {
-        case SelCountry:
-            return (int)(sizeof(kCountries) / sizeof(char*));
-        case SelFruit:
-            return (int)(sizeof(kFruits) / sizeof(char*));
-        case SelUi1:
-        case SelMenuH:
-            return (int)(sizeof(kUi) / sizeof(char*));
-        case SelLanguage:
-            return (int)(sizeof(kLanguages) / sizeof(char*));
-        case SelAppearance:
-            return (int)(sizeof(kCodes) / sizeof(char*));
-        default:
-            return 0;
-    }
-}
-
 // gpui_base::SelectActionForKey is the table crates/base/src/select.rs binds
 // up, down, enter and escape to. The arrows walk the list once the select is
 // open, which is what Rust's content focus handle takes them for.
@@ -277,43 +296,36 @@ void SelectStory::OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev) {
     if (!ev->down) {
         return;
     }
-    bool open = self->open >= 0;
-    SelectAction act = SelectActionForKey(ev->vk, open, self->disabled);
+    component::SearchableListState* s = OpenSel(self, cx);
+    SelectAction act = SelectActionForKey(ev->vk, s != nullptr, self->disabled);
+    if (!s) {
+        return;
+    }
     if (act == SelectAction::Dismiss) {
-        self->open = -1;
-        self->highlight = -1;
+        s->open = false;
+        s->list.selected = -1;
         Notify(cx);
         return;
     }
-    if (act == SelectAction::Confirm && self->highlight >= 0) {
-        self->selected[self->open] = self->highlight;
-        self->open = -1;
-        self->highlight = -1;
+    if (act == SelectAction::Confirm && s->list.selected >= 0) {
+        component::SearchableListClick(s, s->matches[s->list.selected]);
+        if (s->mode == component::SearchableListMode::Single) {
+            s->open = false;
+        }
         // cx.stop_propagation(): the Enter was the select's, so it must not
         // also reach the focused trigger and reopen what it just closed.
         cx->win->eatReturn = true;
         Notify(cx);
         return;
     }
-    if (!open || self->disabled) {
-        return;
-    }
     // Once it is open the root has nothing left to do with an arrow, so the
     // list takes it.
-    int count = SelOptionCount(self->open);
-    if (count <= 0 || (ev->vk != KeyUp && ev->vk != KeyDown)) {
-        return;
+    if (ev->vk == KeyUp || ev->vk == KeyDown) {
+        ListPerform(
+            &s->list, cx,
+            ev->vk == KeyDown ? ListAction::SelectNext : ListAction::SelectPrev,
+            false);
     }
-    int step = ev->vk == KeyDown ? 1 : -1;
-    int next = self->highlight < 0 ? (step > 0 ? 0 : count - 1)
-                                   : self->highlight + step;
-    if (next < 0) {
-        next = count - 1;
-    } else if (next >= count) {
-        next = 0;
-    }
-    self->highlight = next;
-    Notify(cx);
 }
 
 STORY_PAGE_KEYS(StorySelect, SelectStory);
