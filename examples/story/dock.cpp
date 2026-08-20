@@ -1,8 +1,9 @@
 #include "Story.h"
 
-// The Rust story (crates/story/src/dock_story.rs) fills its dock with panels
-// that each render a different widget; ours fills it with labelled boxes, so
-// the page is about the dock and not about what is inside it.
+// crates/story has no dock page at the pinned SHA: the dock is what the
+// gallery itself is built out of, and every story is a Panel inside one. This
+// page is a demo of its own, with labelled boxes for panels so it is about
+// the dock and not about what is inside it.
 struct DockPanelData {
     // Panel::panel_name(), which is what a saved layout stores. The Rust
     // story's panels are all "StoryContainer"; each of these is its own kind,
