@@ -16,13 +16,17 @@
    everything that shows markdown or HTML goes through TextView — so a page
    that needs it should come here rather than grow another parser.
 
-   Where it stops short of Rust: no syntax highlighting inside code blocks (no
-   tree-sitter here) and no images — an <img> or a ![]() contributes its alt
-   text, since nothing in this tree decodes a PNG or fetches a URL. Selection
-   is still per element (base/text_selection.cpp), not the window-wide one
-   text/window_selection.rs runs. */
+   A fenced code block is highlighted by ui/syntax.h, a scanner rather than
+   the tree-sitter parse Rust runs: it answers the capture names position and
+   a keyword list can settle and paints them from the same theme table.
+
+   Where it stops short of Rust: no images — an <img> or a ![]() contributes
+   its alt text, since nothing in this tree decodes a PNG or fetches a URL.
+   Selection is still per element (base/text_selection.cpp), not the
+   window-wide one text/window_selection.rs runs. */
 
 #include "ui/sizing.h"
+#include "ui/syntax.h"
 
 namespace gpui {
 
@@ -156,6 +160,9 @@ struct TextView {
     El* Item(MdNode* n, Str marker, int depth);
     El* Table(MdNode* n);
     El* CodeBlock(MdNode* n);
+    // The highlighted form of a code block: ui/syntax.h scans the text and
+    // this paints its tokens.
+    El* CodeLines(Str code, SyntaxLang lang);
     // One styled word of a flow, with its marks applied and — for a link —
     // the click that opens it.
     El* Word(Str w, float font, Rgba color, uint8_t marks, int weight,

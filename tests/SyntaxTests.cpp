@@ -1,0 +1,206 @@
+/* The code-block scanner — crates/ui/src/highlighter without tree-sitter.
+   Rust's own tests drive a real parser; these pin what a scanner can answer:
+   which language a fence names, and which token every byte belongs to. */
+
+#include "Test.h"
+
+using namespace gpui::component;
+
+// The token covering the first byte of `needle`, or Text when the scan never
+// reaches it.
+static SyntaxTok TokAt(SyntaxLang lang, const char* src, const char* needle) {
+    Str s(src);
+    Str n(needle);
+    int want = -1;
+    for (int i = 0; i + n.len <= s.len; i++) {
+        if (memcmp(s.s + i, n.s, (size_t)n.len) == 0) {
+            want = i;
+            break;
+        }
+    }
+    if (want < 0) {
+        return SyntaxTok::Text;
+    }
+    SyntaxLexer lx;
+    SyntaxLexStart(&lx, lang, s);
+    while (SyntaxLexNext(&lx)) {
+        int off = (int)(lx.text.s - s.s);
+        if (want >= off && want < off + lx.text.len) {
+            return lx.tok;
+        }
+    }
+    return SyntaxTok::Text;
+}
+
+// Every byte belongs to exactly one token, in order: what the renderer walks
+// to put the block back together.
+static bool Partitions(SyntaxLang lang, const char* src) {
+    Str s(src);
+    SyntaxLexer lx;
+    SyntaxLexStart(&lx, lang, s);
+    int at = 0;
+    while (SyntaxLexNext(&lx)) {
+        if (lx.text.s != s.s + at || lx.text.len <= 0) {
+            return false;
+        }
+        at += lx.text.len;
+    }
+    return at == s.len;
+}
+
+static bool NameIs(SyntaxLang lang, const char* want) {
+    Str got = SyntaxLangName(lang);
+    int len = (int)strlen(want);
+    return got.len == len && memcmp(got.s, want, (size_t)len) == 0;
+}
+
+static void TestSyntaxLangFor() {
+    utassert(NameIs(SyntaxLangFor(StrL("cpp")), "cpp"));
+    utassert(NameIs(SyntaxLangFor(StrL("C++")), "cpp"));
+    utassert(NameIs(SyntaxLangFor(StrL("rs")), "rust"));
+    utassert(NameIs(SyntaxLangFor(StrL("tsx")), "js"));
+    // An HTML <code class="language-python"> names its language the long way.
+    utassert(NameIs(SyntaxLangFor(StrL("language-python")), "python"));
+    // A fence may carry more than the name.
+    utassert(NameIs(SyntaxLangFor(StrL("go title=main.go")), "go"));
+    utassert(SyntaxLangFor(StrL("")) == SyntaxLangNone);
+    utassert(SyntaxLangFor(StrL("brainfuck")) == SyntaxLangNone);
+}
+
+static void TestSyntaxCpp() {
+    SyntaxLang cpp = SyntaxLangFor(StrL("cpp"));
+    const char* src =
+        "#include \"a.h\"\n"
+        "// comment\n"
+        "int Add(int a) { return a + 0x2a; /* tail */ }\n";
+    utassert(Partitions(cpp, src));
+    utassert(TokAt(cpp, src, "#include") == SyntaxTok::Keyword);
+    utassert(TokAt(cpp, src, "\"a.h\"") == SyntaxTok::String);
+    utassert(TokAt(cpp, src, "// comment") == SyntaxTok::Comment);
+    utassert(TokAt(cpp, src, "int Add") == SyntaxTok::Type);
+    utassert(TokAt(cpp, src, "Add") == SyntaxTok::Function);
+    utassert(TokAt(cpp, src, "return") == SyntaxTok::Keyword);
+    utassert(TokAt(cpp, src, "0x2a") == SyntaxTok::Number);
+    utassert(TokAt(cpp, src, "/* tail */") == SyntaxTok::Comment);
+    // C does not capitalize its types, so a name is a name.
+    utassert(TokAt(cpp, "Widget w;", "Widget") == SyntaxTok::Text);
+}
+
+static void TestSyntaxRust() {
+    SyntaxLang rust = SyntaxLangFor(StrL("rust"));
+    const char* src = "fn main() { let v: Vec<u8> = vec![]; true }";
+    utassert(Partitions(rust, src));
+    utassert(TokAt(rust, src, "fn") == SyntaxTok::Keyword);
+    utassert(TokAt(rust, src, "main") == SyntaxTok::Function);
+    utassert(TokAt(rust, src, "u8") == SyntaxTok::Type);
+    // capsAreTypes: Rust spells its types with a capital, so Vec is one.
+    utassert(TokAt(rust, src, "Vec") == SyntaxTok::Type);
+    utassert(TokAt(rust, src, "true") == SyntaxTok::Boolean);
+}
+
+static void TestSyntaxPython() {
+    SyntaxLang py = SyntaxLangFor(StrL("py"));
+    const char* src =
+        "def f(x):  # note\n"
+        "    \"\"\"doc\n"
+        "    string\"\"\"\n"
+        "    return None\n";
+    utassert(Partitions(py, src));
+    utassert(TokAt(py, src, "def") == SyntaxTok::Keyword);
+    utassert(TokAt(py, src, "f(") == SyntaxTok::Function);
+    utassert(TokAt(py, src, "# note") == SyntaxTok::Comment);
+    // A triple-quoted string spans lines; a scanner that stopped at the
+    // first line would paint the rest as code.
+    utassert(TokAt(py, src, "doc") == SyntaxTok::String);
+    utassert(TokAt(py, src, "string") == SyntaxTok::String);
+    utassert(TokAt(py, src, "None") == SyntaxTok::Boolean);
+}
+
+static void TestSyntaxJson() {
+    SyntaxLang json = SyntaxLangFor(StrL("json"));
+    const char* src = "{\"name\": \"gpui\", \"n\": 3, \"ok\": true}";
+    utassert(Partitions(json, src));
+    // The key is a property, the value beside it a string.
+    utassert(TokAt(json, src, "\"name\"") == SyntaxTok::Property);
+    utassert(TokAt(json, src, "\"gpui\"") == SyntaxTok::String);
+    utassert(TokAt(json, src, "3") == SyntaxTok::Number);
+    utassert(TokAt(json, src, "true") == SyntaxTok::Boolean);
+}
+
+static void TestSyntaxMarkup() {
+    SyntaxLang html = SyntaxLangFor(StrL("html"));
+    const char* src = "<!-- hi --><a href=\"/x\">text</a>";
+    utassert(Partitions(html, src));
+    utassert(TokAt(html, src, "<!-- hi -->") == SyntaxTok::Comment);
+    utassert(TokAt(html, src, "a href") == SyntaxTok::Tag);
+    utassert(TokAt(html, src, "href") == SyntaxTok::Attribute);
+    utassert(TokAt(html, src, "\"/x\"") == SyntaxTok::String);
+    utassert(TokAt(html, src, "text") == SyntaxTok::Text);
+    // The name after the closing `</` is the tag again, not an attribute.
+    utassert(TokAt(html, src, "a>") == SyntaxTok::Tag);
+}
+
+static void TestSyntaxShellAndSql() {
+    SyntaxLang sh = SyntaxLangFor(StrL("bash"));
+    const char* src = "for f in *.c; do echo 'a $b'; done # done\n";
+    utassert(Partitions(sh, src));
+    utassert(TokAt(sh, src, "for") == SyntaxTok::Keyword);
+    // A shell's single quotes take no escapes and no expansion.
+    utassert(TokAt(sh, src, "'a $b'") == SyntaxTok::String);
+    utassert(TokAt(sh, src, "# done") == SyntaxTok::Comment);
+
+    // SQL is written in either case and means the same thing.
+    SyntaxLang sql = SyntaxLangFor(StrL("sql"));
+    utassert(TokAt(sql, "SELECT a FROM t -- all", "SELECT") ==
+             SyntaxTok::Keyword);
+    utassert(TokAt(sql, "select a from t", "select") == SyntaxTok::Keyword);
+    utassert(TokAt(sql, "SELECT a FROM t -- all", "-- all") ==
+             SyntaxTok::Comment);
+}
+
+// An unterminated string or comment must not swallow the rest of the block.
+static void TestSyntaxUnterminated() {
+    SyntaxLang cpp = SyntaxLangFor(StrL("cpp"));
+    const char* src = "char* s = \"oops;\nint n = 1;\n";
+    utassert(Partitions(cpp, src));
+    utassert(TokAt(cpp, src, "int n") == SyntaxTok::Type);
+    utassert(Partitions(cpp, "/* never closed\nint n;\n"));
+}
+
+// A language the table does not know hands the whole block back as one run,
+// which is what the renderer paints unhighlighted.
+static void TestSyntaxUnknownLang() {
+    SyntaxLexer lx;
+    Str src = StrL("anything at all");
+    SyntaxLexStart(&lx, SyntaxLangNone, src);
+    utassert(SyntaxLexNext(&lx));
+    utassert(lx.tok == SyntaxTok::Text);
+    utassert(lx.text.len == src.len);
+    utassert(!SyntaxLexNext(&lx));
+}
+
+static void TestSyntaxColors() {
+    Rgba fg = Rgb(1, 2, 3);
+    // theme/default-theme.json: keyword is #0433ff light, #c28b12 dark.
+    Rgba light = SyntaxTokColor(SyntaxTok::Keyword, ThemeMode::Light, fg);
+    utassert(light.r == 0x04 && light.g == 0x33 && light.b == 0xff);
+    Rgba dark = SyntaxTokColor(SyntaxTok::Keyword, ThemeMode::Dark, fg);
+    utassert(dark.r == 0xc2 && dark.g == 0x8b && dark.b == 0x12);
+    // Text has no entry: the block's own foreground stands.
+    Rgba text = SyntaxTokColor(SyntaxTok::Text, ThemeMode::Dark, fg);
+    utassert(text.r == 1 && text.g == 2 && text.b == 3);
+}
+
+void TestSyntax() {
+    TestSuite("Syntax");
+    TestSyntaxLangFor();
+    TestSyntaxCpp();
+    TestSyntaxRust();
+    TestSyntaxPython();
+    TestSyntaxJson();
+    TestSyntaxMarkup();
+    TestSyntaxShellAndSql();
+    TestSyntaxUnterminated();
+    TestSyntaxUnknownLang();
+    TestSyntaxColors();
+}

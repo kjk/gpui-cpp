@@ -1,5 +1,6 @@
 #include "ui/text.h"
 
+#include "gpui/paint.h"
 #include "ui/html.h"
 
 #include "md4c.h"
@@ -777,12 +778,78 @@ El* TextView::CodeBlock(MdNode* n) {
         at += r->text.len;
     }
     buf[at] = 0;
+    SyntaxLang lang = SyntaxLangFor(n->lang);
+    if (lang != SyntaxLangNone) {
+        box->Child(CodeLines(Str(buf, at), lang));
+        return box;
+    }
     El* t = TextEl(a, Str(buf, at))->Font(codeFont)->Fg(th.foreground)->Mono();
     if (selectable) {
         t->Selectable();
     }
     box->Child(t);
     return box;
+}
+
+// The highlighted form: one row per line, one element per run of a color.
+// This is where the single-TextEl argument above gives way — a line has to
+// be several elements to be several colors — so the rows carry the line box
+// themselves and every element in them is the same mono face at the same
+// size, which keeps the lines from setting their own leading.
+El* TextView::CodeLines(Str code, SyntaxLang lang) {
+    const Theme& th = cx->theme();
+    ThemeMode mode = cx->themeMode();
+    El* col = Div(a)->FlexCol()->W(kFill);
+    float lineH = codeFont * kLineHeight;
+    El* row = Div(a)->FlexRow()->H(lineH);
+    // The run being gathered: adjacent tokens of one color are one element,
+    // which keeps a line of code down to a handful.
+    char piece[512];
+    int len = 0;
+    Rgba color = th.foreground;
+    auto flush = [&]() {
+        if (len <= 0) {
+            return;
+        }
+        El* t = TextEl(a, StrDup(a, Str(piece, len)))
+                    ->Font(codeFont)
+                    ->Fg(color)
+                    ->Mono();
+        if (selectable) {
+            t->Selectable();
+        }
+        row->Child(t);
+        len = 0;
+    };
+
+    SyntaxLexer lx;
+    SyntaxLexStart(&lx, lang, code);
+    while (SyntaxLexNext(&lx)) {
+        Rgba c = SyntaxTokColor(lx.tok, mode, th.foreground);
+        for (int i = 0; i < lx.text.len; i++) {
+            char ch = lx.text.s[i];
+            if (ch == '\n') {
+                flush();
+                col->Child(row);
+                row = Div(a)->FlexRow()->H(lineH);
+                continue;
+            }
+            if (ch == '\r') {
+                continue;
+            }
+            if (c.a != color.a || c.r != color.r || c.g != color.g ||
+                c.b != color.b) {
+                flush();
+                color = c;
+            }
+            if (len < (int)sizeof(piece) - 1) {
+                piece[len++] = ch;
+            }
+        }
+    }
+    flush();
+    col->Child(row);
+    return col;
 }
 
 // node.rs render_wrap_table proportions the columns by content length and
