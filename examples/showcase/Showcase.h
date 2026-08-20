@@ -88,6 +88,13 @@ inline El* ScButton(Ctx* cx, Str id) {
     return Button::New(cx, id);
 }
 
+// The same, with the semantic states the caller declared. Rust spells it
+// `Button::new(id).disabled(..).styles(|s| s.disabled(..))`.
+inline El* ScButton(Ctx* cx, Str id, bool disabled, const ButtonStyles* styles,
+                    bool selected = false) {
+    return Button::New(cx, id, disabled, {}, true, styles, selected);
+}
+
 struct ShowcaseApp {
     static El* Render(ShowcaseApp* self, Ctx* cx);
 

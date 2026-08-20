@@ -1,6 +1,6 @@
 /* Unstyled button — crates/base/src/button.rs */
 
-#include "gpui/gpui.h"
+#include "base/state_style.h"
 
 namespace gpui {
 
@@ -15,8 +15,18 @@ namespace gpui {
 // exposes the action to the keyboard, the way a number input's step buttons
 // do. A disabled button keeps its element id and takes neither focus nor the
 // click.
+// ButtonStyles, which is what `Button::styles(|s| s.selected(..).disabled(..))`
+// builds. `resolve_style` puts them in the one fixed order — the value state,
+// then disabled — so no two buttons drift apart, and both land at layout, so
+// they win over the look the caller chains onto the element afterwards.
+struct ButtonStyles {
+    StateStyle selected = {};
+    StateStyle disabled = {};
+};
+
 struct Button {
     static El* New(Ctx* cx, Str id, bool disabled = false,
-                   Listener onClick = {}, bool focusable = true);
+                   Listener onClick = {}, bool focusable = true,
+                   const ButtonStyles* styles = nullptr, bool selected = false);
 };
 } // namespace gpui

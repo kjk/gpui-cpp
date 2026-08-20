@@ -1082,6 +1082,9 @@ struct El {
     // entity. Needs a Click(id): the tree is rebuilt every frame, so the id
     // is what finds the element again.
     Listener onDragMove;
+    // The refinement above, and the fields it names. Zero is no refinement.
+    Style refine = {};
+    uint32_t refineSet = 0;
     // on_drag: what a press on this element picks up. The payload rides along
     // on every DragMoveEvent the drag produces.
     DragPayload drag = {};
@@ -1259,6 +1262,11 @@ struct El {
     El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
     El* OnMouseUpOut(Listener l);
     El* OnDrop(Str acceptKind, Listener l);
+    // StyleRefinement, applied at layout time rather than as the caller
+    // chains: a semantic state — selected, disabled — is meant to win over the
+    // instance style underneath it, and the instance style is whatever the
+    // caller chains onto the element after the primitive handed it back.
+    El* Refine(const Style& s, uint32_t fields);
     El* BoundsOut(gpui::Bounds* out);
     El* Cursor(CursorKind c);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
@@ -1442,8 +1450,19 @@ enum StyleField : uint32_t {
     StyleFieldFontSize = 1u << 7,
     StyleFieldWidth = 1u << 8,
     StyleFieldHeight = 1u << 9,
-    StyleFieldOpacity = 1u << 10
+    StyleFieldOpacity = 1u << 10,
+    // Not fields the inspector's editor offers — a hover colour is not a
+    // property of the box, it is what the box becomes under the pointer — but
+    // they are fields a StyleRefinement can name, and `state_style.h` names
+    // them.
+    StyleFieldHoverBg = 1u << 11,
+    StyleFieldHoverFg = 1u << 12
 };
+
+// StyleRefinement::refine, over the fields `fields` names and no others. The
+// inspector's live edit and a control's semantic state are both refinements
+// of a whole style, so they go through the same place.
+void StyleApplyFields(Style* into, const Style& over, uint32_t fields);
 
 // A live style override, which is what Rust's DivInspector writes back into
 // the `StyleRefinement` of the element it took over. The tree is rebuilt every

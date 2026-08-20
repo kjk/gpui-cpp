@@ -724,6 +724,55 @@ void StyleOverrideClearAll() {
     gStyleOverrides.Reset();
 }
 
+void StyleApplyFields(Style* into, const Style& over, uint32_t fields) {
+    if (!into || fields == 0) {
+        return;
+    }
+    if (fields & StyleFieldBg) {
+        into->bg = over.bg;
+        into->hasBg = true;
+    }
+    if (fields & StyleFieldColor) {
+        into->color = over.color;
+        into->hasColor = true;
+    }
+    if (fields & StyleFieldBorderColor) {
+        into->borderColor = over.borderColor;
+    }
+    if (fields & StyleFieldPad) {
+        into->pad = over.pad;
+    }
+    if (fields & StyleFieldGap) {
+        into->gap = over.gap;
+    }
+    if (fields & StyleFieldRadius) {
+        into->radius = over.radius;
+    }
+    if (fields & StyleFieldBorder) {
+        into->border = over.border;
+    }
+    if (fields & StyleFieldFontSize) {
+        into->fontSize = over.fontSize;
+    }
+    if (fields & StyleFieldWidth) {
+        into->width = over.width;
+    }
+    if (fields & StyleFieldHeight) {
+        into->height = over.height;
+    }
+    if (fields & StyleFieldOpacity) {
+        into->opacity = over.opacity;
+    }
+    if (fields & StyleFieldHoverBg) {
+        into->hoverBg = over.hoverBg;
+        into->hasHoverBg = true;
+    }
+    if (fields & StyleFieldHoverFg) {
+        into->hoverFg = over.hoverFg;
+        into->hasHoverFg = true;
+    }
+}
+
 void StyleOverrideApply(El* e) {
     // Nothing picked, nothing edited: the common case costs one compare.
     if (gStyleOverrides.len == 0 || !e || e->clickId == 0) {
@@ -734,41 +783,7 @@ void StyleOverrideApply(El* e) {
         if (o.clickId != e->clickId) {
             continue;
         }
-        if (o.fields & StyleFieldBg) {
-            e->style.bg = o.style.bg;
-            e->style.hasBg = true;
-        }
-        if (o.fields & StyleFieldColor) {
-            e->style.color = o.style.color;
-            e->style.hasColor = true;
-        }
-        if (o.fields & StyleFieldBorderColor) {
-            e->style.borderColor = o.style.borderColor;
-        }
-        if (o.fields & StyleFieldPad) {
-            e->style.pad = o.style.pad;
-        }
-        if (o.fields & StyleFieldGap) {
-            e->style.gap = o.style.gap;
-        }
-        if (o.fields & StyleFieldRadius) {
-            e->style.radius = o.style.radius;
-        }
-        if (o.fields & StyleFieldBorder) {
-            e->style.border = o.style.border;
-        }
-        if (o.fields & StyleFieldFontSize) {
-            e->style.fontSize = o.style.fontSize;
-        }
-        if (o.fields & StyleFieldWidth) {
-            e->style.width = o.style.width;
-        }
-        if (o.fields & StyleFieldHeight) {
-            e->style.height = o.style.height;
-        }
-        if (o.fields & StyleFieldOpacity) {
-            e->style.opacity = o.style.opacity;
-        }
+        StyleApplyFields(&e->style, o.style, o.fields);
         return;
     }
 }
@@ -875,6 +890,17 @@ El* El::OnDrop(Str acceptKind, Listener l) {
     onDrop = l;
     return this;
 }
+El* El::Refine(const Style& s, uint32_t fields) {
+    if (fields == 0) {
+        return this;
+    }
+    // Two refinements on one element merge, the way StyleRefinement::refine
+    // does: the second names what it names and leaves the rest.
+    StyleApplyFields(&refine, s, fields);
+    refineSet |= fields;
+    return this;
+}
+
 El* El::BoundsOut(gpui::Bounds* out) {
     boundsOut = out;
     return this;
@@ -1847,9 +1873,13 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     if (!e) {
         return;
     }
-    // The inspector's live edit, before anything is measured against the
-    // style: this is the frame's copy of the element, so patching it is what
-    // Rust's `StyleRefinement` takeover amounts to.
+    // The element's own refinement first — a semantic state, which is meant
+    // to win over whatever the caller chained on — and then the inspector's
+    // live edit, which wins over everything.
+    if (e->refineSet) {
+        StyleApplyFields(&e->style, e->refine, e->refineSet);
+        e->refineSet = 0;
+    }
     StyleOverrideApply(e);
     // Same inputs as last time: replay the recorded sizes and slide the
     // subtree to the new origin. Everything below is a pure function of these
