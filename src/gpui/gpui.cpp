@@ -223,6 +223,44 @@ const Theme& ThemeLight() {
 }
 
 static ThemeMode gThemeMode = ThemeMode::Light;
+// theme/mod.rs: radius 6, radius_lg 8, font_size 16.
+static const float kDefaultFontSize = 16.f;
+static float gFontSize = kDefaultFontSize;
+static ScrollbarMode gScrollbarMode = ScrollbarMode::Always;
+
+void ThemeSetRadius(float radius) {
+    // Both palettes, since a theme here is a static rather than one window's
+    // Global and the mode can be switched under it.
+    const Theme* both[2] = {&ThemeLight(), &ThemeDark()};
+    for (int i = 0; i < 2; i++) {
+        Theme* t = const_cast<Theme*>(both[i]);
+        t->radius = radius;
+        t->radiusLg = radius > 0 ? radius + 2 : 0;
+    }
+}
+
+float ThemeFontSize() {
+    return gFontSize;
+}
+
+void ThemeSetFontSize(float px) {
+    gFontSize = px > 0 ? px : kDefaultFontSize;
+}
+
+// What an explicit `Font(12)` is multiplied by. Rust says its sizes in rems,
+// so they all follow `Theme::font_size`; these are in DIPs, so the base is
+// what they are measured against.
+static float ThemeFontScale() {
+    return gFontSize / kDefaultFontSize;
+}
+
+ScrollbarMode ScrollbarModeNow() {
+    return gScrollbarMode;
+}
+
+void ScrollbarModeSet(ScrollbarMode m) {
+    gScrollbarMode = m;
+}
 
 void ThemeSet(App* app, ThemeMode mode) {
     if (app) {
@@ -523,7 +561,14 @@ El* El::ClipX() {
     style.overflowX = Overflow::Hidden;
     return this;
 }
+// The bar an element shows: its own when it named one, the theme's default
+// otherwise.
+static ScrollbarMode ElScrollMode(const El* e) {
+    return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow();
+}
+
 El* El::ScrollMode(ScrollbarMode m) {
+    scrollModeSet = true;
     scrollMode = m;
     return this;
 }
@@ -1363,7 +1408,11 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         MoveEl(e, x, y);
         return;
     }
-    float font = e->style.fontSize > 0 ? e->style.fontSize : inheritFont;
+    // An explicit size is in DIPs at the default font size and scales with
+    // it; an inherited one has been scaled already, by the root or by
+    // whichever ancestor set it.
+    float font = e->style.fontSize > 0 ? e->style.fontSize * ThemeFontScale()
+                                       : inheritFont;
     Rgba fg = e->style.hasColor ? e->style.color : inheritFg;
     // Like HoverBg, this needs a click id of its own: without one the element
     // would match hoverId 0, which means nothing is hovered.
@@ -2742,7 +2791,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.scrollY = e->scrollY;
         sr.contentW = e->contentW;
         sr.scrollX = e->scrollX;
-        sr.mode = e->scrollMode;
+        sr.mode = ElScrollMode(e);
         sr.onScroll = e->onScroll;
         ctx->scrolls.Append(sr);
     }
@@ -2939,7 +2988,7 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
 
     // ScrollbarMode: Always paints the bar whenever there is something to
     // scroll, Hover only while the pointer is over the box it belongs to.
-    bool barVisible = e->scrollMode == ScrollbarMode::Always ||
+    bool barVisible = ElScrollMode(e) == ScrollbarMode::Always ||
                       e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
     if (barVisible && e->style.overflowY == Overflow::Scroll &&
         e->contentH > e->h + 1.f && e->h > 0) {

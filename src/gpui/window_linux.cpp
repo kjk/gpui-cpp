@@ -18,6 +18,8 @@
 #include <locale.h>
 #include <poll.h>
 #include <time.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 namespace gpui {
 
@@ -524,6 +526,32 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     (void)y;
     (void)dark;
     return 0;
+}
+
+// cx.open_url. xdg-open is the desktop's own answer to "what opens this";
+// the fork keeps a browser that takes its time from holding up the frame, and
+// the child replaces itself so nothing here waits on it.
+void OpenUrl(Str url) {
+    if (!url.s || url.len <= 0) {
+        return;
+    }
+    char buf[1024];
+    int n = url.len < (int)sizeof(buf) - 1 ? url.len : (int)sizeof(buf) - 1;
+    memcpy(buf, url.s, (size_t)n);
+    buf[n] = 0;
+    pid_t pid = fork();
+    if (pid == 0) {
+        // The grandchild is orphaned deliberately: nobody is left to reap it.
+        if (fork() == 0) {
+            execlp("xdg-open", "xdg-open", buf, (char*)nullptr);
+            _exit(127);
+        }
+        _exit(0);
+    }
+    if (pid > 0) {
+        int st = 0;
+        waitpid(pid, &st, 0);
+    }
 }
 
 void ClipboardSetText(Window* win, Str text) {

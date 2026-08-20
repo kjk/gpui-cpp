@@ -752,7 +752,163 @@ static El* StoryTitleMenuItem(Ctx* cx, const char* label, bool semibold) {
         ->Child(text);
 }
 
-static El* StoryTitleBar(Ctx* cx) {
+// The window's notification list. Rust hangs it off the window — Root renders
+// it and `window.notifications(cx)` reads it — so it is the app's here rather
+// than the notification page's, and a notification outlives leaving that page.
+Entity<component::NotificationListState> StoryNotifications(Ctx* cx) {
+    Entity<StoryApp> app;
+    app.id = cx->win->root;
+    StoryApp* self = app.Get(cx);
+    return self ? self->notifications
+                : Entity<component::NotificationListState>{};
+}
+
+static int StoryNotificationCount(Ctx* cx) {
+    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
+    return st ? st->n : 0;
+}
+
+// AppTitleBar's FontSizeSelector, which is the Appearance menu behind the
+// Settings2 button. Rust gives each row an action — SelectFont, SelectRadius,
+// SelectScrollbarMode, ToggleListActiveHighlight, ToggleFpsMonitor — and
+// dispatches it through the focus chain; a PopupMenu here reports which row
+// was taken, so one table both builds the menu and says what each row does.
+enum class ApKind : uint8_t {
+    Label,
+    Sep,
+    Font,
+    Radius,
+    Scroll,
+    ListHighlight,
+    Fps
+};
+
+struct ApRow {
+    ApKind kind;
+    const char* label;
+    // The font size or radius in DIPs, or the scrollbar mode; unused by the
+    // two toggles, which read what they toggle.
+    float value;
+};
+
+static const ApRow kAppearance[] = {
+    {ApKind::Label, "Font Size", 0},
+    {ApKind::Font, "Large", 18},
+    {ApKind::Font, "Medium (default)", 16},
+    {ApKind::Font, "Small", 14},
+    {ApKind::Sep, nullptr, 0},
+    {ApKind::Label, "Border Radius", 0},
+    {ApKind::Radius, "8px", 8},
+    {ApKind::Radius, "6px (default)", 6},
+    {ApKind::Radius, "4px", 4},
+    {ApKind::Radius, "0px", 0},
+    {ApKind::Sep, nullptr, 0},
+    {ApKind::Label, "Scrollbar", 0},
+    // Rust offers a third, Scrolling — shown while scrolling and fading out
+    // after two idle seconds — which is not ported.
+    {ApKind::Scroll, "Hover to show", (float)ScrollbarMode::Hover},
+    {ApKind::Scroll, "Always show", (float)ScrollbarMode::Always},
+    {ApKind::Sep, nullptr, 0},
+    {ApKind::ListHighlight, "List Active Highlight", 0},
+    {ApKind::Fps, "FPS Monitor", 0},
+};
+
+static const int kAppearanceRows = (int)(sizeof(kAppearance) / sizeof(ApRow));
+
+// menu_with_check: which row is the one in force.
+static bool ApChecked(const StoryApp* app, const ApRow& r) {
+    switch (r.kind) {
+        case ApKind::Font:
+            return ThemeFontSize() == r.value;
+        case ApKind::Radius:
+            return ThemeNow().radius == r.value;
+        case ApKind::Scroll:
+            return ScrollbarModeNow() == (ScrollbarMode)(int)r.value;
+        case ApKind::ListHighlight:
+            return ListSettingsNow().activeHighlight;
+        case ApKind::Fps:
+            return app->fpsMonitor;
+        default:
+            return false;
+    }
+}
+
+static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
+                             intptr_t ix) {
+    if (ix < 0 || ix >= kAppearanceRows) {
+        return;
+    }
+    const ApRow& r = kAppearance[ix];
+    switch (r.kind) {
+        case ApKind::Font:
+            ThemeSetFontSize(r.value);
+            break;
+        case ApKind::Radius:
+            ThemeSetRadius(r.value);
+            break;
+        case ApKind::Scroll:
+            ScrollbarModeSet((ScrollbarMode)(int)r.value);
+            break;
+        case ApKind::ListHighlight: {
+            ListSettings s = ListSettingsNow();
+            s.activeHighlight = !s.activeHighlight;
+            ListSettingsSet(s);
+            break;
+        }
+        case ApKind::Fps:
+            app->fpsMonitor = !app->fpsMonitor;
+            break;
+        default:
+            break;
+    }
+    // window.refresh(), and the layout memo goes with it: a font size or a
+    // radius changes every box that inherited one.
+    Notify(cx);
+}
+
+static El* AppearanceMenu(StoryApp* app, Ctx* cx) {
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("story-appearance-menu"));
+    for (int i = 0; i < kAppearanceRows; i++) {
+        const ApRow& r = kAppearance[i];
+        switch (r.kind) {
+            case ApKind::Label:
+                menu->Label(Str(r.label));
+                break;
+            case ApKind::Sep:
+                menu->Separator();
+                break;
+            default:
+                menu->MenuWithCheck(Str(r.label), ApChecked(app, r));
+                break;
+        }
+    }
+    // check_side(Right): the tick sits on the far edge, so the labels start
+    // flush.
+    menu->CheckSide(Side::Right);
+    if (PopupMenuState* st = menu->state.Get(cx)) {
+        st->onConfirm = Listen(cx, &OnAppearanceItem);
+    }
+    return component::DropdownMenu::New(cx, StrL("story-appearance"))
+        ->Trigger(component::Button::New(cx, StrL("story-title-settings"))
+                      ->Icon(IconName::Settings2)
+                      ->Ghost()
+                      ->Compact()
+                      ->WithSize(UiSize::Small)
+                      ->Tooltip(StrL("Appearance"))
+                      ->IntoEl())
+        ->Menu(menu)
+        // Anchor::TopRight: the menu's right edge lines up with the button's,
+        // which is what keeps it on screen at the corner of the window.
+        ->AnchorRight()
+        ->IntoEl();
+}
+
+static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
+    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+}
+
+static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
 
     El* menus = Div(a)
@@ -770,27 +926,30 @@ static El* StoryTitleBar(Ctx* cx) {
             ->ItemsCenter()
             ->PadX(8)
             ->Gap(2)
-            ->Child(component::Button::New(cx, StrL("story-title-settings"))
-                        ->Icon(IconName::Settings2)
-                        ->Ghost()
-                        ->Compact()
-                        ->WithSize(UiSize::Small)
-                        ->Tooltip(StrL("Appearance"))
-                        ->IntoEl())
+            ->Child(AppearanceMenu(app, cx))
             ->Child(component::Button::New(cx, StrL("story-title-github"))
                         ->Icon(IconName::Github)
                         ->Ghost()
                         ->Compact()
                         ->WithSize(UiSize::Small)
                         ->Tooltip(StrL("GitHub"))
+                        ->OnClick(Listen(cx, &OnGithub))
                         ->IntoEl())
-            ->Child(component::Button::New(cx, StrL("story-title-bell"))
-                        ->Icon(IconName::Bell)
-                        ->Ghost()
-                        ->Compact()
-                        ->WithSize(UiSize::Small)
-                        ->Tooltip(StrL("Notifications"))
-                        ->IntoEl());
+            // Badge::count: how many notifications are up, capped at 99. The
+            // bell itself has nothing to do in Rust either — the count is the
+            // whole of it.
+            ->Child(
+                component::Badge::New(cx)
+                    ->Count(StoryNotificationCount(cx))
+                    ->Max(99)
+                    ->Child(component::Button::New(cx, StrL("story-title-bell"))
+                                ->Icon(IconName::Bell)
+                                ->Ghost()
+                                ->Compact()
+                                ->WithSize(UiSize::Small)
+                                ->Tooltip(StrL("Notifications"))
+                                ->IntoEl())
+                    ->IntoEl());
 
     return component::TitleBar::New(cx)->Child(menus)->Child(tools)->IntoEl();
 }
@@ -843,11 +1002,22 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
         cx->win->input = &app->search;
     }
     const Theme& th = cx->theme();
+    if (!app->seeded) {
+        app->seeded = true;
+        app->notifications =
+            EntityNewState<component::NotificationListState>(cx->app);
+        // Rust spawns a task that advances the list every 50 ms; a window
+        // timer is the same clock.
+        app->notifyTimer = WindowSetInterval(
+            cx->win, component::kNotificationTickMs,
+            ListenTo(app->notifications,
+                     &component::NotificationListState::OnTick));
+    }
     // The window's outermost view is a Root, which is what Rust puts under
     // every window: the page, and over it the layers the window owns.
     El* root = Div(frame)->FlexCol()->SizeFull();
     if (cx->win->opts.clientTitleBar) {
-        root->Child(StoryTitleBar(cx));
+        root->Child(StoryTitleBar(app, cx));
     }
     El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));
@@ -878,11 +1048,17 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     }
     root->Child(body);
     root->Child(Footer(app, cx));
+    // ToggleFpsMonitor: the HUD places itself over the top right corner.
+    if (app->fpsMonitor) {
+        root->Child(FpsMonitorEl(cx));
+    }
     // Bordered only where the window is client-decorated; a system frame
     // draws its own, and Rust's window_border is the Linux CSD wrapper.
     return component::Root::New(cx)
         ->Bordered(cx->win->opts.clientTitleBar)
         ->Child(root)
+        ->Notifications(component::NotificationList::New(cx, app->notifications)
+                            ->IntoEl())
         ->IntoEl();
 }
 

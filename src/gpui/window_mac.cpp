@@ -696,6 +696,21 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     return gMenuChoice;
 }
 
+// cx.open_url. NSWorkspace hands the URL to whichever application is
+// registered for its scheme.
+void OpenUrl(Str url) {
+    if (!url.s || url.len <= 0) {
+        return;
+    }
+    NSString* s = [[NSString alloc] initWithBytes:url.s
+                                           length:(NSUInteger)url.len
+                                         encoding:NSUTF8StringEncoding];
+    NSURL* u = s ? [NSURL URLWithString:s] : nil;
+    if (u) {
+        [[NSWorkspace sharedWorkspace] openURL:u];
+    }
+}
+
 void ClipboardSetText(Window* win, Str text) {
     (void)win;
     if (!text.s || text.len <= 0) {

@@ -46,6 +46,7 @@ void TestSelect();
 void TestDialog();
 void TestSheet();
 void TestScrollbar();
+void TestThemeSettings();
 void TestResizable();
 void TestTree();
 void TestCalendar();
