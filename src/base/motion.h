@@ -132,6 +132,16 @@ double MotionNow(Ctx* cx);
 void* MotionSlot(Ctx* cx, uint32_t key, int size);
 void MotionWantsFrame(Ctx* cx);
 
+// Animation::repeat: a loop with no target and no end. The phase of a cycle
+// of `periodMs`, put through `ease` — the delta GPUI hands the closure of a
+// `with_animation(.., Animation::new(d).repeat(), ..)`. Something showing one
+// is asking for a frame every frame, which is what a spinner is.
+//
+// Rust's repeats do not consult `reduce_motion`, and neither does this: a
+// spinner that stopped spinning would be saying the wrong thing.
+float MotionRepeat(Ctx* cx, uint32_t key, float periodMs,
+                   EaseFn ease = nullptr);
+
 // motion::transition: the value to draw now, on its way to `target`.
 template <typename T>
 T MotionValue(Ctx* cx, uint32_t key, T target, const Motion& m) {

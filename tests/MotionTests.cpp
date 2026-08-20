@@ -36,6 +36,30 @@ static void TheEasingsAreTheCurvesRustNames() {
     utassertnear(EaseInOutCubic(2.f), 1.f);
 }
 
+// GPUI's own easings, which the looping components are written against.
+static void TheLoopingEasingsAreGpuisOwn() {
+    utassertnear(EaseQuadratic(0.5f), 0.25f);
+    // ease_in_out: quadratic at both ends, exactly halfway at halfway.
+    utassertnear(EaseInOutQuad(0.25f), 0.125f);
+    utassertnear(EaseInOutQuad(0.5f), 0.5f);
+    utassertnear(EaseInOutQuad(0.75f), 0.875f);
+    utassertnear(EaseOutQuint(0.5f), 1.f - 0.03125f);
+
+    // bounce: the curve forwards over the first half and back over the
+    // second, so it ends where it started and peaks in the middle.
+    utassertnear(EaseBounce(EaseLinear, 0.f), 0.f);
+    utassertnear(EaseBounce(EaseLinear, 0.25f), 0.5f);
+    utassertnear(EaseBounce(EaseLinear, 0.5f), 1.f);
+    utassertnear(EaseBounce(EaseLinear, 0.75f), 0.5f);
+    utassertnear(EaseBounce(EaseLinear, 1.f), 0.f);
+    // The skeleton's, which is that pair over ease_in_out.
+    utassertnear(EaseBounceInOut(0.5f), EaseInOutQuad(1.f));
+    utassertnear(EaseBounceInOut(0.25f), EaseInOutQuad(0.5f));
+    // 1 - delta * 0.5 is what the skeleton makes of it: never below half.
+    utassertnear(1.f - EaseBounceInOut(0.5f) * 0.5f, 0.5f);
+    utassertnear(1.f - EaseBounceInOut(0.f) * 0.5f, 1.f);
+}
+
 // cubic_bezier: the y of the curve, with both ends pinned.
 static void TheBezierRunsFromNothingToEverything() {
     utassertnear(CubicBezier(0.32f, 0.72f, 0.f, 1.f, 0.f), 0.f);
@@ -211,6 +235,7 @@ static void AChannelKeepsTwoValuesOfOneElementApart() {
 void TestMotion() {
     TestSuite("motion");
     TheEasingsAreTheCurvesRustNames();
+    TheLoopingEasingsAreGpuisOwn();
     TheBezierRunsFromNothingToEverything();
     TheLerpsAreTheThreeRustImplements();
     ProgressWaitsOutTheDelayAndStopsAtTheEnd();

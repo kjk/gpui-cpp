@@ -1,8 +1,12 @@
 #include "ui/skeleton.h"
+#include "base/motion.h"
 
 namespace gpui {
 
 namespace component {
+
+// skeleton.rs: a two-second loop of bounce(ease_in_out).
+static const float kSkeletonPeriodMs = 2000.f;
 
 Skeleton* Skeleton::New(Ctx* cx) {
     Arena* a = cx->a;
@@ -33,7 +37,17 @@ El* Skeleton::IntoEl() {
     if (secondary) {
         bg = RgbaOpacity(bg, 0.5f);
     }
-    return Div(a)->W(w)->H(h)->Bg(bg)->Radius(4);
+    // `1 - delta * 0.5` of the element's opacity, pulsing there and back. The
+    // block is the only thing it paints, so its own alpha is that opacity.
+    // Rust names the animation "skeleton"; every block on a page shares the
+    // phase, which is what makes a stack of them read as one thing loading.
+    float delta = MotionRepeat(cx, MotionId(StrL("skeleton")),
+                               kSkeletonPeriodMs, EaseBounceInOut);
+    return Div(a)
+        ->W(w)
+        ->H(h)
+        ->Bg(RgbaOpacity(bg, 1.f - delta * 0.5f))
+        ->Radius(4);
 }
 
 } // namespace component

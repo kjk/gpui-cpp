@@ -567,6 +567,11 @@ static ScrollbarMode ElScrollMode(const El* e) {
     return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow();
 }
 
+El* El::Rotate(float turns) {
+    style.rotate = turns;
+    return this;
+}
+
 El* El::ScrollMode(ScrollbarMode m) {
     scrollModeSet = true;
     scrollMode = m;
@@ -2957,7 +2962,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
         float s = e->w > 0 ? e->w : 16;
         Str path = e->iconPath.s ? e->iconPath : IconNamePath(e->icon);
-        if (!SvgDraw(ctx, path, e->x, e->y, s, c)) {
+        if (!SvgDraw(ctx, path, e->x, e->y, s, c, e->style.rotate)) {
+            // The hand-drawn fallbacks are built in code and do not turn; an
+            // icon that spins is one with an asset behind it.
             DrawIcon(ctx, e->icon, e->x, e->y, s, c);
         }
     } else if (e->kind == ElKind::Progress) {

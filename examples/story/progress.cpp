@@ -1,18 +1,86 @@
 #include "Story.h"
 
+// The toolbar's two dropdowns, the way the Rust story spells them: a value
+// with four presets, and an Options menu holding the indeterminate switch.
+enum {
+    ProgMenuNone = 0,
+    ProgMenuValue,
+    ProgMenuOptions,
+    ProgActValue0 = 3200,
+    ProgActValue25,
+    ProgActValue75,
+    ProgActValue100,
+    ProgActLoading
+};
+
 struct ProgressStory {
     // The story's value starts at 25 and its toolbar steps it.
     float value = 25;
+    bool loading = false;
+    int openMenu = ProgMenuNone;
     StoryToolbarState toolbar;
 
     static El* Render(ProgressStory* self, Ctx* cx);
 };
 
+static void ProgMenuOpen(ProgressStory* self, Ctx* cx, const ClickEvent*,
+                         intptr_t which) {
+    self->openMenu = self->openMenu == (int)which ? ProgMenuNone : (int)which;
+    Notify(cx);
+}
+
+static void ProgMenuAct(ProgressStory* self, Ctx* cx, const ClickEvent*,
+                        intptr_t act) {
+    switch (act) {
+        case ProgActValue0:
+            self->value = 0;
+            break;
+        case ProgActValue25:
+            self->value = 25;
+            break;
+        case ProgActValue75:
+            self->value = 75;
+            break;
+        case ProgActValue100:
+            self->value = 100;
+            break;
+        case ProgActLoading:
+            self->loading = !self->loading;
+            break;
+        default:
+            StoryToolbarApply(&self->toolbar, nullptr, (int)act);
+            break;
+    }
+    self->openMenu = ProgMenuNone;
+    Notify(cx);
+}
+
 El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
-    page->Child(StoryToolbar(cx, self));
+    Listener openMenu = Listen(cx, &ProgMenuOpen);
+    Listener act = Listen(cx, &ProgMenuAct);
+    El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
+    El* group = StoryToolbarGroup(cx);
+    StoryToolbarOpt presets[4] = {
+        {"0%", self->value == 0, ProgActValue0},
+        {"25%", self->value == 25, ProgActValue25},
+        {"75%", self->value == 75, ProgActValue75},
+        {"100%", self->value == 100, ProgActValue100},
+    };
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("progress-value"), StoryFmt(cx, "Value: %.0f%%", self->value),
+        self->openMenu == ProgMenuValue, ListenerArg(openMenu, ProgMenuValue),
+        presets, 4, act));
+    group->Child(StoryToolbarDivider(cx));
+    StoryToolbarOpt options[1] = {{"Loading", self->loading, ProgActLoading}};
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("progress-options"), StrL("Options"),
+        self->openMenu == ProgMenuOptions,
+        ListenerArg(openMenu, ProgMenuOptions), options, 1, act));
+    toolbarRow->Child(group);
+    page->Child(toolbarRow);
 
     El* upload = StorySection(
         cx, "Upload", "Pair progress with a clear label, value, and status.");
@@ -27,11 +95,17 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     head->Child(
         StoryTxt(cx, StrL("Uploading design-assets.zip"), 14, th.foreground)
             ->Semibold());
-    head->Child(
-        StoryTxt(cx, StoryFmt(cx, "%.0f%%", self->value), 13, th.mutedFg));
+    head->Child(StoryTxt(cx,
+                         self->loading ? StrL("Uploading…")
+                                       : StoryFmt(cx, "%.0f%%", self->value),
+                         13, th.mutedFg));
     card->Child(head);
-    card->Child(
-        component::Progress::New(cx)->Value(self->value)->W(kFill)->IntoEl());
+    card->Child(component::Progress::New(cx)
+                    ->Id(StrL("upload"))
+                    ->Value(self->value)
+                    ->Loading(self->loading)
+                    ->W(kFill)
+                    ->IntoEl());
     El* foot = Div(a)->FlexRow()->W(kFill)->JustifyBetween()->ItemsCenter();
     foot->Child(StoryTxt(cx, StrL("24.8 MB of 96 MB"), 12, th.mutedFg));
     foot->Child(StoryTxt(cx, StrL("About 1 min left"), 12, th.mutedFg));
@@ -50,7 +124,10 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
                       ->Radius(th.radius)
                       ->Bg(RgbaOpacity(th.muted, 0.4f));
     circBox->Child(component::ProgressCircle::New(cx)
+                       ->Id(StrL("analyze"))
                        ->Value(self->value)
+                       ->Loading(self->loading)
+                       ->Label(!self->loading)
                        ->Size(80)
                        ->IntoEl());
     El* circText = Div(a)->FlexCol()->Gap(4);

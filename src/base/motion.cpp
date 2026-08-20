@@ -46,6 +46,39 @@ void MotionSetReduced(bool on) {
     gReduced = on;
 }
 
+// The clock a loop runs on: when it started, and nothing else — a loop has no
+// target to leave from.
+struct MotionLoopState {
+    double startedAt = 0;
+    bool init = false;
+};
+
+float MotionRepeat(Ctx* cx, uint32_t key, float periodMs, EaseFn ease) {
+    if (periodMs <= 0) {
+        return 0.f;
+    }
+    auto* st =
+        (MotionLoopState*)MotionSlot(cx, key, (int)sizeof(MotionLoopState));
+    if (!st) {
+        return 0.f;
+    }
+    double now = MotionNow(cx);
+    if (!st->init) {
+        st->init = true;
+        st->startedAt = now;
+    }
+    float elapsedMs = (float)((now - st->startedAt) * 1000.0);
+    float phase = elapsedMs / periodMs;
+    // The whole turns come off rather than the phase growing without end,
+    // which would lose its precision within a day of running.
+    phase -= (float)(int)phase;
+    if (phase < 0) {
+        phase = 0;
+    }
+    MotionWantsFrame(cx);
+    return ease ? ease(phase) : phase;
+}
+
 double MotionNow(Ctx* cx) {
     // The frame's own instant, which WindowDrawFrame stamps before it renders.
     if (cx && cx->win && cx->win->frameNow > 0) {
