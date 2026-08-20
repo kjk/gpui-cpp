@@ -43,6 +43,11 @@ struct PopupMenuState {
     int openSubmenu = -1;
     // Which side submenus open towards, which decides what Left and Right do.
     Side side = Side::Right;
+    // Where the menu opens, relative to the element it belongs to. A dropdown
+    // hangs under its trigger and leaves this at zero; a context menu opens at
+    // the pointer, which is what Rust's ContextMenuState keeps as `position`.
+    float x = 0;
+    float y = 0;
     // What a confirmed item reports: the item's index, bound with
     // ListenerFill the way a component hands its caller the value it made.
     Listener onConfirm = {};
@@ -51,6 +56,13 @@ struct PopupMenuState {
                             intptr_t ix);
     static void OnItemHover(PopupMenuState* self, Ctx* cx, const HoverEvent* ev,
                             intptr_t ix);
+    // A trigger that opens and closes the menu, and a right press that opens
+    // it where the pointer is — the two ways Rust puts a PopupMenu on screen
+    // (DropdownMenu and ContextMenu).
+    static void OnTriggerClick(PopupMenuState* self, Ctx* cx,
+                               const ClickEvent* ev);
+    static void OnContextDown(PopupMenuState* self, Ctx* cx,
+                              const MouseDownEvent* ev);
 };
 
 // Open and close, which are `PopupMenu::show` and `dismiss(&Cancel)`. A menu

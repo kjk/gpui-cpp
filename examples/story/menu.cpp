@@ -17,12 +17,10 @@ enum {
 struct MenuStory {
     Str message = {};
     bool checkSideRight = false;
-    bool scrollOpen = false;
-    int scrollItems = 0;
-    // Which context-menu area was right-clicked, and where.
-    int ctxArea = -1;
-    float ctxX = 0;
-    float ctxY = 0;
+    // AppMenuBar is an entity in Rust too — it is what knows which title is
+    // open.
+    Entity<component::AppMenuBarState> bar = {};
+    bool seeded = false;
 
     ~MenuStory() { StrFree(message); }
     static El* Render(MenuStory* self, Ctx* cx);
@@ -59,13 +57,6 @@ static void OnContextItem(MenuStory* self, Ctx* cx, const ClickEvent*,
     if (ix >= 0 && ix < 3) {
         SetMessage(self, cx, "Context menu: %s", kNames[ix]);
     }
-}
-
-static void OpenScroll(MenuStory* self, Ctx* cx, const ClickEvent*,
-                       intptr_t items) {
-    self->scrollOpen = !(self->scrollOpen && self->scrollItems == (int)items);
-    self->scrollItems = (int)items;
-    Notify(cx);
 }
 
 // The Edit menu, built the same way every frame so its keyed state and the
@@ -120,6 +111,25 @@ void MenuStory::OnKey(MenuStory* self, Ctx* cx, const KeyEvent* ev) {
     if (!ev->down) {
         return;
     }
+    // The menu bar takes the arrows and Escape while one of its titles is
+    // open, which is on_move_left / on_move_right / on_cancel.
+    component::AppMenuBarState* bar = self->bar.Get(cx);
+    if (bar && bar->selected >= 0) {
+        if (ev->vk == KeyLeft) {
+            component::AppMenuBarSelect(
+                bar, cx, component::AppMenuBarPrevIndex(bar->selected, 3));
+            return;
+        }
+        if (ev->vk == KeyRight) {
+            component::AppMenuBarSelect(
+                bar, cx, component::AppMenuBarNextIndex(bar->selected, 3));
+            return;
+        }
+        if (ev->vk == KeyEscape) {
+            component::AppMenuBarSelect(bar, cx, -1);
+            return;
+        }
+    }
     component::PopupMenu* m = EditMenu(self, cx);
     PopupMenuState* st = m->state.Get(cx);
     if (!st || !st->open) {
@@ -130,41 +140,6 @@ void MenuStory::OnKey(MenuStory* self, Ctx* cx, const KeyEvent* ev) {
     m->Masks(clickable, submenu);
     PopupMenuPerform(st, cx, PopupMenuActionForKey(ev->vk, st->side), clickable,
                      submenu, m->n);
-}
-
-static void ToggleEdit(MenuStory* self, Ctx* cx, const ClickEvent*) {
-    (void)self;
-    Entity<PopupMenuState> st =
-        component::PopupMenuStateFor(cx, StrL("popup-menu-1"));
-    PopupMenuState* s = st.Get(cx);
-    if (!s) {
-        return;
-    }
-    if (s->open) {
-        PopupMenuDismiss(s, cx);
-    } else {
-        PopupMenuOpen(s, cx);
-    }
-}
-
-// A right press inside one of the areas opens that area's menu where the
-// pointer is, which is what ContextMenuExt does.
-static void OnAreaDown(MenuStory* self, Ctx* cx, const MouseDownEvent* ev,
-                       intptr_t area) {
-    if (ev->button != MouseButton::Right) {
-        return;
-    }
-    self->ctxArea = (int)area;
-    // Where the press landed inside the area, so the menu can hang off the
-    // area's own box rather than the window's.
-    self->ctxX = ev->x - ev->el.x;
-    self->ctxY = ev->y - ev->el.y;
-    Entity<PopupMenuState> st = component::PopupMenuStateFor(
-        cx, StoryFmt(cx, "context-menu-%d", (int)area));
-    PopupMenuState* s = st.Get(cx);
-    if (s) {
-        PopupMenuOpen(s, cx);
-    }
 }
 
 static El* ContextArea(MenuStory* self, Ctx* cx, int area, Str title,
@@ -185,51 +160,68 @@ static El* ContextArea(MenuStory* self, Ctx* cx, int area, Str title,
     if (hint.s) {
         box->Child(StoryTxt(cx, hint, 14, th.mutedFg));
     }
-    box->Id(StoryFmt(cx, "ctx-area-%d", area))
-        ->Click(HashClickId(StoryFmt(cx, "ctx-area-%d", area)))
-        ->OnMouseDown(Listen(cx, &OnAreaDown, area));
-    if (self->ctxArea == area) {
-        Entity<PopupMenuState> st = component::PopupMenuStateFor(
-            cx, StoryFmt(cx, "context-menu-%d", area));
-        PopupMenuState* s = st.Get(cx);
-        if (s && s->open) {
-            component::PopupMenu* m = ContextMenu(cx, area);
-            s->onConfirm = Listen(cx, &OnContextItem);
-            box->Child(m->IntoEl()
-                           ->Absolute()
-                           ->Left(self->ctxX)
-                           ->Top(self->ctxY)
-                           ->Deferred());
-        }
+    // ContextMenuExt: the right press, the position and the menu over it are
+    // all the component's.
+    component::PopupMenu* menu = ContextMenu(cx, area);
+    PopupMenuState* st = menu->state.Get(cx);
+    if (st) {
+        st->onConfirm = Listen(cx, &OnContextItem);
     }
-    return box;
+    (void)self;
+    return component::ContextMenu::New(cx, StoryFmt(cx, "ctx-area-%d", area))
+        ->Child(box)
+        ->Menu(menu)
+        ->IntoEl();
 }
 
 El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    if (!self->seeded) {
+        self->seeded = true;
+        self->bar = EntityNewState<component::AppMenuBarState>(cx->app);
+    }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
+
+    // AppMenuBar: one title open at a time, and moving over another switches.
+    El* barSec = StorySection(cx, "Menu Bar",
+                              "The row of menus across the top of a window.");
+    component::AppMenuBar* bar =
+        component::AppMenuBar::New(cx, StrL("app-menu-bar"), self->bar);
+    bar->Menu(StrL("File"), component::PopupMenu::New(cx, StrL("bar-file"))
+                                ->MenuWithKbd(StrL("New"), StrL("Ctrl+N"))
+                                ->MenuWithKbd(StrL("Open"), StrL("Ctrl+O"))
+                                ->Separator()
+                                ->MenuWithKbd(StrL("Quit"), StrL("Ctrl+Q")));
+    bar->Menu(StrL("Edit"), component::PopupMenu::New(cx, StrL("bar-edit"))
+                                ->MenuWithKbd(StrL("Copy"), StrL("Ctrl+C"))
+                                ->MenuWithKbd(StrL("Cut"), StrL("Ctrl+X"))
+                                ->MenuWithKbd(StrL("Paste"), StrL("Ctrl+V")));
+    bar->Menu(StrL("View"), component::PopupMenu::New(cx, StrL("bar-view"))
+                                ->MenuWithCheck(StrL("Status Bar"), true)
+                                ->MenuWithCheck(StrL("Sidebar"), false));
+    StorySectionAdd(barSec, bar->IntoEl());
+    page->Child(barSec);
 
     El* popup = StorySection(
         cx, "Popup Menu",
         "Supports actions, links, checks, icons, custom rows, and nested "
         "menus.");
-    El* editWrap = Div(a)->FlexCol();
-    editWrap->Child(component::Button::New(cx, StrL("edit-menu"))
-                        ->Outline()
-                        ->Label(StrL("Edit"))
-                        ->OnClick(Listen(cx, &ToggleEdit))
-                        ->IntoEl());
     component::PopupMenu* edit = EditMenu(self, cx);
     PopupMenuState* editState = edit->state.Get(cx);
     if (editState) {
         editState->onConfirm = Listen(cx, &OnEditItem);
-        if (editState->open) {
-            editWrap
-                ->Child(edit->IntoEl()->AnchorBelow(4)->Left(0)->Deferred());
-        }
     }
-    StorySectionAdd(popup, editWrap);
+    // DropdownMenu: the trigger, the menu under it, and the click that opens
+    // it are the component's.
+    StorySectionAdd(popup,
+                    component::DropdownMenu::New(cx, StrL("edit-menu"))
+                        ->Trigger(component::Button::New(cx, StrL("edit-btn"))
+                                      ->Outline()
+                                      ->Label(StrL("Edit"))
+                                      ->IntoEl())
+                        ->Menu(edit)
+                        ->IntoEl());
     if (self->message.s) {
         StorySectionAdd(popup, StoryTxt(cx, self->message, 14, th.mutedFg));
     }
@@ -253,29 +245,25 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     El* scroll = StorySection(
         cx, "Scrollable", "A long menu keeps its height and scrolls its rows.");
     El* scrollRow = Div(a)->FlexRow()->Gap(16)->ItemsStart();
-    El* longWrap = Div(a)->FlexCol();
-    longWrap->Child(component::Button::New(cx, StrL("scroll-50"))
-                        ->Outline()
-                        ->Label(StrL("Scrollable Menu (50 items)"))
-                        ->OnClick(Listen(cx, &OpenScroll, 50))
-                        ->IntoEl());
-    El* shortWrap = Div(a)->FlexCol();
-    shortWrap->Child(component::Button::New(cx, StrL("scroll-5"))
-                         ->Outline()
-                         ->Label(StrL("Scrollable Menu (5 items)"))
-                         ->OnClick(Listen(cx, &OpenScroll, 5))
-                         ->IntoEl());
-    if (self->scrollOpen) {
-        component::PopupMenu* m =
-            component::PopupMenu::New(cx, StrL("scroll-menu"));
-        int shown = self->scrollItems > 12 ? 12 : self->scrollItems;
+    for (int which = 0; which < 2; which++) {
+        int items = which == 0 ? 50 : 5;
+        component::PopupMenu* m = component::PopupMenu::New(
+            cx, StoryFmt(cx, "scroll-menu-%d", items));
+        int shown = items > 12 ? 12 : items;
         for (int i = 1; i <= shown; i++) {
             m->Menu(StoryFmt(cx, "Item %d", i));
         }
-        El* menu = m->IntoEl()->AnchorBelow(4)->Left(0)->Deferred();
-        (self->scrollItems == 5 ? shortWrap : longWrap)->Child(menu);
+        scrollRow->Child(
+            component::DropdownMenu::New(cx, StoryFmt(cx, "scroll-%d", items))
+                ->Trigger(component::Button::New(
+                              cx, StoryFmt(cx, "scroll-btn-%d", items))
+                              ->Outline()
+                              ->Label(StoryFmt(cx, "Scrollable Menu (%d items)",
+                                               items))
+                              ->IntoEl())
+                ->Menu(m)
+                ->IntoEl());
     }
-    scrollRow->Child(longWrap)->Child(shortWrap);
     StorySectionAdd(scroll, scrollRow);
     page->Child(scroll);
     return page;

@@ -213,5 +213,172 @@ El* PopupMenu::IntoEl() {
     return root;
 }
 
+DropdownMenu* DropdownMenu::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
+    DropdownMenu* d = ArenaNew<DropdownMenu>(a);
+    d->a = a;
+    d->cx = cx;
+    d->id = id;
+    return d;
+}
+DropdownMenu* DropdownMenu::Trigger(El* e) {
+    trigger = e;
+    return this;
+}
+DropdownMenu* DropdownMenu::Menu(PopupMenu* m) {
+    menu = m;
+    return this;
+}
+DropdownMenu* DropdownMenu::AnchorRight(bool v) {
+    anchorRight = v;
+    return this;
+}
+
+El* DropdownMenu::IntoEl() {
+    El* wrap = Div(a)->FlexCol();
+    PopupMenuState* st = menu ? menu->state.Get(cx) : nullptr;
+    if (trigger) {
+        // The trigger opens and closes the menu it holds; a caller that wants
+        // to know can subscribe to the menu itself.
+        if (st) {
+            BindClick(trigger, id,
+                      ListenTo(menu->state, &PopupMenuState::OnTriggerClick));
+        }
+        wrap->Child(trigger);
+    }
+    if (menu && st && st->open) {
+        El* el = menu->IntoEl()->AnchorBelow(gap)->Deferred();
+        if (anchorRight) {
+            el->Right(0);
+        } else {
+            el->Left(0);
+        }
+        wrap->Child(el);
+    }
+    return wrap;
+}
+
+ContextMenu* ContextMenu::New(Ctx* cx, Str id) {
+    Arena* a = cx->a;
+    ContextMenu* c = ArenaNew<ContextMenu>(a);
+    c->a = a;
+    c->cx = cx;
+    c->id = id;
+    return c;
+}
+ContextMenu* ContextMenu::Child(El* e) {
+    child = e;
+    return this;
+}
+ContextMenu* ContextMenu::Menu(PopupMenu* m) {
+    menu = m;
+    return this;
+}
+
+El* ContextMenu::IntoEl() {
+    El* box = child ? child : Div(a);
+    PopupMenuState* st = menu ? menu->state.Get(cx) : nullptr;
+    if (!st) {
+        return box;
+    }
+    // The element needs identity for the press to reach it.
+    box->Id(id)
+        ->Click(HashClickId(id))
+        ->OnMouseDown(ListenTo(menu->state, &PopupMenuState::OnContextDown));
+    if (st->open) {
+        box->Child(
+            menu->IntoEl()->Absolute()->Left(st->x)->Top(st->y)->Deferred());
+    }
+    return box;
+}
+
+int AppMenuBarNextIndex(int selected, int count) {
+    if (count <= 0 || selected < 0) {
+        return selected;
+    }
+    return selected + 1 >= count ? 0 : selected + 1;
+}
+
+int AppMenuBarPrevIndex(int selected, int count) {
+    if (count <= 0 || selected < 0) {
+        return selected;
+    }
+    return selected == 0 ? count - 1 : selected - 1;
+}
+
+void AppMenuBarSelect(AppMenuBarState* s, Ctx* cx, int ix) {
+    if (!s) {
+        return;
+    }
+    s->selected = ix;
+    Notify(cx);
+}
+
+void AppMenuBarState::OnMenuClick(AppMenuBarState* self, Ctx* cx,
+                                  const ClickEvent*, intptr_t ix) {
+    // A second click on the open menu closes it.
+    AppMenuBarSelect(self, cx, self->selected == (int)ix ? -1 : (int)ix);
+}
+
+void AppMenuBarState::OnMenuHover(AppMenuBarState* self, Ctx* cx,
+                                  const HoverEvent* ev, intptr_t ix) {
+    if (!ev->hovered || self->selected < 0 || self->selected == (int)ix) {
+        return;
+    }
+    AppMenuBarSelect(self, cx, (int)ix);
+}
+
+AppMenuBar* AppMenuBar::New(Ctx* cx, Str id, Entity<AppMenuBarState> state) {
+    Arena* a = cx->a;
+    AppMenuBar* b = ArenaNew<AppMenuBar>(a);
+    b->a = a;
+    b->cx = cx;
+    b->id = id;
+    b->state = state;
+    return b;
+}
+AppMenuBar* AppMenuBar::Menu(Str title, PopupMenu* menu) {
+    if (n < 12) {
+        titles[n] = title;
+        menus[n] = menu;
+        n++;
+    }
+    return this;
+}
+
+El* AppMenuBar::IntoEl() {
+    const Theme& th = cx->theme();
+    AppMenuBarState* s = state.Get(cx);
+    El* bar = Div(a)->FlexRow()->ItemsCenter()->Gap(2)->H(28)->W(kFill);
+    Listener click = ListenTo(state, &AppMenuBarState::OnMenuClick, 0);
+    Listener hover = ListenTo(state, &AppMenuBarState::OnMenuHover, 0);
+    for (int i = 0; i < n; i++) {
+        bool on = s && s->selected == i;
+        El* wrap = Div(a)->FlexCol();
+        El* item = Div(a)
+                       ->FlexRow()
+                       ->H(24)
+                       ->PadX(8)
+                       ->ItemsCenter()
+                       ->Radius(th.radius)
+                       ->HoverBg(th.secondary);
+        if (on) {
+            item->Bg(th.secondary);
+        }
+        item->Child(TextEl(a, titles[i])->Font(14)->Fg(th.foreground));
+        BindClick(item, StrDup(a, fmt("%s-%d", id, i)), ListenerArg(click, i));
+        item->OnHover(ListenerArg(hover, i));
+        wrap->Child(item);
+        if (on && menus[i]) {
+            // The menu of the open title hangs under it, over everything the
+            // frame drew after it.
+            wrap->Child(
+                menus[i]->IntoEl()->AnchorBelow(2)->Left(0)->Deferred());
+        }
+        bar->Child(wrap);
+    }
+    return bar;
+}
+
 } // namespace component
 } // namespace gpui

@@ -143,6 +143,29 @@ void PopupMenuState::OnItemClick(PopupMenuState* self, Ctx* cx,
     PopupMenuConfirm(self, cx, (int)ix);
 }
 
+void PopupMenuState::OnTriggerClick(PopupMenuState* self, Ctx* cx,
+                                    const ClickEvent*) {
+    if (self->open) {
+        PopupMenuDismiss(self, cx);
+    } else {
+        self->x = 0;
+        self->y = 0;
+        PopupMenuOpen(self, cx);
+    }
+}
+
+void PopupMenuState::OnContextDown(PopupMenuState* self, Ctx* cx,
+                                   const MouseDownEvent* ev) {
+    // on_mouse_down(MouseButton::Right): the menu opens where the pointer is,
+    // inside the element that owns it.
+    if (ev->button != MouseButton::Right) {
+        return;
+    }
+    self->x = ev->x - ev->el.x;
+    self->y = ev->y - ev->el.y;
+    PopupMenuOpen(self, cx);
+}
+
 void PopupMenuState::OnItemHover(PopupMenuState* self, Ctx* cx,
                                  const HoverEvent* ev, intptr_t ix) {
     // The hovered row is the selected one; leaving it deselects, unless it is
