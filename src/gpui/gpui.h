@@ -846,7 +846,9 @@ struct Style {
     bool fontMedium = false; // font_medium(): DWrite weight 500
     bool fontMono = false;   // font_family("Consolas")
     bool underline = false;  // text_decoration_1()
-    bool italic = false;     // *emphasis*
+    // text_decoration_line_through(): a ~~del~~ run, an HTML <s> or <del>.
+    bool strike = false;
+    bool italic = false; // *emphasis*
     bool borderDashed = false;
     // Dash on/off lengths for a dashed border, in stroke widths. GPUI's
     // border_dashed draws 2 on, 1 off; a dashed Separator paints its own path
@@ -1133,6 +1135,7 @@ struct El {
     El* Medium();
     El* Mono();
     El* Underline();
+    El* Strikethrough();
     El* Italic();
     El* Selectable();
     El* Wrap();

@@ -534,6 +534,14 @@ struct TextLayout {
     float box = 0;
     float baseline = 0;
     float width = 0;
+    // Core Text knows kCTUnderlineStyleAttributeName and nothing else: the
+    // strikethrough attribute is AppKit's, and CTLineDraw ignores it. So the
+    // rule is drawn here, from the font's own metrics — its offset above the
+    // baseline and its thickness, which is what DirectWrite and Pango use for
+    // theirs.
+    bool strike = false;
+    float strikeOff = 0;
+    float strikeThick = 1;
 };
 
 static NSFontWeight WeightFor(uint8_t weight, float fontSize) {
@@ -717,6 +725,18 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     CGFloat ascent = CTFontGetAscent(font);
     CGFloat descent = CTFontGetDescent(font);
     tl->baseline = (float)ascent + (tl->box - (float)(ascent + descent)) * 0.5f;
+    if (weight & kFontStrike) {
+        tl->strike = true;
+        // The rule sits just under a third of the ascent above the baseline —
+        // about the x-height's middle for a text face — and is as thick as
+        // the font's underline. A face that reports no thickness (some bitmap
+        // and fallback faces do not) gets one device-independent pixel.
+        tl->strikeThick = (float)CTFontGetUnderlineThickness(font);
+        if (tl->strikeThick <= 0) {
+            tl->strikeThick = 1;
+        }
+        tl->strikeOff = (float)ascent * 0.31f;
+    }
 
     if (outSize) {
         outSize->w = width;
@@ -764,8 +784,14 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     SetFill(ctx, cg, c);
     CGContextSetTextMatrix(cg, CGAffineTransformMakeScale(1, -1));
     for (int i = 0; i < tl->nLines; i++) {
-        CGContextSetTextPosition(cg, x, y + (float)i * tl->box + tl->baseline);
+        float base = y + (float)i * tl->box + tl->baseline;
+        CGContextSetTextPosition(cg, x, base);
         CTLineDraw(tl->lines[i].line, cg);
+        if (tl->strike && tl->lines[i].width > 0) {
+            CGContextFillRect(
+                cg, CGRectMake(x, base - tl->strikeOff, tl->lines[i].width,
+                               tl->strikeThick));
+        }
     }
     if (clip) {
         CGContextRestoreGState(cg);

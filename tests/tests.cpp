@@ -36,6 +36,7 @@ int GpuiMain(int argc, char** argv) {
     TestFrameSampler();
     TestTitleBar();
     TestTextBoundary();
+    TestTextView();
     TestSlider();
     TestPagination();
     TestNumberInput();

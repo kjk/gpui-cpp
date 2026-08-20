@@ -563,10 +563,15 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     pango_layout_set_font_description(l, fd);
     pango_font_description_free(fd);
 
-    if (weight & kFontUnderline) {
+    if (weight & (kFontUnderline | kFontStrike)) {
         PangoAttrList* attrs = pango_attr_list_new();
-        pango_attr_list_insert(
-            attrs, pango_attr_underline_new(PANGO_UNDERLINE_SINGLE));
+        if (weight & kFontUnderline) {
+            pango_attr_list_insert(
+                attrs, pango_attr_underline_new(PANGO_UNDERLINE_SINGLE));
+        }
+        if (weight & kFontStrike) {
+            pango_attr_list_insert(attrs, pango_attr_strikethrough_new(TRUE));
+        }
         pango_layout_set_attributes(l, attrs);
         pango_attr_list_unref(attrs);
     }

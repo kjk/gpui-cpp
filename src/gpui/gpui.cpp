@@ -781,6 +781,10 @@ El* El::Underline() {
     style.underline = true;
     return this;
 }
+El* El::Strikethrough() {
+    style.strike = true;
+    return this;
+}
 El* El::Italic() {
     style.italic = true;
     return this;
@@ -1053,6 +1057,9 @@ static uint8_t ElTextWeight(const El* e) {
     }
     if (e->style.underline) {
         w |= kFontUnderline;
+    }
+    if (e->style.strike) {
+        w |= kFontStrike;
     }
     if (e->style.italic) {
         w |= kFontItalic;

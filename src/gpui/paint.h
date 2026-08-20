@@ -19,7 +19,11 @@ enum {
     kFontWeightMedium = 3,
     kFontMono = 4,
     kFontUnderline = 8,
-    kFontItalic = 16
+    kFontItalic = 16,
+    // text_decoration_line_through(): what a markdown `~~del~~` run and an
+    // HTML <s> / <del> paint with. DirectWrite and Pango draw it themselves;
+    // Core Text has no strikethrough attribute, so paint_mac draws the rule.
+    kFontStrike = 32
 };
 
 // GPUI lays every line of text into a box phi times the font size — the

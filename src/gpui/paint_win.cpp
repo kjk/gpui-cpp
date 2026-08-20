@@ -711,6 +711,9 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     if (weight & kFontUnderline) {
         layout->SetUnderline(TRUE, range);
     }
+    if (weight & kFontStrike) {
+        layout->SetStrikethrough(TRUE, range);
+    }
     if (weight & kFontItalic) {
         layout->SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range);
     }
