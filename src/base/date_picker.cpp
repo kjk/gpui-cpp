@@ -128,6 +128,11 @@ DatePickerAction DatePickerActionForKey(int key, bool open, bool disabled) {
         // No disabled check here — Rust's Cancel handler has none either.
         return open ? DatePickerAction::Dismiss : DatePickerAction::None;
     }
+    if (key == KeyDelete || key == KeyBack) {
+        // on_delete calls clean(), the same thing the clear button does, and
+        // it is bound whether or not the picker is open.
+        return DatePickerAction::Clear;
+    }
     return DatePickerAction::None;
 }
 

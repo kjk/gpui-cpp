@@ -28,8 +28,7 @@ struct ListEvent {
 
 // What a keystroke asks a list to do. Rust binds up, down, enter, escape and
 // secondary-enter in the "List" key context; this is that table, read as an
-// answer rather than routed as an action, since there is no action system
-// here.
+// answer rather than routed as an action.
 enum class ListAction : uint8_t {
     None,
     SelectPrev,
@@ -38,7 +37,15 @@ enum class ListAction : uint8_t {
     Cancel
 };
 
-ListAction ListActionForKey(int key);
+// Rust's Confirm carries a field — `Confirm { secondary }`, bound twice, once
+// to enter and once to secondary-enter — so the answer here is the pair. The
+// modifier is the platform's shortcut key, which is `ctrl` on a KeyEvent.
+struct ListKeyAction {
+    ListAction action = ListAction::None;
+    bool secondary = false;
+};
+
+ListKeyAction ListActionForKey(int key, bool secondary);
 
 const int kMaxListSections = 16;
 

@@ -32,6 +32,17 @@ static void OnlyTheConfirmHandlerChecksDisabled() {
              DatePickerAction::Dismiss);
 }
 
+// on_delete: Delete and Backspace clear the date, open or shut. Rust's
+// handler has no disabled check, and neither does this.
+static void DeleteClearsTheDate() {
+    utassert(DatePickerActionForKey(KeyDelete, false, false) ==
+             DatePickerAction::Clear);
+    utassert(DatePickerActionForKey(KeyBack, true, false) ==
+             DatePickerAction::Clear);
+    utassert(DatePickerActionForKey(KeyDelete, false, true) ==
+             DatePickerAction::Clear);
+}
+
 static void OtherKeysAreNotThePickers() {
     utassert(DatePickerActionForKey(KeyDown, false, false) ==
              DatePickerAction::None);
@@ -95,6 +106,7 @@ void TestDatePicker() {
     EnterOnlyOpens();
     EscapeOnlyCloses();
     OnlyTheConfirmHandlerChecksDisabled();
+    DeleteClearsTheDate();
     OtherKeysAreNotThePickers();
     MatchersKeepTheirRustSemantics();
     RangeSelectionRestartsAndCompletes();

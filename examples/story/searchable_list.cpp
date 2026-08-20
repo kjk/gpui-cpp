@@ -51,8 +51,8 @@ void SearchableListStory::OnKey(SearchableListStory* self, Ctx* cx,
     if (!ev->down) {
         return;
     }
-    ListAction act = ListActionForKey(ev->vk);
-    if (act == ListAction::None) {
+    ListKeyAction act = ListActionForKey(ev->vk, ev->ctrl);
+    if (act.action == ListAction::None) {
         return;
     }
     component::SearchableListState* s =
@@ -60,12 +60,12 @@ void SearchableListStory::OnKey(SearchableListStory* self, Ctx* cx,
     if (!s) {
         return;
     }
-    if (act == ListAction::Confirm) {
+    if (act.action == ListAction::Confirm) {
         if (s->list.selected >= 0 && s->list.selected < s->nMatches) {
             component::SearchableListClick(s, s->matches[s->list.selected]);
         }
     } else {
-        ListPerform(&s->list, cx, act, false);
+        ListPerform(&s->list, cx, act.action, act.secondary);
     }
     Notify(cx);
 }

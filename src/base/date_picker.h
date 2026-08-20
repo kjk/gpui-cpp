@@ -11,12 +11,15 @@ namespace gpui {
 enum class DatePickerAction : uint8_t {
     None,
     Open,
-    Dismiss
+    Dismiss,
+    // Delete or Backspace: `on_delete`, which is the clear button's handler
+    // reached from the keyboard.
+    Clear
 };
 
-// The two handlers, whole. Note that only the Confirm one checks `disabled`:
-// Rust's Cancel handler does not, so Escape still closes a disabled picker
-// that somehow got opened rather than trapping it that way.
+// The three handlers, whole. Note that only the Confirm one checks `disabled`:
+// neither Rust's Cancel nor its Delete does, so Escape still closes a disabled
+// picker that somehow got opened rather than trapping it that way.
 DatePickerAction DatePickerActionForKey(int key, bool open, bool disabled);
 
 // Calendar::Matcher, kept POD-friendly so a picker can copy it into its frame
