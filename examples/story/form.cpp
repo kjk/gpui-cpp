@@ -110,11 +110,15 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
                     component::Textarea::New(cx, StrL("form-bio"), &self->bio)
                         ->Rows(5)
                         ->IntoEl())
+            ->Align(component::FieldAlign::Start)
             ->Description(StrL("Use at most 100 words to describe yourself."))
+            // label_indent(false): no label column, so the field starts at
+            // the form's own edge.
             ->Field(Str{}, StoryTxt(cx,
                                     StrL("This is a full width form "
                                          "field."),
                                     14, th.foreground))
+            ->LabelIndent(false)
             ->SpanAll()
             ->Field(StrL("Please select your birthday"),
                     component::DatePicker::New(cx)
@@ -128,16 +132,23 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
                                ->Checked(self->subscribe)
                                ->OnClick(Listen(cx, &ToggleSubscribe))
                                ->IntoEl())
+            ->LabelIndent(false)
+            // visible(false) takes a field out without changing the rest.
+            ->Field(StrL("Hidden"),
+                    StoryTxt(cx, StrL("Never rendered."), 14, th.mutedFg))
+            ->Visible(false)
             ->Field(Str{}, component::ColorPicker::New(cx)
                                ->WithSize(UiSize::Small)
                                ->Label(StrL("Theme color"))
                                ->IntoEl())
+            ->LabelIndent(false)
             ->Field(Str{}, component::Checkbox::New(cx, StrL("future-events"))
                                ->Label(StrL("Use this color for future "
                                             "events"))
                                ->Checked(self->futureEvents)
                                ->OnClick(Listen(cx, &ToggleFuture))
-                               ->IntoEl());
+                               ->IntoEl())
+            ->LabelIndent(false);
     page->Child(form->IntoEl());
     return page;
 }
