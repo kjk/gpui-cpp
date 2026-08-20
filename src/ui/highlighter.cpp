@@ -131,7 +131,7 @@ El* Highlighter::IntoEl() {
     style.foreground = th.foreground;
     style.mutedForeground = th.mutedFg;
     style.caret = th.caret;
-    style.selection = RgbaOpacity(th.accent, 0.45f);
+    style.selection = RgbaOpacity(th.selection, 0.4f);
     style.fontSize = 12;
     // .font_family(theme.mono_font_family).text_size(theme.mono_font_size)
     style.mono = true;

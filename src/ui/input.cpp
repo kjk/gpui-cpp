@@ -122,7 +122,7 @@ El* Input::IntoEl() {
     editor.foreground = hasTextColor ? textColor : th.foreground;
     editor.mutedForeground = th.mutedFg;
     editor.caret = th.caret;
-    editor.selection = RgbaOpacity(th.accent, 0.45f);
+    editor.selection = RgbaOpacity(th.selection, 0.4f);
     editor.fontSize = font;
     editor.mask = masked;
     editor.align = align == InputAlign::Center  ? 1
@@ -236,7 +236,7 @@ El* Textarea::IntoEl() {
     editor.foreground = th.foreground;
     editor.mutedForeground = th.mutedFg;
     editor.caret = th.caret;
-    editor.selection = RgbaOpacity(th.accent, 0.45f);
+    editor.selection = RgbaOpacity(th.selection, 0.4f);
     editor.fontSize = kInputTextSize;
     if (state) {
         state->softWrap = softWrap;
