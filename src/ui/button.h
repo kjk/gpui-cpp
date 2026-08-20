@@ -25,6 +25,9 @@ struct Button {
     Str id = {};
     Str label = {};
     IconName icon = IconName::None;
+    // An icon after the label rather than before it, which is what a row
+    // laid out `flex_row_reverse` comes to — Pagination's Next button.
+    IconName iconRight = IconName::None;
     ButtonVariant variant = ButtonVariant::Default;
     UiSize size = UiSize::Medium;
     bool outline = false;
@@ -57,6 +60,7 @@ struct Button {
     static Button* New(Ctx* cx, Str id);
     Button* Label(Str s);
     Button* Icon(IconName n);
+    Button* IconRight(IconName n);
     Button* Primary();
     Button* Secondary();
     Button* Danger();

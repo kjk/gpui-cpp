@@ -61,18 +61,20 @@ El* Pagination::IntoEl() {
                        ->Ghost()
                        ->Compact()
                        ->WithSize(size)
-                       ->Disabled(!hasPrev);
+                       ->Disabled(disabled || !hasPrev);
     Button* next = Button::New(cx, StrDup(a, fmt("%s-next", base)))
                        ->Ghost()
                        ->Compact()
                        ->WithSize(size)
-                       ->Disabled(!hasNext);
+                       ->Disabled(disabled || !hasNext);
     if (compact) {
         prev->Icon(IconName::ChevronLeft);
         next->Icon(IconName::ChevronRight);
     } else {
+        // The nav content is a row of [label, icon], reversed for Previous:
+        // the chevron leads the word going back and follows it going on.
         prev->Icon(IconName::ChevronLeft)->Label(StrL("Previous"));
-        next->Label(StrL("Next"))->Extra(IconEl(a, IconName::ChevronRight, 16));
+        next->Label(StrL("Next"))->IconRight(IconName::ChevronRight);
     }
     if (hasPrev && onChange.IsValid()) {
         prev->OnClick(ListenerArg(onChange, prevPage));

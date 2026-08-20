@@ -22,6 +22,10 @@ Button* Button::Icon(IconName n) {
     icon = n;
     return this;
 }
+Button* Button::IconRight(IconName n) {
+    iconRight = n;
+    return this;
+}
 Button* Button::Primary() {
     variant = ButtonVariant::Primary;
     return this;
@@ -349,6 +353,9 @@ El* Button::IntoEl() {
             text->Underline();
         }
         e->Child(text);
+    }
+    if (iconRight != IconName::None) {
+        e->Child(IconEl(a, iconRight, 14)->Fg(fg));
     }
     if (dropdown) {
         // Rust splits the caret into its own segment; the seam is the button
