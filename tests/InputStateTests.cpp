@@ -6,8 +6,8 @@
  * ones ported here are the ones whose assertion does not need the window —
  * the text, the selection, and the undo history. Their scroll-offset and
  * `last_layout` halves are dropped, and so are the ones that only assert on
- * something this port does not have (the IME marked range, number stepping,
- * decorations, soft wrap).
+ * something this port does not have (number stepping, decorations, soft
+ * wrap).
  *
  * The engine takes `App*` and `Window*` because it pauses a caret and asks
  * for a repaint; both are optional, so a test drives it with nulls. */
@@ -34,6 +34,20 @@ static void Type(InputState* s, const char* text) {
 
 static void Act(InputState* s, InputAction action) {
     InputPerform(s, nullptr, nullptr, action, false);
+}
+
+// The input method staging a candidate: replace_and_mark_text_in_range with
+// no range, which is what each keystroke of a composition does.
+static void Mark(InputState* s, const char* text) {
+    InputReplaceAndMarkText(s, nullptr, nullptr, nullptr, Str(text), nullptr);
+}
+
+static bool MarkIs(const InputState& s, int start, int end) {
+    Selection m = {};
+    if (!InputMarkedRange(&s, &m)) {
+        return start < 0;
+    }
+    return m.start == start && m.end == end;
 }
 
 static void SingleLineRemovesNewlines() {
@@ -351,6 +365,11 @@ static void ReadonlyRejectsUserEditsOnly() {
     utassert(ValueIs(s, "hello"));
     Act(&s, InputAction::Backspace);
     utassert(ValueIs(s, "hello"));
+    // Typing and the input method go through the same handler, so a readonly
+    // field refuses a composition as flatly as it refuses a keystroke.
+    Mark(&s, "\xE3\x81\x82"); // U+3042 HIRAGANA A
+    utassert(ValueIs(s, "hello"));
+    utassert(MarkIs(s, -1, -1));
 
     InputSetValue(&s, StrL("set anyway"));
     utassert(ValueIs(s, "set anyway"));
@@ -545,6 +564,75 @@ static void TheNumberKeysStepTheField() {
     utassert(!NumberStepForKey(KeyReturn, &action));
 }
 
+
+// replace_and_mark_text_in_range: each candidate stands in for the last, and
+// the range that is marked is what the next one replaces. The Rust case is
+// `undo_with_ime_input`, typed the way a pinyin IME types 你.
+static void ACompositionReplacesItselfUntilItCommits() {
+    InputState s;
+    Type(&s, "prefix ");
+    Mark(&s, "n");
+    utassert(ValueIs(s, "prefix n"));
+    utassert(MarkIs(s, 7, 8));
+    Mark(&s, "ni");
+    utassert(ValueIs(s, "prefix ni"));
+    utassert(MarkIs(s, 7, 9));
+    Mark(&s, "\xE4\xBD\xA0"); // U+4F60, three bytes
+    utassert(ValueIs(s, "prefix \xE4\xBD\xA0"));
+    utassert(MarkIs(s, 7, 10));
+    // The caret sits at the end of the marked run while it is being composed.
+    utassert(RangeIs(s, 10, 10));
+
+    InputUnmarkText(&s, nullptr, nullptr);
+    utassert(MarkIs(s, -1, -1));
+    Type(&s, " suffix");
+    utassert(ValueIs(s, "prefix \xE4\xBD\xA0 suffix"));
+}
+
+// The whole composition is one undo step: the candidates were staging posts,
+// not edits the user made.
+static void ACompositionUndoesAsOneThing() {
+    InputState s;
+    Type(&s, "prefix ");
+    Mark(&s, "n");
+    Mark(&s, "ni");
+    Mark(&s, "\xE4\xBD\xA0");
+    InputUnmarkText(&s, nullptr, nullptr);
+    Type(&s, " suffix");
+    utassert(ValueIs(s, "prefix \xE4\xBD\xA0 suffix"));
+
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "prefix \xE4\xBD\xA0"));
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "prefix "));
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, ""));
+}
+
+// An empty insert is the composition being abandoned: the staged text goes,
+// the caret goes back where it started, and nothing is left marked.
+static void AnAbandonedCompositionLeavesNothingBehind() {
+    InputState s;
+    Type(&s, "ab");
+    Mark(&s, "ni");
+    utassert(ValueIs(s, "abni"));
+    Mark(&s, "");
+    utassert(ValueIs(s, "ab"));
+    utassert(RangeIs(s, 2, 2));
+    utassert(MarkIs(s, -1, -1));
+}
+
+// A commit that names no range of its own replaces the marked text rather
+// than the selection — which is how the platform hands over a result string.
+static void ACommitReplacesWhatWasMarked() {
+    InputState s;
+    Type(&s, "ab");
+    Mark(&s, "ni");
+    Type(&s, "\xE4\xBD\xA0");
+    utassert(ValueIs(s, "ab\xE4\xBD\xA0"));
+    utassert(MarkIs(s, -1, -1));
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -568,6 +656,10 @@ void TestInputState() {
     SelectWordAndLine();
     DraggingCannotEatIntoTheSelectedWord();
     ReadonlyRejectsUserEditsOnly();
+    ACompositionReplacesItselfUntilItCommits();
+    ACompositionUndoesAsOneThing();
+    AnAbandonedCompositionLeavesNothingBehind();
+    ACommitReplacesWhatWasMarked();
     EnterInsertsANewlineOnlyWhereItShould();
     MaskFormatsWhileTyping();
     ActionForKey();

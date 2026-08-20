@@ -792,6 +792,10 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return U16OffToUtf8(s, (int)idx);
 }
 
+float TextLayoutBaseline(TextLayout* tl) {
+    return tl ? tl->baseline : 0.f;
+}
+
 int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
                          int max) {
     if (!tl || !out || max <= 0 || u8a >= u8b) {

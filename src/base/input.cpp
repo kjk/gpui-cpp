@@ -96,10 +96,21 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
     Str run = masked ? MaskedRun(a, text) : text;
     int cursor = InputCursor(state);
     Selection sel = state->selectedRange;
+    Selection mark = {};
+    bool marking = InputMarkedRange(state, &mark);
+    if (marking) {
+        // InputElement puts the caret at the end of the marked range and
+        // shows no selection inside it: what the input method has staged is
+        // one run being composed, not text the user has picked out.
+        cursor = mark.end;
+        sel = SelectionAt(mark.end);
+    }
     if (masked) {
         cursor = MaskedOffset(text, cursor);
         sel.start = MaskedOffset(text, sel.start);
         sel.end = MaskedOffset(text, sel.end);
+        mark.start = MaskedOffset(text, mark.start);
+        mark.end = MaskedOffset(text, mark.end);
     }
     El* el = TextEl(a, run)
                  ->Font(font)
@@ -108,6 +119,9 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
                  ->BindInput(state);
     if (!sel.IsEmpty()) {
         el->SelRange(sel.start, sel.end, style.selection);
+    }
+    if (marking) {
+        el->MarkRange(mark.start, mark.end);
     }
     if (caret) {
         el->Caret(cursor, style.caret);
@@ -757,7 +771,12 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
 
     Arena* tmp = GetTempArena();
     Str text = NormalizeInput(tmp, s, newText);
-    Selection r = range ? *range : s->selectedRange;
+    // A commit with no range of its own replaces whatever the input method
+    // had provisionally put in, not the selection: the marked text is what
+    // the candidate was standing in for.
+    Selection r = range           ? *range
+                  : s->imeMarking ? s->imeMarked
+                                  : s->selectedRange;
     Str before = InputValue(s);
     if (r.start < 0) {
         r.start = 0;
@@ -818,6 +837,9 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     s->selectedRange = SelectionAt(newOffset);
     s->selectionReversed = false;
     s->hasSelectedWordRange = false;
+    // The text went in for real, so there is nothing provisional left.
+    s->imeMarking = false;
+    s->imeMarked = {};
     UpdatePreferredColumn(s);
     if (InputIsMultiLine(s) && s->mode.kind == LayoutModeKind::AutoGrow) {
         LayoutModeSetRows(&s->mode, RopeLinesLen(InputValue(s)));
@@ -825,6 +847,112 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     Emit(s, app, win, InputEvent{InputEventKind::Change});
     Notify(app, win);
     return true;
+}
+
+bool InputMarkedRange(const InputState* s, Selection* out) {
+    if (!s || !s->imeMarking) {
+        return false;
+    }
+    if (out) {
+        *out = s->imeMarked;
+    }
+    return true;
+}
+
+void InputUnmarkText(InputState* s, App* app, Window* win) {
+    if (!s || !s->imeMarking) {
+        return;
+    }
+    s->imeMarking = false;
+    s->imeMarked = {};
+    // The whole composition was one transaction, so it undoes as one thing
+    // rather than one candidate at a time.
+    UndoCommitTransaction(&s->undo);
+    Notify(app, win);
+}
+
+void InputReplaceAndMarkText(InputState* s, App* app, Window* win,
+                             const Selection* range, Str newText,
+                             const Selection* sel) {
+    if (!s || !InputIsEditable(s)) {
+        return;
+    }
+    bool hasIntent = s->undo.hasPendingIntent;
+    EditIntent requested = s->undo.pendingIntent;
+    s->undo.hasPendingIntent = false;
+    Selection selBefore = s->selectedRange;
+    bool startsComposition = !s->imeMarking;
+    if (startsComposition) {
+        UndoBeginTransaction(&s->undo);
+    }
+    if (win && BlinkVisible(app, s->blink)) {
+        PauseBlink(s, app, win);
+    }
+    Arena* tmp = GetTempArena();
+    Str text = NormalizeInput(tmp, s, newText);
+    Selection r = range           ? *range
+                  : s->imeMarking ? s->imeMarked
+                                  : s->selectedRange;
+    Str before = InputValue(s);
+    if (r.start < 0) {
+        r.start = 0;
+    }
+    if (r.end > before.len) {
+        r.end = before.len;
+    }
+    if (r.end < r.start) {
+        r.end = r.start;
+    }
+    Str oldAll = StrDup(tmp, before);
+    TextSplice(s, r.start, r.end, text);
+    if (InputIsSingleLine(s)) {
+        // The same rule the committed path uses: only refuse the edit when it
+        // is the edit that broke the field, so a value that never conformed
+        // cannot trap it.
+        Str pending = InputValue(s);
+        if (!IsValidInput(s, pending) && IsValidInput(s, oldAll)) {
+            TextSet(s, oldAll);
+            if (startsComposition) {
+                UndoCommitTransaction(&s->undo);
+            }
+            return;
+        }
+    }
+    if (text.len == 0) {
+        // An empty insert is the composition being abandoned: the caret goes
+        // back where it started and nothing is marked.
+        s->selectedRange = SelectionAt(r.start);
+        s->imeMarking = false;
+        s->imeMarked = {};
+    } else {
+        s->imeMarking = true;
+        s->imeMarked = Selection{r.start, r.start + text.len};
+        if (sel) {
+            int lo = r.start + sel->start;
+            int hi = r.start + sel->end;
+            int end = r.start + text.len;
+            s->selectedRange =
+                Selection{lo < r.start ? r.start : (lo > end ? end : lo),
+                          hi < r.start ? r.start : (hi > end ? end : hi)};
+        } else {
+            s->selectedRange = SelectionAt(r.start + text.len);
+        }
+    }
+    s->selectionReversed = false;
+    s->hasSelectedWordRange = false;
+    // Every candidate is a change inside the open transaction, so an undo
+    // after the composition takes the whole of it back rather than stepping
+    // through the candidates one at a time.
+    Selection after = s->selectedRange;
+    PushHistory(s, oldAll, r, text, hasIntent, requested, selBefore, &after);
+    UpdatePreferredColumn(s);
+    if (InputIsMultiLine(s) && s->mode.kind == LayoutModeKind::AutoGrow) {
+        LayoutModeSetRows(&s->mode, RopeLinesLen(InputValue(s)));
+    }
+    if (text.len == 0) {
+        UndoCommitTransaction(&s->undo);
+    }
+    Notify(app, win);
 }
 
 // with_edits_allowed: disabled and readonly reject what the *user* does; a

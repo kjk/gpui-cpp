@@ -982,6 +982,10 @@ struct El {
     int selLo = -1; // UTF-8 offsets into text, -1 = none
     int selHi = -1;
     Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
+    // The input method's provisional run, underlined the way Rust gives the
+    // marked range its own UnderlineStyle. Same offsets, same -1 for none.
+    int markLo = -1;
+    int markHi = -1;
     bool selectable = false;
     // The caret this run draws, as a UTF-8 offset into it; -1 for none. Rust's
     // InputElement measures cursor_bounds in prepaint and paints a quad there,
@@ -1086,6 +1090,8 @@ struct El {
     El* BindInput(InputState* s);
     // The selection quad and the caret an input's text run paints over itself.
     El* SelRange(int lo, int hi, Rgba color);
+    // The marked range, which is drawn underlined in the text's own colour.
+    El* MarkRange(int lo, int hi);
     El* Caret(int off, Rgba color, float width = 2);
     El* Child(El* c);
     El* Bold();
@@ -1611,6 +1617,11 @@ struct InputState {
     // Suppressed while set_value writes the text, so a programmatic write is
     // not reported as the user having typed.
     bool emitEvents = true;
+    // ime_marked_range: the text the input method has put in provisionally,
+    // which is the document's until the composition commits or is abandoned.
+    // Rust keeps an Option; `imeMarking` is the Some.
+    Selection imeMarked = {};
+    bool imeMarking = false;
     // preferred_column: the column a vertical move aims for, so walking down
     // past a short line and back up returns to where it started. -1 for none.
     // Rust also remembers the x it measured; without a display map there is
@@ -1744,6 +1755,19 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
 // or a mask or validator that said no.
 bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
                              const Selection* range, Str newText);
+// marked_text_range(): what the input method is still deciding, if anything.
+bool InputMarkedRange(const InputState* s, Selection* out);
+// replace_and_mark_text_in_range(): the input method's provisional insert.
+// A null `range` means "over the mark, or the selection if there is none",
+// which is what makes each keystroke of a composition replace the last one.
+// `sel` is where the caret should sit inside the new text, in bytes from its
+// start; null puts it at the end. Empty text ends the composition.
+void InputReplaceAndMarkText(InputState* s, App* app, Window* win,
+                             const Selection* range, Str newText,
+                             const Selection* sel);
+// unmark_text(): the composition is over and what it left stands. Commits the
+// undo transaction the composition opened, so the whole of it undoes at once.
+void InputUnmarkText(InputState* s, App* app, Window* win);
 // The typed character, once the platform has decoded it.
 void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch);
 
@@ -1900,6 +1924,9 @@ int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                 float relX, float relY);
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                     float x, float y, int u8a, int u8b, Rgba color);
+void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
+                        bool wrap, float x, float y, int u8a, int u8b,
+                        Rgba color);
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
               float availH, float inheritFont, Rgba inheritFg);
 void PaintEl(PaintCtx* ctx, El* e);

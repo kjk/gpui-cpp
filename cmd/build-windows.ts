@@ -171,6 +171,7 @@ const libs = [
   "ole32.lib",
   "windowscodecs.lib",
   "user32.lib",
+  "imm32.lib",
   "gdi32.lib",
   "gdiplus.lib",
   "shlwapi.lib",

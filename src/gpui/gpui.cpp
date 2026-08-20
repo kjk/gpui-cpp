@@ -678,6 +678,11 @@ El* El::SelRange(int lo, int hi, Rgba color) {
     selColor = color;
     return this;
 }
+El* El::MarkRange(int lo, int hi) {
+    markLo = lo;
+    markHi = hi;
+    return this;
+}
 El* El::Caret(int off, Rgba color, float width) {
     caretOff = off;
     caretColor = color;
@@ -1298,6 +1303,34 @@ int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
     int off = TextLayoutHitPoint(layout, s, relX, relY);
     TextLayoutRelease(layout);
     return off;
+}
+
+// The marked range's underline: the same rects the selection quad is built
+// from, one device pixel tall at the bottom of each. Rust hands the run an
+// UnderlineStyle instead, which the shaper draws; the rects land in the same
+// place and cost no new text machinery.
+void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
+                        bool wrap, float x, float y, int u8a, int u8b,
+                        Rgba color) {
+    if (!ctx || !ctx->rt || color.a == 0 || u8a >= u8b) {
+        return;
+    }
+    TextLayout* layout =
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr);
+    if (!layout) {
+        return;
+    }
+    Bounds rects[32] = {};
+    int n = TextLayoutRangeRects(layout, s, u8a, u8b, rects, 32);
+    // Just under the glyphs rather than at the foot of the line box, which is
+    // where a shaper puts an underline and where the leading would otherwise
+    // drop it out of the field altogether.
+    float baseline = TextLayoutBaseline(layout);
+    for (int i = 0; i < n; i++) {
+        CanvasFillRect(ctx, x + rects[i].x, y + rects[i].y + baseline + 1.f,
+                       rects[i].w, 1.f, color);
+    }
+    TextLayoutRelease(layout);
 }
 
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
@@ -2991,6 +3024,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             PaintTextRange(ctx, e->text, font,
                            e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
                            e->x, e->y, lo, hi, e->selColor);
+        }
+        if (e->markLo >= 0 && e->markHi > e->markLo) {
+            PaintTextUnderline(
+                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                e->style.wrap, e->x, e->y, e->markLo, e->markHi, c);
         }
         if (e->laidLayout) {
             TextLayoutDraw(ctx, e->laidLayout, e->x, e->y, c,

@@ -675,6 +675,16 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return index;
 }
 
+float TextLayoutBaseline(TextLayout* tl) {
+    if (!tl || !tl->layout) {
+        return 0;
+    }
+    // pango_layout_get_baseline is measured from the layout's top, and the
+    // rect a decoration hangs off starts a half-leading lower.
+    float fromTop = (float)pango_layout_get_baseline(tl->layout) / PANGO_SCALE;
+    return fromTop - BoxPad(tl);
+}
+
 int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
                          int max) {
     if (!tl || !tl->layout || !out || max <= 0 || u8a >= u8b) {
