@@ -14,6 +14,10 @@ bool SearchableItemMatches(const SearchableItem* it, Str query) {
 
 void SearchableListSearch(SearchableListState* s, const SearchableItem* items,
                           int nItems, Str query) {
+    // The list keeps what it was given, so a click later on knows what it is
+    // changing.
+    s->items = items;
+    s->nItems = nItems;
     s->nMatches = 0;
     for (int i = 0; i < nItems && i < kMaxSearchableItems; i++) {
         if (SearchableItemMatches(&items[i], query)) {
@@ -109,6 +113,14 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
     }
 }
 
+bool SearchableListClick(SearchableListState* s, int index) {
+    SearchableListChange changes[kMaxSearchableSelection + 1];
+    int n = SearchableListChangesFor(s, s->items, s->nItems, index, changes,
+                                     (int)(sizeof(changes) / sizeof(*changes)));
+    SearchableListApply(s, s->items, s->nItems, changes, n);
+    return s->mode == SearchableListMode::Single && s->closeOnSelect;
+}
+
 void SearchableListState::OnRowClick(SearchableListState* self, Ctx* cx,
                                      const ClickEvent*, intptr_t match) {
     int m = (int)match;
@@ -116,10 +128,14 @@ void SearchableListState::OnRowClick(SearchableListState* self, Ctx* cx,
         return;
     }
     self->list.selected = m;
-    // The click carries the row, but what changes is worked out against the
-    // item behind it — the caller applies the changes, since it is the one
-    // holding the items.
-    ListEvent ev = {ListEventKind::Confirm, self->matches[m], false};
+    int index = self->matches[m];
+    // The changes the mode came to are applied here, since the list is what
+    // holds both the selection and the items. What the caller hears is what
+    // was picked, once it has been.
+    if (SearchableListClick(self, index)) {
+        self->open = false;
+    }
+    ListEvent ev = {ListEventKind::Confirm, index, false};
     if (self->onChange.IsValid()) {
         ListenerCall(cx->app, cx->win, self->onChange, &ev);
     }

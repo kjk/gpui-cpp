@@ -4,16 +4,26 @@
 // active one, and an item per setting. The component owns all of that now —
 // what is left here is the values behind the fields and the fields
 // themselves, which is what the Rust story's `SettingField`s stand for.
-static const char* kFontFamilies[] = {"Arial", "Consolas", "Segoe UI"};
-static const char* kGroupVariants[] = {"Outline", "Fill", "Plain"};
+// The two dropdowns' items. A SearchableList keeps a pointer to them, so
+// they outlive the frame.
+static const component::SearchableItem kFontFamilies[] = {
+    {StrL("Arial"), StrL("arial"), 0, false},
+    {StrL("Consolas"), StrL("consolas"), 0, false},
+    {StrL("Segoe UI"), StrL("segoe"), 0, false},
+};
+static const component::SearchableItem kGroupVariants[] = {
+    {StrL("Outline"), StrL("outline"), 0, false},
+    {StrL("Fill"), StrL("fill"), 0, false},
+    {StrL("Plain"), StrL("plain"), 0, false},
+};
 
 struct SettingsStory {
     Entity<component::SettingsState> settings = {};
     bool darkMode = false;
     bool autoSwitch = false;
     bool resettable = true;
-    int fontFamily = 0;
-    int groupVariant = 0;
+    Entity<component::SearchableListState> fontFamily = {};
+    Entity<component::SearchableListState> groupVariant = {};
     InputState search;
     InputState fontSize;
     InputState lineHeight;
@@ -34,15 +44,13 @@ static void ToggleResettable(SettingsStory* self, Ctx* cx, const ClickEvent*) {
     self->resettable = !self->resettable;
     Notify(cx);
 }
-static void PickFontFamily(SettingsStory* self, Ctx* cx, const ClickEvent*,
-                           intptr_t ix) {
-    self->fontFamily = (int)ix;
-    Notify(cx);
+// The select owns its selection now, so a toggle is all the page does.
+static void ToggleFontFamily(SettingsStory* self, Ctx* cx, const ClickEvent*) {
+    component::SelectToggleOpen(self->fontFamily.Get(cx), cx);
 }
-static void PickGroupVariant(SettingsStory* self, Ctx* cx, const ClickEvent*,
-                             intptr_t ix) {
-    self->groupVariant = (int)ix;
-    Notify(cx);
+static void ToggleGroupVariant(SettingsStory* self, Ctx* cx,
+                               const ClickEvent*) {
+    component::SelectToggleOpen(self->groupVariant.Get(cx), cx);
 }
 // on_reset: the font size goes back to what it started at.
 static void ResetFontSize(SettingsStory* self, Ctx* cx, const ClickEvent*) {
@@ -63,6 +71,18 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
         InputSetValue(&self->fontSize, StrL("14"));
         InputSetValue(&self->lineHeight, StrL("12"));
         self->settings = EntityNewState<component::SettingsState>(cx->app);
+        self->fontFamily =
+            EntityNewState<component::SearchableListState>(cx->app);
+        self->groupVariant =
+            EntityNewState<component::SearchableListState>(cx->app);
+        component::SearchableListState* ff = self->fontFamily.Get(cx);
+        component::SearchableListState* gv = self->groupVariant.Get(cx);
+        if (ff) {
+            ff->nSelected = 1;
+        }
+        if (gv) {
+            gv->nSelected = 1;
+        }
     }
     if (self->search.focused) {
         cx->win->input = &self->search;
@@ -95,26 +115,20 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
                 ->Checked(self->resettable)
                 ->OnClick(Listen(cx, &ToggleResettable))
                 ->IntoEl());
-    component::Select* variant = component::Select::New(cx, StrL("set-variant"))
-                                     ->W(140);
-    for (int i = 0; i < 3; i++) {
-        variant->Option(Str(kGroupVariants[i]));
-    }
     s->Item(StrL("Group Variant"),
             StrL("Select the variant for setting groups."),
-            variant->Selected(self->groupVariant)
-                ->OnChange(Listen(cx, &PickGroupVariant))
+            component::Select::New(cx, StrL("set-variant"), self->groupVariant)
+                ->Items(kGroupVariants, 3)
+                ->W(140)
+                ->OnToggle(Listen(cx, &ToggleGroupVariant))
                 ->IntoEl());
 
     s->Group(StrL("Font"));
-    component::Select* family = component::Select::New(cx, StrL("set-family"))
-                                    ->W(140);
-    for (int i = 0; i < 3; i++) {
-        family->Option(Str(kFontFamilies[i]));
-    }
     s->Item(StrL("Font Family"), StrL("Select the font family for the story."),
-            family->Selected(self->fontFamily)
-                ->OnChange(Listen(cx, &PickFontFamily))
+            component::Select::New(cx, StrL("set-family"), self->fontFamily)
+                ->Items(kFontFamilies, 3)
+                ->W(140)
+                ->OnToggle(Listen(cx, &ToggleFontFamily))
                 ->IntoEl());
     s->Keywords(StrL("typeface"));
     s->Item(

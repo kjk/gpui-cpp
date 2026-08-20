@@ -5,28 +5,23 @@ namespace gpui {
 
 namespace component {
 
-Select* Select::New(Ctx* cx, Str id) {
+Select* Select::New(Ctx* cx, Str id, Entity<SearchableListState> state) {
     Arena* a = cx->a;
     Select* s = ArenaNew<Select>(a);
     s->a = a;
     s->cx = cx;
     s->id = id;
+    s->state = state;
     return s;
 }
-Select* Select::Option(Str s) {
-    if (n < 24) {
-        options[n++] = s;
-    }
+Select* Select::Items(const SearchableItem* it, int n) {
+    items = it;
+    nItems = n;
     return this;
 }
-Select* Select::Options(const char* const* items, int count) {
-    for (int i = 0; i < count; i++) {
-        Option(Str(items[i]));
-    }
-    return this;
-}
-Select* Select::Selected(int i) {
-    selected = i;
+Select* Select::Sections(const Str* titles, int n) {
+    sections = titles;
+    nSections = n;
     return this;
 }
 Select* Select::Placeholder(Str s) {
@@ -73,16 +68,17 @@ Select* Select::Appearance(bool v) {
     appearance = v;
     return this;
 }
-Select* Select::Open(bool v) {
-    open = v;
+Select* Select::Searchable(InputState* q, Listener onFocus) {
+    query = q;
+    onQueryFocus = onFocus;
     return this;
 }
-Select* Select::Highlight(int i) {
-    highlight = i;
-    return this;
-}
-Select* Select::OnChange(Listener fn) {
-    onChange = fn;
+Select* Select::Multiple(bool v) {
+    SearchableListState* s = state.Get(cx);
+    if (s) {
+        s->mode = v ? SearchableListMode::Multi : SearchableListMode::Single;
+        s->closeOnSelect = !v;
+    }
     return this;
 }
 Select* Select::OnToggle(Listener fn) {
@@ -94,8 +90,58 @@ Select* Select::OnClear(Listener fn) {
     return this;
 }
 
+Str SelectTriggerTitle(const SearchableListState* s, Str placeholder,
+                       Str titlePrefix, Arena* a) {
+    Str none = placeholder.s ? placeholder : StrL("Please select");
+    if (!s || s->nSelected == 0 || !s->items) {
+        return none;
+    }
+    if (s->nSelected > 1) {
+        // Rust shows the picked items as tags; the trigger says how many when
+        // there is no room for that.
+        return StrDup(a, fmt("%d selected", s->nSelected));
+    }
+    int ix = s->selected[0];
+    if (ix < 0 || ix >= s->nItems) {
+        return none;
+    }
+    Str title = s->items[ix].title;
+    if (titlePrefix.s) {
+        return StrDup(a, fmt("%s%s", titlePrefix, title));
+    }
+    return title;
+}
+
+void SelectToggleOpen(SearchableListState* s, Ctx* cx) {
+    if (!s) {
+        return;
+    }
+    s->open = !s->open;
+    // Opening starts the keyboard on whatever is already picked, so the first
+    // arrow steps from there rather than from the top.
+    s->list.selected = -1;
+    if (s->open && s->nSelected > 0) {
+        for (int m = 0; m < s->nMatches; m++) {
+            if (s->matches[m] == s->selected[0]) {
+                s->list.selected = m;
+                break;
+            }
+        }
+    }
+    Notify(cx);
+}
+
+void SelectClear(SearchableListState* s, Ctx* cx) {
+    if (!s) {
+        return;
+    }
+    s->nSelected = 0;
+    Notify(cx);
+}
+
 El* Select::IntoEl() {
     const Theme& th = cx->theme();
+    SearchableListState* s = state.Get(cx);
     // input_size / input_text_size, by size.
     float h = 32, padX = 10, font = 14, caret = 16;
     if (size == UiSize::Large) {
@@ -112,10 +158,9 @@ El* Select::IntoEl() {
         font = 12;
         caret = 12;
     }
-    bool hasValue = selected >= 0 && selected < n;
-    Str title = hasValue
-                    ? options[selected]
-                    : (placeholder.s ? placeholder : StrL("Please select"));
+    bool open = s && s->open && !disabled;
+    bool hasValue = s && s->nSelected > 0;
+    Str title = SelectTriggerTitle(s, placeholder, titlePrefix, a);
     El* trigger = Div(a)
                       ->FlexRow()
                       ->W(width)
@@ -130,9 +175,6 @@ El* Select::IntoEl() {
             ->Border(1, open ? th.ring : th.inputBorder);
     }
     Rgba fg = disabled ? th.mutedFg : th.foreground;
-    if (hasValue && titlePrefix.s) {
-        title = StrDup(a, fmt("%s%s", titlePrefix, title));
-    }
     trigger
         ->Child(TextEl(a, title)->Font(font)->Fg(hasValue ? fg : th.mutedFg));
     if (cleanable && hasValue && !disabled) {
@@ -153,52 +195,33 @@ El* Select::IntoEl() {
     }
 
     El* menu = nullptr;
-    if (open && !disabled) {
-        menu = Div(a)
-                   ->FlexCol()
-                   ->W(menuWidth > 0 ? menuWidth : width)
-                   ->Pad(4)
-                   ->Gap(1)
-                   ->Radius(th.radiusLg)
-                   ->Border(1, th.border)
-                   ->Bg(th.background);
+    if (open) {
+        // The list is the whole dropdown: the query, the sections, the checks
+        // and the empty state are all its own.
+        SearchableList* list =
+            SearchableList::New(cx, StrDup(a, fmt("%s-list", id)), state, query)
+                ->Items(items, nItems)
+                ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width : 240));
+        if (sections) {
+            list->Sections(sections, nSections);
+        }
+        if (query) {
+            list->OnQueryFocus(onQueryFocus);
+        }
         if (menuMaxH > 0) {
-            menu->H(menuMaxH)->ClipY();
+            list->MaxH(menuMaxH);
         }
-        if (n == 0) {
-            // The story renders its own empty state; ours is the same shape.
-            menu->Child(
+        if (empty.s) {
+            list->Empty(
                 Div(a)->H(96)->W(kFill)->ItemsCenter()->JustifyCenter()->Child(
-                    TextEl(a, empty.s ? empty : StrL("No Data"))
-                        ->Font(font)
-                        ->Fg(th.mutedFg)));
+                    TextEl(a, empty)->Font(font)->Fg(th.mutedFg)));
         }
-        for (int i = 0; i < n; i++) {
-            El* row = Div(a)
-                          ->FlexRow()
-                          ->W(kFill)
-                          ->H(28)
-                          ->PadX(8)
-                          ->Gap(8)
-                          ->ItemsCenter()
-                          ->JustifyBetween()
-                          ->Radius(th.radius)
-                          ->HoverBg(th.accent);
-            // The keyboard's option is painted the way a hover is, so the two
-            // cursors read the same.
-            if (i == highlight) {
-                row->Bg(th.accent);
-            }
-            row->Child(TextEl(a, options[i])->Font(font)->Fg(th.foreground));
-            if (i == selected) {
-                row->Child(IconEl(a, IconName::Check, 14)->Fg(th.foreground));
-            }
-            if (onChange.IsValid()) {
-                BindClick(row, StrDup(a, fmt("%s-opt%d", id, i)),
-                          ListenerArg(onChange, i));
-            }
-            menu->Child(row);
-        }
+        menu = list->IntoEl();
+    } else if (s) {
+        // A closed list still has to know its items and what the query left,
+        // so the trigger can name the selection and the keys can move it.
+        SearchableListSearch(s, items, nItems,
+                             query ? InputValue(query) : Str{});
     }
     El* root = gpui::Select::New(cx, id)->W(width)->Child(trigger);
     return Popup::New(cx, StrDup(a, fmt("%s-popup", id)), root)

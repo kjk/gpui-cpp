@@ -62,6 +62,13 @@ struct SearchableListState {
     // built from, worked out once per frame.
     int matches[kMaxSearchableItems] = {};
     int nMatches = 0;
+    // The items being shown, written by whatever renders the list each frame
+    // so a click can work out what it changed. They have to outlive the frame:
+    // a static array, not one built on the frame arena.
+    const SearchableItem* items = nullptr;
+    int nItems = 0;
+    // What the caller hears once a click has been applied, carrying the item
+    // it was about. Rust's `on_confirm`.
     Listener onChange = {};
 
     static void OnRowClick(SearchableListState* self, Ctx* cx,
@@ -86,6 +93,10 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
 bool SearchableListIsChecked(const SearchableListState* s,
                              const SearchableItem* items, int nItems,
                              int index);
+// A click on the item at `index`: the changes its mode comes to, applied.
+// Answers whether the list should close, which is `close_on_select` for a
+// single-select list and never for a multiple one.
+bool SearchableListClick(SearchableListState* s, int index);
 // perform_search: which items the query leaves, written into `matches`.
 void SearchableListSearch(SearchableListState* s, const SearchableItem* items,
                           int nItems, Str query);

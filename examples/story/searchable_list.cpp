@@ -27,31 +27,9 @@ struct SearchableListStory {
     static void OnKey(SearchableListStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
-// on_will_change: the changes the mode worked out, applied to the selection.
-// The items are the caller's, so the caller is what applies them.
-static void ApplyChange(component::SearchableListState* s, int index) {
-    component::SearchableListChange
-        changes[component::kMaxSearchableSelection + 1];
-    int n = component::SearchableListChangesFor(
-        s, kItems, kNItems, index, changes,
-        (int)(sizeof(changes) / sizeof(changes[0])));
-    component::SearchableListApply(s, kItems, kNItems, changes, n);
-}
-
-static void OnSingleChange(SearchableListStory* self, Ctx* cx,
-                           const ListEvent* ev) {
-    component::SearchableListState* s = self->single.Get(cx);
-    if (s) {
-        ApplyChange(s, ev->index);
-    }
-    Notify(cx);
-}
-static void OnMultiChange(SearchableListStory* self, Ctx* cx,
-                          const ListEvent* ev) {
-    component::SearchableListState* s = self->multi.Get(cx);
-    if (s) {
-        ApplyChange(s, ev->index);
-    }
+// on_confirm: the list has already applied the change; this is only what the
+// page does about it.
+static void OnPicked(SearchableListStory*, Ctx* cx, const ListEvent*) {
     Notify(cx);
 }
 static void FocusSingleQuery(SearchableListStory* self, Ctx* cx,
@@ -84,7 +62,7 @@ void SearchableListStory::OnKey(SearchableListStory* self, Ctx* cx,
     }
     if (act == ListAction::Confirm) {
         if (s->list.selected >= 0 && s->list.selected < s->nMatches) {
-            ApplyChange(s, s->matches[s->list.selected]);
+            component::SearchableListClick(s, s->matches[s->list.selected]);
         }
     } else {
         ListPerform(&s->list, cx, act, false);
@@ -132,10 +110,10 @@ El* SearchableListStory::Render(SearchableListStory* self, Ctx* cx) {
     component::SearchableListState* single = self->single.Get(cx);
     component::SearchableListState* multi = self->multi.Get(cx);
     if (single) {
-        single->onChange = Listen(cx, &OnSingleChange);
+        single->onChange = Listen(cx, &OnPicked);
     }
     if (multi) {
-        multi->onChange = Listen(cx, &OnMultiChange);
+        multi->onChange = Listen(cx, &OnPicked);
     }
 
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);

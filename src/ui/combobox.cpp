@@ -4,32 +4,25 @@ namespace gpui {
 
 namespace component {
 
-Combobox* Combobox::New(Ctx* cx, Str id) {
+Combobox* Combobox::New(Ctx* cx, Str id, Entity<SearchableListState> state,
+                        InputState* query) {
     Arena* a = cx->a;
     Combobox* c = ArenaNew<Combobox>(a);
     c->a = a;
     c->cx = cx;
     c->id = id;
+    c->state = state;
+    c->query = query;
     return c;
 }
-Combobox* Combobox::Option(Str s) {
-    if (n < 12) {
-        options[n++] = s;
-    }
+Combobox* Combobox::Items(const SearchableItem* it, int n) {
+    items = it;
+    nItems = n;
     return this;
 }
-Combobox* Combobox::Options(const char* const* items, int count) {
-    for (int i = 0; i < count; i++) {
-        Option(Str(items[i]));
-    }
-    return this;
-}
-Combobox* Combobox::Selected(Str s) {
-    selected = s;
-    return this;
-}
-Combobox* Combobox::Highlight(int i) {
-    highlight = i;
+Combobox* Combobox::Sections(const Str* titles, int n) {
+    sections = titles;
+    nSections = n;
     return this;
 }
 Combobox* Combobox::Placeholder(Str s) {
@@ -40,111 +33,76 @@ Combobox* Combobox::SearchPlaceholder(Str s) {
     searchPlaceholder = s;
     return this;
 }
-Combobox* Combobox::Icon(IconName i) {
-    icon = i;
+Combobox* Combobox::Empty(Str s) {
+    empty = s;
+    return this;
+}
+Combobox* Combobox::Icon(IconName n) {
+    icon = n;
     return this;
 }
 Combobox* Combobox::W(float v) {
     width = v;
     return this;
 }
-Combobox* Combobox::Open(bool v) {
-    open = v;
+Combobox* Combobox::MenuMaxH(float v) {
+    menuMaxH = v;
     return this;
 }
-Combobox* Combobox::Query(InputState* q) {
-    query = q;
+Combobox* Combobox::Disabled(bool v) {
+    disabled = v;
     return this;
 }
-Combobox* Combobox::OnChange(Listener fn) {
-    onChange = fn;
+Combobox* Combobox::Cleanable(bool v) {
+    cleanable = v;
+    return this;
+}
+Combobox* Combobox::Multiple(bool v) {
+    SearchableListState* s = state.Get(cx);
+    if (s) {
+        s->mode = v ? SearchableListMode::Multi : SearchableListMode::Single;
+        s->closeOnSelect = !v;
+    }
+    return this;
+}
+Combobox* Combobox::OnQueryFocus(Listener fn) {
+    onQueryFocus = fn;
     return this;
 }
 Combobox* Combobox::OnToggle(Listener fn) {
     onToggle = fn;
     return this;
 }
+Combobox* Combobox::OnClear(Listener fn) {
+    onClear = fn;
+    return this;
+}
 
 El* Combobox::IntoEl() {
-    const Theme& th = cx->theme();
-    // The trigger is input-shaped, like Select's.
-    bool hasValue = selected.s != nullptr;
-    El* trigger = Div(a)
-                      ->FlexRow()
+    // A ComboBox is a Select that is always searchable, so it is one: the
+    // trigger, the list and the popup are all the Select's, and the query
+    // field is what tells them apart.
+    if (query && searchPlaceholder.s) {
+        InputSetPlaceholder(query, searchPlaceholder);
+    }
+    Select* sel = Select::New(cx, id, state)
+                      ->Items(items, nItems)
+                      ->Placeholder(placeholder)
+                      ->Empty(empty)
                       ->W(width)
-                      ->H(32)
-                      ->PadX(10)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->JustifyBetween()
-                      ->Radius(th.radius)
-                      ->Bg(th.inputBg)
-                      ->Border(1, open ? th.ring : th.inputBorder);
-    El* title = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    // The icon comes from the selected item, so nothing shows until there
-    // is one.
-    if (icon != IconName::None && hasValue) {
-        title->Child(IconEl(a, icon, 14)->Fg(th.mutedFg));
+                      ->Icon(icon)
+                      ->Disabled(disabled)
+                      ->Cleanable(cleanable)
+                      ->Searchable(query, onQueryFocus)
+                      ->OnToggle(onToggle)
+                      ->OnClear(onClear);
+    if (sections) {
+        sel->Sections(sections, nSections);
     }
-    title->Child(TextEl(a, hasValue ? selected : placeholder)
-                     ->Font(14)
-                     ->Fg(hasValue ? th.foreground : th.mutedFg));
-    trigger->Child(title);
-    trigger->Child(IconEl(a, IconName::ChevronDown, 16)->Fg(th.mutedFg));
-    BindClick(trigger, id, onToggle);
-
-    El* pop = nullptr;
-    if (open) {
-        pop = Div(a)
-                  ->FlexCol()
-                  ->W(width)
-                  ->Pad(4)
-                  ->Gap(2)
-                  ->Radius(th.radiusLg)
-                  ->Border(1, th.border)
-                  ->Bg(th.background);
-        if (query) {
-            El* search = Div(a)
-                             ->FlexRow()
-                             ->W(kFill)
-                             ->H(32)
-                             ->PadX(8)
-                             ->Gap(8)
-                             ->ItemsCenter()
-                             ->BorderB(1, th.border);
-            search->Child(IconEl(a, IconName::Search, 14)->Fg(th.mutedFg));
-            search->Child(Div(a)->Grow()->Child(gpui::Input::New(cx, query)));
-            pop->Child(search);
-        }
-        for (int i = 0; i < n; i++) {
-            El* row = Div(a)
-                          ->FlexRow()
-                          ->W(kFill)
-                          ->H(28)
-                          ->PadX(8)
-                          ->ItemsCenter()
-                          ->JustifyBetween()
-                          ->Radius(th.radius)
-                          ->HoverBg(th.accent);
-            // The keyboard's option reads the same as a hover.
-            if (i == highlight) {
-                row->Bg(th.accent);
-            }
-            row->Child(TextEl(a, options[i])->Font(14)->Fg(th.foreground));
-            if (selected.s && StrEqI(options[i], selected)) {
-                row->Child(IconEl(a, IconName::Check, 14)->Fg(th.foreground));
-            }
-            if (onChange.IsValid()) {
-                BindClick(row, StrDup(a, fmt("%s-opt%d", id, i)),
-                          ListenerArg(onChange, i));
-            }
-            pop->Child(row);
-        }
+    if (menuMaxH > 0) {
+        sel->MenuMaxH(menuMaxH);
     }
-    El* root = gpui::Combobox::New(cx, id)->W(width)->Child(trigger);
-    return Popup::New(cx, StrDup(a, fmt("%s-pop", id)), root)
-        ->Content(pop)
-        ->IntoEl();
+    return sel->IntoEl();
 }
 
 } // namespace component
