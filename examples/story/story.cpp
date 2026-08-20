@@ -781,7 +781,8 @@ enum class ApKind : uint8_t {
     Scroll,
     ListHighlight,
     Fps,
-    Reduce
+    Reduce,
+    Ring
 };
 
 struct ApRow {
@@ -816,6 +817,10 @@ static const ApRow kAppearance[] = {
     // setting, which a gallery of components that move is the one place you
     // would want to try both ways without leaving to change it.
     {ApKind::Reduce, "Reduce Motion", 0},
+    // Nor this one. `Theme::focus_ring` is meant to be set once by an
+    // application whose layout clips its containers; a gallery is where you
+    // can see what the two look like side by side.
+    {ApKind::Ring, "Focus Ring", 0},
 };
 
 static const int kAppearanceRows = (int)(sizeof(kAppearance) / sizeof(ApRow));
@@ -835,6 +840,8 @@ static bool ApChecked(const StoryApp* app, const ApRow& r) {
             return app->fpsMonitor;
         case ApKind::Reduce:
             return MotionReduced();
+        case ApKind::Ring:
+            return ThemeFocusRing();
         default:
             return false;
     }
@@ -867,6 +874,9 @@ static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
             break;
         case ApKind::Reduce:
             MotionSetReduced(!MotionReduced());
+            break;
+        case ApKind::Ring:
+            ThemeSetFocusRing(!ThemeFocusRing());
             break;
         default:
             break;

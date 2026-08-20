@@ -104,6 +104,10 @@ Button* Button::WithSize(UiSize s) {
     size = s;
     return this;
 }
+Button* Button::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 Button* Button::Tooltip(Str s) {
     tooltip = s;
     return this;
@@ -244,6 +248,7 @@ El* Button::IntoEl() {
     // not one: passing one made every enabled button non-focusable and gave
     // disabled ones a focus handle, which is the opposite of both.
     El* e = gpui::Button::New(cx, id, disabled)
+                ->FocusRing(focusRing)
                 ->H(h > 0 ? h : kAuto)
                 ->PadX(padX)
                 ->ItemsCenter()

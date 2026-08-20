@@ -16,6 +16,7 @@ struct Checkbox {
     bool disabled = false;
     UiSize size = UiSize::Medium;
     Str tooltip = {};
+    bool focusRing = true;
     float w = 0;
     Listener onClick;
 
@@ -26,6 +27,8 @@ struct Checkbox {
     Checkbox* Disabled(bool v);
     Checkbox* WithSize(UiSize s);
     Checkbox* W(float v);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    Checkbox* FocusRing(bool v);
     Checkbox* Tooltip(Str s);
     Checkbox* OnClick(Listener fn);
     El* IntoEl();

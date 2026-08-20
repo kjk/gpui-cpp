@@ -67,6 +67,10 @@ Input* Input::Appearance(bool v) {
     appearance = v;
     return this;
 }
+Input* Input::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 Input* Input::TextColor(Rgba c) {
     textColor = c;
     hasTextColor = true;
@@ -136,11 +140,16 @@ El* Input::IntoEl() {
                     ->PadY(padY)
                     ->Gap(kInputGap)
                     ->ItemsCenter();
+    // input.rs gates the whole focus appearance on `appearance`: a field with
+    // none of its own is one somebody else has framed — a NumberInput's
+    // editor, sitting inside a frame that shows the focus for it — and a ring
+    // around the editor as well would say it twice.
+    field->FocusRing(appearance && focusRing);
     if (appearance) {
         field->Radius(th.radius)
             ->Bg(disabled ? th.muted : th.inputBg)
-            // Rust draws a ring outside the border box on focus; without one
-            // here the ring color goes on the border itself.
+            // The other half of focus_ring_style: the border takes the ring
+            // colour, and the ring itself is painted outside it.
             ->Border(1, focused ? th.ring : th.inputBorder);
         // input.rs: the disabled field is faded as a whole, prefix, suffix
         // and text together.
@@ -279,6 +288,10 @@ NumberInput* NumberInput::Appearance(bool v) {
     appearance = v;
     return this;
 }
+NumberInput* NumberInput::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 NumberInput* NumberInput::Suffix(El* el) {
     suffix = el;
     return this;
@@ -325,11 +338,15 @@ El* NumberInput::IntoEl() {
         font = 12;
     }
     Rgba border = disabled ? RgbaOpacity(th.inputBorder, 0.5f) : th.inputBorder;
+    // number_input.rs tints the frame on focus, the same as an Input's own
+    // border: the editor inside wears no appearance of its own, so the frame
+    // is the only thing that can say the editor has the keyboard.
+    bool focused = state && state->focused && !disabled;
     El* frame = gpui::NumberInput::New(cx)->FlexRow()->W(width)->H(h);
     if (appearance) {
         frame->Radius(th.radius)
             ->Bg(hasBg ? bg : (disabled ? th.muted : th.inputBg))
-            ->Border(1, border);
+            ->Border(1, focused && focusRing ? th.ring : border);
     } else if (hasBg) {
         frame->Radius(th.radius)->Bg(bg);
     }
@@ -408,6 +425,10 @@ OtpInput* OtpInput::Disabled(bool v) {
     disabled = v;
     return this;
 }
+OtpInput* OtpInput::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 OtpInput* OtpInput::WithSize(UiSize s) {
     size = s;
     return this;
@@ -442,6 +463,7 @@ El* OtpInput::IntoEl() {
     Rgba fg = disabled ? th.mutedFg : th.secondaryFg;
     // gap_5 between the groups, gap_1 inside one.
     El* row = gpui::OtpInput::New(cx, id.s ? id : StrL("otp"))
+                  ->FocusRing(focusRing)
                   ->FlexRow()
                   ->ItemsCenter()
                   ->Gap(20);

@@ -29,6 +29,7 @@ struct Input {
     bool masked = false;
     bool maskToggle = false;
     bool appearance = true;
+    bool focusRing = true;
     Rgba textColor = {};
     bool hasTextColor = false;
     Listener onChange;
@@ -45,6 +46,8 @@ struct Input {
     Input* Masked(bool v);
     Input* MaskToggle(bool v = true);
     Input* Appearance(bool v);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    Input* FocusRing(bool v);
     Input* TextColor(Rgba c);
     Input* OnClear(Listener fn);
     Input* OnToggleMask(Listener fn);
@@ -92,6 +95,7 @@ struct NumberInput {
     UiSize size = UiSize::Medium;
     bool disabled = false;
     bool appearance = true;
+    bool focusRing = true;
     El* suffix = nullptr;
     Rgba bg = {};
     bool hasBg = false;
@@ -108,6 +112,8 @@ struct NumberInput {
     NumberInput* WithSize(UiSize s);
     NumberInput* Disabled(bool v);
     NumberInput* Appearance(bool v);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    NumberInput* FocusRing(bool v);
     NumberInput* Suffix(El* el);
     NumberInput* Bg(Rgba c);
     NumberInput* TextColor(Rgba c);
@@ -128,6 +134,7 @@ struct OtpInput {
     int groups = 2;
     bool masked = false;
     bool disabled = false;
+    bool focusRing = true;
     UiSize size = UiSize::Medium;
     float cellPx = 0; // with_size(px(..)): a custom cell edge
     Listener onFocus;
@@ -138,6 +145,8 @@ struct OtpInput {
     OtpInput* Groups(int n);
     OtpInput* Masked(bool v);
     OtpInput* Disabled(bool v);
+    // FocusableExt::focus_ring: no focus appearance on this control.
+    OtpInput* FocusRing(bool v);
     OtpInput* WithSize(UiSize s);
     OtpInput* CellSize(float px);
     OtpInput* OnFocus(Listener fn);

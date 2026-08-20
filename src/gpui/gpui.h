@@ -145,6 +145,13 @@ float ThemeFontSize();
 void ThemeSetFontSize(float px);
 // The theme belongs to App, the way Rust keeps it as a Global; read it with
 // cx->theme(). ThemeNow() is the paint-time fallback for code below Ctx.
+// Theme::focus_ring. The ring is painted outside the element's border, so an
+// ancestor that clips its content cuts it off; an application whose layout
+// clips heavily turns it off here and keeps the tinted border, which takes no
+// room. Like the scrollbar mode and the font size, it is one process-wide
+// setting rather than one window's Global.
+bool ThemeFocusRing();
+void ThemeSetFocusRing(bool on);
 const Theme& ThemeNow();
 void ThemeSet(App* app, ThemeMode mode);
 ThemeMode ThemeGet();
@@ -864,6 +871,11 @@ struct Style {
     Rgba hoverFg = {};
     bool hasHoverFg = false;
     int focusId = 0;
+    // FocusableExt::focus_ring: whether a focused element shows the focus
+    // appearance at all. Rust gates the whole `focus_ring_style` call on it,
+    // so turning it off drops the tinted border along with the ring — a
+    // control that draws its own focus some other way wants neither.
+    bool focusRing = true;
     int trapId = 0;
     Str tooltip;
 };
@@ -1097,6 +1109,7 @@ struct El {
     El* HoverBg(Rgba c);
     El* HoverFg(Rgba c);
     El* FocusId(int v);
+    El* FocusRing(bool v);
     El* TrapId(int v);
     El* Tip(Str s);
     El* Id(Str s);

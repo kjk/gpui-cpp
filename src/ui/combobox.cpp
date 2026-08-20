@@ -57,6 +57,10 @@ Combobox* Combobox::Cleanable(bool v) {
     cleanable = v;
     return this;
 }
+Combobox* Combobox::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 Combobox* Combobox::Multiple(bool v) {
     SearchableListState* s = state.Get(cx);
     if (s) {
@@ -93,6 +97,7 @@ El* Combobox::IntoEl() {
                       ->Icon(icon)
                       ->Disabled(disabled)
                       ->Cleanable(cleanable)
+                      ->FocusRing(focusRing)
                       ->Searchable(query, onQueryFocus)
                       ->OnToggle(onToggle)
                       ->OnClear(onClear);

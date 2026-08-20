@@ -33,6 +33,10 @@ Radio* Radio::WithSize(UiSize s) {
     size = s;
     return this;
 }
+Radio* Radio::FocusRing(bool v) {
+    focusRing = v;
+    return this;
+}
 Radio* Radio::OnClick(Listener fn) {
     onClick = fn;
     return this;
@@ -68,6 +72,7 @@ El* Radio::IntoEl() {
     // gpui_base::Radio owns identity, focus and activation, and refuses the
     // click to the option that is already picked.
     El* row = gpui::Radio::New(cx, id, checked, disabled, onClick)
+                  ->FocusRing(focusRing)
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
