@@ -1,5 +1,7 @@
 #include "Story.h"
 
+#include <math.h>
+
 // The theme viewer groups every token the way the Rust story's mapper does;
 // ours lists the tokens this port has.
 struct ColorRow {
@@ -61,6 +63,35 @@ static void FocusFilter(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
     Notify(cx);
 }
 
+// Checkerboard: the wash the theme viewer's swatches sit on, so a colour
+// with alpha in it reads as translucent rather than as a darker opaque one.
+// Rust paints it from a gpui::canvas over the panel background; the same two
+// greys come out of customPaint here, which runs after the element's own fill
+// and before its children.
+static const float kCheckerSquare = 12.f;
+
+static Rgba CheckerBase() {
+    return ThemeGet() == ThemeMode::Dark ? RgbaHsla(0.f, 0.f, 0.1f, 1.f)
+                                         : RgbaHsla(0.f, 0.f, 1.f, 1.f);
+}
+
+static void PaintCheckerboard(PaintCtx* ctx, El* e, void*) {
+    Rgba c2 = ThemeGet() == ThemeMode::Dark ? RgbaHsla(0.f, 0.f, 0.13f, 1.f)
+                                            : RgbaHsla(0.f, 0.f, 0.95f, 1.f);
+    int rows = (int)ceilf(e->h / kCheckerSquare);
+    int cols = (int)ceilf(e->w / kCheckerSquare);
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < cols; col++) {
+            if ((row + col) % 2 != 0) {
+                continue;
+            }
+            CanvasFillRect(ctx, e->x + kCheckerSquare * (float)col,
+                           e->y + kCheckerSquare * (float)row, kCheckerSquare,
+                           kCheckerSquare, c2);
+        }
+    }
+}
+
 static Str HexOf(Ctx* cx, Rgba c) {
     if (c.a == 255) {
         return StoryFmt(cx, "#%02x%02x%02x", c.r, c.g, c.b);
@@ -86,17 +117,21 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         cx->win->input = &self->filter;
     }
 
+    // The names and the categories mapper.rs splits a theme key into,
+    // for every token this port's Theme carries. Global, Primary and
+    // Secondary lead; the rest run alphabetically, as they do in Rust.
     const ColorRow rows[] = {
         {"Global", "Background", th.background},
         {"Global", "Border", th.border},
         {"Global", "Foreground", th.foreground},
+        {"Global", "Overlay", th.overlay},
         {"Global", "Ring", th.ring},
         {"Primary", "Background", th.primary},
         {"Primary", "Foreground", th.primaryFg},
+        {"Secondary", "Active Background", th.secondaryActive},
         {"Secondary", "Background", th.secondary},
         {"Secondary", "Foreground", th.secondaryFg},
-        {"Secondary", "Hover", th.secondaryHover},
-        {"Secondary", "Active", th.secondaryActive},
+        {"Secondary", "Hover Background", th.secondaryHover},
         {"Accent", "Background", th.accent},
         {"Base", "Blue", th.blue},
         {"Base", "Cyan", th.cyan},
@@ -104,27 +139,53 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         {"Base", "Magenta", th.magenta},
         {"Base", "Red", th.red},
         {"Base", "Yellow", th.yellow},
-        {"Chart", "Chart 1", th.chart1},
-        {"Chart", "Chart 2", th.chart2},
-        {"Chart", "Chart 3", th.chart3},
-        {"Chart", "Chart 4", th.chart4},
-        {"Chart", "Chart 5", th.chart5},
         {"Chart", "Bearish", th.chartBearish},
         {"Chart", "Bullish", th.chartBullish},
+        {"Chart", "Color 1", th.chart1},
+        {"Chart", "Color 2", th.chart2},
+        {"Chart", "Color 3", th.chart3},
+        {"Chart", "Color 4", th.chart4},
+        {"Chart", "Color 5", th.chart5},
         {"Danger", "Background", th.danger},
         {"Danger", "Foreground", th.dangerFg},
+        {"Description List", "Label Background", th.descListLabel},
+        {"Description List", "Label Foreground", th.descListLabelFg},
+        {"Group Box", "Background", th.groupBox},
+        {"Group Box", "Foreground", th.groupBoxFg},
         {"Info", "Background", th.info},
         {"Info", "Foreground", th.infoFg},
         {"Input", "Background", th.inputBg},
         {"Input", "Border", th.inputBorder},
+        {"Input", "Caret", th.caret},
+        {"List", "Active Background", th.listActive},
+        {"List", "Active Border", th.listActiveBorder},
         {"Muted", "Background", th.muted},
         {"Muted", "Foreground", th.mutedFg},
+        {"Progress", "Background", th.progress},
+        {"Scrollbar", "Thumb Background", th.scrollbarThumb},
+        {"Sidebar", "Accent Background", th.sidebarAccent},
+        {"Sidebar", "Accent Foreground", th.sidebarAccentFg},
         {"Sidebar", "Background", th.sidebar},
+        {"Sidebar", "Border", th.sidebarBorder},
         {"Sidebar", "Foreground", th.sidebarFg},
-        {"Sidebar", "Primary", th.sidebarPrimary},
+        {"Sidebar", "Primary Background", th.sidebarPrimary},
         {"Sidebar", "Primary Foreground", th.sidebarPrimaryFg},
+        {"Skeleton", "Background", th.skeleton},
         {"Success", "Background", th.success},
         {"Success", "Foreground", th.successFg},
+        {"Tab", "Active Background", th.tabActiveBg},
+        {"Tab", "Active Foreground", th.tabActiveFg},
+        {"Tab", "Foreground", th.tabFg},
+        {"Tab Bar", "Background", th.tabBar},
+        {"Table", "Active Background", th.tableActive},
+        {"Table", "Active Border", th.tableActiveBorder},
+        {"Table", "Background", th.tableBg},
+        {"Table", "Even Background", th.tableEven},
+        {"Table", "Head Background", th.tableHead},
+        {"Table", "Head Foreground", th.tableHeadFg},
+        {"Table", "Row Border", th.tableRowBorder},
+        {"Title Bar", "Background", th.titleBar},
+        {"Title Bar", "Border", th.titleBarBorder},
         {"Warning", "Background", th.warning},
         {"Warning", "Foreground", th.warningFg},
     };
@@ -223,43 +284,60 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     }
     body->Child(left);
 
-    // Right: every group with its swatch, name and hex. Rust paints a
-    // checkerboard behind the swatches to show alpha; ours is flat.
+    // Right: every group with its swatch, name and hex, over the
+    // checkerboard that shows through a translucent colour.
     El* right = Div(a)
                     ->FlexCol()
                     ->Grow()
                     ->H(640)
-                    ->Pad(16)
-                    ->Gap(8)
                     ->ClipY()
                     ->Radius(th.radiusLg)
                     ->Border(1, th.border)
-                    ->Bg(th.muted);
+                    ->Bg(CheckerBase());
+    right->customPaint = PaintCheckerboard;
+    El* inner = Div(a)->FlexCol()->W(kFill)->PadX(16);
+    right->Child(inner);
     for (int i = 0; i < nRows;) {
         const char* name = rows[i].group;
         int end = i;
         while (end < nRows && strcmp(rows[end].group, name) == 0) {
             end++;
         }
-        right->Child(
-            StoryTxt(cx, Str(name), 16, th.foreground)->Medium()->PadY(8));
+        // v_flex().w_full().gap_3().pt_4()
+        El* cat = Div(a)->FlexCol()->W(kFill)->Gap(12)->PadT(16);
+        // text_base().font_semibold().pb_2().border_b_1()
+        cat->Child(Div(a)
+                       ->W(kFill)
+                       ->PadB(8)
+                       ->BorderB(1, th.border)
+                       ->Child(StoryTxt(cx, Str(name), 16, th.foreground)
+                                   ->Semibold()));
+        // div().flex().flex_wrap().gap_4(), one w(px(220.)) cell per colour.
+        El* wrap = Div(a)->FlexRow()->FlexWrap()->W(kFill)->Gap(16);
         for (int r = i; r < end; r++) {
-            El* row = Div(a)->FlexRow()->W(kFill)->Gap(16)->ItemsCenter();
+            // h_flex().gap_3().items_center()
+            El* row = Div(a)->FlexRow()->Gap(12)->ItemsCenter();
+            // div().size_16().rounded(radius).border_1().flex_shrink_0()
             row->Child(Div(a)
-                           ->W(60)
-                           ->H(60)
+                           ->W(64)
+                           ->H(64)
+                           ->Shrink0()
                            ->Radius(th.radius)
                            ->Bg(rows[r].color)
                            ->Border(1, th.border));
-            El* text = Div(a)->FlexCol()->Gap(4);
-            text->Child(StoryTxt(cx, Str(rows[r].name), 16, th.foreground)
+            El* text = Div(a)->FlexCol()->Gap(4)->Grow();
+            text->Child(StoryTxt(cx, Str(rows[r].name), 14, th.foreground)
                             ->Medium());
             text->Child(StoryTxt(cx, HexOf(cx, rows[r].color), 14, th.mutedFg));
             row->Child(text);
-            right->Child(row);
+            wrap->Child(Div(a)->W(220)->Child(row));
         }
+        cat->Child(wrap);
+        inner->Child(cat);
         i = end;
     }
+    // pb_4 under the last category.
+    inner->Child(Div(a)->H(16));
     body->Child(right);
     page->Child(body);
     return page;
