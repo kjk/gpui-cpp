@@ -243,5 +243,30 @@ int ScaleOrdinal::Map(int domainIndex) const {
     return domainIndex % rangeLen;
 }
 
+Point PlotTooltipPlace(Point cursor, Size within, Size box, float gap) {
+    Point at;
+    // Left of the middle, the box sits to the right of the cursor; past it,
+    // the box's right edge is what hugs the cursor instead.
+    if (cursor.x < within.w * 0.5f) {
+        at.x = cursor.x + gap;
+    } else {
+        at.x = cursor.x - gap - box.w;
+    }
+    if (cursor.y < within.h * 0.5f) {
+        at.y = cursor.y + gap;
+    } else {
+        at.y = cursor.y - gap - box.h;
+    }
+    // The flip is what keeps it inside; this is only for a box too big for
+    // the plot to hold either way.
+    if (at.x < 0) {
+        at.x = 0;
+    }
+    if (at.y < 0) {
+        at.y = 0;
+    }
+    return at;
+}
+
 } // namespace component
 } // namespace gpui

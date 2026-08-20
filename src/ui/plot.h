@@ -93,5 +93,19 @@ struct ScaleOrdinal {
     int Map(int domainIndex) const;
 };
 
+// Where a plot's tooltip box goes: it hugs the cursor and flips toward the
+// centre past the halfway line, so it never runs off the near edge. Rust
+// writes it as four `left/right/top/bottom` branches; the answer here is the
+// box's own origin inside the plot.
+//
+// `gap` is the distance the box keeps from the cursor.
+Point PlotTooltipPlace(Point cursor, Size within, Size box, float gap);
+
+// AXIS_GAP: the strip under a plot its x labels sit in.
+const float kPlotAxisGap = 18;
+// label.rs: TEXT_SIZE and TEXT_GAP.
+const float kPlotTextSize = 10;
+const float kPlotTextGap = 4;
+
 } // namespace component
 } // namespace gpui

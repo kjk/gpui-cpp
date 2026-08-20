@@ -34,6 +34,8 @@ struct PieChart {
 
 struct AreaChart {
     Arena* a = nullptr;
+    Str tooltipName = {};
+    bool tooltip = false;
     Ctx* cx = nullptr;
     const float* ys = nullptr;
     int n = 0;
@@ -45,6 +47,9 @@ struct AreaChart {
     Rgba fill = {};
 
     static AreaChart* New(Ctx* cx, const float* ys, int n);
+    // AreaChart::id: a chart with a name takes the pointer and shows a
+    // crosshair and a tooltip for whatever it is over.
+    AreaChart* Tooltip(Str name);
     AreaChart* Stroke(Rgba c);
     AreaChart* Fill(Rgba c);
     AreaChart* Labels(const char* const* l);
@@ -57,6 +62,8 @@ struct AreaChart {
 // under it.
 struct LineChart {
     Arena* a = nullptr;
+    Str tooltipName = {};
+    bool tooltip = false;
     Ctx* cx = nullptr;
     const float* ys = nullptr;
     int n = 0;
@@ -67,6 +74,9 @@ struct LineChart {
     float domainMax = 0;
 
     static LineChart* New(Ctx* cx, const float* ys, int n);
+    // AreaChart::id: a chart with a name takes the pointer and shows a
+    // crosshair and a tooltip for whatever it is over.
+    LineChart* Tooltip(Str name);
     LineChart* Stroke(Rgba c);
     LineChart* Labels(const char* const* l);
     LineChart* TickMargin(int n);
@@ -77,6 +87,8 @@ struct LineChart {
 // BarChart: a band per value, the bars rounded at the top.
 struct BarChart {
     Arena* a = nullptr;
+    Str tooltipName = {};
+    bool tooltip = false;
     Ctx* cx = nullptr;
     const float* ys = nullptr;
     int n = 0;
@@ -90,6 +102,9 @@ struct BarChart {
     float domainMax = 0;
 
     static BarChart* New(Ctx* cx, const float* ys, int n);
+    // AreaChart::id: a chart with a name takes the pointer and shows a
+    // crosshair and a tooltip for whatever it is over.
+    BarChart* Tooltip(Str name);
     BarChart* Fill(Rgba c);
     BarChart* Labels(const char* const* l);
     BarChart* TickMargin(int n);

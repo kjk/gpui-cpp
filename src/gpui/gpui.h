@@ -739,6 +739,11 @@ struct ChartSeries {
     // Bar: ScaleBand's inner padding, and how round the top of a bar is.
     float bandPadding = 0.2f;
     float barRadius = 4;
+    // AreaChart::id in Rust: a chart with one takes the pointer, and shows a
+    // crosshair and a tooltip for whatever it is over.
+    bool tooltip = false;
+    // The name the tooltip's row goes by.
+    Str name = {};
 };
 
 struct Style {

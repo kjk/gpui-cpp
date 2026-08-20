@@ -79,6 +79,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
     }
     El* areaBox = Div(a)->W(kFill)->H(kFill);
     El* area1 = component::AreaChart::New(cx, desktop, kDays)
+                    ->Tooltip(StrL("Desktop"))
                     ->Stroke(th.blue)
                     ->Fill(RgbaOpacity(th.blue, 0.4f))
                     ->Labels(labels)
@@ -119,6 +120,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
                             component::BarChart::New(cx, kMonthly, 6)
                                 ->Fill(th.blue)
                                 ->Labels(kMonthNames)
+                                ->Tooltip(StrL("Visitors"))
                                 ->TickMargin(1)
                                 ->IntoEl()
                                 ->W(kFill)
@@ -128,6 +130,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
                             component::LineChart::New(cx, kMonthly, 6)
                                 ->Stroke(th.blue)
                                 ->Labels(kMonthNames)
+                                ->Tooltip(StrL("Visitors"))
                                 ->TickMargin(1)
                                 ->IntoEl()
                                 ->W(kFill)

@@ -303,6 +303,31 @@ static void ScaleBandLeastIndex() {
     utassert(b.LeastIndex(-40.f) == 0);
     utassert(b.LeastIndex(400.f) == 2);
 }
+
+// The tooltip box hugs the cursor and flips toward the middle past halfway,
+// which is what keeps it inside the plot.
+static void PlotTooltipQuadrants() {
+    Size within = {200, 100};
+    Size box = {40, 20};
+    // Top left quarter: down and to the right of the cursor.
+    Point at = PlotTooltipPlace({10, 10}, within, box, 8);
+    utassert(TestNear(at.x, 18.f) && TestNear(at.y, 18.f));
+    // Right half: the box's right edge is what hugs the cursor.
+    at = PlotTooltipPlace({150, 10}, within, box, 8);
+    utassert(TestNear(at.x, 102.f) && TestNear(at.y, 18.f));
+    // Bottom half: it sits above.
+    at = PlotTooltipPlace({10, 80}, within, box, 8);
+    utassert(TestNear(at.x, 18.f) && TestNear(at.y, 52.f));
+    at = PlotTooltipPlace({150, 80}, within, box, 8);
+    utassert(TestNear(at.x, 102.f) && TestNear(at.y, 52.f));
+}
+
+// A box too big for the plot to hold either way still starts inside it.
+static void PlotTooltipClamps() {
+    Size within = {200, 100};
+    Point at = PlotTooltipPlace({190, 90}, within, {400, 400}, 8);
+    utassert(TestNear(at.x, 0.f) && TestNear(at.y, 0.f));
+}
 void TestScale() {
     TestSuite("scale/linear");
     ScaleLinearBasics();
@@ -330,4 +355,8 @@ void TestScale() {
     ScaleBandPadding();
     ScaleBandSingle();
     ScaleBandLeastIndex();
+
+    TestSuite("plot/tooltip");
+    PlotTooltipQuadrants();
+    PlotTooltipClamps();
 }
