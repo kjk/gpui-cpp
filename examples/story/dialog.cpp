@@ -296,9 +296,9 @@ static El* RenderBasicDialog(DialogStory* self, Ctx* cx) {
                      ->ItemsCenter()
                      ->JustifyBetween()
                      ->Bg(th.muted);
-    footer->Child(DialogButton(cx, StrL("new-dialog"),
-                               StrL("Open Other Dialog"),
-                               Listen(cx, &OpenOtherDialog), false));
+    footer
+        ->Child(DialogButton(cx, StrL("new-dialog"), StrL("Open Other Dialog"),
+                             Listen(cx, &OpenOtherDialog), false));
     footer->Child(actions);
     content->Child(footer);
 
@@ -346,11 +346,11 @@ static El* RenderFocusReturnCheck(DialogStory* self, Ctx* cx) {
                    ->Bg(RgbaOpacity(th.muted, 0.45f))
                    ->Border(1, th.border);
     El* header = Div(a)->FlexCol()->Gap(4);
-    header->Child(
-        StoryTxt(cx, StrL("Focus return check"), 16, th.foreground)->Medium());
-    header->Child(StoryTxt(cx,
-                           StrL("Type here, then open and close any dialog."),
-                           12, th.mutedFg));
+    header->Child(StoryTxt(cx, StrL("Focus return check"), 16, th.foreground)
+                      ->Medium());
+    header
+        ->Child(StoryTxt(cx, StrL("Type here, then open and close any dialog."),
+                         12, th.mutedFg));
     card->Child(header);
 
     El* controls = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
@@ -505,8 +505,8 @@ static El* RenderTableInDialog(DialogStory* self, Ctx* cx) {
     }
 
     El* surface = Div(a)->FlexCol()->W(kFill)->H(kFill)->Gap(16)->Pad(16);
-    surface->Child(
-        DialogTitleText(cx, StrL("Dialog with Table"), th.foreground));
+    surface
+        ->Child(DialogTitleText(cx, StrL("Dialog with Table"), th.foreground));
     El* body = Div(a)->FlexCol()->W(kFill)->Gap(12);
     body->Child(StoryTxt(cx,
                          StrL("This is a dialog contains a table component."),
@@ -596,9 +596,9 @@ static El* RenderDialogWithContent(DialogStory* self, Ctx* cx) {
     }
 
     El* content = Div(a)->FlexCol()->W(kFill)->Gap(16)->Pad(16);
-    content->Child(
-        DialogHeader(cx, StrL("Custom Width"),
-                     StrL("This dialog has a custom width of 400px.")));
+    content
+        ->Child(DialogHeader(cx, StrL("Custom Width"),
+                             StrL("This dialog has a custom width of 400px.")));
     content->Child(
         StoryTxt(cx,
                  StrL("Content area with custom width configuration, and the "

@@ -159,7 +159,8 @@ static ImageCacheSlot gImageCache[kImageCacheSlots];
 static int gImageCacheNext = 0;
 
 static bool SrcEq(Str a, Str b) {
-    return a.len == b.len && (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+    return a.len == b.len &&
+           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
 }
 
 static void ImageSlotFree(ImageCacheSlot* s) {

@@ -683,8 +683,7 @@ Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
     }
     IWICImagingFactory* wic = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
-                                  CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&wic));
+                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic));
     if (FAILED(hr) || !wic) {
         return nullptr;
     }
@@ -767,8 +766,7 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
             DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
         D2D1_SIZE_U size = D2D1::SizeU((UINT32)img->w, (UINT32)img->h);
         UINT32 pitch = (UINT32)img->w * 4;
-        HRESULT hr =
-            rt->CreateBitmap(size, img->bgra, pitch, props, &img->bmp);
+        HRESULT hr = rt->CreateBitmap(size, img->bgra, pitch, props, &img->bmp);
         if (FAILED(hr) || !img->bmp) {
             return;
         }

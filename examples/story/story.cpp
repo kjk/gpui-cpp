@@ -1122,7 +1122,6 @@ static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev) {
     StoryKeyRegistered(app, cx, ev);
 }
 
-
 // The story to open, if one was named on the command line.
 static void ParseSlug(int argc, char** argv, char* out, int cap) {
     out[0] = 0;

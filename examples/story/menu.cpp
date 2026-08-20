@@ -184,8 +184,8 @@ static component::PopupMenu* PopupStoryMenu(MenuStory* self, Ctx* cx) {
     menu->Element(custom);
 
     El* checkedElement = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
-    checkedElement->Child(
-        StoryTxt(cx, StrL("Custom Element"), 14, th.foreground));
+    checkedElement
+        ->Child(StoryTxt(cx, StrL("Custom Element"), 14, th.foreground));
     checkedElement->Child(StoryTxt(cx, StrL("checked"), 12, th.mutedFg));
     menu->Element(checkedElement)->Checked(checked);
 
@@ -475,14 +475,14 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
         "Supports actions, links, checks, icons, custom rows, and nested "
         "menus.");
     El* popupContent = SectionRow(cx, 640);
-    popupContent->Child(
-        component::DropdownMenu::New(cx, StrL("popup-menu-1-dropdown"))
-            ->Trigger(component::Button::New(cx, StrL("popup-menu-1"))
-                          ->Outline()
-                          ->Label(StrL("Edit"))
-                          ->IntoEl())
-            ->Menu(PopupStoryMenu(self, cx))
-            ->IntoEl());
+    popupContent
+        ->Child(component::DropdownMenu::New(cx, StrL("popup-menu-1-dropdown"))
+                    ->Trigger(component::Button::New(cx, StrL("popup-menu-1"))
+                                  ->Outline()
+                                  ->Label(StrL("Edit"))
+                                  ->IntoEl())
+                    ->Menu(PopupStoryMenu(self, cx))
+                    ->IntoEl());
     if (self->message.s) {
         popupContent->Child(StoryTxt(cx, self->message, 14, th.foreground));
     }
@@ -501,9 +501,9 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     contextContent->Child(ContextArea(
         cx, StrL("other"), StrL("Here is another area with context menu."),
         Str{}, OtherContextMenu(self, cx, 0)));
-    contextContent->Child(ContextArea(cx, StrL("other1"),
-                                      StrL("ContextMenu area 1"), Str{},
-                                      OtherContextMenu(self, cx, 1)));
+    contextContent
+        ->Child(ContextArea(cx, StrL("other1"), StrL("ContextMenu area 1"),
+                            Str{}, OtherContextMenu(self, cx, 1)));
     StorySectionAdd(contextSection, contextContent);
     page->Child(contextSection);
 
