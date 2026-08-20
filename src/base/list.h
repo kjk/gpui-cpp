@@ -55,8 +55,6 @@ Str ListContext();
 // names here and the flag comes back beside the answer.
 ListKeyAction ListActionOf(uint32_t id);
 
-const int kMaxListSections = 16;
-
 // RowEntry, from crates/ui/src/list/cache.rs: what one row of the flattened
 // list is. A section contributes a header, its items and a footer, and a
 // section with no items contributes nothing at all.
@@ -92,8 +90,7 @@ struct ListState {
     // The sections, as the number of items in each. RowsCache keeps the same
     // list and flattens it; a section with no items is skipped, header and
     // footer with it.
-    int sectionCounts[kMaxListSections] = {};
-    int nSections = 0;
+    Vec<int> sectionCounts;
     bool sectionHeaders = false;
     bool sectionFooters = false;
     // The list is virtualized, and uniform_list wants every row the same
@@ -114,6 +111,8 @@ struct ListState {
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
     EntityId self = {};
+
+    ~ListState() { sectionCounts.Reset(); }
 
     // Rust's ListState is an Entity, which is what lets the item closures
     // capture it; here the row elements name these handlers instead, so a

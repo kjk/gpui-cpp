@@ -52,7 +52,7 @@ int DockPanelByName(const DockState* s, Str name) {
     if (!name.s || name.len <= 0) {
         return -1;
     }
-    for (int i = 0; i < s->nPanels; i++) {
+    for (int i = 0; i < s->panels.len; i++) {
         if (StrSame(s->panels[i].name, name)) {
             return i;
         }
@@ -61,22 +61,37 @@ int DockPanelByName(const DockState* s, Str name) {
 }
 
 int DockAddPanelDef(DockState* s, DockPanelDef def) {
-    if (s->nPanels >= kMaxDockPanels) {
-        return -1;
-    }
-    s->panels[s->nPanels] = def;
-    return s->nPanels++;
+    s->panels.Append(def);
+    return s->panels.len - 1;
 }
 
+// A free slot, or a new one. The slot's own arrays are emptied rather than
+// dropped: the pool owns them, and a node coming back into use starts with
+// nothing in it.
 static int DockNewNode(DockState* s) {
-    for (int i = 0; i < kMaxDockNodes; i++) {
+    for (int i = 0; i < s->nodes.len; i++) {
         if (!s->nodes[i].used) {
-            s->nodes[i] = {};
-            s->nodes[i].used = true;
+            DockNode& n = s->nodes[i];
+            n.child.Clear();
+            n.size.Clear();
+            n.panel.Clear();
+            n.split = false;
+            n.axis = Axis::Horizontal;
+            n.parent = -1;
+            n.activeIx = 0;
+            n.bounds = {};
+            n.tabScrollX = 0;
+            n.pendingScrollIx = -1;
+            n.tabStripBounds = {};
+            n.activeTabBounds = {};
+            n.activeTabBoundsIx = -1;
+            n.used = true;
             return i;
         }
     }
-    return -1;
+    s->nodes.Append(DockNode{});
+    s->nodes[s->nodes.len - 1].used = true;
+    return s->nodes.len - 1;
 }
 
 int DockNewTabs(DockState* s) {
@@ -93,32 +108,28 @@ int DockNewSplit(DockState* s, Axis axis) {
 }
 
 void DockTabsAdd(DockState* s, int node, int panelIx) {
-    if (node < 0 || node >= kMaxDockNodes || panelIx < 0) {
+    if (node < 0 || node >= s->nodes.len || panelIx < 0) {
         return;
     }
     DockNode& n = s->nodes[node];
-    if (n.split || n.nPanel >= kMaxDockPanels) {
+    if (n.split) {
         return;
     }
-    n.panel[n.nPanel++] = panelIx;
+    n.panel.Append(panelIx);
 }
 
 void DockTabsInsert(DockState* s, int node, int panelIx, int at) {
-    if (node < 0 || node >= kMaxDockNodes || panelIx < 0) {
+    if (node < 0 || node >= s->nodes.len || panelIx < 0) {
         return;
     }
     DockNode& n = s->nodes[node];
-    if (n.split || n.nPanel >= kMaxDockPanels) {
+    if (n.split) {
         return;
     }
-    if (at < 0 || at > n.nPanel) {
-        at = n.nPanel;
+    if (at < 0 || at > n.panel.len) {
+        at = n.panel.len;
     }
-    for (int i = n.nPanel; i > at; i--) {
-        n.panel[i] = n.panel[i - 1];
-    }
-    n.panel[at] = panelIx;
-    n.nPanel++;
+    n.panel.InsertAt(at, panelIx);
     // insert_panel_at ends with set_active_ix(ix): what was dropped is what
     // the group shows.
     n.activeIx = at;
@@ -126,15 +137,15 @@ void DockTabsInsert(DockState* s, int node, int panelIx, int at) {
 }
 
 void DockSplitAdd(DockState* s, int node, int childNode, float size) {
-    if (node < 0 || node >= kMaxDockNodes || childNode < 0) {
+    if (node < 0 || node >= s->nodes.len || childNode < 0) {
         return;
     }
     DockNode& n = s->nodes[node];
-    if (!n.split || n.nChild >= kMaxDockChildren) {
+    if (!n.split) {
         return;
     }
-    n.size[n.nChild] = size;
-    n.child[n.nChild++] = childNode;
+    n.size.Append(size);
+    n.child.Append(childNode);
     s->nodes[childNode].parent = node;
 }
 
@@ -152,12 +163,12 @@ DockSide* DockSideOf(DockState* s, DockPlacement p) {
 }
 
 int DockNodeOfPanel(const DockState* s, int panelIx) {
-    for (int i = 0; i < kMaxDockNodes; i++) {
+    for (int i = 0; i < s->nodes.len; i++) {
         const DockNode& n = s->nodes[i];
         if (!n.used || n.split) {
             continue;
         }
-        for (int j = 0; j < n.nPanel; j++) {
+        for (int j = 0; j < n.panel.len; j++) {
             if (n.panel[j] == panelIx) {
                 return i;
             }
@@ -193,7 +204,7 @@ static void DockReplace(DockState* s, int oldNode, int newNode) {
         return;
     }
     DockNode& p = s->nodes[parent];
-    for (int i = 0; i < p.nChild; i++) {
+    for (int i = 0; i < p.child.len; i++) {
         if (p.child[i] == oldNode) {
             p.child[i] = newNode;
             return;
@@ -212,18 +223,18 @@ static void DockPrune(DockState* s, int node) {
     }
     DockNode& n = s->nodes[node];
     if (n.split) {
-        if (n.nChild == 1) {
+        if (n.child.len == 1) {
             int only = n.child[0];
             DockReplace(s, node, only);
             n.used = false;
             return;
         }
-        if (n.nChild == 0) {
+        if (n.child.len == 0) {
             DockRemoveNode(s, node);
         }
         return;
     }
-    if (n.nPanel == 0 && n.parent >= 0) {
+    if (n.panel.len == 0 && n.parent >= 0) {
         DockRemoveNode(s, node);
     }
 }
@@ -238,7 +249,7 @@ static void DockRemoveNode(DockState* s, int node) {
     }
     DockNode& p = s->nodes[parent];
     int at = -1;
-    for (int i = 0; i < p.nChild; i++) {
+    for (int i = 0; i < p.child.len; i++) {
         if (p.child[i] == node) {
             at = i;
             break;
@@ -247,24 +258,25 @@ static void DockRemoveNode(DockState* s, int node) {
     if (at < 0) {
         return;
     }
-    int give = at > 0 ? at - 1 : (p.nChild > 1 ? at + 1 : -1);
+    int give = at > 0 ? at - 1 : (p.child.len > 1 ? at + 1 : -1);
     if (give >= 0) {
         p.size[give] += p.size[at];
     }
-    for (int i = at; i < p.nChild - 1; i++) {
+    for (int i = at; i < p.child.len - 1; i++) {
         p.child[i] = p.child[i + 1];
         p.size[i] = p.size[i + 1];
     }
-    p.nChild--;
+    p.child.len--;
+    p.size.len--;
     DockPrune(s, parent);
 }
 
 void DockSetActive(DockState* s, Ctx* cx, int node, int ix) {
-    if (node < 0 || node >= kMaxDockNodes) {
+    if (node < 0 || node >= s->nodes.len) {
         return;
     }
     DockNode& n = s->nodes[node];
-    if (ix < 0 || ix >= n.nPanel) {
+    if (ix < 0 || ix >= n.panel.len) {
         return;
     }
     n.activeIx = ix;
@@ -278,21 +290,21 @@ void DockSetActive(DockState* s, Ctx* cx, int node, int ix) {
 // decide what an empty group means.
 static void DockDetach(DockState* s, int node, int ix) {
     DockNode& n = s->nodes[node];
-    for (int i = ix; i < n.nPanel - 1; i++) {
+    for (int i = ix; i < n.panel.len - 1; i++) {
         n.panel[i] = n.panel[i + 1];
     }
-    n.nPanel--;
-    if (n.activeIx >= n.nPanel) {
-        n.activeIx = n.nPanel > 0 ? n.nPanel - 1 : 0;
+    n.panel.len--;
+    if (n.activeIx >= n.panel.len) {
+        n.activeIx = n.panel.len > 0 ? n.panel.len - 1 : 0;
     }
 }
 
 bool DockClosePanelAt(DockState* s, int node, int ix) {
-    if (node < 0 || node >= kMaxDockNodes) {
+    if (node < 0 || node >= s->nodes.len) {
         return false;
     }
     DockNode& n = s->nodes[node];
-    if (ix < 0 || ix >= n.nPanel) {
+    if (ix < 0 || ix >= n.panel.len) {
         return false;
     }
     int panelIx = n.panel[ix];
@@ -312,7 +324,7 @@ void DockClosePanel(DockState* s, Ctx* cx, int node, int ix) {
 
 bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
                      int atIx) {
-    if (s->locked || to < 0 || to >= kMaxDockNodes || !s->nodes[to].used) {
+    if (s->locked || to < 0 || to >= s->nodes.len || !s->nodes[to].used) {
         return false;
     }
     int from = DockNodeOfPanel(s, panelIx);
@@ -327,11 +339,12 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
     }
     // A group of one dropped on its own edge would split with itself, which
     // is the layout it already has.
-    if (from == to && drop != DockDrop::Center && s->nodes[from].nPanel <= 1) {
+    if (from == to && drop != DockDrop::Center &&
+        s->nodes[from].panel.len <= 1) {
         return false;
     }
     int at = -1;
-    for (int i = 0; i < s->nodes[from].nPanel; i++) {
+    for (int i = 0; i < s->nodes[from].panel.len; i++) {
         if (s->nodes[from].panel[i] == panelIx) {
             at = i;
             break;
@@ -351,7 +364,7 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
             DockTabsInsert(s, to, panelIx, atIx);
         } else {
             DockTabsAdd(s, to, panelIx);
-            s->nodes[to].activeIx = s->nodes[to].nPanel - 1;
+            s->nodes[to].activeIx = s->nodes[to].panel.len - 1;
         }
         DockPrune(s, from);
         return true;
@@ -370,13 +383,12 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
     Axis axis = horizontal ? Axis::Horizontal : Axis::Vertical;
 
     int parent = s->nodes[to].parent;
-    if (parent >= 0 && s->nodes[parent].axis == axis &&
-        s->nodes[parent].nChild < kMaxDockChildren) {
+    if (parent >= 0 && s->nodes[parent].axis == axis && true) {
         // The split already runs this way, so the new group joins it beside
         // the target and the two share what the target had.
         DockNode& p = s->nodes[parent];
         int ix = 0;
-        for (int i = 0; i < p.nChild; i++) {
+        for (int i = 0; i < p.child.len; i++) {
             if (p.child[i] == to) {
                 ix = i;
                 break;
@@ -384,14 +396,16 @@ bool DockMovePanelTo(DockState* s, int panelIx, int to, DockDrop drop,
         }
         int insert = before ? ix : ix + 1;
         float half = p.size[ix] * 0.5f;
-        for (int i = p.nChild; i > insert; i--) {
+        p.child.Append(0);
+        p.size.Append(0);
+        for (int i = p.child.len - 1; i > insert; i--) {
             p.child[i] = p.child[i - 1];
             p.size[i] = p.size[i - 1];
         }
         p.child[insert] = fresh;
         p.size[insert] = half;
         p.size[before ? ix + 1 : ix] = half;
-        p.nChild++;
+
         s->nodes[fresh].parent = parent;
     } else {
         int split = DockNewSplit(s, axis);
@@ -444,12 +458,12 @@ float DockTabScrollTo(float scrollX, Bounds strip, Bounds tab) {
 }
 
 DockPlacement DockPlacementOfNode(const DockState* s, int node) {
-    if (node < 0 || node >= kMaxDockNodes) {
+    if (node < 0 || node >= s->nodes.len) {
         return DockPlacement::Center;
     }
     // Up to the root of whichever tree it is in, and then which one that was.
     int root = node;
-    for (int guard = 0; guard < kMaxDockNodes; guard++) {
+    for (int guard = 0; guard < s->nodes.len + 1; guard++) {
         int parent = s->nodes[root].parent;
         if (parent < 0) {
             break;
@@ -568,7 +582,7 @@ void DockState::OnTabDragMove(DockState* self, Ctx* cx,
     // frame's boxes are what there is to ask; the ones Rust asks are just as
     // old.
     int found = -1;
-    for (int i = 0; i < kMaxDockNodes; i++) {
+    for (int i = 0; i < self->nodes.len; i++) {
         const DockNode& n = self->nodes[i];
         if (!n.used || n.split) {
             continue;
@@ -632,7 +646,7 @@ void DockState::OnDropTabBar(DockState* self, Ctx* cx, const DropEvent* ev,
     // and leaves it unnamed otherwise, so the panel is appended.
     int at = -1;
     if (DockNodeOfPanel(self, ev->drag.ix) == to) {
-        at = self->nodes[to].nPanel - 1;
+        at = self->nodes[to].panel.len - 1;
     }
     DockMovePanel(self, cx, ev->drag.ix, to, DockDrop::Center, at);
 }
@@ -642,11 +656,11 @@ void DockState::OnMenuItem(DockState* self, Ctx* cx, const ClickEvent*,
     // The menu reports which of its rows was taken; which panel that is about
     // is the group whose menu was open when it did.
     int node = self->menuNode;
-    if (node < 0 || node >= kMaxDockNodes || !self->nodes[node].used) {
+    if (node < 0 || node >= self->nodes.len || !self->nodes[node].used) {
         return;
     }
     DockNode& n = self->nodes[node];
-    if (n.nPanel <= 0) {
+    if (n.panel.len <= 0) {
         return;
     }
     // Row 0 is ToggleZoom; the separator is row 1, so anything past it is
@@ -659,8 +673,9 @@ void DockState::OnMenuItem(DockState* self, Ctx* cx, const ClickEvent*,
 }
 
 void DockState::OnTabBarScroll(DockState* self, Ctx* cx, const ScrollEvent* ev,
-                               intptr_t node) {
-    if (node < 0 || node >= kMaxDockNodes || !self->nodes[node].used) {
+                               intptr_t nodeArg) {
+    int node = (int)nodeArg;
+    if (node < 0 || node >= self->nodes.len || !self->nodes[node].used) {
         return;
     }
     self->nodes[node].tabScrollX = ev->offsetX;
@@ -676,8 +691,8 @@ void DockState::OnResizeDrag(DockState* self, Ctx* cx,
     int node = DockUnpackNode(ev->drag.ix);
     // A node index past the end of the tree is one of the three Docks, which
     // resize against the whole area rather than against a split's children.
-    if (node >= kMaxDockNodes) {
-        DockPlacement p = (DockPlacement)(node - kMaxDockNodes);
+    if (node >= kDockSideBase) {
+        DockPlacement p = (DockPlacement)(node - kDockSideBase);
         self->resizingSide = p;
         DockResizeSide(self, cx, p, ev->event.x, ev->event.y);
         return;
@@ -689,13 +704,13 @@ void DockState::OnResizeDrag(DockState* self, Ctx* cx,
     int ix = DockUnpackIx(ev->drag.ix);
     bool horizontal = AxisIsHorizontal(n.axis);
     float container = horizontal ? n.bounds.w : n.bounds.h;
-    ResizableAdjustToContainer(n.size, n.nChild, container);
+    ResizableAdjustToContainer(n.size.els, n.child.len, container);
     float start = horizontal ? n.bounds.x : n.bounds.y;
     for (int i = 0; i < ix; i++) {
         start += n.size[i];
     }
     float want = (horizontal ? ev->event.x : ev->event.y) - start;
-    ResizablePanelResize(n.size, nullptr, nullptr, n.nChild, ix, want,
+    ResizablePanelResize(n.size.els, nullptr, nullptr, n.child.len, ix, want,
                          container);
     Notify(cx);
 }

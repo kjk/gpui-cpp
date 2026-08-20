@@ -302,6 +302,11 @@ El* DataTable::IntoEl() {
                          ->FlexRow()
                          ->Shrink0();
     headWrap->Child(headScroll);
+    // Every column's slot in one go: `BoundsOut` keeps a pointer into the
+    // array, so it must not grow again while the heads are being built.
+    if (s) {
+        TableEnsureCols(s, nColumns);
+    }
     for (int d = 0; d < nColumns; d++) {
         // The columns are drawn in the order the table keeps, which is what a
         // head drag rewrites.
@@ -311,7 +316,7 @@ El* DataTable::IntoEl() {
                       ->FlexRow()
                       ->Shrink0()
                       ->W(ColWidth(s, c));
-        if (s && d < kMaxTableCols) {
+        if (s) {
             // The box a drop position is worked out against, which Rust reads
             // off its col_groups.
             th_->BoundsOut(&s->colBounds[d]);

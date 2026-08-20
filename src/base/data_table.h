@@ -71,10 +71,6 @@ struct TableEvent {
     int nWidths = 0;
 };
 
-// How many columns a table keeps a width for. Rust's col_groups is a Vec;
-// past this the width a caller declared is the one a column keeps.
-const int kMaxTableCols = 96;
-
 // The name a column-resize drag goes by, which is the `ResizeColumn` payload
 // type in Rust.
 extern const Str kTableResizeDrag;
@@ -124,7 +120,7 @@ struct TableState {
     // ColGroup::width, seeded from what the caller declared for a column and
     // the table's own from then on. A zero is a column that has not been
     // seeded yet.
-    float colWidth[kMaxTableCols] = {};
+    Vec<float> colWidth;
     // Column::min_width / max_width. Rust hangs a pair off every column and
     // every column in the tree takes the default pair, so one says as much.
     // A zero ceiling is Rust's f32::MAX, which is no ceiling.
@@ -137,7 +133,7 @@ struct TableState {
     // caller's column at display position i. Rust reorders the col_groups
     // vector itself; the columns are the caller's array here, so the order is
     // the table's own list of indices into it.
-    int colOrder[kMaxTableCols] = {};
+    Vec<int> colOrder;
     bool colOrderSeeded = false;
     // col_movable, and the drag in flight: which column was picked up and
     // which gap it would drop into, or -1 for neither.
@@ -146,7 +142,7 @@ struct TableState {
     int dropGap = -1;
     // Where each head was last painted, which is what a drop position is
     // worked out against — Rust reads the same bounds off its col_groups.
-    Bounds colBounds[kMaxTableCols] = {};
+    Vec<Bounds> colBounds;
 
     // The rows are virtualized, and uniform_list wants them all one height.
     // `viewportH` is what the body was last laid out at.
@@ -171,6 +167,12 @@ struct TableState {
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
     EntityId self = {};
+
+    ~TableState() {
+        colWidth.Reset();
+        colOrder.Reset();
+        colBounds.Reset();
+    }
     Listener onLoadMore = {};
 
     static void OnRowClick(TableState* self, Ctx* cx, const ClickEvent* ev,
@@ -211,6 +213,10 @@ void TableMoveColumnEvent(TableState* s, Ctx* cx, int from, int to);
 // the last column whose centre is left of `x` — or -1 when dropping there
 // would put the column back where it already is.
 int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol);
+// The three per-column arrays grown to hold `n` columns. Rust's col_groups is
+// one Vec of structs; these are three, since a column's width, its place in
+// the order and where its head was painted are written at different moments.
+void TableEnsureCols(TableState* s, int n);
 // load_more_if_need: the last row built is within the threshold of the end,
 // and the delegate says there is more.
 bool TableShouldLoadMore(const TableState* s, int visibleEnd);

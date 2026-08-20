@@ -147,13 +147,13 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
         component::SearchableListState* country = self->sel[SelCountry].Get(cx);
         if (country) {
             country->selected[0] = 5;
-            country->nSelected = 1;
+            country->selected.len = 1;
         }
         for (int which : {SelUi1, SelMenuH}) {
             component::SearchableListState* st = self->sel[which].Get(cx);
             if (st) {
                 st->selected[0] = 0;
-                st->nSelected = 1;
+                st->selected.len = 1;
             }
         }
     }
@@ -272,7 +272,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     for (int i = 0; i < 4; i++) {
         component::SearchableListState* s = self->sel[slots[i]].Get(cx);
         Str line = StoryFmt(cx, "%s: None", labels[i]);
-        if (s && s->nSelected > 0) {
+        if (s && s->selected.len > 0) {
             line = StoryFmt(cx, "%s: Some(\"%s\")", labels[i],
                             gItems[slots[i]][s->selected[0]].title);
         }

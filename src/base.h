@@ -387,6 +387,33 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
     return res;
 }
 
+// An array that grows into an arena. `Vec<T>` frees its storage in its
+// destructor, which is wrong for anything built on a frame arena: an element
+// tree and the builders that make one are allocated from the frame's arena and
+// thrown away with it, never destructed. This has no destructor and never
+// frees — the arena is what owns the memory — so a builder can take as many
+// items as the caller has instead of declaring a cap for them.
+template <typename T>
+struct ArenaVec {
+    T* els = nullptr;
+    int len = 0;
+    int cap = 0;
+
+    T& operator[](int idx) const { return els[idx]; }
+
+    bool Append(Arena* a, const T& el) {
+        if (len >= cap) {
+            int newCap = cap > 0 ? cap * 2 : 8;
+            if (!VecRealloc(a, (void**)&els, len, &cap, newCap,
+                            (int)sizeof(T))) {
+                return false;
+            }
+        }
+        els[len++] = el;
+        return true;
+    }
+};
+
 // A calendar date, which is all the date widgets need out of the clock.
 struct LocalDate {
     int year = 0;

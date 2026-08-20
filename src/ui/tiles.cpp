@@ -15,11 +15,10 @@ Tiles* Tiles::New(Ctx* cx, Str id, Entity<TilesState> state) {
 }
 
 Tiles* Tiles::Panel(Str title, El* content) {
-    if (n < kMaxTiles) {
-        panels[n].title = title;
-        panels[n].content = content;
-        n++;
-    }
+    TilePanelDef d;
+    d.title = title;
+    d.content = content;
+    panels.Append(a, d);
     return this;
 }
 
@@ -91,9 +90,9 @@ El* Tiles::IntoEl() {
     // the coordinates the tiles are laid out in.
     root->BoundsOut(&s->bounds);
 
-    int order[kMaxTiles];
+    int* order = (int*)Alloc(a, (int)sizeof(int) * (s->items.len + 1));
     TilesPaintOrder(s, order);
-    for (int k = 0; k < s->n; k++) {
+    for (int k = 0; k < s->items.len; k++) {
         int ix = order[k];
         const TileItem& item = s->items[ix];
         Bounds b = item.bounds;
@@ -127,7 +126,7 @@ El* Tiles::IntoEl() {
         // The panel is the caller's, named by the tile — the list is
         // reordered as tiles come to the front, and the panels are not.
         int p = item.panel;
-        if (p >= 0 && p < n && panels[p].title.s) {
+        if (p >= 0 && p < panels.len && panels[p].title.s) {
             bar->Child(TextEl(a, panels[p].title)->Font(13)->Fg(th.foreground));
         }
         bar->OnMouseDown(
@@ -139,7 +138,7 @@ El* Tiles::IntoEl() {
         tile->Child(bar);
 
         El* body = Div(a)->FlexCol()->W(kFill)->H(kFill)->ClipX()->ClipY();
-        if (p >= 0 && p < n && panels[p].content) {
+        if (p >= 0 && p < panels.len && panels[p].content) {
             body->Child(panels[p].content);
         }
         tile->Child(body);

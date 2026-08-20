@@ -68,14 +68,11 @@ int ListPrevIndex(const ListState* s) {
 
 void ListSetSections(ListState* s, const int* counts, int n, bool headers,
                      bool footers) {
-    if (n > kMaxListSections) {
-        n = kMaxListSections;
-    }
-    s->nSections = n < 0 ? 0 : n;
+    s->sectionCounts.Clear();
     s->count = 0;
-    for (int i = 0; i < s->nSections; i++) {
+    for (int i = 0; i < n; i++) {
         int c = counts[i] < 0 ? 0 : counts[i];
-        s->sectionCounts[i] = c;
+        s->sectionCounts.Append(c);
         s->count += c;
     }
     s->sectionHeaders = headers;
@@ -99,7 +96,7 @@ static int SectionRows(const ListState* s, int section) {
 
 int ListRowCount(const ListState* s) {
     int total = 0;
-    for (int i = 0; i < s->nSections; i++) {
+    for (int i = 0; i < s->sectionCounts.len; i++) {
         total += SectionRows(s, i);
     }
     return total;
@@ -112,7 +109,7 @@ ListRow ListRowAt(const ListState* s, int rowIx) {
     }
     int at = 0;
     int entry = 0;
-    for (int i = 0; i < s->nSections; i++) {
+    for (int i = 0; i < s->sectionCounts.len; i++) {
         int rows = SectionRows(s, i);
         if (rowIx >= at + rows) {
             at += rows;
@@ -146,7 +143,7 @@ int ListRowOfEntry(const ListState* s, int entry) {
     }
     int at = 0;
     int seen = 0;
-    for (int i = 0; i < s->nSections; i++) {
+    for (int i = 0; i < s->sectionCounts.len; i++) {
         int items = s->sectionCounts[i];
         if (items <= 0) {
             continue;

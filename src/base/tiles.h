@@ -40,8 +40,9 @@ enum class TileSide : uint8_t {
     BottomRight
 };
 
-const int kMaxTiles = 16;
-// How many changes the undo history holds.
+// How many changes the undo history holds. Rust's is unbounded; a window this
+// deep is already more undo than a free canvas of panels needs, and the
+// oldest change goes to make room for a new one.
 const int kMaxTileChanges = 64;
 
 // TileItem: a panel of the caller's, where it sits, and how high it stacks.
@@ -65,8 +66,8 @@ struct TileChange {
 };
 
 struct TilesState {
-    TileItem items[kMaxTiles] = {};
-    int n = 0;
+    // As many tiles as the caller adds, which is Rust's Vec<TileItem>.
+    Vec<TileItem> items;
 
     // The tile being moved, and where the drag started — the pointer in the
     // area's own coordinates, and the tile's bounds when the press landed.
@@ -111,6 +112,8 @@ struct TilesState {
                              const DragMoveEvent* ev);
     static void OnDragEnd(TilesState* self, Ctx* cx, const MouseUpEvent* ev);
     static void OnScroll(TilesState* self, Ctx* cx, const ScrollEvent* ev);
+
+    ~TilesState() { items.Reset(); }
 };
 
 // The tile and the side, as one number: what a resize handle's drag carries.

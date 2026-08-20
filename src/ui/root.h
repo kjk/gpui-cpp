@@ -15,10 +15,6 @@ namespace gpui {
 
 namespace component {
 
-// How many dialogs can be open at once. Rust's is a Vec; a stack this deep is
-// already more than any of the stories opens.
-const int kMaxRootDialogs = 8;
-
 // Which dialog shows the overlay: the last one that asked for one, so a stack
 // of dialogs tints the page once, under the topmost of them. -1 when none of
 // them wants one.
@@ -45,9 +41,10 @@ struct Root {
     bool hasSheet = false;
     SheetPlacement sheetPlacement = SheetPlacement::Right;
     float sheetSize = 0;
-    El* dialogs[kMaxRootDialogs] = {};
-    bool dialogOverlay[kMaxRootDialogs] = {};
-    int nDialog = 0;
+    // As many as the caller opens, which is Rust's Vec. They grow into the
+    // frame arena the builder is on.
+    ArenaVec<El*> dialogs;
+    ArenaVec<bool> dialogOverlay;
 
     static Root* New(Ctx* cx);
     Root* Bordered(bool v);

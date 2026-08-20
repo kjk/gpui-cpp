@@ -101,13 +101,13 @@ Select* Select::OnClear(Listener fn) {
 Str SelectTriggerTitle(const SearchableListState* s, Str placeholder,
                        Str titlePrefix, Arena* a) {
     Str none = placeholder.s ? placeholder : StrL("Please select");
-    if (!s || s->nSelected == 0 || !s->items) {
+    if (!s || s->selected.len == 0 || !s->items) {
         return none;
     }
-    if (s->nSelected > 1) {
+    if (s->selected.len > 1) {
         // Rust shows the picked items as tags; the trigger says how many when
         // there is no room for that.
-        return StrDup(a, fmt("%d selected", s->nSelected));
+        return StrDup(a, fmt("%d selected", s->selected.len));
     }
     int ix = s->selected[0];
     if (ix < 0 || ix >= s->nItems) {
@@ -128,8 +128,8 @@ void SelectToggleOpen(SearchableListState* s, Ctx* cx) {
     // Opening starts the keyboard on whatever is already picked, so the first
     // arrow steps from there rather than from the top.
     s->list.selected = -1;
-    if (s->open && s->nSelected > 0) {
-        for (int m = 0; m < s->nMatches; m++) {
+    if (s->open && s->selected.len > 0) {
+        for (int m = 0; m < s->matches.len; m++) {
             if (s->matches[m] == s->selected[0]) {
                 s->list.selected = m;
                 break;
@@ -143,7 +143,7 @@ void SelectClear(SearchableListState* s, Ctx* cx) {
     if (!s) {
         return;
     }
-    s->nSelected = 0;
+    s->selected.len = 0;
     Notify(cx);
 }
 
@@ -176,7 +176,7 @@ El* Select::IntoEl() {
         caret = 12;
     }
     bool open = s && s->open && !disabled;
-    bool hasValue = s && s->nSelected > 0;
+    bool hasValue = s && s->selected.len > 0;
     Str title = SelectTriggerTitle(s, placeholder, titlePrefix, a);
     El* box = Div(a)
                   ->FlexRow()

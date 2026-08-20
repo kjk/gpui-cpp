@@ -49,17 +49,29 @@ void TilesStory::OnSave(TilesStory* self, Ctx* cx, const ClickEvent*) {
     }
     DockAreaState state;
     state.center = state.NewNode(StrL("Tiles"));
-    PanelStateNode& node = state.nodes[state.center];
-    node.kind = PanelInfoKind::Tiles;
-    int panels[kMaxPanelStateChildren] = {};
-    node.nMeta = TilesToMetas(s, node.metas, panels, kMaxPanelStateChildren);
-    node.nChild = node.nMeta;
-    for (int i = 0; i < node.nChild; i++) {
+    int n = s->items.len;
+    Vec<TileMeta> metas;
+    Vec<int> panels;
+    metas.AppendBlanks(n);
+    panels.AppendBlanks(n);
+    int nMeta = TilesToMetas(s, metas.els, panels.els, n);
+    Vec<int> childIx;
+    for (int i = 0; i < nMeta; i++) {
         // The child a meta belongs to. Rust names it after the panel's type
         // and finds it again through the registry; the panels here are the
         // caller's own list, so the index is the name.
-        node.children[i] = state.NewNode(StrDup(StoryFmt(cx, "%d", panels[i])));
+        childIx.Append(state.NewNode(StrDup(StoryFmt(cx, "%d", panels[i]))));
     }
+    // NewNode grew the pool, so the node is reached again after it has.
+    PanelStateNode& node = state.nodes[state.center];
+    node.kind = PanelInfoKind::Tiles;
+    for (int i = 0; i < nMeta; i++) {
+        node.metas.Append(metas[i]);
+        node.children.Append(childIx[i]);
+    }
+    childIx.Reset();
+    metas.Reset();
+    panels.Reset();
     StrBuilder sb;
     DockAreaStateWrite(&state, &sb);
     if (self->saved.s) {
@@ -79,11 +91,14 @@ void TilesStory::OnRestore(TilesStory* self, Ctx* cx, const ClickEvent*) {
     DockAreaState state;
     if (DockAreaStateParse(a, self->saved, &state) && state.center >= 0) {
         const PanelStateNode& node = state.nodes[state.center];
-        int panels[kMaxPanelStateChildren] = {};
-        for (int i = 0; i < node.nChild && i < node.nMeta; i++) {
-            panels[i] = atoi(state.nodes[node.children[i]].panelName.s);
+        int n = node.children.len < node.metas.len ? node.children.len
+                                                   : node.metas.len;
+        Vec<int> panels;
+        for (int i = 0; i < n; i++) {
+            panels.Append(atoi(state.nodes[node.children[i]].panelName.s));
         }
-        TilesFromMetas(s, node.metas, panels, node.nMeta);
+        TilesFromMetas(s, node.metas.els, panels.els, n);
+        panels.Reset();
     }
     ArenaDelete(a);
     Notify(cx);

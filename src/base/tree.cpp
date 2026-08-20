@@ -69,33 +69,27 @@ bool TreeExpands(bool isFolder, bool isExpanded) {
 }
 
 int TreeAddItem(TreeState* s, Str id, Str label, int parent) {
-    if (s->nItems >= kMaxTreeItems) {
-        return -1;
-    }
-    int ix = s->nItems++;
-    TreeItem& it = s->items[ix];
-    it = {};
+    TreeItem it;
     it.id = id;
     it.label = label;
     it.parent = parent;
+    int ix = s->items.len;
     if (parent >= 0 && parent < ix) {
         it.depth = s->items[parent].depth + 1;
         // A folder is an item something else calls its parent.
         s->items[parent].folder = true;
     }
+    s->items.Append(it);
     return ix;
 }
 
 // add_entry: the item, then the children of an expanded one.
 static void TreeAddEntry(TreeState* s, int item) {
-    if (s->nEntries >= kMaxTreeItems) {
-        return;
-    }
-    s->entries[s->nEntries++] = item;
+    s->entries.Append(item);
     if (!s->items[item].expanded) {
         return;
     }
-    for (int i = item + 1; i < s->nItems; i++) {
+    for (int i = item + 1; i < s->items.len; i++) {
         if (s->items[i].parent == item) {
             TreeAddEntry(s, i);
         }
@@ -103,29 +97,29 @@ static void TreeAddEntry(TreeState* s, int item) {
 }
 
 void TreeRebuild(TreeState* s) {
-    s->nEntries = 0;
-    for (int i = 0; i < s->nItems; i++) {
+    s->entries.len = 0;
+    for (int i = 0; i < s->items.len; i++) {
         if (s->items[i].parent < 0) {
             TreeAddEntry(s, i);
         }
     }
-    if (s->selected >= s->nEntries) {
-        s->selected = s->nEntries > 0 ? s->nEntries - 1 : -1;
+    if (s->selected >= s->entries.len) {
+        s->selected = s->entries.len > 0 ? s->entries.len - 1 : -1;
     }
-    if (s->rightClicked >= s->nEntries) {
+    if (s->rightClicked >= s->entries.len) {
         s->rightClicked = -1;
     }
 }
 
 const TreeItem* TreeEntryItem(const TreeState* s, int entryIx) {
-    if (entryIx < 0 || entryIx >= s->nEntries) {
+    if (entryIx < 0 || entryIx >= s->entries.len) {
         return nullptr;
     }
     return &s->items[s->entries[entryIx]];
 }
 
 int TreeIndexOf(const TreeState* s, Str id) {
-    for (int i = 0; i < s->nEntries; i++) {
+    for (int i = 0; i < s->entries.len; i++) {
         if (StrSame(s->items[s->entries[i]].id, id)) {
             return i;
         }
@@ -144,7 +138,7 @@ static void TreeEmit(TreeState* s, Ctx* cx, TreeEventKind kind, Str id,
 }
 
 bool TreeToggleExpandAt(TreeState* s, int entryIx, bool* expandedOut) {
-    if (entryIx < 0 || entryIx >= s->nEntries) {
+    if (entryIx < 0 || entryIx >= s->entries.len) {
         return false;
     }
     TreeItem& it = s->items[s->entries[entryIx]];
@@ -162,7 +156,7 @@ bool TreeToggleExpandAt(TreeState* s, int entryIx, bool* expandedOut) {
 }
 
 void TreeToggleExpand(TreeState* s, Ctx* cx, int entryIx) {
-    if (entryIx < 0 || entryIx >= s->nEntries) {
+    if (entryIx < 0 || entryIx >= s->entries.len) {
         return;
     }
     Str id = s->items[s->entries[entryIx]].id;
@@ -178,7 +172,7 @@ void TreeToggleExpand(TreeState* s, Ctx* cx, int entryIx) {
 
 int TreeRevealItem(TreeState* s, Str id) {
     int item = -1;
-    for (int i = 0; i < s->nItems; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         if (StrSame(s->items[i].id, id)) {
             item = i;
             break;
@@ -198,7 +192,7 @@ void TreeScrollToItem(TreeState* s, int entryIx, ScrollStrategy strategy) {
     if (s->viewportH <= 0) {
         return;
     }
-    s->scrollY = VirtualListScrollToRow(s->nEntries, s->rowH, entryIx,
+    s->scrollY = VirtualListScrollToRow(s->entries.len, s->rowH, entryIx,
                                         s->scrollY, s->viewportH, strategy);
 }
 
@@ -221,14 +215,14 @@ void TreePerform(TreeState* s, Ctx* cx, TreeAction act) {
     const TreeItem* sel = TreeEntryItem(s, s->selected);
     switch (act) {
         case TreeAction::SelectPrev:
-            s->selected = TreeSelectPrev(s->selected, s->nEntries);
+            s->selected = TreeSelectPrev(s->selected, s->entries.len);
             // Rust scrolls to the top for Up and the bottom for Down; both
             // strategies come down to the same "move as little as you can" in
             // the list, which is what keeps the row that arrived on screen.
             TreeScrollToItem(s, s->selected, ScrollStrategy::Top);
             break;
         case TreeAction::SelectNext:
-            s->selected = TreeSelectNext(s->selected, s->nEntries);
+            s->selected = TreeSelectNext(s->selected, s->entries.len);
             TreeScrollToItem(s, s->selected, ScrollStrategy::Bottom);
             break;
         case TreeAction::Collapse:

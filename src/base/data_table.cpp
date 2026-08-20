@@ -90,17 +90,29 @@ static void TableEmit(TableState* s, Ctx* cx, TableEventKind kind, int row,
     EntityEmit(cx->app, cx->win, s->self, &ev);
 }
 
+void TableEnsureCols(TableState* s, int n) {
+    if (n <= s->colWidth.len) {
+        return;
+    }
+    while (s->colWidth.len < n) {
+        s->colWidth.Append(0.f);
+        s->colOrder.Append(s->colOrder.len);
+        s->colBounds.Append(Bounds{});
+    }
+}
+
 float TableColWidth(const TableState* s, int col, float declared) {
-    if (col < 0 || col >= kMaxTableCols || s->colWidth[col] <= 0) {
+    if (col < 0 || col >= s->colWidth.len || s->colWidth[col] <= 0) {
         return declared;
     }
     return s->colWidth[col];
 }
 
 void TableSeedColWidth(TableState* s, int col, float declared) {
-    if (col < 0 || col >= kMaxTableCols) {
+    if (col < 0) {
         return;
     }
+    TableEnsureCols(s, col + 1);
     if (s->colWidth[col] <= 0) {
         s->colWidth[col] = declared;
     }
@@ -117,10 +129,10 @@ float TableClampColWidth(const TableState* s, float width) {
 }
 
 void TableResizeCol(TableState* s, Ctx* cx, int col, float width) {
-    if (!s->colResizable || col < 0 || col >= s->colCount ||
-        col >= kMaxTableCols) {
+    if (!s->colResizable || col < 0 || col >= s->colCount) {
         return;
     }
+    TableEnsureCols(s, col + 1);
     width = TableClampColWidth(s, width);
     // Rust only lays the header out again and notifies when the clamp let
     // something through.
@@ -398,7 +410,8 @@ void TableState::OnSortClick(TableState* self, Ctx* cx, const ClickEvent*,
 }
 
 void TableSeedColOrder(TableState* s, int colCount) {
-    int n = colCount > kMaxTableCols ? kMaxTableCols : colCount;
+    int n = colCount < 0 ? 0 : colCount;
+    TableEnsureCols(s, n);
     if (s->colOrderSeeded && n == s->colCount) {
         return;
     }
@@ -411,14 +424,14 @@ void TableSeedColOrder(TableState* s, int colCount) {
 }
 
 int TableColAt(const TableState* s, int display) {
-    if (display < 0 || display >= s->colCount || display >= kMaxTableCols) {
+    if (display < 0 || display >= s->colCount || display >= s->colOrder.len) {
         return display;
     }
     return s->colOrderSeeded ? s->colOrder[display] : display;
 }
 
 int TableDisplayOfCol(const TableState* s, int col) {
-    for (int i = 0; i < s->colCount && i < kMaxTableCols; i++) {
+    for (int i = 0; i < s->colCount; i++) {
         if (TableColAt(s, i) == col) {
             return i;
         }
@@ -427,7 +440,8 @@ int TableDisplayOfCol(const TableState* s, int col) {
 }
 
 bool TableMoveColumn(TableState* s, int from, int to) {
-    int n = s->colCount < kMaxTableCols ? s->colCount : kMaxTableCols;
+    TableEnsureCols(s, s->colCount);
+    int n = s->colCount;
     if (from < 0 || from >= n || to < 0 || to > n) {
         return false;
     }
@@ -488,9 +502,10 @@ void TableState::OnResizeDrag(TableState* self, Ctx* cx,
         return;
     }
     int col = ev->drag.ix;
-    if (col < 0 || col >= self->colCount || col >= kMaxTableCols) {
+    if (col < 0 || col >= self->colCount) {
         return;
     }
+    TableEnsureCols(self, col + 1);
     self->resizingCol = col;
     // col_group.bounds.left(). The handle straddles the column's right edge,
     // so where the column starts is that edge less the width it has now — and
@@ -508,7 +523,7 @@ void TableState::OnResizeEnd(TableState* self, Ctx* cx, const MouseUpEvent*) {
                      -1,
                      -1,
                      ColumnSort::Default,
-                     self->colWidth,
+                     self->colWidth.els,
                      self->colCount};
     if (self->onEvent.IsValid()) {
         ListenerCall(cx->app, cx->win, self->onEvent, &ev);
@@ -533,8 +548,9 @@ void TableState::OnColDragMove(TableState* self, Ctx* cx,
     if (!StrSame(ev->drag.kind, kTableColDrag) || !self->colMovable) {
         return;
     }
-    int n = self->colCount < kMaxTableCols ? self->colCount : kMaxTableCols;
-    int gap = TableDragGapAt(self->colBounds, n, ev->event.x, ev->drag.ix);
+    TableEnsureCols(self, self->colCount);
+    int n = self->colCount;
+    int gap = TableDragGapAt(self->colBounds.els, n, ev->event.x, ev->drag.ix);
     if (self->draggingCol == ev->drag.ix && self->dropGap == gap) {
         return;
     }
@@ -547,8 +563,9 @@ void TableState::OnColDrop(TableState* self, Ctx* cx, const DropEvent* ev) {
     if (!StrSame(ev->drag.kind, kTableColDrag) || !self->colMovable) {
         return;
     }
-    int n = self->colCount < kMaxTableCols ? self->colCount : kMaxTableCols;
-    int gap = TableDragGapAt(self->colBounds, n, ev->x, ev->drag.ix);
+    TableEnsureCols(self, self->colCount);
+    int n = self->colCount;
+    int gap = TableDragGapAt(self->colBounds.els, n, ev->x, ev->drag.ix);
     self->draggingCol = -1;
     self->dropGap = -1;
     if (gap >= 0) {

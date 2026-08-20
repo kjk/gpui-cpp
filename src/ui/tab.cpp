@@ -180,16 +180,15 @@ Tabs* Tabs::Tab(Str label) {
     return Tab(label, IconName::None, false);
 }
 Tabs* Tabs::Tab(Str label, IconName icon, bool disabled) {
-    if (n < kMaxTabs) {
-        items[n].label = label;
-        items[n].icon = icon;
-        items[n].disabled = disabled;
-        n++;
-    }
+    TabItem it;
+    it.label = label;
+    it.icon = icon;
+    it.disabled = disabled;
+    items.Append(a, it);
     return this;
 }
 Tabs* Tabs::Disabled(int ix, bool v) {
-    if (ix >= 0 && ix < n) {
+    if (ix >= 0 && ix < items.len) {
         items[ix].disabled = v;
     }
     return this;
@@ -376,7 +375,7 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
         s->onConfirm = tabs->onChange;
     }
     PopupMenu* menu = PopupMenu::New(cx, menuId, st)->Scrollable();
-    for (int i = 0; i < tabs->n; i++) {
+    for (int i = 0; i < tabs->items.len; i++) {
         const TabItem& it = tabs->items[i];
         // A tab with no label is an icon-only one; Rust puts the icon in the
         // row, and falls back to "Unnamed" when there is neither.
@@ -469,7 +468,7 @@ El* Tabs::IntoEl() {
         float dw = indW - selBox->w;
         sliding = (dx < -0.5f || dx > 0.5f) || (dw < -0.5f || dw > 0.5f);
     }
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         const TabItem& item = items[i];
         bool on = i == selected;
         TabStyle st = item.disabled      ? TabDisabled(variant, on, th)

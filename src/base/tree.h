@@ -36,8 +36,6 @@ int TreeSelectNext(int selected, int count);
 bool TreeCollapses(bool isFolder, bool isExpanded);
 bool TreeExpands(bool isFolder, bool isExpanded);
 
-const int kMaxTreeItems = 512;
-
 // TreeItem. Rust's holds its children and shares its expanded flag through an
 // Rc; the items here live in one array on the state and name their parent,
 // which is the same tree without the reference counting.
@@ -69,13 +67,14 @@ struct TreeEvent {
 // TreeState. The items, the flattened list of the ones on screen, and what a
 // click or a key does to them.
 struct TreeState {
-    TreeItem items[kMaxTreeItems] = {};
-    int nItems = 0;
+    // As many items as the caller adds. Rust's tree is a graph of Rc'd nodes;
+    // these live in one array and name their parent, which is the same tree
+    // without the reference counting.
+    Vec<TreeItem> items;
     // `entries`: item indices, in the order they are shown. A collapsed
     // folder's descendants are not in it at all, which is what makes the row
     // count the tree's own.
-    int entries[kMaxTreeItems] = {};
-    int nEntries = 0;
+    Vec<int> entries;
     int selected = -1;
     int rightClicked = -1;
     // uniform_list: every row is the same height, so the offset of a row is
@@ -96,6 +95,11 @@ struct TreeState {
     static void OnRowMouseDown(TreeState* self, Ctx* cx,
                                const MouseDownEvent* ev, intptr_t entryIx);
     static void OnScroll(TreeState* self, Ctx* cx, const ScrollEvent* ev);
+
+    ~TreeState() {
+        items.Reset();
+        entries.Reset();
+    }
 };
 
 // Build the tree. `parent` is an item index, or -1 for a root; the children of

@@ -75,7 +75,7 @@ static void OnlyOpenFoldersPutTheirChildrenOnScreen() {
     TreeState s;
     Seed(&s);
     // Everything starts closed, so the two roots are the whole list.
-    utassert(s.nEntries == 2);
+    utassert(s.entries.len == 2);
     utassert(TreeIndexOf(&s, StrL("root")) == 0);
     utassert(TreeIndexOf(&s, StrL("a")) == -1);
     // An item something else calls its parent is a folder; the rest are not.
@@ -88,20 +88,20 @@ static void OnlyOpenFoldersPutTheirChildrenOnScreen() {
     utassert(expanded);
     // The root's own children come in, but not the ones under the folder
     // that is still closed.
-    utassert(s.nEntries == 4);
+    utassert(s.entries.len == 4);
     utassert(TreeIndexOf(&s, StrL("b")) == 2);
     utassert(TreeIndexOf(&s, StrL("b1")) == -1);
     utassert(TreeIndexOf(&s, StrL("other")) == 3);
 
     utassert(TreeToggleExpandAt(&s, 2, &expanded));
     utassert(expanded);
-    utassert(s.nEntries == 5);
+    utassert(s.entries.len == 5);
     utassert(TreeIndexOf(&s, StrL("b1")) == 3);
 
     // Closing the root takes the whole subtree off screen at once.
     utassert(TreeToggleExpandAt(&s, 0, &expanded));
     utassert(!expanded);
-    utassert(s.nEntries == 2);
+    utassert(s.entries.len == 2);
 }
 
 static void ALeafDoesNotToggle() {
@@ -112,7 +112,7 @@ static void ALeafDoesNotToggle() {
     utassert(!TreeToggleExpandAt(&s, 1, nullptr));
     // And neither does a row that is not there.
     utassert(!TreeToggleExpandAt(&s, 99, nullptr));
-    utassert(s.nEntries == 4);
+    utassert(s.entries.len == 4);
 }
 
 static void RevealOpensEveryFolderAboveIt() {
@@ -135,7 +135,7 @@ static void CollapsingPastTheSelectionPullsItBack() {
     // The rows the selection pointed at are gone, so it lands on the last
     // one that is left rather than off the end.
     TreeToggleExpandAt(&s, 0, nullptr);
-    utassert(s.nEntries == 2);
+    utassert(s.entries.len == 2);
     utassert(s.selected == 1);
 }
 

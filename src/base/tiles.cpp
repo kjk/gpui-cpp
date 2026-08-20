@@ -6,12 +6,12 @@ const Str kTileMoveDrag = StrL("tile-move");
 const Str kTileResizeDrag = StrL("tile-resize");
 
 void TilesPaintOrder(const TilesState* s, int* out) {
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         out[i] = i;
     }
     // sorted_panels: by z-index, and by the order they were added where two
     // share one. An insertion sort keeps that tie unbroken.
-    for (int i = 1; i < s->n; i++) {
+    for (int i = 1; i < s->items.len; i++) {
         int v = out[i];
         int j = i - 1;
         while (j >= 0 && s->items[out[j]].zIndex > s->items[v].zIndex) {
@@ -29,7 +29,7 @@ Size TilesContentSize(const TilesState* s) {
     float top = 0;
     float right = 0;
     float bottom = 0;
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         Bounds b = s->items[i].bounds;
         if (b.x < left) {
             left = b.x;
@@ -48,30 +48,27 @@ Size TilesContentSize(const TilesState* s) {
 }
 
 int TilesAdd(TilesState* s, int panel, Bounds bounds) {
-    if (s->n >= kMaxTiles) {
-        return -1;
-    }
-    TileItem& it = s->items[s->n];
-    it = TileItem{};
+    TileItem it;
     it.panel = panel;
     it.bounds = bounds;
-    return s->n++;
+    s->items.Append(it);
+    return s->items.len - 1;
 }
 
 void TilesRemove(TilesState* s, int ix) {
-    if (ix < 0 || ix >= s->n) {
+    if (ix < 0 || ix >= s->items.len) {
         return;
     }
-    for (int i = ix; i + 1 < s->n; i++) {
+    for (int i = ix; i + 1 < s->items.len; i++) {
         s->items[i] = s->items[i + 1];
     }
-    s->n--;
+    s->items.len--;
     s->dragging = -1;
     s->resizing = -1;
 }
 
 int TilesIndexOfPanel(const TilesState* s, int panel) {
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         if (s->items[i].panel == panel) {
             return i;
         }
@@ -112,11 +109,13 @@ Bounds TileComputeResizedBounds(Bounds prev, const float* newX,
                                 const float* newH, const Bounds* others,
                                 int nOthers, float grid) {
     // The edges of the neighbours, which is what a moving edge snaps to.
-    float xEdges[kMaxTiles * 2 + 1];
-    float yEdges[kMaxTiles * 2 + 1];
+    Arena* ta = GetTempArena();
+    int cap = nOthers * 2 + 1;
+    float* xEdges = (float*)Alloc(ta, (int)sizeof(float) * cap);
+    float* yEdges = (float*)Alloc(ta, (int)sizeof(float) * cap);
     int nx = 0;
     int ny = 0;
-    for (int i = 0; i < nOthers && i < kMaxTiles; i++) {
+    for (int i = 0; i < nOthers; i++) {
         xEdges[nx++] = others[i].x;
         xEdges[nx++] = others[i].Right();
         yEdges[ny++] = others[i].y;
@@ -210,7 +209,7 @@ void TilesMagneticSnap(const TilesState* s, Bounds dragging, int itemIx,
         return;
     }
 
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         if (i == itemIx) {
             continue;
         }
@@ -286,7 +285,7 @@ static void PushChange(TilesState* s, const TileChange& c) {
 }
 
 void TilesBeginMove(TilesState* s, int ix, float x, float y) {
-    if (ix < 0 || ix >= s->n) {
+    if (ix < 0 || ix >= s->items.len) {
         return;
     }
     s->dragging = ix;
@@ -296,7 +295,7 @@ void TilesBeginMove(TilesState* s, int ix, float x, float y) {
 }
 
 void TilesBeginResize(TilesState* s, int ix, TileSide side, float x, float y) {
-    if (ix < 0 || ix >= s->n || side == TileSide::None) {
+    if (ix < 0 || ix >= s->items.len || side == TileSide::None) {
         return;
     }
     s->resizing = ix;
@@ -308,7 +307,7 @@ void TilesBeginResize(TilesState* s, int ix, TileSide side, float x, float y) {
 
 void TilesUpdatePosition(TilesState* s, float x, float y) {
     int ix = s->dragging;
-    if (ix < 0 || ix >= s->n) {
+    if (ix < 0 || ix >= s->items.len) {
         return;
     }
     Bounds previous = s->items[ix].bounds;
@@ -351,13 +350,14 @@ void TilesUpdatePosition(TilesState* s, float x, float y) {
 
 void TilesUpdateResize(TilesState* s, float x, float y) {
     int ix = s->resizing;
-    if (ix < 0 || ix >= s->n) {
+    if (ix < 0 || ix >= s->items.len) {
         return;
     }
     // The neighbours, which are what the moving edge snaps to.
-    Bounds others[kMaxTiles];
+    Bounds* others = (Bounds*)Alloc(GetTempArena(),
+                                    (int)sizeof(Bounds) * (s->items.len + 1));
     int nOthers = 0;
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         if (i != ix) {
             others[nOthers++] = s->items[i].bounds;
         }
@@ -418,7 +418,7 @@ void TilesMouseUp(TilesState* s) {
     if (s->dragging < 0 && s->resizing < 0) {
         return;
     }
-    if (s->dragging >= 0 && s->dragging < s->n) {
+    if (s->dragging >= 0 && s->dragging < s->items.len) {
         int ix = s->dragging;
         Bounds initial = s->dragInitialBounds;
         Bounds current = s->items[ix].bounds;
@@ -438,7 +438,7 @@ void TilesMouseUp(TilesState* s) {
             PushChange(s, c);
         }
     }
-    if (s->resizing >= 0 && s->resizing < s->n) {
+    if (s->resizing >= 0 && s->resizing < s->items.len) {
         Bounds initial = s->resizeInitialBounds;
         Bounds current = s->items[s->resizing].bounds;
         if (initial.w != current.w || initial.h != current.h) {
@@ -456,15 +456,15 @@ void TilesMouseUp(TilesState* s) {
 }
 
 int TilesBringToFront(TilesState* s, int ix) {
-    if (ix < 0 || ix >= s->n) {
+    if (ix < 0 || ix >= s->items.len) {
         return -1;
     }
     TileItem item = s->items[ix];
-    for (int i = ix; i + 1 < s->n; i++) {
+    for (int i = ix; i + 1 < s->items.len; i++) {
         s->items[i] = s->items[i + 1];
     }
-    s->items[s->n - 1] = item;
-    int newIx = s->n - 1;
+    s->items[s->items.len - 1] = item;
+    int newIx = s->items.len - 1;
     TileChange c;
     c.tile = newIx;
     c.hasOrder = true;
@@ -484,7 +484,8 @@ bool TilesCanRedo(const TilesState* s) {
 // Move the tile at `from` to `to`, which is what putting an order change back
 // comes down to.
 static void MoveItem(TilesState* s, int from, int to) {
-    if (from < 0 || from >= s->n || to < 0 || to >= s->n || from == to) {
+    if (from < 0 || from >= s->items.len || to < 0 || to >= s->items.len ||
+        from == to) {
         return;
     }
     TileItem item = s->items[from];
@@ -506,7 +507,7 @@ void TilesUndo(TilesState* s) {
     }
     s->ignoring = true;
     const TileChange& c = s->changes[--s->cursor];
-    if (c.hasBounds && c.tile >= 0 && c.tile < s->n) {
+    if (c.hasBounds && c.tile >= 0 && c.tile < s->items.len) {
         s->items[c.tile].bounds = c.oldBounds;
     }
     if (c.hasOrder) {
@@ -521,7 +522,7 @@ void TilesRedo(TilesState* s) {
     }
     s->ignoring = true;
     const TileChange& c = s->changes[s->cursor++];
-    if (c.hasBounds && c.tile >= 0 && c.tile < s->n) {
+    if (c.hasBounds && c.tile >= 0 && c.tile < s->items.len) {
         s->items[c.tile].bounds = c.newBounds;
     }
     if (c.hasOrder) {

@@ -215,9 +215,6 @@ struct RadarChart {
 // SankeyChart: nodes in columns with ribbons between them, each as thick as
 // the flow it carries (crates/ui/src/chart/sankey_chart.rs). The layout is
 // `Sankey` in base; what is here is the paint and the labels.
-const int kMaxSankeyChartNodes = 32;
-const int kMaxSankeyChartLinks = 64;
-
 // DEFAULT_NODE_WIDTH, DEFAULT_NODE_PADDING and the rest of the chart's own
 // defaults, which are not the layout generator's.
 const float kSankeyChartNodeWidth = 10;
@@ -245,10 +242,10 @@ struct SankeyChartNode {
 struct SankeyChart {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    SankeyChartNode nodes[kMaxSankeyChartNodes] = {};
-    int n = 0;
-    SankeyLink links[kMaxSankeyChartLinks] = {};
-    int nLinks = 0;
+    // As many nodes and links as the caller adds; both grow into the frame
+    // arena the builder is on.
+    ArenaVec<SankeyChartNode> nodes;
+    ArenaVec<SankeyLink> links;
     float nodeWidth = kSankeyChartNodeWidth;
     float nodePadding = kSankeyChartNodePadding;
     SankeyAlign align = SankeyAlign::Justify;

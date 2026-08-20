@@ -460,7 +460,7 @@ static void SankeyLabelLine(PaintCtx* ctx, Str text, float x, float y,
 
 static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     auto* c = (SankeyChart*)user;
-    if (!c || !ctx->rt || c->n == 0 || c->nLinks == 0) {
+    if (!c || !ctx->rt || c->nodes.len == 0 || c->links.len == 0) {
         return;
     }
     float width = e->w;
@@ -479,7 +479,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     // The first pass is the topology alone: the columns are all the label
     // margins need, and the margins are what the extent depends on.
     SankeyGraph g;
-    if (SankeyTopology(&gen, c->n, c->links, c->nLinks, &g) !=
+    if (SankeyTopology(&gen, c->nodes.len, c->links.els, c->links.len, &g) !=
         SankeyError::None) {
         return;
     }
@@ -487,15 +487,17 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
 
     // The labels read the raw throughput; the layout's own value is in
     // scaled units under a non-linear scale.
-    double raw[kMaxSankeyChartNodes] = {};
-    SankeyChartThroughput(c->links, c->nLinks, raw, c->n);
-    Str values[kMaxSankeyChartNodes] = {};
-    for (int i = 0; i < c->n; i++) {
+    Arena* ta = GetTempArena();
+    int nNodes = c->nodes.len;
+    double* raw = (double*)Alloc(ta, (int)sizeof(double) * nNodes);
+    SankeyChartThroughput(c->links.els, c->links.len, raw, nNodes);
+    Str* values = (Str*)Alloc(ta, (int)sizeof(Str) * nNodes);
+    for (int i = 0; i < c->nodes.len; i++) {
         values[i] = c->showValues ? fmt("%.0f", raw[i]) : c->nodes[i].value;
     }
 
     bool hasLabels = false;
-    for (int i = 0; i < c->n; i++) {
+    for (int i = 0; i < c->nodes.len; i++) {
         if (c->nodes[i].label.s || values[i].s) {
             hasLabels = true;
         }
@@ -506,7 +508,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     float left = 0;
     float right = 0;
     if (hasLabels) {
-        for (int i = 0; i < c->n; i++) {
+        for (int i = 0; i < c->nodes.len; i++) {
             int layer = g.nodes[i].layer;
             if (layer != 0 && layer + 1 != layers) {
                 continue;
@@ -538,7 +540,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     float lineH = kPlotTextSize + kPlotTextGap;
     float top = 0;
     if (hasLabels && layers > 2) {
-        for (int i = 0; i < c->n; i++) {
+        for (int i = 0; i < c->nodes.len; i++) {
             int layer = g.nodes[i].layer;
             if (layer == 0 || layer + 1 == layers) {
                 continue;
@@ -573,8 +575,8 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     // chart_1..chart_5 in Rust: the palette a node falls back to, by index.
     const Theme& th = ThemeNow();
     Rgba palette[5] = {th.blue, th.green, th.yellow, th.magenta, th.cyan};
-    Rgba colors[kMaxSankeyChartNodes] = {};
-    for (int i = 0; i < c->n; i++) {
+    Rgba* colors = (Rgba*)Alloc(ta, (int)sizeof(Rgba) * nNodes);
+    for (int i = 0; i < c->nodes.len; i++) {
         colors[i] = c->nodes[i].hasColor ? c->nodes[i].color : palette[i % 5];
     }
 
@@ -699,41 +701,38 @@ SankeyChart* SankeyChart::New(Ctx* cx) {
     return c;
 }
 SankeyChart* SankeyChart::Node(Str label) {
-    if (n < kMaxSankeyChartNodes) {
-        nodes[n].label = label;
-        n++;
-    }
+    SankeyChartNode nd;
+    nd.label = label;
+    nodes.Append(a, nd);
     return this;
 }
 SankeyChart* SankeyChart::NodeValue(Str text) {
-    if (n > 0) {
-        nodes[n - 1].value = text;
+    if (nodes.len > 0) {
+        nodes[nodes.len - 1].value = text;
     }
     return this;
 }
 SankeyChart* SankeyChart::NodeNote(Str text, Rgba color) {
-    if (n > 0) {
-        nodes[n - 1].note = text;
-        nodes[n - 1].noteColor = color;
+    if (nodes.len > 0) {
+        nodes[nodes.len - 1].note = text;
+        nodes[nodes.len - 1].noteColor = color;
     }
     return this;
 }
 SankeyChart* SankeyChart::NodeColored(Str label, Rgba color) {
-    if (n < kMaxSankeyChartNodes) {
-        nodes[n].label = label;
-        nodes[n].color = color;
-        nodes[n].hasColor = true;
-        n++;
-    }
+    SankeyChartNode nd;
+    nd.label = label;
+    nd.color = color;
+    nd.hasColor = true;
+    nodes.Append(a, nd);
     return this;
 }
 SankeyChart* SankeyChart::Link(int source, int target, double value) {
-    if (nLinks < kMaxSankeyChartLinks) {
-        links[nLinks].source = source;
-        links[nLinks].target = target;
-        links[nLinks].value = value;
-        nLinks++;
-    }
+    SankeyLink l;
+    l.source = source;
+    l.target = target;
+    l.value = value;
+    links.Append(a, l);
     return this;
 }
 SankeyChart* SankeyChart::NodeWidth(float v) {

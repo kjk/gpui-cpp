@@ -37,7 +37,7 @@ El* Tree::IntoEl() {
     // two spacers stand in for the rest so the scrollbar spans the whole
     // tree.
     VirtualRange range =
-        VirtualListVisibleRows(s->nEntries, s->rowH, s->scrollY, h);
+        VirtualListVisibleRows(s->entries.len, s->rowH, s->scrollY, h);
     int first = range.first;
     int end = range.end;
 
@@ -97,8 +97,9 @@ El* Tree::IntoEl() {
                        ->Fg(it->disabled ? th.mutedFg : th.foreground));
         list->Child(row);
     }
-    if (end < s->nEntries) {
-        list->Child(Div(a)->W(kFill)->H((float)(s->nEntries - end) * s->rowH));
+    if (end < s->entries.len) {
+        list->Child(
+            Div(a)->W(kFill)->H((float)(s->entries.len - end) * s->rowH));
     }
 
     El* box = gpui::Tree::New(cx)

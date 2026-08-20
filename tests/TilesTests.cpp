@@ -169,7 +169,7 @@ static void ThePaintOrderIsZIndexThenInsertion() {
     TilesAdd(&s, 2, B(0, 0, 10, 10));
     s.items[0].zIndex = 2;
     s.items[2].zIndex = 1;
-    int order[kMaxTiles] = {};
+    int order[16] = {};
     TilesPaintOrder(&s, order);
     utassert(order[0] == 1);
     utassert(order[1] == 2);
