@@ -572,6 +572,11 @@ El* El::Rotate(float turns) {
     return this;
 }
 
+El* El::Opacity(float f) {
+    style.opacity = f < 0 ? 0 : (f > 1 ? 1 : f);
+    return this;
+}
+
 El* El::ScrollMode(ScrollbarMode m) {
     scrollModeSet = true;
     scrollMode = m;
@@ -2724,7 +2729,26 @@ void PaintEl(PaintCtx* ctx, El* e) {
     PaintOverlays(ctx, e);
 }
 
+static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay);
+
+// with_element_opacity: the opacity in force while this element and its
+// children paint is the one around it times its own, and it goes back to what
+// it was afterwards.
 static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
+    if (!e || !ctx) {
+        return;
+    }
+    if (e->style.opacity >= 1.f) {
+        PaintElNodeInner(ctx, e, skipOverlay);
+        return;
+    }
+    float prev = ctx->opacity;
+    ctx->opacity = prev * e->style.opacity;
+    PaintElNodeInner(ctx, e, skipOverlay);
+    ctx->opacity = prev;
+}
+
+static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (!e || !ctx->rt) {
         return;
     }

@@ -230,16 +230,22 @@ El* NotificationList::IntoEl() {
     for (int i = 0; i < s->n; i++) {
         const NotificationItem& it = s->items[i];
         int rank = s->n - 1 - i;
-        // collapsed_visible: only the front few show at all when the stack is
-        // closed.
-        if (!expanded && rank >= kToastCollapsedVisible) {
+        // "visibility": collapsed_visible is how many of them show at all
+        // when the stack is closed, and the ones past it fade rather than
+        // vanishing. A card that has finished fading is left out — Rust keeps
+        // it in the tree at zero opacity, where it would still be in the way
+        // of the pointer.
+        Str key = StrDup(a, fmt("%d", it.id));
+        float visible = MotionValue(
+            cx, MotionId(StrL("toast-visibility"), key),
+            (expanded || rank < kToastCollapsedVisible) ? 1.f : 0.f, policy);
+        if (visible <= 0.01f) {
             continue;
         }
         // "offset" and "inset": where this card sits, and how much narrower
         // it is than the front one. Both are the card's own transitions, keyed
         // on its id, so a stack that opens moves each of them from wherever it
         // had got to.
-        Str key = StrDup(a, fmt("%d", it.id));
         float off =
             MotionValue(cx, MotionId(StrL("toast-offset"), key),
                         expanded ? expandedOff[i] : collapsedOff[i], policy);
@@ -265,6 +271,7 @@ El* NotificationList::IntoEl() {
                          ->Top(off)
                          ->Left(shrink * 0.5f)
                          ->W(s->width - shrink)
+                         ->Opacity(visible)
                          ->Child(card));
     }
     return layer;

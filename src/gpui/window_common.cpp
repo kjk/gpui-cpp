@@ -53,6 +53,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         win->frameArena = ArenaNew();
     }
     ResetTempArena();
+    // element_opacity starts at 1 each frame, the way GPUI's window does.
+    win->paint.opacity = 1.f;
     win->paint.hits.Clear();
     win->paint.scrolls.Clear();
     win->paint.texts.Clear();

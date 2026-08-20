@@ -151,12 +151,16 @@ static CGContextRef Cg(PaintCtx* ctx) {
     return (ctx && ctx->rt) ? ctx->rt->cg : nullptr;
 }
 
-static void SetFill(CGContextRef cg, Rgba c) {
+// element_opacity: both colour seams fade what they are given by the opacity
+// in force, which is where GPUI applies it too.
+static void SetFill(PaintCtx* ctx, CGContextRef cg, Rgba c) {
+    c = PaintFade(ctx, c);
     CGContextSetRGBFillColor(cg, c.r / 255.0, c.g / 255.0, c.b / 255.0,
                              c.a / 255.0);
 }
 
-static void SetStroke(CGContextRef cg, Rgba c) {
+static void SetStroke(PaintCtx* ctx, CGContextRef cg, Rgba c) {
+    c = PaintFade(ctx, c);
     CGContextSetRGBStrokeColor(cg, c.r / 255.0, c.g / 255.0, c.b / 255.0,
                                c.a / 255.0);
 }
@@ -188,7 +192,7 @@ void CanvasClear(PaintCtx* ctx, Rgba c) {
     if (!cg) {
         return;
     }
-    SetFill(cg, c);
+    SetFill(ctx, cg, c);
     CGContextFillRect(cg, CGContextGetClipBoundingBox(cg));
 }
 
@@ -197,7 +201,7 @@ void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
     if (!cg || w <= 0 || h <= 0 || c.a == 0) {
         return;
     }
-    SetFill(cg, c);
+    SetFill(ctx, cg, c);
     CGContextFillRect(cg, CGRectMake(x, y, w, h));
 }
 
@@ -208,7 +212,7 @@ void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
         return;
     }
     CGPathRef path = RoundRectPath(x, y, w, h, r);
-    SetFill(cg, c);
+    SetFill(ctx, cg, c);
     CGContextAddPath(cg, path);
     CGContextFillPath(cg);
     CGPathRelease(path);
@@ -223,7 +227,7 @@ void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
     // Inset by half the stroke: Core Graphics, like D2D, centers it.
     CGPathRef path = RoundRectPath(x + stroke * 0.5f, y + stroke * 0.5f,
                                    w - stroke, h - stroke, r);
-    SetStroke(cg, c);
+    SetStroke(ctx, cg, c);
     CGContextSetLineWidth(cg, stroke);
     SetDash(cg, dash, stroke);
     CGContextAddPath(cg, path);
@@ -238,7 +242,7 @@ void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
     if (!cg) {
         return;
     }
-    SetStroke(cg, c);
+    SetStroke(ctx, cg, c);
     CGContextSetLineWidth(cg, stroke);
     SetDash(cg, dash, stroke);
     CGContextBeginPath(cg);
@@ -258,11 +262,11 @@ void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
     CGContextBeginPath(cg);
     CGContextAddEllipseInRect(cg, box);
     if (stroke > 0) {
-        SetStroke(cg, c);
+        SetStroke(ctx, cg, c);
         CGContextSetLineWidth(cg, stroke);
         CGContextStrokePath(cg);
     } else {
-        SetFill(cg, c);
+        SetFill(ctx, cg, c);
         CGContextFillPath(cg);
     }
 }
@@ -376,7 +380,7 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
     }
-    SetFill(cg, c);
+    SetFill(ctx, cg, c);
     CGContextAddPath(cg, p->path);
     if (p->winding) {
         CGContextFillPath(cg);
@@ -396,6 +400,8 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
     }
+    from = PaintFade(ctx, from);
+    to = PaintFade(ctx, to);
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGFloat comps[8] = {from.r / 255.0, from.g / 255.0, from.b / 255.0,
                         from.a / 255.0, to.r / 255.0,   to.g / 255.0,
@@ -427,7 +433,7 @@ void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
     if (!cg || !p || CGPathIsEmpty(p->path)) {
         return;
     }
-    SetStroke(cg, c);
+    SetStroke(ctx, cg, c);
     CGContextSetLineWidth(cg, stroke);
     CGContextSetLineCap(cg, roundCaps ? kCGLineCapRound : kCGLineCapButt);
     CGContextSetLineJoin(cg, roundCaps ? kCGLineJoinRound : kCGLineJoinMiter);
@@ -755,7 +761,7 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
         CGContextClipToRect(
             cg, CGRectMake(x, y, tl->width, tl->box * (float)tl->nLines));
     }
-    SetFill(cg, c);
+    SetFill(ctx, cg, c);
     CGContextSetTextMatrix(cg, CGAffineTransformMakeScale(1, -1));
     for (int i = 0; i < tl->nLines; i++) {
         CGContextSetTextPosition(cg, x, y + (float)i * tl->box + tl->baseline);

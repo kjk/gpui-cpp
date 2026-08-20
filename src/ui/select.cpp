@@ -173,6 +173,11 @@ El* Select::IntoEl() {
         trigger->Radius(th.radius)
             ->Bg(disabled ? th.muted : th.inputBg)
             ->Border(1, open ? th.ring : th.inputBorder);
+        // select.rs: a disabled trigger is the whole control at half
+        // strength, over and above the muted surface it already takes.
+        if (disabled) {
+            trigger->Opacity(0.5f);
+        }
     }
     Rgba fg = disabled ? th.mutedFg : th.foreground;
     trigger

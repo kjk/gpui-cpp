@@ -142,6 +142,11 @@ El* Input::IntoEl() {
             // Rust draws a ring outside the border box on focus; without one
             // here the ring color goes on the border itself.
             ->Border(1, focused ? th.ring : th.inputBorder);
+        // input.rs: the disabled field is faded as a whole, prefix, suffix
+        // and text together.
+        if (disabled) {
+            field->Opacity(0.5f);
+        }
     }
     if (prefix) {
         // `.pl_0()`: the prefix owns the space to the left of the editor.

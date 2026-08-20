@@ -72,8 +72,8 @@ El* Checkbox::IntoEl() {
         ind->Bg(mark);
     }
     // checkbox.rs fades the tick in over 0.25 s, and back out again when the
-    // box is cleared. There is no element opacity here, so the fade is the
-    // tick's own alpha — the mark is the only thing it paints.
+    // box is cleared: `this.opacity(if checked { delta } else { 1 - delta })`,
+    // which one value going the other way says as well.
     float on = checked ? 1.f : 0.f;
     if (!disabled) {
         on = MotionValue(cx, MotionId(id, StrL("checkbox-tick")), on,
@@ -81,8 +81,7 @@ El* Checkbox::IntoEl() {
     }
     if (on > 0.01f) {
         Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;
-        ind->Child(IconEl(a, IconName::Check, box - 4)
-                       ->Fg(RgbaOpacity(tick, on)));
+        ind->Child(IconEl(a, IconName::Check, box - 4)->Fg(tick)->Opacity(on));
     }
     // gpui_base::Checkbox owns identity, focus and activation. It hands the
     // handler the state the activation produces; the themed checkbox is
