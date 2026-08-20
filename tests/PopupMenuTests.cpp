@@ -64,9 +64,25 @@ static void AMenuWithNoRows() {
     utassert(PopupMenuPrevIndex(nullptr, 0, -1) == -1);
 }
 
+static void TheMenuBarWrapsBothWays() {
+    using namespace gpui::component;
+    // on_move_right / on_move_left, over three titles.
+    utassert(AppMenuBarNextIndex(0, 3) == 1);
+    utassert(AppMenuBarNextIndex(2, 3) == 0);
+    utassert(AppMenuBarPrevIndex(1, 3) == 0);
+    utassert(AppMenuBarPrevIndex(0, 3) == 2);
+    // Neither moves while nothing is open: Rust returns early on a None
+    // selected_index.
+    utassert(AppMenuBarNextIndex(-1, 3) == -1);
+    utassert(AppMenuBarPrevIndex(-1, 3) == -1);
+    // And an empty bar has nothing to move to.
+    utassert(AppMenuBarNextIndex(0, 0) == 0);
+}
+
 void TestPopupMenu() {
     TheKeyTableDependsOnTheSide();
     TheWalkStepsOverWhatCannotBeClicked();
     NothingSelectedYet();
     AMenuWithNoRows();
+    TheMenuBarWrapsBothWays();
 }
