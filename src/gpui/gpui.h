@@ -380,6 +380,17 @@ enum class TouchPhase : uint8_t {
     Cancelled
 };
 
+// DispatchPhase, from GPUI's `Window::dispatch_event`. A mouse event is
+// offered to the chain of elements under the pointer twice: outside-in in the
+// Capture phase, where an ancestor can pre-empt what is inside it, and then
+// inside-out in the Bubble phase, which is where a handler that only cares
+// about its own element sits. `WindowStopPropagation` is `cx.stop_propagation`
+// — the rest of the chain does not hear it.
+enum class DispatchPhase : uint8_t {
+    Capture,
+    Bubble
+};
+
 struct MouseDownEvent {
     MouseButton button = MouseButton::Left;
     float x = 0;
@@ -397,6 +408,9 @@ struct MouseDownEvent {
     // WM_MOUSEACTIVATE; X11 has no such notion and a Cocoa view does not
     // accept the first mouse, so it is false on those two.
     bool firstMouse = false;
+    // Which pass of the chain this is. A handler registered for one phase only
+    // ever sees that phase; the field is there for one that took both.
+    DispatchPhase phase = DispatchPhase::Bubble;
 
     // MouseDownEvent::is_focusing.
     bool IsFocusing() const { return button == MouseButton::Left; }
@@ -406,8 +420,12 @@ struct MouseUpEvent {
     MouseButton button = MouseButton::Left;
     float x = 0;
     float y = 0;
+    // The box of the element that heard it, the way MouseDownEvent carries
+    // one. The chain fills it in as the event walks.
+    Bounds el = {};
     Modifiers modifiers = {};
     int clickCount = 1;
+    DispatchPhase phase = DispatchPhase::Bubble;
 
     bool IsFocusing() const { return button == MouseButton::Left; }
 };
@@ -1056,6 +1074,8 @@ struct El {
     // listener above; unlike the click, it carries the full MouseDownEvent.
     Listener onMouseDown;
     Listener onMouseUp;
+    DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
+    DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
     // on_drag_move. GPUI carries a drag entity so the move can name what is
     // being dragged; here the element that took the press keeps the moves
     // until the button comes back up, which is the same thing without the
@@ -1233,8 +1253,8 @@ struct El {
     // thumb or pressing the track reports one for it to store.
     El* OnScroll(Listener l);
     El* OnHover(Listener l);
-    El* OnMouseDown(Listener l);
-    El* OnMouseUp(Listener l);
+    El* OnMouseDown(Listener l, DispatchPhase phase = DispatchPhase::Bubble);
+    El* OnMouseUp(Listener l, DispatchPhase phase = DispatchPhase::Bubble);
     El* OnDragMove(Listener l);
     El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
     El* OnMouseUpOut(Listener l);
@@ -1321,6 +1341,14 @@ struct HitRect {
     Listener onHover;
     Listener onMouseDown;
     Listener onMouseUp;
+    // Which pass of the chain each of the two was registered for.
+    DispatchPhase mouseDownPhase = DispatchPhase::Bubble;
+    DispatchPhase mouseUpPhase = DispatchPhase::Bubble;
+    // The enclosing element that also recorded a hit rect, by index, or -1.
+    // The chain a mouse event walks is this, not every box that happens to
+    // contain the pointer — two absolutely placed siblings can overlap
+    // without either being inside the other.
+    int parent = -1;
     Listener onDragMove;
     DragPayload drag = {};
     Listener onMouseUpOut;
@@ -1489,6 +1517,9 @@ struct PaintCtx {
     // an animation frame once, after the tree has painted, rather than each
     // fading bar asking for itself.
     bool wantsAnimFrame = false;
+    // The enclosing hit rect while the tree paints, which is what a hit rect
+    // records as its parent.
+    int hitParent = -1;
     // The inspector picking an element: every box under the pointer overwrites
     // this as it paints, so the deepest one wins — which is the one a click
     // would land on.
@@ -2382,6 +2413,8 @@ struct Window {
     // `now`, which is what Rust gets from reading the executor's clock.
     double frameNow = 0;
     bool mouseDown = false;
+    // cx.stop_propagation(): set by a handler, read by the chain it is in.
+    bool stopPropagation = false;
     // The multi-click run in progress: when the last press landed, where, and
     // with which button, so WindowClickCount can tell the next press apart
     // from a second click. GPUI keeps the same three in its platform layer.
@@ -2754,6 +2787,9 @@ void WindowSetActive(Window* win, bool active);
 // Which element the drag is over, of those that take its kind — 0 for none.
 // `El::Click(id)` names an element, so this answers with that id.
 int WindowDragOverId(Ctx* cx);
+// cx.stop_propagation(): the rest of the chain does not hear the event the
+// handler is in. Only an element's mouse handler has a chain to stop.
+void WindowStopPropagation(Ctx* cx);
 // The same cursor offset, for whoever draws the thing being dragged.
 Point WindowDragOffset(Ctx* cx);
 // One subscription per event type, which is what window.on_mouse_event::<T>

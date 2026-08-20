@@ -98,18 +98,24 @@ El* Tiles::IntoEl() {
         Bounds b = item.bounds;
         // One pixel more, so two tiles pushed flush together do not leave a
         // seam where their borders meet.
-        El* tile = Div(a)
-                       ->Absolute()
-                       ->Left(b.x)
-                       ->Top(b.y)
-                       ->W(b.w + 1)
-                       ->H(b.h + 1)
-                       ->FlexCol()
-                       ->Bg(th.background)
-                       ->Border(1, th.border)
-                       ->Radius(th.radius)
-                       ->ClipX()
-                       ->ClipY();
+        El* tile =
+            Div(a)
+                ->Absolute()
+                ->Left(b.x)
+                ->Top(b.y)
+                ->W(b.w + 1)
+                ->H(b.h + 1)
+                ->FlexCol()
+                ->Bg(th.background)
+                ->Border(1, th.border)
+                ->Radius(th.radius)
+                ->ClipX()
+                ->ClipY()
+                // The frame hears the press its drag bar or one of its
+                // resize handles took, on the way back out of the
+                // chain, which is what brings it to the front.
+                ->OnMouseDown(ListenTo(state, &TilesState::OnTileDown, ix))
+                ->OnMouseUp(ListenTo(state, &TilesState::OnTileUp, ix));
 
         // The drag bar: the strip along the top that moves the tile.
         Str bid = fmt("%s-bar-%d", id, item.panel);

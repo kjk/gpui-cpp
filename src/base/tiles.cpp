@@ -568,6 +568,22 @@ void TilesState::OnDragEnd(TilesState* self, Ctx* cx, const MouseUpEvent* ev) {
     Notify(cx);
 }
 
+void TilesState::OnTileDown(TilesState* self, Ctx* cx, const MouseDownEvent*,
+                            intptr_t ix) {
+    (void)cx;
+    self->pressed = (int)ix;
+}
+
+void TilesState::OnTileUp(TilesState* self, Ctx* cx, const MouseUpEvent*,
+                          intptr_t ix) {
+    if (self->pressed != (int)ix) {
+        return;
+    }
+    self->pressed = -1;
+    TilesBringToFront(self, (int)ix);
+    Notify(cx);
+}
+
 void TilesState::OnScroll(TilesState* self, Ctx* cx, const ScrollEvent* ev) {
     self->scrollX = ev->offsetX;
     self->scrollY = ev->offsetY;

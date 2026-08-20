@@ -73,6 +73,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.wantsAnimFrame = false;
     win->paint.pickHit = false;
     win->paint.paintDepth = 0;
+    win->paint.hitParent = -1;
     win->paint.pickTier = 0;
     win->paint.pick = {};
     if (win->inspector.pending) {
@@ -696,6 +697,60 @@ static void ClearPendingClick(Window* win) {
     win->pressedMoved = false;
 }
 
+// ─── the dispatch chain ──────────────────────────────────────────────────
+
+// cx.stop_propagation().
+void WindowStopPropagation(Ctx* cx) {
+    if (cx && cx->win) {
+        cx->win->stopPropagation = true;
+    }
+}
+
+// The chain of hit rects the pointer is inside, leaf first. Not every box
+// that contains the point: two absolutely placed siblings can overlap without
+// either being inside the other, so the chain is the one the paint recorded.
+static void HitChain(Window* win, float x, float y, Vec<int>* out) {
+    out->Clear();
+    int leaf = -1;
+    for (int i = win->paint.hits.len - 1; i >= 0; i--) {
+        if (win->paint.hits[i].bounds.Contains({x, y})) {
+            leaf = i;
+            break;
+        }
+    }
+    for (int i = leaf; i >= 0; i = win->paint.hits[i].parent) {
+        out->Append(i);
+    }
+}
+
+// Window::dispatch_event: the chain outside-in for the Capture phase, then
+// inside-out for the Bubble phase, stopping wherever a handler said to.
+// `pick` answers the handler an element registered, or an invalid Listener.
+template <typename Ev, typename Pick>
+static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
+                          Pick pick) {
+    win->stopPropagation = false;
+    for (int k = chain.len - 1; k >= 0 && !win->stopPropagation; k--) {
+        const HitRect& hr = win->paint.hits[chain[k]];
+        Listener l = pick(hr, DispatchPhase::Capture);
+        if (l.IsValid()) {
+            ev->phase = DispatchPhase::Capture;
+            ev->el = hr.bounds;
+            ListenerCall(win->app, win, l, ev);
+        }
+    }
+    for (int k = 0; k < chain.len && !win->stopPropagation; k++) {
+        const HitRect& hr = win->paint.hits[chain[k]];
+        Listener l = pick(hr, DispatchPhase::Bubble);
+        if (l.IsValid()) {
+            ev->phase = DispatchPhase::Bubble;
+            ev->el = hr.bounds;
+            ListenerCall(win->app, win, l, ev);
+        }
+    }
+    win->stopPropagation = false;
+}
+
 static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     float x = in.x;
     float y = in.y;
@@ -769,10 +824,18 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // on_mouse_down, ahead of the click: an element that wants the press
     // itself — a slider jumping to it — gets the whole event, not the
     // ClickEvent the click path builds.
-    if (hit && hit->onMouseDown.IsValid()) {
+    {
+        // on_mouse_down over the whole chain, not just the element the press
+        // landed on: a tile's frame hears the press its drag bar took, which
+        // is what brings it to the front.
+        Vec<int> chain;
+        HitChain(win, x, y, &chain);
         MouseDownEvent ev = in;
-        ev.el = hit->bounds;
-        ListenerCall(win->app, win, hit->onMouseDown, &ev);
+        DispatchChain(
+            win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
+                return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
+            });
+        chain.Reset();
     }
     if (hit && hit->slider) {
         SliderPress(win, hit, {x, y});
@@ -819,8 +882,15 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     // the press stops being held. A drag that ended somewhere else leaves the
     // first of those empty, which is what on_mouse_up_out is for.
     const HitRect* hit = HitTestRect(&win->paint, in.x, in.y);
-    if (hit && hit->onMouseUp.IsValid()) {
-        ListenerCall(win->app, win, hit->onMouseUp, &in);
+    {
+        Vec<int> chain;
+        HitChain(win, in.x, in.y, &chain);
+        MouseUpEvent ev = in;
+        DispatchChain(
+            win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
+                return hr.mouseUpPhase == phase ? hr.onMouseUp : Listener{};
+            });
+        chain.Reset();
     }
     // on_mouse_up_out: every element that asked for the release it did not
     // get. Rust hears one wherever the pointer is, so this walks the frame

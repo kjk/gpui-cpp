@@ -846,12 +846,14 @@ El* El::OnHover(Listener l) {
     onHover = l;
     return this;
 }
-El* El::OnMouseDown(Listener l) {
+El* El::OnMouseDown(Listener l, DispatchPhase phase) {
     onMouseDown = l;
+    mouseDownPhase = phase;
     return this;
 }
-El* El::OnMouseUp(Listener l) {
+El* El::OnMouseUp(Listener l, DispatchPhase phase) {
     onMouseUp = l;
+    mouseUpPhase = phase;
     return this;
 }
 El* El::OnDragMove(Listener l) {
@@ -3606,6 +3608,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         ctx->pickTier = tier;
         ctx->pickHit = true;
     }
+    // What this element's children name as their ancestor: this element if it
+    // recorded a hit rect, and whatever was around it if it did not.
+    int outerHitParent = ctx->hitParent;
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->onHover.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
@@ -3620,6 +3625,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.tooltip = e->style.tooltip;
         hr.onMouseDown = e->onMouseDown;
         hr.onMouseUp = e->onMouseUp;
+        hr.mouseDownPhase = e->mouseDownPhase;
+        hr.mouseUpPhase = e->mouseUpPhase;
+        hr.parent = ctx->hitParent;
         hr.onDragMove = e->onDragMove;
         hr.drag = e->drag;
         hr.onMouseUpOut = e->onMouseUpOut;
@@ -3630,6 +3638,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.sliderAxis = e->sliderAxis;
         hr.input = e->input;
         ctx->hits.Append(hr);
+        // Everything under this element names it as the ancestor its events
+        // pass through, which is the chain the two phases walk.
+        ctx->hitParent = ctx->hits.len - 1;
     }
     if (e->style.overflowY == Overflow::Scroll ||
         e->style.overflowX == Overflow::Scroll) {
@@ -3865,6 +3876,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     for (El* c = e->first; c; c = c->next) {
         PaintElNode(ctx, c, skipOverlay);
     }
+    ctx->hitParent = outerHitParent;
     ctx->paintDepth--;
 
     if (clip) {
