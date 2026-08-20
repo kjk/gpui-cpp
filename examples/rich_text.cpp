@@ -32,6 +32,23 @@ static const char* kMarkdown =
     "  <ul><li>a list item</li><li>and <i>another</i></li></ul>\n"
     "</div>\n"
     "\n"
+    "```cpp\n"
+    "// A fenced block, scanned by ui/syntax.cpp.\n"
+    "#include \"gpui.h\"\n"
+    "\n"
+    "int Add(int a, float b) {\n"
+    "    const char* s = \"a string\";\n"
+    "    return a + (int)b + 0x2a;  // and a comment\n"
+    "}\n"
+    "```\n"
+    "\n"
+    "```python\n"
+    "def greet(name: str) -> None:\n"
+    "    if name is None:  # nothing to do\n"
+    "        return\n"
+    "    print(f\"hello {name}\", 42)\n"
+    "```\n"
+    "\n"
     "> A quote, to end on.\n";
 
 static const char* kHtml =

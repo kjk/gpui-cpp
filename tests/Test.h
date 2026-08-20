@@ -39,6 +39,7 @@ void TestFrameSampler();
 void TestTitleBar();
 void TestTextBoundary();
 void TestTextView();
+void TestSyntax();
 void TestSlider();
 void TestPagination();
 void TestNumberInput();
