@@ -30,6 +30,10 @@ struct Dialog {
     // DialogProps::overlay. The alert story's dialogs never tint the page.
     bool overlay = true;
     bool overlayClosable = true;
+    // close_on_escape. Rust hangs the key context off it, so turning it off
+    // takes Enter with it: the two bindings live in the one context, and a
+    // dialog that does not declare it has neither.
+    bool keyboard = true;
     // Root assigns one layer index per active dialog. Each successive layer
     // sits 16px lower and owns a distinct focus trap.
     int layerIx = 0;
@@ -77,6 +81,7 @@ struct Dialog {
     Dialog* H(float px);
     Dialog* Overlay(bool v);
     Dialog* OverlayClosable(bool v);
+    Dialog* Keyboard(bool v);
     Dialog* Layer(int ix);
     Dialog* Radius(float px);
     Dialog* Bg(Rgba color);

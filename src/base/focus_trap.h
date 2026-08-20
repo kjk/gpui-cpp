@@ -40,7 +40,13 @@ bool FocusTrapEnter(Window* win, int trapId, bool backward = false);
 // the trap container as it renders; here the element tree is built before the
 // focusables are known, so the request is armed during the build and settled
 // after the frame's FocusCollect.
-void FocusTrapArm(Window* win, int trapId);
+//
+// `hostFocusId` is the container's own focus id, used only when the trap
+// holds nothing that takes tab: Rust's container tracks focus itself, so a
+// dialog that is all text still has somewhere for focus to be — and still
+// hears escape. 0 leaves focus outside, which is what an ordinary trap of
+// non-stops wants.
+void FocusTrapArm(Window* win, int trapId, int hostFocusId = 0);
 
 // Settle what FocusTrapArm asked for: if the armed trap does not already hold
 // focus, focus its first element. Called once a frame, after FocusCollect.

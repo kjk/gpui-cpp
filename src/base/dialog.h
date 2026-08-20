@@ -15,19 +15,44 @@ enum class DialogChangeReason : uint8_t {
     Imperative
 };
 
-// What a keystroke asks a dialog to do. Rust binds escape to Cancel and enter
-// to Confirm, and hangs the key context off `keyboard`, so a dialog with
-// keyboard off answers to neither.
+// What an action asks a dialog to do. Rust binds escape to Cancel and enter
+// to Confirm in the "Dialog" key context.
 enum class DialogAction : uint8_t {
     None,
     Cancel,
     Confirm
 };
 
-// `keyboard` is what `close_on_escape` sets: Rust's setter assigns the
-// keyboard flag, so turning escape off takes Enter with it — the two share one
-// key context.
-DialogAction DialogActionForKey(int key, bool keyboard);
+// dialog.rs::init, and the context its two bindings live in.
+void DialogInitKeys();
+Str DialogContext();
+DialogAction DialogActionOf(uint32_t id);
+
+// Where a dialog's two handlers wait between frames. Rust's Dialog is a view
+// and owns them; the port's is a builder that is gone by the time a keystroke
+// arrives, so they live in a keyed entity beside it — which is what an action
+// can still find.
+struct DialogKeys {
+    // on_cancel and on_ok, as the caller gave them: ClickEvent handlers, the
+    // same ones the Cancel and OK buttons carry. Rust calls them with a
+    // ClickEvent::default() from the action, and so does this.
+    Listener onCancel = {};
+    Listener onOk = {};
+    // What escape falls back to when the dialog has no Cancel of its own —
+    // Rust's on_cancel defaults to "yes, close", and closing is what the x
+    // and the backdrop do.
+    Listener onClose = {};
+
+    static void OnAction(DialogKeys* self, Ctx* cx, const ActionEvent* ev);
+};
+
+// `.when(self.keyboard, |this| this.key_context(CONTEXT))` and the two
+// on_action handlers under it. `name` is the dialog's trap name, which is one
+// per layer, so a dialog stacked on another keeps its own handlers. Not
+// called at all for a dialog with the keyboard turned off, which is how Rust
+// spells `close_on_escape(false)`: no context, so neither binding exists.
+void DialogBindKeys(Ctx* cx, El* popup, Str name, Listener onCancel,
+                    Listener onOk, Listener onClose);
 
 // Whether a press on the backdrop dismisses. Rust checks four things in
 // on_any_mouse_down: the press is below the region reserved at the top — a

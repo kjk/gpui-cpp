@@ -58,6 +58,10 @@ Dialog* Dialog::OverlayClosable(bool v) {
     overlayClosable = v;
     return this;
 }
+Dialog* Dialog::Keyboard(bool v) {
+    keyboard = v;
+    return this;
+}
 Dialog* Dialog::Layer(int ix) {
     layerIx = ix;
     return this;
@@ -320,6 +324,12 @@ El* Dialog::IntoEl(WinSize size) {
                     ->PadT((size.dipH * 0.1f + layerIx * 16.f) * delta)
                     ->Child(panel);
     Str trap = StrDup(a, fmt("dialog-%d", layerIx));
+    // The escape and enter bindings, on the popup that traps the focus. They
+    // run the same two handlers the Cancel and OK buttons carry, which is
+    // what Rust's on_action pair does with a ClickEvent::default().
+    if (keyboard) {
+        DialogBindKeys(cx, popup, trap, onCancel, onOk, onClose);
+    }
     return gpui::Dialog::New(cx)
         ->Trap(trap)
         ->Backdrop(backdrop)

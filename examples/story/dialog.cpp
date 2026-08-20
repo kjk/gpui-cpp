@@ -38,7 +38,6 @@ struct DialogStory {
     StoryToolbarState toolbar;
 
     static El* Render(DialogStory* self, Ctx* cx);
-    static void OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static component::SearchableItem gDialogOptions[3];
@@ -293,6 +292,8 @@ static El* RenderBasicDialog(DialogStory* self, Ctx* cx) {
     content->Child(footer);
 
     component::Dialog* dialog = NewOpenDialog(self, cx)
+                                    ->OnOk(Listen(cx, &ConfirmBasicDialog))
+                                    ->Keyboard(self->keyboard)
                                     ->Overlay(self->overlay)
                                     ->OverlayClosable(self->overlayClosable)
                                     ->CloseButton(self->closeButton)
@@ -424,6 +425,8 @@ static El* RenderCustomButtons(DialogStory* self, Ctx* cx) {
     surface->Child(footer);
 
     component::Dialog* dialog = NewOpenDialog(self, cx)
+                                    ->OnOk(Listen(cx, &PressRestart))
+                                    ->OnCancel(Listen(cx, &PressLater))
                                     ->Radius(th.radiusLg)
                                     ->Overlay(self->overlay)
                                     ->OverlayClosable(self->overlayClosable)
@@ -642,6 +645,7 @@ static El* RenderTextViewDialog(DialogStory* self, Ctx* cx) {
     content->Child(footer);
 
     component::Dialog* dialog = NewOpenDialog(self, cx)
+                                    ->Keyboard(self->keyboard)
                                     ->Overlay(self->overlay)
                                     ->OverlayClosable(self->overlayClosable)
                                     ->CloseButton(self->closeButton)
@@ -700,46 +704,4 @@ El* DialogStory::Render(DialogStory* self, Ctx* cx) {
     return page;
 }
 
-void DialogStory::OnKey(DialogStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (!ev->down || self->open < 0) {
-        return;
-    }
-    if (self->otherOpen) {
-        DialogAction action = DialogActionForKey(ev->vk, true);
-        if (action == DialogAction::None) {
-            return;
-        }
-        self->otherOpen = false;
-        if (action == DialogAction::Confirm) {
-            cx->win->eatReturn = true;
-        }
-        Notify(cx);
-        return;
-    }
-
-    // Only the two declarative dialogs capture the toolbar's keyboard option;
-    // the imperative window.open_dialog examples retain Dialog's default.
-    bool keyboard = self->open == DlgDefault || self->open == DlgTextView
-                        ? self->keyboard
-                        : true;
-    DialogAction action = DialogActionForKey(ev->vk, keyboard);
-    if (action == DialogAction::None) {
-        return;
-    }
-
-    int open = self->open;
-    if (open == DlgDefault && action == DialogAction::Confirm) {
-        StoryPushNotification(cx, StrL("You have pressed confirm."));
-    } else if (open == DlgCustomButtons) {
-        StoryPushNotification(cx, action == DialogAction::Confirm
-                                      ? StrL("You have pressed restart.")
-                                      : StrL("You have pressed later."));
-    }
-    ResetDialogState(self, cx);
-    if (action == DialogAction::Confirm) {
-        cx->win->eatReturn = true;
-    }
-    Notify(cx);
-}
-
-STORY_PAGE_KEYS(StoryDialog, DialogStory);
+STORY_PAGE(StoryDialog, DialogStory);
