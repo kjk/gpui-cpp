@@ -102,8 +102,11 @@ El* Switch::IntoEl() {
                    ->Gap(8);
     root->Child(track);
     if (label.s) {
-        root->Child(TextEl(a, label)->Font(14)->Fg(disabled ? th.mutedFg
-                                                            : th.foreground));
+        // text_sm below Medium, text_base at and above it — and the label
+        // keeps its colour when the switch is disabled; only the track dims.
+        float labelFont =
+            (size == UiSize::XSmall || size == UiSize::Small) ? 14.f : 16.f;
+        root->Child(TextEl(a, label)->Font(labelFont)->Fg(th.foreground));
     }
     return root;
 }
