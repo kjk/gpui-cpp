@@ -216,6 +216,37 @@ static void AWholeBindingBeatsOneThatIsOnlyBegun() {
     KeymapClear();
 }
 
+// A window that loses the focus drops what the keyboard was part-way
+// through: the rest of the sequence is going to be typed into whatever took
+// the focus, so the chord must not still be held when this window comes back.
+static void BlurDropsWhatTheKeyboardWasPartWayThrough() {
+    KeymapClear();
+    uint32_t open = ActionOf(StrL("s::Open3"));
+    KeyBinding b[] = {{"ctrl-k ctrl-o", open, nullptr}};
+    KeymapBind(b, 1);
+
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    utassert(KeymapMatch(Chord("ctrl-k"), nullptr, 0).pending);
+    // The other two the keystroke left behind: the character it is also going
+    // to arrive as, and the Enter held down over a focused element.
+    win->eatChar = true;
+    win->keyPressPending = true;
+
+    WindowSetActive(win, false);
+    utassert(!KeymapPending());
+    utassert(!win->eatChar);
+    utassert(!win->keyPressPending);
+
+    // Coming back is not a keystroke: ctrl-o alone finishes nothing.
+    WindowSetActive(win, true);
+    utassert(KeymapMatch(Chord("ctrl-o"), nullptr, 0).action == 0);
+
+    delete win;
+    KeymapClear();
+}
+
 // Two names are two actions, the way two action types never compare equal.
 static void AnActionIsItsName() {
     utassert(ActionOf(StrL("root::Tab")) == ActionOf(StrL("root::Tab")));
@@ -375,6 +406,7 @@ void TestKeymap() {
     AChildPredicateNeedsTheEnclosingContext();
     ASequenceIsHeldUntilItFinishes();
     AWholeBindingBeatsOneThatIsOnlyBegun();
+    BlurDropsWhatTheKeyboardWasPartWayThrough();
     AnActionIsItsName();
     AnActionWalksOutFromWhatHasFocus();
     PropagateCarriesOnOutwards();

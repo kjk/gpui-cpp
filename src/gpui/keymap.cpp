@@ -298,38 +298,48 @@ uint32_t KeyContextOf(Str name) {
     return id;
 }
 
-static const ParsedContext* ContextFor(uint32_t id) {
+// One level of the stack the matcher works on: the id the dispatch recorded,
+// and the parse behind it. Resolved once per keystroke rather than once per
+// node of every predicate, which is the difference between one table scan and
+// a scan for each half of an `&&`.
+struct CtxLevel {
+    uint32_t id = 0;
+    const ParsedContext* c = nullptr;
+};
+
+static CtxLevel ResolveContext(uint32_t id) {
+    CtxLevel l;
+    l.id = id;
     for (int i = 0; i < gNContexts; i++) {
         if (gContexts[i].id == id) {
-            return &gContexts[i];
+            l.c = &gContexts[i];
+            break;
         }
     }
-    return nullptr;
+    return l;
 }
 
-static bool ContextHasIdent(uint32_t id, uint32_t ident) {
-    const ParsedContext* c = ContextFor(id);
-    if (!c) {
+static bool ContextHasIdent(const CtxLevel& l, uint32_t ident) {
+    if (!l.c) {
         // The table filled. A context that is one plain name hashes to that
         // name, so the common one still resolves.
-        return ident == id;
+        return ident == l.id;
     }
-    for (int i = 0; i < c->nIdents; i++) {
-        if (c->idents[i] == ident) {
+    for (int i = 0; i < l.c->nIdents; i++) {
+        if (l.c->idents[i] == ident) {
             return true;
         }
     }
     return false;
 }
 
-static bool ContextValue(uint32_t id, uint32_t key, uint32_t* val) {
-    const ParsedContext* c = ContextFor(id);
-    if (!c) {
+static bool ContextValue(const CtxLevel& l, uint32_t key, uint32_t* val) {
+    if (!l.c) {
         return false;
     }
-    for (int i = 0; i < c->nPairs; i++) {
-        if (c->keys[i] == key) {
-            *val = c->vals[i];
+    for (int i = 0; i < l.c->nPairs; i++) {
+        if (l.c->keys[i] == key) {
+            *val = l.c->vals[i];
             return true;
         }
     }
@@ -517,10 +527,10 @@ static int PredParse(Str spec, bool* ok) {
     return root;
 }
 
-// `contexts` is the ancestry from the level being tried outwards, innermost
+// `levels` is the ancestry from the level being tried outwards, innermost
 // first; the innermost is the one an identifier or a comparison is read
 // against, which is Rust's `contexts.last()`.
-static bool PredEval(int ix, const uint32_t* contexts, int n) {
+static bool PredEval(int ix, const CtxLevel* levels, int n) {
     if (ix < 0 || n <= 0) {
         // Rust reads nothing out of an empty stack, negation included.
         return false;
@@ -529,24 +539,23 @@ static bool PredEval(int ix, const uint32_t* contexts, int n) {
     uint32_t val = 0;
     switch (p.op) {
         case PredOp::Ident:
-            return ContextHasIdent(contexts[0], p.a);
+            return ContextHasIdent(levels[0], p.a);
         case PredOp::Eq:
-            return ContextValue(contexts[0], p.a, &val) && val == p.b;
+            return ContextValue(levels[0], p.a, &val) && val == p.b;
         case PredOp::Neq:
             // A key the context does not carry is not equal to the value,
             // which is `context.get(k) != Some(v)`.
-            return !ContextValue(contexts[0], p.a, &val) || val != p.b;
+            return !ContextValue(levels[0], p.a, &val) || val != p.b;
         case PredOp::Not:
-            return !PredEval(p.l, contexts, n);
+            return !PredEval(p.l, levels, n);
         case PredOp::And:
-            return PredEval(p.l, contexts, n) && PredEval(p.r, contexts, n);
+            return PredEval(p.l, levels, n) && PredEval(p.r, levels, n);
         case PredOp::Or:
-            return PredEval(p.l, contexts, n) || PredEval(p.r, contexts, n);
+            return PredEval(p.l, levels, n) || PredEval(p.r, levels, n);
         case PredOp::Child:
             // The right half against this level, the left half against what
             // encloses it.
-            return PredEval(p.r, contexts, n) &&
-                   PredEval(p.l, contexts + 1, n - 1);
+            return PredEval(p.r, levels, n) && PredEval(p.l, levels + 1, n - 1);
     }
     return false;
 }
@@ -609,15 +618,24 @@ void KeymapBind(const KeyBinding* bindings, int n) {
     }
 }
 
-// One level of the stack, or — with nothing passed — the unscoped pass, which
-// only bindings with no predicate take part in. The last binding for a chord
-// wins, so the search runs backwards.
-static uint32_t MatchIn(const uint32_t* contexts, int n, bool* pending) {
+// Whether a binding is in play at this level. A scoped pass wants a predicate
+// that holds here; the unscoped pass, which runs last, is the bindings that
+// named no context at all.
+static bool BindingApplies(const BoundKey& b, const CtxLevel* levels, int n) {
+    if (n == 0) {
+        return b.pred < 0;
+    }
+    return b.pred >= 0 && PredEval(b.pred, levels, n);
+}
+
+// One level of the stack, or — with nothing passed — the unscoped pass. The
+// last binding for a chord wins, so the search runs backwards. Answers the
+// action of a binding this chord completes, and notes on the way whether one
+// it only begins is left waiting.
+static uint32_t MatchIn(const CtxLevel* levels, int n, bool* pending) {
     for (int i = gNBindings - 1; i >= 0; i--) {
         const BoundKey& b = gBindings[i];
-        bool applies = n > 0 ? (b.pred >= 0 && PredEval(b.pred, contexts, n))
-                             : (b.pred < 0);
-        if (!applies || b.nStrokes < gNPending) {
+        if (!BindingApplies(b, levels, n) || b.nStrokes < gNPending) {
             continue;
         }
         bool begins = true;
@@ -641,34 +659,43 @@ static uint32_t MatchIn(const uint32_t* contexts, int n, bool* pending) {
     return 0;
 }
 
+// The whole stack, innermost level first and the unscoped bindings last.
+// `pending` comes back set when nothing completed but something was begun.
+static uint32_t MatchStack(const CtxLevel* levels, int n, bool* pending) {
+    for (int lvl = 0; lvl < n; lvl++) {
+        uint32_t action = MatchIn(levels + lvl, n - lvl, pending);
+        if (action) {
+            return action;
+        }
+    }
+    return MatchIn(nullptr, 0, pending);
+}
+
 KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
                      int nContexts) {
-    KeyMatch m;
     if (gNPending >= kMaxStrokes) {
         gNPending = 0;
     }
     gPending[gNPending++] = chord;
 
+    if (nContexts > kMaxContextDepth) {
+        nContexts = kMaxContextDepth;
+    }
+    CtxLevel levels[kMaxContextDepth];
+    for (int i = 0; i < nContexts; i++) {
+        levels[i] = ResolveContext(contexts[i]);
+    }
+
+    KeyMatch m;
     bool pending = false;
-    for (int lvl = 0; lvl < nContexts; lvl++) {
-        uint32_t action = MatchIn(contexts + lvl, nContexts - lvl, &pending);
-        if (action) {
-            gNPending = 0;
-            m.action = action;
-            return m;
-        }
-    }
-    uint32_t action = MatchIn(nullptr, 0, &pending);
-    if (action) {
-        gNPending = 0;
-        m.action = action;
-        return m;
-    }
-    if (pending) {
+    m.action = MatchStack(levels, nContexts, &pending);
+    if (!m.action && pending) {
+        // Begun but not finished: the chord stays held, and the window keeps
+        // the next keystroke for the keymap.
         m.pending = true;
         return m;
     }
-    // Neither finished nor continued anything: what was held is dropped,
+    // Finished, or continued nothing — either way what was held is spent,
     // which is Rust's matcher clearing its pending keystrokes.
     gNPending = 0;
     return m;
