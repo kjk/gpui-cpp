@@ -6,15 +6,19 @@ static const char* const kTabMaxWidthLabels[] = {"Unlimited", "80px", "120px",
                                                  "200px"};
 static const int kNTabMaxWidths = 4;
 enum {
-    TabsMenuMaxWidth = 1
+    TabsMenuMaxWidth = 1,
+    TabsMenuOptions
 };
 enum {
+    TabsActMoreMenu = 3799,
     TabsActMaxWidth = 3800
 };
 
 struct TabsStory {
     int tab = 0;
     int maxWidthIx = 0;
+    // TabBar::menu, which the Options dropdown's one row turns on.
+    bool menu = false;
     int openMenu = 0;
     // The Dynamic Tabs section keeps its own bar: ids that keep counting up
     // as tabs come and go, and which of them is selected.
@@ -36,6 +40,8 @@ static void TabsMenuAct(TabsStory* self, Ctx* cx, const ClickEvent*,
                         intptr_t act) {
     if (act >= TabsActMaxWidth) {
         self->maxWidthIx = (int)(act - TabsActMaxWidth);
+    } else if (act == TabsActMoreMenu) {
+        self->menu = !self->menu;
     } else {
         StoryToolbarApply(&self->toolbar, nullptr, (int)act);
     }
@@ -130,9 +136,13 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         StoryFmt(cx, "Max width: %s", kTabMaxWidthLabels[self->maxWidthIx]),
         self->openMenu == TabsMenuMaxWidth,
         ListenerArg(openMenu, TabsMenuMaxWidth), widths, kNTabMaxWidths, act));
-    // Rust has a third dropdown here — an Options menu whose one row turns
-    // TabBar::menu on, the overflow "more" button a bar too narrow for its
-    // tabs grows. There is no such menu on this port's TabBar.
+    StoryToolbarOpt more[1] = {
+        {"More menu", self->menu, TabsActMoreMenu},
+    };
+    group->Child(StoryToolbarDropdown(cx, StrL("tabs-options"), StrL("Options"),
+                                      self->openMenu == TabsMenuOptions,
+                                      ListenerArg(openMenu, TabsMenuOptions),
+                                      more, 1, act));
     toolbarRow->Child(group);
     page->Child(toolbarRow);
     float maxWidth = kTabMaxWidths[self->maxWidthIx];
@@ -162,7 +172,8 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         component::Tabs* bar =
             component::Tabs::New(cx, StoryFmt(cx, "tabs-%d", (int)v))
                 ->Variant(row.variant)
-                ->Size(self->toolbar.size);
+                ->Size(self->toolbar.size)
+                ->Menu(self->menu);
         if (maxWidth > 0) {
             bar->MaxWidth(maxWidth);
         }

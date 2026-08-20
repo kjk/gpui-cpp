@@ -64,6 +64,10 @@ struct Tabs {
     float maxWidth = 0;
     El* prefix = nullptr;
     El* suffix = nullptr;
+    // TabBar::menu: the overflow button after the strip. Its dropdown lists
+    // every tab by name, checked on the selected one and disabled where the
+    // tab is, so a bar too narrow to show them all can still reach them.
+    bool menu = false;
     Listener onChange;
 
     static Tabs* New(Ctx* cx);
@@ -82,6 +86,7 @@ struct Tabs {
     Tabs* MaxWidth(float v);
     Tabs* Prefix(El* e);
     Tabs* Suffix(El* e);
+    Tabs* Menu(bool v = true);
     El* IntoEl();
 };
 
