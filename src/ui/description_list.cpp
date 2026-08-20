@@ -46,6 +46,10 @@ DescriptionList* DescriptionList::Bordered(bool v) {
     bordered = v;
     return this;
 }
+DescriptionList* DescriptionList::Vertical(bool v) {
+    vertical = v;
+    return this;
+}
 DescriptionList* DescriptionList::WithSize(UiSize s) {
     size = s;
     return this;
@@ -103,16 +107,15 @@ El* DescriptionList::IntoEl() {
         }
         for (int k = 0; k < count; k++) {
             const DescriptionItem& it = items[first + k];
-            El* cell = Div(a)->FlexRow()->Grow((float)it.span);
-            El* label = Div(a)
-                            ->W(labelWidth)
-                            ->Shrink0()
-                            ->PadX(padX)
-                            ->PadY(padY)
-                            ->Child(TextEl(a, it.label)
-                                        ->Font(14)
-                                        ->Wrap()
-                                        ->Fg(th.descListLabelFg));
+            El* cell = Div(a)->Grow((float)it.span);
+            cell = vertical ? cell->FlexCol() : cell->FlexRow();
+            El* label = Div(a)->Shrink0()->PadX(padX)->PadY(padY)->Child(
+                TextEl(a, it.label)->Font(14)->Wrap()->Fg(th.descListLabelFg));
+            if (!vertical) {
+                label->W(labelWidth);
+            } else {
+                label->W(kFill);
+            }
             if (bordered) {
                 label->Bg(th.descListLabel)->Border(1, th.border);
             }
