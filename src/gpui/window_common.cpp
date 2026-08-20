@@ -749,6 +749,15 @@ static void DispatchMouseExited(Window* win, const MouseExitEvent& in) {
 }
 
 static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
+    // A multi-line field takes the wheel before anything around it, the way
+    // the editor's own scroll handle does in Rust.
+    InputState* field = InputAtPosition(&win->paint, in.x, in.y);
+    if (field && InputIsMultiLine(field) && field->contentH > field->viewH) {
+        field->scrollY = ClampScroll(field->scrollY - in.deltaY,
+                                     field->contentH, field->viewH);
+        AppInvalidate(win);
+        return;
+    }
     // The scrolled box under the pointer takes the wheel, which is what a
     // `div().overflow_scroll()` does in GPUI — the offset is the view's here,
     // so the box reports where it should now be rather than moving itself.

@@ -1478,6 +1478,18 @@ struct InputState {
     float lastLineH = 0;
     // input_bounds: the whole field, what a press outside the run maps against.
     Bounds inputBounds = {};
+    // scroll_handle: how far the field has scrolled under its own box, and
+    // the box it scrolls inside. Positive-down, as El::ScrollY takes it; Rust
+    // keeps the same pair, negative, on a ScrollHandle.
+    float scrollX = 0;
+    float scrollY = 0;
+    float viewW = 0;
+    float viewH = 0;
+    // The caret's x inside the run, measured when it was last painted, and
+    // the whole scrolled height. `last_layout` is what Rust reads them off.
+    float caretX = 0;
+    float contentW = 0;
+    float contentH = 0;
     // Suppressed while set_value writes the text, so a programmatic write is
     // not reported as the user having typed.
     bool emitEvents = true;
@@ -1489,6 +1501,26 @@ struct InputState {
 
     ~InputState();
 };
+
+// Which way a move went, which decides whether scroll_to may pull the view
+// back the other way. Rust's MoveDirection.
+enum class InputMoveDir : uint8_t {
+    None,
+    Up,
+    Down
+};
+
+// scroll_to: the offset that brings the caret into view, from where the field
+// is now. `caretY` is the top of the caret's line and `caretX` its position
+// across the run; the answer keeps the caret a line's clearance from either
+// edge and never scrolls past the content. A move that went up will not be
+// answered with a downward scroll, and the other way about — Rust clamps the
+// same way, so a vertical walk does not fight itself.
+void InputScrollToCaret(InputState* s, float caretX, float caretY,
+                        InputMoveDir dir);
+// The same, for wherever the caret is now: the row it is on and the x the
+// last paint measured.
+void InputScrollToCursor(InputState* s, InputMoveDir dir);
 
 // value() / the NUL-terminated view of it. Neither allocates.
 Str InputValue(const InputState* s);

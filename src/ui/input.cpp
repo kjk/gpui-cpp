@@ -239,6 +239,9 @@ El* Textarea::IntoEl() {
                   ->Radius(th.radius)
                   ->Bg(th.inputBg)
                   ->Border(1, focused ? th.ring : th.inputBorder)
+                  // scroll_handle: the rows slide under the box as the caret
+                  // moves, and the wheel moves them too.
+                  ->ScrollY(state ? state->scrollY : 0)
                   ->Child(gpui::Textarea::New(cx, state, editor));
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);

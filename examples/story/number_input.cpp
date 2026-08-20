@@ -16,13 +16,11 @@ struct NumberInputStory {
     bool seeded = false;
 
     static El* Render(NumberInputStory* self, Ctx* cx);
+    static void OnKey(NumberInputStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
-static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
-                    intptr_t packed) {
-    int slot = (int)(packed >> 1);
-    StepAction action =
-        (packed & 1) ? StepAction::Increment : StepAction::Decrement;
+static void StepSlot(NumberInputStory* self, Ctx* cx, int slot,
+                     StepAction action) {
     // The format story steps by 0.01, the rest by one.
     double step = slot == NumFormat ? 0.01 : (slot == NumCustom ? 0.1 : 1);
     InputState* f = &self->fields[slot];
@@ -37,6 +35,32 @@ static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
     InputSetValue(f, Str(next));
     Notify(cx);
 }
+
+static void StepNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
+                    intptr_t packed) {
+    StepSlot(self, cx, (int)(packed >> 1),
+             (packed & 1) ? StepAction::Increment : StepAction::Decrement);
+}
+
+// The "NumberInput" key context: up steps the focused field up and down steps
+// it down.
+void NumberInputStory::OnKey(NumberInputStory* self, Ctx* cx,
+                             const KeyEvent* ev) {
+    if (!ev->down) {
+        return;
+    }
+    StepAction action = StepAction::Increment;
+    if (!NumberStepForKey(ev->vk, &action)) {
+        return;
+    }
+    for (int i = 0; i < NumCount; i++) {
+        if (self->fields[i].focused) {
+            StepSlot(self, cx, i, action);
+            return;
+        }
+    }
+}
+
 static void FocusNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
                      intptr_t slot) {
     for (int i = 0; i < NumCount; i++) {
@@ -144,4 +168,4 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     return page;
 }
 
-STORY_PAGE(StoryNumberInput, NumberInputStory);
+STORY_PAGE_KEYS(StoryNumberInput, NumberInputStory);

@@ -2371,6 +2371,11 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
             TextLayoutRelease(tl);
         }
     }
+    // last_layout: where the caret ended up inside the run, which is what
+    // scroll_to measures against on the next move.
+    if (e->input) {
+        e->input->caretX = x - e->x;
+    }
     CanvasFillRect(ctx, x, y, e->caretW, h, e->caretColor);
 }
 
@@ -2535,6 +2540,9 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
         }
         if (!seen) {
             e->input->inputBounds = e->Bounds();
+            // The box the field scrolls inside, less what it pads by.
+            e->input->viewW = e->w - e->style.pad.Horizontal();
+            e->input->viewH = e->h - e->style.pad.Vertical();
             ctx->inputs.Append(e->input);
         }
     }

@@ -94,6 +94,18 @@ bool NumberStepValue(Str value, StepAction action, double step, bool hasMin,
     return true;
 }
 
+bool NumberStepForKey(int key, StepAction* out) {
+    if (key == KeyUp) {
+        *out = StepAction::Increment;
+        return true;
+    }
+    if (key == KeyDown) {
+        *out = StepAction::Decrement;
+        return true;
+    }
+    return false;
+}
+
 El* NumberInput::New(Ctx* cx) {
     Arena* a = cx->a;
     return Div(a);
