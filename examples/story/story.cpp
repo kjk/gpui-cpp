@@ -181,7 +181,9 @@ static const StoryInfo kMeta[StoryCount] = {
      "its edges."},
     {"toggle", "Toggle", "Turn an option on or off, alone or in a group."},
     {"tooltip", "Tooltip", "Describe a control on hover or keyboard focus."},
-    {"tree", "Tree", "A tree view component for hierarchical data."},
+    // TreeStory has no description() in Rust, so its page has no line under
+    // the title.
+    {"tree", "Tree", nullptr},
     {"virtual-list", "VirtualList",
      "Add vertical or horizontal, or both scrollbars to a "
      "container, and use virtual_list to render a large number of "
