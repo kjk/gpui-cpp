@@ -398,6 +398,74 @@ static void EnterInsertsANewlineOnlyWhereItShould() {
     utassert(ValueIs(chat, "\n"));
 }
 
+// indent.rs. Tab indents a multi-line field and shift-tab takes it back; a
+// single-line one does not handle either, which is what lets the window walk
+// the focus ring with the same key.
+static void TabIndentsOnlyWhereThereIsSomethingToIndent() {
+    InputState one;
+    Type(&one, "ab");
+    utassert(!InputPerform(&one, nullptr, nullptr, InputAction::IndentInline,
+                           false));
+    utassert(ValueIs(one, "ab"));
+
+    InputState grow;
+    grow.kind = InputKind::Textarea;
+    grow.mode.kind = LayoutModeKind::AutoGrow;
+    utassert(!InputPerform(&grow, nullptr, nullptr, InputAction::IndentInline,
+                           false));
+
+    // No selection: one tab at the caret, which the caret then sits after.
+    InputState s;
+    s.kind = InputKind::Textarea;
+    InputSetValue(&s, StrL("one\ntwo"));
+    InputSetSelectedRange(&s, nullptr, nullptr, 4, 4);
+    utassert(
+        InputPerform(&s, nullptr, nullptr, InputAction::IndentInline, false));
+    utassert(ValueIs(s, "one\n    two"));
+    utassert(RangeIs(s, 8, 8));
+
+    // And back, from anywhere on the line.
+    utassert(
+        InputPerform(&s, nullptr, nullptr, InputAction::OutdentInline, false));
+    utassert(ValueIs(s, "one\ntwo"));
+    utassert(RangeIs(s, 4, 4));
+    // A line with no indent left is left alone.
+    utassert(
+        InputPerform(&s, nullptr, nullptr, InputAction::OutdentInline, false));
+    utassert(ValueIs(s, "one\ntwo"));
+
+    // Each of the two is one undo step, whole.
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "one\n    two"));
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "one\ntwo"));
+}
+
+// A selection pushes every line it touches over, from the start of its first
+// one, and keeps them selected.
+static void TabIndentsEveryLineOfASelection() {
+    InputState s;
+    s.kind = InputKind::Textarea;
+    InputSetValue(&s, StrL("one\ntwo\nthree"));
+    // From the middle of "one" into the middle of "two".
+    InputSetSelectedRange(&s, nullptr, nullptr, 1, 6);
+    utassert(
+        InputPerform(&s, nullptr, nullptr, InputAction::IndentInline, false));
+    utassert(ValueIs(s, "    one\n    two\nthree"));
+    utassert(RangeIs(s, 0, 14));
+
+    utassert(
+        InputPerform(&s, nullptr, nullptr, InputAction::OutdentInline, false));
+    utassert(ValueIs(s, "one\ntwo\nthree"));
+    utassert(RangeIs(s, 0, 6));
+
+    // One undo step per indent, whatever it touched.
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "    one\n    two\nthree"));
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "one\ntwo\nthree"));
+}
+
 // A mask rejects a character it has no room for and reformats as it fills.
 static void MaskFormatsWhileTyping() {
     InputState s;
@@ -450,6 +518,13 @@ static void ActionForKey() {
              InputAction::Redo);
     // Without the modifier a letter is text, not an action.
     utassert(InputActionForKey(&s, KeyA, false, false, false) ==
+             InputAction::None);
+    utassert(InputActionForKey(&s, KeyTab, false, false, false) ==
+             InputAction::IndentInline);
+    utassert(InputActionForKey(&s, KeyTab, true, false, false) ==
+             InputAction::OutdentInline);
+    // A modified tab belongs to whatever is outside the field.
+    utassert(InputActionForKey(&s, KeyTab, false, true, false) ==
              InputAction::None);
 }
 
@@ -564,7 +639,6 @@ static void TheNumberKeysStepTheField() {
     utassert(!NumberStepForKey(KeyReturn, &action));
 }
 
-
 // replace_and_mark_text_in_range: each candidate stands in for the last, and
 // the range that is marked is what the next one replaces. The Rust case is
 // `undo_with_ime_input`, typed the way a pinyin IME types 你.
@@ -662,6 +736,8 @@ void TestInputState() {
     ACommitReplacesWhatWasMarked();
     EnterInsertsANewlineOnlyWhereItShould();
     MaskFormatsWhileTyping();
+    TabIndentsOnlyWhereThereIsSomethingToIndent();
+    TabIndentsEveryLineOfASelection();
     ActionForKey();
     LayoutModeRowsClamp();
     KindDoesNotFollowTheRowCount();

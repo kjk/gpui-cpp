@@ -1929,6 +1929,13 @@ enum class InputAction : uint8_t {
     DeleteToNextWordEnd,
     Enter,
     Escape,
+    // indent.rs IndentInline / OutdentInline, which is what tab and shift-tab
+    // are bound to inside a field. A single-line input, or one whose layout
+    // has nothing to indent, does not handle them — that is Rust's
+    // cx.propagate(), and here it is `false` back out of InputPerform, which
+    // leaves the keystroke to the window's focus ring.
+    IndentInline,
+    OutdentInline,
     Copy,
     Cut,
     Paste,
