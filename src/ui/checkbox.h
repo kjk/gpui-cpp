@@ -12,6 +12,9 @@ struct Checkbox {
     Str id = {};
     Str label = {};
     Str hint = {};
+    // ParentElement: the element Rust's `.child(..)` puts under the label,
+    // which the story fills with muted text or a markdown line.
+    El* child = nullptr;
     bool checked = false;
     bool disabled = false;
     UiSize size = UiSize::Medium;
@@ -23,6 +26,7 @@ struct Checkbox {
     static Checkbox* New(Ctx* cx, Str id);
     Checkbox* Label(Str s);
     Checkbox* Hint(Str s);
+    Checkbox* Child(El* e);
     Checkbox* Checked(bool v);
     Checkbox* Disabled(bool v);
     Checkbox* WithSize(UiSize s);
