@@ -5,7 +5,7 @@ struct ColorPickerStory {
     // a hover shows beside it. Everything on this page reads the preview when
     // there is one and the value otherwise.
     // Seeded with indigo_500, the way the Rust story seeds its state.
-    ColorPickerState color = {0x6366f0, true, 0, false, false, 0};
+    ColorPickerState color = {0x6366f1, true, 0, false, false, 0};
     bool colorOpen = false;
     StoryToolbarState toolbar;
     static El* Render(ColorPickerStory* self, Ctx* cx);
@@ -54,9 +54,10 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
 
     El* sec = StorySection(cx, "Theme Color",
                            "Select a color and preview the resulting value.");
+    StorySectionBody(sec)->W(440);
     El* card = Div(a)
                    ->FlexCol()
-                   ->W(440)
+                   ->W(kFill)
                    ->Gap(16)
                    ->Pad(16)
                    ->Radius(th.radiusLg)
