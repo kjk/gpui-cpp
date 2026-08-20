@@ -174,7 +174,6 @@ struct ComboboxStory {
     bool seeded = false;
 
     static El* Render(ComboboxStory* self, Ctx* cx);
-    static void OnKey(ComboboxStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void ToggleCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
@@ -382,16 +381,6 @@ static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
     }
 }
 
-static component::SearchableListState* OpenCombo(ComboboxStory* self, Ctx* cx) {
-    for (int i = 0; i < kNSpecs; i++) {
-        component::SearchableListState* s = self->combo[i].Get(cx);
-        if (s && s->open) {
-            return s;
-        }
-    }
-    return nullptr;
-}
-
 El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -481,39 +470,4 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     return page;
 }
 
-// A combobox is a select in Rust — Combobox::render builds one and forwards
-// everything to it — so it answers to the same four keys.
-void ComboboxStory::OnKey(ComboboxStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    component::SearchableListState* s = OpenCombo(self, cx);
-    SelectAction act = SelectActionForKey(ev->vk, s != nullptr, false);
-    if (!s) {
-        return;
-    }
-    if (act == SelectAction::Dismiss) {
-        s->open = false;
-        s->list.selected = -1;
-        Notify(cx);
-        return;
-    }
-    if (act == SelectAction::Confirm) {
-        // Rust's combobox confirms without closing when it is multiple: the
-        // list decides, since close_on_select is its own.
-        if (s->list.selected >= 0 && s->list.selected < s->nMatches) {
-            component::SearchableListClick(s, s->matches[s->list.selected]);
-        }
-        cx->win->eatReturn = true;
-        Notify(cx);
-        return;
-    }
-    if (ev->vk == KeyUp || ev->vk == KeyDown) {
-        ListPerform(
-            &s->list, cx,
-            ev->vk == KeyDown ? ListAction::SelectNext : ListAction::SelectPrev,
-            false);
-    }
-}
-
-STORY_PAGE_KEYS(StoryCombobox, ComboboxStory);
+STORY_PAGE(StoryCombobox, ComboboxStory);

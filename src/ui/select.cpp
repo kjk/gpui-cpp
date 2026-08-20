@@ -257,9 +257,16 @@ El* Select::IntoEl() {
                              query ? InputValue(query) : Str{});
     }
     El* root = gpui::Select::New(cx, id)->W(width)->Child(box);
-    return Popup::New(cx, StrDup(a, fmt("%s-popup", id)), root)
-        ->Content(menu)
-        ->IntoEl();
+    El* wrap = Popup::New(cx, StrDup(a, fmt("%s-popup", id)), root)
+                   ->Content(menu)
+                   ->IntoEl();
+    // The five bindings, on the element that holds both the trigger and the
+    // popup: the trigger is focusable and so is the query field inside the
+    // list, and the context is above whichever of them has the focus.
+    if (!disabled) {
+        SelectBindKeys(cx, wrap, state);
+    }
+    return wrap;
 }
 
 } // namespace component

@@ -1,4 +1,7 @@
 #include "ui/searchable_list.h"
+#include "base/actions.h"
+#include "base/select.h"
+#include "ui/select.h"
 #include "ui/input.h"
 
 namespace gpui {
@@ -328,6 +331,69 @@ El* SearchableList::IntoEl() {
             Div(a)->W(kFill)->BorderT(1, th.border)->Pad(4)->Child(footer));
     }
     return box;
+}
+
+void SearchableListState::OnAction(SearchableListState* self, Ctx* cx,
+                                   const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    // Once it is open the root has nothing left to do with an arrow, so the
+    // list takes it — which is what Rust's content focus handle is for.
+    if (self->open && (ev->action == action::SelectUp() ||
+                       ev->action == action::SelectDown())) {
+        ListPerform(&self->list, cx,
+                    ev->action == action::SelectDown() ? ListAction::SelectNext
+                                                       : ListAction::SelectPrev,
+                    false);
+        return;
+    }
+    switch (SelectActionOf(ev->action, self->open, false)) {
+        case SelectAction::Open:
+            SelectToggleOpen(self, cx);
+            return;
+        case SelectAction::Dismiss:
+            self->open = false;
+            self->list.selected = -1;
+            Notify(cx);
+            return;
+        case SelectAction::Confirm:
+            if (self->list.selected >= 0 &&
+                self->list.selected < self->nMatches) {
+                // The same thing a click on the highlighted row does, down to
+                // what the caller hears and whether the list closes behind
+                // it — which is close_on_select's to decide, not the key's.
+                OnRowClick(self, cx, nullptr, self->list.selected);
+                // cx.stop_propagation(): the Enter was the select's, so it
+                // must not also reach the focused trigger and reopen what it
+                // just closed.
+                if (cx->win) {
+                    cx->win->eatReturn = true;
+                }
+            }
+            return;
+        case SelectAction::None:
+            break;
+    }
+    // Not the select's — a closed one and escape, which is Rust propagating
+    // so whatever encloses it can use the key.
+    const_cast<ActionEvent*>(ev)->propagate = true;
+}
+
+// `.key_context(CONTEXT)` and the handlers under it. A disabled select never
+// declares it, which is Rust's every-handler-propagates-when-disabled.
+void SelectBindKeys(Ctx* cx, El* root, Entity<SearchableListState> state) {
+    if (!cx || !root || !state.IsValid()) {
+        return;
+    }
+    SelectInitKeys();
+    Listener onAction = ListenTo(state, &SearchableListState::OnAction);
+    root->KeyContext(SelectContext())
+        ->OnAction(action::SelectUp(), onAction)
+        ->OnAction(action::SelectDown(), onAction)
+        ->OnAction(action::Confirm(), onAction)
+        ->OnAction(action::ConfirmSecondary(), onAction)
+        ->OnAction(action::Cancel(), onAction);
 }
 
 } // namespace component

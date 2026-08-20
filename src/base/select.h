@@ -21,12 +21,19 @@ enum class SelectAction : uint8_t {
     Dismiss
 };
 
+// select.rs::init: up, down, enter, secondary-enter and escape in the
+// "Select" key context.
+void SelectInitKeys();
+Str SelectContext();
+
 // The rules, whole. `open` and `disabled` are the select's current state.
 //
 // Rust also moves focus to the content handle whenever Up, Down or Enter is
 // taken, and back to the trigger on Cancel. That is a pair of focus handles a
-// select does not have here, so the caller does the same with its own.
-SelectAction SelectActionForKey(int key, bool open, bool disabled);
+// select does not have here; the trigger and the query field are both inside
+// the element that declares the context, so a chord finds the select wherever
+// of the two focus is.
+SelectAction SelectActionOf(uint32_t id, bool open, bool disabled);
 
 struct Select {
     static El* New(Ctx* cx, Str id);

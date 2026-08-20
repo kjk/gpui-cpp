@@ -84,6 +84,11 @@ Str SelectTriggerTitle(const SearchableListState* s, Str placeholder,
 
 // SelectState::toggle / clear, as handlers a trigger can bind straight to.
 void SelectToggleOpen(SearchableListState* s, Ctx* cx);
+
+// Declare the "Select" key context on `root` and hang the five handlers off
+// it. The themed Select does this for itself; a caller that builds its own
+// select out of the same parts can too.
+void SelectBindKeys(Ctx* cx, El* root, Entity<SearchableListState> state);
 void SelectClear(SearchableListState* s, Ctx* cx);
 
 } // namespace component

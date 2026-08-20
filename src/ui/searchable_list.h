@@ -88,6 +88,13 @@ struct SearchableListState {
 
     static void OnRowClick(SearchableListState* self, Ctx* cx,
                            const ClickEvent* ev, intptr_t match);
+
+    // The Select's five bindings, arriving as actions. Rust's Select root
+    // hears Confirm and Cancel and hands the arrows to the content it
+    // focused; this is that root and that content in one, since the list and
+    // the select share a state here.
+    static void OnAction(SearchableListState* self, Ctx* cx,
+                         const ActionEvent* ev);
 };
 
 // The changes a click on `index` comes to under this mode. Single deselects

@@ -63,7 +63,6 @@ struct SelectStory {
     bool seeded = false;
 
     static El* Render(SelectStory* self, Ctx* cx);
-    static void OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 enum {
@@ -120,17 +119,6 @@ static component::Select* Sel(SelectStory* self, Ctx* cx, int which,
         ->Disabled(self->disabled)
         ->OnToggle(ListenerArg(toggle, which))
         ->OnClear(ListenerArg(clear, which));
-}
-
-// The select whose list is open, or null.
-static component::SearchableListState* OpenSel(SelectStory* self, Ctx* cx) {
-    for (int i = 0; i < SelCount; i++) {
-        component::SearchableListState* s = self->sel[i].Get(cx);
-        if (s && s->open) {
-            return s;
-        }
-    }
-    return nullptr;
 }
 
 El* SelectStory::Render(SelectStory* self, Ctx* cx) {
@@ -297,43 +285,4 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     return page;
 }
 
-// gpui_base::SelectActionForKey is the table crates/base/src/select.rs binds
-// up, down, enter and escape to. The arrows walk the list once the select is
-// open, which is what Rust's content focus handle takes them for.
-void SelectStory::OnKey(SelectStory* self, Ctx* cx, const KeyEvent* ev) {
-    if (!ev->down) {
-        return;
-    }
-    component::SearchableListState* s = OpenSel(self, cx);
-    SelectAction act = SelectActionForKey(ev->vk, s != nullptr, self->disabled);
-    if (!s) {
-        return;
-    }
-    if (act == SelectAction::Dismiss) {
-        s->open = false;
-        s->list.selected = -1;
-        Notify(cx);
-        return;
-    }
-    if (act == SelectAction::Confirm && s->list.selected >= 0) {
-        component::SearchableListClick(s, s->matches[s->list.selected]);
-        if (s->mode == component::SearchableListMode::Single) {
-            s->open = false;
-        }
-        // cx.stop_propagation(): the Enter was the select's, so it must not
-        // also reach the focused trigger and reopen what it just closed.
-        cx->win->eatReturn = true;
-        Notify(cx);
-        return;
-    }
-    // Once it is open the root has nothing left to do with an arrow, so the
-    // list takes it.
-    if (ev->vk == KeyUp || ev->vk == KeyDown) {
-        ListPerform(
-            &s->list, cx,
-            ev->vk == KeyDown ? ListAction::SelectNext : ListAction::SelectPrev,
-            false);
-    }
-}
-
-STORY_PAGE_KEYS(StorySelect, SelectStory);
+STORY_PAGE(StorySelect, SelectStory);
