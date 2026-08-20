@@ -21,32 +21,62 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
 
     El* def =
         StorySection(cx, "Default", "Select a value directly from the rating.");
-    StorySectionAdd(def, component::Rating::New(cx, StrL("rating-1"))
-                             ->Value(self->rating)
-                             ->Max(5)
-                             ->WithSize(self->toolbar.size)
-                             ->OnClick(Listen(cx, &SetRating))
-                             ->IntoEl());
+    El* defaultContent =
+        Div(a)
+            ->FlexCol()
+            ->W(kFill)
+            ->Gap(12)
+            ->JustifyCenter()
+            ->ItemsCenter()
+            ->Child(component::Rating::New(cx, StrL("rating-1"))
+                        ->WithSize(self->toolbar.size)
+                        ->Value(self->rating)
+                        ->Max(5)
+                        ->OnClick(Listen(cx, &SetRating))
+                        ->IntoEl());
+    StorySectionAdd(def, Div(a)
+                             ->FlexRow()
+                             ->FlexWrap()
+                             ->W(512)
+                             ->Gap(16)
+                             ->JustifyCenter()
+                             ->ItemsCenter()
+                             ->Child(defaultContent));
     page->Child(def);
 
     El* dis = StorySection(cx, "Disabled", nullptr);
-    StorySectionAdd(dis, component::Rating::New(cx, StrL("rating-2"))
-                             ->Value(2)
-                             ->Max(5)
-                             ->Color(th.green)
-                             ->Disabled(true)
-                             ->WithSize(self->toolbar.size)
-                             ->IntoEl());
+    StorySectionAdd(dis,
+                    Div(a)
+                        ->FlexRow()
+                        ->FlexWrap()
+                        ->W(480)
+                        ->Gap(16)
+                        ->JustifyCenter()
+                        ->ItemsCenter()
+                        ->Child(component::Rating::New(cx, StrL("rating-2"))
+                                    ->WithSize(self->toolbar.size)
+                                    ->Value(2)
+                                    ->Color(th.green)
+                                    ->Max(5)
+                                    ->Disabled(true)
+                                    ->IntoEl()));
     page->Child(dis);
 
     El* col = StorySection(cx, "Color", nullptr);
-    StorySectionAdd(col, component::Rating::New(cx, StrL("rating-3"))
-                             ->Value(self->rating)
-                             ->Max(5)
-                             ->Color(th.green)
-                             ->WithSize(self->toolbar.size)
-                             ->OnClick(Listen(cx, &SetRating))
-                             ->IntoEl());
+    StorySectionAdd(col,
+                    Div(a)
+                        ->FlexRow()
+                        ->FlexWrap()
+                        ->W(480)
+                        ->Gap(16)
+                        ->JustifyCenter()
+                        ->ItemsCenter()
+                        ->Child(component::Rating::New(cx, StrL("rating-3"))
+                                    ->WithSize(self->toolbar.size)
+                                    ->Value(self->rating)
+                                    ->Color(th.green)
+                                    ->Max(5)
+                                    ->IntoEl()));
     page->Child(col);
     return page;
 }
