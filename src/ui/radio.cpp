@@ -102,5 +102,63 @@ El* Radio::IntoEl() {
     return row;
 }
 
+static RadioGroup* RadioGroupNew(Ctx* cx, Str id, bool horizontal) {
+    RadioGroup* g = ArenaNew<RadioGroup>(cx->a);
+    g->a = cx->a;
+    g->cx = cx;
+    g->id = id;
+    g->horizontal = horizontal;
+    return g;
+}
+RadioGroup* RadioGroup::Vertical(Ctx* cx, Str id) {
+    return RadioGroupNew(cx, id, false);
+}
+RadioGroup* RadioGroup::Horizontal(Ctx* cx, Str id) {
+    return RadioGroupNew(cx, id, true);
+}
+RadioGroup* RadioGroup::Child(Radio* r) {
+    if (r && n < 16) {
+        radios[n++] = r;
+    }
+    return this;
+}
+RadioGroup* RadioGroup::Child(Str label) {
+    return Child(Radio::New(cx, label)->Label(label));
+}
+RadioGroup* RadioGroup::Selected(int ix) {
+    selected = ix;
+    return this;
+}
+RadioGroup* RadioGroup::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+RadioGroup* RadioGroup::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+RadioGroup* RadioGroup::OnClick(Listener fn) {
+    onClick = fn;
+    return this;
+}
+
+El* RadioGroup::IntoEl() {
+    El* base = gpui::RadioGroup::New(cx, id)->Gap(12);
+    if (horizontal) {
+        base->FlexRow()->W(kFill)->FlexWrap();
+    } else {
+        base->FlexCol();
+    }
+    for (int i = 0; i < n; i++) {
+        Radio* r = radios[i];
+        r->Checked(selected == i)->Disabled(disabled)->WithSize(size);
+        if (onClick.IsValid()) {
+            r->OnClick(ListenerArg(onClick, i));
+        }
+        base->Child(r->IntoEl());
+    }
+    return base;
+}
+
 } // namespace component
 } // namespace gpui

@@ -30,5 +30,32 @@ struct Radio {
     El* IntoEl();
 };
 
+// crates/ui/src/radio.rs RadioGroup: a set of radios laid out on one axis,
+// of which one is selected. The click reports the index, which is what Rust's
+// `on_click(&usize)` hands its caller.
+struct RadioGroup {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Str id = {};
+    Radio* radios[16] = {};
+    int n = 0;
+    bool horizontal = false;
+    int selected = -1;
+    bool disabled = false;
+    UiSize size = UiSize::Medium;
+    Listener onClick;
+
+    static RadioGroup* Vertical(Ctx* cx, Str id);
+    static RadioGroup* Horizontal(Ctx* cx, Str id);
+    RadioGroup* Child(Radio* r);
+    // `impl From<&str> for Radio`: a bare label is a radio of its own.
+    RadioGroup* Child(Str label);
+    RadioGroup* Selected(int ix);
+    RadioGroup* Disabled(bool v);
+    RadioGroup* WithSize(UiSize s);
+    RadioGroup* OnClick(Listener fn);
+    El* IntoEl();
+};
+
 } // namespace component
 } // namespace gpui
