@@ -52,7 +52,9 @@ struct Dialog {
     Str cancelText = {};
     ButtonVariant okVariant = ButtonVariant::Primary;
     bool okOutline = false;
-    bool showCancel = true;
+    // DialogButtonProps::default(): no Cancel unless something asks. That is
+    // what AlertDialog::confirm() does.
+    bool showCancel = false;
     // AlertDialog::close_button, the x in the corner.
     bool closeButton = false;
 
@@ -85,6 +87,8 @@ struct Dialog {
     Dialog* CancelText(Str s);
     Dialog* OkVariant(ButtonVariant v, bool outline = false);
     Dialog* ShowCancel(bool v);
+    // AlertDialog::confirm(): the standard OK / Cancel pair.
+    Dialog* Confirm();
     Dialog* CloseButton(bool v = true);
     Dialog* Footer(El* e);
     Dialog* FooterVertical(bool v = true);

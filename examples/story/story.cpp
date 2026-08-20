@@ -761,6 +761,19 @@ Entity<component::NotificationListState> StoryNotifications(Ctx* cx) {
                 : Entity<component::NotificationListState>{};
 }
 
+void StoryPushNotification(Ctx* cx, Str message) {
+    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
+    if (!st) {
+        return;
+    }
+    component::NotificationItem item;
+    item.kind = component::NotificationKind::Info;
+    item.message = message;
+    // Notification::timeout, Duration::from_secs(5).
+    NotificationPush(st, item, 5000);
+    Notify(cx);
+}
+
 static int StoryNotificationCount(Ctx* cx) {
     component::NotificationListState* st = StoryNotifications(cx).Get(cx);
     return st ? st->n : 0;
