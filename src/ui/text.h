@@ -20,10 +20,15 @@
    the tree-sitter parse Rust runs: it answers the capture names position and
    a keyword list can settle and paints them from the same theme table.
 
-   Where it stops short of Rust: no images — an <img> or a ![]() contributes
-   its alt text, since nothing in this tree decodes a PNG or fetches a URL.
-   Selection is still per element (base/text_selection.cpp), not the
-   window-wide one text/window_selection.rs runs. */
+   An image — ![alt](src) or <img> — is a run of its own in the flow, drawn
+   by gpui/image.h from the asset roots or from a data: URI. What it cannot
+   reach it shows as its alt text, and that is most of what a document
+   written for the web holds: fetching an http(s) URL needs a socket and a
+   TLS stack this tree does not have.
+
+   Where it stops short of Rust: selection is still per element
+   (base/text_selection.cpp), not the window-wide one
+   text/window_selection.rs runs. */
 
 #include "ui/sizing.h"
 #include "ui/syntax.h"
@@ -45,11 +50,19 @@ enum MdMark : uint8_t {
     MdHighlight = 1 << 6,
 };
 
-// One styled piece of a paragraph: node.rs's (text, TextMark) pair.
+// One styled piece of a paragraph: node.rs's (text, TextMark) pair, or —
+// when `imgSrc` is set — node.rs's InlineNode::image, an ImageNode sitting in
+// the flow with the words. `text` is then the alt text, which is what paints
+// if the source will not decode (gpui/image.h says when that is).
 struct MdRun {
     Str text = {};
     // LinkMark::url, when marks has MdLink.
     Str href = {};
+    // ImageNode::url. An image run carries no other text.
+    Str imgSrc = {};
+    // ImageNode::width / height, when the document gave them. 0 is "its own".
+    float imgW = 0;
+    float imgH = 0;
     MdRun* next = nullptr;
     uint8_t marks = 0;
 };
@@ -163,6 +176,9 @@ struct TextView {
     // The highlighted form of a code block: ui/syntax.h scans the text and
     // this paints its tokens.
     El* CodeLines(Str code, SyntaxLang lang);
+    // An image run: node.rs putting an img() element in the middle of the
+    // inline flow.
+    El* ImageRun(MdRun* r, float font, Rgba color);
     // One styled word of a flow, with its marks applied and — for a link —
     // the click that opens it.
     El* Word(Str w, float font, Rgba color, uint8_t marks, int weight,

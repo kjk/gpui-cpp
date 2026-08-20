@@ -5,6 +5,7 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <math.h>
+#include <wincodec.h>
 
 namespace gpui {
 
@@ -654,6 +655,128 @@ static int WideOffToUtf8(Str s, int woff) {
     }
     return WideCharToMultiByte(CP_UTF8, 0, wbuf, woff, nullptr, 0, nullptr,
                                nullptr);
+}
+
+// ─── images ───────────────────────────────────────────────────────────────
+//
+// WIC decodes whatever the machine has a codec for — PNG, JPEG, GIF, BMP,
+// TIFF, and HEIC / WebP where Windows ships them — into premultiplied BGRA,
+// which is the one format D2D takes without conversion. The pixels are kept
+// rather than the D2D bitmap: a DC render target is recreated on a resize or
+// a lost device, so the bitmap is rebuilt beside it when the target it was
+// made for is no longer the one being drawn into.
+
+struct Image {
+    int w = 0;
+    int h = 0;
+    uint8_t* bgra = nullptr;
+    ID2D1Bitmap* bmp = nullptr;
+    // The render target `bmp` belongs to. D2D bitmaps are device resources
+    // and do not survive it.
+    ID2D1RenderTarget* bmpRt = nullptr;
+};
+
+Image* ImageDecode(PaintApp* pa, const uint8_t* bytes, int len) {
+    (void)pa;
+    if (!bytes || len <= 0) {
+        return nullptr;
+    }
+    IWICImagingFactory* wic = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                  CLSCTX_INPROC_SERVER,
+                                  IID_PPV_ARGS(&wic));
+    if (FAILED(hr) || !wic) {
+        return nullptr;
+    }
+    IWICStream* stream = nullptr;
+    IWICBitmapDecoder* dec = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* conv = nullptr;
+    Image* img = nullptr;
+    hr = wic->CreateStream(&stream);
+    if (SUCCEEDED(hr)) {
+        hr = stream->InitializeFromMemory((BYTE*)bytes, (DWORD)len);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = wic->CreateDecoderFromStream(stream, nullptr,
+                                          WICDecodeMetadataCacheOnLoad, &dec);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = dec->GetFrame(0, &frame);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = wic->CreateFormatConverter(&conv);
+    }
+    if (SUCCEEDED(hr)) {
+        hr = conv->Initialize(frame, GUID_WICPixelFormat32bppPBGRA,
+                              WICBitmapDitherTypeNone, nullptr, 0.f,
+                              WICBitmapPaletteTypeMedianCut);
+    }
+    UINT w = 0, h = 0;
+    if (SUCCEEDED(hr)) {
+        hr = conv->GetSize(&w, &h);
+    }
+    if (SUCCEEDED(hr) && w > 0 && h > 0) {
+        UINT stride = w * 4;
+        UINT size = stride * h;
+        auto* px = (uint8_t*)Alloc(nullptr, (int)size);
+        if (px && SUCCEEDED(conv->CopyPixels(nullptr, stride, size, px))) {
+            img = new Image();
+            img->w = (int)w;
+            img->h = (int)h;
+            img->bgra = px;
+        } else {
+            Free(nullptr, px);
+        }
+    }
+    Rel(&conv);
+    Rel(&frame);
+    Rel(&dec);
+    Rel(&stream);
+    Rel(&wic);
+    return img;
+}
+
+void ImageFree(Image* img) {
+    if (!img) {
+        return;
+    }
+    Rel(&img->bmp);
+    Free(nullptr, img->bgra);
+    delete img;
+}
+
+Size ImageSizePx(const Image* img) {
+    if (!img) {
+        return {};
+    }
+    return {(float)img->w, (float)img->h};
+}
+
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+    if (!ctx || !ctx->rt || !ctx->rt->rt || !img || !img->bgra || b.w <= 0 ||
+        b.h <= 0) {
+        return;
+    }
+    ID2D1RenderTarget* rt = ctx->rt->rt;
+    if (img->bmp && img->bmpRt != rt) {
+        Rel(&img->bmp);
+    }
+    if (!img->bmp) {
+        D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(
+            DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        D2D1_SIZE_U size = D2D1::SizeU((UINT32)img->w, (UINT32)img->h);
+        UINT32 pitch = (UINT32)img->w * 4;
+        HRESULT hr =
+            rt->CreateBitmap(size, img->bgra, pitch, props, &img->bmp);
+        if (FAILED(hr) || !img->bmp) {
+            return;
+        }
+        img->bmpRt = rt;
+    }
+    D2D1_RECT_F dst = D2D1::RectF(b.x, b.y, b.x + b.w, b.y + b.h);
+    rt->DrawBitmap(img->bmp, dst, ctx->opacity < 0 ? 0.f : ctx->opacity,
+                   D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
 // gpui text_system: padding_top = (line_height - ascent - descent) / 2.

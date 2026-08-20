@@ -25,6 +25,10 @@ static const char* kMarkdown =
     "| one  | two    | 3.00  |\n"
     "| four | five   | 42.50 |\n"
     "\n"
+    "An image from the asset roots, inline with the text:\n"
+    "![a gradient](gradient.png) — and one that cannot be fetched, which\n"
+    "shows its alt text instead: ![a remote badge](https://x/badge.svg).\n"
+    "\n"
     "<div>\n"
     "  <h3>A raw HTML block</h3>\n"
     "  <p>Dropped before this change; now it is parsed into the same tree\n"
@@ -57,7 +61,8 @@ static const char* kHtml =
     "<s>struck out</s> and\n"
     "<a href=\"https://github.com/kjk/gpui-cpp\">a link to the port</a>.</p>\n"
     "<p><mark>Highlighted</mark> text, <u>underlined</u> text, and an image\n"
-    "that shows its alt text: <img src=\"cat.png\" alt=\"[a cat]\">.</p>\n"
+    "sized by its tag: <img src=\"gradient.png\" alt=\"[a gradient]\"\n"
+    "width=\"60\">.</p>\n"
     "<table>\n"
     "  <thead><tr><th>Left</th><th align=\"center\">Center</th>\n"
     "    <th align=\"right\">Right</th></tr></thead>\n"
@@ -149,6 +154,11 @@ int GpuiMain(int argc, char** argv) {
     (void)argv;
     App* app = AppNew();
     ThemeSet(app, ThemeMode::Dark);
+    // Where the images in the two documents are looked up, the same way the
+    // icons of any other example are.
+    AssetsClear();
+    AssetsAddDefaultRoots(StrL("rich_text"));
+    AssetsAddRoot(StrL("assets/rich_text"));
     Entity<RichApp> view = EntityNew<RichApp>(app);
     Window* win = WindowOpenView(app, StrL("Rich Text C++"), 820, 760, view.id,
                                  WinOpts{});

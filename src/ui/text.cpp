@@ -22,6 +22,14 @@ struct MdBuild {
     Str href = {};
     // MD_BLOCK_THEAD is not a node of its own; it just marks the rows in it.
     bool inHead = false;
+    // Inside an MD_SPAN_IMG: the source, and the alt text md4c is handing
+    // over as ordinary text callbacks. Rust builds an ImageNode out of the
+    // same pair. Alt text longer than the buffer is cut — it is a label, not
+    // content, and nothing sensible writes a paragraph of it.
+    Str imgSrc = {};
+    bool inImg = false;
+    int altLen = 0;
+    char alt[256] = {};
 };
 
 static MdNode* Push(MdBuild* b, MdKind k) {
@@ -52,6 +60,13 @@ static void AddText(MdBuild* b, Str s) {
     if (s.len <= 0) {
         return;
     }
+    if (b->inImg) {
+        // The alt text of the image being built, not text of its own.
+        for (int i = 0; i < s.len && b->altLen < (int)sizeof(b->alt) - 1; i++) {
+            b->alt[b->altLen++] = s.s[i];
+        }
+        return;
+    }
     MdNode* n = b->cur;
     MdRun* r = n->runLast;
     if (r && r->marks == b->marks && r->href.s == b->href.s &&
@@ -61,6 +76,28 @@ static void AddText(MdBuild* b, Str s) {
     }
     r = ArenaNew<MdRun>(b->a);
     r->text = s;
+    r->marks = b->marks;
+    r->href = b->href;
+    if (n->runLast) {
+        n->runLast->next = r;
+    } else {
+        n->runFirst = r;
+    }
+    n->runLast = r;
+}
+
+// node.rs InlineNode::image: an image sits in the flow beside the words,
+// carrying the marks in force — an image inside a link is a link.
+static void AddImage(MdBuild* b, Str src, Str alt, float w, float h) {
+    if (src.len <= 0) {
+        return;
+    }
+    MdNode* n = b->cur;
+    MdRun* r = ArenaNew<MdRun>(b->a);
+    r->imgSrc = src;
+    r->text = alt;
+    r->imgW = w;
+    r->imgH = h;
     r->marks = b->marks;
     r->href = b->href;
     if (n->runLast) {
@@ -294,8 +331,14 @@ static int OnEnterSpan(MD_SPANTYPE type, void* detail, void* ud) {
         MD_SPAN_A_DETAIL* d = (MD_SPAN_A_DETAIL*)detail;
         b->href = d ? Attr(b->a, &d->href) : Str{};
     }
-    // MD_SPAN_IMG has no image loader behind it here; its alt text arrives as
-    // ordinary text callbacks and is what ends up on screen.
+    if (type == MD_SPAN_IMG) {
+        // The alt text arrives as ordinary text callbacks between here and
+        // the leave below, which is where the run is made.
+        MD_SPAN_IMG_DETAIL* d = (MD_SPAN_IMG_DETAIL*)detail;
+        b->imgSrc = d ? Attr(b->a, &d->src) : Str{};
+        b->inImg = true;
+        b->altLen = 0;
+    }
     b->marks = (uint8_t)(b->marks | SpanMark(type));
     return 0;
 }
@@ -305,6 +348,12 @@ static int OnLeaveSpan(MD_SPANTYPE type, void* detail, void* ud) {
     MdBuild* b = (MdBuild*)ud;
     if (type == MD_SPAN_A) {
         b->href = {};
+    }
+    if (type == MD_SPAN_IMG) {
+        b->inImg = false;
+        AddImage(b, b->imgSrc, StrDup(b->a, Str(b->alt, b->altLen)), 0, 0);
+        b->imgSrc = {};
+        b->altLen = 0;
     }
     b->marks = (uint8_t)(b->marks & ~SpanMark(type));
     return 0;
@@ -331,7 +380,7 @@ static void MdInlineHtml(MdBuild* b, Str tag) {
         return;
     }
     if (t.isImage) {
-        AddText(b, t.alt);
+        AddImage(b, t.src, t.alt, t.width, t.height);
         return;
     }
     if (t.close) {
@@ -608,6 +657,28 @@ static Str OrderedMarker(Arena* a, int n, int depth) {
 static const Rgba kMarkBg = {0xfe, 0xf0, 0x8a, 0xff};
 static const Rgba kMarkFg = {0x0a, 0x0a, 0x0a, 0xff};
 
+// node.rs puts an img() element in the flow beside the words: its own size
+// unless the document gave one, never wider than the space it has, and — for
+// an image inside a link — the hand and the click the link's words get.
+El* TextView::ImageRun(MdRun* r, float font, Rgba color) {
+    El* e = ImageEl(a, r->imgSrc, r->text)->Font(font)->Fg(color);
+    if (r->imgW > 0) {
+        e->W(r->imgW);
+    }
+    if (r->imgH > 0) {
+        e->H(r->imgH);
+    }
+    if ((r->marks & MdLink) && r->href.len > 0) {
+        e->Cursor(CursorKind::Pointer);
+        if (onLink.IsValid()) {
+            e->OnClick(ListenerArg(onLink, (intptr_t)r->href.s));
+        } else {
+            e->OnClick(MkFunc0(MdOpenHref, r->href.s));
+        }
+    }
+    return e;
+}
+
 // One styled word. Everything a TextMark can say about a run, applied to the
 // element that carries it — node.rs 1390 builds the same HighlightStyle.
 El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
@@ -658,7 +729,7 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
 }
 
 static bool IsPlainRun(MdRun* r) {
-    if (!r || r->next || r->marks != 0) {
+    if (!r || r->next || r->marks != 0 || r->imgSrc.len > 0) {
         return false;
     }
     for (int i = 0; i < r->text.len; i++) {
@@ -723,6 +794,10 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
         flush();
         marks = r->marks;
         href = r->href;
+        if (r->imgSrc.len > 0) {
+            row->Child(ImageRun(r, font, color));
+            continue;
+        }
         for (int i = 0; i < r->text.len; i++) {
             char c = r->text.s[i];
             if (c == '\n') {
