@@ -354,6 +354,11 @@ El* NumberInput::IntoEl() {
     } else if (hasBg) {
         frame->Radius(th.radius)->Bg(bg);
     }
+    // The disabled frame is faded as a whole, the way an Input's is: the
+    // value, the two step buttons and the suffix all dim together.
+    if (disabled) {
+        frame->Opacity(0.5f);
+    }
     // The step buttons are transparent until hovered, and fill the frame.
     // Only their outer corners are rounded in Rust; ours are square, which
     // shows on hover alone.
