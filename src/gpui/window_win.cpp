@@ -6,6 +6,7 @@
 #include "gpui/paint.h"
 
 #include <dwmapi.h>
+#include <imm.h>
 #include <ole2.h>
 #include <shellapi.h>
 
@@ -25,6 +26,118 @@ struct PlatWindow {
 
 static HWND Hwnd(Window* win) {
     return (win && win->plat) ? win->plat->hwnd : nullptr;
+}
+
+// --- input method ---------------------------------------------------------
+//
+// GPUI's Windows platform answers the IMM32 messages against whatever the
+// window's focused EntityInputHandler is; the same handler here is
+// `win->input`. The system's own inline composition window is turned off
+// (WM_IME_SETCONTEXT), because the marked text is drawn in the field with the
+// rest of the document, underlined — which is what makes the candidate land
+// in the right font, at the right place, scrolled with everything else.
+
+// The composition or result string, decoded. Answers the byte length written,
+// or -1 when there is nothing of that kind to read.
+static int ImeStringUtf8(HIMC imc, DWORD which, char* out, int cap) {
+    LONG bytes = ImmGetCompositionStringW(imc, which, nullptr, 0);
+    if (bytes < 0) {
+        return -1;
+    }
+    if (bytes == 0) {
+        return 0;
+    }
+    int wlen = (int)((size_t)bytes / sizeof(wchar_t));
+    // A composition long enough to overrun this is not one anybody is typing.
+    wchar_t wbuf[512];
+    if (wlen > (int)(sizeof(wbuf) / sizeof(wbuf[0]))) {
+        wlen = (int)(sizeof(wbuf) / sizeof(wbuf[0]));
+    }
+    ImmGetCompositionStringW(imc, which, wbuf,
+                             (DWORD)(wlen * (int)sizeof(wchar_t)));
+    int n =
+        WideCharToMultiByte(CP_UTF8, 0, wbuf, wlen, out, cap, nullptr, nullptr);
+    return n;
+}
+
+// The bytes of `text` up to the UTF-16 offset the IME reported its caret at,
+// which is where the selection inside the marked run goes.
+static int ImeUtf16ToUtf8Offset(Str text, int utf16) {
+    int u16 = 0;
+    int i = 0;
+    while (i < text.len && u16 < utf16) {
+        unsigned char c = (unsigned char)text.s[i];
+        int len = c < 0x80 ? 1 : (c < 0xE0 ? 2 : (c < 0xF0 ? 3 : 4));
+        u16 += len == 4 ? 2 : 1;
+        i += len;
+    }
+    return i;
+}
+
+// Put the candidate list under the caret. Without this it lands at the
+// window's origin, which on a tall field is nowhere near what is being typed.
+static void ImeMoveCandidateWindow(Window* win, HIMC imc) {
+    InputState* in = win->input;
+    if (!in) {
+        return;
+    }
+    float x = in->lastBounds.x + in->caretX - in->scrollX;
+    float y = in->lastBounds.y - in->scrollY;
+    // The render target is made at 96 dpi, so a DIP is a client pixel and
+    // there is nothing to scale.
+    POINT pt = {(LONG)x, (LONG)(y + in->lastLineH)};
+    COMPOSITIONFORM cf = {};
+    cf.dwStyle = CFS_POINT;
+    cf.ptCurrentPos = pt;
+    ImmSetCompositionWindow(imc, &cf);
+    CANDIDATEFORM cand = {};
+    cand.dwStyle = CFS_CANDIDATEPOS;
+    cand.ptCurrentPos = pt;
+    ImmSetCandidateWindow(imc, &cand);
+}
+
+// WM_IME_COMPOSITION. True when the field took it, so the default window
+// procedure does not also draw a composition of its own.
+static bool ImeComposition(Window* win, LPARAM lParam) {
+    InputState* in = win->input;
+    if (!in || !in->focused) {
+        return false;
+    }
+    HIMC imc = ImmGetContext(Hwnd(win));
+    if (!imc) {
+        return false;
+    }
+    char buf[1024];
+    if (lParam & GCS_RESULTSTR) {
+        int n = ImeStringUtf8(imc, GCS_RESULTSTR, buf, (int)sizeof(buf));
+        if (n > 0) {
+            // The commit replaces the marked run, which replace_text_in_range
+            // does for a null range, and clears the mark with it.
+            InputReplaceTextInRange(in, win->app, win, nullptr, Str(buf, n));
+        } else {
+            InputUnmarkText(in, win->app, win);
+        }
+    }
+    if (lParam & GCS_COMPSTR) {
+        int n = ImeStringUtf8(imc, GCS_COMPSTR, buf, (int)sizeof(buf));
+        if (n >= 0) {
+            Str text = Str(buf, n);
+            LONG caret =
+                ImmGetCompositionStringW(imc, GCS_CURSORPOS, nullptr, 0);
+            Selection sel = {};
+            bool hasSel = caret >= 0;
+            if (hasSel) {
+                int off = ImeUtf16ToUtf8Offset(text, (int)caret);
+                sel = Selection{off, off};
+            }
+            InputReplaceAndMarkText(in, win->app, win, nullptr, text,
+                                    hasSel ? &sel : nullptr);
+        }
+    }
+    ImeMoveCandidateWindow(win, imc);
+    ImmReleaseContext(Hwnd(win), imc);
+    AppInvalidate(win);
+    return true;
 }
 
 double TimeNow() {
@@ -212,6 +325,32 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_CHAR:
             WindowChar(win, (uint32_t)wParam, CtrlDown(), AltDown());
             return 0;
+        case WM_IME_SETCONTEXT:
+            // The field draws the marked text itself, so the system's inline
+            // composition window would be a second copy of it.
+            lParam &= ~(LPARAM)ISC_SHOWUICOMPOSITIONWINDOW;
+            break;
+        case WM_IME_STARTCOMPOSITION:
+            if (win->input && win->input->focused) {
+                HIMC imc = ImmGetContext(hwnd);
+                if (imc) {
+                    ImeMoveCandidateWindow(win, imc);
+                    ImmReleaseContext(hwnd, imc);
+                }
+                return 0;
+            }
+            break;
+        case WM_IME_COMPOSITION:
+            if (ImeComposition(win, lParam)) {
+                return 0;
+            }
+            break;
+        case WM_IME_ENDCOMPOSITION:
+            if (win->input && win->input->focused) {
+                InputUnmarkText(win->input, win->app, win);
+                AppInvalidate(win);
+            }
+            break;
         case WM_ACTIVATE:
             // is_window_active: the frame dims while another window has the
             // focus.

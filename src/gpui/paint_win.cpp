@@ -772,6 +772,18 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY) {
     return WideOffToUtf8(s, wpos);
 }
 
+float TextLayoutBaseline(TextLayout* tl) {
+    if (!tl) {
+        return 0;
+    }
+    DWRITE_LINE_METRICS line = {};
+    UINT32 actual = 0;
+    if (FAILED(Dw(tl)->GetLineMetrics(&line, 1, &actual)) || actual == 0) {
+        return 0;
+    }
+    return (float)line.baseline;
+}
+
 int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
                          int max) {
     if (!tl || !out || max <= 0 || u8a >= u8b) {

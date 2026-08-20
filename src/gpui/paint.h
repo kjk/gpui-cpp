@@ -139,5 +139,9 @@ int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY);
 // many were written.
 int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
                          int max);
+// Where the baseline sits inside a line box, measured from the line's top.
+// The first line's, which is the one a decoration under a run needs: an
+// input method composes one line at a time.
+float TextLayoutBaseline(TextLayout* tl);
 
 } // namespace gpui
