@@ -350,14 +350,23 @@ export async function rightClickClient(hwnd: number, x: number, y: number, settl
   }
 }
 
-export async function hoverClient(hwnd: number, x: number, y: number, settleMs = 200): Promise<void> {
+// Leave the pointer over the window. Answers false when the pointer could not
+// actually be placed there, which is not a detail a caller can ignore: the
+// window keeps a TrackMouseEvent(TME_LEAVE) up, so Windows answers the
+// synthetic move with WM_MOUSELEAVE at once and the hover state is gone again
+// before the frame that would have shown it. A locked desktop and a CI agent
+// with no interactive session both refuse SetCursorPos.
+export async function hoverClient(hwnd: number, x: number, y: number, settleMs = 200): Promise<boolean> {
   const lp = packCoords(x, y);
   const scr = clientToScreen(hwnd, x, y);
   setCursorPos(scr.x, scr.y);
+  const at = getCursorPos();
+  const placed = Math.abs(at.x - scr.x) <= 1 && Math.abs(at.y - scr.y) <= 1;
   sendMessage(hwnd, WM_MOUSEMOVE, 0, lp);
   if (settleMs) {
     await sleep(settleMs);
   }
+  return placed;
 }
 
 const PNG_ENCODER_CLSID = new Uint8Array([

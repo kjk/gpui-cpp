@@ -176,7 +176,14 @@ for (const vk of keys) {
 }
 // Last, so the pointer is still on the element when the frame is captured.
 if (hover) {
-  await hoverClient(hwnd, hover.x, hover.y);
+  if (!(await hoverClient(hwnd, hover.x, hover.y))) {
+    // Saying so beats a shot that quietly shows no hover at all: the window
+    // asks Windows to tell it when the pointer leaves, and a pointer that was
+    // never there has already left.
+    console.error(
+      "warning: the pointer could not be placed (the session is probably locked); hover states will not show",
+    );
+  }
 } else if (dragHold) {
   // The button is still down: moving the real cursor would send the window a
   // move of its own and drag the held thing away from where it was left.
