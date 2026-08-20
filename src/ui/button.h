@@ -93,6 +93,44 @@ struct Button {
     El* IntoEl();
 };
 
+// crates/ui/src/button/dropdown_button.rs: a label button joined to a
+// caret-only button that opens a menu. Two buttons, not one with a caret.
+struct DropdownMenu;
+struct PopupMenu;
+
+struct DropdownButton {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Str id = {};
+    Button* button = nullptr;
+    PopupMenu* menu = nullptr;
+    bool selected = false;
+    bool disabled = false;
+    bool compact = false;
+    bool outline = false;
+    bool loading = false;
+    bool hasVariant = false;
+    ButtonVariant variant = ButtonVariant::Default;
+    UiSize size = UiSize::Medium;
+    // Anchor::TopRight by default; the story's first one asks for
+    // BottomRight, which lines the same edge up.
+    bool anchorRight = true;
+    Str tooltip = {};
+
+    static DropdownButton* New(Ctx* cx, Str id);
+    DropdownButton* Button_(component::Button* b);
+    DropdownButton* Menu(PopupMenu* m);
+    DropdownButton* Selected(bool v);
+    DropdownButton* Disabled(bool v);
+    DropdownButton* Compact();
+    DropdownButton* Outline();
+    DropdownButton* Loading(bool v);
+    DropdownButton* WithVariant(ButtonVariant v);
+    DropdownButton* WithSize(UiSize s);
+    DropdownButton* Tooltip(Str s);
+    El* IntoEl();
+};
+
 // crates/ui/src/button/button_group.rs: buttons joined into one control,
 // which is also a toggle group.
 struct ButtonGroup {
