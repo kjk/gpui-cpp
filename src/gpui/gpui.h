@@ -702,7 +702,18 @@ enum class IconName : uint8_t {
 
 struct PaintCtx;
 
+// Which of crates/ui/src/chart's charts this series is. They share the axis,
+// the grid and the labels; what differs is the shape drawn over them.
+enum class ChartKind : uint8_t {
+    Area,
+    Line,
+    Bar,
+    Candlestick,
+    Radar
+};
+
 struct ChartSeries {
+    ChartKind kind = ChartKind::Area;
     const float* ys = nullptr;
     int n = 0;
     int tickMargin = 15;
@@ -713,6 +724,21 @@ struct ChartSeries {
     Rgba stroke = {};
     Rgba fillTop = {};
     Rgba fillBot = {};
+    // The value domain the y axis is scaled to. Both zero takes it from the
+    // data, which is what a ScaleLinear over the data's own extent does; the
+    // system monitor's charts say 0..100 instead.
+    float domainMin = 0;
+    float domainMax = 0;
+    // Candlestick: the other three values per point, and the two colors a
+    // candle takes depending on which way it closed.
+    const float* opens = nullptr;
+    const float* highs = nullptr;
+    const float* lows = nullptr;
+    Rgba up = {};
+    Rgba down = {};
+    // Bar: ScaleBand's inner padding, and how round the top of a bar is.
+    float bandPadding = 0.2f;
+    float barRadius = 4;
 };
 
 struct Style {

@@ -46,6 +46,176 @@ El* AreaChart::IntoEl() {
     return e;
 }
 
+LineChart* LineChart::New(Ctx* cx, const float* ys, int n) {
+    Arena* a = cx->a;
+    LineChart* c = ArenaNew<LineChart>(a);
+    c->a = a;
+    c->cx = cx;
+    c->ys = ys;
+    c->n = n;
+    c->stroke = cx->theme().blue;
+    return c;
+}
+LineChart* LineChart::Stroke(Rgba c) {
+    stroke = c;
+    return this;
+}
+LineChart* LineChart::Labels(const char* const* l) {
+    labels = l;
+    return this;
+}
+LineChart* LineChart::TickMargin(int t) {
+    tickMargin = t;
+    return this;
+}
+LineChart* LineChart::Domain(float lo, float hi) {
+    domainMin = lo;
+    domainMax = hi;
+    return this;
+}
+El* LineChart::IntoEl() {
+    Rgba none = {0, 0, 0, 0};
+    El* e = ChartEl(a, ys, n, stroke, none, none, tickMargin);
+    e->chart.kind = ChartKind::Line;
+    e->chart.labels = labels;
+    e->chart.domainMin = domainMin;
+    e->chart.domainMax = domainMax;
+    return e;
+}
+
+BarChart* BarChart::New(Ctx* cx, const float* ys, int n) {
+    Arena* a = cx->a;
+    BarChart* c = ArenaNew<BarChart>(a);
+    c->a = a;
+    c->cx = cx;
+    c->ys = ys;
+    c->n = n;
+    c->fill = cx->theme().primary;
+    return c;
+}
+BarChart* BarChart::Fill(Rgba c) {
+    fill = c;
+    return this;
+}
+BarChart* BarChart::Labels(const char* const* l) {
+    labels = l;
+    return this;
+}
+BarChart* BarChart::TickMargin(int t) {
+    tickMargin = t;
+    return this;
+}
+BarChart* BarChart::Padding(float v) {
+    padding = v;
+    return this;
+}
+BarChart* BarChart::Radius(float v) {
+    radius = v;
+    return this;
+}
+BarChart* BarChart::Domain(float lo, float hi) {
+    domainMin = lo;
+    domainMax = hi;
+    return this;
+}
+El* BarChart::IntoEl() {
+    Rgba none = {0, 0, 0, 0};
+    El* e = ChartEl(a, ys, n, fill, none, none, tickMargin);
+    e->chart.kind = ChartKind::Bar;
+    e->chart.labels = labels;
+    e->chart.bandPadding = padding;
+    e->chart.barRadius = radius;
+    e->chart.domainMin = domainMin;
+    e->chart.domainMax = domainMax;
+    return e;
+}
+
+CandlestickChart* CandlestickChart::New(Ctx* cx, const float* opens,
+                                        const float* highs, const float* lows,
+                                        const float* closes, int n) {
+    Arena* a = cx->a;
+    CandlestickChart* c = ArenaNew<CandlestickChart>(a);
+    c->a = a;
+    c->cx = cx;
+    c->opens = opens;
+    c->highs = highs;
+    c->lows = lows;
+    c->closes = closes;
+    c->n = n;
+    c->up = cx->theme().green;
+    c->down = cx->theme().red;
+    return c;
+}
+CandlestickChart* CandlestickChart::Colors(Rgba u, Rgba d) {
+    up = u;
+    down = d;
+    return this;
+}
+CandlestickChart* CandlestickChart::Labels(const char* const* l) {
+    labels = l;
+    return this;
+}
+CandlestickChart* CandlestickChart::TickMargin(int t) {
+    tickMargin = t;
+    return this;
+}
+CandlestickChart* CandlestickChart::Padding(float v) {
+    padding = v;
+    return this;
+}
+El* CandlestickChart::IntoEl() {
+    Rgba none = {0, 0, 0, 0};
+    // The closes are the series; the other three ride along beside them.
+    El* e = ChartEl(a, closes, n, up, none, none, tickMargin);
+    e->chart.kind = ChartKind::Candlestick;
+    e->chart.labels = labels;
+    e->chart.opens = opens;
+    e->chart.highs = highs;
+    e->chart.lows = lows;
+    e->chart.up = up;
+    e->chart.down = down;
+    e->chart.bandPadding = padding;
+    return e;
+}
+
+RadarChart* RadarChart::New(Ctx* cx, const float* values, int n) {
+    Arena* a = cx->a;
+    RadarChart* c = ArenaNew<RadarChart>(a);
+    c->a = a;
+    c->cx = cx;
+    c->values = values;
+    c->n = n;
+    c->stroke = cx->theme().blue;
+    c->fill = RgbaOpacity(cx->theme().blue, 0.3f);
+    return c;
+}
+RadarChart* RadarChart::Stroke(Rgba c) {
+    stroke = c;
+    return this;
+}
+RadarChart* RadarChart::Fill(Rgba c) {
+    fill = c;
+    return this;
+}
+RadarChart* RadarChart::Labels(const char* const* l) {
+    labels = l;
+    return this;
+}
+RadarChart* RadarChart::Domain(float lo, float hi) {
+    domainMin = lo;
+    domainMax = hi;
+    return this;
+}
+El* RadarChart::IntoEl() {
+    Rgba none = {0, 0, 0, 0};
+    El* e = ChartEl(a, values, n, stroke, fill, none, 1);
+    e->chart.kind = ChartKind::Radar;
+    e->chart.labels = labels;
+    e->chart.domainMin = domainMin;
+    e->chart.domainMax = domainMax;
+    return e;
+}
+
 PieChart* PieChart::New(Ctx* cx) {
     Arena* a = cx->a;
     PieChart* p = ArenaNew<PieChart>(a);

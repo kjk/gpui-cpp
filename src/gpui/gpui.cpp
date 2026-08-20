@@ -2219,6 +2219,52 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
     }
 }
 
+// The value domain a chart's y axis is scaled to: what the caller named, or
+// the extent of the data — which is what a ScaleLinear over it comes to.
+static void ChartDomain(const ChartSeries& c, float* outMin, float* outMax) {
+    if (c.domainMin != 0 || c.domainMax != 0) {
+        *outMin = c.domainMin;
+        *outMax = c.domainMax;
+        return;
+    }
+    float lo = 0;
+    float hi = 0;
+    bool seen = false;
+    for (int i = 0; i < c.n; i++) {
+        const float* series[4] = {c.ys, c.opens, c.highs, c.lows};
+        for (int k = 0; k < 4; k++) {
+            if (!series[k]) {
+                continue;
+            }
+            float v = series[k][i];
+            if (!seen || v < lo) {
+                lo = v;
+            }
+            if (!seen || v > hi) {
+                hi = v;
+            }
+            seen = true;
+        }
+    }
+    if (!seen || hi <= lo) {
+        *outMin = 0;
+        *outMax = hi > 0 ? hi : 1;
+        return;
+    }
+    // A bar, an area and a radar are read against a baseline, so their domain
+    // starts at zero unless the data goes below it. A line or a candle is
+    // read against itself, so it keeps the extent of its own values with a
+    // little air either side.
+    if (c.kind == ChartKind::Line || c.kind == ChartKind::Candlestick) {
+        float pad = (hi - lo) * 0.1f;
+        *outMin = lo - pad;
+        *outMax = hi + pad;
+        return;
+    }
+    *outMin = lo > 0 ? 0 : lo;
+    *outMax = hi;
+}
+
 static void DrawChart(PaintCtx* ctx, El* e) {
     const Theme& th = ThemeNow();
     float x = e->x;
@@ -2230,9 +2276,89 @@ static void DrawChart(PaintCtx* ctx, El* e) {
     if (plotH < 8 || w < 8) {
         return;
     }
+    const ChartSeries& c = e->chart;
+    int n = c.n;
+    const float* ys = c.ys;
+
+    // A radar has no axis along the bottom: its grid is the rings the values
+    // are plotted on.
+    if (c.kind == ChartKind::Radar) {
+        if (!ys || n < 3) {
+            return;
+        }
+        float lo = 0;
+        float hi = 0;
+        ChartDomain(c, &lo, &hi);
+        float cx = x + w * 0.5f;
+        float cy = y + h * 0.5f;
+        float radius = (w < h ? w : h) * 0.5f - 16.f;
+        if (radius < 8) {
+            return;
+        }
+        // The rings, and a spoke out to every axis.
+        for (int ring = 1; ring <= 4; ring++) {
+            float rr = radius * (float)ring / 4.f;
+            Path* p = PathNew(ctx, false);
+            if (!p) {
+                break;
+            }
+            for (int i = 0; i <= n; i++) {
+                float a = -1.5707963f + 6.2831853f * (float)(i % n) / (float)n;
+                float px = cx + rr * cosf(a);
+                float py = cy + rr * sinf(a);
+                if (i == 0) {
+                    PathMoveTo(p, px, py);
+                } else {
+                    PathLineTo(p, px, py);
+                }
+            }
+            PathStroke(ctx, p, 1.f, th.border);
+            PathFree(p);
+        }
+        for (int i = 0; i < n; i++) {
+            float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
+            DrawLine(ctx, cx, cy, cx + radius * cosf(a), cy + radius * sinf(a),
+                     1.f, th.border);
+        }
+        // The values themselves, as one closed shape.
+        Path* shape = PathNew(ctx, true);
+        if (shape) {
+            for (int i = 0; i < n; i++) {
+                float t = hi > lo ? (ys[i] - lo) / (hi - lo) : 0.f;
+                if (t < 0) {
+                    t = 0;
+                }
+                if (t > 1) {
+                    t = 1;
+                }
+                float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
+                float px = cx + radius * t * cosf(a);
+                float py = cy + radius * t * sinf(a);
+                if (i == 0) {
+                    PathMoveTo(shape, px, py);
+                } else {
+                    PathLineTo(shape, px, py);
+                }
+            }
+            PathClose(shape);
+            PathFill(ctx, shape, c.fillTop);
+            PathStroke(ctx, shape, 2.f, c.stroke);
+            PathFree(shape);
+        }
+        if (c.labels) {
+            for (int i = 0; i < n; i++) {
+                float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
+                float px = cx + (radius + 12.f) * cosf(a);
+                float py = cy + (radius + 12.f) * sinf(a);
+                DrawTextAt(ctx, Str(c.labels[i]), px - 24, py - 6, 48, 14, 10,
+                           th.mutedFg, false);
+            }
+        }
+        return;
+    }
 
     // An overlay series draws over the grid and axis the first one drew.
-    if (!e->chart.overlay) {
+    if (!c.overlay) {
         const float kGridDash[2] = {4.f, 2.f};
         for (int i = 0; i <= 3; i++) {
             float gy = y + plotH * (i / 4.f);
@@ -2241,11 +2367,12 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
     }
 
-    int n = e->chart.n;
-    const float* ys = e->chart.ys;
     if (!ys || n <= 0) {
         return;
     }
+    float lo = 0;
+    float hi = 0;
+    ChartDomain(c, &lo, &hi);
 
     auto Xat = [&](int i) -> float {
         if (n <= 1) {
@@ -2254,52 +2381,114 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         return x + (w * (float)i / (float)(n - 1));
     };
     auto Yat = [&](float v) -> float {
-        if (v < 0) {
-            v = 0;
+        float t = hi > lo ? (v - lo) / (hi - lo) : 0.f;
+        if (t < 0) {
+            t = 0;
         }
-        if (v > 100) {
-            v = 100;
+        if (t > 1) {
+            t = 1;
         }
-        return y + 10.f + (1.f - v / 100.f) * (plotH - 10.f);
+        return y + 10.f + (1.f - t) * (plotH - 10.f);
     };
 
-    Path* area = PathNew(ctx, true);
-    if (area) {
-        PathMoveTo(area, Xat(0), y + plotH);
-        PathLineTo(area, Xat(0), Yat(ys[0]));
-        for (int i = 1; i < n; i++) {
-            PathLineTo(area, Xat(i), Yat(ys[i]));
+    if (c.kind == ChartKind::Bar || c.kind == ChartKind::Candlestick) {
+        // ScaleBand: every point takes a band of the width, with the padding
+        // between them coming off each one.
+        const float range[2] = {0.f, w};
+        component::ScaleBand band = component::ScaleBand::New(n, range, 2);
+        band.paddingInner = c.bandPadding;
+        band.paddingOuter = c.bandPadding * 0.5f;
+        float bw = band.BandWidth();
+        if (bw < 1) {
+            bw = 1;
         }
-        PathLineTo(area, Xat(n - 1), y + plotH);
-        PathClose(area);
-        PathFillGradientV(ctx, area, y, y + plotH, e->chart.fillTop,
-                          e->chart.fillBot);
-        PathFree(area);
-    }
-
-    if (n == 1) {
-        DrawLine(ctx, x, Yat(ys[0]), x + w, Yat(ys[0]), 2.f, e->chart.stroke);
-    }
-    for (int i = 1; i < n; i++) {
-        DrawLine(ctx, Xat(i - 1), Yat(ys[i - 1]), Xat(i), Yat(ys[i]), 2.f,
-                 e->chart.stroke);
+        for (int i = 0; i < n; i++) {
+            float bx = 0;
+            if (!band.Tick(i, &bx)) {
+                continue;
+            }
+            bx += x;
+            if (c.kind == ChartKind::Bar) {
+                float top = Yat(ys[i]);
+                float base = Yat(lo > 0 ? lo : 0);
+                float bh = base - top;
+                if (bh < 1) {
+                    bh = 1;
+                }
+                FillRound(ctx, bx, top, bw, bh, c.barRadius, c.stroke);
+                continue;
+            }
+            // A candle: the wick from low to high, and the body between open
+            // and close, colored by which way it closed.
+            float open = c.opens ? c.opens[i] : ys[i];
+            float close = ys[i];
+            float high = c.highs ? c.highs[i] : (open > close ? open : close);
+            float low = c.lows ? c.lows[i] : (open < close ? open : close);
+            Rgba color = close >= open ? c.up : c.down;
+            float mid = bx + bw * 0.5f;
+            DrawLine(ctx, mid, Yat(high), mid, Yat(low), 1.f, color);
+            float top = Yat(open > close ? open : close);
+            float bot = Yat(open > close ? close : open);
+            float bh = bot - top;
+            if (bh < 1) {
+                bh = 1;
+            }
+            FillRound(ctx, bx, top, bw, bh, 1.f, color);
+        }
+    } else {
+        // Area and line are the same run of points; only the area fills what
+        // is under it.
+        if (c.kind == ChartKind::Area) {
+            Path* area = PathNew(ctx, true);
+            if (area) {
+                PathMoveTo(area, Xat(0), y + plotH);
+                PathLineTo(area, Xat(0), Yat(ys[0]));
+                for (int i = 1; i < n; i++) {
+                    PathLineTo(area, Xat(i), Yat(ys[i]));
+                }
+                PathLineTo(area, Xat(n - 1), y + plotH);
+                PathClose(area);
+                PathFillGradientV(ctx, area, y, y + plotH, c.fillTop,
+                                  c.fillBot);
+                PathFree(area);
+            }
+        }
+        if (n == 1) {
+            DrawLine(ctx, x, Yat(ys[0]), x + w, Yat(ys[0]), 2.f, c.stroke);
+        }
+        for (int i = 1; i < n; i++) {
+            DrawLine(ctx, Xat(i - 1), Yat(ys[i - 1]), Xat(i), Yat(ys[i]), 2.f,
+                     c.stroke);
+        }
     }
 
     // x labels every tickMargin
-    int step = e->chart.tickMargin;
+    int step = c.tickMargin;
     if (step < 1) {
         step = 15;
     }
-    if (e->chart.overlay) {
+    if (c.overlay) {
         return;
     }
     for (int i = 0; i < n; i += step) {
-        if (e->chart.labels) {
-            DrawTextAt(ctx, Str(e->chart.labels[i]), Xat(i) - 16, y + plotH + 2,
-                       60, 16, 10, th.mutedFg, false);
+        float lx = Xat(i) - 16;
+        if (c.kind == ChartKind::Bar || c.kind == ChartKind::Candlestick) {
+            // A band's label sits under the band, not under a point.
+            const float range[2] = {0.f, w};
+            component::ScaleBand band = component::ScaleBand::New(n, range, 2);
+            band.paddingInner = c.bandPadding;
+            band.paddingOuter = c.bandPadding * 0.5f;
+            float bx = 0;
+            if (band.Tick(i, &bx)) {
+                lx = x + bx + band.BandWidth() * 0.5f - 16.f;
+            }
+        }
+        if (c.labels) {
+            DrawTextAt(ctx, Str(c.labels[i]), lx, y + plotH + 2, 60, 16, 10,
+                       th.mutedFg, false);
         } else {
-            DrawTextAt(ctx, fmt("%ds", i), Xat(i) - 16, y + plotH + 2, 60, 16,
-                       10, th.mutedFg, false);
+            DrawTextAt(ctx, fmt("%ds", i), lx, y + plotH + 2, 60, 16, 10,
+                       th.mutedFg, false);
         }
     }
 }
