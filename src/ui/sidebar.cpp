@@ -1,9 +1,13 @@
 #include "ui/sidebar.h"
+#include "base/motion.h"
 #include "ui/button.h"
 
 namespace gpui {
 
 namespace component {
+
+// sidebar/mod.rs: SIDEBAR_TRANSITION_DURATION.
+static const float kSidebarMotionMs = 200.f;
 
 // DEFAULT_WIDTH is the caller's; COLLAPSED_WIDTH is not.
 
@@ -395,21 +399,37 @@ El* Sidebar::IntoEl() {
     const Theme& th = cx->theme();
     // SidebarLayout::new says what the mode and the flag come to: the width
     // the wrapper takes, which rendering the rows use, and which end the
-    // content is pinned to. Rust animates between the two widths; there is no
-    // animation here, so the width it is heading for is the width it takes.
+    // content is pinned to.
     SidebarLayout layout =
         SidebarLayoutFor(collapsible, collapsed, width, side);
     bool iconCollapsed = layout.iconCollapsed;
-    if (layout.offcanvasCollapsed) {
-        return Div(a)->W(layout.wrapperWidth)->H(kFill)->Shrink0();
+    // EffectTransition::width over SIDEBAR_TRANSITION_DURATION: the box around
+    // the sidebar takes the width and clips, while the sidebar inside keeps
+    // its own — which is what slides the content out of view rather than
+    // squeezing it. The end the content is pinned to is what decides which way
+    // it goes.
+    float target = layout.wrapper == SidebarWrapperKind::None
+                       ? width
+                       : layout.wrapperWidth;
+    Motion motion = MotionNew(kSidebarMotionMs);
+    motion.ease = EaseInOutCubic;
+    float wrapW =
+        MotionValue(cx, MotionId(id, StrL("sidebar-width")), target, motion);
+    // render_child: the sidebar is still built while it is on its way out, and
+    // only dropped once there is no room left to show it in.
+    if (layout.offcanvasCollapsed && wrapW <= 0.5f) {
+        return Div(a)->W(0)->H(kFill)->Shrink0();
     }
+    // The sidebar's own width is the one it is heading for, so its rows are
+    // laid out at their final size while the wrapper reveals them.
+    float natural = layout.wrapper == SidebarWrapperKind::None
+                        ? width
+                        : (iconCollapsed ? kSidebarCollapsedWidth : width);
 
     El* root = Div(a)
                    ->FlexCol()
                    ->Shrink0()
-                   ->W(layout.wrapper == SidebarWrapperKind::None
-                           ? width
-                           : layout.wrapperWidth)
+                   ->W(natural)
                    ->H(kFill)
                    ->Bg(th.sidebar)
                    ->Fg(th.sidebarFg);
@@ -450,7 +470,14 @@ El* Sidebar::IntoEl() {
         box->Child(footer);
         root->Child(box);
     }
-    return root;
+    // sidebar_wrapper: a clipping box of the animated width, with the sidebar
+    // pinned to whichever end it slides from. At rest it is exactly the
+    // sidebar's own width, so nothing moves that was not moving anyway.
+    El* wrapper = Div(a)->FlexRow()->W(wrapW)->H(kFill)->Shrink0()->ClipX();
+    if (layout.alignChildToEnd) {
+        wrapper->JustifyEnd();
+    }
+    return wrapper->Child(root);
 }
 
 } // namespace component

@@ -43,6 +43,7 @@ int GpuiMain(int argc, char** argv) {
     TestSelect();
     TestDialog();
     TestSheet();
+    TestMotion();
     TestScrollbar();
     TestThemeSettings();
     TestResizable();

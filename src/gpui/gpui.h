@@ -1977,6 +1977,14 @@ struct Window {
     bool active = true;
     bool running = true;
     bool anim = false;
+    // window.request_animation_frame(): one more frame after this one, asked
+    // for while the frame is being built and cleared as the next one starts,
+    // so something that has finished moving stops asking. `anim` is the other
+    // thing — a window that draws back to back until it is turned off.
+    bool animFrame = false;
+    // The instant this frame started. Every transition in it samples the same
+    // `now`, which is what Rust gets from reading the executor's clock.
+    double frameNow = 0;
     bool mouseDown = false;
     // The multi-click run in progress: when the last press landed, where, and
     // with which button, so WindowClickCount can tell the next press apart
@@ -2413,6 +2421,8 @@ int AppRun(App* app);
 Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);
 void AppSetTitle(Window* win, Str title);
 void AppRequestAnim(Window* win, bool on);
+// One more frame, rather than every frame. Safe to call from inside a render.
+void WindowRequestAnimationFrame(Window* win);
 
 // Collect focusable click targets from last paint for Tab cycling.
 void FocusCollect(Window* win, El* root);

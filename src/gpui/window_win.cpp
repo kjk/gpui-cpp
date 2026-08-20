@@ -694,6 +694,17 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
 
 // cx.open_url. ShellExecute with no verb runs the shell's default action for
 // the scheme, which is what the user has chosen as their browser.
+// SPI_GETCLIENTAREAANIMATION is the Windows switch behind Settings ▸
+// Accessibility ▸ Visual effects ▸ Animation effects: it answers whether
+// animation is wanted, so reduce-motion is the negative of it.
+bool PlatReduceMotion() {
+    BOOL wanted = TRUE;
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &wanted, 0)) {
+        return false;
+    }
+    return !wanted;
+}
+
 void OpenUrl(Str url) {
     if (!url.s || url.len <= 0) {
         return;

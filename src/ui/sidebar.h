@@ -16,15 +16,15 @@ enum class SidebarCollapsible : uint8_t {
 };
 
 // SidebarWrapperLayout: what the box around the sidebar does with its width.
-// Rust animates between the two widths; there is no animation here, so a
-// width that would have been animated to is simply used.
+// The width named here is the one it is heading for; the wrapper transitions
+// to it over SIDEBAR_TRANSITION_DURATION, as Rust's does.
 enum class SidebarWrapperKind : uint8_t {
     // The sidebar sizes itself and the wrapper stays out of the way.
     None,
     // A fixed width, which is what an offcanvas sidebar with no width of its
     // own collapses to.
     Static,
-    // The width the wrapper is heading for.
+    // The width the wrapper is heading for, which it transitions to.
     Animated
 };
 

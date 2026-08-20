@@ -45,6 +45,7 @@ void TestOtpInput();
 void TestSelect();
 void TestDialog();
 void TestSheet();
+void TestMotion();
 void TestScrollbar();
 void TestThemeSettings();
 void TestResizable();

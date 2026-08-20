@@ -4,6 +4,8 @@
 //   -hover=X,Y   leave the pointer there, for capturing a hover state
 //   -settle=MS   wait that long after the input before the shutter, for a
 //                widget that answers on a timer (a hover card's open delay)
+//   -clickwait=MS  how long to wait after each click before the next input
+//                (default 200) — lower it to catch an animation mid-flight
 //   -drag=X1,Y1,X2,Y2  press, move, release: a text selection drag
 //   -wheel=N     N notches of scroll at the window centre
 //   -key=VK      send a key: the down and the up, since Enter and Space
@@ -44,6 +46,7 @@ let debug = false;
 const clicks: { x: number; y: number; right?: boolean }[] = [];
 let hover: { x: number; y: number } | null = null;
 let settleMs = 0;
+let clickWaitMs = 200;
 let drag: { x1: number; y1: number; x2: number; y2: number } | null = null;
 const keys: number[] = [];
 let wheel = 0;
@@ -70,6 +73,8 @@ for (const a of argv) {
     drag = { x1: x1 ?? 0, y1: y1 ?? 0, x2: x2 ?? 0, y2: y2 ?? 0 };
   } else if (a.startsWith("-settle=")) {
     settleMs = Number(a.slice(8)) || 0;
+  } else if (a.startsWith("-clickwait=")) {
+    clickWaitMs = Number(a.slice(11)) || 0;
   } else if (a.startsWith("-hover=")) {
     const [x, y] = a.slice(7).split(",").map(Number);
     hover = { x: x ?? 0, y: y ?? 0 };
@@ -125,7 +130,7 @@ await waitForForeground(hwnd, 3000);
 const cursorWas = getCursorPos();
 await sleep(500);
 for (const c of clicks) {
-  await (c.right ? rightClickClient(hwnd, c.x, c.y) : clickClient(hwnd, c.x, c.y));
+  await (c.right ? rightClickClient(hwnd, c.x, c.y, clickWaitMs) : clickClient(hwnd, c.x, c.y, clickWaitMs));
 }
 // A selection drag: press, a few moves so the app sees the path, release.
 if (drag) {
