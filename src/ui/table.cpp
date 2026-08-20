@@ -83,6 +83,17 @@ DataTable* DataTable::Stripe(bool v) {
     stripe = v;
     return this;
 }
+DataTable* DataTable::WithSize(UiSize sz) {
+    rowHeight = sz == UiSize::XSmall  ? 26.f
+                : sz == UiSize::Small ? 30.f
+                : sz == UiSize::Large ? 40.f
+                                      : 32.f;
+    return this;
+}
+DataTable* DataTable::RowHeight(float px) {
+    rowHeight = px;
+    return this;
+}
 DataTable* DataTable::H(float px) {
     h = px;
     return this;
@@ -173,6 +184,7 @@ El* DataTable::IntoEl() {
         // keys inside the rows and columns there actually are.
         s->rowCount = nRows;
         s->colCount = nColumns;
+        s->rowH = rowHeight;
         TableSeedColOrder(s, nColumns);
     }
     El* box = gpui::Table::New(cx, id)

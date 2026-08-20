@@ -50,26 +50,64 @@ enum {
 };
 
 enum {
+    DtActSize = 480,   // + index into kSizes
     DtActRows = 500,   // + index into kRowCounts
     DtActExtra = 520,  // + index into kExtraCounts
     DtActOption = 540, // + index into kDtOptions
+    DtActClear = 559,
     DtActGoTo = 560
 };
 
-static const int kRowCounts[] = {100, 1000, 5000, 100000};
-static const int kExtraCounts[] = {0, 5, 20, 50};
-static const char* kDtOptions[] = {"Loop selection", "Col resize",
-                                   "Col order",      "Col sort",
-                                   "Stripe",         "Refresh data"};
-static const char* kGoToRows[] = {"Top", "Selected", "Row 50", "Bottom"};
+// The rows and columns the toolbar can ask for, and how each reads.
+static const int kRowCounts[] = {100, 500, 5000, 10000, 1000000};
+static const char* const kRowLabels[] = {"100", "500", "5,000", "10,000",
+                                         "1,000,000"};
+static const int kNRowCounts = 5;
+static const int kExtraCounts[] = {0, 4, 8, 16, 32};
+static const char* const kExtraLabels[] = {"None", "4", "8", "16", "32"};
+static const int kNExtraCounts = 5;
+// Size::table_row_height: 48px, Large, Medium, Small, XSmall.
+static const float kSizeRowH[] = {48, 40, 32, 30, 26};
+static const char* const kSizeLabels[] = {"48px", "Large", "Medium", "Small",
+                                          "XSmall"};
+static const int kNSizes = 5;
+
+// The Options dropdown, in Rust's own order. Fixed Column is the one row not
+// here: the table has no frozen column to turn on.
+enum {
+    DtOptLoop = 0,
+    DtOptColResize,
+    DtOptColOrder,
+    DtOptSortable,
+    DtOptColSelect,
+    DtOptRowSelect,
+    DtOptCellSelect,
+    DtOptRowHeader,
+    DtOptStriped,
+    DtOptLoading,
+    DtOptLazyLoad,
+    DtOptRefresh,
+    DtOptGroupHeaders,
+    DtOptCount
+};
+static const char* const kDtOptions[DtOptCount] = {
+    "Loop Selection",    "Column Resize",  "Column Order",    "Sortable",
+    "Column Selectable", "Row Selectable", "Cell Selectable", "Row Header",
+    "Striped Rows",      "Loading",        "Lazy Load",       "Refresh Data",
+    "Group Headers"};
+static const char* const kGoToRows[] = {"Top", "Bottom", "Cell 5:3",
+                                        "Cell 10:7"};
+static const int kNGoTo = 4;
 
 // The order the rows are shown in, which is what the delegate's perform_sort
 // rewrites. -1 means the table's own order.
 struct DataTableStory {
-    int rowCount = 2; // 5000
-    int extra = 0;    // 0 extra columns
+    int rowCount = 2; // 5,000
+    int extra = 0;    // no extra columns
+    int size = 2;     // Medium
     int openMenu = 0;
-    bool options[6] = {false, true, true, true, false, false};
+    bool options[DtOptCount] = {false, true,  true,  true,  true,  true, false,
+                                false, false, false, false, false, true};
     StoryToolbarState toolbar;
     // TableState is an entity in Rust too, which is what the row and head
     // closures capture.
@@ -201,15 +239,22 @@ static void DtMenuOpen(DataTableStory* self, Ctx* cx, const ClickEvent*,
 static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t act) {
     if (act >= DtActGoTo) {
-        // scroll_to_row: Top, the selected row, row 50, or the end.
+        // Top and Bottom scroll_to_row; the other two set_selected_cell.
         TableState* st = self->table.Get(cx);
         int which = (int)(act - DtActGoTo);
+        if (st && which == 0) {
+            TableScrollToRow(st, 0, ScrollStrategy::Center);
+        } else if (st && which == 1) {
+            TableScrollToRow(st, st->rowCount - 1, ScrollStrategy::Center);
+        } else if (st && which == 2) {
+            TableSetSelectedCell(st, cx, 5, 3);
+        } else if (st) {
+            TableSetSelectedCell(st, cx, 10, 7);
+        }
+    } else if (act == DtActClear) {
+        TableState* st = self->table.Get(cx);
         if (st) {
-            int row = which == 0   ? 0
-                      : which == 1 ? (st->selectedRow < 0 ? 0 : st->selectedRow)
-                      : which == 2 ? 50
-                                   : st->rowCount - 1;
-            TableScrollToRow(st, row, ScrollStrategy::Center);
+            TableClearSelection(st, cx);
         }
     } else if (act >= DtActOption) {
         int i = (int)(act - DtActOption);
@@ -218,6 +263,8 @@ static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
         self->extra = (int)(act - DtActExtra);
     } else if (act >= DtActRows) {
         self->rowCount = (int)(act - DtActRows);
+    } else if (act >= DtActSize) {
+        self->size = (int)(act - DtActSize);
     }
     self->openMenu = 0;
     Notify(cx);
@@ -253,7 +300,16 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
         case 5:
             return StoryTxt(cx, Str(s.chg), 16, trend)->LineHeight(1.f);
         default:
-            return StoryTxt(cx, Str(s.pct), 16, trend)->LineHeight(1.f);
+            // render_percent: the percentage is tinted over the whole cell,
+            // the way a ticker table does, at 5% of the trend color.
+            return Div(cx->a)
+                ->FlexRow()
+                ->W(kFill)
+                ->H(kFill)
+                ->ItemsCenter()
+                ->JustifyEnd()
+                ->Bg(RgbaOpacity(trend, 0.05f))
+                ->Child(StoryTxt(cx, Str(s.pct), 16, trend)->LineHeight(1.f));
     }
 }
 
@@ -272,16 +328,20 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     // export controls.
     El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
     El* group = StoryToolbarGroup(cx);
-    group->Child(StoryToolbarDropdown(cx, StrL("dt-size"), StrL("Size: Medium"),
-                                      false, ListenerArg(openMenu, DtMenuSize),
-                                      nullptr, 0, act));
+    StoryToolbarOpt sizeRows[kNSizes];
+    for (int i = 0; i < kNSizes; i++) {
+        sizeRows[i].label = kSizeLabels[i];
+        sizeRows[i].checked = self->size == i;
+        sizeRows[i].act = DtActSize + i;
+    }
+    group->Child(StoryToolbarDropdown(
+        cx, StrL("dt-size"), StoryFmt(cx, "Size: %s", kSizeLabels[self->size]),
+        self->openMenu == DtMenuSize, ListenerArg(openMenu, DtMenuSize),
+        sizeRows, kNSizes, act));
     group->Child(StoryToolbarDivider(cx));
-    StoryToolbarOpt rowRows[4];
-    for (int i = 0; i < 4; i++) {
-        rowRows[i].label = i == 0   ? "100"
-                           : i == 1 ? "1000"
-                           : i == 2 ? "5000"
-                                    : "100000";
+    StoryToolbarOpt rowRows[kNRowCounts];
+    for (int i = 0; i < kNRowCounts; i++) {
+        rowRows[i].label = kRowLabels[i];
         rowRows[i].checked = self->rowCount == i;
         rowRows[i].act = DtActRows + i;
     }
@@ -289,11 +349,11 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         cx, StrL("dt-rows"),
         StoryFmt(cx, "Rows: %d", kRowCounts[self->rowCount]),
         self->openMenu == DtMenuRows, ListenerArg(openMenu, DtMenuRows),
-        rowRows, 4, act));
+        rowRows, kNRowCounts, act));
     group->Child(StoryToolbarDivider(cx));
-    StoryToolbarOpt extraRows[4];
-    for (int i = 0; i < 4; i++) {
-        extraRows[i].label = i == 0 ? "0" : i == 1 ? "5" : i == 2 ? "20" : "50";
+    StoryToolbarOpt extraRows[kNExtraCounts];
+    for (int i = 0; i < kNExtraCounts; i++) {
+        extraRows[i].label = kExtraLabels[i];
         extraRows[i].checked = self->extra == i;
         extraRows[i].act = DtActExtra + i;
     }
@@ -301,28 +361,36 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         cx, StrL("dt-extra"),
         StoryFmt(cx, "Extra Columns: %d", kExtraCounts[self->extra]),
         self->openMenu == DtMenuExtra, ListenerArg(openMenu, DtMenuExtra),
-        extraRows, 4, act));
+        extraRows, kNExtraCounts, act));
     group->Child(StoryToolbarDivider(cx));
-    StoryToolbarOpt optRows[6];
-    for (int i = 0; i < 6; i++) {
+    // The Options menu, with the two separators Rust puts in it and the
+    // Clear Selection row under the last one.
+    StoryToolbarOpt optRows[DtOptCount + 1];
+    for (int i = 0; i < DtOptCount; i++) {
         optRows[i].label = kDtOptions[i];
         optRows[i].checked = self->options[i];
         optRows[i].act = DtActOption + i;
+        optRows[i].sep = i == DtOptStriped;
     }
+    optRows[DtOptCount].label = "Clear Selection";
+    optRows[DtOptCount].act = DtActClear;
+    optRows[DtOptCount].plain = true;
+    optRows[DtOptCount].sep = true;
     group->Child(StoryToolbarDropdown(cx, StrL("dt-options"), StrL("Options"),
                                       self->openMenu == DtMenuOptions,
                                       ListenerArg(openMenu, DtMenuOptions),
-                                      optRows, 6, act));
+                                      optRows, DtOptCount + 1, act));
     group->Child(StoryToolbarDivider(cx));
-    StoryToolbarOpt goRows[4];
-    for (int i = 0; i < 4; i++) {
+    StoryToolbarOpt goRows[kNGoTo];
+    for (int i = 0; i < kNGoTo; i++) {
         goRows[i].label = kGoToRows[i];
         goRows[i].act = DtActGoTo + i;
         goRows[i].plain = true;
+        goRows[i].sep = i == 2;
     }
     group->Child(StoryToolbarDropdown(
         cx, StrL("dt-go-to"), StrL("Go To"), self->openMenu == DtMenuGoTo,
-        ListenerArg(openMenu, DtMenuGoTo), goRows, 4, act));
+        ListenerArg(openMenu, DtMenuGoTo), goRows, kNGoTo, act));
     group->Child(StoryToolbarDivider(cx));
     El* exportBtn =
         Div(a)
@@ -354,11 +422,19 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     const int nColumns = (int)(sizeof(kColumns) / sizeof(kColumns[0]));
     TableState* st = self->table.Get(cx);
     if (st) {
-        st->sortable = self->options[3];
-        st->loopSelection = self->options[0];
-        st->colResizable = self->options[1];
+        st->loopSelection = self->options[DtOptLoop];
+        st->colResizable = self->options[DtOptColResize];
         // col_movable: whether a head can be dragged into another place.
-        st->colMovable = self->options[2];
+        st->colMovable = self->options[DtOptColOrder];
+        st->sortable = self->options[DtOptSortable];
+        st->colSelectable = self->options[DtOptColSelect];
+        st->rowSelectable = self->options[DtOptRowSelect];
+        st->cellSelectable = self->options[DtOptCellSelect];
+        st->rowHeader = self->options[DtOptRowHeader];
+        st->loading = self->options[DtOptLoading];
+        // lazy_load: has_more, so the table asks for another page when the
+        // last rows it built come near the end.
+        st->hasMore = self->options[DtOptLazyLoad];
         st->onEvent = Listen(cx, &OnTableEvent);
     }
 
@@ -395,30 +471,51 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         StoryTxt(cx, StrL("Price & Change"), 16, th.foreground)
             ->LineHeight(1.f)));
 
-    El* box = component::DataTable::New(cx, StrL("data-table"), self->table)
-                  ->Columns(kColumns, nColumns)
-                  ->Rows(kRowCounts[self->rowCount], self, DtCellFor)
-                  ->H(520)
-                  ->Stripe(self->options[4])
-                  ->GroupHeader(group1)
-                  ->GroupHeader(group2)
-                  ->IntoEl();
+    component::DataTable* table =
+        component::DataTable::New(cx, StrL("data-table"), self->table)
+            ->Columns(kColumns, nColumns)
+            ->Rows(kRowCounts[self->rowCount], self, DtCellFor)
+            ->H(520)
+            ->RowHeight(kSizeRowH[self->size])
+            ->Stripe(self->options[DtOptStriped]);
+    if (self->options[DtOptGroupHeaders]) {
+        table->GroupHeader(group1)->GroupHeader(group2);
+    }
+    El* box = table->IntoEl();
 
-    // The status line under the table.
+    // The status line under the table: min_h_9, px_3, muted at 35%, text_xs.
+    VirtualRange vis = VirtualListVisibleRows(kRowCounts[self->rowCount],
+                                              kSizeRowH[self->size],
+                                              st ? st->scrollY : 0, 520);
     El* status = Div(a)
                      ->FlexRow()
                      ->W(kFill)
+                     ->MinH(36)
                      ->PadX(12)
-                     ->PadY(8)
+                     ->Gap(12)
                      ->JustifyBetween()
-                     ->ItemsCenter();
-    status->Child(StoryTxt(
-        cx,
-        StoryFmt(cx, "Total · %d rows · %d columns", kRowCounts[self->rowCount],
-                 45 + kExtraCounts[self->extra]),
-        14, th.mutedFg));
-    status->Child(StoryTxt(cx, StrL("Current · rows 0..21 · columns 0..10"), 14,
-                           th.mutedFg));
+                     ->ItemsCenter()
+                     ->Bg(RgbaOpacity(th.muted, 0.35f))
+                     ->Font(12)
+                     ->Fg(th.mutedFg);
+    status->Child(TextEl(a, StoryFmt(cx, "Total · %d rows · %d columns",
+                                     kRowCounts[self->rowCount],
+                                     nColumns + kExtraCounts[self->extra])));
+    El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->JustifyEnd();
+    if (self->options[DtOptLoading]) {
+        right->Child(
+            component::Spinner::New(cx)->WithSize(UiSize::XSmall)->IntoEl());
+    }
+    right->Child(TextEl(a, StoryFmt(cx, "Current · rows %d..%d · columns 0..%d",
+                                    vis.first, vis.end, nColumns - 1)));
+    if (st && st->selectedCellRow >= 0) {
+        right->Child(TextEl(a, StoryFmt(cx, "· cell %d:%d", st->selectedCellRow,
+                                        st->selectedCellCol)));
+    }
+    if (st && !st->hasMore) {
+        right->Child(TextEl(a, StrL("· complete")));
+    }
+    status->Child(right);
     page->Child(box);
     page->Child(status);
     if (self->message.s) {
