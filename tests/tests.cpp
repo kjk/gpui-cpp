@@ -70,6 +70,7 @@ int GpuiMain(int argc, char** argv) {
     TestNativeMenu();
     TestTiles();
     TestRoot();
+    TestSankey();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

@@ -316,5 +316,359 @@ El* PieChart::IntoEl() {
     return e;
 }
 
+// ─── SankeyChart ─────────────────────────────────────────────────────────
+
+void SankeyChartThroughput(const SankeyLink* links, int nLinks, double* out,
+                           int n) {
+    // The two sides are added up separately and the larger wins, the same way
+    // the layout works out a node's value — but in the caller's own units.
+    for (int i = 0; i < n; i++) {
+        double incoming = 0;
+        double outgoing = 0;
+        for (int k = 0; k < nLinks; k++) {
+            if (links[k].target == i) {
+                incoming += links[k].value;
+            }
+            if (links[k].source == i) {
+                outgoing += links[k].value;
+            }
+        }
+        out[i] = incoming > outgoing ? incoming : outgoing;
+    }
+}
+
+// One line of a node's label. `align` is -1 for a label ending at x, 0 for
+// one centred on it, 1 for one starting there.
+static void SankeyLabelLine(PaintCtx* ctx, Str text, float x, float y,
+                            float maxW, float fontSize, Rgba color, int align) {
+    if (!text.s || text.len <= 0 || maxW <= 0) {
+        return;
+    }
+    Size size = {};
+    TextLayout* tl =
+        TextLayoutNew(ctx, text, fontSize, maxW, false, 0, 0, &size);
+    if (!tl) {
+        return;
+    }
+    float left = x;
+    if (align < 0) {
+        left = x - size.w;
+    } else if (align == 0) {
+        left = x - size.w / 2.f;
+    }
+    TextLayoutDraw(ctx, tl, left, y, color, true);
+    TextLayoutRelease(tl);
+}
+
+static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
+    auto* c = (SankeyChart*)user;
+    if (!c || !ctx->rt || c->n == 0 || c->nLinks == 0) {
+        return;
+    }
+    float width = e->w;
+    float height = e->h;
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    Sankey gen;
+    gen.nodeWidth = c->nodeWidth;
+    gen.nodePadding = c->nodePadding;
+    gen.align = c->align;
+    gen.iterations = c->iterations;
+    gen.valueScale = c->valueScale;
+
+    // The first pass is the topology alone: the columns are all the label
+    // margins need, and the margins are what the extent depends on.
+    SankeyGraph g;
+    if (SankeyTopology(&gen, c->n, c->links, c->nLinks, &g) !=
+        SankeyError::None) {
+        return;
+    }
+    int layers = SankeyLayerCount(&g);
+
+    // The labels read the raw throughput; the layout's own value is in
+    // scaled units under a non-linear scale.
+    double raw[kMaxSankeyChartNodes] = {};
+    SankeyChartThroughput(c->links, c->nLinks, raw, c->n);
+    Str values[kMaxSankeyChartNodes] = {};
+    for (int i = 0; i < c->n; i++) {
+        values[i] = c->showValues ? fmt("%.0f", raw[i]) : c->nodes[i].value;
+    }
+
+    bool hasLabels = false;
+    for (int i = 0; i < c->n; i++) {
+        if (c->nodes[i].label.s || values[i].s) {
+            hasLabels = true;
+        }
+    }
+
+    // The margin the labels beside the first and last columns need, each side
+    // capped so one long label cannot take the flow area over.
+    float left = 0;
+    float right = 0;
+    if (hasLabels) {
+        for (int i = 0; i < c->n; i++) {
+            int layer = g.nodes[i].layer;
+            if (layer != 0 && layer + 1 != layers) {
+                continue;
+            }
+            float labelW = 0;
+            Str lines[2] = {values[i], c->nodes[i].label};
+            for (int k = 0; k < 2; k++) {
+                if (!lines[k].s) {
+                    continue;
+                }
+                Size sz = MeasureText(ctx, lines[k], kPlotTextSize, 0);
+                if (sz.w > labelW) {
+                    labelW = sz.w;
+                }
+            }
+            float want = labelW + c->labelGap;
+            if (layer == 0) {
+                left = want > left ? want : left;
+            } else {
+                right = want > right ? want : right;
+            }
+        }
+        float cap = width * kSankeyMaxLabelWidthRatio;
+        left = left < cap ? left : cap;
+        right = right < cap ? right : cap;
+    }
+    // A middle column's labels sit above its nodes, so the top band is
+    // reserved for the tallest of those blocks.
+    float lineH = kPlotTextSize + kPlotTextGap;
+    float top = 0;
+    if (hasLabels && layers > 2) {
+        for (int i = 0; i < c->n; i++) {
+            int layer = g.nodes[i].layer;
+            if (layer == 0 || layer + 1 == layers) {
+                continue;
+            }
+            float block = 0;
+            if (values[i].s) {
+                block += lineH;
+            }
+            if (c->nodes[i].label.s) {
+                block += lineH;
+            }
+            if (block > 0 && block + kPlotTextGap > top) {
+                top = block + kPlotTextGap;
+            }
+        }
+    }
+    float bottom = hasLabels ? kPlotTextGap : 0.f;
+    float maxVertical = height * kSankeyMaxLabelMarginRatio;
+    if (top + bottom > maxVertical) {
+        float k = maxVertical / (top + bottom);
+        top *= k;
+        bottom *= k;
+    }
+
+    // The second pass places the nodes on what the labels left over.
+    gen.x0 = left;
+    gen.y0 = top;
+    gen.x1 = width - right > left + 1 ? width - right : left + 1;
+    gen.y1 = height - bottom > top + 1 ? height - bottom : top + 1;
+    SankeyLayoutFrom(&gen, &g);
+
+    // chart_1..chart_5 in Rust: the palette a node falls back to, by index.
+    const Theme& th = ThemeNow();
+    Rgba palette[5] = {th.blue, th.green, th.yellow, th.magenta, th.cyan};
+    Rgba colors[kMaxSankeyChartNodes] = {};
+    for (int i = 0; i < c->n; i++) {
+        colors[i] = c->nodes[i].hasColor ? c->nodes[i].color : palette[i % 5];
+    }
+
+    // The ribbons first, under the nodes: a horizontal cubic through the
+    // midpoint, thickened to each end's own width, and filled from the colour
+    // it leaves to the colour it arrives at.
+    for (int i = 0; i < g.links.len; i++) {
+        const SankeyLinkLayout& link = g.links[i];
+        if (link.value <= 0) {
+            continue;
+        }
+        const SankeyNodeLayout& source = g.nodes[link.source];
+        const SankeyNodeLayout& target = g.nodes[link.target];
+        float sw = link.sourceWidth > c->minLinkWidth ? link.sourceWidth
+                                                      : c->minLinkWidth;
+        float tw = link.targetWidth > c->minLinkWidth ? link.targetWidth
+                                                      : c->minLinkWidth;
+        float sourceHalf = sw / 2.f;
+        float targetHalf = tw / 2.f;
+        float sx = e->x + source.x1;
+        float tx = e->x + target.x0;
+        float mx = (sx + tx) / 2.f;
+        float sy = e->y + link.y0;
+        float ty = e->y + link.y1;
+        Path* p = PathNew(ctx, true);
+        if (!p) {
+            continue;
+        }
+        PathMoveTo(p, sx, sy - sourceHalf);
+        PathCubicTo(p, mx, sy - sourceHalf, mx, ty - targetHalf, tx,
+                    ty - targetHalf);
+        PathLineTo(p, tx, ty + targetHalf);
+        PathCubicTo(p, mx, ty + targetHalf, mx, sy + sourceHalf, sx,
+                    sy + sourceHalf);
+        PathClose(p);
+        PathFillGradient(ctx, p, sx, sy, tx, ty,
+                         RgbaOpacity(colors[link.source], c->linkOpacity),
+                         RgbaOpacity(colors[link.target], c->linkOpacity));
+        PathFree(p);
+    }
+
+    for (int i = 0; i < g.nodes.len; i++) {
+        const SankeyNodeLayout& node = g.nodes[i];
+        // A node carrying almost nothing still gets a pixel to be seen by.
+        float y1 = node.y1 > node.y0 + 1 ? node.y1 : node.y0 + 1;
+        FillRound(ctx, e->x + node.x0, e->y + node.y0, node.x1 - node.x0,
+                  y1 - node.y0, c->nodeRadius, colors[node.index]);
+    }
+
+    if (!hasLabels) {
+        return;
+    }
+    for (int i = 0; i < g.nodes.len; i++) {
+        const SankeyNodeLayout& node = g.nodes[i];
+        Str lines[2] = {values[node.index], c->nodes[node.index].label};
+        Rgba lineColors[2] = {th.foreground, th.mutedFg};
+        float block = 0;
+        for (int k = 0; k < 2; k++) {
+            if (lines[k].s) {
+                block += lineH;
+            }
+        }
+        if (block <= 0) {
+            continue;
+        }
+
+        bool isFirst = node.layer == 0;
+        bool isLast = node.layer + 1 == layers;
+        // Beside the first and last columns, above the middle ones — and
+        // bounded, so a long label is clipped rather than drawn off the plot.
+        float x = 0;
+        float maxW = 0;
+        int align = 0;
+        if (isFirst) {
+            x = node.x0 - c->labelGap;
+            align = -1;
+            maxW = left - c->labelGap;
+        } else if (isLast) {
+            x = node.x1 + c->labelGap;
+            align = 1;
+            maxW = right - c->labelGap;
+        } else {
+            float center = (node.x0 + node.x1) / 2.f;
+            x = center;
+            align = 0;
+            float toEdge = center < width - center ? center : width - center;
+            maxW = 2.f * toEdge;
+        }
+
+        float y = 0;
+        if (isFirst || isLast) {
+            // Centred beside the node, and kept inside the plot so a node at
+            // either edge does not lose its label.
+            y = (node.y0 + node.y1) / 2.f - block / 2.f;
+            if (y > height - block) {
+                y = height - block;
+            }
+            if (y < 0) {
+                y = 0;
+            }
+        } else {
+            y = node.y0 - block - kPlotTextGap;
+        }
+        for (int k = 0; k < 2; k++) {
+            if (!lines[k].s) {
+                continue;
+            }
+            SankeyLabelLine(ctx, lines[k], e->x + x, e->y + y, maxW,
+                            kPlotTextSize, lineColors[k], align);
+            y += lineH;
+        }
+    }
+}
+
+SankeyChart* SankeyChart::New(Ctx* cx) {
+    Arena* a = cx->a;
+    SankeyChart* c = ArenaNew<SankeyChart>(a);
+    c->a = a;
+    c->cx = cx;
+    return c;
+}
+SankeyChart* SankeyChart::Node(Str label) {
+    if (n < kMaxSankeyChartNodes) {
+        nodes[n].label = label;
+        n++;
+    }
+    return this;
+}
+SankeyChart* SankeyChart::NodeColored(Str label, Rgba color) {
+    if (n < kMaxSankeyChartNodes) {
+        nodes[n].label = label;
+        nodes[n].color = color;
+        nodes[n].hasColor = true;
+        n++;
+    }
+    return this;
+}
+SankeyChart* SankeyChart::Link(int source, int target, double value) {
+    if (nLinks < kMaxSankeyChartLinks) {
+        links[nLinks].source = source;
+        links[nLinks].target = target;
+        links[nLinks].value = value;
+        nLinks++;
+    }
+    return this;
+}
+SankeyChart* SankeyChart::NodeWidth(float v) {
+    nodeWidth = v;
+    return this;
+}
+SankeyChart* SankeyChart::NodePadding(float v) {
+    nodePadding = v;
+    return this;
+}
+SankeyChart* SankeyChart::NodeAlign(SankeyAlign v) {
+    align = v;
+    return this;
+}
+SankeyChart* SankeyChart::Iterations(int v) {
+    iterations = v;
+    return this;
+}
+SankeyChart* SankeyChart::ValueScale(SankeyValueScale v) {
+    valueScale = v;
+    return this;
+}
+SankeyChart* SankeyChart::NodeCornerRadius(float v) {
+    nodeRadius = v;
+    return this;
+}
+SankeyChart* SankeyChart::LinkOpacity(float v) {
+    linkOpacity = v;
+    return this;
+}
+SankeyChart* SankeyChart::MinLinkWidth(float v) {
+    minLinkWidth = v;
+    return this;
+}
+SankeyChart* SankeyChart::LabelGap(float v) {
+    labelGap = v;
+    return this;
+}
+SankeyChart* SankeyChart::ShowValues(bool v) {
+    showValues = v;
+    return this;
+}
+El* SankeyChart::IntoEl() {
+    El* e = Div(a);
+    e->customPaint = PaintSankey;
+    e->customUser = this;
+    return e;
+}
+
 } // namespace component
 } // namespace gpui

@@ -412,20 +412,25 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
                        Rgba bot) {
+    PathFillGradient(ctx, p, 0, y0, 0, y1, top, bot);
+}
+
+void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
+                      float y1, Rgba from, Rgba to) {
     cairo_t* cr = Cr(ctx);
     if (!Replay(cr, p)) {
         return;
     }
-    cairo_pattern_t* pat = cairo_pattern_create_linear(0, y0, 0, y1);
+    cairo_pattern_t* pat = cairo_pattern_create_linear(x0, y0, x1, y1);
     if (!pat) {
-        SetColor(cr, top);
+        SetColor(cr, from);
         cairo_fill(cr);
         return;
     }
-    cairo_pattern_add_color_stop_rgba(pat, 0, top.r / 255.0, top.g / 255.0,
-                                      top.b / 255.0, top.a / 255.0);
-    cairo_pattern_add_color_stop_rgba(pat, 1, bot.r / 255.0, bot.g / 255.0,
-                                      bot.b / 255.0, bot.a / 255.0);
+    cairo_pattern_add_color_stop_rgba(pat, 0, from.r / 255.0, from.g / 255.0,
+                                      from.b / 255.0, from.a / 255.0);
+    cairo_pattern_add_color_stop_rgba(pat, 1, to.r / 255.0, to.g / 255.0,
+                                      to.b / 255.0, to.a / 255.0);
     cairo_set_source(cr, pat);
     cairo_fill(cr);
     cairo_pattern_destroy(pat);

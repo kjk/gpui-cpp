@@ -431,23 +431,28 @@ void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
                        Rgba bot) {
+    PathFillGradient(ctx, p, 0, y0, 0, y1, top, bot);
+}
+
+void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
+                      float y1, Rgba from, Rgba to) {
     ID2D1PathGeometry* g = PathSeal(p);
     if (!g || !ctx || !ctx->rt) {
         return;
     }
     D2D1_GRADIENT_STOP gs[2];
     gs[0].position = 0.f;
-    gs[0].color = ToD2D(top);
+    gs[0].color = ToD2D(from);
     gs[1].position = 1.f;
-    gs[1].color = ToD2D(bot);
+    gs[1].color = ToD2D(to);
     ID2D1GradientStopCollection* stops = nullptr;
     ctx->rt->rt->CreateGradientStopCollection(gs, 2, &stops);
     bool filled = false;
     if (stops) {
         ID2D1LinearGradientBrush* gb = nullptr;
         ctx->rt->rt->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, y0),
-                                                D2D1::Point2F(0, y1)),
+            D2D1::LinearGradientBrushProperties(D2D1::Point2F(x0, y0),
+                                                D2D1::Point2F(x1, y1)),
             stops, &gb);
         if (gb) {
             ctx->rt->rt->FillGeometry(g, gb);
@@ -457,7 +462,7 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
         stops->Release();
     }
     if (!filled) {
-        PathFill(ctx, p, top);
+        PathFill(ctx, p, from);
     }
 }
 

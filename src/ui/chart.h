@@ -160,5 +160,75 @@ struct RadarChart {
     El* IntoEl();
 };
 
+// SankeyChart: nodes in columns with ribbons between them, each as thick as
+// the flow it carries (crates/ui/src/chart/sankey_chart.rs). The layout is
+// `Sankey` in base; what is here is the paint and the labels.
+const int kMaxSankeyChartNodes = 32;
+const int kMaxSankeyChartLinks = 64;
+
+// DEFAULT_NODE_WIDTH, DEFAULT_NODE_PADDING and the rest of the chart's own
+// defaults, which are not the layout generator's.
+const float kSankeyChartNodeWidth = 10;
+const float kSankeyChartNodePadding = 16;
+const float kSankeyChartLinkOpacity = 0.3f;
+const float kSankeyChartMinLinkWidth = 1;
+const float kSankeyChartLabelGap = 6;
+// MAX_LABEL_WIDTH_RATIO and MAX_LABEL_MARGIN_RATIO: a long label is truncated
+// to a modest column beside the flow rather than taking the chart over.
+const float kSankeyMaxLabelWidthRatio = 0.2f;
+const float kSankeyMaxLabelMarginRatio = 0.6f;
+
+struct SankeyChartNode {
+    Str label = {};
+    // The value shown above the name, when the caller asked for one.
+    Str value = {};
+    Rgba color = {};
+    bool hasColor = false;
+};
+
+struct SankeyChart {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    SankeyChartNode nodes[kMaxSankeyChartNodes] = {};
+    int n = 0;
+    SankeyLink links[kMaxSankeyChartLinks] = {};
+    int nLinks = 0;
+    float nodeWidth = kSankeyChartNodeWidth;
+    float nodePadding = kSankeyChartNodePadding;
+    SankeyAlign align = SankeyAlign::Justify;
+    int iterations = 6;
+    SankeyValueScale valueScale = SankeyValueScale::Linear;
+    float nodeRadius = 0;
+    float linkOpacity = kSankeyChartLinkOpacity;
+    float minLinkWidth = kSankeyChartMinLinkWidth;
+    float labelGap = kSankeyChartLabelGap;
+    // Whether the node's throughput is written above its name, which is
+    // Rust's value_label.
+    bool showValues = false;
+
+    static SankeyChart* New(Ctx* cx);
+    // A node, by the order they are added — a link names them by index.
+    SankeyChart* Node(Str label);
+    SankeyChart* NodeColored(Str label, Rgba color);
+    SankeyChart* Link(int source, int target, double value);
+    SankeyChart* NodeWidth(float v);
+    SankeyChart* NodePadding(float v);
+    SankeyChart* NodeAlign(SankeyAlign v);
+    SankeyChart* Iterations(int v);
+    SankeyChart* ValueScale(SankeyValueScale v);
+    SankeyChart* NodeCornerRadius(float v);
+    SankeyChart* LinkOpacity(float v);
+    SankeyChart* MinLinkWidth(float v);
+    SankeyChart* LabelGap(float v);
+    SankeyChart* ShowValues(bool v = true);
+    El* IntoEl();
+};
+
+// raw_throughput: what a node carries in the values the caller gave, which is
+// what a label reads — the layout's own value is in scaled units under a
+// non-linear scale. Writes one per node.
+void SankeyChartThroughput(const SankeyLink* links, int nLinks, double* out,
+                           int n);
+
 } // namespace component
 } // namespace gpui
