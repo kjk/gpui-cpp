@@ -638,6 +638,73 @@ static ScrollbarMode ElScrollMode(const El* e) {
     return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow();
 }
 
+// ScrollbarMode::Scrolling's clock. Rust keeps `last_scroll_offset` and
+// `last_scroll_time` in the scrollbar element's own keyed state; the tree here
+// is rebuilt every frame, so the pair lives beside the tree and is found again
+// by `El::ScrollId`. One entry per scroll area that has ever moved — a
+// gallery has a handful — and they are dropped with the app.
+struct ScrollFade {
+    int id = 0;
+    float y = 0;
+    float x = 0;
+    // TimeNow() when the offset last changed, or when the pointer last held
+    // the bar up.
+    double at = 0;
+};
+
+static Vec<ScrollFade> gScrollFades;
+
+static ScrollFade* ScrollFadeFor(int id, float y, float x) {
+    for (int i = 0; i < gScrollFades.len; i++) {
+        if (gScrollFades[i].id == id) {
+            return &gScrollFades[i];
+        }
+    }
+    ScrollFade f;
+    f.id = id;
+    f.y = y;
+    f.x = x;
+    // A bar the frame has never seen starts out faded: opening a page does not
+    // flash every scrollbar on it, which is what Rust gets from having no
+    // last_scroll_time until something scrolls.
+    f.at = -(double)kScrollbarFadeDuration;
+    gScrollFades.Append(f);
+    return &gScrollFades[gScrollFades.len - 1];
+}
+
+void ScrollFadeClear() {
+    gScrollFades.Reset();
+}
+
+// How opaque a Scrolling bar is right now, and whether the window has to come
+// back for the rest of the fade. `held` is the pointer resting on the bar,
+// which Rust answers by stamping the time again.
+static float ScrollFadeOpacity(int id, float y, float x, bool held,
+                               bool* wantsFrame) {
+    ScrollFade* f = ScrollFadeFor(id, y, x);
+    double now = TimeNow();
+    if (f->y != y || f->x != x || held) {
+        f->y = y;
+        f->x = x;
+        f->at = now;
+    }
+    float elapsed = (float)(now - f->at);
+    if (elapsed < kScrollbarFadeDelay) {
+        *wantsFrame = true;
+        return 1.f;
+    }
+    if (elapsed >= kScrollbarFadeDuration) {
+        return 0.f;
+    }
+    *wantsFrame = true;
+    // 1 - t^10 over the last second, which is Rust's curve.
+    float t = elapsed - kScrollbarFadeDelay;
+    float t2 = t * t;
+    float t4 = t2 * t2;
+    float o = 1.f - t4 * t4 * t2;
+    return o < 0 ? 0 : o;
+}
+
 El* El::Rotate(float turns) {
     style.rotate = turns;
     return this;
@@ -3689,10 +3756,34 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     }
 
     // ScrollbarMode: Always paints the bar whenever there is something to
-    // scroll, Hover only while the pointer is over the box it belongs to.
+    // scroll, Hover only while the pointer is over the box it belongs to, and
+    // Scrolling while the offset is moving plus the fade after it stops.
+    ScrollbarMode barMode = ElScrollMode(e);
+    bool overBox = e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
     bool barVisible =
-        !e->noScrollbar && (ElScrollMode(e) == ScrollbarMode::Always ||
-                            e->Bounds().Contains({ctx->mouseX, ctx->mouseY}));
+        !e->noScrollbar && (barMode == ScrollbarMode::Always || overBox);
+    float barAlpha = 1.f;
+    if (!e->noScrollbar && barMode == ScrollbarMode::Scrolling) {
+        // No ScrollId is no clock: the area cannot be found again next frame,
+        // so it keeps the bar rather than blinking it every time the pointer
+        // moves. Rust's state is keyed the same way, off the element id.
+        if (e->scrollId == 0) {
+            barVisible = true;
+        } else {
+            // is_hovered_on_bar: the pointer resting inside the band the
+            // thumb runs down holds the bar up, which is Rust stamping the
+            // time again on every frame it is there.
+            bool held =
+                overBox && (ctx->mouseX >= e->x + e->w - kScrollbarBandW ||
+                            ctx->mouseY >= e->y + e->h - kScrollbarBandW);
+            barAlpha = ScrollFadeOpacity(e->scrollId, e->scrollY, e->scrollX,
+                                         held, &ctx->wantsAnimFrame);
+            barVisible = barAlpha > 0.f;
+        }
+    }
+    Rgba barColor = barAlpha >= 1.f
+                        ? ThemeNow().scrollbarThumb
+                        : RgbaOpacity(ThemeNow().scrollbarThumb, barAlpha);
     if (barVisible && e->style.overflowY == Overflow::Scroll &&
         e->contentH > e->h + 1.f && e->h > 0) {
         // The same three numbers the press and drag arithmetic goes by, so
@@ -3702,8 +3793,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
         float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
                                                 e->contentH);
-        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
-                  ThemeNow().scrollbarThumb);
+        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, barColor);
     }
     if (barVisible && e->style.overflowX == Overflow::Scroll &&
         e->contentW > e->w + 1.f && e->w > 0) {
@@ -3715,8 +3805,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         float thumbY = e->y + e->h - thumbH - kScrollbarThumbMargin;
         float thumbX = e->x + ScrollbarThumbPos(e->w, thumbW, e->scrollX, e->w,
                                                 e->contentW);
-        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f,
-                  ThemeNow().scrollbarThumb);
+        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, barColor);
     }
 
     if (focused && ThemeFocusRing()) {

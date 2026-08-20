@@ -70,6 +70,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.mouseX = win->mouseX;
     win->paint.mouseY = win->mouseY;
     win->paint.picking = win->inspector.picking;
+    win->paint.wantsAnimFrame = false;
     win->paint.pickHit = false;
     win->paint.pick = {};
     if (win->inspector.pending) {
@@ -116,6 +117,12 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         // Rust gets from tracking focus on the trap container.
         FocusTrapApplyPending(win);
         PaintEl(&win->paint, root);
+    }
+    // A Scrolling scrollbar part-way through its fade wants the next frame.
+    // One ask for the whole tree, after it has painted, the way Rust's
+    // scrollbar schedules its own idle timer.
+    if (win->paint.wantsAnimFrame) {
+        WindowRequestAnimationFrame(win);
     }
     // Rust renders TooltipOverlay deferred with priority 2, so the tip is over
     // everything the frame drew. It is the overlay's, not the trigger's: by
@@ -1404,6 +1411,7 @@ void AppFree(App* app) {
     // The decoded images outlive a window but not the backend that made
     // them, so they go before it does.
     ImageCacheClear();
+    ScrollFadeClear();
     PaintAppFree(app->paint);
     app->paint = nullptr;
     PlatShutdown(app);

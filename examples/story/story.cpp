@@ -854,8 +854,7 @@ static const ApRow kAppearance[] = {
     {ApKind::Radius, "0px", 0},
     {ApKind::Sep, nullptr, 0},
     {ApKind::Label, "Scrollbar", 0},
-    // Rust offers a third, Scrolling — shown while scrolling and fading out
-    // after two idle seconds — which is not ported.
+    {ApKind::Scroll, "Scrolling", (float)ScrollbarMode::Scrolling},
     {ApKind::Scroll, "Hover to show", (float)ScrollbarMode::Hover},
     {ApKind::Scroll, "Always show", (float)ScrollbarMode::Always},
     {ApKind::Sep, nullptr, 0},
