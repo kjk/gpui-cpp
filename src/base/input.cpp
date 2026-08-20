@@ -1428,6 +1428,184 @@ static void DoRedo(InputState* s, App* app, Window* win) {
     UndoSetIgnoring(&s->undo, false);
 }
 
+// ─── indent ───────────────────────────────────────────────────────────────
+//
+// indent.rs. Tab and shift-tab inside a field, which Rust binds to
+// IndentInline / OutdentInline in the input's key context — innermost, so the
+// window's focus ring only gets the keystroke when the field does not want it.
+
+// LayoutMode::is_indentable. An auto-growing field has no blocks to indent;
+// a plain textarea and a code editor do.
+static bool ModeIsIndentable(const InputState* s) {
+    return s->mode.kind == LayoutModeKind::PlainText ||
+           s->mode.kind == LayoutModeKind::CodeEditor;
+}
+
+// TabSize::to_string. Soft tabs only: the mode carries a width, not the
+// hard_tabs flag Rust also has.
+static Str TabIndent(const InputState* s) {
+    int n = s->mode.tabSize > 0 ? s->mode.tabSize : 4;
+    Str tab = AllocStrTemp(n);
+    memset(tab.s, ' ', (size_t)n);
+    return tab;
+}
+
+// start_of_line_of_selection: where the line the selection begins on starts.
+static int StartOfLineOfSelection(const InputState* s) {
+    if (InputIsSingleLine(s)) {
+        return 0;
+    }
+    Str t = InputValue(s);
+    Selection r = s->selectedRange;
+    int off = r.start < r.end ? r.start : r.end;
+    return RopeLineStartOffset(t, RopeOffsetToPoint(t, off).row);
+}
+
+// The bytes of the line starting at `at` in `text`, up to the next newline
+// or the end. The \r of a CRLF pair counts as part of the line, the way
+// Rust's split('\n') leaves it there.
+static int LineLenAt(Str text, int at) {
+    int i = at;
+    while (i < text.len && text.s[i] != '\n') {
+        i++;
+    }
+    return i - at;
+}
+
+// A field that has nothing to indent returns false, which is cx.propagate().
+static bool IndentReady(const InputState* s) {
+    return InputIsMultiLine(s) && ModeIsIndentable(s);
+}
+
+// indent(). With a selection every line it touches is pushed over by one tab;
+// with none, one tab goes in at the caret. Rust walks the lines one
+// replace_text_in_range each and Rust's history brackets them; ours records a
+// change per call and merges an open bracket first-old-to-last-new, which is
+// right for an IME composition and wrong for edits at growing offsets — so
+// the whole span is rewritten in one edit instead, which is also one undo
+// step and one Change event. Rust's `block` variant, bound to ctrl-], is not
+// ported: only the inline one tab carries.
+static bool DoIndent(InputState* s, App* app, Window* win) {
+    if (!IndentReady(s)) {
+        return false;
+    }
+    Str tab = TabIndent(s);
+    Selection sel = s->selectedRange;
+    s->undo.hasPendingIntent = true;
+    s->undo.pendingIntent = EditIntent::Atomic;
+    if (sel.IsEmpty()) {
+        Selection at = SelectionAt(sel.start);
+        InputReplaceTextInRange(s, app, win, &at, tab);
+        s->selectedRange = SelectionAt(sel.start + tab.len);
+        s->selectionReversed = false;
+        PauseBlink(s, app, win);
+        return true;
+    }
+    // The lines the selection touches, from the start of the first one, each
+    // with a tab in front of it.
+    int startOffset = StartOfLineOfSelection(s);
+    Str before = InputValue(s);
+    Str src = Str(before.s + startOffset, sel.end - startOffset);
+    int nLines = 1;
+    for (int i = 0; i < src.len; i++) {
+        if (src.s[i] == '\n') {
+            nLines++;
+        }
+    }
+    int added = tab.len * nLines;
+    Str out = AllocStrTemp(src.len + added);
+    int w = 0;
+    int i = 0;
+    for (;;) {
+        int lineLen = LineLenAt(src, i);
+        memcpy(out.s + w, tab.s, (size_t)tab.len);
+        w += tab.len;
+        memcpy(out.s + w, src.s + i, (size_t)lineLen);
+        w += lineLen;
+        i += lineLen;
+        if (i >= src.len) {
+            break;
+        }
+        out.s[w++] = '\n';
+        i++;
+    }
+    Selection r = {startOffset, sel.end};
+    InputReplaceTextInRange(s, app, win, &r, out);
+    s->selectedRange = Selection{startOffset, sel.end + added};
+    s->selectionReversed = false;
+    PauseBlink(s, app, win);
+    Notify(app, win);
+    return true;
+}
+
+static int SatSub(int a, int b) {
+    return a > b ? a - b : 0;
+}
+
+// outdent(). One tab comes off the front of every line that has one; a line
+// that does not is left alone. Same one-edit shape as DoIndent.
+static bool DoOutdent(InputState* s, App* app, Window* win) {
+    if (!IndentReady(s)) {
+        return false;
+    }
+    Str tab = TabIndent(s);
+    Selection sel = s->selectedRange;
+    Str before = InputValue(s);
+    s->undo.hasPendingIntent = true;
+    s->undo.pendingIntent = EditIntent::Atomic;
+    if (sel.IsEmpty()) {
+        // The caret's own line, whichever column the caret sits in.
+        int offset = StartOfLineOfSelection(s);
+        if (before.len - offset < tab.len ||
+            memcmp(before.s + offset, tab.s, (size_t)tab.len) != 0) {
+            s->undo.hasPendingIntent = false;
+            return true;
+        }
+        Selection r = {offset, offset + tab.len};
+        InputReplaceTextInRange(s, app, win, &r, Str{});
+        s->selectedRange = SelectionAt(SatSub(sel.start, tab.len));
+        s->selectionReversed = false;
+        PauseBlink(s, app, win);
+        return true;
+    }
+    int startOffset = StartOfLineOfSelection(s);
+    Str src = Str(before.s + startOffset, sel.end - startOffset);
+    Str out = AllocStrTemp(src.len);
+    int removed = 0;
+    int w = 0;
+    int i = 0;
+    for (;;) {
+        int lineLen = LineLenAt(src, i);
+        int skip = 0;
+        if (lineLen >= tab.len &&
+            memcmp(src.s + i, tab.s, (size_t)tab.len) == 0) {
+            skip = tab.len;
+            removed += tab.len;
+        }
+        memcpy(out.s + w, src.s + i + skip, (size_t)(lineLen - skip));
+        w += lineLen - skip;
+        i += lineLen;
+        if (i >= src.len) {
+            break;
+        }
+        out.s[w++] = '\n';
+        i++;
+    }
+    if (removed == 0) {
+        s->undo.hasPendingIntent = false;
+        return true;
+    }
+    out.len = w;
+    out.s[w] = 0;
+    Selection r = {startOffset, sel.end};
+    InputReplaceTextInRange(s, app, win, &r, out);
+    s->selectedRange = Selection{startOffset, SatSub(sel.end, removed)};
+    s->selectionReversed = false;
+    PauseBlink(s, app, win);
+    Notify(app, win);
+    return true;
+}
+
 bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
                   bool shift) {
     if (!s) {
@@ -1631,6 +1809,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             Emit(s, app, win, ev);
             return handled;
         }
+        case InputAction::IndentInline:
+            return DoIndent(s, app, win);
+        case InputAction::OutdentInline:
+            return DoOutdent(s, app, win);
+
         case InputAction::Escape:
             if (s->cleanOnEscape) {
                 InputClean(s, app, win);
@@ -1728,6 +1911,13 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
                         : InputAction::Delete;
         case KeyReturn:
             return InputAction::Enter;
+        case KeyTab:
+            // tab / shift-tab. A modified tab is the window's, never text.
+            if (ctrl || alt) {
+                return InputAction::None;
+            }
+            return shift ? InputAction::OutdentInline
+                         : InputAction::IndentInline;
         case KeyEscape:
             return InputAction::Escape;
         case KeyA:

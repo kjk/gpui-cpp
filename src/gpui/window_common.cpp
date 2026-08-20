@@ -196,11 +196,6 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     if (!win) {
         return;
     }
-    if (key == KeyTab) {
-        FocusTrapTab(win, shift);
-        AppInvalidate(win);
-        return;
-    }
     // The focused field gets the chord first, as GPUI dispatches an action to
     // whatever has focus before anything else sees the key. The view's own
     // subscription still hears it — that is Rust's cx.propagate(), which every
@@ -225,6 +220,15 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // the keystroke here.
     if (!eaten && WindowDispatchKeyAction(win, key, shift, ctrl, alt)) {
         win->eatReturn = false;
+        AppInvalidate(win);
+        return;
+    }
+    // The focus ring, last of the three: `tab` is bound on the window in
+    // GPUI, the outermost key context there is, so a field indenting with it
+    // and a binding over it both come first. Only a tab nobody wanted walks
+    // the focus.
+    if (!eaten && key == KeyTab) {
+        FocusTrapTab(win, shift);
         AppInvalidate(win);
         return;
     }
