@@ -393,6 +393,13 @@ static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
 }
 
 // popover_style, plus PopupMenu's p_1 and gap_y_0p5 around the items.
+// PopupMenu::separator.
+static El* ToolbarMenuSep(Ctx* cx) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    return Div(a)->H(1)->W(kFill)->Bg(th.border);
+}
+
 static El* ToolbarMenu(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -508,6 +515,9 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
             }
             optMenu = ToolbarMenu(cx);
             for (int i = 0; i < nrows; i++) {
+                if (rows[i].sep) {
+                    optMenu->Child(ToolbarMenuSep(cx));
+                }
                 optMenu->Child(
                     ToolbarCheckRow(cx, onAct, rows[i].act, rows[i].label,
                                     rows[i].checked && !rows[i].plain, gutter));
@@ -541,6 +551,9 @@ El* StoryToolbarDropdown(Ctx* cx, Str id, Str label, bool open, Listener onOpen,
         }
         menu = ToolbarMenu(cx);
         for (int i = 0; i < nrows; i++) {
+            if (rows[i].sep) {
+                menu->Child(ToolbarMenuSep(cx));
+            }
             menu->Child(ToolbarCheckRow(cx, onAct, rows[i].act, rows[i].label,
                                         rows[i].checked && !rows[i].plain,
                                         gutter));

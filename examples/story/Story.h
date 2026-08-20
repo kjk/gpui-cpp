@@ -180,6 +180,8 @@ struct StoryToolbarOpt {
     int act = 0;
     // menu() rather than menu_with_check(): no check column.
     bool plain = false;
+    // separator() before this row.
+    bool sep = false;
 };
 
 // For a page whose toolbar is not one size button plus one Options menu: the
