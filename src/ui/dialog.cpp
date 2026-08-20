@@ -48,6 +48,10 @@ Dialog* Dialog::OverlayClosable(bool v) {
     overlayClosable = v;
     return this;
 }
+Dialog* Dialog::Layer(int ix) {
+    layerIx = ix;
+    return this;
+}
 Dialog* Dialog::Radius(float px) {
     radius = px;
     return this;
@@ -294,9 +298,14 @@ El* Dialog::IntoEl(WinSize size) {
                     ->H(kFill)
                     ->FlexCol()
                     ->ItemsCenter()
-                    ->PadT(size.dipH * 0.1f)
+                    ->PadT(size.dipH * 0.1f + layerIx * 16.f)
                     ->Child(panel);
-    return gpui::Dialog::New(cx)->Backdrop(backdrop)->Popup(popup)->IntoEl();
+    Str trap = StrDup(a, fmt("dialog-%d", layerIx));
+    return gpui::Dialog::New(cx)
+        ->Trap(trap)
+        ->Backdrop(backdrop)
+        ->Popup(popup)
+        ->IntoEl();
 }
 
 } // namespace component
