@@ -34,4 +34,68 @@ GPUI_ACTION(SelectPageDown, "ui::SelectPageDown")
 
 } // namespace action
 
+void CancelKeys::OnAction(CancelKeys* self, Ctx* cx, const ActionEvent* ev) {
+    if (!self || ev->action != action::Cancel()) {
+        const_cast<ActionEvent*>(ev)->propagate = true;
+        return;
+    }
+    if (!self->onCancel.IsValid()) {
+        return;
+    }
+    // The same handler the close button carries, called the way Rust's
+    // on_action does: with a ClickEvent::default().
+    ClickEvent click = {};
+    ListenerCall(cx->app, cx->win, self->onCancel, &click);
+}
+
+// One entry per context that has been bound, and the keymap it was bound
+// into. A handful of overlay kinds, so a linear scan is the whole index.
+struct CancelBound {
+    uint32_t context = 0;
+    uint32_t generation = 0;
+};
+static const int kMaxCancelContexts = 8;
+static CancelBound gCancelBound[kMaxCancelContexts];
+static int gNCancelBound = 0;
+
+void CancelInitKeys(const char* context) {
+    uint32_t id = KeyContextOf(Str(context));
+    uint32_t gen = KeymapGeneration();
+    for (int i = 0; i < gNCancelBound; i++) {
+        if (gCancelBound[i].context != id) {
+            continue;
+        }
+        if (gCancelBound[i].generation == gen) {
+            return;
+        }
+        gCancelBound[i].generation = gen;
+        KeyBinding b = {"escape", action::Cancel(), context};
+        KeymapBind(&b, 1);
+        return;
+    }
+    if (gNCancelBound >= kMaxCancelContexts) {
+        return;
+    }
+    gCancelBound[gNCancelBound].context = id;
+    gCancelBound[gNCancelBound].generation = gen;
+    gNCancelBound++;
+    KeyBinding b = {"escape", action::Cancel(), context};
+    KeymapBind(&b, 1);
+}
+
+void CancelBindKeys(Ctx* cx, El* root, const char* context, Str name,
+                    Listener onCancel) {
+    if (!cx || !root || !onCancel.IsValid()) {
+        return;
+    }
+    CancelInitKeys(context);
+    Entity<CancelKeys> keys =
+        KeyedEntity<CancelKeys>(cx, (uint32_t)HashClickId(name));
+    if (CancelKeys* k = keys.Get(cx)) {
+        k->onCancel = onCancel;
+    }
+    root->KeyContext(Str(context))->OnAction(
+        action::Cancel(), ListenTo(keys, &CancelKeys::OnAction));
+}
+
 } // namespace gpui

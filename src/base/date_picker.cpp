@@ -1,4 +1,6 @@
 #include "base/date_picker.h"
+#include "base/actions.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
@@ -115,25 +117,91 @@ DateSelectionResult DatePickerSelectDate(bool range, LocalDate value,
     return DateSelectionResult::Complete;
 }
 
-DatePickerAction DatePickerActionForKey(int key, bool open, bool disabled) {
-    if (key == KeyReturn) {
-        // Rust propagates when disabled, and does nothing at all when the
-        // picker is already open: the calendar takes it from there.
+Str DatePickerContext() {
+    return StrL("DatePicker");
+}
+
+void DatePickerInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
+    }
+    bound = KeymapGeneration();
+    const char* ctx = "DatePicker";
+    // Delete is the input's action, not one of the shared ui:: set — Rust
+    // imports it from input:: for exactly these two chords.
+    KeyBinding bindings[] = {
+        {"enter", action::Confirm(), ctx},
+        {"escape", action::Cancel(), ctx},
+        {"delete", ActionOf(StrL("input::Delete")), ctx},
+        {"backspace", ActionOf(StrL("input::Delete")), ctx},
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+DatePickerAction DatePickerActionOf(uint32_t id, bool open, bool disabled) {
+    if (id == action::Confirm()) {
+        // Rust's Confirm opens a closed picker and does nothing at all to one
+        // that is already open: choosing a date is the calendar's business.
         if (disabled || open) {
             return DatePickerAction::None;
         }
         return DatePickerAction::Open;
     }
-    if (key == KeyEscape) {
-        // No disabled check here — Rust's Cancel handler has none either.
+    if (id == action::Cancel()) {
         return open ? DatePickerAction::Dismiss : DatePickerAction::None;
     }
-    if (key == KeyDelete || key == KeyBack) {
-        // on_delete calls clean(), the same thing the clear button does, and
-        // it is bound whether or not the picker is open.
+    if (id == ActionOf(StrL("input::Delete"))) {
         return DatePickerAction::Clear;
     }
     return DatePickerAction::None;
+}
+
+void DatePickerKeys::OnAction(DatePickerKeys* self, Ctx* cx,
+                              const ActionEvent* ev) {
+    if (!self) {
+        return;
+    }
+    Listener l = {};
+    switch (DatePickerActionOf(ev->action, self->open, self->disabled)) {
+        case DatePickerAction::Open:
+        case DatePickerAction::Dismiss:
+            // Both are the toggle the trigger carries, one way each.
+            l = self->onToggle;
+            break;
+        case DatePickerAction::Clear:
+            l = self->onClear;
+            break;
+        case DatePickerAction::None:
+            const_cast<ActionEvent*>(ev)->propagate = true;
+            return;
+    }
+    if (!l.IsValid()) {
+        return;
+    }
+    ClickEvent click = {};
+    ListenerCall(cx->app, cx->win, l, &click);
+}
+
+void DatePickerBindKeys(Ctx* cx, El* root, Str name, Listener onToggle,
+                        Listener onClear, bool open, bool disabled) {
+    if (!cx || !root) {
+        return;
+    }
+    DatePickerInitKeys();
+    Entity<DatePickerKeys> keys =
+        KeyedEntity<DatePickerKeys>(cx, (uint32_t)HashClickId(name));
+    if (DatePickerKeys* k = keys.Get(cx)) {
+        k->onToggle = onToggle;
+        k->onClear = onClear;
+        k->open = open;
+        k->disabled = disabled;
+    }
+    Listener onAction = ListenTo(keys, &DatePickerKeys::OnAction);
+    root->KeyContext(DatePickerContext())
+        ->OnAction(action::Confirm(), onAction)
+        ->OnAction(action::Cancel(), onAction)
+        ->OnAction(ActionOf(StrL("input::Delete")), onAction);
 }
 
 El* DatePicker::New(Ctx* cx, Str id, bool disabled) {

@@ -9,7 +9,6 @@ struct ColorPickerStory {
     bool colorOpen = false;
     StoryToolbarState toolbar;
     static El* Render(ColorPickerStory* self, Ctx* cx);
-    static void OnKey(ColorPickerStory* self, Ctx* cx, const KeyEvent* ev);
 };
 
 static void ToggleColor(ColorPickerStory* self, Ctx* cx, const ClickEvent*) {
@@ -109,14 +108,4 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     return page;
 }
 
-// Esc closes what this page has open, like an overlay dismiss.
-void ColorPickerStory::OnKey(ColorPickerStory* self, Ctx* cx,
-                             const KeyEvent* ev) {
-    if (ev->vk != KeyEscape) {
-        return;
-    }
-    self->colorOpen = false;
-    Notify(cx);
-}
-
-STORY_PAGE_KEYS(StoryColorPicker, ColorPickerStory);
+STORY_PAGE(StoryColorPicker, ColorPickerStory);

@@ -1,4 +1,5 @@
 #include "ui/sheet.h"
+#include "base/actions.h"
 #include "base/motion.h"
 #include "ui/button.h"
 
@@ -102,7 +103,12 @@ El* Sheet::IntoEl(WinSize win) {
                 ->Click(HashClickId(StrL("sheet-overlay")));
         }
     }
-    return gpui::Sheet::New(cx)->Overlay(backdrop)->Surface(surface)->IntoEl();
+    El* root =
+        gpui::Sheet::New(cx)->Overlay(backdrop)->Surface(surface)->IntoEl();
+    // sheet.rs binds escape to Cancel in the "Sheet" context, which runs the
+    // same close the backdrop and the x carry.
+    CancelBindKeys(cx, root, "Sheet", StrL("sheet"), onClose);
+    return root;
 }
 
 } // namespace component

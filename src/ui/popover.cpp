@@ -1,4 +1,5 @@
 #include "ui/popover.h"
+#include "base/actions.h"
 
 namespace gpui {
 
@@ -33,6 +34,10 @@ Popover* Popover::DefaultOpen(bool v) {
     defaultOpen = v;
     return this;
 }
+Popover* Popover::OnClose(Listener fn) {
+    onClose = fn;
+    return this;
+}
 Popover* Popover::Button(MouseButton b) {
     button = b;
     return this;
@@ -62,10 +67,19 @@ El* Popover::IntoEl() {
         PopoverSetOpen(cx, st, open);
     }
     bool isOpen = PopoverIsOpen(cx, st);
-    return gpui::Popover::New(cx, popId, st, button)
-        ->Trigger(trigger)
-        ->Content(isOpen ? content : nullptr)
-        ->IntoEl();
+    El* root = gpui::Popover::New(cx, popId, st, button)
+                   ->Trigger(trigger)
+                   ->Content(isOpen ? content : nullptr)
+                   ->IntoEl();
+    // popover.rs binds escape to Cancel in the "Popover" context and closes
+    // on it. A controlled popover's flag is the caller's, so it says what to
+    // run; an uncontrolled one closes its own state.
+    if (isOpen) {
+        Listener close = onClose.IsValid() ? onClose
+                                           : ListenTo(st, &PopoverDismiss);
+        CancelBindKeys(cx, root, "Popover", popId, close);
+    }
+    return root;
 }
 
 } // namespace component
