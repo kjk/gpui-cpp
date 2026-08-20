@@ -72,6 +72,11 @@ struct TilesState {
     // The tile being moved, and where the drag started — the pointer in the
     // area's own coordinates, and the tile's bounds when the press landed.
     int dragging = -1;
+    // The tile a press landed anywhere inside, which is what brings it to the
+    // front when the button comes back up. Rust keeps this in `dragging_id`;
+    // it is its own field here because the move drag reads `dragging` alone
+    // and a press on a tile's body is not a move.
+    int pressed = -1;
     Point dragInitialMouse = {};
     Bounds dragInitialBounds = {};
 
@@ -112,6 +117,14 @@ struct TilesState {
                              const DragMoveEvent* ev);
     static void OnDragEnd(TilesState* self, Ctx* cx, const MouseUpEvent* ev);
     static void OnScroll(TilesState* self, Ctx* cx, const ScrollEvent* ev);
+    // The frame's own press and release. Rust hangs these off the tile
+    // container and lets them hear what the drag bar and the resize handles
+    // inside it took, which is the bubble half of DispatchPhase: a press
+    // anywhere on a tile brings it to the front.
+    static void OnTileDown(TilesState* self, Ctx* cx, const MouseDownEvent* ev,
+                           intptr_t ix);
+    static void OnTileUp(TilesState* self, Ctx* cx, const MouseUpEvent* ev,
+                         intptr_t ix);
 
     ~TilesState() { items.Reset(); }
 };
