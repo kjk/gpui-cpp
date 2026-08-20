@@ -97,11 +97,6 @@ struct StoryApp {
     float sideScrollY = 0;
     bool collapsed = false;
     InputState search;
-    int selA = -1;
-    int selB = -1;
-    // gpui_base::TextSelectionGesture, which decides whether a drag produced
-    // a selection at all: one that never touched a glyph publishes nothing.
-    TextSelectionGesture sel;
     // One entity per story, created on first view. crates/story keeps the
     // same shape: Gallery holds a view per story, not their state.
     EntityId pages[StoryCount] = {};

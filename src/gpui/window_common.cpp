@@ -6,6 +6,7 @@
 #include "gpui/image.h"
 #include "gpui/paint.h"
 #include "base/focus_trap.h"
+#include "base/text_selection.h"
 
 namespace gpui {
 
@@ -96,6 +97,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         }
         win->prevInput = win->input;
     }
+
+    // The window's own selection, before the view builds: an application
+    // only says Selectable() on its text, the way Rust has the window drive
+    // every registered run.
+    WindowSelectionApply(win);
 
     El* root = EntityRender(win->app, win, win->frameArena, win->root);
 
@@ -205,6 +211,13 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         InputAction action =
             InputActionForKey(win->input, key, shift, ctrl, alt);
         eaten = InputPerform(win->input, win->app, win, action, shift);
+    }
+    // Copy, once the focused field has had its go: a field with a selection
+    // of its own copied that, and this is the page's selection — Rust's
+    // TextSelection::selected_text, on the same chord. Nothing selected
+    // leaves the key to whatever else wants it.
+    if (!eaten && key == KeyC && ctrl && !shift && !alt) {
+        eaten = WindowSelectionCopy(win);
     }
     // The keymap, once the focused field has had its go: a field's own
     // editing is Rust's innermost key context, so a binding further out
@@ -555,6 +568,9 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         }
         AppInvalidate(win);
     }
+    // The drag half of the window's selection, before the view's own handler
+    // so a page that watches moves sees the selection already extended.
+    WindowSelectionDrag(win, x, y);
     if (win->onMouseMove.IsValid()) {
         ListenerCall(win->app, win, win->onMouseMove, &in);
     }
@@ -687,6 +703,12 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         AppInvalidate(win);
         return;
     }
+    // The window's own selection hears the press first — Rust registers its
+    // handler on the window, above every participant — and only acts where
+    // there is selectable text. A press anywhere else drops what was
+    // selected, which is the outside click that clears it.
+    WindowSelectionPress(win, x, y, in.clickCount, in.modifiers.shift);
+
     const HitRect* hit = HitTestRect(&win->paint, x, y);
     int id = hit ? hit->id : 0;
     win->mouseDown = true;
@@ -751,6 +773,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     // landed.
     win->scrollDragId = 0;
     win->scrollDragGrab = 0;
+    WindowSelectionRelease(win);
     if (win->onMouseUp.IsValid()) {
         ListenerCall(win->app, win, win->onMouseUp, &in);
     }
@@ -1341,6 +1364,7 @@ void AppFree(App* app) {
             ArenaDelete(w->frameArena);
         }
         TextMeasClear(&w->paint);
+        WindowSelectionFree(w);
         PaintTargetFree(&w->paint);
         w->timers.Reset();
         WindowKeyedFree(w);

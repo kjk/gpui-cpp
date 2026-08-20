@@ -34,30 +34,7 @@ struct DialogApp {
     bool menuOpen = false;
     float menuX = 0;
     float menuY = 0;
-    // Text selection, as offsets into the frame's selectable text; -1 is no
-    // selection. `selecting` is true between press and release.
-    int selA = -1;
-    int selB = -1;
-    bool selecting = false;
 };
-
-static void OnMouseUp(DialogApp* app, Ctx* cx, const MouseUpEvent*) {
-    (void)cx;
-    app->selecting = false;
-}
-
-static void OnMouseMove(DialogApp* app, Ctx* cx, const MouseMoveEvent* ev) {
-    if (!app->selecting) {
-        return;
-    }
-    // `nearest` clamps to the closest selectable run, so dragging past
-    // the end of the dialog's text stops there instead of reaching the
-    // paragraph behind it.
-    int moveOff = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, true);
-    if (moveOff >= 0) {
-        app->selB = moveOff;
-    }
-}
 
 static void OnMouseDown(DialogApp* app, Ctx* cx, const MouseDownEvent* ev) {
     // The context menu belongs to the dashed area, so a right click anywhere
@@ -72,33 +49,12 @@ static void OnMouseDown(DialogApp* app, Ctx* cx, const MouseDownEvent* ev) {
     if (ev->button != MouseButton::Left) {
         return;
     }
+    // The selection itself is the window's — WindowSelectionPress ran before
+    // this handler did — so all that is left here is the menu.
     if (app->menuOpen) {
         app->menuOpen = false;
         Notify(cx);
     }
-    // A double click takes the word under the pointer and a triple click the
-    // whole run, the way points_for_multi_click does in text_selection.rs.
-    // The button stays down on a word, but the drag does not extend it: the
-    // selection is already the unit the user asked for.
-    int wordA = 0;
-    int wordB = 0;
-    if (TextMultiClickRange(&cx->win->paint, ev->x, ev->y, ev->clickCount,
-                            &wordA, &wordB)) {
-        app->selA = wordA;
-        app->selB = wordB;
-        app->selecting = false;
-        return;
-    }
-    int off = TextHitOffsetAt(&cx->win->paint, ev->x, ev->y, false);
-    if (off >= 0) {
-        app->selA = off;
-        app->selB = off;
-        app->selecting = true;
-        return;
-    }
-    app->selA = -1;
-    app->selB = -1;
-    app->selecting = false;
 }
 
 static void OpenOverlay(DialogApp* app, Ctx* cx, const ClickEvent*,
@@ -143,8 +99,6 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     Arena* frame = cx->a;
     WinSize size = WindowSize(cx->win);
     const Theme& th = cx->theme();
-    cx->win->paint.selA = app->selA;
-    cx->win->paint.selB = app->selB;
 
     El* bar = Div(frame)
                   ->FlexRow()
@@ -233,7 +187,13 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                         ->FlexCol()
                         ->Gap(8)
                         ->Bg(th.background)
-                        ->Click(ClickOverlayPanel);
+                        ->Click(ClickOverlayPanel)
+                        // The trap is what makes the overlay a selection
+                        // scope as well as a focus one: a drag that began on
+                        // the panel's text cannot run on into the page
+                        // behind it. Rust says the same with
+                        // TextSelection::activate_scope.
+                        ->TrapId(FocusTrapId(StrL("dialog-overlay")));
         if (dialog) {
             panel->W(kDialogWidth)
                 ->Left((size.dipW - kDialogWidth) * 0.5f)
@@ -310,8 +270,6 @@ int GpuiMain(int argc, char** argv) {
     Window* win = WindowOpenView(app, StrL("Dialog Overlay C++"), 800, 600,
                                  view.id, opts);
     WindowOnMouseDown(win, ListenTo(view, &OnMouseDown));
-    WindowOnMouseUp(win, ListenTo(view, &OnMouseUp));
-    WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);
     return rc;
