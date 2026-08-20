@@ -479,6 +479,23 @@ int PlatDoubleClickMs() {
     return 400;
 }
 
+bool PlatHasMenu() {
+    // X11 has no popup menu of its own — a toolkit draws its own. The caller
+    // falls back to the drawn menu, which is what Rust does here too.
+    return false;
+}
+
+int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
+                 float y, bool dark) {
+    (void)win;
+    (void)items;
+    (void)n;
+    (void)x;
+    (void)y;
+    (void)dark;
+    return 0;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     if (!win || !win->plat || !text.s || text.len <= 0) {
         return;

@@ -518,6 +518,80 @@ int PlatDoubleClickMs() {
     return (int)([NSEvent doubleClickInterval] * 1000);
 }
 
+bool PlatHasMenu() {
+    return true;
+}
+
+// Which row was chosen. popUpMenuPositioningItem runs its own tracking loop
+// and returns once the menu is gone, so one variable is enough to carry the
+// answer back out of the action.
+static int gMenuChoice = 0;
+
+} // namespace gpui
+
+// The object every row of a native menu sends its action to.
+@interface GpuiMenuTarget : NSObject
+@end
+
+@implementation GpuiMenuTarget
+- (void)gpuiMenuItemChosen:(id)sender {
+    gpui::gMenuChoice = (int)[(NSMenuItem*)sender tag];
+}
+@end
+
+namespace gpui {
+
+// The rows as an NSMenu. A row's tag is the id it reports; a submenu row
+// carries no tag and opens onto a menu built the same way.
+static NSMenu* BuildMenu(const PlatMenuItem* items, int n,
+                         GpuiMenuTarget* target) {
+    NSMenu* menu = [[NSMenu alloc] init];
+    // Without this AppKit greys every row whose target does not answer
+    // validateMenuItem:, which is all of them.
+    [menu setAutoenablesItems:NO];
+    for (int i = 0; i < n; i++) {
+        const PlatMenuItem& it = items[i];
+        if (it.separator) {
+            [menu addItem:[NSMenuItem separatorItem]];
+            continue;
+        }
+        NSString* label =
+            [NSString stringWithUTF8String:(it.label ? it.label : "")];
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:label
+                                                      action:nil
+                                               keyEquivalent:@""];
+        [item setEnabled:(it.disabled ? NO : YES)];
+        if (it.submenu && it.submenuN > 0) {
+            [item setSubmenu:BuildMenu(it.submenu, it.submenuN, target)];
+        } else {
+            [item setTag:it.id];
+            [item setState:(it.checked ? NSControlStateValueOn
+                                       : NSControlStateValueOff)];
+            if (!it.disabled) {
+                [item setTarget:target];
+                [item setAction:@selector(gpuiMenuItemChosen:)];
+            }
+        }
+        [menu addItem:item];
+    }
+    return menu;
+}
+
+int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
+                 float y, bool dark) {
+    (void)dark;
+    if (!win || !win->plat || !items || n <= 0) {
+        return 0;
+    }
+    GpuiMenuTarget* target = [[GpuiMenuTarget alloc] init];
+    NSMenu* menu = BuildMenu(items, n, target);
+    gMenuChoice = 0;
+    // The view is flipped, so the position is the one the window works in.
+    NSPoint at = NSMakePoint(x, y);
+    [menu popUpMenuPositioningItem:nil atLocation:at inView:win->plat->view];
+    return gMenuChoice;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     (void)win;
     if (!text.s || text.len <= 0) {
