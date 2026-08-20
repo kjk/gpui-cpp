@@ -38,6 +38,12 @@ StateStyle& StateStyle::HoverFg(Rgba c) {
     return *this;
 }
 
+StateStyle& StateStyle::Opacity(float v) {
+    style.opacity = v;
+    set |= StateFieldOpacity;
+    return *this;
+}
+
 void StateStyleRefine(StateStyle* into, const StateStyle& over) {
     if (over.Has(StateFieldBg)) {
         into->Bg(over.style.bg);
@@ -57,6 +63,9 @@ void StateStyleRefine(StateStyle* into, const StateStyle& over) {
     if (over.Has(StateFieldHoverFg)) {
         into->HoverFg(over.style.hoverFg);
     }
+    if (over.Has(StateFieldOpacity)) {
+        into->Opacity(over.style.opacity);
+    }
 }
 
 StateStyle StateStyleResolve(const StateStyle& instance,
@@ -72,28 +81,7 @@ StateStyle StateStyleResolve(const StateStyle& instance,
 }
 
 El* ElRefine(El* e, const StateStyle& s) {
-    if (!e) {
-        return e;
-    }
-    if (s.Has(StateFieldBg)) {
-        e->Bg(s.style.bg);
-    }
-    if (s.Has(StateFieldFg)) {
-        e->Fg(s.style.color);
-    }
-    if (s.Has(StateFieldBorder)) {
-        e->Border(s.style.border, s.style.borderColor);
-    }
-    if (s.Has(StateFieldRadius)) {
-        e->Radius(s.style.radius);
-    }
-    if (s.Has(StateFieldHoverBg)) {
-        e->HoverBg(s.style.hoverBg);
-    }
-    if (s.Has(StateFieldHoverFg)) {
-        e->HoverFg(s.style.hoverFg);
-    }
-    return e;
+    return e ? e->Refine(s.style, s.set) : e;
 }
 
 } // namespace gpui

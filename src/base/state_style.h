@@ -18,14 +18,19 @@
 
 namespace gpui {
 
-// The fields a state may name. A field not named is left as it was.
+// The fields a state may name. A field not named is left as it was. They are
+// `StyleField`'s bits: a semantic state and the inspector's live edit are both
+// refinements of a whole style, so one set of names covers both.
 enum StateField : uint32_t {
-    StateFieldBg = 1u << 0,
-    StateFieldFg = 1u << 1,
-    StateFieldBorder = 1u << 2, // width and color together, as `border_*` is
-    StateFieldRadius = 1u << 3,
-    StateFieldHoverBg = 1u << 4,
-    StateFieldHoverFg = 1u << 5,
+    StateFieldBg = StyleFieldBg,
+    StateFieldFg = StyleFieldColor,
+    // Width and colour together, as `border_*` is.
+    StateFieldBorder = StyleFieldBorder | StyleFieldBorderColor,
+    StateFieldRadius = StyleFieldRadius,
+    StateFieldHoverBg = StyleFieldHoverBg,
+    StateFieldHoverFg = StyleFieldHoverFg,
+    // What Rust's own `disabled(|style| style.opacity(0.5))` names.
+    StateFieldOpacity = StyleFieldOpacity,
 };
 
 struct StateStyle {
@@ -38,6 +43,7 @@ struct StateStyle {
     StateStyle& Radius(float v);
     StateStyle& HoverBg(Rgba c);
     StateStyle& HoverFg(Rgba c);
+    StateStyle& Opacity(float v);
 
     bool Has(StateField f) const { return (set & (uint32_t)f) != 0; }
 };
@@ -50,7 +56,10 @@ void StateStyleRefine(StateStyle* into, const StateStyle& over);
 StateStyle StateStyleResolve(const StateStyle& instance,
                              const StateStyle* const* states, int n);
 
-// Put a resolved style on an element.
+// Put a resolved style on an element. It lands at layout time rather than
+// where the call sits, which is what lets a primitive hand an element back and
+// have the state still win over the look the caller chains onto it — the
+// order `resolve_style` promises.
 El* ElRefine(El* e, const StateStyle& s);
 
 } // namespace gpui

@@ -1,6 +1,6 @@
 /* Unstyled link — crates/base/src/link.rs */
 
-#include "gpui/gpui.h"
+#include "base/state_style.h"
 
 namespace gpui {
 
@@ -14,8 +14,15 @@ namespace gpui {
 // href would not outlive the frame that built it, so the href stays with the
 // caller that already knows it. `activates` is then simply whether a handler
 // was given, which is what Rust's own condition reduces to without one.
+// LinkStyles: what `Link::styles(|s| s.disabled(..))` builds. A link has the
+// one semantic state, and `resolve_style` puts it last.
+struct LinkStyles {
+    StateStyle disabled = {};
+};
+
 struct Link {
     static El* New(Ctx* cx, Str id, bool disabled = false,
-                   Listener onActivate = {});
+                   Listener onActivate = {},
+                   const LinkStyles* styles = nullptr);
 };
 } // namespace gpui

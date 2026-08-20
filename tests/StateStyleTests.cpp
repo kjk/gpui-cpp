@@ -100,18 +100,37 @@ static void SelectedAndDisabledFollowTheSharedPriority() {
 }
 
 // refine_style: what the resolved style does to the element it is put on, and
-// nothing beyond it.
+// nothing beyond it. It lands at layout rather than where the call sits, so
+// the element carries the refinement until then.
 static void AResolvedStyleGoesOntoTheElement() {
     Arena* a = ArenaNew();
     StateStyle s;
     s.Bg(kSelected).Border(2, kDisabled);
     El* e = Div(a)->Radius(4);
     ElRefine(e, s);
+    utassert(e->refineSet == s.set);
+    StyleApplyFields(&e->style, e->refine, e->refineSet);
     utassert(e->style.hasBg && Same(e->style.bg, kSelected));
     utassertnear(e->style.border, 2.f);
     utassert(Same(e->style.borderColor, kDisabled));
     // The radius was never named, so the element keeps its own.
     utassertnear(e->style.radius, 4.f);
+    ArenaDelete(a);
+}
+
+// The order resolve_style promises: the instance style is underneath, and a
+// semantic state wins over it — including the part of the instance style the
+// caller chained on *after* the primitive handed the element back, which is
+// the only order a builder can offer.
+static void AStateWinsOverWhatIsChainedAfterIt() {
+    Arena* a = ArenaNew();
+    StateStyle s;
+    s.Bg(kDisabled);
+    El* e = ElRefine(Div(a), s)->Bg(kSelected)->Radius(6);
+    utassert(Same(e->style.bg, kSelected));
+    StyleApplyFields(&e->style, e->refine, e->refineSet);
+    utassert(Same(e->style.bg, kDisabled));
+    utassertnear(e->style.radius, 6.f);
     ArenaDelete(a);
 }
 
@@ -124,4 +143,5 @@ void TestStateStyle() {
     ADisabledStyleOnlyAppliesWhileDisabled();
     SelectedAndDisabledFollowTheSharedPriority();
     AResolvedStyleGoesOntoTheElement();
+    AStateWinsOverWhatIsChainedAfterIt();
 }
