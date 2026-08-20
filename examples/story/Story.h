@@ -112,6 +112,9 @@ struct StoryApp {
 
 // The window's notification list, for a page that wants to push one.
 Entity<component::NotificationListState> StoryNotifications(Ctx* cx);
+// window.push_notification(message, cx): the one-line info toast the stories
+// answer a dialog button with. `message` has to outlive the frame.
+void StoryPushNotification(Ctx* cx, Str message);
 
 struct StoryInfo {
     const char* slug;

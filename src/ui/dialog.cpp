@@ -104,6 +104,10 @@ Dialog* Dialog::ShowCancel(bool v) {
     showCancel = v;
     return this;
 }
+Dialog* Dialog::Confirm() {
+    showCancel = true;
+    return this;
+}
 Dialog* Dialog::CloseButton(bool v) {
     closeButton = v;
     return this;
