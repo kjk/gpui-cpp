@@ -76,6 +76,17 @@ El* Tiles::IntoEl() {
     if (!s) {
         return root;
     }
+    // The area scrolls over whatever the tiles cover: a tile dragged past an
+    // edge is still reachable, which is what Rust's scroll_size says.
+    Size content = TilesContentSize(s);
+    root->ScrollX(s->scrollX)
+        ->ScrollY(s->scrollY)
+        ->ScrollMode(s->scrollbarMode)
+        ->ScrollId(HashClickId(id))
+        ->OnScroll(ListenTo(state, &TilesState::OnScroll));
+    // The tiles are all out of flow, so nothing in the box has a size of its
+    // own; this is what the scrollbars measure against.
+    root->Child(Div(a)->W(content.w)->H(content.h));
     // The area's own box, so a pointer position in the window can be read in
     // the coordinates the tiles are laid out in.
     root->BoundsOut(&s->bounds);

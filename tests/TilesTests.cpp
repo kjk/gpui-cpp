@@ -243,6 +243,44 @@ static void AnUndoRecordsNothing() {
     utassert(s.nChange == recorded);
 }
 
+
+// The room the tiles take between them, which is what the area scrolls over.
+// Rust folds it from an empty box at the origin, so the content never starts
+// past the origin and is never smaller than the view's own corner.
+static void TheContentIsWhateverTheTilesCover() {
+    TilesState s;
+    Size size = TilesContentSize(&s);
+    utassertnear(size.w, 0.f);
+    utassertnear(size.h, 0.f);
+
+    TilesAdd(&s, 0, B(16, 16, 300, 200));
+    TilesAdd(&s, 1, B(340, 16, 260, 160));
+    size = TilesContentSize(&s);
+    utassertnear(size.w, 600.f);
+    utassertnear(size.h, 216.f);
+
+    // A tile hanging off the left extends the content that way instead.
+    TilesAdd(&s, 2, B(-40, 0, 100, 100));
+    size = TilesContentSize(&s);
+    utassertnear(size.w, 640.f);
+    utassertnear(size.h, 216.f);
+}
+
+// The pointer is read in the coordinates the tiles are laid out in, which is
+// the content's — a scrolled area moves the tiles under the view.
+static void ADragReadsThePointerThroughTheScroll() {
+    TilesState s;
+    s.bounds = B(100, 50, 400, 300);
+    s.scrollY = 120;
+    TilesAdd(&s, 0, B(0, 200, 100, 100));
+    TilesBeginMove(&s, 0, 150, 100);
+    utassertnear(s.dragInitialMouse.x, 50.f);
+    utassertnear(s.dragInitialMouse.y, 170.f);
+    // A move of ten pixels down the window is ten pixels down the content.
+    TilesUpdatePosition(&s, 150, 110);
+    utassertnear(s.items[0].bounds.y, 210.f);
+}
+
 void TestTiles() {
     TestSuite("tiles/snap");
     SnapEdgeWithinThreshold();
@@ -264,6 +302,10 @@ void TestTiles() {
     ATileSnapsToItsNeighbour();
     ATileStaysReachable();
     TheReleaseLandsTheTileOnTheGrid();
+
+    TestSuite("tiles/scroll");
+    TheContentIsWhateverTheTilesCover();
+    ADragReadsThePointerThroughTheScroll();
 
     TestSuite("tiles/order");
     ThePaintOrderIsZIndexThenInsertion();
