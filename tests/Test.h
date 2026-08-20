@@ -69,3 +69,4 @@ void TestSearchableList();
 void TestSidebar();
 void TestWindowBorder();
 void TestKbd();
+void TestNativeMenu();

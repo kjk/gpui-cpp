@@ -509,6 +509,105 @@ int PlatDoubleClickMs() {
     return (int)GetDoubleClickTime();
 }
 
+bool PlatHasMenu() {
+    return true;
+}
+
+// Windows has no documented way to ask for a dark HMENU. These three uxtheme
+// entry points, resolved by ordinal, are the ones Windows itself uses, and a
+// Windows that does not have them draws the ordinary system menu.
+static void ApplyMenuTheme(HWND hwnd, bool dark) {
+    typedef BOOL(WINAPI * AllowDarkModeForWindowFn)(HWND, BOOL);
+    typedef int(WINAPI * SetPreferredAppModeFn)(int);
+    typedef void(WINAPI * FlushMenuThemesFn)();
+
+    static HMODULE uxtheme = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        uxtheme = LoadLibraryW(L"uxtheme.dll");
+    }
+    if (!uxtheme) {
+        return;
+    }
+    auto allowDark = (AllowDarkModeForWindowFn)GetProcAddress(
+        uxtheme, MAKEINTRESOURCEA(133));
+    auto setMode =
+        (SetPreferredAppModeFn)GetProcAddress(uxtheme, MAKEINTRESOURCEA(135));
+    auto flush =
+        (FlushMenuThemesFn)GetProcAddress(uxtheme, MAKEINTRESOURCEA(136));
+    if (allowDark) {
+        allowDark(hwnd, dark ? TRUE : FALSE);
+    }
+    if (setMode) {
+        // ForceDark and ForceLight, the two PreferredAppMode values that say
+        // which one regardless of what the system is set to.
+        const int kForceDark = 2;
+        const int kForceLight = 3;
+        setMode(dark ? kForceDark : kForceLight);
+    }
+    if (flush) {
+        flush();
+    }
+}
+
+// The rows, as an HMENU. A submenu is built the same way and attached with
+// MF_POPUP; destroying the menu destroys them with it.
+static HMENU BuildMenu(const PlatMenuItem* items, int n) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return nullptr;
+    }
+    for (int i = 0; i < n; i++) {
+        const PlatMenuItem& it = items[i];
+        if (it.separator) {
+            AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+            continue;
+        }
+        WCHAR* label = ToCWstrTemp(Str(it.label ? it.label : ""));
+        if (it.submenu && it.submenuN > 0) {
+            HMENU sub = BuildMenu(it.submenu, it.submenuN);
+            if (!sub) {
+                continue;
+            }
+            UINT flags = MF_POPUP | (it.disabled ? MF_GRAYED : 0u);
+            AppendMenuW(menu, flags, (UINT_PTR)sub, label);
+            continue;
+        }
+        UINT flags = MF_STRING | (it.disabled ? MF_GRAYED : 0u) |
+                     (it.checked ? MF_CHECKED : 0u);
+        AppendMenuW(menu, flags, (UINT_PTR)it.id, label);
+    }
+    return menu;
+}
+
+int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
+                 float y, bool dark) {
+    HWND hwnd = Hwnd(win);
+    if (!hwnd || !items || n <= 0) {
+        return 0;
+    }
+    HMENU menu = BuildMenu(items, n);
+    if (!menu) {
+        return 0;
+    }
+    // The position is in logical pixels; Win32 wants physical ones, and on
+    // the screen rather than in the client area.
+    float scale = win->paint.dpi / 96.f;
+    POINT pt = {(LONG)(x * scale + 0.5f), (LONG)(y * scale + 0.5f)};
+    ClientToScreen(hwnd, &pt);
+    // Without this the menu does not dismiss when the click lands elsewhere.
+    SetForegroundWindow(hwnd);
+    ApplyMenuTheme(hwnd, dark);
+    UINT flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_NONOTIFY;
+    // TrackPopupMenuEx runs the OS tracking loop and answers with the id the
+    // row was appended with, or 0 for a menu that was dismissed.
+    int selected =
+        (int)TrackPopupMenuEx(menu, flags, pt.x, pt.y, hwnd, nullptr);
+    DestroyMenu(menu);
+    return selected;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     HWND hwnd = Hwnd(win);
     if (!text.s || text.len <= 0) {

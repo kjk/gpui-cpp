@@ -101,4 +101,31 @@ void PlatSetCursor(Window* win, CursorKind kind);
 // has no such setting, so Linux answers with the 400 ms every toolkit picks.
 int PlatDoubleClickMs();
 
+// ─── OS popup menus (crates/ui/src/native_menu) ──────────────────────────
+
+// One row of a menu the OS draws. A row with no label is a separator, and a
+// row with rows under it opens onto them rather than reporting anything
+// itself.
+struct PlatMenuItem {
+    const char* label = nullptr;
+    // What choosing this row reports. The caller numbers them; 0 is a row
+    // that cannot be chosen at all.
+    int id = 0;
+    bool separator = false;
+    bool disabled = false;
+    bool checked = false;
+    const PlatMenuItem* submenu = nullptr;
+    int submenuN = 0;
+};
+
+// Whether this platform has a popup menu of its own. False sends the caller
+// to a drawn menu instead, which is Rust's FallbackMenuOverlay.
+bool PlatHasMenu();
+// Show `items` at (x, y) in the window's client area, in logical pixels, and
+// answer the id of the row that was chosen — 0 for a menu dismissed without
+// choosing one. The OS runs the tracking loop, so this returns once the menu
+// is gone. `dark` asks for the dark rendering where the OS can be told.
+int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
+                 float y, bool dark);
+
 } // namespace gpui

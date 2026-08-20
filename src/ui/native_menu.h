@@ -1,5 +1,10 @@
-/* Native menu façade — crates/ui/src/native_menu
-   Windows: application builds a Menu and can assign it as a context menu. */
+/* A menu the OS draws — crates/ui/src/native_menu
+
+   Unlike component::PopupMenu, which is drawn into the window and clipped to
+   it, a native menu is the operating system's own and can extend past the
+   window edge. Where a platform has no menu of its own (X11), the caller
+   draws a PopupMenu built from the same rows instead, which is Rust's
+   FallbackMenuOverlay. */
 
 #include "ui/menu.h"
 
@@ -7,9 +12,65 @@ namespace gpui {
 
 namespace component {
 
-struct NativeMenu {
-    static El* New(Ctx* cx, PopupMenu* menu);
+enum class NativeMenuItemKind : uint8_t {
+    Item,
+    Separator,
+    Submenu
 };
+
+struct NativeMenu;
+
+struct NativeMenuItem {
+    NativeMenuItemKind kind = NativeMenuItemKind::Item;
+    Str label = {};
+    bool disabled = false;
+    bool checked = false;
+    // The icon beside the label. The drawn fallback shows it; a real OS menu
+    // would want a bitmap of it, which this port does not build.
+    IconName icon = IconName::None;
+    // What choosing this row reports — Rust dispatches the row's Action, and
+    // this is the value handed to onSelect in its place.
+    intptr_t id = 0;
+    NativeMenu* submenu = nullptr;
+};
+
+const int kNativeMenuMaxItems = 32;
+
+struct NativeMenu {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    NativeMenuItem items[kNativeMenuMaxItems] = {};
+    int n = 0;
+    // What a chosen row reports, bound with ListenerFill the way a component
+    // hands its caller the value it made.
+    Listener onSelect = {};
+
+    static NativeMenu* New(Ctx* cx);
+    NativeMenu* Menu(Str label, intptr_t id);
+    NativeMenu* MenuWithDisabled(Str label, bool disabled, intptr_t id);
+    NativeMenu* MenuWithCheck(Str label, bool checked, intptr_t id);
+    NativeMenu* MenuWithIcon(Str label, IconName icon, intptr_t id);
+    NativeMenu* Separator();
+    NativeMenu* Submenu(Str label, NativeMenu* menu);
+    NativeMenu* OnSelect(Listener l);
+    bool IsEmpty() const { return n == 0; }
+
+    // Show the menu at (x, y) in the window, in logical pixels, and run
+    // onSelect for the row that was chosen. False means this platform has no
+    // menu of its own and nothing was shown — build the drawn menu instead.
+    bool Show(float x, float y);
+
+    // The same rows as a drawn menu, for the platforms without one of their
+    // own and for a caller that would rather draw it anyway.
+    PopupMenu* IntoPopupMenu(Str id) const;
+};
+
+// The rows that can be chosen, in the order the OS is given them: preorder
+// over the submenus, skipping separators, submenu rows and disabled rows —
+// Rust's `actions` vector, which is what makes the id the OS reports map back
+// to the row that was built. Answers how many there are.
+int NativeMenuSelectable(const NativeMenu* m, const NativeMenuItem** out,
+                         int cap);
 
 } // namespace component
 } // namespace gpui
