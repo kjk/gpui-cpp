@@ -1,7 +1,9 @@
 #include "Story.h"
 
-// crates/story/src/tiles_story.rs: panels that float over the area rather
-// than splitting it, each moved by its bar and resized by its edges.
+// crates/story has no tiles page at the pinned SHA; `Tiles` is a crates/ui
+// widget the gallery does not put on a page. This one is a demo of its own:
+// panels that float over the area rather than splitting it, each moved by
+// its bar and resized by its edges.
 struct TilePanelData {
     const char* title;
     const char* body;

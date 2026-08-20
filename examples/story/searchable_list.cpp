@@ -1,6 +1,8 @@
 #include "Story.h"
 
-// The machinery behind a Select and a ComboBox, on its own: a query, items in
+// crates/story has no searchable-list page at the pinned SHA — the delegate
+// is only ever seen through a Select or a ComboBox. This page is a demo of
+// its own: the machinery behind both, on its own, with a query, items in
 // sections, and one or many of them picked.
 static const Str kSections[] = {StrL("Fruit"), StrL("Vegetable")};
 
