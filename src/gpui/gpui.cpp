@@ -4264,11 +4264,11 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
     }
     int ix = DispatchAnchor(win);
 
-    // The contexts stacked over the focused element, innermost first. Deeper
-    // than eight nested key contexts is not a tree anybody builds.
-    uint32_t contexts[8];
+    // The contexts stacked over the focused element, innermost first; the
+    // keymap reads as deep a stack as kMaxContextDepth.
+    uint32_t contexts[kMaxContextDepth];
     int nContexts = 0;
-    for (int i = ix - 1; i >= 0 && nContexts < 8; i--) {
+    for (int i = ix - 1; i >= 0 && nContexts < kMaxContextDepth; i--) {
         if (win->dispatch[i].subtreeEnd <= ix || !win->dispatch[i].context) {
             continue;
         }

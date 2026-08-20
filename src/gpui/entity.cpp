@@ -2,6 +2,7 @@
 
 #include "gpui/gpui.h"
 #include "gpui/platform.h"
+#include "gpui/keymap.h"
 
 namespace gpui {
 
@@ -187,6 +188,18 @@ void WindowSetActive(Window* win, bool active) {
         return;
     }
     win->active = active;
+    if (!active) {
+        // Window::deactivate. Everything the keyboard was part-way through is
+        // dropped, because its other half is going somewhere else: the rest
+        // of a multi-stroke binding will be typed into whatever took the
+        // focus, the character a taken keystroke was going to arrive as never
+        // will, and the key held down over a focused element gets no release
+        // here — so none of the three may be waiting when the window comes
+        // back.
+        KeymapClearPending();
+        win->eatChar = false;
+        win->keyPressPending = false;
+    }
     AppInvalidate(win);
 }
 

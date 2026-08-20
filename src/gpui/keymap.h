@@ -42,6 +42,12 @@ struct KeyChord {
 bool KeyChordParse(Str spec, KeyChord* out);
 bool KeyChordEq(const KeyChord& a, const KeyChord& b);
 
+// How deep a stack of key contexts the matcher reads. Deeper than eight
+// nested contexts is not a tree anybody builds, and the levels past that are
+// the outermost ones — the window's, which a binding scoped to them could
+// have gone unscoped instead.
+const int kMaxContextDepth = 8;
+
 // The longest sequence a binding may be written as. Rust's Vec has no bound;
 // three is past what anything binds — Zed's own keymap stops at two.
 const int kMaxStrokes = 3;
@@ -115,6 +121,9 @@ KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
 // keystroke to the focused field: GPUI matches the keystroke before the text
 // input is given it, which is what lets a sequence finish inside one.
 bool KeymapPending();
+// Drop a half-finished one. A window that loses the focus does this: the rest
+// of the sequence is being typed somewhere else, and a chord left waiting
+// would take the first keystroke of the window's next visit.
 void KeymapClearPending();
 
 } // namespace gpui
