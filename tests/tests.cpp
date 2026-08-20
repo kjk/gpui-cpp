@@ -71,6 +71,8 @@ int GpuiMain(int argc, char** argv) {
     TestTiles();
     TestRoot();
     TestSankey();
+    TestJson();
+    TestDockState();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

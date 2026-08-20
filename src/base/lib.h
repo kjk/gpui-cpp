@@ -14,6 +14,8 @@
 #include "base/dock.h"
 #include "base/tiles.h"
 #include "base/sankey.h"
+#include "base/json.h"
+#include "base/dock_state.h"
 #include "base/dialog.h"
 #include "base/hover_card.h"
 #include "base/input.h"

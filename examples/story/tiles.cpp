@@ -27,11 +27,65 @@ const int kNTiles = (int)(sizeof(kTiles) / sizeof(kTiles[0]));
 struct TilesStory {
     Entity<TilesState> tiles = {};
     bool seeded = false;
+    // The layout the page last saved, as the JSON a dock area is persisted
+    // as — a Tiles node with one TileMeta per tile.
+    Str saved = {};
 
     static El* Render(TilesStory* self, Ctx* cx);
     static void OnUndo(TilesStory* self, Ctx* cx, const ClickEvent* ev);
     static void OnRedo(TilesStory* self, Ctx* cx, const ClickEvent* ev);
+    static void OnSave(TilesStory* self, Ctx* cx, const ClickEvent* ev);
+    static void OnRestore(TilesStory* self, Ctx* cx, const ClickEvent* ev);
 };
+
+// The tiles as a saved dock layout: one node, a TileMeta per tile, written
+// out the way DockAreaState persists one.
+void TilesStory::OnSave(TilesStory* self, Ctx* cx, const ClickEvent*) {
+    TilesState* s = self->tiles.Get(cx);
+    if (!s) {
+        return;
+    }
+    DockAreaState state;
+    state.center = state.NewNode(StrL("Tiles"));
+    PanelStateNode& node = state.nodes[state.center];
+    node.kind = PanelInfoKind::Tiles;
+    int panels[kMaxPanelStateChildren] = {};
+    node.nMeta = TilesToMetas(s, node.metas, panels, kMaxPanelStateChildren);
+    node.nChild = node.nMeta;
+    for (int i = 0; i < node.nChild; i++) {
+        // The child a meta belongs to. Rust names it after the panel's type
+        // and finds it again through the registry; the panels here are the
+        // caller's own list, so the index is the name.
+        node.children[i] = state.NewNode(StrDup(StoryFmt(cx, "%d", panels[i])));
+    }
+    StrBuilder sb;
+    DockAreaStateWrite(&state, &sb);
+    if (self->saved.s) {
+        StrFree(self->saved);
+    }
+    self->saved = sb.TakeStr();
+    Notify(cx);
+}
+
+// And back: the layout is read and every tile goes where its meta says.
+void TilesStory::OnRestore(TilesStory* self, Ctx* cx, const ClickEvent*) {
+    TilesState* s = self->tiles.Get(cx);
+    if (!s || !self->saved.s) {
+        return;
+    }
+    Arena* a = ArenaNew();
+    DockAreaState state;
+    if (DockAreaStateParse(a, self->saved, &state) && state.center >= 0) {
+        const PanelStateNode& node = state.nodes[state.center];
+        int panels[kMaxPanelStateChildren] = {};
+        for (int i = 0; i < node.nChild && i < node.nMeta; i++) {
+            panels[i] = atoi(state.nodes[node.children[i]].panelName.s);
+        }
+        TilesFromMetas(s, node.metas, panels, node.nMeta);
+    }
+    ArenaDelete(a);
+    Notify(cx);
+}
 
 void TilesStory::OnUndo(TilesStory* self, Ctx* cx, const ClickEvent*) {
     TilesState* s = self->tiles.Get(cx);
@@ -86,6 +140,21 @@ El* TilesStory::Render(TilesStory* self, Ctx* cx) {
                    ->Outline()
                    ->OnClick(Listen(cx, &TilesStory::OnRedo))
                    ->IntoEl());
+    row->Child(component::Button::New(cx, StrL("tiles-save"))
+                   ->Label(StrL("Save layout"))
+                   ->Outline()
+                   ->OnClick(Listen(cx, &TilesStory::OnSave))
+                   ->IntoEl());
+    row->Child(component::Button::New(cx, StrL("tiles-restore"))
+                   ->Label(StrL("Restore"))
+                   ->Outline()
+                   ->OnClick(Listen(cx, &TilesStory::OnRestore))
+                   ->IntoEl());
+    row->Child(StoryTxt(
+        cx,
+        self->saved.s ? StoryFmt(cx, "Saved layout: %d bytes", self->saved.len)
+                      : StrL("Nothing saved yet"),
+        13, th.mutedFg));
     El* col = Div(a)->FlexCol()->Gap(12)->W(kFill);
     col->Child(row);
     col->Child(tiles->IntoEl()
