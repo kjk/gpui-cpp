@@ -14,6 +14,10 @@ struct Dialog {
     Str description = {};
     bool open = false;
     El* body = nullptr;
+    // content() in Rust can replace the title/body/footer composition with a
+    // complete DialogContent tree. Surface is that tree; the Dialog still
+    // owns the modal host, panel, overlay, and close button.
+    El* surface = nullptr;
     // onClose is the x and the backdrop; onCancel is the Cancel button, which
     // Rust lets refuse to close on its own (on_cancel returning false).
     Listener onClose;
@@ -22,8 +26,15 @@ struct Dialog {
 
     // AlertDialog::w.
     float width = 448;
+    float height = 0;
     // DialogProps::overlay. The alert story's dialogs never tint the page.
     bool overlay = true;
+    bool overlayClosable = true;
+    float radius = 0;
+    Rgba background = {};
+    Rgba foreground = {};
+    bool hasBackground = false;
+    bool hasForeground = false;
     // AlertDialog::icon sits inline before the title. A story that builds its
     // own DialogHeader can center the group instead and put a large glyph
     // above it.
@@ -56,8 +67,14 @@ struct Dialog {
     Dialog* Description(Str s);
     Dialog* Open(bool v);
     Dialog* Body(El* e);
+    Dialog* Surface(El* e);
     Dialog* W(float px);
+    Dialog* H(float px);
     Dialog* Overlay(bool v);
+    Dialog* OverlayClosable(bool v);
+    Dialog* Radius(float px);
+    Dialog* Bg(Rgba color);
+    Dialog* Fg(Rgba color);
     Dialog* Icon(IconName n, Rgba color, float size = 16);
     Dialog* HeaderCentered(bool v = true);
     Dialog* OkText(Str s);
