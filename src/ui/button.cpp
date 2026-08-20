@@ -104,6 +104,14 @@ Button* Button::WithSize(UiSize s) {
     size = s;
     return this;
 }
+Button* Button::Size(float px) {
+    sizePx = px;
+    return this;
+}
+Button* Button::LoadingIcon(IconName n) {
+    loadingIcon = n;
+    return this;
+}
 Button* Button::TabIndex(int v) {
     tabIndex = v;
     return this;
@@ -252,6 +260,11 @@ El* Button::IntoEl() {
         padX = 0;
         h = 0;
     }
+    // Size::Size(px): a square of that size, with no room for a label.
+    if (sizePx > 0) {
+        h = sizePx;
+        padX = 0;
+    }
     // The unstyled Button takes `disabled` here, and a click id of its own is
     // not one: passing one made every enabled button non-focusable and gave
     // disabled ones a focus handle, which is the opposite of both.
@@ -267,8 +280,29 @@ El* Button::IntoEl() {
                 ->Gap(6)
                 ->Radius(resolved.Has(StateFieldRadius) ? resolved.style.radius
                                                         : th.radius);
+    if (sizePx > 0) {
+        e->W(sizePx);
+    }
     if (bd.a) {
-        e->Border(borderW, bd);
+        if (joined) {
+            // A joined child draws only the edges the group left it, and
+            // takes its rounding from the group's own clip.
+            e->Radius(0);
+            if (edgeT) {
+                e->BorderT(borderW, bd);
+            }
+            if (edgeB) {
+                e->BorderB(borderW, bd);
+            }
+            if (edgeL) {
+                e->BorderL(borderW, bd);
+            }
+            if (edgeR) {
+                e->BorderR(borderW, bd);
+            }
+        } else {
+            e->Border(borderW, bd);
+        }
     }
     if (bg.a) {
         e->Bg(bg);
@@ -298,7 +332,7 @@ El* Button::IntoEl() {
     if (extra) {
         e->Child(extra);
     } else if (loading) {
-        e->Child(IconEl(a, IconName::Loader, 14)->Fg(fg));
+        e->Child(IconEl(a, loadingIcon, 14)->Fg(fg));
     } else if (icon != IconName::None) {
         e->Child(IconEl(a, icon, 14)->Fg(fg));
     }
@@ -308,7 +342,12 @@ El* Button::IntoEl() {
         float fontPx = size == UiSize::XSmall  ? 12.f
                        : size == UiSize::Small ? 14.f
                                                : 16.f;
-        e->Child(TextEl(a, label)->Font(fontPx)->Fg(fg));
+        El* text = TextEl(a, label)->Font(fontPx)->Fg(fg);
+        // ButtonVariant::underline: only the link looks like a link.
+        if (variant == ButtonVariant::Link) {
+            text->Underline();
+        }
+        e->Child(text);
     }
     if (dropdown) {
         // Rust splits the caret into its own segment; the seam is the button
@@ -319,6 +358,117 @@ El* Button::IntoEl() {
         e->Child(IconEl(a, IconName::ChevronDown, 12)->Fg(fg));
     }
     return e;
+}
+
+ButtonGroup* ButtonGroup::New(Ctx* cx, Str id) {
+    ButtonGroup* g = ArenaNew<ButtonGroup>(cx->a);
+    g->a = cx->a;
+    g->cx = cx;
+    g->id = id;
+    return g;
+}
+ButtonGroup* ButtonGroup::Child(Button* b) {
+    if (b && n < 8) {
+        // child(): the group's `disabled` is pushed down as the child is
+        // added, which is why the order of the two calls matters in Rust.
+        b->Disabled(b->disabled || disabled);
+        children[n++] = b;
+    }
+    return this;
+}
+ButtonGroup* ButtonGroup::Multiple(bool v) {
+    multiple = v;
+    return this;
+}
+ButtonGroup* ButtonGroup::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
+ButtonGroup* ButtonGroup::Vertical(bool v) {
+    vertical = v;
+    return this;
+}
+ButtonGroup* ButtonGroup::Compact() {
+    compact = true;
+    return this;
+}
+ButtonGroup* ButtonGroup::Outline() {
+    outline = true;
+    return this;
+}
+ButtonGroup* ButtonGroup::WithVariant(ButtonVariant v) {
+    hasVariant = true;
+    variant = v;
+    return this;
+}
+ButtonGroup* ButtonGroup::WithSize(UiSize s) {
+    hasSize = true;
+    size = s;
+    return this;
+}
+ButtonGroup* ButtonGroup::OnClick(Listener l) {
+    onClick = l;
+    return this;
+}
+
+El* ButtonGroup::IntoEl() {
+    const Theme& th = cx->theme();
+    // The selection the group would report, which each child's click turns
+    // into: its own index toggled in, or replacing the lot when single.
+    intptr_t selected = 0;
+    for (int i = 0; i < n; i++) {
+        if (children[i]->selected) {
+            selected |= (intptr_t)1 << i;
+        }
+    }
+    El* box = Div(a)->Id(id);
+    if (vertical) {
+        // Rust's column stretches its children to the widest of them, because
+        // taffy's default align_items is Stretch. Layout here only stretches
+        // to a cross size the parent already has, and a group shrink-wraps,
+        // so a vertical group's buttons stay as wide as their own labels.
+        box->FlexCol()->JustifyCenter();
+    } else {
+        box->FlexRow()->ItemsCenter();
+    }
+    // The ends are rounded by the group, so a child never has to be.
+    box->Radius(th.radius)->ClipX()->ClipY();
+    for (int i = 0; i < n; i++) {
+        Button* b = children[i];
+        if (hasSize) {
+            b->WithSize(size);
+        }
+        if (hasVariant) {
+            b->variant = variant;
+        }
+        if (compact) {
+            b->Compact();
+        }
+        if (outline) {
+            b->Outline();
+        }
+        b->joined = n > 1;
+        if (n > 1) {
+            // First / middle / last: the seam between two children is drawn
+            // once, by the one after it.
+            b->edgeT = vertical ? (i == 0) : true;
+            b->edgeL = vertical ? true : (i == 0);
+            b->edgeB = true;
+            b->edgeR = true;
+        }
+        if (onClick.IsValid() && !disabled) {
+            intptr_t next = selected;
+            intptr_t bit = (intptr_t)1 << i;
+            if (multiple) {
+                next ^= bit;
+            } else {
+                next = bit;
+            }
+            b->OnClick(ListenerArg(onClick, next));
+        }
+        box->Child(b->IntoEl());
+    }
+    return box;
 }
 
 } // namespace component

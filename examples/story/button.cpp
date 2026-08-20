@@ -1,13 +1,79 @@
 #include "Story.h"
 
+// ButtonAction: the rows of this page's Options dropdown. Shadow is not one
+// of them — there is no Theme::shadow here for it to turn on.
+enum {
+    BtnActDisabled = 3100,
+    BtnActLoading,
+    BtnActSelected,
+    BtnActCompact,
+    BtnActMultiple,
+};
+
 struct ButtonStory {
     StoryToolbarState toolbar;
+    bool disabled = false;
+    bool loading = false;
+    bool selected = false;
+    bool compact = false;
+    bool toggleMultiple = false;
 
     static El* Render(ButtonStory* self, Ctx* cx);
 };
 
+static void OnOption(ButtonStory* self, Ctx* cx, const ClickEvent*,
+                     intptr_t act) {
+    switch ((int)act) {
+        case BtnActDisabled:
+            self->disabled = !self->disabled;
+            break;
+        case BtnActLoading:
+            self->loading = !self->loading;
+            break;
+        case BtnActSelected:
+            self->selected = !self->selected;
+            break;
+        case BtnActCompact:
+            self->compact = !self->compact;
+            break;
+        case BtnActMultiple:
+            self->toggleMultiple = !self->toggleMultiple;
+            break;
+        default:
+            StoryToolbarApply(&self->toolbar, nullptr, (int)act);
+            break;
+    }
+    Notify(cx);
+}
+
+// println!("Button clicked {:?}", ev).
+static void OnButtonClick(ButtonStory*, Ctx*, const ClickEvent*) {
+    logf("Button clicked\n");
+}
+
+// The Selection group reports the indices selected after the click, one bit
+// per child, and this page keeps its four flags in them.
+static void OnSelectionGroup(ButtonStory* self, Ctx* cx, const ClickEvent*,
+                             intptr_t bits) {
+    self->disabled = (bits & 1) != 0;
+    self->loading = (bits & 2) != 0;
+    self->selected = (bits & 4) != 0;
+    self->compact = (bits & 8) != 0;
+    Notify(cx);
+}
+
+// `let button = |id| Button::new(id).with_size(self.size)`, plus the four
+// flags every button on the page carries.
 static component::Button* Btn(Ctx* cx, ButtonStory* self, const char* id) {
-    return component::Button::New(cx, Str(id))->WithSize(self->toolbar.size);
+    component::Button* b = component::Button::New(cx, Str(id))
+                               ->WithSize(self->toolbar.size)
+                               ->Disabled(self->disabled)
+                               ->Selected(self->selected)
+                               ->Loading(self->loading);
+    if (self->compact) {
+        b->Compact();
+    }
+    return b;
 }
 
 static El* ProgressIcon(Ctx* cx, float value, Rgba color, bool hasColor) {
@@ -21,308 +87,305 @@ static El* ProgressIcon(Ctx* cx, float value, Rgba color, bool hasColor) {
     return p->IntoEl();
 }
 
-static El* BtnGroup(Ctx* cx, ButtonStory* self, bool vertical,
-                    const char* prefix) {
-    Arena* a = cx->a;
-    const Theme& th = cx->theme();
-    const char* labels[] = {"One", "Two", "Three"};
-    El* g = vertical ? Div(a)->FlexCol() : Div(a)->FlexRow();
-    g->Border(1, th.border)->Radius(th.radius);
-    for (int i = 0; i < 3; i++) {
-        char id[32];
-        snprintf(id, sizeof(id), "%s-%d", prefix, i);
-        El* b = Btn(cx, self, id)->Label(Str(labels[i]))->IntoEl();
-        if (!vertical && i < 2) {
-            b->Border(0, th.border);
-        }
-        g->Child(b);
-    }
-    return g;
-}
+struct BtnVarSpec {
+    const char* id;
+    const char* label;
+    component::ButtonVariant v;
+};
 
 El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    UiSize size = self->toolbar.size;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
-    page->Child(StoryToolbar(cx, self));
+
+    StoryToolbarOpt opts[5] = {
+        {"Disabled", self->disabled, BtnActDisabled},
+        {"Loading", self->loading, BtnActLoading},
+        {"Selected", self->selected, BtnActSelected},
+        {"Compact", self->compact, BtnActCompact},
+        {"Multiple selection", self->toggleMultiple, BtnActMultiple, false,
+         true},
+    };
+    page->Child(StoryToolbarOptions(cx, self, opts, 5, Listen(cx, &OnOption)));
+
+    Listener click = Listen(cx, &OnButtonClick);
 
     El* vars = StorySection(cx, "Variants",
                             "Visual treatments communicate action priority.");
-    // Rust gives this section .w_128(); the row wraps inside it.
-    El* row = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter()->W(512);
-    row->Child(Btn(cx, self, "button-0")->Label(StrL("Default"))->IntoEl());
-    row->Child(
-        Btn(cx, self, "button-1")->Label(StrL("Primary"))->Primary()->IntoEl());
-    row->Child(Btn(cx, self, "button-2")
-                   ->Label(StrL("Secondary"))
-                   ->Secondary()
-                   ->IntoEl());
-    row->Child(
-        Btn(cx, self, "button-4")->Label(StrL("Danger"))->Danger()->IntoEl());
-    row->Child(Btn(cx, self, "button-4-warning")
-                   ->Label(StrL("Warning"))
-                   ->Warning()
-                   ->IntoEl());
-    row->Child(Btn(cx, self, "button-4-success")
-                   ->Label(StrL("Success"))
-                   ->Success()
-                   ->IntoEl());
-    row->Child(
-        Btn(cx, self, "button-5-info")->Label(StrL("Info"))->Info()->IntoEl());
-    row->Child(Btn(cx, self, "button-5-ghost")
-                   ->Label(StrL("Ghost"))
-                   ->Ghost()
-                   ->IntoEl());
-    row->Child(
-        Btn(cx, self, "button-5-link")->Label(StrL("Link"))->Link()->IntoEl());
-    row->Child(
-        Btn(cx, self, "button-5-text")->Label(StrL("Text"))->Text()->IntoEl());
-    StorySectionAdd(vars, row);
+    StorySectionBody(vars)->W(512);
+    static const BtnVarSpec kVars[] = {
+        {"button-0", "Default", component::ButtonVariant::Default},
+        {"button-1", "Primary", component::ButtonVariant::Primary},
+        {"button-2", "Secondary", component::ButtonVariant::Secondary},
+        {"button-4", "Danger", component::ButtonVariant::Danger},
+        {"button-4-warning", "Warning", component::ButtonVariant::Warning},
+        {"button-4-success", "Success", component::ButtonVariant::Success},
+        {"button-5-info", "Info", component::ButtonVariant::Info},
+        {"button-5-ghost", "Ghost", component::ButtonVariant::Ghost},
+        {"button-5-link", "Link", component::ButtonVariant::Link},
+        {"button-5-text", "Text", component::ButtonVariant::Text},
+    };
+    for (const BtnVarSpec& v : kVars) {
+        component::Button* b = Btn(cx, self, v.id)->Label(Str(v.label));
+        b->variant = v.v;
+        StorySectionAdd(vars, b->OnClick(click)->IntoEl());
+    }
     page->Child(vars);
 
     El* icons = StorySection(
         cx, "Icons", "Icons can lead labels or appear in custom content.");
-    El* iconRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter();
-    iconRow->Child(Btn(cx, self, "button-icon-1")
-                       ->Outline()
-                       ->Label(StrL("Confirm"))
-                       ->Icon(IconName::Check)
-                       ->IntoEl());
-    iconRow->Child(Btn(cx, self, "button-icon-2")
-                       ->Outline()
-                       ->Label(StrL("Abort"))
-                       ->Icon(IconName::X)
-                       ->IntoEl());
-    iconRow->Child(Btn(cx, self, "button-icon-3")
-                       ->Outline()
-                       ->Label(StrL("Maximize"))
-                       ->Icon(IconName::Maximize)
-                       ->IntoEl());
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-1")
+                               ->Outline()
+                               ->Label(StrL("Confirm"))
+                               ->Icon(IconName::Check)
+                               ->OnClick(click)
+                               ->IntoEl());
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-2")
+                               ->Outline()
+                               ->Label(StrL("Abort"))
+                               ->Icon(IconName::X)
+                               ->OnClick(click)
+                               ->IntoEl());
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-3")
+                               ->Outline()
+                               ->Label(StrL("Maximize"))
+                               ->Icon(IconName::Maximize)
+                               ->OnClick(click)
+                               ->IntoEl());
     El* custom = Div(a)->FlexRow()->ItemsCenter()->Gap(8);
-    custom->Child(StoryTxt(cx, StrL("Custom Child"), 14, th.foreground));
-    custom->Child(IconEl(a, IconName::ChevronDown, 14)->Fg(th.foreground));
-    custom->Child(IconEl(a, IconName::Eye, 14)->Fg(th.foreground));
-    iconRow->Child(Btn(cx, self, "button-icon-4")->Extra(custom)->IntoEl());
-    iconRow->Child(Btn(cx, self, "button-icon-5-ghost")
-                       ->Ghost()
-                       ->Icon(IconName::Check)
-                       ->Label(StrL("Confirm"))
-                       ->IntoEl());
-    iconRow->Child(Btn(cx, self, "button-icon-6-link")
-                       ->Link()
-                       ->Icon(IconName::Check)
-                       ->Label(StrL("Link"))
-                       ->IntoEl());
-    iconRow->Child(Btn(cx, self, "button-icon-6-text")
-                       ->Text()
-                       ->Icon(IconName::Check)
-                       ->Label(StrL("Text Button"))
-                       ->IntoEl());
-    StorySectionAdd(icons, iconRow);
+    custom->Child(TextEl(a, StrL("Custom Child")));
+    custom->Child(IconEl(a, IconName::ChevronDown, 14));
+    custom->Child(IconEl(a, IconName::Eye, 14));
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-4")
+                               ->Extra(custom)
+                               ->OnClick(click)
+                               ->IntoEl());
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-5-ghost")
+                               ->Ghost()
+                               ->Icon(IconName::Check)
+                               ->Label(StrL("Confirm"))
+                               ->OnClick(click)
+                               ->IntoEl());
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-6-link")
+                               ->Link()
+                               ->Icon(IconName::Check)
+                               ->Label(StrL("Link"))
+                               ->OnClick(click)
+                               ->IntoEl());
+    StorySectionAdd(icons, Btn(cx, self, "button-icon-6-text")
+                               ->Text()
+                               ->Icon(IconName::Check)
+                               ->Label(StrL("Text Button"))
+                               ->OnClick(click)
+                               ->IntoEl());
     page->Child(icons);
 
+    // The progress buttons take none of the page's flags — Rust builds them
+    // straight off the plain button helper.
     El* prog =
         StorySection(cx, "Progress", "Buttons can show determinate progress.");
-    El* progRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter();
-    progRow->Child(Btn(cx, self, "progress-button-1")
+    El* progRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
+    progRow->Child(component::Button::New(cx, StrL("progress-button-1"))
+                       ->WithSize(size)
                        ->Primary()
                        ->Extra(ProgressIcon(cx, 25, th.primaryFg, true))
                        ->Label(StrL("Installing..."))
                        ->IntoEl());
-    progRow->Child(Btn(cx, self, "progress-button-2")
-                       ->Extra(ProgressIcon(cx, 35, {}, false))
-                       ->Label(StrL("Installing..."))
-                       ->IntoEl());
-    progRow->Child(Btn(cx, self, "progress-button-3")
-                       ->Extra(ProgressIcon(cx, 68, {}, false))
-                       ->Label(StrL("Installing..."))
-                       ->IntoEl());
-    progRow->Child(Btn(cx, self, "progress-button-4")
-                       ->Extra(ProgressIcon(cx, 85, {}, false))
-                       ->Label(StrL("Installing..."))
-                       ->IntoEl());
+    const float kProgress[] = {35, 68, 85};
+    for (int i = 0; i < 3; i++) {
+        progRow->Child(component::Button::New(
+                           cx, StoryFmt(cx, "progress-button-%d", i + 2))
+                           ->WithSize(size)
+                           ->Extra(ProgressIcon(cx, kProgress[i], {}, false))
+                           ->Label(StrL("Installing..."))
+                           ->IntoEl());
+    }
     StorySectionAdd(prog, progRow);
     page->Child(prog);
 
     El* out = StorySection(cx, "Outline",
                            "Outlined treatments keep actions visually quiet.");
-    El* outRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter()->W(512);
-    outRow->Child(Btn(cx, self, "button-outline-1")
-                      ->Primary()
-                      ->Outline()
-                      ->Label(StrL("Primary Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-2")
-                      ->Outline()
-                      ->Label(StrL("Normal Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-4-danger")
-                      ->Danger()
-                      ->Outline()
-                      ->Label(StrL("Danger Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-4-warning")
-                      ->Warning()
-                      ->Outline()
-                      ->Label(StrL("Warning Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-4-success")
-                      ->Success()
-                      ->Outline()
-                      ->Label(StrL("Success Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-5-info")
-                      ->Info()
-                      ->Outline()
-                      ->Label(StrL("Info Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-5-ghost")
-                      ->Ghost()
-                      ->Outline()
-                      ->Label(StrL("Ghost Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-5-link")
-                      ->Link()
-                      ->Outline()
-                      ->Label(StrL("Link Button"))
-                      ->IntoEl());
-    outRow->Child(Btn(cx, self, "button-outline-5-text")
-                      ->Text()
-                      ->Outline()
-                      ->Label(StrL("Text Button"))
-                      ->IntoEl());
-    StorySectionAdd(out, outRow);
+    StorySectionBody(out)->W(512);
+    static const BtnVarSpec kOutline[] = {
+        {"button-outline-1", "Primary Button",
+         component::ButtonVariant::Primary},
+        {"button-outline-2", "Normal Button",
+         component::ButtonVariant::Default},
+        {"button-outline-4-danger", "Danger Button",
+         component::ButtonVariant::Danger},
+        {"button-outline-4-warning", "Warning Button",
+         component::ButtonVariant::Warning},
+        {"button-outline-4-success", "Success Button",
+         component::ButtonVariant::Success},
+        {"button-outline-5-info", "Info Button",
+         component::ButtonVariant::Info},
+        {"button-outline-5-ghost", "Ghost Button",
+         component::ButtonVariant::Ghost},
+        {"button-outline-5-link", "Link Button",
+         component::ButtonVariant::Link},
+        {"button-outline-5-text", "Text Button",
+         component::ButtonVariant::Text},
+    };
+    for (const BtnVarSpec& v : kOutline) {
+        component::Button* b =
+            Btn(cx, self, v.id)->Outline()->Label(Str(v.label));
+        b->variant = v.v;
+        StorySectionAdd(out, b->OnClick(click)->IntoEl());
+    }
     page->Child(out);
 
     El* drop =
         StorySection(cx, "Dropdown", "A caret indicates an attached menu.");
-    El* dropRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter()->W(512);
-    dropRow->Child(Btn(cx, self, "button-dropdown-caret-primary")
-                       ->Primary()
-                       ->DropdownCaret()
-                       ->Label(StrL("Primary Button"))
-                       ->IntoEl());
-    dropRow->Child(Btn(cx, self, "button-dropdown-caret-default")
-                       ->DropdownCaret()
-                       ->Label(StrL("Default Button"))
-                       ->IntoEl());
-    dropRow->Child(Btn(cx, self, "button-outline-3")
-                       ->Secondary()
-                       ->DropdownCaret()
-                       ->Label(StrL("Secondary Button"))
-                       ->IntoEl());
-    dropRow->Child(Btn(cx, self, "button-dropdown-caret-ghost")
-                       ->Ghost()
-                       ->DropdownCaret()
-                       ->Label(StrL("Ghost Button"))
-                       ->IntoEl());
-    dropRow->Child(Btn(cx, self, "button-dropdown-caret-link")
-                       ->Link()
-                       ->DropdownCaret()
-                       ->Label(StrL("Link Button"))
-                       ->IntoEl());
-    dropRow->Child(Btn(cx, self, "button-dropdown-caret-small")
-                       ->Outline()
-                       ->DropdownCaret()
-                       ->Label(StrL("Small Button"))
-                       ->IntoEl());
-    StorySectionAdd(drop, dropRow);
+    StorySectionBody(drop)->W(512);
+    static const BtnVarSpec kDrop[] = {
+        {"button-dropdown-caret-primary", "Primary Button",
+         component::ButtonVariant::Primary},
+        {"button-dropdown-caret-default", "Default Button",
+         component::ButtonVariant::Default},
+        {"button-outline-3", "Secondary Button",
+         component::ButtonVariant::Secondary},
+        {"button-dropdown-caret-ghost", "Ghost Button",
+         component::ButtonVariant::Ghost},
+        {"button-dropdown-caret-link", "Link Button",
+         component::ButtonVariant::Link},
+    };
+    for (const BtnVarSpec& v : kDrop) {
+        component::Button* b =
+            Btn(cx, self, v.id)->DropdownCaret()->Label(Str(v.label));
+        b->variant = v.v;
+        StorySectionAdd(drop, b->OnClick(click)->IntoEl());
+    }
+    StorySectionAdd(drop, Btn(cx, self, "button-dropdown-caret-small")
+                              ->Outline()
+                              ->DropdownCaret()
+                              ->Label(StrL("Small Button"))
+                              ->OnClick(click)
+                              ->IntoEl());
     page->Child(drop);
 
+    static const char* const kOneTwoThree[] = {"One", "Two", "Three"};
     El* hg = StorySection(cx, "Horizontal group", nullptr);
-    StorySectionAdd(hg, BtnGroup(cx, self, false, "button-h"));
+    component::ButtonGroup* hgrp =
+        component::ButtonGroup::New(cx, StrL("button-group"))
+            ->Outline()
+            ->Disabled(self->disabled);
+    for (int i = 0; i < 3; i++) {
+        hgrp->Child(Btn(cx, self, StoryFmt(cx, "button-%s", kOneTwoThree[i]).s)
+                        ->Label(Str(kOneTwoThree[i]))
+                        ->Loading(false)
+                        ->OnClick(click));
+    }
+    StorySectionAdd(hg, hgrp->IntoEl());
     page->Child(hg);
 
     El* vg = StorySection(cx, "Vertical group", nullptr);
-    StorySectionAdd(vg, BtnGroup(cx, self, true, "button-v"));
+    component::ButtonGroup* vgrp =
+        component::ButtonGroup::New(cx, StrL("button-group-vertical"))
+            ->Outline()
+            ->Vertical()
+            ->Disabled(self->disabled);
+    for (int i = 0; i < 3; i++) {
+        vgrp->Child(
+            Btn(cx, self, StoryFmt(cx, "button-vertical-%s", kOneTwoThree[i]).s)
+                ->Label(Str(kOneTwoThree[i]))
+                ->Loading(false)
+                ->OnClick(click));
+    }
+    StorySectionAdd(vg, vgrp->IntoEl());
     page->Child(vg);
 
+    // The four toggles in this group are the four Options rows, so the group
+    // and the dropdown drive one another.
     El* sel = StorySection(cx, "Selection group",
                            "Groups support single or multiple selection.");
-    El* selRow = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
-    selRow->Child(Btn(cx, self, "disabled-toggle-button")
-                      ->Label(StrL("Disabled"))
-                      ->Compact()
-                      ->Outline()
-                      ->IntoEl());
-    selRow->Child(Btn(cx, self, "loading-toggle-button")
-                      ->Label(StrL("Loading"))
-                      ->Compact()
-                      ->Outline()
-                      ->IntoEl());
-    selRow->Child(Btn(cx, self, "selected-toggle-button")
-                      ->Label(StrL("Selected"))
-                      ->Compact()
-                      ->Outline()
-                      ->Selected(true)
-                      ->IntoEl());
-    selRow->Child(Btn(cx, self, "compact-toggle-button")
-                      ->Label(StrL("Compact"))
-                      ->Compact()
-                      ->Outline()
-                      ->IntoEl());
-    StorySectionAdd(sel, selRow);
+    struct ToggleSpec {
+        const char* id;
+        const char* label;
+        bool on;
+    };
+    const ToggleSpec kToggles[] = {
+        {"disabled-toggle-button", "Disabled", self->disabled},
+        {"loading-toggle-button", "Loading", self->loading},
+        {"selected-toggle-button", "Selected", self->selected},
+        {"compact-toggle-button", "Compact", self->compact},
+    };
+    component::ButtonGroup* tgrp =
+        component::ButtonGroup::New(cx, StrL("toggle-button-group"))
+            ->Outline()
+            ->Compact()
+            ->Multiple(self->toggleMultiple)
+            ->OnClick(Listen(cx, &OnSelectionGroup));
+    for (const ToggleSpec& t : kToggles) {
+        tgrp->Child(component::Button::New(cx, Str(t.id))
+                        ->WithSize(size)
+                        ->Label(Str(t.label))
+                        ->Selected(t.on));
+    }
+    StorySectionAdd(sel, tgrp->IntoEl());
     page->Child(sel);
 
     El* only = StorySection(cx, "Icon-only",
                             "Compact actions can omit visible labels.");
-    El* onlyRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    onlyRow->Child(Btn(cx, self, "icon-button-primary")
-                       ->Icon(IconName::Search)
-                       ->Primary()
-                       ->IntoEl());
-    onlyRow->Child(Btn(cx, self, "icon-button-secondary")
-                       ->Icon(IconName::Info)
-                       ->Loading(true)
-                       ->IntoEl());
-    onlyRow->Child(Btn(cx, self, "icon-button-danger")
-                       ->Icon(IconName::X)
-                       ->Danger()
-                       ->IntoEl());
-    onlyRow->Child(Btn(cx, self, "icon-button-small-primary")
-                       ->Icon(IconName::Search)
-                       ->Primary()
-                       ->IntoEl());
-    onlyRow->Child(Btn(cx, self, "icon-button-outline")
-                       ->Icon(IconName::Search)
-                       ->Outline()
-                       ->IntoEl());
-    onlyRow->Child(Btn(cx, self, "icon-button-ghost")
-                       ->Icon(IconName::ArrowLeft)
-                       ->Ghost()
-                       ->IntoEl());
-    StorySectionAdd(only, onlyRow);
+    StorySectionAdd(only, Btn(cx, self, "icon-button-primary")
+                              ->Icon(IconName::Search)
+                              ->LoadingIcon(IconName::LoaderCircle)
+                              ->Primary()
+                              ->IntoEl());
+    // .loading(true) then .loading(loading): the later call wins.
+    StorySectionAdd(only, Btn(cx, self, "icon-button-secondary")
+                              ->Icon(IconName::Info)
+                              ->IntoEl());
+    StorySectionAdd(only, Btn(cx, self, "icon-button-danger")
+                              ->Icon(IconName::X)
+                              ->Danger()
+                              ->IntoEl());
+    StorySectionAdd(only, Btn(cx, self, "icon-button-small-primary")
+                              ->Icon(IconName::Search)
+                              ->Primary()
+                              ->IntoEl());
+    StorySectionAdd(only, Btn(cx, self, "icon-button-outline")
+                              ->Icon(IconName::Search)
+                              ->Outline()
+                              ->IntoEl());
+    StorySectionAdd(only, Btn(cx, self, "icon-button-ghost")
+                              ->Icon(IconName::ArrowLeft)
+                              ->LoadingIcon(IconName::LoaderCircle)
+                              ->Ghost()
+                              ->IntoEl());
     page->Child(only);
 
     El* csz = StorySection(
         cx, "Custom size",
         "A fixed pixel size is available for compact icon actions.");
-    StorySectionAdd(csz, component::Button::New(cx, StrL("icon-button-9"))
+    StorySectionAdd(csz, Btn(cx, self, "icon-button-9")
                              ->Icon(IconName::Heart)
+                             ->Size(24)
                              ->Ghost()
-                             ->IntoEl()
-                             ->W(24)
-                             ->H(24));
+                             ->IntoEl());
     page->Child(csz);
 
+    // ButtonCustomVariant::new(cx).color(magenta).foreground(magenta)
+    // .hover(magenta at 0.1).active(magenta at 0.2).
     El* customSec = StorySection(cx, "Custom color", nullptr);
-    El* customRow = Div(a)->FlexRow()->FlexWrap()->Gap(16)->ItemsCenter();
-    customRow->Child(Btn(cx, self, "button-6-custom")
-                         ->Custom(th.magenta)
-                         ->Label(StrL("Custom Button"))
-                         ->IntoEl());
-    customRow->Child(Btn(cx, self, "button-outline-6-custom")
-                         ->Outline()
-                         ->Custom(th.magenta)
-                         ->Label(StrL("Outline Button"))
-                         ->IntoEl());
-    customRow->Child(Btn(cx, self, "button-outline-6-custom-1")
-                         ->Outline()
-                         ->Icon(IconName::Bell)
-                         ->Custom(th.magenta)
-                         ->Label(StrL("Icon Button"))
-                         ->IntoEl());
-    StorySectionAdd(customSec, customRow);
+    StorySectionAdd(customSec, Btn(cx, self, "button-6-custom")
+                                   ->Custom(th.magenta)
+                                   ->Label(StrL("Custom Button"))
+                                   ->OnClick(click)
+                                   ->IntoEl());
+    StorySectionAdd(customSec, Btn(cx, self, "button-outline-6-custom")
+                                   ->Outline()
+                                   ->Custom(th.magenta)
+                                   ->Label(StrL("Outline Button"))
+                                   ->OnClick(click)
+                                   ->IntoEl());
+    StorySectionAdd(customSec, Btn(cx, self, "button-outline-6-custom-1")
+                                   ->Outline()
+                                   ->Icon(IconName::Bell)
+                                   ->Custom(th.magenta)
+                                   ->Label(StrL("Icon Button"))
+                                   ->OnClick(click)
+                                   ->IntoEl());
     page->Child(customSec);
     return page;
 }
