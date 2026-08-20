@@ -404,7 +404,10 @@ static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
 static El* ToolbarMenuSep(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    return Div(a)->H(1)->W(kFill)->Bg(th.border);
+    // No width of its own: `align: stretch` is what makes it as wide as the
+    // menu, where `W(kFill)` would make it as wide as whatever the menu is
+    // floating over — and take the menu with it.
+    return Div(a)->H(1)->Bg(th.border);
 }
 
 static El* ToolbarMenu(Ctx* cx) {

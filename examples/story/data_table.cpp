@@ -181,8 +181,16 @@ static void OnTableEvent(DataTableStory* self, Ctx* cx, const TableEvent* ev) {
         case TableEventKind::SelectCol:
             self->message = StrDup(fmt("Selected column %d", ev->col));
             break;
+        case TableEventKind::SelectCell:
+            self->message =
+                StrDup(fmt("Selected cell %d:%d", ev->row, ev->col));
+            break;
         case TableEventKind::DoubleClickedRow:
             self->message = StrDup(fmt("Double clicked row %d", ev->row));
+            break;
+        case TableEventKind::DoubleClickedCell:
+            self->message =
+                StrDup(fmt("Double clicked cell %d:%d", ev->row, ev->col));
             break;
         case TableEventKind::MoveColumn:
             self->message =
