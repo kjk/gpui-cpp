@@ -6,6 +6,8 @@
 
 #include "Test.h"
 
+#include <math.h>
+
 static const float kSankeyEps = 1e-3f;
 
 static bool Near(float a, float b) {
