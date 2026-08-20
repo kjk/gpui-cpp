@@ -76,10 +76,14 @@ El* Slider::IntoEl() {
     if (axis == Axis::Vertical) {
         // The same three parts turned on their side, filling upward from the
         // bottom of the track.
-        El* vtrack = SliderTrack::New(cx, bind, axis)
-                         ->W(kH)
-                         ->H(w)
-                         ->Click(HashClickId(id.s ? id : StrL("slider-v")));
+        int vid = HashClickId(id.s ? id : StrL("slider-v"));
+        El* vtrack = SliderTrack::New(cx, bind, axis)->W(kH)->H(w)->Click(vid);
+        // Focusable, so the arrows can reach it: `on_a11y_action(Increment |
+        // Decrement)` is what they stand in for, and a track that cannot take
+        // focus has no way to hear them.
+        if (!disabled) {
+            vtrack->FocusId(vid);
+        }
         vtrack->Child(SliderIndicator::New(cx, bind)
                           ->Absolute()
                           ->Left(mid)
@@ -113,10 +117,11 @@ El* Slider::IntoEl() {
         return gpui::Slider::New(cx)->W(kH)->H(w)->Child(vtrack);
     }
 
-    El* track = SliderTrack::New(cx, bind, axis)
-                    ->W(w)
-                    ->H(kH)
-                    ->Click(HashClickId(id.s ? id : StrL("slider")));
+    int tid = HashClickId(id.s ? id : StrL("slider"));
+    El* track = SliderTrack::New(cx, bind, axis)->W(w)->H(kH)->Click(tid);
+    if (!disabled) {
+        track->FocusId(tid);
+    }
     track->Child(SliderIndicator::New(cx, bind)
                      ->Absolute()
                      ->Top(mid)

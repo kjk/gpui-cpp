@@ -165,6 +165,34 @@ bool SliderUpdateByPosition(SliderState* s, Axis axis, Point pos,
     return s->value.lo != before.lo || s->value.hi != before.hi;
 }
 
+bool SliderStepBy(SliderState* s, int dir, bool isStart) {
+    if (!s || dir == 0) {
+        return false;
+    }
+    // A slider with no step of its own moves by a hundredth of its range,
+    // which is what a percentage slider's arrow is worth.
+    float step = s->step > 0 ? s->step : (s->max - s->min) / 100.f;
+    if (step <= 0) {
+        return false;
+    }
+    float from = isStart ? s->value.Start() : s->value.End();
+    float want = from + step * (float)dir;
+    // The same clamp a drag gets: an end never crosses the other one.
+    float lo = isStart ? s->min : SliderPctToValue(s, s->pctLo);
+    float hi = isStart ? SliderPctToValue(s, s->pctHi) : s->max;
+    want = ClampF(want, lo, hi);
+    if (want == from) {
+        return false;
+    }
+    if (isStart) {
+        SliderValueSetStart(&s->value, want);
+    } else {
+        SliderValueSetEnd(&s->value, want);
+    }
+    SliderUpdateThumbPos(s);
+    return true;
+}
+
 bool SliderHandleRelease(SliderState* s) {
     if (!s->dragging) {
         return false;
