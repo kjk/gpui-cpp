@@ -214,6 +214,8 @@ static void SetMouseDown(Window* win, bool down) {
     PlatSetMouseCapture(win, down);
 }
 
+static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt);
+
 void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     if (!win) {
         return;
@@ -242,6 +244,12 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // leaves the key to whatever else wants it.
     if (!held && !eaten && key == KeyC && ctrl && !shift && !alt) {
         eaten = WindowSelectionCopy(win);
+    }
+    // The focused slider's arrows, before anything else looks at them: an
+    // element bound to a SliderState is a slider whatever else it is.
+    if (!held && !eaten && SliderKeyStep(win, key, ctrl, alt)) {
+        win->eatChar = true;
+        return;
     }
     // div().on_key_down: the focused element's own listener, and then the
     // ones above it, before the keymap resolves the chord. A field that is
@@ -580,6 +588,42 @@ static void SliderRelease(Window* win) {
             AppInvalidate(win);
         }
     }
+}
+
+// slider.rs's `on_a11y_action(Increment | Decrement)`, on the keyboard. There
+// is no accessibility layer in this tree for the role and the aria values to
+// live in, and the half that is reachable is the half a keyboard user needs:
+// the arrows over the focused track, stepping by the slider's own step. Which
+// end of a range moves is the one the last press took, which is what a reader
+// who just dragged one of them expects to keep moving.
+static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt) {
+    if (ctrl || alt || !win->focusId) {
+        return false;
+    }
+    int dir = 0;
+    if (key == KeyRight || key == KeyUp) {
+        dir = 1;
+    } else if (key == KeyLeft || key == KeyDown) {
+        dir = -1;
+    }
+    if (dir == 0) {
+        return false;
+    }
+    for (int i = 0; i < win->paint.hits.len; i++) {
+        const HitRect& hr = win->paint.hits[i];
+        if (hr.id != win->focusId || !hr.slider) {
+            continue;
+        }
+        if (SliderStepBy(hr.slider, dir,
+                         hr.slider->value.range && hr.slider->dragStart)) {
+            SliderEmit(win, hr.slider, SliderEventKind::Change);
+        }
+        // The keystroke was the slider's whether or not it could move: an
+        // arrow on a slider at its limit is not also a walk of the focus.
+        AppInvalidate(win);
+        return true;
+    }
+    return false;
 }
 
 // How far the pointer travels before a press counts as a drag rather than a

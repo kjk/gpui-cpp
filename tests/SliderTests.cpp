@@ -123,6 +123,46 @@ static void ReleaseOnlyFiresAfterAPress() {
     utassert(!SliderHandleRelease(&s));
 }
 
+
+// on_a11y_action(Increment | Decrement), which is what the arrows carry: the
+// value moves by the slider's own step and stops at its limits.
+static void TheArrowsStepByTheStep() {
+    SliderState s = TrackState();
+    SliderSetStep(&s, 5.f);
+    SliderSetValue(&s, SliderSingle(50.f));
+
+    utassert(SliderStepBy(&s, 1, false));
+    utassertnear(s.value.End(), 55.f);
+    utassert(SliderStepBy(&s, -1, false));
+    utassertnear(s.value.End(), 50.f);
+    // The percentage follows, which is what the thumb is drawn from.
+    utassertnear(s.pctHi, 0.5f);
+
+    // A slider with no step of its own moves by a hundredth of its range.
+    SliderState pct = TrackState();
+    SliderSetStep(&pct, 0.f);
+    SliderSetValue(&pct, SliderSingle(50.f));
+    utassert(SliderStepBy(&pct, 1, false));
+    utassertnear(pct.value.End(), 51.f);
+
+    // The limits hold, and a step that cannot move answers false.
+    SliderSetValue(&s, SliderSingle(100.f));
+    utassert(!SliderStepBy(&s, 1, false));
+    utassertnear(s.value.End(), 100.f);
+    SliderSetValue(&s, SliderSingle(0.f));
+    utassert(!SliderStepBy(&s, -1, false));
+
+    // A range's ends never cross: the low end stops at the high one.
+    SliderState r = TrackState();
+    SliderSetStep(&r, 10.f);
+    SliderSetValue(&r, SliderRange(30.f, 40.f));
+    utassert(SliderStepBy(&r, 1, true));
+    utassertnear(r.value.Start(), 40.f);
+    utassert(!SliderStepBy(&r, 1, true));
+    utassert(SliderStepBy(&r, 1, false));
+    utassertnear(r.value.End(), 50.f);
+}
+
 void TestSlider() {
     TestSuite("slider");
     ValueConversionsAndClampingArePreserved();
@@ -135,4 +175,5 @@ void TestSlider() {
     RangeEndsKeepTheirOrder();
     APressTakesTheNearerHalfOfARange();
     ReleaseOnlyFiresAfterAPress();
+    TheArrowsStepByTheStep();
 }

@@ -2228,6 +2228,13 @@ bool SliderUpdateByPosition(SliderState* s, Axis axis, Point pos, bool isStart);
 bool SliderIsStartAt(const SliderState* s, Axis axis, Point pos);
 // handle_release: true when a Release event is due.
 bool SliderHandleRelease(SliderState* s);
+// The a11y half of slider.rs that is reachable here: `on_a11y_action` binds
+// Increment and Decrement, and this is what the two of them do to the value.
+// There is no accessibility layer in this tree, so the arrows are what carries
+// them — and the arrows are what a keyboard user needs either way. `dir` is +1
+// or -1, and `isStart` picks which end of a range moves. Answers whether the
+// value moved.
+bool SliderStepBy(SliderState* s, int dir, bool isStart);
 
 struct Overlay {
     int kind = 0; // 0 none, 1 dialog, 2 sheet
