@@ -29,6 +29,9 @@ static void TheLightPaletteIsDefaultLight() {
     utassert(Is(t.success, 0x22c55e) && Is(t.successFg, 0xfafafa));
     utassert(Is(t.warning, 0xeab308) && Is(t.warningFg, 0xfafafa));
     utassert(Is(t.skeleton, 0xf5f5f5));
+    // selection.background is a colour of its own, not `accent` faded — which
+    // on a white field is a tint nobody can see.
+    utassert(Is(t.selection, 0x55a0fc));
 }
 
 static void TheDarkPaletteIsDefaultDark() {
@@ -44,6 +47,7 @@ static void TheDarkPaletteIsDefaultDark() {
     utassert(Is(t.success, 0x4ade80) && Is(t.successFg, 0x16a34a));
     utassert(Is(t.warning, 0xfacc15) && Is(t.warningFg, 0xca8a04));
     utassert(Is(t.skeleton, 0x171717));
+    utassert(Is(t.selection, 0x1d4ed8));
 }
 
 void TestThemeColor() {

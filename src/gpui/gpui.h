@@ -64,6 +64,10 @@ struct Theme {
     // ring: the focus ring color. caret: the text cursor.
     Rgba ring;
     Rgba caret;
+    // selection.background: what a run of picked-out text is tinted with. It
+    // is a colour of its own in default-theme.json, not `accent` faded — a
+    // blue, in both themes.
+    Rgba selection;
     Rgba titleBar;
     Rgba titleBarBorder;
     Rgba tabBar;
