@@ -48,9 +48,10 @@ DockDrop DockDropAt(Bounds b, float x, float y);
 // or all of it for a merge.
 Bounds DockDropPlaceholder(Bounds b, DockDrop d);
 
-const int kMaxDockPanels = 32;
-const int kMaxDockNodes = 32;
-const int kMaxDockChildren = 8;
+// A node index past the pool, which is what a listener bound to one of the
+// three docks rather than to a node carries. The pool grows, so this is a
+// number no node index can reach rather than the pool's own size.
+const int kDockSideBase = 1 << 20;
 
 // One panel the host handed the dock. Rust's `Arc<dyn PanelView>` is a title,
 // a render and the two questions the tab bar asks it.
@@ -69,15 +70,17 @@ struct DockPanelDef {
 // DockItem. A node is either Tabs — a list of panels with one active — or
 // Split — a list of child nodes along an axis, each with a size.
 struct DockNode {
+    DockNode() = default;
+
     bool used = false;
     bool split = false;
     Axis axis = Axis::Horizontal;
     int parent = -1;
-    int child[kMaxDockChildren] = {};
-    float size[kMaxDockChildren] = {};
-    int nChild = 0;
-    int panel[kMaxDockPanels] = {};
-    int nPanel = 0;
+    // A split's children and their sizes, and a tab group's panels: as many
+    // of either as the caller builds. Rust holds a Vec for each.
+    Vec<int> child;
+    Vec<float> size;
+    Vec<int> panel;
     int activeIx = 0;
     // Where the node was last painted. The drop zone under the pointer can
     // only be worked out against boxes, and the boxes are last frame's.
@@ -114,9 +117,11 @@ struct DockEvent {
 };
 
 struct DockState {
-    DockPanelDef panels[kMaxDockPanels] = {};
-    int nPanels = 0;
-    DockNode nodes[kMaxDockNodes] = {};
+    Vec<DockPanelDef> panels;
+    // The node pool. A free slot is one whose `used` is false, and the pool
+    // grows when there is none — `DockNode` holds arrays of its own, so a
+    // slot is emptied rather than dropped.
+    Vec<DockNode> nodes;
     int center = -1;
     DockSide left = {};
     DockSide bottom = {};
@@ -170,6 +175,16 @@ struct DockState {
                                intptr_t node);
     static void OnResizeDrag(DockState* self, Ctx* cx, const DragMoveEvent* ev);
     static void OnResizeEnd(DockState* self, Ctx* cx, const MouseUpEvent* ev);
+
+    ~DockState() {
+        for (int i = 0; i < nodes.len; i++) {
+            nodes[i].child.Reset();
+            nodes[i].size.Reset();
+            nodes[i].panel.Reset();
+        }
+        nodes.Reset();
+        panels.Reset();
+    }
 };
 
 // A node index and a slot inside it, packed into the one intptr_t a listener

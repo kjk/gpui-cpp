@@ -110,7 +110,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         if (t) {
             // The picker opens on the theme that is showing.
             t->selected[0] = 0;
-            t->nSelected = 1;
+            t->selected.len = 1;
         }
     }
     if (self->filter.focused) {

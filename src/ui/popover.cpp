@@ -75,8 +75,8 @@ El* Popover::IntoEl() {
     // on it. A controlled popover's flag is the caller's, so it says what to
     // run; an uncontrolled one closes its own state.
     if (isOpen) {
-        Listener close = onClose.IsValid() ? onClose
-                                           : ListenTo(st, &PopoverDismiss);
+        Listener close =
+            onClose.IsValid() ? onClose : ListenTo(st, &PopoverDismiss);
         CancelBindKeys(cx, root, "Popover", popId, close);
     }
     return root;

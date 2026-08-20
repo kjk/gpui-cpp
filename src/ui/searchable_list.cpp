@@ -22,19 +22,19 @@ void SearchableListSearch(SearchableListState* s, const SearchableItem* items,
     // changing.
     s->items = items;
     s->nItems = nItems;
-    s->nMatches = 0;
-    for (int i = 0; i < nItems && i < kMaxSearchableItems; i++) {
+    s->matches.Clear();
+    for (int i = 0; i < nItems; i++) {
         if (SearchableItemMatches(&items[i], query)) {
-            s->matches[s->nMatches++] = i;
+            s->matches.Append(i);
         }
     }
-    s->list.count = s->nMatches;
+    s->list.count = s->matches.len;
 }
 
 static int SelectionIndexOfValue(const SearchableListState* s,
                                  const SearchableItem* items, int nItems,
                                  Str value) {
-    for (int i = 0; i < s->nSelected; i++) {
+    for (int i = 0; i < s->selected.len; i++) {
         int ix = s->selected[i];
         if (ix >= 0 && ix < nItems && StrSame(items[ix].value, value)) {
             return i;
@@ -64,44 +64,39 @@ bool SearchableListIsEnabled(const SearchableListState* s,
     if (items[index].disabled || items[index].pinned) {
         return false;
     }
-    if (s->maxSelected > 0 && s->nSelected >= s->maxSelected) {
+    if (s->maxSelected > 0 && s->selected.len >= s->maxSelected) {
         return SelectionIndexOfValue(s, items, nItems, items[index].value) >= 0;
     }
     return true;
 }
 
-int SearchableListChangesFor(const SearchableListState* s,
-                             const SearchableItem* items, int nItems, int index,
-                             SearchableListChange* out, int cap) {
-    int n = 0;
+void SearchableListChangesFor(const SearchableListState* s,
+                              const SearchableItem* items, int nItems,
+                              int index, Vec<SearchableListChange>* out) {
+    out->Clear();
     if (s->mode == SearchableListMode::Single) {
         // The single-select strategy: everything that was selected comes out,
         // and the one that was clicked goes in.
-        for (int i = 0; i < s->nSelected && n < cap; i++) {
-            out[n++] = {SearchableListChangeKind::Deselect, s->selected[i]};
+        for (int i = 0; i < s->selected.len; i++) {
+            out->Append({SearchableListChangeKind::Deselect, s->selected[i]});
         }
-        if (n < cap) {
-            out[n++] = {SearchableListChangeKind::Select, index};
-        }
-        return n;
+        out->Append({SearchableListChangeKind::Select, index});
+        return;
     }
     // Multi toggles the row that was clicked and leaves the rest alone. What
     // it is toggling is the item's value, which is what the check beside it
     // goes by.
     bool selected = SearchableListIsChecked(s, items, nItems, index);
-    if (n < cap) {
-        out[n++] = {selected ? SearchableListChangeKind::Deselect
-                             : SearchableListChangeKind::Select,
-                    index};
-    }
-    return n;
+    out->Append({selected ? SearchableListChangeKind::Deselect
+                          : SearchableListChangeKind::Select,
+                 index});
 }
 
 static void SelectionRemoveAt(SearchableListState* s, int at) {
-    for (int i = at; i < s->nSelected - 1; i++) {
+    for (int i = at; i < s->selected.len - 1; i++) {
         s->selected[i] = s->selected[i + 1];
     }
-    s->nSelected--;
+    s->selected.len--;
 }
 
 void SearchableListApply(SearchableListState* s, const SearchableItem* items,
@@ -117,12 +112,12 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
         if (ch.kind == SearchableListChangeKind::Select) {
             // on_will_change: a Select that would take the selection past its
             // limit is dropped, rather than pushing something else out.
-            if (s->maxSelected > 0 && s->nSelected >= s->maxSelected) {
+            if (s->maxSelected > 0 && s->selected.len >= s->maxSelected) {
                 continue;
             }
             // A value already in the selection is not added twice.
-            if (at < 0 && s->nSelected < kMaxSearchableSelection) {
-                s->selected[s->nSelected++] = ch.index;
+            if (at < 0) {
+                s->selected.Append(ch.index);
             }
             continue;
         }
@@ -131,7 +126,7 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
             continue;
         }
         // Nothing carried that value, so the index itself is what goes.
-        for (int i = 0; i < s->nSelected; i++) {
+        for (int i = 0; i < s->selected.len; i++) {
             if (s->selected[i] == ch.index) {
                 SelectionRemoveAt(s, i);
                 break;
@@ -141,17 +136,17 @@ void SearchableListApply(SearchableListState* s, const SearchableItem* items,
 }
 
 bool SearchableListClick(SearchableListState* s, int index) {
-    SearchableListChange changes[kMaxSearchableSelection + 1];
-    int n = SearchableListChangesFor(s, s->items, s->nItems, index, changes,
-                                     (int)(sizeof(changes) / sizeof(*changes)));
-    SearchableListApply(s, s->items, s->nItems, changes, n);
+    Vec<SearchableListChange> changes;
+    SearchableListChangesFor(s, s->items, s->nItems, index, &changes);
+    SearchableListApply(s, s->items, s->nItems, changes.els, changes.len);
+    changes.Reset();
     return s->mode == SearchableListMode::Single && s->closeOnSelect;
 }
 
 void SearchableListState::OnRowClick(SearchableListState* self, Ctx* cx,
                                      const ClickEvent*, intptr_t match) {
     int m = (int)match;
-    if (m < 0 || m >= self->nMatches) {
+    if (m < 0 || m >= self->matches.len) {
         return;
     }
     self->list.selected = m;
@@ -250,7 +245,7 @@ El* SearchableList::IntoEl() {
         box->Child(row);
     }
 
-    if (s->nMatches == 0) {
+    if (s->matches.len == 0) {
         box->Child(empty
                        ? empty
                        : Div(a)
@@ -267,7 +262,7 @@ El* SearchableList::IntoEl() {
     El* rows = Div(a)->FlexCol()->W(kFill)->MaxH(maxH)->ClipY();
     Listener click = ListenTo(state, &SearchableListState::OnRowClick, 0);
     int lastSection = -1;
-    for (int m = 0; m < s->nMatches; m++) {
+    for (int m = 0; m < s->matches.len; m++) {
         int ix = s->matches[m];
         const SearchableItem& it = items[ix];
         // render_section_header: a heading whenever the section changes, and
@@ -378,8 +373,8 @@ void SearchableListState::OnAction(SearchableListState* self, Ctx* cx,
             Notify(cx);
             return;
         case SelectAction::Confirm:
-            if (self->list.selected >= 0 &&
-                self->list.selected < self->nMatches) {
+            if (self->list.selected >= 0 && self->list.selected < self->matches
+                                                                      .len) {
                 // The same thing a click on the highlighted row does, down to
                 // what the caller hears and whether the list closes behind
                 // it — which is close_on_select's to decide, not the key's.
@@ -427,7 +422,8 @@ void SearchableListState::OnListAction(SearchableListState* self, Ctx* cx,
         return;
     }
     if (act.action == ListAction::Confirm) {
-        if (self->list.selected >= 0 && self->list.selected < self->nMatches) {
+        if (self->list.selected >= 0 && self->list.selected < self->matches
+                                                                  .len) {
             OnRowClick(self, cx, nullptr, self->list.selected);
         }
         return;

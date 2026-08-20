@@ -21,10 +21,10 @@ static const SearchableItem kItems[] = {
 static const int kN = 4;
 
 static void Apply(SearchableListState* s, int index) {
-    SearchableListChange changes[kMaxSearchableSelection + 1];
-    int n = SearchableListChangesFor(s, kItems, kN, index, changes,
-                                     (int)(sizeof(changes) / sizeof(*changes)));
-    SearchableListApply(s, kItems, kN, changes, n);
+    Vec<SearchableListChange> changes;
+    SearchableListChangesFor(s, kItems, kN, index, &changes);
+    SearchableListApply(s, kItems, kN, changes.els, changes.len);
+    changes.Reset();
 }
 
 static void TheQueryIsACaseInsensitiveSubstringOfTheTitle() {
@@ -40,27 +40,27 @@ static void SearchLeavesTheMatchesInOrder() {
     SearchableListState s;
     SearchableListSearch(&s, kItems, kN, StrL("an"));
     // Banana, and nothing else.
-    utassert(s.nMatches == 1);
+    utassert(s.matches.len == 1);
     utassert(s.matches[0] == 1);
     // The list is told how many rows it has, since that is what its keys walk.
     utassert(s.list.count == 1);
 
     SearchableListSearch(&s, kItems, kN, StrL(""));
-    utassert(s.nMatches == kN);
+    utassert(s.matches.len == kN);
     utassert(s.matches[3] == 3);
 }
 
 static void SingleReplacesTheSelection() {
     SearchableListState s;
     Apply(&s, 0);
-    utassert(s.nSelected == 1 && s.selected[0] == 0);
+    utassert(s.selected.len == 1 && s.selected[0] == 0);
     // Picking another one deselects what was there first.
     Apply(&s, 1);
-    utassert(s.nSelected == 1 && s.selected[0] == 1);
+    utassert(s.selected.len == 1 && s.selected[0] == 1);
     // Picking the same one again leaves it selected: the Deselect takes it
     // out and the Select puts it straight back.
     Apply(&s, 1);
-    utassert(s.nSelected == 1 && s.selected[0] == 1);
+    utassert(s.selected.len == 1 && s.selected[0] == 1);
 }
 
 static void MultiTogglesOnlyTheRowThatWasClicked() {
@@ -68,10 +68,10 @@ static void MultiTogglesOnlyTheRowThatWasClicked() {
     s.mode = SearchableListMode::Multi;
     Apply(&s, 0);
     Apply(&s, 1);
-    utassert(s.nSelected == 2 && s.selected[0] == 0 && s.selected[1] == 1);
+    utassert(s.selected.len == 2 && s.selected[0] == 0 && s.selected[1] == 1);
     // The second click on the first row takes only that one out.
     Apply(&s, 0);
-    utassert(s.nSelected == 1 && s.selected[0] == 1);
+    utassert(s.selected.len == 1 && s.selected[0] == 1);
 }
 
 static void ASelectionIsComparedByValue() {
@@ -82,7 +82,7 @@ static void ASelectionIsComparedByValue() {
     utassert(SearchableListIsChecked(&s, kItems, kN, 3));
     // ...and selecting it adds nothing.
     Apply(&s, 3);
-    utassert(s.nSelected == 0);
+    utassert(s.selected.len == 0);
     // Which is to say the toggle deselected it: a value already in the
     // selection is what the click was toggling.
     utassert(!SearchableListIsChecked(&s, kItems, kN, 0));

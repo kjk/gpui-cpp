@@ -7,13 +7,13 @@ namespace action {
 
 // The hash is cheap, but it is the same hash every frame for the life of the
 // process, so each name is taken once and kept.
-#define GPUI_ACTION(fn, name)                                                  \
-    uint32_t fn() {                                                            \
-        static uint32_t id = 0;                                                \
-        if (!id) {                                                             \
-            id = ActionOf(StrL(name));                                         \
-        }                                                                      \
-        return id;                                                             \
+#define GPUI_ACTION(fn, name)          \
+    uint32_t fn() {                    \
+        static uint32_t id = 0;        \
+        if (!id) {                     \
+            id = ActionOf(StrL(name)); \
+        }                              \
+        return id;                     \
     }
 
 GPUI_ACTION(Confirm, "ui::Confirm")
@@ -95,8 +95,8 @@ void CancelBindKeys(Ctx* cx, El* root, const char* context, Str name,
     if (CancelKeys* k = keys.Get(cx)) {
         k->onCancel = onCancel;
     }
-    root->KeyContext(Str(context))->OnAction(
-        action::Cancel(), ListenTo(keys, &CancelKeys::OnAction));
+    root->KeyContext(Str(context))
+        ->OnAction(action::Cancel(), ListenTo(keys, &CancelKeys::OnAction));
 }
 
 } // namespace gpui

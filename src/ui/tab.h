@@ -48,14 +48,13 @@ struct TabItem {
     bool disabled = false;
 };
 
-const int kMaxTabs = 16;
-
 struct Tabs {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    TabItem items[kMaxTabs] = {};
-    int n = 0;
+    // As many tabs as the caller adds; the builder is on the frame arena, so
+    // the items grow into it.
+    ArenaVec<TabItem> items;
     int selected = 0;
     TabVariant variant = TabVariant::Tab;
     UiSize size = UiSize::Medium;

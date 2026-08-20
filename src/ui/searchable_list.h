@@ -12,9 +12,6 @@ namespace gpui {
 
 namespace component {
 
-const int kMaxSearchableItems = 64;
-const int kMaxSearchableSelection = 16;
-
 // One row. `value` is what identifies it — Rust's `SearchableListItem::value`,
 // which is what a selection is compared by, and `title` is what it shows.
 struct SearchableItem {
@@ -61,18 +58,18 @@ bool SearchableItemMatches(const SearchableItem* it, Str query);
 struct SearchableListState {
     // The row highlight and the arrow keys are a list's, so the list is what
     // holds them.
-    ListState list = {};
+    ListState list;
     SearchableListMode mode = SearchableListMode::Single;
-    // Which items are selected, as indices into the caller's array.
-    int selected[kMaxSearchableSelection] = {};
-    int nSelected = 0;
+    // Which items are selected, as indices into the caller's array. It grows
+    // with the selection: a list is as long as the caller's array, and a
+    // multi-select one can have all of it picked.
+    Vec<int> selected;
     bool open = false;
     // close_on_select: a single-select list closes when something is picked.
     bool closeOnSelect = true;
-    // Which items the query left, and how many — the matches the rows are
-    // built from, worked out once per frame.
-    int matches[kMaxSearchableItems] = {};
-    int nMatches = 0;
+    // Which items the query left — the matches the rows are built from,
+    // worked out once per frame.
+    Vec<int> matches;
     // The items being shown, written by whatever renders the list each frame
     // so a click can work out what it changed. They have to outlive the frame:
     // a static array, not one built on the frame arena.
@@ -99,15 +96,20 @@ struct SearchableListState {
     // bindings, over the row highlight this state already holds.
     static void OnListAction(SearchableListState* self, Ctx* cx,
                              const ActionEvent* ev);
+
+    ~SearchableListState() {
+        selected.Reset();
+        matches.Reset();
+    }
 };
 
 // The changes a click on `index` comes to under this mode. Single deselects
 // whatever was selected and selects the one clicked; Multi toggles it — by
 // the item's value, so a second row carrying a selected value toggles that
-// value off rather than adding it again. Answers how many were written.
-int SearchableListChangesFor(const SearchableListState* s,
-                             const SearchableItem* items, int nItems, int index,
-                             SearchableListChange* out, int cap);
+// value off rather than adding it again. `out` is cleared first.
+void SearchableListChangesFor(const SearchableListState* s,
+                              const SearchableItem* items, int nItems,
+                              int index, Vec<SearchableListChange>* out);
 // on_will_change's default: apply them in order. A Select whose value is
 // already in the selection changes nothing, and a Deselect takes out whatever
 // carries that value — by value first, then by index, which is what Rust's

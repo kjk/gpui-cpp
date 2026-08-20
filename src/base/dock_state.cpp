@@ -2,14 +2,26 @@
 
 namespace gpui {
 
-int DockAreaState::NewNode(Str panelName) {
-    if (n >= kMaxPanelStateNodes) {
-        return -1;
+void DockAreaState::Clear() {
+    for (int i = 0; i < nodes.len; i++) {
+        nodes[i].children.Reset();
+        nodes[i].sizes.Reset();
+        nodes[i].metas.Reset();
     }
-    int ix = n++;
-    nodes[ix] = PanelStateNode{};
-    nodes[ix].panelName = panelName;
-    return ix;
+    nodes.Clear();
+    hasVersion = false;
+    version = 0;
+    center = -1;
+    left = DockSideState{};
+    right = DockSideState{};
+    bottom = DockSideState{};
+}
+
+int DockAreaState::NewNode(Str panelName) {
+    PanelStateNode node;
+    node.panelName = panelName;
+    nodes.Append(node);
+    return nodes.len - 1;
 }
 
 // Bounds, the way GPUI writes one: an origin and a size, each a pair.
@@ -49,23 +61,21 @@ static int ParseNode(Arena* a, const JsonValue* v, DockAreaState* out) {
     // The children are read before the info, so a node's own fields are
     // written after the recursion has finished with the array.
     const JsonValue* children = JsonGet(v, "children");
-    int childIx[kMaxPanelStateChildren];
-    int nChild = 0;
+    Vec<int> childIx;
     for (const JsonValue* c = children ? children->first : nullptr; c;
          c = c->next) {
-        if (nChild >= kMaxPanelStateChildren) {
-            break;
-        }
         int child = ParseNode(a, c, out);
         if (child >= 0) {
-            childIx[nChild++] = child;
+            childIx.Append(child);
         }
     }
+    // The recursion appended nodes of its own, so the reference is taken
+    // after it has finished growing the pool.
     PanelStateNode& node = out->nodes[ix];
-    node.nChild = nChild;
-    for (int i = 0; i < nChild; i++) {
-        node.children[i] = childIx[i];
+    for (int i = 0; i < childIx.len; i++) {
+        node.children.Append(childIx[i]);
     }
+    childIx.Reset();
 
     // PanelInfo is an externally tagged enum: one member, named for the kind.
     const JsonValue* info = JsonGet(v, "info");
@@ -77,10 +87,7 @@ static int ParseNode(Arena* a, const JsonValue* v, DockAreaState* out) {
         const JsonValue* sizes = JsonGet(stack, "sizes");
         for (const JsonValue* s = sizes ? sizes->first : nullptr; s;
              s = s->next) {
-            if (node.nSize >= kMaxPanelStateChildren) {
-                break;
-            }
-            node.sizes[node.nSize++] = (float)JsonNumber(s);
+            node.sizes.Append((float)JsonNumber(s));
         }
         // 0 is horizontal and 1 is vertical, which is what Rust writes.
         node.axis = (int)JsonNumber(JsonGet(stack, "axis")) == 0
@@ -94,12 +101,10 @@ static int ParseNode(Arena* a, const JsonValue* v, DockAreaState* out) {
         const JsonValue* metas = JsonGet(tiles, "metas");
         for (const JsonValue* m = metas ? metas->first : nullptr; m;
              m = m->next) {
-            if (node.nMeta >= kMaxPanelStateChildren) {
-                break;
-            }
-            TileMeta& meta = node.metas[node.nMeta++];
+            TileMeta meta;
             meta.bounds = ParseBounds(JsonGet(m, "bounds"));
             meta.zIndex = (int)JsonNumber(JsonGet(m, "z_index"));
+            node.metas.Append(meta);
         }
     } else {
         node.kind = PanelInfoKind::Panel;
@@ -153,7 +158,7 @@ static void ParseDock(Arena* a, const JsonValue* v, DockAreaState* out,
 }
 
 bool DockAreaStateParse(Arena* a, Str json, DockAreaState* out) {
-    *out = DockAreaState{};
+    out->Clear();
     JsonValue* root = JsonParse(a, json);
     if (!root || root->kind != JsonKind::Object) {
         return false;
@@ -175,7 +180,7 @@ bool DockAreaStateParse(Arena* a, Str json, DockAreaState* out) {
 
 static void WriteNode(JsonWriter* w, const char* key, const DockAreaState* s,
                       int ix) {
-    if (ix < 0 || ix >= s->n) {
+    if (ix < 0 || ix >= s->nodes.len) {
         w->Null(key);
         return;
     }
@@ -183,7 +188,7 @@ static void WriteNode(JsonWriter* w, const char* key, const DockAreaState* s,
     w->BeginObject(key);
     w->String("panel_name", node.panelName);
     w->BeginArray("children");
-    for (int i = 0; i < node.nChild; i++) {
+    for (int i = 0; i < node.children.len; i++) {
         WriteNode(w, nullptr, s, node.children[i]);
     }
     w->EndArray();
@@ -192,7 +197,7 @@ static void WriteNode(JsonWriter* w, const char* key, const DockAreaState* s,
         case PanelInfoKind::Stack:
             w->BeginObject("stack");
             w->BeginArray("sizes");
-            for (int i = 0; i < node.nSize; i++) {
+            for (int i = 0; i < node.sizes.len; i++) {
                 w->Number(nullptr, node.sizes[i]);
             }
             w->EndArray();
@@ -207,7 +212,7 @@ static void WriteNode(JsonWriter* w, const char* key, const DockAreaState* s,
         case PanelInfoKind::Tiles:
             w->BeginObject("tiles");
             w->BeginArray("metas");
-            for (int i = 0; i < node.nMeta; i++) {
+            for (int i = 0; i < node.metas.len; i++) {
                 w->BeginObject(nullptr);
                 WriteBounds(w, "bounds", node.metas[i].bounds);
                 w->Number("z_index", node.metas[i].zIndex);
@@ -261,7 +266,7 @@ void DockAreaStateWrite(const DockAreaState* s, StrBuilder* out) {
 
 // One node of the live tree, written out. Answers the state node's index.
 static int DumpNode(const DockState* s, DockAreaState* out, int node) {
-    if (node < 0 || node >= kMaxDockNodes || !s->nodes[node].used) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
         return -1;
     }
     const DockNode& n = s->nodes[node];
@@ -270,24 +275,26 @@ static int DumpNode(const DockState* s, DockAreaState* out, int node) {
         if (ix < 0) {
             return -1;
         }
-        int children[kMaxPanelStateChildren];
-        int count = 0;
-        for (int i = 0; i < n.nChild && count < kMaxPanelStateChildren; i++) {
+        Vec<int> children;
+        Vec<float> sizes;
+        for (int i = 0; i < n.child.len; i++) {
             int child = DumpNode(s, out, n.child[i]);
             if (child >= 0) {
-                children[count] = child;
-                out->nodes[ix].sizes[count] = n.size[i];
-                count++;
+                children.Append(child);
+                sizes.Append(n.size[i]);
             }
         }
+        // DumpNode appended nodes of its own, so the reference is taken
+        // after the recursion has finished growing the pool.
         PanelStateNode& sn = out->nodes[ix];
         sn.kind = PanelInfoKind::Stack;
-        sn.nChild = count;
-        sn.nSize = count;
         sn.axis = n.axis;
-        for (int i = 0; i < count; i++) {
-            sn.children[i] = children[i];
+        for (int i = 0; i < children.len; i++) {
+            sn.children.Append(children[i]);
+            sn.sizes.Append(sizes[i]);
         }
+        children.Reset();
+        sizes.Reset();
         return ix;
     }
     int ix = out->NewNode(StrL("TabPanel"));
@@ -296,11 +303,10 @@ static int DumpNode(const DockState* s, DockAreaState* out, int node) {
     }
     // A panel is a leaf under the name it was registered with, which is what
     // the registry is asked for when this is read back.
-    int children[kMaxPanelStateChildren];
-    int count = 0;
-    for (int i = 0; i < n.nPanel && count < kMaxPanelStateChildren; i++) {
+    Vec<int> children;
+    for (int i = 0; i < n.panel.len; i++) {
         int panelIx = n.panel[i];
-        if (panelIx < 0 || panelIx >= s->nPanels) {
+        if (panelIx < 0 || panelIx >= s->panels.len) {
             continue;
         }
         int leaf = out->NewNode(s->panels[panelIx].name);
@@ -308,15 +314,15 @@ static int DumpNode(const DockState* s, DockAreaState* out, int node) {
             break;
         }
         out->nodes[leaf].kind = PanelInfoKind::Panel;
-        children[count++] = leaf;
+        children.Append(leaf);
     }
     PanelStateNode& sn = out->nodes[ix];
     sn.kind = PanelInfoKind::Tabs;
-    sn.nChild = count;
-    sn.activeIndex = n.activeIx < count ? n.activeIx : 0;
-    for (int i = 0; i < count; i++) {
-        sn.children[i] = children[i];
+    sn.activeIndex = n.activeIx < children.len ? n.activeIx : 0;
+    for (int i = 0; i < children.len; i++) {
+        sn.children.Append(children[i]);
     }
+    children.Reset();
     return ix;
 }
 
@@ -337,7 +343,7 @@ static void DumpSide(const DockState* s, DockAreaState* out,
 }
 
 void DockDump(const DockState* s, DockAreaState* out) {
-    *out = DockAreaState{};
+    out->Clear();
     out->center = DumpNode(s, out, s->center);
     DumpSide(s, out, s->left, DockPlacement::Left, &out->left);
     DumpSide(s, out, s->right, DockPlacement::Right, &out->right);
@@ -368,7 +374,7 @@ static int PanelForName(DockState* s, Str name, Arena* a,
 // One saved node, built into the live tree. Answers the live node, or -1.
 static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
                     El* (*invalidRender)(Ctx* cx, void* data)) {
-    if (ix < 0 || ix >= st->n) {
+    if (ix < 0 || ix >= st->nodes.len) {
         return -1;
     }
     const PanelStateNode& sn = st->nodes[ix];
@@ -377,11 +383,12 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
         if (node < 0) {
             return -1;
         }
-        for (int i = 0; i < sn.nChild; i++) {
+        for (int i = 0; i < sn.children.len; i++) {
             int child = LoadNode(s, st, sn.children[i], a, invalidRender);
             if (child >= 0) {
-                DockSplitAdd(s, node, child,
-                             i < sn.nSize ? sn.sizes[i] : kDockPanelMinSize);
+                DockSplitAdd(
+                    s, node, child,
+                    i < sn.sizes.len ? sn.sizes[i] : kDockPanelMinSize);
             }
         }
         return node;
@@ -393,7 +400,7 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
         return -1;
     }
     if (sn.kind == PanelInfoKind::Tabs) {
-        for (int i = 0; i < sn.nChild; i++) {
+        for (int i = 0; i < sn.children.len; i++) {
             const PanelStateNode& leaf = st->nodes[sn.children[i]];
             // Rust flattens a tab group's children into their panels and
             // ignores anything that is not one.
@@ -406,7 +413,7 @@ static int LoadNode(DockState* s, const DockAreaState* st, int ix, Arena* a,
             }
         }
         s->nodes[node].activeIx =
-            sn.activeIndex < s->nodes[node].nPanel ? sn.activeIndex : 0;
+            sn.activeIndex < s->nodes[node].panel.len ? sn.activeIndex : 0;
         return node;
     }
     int panelIx = PanelForName(s, sn.panelName, a, invalidRender);
@@ -435,7 +442,7 @@ bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
         return false;
     }
     // The panels the host registered stay; the tree they were in does not.
-    for (int i = 0; i < kMaxDockNodes; i++) {
+    for (int i = 0; i < s->nodes.len; i++) {
         s->nodes[i] = DockNode{};
     }
     s->center = -1;
@@ -457,7 +464,7 @@ bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
 
 int TilesToMetas(const TilesState* s, TileMeta* out, int* outPanels, int cap) {
     int n = 0;
-    for (int i = 0; i < s->n && n < cap; i++) {
+    for (int i = 0; i < s->items.len && n < cap; i++) {
         out[n].bounds = s->items[i].bounds;
         out[n].zIndex = s->items[i].zIndex;
         if (outPanels) {
@@ -470,9 +477,10 @@ int TilesToMetas(const TilesState* s, TileMeta* out, int* outPanels, int cap) {
 
 void TilesFromMetas(TilesState* s, const TileMeta* metas, const int* panels,
                     int n) {
-    TileItem rebuilt[kMaxTiles] = {};
+    Vec<TileItem> rebuilt;
     int count = 0;
-    for (int i = 0; i < n && count < kMaxTiles; i++) {
+    for (int i = 0; i < n; i++) {
+        rebuilt.Append(TileItem{});
         int panel = panels ? panels[i] : i;
         // The tile showing that panel, wherever it has ended up in the list.
         int at = TilesIndexOfPanel(s, panel);
@@ -484,7 +492,7 @@ void TilesFromMetas(TilesState* s, const TileMeta* metas, const int* panels,
     }
     // A tile the layout says nothing about keeps its place, after the ones it
     // does — the same as a panel the saved tree has no child for.
-    for (int i = 0; i < s->n && count < kMaxTiles; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         bool saved = false;
         for (int k = 0; k < count; k++) {
             if (rebuilt[k].panel == s->items[i].panel) {
@@ -493,13 +501,15 @@ void TilesFromMetas(TilesState* s, const TileMeta* metas, const int* panels,
             }
         }
         if (!saved) {
-            rebuilt[count++] = s->items[i];
+            rebuilt.Append(s->items[i]);
+            count++;
         }
     }
+    s->items.Clear();
     for (int i = 0; i < count; i++) {
-        s->items[i] = rebuilt[i];
+        s->items.Append(rebuilt[i]);
     }
-    s->n = count;
+    rebuilt.Reset();
     s->dragging = -1;
     s->resizing = -1;
     s->side = TileSide::None;

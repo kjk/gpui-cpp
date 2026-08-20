@@ -38,11 +38,11 @@ static void TheQueryMatchesTitleDescriptionAndKeywords() {
 }
 
 static void AGroupIsShownWhenAnythingInItIs() {
+    Arena* a = ArenaNew();
     SettingGroup g;
     g.title = StrL("Appearance");
-    g.items[0] = Item("Dark Mode", "Switch between themes.");
-    g.items[1] = Item("Auto Switch", "Follow the system.");
-    g.n = 2;
+    g.items.Append(a, Item("Dark Mode", "Switch between themes."));
+    g.items.Append(a, Item("Auto Switch", "Follow the system."));
 
     utassert(SettingGroupMatches(&g, StrL("")));
     utassert(SettingGroupMatches(&g, StrL("auto")));
@@ -54,24 +54,28 @@ static void AGroupIsShownWhenAnythingInItIs() {
     SettingGroup empty;
     utassert(!SettingGroupMatches(&empty, StrL("dark")));
     utassert(SettingGroupMatches(&empty, StrL("")));
+    ArenaDelete(a);
 }
 
 static void APageIsShownWhenAnyGroupIs() {
+    Arena* a = ArenaNew();
     SettingPage p;
     p.title = StrL("General");
-    p.groups[0].title = StrL("Appearance");
-    p.groups[0].items[0] = Item("Dark Mode", "Switch between themes.");
-    p.groups[0].n = 1;
-    p.groups[1].title = StrL("Font");
-    p.groups[1].items[0] = Item("Font Size", "How big the text is.");
-    p.groups[1].n = 1;
-    p.n = 2;
+    SettingGroup appearance;
+    appearance.title = StrL("Appearance");
+    appearance.items.Append(a, Item("Dark Mode", "Switch between themes."));
+    SettingGroup font;
+    font.title = StrL("Font");
+    font.items.Append(a, Item("Font Size", "How big the text is."));
+    p.groups.Append(a, appearance);
+    p.groups.Append(a, font);
 
     utassert(SettingPageMatches(&p, StrL("dark")));
     utassert(SettingPageMatches(&p, StrL("font")));
     // The page's own title is not what a search matches on; the items are.
     utassert(!SettingPageMatches(&p, StrL("general")));
     utassert(!SettingPageMatches(&p, StrL("network")));
+    ArenaDelete(a);
 }
 
 void TestSetting() {

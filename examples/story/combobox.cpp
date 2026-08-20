@@ -203,13 +203,13 @@ static void ClearCombo(ComboboxStory* self, Ctx* cx, const ClickEvent*,
 static void RemoveComboBadge(ComboboxStory* self, Ctx* cx, const ClickEvent*,
                              intptr_t which) {
     component::SearchableListState* s = self->combo[which].Get(cx);
-    if (!s || s->nSelected == 0) {
+    if (!s || s->selected.len == 0) {
         return;
     }
-    for (int i = 0; i + 1 < s->nSelected; i++) {
+    for (int i = 0; i + 1 < s->selected.len; i++) {
         s->selected[i] = s->selected[i + 1];
     }
-    s->nSelected--;
+    s->selected.len--;
     Notify(cx);
 }
 static void FocusQuery(ComboboxStory* self, Ctx* cx, const ClickEvent*) {
@@ -249,7 +249,7 @@ static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
         return nullptr;
     }
     component::SearchableListState* st = self->combo[i].Get(cx);
-    int n = st ? st->nSelected : 0;
+    int n = st ? st->selected.len : 0;
     El* row = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->Gap(8)->MinW(0);
     switch (spec.trigger) {
         case ComboTrigger::Icon: {
@@ -396,7 +396,7 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
             }
             for (int k = 0; k < kSpecs[i].count; k++) {
                 if (kSpecs[i].selected & (1u << k)) {
-                    s->selected[s->nSelected++] = k;
+                    s->selected[s->selected.len++] = k;
                 }
             }
         }
@@ -457,11 +457,12 @@ El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
         int i = kShown[k];
         component::SearchableListState* s = self->combo[i].Get(cx);
         Str line = StoryFmt(cx, "%s: []", kSpecs[i].id);
-        if (s && s->nSelected == 1) {
+        if (s && s->selected.len == 1) {
             line = StoryFmt(cx, "%s: [\"%s\"]", kSpecs[i].id,
                             kSpecs[i].items[s->selected[0]].title);
-        } else if (s && s->nSelected > 1) {
-            line = StoryFmt(cx, "%s: %d selected", kSpecs[i].id, s->nSelected);
+        } else if (s && s->selected.len > 1) {
+            line =
+                StoryFmt(cx, "%s: %d selected", kSpecs[i].id, s->selected.len);
         }
         valueCol->Child(StoryTxt(cx, line, 16, th.foreground));
     }

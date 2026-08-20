@@ -27,26 +27,23 @@ struct TileMeta {
     int zIndex = 0;
 };
 
-const int kMaxPanelStateNodes = 64;
-const int kMaxPanelStateChildren = 16;
-
 // PanelState: one node of the tree. Rust nests them by ownership; the nodes
 // here live in one array and name their children by index, the way the dock's
 // own tree does.
 struct PanelStateNode {
     Str panelName = {};
-    int children[kMaxPanelStateChildren] = {};
-    int nChild = 0;
+    // As many children, sizes and metas as the tree has. The live tree they
+    // are written from is unbounded, so a saved layout that truncated it
+    // would be a layout that could not be read back.
+    Vec<int> children;
     PanelInfoKind kind = PanelInfoKind::Panel;
     // Stack: the size of each child, and which way they are laid out.
-    float sizes[kMaxPanelStateChildren] = {};
-    int nSize = 0;
+    Vec<float> sizes;
     Axis axis = Axis::Horizontal;
     // Tabs.
     int activeIndex = 0;
     // Tiles: one meta per child.
-    TileMeta metas[kMaxPanelStateChildren] = {};
-    int nMeta = 0;
+    Vec<TileMeta> metas;
     // Panel: whatever the panel itself wrote, kept as it was so a round trip
     // does not lose it. Rust holds a serde_json::Value here.
     Str info = {};
@@ -66,14 +63,26 @@ struct DockAreaState {
     // does not understand. Rust leaves it None when there is none.
     bool hasVersion = false;
     int version = 0;
-    PanelStateNode nodes[kMaxPanelStateNodes] = {};
-    int n = 0;
+    Vec<PanelStateNode> nodes;
     int center = -1;
     DockSideState left = {};
     DockSideState right = {};
     DockSideState bottom = {};
 
     int NewNode(Str panelName);
+    // Back to an empty layout, with the nodes' own arrays dropped. Assigning
+    // a fresh one over it would leak them; this is what the two callers that
+    // start a layout from nothing use.
+    void Clear();
+
+    ~DockAreaState() {
+        for (int i = 0; i < nodes.len; i++) {
+            nodes[i].children.Reset();
+            nodes[i].sizes.Reset();
+            nodes[i].metas.Reset();
+        }
+        nodes.Reset();
+    }
 };
 
 // The layout as JSON, and back. The parse answers false for text that is not

@@ -131,7 +131,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                                    "Popup Form", toggle))
                               ->Content(formCard)
                               ->Open(self->open == PopForm)
-                             ->OnClose(ListenerArg(toggle, PopForm))
+                              ->OnClose(ListenerArg(toggle, PopForm))
                               ->IntoEl());
     page->Child(form);
 
@@ -148,7 +148,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                 ->Menu(StrL("Alan Turing"))
                                 ->IntoEl())
                   ->Open(self->open == PopList)
-                             ->OnClose(ListenerArg(toggle, PopList))
+                  ->OnClose(ListenerArg(toggle, PopList))
                   ->IntoEl());
     page->Child(list);
 
@@ -200,7 +200,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                              "Style Popover", toggle))
                         ->Content(styleCard)
                         ->Open(self->open == PopStyle)
-                             ->OnClose(ListenerArg(toggle, PopStyle))
+                        ->OnClose(ListenerArg(toggle, PopStyle))
                         ->IntoEl());
     page->Child(style);
 
@@ -215,7 +215,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                                  ->Menu(StrL("Loading..."))
                                  ->IntoEl())
                    ->Open(self->open == PopAsync)
-                             ->OnClose(ListenerArg(toggle, PopAsync))
+                   ->OnClose(ListenerArg(toggle, PopAsync))
                    ->IntoEl());
     page->Child(async);
 

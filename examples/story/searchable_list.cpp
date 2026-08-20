@@ -50,11 +50,11 @@ static El* SelectionLine(Ctx* cx, component::SearchableListState* s) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->FlexWrap();
-    if (!s || s->nSelected == 0) {
+    if (!s || s->selected.len == 0) {
         row->Child(StoryTxt(cx, StrL("Nothing selected."), 14, th.mutedFg));
         return row;
     }
-    for (int i = 0; i < s->nSelected; i++) {
+    for (int i = 0; i < s->selected.len; i++) {
         int ix = s->selected[i];
         if (ix < 0 || ix >= kNItems) {
             continue;

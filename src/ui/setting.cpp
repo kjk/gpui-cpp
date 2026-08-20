@@ -63,7 +63,7 @@ bool SettingGroupMatches(const SettingGroup* g, Str query) {
     }
     // A group is shown when anything in it is: Rust drops a group whose
     // filtered items came out empty.
-    for (int i = 0; i < g->n; i++) {
+    for (int i = 0; i < g->items.len; i++) {
         if (SettingItemMatches(&g->items[i], query)) {
             return true;
         }
@@ -75,7 +75,7 @@ bool SettingPageMatches(const SettingPage* p, Str query) {
     if (query.len <= 0) {
         return true;
     }
-    for (int i = 0; i < p->n; i++) {
+    for (int i = 0; i < p->groups.len; i++) {
         if (SettingGroupMatches(&p->groups[i], query)) {
             return true;
         }
@@ -100,7 +100,7 @@ void SettingsState::OnGroupClick(SettingsState* self, Ctx* cx,
 // The one selected index, or -1. A setting dropdown is single-select, which
 // is what Rust's `SettingField<SharedString>::dropdown` is.
 static int DropdownIndex(const SearchableListState* st) {
-    return st && st->nSelected > 0 ? st->selected[0] : -1;
+    return st && st->selected.len > 0 ? st->selected[0] : -1;
 }
 
 // f64 -> the text a NumberInput shows. Rust writes `value.to_string()`, which
@@ -167,7 +167,7 @@ void SettingsState::OnFieldReset(SettingsState* self, Ctx* cx,
             break;
         case SettingFieldKind::Dropdown:
             if (SearchableListState* st = f->list.Get(cx)) {
-                st->nSelected = f->defIndex >= 0 ? 1 : 0;
+                st->selected.len = f->defIndex >= 0 ? 1 : 0;
                 st->selected[0] = f->defIndex;
             }
             break;
@@ -228,58 +228,54 @@ Settings* Settings::New(Ctx* cx, Str id, Entity<SettingsState> state) {
 }
 
 Settings* Settings::Page(Str title, IconName icon, Str description) {
-    if (n < kMaxSettingPages) {
-        pages[n].title = title;
-        pages[n].icon = icon;
-        pages[n].description = description;
-        n++;
-    }
+    SettingPage pg;
+    pg.title = title;
+    pg.icon = icon;
+    pg.description = description;
+    pages.Append(a, pg);
     return this;
 }
 
 Settings* Settings::Group(Str title, Str description) {
-    if (n == 0) {
+    if (pages.len == 0) {
         Page(StrL("Settings"));
     }
-    SettingPage& p = pages[n - 1];
-    if (p.n < kMaxSettingGroups) {
-        p.groups[p.n].title = title;
-        p.groups[p.n].description = description;
-        p.n++;
-    }
+    SettingPage& p = pages[pages.len - 1];
+    SettingGroup g;
+    g.title = title;
+    g.description = description;
+    p.groups.Append(a, g);
     return this;
 }
 
 Settings* Settings::Item(Str title, Str description, El* control) {
-    if (n == 0) {
+    if (pages.len == 0) {
         Group({});
     }
-    SettingPage& p = pages[n - 1];
-    if (p.n == 0) {
+    SettingPage& p = pages[pages.len - 1];
+    if (p.groups.len == 0) {
         Group({});
     }
-    SettingGroup& g = p.groups[p.n - 1];
-    if (g.n < kMaxSettingItems) {
-        g.items[g.n] = SettingItem{};
-        g.items[g.n].title = title;
-        g.items[g.n].description = description;
-        g.items[g.n].control = control;
-        g.n++;
-    }
+    SettingGroup& g = p.groups[p.groups.len - 1];
+    SettingItem it;
+    it.title = title;
+    it.description = description;
+    it.control = control;
+    g.items.Append(a, it);
     return this;
 }
 
 // The item last added, which is what every modifier below reads.
 static SettingItem* LastItem(Settings* s) {
-    if (s->n == 0) {
+    if (s->pages.len == 0) {
         return nullptr;
     }
-    SettingPage& p = s->pages[s->n - 1];
-    if (p.n == 0) {
+    SettingPage& p = s->pages[s->pages.len - 1];
+    if (p.groups.len == 0) {
         return nullptr;
     }
-    SettingGroup& g = p.groups[p.n - 1];
-    return g.n > 0 ? &g.items[g.n - 1] : nullptr;
+    SettingGroup& g = p.groups[p.groups.len - 1];
+    return g.items.len > 0 ? &g.items[g.items.len - 1] : nullptr;
 }
 
 Settings* Settings::Keywords(Str a1, Str a2, Str a3) {
@@ -382,8 +378,8 @@ Settings* Settings::DropdownField(Entity<SearchableListState> list,
 }
 
 Settings* Settings::PageResettable(bool v) {
-    if (n > 0) {
-        pages[n - 1].resettable = v;
+    if (pages.len > 0) {
+        pages[pages.len - 1].resettable = v;
     }
     return this;
 }
@@ -596,7 +592,7 @@ El* Settings::IntoEl() {
                         ->IntoEl());
     }
     int selected = st ? st->page : 0;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < pages.len; i++) {
         const SettingPage& p = pages[i];
         if (!SettingPageMatches(&p, query)) {
             continue;
@@ -622,7 +618,7 @@ El* Settings::IntoEl() {
                                                        ->Fg(th.foreground)
                                                        ->MaxW(sidebarWidth - 80)
                                                        ->Truncate()));
-        if (p.n > 0) {
+        if (p.groups.len > 0) {
             item->Child(
                 IconEl(a,
                        active ? IconName::ChevronDown : IconName::ChevronRight,
@@ -637,7 +633,7 @@ El* Settings::IntoEl() {
         if (!active) {
             continue;
         }
-        for (int g = 0; g < p.n; g++) {
+        for (int g = 0; g < p.groups.len; g++) {
             if (!SettingGroupMatches(&p.groups[g], query)) {
                 continue;
             }
@@ -664,13 +660,13 @@ El* Settings::IntoEl() {
 
     // The page: its title, then a card per group.
     El* pane = Div(a)->FlexCol()->Grow()->H(kFill)->ClipY();
-    if (selected >= 0 && selected < n) {
+    if (selected >= 0 && selected < pages.len) {
         const SettingPage& p = pages[selected];
         // The body first: whether the page offers Reset All is whether
         // anything on it came out dirty, which only the fields know.
         bool anyDirty = false;
         El* body = Div(a)->FlexCol()->W(kFill)->Pad(16)->Gap(8);
-        for (int g = 0; g < p.n; g++) {
+        for (int g = 0; g < p.groups.len; g++) {
             const SettingGroup& grp = p.groups[g];
             if (!SettingGroupMatches(&grp, query)) {
                 continue;
@@ -684,7 +680,7 @@ El* Settings::IntoEl() {
                 card->Border(1, th.border);
             }
             int shown = 0;
-            for (int i = 0; i < grp.n; i++) {
+            for (int i = 0; i < grp.items.len; i++) {
                 const SettingItem& it = grp.items[i];
                 if (!SettingItemMatches(&it, query)) {
                     continue;

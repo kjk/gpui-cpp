@@ -165,7 +165,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                     ->OnScroll(ListenTo(st, &DockState::OnTabBarScroll,
                                         (intptr_t)node));
     strip->BoundsOut(&n.tabStripBounds);
-    for (int i = 0; i < n.nPanel; i++) {
+    for (int i = 0; i < n.panel.len; i++) {
         int panelIx = n.panel[i];
         const DockPanelDef& def = s->panels[panelIx];
         bool on = i == n.activeIx;
@@ -245,7 +245,8 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     }
     strip->Child(rest);
     bar->Child(strip);
-    if (!collapsed && n.nPanel > 0 && s->panels[n.panel[n.activeIx]].zoomable) {
+    if (!collapsed && n.panel.len > 0 &&
+        s->panels[n.panel[n.activeIx]].zoomable) {
         int panelIx = n.panel[n.activeIx];
         El* zoom =
             Div(a)
@@ -264,7 +265,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     }
     // TabPanel::render_toolbar's menu button: the same two actions the
     // toolbar has, where a narrow tab bar can still reach them.
-    if (!collapsed && n.nPanel > 0) {
+    if (!collapsed && n.panel.len > 0) {
         int panelIx = n.panel[n.activeIx];
         const DockPanelDef& def = s->panels[panelIx];
         bool zoomed = s->zoomPanel == panelIx;
@@ -306,7 +307,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     if (!collapsed) {
         El* body =
             Div(a)->FlexCol()->Grow()->W(kFill)->ClipY()->Bg(th.background);
-        if (n.nPanel > 0) {
+        if (n.panel.len > 0) {
             const DockPanelDef& def = s->panels[n.panel[n.activeIx]];
             if (def.render) {
                 body->Child(def.render(cx, def.data));
@@ -345,11 +346,11 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
         box->FlexCol();
     }
     box->BoundsOut(&n.bounds);
-    for (int i = 0; i < n.nChild; i++) {
+    for (int i = 0; i < n.child.len; i++) {
         El* wrap = Div(a)->FlexCol();
         // The last child takes what is left, so rounding never leaves a gap
         // down the edge of the split.
-        if (i == n.nChild - 1) {
+        if (i == n.child.len - 1) {
             wrap->Grow();
             if (horizontal) {
                 wrap->H(kFill);
@@ -363,7 +364,7 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
         }
         wrap->Child(RenderNode(cx, id, st, n.child[i], toolbarNode));
         box->Child(wrap);
-        if (i < n.nChild - 1) {
+        if (i < n.child.len - 1) {
             box->Child(
                 ResizeHandle(cx, StrDup(a, fmt("%s-split-%d-%d", id, node, i)),
                              st, DockPack(node, i), n.axis));
@@ -375,7 +376,7 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
 static El* RenderNode(Ctx* cx, Str id, Entity<DockState> st, int node,
                       int toolbarNode) {
     DockState* s = st.Get(cx);
-    if (node < 0 || node >= kMaxDockNodes || !s->nodes[node].used) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
         return Div(cx->a)->SizeFull();
     }
     if (s->nodes[node].split) {
@@ -396,7 +397,7 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
         return nullptr;
     }
     int panelIx = drag->ix;
-    if (panelIx < 0 || panelIx >= s->nPanels) {
+    if (panelIx < 0 || panelIx >= s->panels.len) {
         return nullptr;
     }
     Point off = WindowDragOffset(cx);
@@ -425,13 +426,13 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
 // item, which is where Rust's `toggle_button_panels` ends up for a plain
 // left-to-right layout.
 static int FirstTabsNode(const DockState* s, int node) {
-    if (node < 0 || node >= kMaxDockNodes || !s->nodes[node].used) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
         return -1;
     }
     if (!s->nodes[node].split) {
         return node;
     }
-    for (int i = 0; i < s->nodes[node].nChild; i++) {
+    for (int i = 0; i < s->nodes[node].child.len; i++) {
         int found = FirstTabsNode(s, s->nodes[node].child[i]);
         if (found >= 0) {
             return found;
@@ -472,7 +473,7 @@ El* DockArea::IntoEl() {
                 ->Child(RenderNode(cx, id, state, s->left.node, toolbarNode)));
         dock->Child(
             ResizeHandle(cx, StrDup(a, fmt("%s-dock-left", id)), state,
-                         DockPack(kMaxDockNodes + (int)DockPlacement::Left, 0),
+                         DockPack(kDockSideBase + (int)DockPlacement::Left, 0),
                          Axis::Horizontal));
         row->Child(dock);
     }
@@ -482,7 +483,7 @@ El* DockArea::IntoEl() {
         El* dock = Div(a)->FlexRow()->W(s->right.size)->H(kFill);
         dock->Child(
             ResizeHandle(cx, StrDup(a, fmt("%s-dock-right", id)), state,
-                         DockPack(kMaxDockNodes + (int)DockPlacement::Right, 0),
+                         DockPack(kDockSideBase + (int)DockPlacement::Right, 0),
                          Axis::Horizontal));
         dock->Child(
             Div(a)
@@ -508,7 +509,7 @@ El* DockArea::IntoEl() {
         if (s->bottom.open) {
             dock->Child(ResizeHandle(
                 cx, StrDup(a, fmt("%s-dock-bottom", id)), state,
-                DockPack(kMaxDockNodes + (int)DockPlacement::Bottom, 0),
+                DockPack(kDockSideBase + (int)DockPlacement::Bottom, 0),
                 Axis::Vertical));
         }
         dock->Child(Div(a)->FlexCol()->Grow()->W(kFill)->Child(

@@ -39,9 +39,8 @@ struct NumberFieldOptions {
     double step = 1;
 };
 
-const int kMaxSettingItems = 16;
-const int kMaxSettingGroups = 8;
-const int kMaxSettingPages = 8;
+// `keywords` is the one array left with a cap: Rust's `SettingItem::keywords`
+// is a Vec, and no caller of the builder below has ever named more than three.
 const int kMaxSettingKeywords = 4;
 
 // SettingItem::Item: the title, what it is for, and the control that changes
@@ -85,16 +84,14 @@ struct SettingItem {
 struct SettingGroup {
     Str title = {};
     Str description = {};
-    SettingItem items[kMaxSettingItems] = {};
-    int n = 0;
+    ArenaVec<SettingItem> items;
 };
 
 struct SettingPage {
     Str title = {};
     Str description = {};
     IconName icon = IconName::None;
-    SettingGroup groups[kMaxSettingGroups] = {};
-    int n = 0;
+    ArenaVec<SettingGroup> groups;
     // SettingPage::resettable, default true: whether this page offers the
     // reset buttons at all — the per-item one, and the Reset All in its
     // header once anything on it has been changed.
@@ -157,8 +154,9 @@ struct Settings {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<SettingsState> state = {};
-    SettingPage pages[kMaxSettingPages] = {};
-    int n = 0;
+    // The three levels grow into the frame arena the builder is on, so a
+    // page is as long as the caller makes it.
+    ArenaVec<SettingPage> pages;
     // The search field, which filters the pages, the groups and the items.
     InputState* search = nullptr;
     Listener onSearchFocus = {};

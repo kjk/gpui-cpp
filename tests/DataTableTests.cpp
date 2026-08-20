@@ -67,8 +67,10 @@ static void AColumnKeepsItsWidthOnceItHasOne() {
     s.colWidth[0] = 200;
     TableSeedColWidth(&s, 0, 120);
     utassert(TableColWidth(&s, 0, 120) == 200);
-    // Past the columns a table keeps widths for, the caller's is all there is.
-    utassert(TableColWidth(&s, kMaxTableCols, 120) == 120);
+    // A column the table has never been asked about answers with what the
+    // caller declared rather than growing the array to reach it.
+    utassert(TableColWidth(&s, 40, 120) == 120);
+    utassert(s.colWidth.len == 1);
 }
 
 static void AResizeIsClamped() {

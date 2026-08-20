@@ -21,8 +21,8 @@ struct Tiles {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<TilesState> state = {};
-    TilePanelDef panels[kMaxTiles] = {};
-    int n = 0;
+    // One panel per tile the caller adds; the builder is on the frame arena.
+    ArenaVec<TilePanelDef> panels;
 
     static Tiles* New(Ctx* cx, Str id, Entity<TilesState> state);
     // The panel for the tile at that index. A tile with no panel draws its

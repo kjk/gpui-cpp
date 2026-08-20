@@ -105,9 +105,9 @@ static void TheFixtureLayoutReadsBack() {
 
     const PanelStateNode& center = s.nodes[s.center];
     utassert(StrEqI(center.panelName, StrL("StackPanel")));
-    utassert(center.nChild == 2);
+    utassert(center.children.len == 2);
     utassert(center.kind == PanelInfoKind::Stack);
-    utassert(center.nSize == 2);
+    utassert(center.sizes.len == 2);
     utassertnear(center.sizes[0], 704.f);
     utassertnear(center.sizes[1], 263.f);
     // axis 1 is vertical.
@@ -119,7 +119,7 @@ static void TheFixtureLayoutReadsBack() {
     utassert(first.activeIndex == 0);
     const PanelStateNode& second = s.nodes[center.children[1]];
     utassert(StrEqI(second.panelName, StrL("TabPanel")));
-    utassert(second.nChild == 1);
+    utassert(second.children.len == 1);
     utassert(
         StrEqI(s.nodes[second.children[0]].panelName, StrL("StoryContainer")));
 
@@ -129,7 +129,7 @@ static void TheFixtureLayoutReadsBack() {
     utassert(s.left.placement == DockPlacement::Left);
     const PanelStateNode& left = s.nodes[s.left.node];
     utassert(StrEqI(left.panelName, StrL("TabPanel")));
-    utassert(left.nChild == 1);
+    utassert(left.children.len == 1);
     utassert(
         StrEqI(s.nodes[left.children[0]].panelName, StrL("StoryContainer")));
 
@@ -137,13 +137,13 @@ static void TheFixtureLayoutReadsBack() {
     utassert(s.bottom.open);
     utassertnear(s.bottom.size, 200.f);
     utassert(s.bottom.placement == DockPlacement::Bottom);
-    utassert(s.nodes[s.bottom.node].nChild == 2);
+    utassert(s.nodes[s.bottom.node].children.len == 2);
 
     utassert(s.right.present);
     utassert(s.right.open);
     utassertnear(s.right.size, 320.f);
     utassert(s.right.placement == DockPlacement::Right);
-    utassert(s.nodes[s.right.node].nChild == 1);
+    utassert(s.nodes[s.right.node].children.len == 1);
     ArenaDelete(a);
 }
 
@@ -158,14 +158,10 @@ static void ALayoutSurvivesTheRoundTrip() {
     int two = s.NewNode(StrL("TabPanel"));
     PanelStateNode& tiles = s.nodes[s.center];
     tiles.kind = PanelInfoKind::Tiles;
-    tiles.nChild = 2;
-    tiles.children[0] = one;
-    tiles.children[1] = two;
-    tiles.nMeta = 2;
-    tiles.metas[0].bounds = {16, 24, 300, 200};
-    tiles.metas[0].zIndex = 0;
-    tiles.metas[1].bounds = {340, 24, 260, 160};
-    tiles.metas[1].zIndex = 3;
+    tiles.children.Append(one);
+    tiles.children.Append(two);
+    tiles.metas.Append(TileMeta{{16, 24, 300, 200}, 0});
+    tiles.metas.Append(TileMeta{{340, 24, 260, 160}, 3});
     s.left.present = true;
     s.left.node = s.NewNode(StrL("TabPanel"));
     s.left.placement = DockPlacement::Left;
@@ -182,8 +178,8 @@ static void ALayoutSurvivesTheRoundTrip() {
     const PanelStateNode& node = back.nodes[back.center];
     utassert(StrEqI(node.panelName, StrL("Tiles")));
     utassert(node.kind == PanelInfoKind::Tiles);
-    utassert(node.nChild == 2);
-    utassert(node.nMeta == 2);
+    utassert(node.children.len == 2);
+    utassert(node.metas.len == 2);
     utassertnear(node.metas[0].bounds.x, 16.f);
     utassertnear(node.metas[0].bounds.h, 200.f);
     utassert(node.metas[0].zIndex == 0);
@@ -248,7 +244,7 @@ static void TheTilesGoBackWhereTheyWere() {
     // does.
     TilesAdd(&s, 7, {0, 400, 100, 100});
     TilesFromMetas(&s, metas, panels, n);
-    utassert(s.n == 3);
+    utassert(s.items.len == 3);
     utassert(s.items[2].panel == 7);
     utassertnear(s.items[2].bounds.y, 400.f);
 }

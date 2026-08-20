@@ -31,10 +31,10 @@ void TreeStory::OnTreeEvent(TreeStory* self, Ctx* cx, const TreeEvent* ev) {
 // here; the monotonic clock in milliseconds is random enough for "pick one".
 void TreeStory::OnRevealRandom(TreeStory* self, Ctx* cx, const ClickEvent*) {
     TreeState* s = self->tree.Get(cx);
-    if (!s || s->nItems == 0) {
+    if (!s || s->items.len == 0) {
         return;
     }
-    int item = (int)((uint64_t)(TimeNow() * 1000.0) % (uint64_t)s->nItems);
+    int item = (int)((uint64_t)(TimeNow() * 1000.0) % (uint64_t)s->items.len);
     int ix = TreeRevealItem(s, s->items[item].id);
     if (ix >= 0) {
         s->selected = ix;
@@ -117,7 +117,7 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
             LoadDir(s, ".", -1, 2);
             // The first folder starts open, so the page shows a tree rather
             // than a list of roots.
-            for (int i = 0; i < s->nItems; i++) {
+            for (int i = 0; i < s->items.len; i++) {
                 if (s->items[i].folder) {
                     s->items[i].expanded = true;
                     break;
