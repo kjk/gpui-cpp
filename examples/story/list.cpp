@@ -12,17 +12,20 @@ struct ListQuote {
 struct QuoteSection {
     const char* industry;
     int section; // the index the Rust delegate prints in the header
+    int count;   // items_count for it, which the footer prints
     ListQuote rows[4];
 };
 
 static const QuoteSection kSections[] = {
     {"Airlines / Aviation",
      1,
+     4,
      {{"Daugherty and Sons", "422.23", "54.63%", true},
       {"Jaskolski and Rowe Inc", "958.26", "-14.56%", false},
       {"Windler and Sons", "329.63", "-12.71%", false},
       {"Jaskolski and Rowe Inc", "331.79", "21.49%", true}}},
     {"Automotive",
+     4,
      4,
      {{"Walter Group", "137.70", "10.01%", true},
       {"Hilpert Group", "962.30", "-15.44%", false},
@@ -30,11 +33,25 @@ static const QuoteSection kSections[] = {
       {"Hilpert Group", "48.07", "42.82%", true}}},
     {"Think Tanks",
      5,
+     4,
      {{"Windler and Sons", "352.49", "131.67%", true},
       {"Hills LLC", "768.95", "-726.01%", false},
       {"Muller and Rippin Inc", "512.03", "-805.82%", false},
       {"Hills LLC", "477.77", "-26.30%", false}}},
+    {"Internet",
+     6,
+     2,
+     {{"Upton and Auer Sons", "691.74", "12.81%", true},
+      {"Hartmann Group", "375.69", "12.45%", true}}},
+    {"Machinery",
+     7,
+     3,
+     {{"Hartmann Group", "806.45", "22.73%", true},
+      {"Dare Group", "261.88", "-12.83%", false},
+      {"Kilback Group", "170.31", "-50.65%", false}}},
 };
+static const int kSectionCount =
+    (int)(sizeof(kSections) / sizeof(kSections[0]));
 
 enum {
     ListMenuGoTo = 1,
@@ -147,11 +164,13 @@ static El* SectionHeader(Ctx* cx, void*, int section) {
     return head;
 }
 
-static El* SectionFooter(Ctx* cx, void*, int) {
+static El* SectionFooter(Ctx* cx, void*, int section) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    return Div(a)->PadX(8)->PadT(4)->Child(
-        StoryTxt(cx, StrL("Total 4 items in section."), 12, th.mutedFg));
+    return Div(a)->PadX(8)->PadT(4)->Child(StoryTxt(
+        cx,
+        StoryFmt(cx, "Total %d items in section.", kSections[section].count),
+        12, th.mutedFg));
 }
 
 static component::ListItem* RenderQuote(Ctx* cx, void* data, int section,
@@ -190,7 +209,8 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     Listener openMenu = Listen(cx, &ListMenuOpen);
     Listener act = Listen(cx, &ListMenuAct);
 
-    El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
+    // size_full().gap_4(): the list under the toolbar takes the rest.
+    El* page = Div(a)->FlexCol()->Gap(16)->W(kFill)->H(kFill);
 
     // story_toolbar_group() with two dropdowns: Go To and Options.
     El* toolbarRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsStart();
@@ -230,11 +250,14 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     }
     component::List* list =
         component::List::New(cx, StrL("list-story"), self->list)
-            ->H(520)
+            ->H(WindowSize(cx->win).dipH - 247)
             ->Headers(&SectionHeader, &SectionFooter)
             ->Items(self, &RenderQuote);
-    static const int kCounts[] = {4, 4, 4};
-    list->Sections(kCounts, 3);
+    int counts[8];
+    for (int i = 0; i < kSectionCount; i++) {
+        counts[i] = kSections[i].count;
+    }
+    list->Sections(counts, kSectionCount);
     if (self->searchable) {
         list->Searchable(&self->search, Listen(cx, &FocusSearch));
     }
