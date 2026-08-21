@@ -442,6 +442,13 @@ deep grids, and tree construction on its own. They come from the crate's
 the crate, so it comes from the git checkout `port-upstream.md` clones. Read a
 number only from a release build; a debug one measures the assertions.
 
+`bench/MarkdownBench.cpp` is not a port — markdown-rs carries no benchmarks —
+and measures the other thing in this tree with a size to it: parsing.
+`bun cmd/bench.ts markdown` runs four document shapes (prose, nested
+containers, GFM tables, character references) and then splits one of them into
+its tokenize and to_mdast halves, so a change to `src/markdown/` can be
+attributed. Run it if you touch that tree.
+
 The harness is `bench/Bench.h` and `bench/bench.cpp`: criterion's
 `iter_batched`, without criterion. Setup builds a fresh tree and is not timed,
 the run is, and the row reports the median and the minimum over the samples.
@@ -510,7 +517,8 @@ cmd/build-dist.ts      amalgamate src/** into gpui.h + gpui.cpp
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
 cmd/bench.ts           build bench/ and run it (-small, -large, -n=<count>)
-bench/                 ports of taffy's layout benchmarks
+bench/                 taffy's layout benchmarks, ported, and markdown parse
+                       benchmarks of our own (`bun cmd/bench.ts markdown`)
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/taffy/             the taffy layout crate, ported (see its readme.md)
 src/markdown/          the markdown crate, ported (see its readme.md)

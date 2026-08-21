@@ -147,11 +147,22 @@ crate version:
 
 ## Speed
 
-1.5 ms for the 13 KB `assets/story/README.md`, against 2.1 ms for
+`bun cmd/bench.ts markdown` is the measurement, and
+`bench/MarkdownBench.cpp` says what each row is. Four document shapes at
+64 KB, plus the tokenize / to_mdast split of one of them; `-small` and
+`-large` add a 16 KB and a 1 MB size.
+
+For scale: 1.5 ms for the 13 KB `assets/story/README.md`, against 2.1 ms for
 markdown-rs 1.0.0 built `--release` on the same machine, so a page costs what
 it costs Rust. That is far more than the 52 µs the vendored md4c took before
 this, which is why `ui/text.cpp` keeps its parse cache: a document is parsed
 once and the tree is reused until its bytes change.
+
+The one shape that stands out is tables, about seven times prose per byte.
+markdown-rs is the same (10.5 ms and 80.4 ms on those two shapes, against
+9.4 ms and 66.8 ms here), so it is the edit map both share: `add` scans the
+entries it already holds for one at the same index, and a table adds one per
+cell.
 
 ## Refreshing the port
 
