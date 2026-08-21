@@ -378,15 +378,12 @@ cargo run -p system_monitor
   than Rust's — visible on the story's two-line label and nowhere else.
 
 - 2026-08-21: The multi-month calendar stacks its months, which is the last of
-  the differences the 08-21 entry above left open. What is still not matched is
-  a level below the calendar: Rust's themed wrapper sets `w(px(288.) *
-  month_count)` — 864 for three months — and the story's section is narrower
-  than that, so taffy shrinks the panel to the ~510 it has room for and the
-  wrapping rows land on about fifteen columns. Here an explicit `W()` is a
-  fixed width rather than a flex basis that can shrink, so the panel keeps its
-  864, overflows the section and wraps at about twenty. The months are stacked
-  and the wrap point is the panel's either way; what differs is what the panel
-  is allowed to measure, and that is a layout-engine gap, not a calendar one.
+  the differences the 08-21 entry above left open. One thing was still not
+  matched at the time and is now, a level below the calendar: Rust's themed
+  wrapper sets `w(px(288.) * month_count)` — 864 for three months — and the
+  story's section is narrower, so taffy shrinks the panel to the room it has.
+  The entry that stood here said an explicit `W()` was a fixed width in this
+  tree and left it as a layout-engine gap; the entry below closes it.
 
 - 2026-08-21: The palette is read from the file. `crates/ui/src/theme` is data upstream — `default-theme.json` names sixty-odd tokens, the twenty theme files under `themes/` name a subset each, and `schema.rs`'s `apply_config` resolves what a file leaves out from what it sets — and ours was two hand-written C++ functions, so the two could drift and did. `src/ui/theme_registry.*` is the reader: the colour grammar from `color.rs` (a hex string, or a shadcn name with an optional scale and an optional percentage), the hundred-entry fallback chain from `schema.rs`, and the sorted table from `registry.rs`. `cmd/gen-theme-data.ts` turns `default-colors.json` and `default-theme.json` into `src/ui/theme_data.cpp`, so the numbers still come from upstream's files and a later pin lands by re-running it. `ThemeDefaultLight` / `ThemeDefaultDark` are what a file is resolved against and never change; `ThemeLight` / `ThemeDark` are the pair in force, which `ThemeInstall` replaces — Rust's `ThemeColor::light()` against its `Theme::light_theme`. The test resolves the file the hardcoded palette was transcribed from and demands the palette back, which found three transcription errors: a text selection is capped at 30% by `apply_config` and ours was opaque in both themes, and a dark input's background is its border mixed 30% toward transparent, not 70%. It also found that `default-theme.json` spells nine of its own keys differently from the serde names `schema.rs` declares — `chart_1` for `chart.1`, `drag_border` for `drag.border`, `progress_bar.background`, `description_list_label.*` — so serde drops those values and upstream paints the fallback: five distinct chart blues collapse to one lightened ramp, and the drag border goes from blue to the primary at 65%. Both spellings are read here, since the file's values are plainly what its author meant and are the only spelling a third-party theme would copy. The Theme Colors page offered two entries and its "Set Theme" button had no `OnClick` at all; it now lists what the registry holds — the two defaults plus every theme file found under a `themes/` folder on the asset roots, and the pinned Rust clone is now a root of its own — and applying one resolves it, installs it and switches the window to its mode. Nothing is checked in: those files are Apache-2.0 and several are Zed's, so they are read where they lie. 3636 checks.
 - 2026-08-21: The layers belong to the window. `crates/ui/src/window_ext.rs` routes everything through `Root`, which is the window's own view: `window.open_dialog(cx, ..)` pushes onto `active_dialogs`, and any handler anywhere can raise one. Here the layers were the *page's* — `component::Root` is a builder a page fills in each frame — so only the view that rendered a dialog could open one, and the story had to hang its notification list off `StoryApp`. `src/ui/window_ext.*` is the store, kept with `window.use_keyed_state`, which is the lifetime Rust's Root has. A layer is an entity, as it is in Rust, so the `Fn(Dialog, &mut Window, &mut App) -> Dialog` callback upstream stores has no counterpart here: a view with a `Render` is that already. The layer owns its entity and closing drops it, the way Rust's `Vec<Entity<Dialog>>` does. `Root::IntoEl` draws what the window holds alongside what the page passed in, so every existing caller is untouched. Two first users: the story's notifications are `WindowNotifications` / `WindowPushNotification` and off `StoryApp` entirely, and Help — a dead label until now — is a menu whose About item opens a dialog from a handler with no view that draws one. `AppOnShutdown` is the seam a teardown above gpui registers through, since `AppFree` cannot name `src/ui`.
@@ -416,3 +413,43 @@ cargo run -p system_monitor
   above it — which is the only way to see this path now that `AppNew`
   registers the default roots — with every `IconName` on the icon page at
   40px.
+
+- 2026-08-21: Flex children shrink. `LayoutChildren` grew leftover space out
+  to the children that ask for it and always had; the other half of
+  `resolve_flexible_lengths` — handing a *deficit* back by shrinking them —
+  was never written, so `flexShrink` was a field nothing read. An explicit
+  `W()` was a hard width rather than a basis that can give, and a child wider
+  than the box holding it simply hung over the edge where taffy would have
+  squeezed it in.
+
+  `FlexShrinkLine` is that half: the deficit shared out in proportion to
+  flex-shrink times base size, which is CSS's scaled flex shrink factor. Two
+  details are what make it behave rather than flatten things. A child with a
+  definite width has to be *lent* the smaller one for the measurement — its
+  own children measure against its width, and a definite `W()` would resolve
+  to the old number again — while a child with an auto or `kFill` width needs
+  no loan and reports back its own content minimum, which is the
+  `min-width: auto` floor this engine has no other way to find. And it runs
+  per line, not per container: a wrapping row puts an item that does not fit
+  on the next line, so the shrink for one of those happens inside the wrap
+  block, where a line that still overflows — a lone oversized child — is
+  squeezed. A row that scrolls sideways is left alone, since its children are
+  meant to overflow so the bar has something to travel over.
+
+  The 70 `Shrink0()` calls this tree already carried, mirroring upstream's 67
+  `flex_shrink_0()`, were opting out of something that had never happened.
+  They do now, which is why turning this on landed where it did: of the 65
+  story pages, four changed outside animation noise — the calendar, which is
+  the point, and settings, tiles and checkbox by two or three pixels of
+  vertical tightening. The visible win beyond the calendar is the
+  `system_monitor` process table: narrow the window under the 630 its four
+  columns want and they now shrink together, header aligned with the rows,
+  where before the table ran off the right edge.
+
+  The calendar needed one change of its own to benefit. `CalendarMonth` was
+  told a width worked out from the size and the month count, which is the
+  same number as the panel's while the panel gets what it asks for and the
+  wrong one the moment it is squeezed. Rust's month row is `h_flex()
+  .flex_wrap()` with no width at all, so it is `W(kFill)` here now and wraps
+  where the panel ends. The three-month calendar breaks its rows on the same
+  days as the Rust window.

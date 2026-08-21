@@ -2365,6 +2365,93 @@ static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
     MoveEl(c, ax, ay);
 }
 
+// How many children one flex line can hold. Past this the line is laid out
+// the way it always was, which is the right failure: shrinking is a
+// refinement, and a row of hundreds is not what it is for.
+enum {
+    kMaxFlexItems = 256
+};
+
+// resolve_flexible_lengths, the negative branch — the half this engine did
+// not have. When a line's children want more of the main axis than it has,
+// flex-shrink takes the difference back off them in proportion to
+// flex-shrink times base size, which is CSS's scaled flex shrink factor and
+// what taffy runs for GPUI. Without it an explicit `W()` was a hard width
+// rather than a basis that can give, so a panel wider than the box holding it
+// ran off the edge instead of being squeezed into it.
+//
+// Answers the line's main size afterwards.
+static float FlexShrinkLine(PaintCtx* ctx, El** items, int nItems, bool row,
+                            float avail, float gaps, float childCross0,
+                            float inheritFont, Rgba inheritFg) {
+    float used = gaps;
+    for (int k = 0; k < nItems; k++) {
+        used += row ? items[k]->w : items[k]->h;
+    }
+    if (avail <= 0 || used <= avail + 0.5f) {
+        return used;
+    }
+    float deficit = used - avail;
+    float shrinkSum = 0;
+    for (int k = 0; k < nItems; k++) {
+        El* c = items[k];
+        if (c->style.flexShrink <= 0) {
+            continue;
+        }
+        shrinkSum += c->style.flexShrink * (row ? c->w : c->h);
+    }
+    if (shrinkSum <= 0) {
+        return used;
+    }
+    used = gaps;
+    for (int k = 0; k < nItems; k++) {
+        El* c = items[k];
+        float base = row ? c->w : c->h;
+        float take = c->style.flexShrink > 0
+                         ? deficit * (c->style.flexShrink * base) / shrinkSum
+                         : 0.f;
+        float want = base - take;
+        float lo = row ? c->style.minW : c->style.minH;
+        if (want < lo) {
+            want = lo;
+        }
+        if (take > 0 && want > 0 && want < base - 0.5f) {
+            // The item is laid out *at* the smaller size rather than clipped
+            // to it: its own children measure against its width, so a
+            // definite W() has to be lent the new one for the measurement or
+            // it would resolve to the old one again. An auto or kFill width
+            // needs no loan — it is already a function of what it is given,
+            // and what it reports back is its own content minimum, which is
+            // the `min-width: auto` floor this has no other way to find.
+            float wasW = c->style.width;
+            float wasH = c->style.height;
+            bool definite =
+                row ? (c->style.width >= 0) : (c->style.height >= 0);
+            if (definite) {
+                if (row) {
+                    c->style.width = want;
+                } else {
+                    c->style.height = want;
+                }
+            }
+            c->memoValid = false;
+            if (row) {
+                LayoutEl(ctx, c, 0, 0, want, childCross0, inheritFont,
+                         inheritFg);
+            } else {
+                LayoutEl(ctx, c, 0, 0, childCross0, want, inheritFont,
+                         inheritFg);
+            }
+            c->style.width = wasW;
+            c->style.height = wasH;
+            c->memoValid = false;
+            base = row ? c->w : c->h;
+        }
+        used += base;
+    }
+    return used;
+}
+
 static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                            Rgba inheritFg) {
     float padL = e->style.pad.left;
@@ -2405,6 +2492,22 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                 c->style.widthFrac = 0;
             }
         }
+    }
+
+    // The children in flow order, which both the shrink above and the wrap
+    // below walk. Collected once, here, so the two agree on what a line is.
+    El* items[kMaxFlexItems];
+    int nItems = 0;
+    bool tooMany = false;
+    for (El* c = e->first; c; c = c->next) {
+        if (c->style.absolute) {
+            continue;
+        }
+        if (nItems >= kMaxFlexItems) {
+            tooMany = true;
+            break;
+        }
+        items[nItems++] = c;
     }
 
     bool row = e->style.dir == FlexDir::Row;
@@ -2469,6 +2572,15 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
         used += row ? c->w : c->h;
     }
 
+    // A wrapping row puts an item that does not fit on the next line rather
+    // than squeezing it, so the shrink for one of those happens per line,
+    // down in the wrap block. A row that scrolls sideways *wants* its
+    // children to overflow, so the bar has something to travel over.
+    if (!e->style.flexWrap && !(row ? unconstrW : unconstrH) && !tooMany) {
+        used = FlexShrinkLine(ctx, items, nItems, row, mainAvail, gaps,
+                              childCross0, inheritFont, inheritFg);
+    }
+
     float leftover = mainAvail - used;
     if (leftover < 0) {
         leftover = 0;
@@ -2504,22 +2616,6 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
     // Every story section is a wrapping row, so its content reflows instead of
     // running off the right edge.
     if (row && e->style.flexWrap && mainAvail > 0) {
-        enum {
-            kMaxWrapItems = 256
-        };
-        El* items[kMaxWrapItems];
-        int nItems = 0;
-        bool tooMany = false;
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute) {
-                continue;
-            }
-            if (nItems >= kMaxWrapItems) {
-                tooMany = true;
-                break;
-            }
-            items[nItems++] = c;
-        }
         if (!tooMany) {
             // Flexbox breaks lines on each item's hypothetical main size —
             // the width it would take unconstrained — and only then hands the
@@ -2557,6 +2653,16 @@ static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
                     }
                     lineW = next;
                     j++;
+                }
+                // A line always takes at least one item, so an item wider
+                // than the row is a line wider than the row. Flexbox shrinks
+                // that line rather than letting it hang over the edge, and
+                // this is where a lone oversized child — a three-month
+                // calendar in a narrower section — is squeezed to fit.
+                if (lineW > mainAvail + 0.5f) {
+                    lineW = FlexShrinkLine(ctx, items + i, j - i, true,
+                                           mainAvail, gap * (float)(j - i - 1),
+                                           childCross0, inheritFont, inheritFg);
                 }
                 // The line's own leftover, shared out by flex_grow.
                 float lineGrow = 0;

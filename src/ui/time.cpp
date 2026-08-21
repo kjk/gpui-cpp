@@ -142,8 +142,7 @@ static float CalendarWidth(UiSize size) {
     return 288;
 }
 
-static El* CalendarMonth(Calendar* self, int year, int month, float cellSize,
-                         float bodyW) {
+static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
     Arena* a = self->a;
     Ctx* cx = self->cx;
     const Theme& th = cx->theme();
@@ -156,7 +155,13 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize,
     // from the second row on. It is upstream's layout and upstream's look;
     // building explicit seven-column rows here would be a different widget.
     El* panel = Div(a)->FlexCol();
-    El* body = Div(a)->FlexRow()->FlexWrap()->W(bodyW);
+    // `h_flex().flex_wrap()` with no width of its own: the row wraps at
+    // whatever the panel gives it. It used to be told a width worked out from
+    // the size and the month count, which is the same number while the panel
+    // gets the width it asked for — and the wrong one the moment the panel is
+    // squeezed into something narrower, since the row would keep wrapping at
+    // a width the panel no longer has.
+    El* body = Div(a)->FlexRow()->FlexWrap()->W(kFill);
     for (int i = 0; i < 7; i++) {
         body->Child(
             Div(a)
@@ -341,21 +346,12 @@ El* Calendar::IntoEl() {
     root->Child(nav);
 
     El* body = Div(a)->FlexRow()->W(kFill);
-    // What one month's wrapping row is measured against. `body` in the day
-    // view is Rust's `v_flex()` holding one `h_flex().flex_wrap()` per month,
-    // and none of those rows is given a width of its own — so each is as wide
-    // as the whole panel, and a three-month calendar wraps every month at
-    // three months' worth of columns rather than at one month's. This laid
-    // the months out side by side and wrapped each at its own width, which
-    // put a different number of days on a row than upstream does.
-    float monthW = width - 24;
     if (view == CalendarView::Day) {
-        body->FlexCol()->ItemsStart();
+        body->FlexCol();
         for (int i = 0; i < numberOfMonths; i++) {
             int shownYear = 0, shownMonth = 0;
             OffsetMonth(year, month, i, &shownYear, &shownMonth);
-            body->Child(
-                CalendarMonth(this, shownYear, shownMonth, cellSize, monthW));
+            body->Child(CalendarMonth(this, shownYear, shownMonth, cellSize));
         }
     } else if (view == CalendarView::Month) {
         body->FlexWrap();
