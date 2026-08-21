@@ -142,15 +142,23 @@ static float CalendarWidth(UiSize size) {
     return 288;
 }
 
-static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
+static El* CalendarMonth(Calendar* self, int year, int month, float cellSize,
+                         float bodyW) {
     Arena* a = self->a;
     Ctx* cx = self->cx;
     const Theme& th = cx->theme();
     static const char* weekdays[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
+    // calendar.rs builds a month as one `h_flex().flex_wrap()` holding the
+    // seven weekday headers and then every day cell in sequence. Nothing
+    // says seven per row: the column count is whatever the container's width
+    // fits, and at the medium size — 288 wide, 12 of padding each side, 32
+    // cells, no gap — that is eight, so the month comes out shifted by one
+    // from the second row on. It is upstream's layout and upstream's look;
+    // building explicit seven-column rows here would be a different widget.
     El* panel = Div(a)->FlexCol();
-    El* head = Div(a)->FlexRow();
+    El* body = Div(a)->FlexRow()->FlexWrap()->W(bodyW);
     for (int i = 0; i < 7; i++) {
-        head->Child(
+        body->Child(
             Div(a)
                 ->W(cellSize)
                 ->H(cellSize)
@@ -158,8 +166,6 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                 ->JustifyCenter()
                 ->Child(TextEl(a, Str(weekdays[i]))->Font(12)->Fg(th.mutedFg)));
     }
-    panel->Child(head);
-
     LocalDate today = DateToday();
     LocalDate selected = {
         self->selectedYear ? self->selectedYear : self->year,
@@ -169,11 +175,9 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
     int offset = CalendarGridOffset(Dow(year, month, 1));
     int cells = CalendarGridCells(offset, Dim(year, month));
     LocalDate first = DateAddDays({year, month, 1}, -offset);
-    El* grid = Div(a)->FlexCol()->Gap(2);
-    for (int rowIx = 0; rowIx < cells / 7; rowIx++) {
-        El* row = Div(a)->FlexRow();
-        for (int col = 0; col < 7; col++) {
-            LocalDate date = DateAddDays(first, rowIx * 7 + col);
+    for (int i = 0; i < cells; i++) {
+        {
+            LocalDate date = DateAddDays(first, i);
             bool outside = date.month != month;
             bool disabled = DateMatcherMatches(self->disabledMatcher, date);
             bool muted = outside || disabled;
@@ -217,11 +221,10 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                     cell->OnClick(ListenerArg(self->onDay, date.day));
                 }
             }
-            row->Child(cell);
+            body->Child(cell);
         }
-        grid->Child(row);
     }
-    panel->Child(grid);
+    panel->Child(body);
     return panel;
 }
 
@@ -338,12 +341,20 @@ El* Calendar::IntoEl() {
     root->Child(nav);
 
     El* body = Div(a)->FlexRow()->W(kFill);
+    // What one month's wrapping row is measured against: the width a single
+    // month is given, less this container's padding, so a month wraps at the
+    // same column it would on its own. Rust stacks its months vertically
+    // instead — `body` is a v_flex of one wrapping row each, so every month
+    // is as wide as the whole panel — and this tree has always laid them out
+    // side by side.
+    float monthW = CalendarWidth(size) - 24;
     if (view == CalendarView::Day) {
         body->JustifyBetween()->ItemsStart();
         for (int i = 0; i < numberOfMonths; i++) {
             int shownYear = 0, shownMonth = 0;
             OffsetMonth(year, month, i, &shownYear, &shownMonth);
-            body->Child(CalendarMonth(this, shownYear, shownMonth, cellSize));
+            body->Child(
+                CalendarMonth(this, shownYear, shownMonth, cellSize, monthW));
         }
     } else if (view == CalendarView::Month) {
         body->FlexWrap();
