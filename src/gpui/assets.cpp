@@ -36,6 +36,12 @@ static void AddRootRaw(const char* dir) {
     gRootN++;
 }
 
+// How many roots are registered, which is what AppNew asks before it
+// supplies a default.
+int AssetsRootCount() {
+    return gRootN;
+}
+
 void AssetsAddRoot(Str dir) {
     if (!dir.s || dir.len <= 0) {
         return;

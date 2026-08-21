@@ -1582,6 +1582,15 @@ void WindowClosed(Window* win) {
 
 App* AppNew() {
     App* app = new App();
+    // Somewhere to read icons and images from, unless the caller has
+    // already said. Without a root the icon set falls back to the
+    // built-in strokes, which cover only part of it, so an app that
+    // never mentioned assets drew nothing where the rest should be.
+    // A caller that wants an example's own subfolder still asks for it,
+    // and AssetsClear + AssetsAddRoot still replaces what this found.
+    if (AssetsRootCount() == 0) {
+        AssetsAddDefaultRoots(Str{});
+    }
     app->paint = PaintAppNew();
     if (!app->paint) {
         delete app;

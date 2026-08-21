@@ -3058,6 +3058,17 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(18, 6, 15, 9);
             line(9, 15, 6, 18);
             break;
+        case IconName::ChevronsUpDown:
+            // Two chevrons back to back, which is what a sortable column head
+            // shows before anything is sorted by it. Without this case the
+            // icon drew nothing at all in an app that has no assets folder to
+            // read lucide's own file from, and the sort affordance in
+            // component::Table went missing with it.
+            line(7, 15, 12, 20);
+            line(12, 20, 17, 15);
+            line(7, 9, 12, 4);
+            line(12, 4, 17, 9);
+            break;
         case IconName::ChevronDown:
             line(6, 9, 12, 15);
             line(12, 15, 18, 9);

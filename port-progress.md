@@ -335,3 +335,30 @@ cargo run -p system_monitor
   and the hit test, `scroll_to` and the first-visible-row walk all snap onto a
   line that is on screen. `tests/FoldMapTests.cpp` pins the projection, the
   nesting and the edit adjustment; 3902 checks.
+
+- 2026-08-21: `system_monitor`'s process table sorts the way Rust's does, and
+  two things underneath it were wrong. The visible half: Rust builds the table
+  out of `DataTable` with `Column::sortable()`, so every sortable column head
+  carries an icon — the two chevrons at half opacity while the column is not
+  the sorted one, the single chevron the sort is in when it is — pushed to the
+  right edge of the head by `justify_between`, and `perform_sort` cycles
+  Default -> Descending -> Ascending -> Default with every other column
+  dropping back to Default. This example predates `component::Table` and drew
+  a text arrow appended to the label of the sorted column only, with a
+  two-state toggle, so the third press had nowhere to go and a column could
+  never be given up. It uses `TableNextSort` and `ColumnSort` now, and
+  `is_descending = sort == Descending` — so a column cycled back to Default
+  sorts ascending, which is what `sort_processes` does.
+
+  Underneath: the two-chevron icon drew *nothing*. `IconNamePath` names
+  `icons/chevrons-up-down.svg` for it and the file is there, but nothing had
+  registered an asset root, so every icon fell back to the built-in stroke
+  table in `gpui.cpp` — and 32 of the 74 `IconName`s have no case in it.
+  `ChevronsUpDown` was one, which is why `component::Table`'s sort affordance
+  went missing in any app that never mentioned assets. Both ends are fixed:
+  the stroke table gained the case, and `AppNew` supplies
+  `AssetsAddDefaultRoots` when no root has been registered, so an app gets
+  lucide's own files without having to know to ask. A caller that wants an
+  example's own subfolder still asks, and `AssetsClear` still replaces what
+  this found. The other 31 icons without a stroke fallback are still without
+  one; they are only reached now if the assets folder is genuinely missing.
