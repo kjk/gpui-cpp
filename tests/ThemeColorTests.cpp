@@ -10,9 +10,13 @@
 
 #include "Test.h"
 
-static bool Is(Rgba c, uint32_t hex) {
+static bool IsA(Rgba c, uint32_t hex, uint8_t a) {
     return c.r == ((hex >> 16) & 0xff) && c.g == ((hex >> 8) & 0xff) &&
-           c.b == (hex & 0xff) && c.a == 255;
+           c.b == (hex & 0xff) && c.a == a;
+}
+
+static bool Is(Rgba c, uint32_t hex) {
+    return IsA(c, hex, 255);
 }
 
 static void TheLightPaletteIsDefaultLight() {
@@ -30,8 +34,9 @@ static void TheLightPaletteIsDefaultLight() {
     utassert(Is(t.warning, 0xeab308) && Is(t.warningFg, 0xfafafa));
     utassert(Is(t.skeleton, 0xf5f5f5));
     // selection.background is a colour of its own, not `accent` faded — which
-    // on a white field is a tint nobody can see.
-    utassert(Is(t.selection, 0x55a0fc));
+    // on a white field is a tint nobody can see. apply_config caps whatever a
+    // file writes there at 30%, since it is painted over a row of text.
+    utassert(IsA(t.selection, 0x55a0fc, 0x4d));
 }
 
 static void TheDarkPaletteIsDefaultDark() {
@@ -47,7 +52,7 @@ static void TheDarkPaletteIsDefaultDark() {
     utassert(Is(t.success, 0x4ade80) && Is(t.successFg, 0x16a34a));
     utassert(Is(t.warning, 0xfacc15) && Is(t.warningFg, 0xca8a04));
     utassert(Is(t.skeleton, 0x171717));
-    utassert(Is(t.selection, 0x1d4ed8));
+    utassert(IsA(t.selection, 0x1d4ed8, 0x4d));
 }
 
 void TestThemeColor() {

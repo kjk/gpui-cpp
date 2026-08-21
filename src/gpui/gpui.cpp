@@ -114,7 +114,7 @@ Rgba RgbaWithHue(Rgba c, float h01) {
     return RgbaHsla(Clamp01(h01), s, l, c.a / 255.f);
 }
 
-const Theme& ThemeDark() {
+const Theme& ThemeDefaultDark() {
     static Theme t;
     static bool init = false;
     if (!init) {
@@ -123,10 +123,10 @@ const Theme& ThemeDark() {
         t.border = Rgb(0x26, 0x26, 0x26);
         t.mutedFg = Rgb(0xa3, 0xa3, 0xa3);
         t.inputBorder = Rgb(0x2f, 0x2f, 0x2f);
-        t.inputBg = Rgba8(0x2f, 0x2f, 0x2f, 0xb3);
+        t.inputBg = Rgba8(0x2f, 0x2f, 0x2f, 0x4d);
         t.ring = Rgb(0x73, 0x73, 0x73);
         t.caret = Rgb(0xfa, 0xfa, 0xfa);
-        t.selection = Rgb(0x1d, 0x4e, 0xd8);
+        t.selection = Rgba8(0x1d, 0x4e, 0xd8, 0x4d);
         t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
         t.titleBar = Rgb(0x17, 0x17, 0x17);
         t.titleBarBorder = Rgb(0x26, 0x26, 0x26);
@@ -197,7 +197,7 @@ const Theme& ThemeDark() {
     return t;
 }
 
-const Theme& ThemeLight() {
+const Theme& ThemeDefaultLight() {
     static Theme t;
     static bool init = false;
     if (!init) {
@@ -209,7 +209,7 @@ const Theme& ThemeLight() {
         t.inputBg = Rgb(0xff, 0xff, 0xff);
         t.ring = Rgb(0xa3, 0xa3, 0xa3);
         t.caret = Rgb(0x0a, 0x0a, 0x0a);
-        t.selection = Rgb(0x55, 0xa0, 0xfc);
+        t.selection = Rgba8(0x55, 0xa0, 0xfc, 0x4d);
         t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
         t.titleBar = Rgb(0xf8, 0xf8, 0xf8);
         t.titleBarBorder = Rgb(0xe5, 0xe5, 0xe5);
@@ -276,6 +276,36 @@ const Theme& ThemeLight() {
         init = true;
     }
     return t;
+}
+
+// The pair in force. The two above are what a theme file is resolved
+// against and never change; these are what everything paints from, and what
+// ThemeInstall replaces when a theme is applied.
+static Theme gActiveTheme[2];
+static bool gActiveThemeInit = false;
+
+static void ActiveThemeInit() {
+    if (gActiveThemeInit) {
+        return;
+    }
+    gActiveThemeInit = true;
+    gActiveTheme[(int)ThemeMode::Light] = ThemeDefaultLight();
+    gActiveTheme[(int)ThemeMode::Dark] = ThemeDefaultDark();
+}
+
+const Theme& ThemeLight() {
+    ActiveThemeInit();
+    return gActiveTheme[(int)ThemeMode::Light];
+}
+
+const Theme& ThemeDark() {
+    ActiveThemeInit();
+    return gActiveTheme[(int)ThemeMode::Dark];
+}
+
+void ThemeInstall(ThemeMode mode, const Theme& t) {
+    ActiveThemeInit();
+    gActiveTheme[(int)mode] = t;
 }
 
 static ThemeMode gThemeMode = ThemeMode::Light;

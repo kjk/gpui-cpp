@@ -176,6 +176,27 @@ static bool ReadFileAll(const char* path, Vec<uint8_t>* out) {
     return true;
 }
 
+bool AssetsFindDir(Str relDir, char* out, int cap) {
+    if (!relDir.s || relDir.len <= 0 || !out || cap <= 0) {
+        return false;
+    }
+    char rel[kMaxPath];
+    int n = relDir.len < kMaxPath - 1 ? relDir.len : kMaxPath - 1;
+    memcpy(rel, relDir.s, (size_t)n);
+    rel[n] = 0;
+    ToNativeSep(rel);
+
+    for (int i = 0; i < gRootN; i++) {
+        char full[kMaxPath];
+        JoinPath(full, kMaxPath, gRoots[i], rel);
+        if (PlatDirExists(full)) {
+            StrCopyZ(out, cap, full);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool AssetsLoad(Str relPath, Vec<uint8_t>* out) {
     if (!relPath.s || relPath.len <= 0 || !out) {
         return false;
