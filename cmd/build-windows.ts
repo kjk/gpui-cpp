@@ -456,9 +456,12 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
       name === "tests" || name === "bench" ? "/SUBSYSTEM:CONSOLE" : "/SUBSYSTEM:WINDOWS",
       // Layout recurses once per level of the tree, and taffy's `superdeep`
       // benchmarks nest a thousand of them. Windows reserves 1 MB by default,
-      // where the Rust benchmarks get the 8 MB of a Rust main thread. Reserve
-      // is address space, not memory: pages commit as the stack grows.
-      ...(name === "bench" ? ["/STACK:67108864"] : []),
+      // where the Rust benchmarks get the 8 MB of a Rust main thread, so this
+      // asks for the same 8 MB. Measured floor for the whole suite (`-small
+      // -large`) is between 2 and 3 MB, which is the ~2-3 KB a level of nested
+      // grid costs; 8 MB is that with room to spare. Reserve is address space,
+      // not memory: pages commit as the stack grows.
+      ...(name === "bench" ? ["/STACK:8388608"] : []),
       "/ENTRY:wWinMainCRTStartup",
       "/NODEFAULTLIB:msvcrt.lib",
       "/NODEFAULTLIB:msvcrtd.lib",
