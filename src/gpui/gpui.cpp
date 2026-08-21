@@ -3956,9 +3956,21 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         }
         PaintCaret(ctx, e, font);
     } else if (e->kind == ElKind::Image) {
-        Image* img = ImageForSrc(ctx->pa, e->imgSrc);
+        // What the src names locally: itself, or the asset an application
+        // shipped under the same file name as the URL the document wrote.
+        Str asset = ImageAssetFor(GetTempArena(), e->imgSrc);
+        Image* img = asset.s ? ImageForSrc(ctx->pa, asset) : nullptr;
         if (img) {
             ImageDraw(ctx, img, e->Bounds());
+        } else if (asset.len > 4 &&
+                   StrEqI(Str(asset.s + asset.len - 4, 4), StrL(".svg")) &&
+                   SvgDraw(ctx, asset, e->x, e->y, e->w < e->h ? e->w : e->h,
+                           e->style.hasColor ? e->style.color
+                                             : ThemeNow().foreground,
+                           0)) {
+            // An SVG is not a bitmap for any of the three backends to decode;
+            // it is the vector the icon renderer already walks, and a picture
+            // with colours of its own keeps them.
         } else if (e->text.s && e->text.len > 0) {
             // The alt text, in the color the text around it uses.
             float font =
