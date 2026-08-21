@@ -88,7 +88,7 @@ Root* Root::UseWindowLayers(bool v) {
 
 El* Root::IntoEl() {
     const Theme& th = cx->theme();
-    El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.background);
+    El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.tokens.background);
     if (child) {
         e->Child(child);
     }

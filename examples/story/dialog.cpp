@@ -284,7 +284,7 @@ static El* RenderBasicDialog(DialogStory* self, Ctx* cx) {
                      ->Gap(8)
                      ->ItemsCenter()
                      ->JustifyBetween()
-                     ->Bg(th.muted);
+                     ->Bg(th.tokens.muted);
     footer
         ->Child(DialogButton(cx, StrL("new-dialog"), StrL("Open Other Dialog"),
                              Listen(cx, &OpenOtherDialog), false));

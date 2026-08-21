@@ -22,7 +22,7 @@ El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
                  ->PadX(8)
                  ->ItemsCenter()
                  ->JustifyBetween()
-                 ->Bg(th.titleBar)
+                 ->Bg(th.tokens.titleBar)
                  ->BorderT(1, th.border);
     El* left = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     left->Child(component::Button::New(cx, StrL("branch"))
@@ -56,7 +56,7 @@ El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
                   ->PadX(8)
                   ->ItemsCenter()
                   ->JustifyBetween()
-                  ->Bg(th.titleBar)
+                  ->Bg(th.tokens.titleBar)
                   ->BorderT(1, th.border);
     El* aLeft = Div(a)->FlexRow()->Gap(6)->ItemsCenter();
     aLeft->Child(IconEl(a, IconName::Check, 12)->Fg(th.foreground));

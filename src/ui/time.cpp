@@ -203,10 +203,10 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize,
                 fg = RgbaOpacity(fg, 0.5f);
             }
             if (active) {
-                cell->Bg(th.primary);
+                cell->Bg(th.tokens.primary);
                 fg = th.primaryFg;
             } else if (inRange || isToday) {
-                cell->Bg(th.accent);
+                cell->Bg(th.tokens.accent);
                 fg = th.foreground;
             } else if (!disabled) {
                 cell->HoverBg(th.secondaryHover);
@@ -284,7 +284,7 @@ El* Calendar::IntoEl() {
                                                       ? th.primaryFg
                                                       : th.foreground));
             if (view == CalendarView::Month) {
-                monthLabel->Bg(th.primary);
+                monthLabel->Bg(th.tokens.primary);
             }
             BindClick(monthLabel, StrL("cal-month-toggle"), onMonthToggle);
             El* yearLabel =
@@ -300,7 +300,7 @@ El* Calendar::IntoEl() {
                                          ? th.primaryFg
                                          : th.foreground));
             if (view == CalendarView::Year) {
-                yearLabel->Bg(th.primary);
+                yearLabel->Bg(th.tokens.primary);
             }
             BindClick(yearLabel, StrL("cal-year-toggle"), onYearToggle);
             label->Child(monthLabel)->Child(yearLabel);
@@ -373,7 +373,7 @@ El* Calendar::IntoEl() {
                             ->Font(14)
                             ->Fg(m == month ? th.primaryFg : th.foreground));
             if (m == month) {
-                item->Bg(th.primary);
+                item->Bg(th.tokens.primary);
             }
             item->OnClick(ListenerArg(onMonth, m));
             body->Child(item);
@@ -397,7 +397,7 @@ El* Calendar::IntoEl() {
                                 ->Font(14)
                                 ->Fg(y == year ? th.primaryFg : th.foreground));
             if (y == year) {
-                item->Bg(th.primary);
+                item->Bg(th.tokens.primary);
             }
             item->OnClick(ListenerArg(onYear, y));
             body->Child(item);
@@ -656,7 +656,7 @@ El* DatePicker::IntoEl() {
                     ->Pad(12)
                     ->Border(1, th.border)
                     ->Radius(std::min(th.radius * 2.f, 8.f))
-                    ->Bg(th.background)
+                    ->Bg(th.tokens.background)
                     ->Fg(th.foreground)
                     ->OnMouseUpOut(onToggle)
                     ->Child(content);

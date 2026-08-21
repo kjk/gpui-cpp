@@ -33,9 +33,9 @@ Skeleton* Skeleton::H(float v) {
 
 El* Skeleton::IntoEl() {
     const Theme& th = cx->theme();
-    Rgba bg = th.skeleton;
+    Background bg = th.tokens.skeleton;
     if (secondary) {
-        bg = RgbaOpacity(bg, 0.5f);
+        bg = BackgroundOpacity(bg, 0.5f);
     }
     // `1 - delta * 0.5` of the element's opacity, pulsing there and back.
     // Rust names the animation "skeleton"; every block on a page shares the

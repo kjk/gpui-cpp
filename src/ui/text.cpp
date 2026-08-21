@@ -724,7 +724,7 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
         t->Bg(kMarkBg);
     } else if (marks & MdCode) {
         // TextViewStyle::inline_code_highlight falls back to theme.accent.
-        t->Mono()->Bg(th.accent);
+        t->Mono()->Bg(th.tokens.accent);
     }
     if (selectable) {
         t->Selectable();
@@ -846,8 +846,8 @@ static int RunsLen(MdNode* n) {
 
 El* TextView::CodeBlock(MdNode* n) {
     const Theme& th = cx->theme();
-    El* box =
-        Div(a)->FlexCol()->W(kFill)->Pad(12)->Radius(th.radius)->Bg(th.muted);
+    El* box = Div(a)->FlexCol()->W(kFill)->Pad(12)->Radius(th.radius)->Bg(
+        th.tokens.muted);
     // The runs are verbatim text with embedded newlines. They go into one
     // TextEl rather than one per line: the text engine then lays every line
     // out against the same metrics, so a line that needs a font fallback (box

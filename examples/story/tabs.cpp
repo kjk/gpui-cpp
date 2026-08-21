@@ -250,9 +250,13 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                        ->IntoEl());
     El* dynCol = Div(a)->FlexCol()->W(kFill)->Gap(8);
     dynCol->Child(actions);
-    El* dynBar =
-        Div(a)->FlexRow()->W(kFill)->Pad(2)->Gap(2)->Bg(th.muted)->Radius(
-            th.radius);
+    El* dynBar = Div(a)
+                     ->FlexRow()
+                     ->W(kFill)
+                     ->Pad(2)
+                     ->Gap(2)
+                     ->Bg(th.tokens.muted)
+                     ->Radius(th.radius);
     for (int i = 0; i < self->dynamicCount; i++) {
         El* t = Div(a)
                     ->FlexRow()
@@ -263,7 +267,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                     ->Radius(th.radius)
                     ->OnClick(Listen(cx, &SetDynamicTab, i));
         if (i == self->dynamicTab) {
-            t->Bg(th.background);
+            t->Bg(th.tokens.background);
         }
         t->Child(IconEl(a, IconName::BookOpen, 12)->Fg(th.mutedFg));
         t->Child(StoryTxt(cx, StoryFmt(cx, "Tab %d", self->dynamicIds[i]), 13,
@@ -285,9 +289,13 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     El* filling =
         StorySection(cx, "Filling Space",
                      "Segmented tabs can share the available width equally.");
-    El* fillBar =
-        Div(a)->FlexRow()->W(kFill)->Pad(2)->Gap(2)->Bg(th.muted)->Radius(
-            th.radius);
+    El* fillBar = Div(a)
+                      ->FlexRow()
+                      ->W(kFill)
+                      ->Pad(2)
+                      ->Gap(2)
+                      ->Bg(th.tokens.muted)
+                      ->Radius(th.radius);
     static const char* kFillNames[2] = {"About", "Profile"};
     for (int i = 0; i < 2; i++) {
         El* t =
@@ -301,7 +309,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                 ->OnClick(Listen(cx, &SetTab, i))
                 ->Child(StoryTxt(cx, Str(kFillNames[i]), 13, th.foreground));
         if (i == self->tab) {
-            t->Bg(th.background);
+            t->Bg(th.tokens.background);
         }
         fillBar->Child(t);
     }

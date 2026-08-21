@@ -23,12 +23,12 @@ void ListSettingsSet(ListSettings s);
 // row's own box so the highlight does not move anything. `active` is the theme
 // pair for a list or for a table, which fall back to the same colors.
 struct ListActiveStyle {
-    Rgba bg = {};
+    Background bg = {};
     Rgba border = {};
     bool hasBorder = false;
 };
-ListActiveStyle ListActiveStyleOf(Rgba active, Rgba activeBorder, Rgba accent,
-                                  bool selected);
+ListActiveStyle ListActiveStyleOf(Background active, Rgba activeBorder,
+                                  Background accent, bool selected);
 
 // The rule itself: an absolutely positioned child that covers the row.
 El* ListActiveOverlay(Arena* a, Rgba border, float radius);

@@ -68,7 +68,7 @@ static El* ToggleButton(Ctx* cx, Str bid, Entity<DockState> st, DockPlacement p,
     El* e = Div(a)
                 ->Pad(4)
                 ->Radius(th.radius * 0.5f)
-                ->HoverBg(th.secondary)
+                ->HoverBg(th.tokens.secondary)
                 ->Child(IconEl(a, icon, 14)->Fg(th.mutedFg));
     BindClick(e, bid, ListenTo(st, &DockState::OnToggleSide, (intptr_t)p));
     // tab_panel.rs marks every tool on the bar `.tab_stop(false)`: the panel
@@ -131,7 +131,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                   ->ItemsCenter()
                   ->W(kFill)
                   ->H(kDockTabBarH)
-                  ->Bg(th.tabBar)
+                  ->Bg(th.tokens.tabBar)
                   ->BorderB(1, th.border);
     if (toolbar) {
         bar->Child(RenderToolbar(cx, id, st, false));
@@ -215,7 +215,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
             El* x = Div(a)
                         ->Pad(2)
                         ->Radius(th.radius * 0.5f)
-                        ->HoverBg(th.secondary)
+                        ->HoverBg(th.tokens.secondary)
                         ->Child(IconEl(a, IconName::X, 12)->Fg(th.mutedFg));
             BindClick(
                 x, StrDup(a, fmt("%s-close-%d-%d", id, node, i)),
@@ -240,7 +240,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
         const DragPayload* drag = WindowActiveDrag(cx);
         if (drag && StrSame(drag->kind, kDockPanelDrag) &&
             WindowDragOverId(cx) == HashClickId(restId)) {
-            rest->Bg(RgbaOpacity(th.primary, 0.2f));
+            rest->Bg(BackgroundOpacity(th.tokens.primary, 0.2f));
         }
     }
     strip->Child(rest);
@@ -252,7 +252,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
             Div(a)
                 ->Pad(4)
                 ->Radius(th.radius * 0.5f)
-                ->HoverBg(th.secondary)
+                ->HoverBg(th.tokens.secondary)
                 ->Child(IconEl(a,
                                s->zoomPanel == panelIx ? IconName::Minimize
                                                        : IconName::Maximize,
@@ -305,8 +305,8 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     box->Child(bar);
 
     if (!collapsed) {
-        El* body =
-            Div(a)->FlexCol()->Grow()->W(kFill)->ClipY()->Bg(th.background);
+        El* body = Div(a)->FlexCol()->Grow()->W(kFill)->ClipY()->Bg(
+            th.tokens.background);
         if (n.panel.len > 0) {
             const DockPanelDef& def = s->panels[n.panel[n.activeIx]];
             if (def.render) {
@@ -326,7 +326,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                        ->Top(ph.y - n.bounds.y)
                        ->W(ph.w)
                        ->H(ph.h)
-                       ->Bg(RgbaOpacity(th.primary, 0.2f)));
+                       ->Bg(BackgroundOpacity(th.tokens.primary, 0.2f)));
     }
     return box;
 }
@@ -413,7 +413,7 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
         ->ClipX()
         ->Radius(th.radius)
         ->Border(1, th.border)
-        ->Bg(th.tabActiveBg)
+        ->Bg(th.tokens.tabActiveBg)
         ->Opacity(0.75f)
         ->Child(TextEl(a, s->panels[panelIx].title)
                     ->Font(13)
@@ -447,7 +447,7 @@ El* DockArea::IntoEl() {
     if (!s) {
         return Div(a)->SizeFull();
     }
-    El* box = Div(a)->FlexCol()->SizeFull()->Bg(th.background);
+    El* box = Div(a)->FlexCol()->SizeFull()->Bg(th.tokens.background);
     box->BoundsOut(&s->bounds);
 
     // ToggleZoom: one panel over the whole area, and nothing else rendered.

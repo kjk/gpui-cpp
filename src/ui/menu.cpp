@@ -218,7 +218,7 @@ El* PopupMenu::IntoEl() {
     El* root = Div(a)
                    ->FlexCol()
                    ->W(menuW)
-                   ->Bg(th.background)
+                   ->Bg(th.tokens.background)
                    ->Border(1, th.border)
                    ->Radius(th.radius)
                    ->ClipY();
@@ -293,7 +293,7 @@ El* PopupMenu::IntoEl() {
                       ->JustifyBetween()
                       ->Radius(radius);
         if (lit) {
-            row->Bg(th.accent);
+            row->Bg(th.tokens.accent);
         }
         Rgba fg = it.disabled ? th.mutedFg : th.foreground;
         El* left = Div(a)->FlexRow()->Grow()->Gap(4)->ItemsCenter();
@@ -525,9 +525,9 @@ El* AppMenuBar::IntoEl() {
                        ->PadX(8)
                        ->ItemsCenter()
                        ->Radius(th.radius)
-                       ->HoverBg(th.secondary);
+                       ->HoverBg(th.tokens.secondary);
         if (on) {
-            item->Bg(th.secondary);
+            item->Bg(th.tokens.secondary);
         }
         item->Child(TextEl(a, titles[i])->Font(14)->Fg(th.foreground));
         BindClick(item, StrDup(a, fmt("%s-%d", id, i)), ListenerArg(click, i));

@@ -375,7 +375,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                         ->W(512)
                         ->PadX(24)
                         ->PadY(12)
-                        ->Bg(th.secondary)
+                        ->Bg(th.tokens.secondary)
                         ->BorderB(2, th.border)
                         ->Mono()
                         ->Child(Field(self, cx, InCustom, focus, clear)

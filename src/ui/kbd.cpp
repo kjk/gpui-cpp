@@ -175,9 +175,9 @@ El* Kbd::IntoEl() {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Radius(th.radius * 0.5f)
-                ->Bg(th.muted);
+                ->Bg(th.tokens.muted);
     if (outline) {
-        e->Bg(th.background)->Border(1, th.border);
+        e->Bg(th.tokens.background)->Border(1, th.border);
     }
     e->Child(TextEl(a, stroke)->Font(12)->LineHeight(1.f)->Fg(th.mutedFg));
     return e;

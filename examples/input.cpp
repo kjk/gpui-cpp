@@ -30,7 +30,7 @@ struct Example {
             ->SizeFull()
             ->ItemsCenter()
             ->JustifyCenter()
-            ->Bg(th.background)
+            ->Bg(th.tokens.background)
             // A press on the field focuses it and places the caret;
             // the window does that for any element bound to a state, the
             // way GPUI's focus handle does.

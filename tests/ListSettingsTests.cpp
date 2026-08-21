@@ -26,7 +26,7 @@ static void ASelectedRowTakesTheTintAndTheRule() {
     ListSettingsSet(ListSettings{});
     ListActiveStyle st =
         ListActiveStyleOf(kActive, kActiveBorder, kAccent, true);
-    utassert(Same(st.bg, kActive));
+    utassert(Same(st.bg.color, kActive));
     utassert(st.hasBorder);
     utassert(Same(st.border, kActiveBorder));
 }
@@ -38,7 +38,7 @@ static void ARowThatIsOnlySecondarySelectedKeepsAccent() {
     ListSettingsSet(ListSettings{});
     ListActiveStyle st =
         ListActiveStyleOf(kActive, kActiveBorder, kAccent, false);
-    utassert(Same(st.bg, kAccent));
+    utassert(Same(st.bg.color, kAccent));
     utassert(st.hasBorder);
 }
 
@@ -48,11 +48,11 @@ static void WithTheHighlightOffASelectionIsAPlainBlock() {
     ListSettingsSet(off);
     ListActiveStyle st =
         ListActiveStyleOf(kActive, kActiveBorder, kAccent, true);
-    utassert(Same(st.bg, kAccent));
+    utassert(Same(st.bg.color, kAccent));
     utassert(!st.hasBorder);
     // And nothing about the setting is per-row.
     st = ListActiveStyleOf(kActive, kActiveBorder, kAccent, false);
-    utassert(Same(st.bg, kAccent));
+    utassert(Same(st.bg.color, kAccent));
     utassert(!st.hasBorder);
     ListSettingsSet(ListSettings{});
 }

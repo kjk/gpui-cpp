@@ -145,63 +145,67 @@ El* Button::IntoEl() {
     // in light mode, and hovers toward the input color.
     // bg and hover are Backgrounds, not colours: a theme may spell either as
     // a gradient, and a button is where most of them land.
-    Background bg = th.background, hover = RgbaOpacity(th.inputBorder, 0.5f);
+    Background bg = th.tokens.background,
+               hover = RgbaOpacity(th.inputBorder, 0.5f);
     Rgba fg = th.foreground, bd = th.inputBorder;
     // The status variants are washes, not fills: crates/ui's button_danger and
     // friends are the status color mixed 20% toward transparent, with the
     // color itself as the text and the same wash as the border. Outlined, the
     // wash drops to 10% and the border goes to 60%.
-    Rgba accent = {};
+    // The status variants' accent is a fill, not a colour: schema.rs lets
+    // `danger.background` and friends be gradients, and the wash a button
+    // paints is that fill faded rather than a flat colour faded.
+    Background accent = {};
     bool hasAccent = false;
     switch (variant) {
         case ButtonVariant::Secondary:
-            bg = th.secondary;
+            bg = th.tokens.secondary;
             fg = th.secondaryFg;
             hover = th.secondaryHover;
             bd = th.border;
             break;
         case ButtonVariant::Primary:
-            bg = th.primary;
+            bg = th.tokens.primary;
             fg = th.primaryFg;
             hover = RgbaMix(th.primary, th.foreground, 0.85f);
             bd = th.primary;
             break;
         case ButtonVariant::Danger:
-            accent = th.danger;
+            accent = th.tokens.danger;
             hasAccent = true;
             break;
         case ButtonVariant::Success:
-            accent = th.success;
+            accent = th.tokens.success;
             hasAccent = true;
             break;
         case ButtonVariant::Warning:
-            accent = th.warning;
+            accent = th.tokens.warning;
             hasAccent = true;
             break;
         case ButtonVariant::Info:
-            accent = th.info;
+            accent = th.tokens.info;
             hasAccent = true;
             break;
         case ButtonVariant::Ghost:
         case ButtonVariant::Text:
             bg = Rgba8(0, 0, 0, 0);
             fg = th.foreground;
-            hover = th.muted;
+            hover = th.tokens.muted;
             bd = Rgba8(0, 0, 0, 0);
             break;
         case ButtonVariant::Link:
             bg = Rgba8(0, 0, 0, 0);
             fg = th.blue;
-            hover = th.muted;
+            hover = th.tokens.muted;
             bd = Rgba8(0, 0, 0, 0);
             break;
         default:
             break;
     }
     if (hasAccent) {
-        bg = RgbaOpacity(accent, 0.2f);
-        fg = accent;
-        hover = RgbaOpacity(accent, 0.3f);
+        bg = BackgroundOpacity(accent, 0.2f);
+        fg = accent.color;
+        hover = BackgroundOpacity(accent, 0.3f);
         bd = bg.color;
     }
     if (hasCustom) {
@@ -212,16 +216,16 @@ El* Button::IntoEl() {
     }
     if (outline && !hasCustom) {
         if (hasAccent) {
-            bg = RgbaOpacity(accent, 0.1f);
-            bd = RgbaOpacity(accent, 0.6f);
-            hover = RgbaOpacity(accent, 0.2f);
+            bg = BackgroundOpacity(accent, 0.1f);
+            bd = RgbaOpacity(accent.color, 0.6f);
+            hover = BackgroundOpacity(accent, 0.2f);
         } else if (variant == ButtonVariant::Primary) {
-            bg = RgbaOpacity(th.primary, 0.1f);
+            bg = BackgroundOpacity(th.tokens.primary, 0.1f);
             fg = th.primary;
-            hover = RgbaOpacity(th.primary, 0.2f);
+            hover = BackgroundOpacity(th.tokens.primary, 0.2f);
         } else {
-            bg = th.background;
-            hover = th.muted;
+            bg = th.tokens.background;
+            hover = th.tokens.muted;
         }
     }
     if (selected) {

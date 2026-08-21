@@ -605,9 +605,9 @@ El* Settings::IntoEl() {
                        ->Gap(8)
                        ->ItemsCenter()
                        ->Radius(th.radius)
-                       ->HoverBg(th.muted);
+                       ->HoverBg(th.tokens.muted);
         if (active) {
-            item->Bg(th.accent);
+            item->Bg(th.tokens.accent);
         }
         if (p.icon != IconName::None) {
             item->Child(IconEl(a, p.icon, 16)->Fg(th.foreground));
@@ -643,9 +643,9 @@ El* Settings::IntoEl() {
                           ->PadL(28)
                           ->ItemsCenter()
                           ->Radius(th.radius)
-                          ->HoverBg(th.muted);
+                          ->HoverBg(th.tokens.muted);
             if (st && st->group == g) {
-                sub->Bg(RgbaOpacity(th.accent, 0.6f));
+                sub->Bg(BackgroundOpacity(th.tokens.accent, 0.6f));
             }
             sub->Child(
                 TextEl(a, p.groups[g].title)->Font(16)->Fg(th.foreground));

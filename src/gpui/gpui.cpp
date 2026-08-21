@@ -592,11 +592,11 @@ El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected) {
     if (kind == BtnKind::Primary) {
         b->PadX(16)
             ->PadY(8)
-            ->Bg(th.primary)
+            ->Bg(th.tokens.primary)
             ->HoverBg(RgbaMix(th.primary, th.foreground, 0.85f));
         b->Child(TextEl(a, label)->Font(14)->Fg(th.primaryFg));
     } else if (kind == BtnKind::Outline) {
-        b->PadX(16)->PadY(8)->Border(1, th.border)->HoverBg(th.muted);
+        b->PadX(16)->PadY(8)->Border(1, th.border)->HoverBg(th.tokens.muted);
         b->Child(TextEl(a, label)->Font(14)->Fg(th.foreground));
     } else {
         b->PadX(12)
@@ -4217,11 +4217,13 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         }
     } else if (e->kind == ElKind::Progress) {
         const Theme& th = ThemeNow();
-        Rgba track = RgbaOpacity(th.progress, 0.2f);
-        FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius, track);
+        Background track = BackgroundOpacity(th.tokens.progress, 0.2f);
+        FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius, nullptr,
+                       track);
         float fw = e->w * (e->progress / 100.f);
         if (fw > 0) {
-            FillRound(ctx, e->x, e->y, fw, e->h, e->style.radius, th.progress);
+            FillBackground(ctx, e->x, e->y, fw, e->h, e->style.radius, nullptr,
+                           th.tokens.progress);
         }
     } else if (e->kind == ElKind::Chart) {
         DrawChart(ctx, e);
@@ -4270,9 +4272,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             barVisible = barAlpha > 0.f;
         }
     }
-    Rgba barColor = barAlpha >= 1.f
-                        ? ThemeNow().scrollbarThumb
-                        : RgbaOpacity(ThemeNow().scrollbarThumb, barAlpha);
+    Background barColor =
+        barAlpha >= 1.f
+            ? ThemeNow().tokens.scrollbarThumb
+            : BackgroundOpacity(ThemeNow().tokens.scrollbarThumb, barAlpha);
     if (barVisible && e->style.overflowY == Overflow::Scroll &&
         e->contentH > e->h + 1.f && e->h > 0) {
         // The same three numbers the press and drag arithmetic goes by, so
@@ -4282,7 +4285,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
         float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
                                                 e->contentH);
-        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, barColor);
+        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, nullptr,
+                       barColor);
     }
     if (barVisible && e->style.overflowX == Overflow::Scroll &&
         e->contentW > e->w + 1.f && e->w > 0) {
@@ -4294,7 +4298,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         float thumbY = e->y + e->h - thumbH - kScrollbarThumbMargin;
         float thumbX = e->x + ScrollbarThumbPos(e->w, thumbW, e->scrollX, e->w,
                                                 e->contentW);
-        FillRound(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, barColor);
+        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, nullptr,
+                       barColor);
     }
 
     if (focused && ThemeFocusRing()) {

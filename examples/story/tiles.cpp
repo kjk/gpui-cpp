@@ -179,7 +179,7 @@ El* TilesStory::Render(TilesStory* self, Ctx* cx) {
                    ->H(440)
                    ->Border(1, th.border)
                    ->Radius(th.radius)
-                   ->Bg(th.secondary));
+                   ->Bg(th.tokens.secondary));
     StorySectionAdd(section, col);
     page->Child(section);
     return page;

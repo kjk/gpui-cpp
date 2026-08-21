@@ -125,7 +125,7 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
                    ->PadX(8)
                    ->ItemsCenter()
                    ->JustifyCenter()
-                   ->HoverBg(th.muted)
+                   ->HoverBg(th.tokens.muted)
                    ->Child(IconEl(a, IconName::Play, 14)->Fg(th.foreground));
     play->Click(HashClickId(StrL("progress-play")))
         ->OnClick(Listen(cx, &ProgPlay));

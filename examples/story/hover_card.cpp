@@ -27,7 +27,7 @@ static El* Card(Ctx* cx, const char* title, const char* body) {
                    ->FlexCol()
                    ->Gap(4)
                    ->Border(1, th.border)
-                   ->Bg(th.background)
+                   ->Bg(th.tokens.background)
                    ->Radius(th.radius);
     card->Child(StoryTxt(cx, Str(title), 14, th.foreground)->Semibold());
     card->Child(StoryTxt(cx, Str(body), 14, th.mutedFg)->Wrap());
@@ -41,7 +41,7 @@ static El* PlainCard(Ctx* cx, Str body) {
     return Div(a)
         ->Pad(12)
         ->Border(1, th.border)
-        ->Bg(th.background)
+        ->Bg(th.tokens.background)
         ->Radius(th.radius)
         ->Child(StoryTxt(cx, body, 13, th.foreground));
 }
@@ -88,7 +88,7 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
                       ->W(320)
                       ->Pad(12)
                       ->Border(1, th.border)
-                      ->Bg(th.background)
+                      ->Bg(th.tokens.background)
                       ->Radius(th.radius);
         profile->ItemsStart();
         profile->Child(component::Avatar::New(cx)

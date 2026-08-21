@@ -300,7 +300,7 @@ NumberInput* NumberInput::Suffix(El* el) {
     suffix = el;
     return this;
 }
-NumberInput* NumberInput::Bg(Rgba c) {
+NumberInput* NumberInput::Bg(Background c) {
     bg = c;
     hasBg = true;
     return this;
@@ -349,7 +349,9 @@ El* NumberInput::IntoEl() {
     El* frame = gpui::NumberInput::New(cx)->FlexRow()->W(width)->H(h);
     if (appearance) {
         frame->Radius(th.radius)
-            ->Bg(hasBg ? bg : (disabled ? th.muted : th.inputBg))
+            ->Bg(hasBg ? bg
+                       : Background(disabled ? th.tokens.muted.color
+                                             : th.inputBg))
             ->Border(1, focused && focusRing ? th.ring : border);
     } else if (hasBg) {
         frame->Radius(th.radius)->Bg(bg);

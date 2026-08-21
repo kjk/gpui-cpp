@@ -57,7 +57,7 @@ Avatar* Avatar::Initials(Str s) {
     initials = s;
     return this;
 }
-Avatar* Avatar::Bg(Rgba c) {
+Avatar* Avatar::Bg(Background c) {
     bg = c;
     hasBg = true;
     return this;
@@ -138,7 +138,7 @@ El* Avatar::IntoEl() {
     float inset = borderW > 0 ? borderW : 0;
     float innerSize = size - inset * 2;
     bool named = initials.s && initials.len > 0;
-    Rgba fill = th.secondary;
+    Background fill = th.tokens.secondary;
     Rgba text = th.mutedFg;
     if (hasBg) {
         fill = bg;
@@ -166,7 +166,7 @@ El* Avatar::IntoEl() {
                  ->Fallback(fb)
                  ->IntoEl()
                  ->Radius(r)
-                 ->Bg(th.secondary);
+                 ->Bg(th.tokens.secondary);
     Rgba bd = hasBorderC ? borderC : th.border;
     if (borderW > 0) {
         el->Pad(inset)->Border(borderW, bd);

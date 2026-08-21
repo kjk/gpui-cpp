@@ -44,7 +44,7 @@ El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
                   ->JustifyBetween()
                   ->Radius(th.radius);
     if (!disabled) {
-        row->HoverBg(th.accent);
+        row->HoverBg(th.tokens.accent);
     }
     if (selected || secondarySelected) {
         // list_item.rs: the selection takes the active highlight when the
@@ -52,8 +52,9 @@ El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
         // — and plain `accent` when it is off. A row a right press marked is
         // outlined rather than filled, so it is not mistaken for the
         // selection.
-        ListActiveStyle st = ListActiveStyleOf(
-            th.listActive, th.listActiveBorder, th.accent, selected);
+        ListActiveStyle st =
+            ListActiveStyleOf(th.tokens.listActive, th.listActiveBorder,
+                              th.tokens.accent, selected);
         if (!secondarySelected) {
             row->Bg(st.bg);
         }

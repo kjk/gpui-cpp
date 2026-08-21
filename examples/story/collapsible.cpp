@@ -92,7 +92,7 @@ static El* FileRow(Ctx* cx, Str name) {
         ->Gap(8)
         ->ItemsCenter()
         ->Radius(th.radius)
-        ->HoverBg(th.accent)
+        ->HoverBg(th.tokens.accent)
         ->Font(14)
         ->Child(Div(a)->W(12)->Shrink0())
         ->Child(IconEl(a, IconName::File, UiIconPx(UiSize::XSmall))
@@ -113,7 +113,7 @@ static El* FolderRow(CollapsibleStory* self, Ctx* cx, int key, Str name) {
         ->Gap(8)
         ->ItemsCenter()
         ->Radius(th.radius)
-        ->HoverBg(th.accent)
+        ->HoverBg(th.tokens.accent)
         ->Font(14)
         ->OnClick(Listen(cx, &OnColl, key))
         ->Child(Chevron(cx, open))
@@ -287,7 +287,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                         ->OnClick(Listen(cx, &OnColl, CollUsage))
                         ->IntoEl()
                         ->Radius(12)
-                        ->Bg(th.background)));
+                        ->Bg(th.tokens.background)));
     StorySectionAdd(bottom, card);
     page->Child(bottom);
 
@@ -369,7 +369,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Radius(th.radius)
-                ->Bg(th.muted)
+                ->Bg(th.tokens.muted)
                 ->Child(IconEl(a, IconName::Asterisk, UiIconPx(UiSize::XSmall))
                             ->Fg(th.green)));
         keyRow->Child(TextEl(a, Str(kKeys[i][0]))->Font(12)->W(80)->Shrink0());
@@ -379,7 +379,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                           ->PadX(8)
                           ->PadY(2)
                           ->Radius(th.radius)
-                          ->Bg(th.muted)
+                          ->Bg(th.tokens.muted)
                           ->Child(TextEl(a, Str(kKeys[i][1]))->Font(12)));
         keyRow->Child(component::Button::New(cx, Str(kKeys[i][0]))
                           ->Ghost()

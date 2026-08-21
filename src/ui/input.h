@@ -97,7 +97,7 @@ struct NumberInput {
     bool appearance = true;
     bool focusRing = true;
     El* suffix = nullptr;
-    Rgba bg = {};
+    Background bg = {};
     bool hasBg = false;
     Rgba textColor = {};
     bool hasTextColor = false;
@@ -115,7 +115,7 @@ struct NumberInput {
     // FocusableExt::focus_ring: no focus appearance on this control.
     NumberInput* FocusRing(bool v);
     NumberInput* Suffix(El* el);
-    NumberInput* Bg(Rgba c);
+    NumberInput* Bg(Background c);
     NumberInput* TextColor(Rgba c);
     NumberInput* OnFocus(Listener fn);
     NumberInput* OnInc(Listener fn);

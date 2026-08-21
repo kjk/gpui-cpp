@@ -387,7 +387,7 @@ El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     StorySectionAdd(custom,
                     Div(a)
                         ->W(280)
-                        ->Bg(th.secondary)
+                        ->Bg(th.tokens.secondary)
                         ->Child(Picker(self, cx, DpNoAppearance,
                                        StrL("date-picker-no-appearance"))
                                     ->Appearance(false)

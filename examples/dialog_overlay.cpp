@@ -88,7 +88,7 @@ static El* OverlayHeader(Ctx* cx, Str title) {
                    ->ItemsCenter()
                    ->JustifyCenter()
                    ->Radius(4)
-                   ->HoverBg(th.muted)
+                   ->HoverBg(th.tokens.muted)
                    ->Click(ClickCloseOverlay)
                    ->OnClick(Listen(cx, &CloseOverlay))
                    ->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg)));
@@ -105,7 +105,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                   ->H(34)
                   ->PadX(12)
                   ->ItemsCenter()
-                  ->Bg(th.titleBar)
+                  ->Bg(th.tokens.titleBar)
                   ->Child(TextEl(frame, StrL("Dialog & Sheet"))
                               ->Font(14)
                               ->Fg(th.foreground));
@@ -186,7 +186,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                         ->Absolute()
                         ->FlexCol()
                         ->Gap(8)
-                        ->Bg(th.background)
+                        ->Bg(th.tokens.background)
                         ->Click(ClickOverlayPanel)
                         // The trap is what makes the overlay a selection
                         // scope as well as a focus one: a drag that began on
@@ -237,7 +237,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                        ->W(130)
                        ->PadY(4)
                        ->FlexCol()
-                       ->Bg(th.background)
+                       ->Bg(th.tokens.background)
                        ->Border(1, th.border)
                        ->Radius(6);
         for (int i = 0; i < kMenuCount; i++) {
@@ -247,7 +247,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                             ->H(28)
                             ->PadX(12)
                             ->ItemsCenter()
-                            ->HoverBg(th.muted)
+                            ->HoverBg(th.tokens.muted)
                             ->Click(ClickMenuBase + i)
                             ->OnClick(Listen(cx, &MenuPicked, i))
                             ->Child(TextEl(frame, Str(kMenuItems[i]))

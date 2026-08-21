@@ -15,7 +15,7 @@ struct Example {
             ->Gap(8)
             ->ItemsCenter()
             ->JustifyCenter()
-            ->Bg(th.background)
+            ->Bg(th.tokens.background)
             ->Child(IconEl(a, IconName::Inbox, 16))
             ->Child(IconEl(a, IconName::Bot, 16));
     }

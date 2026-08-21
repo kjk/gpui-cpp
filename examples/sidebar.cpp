@@ -55,7 +55,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     bool iconCollapsed =
         collapsed && kModes[app->mode] == component::SidebarCollapsible::Icon;
 
-    El* root = Div(frame)->FlexRow()->SizeFull()->Bg(th.background);
+    El* root = Div(frame)->FlexRow()->SizeFull()->Bg(th.tokens.background);
 
     // The header is a logo and the workspace it names.
     El* brand = Div(frame)->FlexRow()->Gap(8)->ItemsCenter();
@@ -64,7 +64,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
                      ->H(32)
                      ->Shrink0()
                      ->Radius(th.radius)
-                     ->Bg(th.sidebarPrimary)
+                     ->Bg(th.tokens.sidebarPrimary)
                      ->ItemsCenter()
                      ->JustifyCenter()
                      ->Child(IconEl(frame, IconName::GalleryVerticalEnd, 16)

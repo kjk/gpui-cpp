@@ -18,7 +18,7 @@ struct Example {
             Div(a)
                 ->Grow()
                 ->W(kFill)
-                ->Bg(th.background)
+                ->Bg(th.tokens.background)
                 ->Child(Div(a)->Absolute()->Top(0)->Left(24)->Child(btn))
                 ->Child(Div(a)->Absolute()->Top(64)->Left(24)->MaxW(420)->Child(
                     TextEl(a,
@@ -33,7 +33,7 @@ struct Example {
         return Div(a)
             ->FlexCol()
             ->SizeFull()
-            ->Bg(th.background)
+            ->Bg(th.tokens.background)
             ->Child(component::TitleBar::New(cx)
                         ->Child(TextEl(a, StrL("Tooltip Top Edge"))
                                     ->Font(14)

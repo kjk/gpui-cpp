@@ -16,7 +16,7 @@ struct Example {
             ->Gap(8)
             ->ItemsCenter()
             ->JustifyCenter()
-            ->Bg(th.background)
+            ->Bg(th.tokens.background)
             ->Child(TextEl(cx->a, StrL("Hello, World!"))
                         ->Font(16)
                         ->Fg(th.foreground))

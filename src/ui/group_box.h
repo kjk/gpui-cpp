@@ -23,7 +23,7 @@ struct GroupBox {
     // content container; these are the pieces it reaches for.
     bool titleSemibold = false;
     float titlePadX = 0;
-    Rgba contentBg = {};
+    Background contentBg = {};
     bool hasContentBg = false;
     float contentRadius = -1;
     float contentPad = -1;
@@ -36,7 +36,7 @@ struct GroupBox {
     GroupBox* Filled(bool v);
     GroupBox* TitleSemibold(bool v = true);
     GroupBox* TitlePadX(float px);
-    GroupBox* ContentBg(Rgba c);
+    GroupBox* ContentBg(Background c);
     GroupBox* ContentRadius(float px);
     GroupBox* ContentPad(float px);
     GroupBox* ContentBorder(float px);
