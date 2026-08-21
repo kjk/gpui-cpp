@@ -1,9 +1,8 @@
 #include "ui/text.h"
 
 #include "gpui/paint.h"
+#include "markdown/markdown.h"
 #include "ui/html.h"
-
-#include "md4c.h"
 
 namespace gpui {
 
@@ -11,25 +10,28 @@ namespace component {
 
 // ─── parse ────────────────────────────────────────────────────────────────
 //
-// md4c is a SAX parser: it announces blocks and spans as it walks the source
-// and never builds a tree. These callbacks build the one node.rs describes.
+// src/markdown is the `markdown` crate, ported: it hands back an mdast, the
+// same tree Rust gets from `markdown::to_mdast`. This walk folds that tree
+// into the MdNode tree below, which is what crates/ui/src/text/format/
+// markdown.rs does with `ast_to_node` and `parse_paragraph`.
+
+namespace md = markdown;
+
+// A link reference definition, kept so `[text][id]` can find its URL.
+// crates/ui/src/text/format/markdown.rs puts these in the NodeContext with
+// `cx.add_ref`; there is one parse here, so they live with the builder.
+struct MdDef {
+    Str identifier;
+    Str url;
+};
 
 struct MdBuild {
     Arena* a = nullptr;
     MdNode* cur = nullptr;
-    // The marks in effect, from the enclosing MD_SPAN_* stack.
+    // The marks in effect, from the enclosing inline nodes.
     uint8_t marks = 0;
     Str href = {};
-    // MD_BLOCK_THEAD is not a node of its own; it just marks the rows in it.
-    bool inHead = false;
-    // Inside an MD_SPAN_IMG: the source, and the alt text md4c is handing
-    // over as ordinary text callbacks. Rust builds an ImageNode out of the
-    // same pair. Alt text longer than the buffer is cut — it is a label, not
-    // content, and nothing sensible writes a paragraph of it.
-    Str imgSrc = {};
-    bool inImg = false;
-    int altLen = 0;
-    char alt[256] = {};
+    ArenaVec<MdDef> defs = {};
 };
 
 static MdNode* Push(MdBuild* b, MdKind k) {
@@ -55,21 +57,14 @@ static void Pop(MdBuild* b) {
 // Appends to the run being built when the marks match and the text is the
 // next byte of the source; otherwise starts a new run. Most of a paragraph is
 // one uninterrupted stretch of source, so this usually collapses to one run
-// pointing straight at `source` with nothing copied.
+// pointing straight at the tree's text with nothing copied.
 static void AddText(MdBuild* b, Str s) {
     if (s.len <= 0) {
         return;
     }
-    if (b->inImg) {
-        // The alt text of the image being built, not text of its own.
-        for (int i = 0; i < s.len && b->altLen < (int)sizeof(b->alt) - 1; i++) {
-            b->alt[b->altLen++] = s.s[i];
-        }
-        return;
-    }
     MdNode* n = b->cur;
     MdRun* r = n->runLast;
-    if (r && r->marks == b->marks && r->href.s == b->href.s &&
+    if (r && !r->imgSrc.s && r->marks == b->marks && r->href.s == b->href.s &&
         r->text.s + r->text.len == s.s) {
         r->text.len += s.len;
         return;
@@ -108,260 +103,33 @@ static void AddImage(MdBuild* b, Str src, Str alt, float w, float h) {
     n->runLast = r;
 }
 
-static int Utf8Encode(char* out, uint32_t cp) {
-    if (cp < 0x80) {
-        out[0] = (char)cp;
-        return 1;
-    }
-    if (cp < 0x800) {
-        out[0] = (char)(0xc0 | (cp >> 6));
-        out[1] = (char)(0x80 | (cp & 0x3f));
-        return 2;
-    }
-    if (cp < 0x10000) {
-        out[0] = (char)(0xe0 | (cp >> 12));
-        out[1] = (char)(0x80 | ((cp >> 6) & 0x3f));
-        out[2] = (char)(0x80 | (cp & 0x3f));
-        return 3;
-    }
-    out[0] = (char)(0xf0 | (cp >> 18));
-    out[1] = (char)(0x80 | ((cp >> 12) & 0x3f));
-    out[2] = (char)(0x80 | ((cp >> 6) & 0x3f));
-    out[3] = (char)(0x80 | (cp & 0x3f));
-    return 4;
-}
-
-struct NamedEntity {
-    const char* name;
-    uint32_t cp;
-};
-
-// md4c hands entities over verbatim — it deliberately keeps no table of them.
-// This is the handful that shows up in prose; anything else is left as typed.
-static const NamedEntity kEntities[] = {
-    {"amp", '&'},      {"lt", '<'},        {"gt", '>'},
-    {"quot", '"'},     {"apos", '\''},     {"nbsp", 0xa0},
-    {"copy", 0xa9},    {"reg", 0xae},      {"trade", 0x2122},
-    {"deg", 0xb0},     {"hellip", 0x2026}, {"mdash", 0x2014},
-    {"ndash", 0x2013}, {"lsquo", 0x2018},  {"rsquo", 0x2019},
-    {"ldquo", 0x201c}, {"rdquo", 0x201d},  {"bull", 0x2022},
-    {"middot", 0xb7},  {"times", 0xd7},    {"rarr", 0x2192},
-    {"larr", 0x2190},  {"check", 0x2713},  {"dagger", 0x2020},
-};
-
-static uint32_t ParseHex(Str s) {
-    uint32_t v = 0;
-    for (int i = 0; i < s.len; i++) {
-        char c = s.s[i];
-        int d;
-        if (c >= '0' && c <= '9') {
-            d = c - '0';
-        } else if (c >= 'a' && c <= 'f') {
-            d = c - 'a' + 10;
-        } else if (c >= 'A' && c <= 'F') {
-            d = c - 'A' + 10;
-        } else {
-            return 0;
-        }
-        v = v * 16 + (uint32_t)d;
-    }
-    return v;
-}
-
-static uint32_t ParseDec(Str s) {
-    uint32_t v = 0;
-    for (int i = 0; i < s.len; i++) {
-        if (s.s[i] < '0' || s.s[i] > '9') {
-            return 0;
-        }
-        v = v * 10 + (uint32_t)(s.s[i] - '0');
-    }
-    return v;
-}
-
-// "&amp;" -> "&". Returns the entity unchanged when it is not one we know.
-// ui/html.cpp decodes the entities in an attribute and in HTML text with it.
+// "&amp;" -> "&". Returns the entity unchanged when it is not one the crate's
+// table knows. ui/html.cpp decodes the entities in an attribute and in HTML
+// text with it; the markdown side needs no such thing, because the parser
+// decodes character references itself.
 Str MdDecodeEntity(Arena* a, Str e) {
     if (e.len < 3 || e.s[0] != '&' || e.s[e.len - 1] != ';') {
         return e;
     }
     Str body((char*)e.s + 1, e.len - 2);
-    uint32_t cp = 0;
+    Str value;
     if (body.len > 1 && body.s[0] == '#') {
         if (body.s[1] == 'x' || body.s[1] == 'X') {
-            cp = ParseHex(Str((char*)body.s + 2, body.len - 2));
+            value =
+                md::DecodeNumeric(a, Str((char*)body.s + 2, body.len - 2), 16);
         } else {
-            cp = ParseDec(Str((char*)body.s + 1, body.len - 1));
+            value =
+                md::DecodeNumeric(a, Str((char*)body.s + 1, body.len - 1), 10);
         }
     } else {
-        for (const NamedEntity& ne : kEntities) {
-            int n = (int)strlen(ne.name);
-            if (n == body.len && memcmp(ne.name, body.s, (size_t)n) == 0) {
-                cp = ne.cp;
-                break;
-            }
-        }
+        value = md::DecodeNamed(a, body);
     }
-    if (cp == 0) {
-        return e;
-    }
-    char* out = (char*)Alloc(a, 5);
-    if (!out) {
-        return e;
-    }
-    int n = Utf8Encode(out, cp);
-    out[n] = 0;
-    return Str(out, n);
+    return value.s ? value : e;
 }
 
-// MD_ATTRIBUTE carries entity substrings, which the callers here only ever
-// show verbatim, so the raw text is enough.
-static Str Attr(Arena* a, const MD_ATTRIBUTE* at) {
-    if (!at || !at->text || at->size == 0) {
-        return {};
-    }
-    return StrDup(a, Str((char*)at->text, (int)at->size));
-}
-
-static int OnEnterBlock(MD_BLOCKTYPE type, void* detail, void* ud) {
-    MdBuild* b = (MdBuild*)ud;
-    switch (type) {
-        case MD_BLOCK_QUOTE:
-            Push(b, MdKind::Quote);
-            break;
-        case MD_BLOCK_UL:
-            Push(b, MdKind::List);
-            break;
-        case MD_BLOCK_OL: {
-            MD_BLOCK_OL_DETAIL* d = (MD_BLOCK_OL_DETAIL*)detail;
-            MdNode* n = Push(b, MdKind::List);
-            n->ordered = true;
-            n->start = d ? (int)d->start : 1;
-            break;
-        }
-        case MD_BLOCK_LI:
-            Push(b, MdKind::Item);
-            break;
-        case MD_BLOCK_HR:
-            Push(b, MdKind::Rule);
-            break;
-        case MD_BLOCK_H: {
-            MD_BLOCK_H_DETAIL* d = (MD_BLOCK_H_DETAIL*)detail;
-            MdNode* n = Push(b, MdKind::Heading);
-            n->level = d ? (uint8_t)d->level : 1;
-            break;
-        }
-        case MD_BLOCK_CODE: {
-            MD_BLOCK_CODE_DETAIL* d = (MD_BLOCK_CODE_DETAIL*)detail;
-            MdNode* n = Push(b, MdKind::Code);
-            n->lang = d ? Attr(b->a, &d->lang) : Str{};
-            break;
-        }
-        case MD_BLOCK_HTML:
-            Push(b, MdKind::Html);
-            break;
-        case MD_BLOCK_P:
-            Push(b, MdKind::Paragraph);
-            break;
-        case MD_BLOCK_TABLE:
-            Push(b, MdKind::Table);
-            break;
-        case MD_BLOCK_THEAD:
-            b->inHead = true;
-            break;
-        case MD_BLOCK_TBODY:
-            b->inHead = false;
-            break;
-        case MD_BLOCK_TR: {
-            MdNode* n = Push(b, MdKind::Row);
-            n->head = b->inHead;
-            break;
-        }
-        case MD_BLOCK_TH:
-        case MD_BLOCK_TD: {
-            MD_BLOCK_TD_DETAIL* d = (MD_BLOCK_TD_DETAIL*)detail;
-            MdNode* n = Push(b, MdKind::Cell);
-            n->align = d ? (uint8_t)d->align : 0;
-            break;
-        }
-        default:
-            break;
-    }
-    return 0;
-}
-
-static int OnLeaveBlock(MD_BLOCKTYPE type, void* detail, void* ud) {
-    (void)detail;
-    MdBuild* b = (MdBuild*)ud;
-    switch (type) {
-        case MD_BLOCK_DOC:
-        case MD_BLOCK_THEAD:
-        case MD_BLOCK_TBODY:
-            break;
-        default:
-            Pop(b);
-            break;
-    }
-    return 0;
-}
-
-static uint8_t SpanMark(MD_SPANTYPE type) {
-    switch (type) {
-        case MD_SPAN_EM:
-            return MdItalic;
-        case MD_SPAN_STRONG:
-            return MdBold;
-        case MD_SPAN_CODE:
-            return MdCode;
-        case MD_SPAN_DEL:
-            return MdDel;
-        case MD_SPAN_U:
-            return MdUnderline;
-        case MD_SPAN_A:
-        case MD_SPAN_WIKILINK:
-            return MdLink;
-        default:
-            return 0;
-    }
-}
-
-static int OnEnterSpan(MD_SPANTYPE type, void* detail, void* ud) {
-    MdBuild* b = (MdBuild*)ud;
-    if (type == MD_SPAN_A) {
-        MD_SPAN_A_DETAIL* d = (MD_SPAN_A_DETAIL*)detail;
-        b->href = d ? Attr(b->a, &d->href) : Str{};
-    }
-    if (type == MD_SPAN_IMG) {
-        // The alt text arrives as ordinary text callbacks between here and
-        // the leave below, which is where the run is made.
-        MD_SPAN_IMG_DETAIL* d = (MD_SPAN_IMG_DETAIL*)detail;
-        b->imgSrc = d ? Attr(b->a, &d->src) : Str{};
-        b->inImg = true;
-        b->altLen = 0;
-    }
-    b->marks = (uint8_t)(b->marks | SpanMark(type));
-    return 0;
-}
-
-static int OnLeaveSpan(MD_SPANTYPE type, void* detail, void* ud) {
-    (void)detail;
-    MdBuild* b = (MdBuild*)ud;
-    if (type == MD_SPAN_A) {
-        b->href = {};
-    }
-    if (type == MD_SPAN_IMG) {
-        b->inImg = false;
-        AddImage(b, b->imgSrc, StrDup(b->a, Str(b->alt, b->altLen)), 0, 0);
-        b->imgSrc = {};
-        b->altLen = 0;
-    }
-    b->marks = (uint8_t)(b->marks & ~SpanMark(type));
-    return 0;
-}
-
-// One inline tag inside a paragraph. md4c hands `<b>` over as raw text and
-// leaves the meaning to us; Rust reaches the same tags through html5ever,
-// since markdown_ext.rs sends an mdast::Html node to format::html. A raw
+// One inline tag inside a paragraph. The markdown parser hands `<b>` over as
+// an mdast Html node and leaves the meaning to us; Rust reaches the same tags
+// through html5ever, since markdown.rs sends the node to format::html. A raw
 // HTML *block* is a node of its own and is parsed whole, below.
 static void MdInlineHtml(MdBuild* b, Str tag) {
     if (b->cur->kind == MdKind::Html) {
@@ -396,37 +164,277 @@ static void MdInlineHtml(MdBuild* b, Str tag) {
     }
 }
 
-static int OnText(MD_TEXTTYPE type, const MD_CHAR* txt, MD_SIZE size,
-                  void* ud) {
-    MdBuild* b = (MdBuild*)ud;
-    Str s((char*)txt, (int)size);
-    switch (type) {
-        case MD_TEXT_NULLCHAR:
-            AddText(b, StrL("\xEF\xBF\xBD"));
+// ─── the mdast walk ───────────────────────────────────────────────────────
+
+static void MdInlineNode(MdBuild* b, const md::Node* n);
+
+static void MdInlineChildren(MdBuild* b, const md::Node* n) {
+    for (int32_t i = 0; i < n->children.len; i++) {
+        MdInlineNode(b, n->children[i]);
+    }
+}
+
+// The children of `n` with `mark` added to whatever is already in force,
+// which is markdown.rs's merge_children_with_mark.
+static void MdMarked(MdBuild* b, const md::Node* n, uint8_t mark) {
+    uint8_t saved = b->marks;
+    b->marks = (uint8_t)(b->marks | mark);
+    MdInlineChildren(b, n);
+    b->marks = saved;
+}
+
+// The URL a `[text][id]` or `![alt][id]` points at, from the definitions
+// collected below. Empty when the definition is missing, which is what Rust's
+// LinkMark holds until the reference is resolved.
+static Str MdDefUrl(MdBuild* b, Str identifier) {
+    for (int32_t i = 0; i < b->defs.len; i++) {
+        if (b->defs[i].identifier.len == identifier.len &&
+            memcmp(b->defs[i].identifier.s, identifier.s,
+                   (size_t)identifier.len) == 0) {
+            return b->defs[i].url;
+        }
+    }
+    return {};
+}
+
+static void MdInlineNode(MdBuild* b, const md::Node* n) {
+    switch (n->kind) {
+        case md::NodeKind::Text:
+            AddText(b, n->value);
             break;
-        case MD_TEXT_BR:
+        case md::NodeKind::Emphasis:
+            MdMarked(b, n, MdItalic);
+            break;
+        case md::NodeKind::Strong:
+            MdMarked(b, n, MdBold);
+            break;
+        case md::NodeKind::Delete:
+            MdMarked(b, n, MdDel);
+            break;
+        case md::NodeKind::InlineCode:
+        case md::NodeKind::InlineMath: {
+            uint8_t saved = b->marks;
+            b->marks = (uint8_t)(b->marks | MdCode);
+            AddText(b, n->value);
+            b->marks = saved;
+            break;
+        }
+        case md::NodeKind::Break:
+            // Rust drops an inline break (parse_paragraph has no arm for it);
+            // a hard break is what starts a new row of the flow here, so it
+            // stays.
             AddText(b, StrL("\n"));
             break;
-        case MD_TEXT_SOFTBR:
-            AddText(b, StrL(" "));
+        case md::NodeKind::Link:
+        case md::NodeKind::LinkReference: {
+            Str saved = b->href;
+            b->href = n->kind == md::NodeKind::Link
+                          ? n->url
+                          : MdDefUrl(b, n->identifier);
+            MdMarked(b, n, MdLink);
+            b->href = saved;
             break;
-        case MD_TEXT_ENTITY:
-            AddText(b, MdDecodeEntity(b->a, s));
+        }
+        case md::NodeKind::Image:
+            AddImage(b, n->url, n->alt, 0, 0);
             break;
-        case MD_TEXT_HTML:
-            MdInlineHtml(b, s);
+        case md::NodeKind::ImageReference:
+            AddImage(b, MdDefUrl(b, n->identifier), n->alt, 0, 0);
+            break;
+        case md::NodeKind::FootnoteReference: {
+            // markdown.rs renders the call as an italic `[id]`.
+            uint8_t saved = b->marks;
+            b->marks = (uint8_t)(b->marks | MdItalic);
+            AddText(b, StrL("["));
+            AddText(b, n->identifier);
+            AddText(b, StrL("]"));
+            b->marks = saved;
+            break;
+        }
+        case md::NodeKind::Html:
+            MdInlineHtml(b, n->value);
             break;
         default:
-            AddText(b, s);
+            // Anything else is not inline content; Rust warns and drops it.
             break;
     }
-    return 0;
+}
+
+// The inline children of `n` as the runs of the current block.
+static void MdInline(MdBuild* b, const md::Node* n) {
+    MdInlineChildren(b, n);
+}
+
+static void MdBlockNode(MdBuild* b, const md::Node* n);
+
+static void MdBlockChildren(MdBuild* b, const md::Node* n) {
+    for (int32_t i = 0; i < n->children.len; i++) {
+        MdBlockNode(b, n->children[i]);
+    }
+}
+
+// A code block, however the source spelled it: a fence, an indent, math, or
+// the document's frontmatter.
+static void MdCodeBlock(MdBuild* b, Str value, Str lang) {
+    MdNode* n = Push(b, MdKind::Code);
+    n->lang = lang;
+    AddText(b, value);
+    Pop(b);
+}
+
+static void MdTable(MdBuild* b, const md::Node* n) {
+    MdNode* table = Push(b, MdKind::Table);
+    (void)table;
+    for (int32_t i = 0; i < n->children.len; i++) {
+        const md::Node* row = n->children[i];
+        if (row->kind != md::NodeKind::TableRow) {
+            continue;
+        }
+        MdNode* r = Push(b, MdKind::Row);
+        // mdast has no thead: the first row is the head.
+        r->head = i == 0;
+        for (int32_t j = 0; j < row->children.len; j++) {
+            const md::Node* cell = row->children[j];
+            if (cell->kind != md::NodeKind::TableCell) {
+                continue;
+            }
+            MdNode* c = Push(b, MdKind::Cell);
+            if (j < n->align.len) {
+                switch (n->align[j]) {
+                    case md::AlignKind::Left:
+                        c->align = MdAlignLeft;
+                        break;
+                    case md::AlignKind::Center:
+                        c->align = MdAlignCenter;
+                        break;
+                    case md::AlignKind::Right:
+                        c->align = MdAlignRight;
+                        break;
+                    case md::AlignKind::None:
+                        c->align = MdAlignDefault;
+                        break;
+                }
+            }
+            MdInline(b, cell);
+            Pop(b);
+        }
+        Pop(b);
+    }
+    Pop(b);
+}
+
+static void MdBlockNode(MdBuild* b, const md::Node* n) {
+    switch (n->kind) {
+        case md::NodeKind::Paragraph:
+            Push(b, MdKind::Paragraph);
+            MdInline(b, n);
+            Pop(b);
+            break;
+        case md::NodeKind::Heading: {
+            MdNode* h = Push(b, MdKind::Heading);
+            h->level = n->depth == 0 ? 1 : n->depth;
+            MdInline(b, n);
+            Pop(b);
+            break;
+        }
+        case md::NodeKind::Blockquote:
+            Push(b, MdKind::Quote);
+            MdBlockChildren(b, n);
+            Pop(b);
+            break;
+        case md::NodeKind::List: {
+            MdNode* l = Push(b, MdKind::List);
+            l->ordered = n->ordered;
+            l->start = n->hasStart ? (int)n->start : 1;
+            MdBlockChildren(b, n);
+            Pop(b);
+            break;
+        }
+        case md::NodeKind::ListItem:
+            Push(b, MdKind::Item);
+            MdBlockChildren(b, n);
+            Pop(b);
+            break;
+        case md::NodeKind::ThematicBreak:
+            Push(b, MdKind::Rule);
+            Pop(b);
+            break;
+        case md::NodeKind::Code:
+            MdCodeBlock(b, n->value, n->lang);
+            break;
+        case md::NodeKind::Math:
+            MdCodeBlock(b, n->value, {});
+            break;
+        case md::NodeKind::Yaml:
+            MdCodeBlock(b, n->value, StrL("yml"));
+            break;
+        case md::NodeKind::Toml:
+            MdCodeBlock(b, n->value, StrL("toml"));
+            break;
+        case md::NodeKind::Table:
+            MdTable(b, n);
+            break;
+        case md::NodeKind::Html:
+            // The raw source of the block; MdExpandHtml below turns it into
+            // children.
+            Push(b, MdKind::Html);
+            AddText(b, n->value);
+            Pop(b);
+            break;
+        case md::NodeKind::Break:
+            Push(b, MdKind::Paragraph);
+            AddText(b, StrL("\n"));
+            Pop(b);
+            break;
+        case md::NodeKind::FootnoteDefinition: {
+            // markdown.rs renders the definition as a paragraph opening with
+            // an italic `[id]: `.
+            Push(b, MdKind::Paragraph);
+            uint8_t saved = b->marks;
+            b->marks = (uint8_t)(b->marks | MdItalic);
+            AddText(b, StrL("["));
+            AddText(b, n->identifier);
+            AddText(b, StrL("]: "));
+            b->marks = saved;
+            for (int32_t i = 0; i < n->children.len; i++) {
+                const md::Node* c = n->children[i];
+                // Its children are blocks; their inline content joins the one
+                // paragraph, which is what Rust's parse_paragraph does.
+                if (md::NodeHasChildren(c->kind)) {
+                    MdInline(b, c);
+                } else {
+                    AddText(b, c->value);
+                }
+            }
+            Pop(b);
+            break;
+        }
+        case md::NodeKind::Definition:
+            // Collected before the walk; it renders as nothing.
+            break;
+        default:
+            break;
+    }
+}
+
+// Every link reference definition in the tree, wherever it sits.
+static void MdCollectDefs(MdBuild* b, const md::Node* n) {
+    if (n->kind == md::NodeKind::Definition) {
+        MdDef def;
+        def.identifier = n->identifier;
+        def.url = n->url;
+        b->defs.Append(b->a, def);
+        return;
+    }
+    for (int32_t i = 0; i < n->children.len; i++) {
+        MdCollectDefs(b, n->children[i]);
+    }
 }
 
 // A raw HTML block arrives as source text on an MdKind::Html node. Turning
 // it into children here rather than at render time means the parse cache
 // holds the finished tree, and it is the same hand-off Rust makes when
-// markdown_ext.rs gives an mdast::Html node to format::html.
+// markdown.rs gives an mdast::Html node to format::html.
 static void MdExpandHtml(Arena* a, MdNode* n) {
     for (MdNode* c = n->first; c; c = c->next) {
         MdExpandHtml(a, c);
@@ -459,19 +467,17 @@ MdNode* MdParse(Arena* a, Str source) {
     if (!source.s || source.len <= 0) {
         return doc;
     }
+
+    // The GFM dialect, which is what TextView renders: tables, strikethrough,
+    // task lists, footnotes and bare-URL autolinks. `parse_options` in
+    // crates/ui/src/text/markdown_ext.rs asks for the same.
+    md::Node* root = md::ToMdast(a, source, md::ParseOptions::Gfm());
+
     MdBuild b;
     b.a = a;
     b.cur = doc;
-
-    MD_PARSER p = {};
-    p.abi_version = 0;
-    p.flags = MD_DIALECT_GITHUB;
-    p.enter_block = OnEnterBlock;
-    p.leave_block = OnLeaveBlock;
-    p.enter_span = OnEnterSpan;
-    p.leave_span = OnLeaveSpan;
-    p.text = OnText;
-    md_parse(source.s, (MD_SIZE)source.len, &p, &b);
+    MdCollectDefs(&b, root);
+    MdBlockChildren(&b, root);
     MdExpandHtml(a, doc);
     return doc;
 }
@@ -1023,8 +1029,9 @@ El* TextView::Table(MdNode* n) {
 El* TextView::Item(MdNode* n, Str marker, int depth) {
     const Theme& th = cx->theme();
     El* content = Div(a)->FlexCol()->Grow()->MinW(0)->ClipX();
-    // md4c omits MD_BLOCK_P inside a tight list (md4c.c 4842), so an item's
-    // first paragraph arrives as runs on the item itself.
+    // An item's blocks are below; runs sit on the item itself only when
+    // something built the tree by hand, since mdast gives even a tight list
+    // item a paragraph of its own.
     if (n->runFirst) {
         content->Child(Inline(n, baseFont, th.foreground, 0));
     }

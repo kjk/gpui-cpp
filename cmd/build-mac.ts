@@ -165,7 +165,7 @@ function outDirName(debug: boolean, asan: boolean): string {
   return join("mac", amalgamIsWork() ? name : `${name}_dist`);
 }
 
-// The whole library, the platform halves and md4c included; one file, see
+// The whole library, the platform halves included; one file, see
 // cmd/build-dist.ts.
 const macAmalgam = `${amalgamDir()}/gpui.cpp`;
 const amalgamSrc = [macAmalgam];

@@ -1,5 +1,5 @@
-// Amalgamate src/**/*.h and src/**/*.cpp, plus the vendored md4c, into two
-// files: gpui.h and gpui.cpp. Both are the same on every platform.
+// Amalgamate src/**/*.h and src/**/*.cpp into two files: gpui.h and gpui.cpp.
+// Both are the same on every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
 // _mac.cpp, and _posix.cpp for the Linux and macOS halves both. Each of those
@@ -7,12 +7,6 @@
 // and <Cocoa/*> still never reach the same translation unit — the preprocessor
 // drops the two halves that are not this platform's before anything parses
 // them. On macOS the whole file is Objective-C++, because the mac half is.
-//
-// md4c is the tail of both outputs: md4c.h at the end of gpui.h, md4c.c at the
-// end of gpui.cpp. `ext/md4c` stays pristine, so the handful of edits C++
-// needs that C did not — casting malloc/realloc away from void* — are applied
-// here, each one asserted to match exactly once so an md4c refresh that moves
-// them fails loudly instead of silently.
 //
 // The published pair lives in a repo of its own and this script run by hand is
 // the only thing that writes it. Nothing automatic may: the three platform
@@ -118,85 +112,6 @@ function guardFor(plats: Platform[]): string {
   return `#if ${plats.map((p) => osMacro[p]).join(" || ")}`;
 }
 
-// The vendored parser, appended to the tail of each output. See ext/md4c.
-const md4cHeader = "ext/md4c/md4c.h";
-const md4cSource = "ext/md4c/md4c.c";
-
-// md4c is C, and C++ will not convert a void* to a typed pointer on its own.
-// These six are every place that needs a cast — five malloc/realloc results and
-// one md_mark_get_ptr. Each must match exactly once.
-const md4cCppFixes: [string, string][] = [
-  [
-    "            new_buffer = realloc(ctx->buffer, new_size);",
-    "            new_buffer = (CHAR*) realloc(ctx->buffer, new_size);",
-  ],
-  [
-    "    ctx->ref_def_hashtable = malloc(ctx->ref_def_hashtable_size * sizeof(void*));",
-    "    ctx->ref_def_hashtable = (void**) malloc(ctx->ref_def_hashtable_size * sizeof(void*));",
-  ],
-  [
-    "        new_marks = realloc(ctx->marks, ctx->alloc_marks * sizeof(MD_MARK));",
-    "        new_marks = (MD_MARK*) realloc(ctx->marks, ctx->alloc_marks * sizeof(MD_MARK));",
-  ],
-  [
-    "                                md_mark_get_ptr(ctx, (int)(title_mark - ctx->marks)),",
-    "                                (const CHAR*) md_mark_get_ptr(ctx, (int)(title_mark - ctx->marks)),",
-  ],
-  [
-    "    align = malloc(col_count * sizeof(MD_ALIGN));",
-    "    align = (MD_ALIGN*) malloc(col_count * sizeof(MD_ALIGN));",
-  ],
-  [
-    "        new_containers = realloc(ctx->containers, ctx->alloc_containers * sizeof(MD_CONTAINER));",
-    "        new_containers = (MD_CONTAINER*) realloc(ctx->containers, ctx->alloc_containers * sizeof(MD_CONTAINER));",
-  ],
-];
-
-// The tree compiles with /W4 /WX and -Wall -Wextra -Werror. md4c is not ours
-// to keep clean under those, so its two chunks are bracketed by these.
-const warnPush = [
-  "#if defined(_MSC_VER)",
-  "#pragma warning(push, 0)",
-  // C4701 and C4702 are decided after code generation, so the level-0 push
-  // above does not reach them; they have to be named.
-  "#pragma warning(disable : 4701 4702)",
-  "#elif defined(__GNUC__) || defined(__clang__)",
-  "#pragma GCC diagnostic push",
-  '#pragma GCC diagnostic ignored "-Wmissing-field-initializers"',
-  "#endif",
-].join("\n");
-
-const warnPop = [
-  "#if defined(_MSC_VER)",
-  "#pragma warning(pop)",
-  "#elif defined(__GNUC__) || defined(__clang__)",
-  "#pragma GCC diagnostic pop",
-  "#endif",
-].join("\n");
-
-// md4c defines these two unguarded, and glib (through Pango) already has them,
-// which gcc reports with a warning that has no -W switch to turn off. Nothing
-// after md4c uses either, so dropping the earlier definition is enough.
-const md4cUndefs = ["#undef MIN", "#undef MAX"];
-
-// `pop` is optional because md4c is the last chunk of whichever file it lands
-// in: the header has to restore the includer's warning state, but the .cpp
-// must not, since MSVC decides C4701 and C4702 after code generation and reads
-// the state as it stands at the end of the translation unit.
-function md4cChunk(rel: string, fixes: [string, string][], pop: boolean): string {
-  let body = stripInternalIncludes(rel, readLf(rel));
-  for (const [from, to] of fixes) {
-    const n = body.split(from).length - 1;
-    if (n !== 1) {
-      throw new Error(`${rel}: expected 1 match, found ${n}, for: ${from.trim()}`);
-    }
-    body = body.split(from).join(to);
-  }
-  const tail = pop ? [warnPop, ""] : [""];
-  const undefs = rel.endsWith(".c") ? md4cUndefs : [];
-  return [warnPush, ...undefs, `#line 1 "${rel}"`, body, ...tail].join("\n");
-}
-
 const quotedIncRe = /^\s*#\s*include\s+"([^"]+)"/;
 const angleIncRe = /^\s*#\s*include\s+<([^>]+)>/;
 const pragmaOnceRe = /^\s*#\s*pragma\s+once\b/;
@@ -237,13 +152,7 @@ function readLf(rel: string): string {
 function resolveQuoted(fromRel: string, inc: string): string | null {
   const incNorm = inc.replaceAll("\\", "/");
   const fromDir = dirname(fromRel).replaceAll("\\", "/");
-  const candidates = [
-    `src/${incNorm}`,
-    `${fromDir}/${incNorm}`,
-    `src/${incNorm.split("/").pop()}`,
-    // md4c.h is part of the amalgam too, so the include of it is internal.
-    `ext/md4c/${incNorm.split("/").pop()}`,
-  ];
+  const candidates = [`src/${incNorm}`, `${fromDir}/${incNorm}`, `src/${incNorm.split("/").pop()}`];
   for (const raw of candidates) {
     const norm = raw.replace(/\/\.\//g, "/").replace(/^\.\//, "");
     if (existsSync(join(root, norm))) {
@@ -501,7 +410,8 @@ function liftIncludes(body: string): { body: string; includes: string[] } {
   return { body: kept.join("\n"), includes };
 }
 
-// <sys/stat.h> before "md4c.h", each name once, so the block reads as a list.
+// The angle-bracket includes first, then the quoted ones, each name once,
+// so the block reads as a list.
 function sortedIncludes(lines: Iterable<string>): string[] {
   const key = (l: string) => {
     const angle = l.includes("<");
@@ -550,7 +460,6 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     }
     headerChunks.push(`#line 1 "${rel}"`, body, "");
   }
-  headerChunks.push(md4cChunk(md4cHeader, [], true));
   headerChunks.push("#endif");
 
   const cppTexts = new Map<string, string>();
@@ -633,12 +542,6 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
       portableChunks.push(chunk);
     }
   }
-  let md4c = md4cChunk(md4cSource, md4cCppFixes, false);
-  if (tidy) {
-    const lifted = liftIncludes(md4c);
-    md4c = lifted.body;
-    takeIncludes([], lifted.includes);
-  }
   const platformChunks: string[] = [];
   for (const rel of platCpps) {
     const chunk = chunkFor(rel);
@@ -665,7 +568,6 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     chunks.push(guardFor(group.plats), ...sortedIncludes(lines), "#endif", "");
   }
   chunks.push(...platformChunks);
-  chunks.push(md4c);
 
   const headerText = tidy
     ? collapseBlankRuns(finish(headerChunks.join("\n"), true))
@@ -753,9 +655,8 @@ const readmeMarker = "## This copy";
 const readmeHead = `# gpui-cpp-dist
 
 The single-file build of [gpui-cpp](${srcRepoUrl}): \`gpui.h\` and \`gpui.cpp\`,
-amalgamated from that repo's \`src/**\` plus the vendored md4c by its
-\`cmd/build-dist.ts\`. Nothing here is written by hand, so issues and pull
-requests belong in the source repo.
+amalgamated from that repo's \`src/**\` by its \`cmd/build-dist.ts\`. Nothing
+here is written by hand, so issues and pull requests belong in the source repo.
 
 ## Use it
 

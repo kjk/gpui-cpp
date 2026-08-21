@@ -34,7 +34,7 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 | 17. sidebar                     | done   | Collapsible icon/offcanvas/none + Lucide nav                                                                                        |
 | 18. table_in_scrollable         | done   | Nested scroll; inner table y-band heuristic                                                                                         |
 | 19. text_selection              | done   | Selectable text block                                                                                                               |
-| 20. markdown_table              | done   | md4c parses, `component::TextView` renders                                                                                          |
+| 20. markdown_table              | done   | `src/markdown` parses, `component::TextView` renders                                                                                |
 | 21. fps_monitor                 | done   | Hilbert + Catmull-Rom + HSL customPaint, 16 ms; `crates/fps` HUD in `src/gpui/fps.h`                                                |
 | 22. showcase                    | done   | `crates/base/examples/showcase` — overview + 39 component pages                                                                     |
 | 23. story gallery               | done   | `crates/story` — sidebar + 65 stories; upstream-style client title bar on all three (`bun cmd/build.ts story`)                      |
@@ -61,7 +61,7 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 - **The GPU path stops at the tessellator.** Painting goes to a DXGI flip-model swap chain with an `ID2D1DeviceContext` on its back buffer, which is the shape GPUI's `directx_renderer.rs` has. What is still not GPUI's is what happens above that: D2D tessellates strokes and paths on the CPU (`FillNonOverlappingRectangles_SlowPath`) where GPUI rasterizes them in a shader, so a scene made of many thin antialiased paths costs more here — `fps_monitor` at Rust's window size reads 7.0 ms against Rust's 3.0 ms, nearly all of it tessellation.
 - **Process CPU %** is a Win32 times delta, not `sysinfo`; first sample is 0; values are in the same ballpark, not bit-identical.
 - **Icons** are Lucide's own SVG files: `AppNew` registers the default asset roots when nothing else has, so any app finds `assets/icons/*.svg` without asking. Where the folder is genuinely missing they fall back to the stroke sketches in `DrawIcon`, which cover all 74 `IconName`s.
-- **Markdown and HTML** are md4c plus `src/ui/html.cpp` behind `component::TextView` — headings, lists, tables, quotes, images, inline HTML and raw HTML blocks. The code fences are coloured by the scanner below rather than by tree-sitter.
+- **Markdown is the crate, ported.** `src/markdown/` is markdown-rs 1.0.0 — the `markdown` crate `crates/ui` parses with — so a `TextView` reads the same mdast Rust does. HTML is `src/ui/html.cpp` in html5ever's place, folding into the same tree. Headings, lists, tables, quotes, images, footnotes, task lists, inline HTML and raw HTML blocks. The code fences are coloured by the scanner below rather than by tree-sitter.
 - **Nested scroll** in `table_in_scrollable` now uses a real inner `ScrollY` body plus thumbs.
 - **Syntax colouring is a scanner, not a parser.** `src/ui/syntax.cpp` is what a per-language scanner can carry of upstream's tree-sitter queries — comments, strings, numbers, keywords, type names, and what position alone settles, like a name before `(` being a call. It has no tree, so nothing that needs one — a rename, a semantic scope — can be asked of it. Code folding turned out not to be one of those: upstream's own fold extractor is "every named node spanning two rows or more", and its showcase highlighter finds the same blocks by scanning brace pairs, which is what this does.
 - **Showcase text-selection** is character-accurate via DirectWrite hit-test; a double click takes the word and a triple the paragraph.
@@ -792,3 +792,67 @@ cargo run -p system_monitor
   have `p_4` in the Rust and had been drawing their buttons outside the box
   they belong to. The taffy port fixed that one on its way past, and the
   screenshot diff was the fix, not the bug.
+
+- 2026-08-21: The `markdown` crate, ported. `src/markdown/` is a C++ port of
+  markdown-rs 1.0.0 — the version `crates/ui/Cargo.toml` asks for — and
+  `component::TextView` now parses through it, folding the mdast into the
+  `MdNode` tree exactly as `crates/ui/src/text/format/markdown.rs` folds the
+  crate's with `ast_to_node`. `ext/md4c` is gone, and with it the tree's last
+  vendored library: hard rule 3 now says there is none.
+
+  This is the same reversal taffy was, for the same reason. md4c was a good
+  CommonMark parser and it was not *this* parser, so every question about what
+  a document means had two answers — GitHub's dialect as md4c reads it, and
+  whatever markdown-rs does — and the second one is the only one that matters,
+  because it is what upstream renders. The differences were not theoretical:
+  md4c has no footnotes at all, drops a tight list item's paragraph (the tree
+  shape `text/node.rs` expects), hands entities over undecoded, and reports
+  table alignment per cell where mdast reports it per column. All of that is
+  now what the Rust says it is.
+
+  The port is 25 files and about 13k lines, a fifth of it the crate's own
+  tables transcribed: the tokenizer and its attempt machinery, the 317 states of the state machine (one C++ function each,
+  named as the crate's `StateName` names them), the 48 constructs grouped into
+  seven `construct_*.cpp`, the resolvers, and `to_mdast`. `src/markdown/readme.md`
+  has the file-for-file map. MDX is not ported — `TextView` never turns it on —
+  and dropping it takes `to_mdast`'s only failure mode with it, so `ToMdast`
+  returns the tree rather than a `Result`. Two of MDX's fingerprints are kept
+  anyway, because they are visible with MDX off: a flow line starting with `e`,
+  `i` or `{` jumps straight to content, so a GFM table whose header row starts
+  with one of those bytes is not a table — in the crate and here alike.
+  `to_html` is not ported either; nothing here renders HTML text.
+
+  **Checked against the Rust, not against a reading of it.** A scratch cargo
+  project holding this exact crate version dumped its event stream and its
+  mdast for 3283 documents — every `.md` in this tree and in
+  `.work/gpui-component`, an edge-case file, and 3000 generated from fragments
+  (containers, tabs, CRLF, punctuation soup) — and this port produced the same
+  events for all 3283, byte for byte, and the same tree for every one
+  markdown-rs can parse. It found the `e`/`i`/`{` rule above, which no amount
+  of reading had. On 35 of the generated documents markdown-rs panics
+  (`- ~~~~
+1. ~~~ meta` is the shortest); nothing here asserts, so those
+  produce a tree instead of a crash.
+
+  1.5 ms for the 13 KB story README, against 2.1 ms for markdown-rs built
+  `--release` on the same machine — so a page costs what it costs Rust, and
+  thirty times what md4c charged. The parse cache in `ui/text.cpp` already
+  existed for exactly this and is why it does not show.
+
+  `tests/MarkdownTests.cpp` ports the crate's in-`src` test modules and adds an
+  end-to-end check per construct; the ~8000-case CommonMark suite lives in the
+  crate's `tests/` directory, which the published crate does not carry — the
+  same gap `port-upstream.md` records for taffy. 6878 checks.
+
+  Two things the port keeps that look like bugs, both deliberate, both
+  commented where they apply: `normalize_identifier` collapses whitespace to
+  nothing rather than to a space when the value's first word starts at offset 0
+  (markdown-rs does, whatever its doc comment claims, and a reference has to
+  match the definitions it matches), and the character reference table is
+  sorted here where the crate's is nearly-but-not-quite ascending, so the
+  lookup can binary search 2125 entries instead of walking them.
+
+  One thing removed on the way past: a dead `static float Clamp` in
+  `gpui.cpp`. It compiled only because md4c sat at the tail of the amalgam
+  with `#pragma warning(push, 0)` and no pop, which turned C4505 off for the
+  whole translation unit. Taking md4c out turned the warning back on.

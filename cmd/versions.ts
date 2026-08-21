@@ -50,6 +50,19 @@ export const taffy = {
   dir: "src/taffy",
 } as const;
 
+/**
+ * The CommonMark + GFM parser gpui-component's `crates/ui/Cargo.toml` asks
+ * for (`markdown = { version = "1.0.0", features = ["serde"] }`). We port it:
+ * `src/markdown/` is a C++ port of exactly this version, and
+ * `component::TextView` parses through it. See `src/markdown/readme.md`.
+ */
+export const markdown = {
+  repo: "https://github.com/wooorm/markdown-rs",
+  version: "1.0.0",
+  crateSha256: "a5cab8f2cadc416a82d2e783a1946388b31654d391d1c7d92cc1f03e295b1deb",
+  dir: "src/markdown",
+} as const;
+
 export function rustTreeDir(repoRoot: string): string {
   return join(repoRoot, gpuiComponent.dir);
 }
@@ -147,6 +160,8 @@ if (import.meta.main) {
   console.log("  ", gpuiComponent.subject);
   console.log("  crates", gpuiComponent.crates);
   console.log("zed gpui     ", zedGpui.sha, zedGpui.date, "(reference only)");
+  console.log("crates ported", `taffy ${taffy.version} -> ${taffy.dir}`);
+  console.log("             ", `markdown ${markdown.version} -> ${markdown.dir}`);
   try {
     const dir = ensureRustTree(root);
     console.log("tree", dir, headSha(dir));
