@@ -761,3 +761,34 @@ cargo run -p system_monitor
 
   The Tree story page gained by it too: its file rows are images, and the list
   had been stopping eight items in rather than filling the box.
+- 2026-08-21: `min-width: auto` is not `min-width: 0`, and the DataTable page
+  that needed both told apart. The story gallery's content pane came out 4944
+  wide inside a 1614 window — the width of a 45-column table, carried all the
+  way up — so the page's toolbar and the right half of its status line were
+  laid out off the side of the screen, and the footer was pushed off the
+  bottom.
+
+  `Style` kept `minW` / `minH` as plain floats defaulting to zero, and
+  yesterday's fix mapped "zero" to `auto` so that an element which had never
+  named a minimum got CSS's content-based one. That is right for an element
+  that never named one and wrong for the several dozen in this tree that say
+  `MinW(0)` — Rust's `min_w_0()`, the idiom for "this may shrink past its
+  content", and exactly what the content pane says. The two cannot share a
+  sentinel: they default to `kAuto` now, and an explicit zero is a length of
+  zero.
+
+  The cells of that table were empty as well, each with a one-pixel smear
+  where its text belonged. The text cache keys a run by its width only when
+  the run wraps — a run that cannot break is the same size whatever width it
+  was measured against, which is true of its size and false of the shaped run
+  the platform hands back, because that is laid out inside a box of that
+  width and drawn clipped to it. A truncating cell asked for its min-content
+  width got shaped at one pixel, and every later ask found that run in the
+  cache. Non-wrapping runs are shaped unconstrained now, which is what makes
+  the key's premise true; `truncate` was already doing its own cutting at
+  paint time, against the box layout settled on.
+
+  `focus_trap` was on the list of four and needed nothing: its trap boxes
+  have `p_4` in the Rust and had been drawing their buttons outside the box
+  they belong to. The taffy port fixed that one on its way past, and the
+  screenshot diff was the fix, not the bug.
