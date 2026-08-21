@@ -22,7 +22,7 @@ static void TheInstanceStyleIsTheBaseline() {
     instance.Bg(kInstance);
     StateStyle out = StateStyleResolve(instance, nullptr, 0);
     utassert(out.Has(StateFieldBg));
-    utassert(Same(out.style.bg, kInstance));
+    utassert(Same(out.style.bg.color, kInstance));
 }
 
 // an_active_state_overrides_the_instance_style.
@@ -33,7 +33,7 @@ static void AnActiveStateOverridesTheInstance() {
     selected.Bg(kSelected);
     const StateStyle* states[] = {&selected};
     StateStyle out = StateStyleResolve(instance, states, 1);
-    utassert(Same(out.style.bg, kSelected));
+    utassert(Same(out.style.bg.color, kSelected));
 }
 
 // later_states_override_earlier_states: disabled is last, so it wins.
@@ -46,7 +46,7 @@ static void LaterStatesOverrideEarlierOnes() {
     disabled.Bg(kDisabled);
     const StateStyle* states[] = {&selected, &disabled};
     StateStyle out = StateStyleResolve(instance, states, 2);
-    utassert(Same(out.style.bg, kDisabled));
+    utassert(Same(out.style.bg.color, kDisabled));
 }
 
 // states_only_override_the_fields_they_set.
@@ -57,7 +57,7 @@ static void AStateOnlyOverridesWhatItNames() {
     disabled.Bg(kDisabled);
     const StateStyle* states[] = {&disabled};
     StateStyle out = StateStyleResolve(instance, states, 1);
-    utassert(Same(out.style.bg, kDisabled));
+    utassert(Same(out.style.bg.color, kDisabled));
     // The radius came from the instance and nothing said otherwise.
     utassert(out.Has(StateFieldRadius));
     utassertnear(out.style.radius, 8.f);
@@ -72,14 +72,14 @@ static void ADisabledStyleOnlyAppliesWhileDisabled() {
     disabled.Bg(kDisabled);
 
     const StateStyle* enabled[] = {nullptr};
-    utassert(Same(StateStyleResolve(instance, enabled, 1).style.bg, kInstance));
+    utassert(Same(StateStyleResolve(instance, enabled, 1).style.bg.color, kInstance));
 
     const StateStyle* off[] = {&disabled};
-    utassert(Same(StateStyleResolve(instance, off, 1).style.bg, kDisabled));
+    utassert(Same(StateStyleResolve(instance, off, 1).style.bg.color, kDisabled));
 
     // And with no instance style of its own, the state is all there is.
     StateStyle bare;
-    utassert(Same(StateStyleResolve(bare, off, 1).style.bg, kDisabled));
+    utassert(Same(StateStyleResolve(bare, off, 1).style.bg.color, kDisabled));
 }
 
 // button.rs selected_disabled_and_instance_styles_follow_the_shared_priority.
@@ -94,9 +94,9 @@ static void SelectedAndDisabledFollowTheSharedPriority() {
         return StateStyleResolve(StateStyle{}, states, 2);
     };
     utassert(!resolve(false, false).Has(StateFieldBg));
-    utassert(Same(resolve(true, false).style.bg, kSelected));
-    utassert(Same(resolve(true, true).style.bg, kDisabled));
-    utassert(Same(resolve(false, true).style.bg, kDisabled));
+    utassert(Same(resolve(true, false).style.bg.color, kSelected));
+    utassert(Same(resolve(true, true).style.bg.color, kDisabled));
+    utassert(Same(resolve(false, true).style.bg.color, kDisabled));
 }
 
 // refine_style: what the resolved style does to the element it is put on, and
@@ -110,7 +110,7 @@ static void AResolvedStyleGoesOntoTheElement() {
     ElRefine(e, s);
     utassert(e->refineSet == s.set);
     StyleApplyFields(&e->style, e->refine, e->refineSet);
-    utassert(e->style.hasBg && Same(e->style.bg, kSelected));
+    utassert(e->style.hasBg && Same(e->style.bg.color, kSelected));
     utassertnear(e->style.border, 2.f);
     utassert(Same(e->style.borderColor, kDisabled));
     // The radius was never named, so the element keeps its own.
@@ -127,9 +127,9 @@ static void AStateWinsOverWhatIsChainedAfterIt() {
     StateStyle s;
     s.Bg(kDisabled);
     El* e = ElRefine(Div(a), s)->Bg(kSelected)->Radius(6);
-    utassert(Same(e->style.bg, kSelected));
+    utassert(Same(e->style.bg.color, kSelected));
     StyleApplyFields(&e->style, e->refine, e->refineSet);
-    utassert(Same(e->style.bg, kDisabled));
+    utassert(Same(e->style.bg.color, kDisabled));
     utassertnear(e->style.radius, 6.f);
     ArenaDelete(a);
 }

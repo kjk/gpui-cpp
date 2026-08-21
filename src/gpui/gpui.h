@@ -39,6 +39,60 @@ void RgbaToHsla(Rgba c, float* h, float* s, float* l);
 // lightness and alpha.
 Rgba RgbaWithHue(Rgba c, float h01);
 
+// ─── background ───────────────────────────────────────────────────────────
+//
+// gpui::Background. A fill is one colour or a two-stop linear gradient, and
+// every place that paints a surface takes one — GPUI's `Style::background` is
+// a `Fill`, and `.bg(..)` accepts anything that converts into one. A theme
+// file spells the gradient the way CSS does:
+//
+//     "primary.background": "linear-gradient(180deg, #1E293B, #0F172A)"
+//
+// so the type has to survive from `theme/color.rs`'s parser all the way to
+// the D2D / cairo / Core Graphics brush. `color` is the solid fill and, for a
+// gradient, its representative colour — the first stop, which is what Rust's
+// `try_parse_theme_color` keeps for the flat `ThemeColor` field beside the
+// renderable token. Reading `bg.color` off a gradient is therefore never
+// wrong, only flat.
+struct ColorStop {
+    Rgba color = {};
+    // Where along the gradient line this stop sits, 0..1.
+    float percentage = 0;
+};
+
+struct Background {
+    Rgba color = {};
+    ColorStop from = {};
+    ColorStop to = {};
+    // CSS degrees: 0 points at the top of the box and turns clockwise, so 90
+    // is `to right` and 180 — the default, and what a two-argument
+    // `linear-gradient` means — is `to bottom`.
+    float angle = 180.f;
+    bool gradient = false;
+
+    Background() = default;
+    // Implicit, so the several hundred `->Bg(theme.foo)` calls that mean one
+    // colour go on saying so. Rust gets the same from `impl From<Hsla> for
+    // Background`.
+    Background(Rgba c) : color(c) {}
+};
+
+// gpui::linear_gradient(angle, from, to).
+Background BackgroundLinear(float angle, ColorStop from, ColorStop to);
+inline ColorStop ColorStopAt(Rgba c, float pct) {
+    return ColorStop{c, pct};
+}
+// Background::opacity: every stop scaled by the same factor, which is what
+// fading a whole element does to its fill.
+Background BackgroundOpacity(Background b, float factor);
+// Each stop's alpha capped independently at `max` — theme/color.rs's
+// `try_parse_background_clamped`. Unlike scaling, a bright `to` stop cannot
+// push the rendered highlight past the cap.
+Background BackgroundClampAlpha(Background b, float max);
+inline bool BackgroundIsSolid(const Background& b) {
+    return !b.gradient;
+}
+
 // The text-field engine, in the input section below. El and HitRect name one
 // before it is defined, the way they name SliderState.
 struct InputState;
@@ -273,6 +327,16 @@ struct Bounds {
 inline Bounds BoundsAt(Point origin, Size size) {
     return {origin.x, origin.y, size.w, size.h};
 }
+
+// Where a CSS `linear-gradient` puts its two ends inside a box. The gradient
+// line runs through the centre at `angle`, and is long enough that the two
+// corners it points between land exactly on 0% and 100% — which is what makes
+// a 45-degree gradient reach the corners rather than stopping short of them.
+// The points come back at the stops' own percentages, so the caller hands the
+// backend two colours and two positions and nothing else: all three clamp
+// beyond their ends (D2D's default extend, cairo's PAD, Core Graphics' draws-
+// before/after), so a stop at 25% still paints the quarter behind it.
+void BackgroundLine(const Background& b, Bounds box, Point* p0, Point* p1);
 
 // ─── entities ─────────────────────────────────────────────────────────────
 //
@@ -988,7 +1052,7 @@ struct Style {
     // says to read them at all, so the ordinary case costs one bool.
     Corners corners = {};
     bool hasCorners = false;
-    Rgba bg = {};
+    Background bg = {};
     Rgba borderColor = {};
     Rgba color = {};
     // Transformation::rotate: turns clockwise about the element's own centre,
@@ -1036,7 +1100,7 @@ struct Style {
     // the parent's width, added to the pixel one. A stepper's connector needs
     // it to reach from the middle of one step to the middle of the next.
     float absLeftRel = 0, absRightRel = 0;
-    Rgba hoverBg = {};
+    Background hoverBg = {};
     bool hasHoverBg = false;
     // hover(|style| style.text_color(..)): what the subtree under a hovered
     // element paints with, for the descendants that set no color of their own.
@@ -1269,7 +1333,7 @@ struct El {
     El* JustifyCenter();
     El* JustifyEnd();
     El* JustifyStart();
-    El* Bg(Rgba c);
+    El* Bg(Background c);
     El* Border(float width, Rgba c);
     El* BorderT(float width, Rgba c);
     El* BorderB(float width, Rgba c);
@@ -1343,7 +1407,7 @@ struct El {
     El* Right(float v);
     El* LeftRel(float frac);
     El* RightRel(float frac);
-    El* HoverBg(Rgba c);
+    El* HoverBg(Background c);
     El* HoverFg(Rgba c);
     El* FocusId(int v);
     El* KeyContext(Str name);

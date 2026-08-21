@@ -2,7 +2,7 @@
 
 namespace gpui {
 
-StateStyle& StateStyle::Bg(Rgba c) {
+StateStyle& StateStyle::Bg(Background c) {
     style.bg = c;
     style.hasBg = true;
     set |= StateFieldBg;
@@ -25,7 +25,7 @@ StateStyle& StateStyle::Radius(float v) {
     set |= StateFieldRadius;
     return *this;
 }
-StateStyle& StateStyle::HoverBg(Rgba c) {
+StateStyle& StateStyle::HoverBg(Background c) {
     style.hoverBg = c;
     style.hasHoverBg = true;
     set |= StateFieldHoverBg;

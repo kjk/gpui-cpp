@@ -114,6 +114,69 @@ Rgba RgbaWithHue(Rgba c, float h01) {
     return RgbaHsla(Clamp01(h01), s, l, c.a / 255.f);
 }
 
+// ─── background ───────────────────────────────────────────────────────────
+
+Background BackgroundLinear(float angle, ColorStop from, ColorStop to) {
+    Background b;
+    // try_parse_theme_color: the flat colour a gradient stands in for is its
+    // first stop, so a caller that only wants one colour gets a sensible one.
+    b.color = from.color;
+    b.from = from;
+    b.to = to;
+    b.angle = angle;
+    b.gradient = true;
+    return b;
+}
+
+Background BackgroundOpacity(Background b, float factor) {
+    // RgbaOpacity scales what is already there, the way Colorize::opacity
+    // does, so the two stops keep their ratio.
+    b.color = RgbaOpacity(b.color, factor);
+    if (b.gradient) {
+        b.from.color = RgbaOpacity(b.from.color, factor);
+        b.to.color = RgbaOpacity(b.to.color, factor);
+    }
+    return b;
+}
+
+// Hsla::alpha(a.min(max)): a ceiling, not a scale.
+static Rgba CapAlpha(Rgba c, float max) {
+    uint8_t cap = (uint8_t)(max * 255.f + 0.5f);
+    if (c.a > cap) {
+        c.a = cap;
+    }
+    return c;
+}
+
+Background BackgroundClampAlpha(Background b, float max) {
+    b.color = CapAlpha(b.color, max);
+    if (b.gradient) {
+        b.from.color = CapAlpha(b.from.color, max);
+        b.to.color = CapAlpha(b.to.color, max);
+    }
+    return b;
+}
+
+void BackgroundLine(const Background& b, Bounds box, Point* p0, Point* p1) {
+    if (!p0 || !p1) {
+        return;
+    }
+    float rad = b.angle * (kPi / 180.f);
+    // CSS measures from "to top" and turns clockwise; y grows downward here,
+    // so the direction the gradient runs in is (sin, -cos).
+    float dx = sinf(rad);
+    float dy = -cosf(rad);
+    // The line is long enough for the corners to fall on its ends: the box
+    // projected onto the direction.
+    float len = fabsf(box.w * dx) + fabsf(box.h * dy);
+    float cx = box.CenterX(), cy = box.CenterY();
+    float sx = cx - dx * len * 0.5f, sy = cy - dy * len * 0.5f;
+    p0->x = sx + dx * len * b.from.percentage;
+    p0->y = sy + dy * len * b.from.percentage;
+    p1->x = sx + dx * len * b.to.percentage;
+    p1->y = sy + dy * len * b.to.percentage;
+}
+
 const Theme& ThemeDefaultDark() {
     static Theme t;
     static bool init = false;
@@ -592,7 +655,7 @@ El* El::JustifyStart() {
     style.justify = Justify::Start;
     return this;
 }
-El* El::Bg(Rgba c) {
+El* El::Bg(Background c) {
     style.bg = c;
     style.hasBg = true;
     return this;
@@ -1153,7 +1216,7 @@ El* El::Right(float v) {
     style.absRight = v;
     return this;
 }
-El* El::HoverBg(Rgba c) {
+El* El::HoverBg(Background c) {
     style.hoverBg = c;
     style.hasHoverBg = true;
     return this;
@@ -2657,6 +2720,44 @@ static void FillCorners(PaintCtx* ctx, float x, float y, float w, float h,
     PathFree(p);
 }
 
+// The same two, for a fill that may be a gradient. A gradient is painted as
+// a path rather than a rectangle because the path API already carries one on
+// all three backends — D2D's linear-gradient brush, cairo's linear pattern,
+// Core Graphics' CGGradient — and a rounded box is nothing but four arcs. A
+// solid Background takes the rectangle route it always did.
+static void FillBackground(PaintCtx* ctx, float x, float y, float w, float h,
+                           float r, const Corners* c, const Background& bg) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    if (!bg.gradient) {
+        if (c) {
+            FillCorners(ctx, x, y, w, h, *c, bg.color);
+        } else {
+            FillRound(ctx, x, y, w, h, r, bg.color);
+        }
+        return;
+    }
+    Point p0 = {}, p1 = {};
+    BackgroundLine(bg, Bounds{x, y, w, h}, &p0, &p1);
+    // Two stops at the same place have no line to run along; the first stop
+    // is what the whole box would be anyway.
+    if (fabsf(p1.x - p0.x) < 1e-4f && fabsf(p1.y - p0.y) < 1e-4f) {
+        if (c) {
+            FillCorners(ctx, x, y, w, h, *c, bg.from.color);
+        } else {
+            FillRound(ctx, x, y, w, h, r, bg.from.color);
+        }
+        return;
+    }
+    Corners uniform = {r, r, r, r};
+    Path* p = PathNew(ctx, true);
+    CornersPath(p, x, y, w, h, c ? *c : uniform);
+    PathFillGradient(ctx, p, p0.x, p0.y, p1.x, p1.y, bg.from.color,
+                     bg.to.color);
+    PathFree(p);
+}
+
 static void StrokeCorners(PaintCtx* ctx, float x, float y, float w, float h,
                           const Corners& c, float stroke, Rgba col) {
     if (w <= 0 || h <= 0) {
@@ -3738,7 +3839,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         p.bounds = e->Bounds();
         p.kind = (int)e->kind;
         p.hasBg = e->style.hasBg;
-        p.bg = e->style.bg;
+        p.bg = e->style.bg.color;
         p.pad = e->style.pad.left;
         p.gap = e->style.gap;
         p.radius = e->style.radius;
@@ -3815,21 +3916,13 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // The hover background needs a click id of its own: without one the
     // element would match hoverId 0, which means nothing is hovered.
     if (e->style.hasHoverBg && e->clickId && e->clickId == ctx->hoverId) {
-        if (e->style.hasCorners) {
-            FillCorners(ctx, e->x, e->y, e->w, e->h, e->style.corners,
-                        e->style.hoverBg);
-        } else {
-            FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
-                      e->style.hoverBg);
-        }
+        FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius,
+                       e->style.hasCorners ? &e->style.corners : nullptr,
+                       e->style.hoverBg);
     } else if (e->style.hasBg) {
-        if (e->style.hasCorners) {
-            FillCorners(ctx, e->x, e->y, e->w, e->h, e->style.corners,
-                        e->style.bg);
-        } else {
-            FillRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
-                      e->style.bg);
-        }
+        FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius,
+                       e->style.hasCorners ? &e->style.corners : nullptr,
+                       e->style.bg);
     }
     if (e->style.border > 0) {
         if (e->style.borderDashed) {
