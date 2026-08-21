@@ -134,7 +134,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                      ->ItemsCenter()
                      ->JustifyCenter()
                      ->Radius(th.radius)
-                     ->Bg(th.success)
+                     ->Bg(th.tokens.success)
                      ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)
                                  ->Fg(th.successFg)));
     if (!iconCollapsed) {
@@ -355,7 +355,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                 ->ItemsCenter()
                 ->JustifyCenter()
                 ->Radius(16)
-                ->Bg(th.muted)
+                ->Bg(th.tokens.muted)
                 ->Child(IconEl(a, kActivity[i].icon, 16)->Fg(th.foreground)));
         El* col = Div(a)->FlexCol()->Grow()->Gap(2);
         col->Child(StoryTxt(cx, Str(kActivity[i].title), 14, th.foreground));

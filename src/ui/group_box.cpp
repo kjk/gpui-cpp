@@ -37,7 +37,7 @@ GroupBox* GroupBox::TitlePadX(float px) {
     titlePadX = px;
     return this;
 }
-GroupBox* GroupBox::ContentBg(Rgba c) {
+GroupBox* GroupBox::ContentBg(Background c) {
     contentBg = c;
     hasContentBg = true;
     return this;

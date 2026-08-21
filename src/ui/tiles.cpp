@@ -106,7 +106,7 @@ El* Tiles::IntoEl() {
                 ->W(b.w + 1)
                 ->H(b.h + 1)
                 ->FlexCol()
-                ->Bg(th.background)
+                ->Bg(th.tokens.background)
                 ->Border(1, th.border)
                 ->Radius(th.radius)
                 ->ClipX()
@@ -127,7 +127,7 @@ El* Tiles::IntoEl() {
                       ->W(kFill)
                       ->H(kTileDragBarH)
                       ->PadX(8)
-                      ->Bg(th.secondary)
+                      ->Bg(th.tokens.secondary)
                       ->Cursor(CursorKind::Arrow);
         // The panel is the caller's, named by the tile — the list is
         // reordered as tiles come to the front, and the panels are not.

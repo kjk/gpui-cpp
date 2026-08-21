@@ -47,7 +47,7 @@ El* Progress::IntoEl() {
     El* indicator = gpui::ProgressIndicator::New(cx)
                         ->H(h)
                         ->Radius(h * 0.5f)
-                        ->Bg(th.progress);
+                        ->Bg(th.tokens.progress);
     if (loading) {
         // The indeterminate sweep: both edges are fractions of the track, and
         // the trailing one only starts moving halfway through the loop, so the
@@ -77,7 +77,7 @@ El* Progress::IntoEl() {
                     ->W(w)
                     ->H(h)
                     ->Radius(h * 0.5f)
-                    ->Bg(RgbaOpacity(th.progress, 0.2f))
+                    ->Bg(BackgroundOpacity(th.tokens.progress, 0.2f))
                     ->Child(indicator));
 }
 

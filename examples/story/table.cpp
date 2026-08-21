@@ -108,7 +108,7 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
         table->Child(row);
     }
     // The footer spans the first three columns, then the total.
-    El* foot = Div(a)->FlexRow()->W(kFill)->Bg(th.muted);
+    El* foot = Div(a)->FlexRow()->W(kFill)->Bg(th.tokens.muted);
     foot->Child(TextCell(cx, "Total", 0, false));
     foot->Child(TextCell(cx, "$2,250.00", 240, true));
     table->Child(foot);
@@ -130,7 +130,7 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
         const Invoice& inv = kInvoices[i];
         El* row = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
         if (i % 2 != 0) {
-            row->Bg(th.tableEven);
+            row->Bg(th.tokens.tableEven);
         }
         row->Child(TextCell(cx, inv.id, 100, false));
         El* methodCell = Cell(cx, 0, false);

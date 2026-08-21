@@ -422,9 +422,9 @@ El* Tabs::IntoEl() {
                   ->H(h)
                   ->Radius(barRadius);
     if (variant == TabVariant::Tab) {
-        bar->Bg(th.tabBar);
+        bar->Bg(th.tokens.tabBar);
     } else if (variant == TabVariant::Segmented) {
-        bar->Bg(th.tabBar);
+        bar->Bg(th.tokens.tabBar);
     }
     if (barPadX > 0) {
         bar->PadX(barPadX);
@@ -562,17 +562,17 @@ El* Tabs::IntoEl() {
         El* ind = Div(a)->Absolute()->Left(x)->W(indW);
         switch (variant) {
             case TabVariant::Underline:
-                ind->Bottom(0)->H(2)->Bg(th.primary);
+                ind->Bottom(0)->H(2)->Bg(th.tokens.primary);
                 break;
             case TabVariant::Pill:
-                ind->Top(0)->H(kFill)->Radius(99)->Bg(th.primary);
+                ind->Top(0)->H(kFill)->Radius(99)->Bg(th.tokens.primary);
                 break;
             case TabVariant::Segmented:
             case TabVariant::Tab:
                 ind->Top((h - innerH) * 0.5f)
                     ->H(innerH)
                     ->Radius(innerRadius)
-                    ->Bg(th.background);
+                    ->Bg(th.tokens.background);
                 break;
             default:
                 ind = nullptr;

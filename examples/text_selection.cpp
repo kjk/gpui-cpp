@@ -102,8 +102,8 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
     Arena* frame = cx->a;
 
     const Theme& th = cx->theme();
-    El* col =
-        Div(frame)->FlexCol()->SizeFull()->Pad(16)->Gap(12)->Bg(th.background);
+    El* col = Div(frame)->FlexCol()->SizeFull()->Pad(16)->Gap(12)->Bg(
+        th.tokens.background);
     for (int i = 0; i < kNMsgs; i++) {
         col->Child(Bubble(cx, i, th));
     }

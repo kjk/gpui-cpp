@@ -235,7 +235,7 @@ El* SearchableList::IntoEl() {
                   ->Gap(2)
                   ->Radius(th.radius)
                   ->Border(1, th.border)
-                  ->Bg(th.background);
+                  ->Bg(th.tokens.background);
     if (!s) {
         return box;
     }
@@ -294,10 +294,10 @@ El* SearchableList::IntoEl() {
                       ->Radius(th.radius);
         bool enabled = SearchableListIsEnabled(s, items, nItems, ix);
         if (enabled) {
-            row->HoverBg(th.accent);
+            row->HoverBg(th.tokens.accent);
         }
         if (m == s->list.selected) {
-            row->Bg(th.accent);
+            row->Bg(th.tokens.accent);
         }
         // SearchableListItem::render: an icon before the label when the item
         // gave one.
@@ -321,7 +321,7 @@ El* SearchableList::IntoEl() {
             trail->Child(Div(a)
                              ->PadX(4)
                              ->Radius(th.radius * 0.5f)
-                             ->Bg(th.primary)
+                             ->Bg(th.tokens.primary)
                              ->Child(TextEl(a, it.badge)
                                          ->Font(12)
                                          ->Fg(th.primaryFg)

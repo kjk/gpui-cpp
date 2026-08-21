@@ -12,8 +12,8 @@ void ListSettingsSet(ListSettings s) {
     gListSettings = s;
 }
 
-ListActiveStyle ListActiveStyleOf(Rgba active, Rgba activeBorder, Rgba accent,
-                                  bool selected) {
+ListActiveStyle ListActiveStyleOf(Background active, Rgba activeBorder,
+                                  Background accent, bool selected) {
     ListActiveStyle out;
     bool highlight = gListSettings.activeHighlight;
     // list_item.rs: the tint is for the selection proper — a row marked by a

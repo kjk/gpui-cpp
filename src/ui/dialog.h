@@ -38,7 +38,7 @@ struct Dialog {
     // sits 16px lower and owns a distinct focus trap.
     int layerIx = 0;
     float radius = 0;
-    Rgba background = {};
+    Background background = {};
     Rgba foreground = {};
     bool hasBackground = false;
     bool hasForeground = false;
@@ -84,7 +84,7 @@ struct Dialog {
     Dialog* Keyboard(bool v);
     Dialog* Layer(int ix);
     Dialog* Radius(float px);
-    Dialog* Bg(Rgba color);
+    Dialog* Bg(Background color);
     Dialog* Fg(Rgba color);
     Dialog* Icon(IconName n, Rgba color, float size = 16);
     Dialog* HeaderCentered(bool v = true);

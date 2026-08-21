@@ -78,7 +78,7 @@ El* ColorPicker::IntoEl() {
                   ->Gap(4)
                   ->Pad(8)
                   ->Border(1, th.foreground)
-                  ->Bg(th.background);
+                  ->Bg(th.tokens.background);
         for (int i = 0; i < 5; i++) {
             Rgba sc =
                 Rgb((uint8_t)((sw[i] >> 16) & 0xff),

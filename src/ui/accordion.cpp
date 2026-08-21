@@ -155,8 +155,8 @@ El* Accordion::IntoEl() {
     const Theme& th = cx->theme();
     // Items paint tokens.accordion (= background); bordered turns the group
     // into one rounded card instead of a stack of separators.
-    El* root =
-        gpui::Accordion::New(cx, id)->FlexCol()->W(kFill)->Bg(th.background);
+    El* root = gpui::Accordion::New(cx, id)->FlexCol()->W(kFill)->Bg(
+        th.tokens.background);
     if (bordered) {
         root->Border(1, th.border)->Radius(th.radiusLg)->ClipY();
     }

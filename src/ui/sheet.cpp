@@ -60,7 +60,7 @@ El* Sheet::IntoEl(WinSize win) {
                       ->Pad(16)
                       ->FlexCol()
                       ->Gap(12)
-                      ->Bg(th.background)
+                      ->Bg(th.tokens.background)
                       ->Border(1, th.border);
     // sheet.rs's "slide": 0.15 s from a hundred pixels off its own edge to
     // where it belongs. GPUI's default easing is linear, and the offset is

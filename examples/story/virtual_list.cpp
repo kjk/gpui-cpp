@@ -151,7 +151,7 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
                       ->PadX(8)
                       ->ItemsCenter()
                       ->JustifyCenter()
-                      ->HoverBg(th.muted)
+                      ->HoverBg(th.tokens.muted)
                       ->Child(StoryTxt(cx, Str(kVlScrollBtns[i].label), 14,
                                        th.foreground));
         btn->Click(HashClickId(Str(kVlScrollBtns[i].id)))

@@ -37,9 +37,9 @@ static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
         t->Border(1, th.border);
     }
     if (on) {
-        t->Bg(th.accent);
+        t->Bg(th.tokens.accent);
     } else {
-        t->HoverBg(th.muted);
+        t->HoverBg(th.tokens.muted);
     }
     if (icon != IconName::None) {
         t->Child(IconEl(a, icon, 14)->Fg(th.foreground));

@@ -143,7 +143,7 @@ El* RichApp::Render(RichApp* self, Ctx* cx) {
     return Div(frame)
         ->FlexCol()
         ->SizeFull()
-        ->Bg(th.background)
+        ->Bg(th.tokens.background)
         ->Child(bar)
         ->Child(Div(frame)->H(1)->Bg(th.border))
         ->Child(body);

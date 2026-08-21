@@ -70,7 +70,7 @@ Dialog* Dialog::Radius(float px) {
     radius = px;
     return this;
 }
-Dialog* Dialog::Bg(Rgba color) {
+Dialog* Dialog::Bg(Background color) {
     background = color;
     hasBackground = true;
     return this;
@@ -202,7 +202,7 @@ El* Dialog::Actions() {
         row->FlexRow()->JustifyEnd();
     }
     if (footerMuted) {
-        row->Bg(th.muted);
+        row->Bg(th.tokens.muted);
     }
     if (footerDivider) {
         row->BorderT(1, th.border);
@@ -306,7 +306,7 @@ El* Dialog::IntoEl(WinSize size) {
     El* backdrop =
         DialogBackdrop::New(cx)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
     if (overlay) {
-        backdrop->Bg(th.overlay);
+        backdrop->Bg(th.tokens.overlay);
     }
     if (overlayClosable && onClose.IsValid()) {
         backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));

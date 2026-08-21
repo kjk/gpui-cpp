@@ -115,10 +115,10 @@ El* SidebarMenuItem::IntoEl(Str id) {
                   ->Font(14);
     bool hoverable = !active && !disabled;
     if (hoverable) {
-        row->HoverBg(th.sidebarAccent)->HoverFg(th.sidebarAccentFg);
+        row->HoverBg(th.tokens.sidebarAccent)->HoverFg(th.sidebarAccentFg);
     }
     if (active) {
-        row->Bg(th.sidebarAccent)->Fg(th.sidebarAccentFg);
+        row->Bg(th.tokens.sidebarAccent)->Fg(th.sidebarAccentFg);
     }
     Rgba fg =
         disabled ? th.mutedFg : (active ? th.sidebarAccentFg : th.sidebarFg);
@@ -262,10 +262,10 @@ static El* SidebarBand(Ctx* cx, El* child, bool selected, Listener onClick,
                   ->ItemsCenter()
                   ->JustifyBetween()
                   ->Radius(th.radius)
-                  ->HoverBg(th.sidebarAccent)
+                  ->HoverBg(th.tokens.sidebarAccent)
                   ->HoverFg(th.sidebarAccentFg);
     if (selected) {
-        row->Bg(th.sidebarAccent)->Fg(th.sidebarAccentFg);
+        row->Bg(th.tokens.sidebarAccent)->Fg(th.sidebarAccentFg);
     }
     if (child) {
         row->Child(child);

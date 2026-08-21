@@ -35,7 +35,7 @@ El* StatusBar::IntoEl() {
                   ->H(28)
                   ->PadX(12)
                   ->ItemsCenter()
-                  ->Bg(th.titleBar)
+                  ->Bg(th.tokens.statusBar)
                   ->BorderT(1, th.border);
     // Left and right hold their edges; the center takes what is left, so it
     // sits at the start with only a right side, at the end with only a left

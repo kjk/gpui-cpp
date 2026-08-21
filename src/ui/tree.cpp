@@ -64,13 +64,13 @@ El* Tree::IntoEl() {
                       ->ItemsCenter()
                       ->Radius(th.radius);
         if (!it->disabled) {
-            row->HoverBg(th.muted);
+            row->HoverBg(th.tokens.muted);
             row->OnMouseDown(ListenerArg(down, i));
         }
         if (on) {
-            row->Bg(th.accent);
+            row->Bg(th.tokens.accent);
         } else if (i == s->rightClicked) {
-            row->Bg(RgbaOpacity(th.accent, 0.5f));
+            row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
         }
         // Every entry indents by its depth, so a child lines up under the
         // chevron of the folder it is in.

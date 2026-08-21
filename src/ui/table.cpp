@@ -28,9 +28,10 @@ El* Table::IntoEl() {
     const Theme& th = cx->theme();
     El* t =
         gpui::Table::New(cx, StrL("table"))->FlexCol()->Border(1, th.border);
-    El* head =
-        TableHeader::New(cx, StrL("th"))
-            ->Child(TableRow::New(cx, StrL("hr"))->FlexRow()->Bg(th.muted));
+    El* head = TableHeader::New(cx, StrL("th"))
+                   ->Child(TableRow::New(cx, StrL("hr"))
+                               ->FlexRow()
+                               ->Bg(th.tokens.muted));
     for (int i = 0; i < nHeads; i++) {
         head->first->Child(
             TableHead::New(cx, Str(heads[i]))
@@ -131,7 +132,7 @@ static El* SortIcon(Arena* a, const Theme& th, ColumnSort sort) {
     return Div(a)
         ->Pad(2)
         ->Radius(th.radius * 0.5f)
-        ->HoverBg(th.secondary)
+        ->HoverBg(th.tokens.secondary)
         ->Child(
             IconEl(a, name, 12)
                 ->Fg(on ? th.secondaryFg : RgbaOpacity(th.secondaryFg, 0.5f)));
@@ -332,7 +333,7 @@ El* DataTable::IntoEl() {
             th_->BorderR(2, th.primary);
         }
         if (s && s->selectedCol == c && s->mode == TableSelectionMode::Column) {
-            th_->Bg(th.accent);
+            th_->Bg(th.tokens.accent);
         }
         // render_th: the head is the content and the resize handle beside it,
         // and only the content carries the padding — the handle has to reach
@@ -455,20 +456,21 @@ El* DataTable::IntoEl() {
                 row->H(s->rowH);
             }
             if (stripe && (r % 2) == 1) {
-                row->Bg(th.tableEven);
+                row->Bg(th.tokens.tableEven);
             }
             if (s && s->selectedRow == r &&
                 s->mode == TableSelectionMode::Row) {
                 // state.rs paints the selected row the same way a list item
                 // does, off the table's own pair of colors.
-                ListActiveStyle sel = ListActiveStyleOf(
-                    th.tableActive, th.tableActiveBorder, th.accent, true);
+                ListActiveStyle sel = ListActiveStyleOf(th.tokens.tableActive,
+                                                        th.tableActiveBorder,
+                                                        th.tokens.accent, true);
                 row->Bg(sel.bg);
                 if (sel.hasBorder) {
                     row->Child(ListActiveOverlay(a, sel.border, 0));
                 }
             } else if (s && s->rightClickedRow == r) {
-                row->Bg(RgbaOpacity(th.accent, 0.5f));
+                row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
             }
         }
         for (int d = 0; d < nColumns; d++) {
@@ -489,18 +491,19 @@ El* DataTable::IntoEl() {
             }
             if (s && s->mode == TableSelectionMode::Column &&
                 s->selectedCol == c) {
-                td->Bg(RgbaOpacity(th.accent, 0.5f));
+                td->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
             }
             // The selected cell, painted the way the selected row is: the
             // table's own active pair rather than a plain accent block.
             if (s && s->rightClickedCellRow == r &&
                 s->rightClickedCellCol == c) {
-                td->Bg(RgbaOpacity(th.accent, 0.5f));
+                td->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
             }
             if (s && s->mode == TableSelectionMode::Cell &&
                 s->selectedCellRow == r && s->selectedCellCol == c) {
-                ListActiveStyle sel = ListActiveStyleOf(
-                    th.tableActive, th.tableActiveBorder, th.accent, true);
+                ListActiveStyle sel = ListActiveStyleOf(th.tokens.tableActive,
+                                                        th.tableActiveBorder,
+                                                        th.tokens.accent, true);
                 td->Bg(sel.bg);
                 if (sel.hasBorder) {
                     td->Child(ListActiveOverlay(a, sel.border, 0));

@@ -75,7 +75,7 @@ El* Separator::IntoEl() {
         root->Child(TextEl(a, label)
                         ->Font(12)
                         ->Fg(th.mutedFg)
-                        ->Bg(th.background)
+                        ->Bg(th.tokens.background)
                         ->PadX(8));
     }
     return root;

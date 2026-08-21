@@ -121,7 +121,7 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                 ->Child(Div(a)
                             ->W(kFill)
                             ->Pad(8)
-                            ->Bg(th.secondary)
+                            ->Bg(th.tokens.secondary)
                             ->Child(StoryTxt(cx, StoryFmt(cx, "Item %d", i), 14,
                                              th.foreground))));
     }
@@ -142,7 +142,7 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
                            ->H(28)
                            ->ItemsCenter()
                            ->JustifyCenter()
-                           ->Bg(th.secondary)
+                           ->Bg(th.tokens.secondary)
                            ->Radius(th.radius)
                            ->Child(StoryTxt(cx, StoryFmt(cx, "%d:%d", r, c), 13,
                                             th.foreground)));

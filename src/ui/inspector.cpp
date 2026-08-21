@@ -350,7 +350,7 @@ El* Inspector::IntoEl() {
                     ->FlexCol()
                     ->W(width)
                     ->H(kFill)
-                    ->Bg(th.background)
+                    ->Bg(th.tokens.background)
                     ->BorderL(1, th.border);
 
     // The title bar: the magnifier that starts picking, the name, and the
@@ -363,7 +363,7 @@ El* Inspector::IntoEl() {
                   ->Gap(8)
                   ->ItemsCenter()
                   ->JustifyBetween()
-                  ->Bg(th.titleBar)
+                  ->Bg(th.tokens.titleBar)
                   ->BorderB(1, th.titleBarBorder);
     El* left = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     left->Child(Button::New(cx, StrL("inspect"))

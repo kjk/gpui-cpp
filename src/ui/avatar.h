@@ -18,7 +18,7 @@ struct Avatar {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str initials = {};
-    Rgba bg = {};
+    Background bg = {};
     bool hasBg = false;
     float size = 48;
     // Set by WithSize; drives the fallback text size the way avatar_text_size
@@ -35,7 +35,7 @@ struct Avatar {
     // and off which its color is picked.
     Avatar* Name(Str s);
     Avatar* Initials(Str s);
-    Avatar* Bg(Rgba c);
+    Avatar* Bg(Background c);
     Avatar* Size(float v);
     Avatar* WithSize(UiSize s);
     Avatar* Radius(float v);

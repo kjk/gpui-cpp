@@ -495,7 +495,7 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
             ->PadX(8)
             ->ItemsCenter()
             ->JustifyCenter()
-            ->HoverBg(th.muted)
+            ->HoverBg(th.tokens.muted)
             ->Child(StoryTxt(cx, StrL("Export CSV"), 14, th.foreground));
     group->Child(exportBtn);
     toolbarRow->Child(group);

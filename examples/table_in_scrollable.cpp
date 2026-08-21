@@ -125,10 +125,13 @@ El* TableApp::Render(TableApp* app, Ctx* cx) {
                     ->W(kFill)
                     ->Border(1, th.border)
                     ->Radius(th.radius)
-                    ->Bg(th.tableBg);
-    El* head =
-        Div(frame)->FlexRow()->H(kHeadH)->Shrink0()->Bg(th.muted)->BorderB(
-            1, th.tableRowBorder);
+                    ->Bg(th.tokens.tableBg);
+    El* head = Div(frame)
+                   ->FlexRow()
+                   ->H(kHeadH)
+                   ->Shrink0()
+                   ->Bg(th.tokens.muted)
+                   ->BorderB(1, th.tableRowBorder);
     for (int i = 0; i < 5; i++) {
         head->Child(
             Div(frame)->W(widths[i])->H(kHeadH)->PadX(8)->ItemsCenter()->Child(
@@ -141,7 +144,7 @@ El* TableApp::Render(TableApp* app, Ctx* cx) {
     for (int r = 0; r < kRows; r++) {
         El* row = Div(frame)->FlexRow()->H(kRowH)->Shrink0();
         if (r % 2) {
-            row->Bg(th.tableEven);
+            row->Bg(th.tokens.tableEven);
         }
         TempStr id = fmt("%d", r);
         TempStr name = fmt("User %d", r);
@@ -195,7 +198,7 @@ El* TableApp::Render(TableApp* app, Ctx* cx) {
                    ->SizeFull()
                    ->ClipY()
                    ->ScrollY(app->pageScroll)
-                   ->Bg(th.background);
+                   ->Bg(th.tokens.background);
     root->Child(page);
     root->Child(Thumb(frame, pThumbY, pThumbH, RgbaOpacity(th.mutedFg, 0.45f)));
     return root;

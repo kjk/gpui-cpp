@@ -68,8 +68,9 @@ El* Slider::IntoEl() {
     float w = width;
     float mid = (kH - kBar) * 0.5f;
 
-    Rgba railBg = th.secondary;
-    Rgba fillBg = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
+    Background railBg = th.tokens.secondary;
+    Background fillBg = disabled ? BackgroundOpacity(th.tokens.primary, 0.5f)
+                                 : th.tokens.primary;
     Rgba thumbBorder = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
     SliderState* bind = disabled ? nullptr : state;
 
@@ -111,7 +112,7 @@ El* Slider::IntoEl() {
                               ->W(kThumb)
                               ->H(kThumb)
                               ->Radius(kThumb * 0.5f)
-                              ->Bg(th.background)
+                              ->Bg(th.tokens.sliderThumb)
                               ->Border(1, thumbBorder));
         }
         return gpui::Slider::New(cx)->W(kH)->H(w)->Child(vtrack);
@@ -150,7 +151,7 @@ El* Slider::IntoEl() {
                          ->W(kThumb)
                          ->H(kThumb)
                          ->Radius(kThumb * 0.5f)
-                         ->Bg(th.background)
+                         ->Bg(th.tokens.sliderThumb)
                          ->Border(1, thumbBorder));
     }
     return gpui::Slider::New(cx)->W(w)->H(kH)->Child(track);

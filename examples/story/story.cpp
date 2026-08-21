@@ -4,6 +4,7 @@
 using namespace gpui;
 
 #include <stdarg.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 static StoryPageNewFn gNew[StoryCount] = {};
@@ -337,7 +338,7 @@ static El* ToolbarGroup(Ctx* cx) {
     return Div(a)
         ->FlexRow()
         ->ItemsStart()
-        ->Bg(th.background)
+        ->Bg(th.tokens.background)
         ->Border(1, th.border)
         ->Radius(th.radius);
 }
@@ -359,7 +360,7 @@ static El* ToolbarDropBtn(Ctx* cx, Str label) {
         ->PadX(8)
         ->ItemsCenter()
         ->JustifyCenter()
-        ->HoverBg(th.muted)
+        ->HoverBg(th.tokens.muted)
         ->Child(StoryTxt(cx, label, 14, th.foreground));
 }
 
@@ -383,7 +384,7 @@ static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
                   ->Gap(4)
                   ->ItemsCenter()
                   ->Radius(th.radius)
-                  ->HoverBg(th.accent);
+                  ->HoverBg(th.tokens.accent);
     // The row needs a click id of its own, or HoverBg has nothing to match
     // against and the hovered row never lights up.
     row->Click(HashClickId(StoryFmt(cx, "story-toolbar-opt%d", act)))
@@ -417,7 +418,7 @@ static El* ToolbarMenu(Ctx* cx) {
         ->FlexCol()
         ->Pad(4)
         ->Gap(2)
-        ->Bg(th.background)
+        ->Bg(th.tokens.background)
         ->Border(1, th.border)
         ->Radius(th.radius);
 }
@@ -652,9 +653,9 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
         El* label = StoryTxt(cx, Str(m->title), 13, th.sidebarFg);
         if (on) {
             label->Semibold();
-            row->Bg(th.secondary);
+            row->Bg(th.tokens.secondary);
         } else {
-            row->HoverBg(th.secondary);
+            row->HoverBg(th.tokens.secondary);
         }
         row->Child(label);
         list->Child(row);
@@ -674,7 +675,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
                   ->JustifyBetween()
                   ->Gap(8)
                   ->Radius(18)
-                  ->Bg(th.secondary)
+                  ->Bg(th.tokens.secondary)
                   ->OnClick(Listen(cx, &FocusSearch))
                   ->FocusId(ClickSearch);
     box->Child(::Input::New(cx, &app->search)->Grow());
@@ -720,7 +721,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
                    ->W(32)
                    ->H(32)
                    ->Radius(8)
-                   ->Bg(th.primary)
+                   ->Bg(th.tokens.primary)
                    ->ItemsCenter()
                    ->JustifyCenter()
                    ->Shrink0()
@@ -786,7 +787,7 @@ static El* StoryTitleMenuItem(Ctx* cx, const char* label, bool semibold) {
         ->ItemsCenter()
         ->Radius(th.radius)
         ->Click(HashClickId(StoryFmt(cx, "story-title-%s", label)))
-        ->HoverBg(th.muted)
+        ->HoverBg(th.tokens.muted)
         ->Child(text);
 }
 
@@ -1033,7 +1034,7 @@ static El* HelpMenu(Ctx* cx) {
                       ->PadX(8)
                       ->ItemsCenter()
                       ->Radius(th.radius)
-                      ->HoverBg(th.muted)
+                      ->HoverBg(th.tokens.muted)
                       ->Cursor(CursorKind::Pointer)
                       ->Child(StoryTxt(cx, StrL("Help"), 14, th.foreground)))
         ->Menu(menu)
@@ -1056,7 +1057,7 @@ static El* WindowMenu(Ctx* cx) {
                       ->PadX(8)
                       ->ItemsCenter()
                       ->Radius(th.radius)
-                      ->HoverBg(th.muted)
+                      ->HoverBg(th.tokens.muted)
                       ->Cursor(CursorKind::Pointer)
                       ->Child(StoryTxt(cx, StrL("Window"), 14, th.foreground)))
         ->Menu(menu)
@@ -1169,7 +1170,7 @@ static El* Footer(StoryApp* app, Ctx* cx) {
         ->ItemsCenter()
         ->JustifyBetween()
         ->Shrink0()
-        ->Bg(th.titleBar)
+        ->Bg(th.tokens.titleBar)
         ->BorderT(1, th.border)
         ->Child(
             Div(a)
@@ -1306,6 +1307,17 @@ int GpuiMain(int argc, char** argv) {
     AssetsClear();
     AssetsAddDefaultRoots(Str{});
     AssetsAddRoot(StrL("assets"));
+
+    // A theme out of the registry named in the environment, so a screenshot
+    // of one is reproducible the way GPUI_TODAY makes the calendar's today.
+    if (const char* themeName = getenv("GPUI_THEME")) {
+        ThemeRegistryLoadDir(StrL("themes"));
+        const ThemeConfig* cfg = ThemeRegistryFind(Str(themeName));
+        if (cfg) {
+            ThemeRegistryApply(app, cfg);
+            ThemeSet(app, cfg->mode);
+        }
+    }
 
     char slug[64] = {};
     ParseSlug(argc, argv, slug, 64);

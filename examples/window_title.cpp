@@ -46,7 +46,7 @@ struct Example {
         return Div(a)
             ->FlexCol()
             ->SizeFull()
-            ->Bg(th.background)
+            ->Bg(th.tokens.background)
             ->Child(bar)
             ->Child(body);
     }

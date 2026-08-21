@@ -94,7 +94,7 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
                    ->PadY(8)
                    ->ItemsCenter()
                    ->JustifyBetween()
-                   ->Bg(th.muted);
+                   ->Bg(th.tokens.muted);
     foot->Child(StoryTxt(cx, StrL("Selected color"), 14, th.mutedFg));
     foot->Child(
         StoryTxt(cx, StoryFmt(cx, "#%06X", shown & 0xffffff), 16, th.foreground)

@@ -45,7 +45,7 @@ Switch* Switch::OnClick(Listener fn) {
 
 El* Switch::IntoEl() {
     const Theme& th = cx->theme();
-    Rgba on = hasColor ? color : th.primary;
+    Background on = hasColor ? Background(color) : th.tokens.primary;
     float trackW = 36;
     float trackH = 20;
     float thumb = 16;
@@ -60,11 +60,13 @@ El* Switch::IntoEl() {
     }
     // Disabled halves the checked track and dims the thumb, the way
     // disabled_checked_bg and the thumb's disabled style do.
-    Rgba trackBg = checked ? on : th.secondary;
+    Background trackBg = checked ? on : th.tokens.secondary;
     if (disabled && checked) {
-        trackBg = RgbaOpacity(trackBg, 0.5f);
+        trackBg = BackgroundOpacity(trackBg, 0.5f);
     }
-    Rgba thumbBg = disabled ? RgbaOpacity(th.background, 0.35f) : th.background;
+    Background thumbBg = disabled
+                             ? BackgroundOpacity(th.tokens.switchThumb, 0.35f)
+                             : th.tokens.switchThumb;
     // Rust builds the track's id from `(id, "track")`, so the part is named
     // apart from the switch it sits in.
     El* track = SwitchTrack::New(cx, StrDup(a, fmt("%s-track", id)))

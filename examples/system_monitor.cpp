@@ -106,7 +106,7 @@ static El* SegmentedTab(Arena* a, Str label, bool selected, Listener onClick) {
                 ->Child(TextEl(a, label)->Font(13)->Fg(selected ? th.tabActiveFg
                                                                 : th.tabFg));
     if (selected) {
-        t->Bg(th.tabActiveBg);
+        t->Bg(th.tokens.tabActiveBg);
     }
     return t;
 }
@@ -125,7 +125,7 @@ static El* TitleBar(Ctx* cx, MonitorApp* app) {
                    ->Gap(2)
                    ->PadY(2)
                    ->Radius(8)
-                   ->Bg(th.tabBar)
+                   ->Bg(th.tokens.tabBar)
                    ->Child(SegmentedTab(a, StrL("System"), app->tab == 0,
                                         Listen(cx, &PickTab, 0)))
                    ->Child(SegmentedTab(a, StrL("Processes"), app->tab == 1,
@@ -198,8 +198,8 @@ static El* ProcTableHeader(Ctx* cx, MonitorApp* app) {
     const char* names[4] = {"PID", "Name", "CPU %", "Memory"};
     ProcessSort fields[4] = {ProcessSort::Pid, ProcessSort::Name,
                              ProcessSort::Cpu, ProcessSort::Memory};
-    El* row =
-        Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(th.tableHead);
+    El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(
+        th.tokens.tableHead);
     for (int i = 0; i < 4; i++) {
         TempStr lab = fmt("%s%s", Str(names[i]),
                           SortMark(fields[i], app->sort, app->sortDesc));
@@ -228,7 +228,7 @@ static El* ProcTableRow(Arena* a, const ProcessInfo* p, int ix) {
     const Theme& th = ThemeDark();
     El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter();
     if (ix % 2 == 1) {
-        row->Bg(th.tableEven);
+        row->Bg(th.tokens.tableEven);
     }
     row->Child(Div(a)->W(kColW[0])->H(28)->PadX(8)->ItemsCenter()->Child(
         TextEl(a, fmt("%d", (int)p->pid))->Font(12)->Fg(th.mutedFg)));
@@ -327,7 +327,7 @@ static El* StatusBar(Arena* a, MonitorApp* app) {
         ->ItemsCenter()
         ->JustifyBetween()
         ->BorderT(1, th.border)
-        ->Bg(th.tabBar)
+        ->Bg(th.tokens.tabBar)
         ->Child(left)
         ->Child(right);
 }
@@ -347,7 +347,7 @@ El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
     return Div(frame)
         ->FlexCol()
         ->SizeFull()
-        ->Bg(th.background)
+        ->Bg(th.tokens.background)
         ->Child(TitleBar(cx, app))
         ->Child(content)
         ->Child(StatusBar(frame, app));

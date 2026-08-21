@@ -26,7 +26,7 @@ El* Example::Render(Example*, Ctx* cx) {
         ->SizeFull()
         ->Gap(16)
         ->Pad(32)
-        ->Bg(th.background)
+        ->Bg(th.tokens.background)
         ->Child(TextEl(frame, StrL("Root::bordered(false)"))
                     ->Font(24)
                     ->Semibold()

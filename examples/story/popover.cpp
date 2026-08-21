@@ -50,7 +50,7 @@ static El* PopCard(Ctx* cx, float maxW) {
                    ->Pad(12)
                    ->Radius(th.radiusLg)
                    ->Border(1, th.border)
-                   ->Bg(th.background);
+                   ->Bg(th.tokens.background);
     if (maxW > 0) {
         card->MaxW(maxW);
     }
@@ -188,7 +188,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                         ->PadX(8)
                         ->PadY(4)
                         ->Radius(th.radius * 0.5f)
-                        ->Bg(th.primary)
+                        ->Bg(th.tokens.primary)
                         ->Child(StoryTxt(cx,
                                          StrL("A styled Popover with custom "
                                               "background and text color."),

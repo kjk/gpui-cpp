@@ -158,7 +158,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
                                 ->W(512)
                                 ->WithSize(self->toolbar.size)
                                 ->Appearance(false)
-                                ->Bg(th.secondary)
+                                ->Bg(th.tokens.secondary)
                                 ->TextColor(th.info)
                                 ->OnInc(ListenerArg(step, (NumCustom << 1) | 1))
                                 ->OnDec(ListenerArg(step, NumCustom << 1))

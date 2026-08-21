@@ -7,7 +7,10 @@
 struct ColorRow {
     const char* group;
     const char* name;
-    Rgba color;
+    // A fill, not a colour: the tokens schema.rs lets a theme spell as a
+    // gradient are shown as one, so the swatch says what the token paints
+    // rather than what its first stop is.
+    Background color;
 };
 
 // The themes the picker offers: what the registry holds, which is the two
@@ -138,6 +141,15 @@ static Str HexOf(Ctx* cx, Rgba c) {
     return StoryFmt(cx, "#%02x%02x%02x%02x", c.r, c.g, c.b, c.a);
 }
 
+// The value a theme file would have to write to get this fill back.
+static Str ValueOf(Ctx* cx, const Background& b) {
+    if (!b.gradient) {
+        return HexOf(cx, b.color);
+    }
+    return StoryFmt(cx, "linear-gradient(%gdeg, %s, %s)", (double)b.angle,
+                    HexOf(cx, b.from.color), HexOf(cx, b.to.color));
+}
+
 El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -169,18 +181,18 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     // for every token this port's Theme carries. Global, Primary and
     // Secondary lead; the rest run alphabetically, as they do in Rust.
     const ColorRow rows[] = {
-        {"Global", "Background", th.background},
+        {"Global", "Background", th.tokens.background},
         {"Global", "Border", th.border},
         {"Global", "Foreground", th.foreground},
-        {"Global", "Overlay", th.overlay},
+        {"Global", "Overlay", th.tokens.overlay},
         {"Global", "Ring", th.ring},
-        {"Primary", "Background", th.primary},
+        {"Primary", "Background", th.tokens.primary},
         {"Primary", "Foreground", th.primaryFg},
         {"Secondary", "Active Background", th.secondaryActive},
-        {"Secondary", "Background", th.secondary},
+        {"Secondary", "Background", th.tokens.secondary},
         {"Secondary", "Foreground", th.secondaryFg},
         {"Secondary", "Hover Background", th.secondaryHover},
-        {"Accent", "Background", th.accent},
+        {"Accent", "Background", th.tokens.accent},
         {"Base", "Blue", th.blue},
         {"Base", "Cyan", th.cyan},
         {"Base", "Green", th.green},
@@ -194,47 +206,50 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         {"Chart", "Color 3", th.chart3},
         {"Chart", "Color 4", th.chart4},
         {"Chart", "Color 5", th.chart5},
-        {"Danger", "Background", th.danger},
+        {"Danger", "Background", th.tokens.danger},
         {"Danger", "Foreground", th.dangerFg},
         {"Description List", "Label Background", th.descListLabel},
         {"Description List", "Label Foreground", th.descListLabelFg},
         {"Group Box", "Background", th.groupBox},
         {"Group Box", "Foreground", th.groupBoxFg},
-        {"Info", "Background", th.info},
+        {"Info", "Background", th.tokens.info},
         {"Info", "Foreground", th.infoFg},
         {"Input", "Background", th.inputBg},
         {"Input", "Border", th.inputBorder},
         {"Input", "Caret", th.caret},
-        {"List", "Active Background", th.listActive},
+        {"List", "Active Background", th.tokens.listActive},
         {"List", "Active Border", th.listActiveBorder},
-        {"Muted", "Background", th.muted},
+        {"Muted", "Background", th.tokens.muted},
         {"Muted", "Foreground", th.mutedFg},
-        {"Progress", "Background", th.progress},
-        {"Scrollbar", "Thumb Background", th.scrollbarThumb},
-        {"Sidebar", "Accent Background", th.sidebarAccent},
+        {"Progress", "Background", th.tokens.progress},
+        {"Scrollbar", "Thumb Background", th.tokens.scrollbarThumb},
+        {"Sidebar", "Accent Background", th.tokens.sidebarAccent},
         {"Sidebar", "Accent Foreground", th.sidebarAccentFg},
         {"Sidebar", "Background", th.sidebar},
         {"Sidebar", "Border", th.sidebarBorder},
         {"Sidebar", "Foreground", th.sidebarFg},
-        {"Sidebar", "Primary Background", th.sidebarPrimary},
+        {"Sidebar", "Primary Background", th.tokens.sidebarPrimary},
         {"Sidebar", "Primary Foreground", th.sidebarPrimaryFg},
-        {"Skeleton", "Background", th.skeleton},
-        {"Success", "Background", th.success},
+        {"Skeleton", "Background", th.tokens.skeleton},
+        {"Slider", "Thumb Background", th.tokens.sliderThumb},
+        {"Status Bar", "Background", th.tokens.statusBar},
+        {"Success", "Background", th.tokens.success},
         {"Success", "Foreground", th.successFg},
-        {"Tab", "Active Background", th.tabActiveBg},
+        {"Switch", "Thumb Background", th.tokens.switchThumb},
+        {"Tab", "Active Background", th.tokens.tabActiveBg},
         {"Tab", "Active Foreground", th.tabActiveFg},
         {"Tab", "Foreground", th.tabFg},
-        {"Tab Bar", "Background", th.tabBar},
-        {"Table", "Active Background", th.tableActive},
+        {"Tab Bar", "Background", th.tokens.tabBar},
+        {"Table", "Active Background", th.tokens.tableActive},
         {"Table", "Active Border", th.tableActiveBorder},
-        {"Table", "Background", th.tableBg},
-        {"Table", "Even Background", th.tableEven},
-        {"Table", "Head Background", th.tableHead},
+        {"Table", "Background", th.tokens.tableBg},
+        {"Table", "Even Background", th.tokens.tableEven},
+        {"Table", "Head Background", th.tokens.tableHead},
         {"Table", "Head Foreground", th.tableHeadFg},
         {"Table", "Row Border", th.tableRowBorder},
-        {"Title Bar", "Background", th.titleBar},
+        {"Title Bar", "Background", th.tokens.titleBar},
         {"Title Bar", "Border", th.titleBarBorder},
-        {"Warning", "Background", th.warning},
+        {"Warning", "Background", th.tokens.warning},
         {"Warning", "Foreground", th.warningFg},
     };
     const int nRows = (int)(sizeof(rows) / sizeof(rows[0]));
@@ -295,7 +310,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                        ->ItemsCenter()
                        ->JustifyBetween()
                        ->Radius(th.radius)
-                       ->HoverBg(th.muted);
+                       ->HoverBg(th.tokens.muted);
         head->Child(StoryTxt(cx, Str(name), 16, th.foreground));
         head->Child(
             IconEl(a, open ? IconName::ChevronDown : IconName::ChevronRight, 16)
@@ -377,9 +392,11 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
             El* text = Div(a)->FlexCol()->Gap(4)->Grow();
             text->Child(StoryTxt(cx, Str(rows[r].name), 14, th.foreground)
                             ->Medium());
-            text->Child(StoryTxt(cx, HexOf(cx, rows[r].color), 14, th.mutedFg));
+            // A gradient's value is long; the cell is 220 wide either way.
+            text->Child(StoryTxt(cx, ValueOf(cx, rows[r].color), 14, th.mutedFg)
+                            ->Truncate());
             row->Child(text);
-            wrap->Child(Div(a)->W(220)->Child(row));
+            wrap->Child(Div(a)->W(220)->ClipX()->Child(row));
         }
         cat->Child(wrap);
         inner->Child(cat);

@@ -288,7 +288,7 @@ static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
                                 ->PadX(8)
                                 ->PadY(2)
                                 ->Radius(99)
-                                ->Bg(th.primary)
+                                ->Bg(th.tokens.primary)
                                 ->Child(TextEl(a, label)
                                             ->Font(12)
                                             ->Fg(th.primaryFg)
