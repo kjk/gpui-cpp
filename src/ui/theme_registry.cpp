@@ -610,6 +610,7 @@ void ThemeRegistryInit() {
     }
     gInited = true;
     gArena = ArenaNew();
+    AppOnShutdown(ThemeRegistryFree);
     // The two the tree was built with are what everything else resolves
     // against, so they go in first and stay first.
     ThemeRegistryLoadStr(Str(kDefaultThemeJson));

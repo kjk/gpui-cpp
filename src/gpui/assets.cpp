@@ -113,6 +113,7 @@ void AssetsAddDefaultRoots(Str exampleName) {
 
     // Walk parents of cwd and exe looking for assets/<name>
     char walk[kMaxPath];
+    char work[kMaxPath];
     for (int src = 0; src < 2; src++) {
         StrCopyZ(walk, kMaxPath, src == 0 ? cwd : exe);
         for (int up = 0; up < 6; up++) {
@@ -131,6 +132,12 @@ void AssetsAddDefaultRoots(Str exampleName) {
                 JoinPath(p, kMaxPath, walk, rust);
                 AddRootRaw(p);
             }
+            // The pinned Rust clone itself, which is where a folder that
+            // belongs to no one example lives — `themes/`, the theme files
+            // the registry reads.
+            snprintf(work, kMaxPath, ".work%cgpui-component", kSep);
+            JoinPath(p, kMaxPath, walk, work);
+            AddRootRaw(p);
             char prev[kMaxPath];
             StrCopyZ(prev, kMaxPath, walk);
             ParentDir(walk);

@@ -3072,6 +3072,12 @@ void AppInvalidate(Window* win);
 // cx.refresh_windows(): every window this app owns repaints. What a change
 // with no one view behind it — the theme, the font size — asks for.
 void AppRefreshWindows(App* app);
+// A teardown belonging to a layer above this one, run by AppFree once the
+// windows are gone. The theme registry's arena is what asked for it: it lives
+// in src/ui, which gpui cannot name, and a process-wide table has to be given
+// back somewhere or every ASan run reports it. Registering the same function
+// twice registers it once.
+void AppOnShutdown(void (*fn)());
 void AppMinimize(Window* win);
 void AppToggleMaximize(Window* win);
 void AppClose(Window* win);

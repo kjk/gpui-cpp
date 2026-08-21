@@ -1125,11 +1125,11 @@ static El* Footer(StoryApp* app, Ctx* cx) {
                     ->FlexRow()
                     ->Gap(12)
                     ->ItemsCenter()
-                    ->Child(StoryTxt(cx,
-                                     ThemeGet() == ThemeMode::Dark
-                                         ? StrL("Default Dark")
-                                         : StrL("Default Light"),
-                                     12, th.mutedFg))
+                    // The theme in force, which is whatever the registry
+                    // last installed for this mode rather than always one of
+                    // the two defaults.
+                    ->Child(StoryTxt(cx, ThemeRegistryActive(ThemeGet()), 12,
+                                     th.mutedFg))
                     ->Child(StoryTxt(cx, StrL("v0.5.1"), 12, th.mutedFg)));
 }
 

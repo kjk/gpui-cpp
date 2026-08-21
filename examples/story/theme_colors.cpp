@@ -10,12 +10,30 @@ struct ColorRow {
     Rgba color;
 };
 
-// The two themes the picker offers. A SearchableList keeps a pointer to the
-// items, so they outlive the frame.
-static const component::SearchableItem kThemeItems[] = {
-    {StrL("Default Light"), StrL("light"), 0, false},
-    {StrL("Default Dark"), StrL("dark"), 0, false},
-};
+// The themes the picker offers: what the registry holds, which is the two
+// out of default-theme.json plus every theme file it found. A SearchableList
+// keeps a pointer to the items, so they outlive the frame — and the names
+// point into the registry's own arena, which outlives everything.
+static Vec<component::SearchableItem> gThemeItems;
+
+// One entry per theme in the registry, in its sorted order, with the light
+// ones in a section of their own so the list reads the way Rust's does.
+static void FillThemeItems() {
+    if (gThemeItems.len > 0) {
+        return;
+    }
+    // `themes/`, wherever an asset root has one — the pinned Rust clone ships
+    // twenty of them. Two entries are all the picker has without it.
+    ThemeRegistryLoadDir(StrL("themes"));
+    for (int i = 0; i < ThemeRegistryCount(); i++) {
+        const ThemeConfig* cfg = ThemeRegistryAt(i);
+        component::SearchableItem it = {};
+        it.title = cfg->name;
+        it.value = cfg->name;
+        it.section = cfg->mode == ThemeMode::Dark ? 1 : 0;
+        gThemeItems.Append(it);
+    }
+}
 
 struct ThemeColorsStory {
     Entity<component::SearchableListState> themes = {};
@@ -58,6 +76,27 @@ static void ToggleThemeSelect(ThemeColorsStory* self, Ctx* cx,
                               const ClickEvent*) {
     component::SelectToggleOpen(self->themes.Get(cx), cx);
 }
+// Theme::apply_config, from the row the picker has selected. Rust does it
+// from the registry the same way; the palette the file resolves to replaces
+// the one for its mode, and the window switches to that mode so the change is
+// on screen rather than one menu away.
+static void SetTheme(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
+    component::SearchableListState* st = self->themes.Get(cx);
+    if (!st || st->selected.len == 0) {
+        return;
+    }
+    int ix = st->selected[0];
+    if (ix < 0 || ix >= gThemeItems.len) {
+        return;
+    }
+    const ThemeConfig* cfg = ThemeRegistryFind(gThemeItems[ix].title);
+    if (!cfg || !ThemeRegistryApply(cx->app, cfg)) {
+        return;
+    }
+    ThemeSet(cx->app, cfg->mode);
+    Notify(cx);
+}
+
 static void FocusFilter(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
     self->filter.focused = true;
     Notify(cx);
@@ -104,12 +143,22 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
+        FillThemeItems();
         InputSetPlaceholder(&self->filter, StrL("Search..."));
         self->themes = EntityNewState<component::SearchableListState>(cx->app);
         component::SearchableListState* t = self->themes.Get(cx);
         if (t) {
-            // The picker opens on the theme that is showing.
-            component::SearchableListSelectOnly(t, 0);
+            // The picker opens on the theme that is showing, which is the
+            // one the registry has installed for the mode in force.
+            Str active = ThemeRegistryActive(ThemeGet());
+            int at = 0;
+            for (int i = 0; i < gThemeItems.len; i++) {
+                if (StrSame(gThemeItems[i].title, active)) {
+                    at = i;
+                    break;
+                }
+            }
+            component::SearchableListSelectOnly(t, at);
         }
     }
     if (self->filter.focused) {
@@ -197,13 +246,14 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     El* top = Div(a)->FlexCol()->W(kFill)->Gap(12);
     El* pick = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
     pick->Child(component::Select::New(cx, StrL("theme-select"), self->themes)
-                    ->Items(kThemeItems, 2)
+                    ->Items(gThemeItems.els, gThemeItems.len)
                     ->W(300)
                     ->OnToggle(Listen(cx, &ToggleThemeSelect))
                     ->IntoEl());
     pick->Child(component::Button::New(cx, StrL("set_theme"))
                     ->Label(StrL("Set Theme"))
                     ->Primary()
+                    ->OnClick(Listen(cx, &SetTheme))
                     ->IntoEl());
     top->Child(pick);
     El* optRow = Div(a)->FlexRow()->W(kFill)->JustifyEnd();
