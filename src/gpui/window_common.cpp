@@ -464,6 +464,14 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
     if (s->disabled) {
         return;
     }
+    // A press on a fold chevron toggles it and goes no further — Rust's icon
+    // handler calls cx.stop_propagation() so the press never reaches the text
+    // underneath and moves the caret.
+    int foldLine = InputFoldIconAt(s, in.x, in.y);
+    if (foldLine >= 0) {
+        InputToggleFold(s, win->app, win, foldLine);
+        return;
+    }
     if (!s->focused) {
         InputFocus(s, win->app, win);
     }

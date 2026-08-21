@@ -146,7 +146,9 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
         cx, StrL("editor"), self->tab == 0 ? &self->code : &self->decorations);
     ed->H(WindowSize(cx->win).dipH - 262)->ActiveLine()->IndentGuides();
     if (self->tab == 0) {
-        ed->Language(StrL("rust"));
+        // The Rust tab is the code editor, which is where folding is on
+        // upstream: a chevron in the gutter beside every brace block.
+        ed->Language(StrL("rust"))->Folding();
     } else {
         // create_decorations_collection: the four runs, found in the text by
         // the words they cover, as Rust finds them.

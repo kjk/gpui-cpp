@@ -286,3 +286,52 @@ cargo run -p system_monitor
   where GPUI rasterizes paths in a shader; batching each colour run into one
   stroked `Path` was tried and came out slower, since a D2D path geometry per
   run costs more than the six `DrawLine` calls it replaces.
+
+- 2026-08-21: Code folding, which two earlier entries said this tree could not
+  have. Both gave the same reason — the scanner in `src/ui/syntax.cpp` has no
+  tree, and a fold needs one — and reading upstream says it does not. The fold
+  extractor in `crates/ui/src/highlighter/input_adapter.rs` offers every named
+  node spanning two rows or more, sorted and deduped by start line, which is
+  row geometry rather than anything semantic; and the showcase's own
+  highlighter ships `brace_fold_ranges`, a thirty-line `{`/`}` scan with quote
+  and `//` awareness, driving the same `.folding(true)` editor with no tree at
+  all. So upstream has two fold sources and one of them needs nothing we lack.
+
+  `display_map/fold_map.rs` and `folding.rs` port as `FoldMap` and `FoldRange`
+  in `src/base/input.cpp`. Rust's map projects wrap rows to display rows,
+  because its display map wraps first and folds second; the rows here are
+  logical lines already — a soft-wrapped line is one row as tall as its text,
+  which is what `rowBoxes` is indexed by — so this maps line to display row
+  and the wrap half has nowhere to live. Everything else is as written: the
+  candidate list is sorted and one range per start line, a closed fold hides
+  the lines *between* its ends so a folded block still reads as its opening
+  line and its closing brace, and `adjust_folds_for_edit` drops the ranges an
+  edit ran through and shifts the ones below it rather than re-extracting on
+  every keystroke.
+
+  The candidates come from `Highlighter`, the way Rust's come from the
+  highlighter through `apply_highlighter_fold_candidates`. The scan is
+  upstream's brace pairs run over `SyntaxLexer` rather than over raw
+  characters, so a brace inside a string or a comment is not a brace — which
+  is what Rust's hand-rolled quote tracking is doing by hand, and does less
+  well. A language with no braces has no candidates, and that is where this
+  stops short of the tree: Rust would fold a Python suite and this cannot see
+  one.
+
+  The gutter is `element.rs`: the line-number column widens by
+  `FOLD_ICON_HITBOX_WIDTH` (18) and every candidate line gets a cell that
+  size, with a 14px chevron in it. The chevron is drawn only while the gutter
+  is hovered, on the caret's own row, or over a fold that is closed, which is
+  `paint_fold_icons`; the cell is built and measured either way, because Rust
+  prepaints an icon for every candidate and only the painting is conditional —
+  the click that reveals a chevron has to be the click that lands on it. The
+  press is routed by `InputPress` and stops there, which is the
+  `cx.stop_propagation()` on Rust's icon.
+
+  A caret inside a closed fold is drawn at column 0 of the line the fold
+  starts on, which is what `buffer_pos_to_display_pos` answers for a folded
+  position; the offset itself does not move. The vertical walk crosses a
+  closed fold in one press because a hidden line measures as no height at all,
+  and the hit test, `scroll_to` and the first-visible-row walk all snap onto a
+  line that is on screen. `tests/FoldMapTests.cpp` pins the projection, the
+  nesting and the edit adjustment; 3902 checks.

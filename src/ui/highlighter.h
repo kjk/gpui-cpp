@@ -33,6 +33,9 @@ struct Highlighter {
     // editor: ctrl-f opens a find bar over the rows, and ctrl-h opens it with
     // the replace row already out.
     bool searchable = true;
+    // LayoutMode::CodeEditor { folding }: a chevron in the gutter beside every
+    // line that opens a foldable block, and a click on it collapses the block.
+    bool folding = false;
 
     static Highlighter* New(Ctx* cx, InputState* state);
     static Highlighter* New(Ctx* cx, Str id, InputState* state);
@@ -42,6 +45,7 @@ struct Highlighter {
     Highlighter* ActiveLine(bool v = true);
     Highlighter* IndentGuides(bool v = true);
     Highlighter* Searchable(bool v);
+    Highlighter* Folding(bool v = true);
     El* IntoEl();
 };
 

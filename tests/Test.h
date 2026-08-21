@@ -68,6 +68,7 @@ void TestMaskPattern();
 void TestUndoManager();
 void TestInputState();
 void TestSearchMatcher();
+void TestFoldMap();
 void TestList();
 void TestPopupMenu();
 void TestDataTable();

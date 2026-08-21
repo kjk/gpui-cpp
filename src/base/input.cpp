@@ -179,6 +179,85 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
     return row->Child(el);
 }
 
+// element.rs FOLD_ICON_WIDTH / FOLD_ICON_HITBOX_WIDTH.
+static const float kFoldIcon = 14.f;
+static const float kFoldIconHitbox = 18.f;
+
+// Whether the pointer is over the gutter, which is what decides if the
+// chevrons show. Rust inserts one hitbox over the whole line-number column;
+// the column is at the same x on every row, so the first row's cell is where
+// it is, and the rows themselves say how far down it reaches.
+static bool GutterHovered(const InputState* s, Window* win, float gutterW) {
+    if (!win || s->gutterBox.w <= 0) {
+        return false;
+    }
+    float x = win->mouseX;
+    if (x < s->gutterBox.x || x >= s->gutterBox.x + gutterW) {
+        return false;
+    }
+    float top = 0, bottom = 0;
+    bool any = false;
+    for (int i = 0; i < s->rowBoxes.len; i++) {
+        const Bounds& b = s->rowBoxes[i];
+        if (b.h <= 0) {
+            continue;
+        }
+        if (!any || b.y < top) {
+            top = b.y;
+        }
+        if (!any || b.y + b.h > bottom) {
+            bottom = b.y + b.h;
+        }
+        any = true;
+    }
+    if (!any) {
+        return false;
+    }
+    return win->mouseY >= top && win->mouseY < bottom;
+}
+
+// One cell of the fold gutter: a chevron when the line opens a fold, and an
+// empty box of the same width when it does not, so the text column starts at
+// the same place on every row.
+static El* FoldChevron(Arena* a, InputState* state,
+                       const InputEditorStyle& style, int row, int caretRow,
+                       bool gutterHover) {
+    // size(FOLD_ICON_HITBOX_WIDTH, line_height): the height is spelled out
+    // because a wrapped row's band is items-start rather than stretch, so
+    // a cell with no chevron in it would otherwise measure as nothing and
+    // a press could not land on it.
+    El* cell = Div(a)
+                   ->W(kFoldIconHitbox)
+                   ->H(kInputLineH)
+                   ->ItemsCenter()
+                   ->JustifyCenter();
+    if (!FoldMapIsCandidate(&state->folds, row)) {
+        return cell;
+    }
+    bool folded = FoldMapIsFolded(&state->folds, row);
+    // The box a press is matched against. Every candidate gets one, whether
+    // or not its chevron is drawn: layout_fold_icons prepaints an icon for
+    // each one and only paint_fold_icons skips the drawing, so a click lands
+    // on a chevron that the same click is what makes visible. Reserved before
+    // the rows were built, so appending here cannot move a box already handed
+    // out.
+    if (state->foldIcons.len < state->foldIcons.cap) {
+        FoldIconBox slot;
+        slot.line = row;
+        state->foldIcons.Append(slot);
+        cell->BoundsOut(&state->foldIcons[state->foldIcons.len - 1].bounds);
+    }
+    // paint_fold_icons: hovered, on the caret's row, or closed. A closed fold
+    // always shows, because nothing else on the row says its text is hidden.
+    if (!gutterHover && !folded && row != caretRow) {
+        return cell;
+    }
+    return cell->Child(
+        IconEl(a, folded ? IconName::ChevronRight : IconName::ChevronDown,
+               kFoldIcon)
+            ->Fg(style.mutedForeground));
+}
+
 El* Textarea::New(Ctx* cx, InputState* state) {
     return New(cx, state, InputEditorStyle{});
 }
@@ -230,6 +309,11 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // nothing here can tell how many times a line will break; until there is
     // one, a line apiece is the estimate.
     state->contentH = (float)rows * kInputLineH;
+    if (LayoutModeIsFolding(state->mode)) {
+        FoldMapRebuild(&state->folds, rows);
+        state->contentH =
+            (float)FoldMapDisplayRowCount(&state->folds) * kInputLineH;
+    }
     if (wrap && state->contentBox.h > 0) {
         state->contentH = state->contentBox.h;
     }
@@ -251,11 +335,37 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     if (lineNumbers) {
         numW = 12.f + 7.f * (rows >= 100 ? 3 : (rows >= 10 ? 2 : 1));
     }
-    // The row the caret is on, which is the one the active-line wash covers.
-    int caretRow = -1;
-    if (style.activeLine.a != 0) {
-        caretRow = RopeOffsetToPoint(text, cursor).row;
+    // The fold gutter. Rust widens the line-number column by the hitbox and
+    // lays the icons into the space it made; the column here is a flex row,
+    // so the icons get a cell of their own that is the same width.
+    bool folding = lineNumbers && LayoutModeIsFolding(state->mode);
+    float foldW = folding ? kFoldIconHitbox : 0.f;
+    if (folding) {
+        FoldMapRebuild(&state->folds, rows);
     }
+    // The chevrons are only on screen while the gutter is hovered, on the
+    // caret's own row, or over a fold that is closed — a column of them on
+    // every candidate line would read as noise. This is last frame's boxes,
+    // which is one frame stale and is what Rust's hitbox is too.
+    bool gutterHover = folding && GutterHovered(state, cx->win, numW + foldW);
+    state->foldIcons.Clear();
+    if (folding) {
+        VecReserve(state->foldIcons, state->folds.candidates.len);
+    }
+    // The row the caret is on, which is the one the active-line wash covers
+    // and the one the fold gutter keeps a chevron showing on. A caret inside
+    // a closed fold reads as the fold's own line: display_map maps a folded
+    // buffer position to column 0 of the nearest visible display row, so the
+    // caret sits at the head of the line the fold collapsed into rather than
+    // vanishing with the text it is in.
+    int caretRow = -1;
+    if (style.activeLine.a != 0 || folding) {
+        caretRow = RopeOffsetToPoint(text, cursor).row;
+        caretRow = FoldMapNearestVisibleLine(&state->folds, caretRow);
+    }
+    bool caretFolded =
+        folding && caret &&
+        FoldMapLineHidden(&state->folds, RopeOffsetToPoint(text, cursor).row);
     // A monospace column, for the indent guides. The glyphs are all one width
     // in the family the editor asks for, so one measurement does.
     float colW = 0;
@@ -267,6 +377,16 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     int spanAt = 0;
     int matchAt = 0;
     for (int row = 0; row < rows; row++) {
+        // A line inside a closed fold is not built at all, which is what
+        // makes the rows below it move up. Its box is zeroed rather than left
+        // at last frame's, so the hit test and the vertical walk read it as
+        // gone the moment the fold closes.
+        if (folding && FoldMapLineHidden(&state->folds, row)) {
+            if (row < state->rowBoxes.len) {
+                state->rowBoxes[row] = Bounds{};
+            }
+            continue;
+        }
         int start = RopeLineStartOffset(text, row);
         Str line = RopeSliceLine(text, row);
         El* el = TextEl(a, line)->Font(font)->LineHeight(lineMult)->Fg(
@@ -339,7 +459,11 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         if (!sel.IsEmpty() && lo < hi) {
             el->SelRange(lo, hi, style.selection);
         }
-        if (caret && cursor >= start && cursor <= start + line.len) {
+        if (caretFolded) {
+            if (row == caretRow) {
+                el->Caret(0, style.caret);
+            }
+        } else if (caret && cursor >= start && cursor <= start + line.len) {
             el->Caret(cursor - start, style.caret);
         }
         // indent_guides: a hairline every tab stop of the row's own leading
@@ -391,7 +515,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             band->H(kInputLineH);
         }
         // active_line: the wash under the row the caret is on, gutter and all.
-        if (row == caretRow) {
+        if (row == caretRow && style.activeLine.a != 0) {
             band->Bg(style.activeLine);
         }
         El* num = TextEl(a, StrDup(a, fmt("%d", row + 1)))
@@ -401,7 +525,15 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         if (style.mono) {
             num->Mono();
         }
-        band->Child(Div(a)->W(numW)->JustifyEnd()->Child(num));
+        El* numCell = Div(a)->W(numW)->JustifyEnd()->Child(num);
+        if (row == 0) {
+            numCell->BoundsOut(&state->gutterBox);
+        }
+        band->Child(numCell);
+        if (folding) {
+            band->Child(
+                FoldChevron(a, state, style, row, caretRow, gutterHover));
+        }
         if (guides) {
             El* pane = Div(a)->Grow()->Child(guides)->Child(el);
             if (!wrap) {
@@ -529,6 +661,284 @@ int LayoutModeMinRows(const LayoutMode& m) {
         return 1;
     }
     return m.minRows > 1 ? m.minRows : 1;
+}
+
+bool LayoutModeIsFolding(const LayoutMode& m) {
+    return m.kind == LayoutModeKind::CodeEditor && m.folding;
+}
+
+int InputFoldIconAt(const InputState* s, float x, float y) {
+    if (!s) {
+        return -1;
+    }
+    for (int i = 0; i < s->foldIcons.len; i++) {
+        const Bounds& b = s->foldIcons[i].bounds;
+        if (b.w <= 0 || b.h <= 0) {
+            continue;
+        }
+        if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) {
+            return s->foldIcons[i].line;
+        }
+    }
+    return -1;
+}
+
+void InputToggleFold(InputState* s, App* app, Window* win, int line) {
+    if (!s || !LayoutModeIsFolding(s->mode)) {
+        return;
+    }
+    FoldMapToggle(&s->folds, line);
+    AppInvalidate(win);
+    (void)app;
+}
+
+void InputSetFoldCandidates(InputState* s, const FoldRange* ranges, int n) {
+    if (!s || !LayoutModeIsFolding(s->mode)) {
+        return;
+    }
+    FoldMapSetCandidates(&s->folds, ranges, n);
+}
+
+// ─── fold map (display_map/fold_map.rs) ───────────────────────────────────
+//
+// The projection that hides folded lines. Rust folds wrap rows; the rows here
+// are logical lines, so this maps line <-> display row. See the header for
+// why the two differ.
+
+// The index of the range starting at `line`, or -1.
+static int FoldFindAt(const Vec<FoldRange>& v, int line) {
+    for (int i = 0; i < v.len; i++) {
+        if (v[i].startLine == line) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void FoldRemoveAt(Vec<FoldRange>* v, int ix) {
+    for (int i = ix; i + 1 < v->len; i++) {
+        (*v)[i] = (*v)[i + 1];
+    }
+    v->len--;
+}
+
+// Sorted by startLine. An insertion sort: a document's candidate list is
+// short and arrives nearly sorted, since the scanner walks it in order.
+static void FoldSort(Vec<FoldRange>* v) {
+    for (int i = 1; i < v->len; i++) {
+        FoldRange cur = (*v)[i];
+        int j = i - 1;
+        for (; j >= 0 && (*v)[j].startLine > cur.startLine; j--) {
+            (*v)[j + 1] = (*v)[j];
+        }
+        (*v)[j + 1] = cur;
+    }
+}
+
+// dedup_by_key(start_line): of ranges sharing a start line, the first wins.
+// Rust's tree walk emits the outermost node first, so the first is the widest
+// fold at that line, which is the one worth offering.
+static void FoldDedup(Vec<FoldRange>* v) {
+    int out = 0;
+    for (int i = 0; i < v->len; i++) {
+        if (out > 0 && (*v)[out - 1].startLine == (*v)[i].startLine) {
+            continue;
+        }
+        (*v)[out++] = (*v)[i];
+    }
+    v->len = out;
+}
+
+void FoldMapSetCandidates(FoldMap* m, const FoldRange* ranges, int n) {
+    if (!m) {
+        return;
+    }
+    m->candidates.Clear();
+    for (int i = 0; i < n; i++) {
+        if (ranges[i].startLine <= ranges[i].endLine) {
+            m->candidates.Append(ranges[i]);
+        }
+    }
+    FoldSort(&m->candidates);
+    FoldDedup(&m->candidates);
+    // A fold whose candidate is gone has nothing left to describe it.
+    for (int i = m->folded.len - 1; i >= 0; i--) {
+        if (FoldFindAt(m->candidates, m->folded[i].startLine) < 0) {
+            FoldRemoveAt(&m->folded, i);
+            m->needsRebuild = true;
+        }
+    }
+}
+
+void FoldMapSetFolded(FoldMap* m, int startLine, bool folded) {
+    if (!m) {
+        return;
+    }
+    if (folded) {
+        int ix = FoldFindAt(m->candidates, startLine);
+        if (ix < 0 || FoldFindAt(m->folded, startLine) >= 0) {
+            return;
+        }
+        m->folded.Append(m->candidates[ix]);
+        FoldSort(&m->folded);
+        m->needsRebuild = true;
+        return;
+    }
+    int ix = FoldFindAt(m->folded, startLine);
+    if (ix >= 0) {
+        FoldRemoveAt(&m->folded, ix);
+        m->needsRebuild = true;
+    }
+}
+
+void FoldMapToggle(FoldMap* m, int startLine) {
+    FoldMapSetFolded(m, startLine, !FoldMapIsFolded(m, startLine));
+}
+
+bool FoldMapIsFolded(const FoldMap* m, int startLine) {
+    return m && FoldFindAt(m->folded, startLine) >= 0;
+}
+
+bool FoldMapIsCandidate(const FoldMap* m, int startLine) {
+    return m && FoldFindAt(m->candidates, startLine) >= 0;
+}
+
+void FoldMapClearFolds(FoldMap* m) {
+    if (m && m->folded.len > 0) {
+        m->folded.Clear();
+        m->needsRebuild = true;
+    }
+}
+
+// A range that overlaps the edited lines describes text that is no longer
+// there; one below the edit keeps its shape and only moves.
+static void FoldShiftForEdit(Vec<FoldRange>* v, int editStartLine,
+                             int editEndLine, int lineDelta) {
+    for (int i = v->len - 1; i >= 0; i--) {
+        const FoldRange& r = (*v)[i];
+        if (r.startLine <= editEndLine && r.endLine >= editStartLine) {
+            FoldRemoveAt(v, i);
+        }
+    }
+    if (lineDelta == 0) {
+        return;
+    }
+    for (int i = 0; i < v->len; i++) {
+        FoldRange& r = (*v)[i];
+        if (r.startLine > editEndLine) {
+            r.startLine = r.startLine + lineDelta;
+            r.endLine = r.endLine + lineDelta;
+            if (r.startLine < 0) {
+                r.startLine = 0;
+            }
+            if (r.endLine < 0) {
+                r.endLine = 0;
+            }
+        }
+    }
+}
+
+void FoldMapAdjustForEdit(FoldMap* m, int editStartLine, int editEndLine,
+                          int lineDelta) {
+    if (!m || (m->folded.len == 0 && m->candidates.len == 0)) {
+        return;
+    }
+    FoldShiftForEdit(&m->folded, editStartLine, editEndLine, lineDelta);
+    FoldShiftForEdit(&m->candidates, editStartLine, editEndLine, lineDelta);
+    m->needsRebuild = true;
+}
+
+void FoldMapRebuild(FoldMap* m, int lineCount) {
+    if (!m) {
+        return;
+    }
+    if (lineCount < 0) {
+        lineCount = 0;
+    }
+    if (!m->needsRebuild && lineCount == m->cachedLineCount) {
+        return;
+    }
+    m->cachedLineCount = lineCount;
+    m->needsRebuild = false;
+    m->visibleLines.Clear();
+    m->lineToDisplayRow.Clear();
+    // With nothing folded the projection is the identity, and the two vectors
+    // are left empty rather than filled with it — every reader below answers
+    // from `cachedLineCount` in that case, which is the whole point of the
+    // fast path in Rust's rebuild.
+    if (m->folded.len == 0) {
+        return;
+    }
+    if (int* rows = m->lineToDisplayRow.AppendBlanks(lineCount)) {
+        for (int i = 0; i < lineCount; i++) {
+            rows[i] = -1;
+        }
+    }
+    // Which lines a closed fold hides: the ones *between* its ends. Both the
+    // line the fold starts on and the one it ends on stay on screen, so a
+    // folded block reads as its opening line and its closing brace.
+    for (int line = 0; line < lineCount; line++) {
+        bool hidden = false;
+        for (int i = 0; i < m->folded.len; i++) {
+            const FoldRange& f = m->folded[i];
+            if (line > f.startLine && line < f.endLine) {
+                hidden = true;
+                break;
+            }
+        }
+        if (hidden) {
+            continue;
+        }
+        m->lineToDisplayRow[line] = m->visibleLines.len;
+        m->visibleLines.Append(line);
+    }
+}
+
+int FoldMapDisplayRowCount(const FoldMap* m) {
+    if (!m || m->folded.len == 0) {
+        return m ? m->cachedLineCount : 0;
+    }
+    return m->visibleLines.len;
+}
+
+int FoldMapDisplayRow(const FoldMap* m, int line) {
+    if (!m || m->folded.len == 0) {
+        return (m && line >= 0 && line < m->cachedLineCount) ? line : -1;
+    }
+    if (line < 0 || line >= m->lineToDisplayRow.len) {
+        return -1;
+    }
+    return m->lineToDisplayRow[line];
+}
+
+int FoldMapLineAt(const FoldMap* m, int displayRow) {
+    if (!m || m->folded.len == 0) {
+        return (m && displayRow >= 0 && displayRow < m->cachedLineCount)
+                   ? displayRow
+                   : -1;
+    }
+    if (displayRow < 0 || displayRow >= m->visibleLines.len) {
+        return -1;
+    }
+    return m->visibleLines[displayRow];
+}
+
+bool FoldMapLineHidden(const FoldMap* m, int line) {
+    return m && m->folded.len > 0 && FoldMapDisplayRow(m, line) < 0;
+}
+
+int FoldMapNearestVisibleLine(const FoldMap* m, int line) {
+    if (!FoldMapLineHidden(m, line)) {
+        return line;
+    }
+    // Hidden means something above it is folded, so the line the fold starts
+    // on is both visible and the row the hidden text now reads as.
+    for (int i = line - 1; i >= 0; i--) {
+        if (!FoldMapLineHidden(m, i)) {
+            return i;
+        }
+    }
+    return 0;
 }
 
 bool InputIsMultiLine(const InputState* s) {
@@ -762,6 +1172,9 @@ void InputScrollToCursor(InputState* s, InputMoveDir dir) {
     }
     float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
     int row = RopeOffsetToPoint(InputValue(s), InputCursor(s)).row;
+    // A caret inside a closed fold reads as the fold's own line, which is
+    // where the frame draws it.
+    row = FoldMapNearestVisibleLine(&s->folds, row);
     // Where that row actually starts: a wrapping editor's rows are uneven, so
     // the arithmetic only holds when nothing wrapped.
     float caretY = (float)row * lineH;
@@ -777,6 +1190,7 @@ void InputScrollToOffset(InputState* s, int offset, InputMoveDir dir) {
     }
     float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
     int row = RopeOffsetToPoint(InputValue(s), offset).row;
+    row = FoldMapNearestVisibleLine(&s->folds, row);
     float y = (float)row * lineH;
     if (row < s->rowBoxes.len && s->rowBoxes.len > 0) {
         y = s->rowBoxes[row].y - s->rowBoxes[0].y;
@@ -1016,6 +1430,24 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     // The document as it was, which push_history indexes and an invalid edit
     // is rolled back to.
     Str oldAll = StrDup(tmp, before);
+
+    // adjust_folds_for_edit, before the splice, because the line numbers a
+    // fold is written in are the old document's. A fold or a candidate that
+    // spans the edited lines is dropped — its text is not what it was — and
+    // the ones below it move by however many lines the edit added or took.
+    if (LayoutModeIsFolding(s->mode)) {
+        int editStartLine = RopeOffsetToPoint(before, r.start).row;
+        int editEndLine = RopeOffsetToPoint(before, r.end).row;
+        int removed = editEndLine - editStartLine;
+        int added = 0;
+        for (int i = 0; i < text.len; i++) {
+            if (text.s[i] == '\n') {
+                added++;
+            }
+        }
+        FoldMapAdjustForEdit(&s->folds, editStartLine, editEndLine,
+                             added - removed);
+    }
 
     TextSplice(s, r.start, r.end, text);
     int newOffset = r.start + text.len;
@@ -1306,6 +1738,13 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
 // How tall a logical line was laid out. The rows reported their boxes last
 // frame; without them every line is one row high.
 static float DisplayLineH(const InputState* s, int row, float lineH) {
+    // A folded-away line is worth no height at all, which is what makes the
+    // walk below step straight over it: the row moves on and the y it is
+    // carrying does not, so a closed fold costs one press to cross rather
+    // than one per line inside it.
+    if (FoldMapLineHidden(&s->folds, row)) {
+        return 0;
+    }
     if (row >= 0 && row < s->rowBoxes.len && s->rowBoxes[row].h > 0) {
         return s->rowBoxes[row].h;
     }
@@ -1374,6 +1813,9 @@ static bool VerticalTargetDisplay(const InputState* s, Window* win, int lines,
     if (y > h - 1) {
         y = h - 1;
     }
+    // The ends of the document are the one place the walk can stop on a
+    // hidden row: it runs out of rows before it runs out of y.
+    row = FoldMapNearestVisibleLine(&s->folds, row);
     Str target = RopeSliceLine(t, row);
     int targetStart = RopeLineStartOffset(t, row);
     out->offset = targetStart;
@@ -2075,9 +2517,13 @@ static int FirstVisibleOffset(const InputState* s) {
     int row = 0;
     if (s->rowBoxes.len > 0) {
         float top = s->rowBoxes[0].y + s->scrollY;
-        while (row + 1 < s->rowBoxes.len && s->rowBoxes[row + 1].y <= top) {
+        // A folded-away row has a zeroed box, so it is stepped over rather
+        // than compared: its y would read as above everything.
+        while (row + 1 < s->rowBoxes.len &&
+               (s->rowBoxes[row + 1].h <= 0 || s->rowBoxes[row + 1].y <= top)) {
             row++;
         }
+        row = FoldMapNearestVisibleLine(&s->folds, row);
     } else {
         float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
         row = (int)(s->scrollY / lineH);
@@ -2301,11 +2747,17 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
     if (s->rowBoxes.len == rows && rows > 0) {
         // The rows are uneven, so the one under the press is found by walking
         // them rather than by dividing.
-        row = rows - 1;
+        // Past the last row, the press takes the last row there is. A
+        // folded-away one has a zeroed box and never matches the walk, so
+        // only this fallback has to be snapped back onto a visible line.
+        row = FoldMapNearestVisibleLine(&s->folds, rows - 1);
         for (int i = 0; i < rows; i++) {
             const Bounds& rb = s->rowBoxes[i];
+            if (rb.h <= 0) {
+                continue;
+            }
             if (y < rb.y + rb.h) {
-                row = i > 0 ? i : 0;
+                row = i;
                 break;
             }
         }
@@ -2321,6 +2773,7 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
         if (row > rows - 1) {
             row = rows - 1;
         }
+        row = FoldMapNearestVisibleLine(&s->folds, row);
     }
     Str line = RopeSliceLine(t, row);
     int start = RopeLineStartOffset(t, row);
