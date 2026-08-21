@@ -1,0 +1,193 @@
+/* The per-node layout cache — taffy/src/tree/cache.rs */
+
+#include "taffy/tree.h"
+
+namespace taffy {
+
+// f32::INFINITY / f32::NEG_INFINITY as u32 bit patterns.
+static constexpr uint32_t kInfinityBits = 0x7f800000u;
+static constexpr uint32_t kNegInfinityBits = 0xff800000u;
+
+// The sign bit of each of the two packed f32s, which is where the requested
+// axis is stashed.
+static constexpr uint64_t kSignBit1 = (uint64_t)1 << 63;
+static constexpr uint64_t kSignBit2 = (uint64_t)1 << 31;
+static constexpr uint64_t kBothSignBitsMask = kSignBit1 | kSignBit2;
+static constexpr uint64_t kNonSignBitsMask = ~kBothSignBitsMask;
+
+// Only the bits that encode the x-axis value, so the y-axis one can be
+// ignored when comparing a key.
+static constexpr uint64_t kXAxisValueMask = (uint64_t)0xffffffffu << 32;
+
+static uint32_t ToBits(float v) {
+    uint32_t out = 0;
+    memcpy(&out, &v, sizeof(out));
+    return out;
+}
+
+static uint32_t OptionCacheKey(Optf v) {
+    return v.IsSome() ? ToBits(v.val) : kInfinityBits;
+}
+
+static uint64_t SizeOptionCacheKey(SizeOptF s) {
+    return ((uint64_t)OptionCacheKey(s.width) << 32) |
+           (uint64_t)OptionCacheKey(s.height);
+}
+
+static uint32_t AvailableSpaceCacheKey(AvailableSpace a) {
+    switch (a.kind) {
+        case AvailableSpace::Kind::Definite:
+            return ToBits(-a.value);
+        case AvailableSpace::Kind::MinContent:
+            return kNegInfinityBits;
+        default:
+            return kInfinityBits;
+    }
+}
+
+// A known dimension wins; when there is none, the available space stands in.
+static uint32_t MixedCacheKey(Optf kd, AvailableSpace avs) {
+    return kd.IsSome() ? ToBits(kd.val) : AvailableSpaceCacheKey(avs);
+}
+
+static uint64_t SizeMixedCacheKey(SizeOptF kd, SizeAvail avs) {
+    return ((uint64_t)MixedCacheKey(kd.width, avs.width) << 32) |
+           (uint64_t)MixedCacheKey(kd.height, avs.height);
+}
+
+CacheKey CacheKey::From(const LayoutInput& input) {
+    uint64_t extraBits = 0;
+    switch (input.axis) {
+        case RequestedAxis::Horizontal:
+            extraBits = kSignBit1;
+            break;
+        case RequestedAxis::Vertical:
+            extraBits = kSignBit2;
+            break;
+        default:
+            extraBits = kSignBit1 | kSignBit2;
+            break;
+    }
+    CacheKey key;
+    key.kdAvailableSpace =
+        SizeMixedCacheKey(input.knownDimensions, input.availableSpace);
+    key.parentSize =
+        (SizeOptionCacheKey(input.parentSize) & kNonSignBitsMask) | extraBits;
+    return key;
+}
+
+uint64_t CacheKey::XAxisParentSize() const {
+    return parentSize & (kXAxisValueMask & kNonSignBitsMask);
+}
+
+// Which slot the current computation is cached in.
+//
+//   - Slot 0: both known dimensions were set
+//   - Slots 1-4: one of the two was set —
+//       1: width known, other axis MaxContent or Definite
+//       2: width known, other axis MinContent
+//       3: height known, other axis MaxContent or Definite
+//       4: height known, other axis MinContent
+//   - Slots 5-8: neither was set —
+//       5: x MaxContent/Definite, y MaxContent/Definite
+//       6: x MaxContent/Definite, y MinContent
+//       7: x MinContent,          y MaxContent/Definite
+//       8: x MinContent,          y MinContent
+//
+// Definite available space shares a slot with MaxContent because a node is
+// generally sized under one or the other, not both.
+static int ComputeCacheSlot(SizeOptF knownDimensions,
+                            SizeAvail availableSpace) {
+    bool hasKnownWidth = knownDimensions.width.IsSome();
+    bool hasKnownHeight = knownDimensions.height.IsSome();
+
+    if (hasKnownWidth && hasKnownHeight) {
+        return 0;
+    }
+    bool heightIsMin = availableSpace.height
+                           .kind == AvailableSpace::Kind::MinContent;
+    bool widthIsMin = availableSpace.width
+                          .kind == AvailableSpace::Kind::MinContent;
+    if (hasKnownWidth && !hasKnownHeight) {
+        return 1 + (heightIsMin ? 1 : 0);
+    }
+    if (hasKnownHeight && !hasKnownWidth) {
+        return 3 + (widthIsMin ? 1 : 0);
+    }
+    if (!widthIsMin) {
+        return heightIsMin ? 6 : 5;
+    }
+    return heightIsMin ? 8 : 7;
+}
+
+bool Cache::Get(const LayoutInput& input, LayoutOutput* out) const {
+    CacheKey key = CacheKey::From(input);
+    switch (input.runMode) {
+        case RunMode::PerformLayout:
+            if (finalLayoutEntry.present && finalLayoutEntry.key == key) {
+                *out = finalLayoutEntry.content;
+                return true;
+            }
+            return false;
+        case RunMode::ComputeSize:
+            for (int i = 0; i < kCacheSize; i++) {
+                const CacheEntry<SizeF>& e = measureEntries[i];
+                if (!e.present) {
+                    continue;
+                }
+                if (e.key.kdAvailableSpace == key.kdAvailableSpace &&
+                    e.key.XAxisParentSize() == key.XAxisParentSize()) {
+                    *out = LayoutOutput::FromOuterSize(e.content);
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+void Cache::Store(const LayoutInput& input, const LayoutOutput& output) {
+    CacheKey key = CacheKey::From(input);
+    switch (input.runMode) {
+        case RunMode::PerformLayout:
+            isEmpty = false;
+            finalLayoutEntry = {key, output, true};
+            break;
+        case RunMode::ComputeSize: {
+            isEmpty = false;
+            int slot =
+                ComputeCacheSlot(input.knownDimensions, input.availableSpace);
+            measureEntries[slot] = {key, output.size, true};
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+bool Cache::Clear() {
+    if (isEmpty) {
+        return false;
+    }
+    isEmpty = true;
+    finalLayoutEntry = {};
+    for (int i = 0; i < kCacheSize; i++) {
+        measureEntries[i] = {};
+    }
+    return true;
+}
+
+bool Cache::IsEmpty() const {
+    if (finalLayoutEntry.present) {
+        return false;
+    }
+    for (int i = 0; i < kCacheSize; i++) {
+        if (measureEntries[i].present) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace taffy

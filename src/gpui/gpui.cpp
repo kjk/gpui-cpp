@@ -1962,27 +1962,56 @@ static float Clamp(float v, float lo, float hi) {
     return v;
 }
 
-static float ResolveSize(float spec, float avail, float growAsFill) {
-    (void)growAsFill;
-    if (spec == kFill) {
-        return avail;
-    }
-    if (spec == kAuto) {
-        return -1.f; // intrinsic
-    }
-    if (spec >= 0) {
-        return spec;
-    }
-    return -1.f;
-}
+// ─── layout ───────────────────────────────────────────────────────────────
+//
+// The element tree is laid out by src/taffy — the C++ port of the taffy crate
+// GPUI itself uses — rather than by an engine of its own. Each frame the El
+// tree is translated into a taffy tree, taffy computes it, and the results
+// are written back onto the El nodes.
+//
+// What taffy does not model, and this layer still does:
+//
+//   - `fixed`: out-of-flow in *window* coordinates. Those elements are
+//     re-parented onto the root taffy node as absolutely positioned children,
+//     so their insets resolve against the window rather than their El parent.
+//   - `anchorBelow` / `anchorAbove` / `anchorCenterX` and the `relative(f)`
+//     halves of `left` / `right`: positioning rules gpui-component has and CSS
+//     does not. They move an already-laid-out subtree afterwards, which is
+//     what the old engine did too.
+//   - `scrollX` / `scrollY`: taffy lays a scroll container's content out at
+//     the origin and reports how big it is; the offset is applied to the
+//     in-flow children as their absolute positions are accumulated.
+//   - text, icon, image and progress sizing, which reach the port through a
+//     taffy measure function the way Rust's `request_measured_layout` does.
+//
+// Two deliberate differences from what `Style::to_taffy` does in Rust, both
+// noted in port-progress.md:
+//
+//   - `border` is not given to taffy, so a border still paints over the box
+//     rather than reserving space inside it. That is what this tree's widgets
+//     were built against; giving taffy the widths would move content by the
+//     border width everywhere at the same time as the engine changed.
+//   - `minW` / `maxW` / `minH` / `maxH` are plain floats whose defaults (0 and
+//     1e9) mean "unset", so they map to a length of zero and to auto. CSS's
+//     `min-width: auto` — the content-based automatic minimum size — is
+//     therefore off, again matching what the widgets were built against.
 
-static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
-                           Rgba inheritFg);
+// The taffy tree is rebuilt every frame but kept between them, so its node
+// slots and per-node child arrays are recycled instead of reallocated.
+static taffy::TaffyTree gLayoutTree;
+static bool gLayoutTreeReady = false;
+
+// The fixed elements found while building this frame's tree, which are
+// re-parented onto the root.
+static Vec<El*> gLayoutFixed;
+
+static bool RgbaEq(Rgba a, Rgba b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
 
 // Move a laid-out subtree without re-running layout. Positions are absolute,
 // so shifting the origin shifts every descendant by the same delta; sizes are
-// unaffected. This is what LayoutChildren needs once it knows where a child
-// goes, and what a layout-memo hit replays.
+// unaffected.
 static void TranslateSubtree(El* e, float dx, float dy) {
     for (El* c = e->first; c; c = c->next) {
         // A fixed element was placed against the window, not against whatever
@@ -2009,10 +2038,6 @@ static void MoveEl(El* c, float cx, float cy) {
     TranslateSubtree(c, dx, dy);
 }
 
-static bool RgbaEq(Rgba a, Rgba b) {
-    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-}
-
 // text_color cascades in GPUI, but here a Text or an Icon resolves its own
 // color when it paints. So a hovered element stamps its hover color onto the
 // descendants that set none — a child with a color of its own keeps it, and
@@ -2028,34 +2053,27 @@ static void StampFg(El* e, Rgba c) {
     }
 }
 
-// Records the result of a full layout so a later call with the same inputs can
-// replay it. See the memo* fields on El.
-// gpui img(..): the box an image takes. Its own pixels are the natural
-// size, at one DIP per pixel; a width or a height given by the document wins
-// and the other side follows the aspect ratio, which is what html.rs reads
-// out of the width / height attributes. Wider than the space it has, it
-// shrinks to fit — max_w(relative(1.)) with object_fit(Contain), the pair
-// node.rs gives a markdown image.
+// gpui img(..): the box an image takes. Its own pixels are the natural size,
+// at one DIP per pixel; a width or a height given by the document wins and the
+// other side follows the aspect ratio, which is what html.rs reads out of the
+// width / height attributes. Wider than the space it has, it shrinks to fit —
+// max_w(relative(1.)) with object_fit(Contain), the pair node.rs gives a
+// markdown image.
 //
-// An image that will not decode is its alt text instead, measured here so
-// the line it sits in is the right height for it.
-static void LayoutImage(PaintCtx* ctx, El* e, float wSpec, float hSpec,
-                        float availW, float font, Rgba inheritFg) {
-    (void)inheritFg;
+// An image that will not decode is its alt text instead, measured here so the
+// line it sits in is the right height for it.
+static Size LayoutImageSize(PaintCtx* ctx, El* e, float wSpec, float hSpec,
+                            float availW, float font) {
     Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
     if (!img) {
         Size text =
             MeasureText(ctx, e->text, font, availW > 0 ? availW : 0,
                         e->style.wrap, ElTextWeight(e), e->style.lineHeight);
-        e->w = wSpec > 0 ? wSpec : text.w;
-        e->h = hSpec > 0 ? hSpec : text.h;
-        return;
+        return {wSpec > 0 ? wSpec : text.w, hSpec > 0 ? hSpec : text.h};
     }
     Size px = ImageSizePx(img);
     if (px.w <= 0 || px.h <= 0) {
-        e->w = wSpec > 0 ? wSpec : 0;
-        e->h = hSpec > 0 ? hSpec : 0;
-        return;
+        return {wSpec > 0 ? wSpec : 0, hSpec > 0 ? hSpec : 0};
     }
     float aspect = px.h / px.w;
     float w = wSpec > 0 ? wSpec : (hSpec > 0 ? hSpec / aspect : px.w);
@@ -2066,28 +2084,209 @@ static void LayoutImage(PaintCtx* ctx, El* e, float wSpec, float hSpec,
     if (wSpec > 0 && hSpec > 0) {
         h = hSpec;
     }
-    e->w = w;
-    e->h = h;
+    return {w, h};
 }
 
-static void LayoutMemoStore(El* e, float availW, float availH,
-                            float inheritFont, Rgba inheritFg) {
-    e->memoAvailW = availW;
-    e->memoAvailH = availH;
-    e->memoFont = inheritFont;
-    e->memoFg = inheritFg;
-    e->memoW = e->w;
-    e->memoH = e->h;
-    e->memoContentW = e->contentW;
-    e->memoContentH = e->contentH;
-    e->memoValid = true;
-}
+// ─── style translation ───────────────────────────────────────────────────
 
-void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
-              float availH, float inheritFont, Rgba inheritFg) {
-    if (!e) {
-        return;
+// A gpui length: kAuto means "as big as the content", kFill means "as big as
+// the box holding it" (a full-width percentage), anything else is DIPs.
+static taffy::Dimension ToDim(float v, float frac) {
+    if (frac > 0) {
+        return taffy::Dimension::Percent(frac);
     }
+    if (v == kFill) {
+        return taffy::Dimension::Percent(1.0f);
+    }
+    if (v == kAuto || v < 0) {
+        return taffy::Dimension::Auto();
+    }
+    return taffy::Dimension::Length(v);
+}
+
+static taffy::LengthPercentageAuto ToInset(float v, float rel) {
+    // The pixel and the `relative(f)` halves of one inset cannot both reach
+    // taffy without a calc() node, so a mixed pair is finished off by
+    // PlaceAnchored below and only the plain cases are handed over here.
+    if (rel != 0) {
+        return taffy::LengthPercentageAuto::Auto();
+    }
+    if (v == kAuto) {
+        return taffy::LengthPercentageAuto::Auto();
+    }
+    return taffy::LengthPercentageAuto::Length(v);
+}
+
+static taffy::Overflow ToTaffyOverflow(Overflow o) {
+    switch (o) {
+        case Overflow::Hidden:
+            return taffy::Overflow::Hidden;
+        case Overflow::Scroll:
+            return taffy::Overflow::Scroll;
+        default:
+            return taffy::Overflow::Visible;
+    }
+}
+
+static taffy::OptAlignItems ToTaffyAlignItems(Align a) {
+    using K = taffy::AlignItemsKeyword;
+    switch (a) {
+        case Align::Start:
+            return taffy::OptAlignItems(taffy::AlignItems{K::Start});
+        case Align::Center:
+            return taffy::OptAlignItems(taffy::AlignItems{K::Center});
+        case Align::End:
+            return taffy::OptAlignItems(taffy::AlignItems{K::End});
+        default:
+            return taffy::OptAlignItems(taffy::AlignItems{K::Stretch});
+    }
+}
+
+static taffy::OptJustifyContent ToTaffyJustify(Justify j) {
+    using K = taffy::AlignContentKeyword;
+    switch (j) {
+        case Justify::Center:
+            return taffy::OptJustifyContent(taffy::AlignContent{K::Center});
+        case Justify::End:
+            return taffy::OptJustifyContent(taffy::AlignContent{K::End});
+        case Justify::SpaceBetween:
+            return taffy::OptJustifyContent(
+                taffy::AlignContent{K::SpaceBetween});
+        default:
+            return taffy::OptJustifyContent(taffy::AlignContent{K::Start});
+    }
+}
+
+// Rust's `Style::to_taffy`, for the subset of CSS this tree's Style carries.
+static taffy::Style ToTaffyStyle(const El* e) {
+    const Style& s = e->style;
+    taffy::Style t;
+    t.display = taffy::Display::Flex;
+    t.flexDirection = s.dir == FlexDir::Row ? taffy::FlexDirection::Row
+                                            : taffy::FlexDirection::Column;
+    t.flexWrap = s.flexWrap ? taffy::FlexWrap::Wrap : taffy::FlexWrap::NoWrap;
+    t.alignItems = ToTaffyAlignItems(s.align);
+    t.justifyContent = ToTaffyJustify(s.justify);
+    t.overflow = {ToTaffyOverflow(s.overflowX), ToTaffyOverflow(s.overflowY)};
+
+    t.size = {ToDim(s.width, s.widthFrac), ToDim(s.height, 0)};
+    // See the header comment: an unset min is a zero length, not `auto`, so
+    // the content-based automatic minimum size stays off.
+    t.minSize = {taffy::Dimension::Length(s.minW > 0 ? s.minW : 0.0f),
+                 taffy::Dimension::Length(s.minH > 0 ? s.minH : 0.0f)};
+    t.maxSize = {s.maxW < 1e9f ? taffy::Dimension::Length(s.maxW)
+                               : taffy::Dimension::Auto(),
+                 s.maxH < 1e9f ? taffy::Dimension::Length(s.maxH)
+                               : taffy::Dimension::Auto()};
+
+    t.flexGrow = s.flexGrow;
+    t.flexShrink = s.flexShrink;
+    // An auto flex-basis makes the main size the item's own size style, which
+    // is what the rest of this tree assumes a `W()` means.
+    t.flexBasis = taffy::Dimension::Auto();
+
+    t.padding = {taffy::LengthPercentage::Length(s.pad.left),
+                 taffy::LengthPercentage::Length(s.pad.right),
+                 taffy::LengthPercentage::Length(s.pad.top),
+                 taffy::LengthPercentage::Length(s.pad.bottom)};
+    t.gap = {taffy::LengthPercentage::Length(s.gap),
+             taffy::LengthPercentage::Length(s.gap)};
+
+    if (s.absolute || s.fixed) {
+        t.position = taffy::Position::Absolute;
+        t.inset = {ToInset(s.absLeft, s.absLeftRel),
+                   ToInset(s.absRight, s.absRightRel), ToInset(s.absTop, 0),
+                   ToInset(s.absBottom, 0)};
+    }
+    return t;
+}
+
+// ─── measurement ─────────────────────────────────────────────────────────
+
+// What a leaf's measure function is handed, beyond the node itself.
+struct LayoutMeasureCtx {
+    PaintCtx* ctx;
+};
+
+// The width a text run may use: a known width wins, then a definite
+// constraint if the run wraps or truncates, else unconstrained.
+static float TextMeasureWidth(const El* e, taffy::SizeOptF known,
+                              taffy::SizeAvail avail) {
+    if (known.width.IsSome()) {
+        return known.width.val;
+    }
+    if (!(e->style.wrap || e->style.truncate)) {
+        return 0.0f;
+    }
+    if (avail.width.IsDefinite()) {
+        return avail.width.value > 0 ? avail.width.value : 0.0f;
+    }
+    // A min-content constraint asks for the narrowest the run can be, which
+    // for wrapped text is its longest word — what a one-pixel wrap box gives.
+    if (avail.width.kind == taffy::AvailableSpace::Kind::MinContent) {
+        return 1.0f;
+    }
+    return 0.0f;
+}
+
+static taffy::SizeF LayoutMeasure(taffy::SizeOptF known, taffy::SizeAvail avail,
+                                  taffy::NodeId node, void* nodeContext,
+                                  const taffy::Style* nodeStyle,
+                                  void* userData) {
+    (void)node;
+    (void)nodeStyle;
+    El* e = (El*)nodeContext;
+    LayoutMeasureCtx* mc = (LayoutMeasureCtx*)userData;
+    if (!e) {
+        return taffy::SizeF::Zero();
+    }
+    PaintCtx* ctx = mc ? mc->ctx : nullptr;
+    float font = e->laidFont;
+
+    switch (e->kind) {
+        case ElKind::Text: {
+            float measW = TextMeasureWidth(e, known, avail);
+            Size text = MeasureText(ctx, e->text, font, measW, e->style.wrap,
+                                    ElTextWeight(e), e->style.lineHeight);
+            return {known.width.UnwrapOr(text.w), known.height
+                                                      .UnwrapOr(text.h)};
+        }
+        case ElKind::Icon:
+            return {known.width.UnwrapOr(16.0f), known.height.UnwrapOr(16.0f)};
+        case ElKind::Progress:
+            return {known.width.UnwrapOr(48.0f), known.height.UnwrapOr(8.0f)};
+        case ElKind::Image: {
+            float availW = avail.width.IsDefinite() ? avail.width.value : 0.0f;
+            Size sz =
+                LayoutImageSize(ctx, e, known.width.UnwrapOr(0.0f),
+                                known.height.UnwrapOr(0.0f), availW, font);
+            return {sz.w, sz.h};
+        }
+        default:
+            return taffy::SizeF::Zero();
+    }
+}
+
+// A childless Div is still a box with a size; only these kinds have content
+// of their own to measure.
+static bool ElIsMeasured(const El* e) {
+    switch (e->kind) {
+        case ElKind::Text:
+        case ElKind::Icon:
+        case ElKind::Progress:
+        case ElKind::Image:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// ─── building the taffy tree ─────────────────────────────────────────────
+
+// The style refinement, the inspector's live edit, the inherited font and the
+// inherited color, resolved once per element before anything is measured.
+// The old engine did this on the way down its own recursion.
+static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     // The element's own refinement first — a semantic state, which is meant
     // to win over whatever the caller chained on — and then the inspector's
     // live edit, which wins over everything.
@@ -2096,18 +2295,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         e->refineSet = 0;
     }
     StyleOverrideApply(e);
-    // Same inputs as last time: replay the recorded sizes and slide the
-    // subtree to the new origin. Everything below is a pure function of these
-    // four inputs within a frame, so this is the full-fidelity answer.
-    if (e->memoValid && e->memoAvailW == availW && e->memoAvailH == availH &&
-        e->memoFont == inheritFont && RgbaEq(e->memoFg, inheritFg)) {
-        e->w = e->memoW;
-        e->h = e->memoH;
-        e->contentW = e->memoContentW;
-        e->contentH = e->memoContentH;
-        MoveEl(e, x, y);
-        return;
-    }
+
     // An explicit size is in DIPs at the default font size and scales with
     // it; an inherited one has been scaled already, by the root or by
     // whichever ancestor set it.
@@ -2116,761 +2304,199 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     Rgba fg = e->style.hasColor ? e->style.color : inheritFg;
     // Like HoverBg, this needs a click id of its own: without one the element
     // would match hoverId 0, which means nothing is hovered.
-    if (e->style.hasHoverFg && e->clickId && e->clickId == ctx->hoverId) {
+    if (e->style.hasHoverFg && e->clickId && ctx &&
+        e->clickId == ctx->hoverId) {
         fg = e->style.hoverFg;
         StampFg(e, fg);
     }
     // font_family inherits. Pushing the flag one level down here cascades it
-    // through the subtree, since every child is laid out the same way.
+    // through the subtree, since every child is prepared the same way.
     if (e->style.fontMono) {
         for (El* c = e->first; c; c = c->next) {
             c->style.fontMono = true;
         }
     }
+    e->laidFont = font;
 
-    float wSpec = ResolveSize(e->style.width, availW, e->style.flexGrow);
-    float hSpec = ResolveSize(e->style.height, availH, e->style.flexGrow);
+    for (El* c = e->first; c; c = c->next) {
+        PrepareEl(ctx, c, font, fg);
+    }
+}
 
-    e->x = x;
-    e->y = y;
+static taffy::NodeId BuildNode(El* e) {
+    taffy::Style ts = ToTaffyStyle(e);
+    taffy::NodeId id;
+    if (ElIsMeasured(e)) {
+        id = gLayoutTree.NewLeafWithContext(ts, e);
+    } else {
+        id = gLayoutTree.NewLeaf(ts);
+    }
+    e->layoutNode = id.raw;
 
-    if (e->kind == ElKind::Text) {
-        float boxW = wSpec > 0 ? wSpec : availW;
-        if (boxW > e->style.maxW) {
-            boxW = e->style.maxW;
+    for (El* c = e->first; c; c = c->next) {
+        if (c->style.fixed) {
+            // Placed against the window, so it hangs off the root instead.
+            gLayoutFixed.Append(c);
+            BuildNode(c);
+            continue;
         }
+        gLayoutTree.AddChild(id, BuildNode(c));
+    }
+    return id;
+}
+
+// ─── writing the result back ─────────────────────────────────────────────
+
+static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY);
+
+static void WriteBackChildren(PaintCtx* ctx, El* e) {
+    // A scrolled box slides its in-flow content; an out-of-flow child is
+    // pinned to the box and does not move with it, which is what the old
+    // engine's PlaceOutOfFlow did.
+    float inFlowX = e->x - e->scrollX;
+    float inFlowY = e->y - e->scrollY;
+    for (El* c = e->first; c; c = c->next) {
+        if (c->style.fixed) {
+            continue;
+        }
+        if (c->style.absolute) {
+            WriteBackEl(ctx, c, e->x, e->y);
+        } else {
+            WriteBackEl(ctx, c, inFlowX, inFlowY);
+        }
+    }
+}
+
+static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY) {
+    const taffy::Layout& l = gLayoutTree
+                                 .GetLayout(taffy::NodeId{e->layoutNode});
+    e->x = originX + l.location.x;
+    e->y = originY + l.location.y;
+    e->w = l.size.width;
+    e->h = l.size.height;
+    e->contentW = l.contentSize.width;
+    e->contentH = l.contentSize.height;
+
+    // The shaped run paint wants, taken from the text cache at the size
+    // layout settled on. Releasing our reference is safe because a cached run
+    // belongs to the cache until TextMeasEndFrame, well after paint.
+    if (e->kind == ElKind::Text) {
         bool constrain = e->style.wrap || e->style.truncate;
-        float measW = constrain && boxW > 0 ? boxW : 0;
-        e->laidFont = font;
+        float measW = constrain ? e->w : 0.0f;
         e->laidMaxW = measW;
-        Size text = {};
-        // Same call MeasureText makes, but the shaped run is kept: paint would
-        // otherwise hash and compare the whole string again to arrive at this
-        // exact object. Releasing our reference is safe because a cached run
-        // belongs to the cache until TextMeasEndFrame, well after paint.
         bool cached = false;
-        TextLayout* tl = TextMeasLayout(ctx, e->text, font, measW,
+        TextLayout* tl = TextMeasLayout(ctx, e->text, e->laidFont, measW,
                                         e->style.wrap, (uint8_t)ElTextWeight(e),
-                                        e->style.lineHeight, &text, &cached);
+                                        e->style.lineHeight, nullptr, &cached);
         e->laidLayout = cached ? tl : nullptr;
         if (tl) {
             TextLayoutRelease(tl);
         }
-        e->w = wSpec > 0 ? wSpec : Clamp(text.w, e->style.minW, e->style.maxW);
-        e->h = hSpec > 0 ? hSpec : Clamp(text.h, e->style.minH, e->style.maxH);
-        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
-        return;
-    }
-    if (e->kind == ElKind::Icon) {
-        e->w = wSpec > 0 ? wSpec : 16;
-        e->h = hSpec > 0 ? hSpec : 16;
-        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
-        return;
-    }
-    if (e->kind == ElKind::Image) {
-        LayoutImage(ctx, e, wSpec, hSpec, availW, font, inheritFg);
-        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
-        return;
-    }
-    if (e->kind == ElKind::Progress) {
-        e->w = wSpec > 0 ? wSpec : 48;
-        e->h = hSpec > 0 ? hSpec : 8;
-        LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
-        return;
     }
 
-    // Container / chart: start with available or definite size
-    float padX = e->style.pad.Horizontal();
-    float padY = e->style.pad.Vertical();
-    float innerW = (wSpec > 0 ? wSpec : availW) - padX;
-    float innerH = (hSpec > 0 ? hSpec : availH) - padY;
-    if (innerW < 0) {
-        innerW = 0;
-    }
-    if (innerH < 0) {
-        innerH = 0;
-    }
-
-    e->w = wSpec > 0 ? wSpec : availW;
-    e->h = hSpec > 0 ? hSpec : availH;
-    LayoutChildren(ctx, e, font, fg);
-
-    // Grow() is a main-axis hint. The parent overwrites the grown size after
-    // this call, so skip wrap on an auto width (typical row grow). Always
-    // wrap auto height so a grow cell in a row cannot inherit the leftover
-    // viewport height and swallow siblings (welcome table, feature rows).
-    bool wrapW = (wSpec < 0 && e->style.flexGrow <= 0);
-    bool wrapH = (hSpec < 0);
-    bool resized = false;
-    if (wrapW) {
-        float needed = e->contentW + padX;
-        float nw = Clamp(needed, e->style.minW, e->style.maxW);
-        if (availW > 0 && nw > availW) {
-            nw = availW;
-        }
-        if (nw != e->w) {
-            e->w = nw;
-            resized = true;
-        }
-    }
-    // Scroll views keep the viewport height and let children overflow.
-    // Wrapping to contentH would make contentH == h and hide the thumb.
-    if (wrapH && e->style.overflowY != Overflow::Scroll) {
-        float needed = e->contentH + padY;
-        float nh = Clamp(needed, e->style.minH, e->style.maxH);
-        if (availH > 0 && nh > availH) {
-            nh = availH;
-        }
-        if (nh != e->h) {
-            e->h = nh;
-            resized = true;
-        }
-    }
-    if (resized) {
-        LayoutChildren(ctx, e, font, fg);
-    }
-    float prevW = e->w;
-    float prevH = e->h;
-    e->w = Clamp(e->w, e->style.minW, e->style.maxW);
-    e->h = Clamp(e->h, e->style.minH, e->style.maxH);
-    if (e->w != prevW || e->h != prevH) {
-        LayoutChildren(ctx, e, font, fg);
-    }
-    LayoutMemoStore(e, availW, availH, inheritFont, inheritFg);
+    WriteBackChildren(ctx, e);
 }
 
-static void PlaceOutOfFlow(PaintCtx* ctx, El* parent, El* c, float inheritFont,
-                           Rgba inheritFg) {
-    float ax;
-    float ay;
-    float aw;
-    float ah;
-    if (c->style.fixed) {
-        ax = c->style.absLeft != kAuto ? c->style.absLeft : 0;
-        ay = c->style.absTop != kAuto ? c->style.absTop : 0;
-        if (c->style.width == kFill) {
-            aw = ctx->viewW;
-        } else if (c->style.width >= 0) {
-            aw = c->style.width;
-        } else {
-            aw = ctx->viewW > 0 ? ctx->viewW : 10000.f;
+// The positioning rules gpui-component has and CSS does not: an overlay
+// anchored under or over its trigger, one centred on it, and the
+// `relative(f)` half of a left/right inset. Each moves a subtree that taffy
+// has already sized and placed.
+static void PlaceAnchored(El* e) {
+    for (El* c = e->first; c; c = c->next) {
+        PlaceAnchored(c);
+        if (c->style.fixed || !c->style.absolute) {
+            continue;
         }
-        if (c->style.height == kFill) {
-            ah = ctx->viewH;
-        } else if (c->style.height >= 0) {
-            ah = c->style.height;
-        } else {
-            ah = ctx->viewH > 0 ? ctx->viewH : 10000.f;
+        const Style& s = c->style;
+        if (!s.anchorBelow && !s.anchorAbove && !s.anchorCenterX &&
+            s.absLeftRel == 0 && s.absRightRel == 0) {
+            continue;
         }
-        LayoutEl(ctx, c, ax, ay, aw, ah, inheritFont, inheritFg);
-        if (c->style.absRight != kAuto) {
-            ax = ctx->viewW - c->style.absRight - c->w;
+        float innerW = e->w - e->style.pad.Horizontal();
+        if (innerW < 0) {
+            innerW = 0;
         }
-        if (c->style.absBottom != kAuto) {
-            ay = ctx->viewH - c->style.absBottom - c->h;
+        float ax = c->x;
+        float ay = c->y;
+        if (s.absLeftRel != 0) {
+            float absL = (s.absLeft == kAuto ? 0.f : s.absLeft);
+            ax = e->x + e->style.pad.left + absL + innerW * s.absLeftRel;
         }
-        c->x = ax;
-        c->y = ay;
-        if (c->first) {
-            LayoutEl(ctx, c, ax, ay, c->w, c->h, inheritFont, inheritFg);
+        if (s.absRightRel != 0) {
+            float absR = (s.absRight == kAuto ? 0.f : s.absRight);
+            ax = e->x + e->w - e->style.pad.right - absR -
+                 innerW * s.absRightRel - c->w;
         }
-        return;
-    }
-    Bounds inner = parent->Bounds().Inset(parent->style.pad);
-    ax = inner.x;
-    ay = inner.y;
-    float innerW = inner.w;
-    float innerH = inner.h;
-    if (innerW < 0) {
-        innerW = 0;
-    }
-    if (innerH < 0) {
-        innerH = 0;
-    }
-    // left(relative(f)) folds into the pixel offset before anything uses it.
-    float absL = c->style.absLeft;
-    float absR = c->style.absRight;
-    if (c->style.absLeftRel != 0) {
-        absL = (absL == kAuto ? 0.f : absL) + innerW * c->style.absLeftRel;
-    }
-    if (c->style.absRightRel != 0) {
-        absR = (absR == kAuto ? 0.f : absR) + innerW * c->style.absRightRel;
-    }
-    if (c->style.width == kFill) {
-        aw = innerW;
-    } else if (c->style.width >= 0) {
-        aw = c->style.width;
-    } else if (absL != kAuto && absR != kAuto && c->style.width == kAuto) {
-        // Both edges pinned and no width of its own: the box spans between
-        // them, which is CSS's stretch and what left_0().right_0() asks for.
-        aw = innerW - absL - absR;
-        if (aw < 0) {
-            aw = 0;
+        if (s.anchorBelow) {
+            ay = e->y + e->h + s.anchorGap;
         }
-    } else {
-        aw = 10000.f;
-    }
-    if (c->style.height == kFill) {
-        ah = innerH;
-    } else if (c->style.height >= 0) {
-        ah = c->style.height;
-    } else if (c->style.absTop != kAuto && c->style.absBottom != kAuto &&
-               c->style.height == kAuto) {
-        ah = innerH - c->style.absTop - c->style.absBottom;
-        if (ah < 0) {
-            ah = 0;
+        if (s.anchorAbove) {
+            ay = e->y - c->h - s.anchorGap;
         }
-    } else {
-        ah = 10000.f;
+        if (s.anchorCenterX) {
+            ax = e->x + (e->w - c->w) * 0.5f;
+        }
+        MoveEl(c, ax, ay);
     }
-    bool spanX = absL != kAuto && absR != kAuto && c->style.width == kAuto;
-    bool spanY = c->style.absTop != kAuto && c->style.absBottom != kAuto &&
-                 c->style.height == kAuto;
-    // A span is definite for this pass only: layout runs more than once and
-    // the first pass can see a parent that has no width yet, so writing the
-    // result back into the style would pin the box at what that pass made of
-    // it.
-    float savedW = c->style.width;
-    float savedH = c->style.height;
-    if (spanX) {
-        c->style.width = aw;
-    }
-    if (spanY) {
-        c->style.height = ah;
-    }
-    LayoutEl(ctx, c, ax, ay, aw, ah, inheritFont, inheritFg);
-    c->style.width = savedW;
-    c->style.height = savedH;
-    if (absL != kAuto) {
-        ax = parent->x + absL;
-    }
-    if (c->style.absTop != kAuto) {
-        ay = parent->y + c->style.absTop;
-    }
-    if (absR != kAuto && !spanX) {
-        ax = parent->x + parent->w - absR - c->w;
-    }
-    if (c->style.absBottom != kAuto && !spanY) {
-        ay = parent->y + parent->h - c->style.absBottom - c->h;
-    }
-    if (c->style.anchorBelow) {
-        ay = parent->y + parent->h + c->style.anchorGap;
-    }
-    if (c->style.anchorAbove) {
-        ay = parent->y - c->h - c->style.anchorGap;
-    }
-    if (c->style.anchorCenterX) {
-        ax = parent->x + (parent->w - c->w) * 0.5f;
-    }
-    MoveEl(c, ax, ay);
 }
 
-// How many children one flex line can hold. Past this the line is laid out
-// the way it always was, which is the right failure: shrinking is a
-// refinement, and a row of hundreds is not what it is for.
-enum {
-    kMaxFlexItems = 256
-};
-
-// resolve_flexible_lengths, the negative branch — the half this engine did
-// not have. When a line's children want more of the main axis than it has,
-// flex-shrink takes the difference back off them in proportion to
-// flex-shrink times base size, which is CSS's scaled flex shrink factor and
-// what taffy runs for GPUI. Without it an explicit `W()` was a hard width
-// rather than a basis that can give, so a panel wider than the box holding it
-// ran off the edge instead of being squeezed into it.
-//
-// Answers the line's main size afterwards.
-static float FlexShrinkLine(PaintCtx* ctx, El** items, int nItems, bool row,
-                            float avail, float gaps, float childCross0,
-                            float inheritFont, Rgba inheritFg) {
-    float used = gaps;
-    for (int k = 0; k < nItems; k++) {
-        used += row ? items[k]->w : items[k]->h;
-    }
-    if (avail <= 0 || used <= avail + 0.5f) {
-        return used;
-    }
-    float deficit = used - avail;
-    float shrinkSum = 0;
-    for (int k = 0; k < nItems; k++) {
-        El* c = items[k];
-        if (c->style.flexShrink <= 0) {
-            continue;
-        }
-        shrinkSum += c->style.flexShrink * (row ? c->w : c->h);
-    }
-    if (shrinkSum <= 0) {
-        return used;
-    }
-    used = gaps;
-    for (int k = 0; k < nItems; k++) {
-        El* c = items[k];
-        float base = row ? c->w : c->h;
-        float take = c->style.flexShrink > 0
-                         ? deficit * (c->style.flexShrink * base) / shrinkSum
-                         : 0.f;
-        float want = base - take;
-        float lo = row ? c->style.minW : c->style.minH;
-        if (want < lo) {
-            want = lo;
-        }
-        if (take > 0 && want > 0 && want < base - 0.5f) {
-            // The item is laid out *at* the smaller size rather than clipped
-            // to it: its own children measure against its width, so a
-            // definite W() has to be lent the new one for the measurement or
-            // it would resolve to the old one again. An auto or kFill width
-            // needs no loan — it is already a function of what it is given,
-            // and what it reports back is its own content minimum, which is
-            // the `min-width: auto` floor this has no other way to find.
-            float wasW = c->style.width;
-            float wasH = c->style.height;
-            bool definite =
-                row ? (c->style.width >= 0) : (c->style.height >= 0);
-            if (definite) {
-                if (row) {
-                    c->style.width = want;
-                } else {
-                    c->style.height = want;
-                }
-            }
-            c->memoValid = false;
-            if (row) {
-                LayoutEl(ctx, c, 0, 0, want, childCross0, inheritFont,
-                         inheritFg);
-            } else {
-                LayoutEl(ctx, c, 0, 0, childCross0, want, inheritFont,
-                         inheritFg);
-            }
-            c->style.width = wasW;
-            c->style.height = wasH;
-            c->memoValid = false;
-            base = row ? c->w : c->h;
-        }
-        used += base;
-    }
-    return used;
-}
-
-static void LayoutChildren(PaintCtx* ctx, El* e, float inheritFont,
-                           Rgba inheritFg) {
-    float padL = e->style.pad.left;
-    float padT = e->style.pad.top;
-    float innerW = e->w - e->style.pad.Horizontal();
-    float innerH = e->h - e->style.pad.Vertical();
-    if (innerW < 0) {
-        innerW = 0;
-    }
-    if (innerH < 0) {
-        innerH = 0;
-    }
-
-    int n = 0;
-    for (El* c = e->first; c; c = c->next) {
-        if (!c->style.absolute) {
-            n++;
-        }
-    }
-    if (n == 0) {
-        e->contentW = 0;
-        e->contentH = 0;
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute) {
-                PlaceOutOfFlow(ctx, e, c, inheritFont, inheritFg);
-            }
-        }
+void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
+              float availH, float inheritFont, Rgba inheritFg) {
+    if (!e) {
         return;
     }
+    if (!gLayoutTreeReady) {
+        gLayoutTree.Init(256);
+        // GPUI calls `taffy.disable_rounding()`; everything above paint here
+        // is DIPs, and the backends snap to the pixel grid themselves.
+        gLayoutTree.DisableRounding();
+        gLayoutTreeReady = true;
+    }
+    gLayoutTree.Clear();
+    gLayoutFixed.len = 0;
 
-    // w_2_3 and friends are a fraction of this element's content box. Resolve
-    // them here, once: layout re-runs a child with the width it already got,
-    // and a fraction taken again would compound.
-    if (innerW > 0) {
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.widthFrac > 0) {
-                c->style.width = innerW * c->style.widthFrac;
-                c->style.widthFrac = 0;
-            }
-        }
+    PrepareEl(ctx, e, inheritFont, inheritFg);
+
+    taffy::NodeId root = BuildNode(e);
+    // A `fixed` element resolves its insets against the window, so it hangs
+    // off the root rather than off whatever built it.
+    for (int i = 0; i < gLayoutFixed.len; i++) {
+        gLayoutTree.AddChild(root, taffy::NodeId{gLayoutFixed[i]->layoutNode});
     }
 
-    // The children in flow order, which both the shrink above and the wrap
-    // below walk. Collected once, here, so the two agree on what a line is.
-    El* items[kMaxFlexItems];
-    int nItems = 0;
-    bool tooMany = false;
-    for (El* c = e->first; c; c = c->next) {
-        if (c->style.absolute) {
-            continue;
-        }
-        if (nItems >= kMaxFlexItems) {
-            tooMany = true;
-            break;
-        }
-        items[nItems++] = c;
+    // Rust's `stretch_auto_size_to_fill`: a root with an auto dimension fills
+    // the space it was given, the way the root element of a page fills the
+    // viewport.
+    taffy::Style rootStyle = gLayoutTree.GetStyle(root);
+    bool changed = false;
+    if (rootStyle.size.width.IsAuto() && availW > 0) {
+        rootStyle.size.width = taffy::Dimension::Length(availW);
+        changed = true;
+    }
+    if (rootStyle.size.height.IsAuto() && availH > 0) {
+        rootStyle.size.height = taffy::Dimension::Length(availH);
+        changed = true;
+    }
+    if (changed) {
+        gLayoutTree.SetStyle(root, rootStyle);
     }
 
-    bool row = e->style.dir == FlexDir::Row;
-    float mainAvail = row ? innerW : innerH;
-    float crossAvail = row ? innerH : innerW;
-    float gap = e->style.gap;
-    float gaps = gap * (n - 1);
-    // Overflow-y scroll: measure children with unconstrained height so
-    // contentH can exceed the viewport (needed for the thumb + scroll).
-    // Shrink-wrap (height:auto, no grow) must also stay unconstrained:
-    // after wrap, a second LayoutChildren would otherwise pass the used
-    // content height as a definite block, and H(kFill) kids (blockquote
-    // bar) would expand to the whole page and hide later siblings.
-    bool shrinkWrapH = e->style.height == kAuto && e->style.flexGrow <= 0 &&
-                       e->style.overflowY != Overflow::Scroll;
-    bool unconstrH = e->style.overflowY == Overflow::Scroll || shrinkWrapH;
-    // The same on the other axis: a box that scrolls sideways measures its
-    // children unconstrained across, so contentW can run past the viewport
-    // and leave the thumb something to travel over.
-    bool unconstrW = e->style.overflowX == Overflow::Scroll;
-    float childCross0 = ((row ? unconstrH : unconstrW)) ? 0.f : crossAvail;
-    float childMain0 = ((row ? unconstrW : unconstrH)) ? 0.f : mainAvail;
+    taffy::SizeAvail space;
+    space.width = availW > 0 ? taffy::AvailableSpace::Definite(availW)
+                             : taffy::AvailableSpace::MaxContent();
+    space.height = availH > 0 ? taffy::AvailableSpace::Definite(availH)
+                              : taffy::AvailableSpace::MaxContent();
 
-    // First pass: non-grow at the available size; grow+wrap at leftover
-    // width so wrapping text is not measured as one infinite line.
-    float used = 0;
-    float growSum = 0;
-    for (El* c = e->first; c; c = c->next) {
-        if (c->style.absolute) {
-            continue;
-        }
-        growSum += c->style.flexGrow;
-        if (c->style.flexGrow > 0) {
-            continue;
-        }
-        if (row) {
-            LayoutEl(ctx, c, 0, 0, childMain0, childCross0, inheritFont,
-                     inheritFg);
-        } else {
-            LayoutEl(ctx, c, 0, 0, childCross0, childMain0, inheritFont,
-                     inheritFg);
-        }
-        used += row ? c->w : c->h;
-    }
-    used += gaps;
-    float remain = mainAvail - used;
-    if (remain < 0) {
-        remain = 0;
-    }
-    for (El* c = e->first; c; c = c->next) {
-        if (c->style.absolute || c->style.flexGrow <= 0) {
-            continue;
-        }
-        float growMain = (row && c->style.wrap) ? remain : 0.f;
-        if (row) {
-            LayoutEl(ctx, c, 0, 0, growMain, childCross0, inheritFont,
-                     inheritFg);
-        } else {
-            LayoutEl(ctx, c, 0, 0, childCross0, growMain, inheritFont,
-                     inheritFg);
-        }
-        used += row ? c->w : c->h;
-    }
+    LayoutMeasureCtx mc = {ctx};
+    gLayoutTree.ComputeLayoutWithMeasure(root, space, LayoutMeasure, &mc);
 
-    // A wrapping row puts an item that does not fit on the next line rather
-    // than squeezing it, so the shrink for one of those happens per line,
-    // down in the wrap block. A row that scrolls sideways *wants* its
-    // children to overflow, so the bar has something to travel over.
-    if (!e->style.flexWrap && !(row ? unconstrW : unconstrH) && !tooMany) {
-        used = FlexShrinkLine(ctx, items, nItems, row, mainAvail, gaps,
-                              childCross0, inheritFont, inheritFg);
+    WriteBackEl(ctx, e, x, y);
+    // The fixed elements are laid out as children of the root, so their boxes
+    // come out in window coordinates already.
+    for (int i = 0; i < gLayoutFixed.len; i++) {
+        WriteBackEl(ctx, gLayoutFixed[i], 0, 0);
     }
-
-    float leftover = mainAvail - used;
-    if (leftover < 0) {
-        leftover = 0;
-    }
-
-    // Second pass: assign leftover to grow children
-    if (growSum > 0 && leftover > 0) {
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute || c->style.flexGrow <= 0) {
-                continue;
-            }
-            float extra = leftover * (c->style.flexGrow / growSum);
-            if (row) {
-                float w = c->w + extra;
-                if (w < c->style.minW) {
-                    w = c->style.minW;
-                }
-                LayoutEl(ctx, c, 0, 0, w, crossAvail, inheritFont, inheritFg);
-                c->w = w;
-            } else {
-                float h = c->h + extra;
-                if (h < c->style.minH) {
-                    h = c->style.minH;
-                }
-                LayoutEl(ctx, c, 0, 0, crossAvail, h, inheritFont, inheritFg);
-                c->h = h;
-            }
-        }
-    }
-
-    // flex_wrap: pack the children into lines no wider than the content box,
-    // then stack the lines. justify applies inside a line, align across it.
-    // Every story section is a wrapping row, so its content reflows instead of
-    // running off the right edge.
-    if (row && e->style.flexWrap && mainAvail > 0) {
-        if (!tooMany) {
-            // Flexbox breaks lines on each item's hypothetical main size —
-            // the width it would take unconstrained — and only then hands the
-            // leftover to the growing items *of that line*. The passes above
-            // grew first, against the whole row, so a wrapping row of cards
-            // that all grow fitted every one of them on one line however many
-            // there were. Measure the growing ones again with no main
-            // constraint, so the break comes out of what they actually want.
-            for (int k = 0; k < nItems; k++) {
-                El* c = items[k];
-                if (c->style.flexGrow <= 0) {
-                    continue;
-                }
-                // An auto width only shrink-wraps to its content when the
-                // element is not growing, so the hint comes off for the
-                // length of the measurement and goes straight back on.
-                float grow = c->style.flexGrow;
-                c->style.flexGrow = 0;
-                LayoutEl(ctx, c, 0, 0, 0.f, childCross0, inheritFont,
-                         inheritFg);
-                c->style.flexGrow = grow;
-            }
-            float lineY = 0;
-            float widest = 0;
-            int i = 0;
-            while (i < nItems) {
-                int j = i;
-                float lineW = 0;
-                float lineH = 0;
-                while (j < nItems) {
-                    float next =
-                        j > i ? lineW + gap + items[j]->w : items[j]->w;
-                    if (j > i && next > mainAvail) {
-                        break;
-                    }
-                    lineW = next;
-                    j++;
-                }
-                // A line always takes at least one item, so an item wider
-                // than the row is a line wider than the row. Flexbox shrinks
-                // that line rather than letting it hang over the edge, and
-                // this is where a lone oversized child — a three-month
-                // calendar in a narrower section — is squeezed to fit.
-                if (lineW > mainAvail + 0.5f) {
-                    lineW = FlexShrinkLine(ctx, items + i, j - i, true,
-                                           mainAvail, gap * (float)(j - i - 1),
-                                           childCross0, inheritFont, inheritFg);
-                }
-                // The line's own leftover, shared out by flex_grow.
-                float lineGrow = 0;
-                for (int k = i; k < j; k++) {
-                    lineGrow += items[k]->style.flexGrow;
-                }
-                float lineLeft = mainAvail - lineW;
-                if (lineGrow > 0 && lineLeft > 0) {
-                    for (int k = i; k < j; k++) {
-                        El* c = items[k];
-                        if (c->style.flexGrow <= 0) {
-                            continue;
-                        }
-                        float cw =
-                            c->w + lineLeft * (c->style.flexGrow / lineGrow);
-                        if (cw < c->style.minW) {
-                            cw = c->style.minW;
-                        }
-                        LayoutEl(ctx, c, 0, 0, cw, crossAvail, inheritFont,
-                                 inheritFg);
-                        c->w = cw;
-                    }
-                    lineW = 0;
-                    for (int k = i; k < j; k++) {
-                        lineW += (k > i ? gap : 0) + items[k]->w;
-                    }
-                }
-                for (int k = i; k < j; k++) {
-                    if (items[k]->h > lineH) {
-                        lineH = items[k]->h;
-                    }
-                }
-                float x = 0;
-                if (e->style.justify == Justify::Center) {
-                    x = (mainAvail - lineW) * 0.5f;
-                } else if (e->style.justify == Justify::End) {
-                    x = mainAvail - lineW;
-                }
-                if (x < 0) {
-                    x = 0;
-                }
-                for (int k = i; k < j; k++) {
-                    El* c = items[k];
-                    float cross = 0;
-                    if (e->style.align == Align::Center) {
-                        cross = (lineH - c->h) * 0.5f;
-                    } else if (e->style.align == Align::End) {
-                        cross = lineH - c->h;
-                    }
-                    float cx = e->x + padL + x - e->scrollX;
-                    float cy = e->y + padT + lineY + cross - e->scrollY;
-                    MoveEl(c, cx, cy);
-                    x += c->w + gap;
-                }
-                if (lineW > widest) {
-                    widest = lineW;
-                }
-                lineY += lineH + gap;
-                i = j;
-            }
-            e->contentW = widest;
-            e->contentH = lineY > 0 ? lineY - gap : 0;
-            for (El* c = e->first; c; c = c->next) {
-                if (c->style.absolute) {
-                    PlaceOutOfFlow(ctx, e, c, inheritFont, inheritFg);
-                }
-            }
-            return;
-        }
-    }
-
-    // Place
-    float cursor = 0;
-    if (e->style.justify == Justify::Center) {
-        float total = -gap;
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute) {
-                continue;
-            }
-            total += (row ? c->w : c->h) + gap;
-        }
-        cursor = (mainAvail - total) * 0.5f;
-        if (cursor < 0) {
-            cursor = 0;
-        }
-    } else if (e->style.justify == Justify::End) {
-        float total = -gap;
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute) {
-                continue;
-            }
-            total += (row ? c->w : c->h) + gap;
-        }
-        cursor = mainAvail - total;
-        if (cursor < 0) {
-            cursor = 0;
-        }
-    }
-
-    float betweenExtra = 0;
-    if (e->style.justify == Justify::SpaceBetween && n > 1) {
-        float total = 0;
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute) {
-                continue;
-            }
-            total += row ? c->w : c->h;
-        }
-        // Placement adds the gap on top of betweenExtra, so the gaps have to
-        // come out of the free space here or the last child lands past the
-        // content box.
-        float free = mainAvail - total - gaps;
-        if (free > 0) {
-            betweenExtra = free / (n - 1);
-        }
-    }
-
-    float maxCross = 0;
-    for (El* c = e->first; c; c = c->next) {
-        if (c->style.absolute) {
-            continue;
-        }
-        float cw = c->w;
-        float ch = c->h;
-        float cross = 0;
-        bool crossScrolls = row ? e->style.overflowY == Overflow::Scroll
-                                : e->style.overflowX == Overflow::Scroll;
-        if (e->style.align == Align::Center) {
-            cross = ((row ? innerH : innerW) - (row ? ch : cw)) * 0.5f;
-        } else if (e->style.align == Align::End) {
-            cross = (row ? innerH : innerW) - (row ? ch : cw);
-        } else if (e->style.align == Align::Stretch && !crossScrolls) {
-            // Only stretch the cross axis when the parent already has a
-            // definite size on that axis. Otherwise shrink-wrap measures
-            // explode (a row header becomes as tall as the leftover column).
-            // A scrolled axis is not a size to stretch to either: stretching
-            // to the viewport would make the content exactly as big as the
-            // box, and there would be nothing left to scroll.
-            if (row && e->style.height != kAuto) {
-                ch = innerH;
-                c->h = ch;
-            } else if (!row && e->style.width != kAuto) {
-                cw = innerW;
-                c->w = cw;
-            }
-        }
-        if (cross < 0) {
-            cross = 0;
-        }
-
-        float cx, cy;
-        if (row) {
-            cx = e->x + padL + cursor - e->scrollX;
-            cy = e->y + padT + cross - e->scrollY;
-        } else {
-            cx = e->x + padL + cross - e->scrollX;
-            cy = e->y + padT + cursor - e->scrollY;
-        }
-        // The child was measured at the origin; slide it and its subtree to
-        // where it actually goes. Its size is already final, so nothing below
-        // has to be laid out again.
-        MoveEl(c, cx, cy);
-
-        float step = (row ? c->w : c->h) + gap + betweenExtra;
-        cursor += step;
-        float cr = row ? c->h : c->w;
-        if (cr > maxCross) {
-            maxCross = cr;
-        }
-    }
-
-    // Stretch kFill / align-stretch items to the line cross size without
-    // re-LayoutEl (that would treat the used height as a definite block).
-    if (row && maxCross > 0 && e->style.overflowY != Overflow::Scroll) {
-        for (El* c = e->first; c; c = c->next) {
-            if (c->style.absolute) {
-                continue;
-            }
-            bool fillCross =
-                c->style.height == kFill ||
-                (e->style.align == Align::Stretch && c->style.height == kAuto);
-            if (fillCross && maxCross > c->h) {
-                c->h = maxCross;
-            }
-        }
-    }
-
-    float intrinsicMain = 0;
-    int inN = 0;
-    for (El* c = e->first; c; c = c->next) {
-        if (c->style.absolute) {
-            continue;
-        }
-        if (inN) {
-            intrinsicMain += gap;
-        }
-        intrinsicMain += row ? c->w : c->h;
-        inN++;
-    }
-    e->contentW = row ? intrinsicMain : maxCross;
-    e->contentH = row ? maxCross : intrinsicMain;
-
-    for (El* c = e->first; c; c = c->next) {
-        if (!c->style.absolute) {
-            continue;
-        }
-        PlaceOutOfFlow(ctx, e, c, inheritFont, inheritFg);
-    }
+    PlaceAnchored(e);
 }
 
 // ─── paint ────────────────────────────────────────────────────────────────

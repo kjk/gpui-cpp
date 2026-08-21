@@ -46,7 +46,11 @@ Matching means:
 - same refresh cadence (500 ms) and history length (120 samples)
 - same interaction: tab switch, column sort, window drag, min/max/close, Alt+F4, vertical scroll
 
-It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy or Blade. Those are the layer *under* gpui-component, and we reimplement a subset of them rather than port them.
+It does **not** mean a line-for-line clone of Zed's GPUI renderer or Blade.
+Those are the layer *under* gpui-component, and we reimplement a subset of them
+rather than port them. **Taffy is the exception**: `src/taffy/` is a full C++
+port of the taffy crate at the version gpui-component pins, and every box in
+this tree is laid out by it. See `src/taffy/readme.md`.
 
 ## Non-goals
 
@@ -96,7 +100,7 @@ gpui-component  (Theme, Root, TitleBar, Tab/TabBar, AreaChart,
 gpui-base       (Tabs, Progress parts, table behavior, h_flex/v_flex)
         │
         ▼
-gpui + gpui_platform   (Zed: window, flex layout via Taffy, GPU scene,
+gpui + gpui_platform   (Zed: window, layout via Taffy, GPU scene,
                         Entity/Context, timers, input)
         │
         ▼
@@ -115,9 +119,12 @@ src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root
 src/base/   unstyled primitives the themed layer is built from
         │
         ▼
-src/gpui/   App + Window + entity store, flex layout, hit-test, timer,
-            frame arena; paint through paint.h, the OS window through
-            platform.h
+src/gpui/   App + Window + entity store, hit-test, timer, frame arena;
+            layout through src/taffy, paint through paint.h, the OS window
+            through platform.h
+        │
+        ▼
+src/taffy/  the taffy crate, ported; every El box is laid out by it
         │
         ▼
 src/gpui/paint_win.cpp     Direct2D + DirectWrite
@@ -291,6 +298,33 @@ Rules:
 
 `AppNew` → `WindowOpenView` → `AppRun` → `AppFree` is the whole lifecycle; `AppRunView` is the one-window shorthand. There is no hook table.
 
+## Layout
+
+`src/taffy/` is a C++ port of [taffy](https://github.com/DioxusLabs/taffy)
+0.12.2 — the crate Zed's GPUI lays out with, and therefore the one that defines
+what gpui-component's layout *means*. Flexbox, CSS Grid, block layout and
+floats are all there, and so are ports of the crate's own unit tests
+(`tests/TaffyTests.cpp`). It lives in `namespace taffy`, not `gpui`: `Style`,
+`Overflow`, `Position` and `Display` exist in both and mean different things.
+
+`LayoutEl` in `src/gpui/gpui.cpp` is the seam. Each frame it walks the `El`
+tree, translates every `gpui::Style` into a `taffy::Style`, runs
+`TaffyTree::ComputeLayoutWithMeasure`, and writes the boxes back onto the
+elements. Text, icons, images and progress bars are measured leaves, which is
+Rust's `request_measured_layout`. What taffy does not model — `fixed`,
+`anchorBelow` / `anchorAbove` / `anchorCenterX`, the `relative(f)` half of an
+inset, and scroll offsets — is applied around it, and the comment above
+`LayoutEl` says how.
+
+When a layout question comes up, the answer is in `src/taffy/`, and behind that
+in the Rust crate. Do not add a special case to `LayoutEl` for something CSS
+already has a rule for; make the style translation say the right thing instead.
+
+**The port is kept current.** When `cmd/versions.ts` moves to a gpui-component
+whose `Cargo.lock` resolves a different taffy, the port moves with it — bump
+`taffy.version` there and diff the crate. `src/taffy/readme.md` has the
+file-for-file map and `port-upstream.md` has the procedure.
+
 ## Code style (match SumatraPDF `src/base`)
 
 ```cpp
@@ -393,7 +427,8 @@ AGENTS.md              this file
 port.md                phased porting plan
 port-progress.md       what is done / what is next
 port-upstream.md       how to ingest later checkins (pins live in cmd/versions.ts)
-cmd/versions.ts        exact gpui-component + zed gpui SHAs we are porting
+cmd/versions.ts        exact gpui-component + zed gpui SHAs and the taffy
+                       version we are porting
 cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
 cmd/build.ts           dispatches to build-windows.ts / build-linux.ts by host
 cmd/build-windows.ts   MSVC compile/link via bun; also clones the pinned Rust spec
@@ -423,10 +458,12 @@ cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
+src/taffy/             the taffy layout crate, ported (see its readme.md)
 src/base.h/.cpp        vendored SumatraPDF subset
 src/base_win.cpp       Windows platform layer (memory, paths, strings)
 src/base_linux.cpp     the same, on POSIX
 src/gpui/gpui.h        App, Window, Entity, Ctx, El, theme, paint
+src/taffy/taffy.md     see src/taffy/readme.md — the ported layout crate
 src/gpui/paint.h       the portable 2D canvas and shaped-text API
 src/gpui/paint_win.cpp / paint_linux.cpp   its two backends
 src/gpui/platform.h    the seam between window_common.cpp and the OS window

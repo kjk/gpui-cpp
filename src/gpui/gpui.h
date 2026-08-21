@@ -1,6 +1,7 @@
 /* C++ GPUI subset used by system_monitor. Frame-rebuilt element tree. */
 
 #include "base.h"
+#include "taffy/taffy_tree.h"
 
 // ─── color ────────────────────────────────────────────────────────────────
 
@@ -1348,6 +1349,10 @@ struct El {
     int caretOff = -1;
     Rgba caretColor = {};
     float caretW = 2;
+    // The taffy node this element was laid out as, this frame. A
+    // `taffy::NodeId` is a u64 and is kept as one here so gpui.h does not
+    // have to name the layout port's types.
+    uint64_t layoutNode = 0;
     float laidFont = 0; // resolved font size from last LayoutEl
     float laidMaxW = 0; // MeasureText maxW used (0 = unconstrained)
     // The shaped run LayoutEl measured, borrowed from the text cache so the
@@ -1355,21 +1360,6 @@ struct El {
     // the cache, which cannot drop it before the frame ends; null when the
     // element has no text or the run could not be cached.
     TextLayout* laidLayout = nullptr;
-    // Layout memo. LayoutEl runs a subtree up to three times per parent pass
-    // (measure, shrink-wrap, clamp) and LayoutChildren used to re-run one just
-    // to move it, which multiplies out to an exponential in tree depth. Layout
-    // is a pure function of (availW, availH, inherited font, inherited color)
-    // for a given frame, so the second call with the same inputs replays the
-    // recorded result and translates the subtree to its new origin instead.
-    float memoAvailW = 0;
-    float memoAvailH = 0;
-    float memoFont = 0;
-    Rgba memoFg = {};
-    float memoW = 0;
-    float memoH = 0;
-    float memoContentW = 0;
-    float memoContentH = 0;
-    bool memoValid = false;
 
     El* FlexRow();
     El* FlexCol();
