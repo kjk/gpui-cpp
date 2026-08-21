@@ -831,6 +831,15 @@ enum class ElKind : uint8_t {
     Image
 };
 
+// gpui's Display. `div()` is a block container, the way an unstyled HTML
+// element is: children stack down the page at the container's full width, and
+// nothing is stretched or shrunk to make them fit. `flex()` — or either of the
+// h_flex/v_flex helpers that call it — is what turns on the flex model.
+enum class Display : uint8_t {
+    Block,
+    Flex
+};
+
 enum class FlexDir : uint8_t {
     Row,
     Col
@@ -1090,6 +1099,7 @@ struct Corners {
 };
 
 struct Style {
+    Display display = Display::Block;
     FlexDir dir = FlexDir::Row;
     Align align = Align::Stretch;
     Justify justify = Justify::Start;
@@ -1361,6 +1371,10 @@ struct El {
     // element has no text or the run could not be cached.
     TextLayout* laidLayout = nullptr;
 
+    // display: flex, leaving the direction at its row default — gpui's
+    // `.flex()`, for a box that wants the flex model without saying which way
+    // it runs.
+    El* Flex();
     El* FlexRow();
     El* FlexCol();
     El* FlexWrap();

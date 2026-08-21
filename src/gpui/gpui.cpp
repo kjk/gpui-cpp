@@ -640,15 +640,30 @@ El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
     return e;
 }
 
+// The flex model is on for a box that says so, and for one that sets an
+// alignment, a justification or a gap. Rust does not do the second half —
+// `div().items_center()` there is a block container with a property that does
+// nothing — but Rust callers write `h_flex()` when they mean a row, and this
+// tree's callers wrote the alignment because until now every box was a flex
+// container. Reading the intent from the alignment keeps those calls meaning
+// what the person who wrote them saw, and leaves a bare `Div()` as the block
+// container `div()` is.
+El* El::Flex() {
+    style.display = Display::Flex;
+    return this;
+}
 El* El::FlexRow() {
+    style.display = Display::Flex;
     style.dir = FlexDir::Row;
     return this;
 }
 El* El::FlexCol() {
+    style.display = Display::Flex;
     style.dir = FlexDir::Col;
     return this;
 }
 El* El::FlexWrap() {
+    style.display = Display::Flex;
     style.flexWrap = true;
     return this;
 }
@@ -695,6 +710,7 @@ El* El::MaxH(float v) {
     return this;
 }
 El* El::Gap(float v) {
+    style.display = Display::Flex;
     style.gap = v;
     return this;
 }
@@ -727,30 +743,37 @@ El* El::PadB(float v) {
     return this;
 }
 El* El::ItemsCenter() {
+    style.display = Display::Flex;
     style.align = Align::Center;
     return this;
 }
 El* El::ItemsStart() {
+    style.display = Display::Flex;
     style.align = Align::Start;
     return this;
 }
 El* El::ItemsEnd() {
+    style.display = Display::Flex;
     style.align = Align::End;
     return this;
 }
 El* El::JustifyBetween() {
+    style.display = Display::Flex;
     style.justify = Justify::SpaceBetween;
     return this;
 }
 El* El::JustifyCenter() {
+    style.display = Display::Flex;
     style.justify = Justify::Center;
     return this;
 }
 El* El::JustifyEnd() {
+    style.display = Display::Flex;
     style.justify = Justify::End;
     return this;
 }
 El* El::JustifyStart() {
+    style.display = Display::Flex;
     style.justify = Justify::Start;
     return this;
 }
@@ -2161,7 +2184,8 @@ static taffy::OptJustifyContent ToTaffyJustify(Justify j) {
 static taffy::Style ToTaffyStyle(const El* e) {
     const Style& s = e->style;
     taffy::Style t;
-    t.display = taffy::Display::Flex;
+    t.display = s.display == Display::Flex ? taffy::Display::Flex
+                                           : taffy::Display::Block;
     t.flexDirection = s.dir == FlexDir::Row ? taffy::FlexDirection::Row
                                             : taffy::FlexDirection::Column;
     t.flexWrap = s.flexWrap ? taffy::FlexWrap::Wrap : taffy::FlexWrap::NoWrap;
