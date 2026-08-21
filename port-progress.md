@@ -734,3 +734,30 @@ cargo run -p system_monitor
     for. They were being shrunk flush against each other.
 
   `system_monitor` also differs, on the CPU line, because it is live data.
+- 2026-08-21: an image is not measured, it is sized. `rich_text`'s inline
+  picture grew on every layout pass: 120x80 in the first, 158.8x105.9 by the
+  last, and the wrapping row it sat in kept the height it had computed before
+  the growth, so the line under it was drawn outside the paragraph's box and
+  the heading that followed sat on top of it.
+
+  The loop: taffy hands a stretch-aligned item the container's cross size as a
+  known dimension while it works out the item's flex base size — that is what
+  the spec asks for. `LayoutImageSize` read that known height as if it were a
+  height the document had asked for, answered with the width the aspect ratio
+  implies, and that width came back as the base size the next pass stretched
+  again.
+
+  gpui does not measure images at all. `Img::request_layout`
+  (crates/gpui/src/elements/img.rs) reads the decoded bitmap, stamps
+  `aspect_ratio` on the style, and fills in whichever of width and height was
+  auto — from the other one when that one is an absolute length, from the
+  bitmap otherwise — so by the time taffy sees the node both axes are
+  definite and there is nothing to feed back. `PrepareEl` does the same now,
+  and `gpui::Style` carries the `aspect` that goes with it.
+
+  An image that cannot be decoded has no size to resolve and stays a measured
+  leaf, so its alt text is measured as the text it is. That is this tree's
+  stand-in for gpui's `fallback` element.
+
+  The Tree story page gained by it too: its file rows are images, and the list
+  had been stopping eight items in rather than filling the box.

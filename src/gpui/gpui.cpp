@@ -2194,6 +2194,9 @@ static taffy::Style ToTaffyStyle(const El* e) {
     t.overflow = {ToTaffyOverflow(s.overflowX), ToTaffyOverflow(s.overflowY)};
 
     t.size = {ToDim(s.width, s.widthFrac), ToDim(s.height, 0)};
+    if (s.aspect > 0) {
+        t.aspectRatio = taffy::Optf(s.aspect);
+    }
     // An unset min is `auto`, which is CSS's default and Rust's: a flex item
     // may not shrink below its own content. Zero would be the other reading
     // of a `0` that means "unset", and it takes the floor away — a column of
@@ -2312,6 +2315,44 @@ static bool ElIsMeasured(const El* e) {
 
 // ─── building the taffy tree ─────────────────────────────────────────────
 
+// gpui's `img()` does not measure: `Img::request_layout` reads the decoded
+// bitmap's size, stamps an aspect ratio on the style, and fills in whichever
+// of width and height was auto — from the other one when that one is an
+// absolute length, from the bitmap otherwise. Doing the same here is not a
+// tidiness: an image left as a measured leaf is asked for its size with the
+// cross axis already known, answers with the width that height implies, and
+// that width becomes the flex base size the next pass stretches again. A run
+// of markdown with a picture in it grew a little on every pass.
+//
+// An image that cannot be decoded — a remote URL, a format the platform does
+// not read — has no size to resolve and stays a measured leaf, so its alt
+// text is measured as the text it is. That is our stand-in for gpui's
+// `fallback` element.
+static void ResolveImageStyle(PaintCtx* ctx, El* e) {
+    Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
+    if (!img) {
+        return;
+    }
+    Size px = ImageSizePx(img);
+    if (px.w <= 0 || px.h <= 0) {
+        return;
+    }
+    Style& s = e->style;
+    s.aspect = px.w / px.h;
+    // An absolute length is the only thing the other axis can be derived
+    // from; kFill and the fractional widths are a share of a box that is not
+    // settled yet.
+    auto absolute = [](float v) { return v != kAuto && v != kFill && v >= 0; };
+    if (s.width == kAuto) {
+        s.width = absolute(s.height) ? px.w * s.height / px.h : px.w;
+    }
+    if (s.height == kAuto) {
+        s.height = (absolute(s.width) && s.widthFrac == 0)
+                       ? px.h * s.width / px.w
+                       : px.h;
+    }
+}
+
 // The style refinement, the inspector's live edit, the inherited font and the
 // inherited color, resolved once per element before anything is measured.
 // The old engine did this on the way down its own recursion.
@@ -2346,6 +2387,9 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
         }
     }
     e->laidFont = font;
+    if (e->kind == ElKind::Image) {
+        ResolveImageStyle(ctx, e);
+    }
 
     for (El* c = e->first; c; c = c->next) {
         PrepareEl(ctx, c, font, fg);
