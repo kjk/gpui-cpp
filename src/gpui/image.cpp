@@ -139,6 +139,51 @@ bool ImageSrcIsLocal(Str src) {
     return true;
 }
 
+// The asset a src names. A local path is itself; a remote URL is its last path
+// segment, looked for in the asset roots and then under the two folders a
+// story's own pictures live in. What Rust gets from its asset system fetching
+// the URL, an application here gets by shipping the file.
+Str ImageAssetFor(Arena* a, Str src) {
+    if (!src.s || src.len <= 0 || StartsWithNoCase(src, "data:")) {
+        return {};
+    }
+    if (ImageSrcIsLocal(src)) {
+        return AssetsExists(src) ? src : Str{};
+    }
+    int slash = -1;
+    for (int i = src.len - 1; i >= 0; i--) {
+        if (src.s[i] == '/') {
+            slash = i;
+            break;
+        }
+    }
+    if (slash < 0 || slash + 1 >= src.len) {
+        return {};
+    }
+    Str name(src.s + slash + 1, src.len - slash - 1);
+    // A query string is not part of the name.
+    for (int i = 0; i < name.len; i++) {
+        if (name.s[i] == '?' || name.s[i] == '#') {
+            name.len = i;
+            break;
+        }
+    }
+    if (name.len <= 0) {
+        return {};
+    }
+    if (AssetsExists(name)) {
+        return StrDup(a, name);
+    }
+    const char* dirs[] = {"story/", "images/"};
+    for (const char* d : dirs) {
+        Str p = StrDup(a, fmt("%s%s", Str(d), name));
+        if (AssetsExists(p)) {
+            return p;
+        }
+    }
+    return {};
+}
+
 // ─── the cache ────────────────────────────────────────────────────────────
 //
 // A document shows the same badge or logo more than once and repaints many

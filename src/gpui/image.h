@@ -32,6 +32,13 @@ Image* ImageForSrc(PaintApp* pa, Str src);
 // URI. A remote URL answers false without touching the cache.
 bool ImageSrcIsLocal(Str src);
 
+// The asset a `src` names, when the application ships one. A local path is
+// itself; a remote URL is its last path segment looked for in the asset roots,
+// which is what lets a document written for the web show the picture an
+// application bundled beside it rather than its alt text. Answers an empty Str
+// when nothing local matches.
+Str ImageAssetFor(Arena* a, Str src);
+
 // Drop every decoded image. AppFree calls it; a test may too.
 void ImageCacheClear();
 

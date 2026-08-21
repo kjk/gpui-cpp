@@ -662,11 +662,28 @@ static const Rgba kMarkFg = {0x0a, 0x0a, 0x0a, 0xff};
 // an image inside a link — the hand and the click the link's words get.
 El* TextView::ImageRun(MdRun* r, float font, Rgba color) {
     El* e = ImageEl(a, r->imgSrc, r->text)->Font(font)->Fg(color);
-    if (r->imgW > 0) {
-        e->W(r->imgW);
+    float w = r->imgW;
+    float h = r->imgH;
+    // A vector picture knows its own shape, so a document that gave only one
+    // dimension gets the other rather than a run of text's line height. A
+    // bitmap cannot answer that without being decoded, and a remote one
+    // cannot be decoded at all, so this is the SVG case only.
+    if ((w > 0) != (h > 0)) {
+        Size vb = {};
+        Str asset = ImageAssetFor(a, r->imgSrc);
+        if (asset.s && SvgViewBox(asset, &vb) && vb.w > 0 && vb.h > 0) {
+            if (w > 0) {
+                h = w * (vb.h / vb.w);
+            } else {
+                w = h * (vb.w / vb.h);
+            }
+        }
     }
-    if (r->imgH > 0) {
-        e->H(r->imgH);
+    if (w > 0) {
+        e->W(w);
+    }
+    if (h > 0) {
+        e->H(h);
     }
     if ((r->marks & MdLink) && r->href.len > 0) {
         e->Cursor(CursorKind::Pointer);

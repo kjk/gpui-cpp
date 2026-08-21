@@ -7,6 +7,7 @@
 namespace gpui {
 
 static const int kMaxOps = 128;
+static const int kMaxShapes = 32;
 static const int kMaxCache = 24;
 
 enum SvgCmd : uint8_t {
@@ -23,14 +24,30 @@ struct SvgOp {
     float x2 = 0, y2 = 0;
 };
 
+// One drawn element of the file — a <path>, a <rect>, a <circle> — and the
+// run of ops it contributed. A Lucide icon says nothing about colour and every
+// shape takes the caller's; a picture with colours of its own names them per
+// shape, which is what a two-tone logo is.
+struct SvgShape {
+    int start = 0;
+    int count = 0;
+    bool hasFill = false;
+    Rgba fill = {};
+};
+
 struct SvgIcon {
     float vbX = 0, vbY = 0, vbW = 24, vbH = 24;
     float strokeW = 2;
     // fill="currentColor" on the root: the solid variants (star-fill, …) are
     // filled and stroked, everything else is stroke only.
     bool filled = false;
+    // Whether any shape named a colour. False is every Lucide icon, and the
+    // whole file is then one path in the caller's colour, as it always was.
+    bool hasOwnColors = false;
     int nOps = 0;
     SvgOp ops[kMaxOps];
+    int nShapes = 0;
+    SvgShape shapes[kMaxShapes];
 };
 
 struct SvgCache {
@@ -523,6 +540,54 @@ static float AttrF(Str tag, const char* name, float def) {
     return (float)atof(buf);
 }
 
+// `fill="#rrggbb"` on a shape. "none" and "currentColor" both leave the shape
+// in the caller's colour, which is what every Lucide icon says.
+static bool ParseSvgColor(Str s, Rgba* out) {
+    if (!s.s || s.len < 4 || s.s[0] != '#') {
+        return false;
+    }
+    int n = s.len - 1;
+    if (n != 3 && n != 6) {
+        return false;
+    }
+    int v[6] = {};
+    for (int i = 0; i < n; i++) {
+        char c = s.s[i + 1];
+        if (c >= '0' && c <= '9') {
+            v[i] = c - '0';
+        } else if (c >= 'a' && c <= 'f') {
+            v[i] = c - 'a' + 10;
+        } else if (c >= 'A' && c <= 'F') {
+            v[i] = c - 'A' + 10;
+        } else {
+            return false;
+        }
+    }
+    if (n == 3) {
+        *out = Rgba{(uint8_t)(v[0] * 17), (uint8_t)(v[1] * 17),
+                    (uint8_t)(v[2] * 17), 255};
+    } else {
+        *out = Rgba{(uint8_t)(v[0] * 16 + v[1]), (uint8_t)(v[2] * 16 + v[3]),
+                    (uint8_t)(v[4] * 16 + v[5]), 255};
+    }
+    return true;
+}
+
+// One drawn element is done: what it added, and the colour it named.
+static void EndShape(SvgIcon* ic, int start, Str tag) {
+    if (ic->nOps <= start || ic->nShapes >= kMaxShapes) {
+        return;
+    }
+    SvgShape& sh = ic->shapes[ic->nShapes++];
+    sh.start = start;
+    sh.count = ic->nOps - start;
+    char fill[64];
+    if (GetAttr(tag, "fill", fill, 64) && ParseSvgColor(Str(fill), &sh.fill)) {
+        sh.hasFill = true;
+        ic->hasOwnColors = true;
+    }
+}
+
 static void ParseSvg(Str xml, SvgIcon* ic) {
     *ic = SvgIcon{};
     ic->vbW = 24;
@@ -594,18 +659,22 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         }
         if (StartsWithI(tagStart, end, "path")) {
             char d[2048];
+            int start = ic->nOps;
             if (GetAttr(tag, "d", d, 2048)) {
                 ParsePathD(ic, Str(d));
             }
+            EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "rect")) {
+            int start = ic->nOps;
             float x = AttrF(tag, "x", 0);
             float y = AttrF(tag, "y", 0);
             float w = AttrF(tag, "width", 0);
             float h = AttrF(tag, "height", 0);
             float rx = AttrF(tag, "rx", 0);
             AddRoundRect(ic, x, y, w, h, rx);
+            EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "polyline")) {
@@ -617,9 +686,11 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         }
         if (StartsWithI(tagStart, end, "polygon")) {
             char pts[1024];
+            int start = ic->nOps;
             if (GetAttr(tag, "points", pts, 1024)) {
                 ParsePolyline(ic, Str(pts), true);
             }
+            EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "line")) {
@@ -632,10 +703,12 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             continue;
         }
         if (StartsWithI(tagStart, end, "circle")) {
+            int start = ic->nOps;
             float cx = AttrF(tag, "cx", 0);
             float cy = AttrF(tag, "cy", 0);
             float r = AttrF(tag, "r", 0);
             AddRoundRect(ic, cx - r, cy - r, r * 2, r * 2, r);
+            EndShape(ic, start, tag);
             continue;
         }
     }
@@ -666,6 +739,16 @@ static const SvgIcon* GetIcon(Str assetPath) {
     ParseSvg(xml, &e->icon);
     e->ok = e->icon.nOps > 0;
     return e->ok ? &e->icon : nullptr;
+}
+
+bool SvgViewBox(Str assetPath, Size* out) {
+    const SvgIcon* ic = GetIcon(assetPath);
+    if (!ic || !out) {
+        return false;
+    }
+    out->w = ic->vbW > 0 ? ic->vbW : 24.f;
+    out->h = ic->vbH > 0 ? ic->vbH : 24.f;
+    return true;
 }
 
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
@@ -707,31 +790,61 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
         return my + (px - mx) * sa + (py - my) * ca;
     };
 
-    Path* path = PathNew(ctx, true);
+    auto Build = [&](int from, int to) -> Path* {
+        Path* p = PathNew(ctx, true);
+        if (!p) {
+            return nullptr;
+        }
+        for (int i = from; i < to; i++) {
+            const SvgOp& o = ic->ops[i];
+            if (o.cmd == kMove) {
+                PathMoveTo(p, TX(o.x, o.y), TY(o.x, o.y));
+            } else if (o.cmd == kLine) {
+                PathLineTo(p, TX(o.x, o.y), TY(o.x, o.y));
+            } else if (o.cmd == kCubic) {
+                PathCubicTo(p, TX(o.x1, o.y1), TY(o.x1, o.y1), TX(o.x2, o.y2),
+                            TY(o.x2, o.y2), TX(o.x, o.y), TY(o.x, o.y));
+            } else if (o.cmd == kClose) {
+                PathClose(p);
+            }
+        }
+        return p;
+    };
+
+    // The authored stroke width is in viewBox units and scales with the icon.
+    float strokeScale = (sx + sy) * 0.5f;
+    float stroke = (ic->strokeW > 0 ? ic->strokeW : 2.f) * strokeScale;
+
+    // A file whose shapes name their own colours is a picture, not an icon:
+    // each one is filled with what it said, and the caller's colour is only
+    // for the shapes that said nothing.
+    if (ic->hasOwnColors) {
+        for (int s = 0; s < ic->nShapes; s++) {
+            const SvgShape& sh = ic->shapes[s];
+            Path* p = Build(sh.start, sh.start + sh.count);
+            if (!p) {
+                continue;
+            }
+            if (sh.hasFill) {
+                PathFill(ctx, p, sh.fill);
+            } else if (ic->filled) {
+                PathFill(ctx, p, color);
+            } else {
+                PathStroke(ctx, p, stroke, color, true);
+            }
+            PathFree(p);
+        }
+        return true;
+    }
+
+    Path* path = Build(0, ic->nOps);
     if (!path) {
         return false;
     }
-    for (int i = 0; i < ic->nOps; i++) {
-        const SvgOp& o = ic->ops[i];
-        if (o.cmd == kMove) {
-            PathMoveTo(path, TX(o.x, o.y), TY(o.x, o.y));
-        } else if (o.cmd == kLine) {
-            PathLineTo(path, TX(o.x, o.y), TY(o.x, o.y));
-        } else if (o.cmd == kCubic) {
-            PathCubicTo(path, TX(o.x1, o.y1), TY(o.x1, o.y1), TX(o.x2, o.y2),
-                        TY(o.x2, o.y2), TX(o.x, o.y), TY(o.x, o.y));
-        } else if (o.cmd == kClose) {
-            PathClose(path);
-        }
-    }
-
     if (ic->filled) {
         PathFill(ctx, path, color);
     }
-    // The authored stroke width is in viewBox units and scales with the icon.
-    float strokeScale = (sx + sy) * 0.5f;
-    PathStroke(ctx, path, (ic->strokeW > 0 ? ic->strokeW : 2.f) * strokeScale,
-               color, true);
+    PathStroke(ctx, path, stroke, color, true);
     PathFree(path);
     return true;
 }
