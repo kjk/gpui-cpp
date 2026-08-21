@@ -528,6 +528,63 @@ int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol) {
     return gap;
 }
 
+// Both halves of update_visible_range_if_need. The range-of-one guard is
+// Rust's `if visible_range.len() <= 1 { return }`: the virtual list lays a
+// single item out to measure with, and telling a delegate that one row is
+// visible would be a lie it might go and fetch data on.
+bool TableVisibleRowsChanged(TableState* s, int first, int end) {
+    if (end - first <= 1) {
+        return false;
+    }
+    if (s->visibleRange.rowFirst == first && s->visibleRange.rowEnd == end) {
+        return false;
+    }
+    s->visibleRange.rowFirst = first;
+    s->visibleRange.rowEnd = end;
+    return true;
+}
+
+bool TableVisibleColsChanged(TableState* s, int first, int end) {
+    if (end - first <= 1) {
+        return false;
+    }
+    if (s->visibleRange.colFirst == first && s->visibleRange.colEnd == end) {
+        return false;
+    }
+    s->visibleRange.colFirst = first;
+    s->visibleRange.colEnd = end;
+    return true;
+}
+
+void TableVisibleCols(const TableState* s, int nFixed, int nCols, int* first,
+                      int* end) {
+    // The pinned columns are always on screen, so the window the offset moves
+    // over starts after them. A pane that has not been laid out yet has no
+    // width, and answers an empty range rather than every column.
+    float w = s->bodyBounds.w;
+    if (w <= 0 || nCols <= 0) {
+        *first = 0;
+        *end = 0;
+        return;
+    }
+    float lo = s->scrollX, hi = s->scrollX + w;
+    float x = 0;
+    int lead = -1, last = -1;
+    for (int d = nFixed; d < nCols; d++) {
+        int c = TableColAt(s, d);
+        float cw = c < s->colWidth.len ? s->colWidth[c] : 0;
+        if (x + cw > lo && x < hi) {
+            if (lead < 0) {
+                lead = d;
+            }
+            last = d;
+        }
+        x += cw;
+    }
+    *first = lead < 0 ? 0 : lead;
+    *end = lead < 0 ? 0 : last + 1;
+}
+
 bool TableShouldLoadMore(const TableState* s, int visibleEnd) {
     if (!s->hasMore || s->loading) {
         return false;

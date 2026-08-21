@@ -85,10 +85,8 @@ DataTable* DataTable::Stripe(bool v) {
     return this;
 }
 DataTable* DataTable::WithSize(UiSize sz) {
-    rowHeight = sz == UiSize::XSmall  ? 26.f
-                : sz == UiSize::Small ? 30.f
-                : sz == UiSize::Large ? 40.f
-                                      : 32.f;
+    size = sz;
+    rowHeight = UiTableRowHeight(sz);
     return this;
 }
 DataTable* DataTable::RowHeight(float px) {
@@ -102,6 +100,33 @@ DataTable* DataTable::H(float px) {
 DataTable* DataTable::Empty(El* e) {
     empty = e;
     return this;
+}
+DataTable* DataTable::LastEmptyCol(El* (*fn)(Ctx*, void*)) {
+    lastEmptyCol = fn;
+    return this;
+}
+DataTable* DataTable::OnVisibleRows(void (*fn)(Ctx*, void*, int, int)) {
+    visibleRowsChanged = fn;
+    return this;
+}
+DataTable* DataTable::OnVisibleCols(void (*fn)(Ctx*, void*, int, int)) {
+    visibleColsChanged = fn;
+    return this;
+}
+DataTable* DataTable::CellText(Str (*fn)(Ctx*, void*, int, int)) {
+    cellText = fn;
+    return this;
+}
+
+void DataTable::Dump(Vec<Str>* heads, Vec<Str>* cells) {
+    for (int c = 0; c < nColumns; c++) {
+        heads->Append(columns[c].title);
+    }
+    for (int r = 0; r < nRows; r++) {
+        for (int c = 0; c < nColumns; c++) {
+            cells->Append(cellText ? cellText(cx, data, r, c) : Str());
+        }
+    }
 }
 DataTable* DataTable::GroupHeader(const TableGroupCell* cells, int n) {
     if (nGroupHeaders < 4 && cells && n > 0) {
@@ -223,6 +248,77 @@ DataTable* DataTable::ContextMenu(PopupMenu* (*fn)(Ctx*, void*, int,
     return this;
 }
 
+// table/loading.rs. The loading view is a table rather than a stack of bars:
+// a head row on the head colour and four rows under it, each holding three
+// skeletons on the left and one on the right, at half the row height. That
+// shape is the point — it stands where the real table will, so the layout
+// does not jump when the rows arrive.
+static El* LoadingRow(Ctx* cx, UiSize size, bool header) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    Edges pad = UiTableCellPadding(size);
+    float rowH = UiTableRowHeight(size);
+    float barH = rowH * 0.5f;
+    auto bar = [&](float w) {
+        Skeleton* sk = Skeleton::New(cx)->W(w)->H(barH);
+        if (header) {
+            sk->Secondary();
+        }
+        return sk->IntoEl();
+    };
+    El* row = Div(a)
+                  ->FlexRow()
+                  ->W(kFill)
+                  ->Gap(12)
+                  ->H(rowH)
+                  ->ClipX()
+                  ->PadT(pad.top)
+                  ->PadB(pad.bottom)
+                  ->PadL(pad.left)
+                  ->PadR(pad.right)
+                  ->ItemsCenter()
+                  ->JustifyBetween();
+    if (header) {
+        row->Bg(th.tokens.tableHead);
+    } else {
+        row->BorderT(1, th.tableRowBorder);
+    }
+    // w_24 / w_48 / w_16, which is what makes the three read as a name, a
+    // description and a number rather than three of the same thing.
+    row->Child(Div(a)
+                   ->FlexRow()
+                   ->Gap(12)
+                   ->Grow()
+                   ->ItemsCenter()
+                   ->Child(bar(96))
+                   ->Child(bar(192))
+                   ->Child(bar(64)));
+    row->Child(bar(96));
+    return row;
+}
+
+static El* LoadingView(Ctx* cx, UiSize size) {
+    El* v = Div(cx->a)->FlexCol()->W(kFill);
+    v->Child(LoadingRow(cx, size, true));
+    for (int i = 0; i < 4; i++) {
+        v->Child(LoadingRow(cx, size, false));
+    }
+    return v;
+}
+
+// render_last_empty_col: h_flex().w_3().h_full().flex_shrink_0(), which is
+// the blank past the last column. It sits on the scrolling side only — the
+// pinned pane ends where its columns do.
+static El* LastEmptyColEl(Ctx* cx, El* (*fn)(Ctx*, void*), void* data) {
+    if (fn) {
+        El* e = fn(cx, data);
+        if (e) {
+            return e;
+        }
+    }
+    return Div(cx->a)->FlexRow()->W(12)->Shrink0();
+}
+
 // `.context_menu(..)` on the inner table: the menu is built from the row the
 // last secondary press marked, and the wrapper is what catches the press —
 // so it has to be there before there is a row, which is why the menu is
@@ -278,6 +374,14 @@ El* DataTable::BuildEl() {
                   ->Radius(th.radius)
                   ->Border(1, th.border);
 
+    // render_loading stands in for the whole table, head and all — its first
+    // row is the fake head, which is why that row is painted the head colour.
+    // Rust puts it beside `inner_table` and builds only one of the two.
+    if (s && s->loading) {
+        box->Child(LoadingView(cx, size));
+        return box;
+    }
+
     // The table is two panes side by side: the pinned columns, which only
     // ever move down, and the rest, which move both ways under a head that
     // goes with them. Rust gets the same split out of one element tree by
@@ -290,6 +394,11 @@ El* DataTable::BuildEl() {
         main->Child(fixedPane);
     }
     main->Child(scrollPane);
+    if (s) {
+        // The clipping box, which is the width a column is on screen or not
+        // against. Read next frame, the way any laid-out box is.
+        scrollPane->BoundsOut(&s->bodyBounds);
+    }
     box->Child(main);
 
     // A sideways-slid band that is not itself a scroll target: the wheel
@@ -412,19 +521,11 @@ El* DataTable::BuildEl() {
         }
         (d < nFixed ? headFixed : headScroll)->Child(th_);
     }
+    headScroll->Child(LastEmptyColEl(cx, lastEmptyCol, data));
     fixedPane->Child(headFixed);
     scrollPane->Child(headWrap);
 
-    // render_empty / render_loading: a table with no rows shows one of the
-    // two instead of a body.
-    if (s && s->loading) {
-        El* skeleton = Div(a)->FlexCol()->W(kFill)->Gap(8)->Pad(12);
-        for (int i = 0; i < 5; i++) {
-            skeleton->Child(Skeleton::New(cx)->W(kFill)->H(16)->IntoEl());
-        }
-        scrollPane->Child(skeleton);
-        return box;
-    }
+    // render_empty: a table with no rows shows this instead of a body.
     if (nRows == 0) {
         scrollPane->Child(
             empty ? empty
@@ -474,6 +575,20 @@ El* DataTable::BuildEl() {
             float pad = (float)range.first * s->rowH;
             bodyFixed->Child(Div(a)->H(pad));
             bodyScroll->Child(Div(a)->W(kFill)->H(pad));
+        }
+    }
+    // update_visible_range_if_need. Rust hangs both off its virtual lists;
+    // here the row range is what the body was built from and the column range
+    // is worked out from the offset, since this tree builds every column.
+    if (s) {
+        if (TableVisibleRowsChanged(s, range.first, range.end) &&
+            visibleRowsChanged) {
+            visibleRowsChanged(cx, data, range.first, range.end);
+        }
+        int cFirst = 0, cEnd = 0;
+        TableVisibleCols(s, nFixed, nColumns, &cFirst, &cEnd);
+        if (TableVisibleColsChanged(s, cFirst, cEnd) && visibleColsChanged) {
+            visibleColsChanged(cx, data, cFirst, cEnd);
         }
     }
     for (int r = range.first; r < range.end; r++) {
@@ -563,6 +678,7 @@ El* DataTable::BuildEl() {
             }
             (d < nFixed ? rowFixed : rowScroll)->Child(td);
         }
+        rowScroll->Child(LastEmptyColEl(cx, lastEmptyCol, data));
         if (s && s->rowSelectable && !s->cellSelectable) {
             BindClick(rowScroll, StrDup(a, fmt("%s-row-%d", id, r)),
                       ListenerArg(rowClick, r));

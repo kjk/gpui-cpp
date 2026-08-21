@@ -40,6 +40,36 @@ inline float UiIconPx(UiSize s) {
     }
 }
 
+// Size::table_cell_padding, crates/ui/src/sizing.rs. The table's own cells
+// are padded by hand; this is what the loading view measures its rows with,
+// which is the one place Rust reads the scale rather than a constant.
+inline Edges UiTableCellPadding(UiSize s) {
+    switch (s) {
+        case UiSize::XSmall:
+            return Edges{2, 4, 2, 4};
+        case UiSize::Small:
+            return Edges{3, 6, 3, 6};
+        case UiSize::Large:
+            return Edges{8, 12, 8, 12};
+        default:
+            return Edges{4, 8, 4, 8};
+    }
+}
+
+// Size::table_row_height: 26 / 30 / 32 / 40.
+inline float UiTableRowHeight(UiSize s) {
+    switch (s) {
+        case UiSize::XSmall:
+            return 26;
+        case UiSize::Small:
+            return 30;
+        case UiSize::Large:
+            return 40;
+        default:
+            return 32;
+    }
+}
+
 inline float UiFontPx(UiSize s) {
     switch (s) {
         case UiSize::XSmall:
