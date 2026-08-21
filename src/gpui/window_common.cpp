@@ -1581,6 +1581,15 @@ void WindowRequestAnimationFrame(Window* win) {
     PlatSetTimer(win, WindowTimerMs(win));
 }
 
+void AppRefreshWindows(App* app) {
+    if (!app) {
+        return;
+    }
+    for (int i = 0; i < app->windows.len; i++) {
+        AppInvalidate(app->windows[i]);
+    }
+}
+
 void AppRequestAnim(Window* win, bool on) {
     if (!win) {
         return;

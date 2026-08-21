@@ -151,8 +151,17 @@ enum class ThemeMode : uint8_t {
     Dark
 };
 
+// The two palettes in force, which is what everything paints from.
 const Theme& ThemeDark();
 const Theme& ThemeLight();
+// ThemeColor::dark() / ::light(): the palette a theme file is resolved
+// against, before any config has been applied to it. It never changes, which
+// is what keeps two themes applied in a row from compounding.
+const Theme& ThemeDefaultDark();
+const Theme& ThemeDefaultLight();
+// The last step of Theme::apply_config: the resolved palette becomes the
+// light or the dark theme. `ui/theme_registry.h` is what produces one.
+void ThemeInstall(ThemeMode mode, const Theme& t);
 // Theme::font_size and Theme::radius, which the story's Appearance menu
 // writes the way Rust writes `Theme::global_mut(cx).font_size`. The themes
 // here are shared statics rather than a per-app Global, so a change is the
@@ -3060,6 +3069,9 @@ using ActionFn = void (*)(Window* win, ActionEvent* ev);
 void AppOnAction(uint32_t action, ActionFn fn);
 void AppQuit(Window* win);
 void AppInvalidate(Window* win);
+// cx.refresh_windows(): every window this app owns repaints. What a change
+// with no one view behind it — the theme, the font size — asks for.
+void AppRefreshWindows(App* app);
 void AppMinimize(Window* win);
 void AppToggleMaximize(Window* win);
 void AppClose(Window* win);
