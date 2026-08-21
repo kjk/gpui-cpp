@@ -2170,10 +2170,15 @@ static taffy::Style ToTaffyStyle(const El* e) {
     t.overflow = {ToTaffyOverflow(s.overflowX), ToTaffyOverflow(s.overflowY)};
 
     t.size = {ToDim(s.width, s.widthFrac), ToDim(s.height, 0)};
-    // See the header comment: an unset min is a zero length, not `auto`, so
-    // the content-based automatic minimum size stays off.
-    t.minSize = {taffy::Dimension::Length(s.minW > 0 ? s.minW : 0.0f),
-                 taffy::Dimension::Length(s.minH > 0 ? s.minH : 0.0f)};
+    // An unset min is `auto`, which is CSS's default and Rust's: a flex item
+    // may not shrink below its own content. Zero would be the other reading
+    // of a `0` that means "unset", and it takes the floor away — a column of
+    // paragraphs taller than the box holding it then shrinks to nothing
+    // instead of overflowing it, which is what a scroll container is for.
+    t.minSize = {s.minW > 0 ? taffy::Dimension::Length(s.minW)
+                            : taffy::Dimension::Auto(),
+                 s.minH > 0 ? taffy::Dimension::Length(s.minH)
+                            : taffy::Dimension::Auto()};
     t.maxSize = {s.maxW < 1e9f ? taffy::Dimension::Length(s.maxW)
                                : taffy::Dimension::Auto(),
                  s.maxH < 1e9f ? taffy::Dimension::Length(s.maxH)

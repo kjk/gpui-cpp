@@ -521,7 +521,8 @@ cargo run -p system_monitor
     content-based automatic minimum size is off. `gpui::Style` stores these as
     plain floats whose default `0` means "unset", so there is no way to tell
     "no minimum" from "a minimum of zero" anyway; Rust's default is `auto`,
-    which gives a flex item a min-content floor.
+    which gives a flex item a min-content floor. **This one was a mistake and
+    is gone — see the entry below.**
 
   `El::contentW` / `contentH`, which the scrollbars read, now come from taffy's
   `content_size` rather than from the old engine's intrinsic main/cross sums.
@@ -624,3 +625,64 @@ cargo run -p system_monitor
 
   Also fixed on the way past: `AGENTS.md` listed `src/taffy/taffy.md`, a file
   that does not exist.
+- 2026-08-21: `min-height: auto`, and the screenshots that were never taken.
+  `markdown_table` rendered every block of the document on top of every other
+  one: a heading four pixels tall with three lines of paragraph drawn through
+  it, the whole document crammed into one screen. The story gallery's
+  Introduction page, which is the same markdown renderer, did the same.
+
+  The cause is one line of yesterday's entry, the second of the two "deliberate
+  deviations": `minW` / `minH` mapped to a length of zero rather than `auto`.
+  Zero is a floor a flex item can be shrunk to. `auto` is CSS's default, and
+  it means an item may not be shrunk below its own content. A markdown page is
+  a column of paragraphs inside a box the size of the window, taller than the
+  window because that is what a scroll container is for; with the floor at
+  zero, flexbox reads that as a deficit to share out and squeezes every block
+  until the column fits. The text still paints at its own size, so it paints
+  over its neighbours. `minW`/`minH` are `auto` now when unset, which is what
+  Rust's `Style::to_taffy` passes and what CSS says, and the document renders
+  the way it did before the port.
+
+  How it survived yesterday: `cmd/shot.ts` did not build. It ran whatever
+  binary was already in `out/rel/`, so the "old engine" and "new engine"
+  captures of the acceptance sweep were, for every target that had not been
+  rebuilt in between, the *same binary photographed twice*. That is why all 29
+  pairs came out identical to the byte — not a strong result, no result at
+  all. It now builds the target first, the way `cmd/test.ts` does, with
+  `-nobuild` for a caller that has just built or wants an older binary on
+  purpose.
+
+  Redone properly — build, shoot, build, shoot — the port is *not* pixel
+  identical to the engine it replaced, and this entry is the correction of
+  that claim. `hello_world`, `app_assets`, `dialog_overlay`, `root_borderless`
+  and `tooltip_top_edge` match exactly. The rest differ, most of them by a
+  sub-pixel drift in one direction, and four by something real:
+
+  - `table_in_scrollable` squashes its 400px filler to 112. Ground truth says
+    this one is *ours to answer, not taffy's*: the same tree run through the
+    Rust crate squashes it identically. GPUI's `div()` is `display: block`,
+    and a block container does not stretch or shrink its children; every
+    element here is a flex container, because `gpui::Style` has no display
+    property at all. That is the next thing to fix and it is a real piece of
+    work.
+  - `rich_text` lets its content run past the right edge instead of wrapping —
+    a min-content width larger than the window, which nothing is allowed to
+    shrink. Better than it was before this fix (33% of pixels differing, now
+    13%) and still wrong.
+  - `focus_trap` and the DataTable story page differ in the same family.
+  - The sub-pixel drift is `snap_measured_size_to_device_pixels`: GPUI ceils
+    every measured leaf to the device pixel grid before handing it to taffy,
+    and `LayoutMeasure` hands over the raw float. That is one line and it will
+    move a pixel on nearly every page, so it wants its own change and its own
+    sweep.
+
+  Fixed on the way past, and the same class of bug: the story gallery's
+  sidebar was 180 wide instead of 255, because it is a plain flex item and the
+  content pane's minimum was squeezing it. Rust puts it in a
+  `resizable_panel()`, whose width is not up for negotiation; here it says
+  `Shrink0()`. The gallery pages went from 12.9% of pixels differing to 3.2%.
+
+  `tests/TaffyTests.cpp` gained the case this turned on: a scroll container
+  holding a column of fixed-height children, whose numbers came from running
+  the same tree through the Rust crate. The C++ engine already matched it —
+  the port is faithful, the translation into it was not.

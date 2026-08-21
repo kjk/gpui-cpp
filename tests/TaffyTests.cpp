@@ -1704,7 +1704,79 @@ static void TestGridLayout() {
     }
 }
 
+// A scroll container holding a column of fixed-height children: the column
+// overflows rather than shrinking, because its own automatic minimum size is
+// its min-content height, and that is the sum of three definite heights.
+// The numbers are what the Rust crate prints for the same tree.
+static void TestScrollColumnDoesNotShrink() {
+    TestSuite("taffy scroll column");
+
+    TaffyTree tree;
+    tree.Init();
+
+    // Each filler centres a line of text, so it has content of its own that
+    // is far shorter than the height it asks for.
+    taffy::Style textStyle;
+    textStyle.size = SizeDim::FromLengths(149.0f, 22.0f);
+
+    taffy::Style leaf;
+    leaf.size = {taffy::Dimension::Percent(1.0f), taffy::Dimension::Length(400.0f)};
+    leaf.alignItems = taffy::OptAlignItems(taffy::AlignItems{taffy::AlignItemsKeyword::Center});
+    leaf.justifyContent = taffy::OptJustifyContent(taffy::AlignContent{taffy::AlignContentKeyword::Center});
+    NodeId ta = tree.NewLeaf(textStyle);
+    NodeId a = tree.NewWithChildren(leaf, &ta, 1);
+    leaf.size.height = taffy::Dimension::Length(300.0f);
+    NodeId tb = tree.NewLeaf(textStyle);
+    NodeId b = tree.NewWithChildren(leaf, &tb, 1);
+    leaf.size.height = taffy::Dimension::Length(800.0f);
+    NodeId tc = tree.NewLeaf(textStyle);
+    NodeId c = tree.NewWithChildren(leaf, &tc, 1);
+
+    taffy::Style colStyle;
+    colStyle.flexDirection = FlexDirection::Column;
+    colStyle.padding = {taffy::LengthPercentage::Length(16.0f),
+                        taffy::LengthPercentage::Length(16.0f),
+                        taffy::LengthPercentage::Length(16.0f),
+                        taffy::LengthPercentage::Length(16.0f)};
+    colStyle.gap = {taffy::LengthPercentage::Length(16.0f),
+                    taffy::LengthPercentage::Length(16.0f)};
+    NodeId kids[3] = {a, b, c};
+    NodeId col = tree.NewWithChildren(colStyle, kids, 3);
+
+    taffy::Style pageStyle;
+    pageStyle.flexDirection = FlexDirection::Column;
+    pageStyle.size = {taffy::Dimension::Percent(1.0f),
+                      taffy::Dimension::Percent(1.0f)};
+    pageStyle.overflow = {taffy::Overflow::Visible, taffy::Overflow::Scroll};
+    NodeId page = tree.NewWithChildren(pageStyle, &col, 1);
+
+    // The scroll container is itself the node layout runs on, which is what
+    // `LayoutEl` does with the element tree's root.
+    // The example hangs its scrollbar thumb off the scroll container.
+    taffy::Style thumbStyle;
+    thumbStyle.position = taffy::Position::Absolute;
+    thumbStyle.size = SizeDim::FromLengths(6.0f, 80.0f);
+    tree.AddChild(page, tree.NewLeaf(thumbStyle));
+
+    NodeId root = page;
+
+    tree.ComputeLayout(root, SizeAvail::Definite(SizeF{700.0f, 700.0f}));
+
+    utassertnear(tree.GetLayout(page).size.width, 700.0f);
+    utassertnear(tree.GetLayout(col).size.width, 700.0f);
+    utassertnear(tree.GetLayout(a).size.width, 668.0f);
+    utassertnear(tree.GetLayout(page).size.height, 700.0f);
+    utassertnear(tree.GetLayout(col).size.height, 1564.0f);
+    utassertnear(tree.GetLayout(a).size.height, 400.0f);
+    utassertnear(tree.GetLayout(b).size.height, 300.0f);
+    utassertnear(tree.GetLayout(c).size.height, 800.0f);
+    utassertnear(tree.GetLayout(b).location.y, 432.0f);
+
+    tree.Free();
+}
+
 void TestTaffy() {
+    TestScrollColumnDoesNotShrink();
     TestMaybeMathOptOpt();
     TestMaybeMathOptFloat();
     TestMaybeMathFloatOpt();

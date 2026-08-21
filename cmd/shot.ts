@@ -50,6 +50,7 @@ process.chdir(root);
 
 const argv = Bun.argv.slice(2);
 let debug = false;
+let noBuild = false;
 const clicks: { x: number; y: number; right?: boolean }[] = [];
 let hover: { x: number; y: number } | null = null;
 let typed = "";
@@ -99,13 +100,15 @@ for (const a of argv) {
   } else if (a.startsWith("-rclick=")) {
     const [x, y] = a.slice(8).split(",").map(Number);
     clicks.push({ x: x ?? 0, y: y ?? 0, right: true });
+  } else if (a === "-nobuild" || a === "--nobuild") {
+    noBuild = true;
   } else {
     rest.push(a);
   }
 }
 const name = rest[0];
 if (!name) {
-  console.error("Usage: bun cmd/shot.ts [-dbg] <example> [out.png] [args...]");
+  console.error("Usage: bun cmd/shot.ts [-dbg] [-nobuild] <example> [out.png] [args...]");
   process.exit(1);
 }
 const outDir = join(root, "out", "shots");
@@ -113,6 +116,24 @@ mkdirSync(outDir, { recursive: true });
 const dst = rest[1] ?? join(outDir, `${name}.png`);
 const exeDir = join(root, "out", debug ? "dbg" : "rel");
 const exe = join(exeDir, `${name}.exe`);
+
+// Build first, the way cmd/test.ts does. A screenshot is evidence about the
+// code in the tree, and shooting a stale binary makes it evidence about
+// something else — which is exactly how a layout regression once passed a
+// whole sweep of "identical" captures. Skip with -nobuild when the caller
+// has just built, or is deliberately shooting an older binary.
+if (!noBuild) {
+  const build = Bun.spawnSync(["bun", join("cmd", "build.ts"), debug ? "-dbg" : "-rel", name], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  if (build.exitCode !== 0) {
+    console.error(new TextDecoder().decode(build.stdout));
+    console.error(`build failed for ${name}`);
+    process.exit(build.exitCode ?? 1);
+  }
+}
 
 setProcessDpiAware();
 // AppLog writes out\gpui2.log relative to cwd.
