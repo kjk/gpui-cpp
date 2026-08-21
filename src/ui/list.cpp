@@ -220,10 +220,14 @@ El* List::IntoEl() {
                 it->selected = s->selectable && s->selected == row.entry;
                 it->secondarySelected = s->rightClicked == row.entry;
                 // Each row names the state and carries its own index, which
-                // is what Rust's per-row closure captures.
-                el = it->IntoEl(StrDup(a, fmt("%s-row-%d", id, row.entry)),
-                                ListenerArg(click, row.entry),
-                                ListenerArg(down, row.entry));
+                // is what Rust's per-row closure captures. The name is the
+                // row's IndexPath, the way `impl From<IndexPath> for
+                // ElementId` spells it, so it stays the same when a section
+                // above it grows or shrinks and the flat index shifts.
+                el = it->IntoEl(
+                    StrDup(a, fmt("%s-%s", id, IndexPathIdStr(a, row.Path()))),
+                    ListenerArg(click, row.entry),
+                    ListenerArg(down, row.entry));
             }
         }
         // Every row is the same height, which is what uniform_list asks for
