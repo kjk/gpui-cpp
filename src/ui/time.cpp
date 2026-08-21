@@ -341,15 +341,16 @@ El* Calendar::IntoEl() {
     root->Child(nav);
 
     El* body = Div(a)->FlexRow()->W(kFill);
-    // What one month's wrapping row is measured against: the width a single
-    // month is given, less this container's padding, so a month wraps at the
-    // same column it would on its own. Rust stacks its months vertically
-    // instead — `body` is a v_flex of one wrapping row each, so every month
-    // is as wide as the whole panel — and this tree has always laid them out
-    // side by side.
-    float monthW = CalendarWidth(size) - 24;
+    // What one month's wrapping row is measured against. `body` in the day
+    // view is Rust's `v_flex()` holding one `h_flex().flex_wrap()` per month,
+    // and none of those rows is given a width of its own — so each is as wide
+    // as the whole panel, and a three-month calendar wraps every month at
+    // three months' worth of columns rather than at one month's. This laid
+    // the months out side by side and wrapped each at its own width, which
+    // put a different number of days on a row than upstream does.
+    float monthW = width - 24;
     if (view == CalendarView::Day) {
-        body->JustifyBetween()->ItemsStart();
+        body->FlexCol()->ItemsStart();
         for (int i = 0; i < numberOfMonths; i++) {
             int shownYear = 0, shownMonth = 0;
             OffsetMonth(year, month, i, &shownYear, &shownMonth);
