@@ -34,6 +34,17 @@ struct InputEditorStyle {
     // them out of it, so a run may span more than one.
     const TextSpan* spans = nullptr;
     int nSpans = 0;
+    // The search matches over the whole document, in order, as UTF-8 offsets
+    // — `search_session.matcher.matched_ranges()`. The rows slice what falls
+    // inside them out of it, the way they do the highlighted runs. Empty
+    // while the find bar is closed, which is when Rust builds no paths.
+    const Selection* matches = nullptr;
+    int nMatches = 0;
+    // Which of them is the one the panel is on, painted in its own colour so
+    // it stands out from the rest. -1 for none.
+    int currentMatch = -1;
+    Rgba matchBg = {};
+    Rgba currentMatchBg = {};
     // Editor's active-line wash and its indent guides. Alpha 0 and 0 are off,
     // which is what a plain textarea wants.
     Rgba activeLine = {};

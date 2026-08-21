@@ -542,5 +542,310 @@ El* OtpInput::IntoEl() {
     return row;
 }
 
+// --- SearchPanel, crates/ui/src/input/search.rs ---------------------------
+
+// The bar's own two fields, and what it needs to remember between frames.
+// The session itself lives on the field being searched, so closing the bar
+// and opening it again keeps the query.
+struct SearchPanelState {
+    InputState query;
+    InputState replacement;
+    // The field the bar is over, pointed at as the bar builds. It outlives
+    // the frame — a caller's member, or an entity's — so the handlers reach
+    // it between frames the way Rust's WeakEntity does.
+    InputState* target = nullptr;
+    // The box the query field was laid out in, which the replacement field
+    // below it is given so the two line up. Rust reads it in on_prepaint,
+    // and this is a frame behind for the same reason any laid-out box is.
+    Bounds queryBounds = {};
+    bool seeded = false;
+    // Whether the session was open on the last build, so opening it puts the
+    // caret in the query field exactly once.
+    bool wasOpen = false;
+
+    static void OnQueryEvent(SearchPanelState* self, Ctx* cx,
+                             const InputEvent* ev);
+    static void OnReplacementEvent(SearchPanelState* self, Ctx* cx,
+                                   const InputEvent* ev);
+    static void OnToggleCase(SearchPanelState* self, Ctx* cx,
+                             const ClickEvent*);
+    static void OnToggleReplace(SearchPanelState* self, Ctx* cx,
+                                const ClickEvent*);
+    static void OnPrev(SearchPanelState* self, Ctx* cx, const ClickEvent*);
+    static void OnNext(SearchPanelState* self, Ctx* cx, const ClickEvent*);
+    static void OnClose(SearchPanelState* self, Ctx* cx, const ClickEvent*);
+    static void OnReplaceOne(SearchPanelState* self, Ctx* cx,
+                             const ClickEvent*);
+    static void OnReplaceAll(SearchPanelState* self, Ctx* cx,
+                             const ClickEvent*);
+    static void OnKey(SearchPanelState* self, Ctx* cx, const KeyEvent* ev);
+};
+
+// The bar closes and the field it was over takes the caret back, which is
+// what makes escape put you where you were.
+static void PanelClose(SearchPanelState* self, Ctx* cx) {
+    if (!self->target) {
+        return;
+    }
+    InputCloseSearch(self->target, cx->app, cx->win);
+    InputFocus(self->target, cx->app, cx->win);
+}
+
+void SearchPanelState::OnQueryEvent(SearchPanelState* self, Ctx* cx,
+                                    const InputEvent* ev) {
+    if (!self->target) {
+        return;
+    }
+    if (ev->kind == InputEventKind::Change) {
+        InputSetSearchQuery(self->target, cx->app, cx->win,
+                            InputValue(&self->query),
+                            self->target->search.caseInsensitive);
+        return;
+    }
+    if (ev->kind == InputEventKind::PressEnter) {
+        // on_action_enter: enter walks forward, shift-enter back.
+        if (ev->shift) {
+            InputSearchPrev(self->target, cx->app, cx->win, nullptr);
+        } else {
+            InputSearchNext(self->target, cx->app, cx->win, nullptr);
+        }
+    }
+}
+
+void SearchPanelState::OnReplacementEvent(SearchPanelState* self, Ctx* cx,
+                                          const InputEvent* ev) {
+    if (!self->target) {
+        return;
+    }
+    if (ev->kind == InputEventKind::Change) {
+        SearchSessionSetReplacement(&self->target->search,
+                                    InputValue(&self->replacement));
+        Notify(cx);
+        return;
+    }
+    if (ev->kind == InputEventKind::PressEnter) {
+        InputSearchReplaceOne(self->target, cx->app, cx->win,
+                              InputValue(&self->replacement));
+    }
+}
+
+void SearchPanelState::OnToggleCase(SearchPanelState* self, Ctx* cx,
+                                    const ClickEvent*) {
+    if (!self->target) {
+        return;
+    }
+    SearchSession* ss = &self->target->search;
+    InputSetSearchQuery(self->target, cx->app, cx->win,
+                        InputValue(&self->query), !ss->caseInsensitive);
+}
+
+void SearchPanelState::OnToggleReplace(SearchPanelState* self, Ctx* cx,
+                                       const ClickEvent*) {
+    if (self->target) {
+        InputSetSearchReplaceMode(self->target, cx->app, cx->win,
+                                  !self->target->search.replaceMode);
+    }
+}
+
+void SearchPanelState::OnPrev(SearchPanelState* self, Ctx* cx,
+                              const ClickEvent*) {
+    if (self->target) {
+        InputSearchPrev(self->target, cx->app, cx->win, nullptr);
+    }
+}
+
+void SearchPanelState::OnNext(SearchPanelState* self, Ctx* cx,
+                              const ClickEvent*) {
+    if (self->target) {
+        InputSearchNext(self->target, cx->app, cx->win, nullptr);
+    }
+}
+
+void SearchPanelState::OnClose(SearchPanelState* self, Ctx* cx,
+                               const ClickEvent*) {
+    PanelClose(self, cx);
+}
+
+void SearchPanelState::OnReplaceOne(SearchPanelState* self, Ctx* cx,
+                                    const ClickEvent*) {
+    if (self->target) {
+        InputSearchReplaceOne(self->target, cx->app, cx->win,
+                              InputValue(&self->replacement));
+    }
+}
+
+void SearchPanelState::OnReplaceAll(SearchPanelState* self, Ctx* cx,
+                                    const ClickEvent*) {
+    if (self->target) {
+        InputSearchReplaceAll(self->target, cx->app, cx->win,
+                              InputValue(&self->replacement));
+    }
+}
+
+void SearchPanelState::OnKey(SearchPanelState* self, Ctx* cx,
+                             const KeyEvent* ev) {
+    if (!ev->down || !self->target) {
+        return;
+    }
+    if (ev->vk == KeyEscape) {
+        // on_action_escape.
+        PanelClose(self, cx);
+        WindowStopPropagation(cx);
+        return;
+    }
+    if (ev->vk == KeyTab && self->target->search.replaceMode) {
+        // on_action_tab / on_action_tab_prev: the two fields, and nothing
+        // outside them — the focus ring never sees this tab.
+        InputState* to =
+            self->query.focused ? &self->replacement : &self->query;
+        InputFocus(to, cx->app, cx->win);
+        InputSelectAll(to, cx->app, cx->win);
+        WindowStopPropagation(cx);
+    }
+}
+
+SearchPanel* SearchPanel::New(Ctx* cx, Str id, InputState* target) {
+    Arena* a = cx->a;
+    SearchPanel* p = ArenaNew<SearchPanel>(a);
+    p->a = a;
+    p->cx = cx;
+    p->id = id;
+    p->target = target;
+    return p;
+}
+
+El* SearchPanel::IntoEl() {
+    const Theme& th = cx->theme();
+    // The state is the window's, keyed by the bar's id, so two editors on one
+    // page each get their own.
+    Entity<SearchPanelState> ent = KeyedEntity<SearchPanelState>(
+        cx, KeyedKey(HashClickId(id), HashClickId(StrL("search-panel"))));
+    SearchPanelState* st = ent.Get(cx);
+    if (!st || !target) {
+        return Div(a);
+    }
+    st->target = target;
+    if (!st->seeded) {
+        st->seeded = true;
+        st->query.onChange = ListenTo(ent, &SearchPanelState::OnQueryEvent);
+        st->replacement
+            .onChange = ListenTo(ent, &SearchPanelState::OnReplacementEvent);
+    }
+    SearchSession* ss = &target->search;
+    if (!ss->open) {
+        st->wasOpen = false;
+        return Div(a);
+    }
+    // Opening it puts the query in the field and picks it out, which is what
+    // makes typing over it the next search rather than an edit of the last.
+    if (!st->wasOpen) {
+        st->wasOpen = true;
+        InputSetValue(&st->query, ss->query);
+        InputFocus(&st->query, cx->app, cx->win);
+        InputSelectAll(&st->query, cx->app, cx->win);
+    }
+    bool hasMatches = !SearchMatcherIsEmpty(&ss->matcher);
+    bool allowReplace = InputIsReplaceable(target);
+    if (!allowReplace) {
+        ss->replaceMode = false;
+    }
+
+    El* panel = Div(a)
+                    ->FlexCol()
+                    ->W(kFill)
+                    ->PadY(8)
+                    ->PadX(12)
+                    ->Gap(4)
+                    ->Bg(th.tokens.background)
+                    ->BorderB(1, th.border)
+                    ->Radius(th.radius * 0.5f)
+                    ->OnKeyDown(ListenTo(ent, &SearchPanelState::OnKey));
+
+    El* row = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+    El* caseBtn = Button::New(cx, StrDup(a, fmt("%s-case", id)))
+                      ->Text()
+                      ->Compact()
+                      ->WithSize(UiSize::XSmall)
+                      ->Icon(IconName::CaseSensitive)
+                      ->Selected(!ss->caseInsensitive)
+                      ->OnClick(ListenTo(ent, &SearchPanelState::OnToggleCase))
+                      ->IntoEl();
+    El* queryBox = Div(a)->FlexRow()->Grow()->Gap(4);
+    queryBox->Child(Input::New(cx, StrDup(a, fmt("%s-q", id)), &st->query)
+                        ->WithSize(UiSize::Small)
+                        ->FocusRing(false)
+                        ->Suffix(caseBtn)
+                        ->IntoEl()
+                        ->BoundsOut(&st->queryBounds));
+    row->Child(queryBox);
+    if (allowReplace) {
+        row->Child(
+            Button::New(cx, StrDup(a, fmt("%s-mode", id)))
+                ->Ghost()
+                ->WithSize(UiSize::XSmall)
+                ->Icon(IconName::Replace)
+                ->Selected(ss->replaceMode)
+                ->OnClick(ListenTo(ent, &SearchPanelState::OnToggleReplace))
+                ->IntoEl());
+    }
+    row->Child(Button::New(cx, StrDup(a, fmt("%s-prev", id)))
+                   ->Ghost()
+                   ->WithSize(UiSize::XSmall)
+                   ->Icon(IconName::ChevronLeft)
+                   ->Disabled(!hasMatches)
+                   ->OnClick(ListenTo(ent, &SearchPanelState::OnPrev))
+                   ->IntoEl());
+    row->Child(Button::New(cx, StrDup(a, fmt("%s-next", id)))
+                   ->Ghost()
+                   ->WithSize(UiSize::XSmall)
+                   ->Icon(IconName::ChevronRight)
+                   ->Disabled(!hasMatches)
+                   ->OnClick(ListenTo(ent, &SearchPanelState::OnNext))
+                   ->IntoEl());
+    row->Child(TextEl(a, SearchMatcherLabel(a, &ss->matcher))
+                   ->Font(14)
+                   ->MinW(64)
+                   ->Fg(hasMatches ? th.foreground : th.mutedFg));
+    // div().w_7(): the gap that keeps the close button off the counter.
+    row->Child(Div(a)->W(28));
+    row->Child(Button::New(cx, StrDup(a, fmt("%s-close", id)))
+                   ->Ghost()
+                   ->WithSize(UiSize::XSmall)
+                   ->Icon(IconName::WindowClose)
+                   ->OnClick(ListenTo(ent, &SearchPanelState::OnClose))
+                   ->IntoEl());
+    panel->Child(row);
+
+    if (ss->replaceMode && allowReplace) {
+        El* row2 = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+        // The replacement field is as wide as the query field above it,
+        // which is what Rust's `input_width` is for. Zero on the first frame,
+        // before the query field has been laid out; growing stands in.
+        float w = st->queryBounds.w > 1 ? st->queryBounds.w : kFill;
+        El* rep = Input::New(cx, StrDup(a, fmt("%s-r", id)), &st->replacement)
+                      ->WithSize(UiSize::Small)
+                      ->FocusRing(false)
+                      ->W(w)
+                      ->IntoEl();
+        row2->Child(rep);
+        row2->Child(
+            Button::New(cx, StrDup(a, fmt("%s-rep1", id)))
+                ->WithSize(UiSize::Small)
+                ->Label(StrL("Replace"))
+                ->Disabled(!hasMatches)
+                ->OnClick(ListenTo(ent, &SearchPanelState::OnReplaceOne))
+                ->IntoEl());
+        row2->Child(
+            Button::New(cx, StrDup(a, fmt("%s-repall", id)))
+                ->WithSize(UiSize::Small)
+                ->Label(StrL("Replace All"))
+                ->Disabled(!hasMatches)
+                ->OnClick(ListenTo(ent, &SearchPanelState::OnReplaceAll))
+                ->IntoEl());
+        panel->Child(row2);
+    }
+    return panel;
+}
+
 } // namespace component
 } // namespace gpui

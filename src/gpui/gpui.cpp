@@ -1135,6 +1135,12 @@ El* El::SelRange(int lo, int hi, Rgba color) {
     selColor = color;
     return this;
 }
+
+El* El::Washes(const TextSpan* runs, int n) {
+    washes = runs;
+    nWashes = n;
+    return this;
+}
 El* El::Spans(const TextSpan* runs, int n) {
     spans = runs;
     nSpans = n;
@@ -1917,7 +1923,8 @@ void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
 }
 
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
-                    float x, float y, int u8a, int u8b, Rgba color) {
+                    uint8_t weight, float lineH, float x, float y, int u8a,
+                    int u8b, Rgba color) {
     if (!ctx || !ctx->rt || color.a == 0) {
         return;
     }
@@ -1930,7 +1937,7 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
         return;
     }
     TextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr);
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, weight, lineH, nullptr);
     if (!layout) {
         return;
     }
@@ -3063,6 +3070,28 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
             line(9, 6, 15, 12);
             line(15, 12, 9, 18);
             break;
+        case IconName::CaseSensitive:
+            // An A and an o beside it, which is what lucide's is.
+            line(2, 16, 6.5f, 6);
+            line(6.5f, 6, 11, 16);
+            line(3.3f, 13, 9.7f, 13);
+            line(22, 9, 22, 16);
+            ring(18.5f, 12.5f, s * 3.5f / 24.f, s * 3.5f / 24.f);
+            break;
+        case IconName::Replace:
+            // The arrow curling back over a box, and the dashed box it comes
+            // from — lucide draws that one as four corners, and so does this.
+            line(3, 7, 6, 10);
+            line(6, 10, 9, 7);
+            line(6, 10, 6, 5);
+            line(6, 5, 10, 2);
+            line(14, 4, 16, 2);
+            line(14, 8, 16, 10);
+            line(20, 2, 22, 4);
+            line(20, 10, 22, 8);
+            DrawRoundStroke(ctx, PX(2), PY(14), s * 8.f / 24.f, s * 8.f / 24.f,
+                            s * 2.f / 24.f, sw, c);
+            break;
         case IconName::ChevronUp:
             line(6, 15, 12, 9);
             line(12, 9, 18, 15);
@@ -4155,10 +4184,23 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         if (clipText) {
             CanvasPushClip(ctx, e->x, e->y, e->laidMaxW, e->h);
         }
+        // Under the selection quad as well as under the glyphs: a match the
+        // caret happens to be inside still reads as selected.
+        for (int i = 0; i < e->nWashes; i++) {
+            const TextSpan& w = e->washes[i];
+            if (w.bg.a == 0 || w.hi <= w.lo) {
+                continue;
+            }
+            PaintTextRange(ctx, e->text, font,
+                           e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
+                           ElTextWeight(e), e->style.lineHeight, e->x, e->y,
+                           w.lo, w.hi, w.bg);
+        }
         if (lo >= 0 && hi > lo) {
             PaintTextRange(ctx, e->text, font,
                            e->laidMaxW > 0 ? e->laidMaxW : e->w, e->style.wrap,
-                           e->x, e->y, lo, hi, e->selColor);
+                           ElTextWeight(e), e->style.lineHeight, e->x, e->y, lo,
+                           hi, e->selColor);
         }
         if (e->markLo >= 0 && e->markHi > e->markLo) {
             PaintTextUnderline(

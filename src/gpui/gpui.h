@@ -726,6 +726,8 @@ enum {
     KeyA = 65,
     KeyC = 67,
     KeyE = 69,
+    KeyF = 70,
+    KeyH = 72,
     KeyV = 86,
     KeyX = 88,
     KeyY = 89,
@@ -926,6 +928,9 @@ enum class IconName : uint8_t {
     ChevronDown,
     ChevronLeft,
     ChevronRight,
+    // The find bar's two: the case toggle and the replace-mode toggle.
+    CaseSensitive,
+    Replace,
     ChevronUp,
     Check,
     Search,
@@ -1322,6 +1327,14 @@ struct El {
     // element was built in.
     const TextSpan* spans = nullptr;
     int nSpans = 0;
+    // Washes under this run, painted where the selection quad is and before
+    // the glyphs — which is what Rust's `layout_search_matches` builds paths
+    // for. They are a second array rather than more `spans` because the span
+    // painter partitions the text and so cannot take two runs over the same
+    // bytes, and a search match sits over whatever the highlighter said.
+    // Only `lo`, `hi` and `bg` are read.
+    const TextSpan* washes = nullptr;
+    int nWashes = 0;
     Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
     // The input method's provisional run, underlined the way Rust gives the
     // marked range its own UnderlineStyle. Same offsets, same -1 for none.
@@ -1439,6 +1452,7 @@ struct El {
     El* BindInput(InputState* s);
     // The selection quad and the caret an input's text run paints over itself.
     El* SelRange(int lo, int hi, Rgba color);
+    El* Washes(const TextSpan* runs, int n);
     El* Spans(const TextSpan* runs, int n);
     // The marked range, which is drawn underlined in the text's own colour.
     El* MarkRange(int lo, int hi);
@@ -2183,6 +2197,14 @@ struct InputState {
     bool masked = false;
     bool cleanOnEscape = false;
     bool submitOnEnter = false;
+    // searchable / replaceable: whether ctrl-f opens a find bar over this
+    // field at all, and whether that bar may write back. Rust defaults the
+    // first to false and turns it on for the code editor, and the second to
+    // true — a field that cannot be edited is not replaceable anyway, which
+    // `InputIsReplaceable` is what says.
+    bool searchable = false;
+    bool replaceable = true;
+    SearchSession search;
     bool softWrap = true;
     // text_align: 0 left, 1 center, 2 right.
     int align = 0;
@@ -2269,6 +2291,11 @@ enum class InputMoveDir : uint8_t {
 // same way, so a vertical walk does not fight itself.
 void InputScrollToCaret(InputState* s, float caretX, float caretY,
                         InputMoveDir dir);
+// A negative `caretX` leaves the sideways offset alone, which is what
+// scrolling to something that is not the caret wants: a search match is a
+// row to bring into view, and how far across it sits is not measurable
+// outside a paint.
+void InputScrollToOffset(InputState* s, int offset, InputMoveDir dir);
 // The same, for wherever the caret is now: the row it is on and the x the
 // last paint measured.
 void InputScrollToCursor(InputState* s, InputMoveDir dir);
@@ -2374,7 +2401,12 @@ enum class InputAction : uint8_t {
     Cut,
     Paste,
     Undo,
-    Redo
+    Redo,
+    // ctrl-f and ctrl-h, which open the find bar over the field — the second
+    // with its replace row already out. Rust binds both in the input's key
+    // context and both do nothing on a field that is not searchable.
+    Search,
+    Replace
 };
 
 InputAction InputActionForKey(const InputState* s, int vk, bool shift,
@@ -2410,6 +2442,32 @@ void InputReplaceAndMarkText(InputState* s, App* app, Window* win,
 void InputUnmarkText(InputState* s, App* app, Window* win);
 // The typed character, once the platform has decoded it.
 void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch);
+
+// ─── the find bar, crates/base/src/input/editor/search.rs ─────────────────
+
+// open_search: the bar opens over the field, with whatever is selected as
+// its first query and the match nearest the top of the view as its first
+// match. A field that is not searchable ignores it.
+void InputOpenSearch(InputState* s, App* app, Window* win, bool replaceMode);
+void InputCloseSearch(InputState* s, App* app, Window* win);
+// is_replaceable(): the field allows it and is editable right now.
+bool InputIsReplaceable(const InputState* s);
+void InputSetSearchReplaceMode(InputState* s, App* app, Window* win, bool on);
+void InputSetSearchQuery(InputState* s, App* app, Window* win, Str query,
+                         bool insensitive);
+// next_search_match / previous_search_match: the cursor moves, wrapping, and
+// the view follows. False when nothing matched.
+bool InputSearchNext(InputState* s, App* app, Window* win, Selection* out);
+bool InputSearchPrev(InputState* s, App* app, Window* win, Selection* out);
+// replace_current_search_match: the match under the cursor becomes the
+// replacement, and the cursor is left on what is now under it.
+bool InputSearchReplaceOne(InputState* s, App* app, Window* win, Str with);
+// replace_all_search_matches: every match, back to front so the earlier
+// offsets stay good. Answers how many there were.
+int InputSearchReplaceAll(InputState* s, App* app, Window* win, Str with);
+// update_search: the matcher takes the text as it is now. Every edit goes
+// through this, so a find bar left open follows what is typed.
+void InputUpdateSearch(InputState* s);
 
 // on_focus / on_blur. Points win->input at this field, starts its caret, and
 // emits the event; blurring commits the typing session, which is what makes a
@@ -2582,8 +2640,13 @@ bool TextPointAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                 float relX, float relY, bool mono = false,
                 float lineHeight = 0);
+// `weight` and `lineH` have to be the ones the run was laid out with, or the
+// rects come back measured against a different font: the mono family is a
+// weight sentinel here, so a code row measured with 0 drifts further from the
+// glyphs the further along the line it is.
 void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
-                    float x, float y, int u8a, int u8b, Rgba color);
+                    uint8_t weight, float lineH, float x, float y, int u8a,
+                    int u8b, Rgba color);
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
                         bool wrap, float x, float y, int u8a, int u8b,
                         Rgba color);
