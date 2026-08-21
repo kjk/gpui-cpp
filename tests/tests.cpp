@@ -60,6 +60,7 @@ int GpuiMain(int argc, char** argv) {
     TestVirtualList();
     TestTaffy();
     TestGpuiBlockLayout();
+    TestMinSize();
     TestDatePicker();
     TestPopup();
     TestTextSelection();

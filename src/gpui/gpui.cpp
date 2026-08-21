@@ -1805,6 +1805,17 @@ static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     if (!ctx || !ctx->pa || !s.s || s.len <= 0) {
         return nullptr;
     }
+    // A run that does not wrap is the same size whatever width it was
+    // measured against, which is why the cache key drops maxW for one. The
+    // shaped run is not: the platform lays it out inside a box of that width
+    // and draws it clipped to the box. Shaping it unconstrained is what makes
+    // the key's premise true — a table cell whose min-content width was asked
+    // for at one pixel would otherwise keep the one-pixel run it was given,
+    // and paint a one-pixel smear where its text belongs. `truncate` does its
+    // own cutting at paint time, against the box layout settled on.
+    if (!wrap) {
+        maxW = 0;
+    }
     TextMeasCache* c = &ctx->textCache;
     TextMeasSlot* hit =
         TextMeasFind(c, s, fontSize, maxW, wrap, weight, lineH, nullptr);
@@ -2014,10 +2025,10 @@ static float Clamp(float v, float lo, float hi) {
 //     rather than reserving space inside it. That is what this tree's widgets
 //     were built against; giving taffy the widths would move content by the
 //     border width everywhere at the same time as the engine changed.
-//   - `minW` / `maxW` / `minH` / `maxH` are plain floats whose defaults (0 and
-//     1e9) mean "unset", so they map to a length of zero and to auto. CSS's
-//     `min-width: auto` — the content-based automatic minimum size — is
-//     therefore off, again matching what the widgets were built against.
+//   - `maxW` / `maxH` are plain floats whose default of 1e9 means "unset" and
+//     maps to auto. `minW` / `minH` default to kAuto, so an element that
+//     names no minimum gets CSS's content-based automatic minimum size and an
+//     element that says `MinW(0)` gets the zero it asked for.
 
 // The taffy tree is rebuilt every frame but kept between them, so its node
 // slots and per-node child arrays are recycled instead of reallocated.
@@ -2127,6 +2138,15 @@ static taffy::Dimension ToDim(float v, float frac) {
     return taffy::Dimension::Length(v);
 }
 
+// A min-width / min-height: kAuto is the content-based automatic minimum,
+// anything else is the length it says, zero included.
+static taffy::Dimension ToMinDim(float v) {
+    if (v == kAuto || v < 0) {
+        return taffy::Dimension::Auto();
+    }
+    return taffy::Dimension::Length(v);
+}
+
 static taffy::LengthPercentageAuto ToInset(float v, float rel) {
     // The pixel and the `relative(f)` halves of one inset cannot both reach
     // taffy without a calc() node, so a mixed pair is finished off by
@@ -2197,15 +2217,12 @@ static taffy::Style ToTaffyStyle(const El* e) {
     if (s.aspect > 0) {
         t.aspectRatio = taffy::Optf(s.aspect);
     }
-    // An unset min is `auto`, which is CSS's default and Rust's: a flex item
-    // may not shrink below its own content. Zero would be the other reading
-    // of a `0` that means "unset", and it takes the floor away — a column of
-    // paragraphs taller than the box holding it then shrinks to nothing
-    // instead of overflowing it, which is what a scroll container is for.
-    t.minSize = {s.minW > 0 ? taffy::Dimension::Length(s.minW)
-                            : taffy::Dimension::Auto(),
-                 s.minH > 0 ? taffy::Dimension::Length(s.minH)
-                            : taffy::Dimension::Auto()};
+    // An unset min is `auto`: a flex item may not shrink below its own
+    // content, which is CSS's default and Rust's. An explicit zero is the
+    // opposite instruction — `min_w_0()`, "this may shrink past its content"
+    // — and it is what a pane holding something wider than the window says so
+    // the window's width still wins.
+    t.minSize = {ToMinDim(s.minW), ToMinDim(s.minH)};
     t.maxSize = {s.maxW < 1e9f ? taffy::Dimension::Length(s.maxW)
                                : taffy::Dimension::Auto(),
                  s.maxH < 1e9f ? taffy::Dimension::Length(s.maxH)
@@ -2255,7 +2272,10 @@ static float TextMeasureWidth(const El* e, taffy::SizeOptF known,
     }
     // A min-content constraint asks for the narrowest the run can be, which
     // for wrapped text is its longest word — what a one-pixel wrap box gives.
-    if (avail.width.kind == taffy::AvailableSpace::Kind::MinContent) {
+    // A run that only truncates cannot break, so its narrowest is its whole
+    // width, which is what an unconstrained measure answers.
+    if (avail.width.kind == taffy::AvailableSpace::Kind::MinContent &&
+        e->style.wrap) {
         return 1.0f;
     }
     return 0.0f;

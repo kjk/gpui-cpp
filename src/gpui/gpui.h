@@ -1110,8 +1110,13 @@ struct Style {
     // w_1_2 / w_2_3 / …: a fraction of the parent's content box, which GPUI
     // has as first-class widths. 0 = unset.
     float widthFrac = 0;
-    float minW = 0;
-    float minH = 0;
+    // min_width / min_height. kAuto is CSS's `auto`, the content-based
+    // automatic minimum size, and is what an element that never names one
+    // gets. An explicit zero is a different thing — Rust's `min_w_0()`, the
+    // idiom for "this may shrink past its content" — so the two cannot share
+    // a sentinel.
+    float minW = kAuto;
+    float minH = kAuto;
     float maxW = 1e9f;
     float maxH = 1e9f;
     // aspect_ratio, width over height. Only an image sets it, and it sets it
