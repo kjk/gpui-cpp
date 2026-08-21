@@ -2066,6 +2066,193 @@ int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x,
                                s->lastLineH > 0 ? s->lastLineH / font : 0);
 }
 
+/* Port of crates/base/src/input/editor/search.rs — the matcher behind the
+   find bar. Rust builds an aho-corasick automaton over one literal pattern,
+   which is a substring scan; the fold that comes with
+   `ascii_case_insensitive(true)` is ASCII only, so this is too. */
+
+static char FoldAscii(char c) {
+    return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+}
+
+// The first occurrence of `needle` in `hay` at or after `from`, or -1.
+static int FindFrom(Str hay, Str needle, int from, bool fold) {
+    if (needle.len <= 0 || needle.len > hay.len) {
+        return -1;
+    }
+    for (int i = from; i + needle.len <= hay.len; i++) {
+        int k = 0;
+        for (; k < needle.len; k++) {
+            char a = hay.s[i + k], b = needle.s[k];
+            if (fold) {
+                a = FoldAscii(a);
+                b = FoldAscii(b);
+            }
+            if (a != b) {
+                break;
+            }
+        }
+        if (k == needle.len) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static Str MatcherText(const SearchMatcher* m) {
+    return Str(m->text.els, m->text.len);
+}
+
+// update_matches. `stream_find_iter` answers leftmost non-overlapping
+// matches, which is what stepping past the end of each one comes to.
+static void MatcherUpdateMatches(SearchMatcher* m) {
+    m->ranges.Clear();
+    m->ranges.len = 0;
+    if (m->query.len > 0) {
+        Str hay = MatcherText(m);
+        int at = 0;
+        for (;;) {
+            int lo = FindFrom(hay, m->query, at, m->caseInsensitive);
+            if (lo < 0) {
+                break;
+            }
+            m->ranges.Append(Selection{lo, lo + m->query.len});
+            at = lo + m->query.len;
+        }
+    }
+    if (!m->replacing || m->ranges.len == 0) {
+        m->current = 0;
+    } else if (m->current > m->ranges.len - 1) {
+        m->current = m->ranges.len - 1;
+    }
+    m->replacing = false;
+}
+
+void SearchMatcherReset(SearchMatcher* m) {
+    m->ranges.len = 0;
+    m->text.len = 0;
+    StrFree(m->query);
+    m->query = {};
+    m->current = 0;
+    m->replacing = false;
+}
+
+void SearchMatcherUpdate(SearchMatcher* m, Str text) {
+    // The unchanged text is Rust's early return, and it clears `replacing`
+    // on the way out — a replacement that did not move a byte still ends.
+    if (m->text.len == text.len &&
+        (text.len == 0 || memcmp(m->text.els, text.s, (size_t)text.len) == 0)) {
+        m->replacing = false;
+        return;
+    }
+    m->text.len = 0;
+    if (text.len > 0) {
+        char* dst = m->text.AppendBlanks(text.len);
+        if (dst) {
+            memcpy(dst, text.s, (size_t)text.len);
+        }
+    }
+    MatcherUpdateMatches(m);
+}
+
+void SearchMatcherUpdateQuery(SearchMatcher* m, Str query, bool insensitive) {
+    StrFree(m->query);
+    m->query = query.len > 0 ? StrDup(query) : Str{};
+    m->caseInsensitive = insensitive;
+    MatcherUpdateMatches(m);
+}
+
+Str SearchMatcherLabel(Arena* a, const SearchMatcher* m) {
+    if (m->ranges.len == 0) {
+        return StrDup(a, StrL("0/0"));
+    }
+    return StrDup(a, fmt("%d/%d", m->current + 1, m->ranges.len));
+}
+
+void SearchMatcherSetIndex(SearchMatcher* m, int ix) {
+    int most = m->ranges.len > 0 ? m->ranges.len - 1 : 0;
+    if (ix > most) {
+        ix = most;
+    }
+    m->current = ix < 0 ? 0 : ix;
+}
+
+void SearchMatcherBeginReplacement(SearchMatcher* m) {
+    m->replacing = true;
+}
+
+bool SearchMatcherHasNextWithoutWrap(const SearchMatcher* m) {
+    return m->current < (m->ranges.len > 0 ? m->ranges.len - 1 : 0);
+}
+
+// next_index: the one after, or back to the top.
+static int MatcherNextIndex(const SearchMatcher* m) {
+    if (m->ranges.len == 0) {
+        return -1;
+    }
+    return SearchMatcherHasNextWithoutWrap(m) ? m->current + 1 : 0;
+}
+
+bool SearchMatcherPeek(const SearchMatcher* m, Selection* out) {
+    int ix = MatcherNextIndex(m);
+    if (ix < 0) {
+        return false;
+    }
+    *out = m->ranges[ix];
+    return true;
+}
+
+bool SearchMatcherCurrent(const SearchMatcher* m, Selection* out) {
+    if (m->current < 0 || m->current >= m->ranges.len) {
+        return false;
+    }
+    *out = m->ranges[m->current];
+    return true;
+}
+
+void SearchMatcherCursorByOffset(SearchMatcher* m, int offset) {
+    for (int i = 0; i < m->ranges.len; i++) {
+        m->current = i;
+        if (m->ranges[i].Contains(offset) || m->ranges[i].end >= offset) {
+            return;
+        }
+    }
+}
+
+bool SearchMatcherNext(SearchMatcher* m, Selection* out) {
+    int ix = MatcherNextIndex(m);
+    if (ix < 0) {
+        return false;
+    }
+    m->current = ix;
+    *out = m->ranges[ix];
+    return true;
+}
+
+bool SearchMatcherPrev(SearchMatcher* m, Selection* out) {
+    if (m->ranges.len == 0) {
+        return false;
+    }
+    if (m->current == 0) {
+        m->current = m->ranges.len;
+    }
+    m->current--;
+    *out = m->ranges[m->current];
+    return true;
+}
+
+void SearchSessionSetQuery(SearchSession* s, Str query, bool insensitive) {
+    StrFree(s->query);
+    s->query = query.len > 0 ? StrDup(query) : Str{};
+    s->caseInsensitive = insensitive;
+    SearchMatcherUpdateQuery(&s->matcher, s->query, insensitive);
+}
+
+void SearchSessionSetReplacement(SearchSession* s, Str replacement) {
+    StrFree(s->replacement);
+    s->replacement = replacement.len > 0 ? StrDup(replacement) : Str{};
+}
+
 /* Port of crates/base/src/input/base/mask_pattern.rs.
 
    Rust parses the pattern once into a `Vec<MaskToken>` and keeps it beside the

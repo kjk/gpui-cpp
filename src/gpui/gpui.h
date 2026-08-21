@@ -2075,6 +2075,90 @@ struct AutoScroll {
 
 // that edits it, and the undo history behind it. `onChange` is what Rust
 // spells cx.subscribe(&input_state, |ev: &InputEvent| ...).
+// SearchMatcher, crates/base/src/input/editor/search.rs: a query, where it is
+// found in the text, and a cursor into that list. Rust builds an aho-corasick
+// automaton over a single literal pattern, which is a substring scan with an
+// ASCII case fold on the side — so that is what this is, and no library comes
+// with it.
+struct SearchMatcher {
+    // matched_ranges, in order and non-overlapping.
+    Vec<Selection> ranges;
+    int current = 0;
+    // ascii_case_insensitive, which is the fold aho-corasick is built with.
+    bool caseInsensitive = true;
+    // The query, owned. Empty is Rust's `None`: no automaton, no matches.
+    Str query = {};
+    // The text the ranges were found in. Rust clones the rope and compares
+    // it to know whether anything moved; a clone is structural there and a
+    // copy of the document here, which is the one cost this port pays for
+    // keeping the comparison exact.
+    Vec<char> text;
+    // begin_replacement: set for the one update that a replacement causes, so
+    // the cursor is clamped into the shorter list rather than reset to the
+    // top. Cleared by that update, whether or not anything moved.
+    bool replacing = false;
+
+    ~SearchMatcher() {
+        ranges.Reset();
+        text.Reset();
+        StrFree(query);
+    }
+};
+
+// new(). A matcher is a plain value, so this is only for putting a used one
+// back to the start.
+void SearchMatcherReset(SearchMatcher* m);
+// update(&text): the text is what it is now, and the matches follow.
+void SearchMatcherUpdate(SearchMatcher* m, Str text);
+void SearchMatcherUpdateQuery(SearchMatcher* m, Str query, bool insensitive);
+inline int SearchMatcherLen(const SearchMatcher* m) {
+    return m->ranges.len;
+}
+inline bool SearchMatcherIsEmpty(const SearchMatcher* m) {
+    return m->ranges.len == 0;
+}
+inline int SearchMatcherIndex(const SearchMatcher* m) {
+    return m->current;
+}
+// label(): "3/17", or "0/0" when nothing matched.
+Str SearchMatcherLabel(Arena* a, const SearchMatcher* m);
+// set_current_match_index: clamped into the list, as Rust's `.min(len - 1)`.
+void SearchMatcherSetIndex(SearchMatcher* m, int ix);
+void SearchMatcherBeginReplacement(SearchMatcher* m);
+bool SearchMatcherHasNextWithoutWrap(const SearchMatcher* m);
+// peek(): the range `next` would land on, without moving the cursor.
+bool SearchMatcherPeek(const SearchMatcher* m, Selection* out);
+// The current range, if there is one.
+bool SearchMatcherCurrent(const SearchMatcher* m, Selection* out);
+// update_cursor_by_offset: the first match at or after the offset, which is
+// where a freshly opened panel starts from.
+void SearchMatcherCursorByOffset(SearchMatcher* m, int offset);
+// Iterator::next and DoubleEndedIterator::next_back, both of which wrap.
+bool SearchMatcherNext(SearchMatcher* m, Selection* out);
+bool SearchMatcherPrev(SearchMatcher* m, Selection* out);
+
+// SearchSession: the panel's state, kept on the field so it survives the
+// panel being closed and opened again.
+struct SearchSession {
+    bool open = false;
+    bool replaceMode = false;
+    bool caseInsensitive = true;
+    Str query = {};       // owned
+    Str replacement = {}; // owned
+    // anchor_offset: where the view was when the panel opened, so the first
+    // match chosen is the one nearest what you were looking at. -1 is None.
+    int anchorOffset = -1;
+    SearchMatcher matcher;
+
+    ~SearchSession() {
+        StrFree(query);
+        StrFree(replacement);
+    }
+};
+
+void SearchSessionSetQuery(SearchSession* s, Str query, bool insensitive);
+void SearchSessionSetReplacement(SearchSession* s, Str replacement);
+
 struct InputState {
     InputKind kind = InputKind::Input;
     LayoutMode mode = {};

@@ -65,6 +65,7 @@ int GpuiMain(int argc, char** argv) {
     TestMaskPattern();
     TestUndoManager();
     TestInputState();
+    TestSearchMatcher();
     TestList();
     TestPopupMenu();
     TestDataTable();
