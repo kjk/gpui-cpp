@@ -100,11 +100,6 @@ struct StoryApp {
     // One entity per story, created on first view. crates/story keeps the
     // same shape: Gallery holds a view per story, not their state.
     EntityId pages[StoryCount] = {};
-    // The window's notifications, which Root renders and the title bar
-    // counts — `window.notifications(cx)` in Rust. The page that pushes one
-    // does not own it, so a notification outlives leaving that page.
-    Entity<component::NotificationListState> notifications = {};
-    int notifyTimer = 0;
     // ToggleFpsMonitor: AppState::show_fps_monitor, the HUD over the window.
     bool fpsMonitor = false;
     bool seeded = false;
