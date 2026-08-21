@@ -1,10 +1,19 @@
 #include "Story.h"
 
+// One ResizableState per group, the way the Rust story makes one per
+// ResizablePanelGroup: the sizes the drags leave belong to the state, not to
+// the elements, which are rebuilt every frame.
 struct ResizableStory {
     bool showLeft = true;
     bool useFlexNone = true;
     float leftSize = 200;
     float rightSize = 200;
+    Entity<component::ResizableState> nested = {};
+    Entity<component::ResizableState> nestedTop = {};
+    Entity<component::ResizableState> grow = {};
+    Entity<component::ResizableState> flex = {};
+    Entity<component::ResizableState> prog = {};
+    bool seeded = false;
 
     static El* Render(ResizableStory* self, Ctx* cx);
 };
@@ -26,6 +35,20 @@ static void SetPanelSize(ResizableStory* self, Ctx* cx, const ClickEvent*,
     } else {
         self->leftSize = size;
     }
+    // resize_panel_at_handle from an action rather than a drag, which is what
+    // the Rust story's four buttons do: the group settles the rest.
+    component::ResizableState* st = self->prog.Get(cx);
+    if (st && st->sizes.len == 3) {
+        float container = st->bounds.w;
+        if (packed & 1) {
+            ResizablePanelResize(st->sizes.els, st->mins.els, st->maxs.els,
+                                 st->sizes.len, 1,
+                                 container - size - st->sizes[0], container);
+        } else {
+            ResizablePanelResize(st->sizes.els, st->mins.els, st->maxs.els,
+                                 st->sizes.len, 0, size, container);
+        }
+    }
     Notify(cx);
 }
 
@@ -36,13 +59,6 @@ static El* PanelBox(Ctx* cx, const char* text) {
         StoryTxt(cx, Str(text), 16, cx->theme().foreground)->Wrap());
 }
 
-static El* Divider(Ctx* cx, bool vertical) {
-    Arena* a = cx->a;
-    const Theme& th = cx->theme();
-    return vertical ? Div(a)->W(1)->H(kFill)->Bg(th.border)
-                    : Div(a)->H(1)->W(kFill)->Bg(th.border);
-}
-
 static El* Frame(Ctx* cx, float h) {
     Arena* a = cx->a;
     return Div(a)->FlexCol()->W(kFill)->H(h)->Border(1, cx->theme().border);
@@ -50,39 +66,45 @@ static El* Frame(Ctx* cx, float h) {
 
 El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     Arena* a = cx->a;
+    if (!self->seeded) {
+        self->seeded = true;
+        for (Entity<component::ResizableState>* e :
+             {&self->nested, &self->nestedTop, &self->grow, &self->flex,
+              &self->prog}) {
+            *e = EntityNewState<component::ResizableState>(cx->app);
+        }
+    }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
 
     El* nested = StorySection(cx, "Nested Panels",
                               "Combines horizontal and vertical splits with "
                               "constrained panel sizes.");
-    El* nestedBox = Frame(cx, 600);
-    El* topRow = Div(a)->FlexRow()->W(kFill)->H(264);
-    topRow->Child(
-        Div(a)->W(150)->H(kFill)->Child(PanelBox(cx, "Left (120px .. 300px)")));
-    topRow->Child(Divider(cx, true));
-    topRow->Child(Div(a)->Grow()->H(kFill)->Child(PanelBox(cx, "Center")));
-    topRow->Child(Divider(cx, true));
-    topRow->Child(Div(a)->W(300)->H(kFill)->Child(PanelBox(cx, "Right")));
-    nestedBox->Child(topRow);
-    nestedBox->Child(Divider(cx, false));
-    nestedBox->Child(Div(a)->W(kFill)->Grow()->Child(PanelBox(cx, "Center")));
-    nestedBox->Child(Divider(cx, false));
-    nestedBox->Child(
-        Div(a)->W(kFill)->H(80)->Child(PanelBox(cx, "Bottom (80px .. 150px)")));
-    StorySectionAdd(nested, nestedBox);
+    El* topRow =
+        component::Resizable::New(cx, StrL("rz-nested-top"), self->nestedTop)
+            ->H(264)
+            ->Panel(PanelBox(cx, "Left (120px .. 300px)"), 150, 120, 300)
+            ->Grow(PanelBox(cx, "Center"))
+            ->Panel(PanelBox(cx, "Right"), 300)
+            ->IntoEl();
+    El* nestedBox =
+        component::Resizable::New(cx, StrL("rz-nested"), self->nested,
+                                  Axis::Vertical)
+            ->H(600)
+            ->Panel(topRow, 264)
+            ->Grow(PanelBox(cx, "Center"))
+            ->Panel(PanelBox(cx, "Bottom (80px .. 150px)"), 80, 80, 150)
+            ->IntoEl();
+    StorySectionAdd(nested, Frame(cx, 600)->Child(nestedBox));
     page->Child(nested);
 
     El* grow = StorySection(cx, "Growing Panel",
                             "A flexible panel absorbs the space left by a "
                             "constrained neighbor.");
-    El* growBox = Frame(cx, 400);
-    El* growRow = Div(a)->FlexRow()->W(kFill)->H(kFill);
-    growRow->Child(Div(a)->W(200)->H(kFill)->Child(PanelBox(cx, "Left 2")));
-    growRow->Child(Divider(cx, true));
-    growRow
-        ->Child(Div(a)->Grow()->H(kFill)->Child(PanelBox(cx, "Right (Grow)")));
-    growBox->Child(growRow);
-    StorySectionAdd(grow, growBox);
+    El* growRow = component::Resizable::New(cx, StrL("rz-grow"), self->grow)
+                      ->Panel(PanelBox(cx, "Left 2"), 200)
+                      ->Grow(PanelBox(cx, "Right (Grow)"))
+                      ->IntoEl();
+    StorySectionAdd(grow, Frame(cx, 400)->Child(growRow));
     page->Child(grow);
 
     El* flex = StorySection(cx, "Flex Behavior",
@@ -105,23 +127,18 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* flexBtnRow = Div(a)->FlexRow()->W(kFill)->Gap(8);
     flexBtnRow->Child(flexBtns);
     flexCol->Child(flexBtnRow);
-    El* flexBox = Frame(cx, 200);
-    El* flexRow = Div(a)->FlexRow()->W(kFill)->H(kFill);
+    component::Resizable* flexGroup =
+        component::Resizable::New(cx, StrL("rz-flex"), self->flex);
     if (self->showLeft) {
-        flexRow->Child(Div(a)->W(200)->H(kFill)->Child(PanelBox(cx, "Left")));
-        flexRow->Child(Divider(cx, true));
+        flexGroup->Panel(PanelBox(cx, "Left"), 200);
     }
-    flexRow->Child(Div(a)->Grow()->H(kFill)->Child(PanelBox(cx, "Center")));
-    flexRow->Child(Divider(cx, true));
-    El* flexRight = Div(a)->H(kFill)->Child(PanelBox(cx, "Right"));
+    flexGroup->Grow(PanelBox(cx, "Center"));
     if (self->useFlexNone) {
-        flexRight->W(280);
+        flexGroup->Panel(PanelBox(cx, "Right"), 280);
     } else {
-        flexRight->Grow();
+        flexGroup->Grow(PanelBox(cx, "Right"));
     }
-    flexRow->Child(flexRight);
-    flexBox->Child(flexRow);
-    flexCol->Child(flexBox);
+    flexCol->Child(Frame(cx, 200)->Child(flexGroup->IntoEl()));
     StorySectionAdd(flex, flexCol);
     page->Child(flex);
 
@@ -150,18 +167,12 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
                             ->IntoEl());
     }
     progCol->Child(progBtns);
-    El* progBox = Frame(cx, 200);
-    El* progRow = Div(a)->FlexRow()->W(kFill)->H(kFill);
-    progRow->Child(
-        Div(a)->W(self->leftSize)->H(kFill)->Child(PanelBox(cx, "Left")));
-    progRow->Child(Divider(cx, true));
-    progRow
-        ->Child(Div(a)->Grow()->H(kFill)->Child(PanelBox(cx, "Center (grow)")));
-    progRow->Child(Divider(cx, true));
-    progRow->Child(
-        Div(a)->W(self->rightSize)->H(kFill)->Child(PanelBox(cx, "Right")));
-    progBox->Child(progRow);
-    progCol->Child(progBox);
+    El* progRow = component::Resizable::New(cx, StrL("rz-prog"), self->prog)
+                      ->Panel(PanelBox(cx, "Left"), self->leftSize)
+                      ->Panel(PanelBox(cx, "Center"), 300)
+                      ->Panel(PanelBox(cx, "Right"), self->rightSize)
+                      ->IntoEl();
+    progCol->Child(Frame(cx, 200)->Child(progRow));
     StorySectionAdd(prog, progCol);
     page->Child(prog);
     return page;

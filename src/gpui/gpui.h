@@ -68,6 +68,9 @@ struct Theme {
     // is a colour of its own in default-theme.json, not `accent` faded — a
     // blue, in both themes.
     Rgba selection;
+    // drag_border: the accent a drag paints with — a resize handle under the
+    // pointer, a drop target's rule. The same blue in both themes.
+    Rgba dragBorder;
     Rgba titleBar;
     Rgba titleBarBorder;
     Rgba tabBar;
