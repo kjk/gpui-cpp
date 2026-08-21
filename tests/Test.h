@@ -60,6 +60,7 @@ void TestCalendar();
 void TestColorPicker();
 void TestToast();
 void TestVirtualList();
+void TestTaffy();
 void TestDatePicker();
 void TestPopup();
 void TestTextSelection();

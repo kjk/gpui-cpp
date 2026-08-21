@@ -453,3 +453,118 @@ cargo run -p system_monitor
   .flex_wrap()` with no width at all, so it is `W(kFill)` here now and wraps
   where the panel ends. The three-month calendar breaks its rows on the same
   days as the Rust window.
+- 2026-08-21: Taffy, ported. `src/taffy/` is a C++ port of the taffy crate at
+  0.12.2 — the version `gpui-component`'s `Cargo.lock` resolves for `gpui`,
+  which asks for `=0.12.2` — and `LayoutEl` now lays the element tree out
+  through it. The hand-written flex engine that used to live in `gpui.cpp` is
+  gone.
+
+  This is a reversal of a standing decision. AGENTS.md said Taffy was the layer
+  *under* gpui-component and that we reimplemented a subset rather than ported
+  it, and for most of this tree's life that was the right call: a row, a
+  column, grow, and the constants copied out of the Rust were enough. It
+  stopped being enough one question at a time. The shrink half of
+  `resolve_flexible_lengths` was the entry the day before this one; before that
+  it was wrap, and stretch, and shrink-wrap, and the layout memo that existed
+  because the engine ran a subtree three times per parent pass. Every one of
+  those was a piece of taffy being rediscovered from the outside, with the Rust
+  open in the other window. Porting the crate answers all of them at once, and
+  answers the next one before it is asked.
+
+  What is there: flexbox, CSS Grid, block layout with margin collapsing,
+  floats, `calc()` handles, content sizes, and the nine-slot per-node layout
+  cache. What is not: the crate's `parse` (needs `cssparser`, and nothing here
+  parses CSS) and `serde` features, and `detailed_layout_info`, which is an
+  accessor for the computed grid track sizes that nothing reads.
+  `src/taffy/readme.md` is the file-for-file map and the list of deliberate
+  differences; the two that matter to a reader of the C++ are that the traits
+  are gone (there is one tree type and one style type, so the compute pass
+  takes a `TaffyTree*` and reads `Style` fields) and that the generic
+  containers are gone (`Size<Dimension>` is `SizeDim`, `Option<f32>` is `Optf`,
+  and so on, one concrete struct per instantiation the algorithms carry).
+
+  A `taffy::Style` owns nothing: its grid track lists are arena-backed
+  `Slice<T>` and a custom ident is a `Str` into the same arena, so a style
+  copies as bytes. That is hard rule 4 applied to a type Rust can afford to
+  fill with `Vec`s.
+
+  `LayoutEl` is the seam. It walks the `El` tree once to resolve the style
+  refinement, the inspector's edit, the inherited font and the hover color
+  stamp; builds a taffy node per element, with text, icons, images and progress
+  bars as measured leaves (Rust's `request_measured_layout`); runs
+  `ComputeLayoutWithMeasure` with rounding off, the way GPUI does; and writes
+  the boxes back. The taffy tree is kept between frames and cleared, so its
+  node slots and per-node child arrays are recycled rather than reallocated.
+  The `memo*` fields on `El` are gone with the engine that needed them —
+  taffy's own cache is what stops a subtree being measured twice.
+
+  Four things do not go through taffy, and the comment above `LayoutEl` says
+  so: `fixed` elements, which resolve their insets against the *window*, so
+  they are re-parented onto the root taffy node as absolutely positioned
+  children; `anchorBelow` / `anchorAbove` / `anchorCenterX` and the
+  `relative(f)` half of a left/right inset, which are gpui-component
+  positioning rules CSS has no word for and which move an already-laid-out
+  subtree afterwards; and `scrollX` / `scrollY`, which taffy has no notion of —
+  it lays a scroll container's content out at the origin and reports how big it
+  is, and the offset is applied to the in-flow children as their absolute
+  positions accumulate.
+
+  Two style translations are deliberately *not* what Rust's `Style::to_taffy`
+  does, both because doing it the Rust way would move pixels everywhere at the
+  same moment the engine changed, and both worth revisiting on their own:
+
+  - `border` is not handed to taffy. A border still paints over the box rather
+    than reserving space inside it, which is what every widget in this tree was
+    built against. Rust reserves it, so our content sits one border width
+    closer to the edge than the Rust window's does.
+  - `minW` / `minH` map to a length of zero rather than `auto`, so CSS's
+    content-based automatic minimum size is off. `gpui::Style` stores these as
+    plain floats whose default `0` means "unset", so there is no way to tell
+    "no minimum" from "a minimum of zero" anyway; Rust's default is `auto`,
+    which gives a flex item a min-content floor.
+
+  `El::contentW` / `contentH`, which the scrollbars read, now come from taffy's
+  `content_size` rather than from the old engine's intrinsic main/cross sums.
+  Taffy's number includes the container's padding on the trailing side, and the
+  comparison the scrollbar makes is against the border-box size, so the two
+  line up; the old pair excluded padding on both.
+
+  `tests/TaffyTests.cpp` ports every `#[cfg(test)]` module in the crate that
+  pins behaviour rather than Rust specifics: `util/math.rs`, `util/resolve.rs`,
+  `style/alignment.rs`, `style/flex.rs`, `style/mod.rs` (`defaults_match`),
+  `compute/mod.rs`, `tree/taffy_tree.rs`, and the grid's `explicit_grid.rs`,
+  `implicit_grid.rs` and `placement.rs` — plus end-to-end checks of flexbox,
+  block and grid layout, and one of its own for the `CompactLength` bit
+  packing, which is the one place the C++ layout had to be re-derived rather
+  than translated. Left out and not coming: `style_sizes`, which asserts Rust
+  `size_of`s; the `parse` and `serde` cases, for features that are not ported;
+  and `new_should_allocate_default_capacity`, which asserts on a `SlotMap`
+  capacity the C++ tree has no equivalent of.
+
+  Three grid internals are reached through named seams in `compute.h` rather
+  than a test harness, per AGENTS.md. The crate's larger generated suite is not
+  available to port: it lives in taffy's `tests/` directory, and the published
+  crate's `include` covers only `src/` and `examples/`.
+
+  One porting bug the tests caught and worth naming, because it is the kind
+  that hides: `Line<OriginZeroGridPlacement>::is_definite` and
+  `Line<NonNamedGridPlacement>::is_definite` are different functions in Rust.
+  The second treats line 0 as invalid, because 0 is not a valid CSS grid line;
+  the first does not, because in OriginZero coordinates 0 is the left edge of
+  the explicit grid. Both placements are one `LinePlain` here, and it started
+  out with only the CSS-grid-line rule, so every item placed on the first
+  explicit line was treated as auto-placed. Both spellings are there now, named
+  `IsDefinite` and `IsDefiniteGridLine`.
+
+  Verified: `bun cmd/test.ts` (4586 checks), `bun cmd/build.ts -rel -all` and
+  `-dbg -all`, and the laid-out element tree of `system_monitor` dumped and
+  read against the Rust example's numbers. And a screenshot sweep against the
+  old engine: the examples (`hello_world`, `input`, `sidebar`, `showcase`,
+  `markdown_table`, `table_in_scrollable`, `focus_trap`, `dialog_overlay`,
+  `rich_text`, `text_selection`, `tooltip_top_edge`, `app_assets`,
+  `root_borderless`, `window_title`) and fourteen story pages, shot from a
+  build with the old flex engine stashed back in and again from this one. All
+  29 pairs are identical pixel for pixel — not close, equal. `cmd/shot.ts`
+  warns that the window never reached the foreground on some runs and leaves
+  the previous PNG in place when it does, so check the file's mtime before
+  reading anything into a capture.

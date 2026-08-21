@@ -37,6 +37,19 @@ export const zedGpui = {
   lock: "git+https://github.com/zed-industries/zed#cc053a4a6fa2fd0e8793201ed9099466af1be0b1",
 } as const;
 
+/**
+ * The layout crate that gpui-component's Cargo.lock resolves for `gpui`,
+ * which asks for `taffy = "=0.12.2"`. We port it: `src/taffy/` is a C++ port
+ * of exactly this version, and `src/gpui` lays out through it. See
+ * `src/taffy/readme.md`.
+ */
+export const taffy = {
+  repo: "https://github.com/DioxusLabs/taffy",
+  version: "0.12.2",
+  crateSha256: "340a09581f29809fc0df82a3955501dc7f2a21f887e5d1c13dbe288fe1c0bef4",
+  dir: "src/taffy",
+} as const;
+
 export function rustTreeDir(repoRoot: string): string {
   return join(repoRoot, gpuiComponent.dir);
 }

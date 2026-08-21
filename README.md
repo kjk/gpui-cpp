@@ -7,7 +7,7 @@ Original project:
 - Repository: https://github.com/longbridge/gpui-component
 - Docs: https://longbridge.github.io/gpui-component
 
-This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux, and Cocoa + Core Graphics + Core Text on macOS. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates and does not use Taffy, Blade, or Zed’s renderer.
+This tree reimplements the component examples and a small runtime on top of the OS: Win32 + Direct2D + DirectWrite on Windows, X11 + cairo + Pango on Linux, and Cocoa + Core Graphics + Core Text on macOS. Everything above the `Paint.h` / `Platform.h` seam is shared. It is not a binding to the Rust crates, and it does not use Blade or Zed’s renderer. Layout is the exception: `src/taffy/` is a C++ port of the taffy crate GPUI itself lays out with, at the version gpui-component pins.
 
 The API follows GPUI's shape: an `App` owns the entity store and the windows, a `Window` renders a view, and a view is a struct with state plus `static El* Render(T* self, Ctx* cx)`:
 

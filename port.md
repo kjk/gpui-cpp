@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | App | `examples/system_monitor/src/main.rs` | `examples/system_monitor.cpp` |
 | Components | Theme, Root, TitleBar, TabBar(segmented), Tab, AreaChart, Progress, Icon, DataTable | `src/ui/*` |
-| Runtime | gpui window, flex `div`/`h_flex`/`v_flex`, text, gradient, path, timer, input | `src/gpui/*` (Win32 + Direct2D + DirectWrite + custom flex) |
+| Runtime | gpui window, flex `div`/`h_flex`/`v_flex`, text, gradient, path, timer, input | `src/gpui/*` (Win32 + Direct2D + DirectWrite) + `src/taffy/*` (taffy, ported) |
 | Metrics | `sysinfo`, `battery` | `src/sys/*` (Win32) |
 | Strings/arrays | `String`, `Vec` | `Str`, `Vec` from SumatraPDF |
 
@@ -21,6 +21,9 @@ An earlier STL-based sketch exists in `../gpui/`. Ignore it for implementation. 
 Workspace crates: `gpui-component` (`crates/ui`), `gpui-base`, `gpui-component-assets`, `gpui-component-macros`, `story`, `fps`, `webview`.
 
 Pinned GPUI from `zed-industries/zed` (`gpui`, `gpui_platform`, `gpui_macros`). That pull brings Taffy, Blade, font-kit, cosmic-text/rustybuzz, and a huge Windows crate surface. Exact SHAs: [`cmd/versions.ts`](cmd/versions.ts).
+
+Taffy is the one of those we **do** port: `src/taffy/` is a C++ port of taffy
+0.12.2, the version that `Cargo.lock` resolves for `gpui`. See §4.3.
 
 `system_monitor` extra crates: `sysinfo 0.37`, `battery 0.7`, `smol` (500 ms timer). The `windows` GPU features in its `Cargo.toml` are unused by the example source.
 
@@ -103,18 +106,24 @@ Fluent methods return `El*` so call sites read like the Rust builder.
 
 ### 4.3 Layout
 
-Custom flex subset (Taffy is not vendored):
+`src/taffy/` — a C++ port of [taffy](https://github.com/DioxusLabs/taffy)
+0.12.2, the layout crate Zed's GPUI itself uses, so layout here means what
+layout means in gpui-component. This started as a hand-written flex subset and
+was replaced once the subset stopped being able to answer the questions the
+widgets were asking of it.
 
-- row / column
-- `flex-grow` / `flex-shrink` / definite px sizes / percent of parent / `auto`
-- `min-width` / `min-height` / `max-*`
-- padding, margin, gap
-- `justify-content`: start, end, center, space-between
-- `align-items`: start, end, center, stretch
-- overflow clip + vertical scroll offset
-- text measure via DirectWrite
+What the port covers: flexbox, CSS Grid, block layout with margin collapsing,
+floats, `calc()` handles, content sizes and the per-node layout cache. What it
+does not: the crate's `parse` and `serde` features, and
+`detailed_layout_info`. `src/taffy/readme.md` is the file-for-file map, the
+list of deliberate differences, and the refresh procedure.
 
-Good enough for this example. No grid, no wrap, no absolute except progress fill.
+`LayoutEl` in `src/gpui/gpui.cpp` is the seam between the `El` tree and the
+taffy tree: it translates `gpui::Style` into `taffy::Style`, runs the layout,
+and writes the boxes back. Text, icons, images and progress bars reach taffy as
+measured leaves. The handful of gpui-component positioning rules CSS has no
+word for — `fixed` against the window, an overlay anchored under its trigger, a
+`relative(f)` inset — are applied around it.
 
 ### 4.4 Paint
 
