@@ -714,7 +714,11 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     float w = app->collapsed ? 56.f : SidebarWidth(cx);
-    El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Bg(th.sidebar);
+    // Rust puts this sidebar in a `resizable_panel()`, whose width is not up
+    // for negotiation with the pane beside it. A plain flex item is, so it
+    // says so: without this the content pane's own minimum squeezes the
+    // sidebar below the 200 the width helper floors at.
+    El* side = Div(a)->W(w)->H(kFill)->FlexCol()->Shrink0()->Bg(th.sidebar);
     El* header = Div(a)->FlexCol()->Pad(12)->Gap(16);
     El* brand = Div(a)->FlexRow()->Gap(10)->ItemsCenter();
     El* logo = Div(a)
