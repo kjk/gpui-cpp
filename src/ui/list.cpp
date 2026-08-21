@@ -119,9 +119,23 @@ List* List::Headers(El* (*headerFn)(Ctx*, void*, int),
     }
     return this;
 }
+ListItem* ListSeparatorItem(Ctx* cx, El* child) {
+    return ListItem::New(cx, child)->Disabled(true);
+}
+
 List* List::Searchable(InputState* s, Listener onFocus) {
     search = s;
     onSearchFocus = onFocus;
+    return this;
+}
+
+List* List::Loading(El* e) {
+    loading = e;
+    return this;
+}
+
+List* List::Initial(El* e) {
+    initial = e;
     return this;
 }
 List* List::Empty(El* e) {
@@ -131,6 +145,34 @@ List* List::Empty(El* e) {
 List* List::H(float px) {
     h = px;
     return this;
+}
+
+// list/loading.rs: three placeholder rows, each a wide bar over a narrower
+// secondary one. Rust builds them out of ListItem so they carry a row's own
+// padding; the shape is the same either way.
+El* ListLoadingView(Ctx* cx, float h) {
+    Arena* a = cx->a;
+    El* body = Div(a)->FlexCol()->W(kFill)->PadY(10)->Gap(12);
+    if (h > 0) {
+        body->H(h);
+    }
+    for (int i = 0; i < 3; i++) {
+        body->Child(
+            Div(a)
+                ->FlexCol()
+                ->W(kFill)
+                ->PadX(8)
+                ->Gap(6)
+                // max_w_full: the bars keep their own widths and a
+                // list narrower than they are clips them rather than
+                // letting them hang over its edge.
+                ->ItemsStart()
+                ->ClipX()
+                ->Child(Skeleton::New(cx)->W(192)->H(20)->IntoEl())
+                ->Child(
+                    Skeleton::New(cx)->Secondary()->W(256)->H(12)->IntoEl()));
+    }
+    return body;
 }
 
 // render_empty: an Inbox icon in muted_foreground at 60%, centred in what the
@@ -178,13 +220,14 @@ El* List::IntoEl() {
     s->viewportH = h;
 
     if (s->loading) {
-        // The delegate's loading state: skeleton rows in place of the list.
-        El* body = Div(a)->FlexCol()->W(kFill)->H(h);
-        for (int i = 0; i < 5; i++) {
-            body->Child(Div(a)->W(kFill)->PadX(8)->PadY(6)->Child(
-                Skeleton::New(cx)->W(kFill)->H(16)->IntoEl()));
-        }
-        root->Child(body);
+        root->Child(loading ? loading : ListLoadingView(cx, h));
+        return root;
+    }
+    // render_initial: what the list shows before anything has been searched
+    // for. Rust asks for it only while the query field is empty, which is the
+    // one place it could be reached from.
+    if (initial && (!search || search->text.len == 0)) {
+        root->Child(initial);
         return root;
     }
     if (s->count == 0) {
