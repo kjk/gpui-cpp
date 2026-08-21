@@ -2271,21 +2271,18 @@ static float TextMeasureWidth(const El* e, taffy::SizeOptF known,
     return 0.0f;
 }
 
-// gpui's `snap_measured_size_to_device_pixels`: what a leaf measures is
-// ceiled to the device pixel grid before taffy sees it, so a box is never
-// laid out half a pixel short of the glyphs that have to be painted in it.
-// GPUI runs the whole layout in device pixels and ceils there; this tree
-// works in DIPs, so the same snapping is a round trip through the grid.
-static float SnapMeasuredUp(float v, float scale) {
-    if (!(v > 0.0f)) {
-        return 0.0f;
-    }
-    if (scale <= 0.0f) {
-        return v;
-    }
-    return ceilf(v * scale) / scale;
-}
-
+// Not snapped. gpui ceils what a leaf measures to the device pixel grid
+// (`snap_measured_size_to_device_pixels`), and it is tempting to read the raw
+// float handed over here as the sub-pixel drift between this tree and that
+// one. It is not: gpui runs the *whole* layout in device pixels — available
+// space multiplied by the scale factor on the way in, every authored length
+// rounded in `to_taffy`, bounds divided back out on the way to paint — and
+// ceiling the measure alone imports a quarter of that model. Measured against
+// the engine this port replaced, over all 65 story pages, doing so moved
+// every one of them further away and tripled the pixels that differ, because
+// it quantises text boxes while the padding, gaps and borders around them
+// stay where they were. Whole model or none of it; port-progress.md has the
+// numbers.
 static taffy::SizeF LayoutMeasure(taffy::SizeOptF known, taffy::SizeAvail avail,
                                   taffy::NodeId node, void* nodeContext,
                                   const taffy::Style* nodeStyle,
@@ -2299,36 +2296,29 @@ static taffy::SizeF LayoutMeasure(taffy::SizeOptF known, taffy::SizeAvail avail,
     }
     PaintCtx* ctx = mc ? mc->ctx : nullptr;
     float font = e->laidFont;
-    float scale = ctx && ctx->dpi > 0 ? ctx->dpi / 96.0f : 1.0f;
 
-    taffy::SizeF out;
     switch (e->kind) {
         case ElKind::Text: {
             float measW = TextMeasureWidth(e, known, avail);
             Size text = MeasureText(ctx, e->text, font, measW, e->style.wrap,
                                     ElTextWeight(e), e->style.lineHeight);
-            out = {known.width.UnwrapOr(text.w), known.height.UnwrapOr(text.h)};
-            break;
+            return {known.width.UnwrapOr(text.w), known.height
+                                                      .UnwrapOr(text.h)};
         }
         case ElKind::Icon:
-            out = {known.width.UnwrapOr(16.0f), known.height.UnwrapOr(16.0f)};
-            break;
+            return {known.width.UnwrapOr(16.0f), known.height.UnwrapOr(16.0f)};
         case ElKind::Progress:
-            out = {known.width.UnwrapOr(48.0f), known.height.UnwrapOr(8.0f)};
-            break;
+            return {known.width.UnwrapOr(48.0f), known.height.UnwrapOr(8.0f)};
         case ElKind::Image: {
             float availW = avail.width.IsDefinite() ? avail.width.value : 0.0f;
             Size sz =
                 LayoutImageSize(ctx, e, known.width.UnwrapOr(0.0f),
                                 known.height.UnwrapOr(0.0f), availW, font);
-            out = {sz.w, sz.h};
-            break;
+            return {sz.w, sz.h};
         }
         default:
             return taffy::SizeF::Zero();
     }
-    return {SnapMeasuredUp(out.width, scale),
-            SnapMeasuredUp(out.height, scale)};
 }
 
 // A childless Div is still a box with a size; only these kinds have content

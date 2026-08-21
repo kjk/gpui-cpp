@@ -856,3 +856,30 @@ cargo run -p system_monitor
   `gpui.cpp`. It compiled only because md4c sat at the tail of the amalgam
   with `#pragma warning(push, 0)` and no pop, which turned C4505 off for the
   whole translation unit. Taking md4c out turned the warning back on.
+- 2026-08-21: The device-pixel snap, measured and not taken. The taffy entry
+  listed a fourth thing to fix: gpui ceils what a leaf measures to the device
+  pixel grid (`snap_measured_size_to_device_pixels`) and `LayoutMeasure` hands
+  over the raw float, so the sub-pixel drift between this tree's screenshots
+  and the engine it replaced looked like that missing ceil.
+
+  It is not. Ceiling the measure was written, built and swept: 65 story pages
+  against a build of `d270de4`, the last commit before the port. Every one of
+  the 65 moved *further* from it, and the pixels that differ went from 324,663
+  to 1,001,435 — three times worse, with no page improved.
+
+  The reason is that gpui's snapping is not a step, it is a coordinate system.
+  `Window::layout` multiplies the available space by the scale factor going
+  in, `Style::to_taffy` rounds every authored length — borders, padding, gaps,
+  explicit sizes — in that same space, and bounds are divided back out on the
+  way to paint. Taffy sees whole device pixels for everything. Ceiling only
+  what a leaf measures imports a quarter of that: text boxes quantised while
+  the padding, gaps and borders around them keep their fractions, which is a
+  new kind of wrong rather than less of the old one.
+
+  So the drift stands, and the entry above it was wrong about the cause. What
+  would actually close it is adopting the device-pixel layout space whole —
+  the transform on available space, the rounding in `ToTaffyStyle`, the
+  division on write-back — which is its own change with its own sweep, and
+  worth doing only with a reason better than "the screenshots differ from an
+  engine that is gone". `LayoutMeasure` carries the finding in a comment so
+  the next reader does not spend the afternoon rediscovering it.
