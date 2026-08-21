@@ -86,6 +86,14 @@ diff applies mechanically. The crate's own unit tests are ported in
 `tests/TaffyTests.cpp`; a version bump that changes behaviour should show up
 there first.
 
+Two things we port are in the repository but not in the published crate, whose
+`include` covers only `src/` and `examples/`: the `#[cfg(test)]` modules'
+larger generated suite in `tests/`, and the benchmarks in `benches/`. Both
+need the clone above. `bench/` is the port of `benches/benches/flexbox.rs`,
+`grid.rs` and `tree_creation.rs` plus the tree builders in `benches/src/`;
+`benches/benches/mixed.rs` is not ported, because it measures text through
+`parley`.
+
 ## Not ported (do not pin / do not chase)
 
 `sysinfo`, `battery`, `smol`, `reqwest` (zed fork), ropey, tree-sitter, syntect, html5ever, resvg — C++ uses Win32 / our own code instead.

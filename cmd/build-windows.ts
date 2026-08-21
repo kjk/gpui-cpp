@@ -31,7 +31,15 @@ const simpleExamples = [
   "rich_text",
 ];
 
-const knownTargets = ["system_monitor", "app_assets", "showcase", "story", "tests", ...simpleExamples] as const;
+const knownTargets = [
+  "system_monitor",
+  "app_assets",
+  "showcase",
+  "story",
+  "tests",
+  "bench",
+  ...simpleExamples,
+] as const;
 type Target = (typeof knownTargets)[number];
 
 const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<example>]
@@ -200,6 +208,9 @@ function sourcesFor(name: string): string[] | null {
   if (name === "tests") {
     return [...amalgamSrc, ...cppDir("tests")];
   }
+  if (name === "bench") {
+    return [...amalgamSrc, ...cppDir("bench")];
+  }
   if (simpleExamples.includes(name)) {
     return [...amalgamSrc, `examples/${name}.cpp`];
   }
@@ -252,6 +263,7 @@ function groupSources(files: string[]): { key: string; files: string[] }[] {
     showcase: [],
     story: [],
     tests: [],
+    bench: [],
     ex: [],
   };
   for (const f of files) {
@@ -265,6 +277,8 @@ function groupSources(files: string[]): { key: string; files: string[] }[] {
       buckets.story.push(f);
     } else if (f.startsWith("tests/")) {
       buckets.tests.push(f);
+    } else if (f.startsWith("bench/")) {
+      buckets.bench.push(f);
     } else {
       buckets.ex.push(f);
     }
@@ -436,9 +450,15 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
   if (linkNeeded) {
     const link = [
       "/link",
-      // The test runner writes its report to stdout, so it is a console app.
-      // The entry point is the amalgam's wWinMain either way.
-      name === "tests" ? "/SUBSYSTEM:CONSOLE" : "/SUBSYSTEM:WINDOWS",
+      // The test and benchmark runners write their reports to stdout, so
+      // they are console apps. The entry point is the amalgam's wWinMain
+      // either way.
+      name === "tests" || name === "bench" ? "/SUBSYSTEM:CONSOLE" : "/SUBSYSTEM:WINDOWS",
+      // Layout recurses once per level of the tree, and taffy's `superdeep`
+      // benchmarks nest a thousand of them. Windows reserves 1 MB by default,
+      // where the Rust benchmarks get the 8 MB of a Rust main thread. Reserve
+      // is address space, not memory: pages commit as the stack grows.
+      ...(name === "bench" ? ["/STACK:67108864"] : []),
       "/ENTRY:wWinMainCRTStartup",
       "/NODEFAULTLIB:msvcrt.lib",
       "/NODEFAULTLIB:msvcrtd.lib",
@@ -525,8 +545,8 @@ if (clean) {
 }
 const built: string[] = [];
 if (all) {
-  // Every example. The test runner is a target but not an example, so -all
-  // leaves it to cmd/test.ts.
+  // Every example. The test and benchmark runners are targets but not
+  // examples, so -all leaves them to cmd/test.ts and cmd/bench.ts.
   built.push("system_monitor", "app_assets", "showcase", "story", ...simpleExamples);
 } else if (target) {
   built.push(target);

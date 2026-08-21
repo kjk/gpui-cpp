@@ -489,19 +489,91 @@ struct GridItem {
 // ─── stable sort ─────────────────────────────────────────────────────────
 //
 // Rust's `sort_by` and `sort_by_key` are stable, and grid placement depends on
-// that. An insertion sort is stable and a grid's item list is short.
+// that: two items with the same sort key have to stay in document order.
+//
+// This is a bottom-up merge sort over insertion-sorted runs, which is the
+// shape of Rust's own `slice::sort`. It began as a plain insertion sort, on
+// the reasoning that a grid's item list is short — which is true of a grid
+// someone wrote by hand and false of the ones the benchmarks build. A 316x316
+// grid has 99,856 items, and sorting them by hand took 94 seconds of the
+// benchmark's 95.
 
 template <typename T, typename Less>
-void StableSort(T* items, int n, Less less) {
-    for (int i = 1; i < n; i++) {
+static void InsertionSortRange(T* items, int lo, int hi, Less less) {
+    for (int i = lo + 1; i < hi; i++) {
         T key = items[i];
         int j = i - 1;
-        while (j >= 0 && less(key, items[j])) {
+        while (j >= lo && less(key, items[j])) {
             items[j + 1] = items[j];
             j--;
         }
         items[j + 1] = key;
     }
+}
+
+// `!less(right, left)` rather than `less(left, right)` is what keeps equal
+// elements in their original order.
+template <typename T, typename Less>
+static void MergeRuns(const T* src, T* dst, int lo, int mid, int hi,
+                      Less less) {
+    int i = lo;
+    int j = mid;
+    int k = lo;
+    while (i < mid && j < hi) {
+        if (!less(src[j], src[i])) {
+            dst[k++] = src[i++];
+        } else {
+            dst[k++] = src[j++];
+        }
+    }
+    while (i < mid) {
+        dst[k++] = src[i++];
+    }
+    while (j < hi) {
+        dst[k++] = src[j++];
+    }
+}
+
+template <typename T, typename Less>
+void StableSort(T* items, int n, Less less) {
+    if (n < 2) {
+        return;
+    }
+    // Short runs are insertion sorted, then merged pairwise. Below the
+    // threshold there is nothing to merge.
+    const int kRun = 32;
+    for (int lo = 0; lo < n; lo += kRun) {
+        int hi = lo + kRun < n ? lo + kRun : n;
+        InsertionSortRange(items, lo, hi, less);
+    }
+    if (n <= kRun) {
+        return;
+    }
+
+    T* scratch = (T*)gpui::Alloc(nullptr, n * (int)sizeof(T));
+    if (!scratch) {
+        // Out of memory for the scratch half. The insertion sort still sorts,
+        // just slowly, and a sorted list is what the caller needs.
+        InsertionSortRange(items, 0, n, less);
+        return;
+    }
+
+    T* src = items;
+    T* dst = scratch;
+    for (int width = kRun; width < n; width *= 2) {
+        for (int lo = 0; lo < n; lo += 2 * width) {
+            int mid = lo + width < n ? lo + width : n;
+            int hi = lo + 2 * width < n ? lo + 2 * width : n;
+            MergeRuns(src, dst, lo, mid, hi, less);
+        }
+        T* swap = src;
+        src = dst;
+        dst = swap;
+    }
+    if (src != items) {
+        memcpy((void*)items, (const void*)src, (size_t)n * sizeof(T));
+    }
+    gpui::Free(nullptr, (void*)scratch);
 }
 
 // ─── types/named.rs ──────────────────────────────────────────────────────

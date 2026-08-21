@@ -36,7 +36,15 @@ const simpleExamples = [
   "rich_text",
 ];
 
-const knownTargets = ["system_monitor", "app_assets", "showcase", "story", "tests", ...simpleExamples] as const;
+const knownTargets = [
+  "system_monitor",
+  "app_assets",
+  "showcase",
+  "story",
+  "tests",
+  "bench",
+  ...simpleExamples,
+] as const;
 type Target = (typeof knownTargets)[number];
 
 const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clean] [-all] [<example>]
@@ -189,6 +197,9 @@ function sourcesFor(name: string): string[] | null {
   if (name === "tests") {
     return [...amalgamSrc, ...cppDir("tests")];
   }
+  if (name === "bench") {
+    return [...amalgamSrc, ...cppDir("bench")];
+  }
   if (simpleExamples.includes(name)) {
     return [...amalgamSrc, `examples/${name}.cpp`];
   }
@@ -317,6 +328,9 @@ function objGroup(f: string): string {
   }
   if (f.startsWith("tests/")) {
     return "tests";
+  }
+  if (f.startsWith("bench/")) {
+    return "bench";
   }
   return "ex";
 }
@@ -470,8 +484,8 @@ if (clean) {
 }
 const built: string[] = [];
 if (all) {
-  // Every example. The test runner is a target but not an example, so -all
-  // leaves it to cmd/test.ts.
+  // Every example. The test and benchmark runners are targets but not
+  // examples, so -all leaves them to cmd/test.ts and cmd/bench.ts.
   built.push("system_monitor", "app_assets", "showcase", "story", ...simpleExamples);
 } else if (target) {
   built.push(target);

@@ -568,3 +568,59 @@ cargo run -p system_monitor
   warns that the window never reached the foreground on some runs and leaves
   the previous PNG in place when it does, so check the file's mtime before
   reading anything into a capture.
+- 2026-08-21: Taffy's benchmarks, ported, and the 94-second grid they found.
+  `bench/` is a port of the crate's `benches/benches/flexbox.rs`, `grid.rs`
+  and `tree_creation.rs`, plus the tree builders in `benches/src/lib.rs` that
+  all three draw their shapes from. `bun cmd/bench.ts` builds and runs them;
+  the whole suite is eight seconds.
+
+  They are not in the published crate — its `include` covers `src/` and
+  `examples/` — so they come from a git checkout, the same one the generated
+  test suite needs. Yesterday's entry said that suite was "not available to
+  port", which was true of the tarball and false of the repository. Both are
+  reachable; `port-upstream.md` has the clone.
+
+  `benches/benches/mixed.rs` is left out. It measures text leaves through
+  `parley`, and with our own text measure substituted it would be a new
+  benchmark rather than a port of that one. It is the one most worth having
+  afterwards, because a measured leaf is where a real window's layout time
+  goes, and nothing here measures that yet.
+
+  The harness is criterion's `iter_batched` without criterion: setup builds a
+  fresh tree untimed, the run is what the clock sees, and the row reports the
+  median and the minimum over ten samples. Criterion's statistics are for
+  telling a 3% regression from noise; these numbers are read for their shape.
+  The random source is a PCG32 rather than Rust's ChaCha8, seeded the same
+  12345 — reproducible against itself, not against a Rust run, which would
+  have meant porting `rand`'s uniform sampling for numbers a different machine
+  produced anyway.
+
+  What they immediately found: `grid/wide/316x316` took **94 seconds**. Taffy's
+  own published table has that case at 104 ms. The rest of the port was within
+  the constant factor you would expect — `grid/deep/2x2/1024` at 9.9 ms
+  against their 1.7 ms, `superdeep/1000` at 8.2 ms against 2.0 ms, all of it
+  scaling linearly — but wide grids grew quadratically: ten times the cells,
+  two hundred times the time.
+
+  It was the sort. Rust's `sort_by_key` is stable and grid placement depends
+  on that, so the port used an insertion sort, with a comment reasoning that
+  "a grid's item list is short". That is true of every grid anyone writes by
+  hand, and true of all 65 story pages, and false of a 316x316 one, which has
+  99,856 items. `StableSort` is a bottom-up merge over insertion-sorted runs
+  now — the shape of Rust's own `slice::sort`. 94 s to 0.30 s, and the curve
+  is straight.
+
+  Worth naming as a category: that is a bug no test in this tree could have
+  caught, because every test and every screenshot is the size a person would
+  draw. It took an input built by a machine to be big. The benchmarks are
+  where that class of mistake surfaces, which is the argument for keeping them
+  runnable rather than reading a number once.
+
+  One harness detail. Layout recurses once per level, and `superdeep` nests a
+  thousand of them, which overflows Windows' 1 MB default stack — Rust's main
+  thread gets 8 MB. The bench binary links with `/STACK:67108864`; reserve is
+  address space, and pages commit as the stack grows. Nothing else needs it,
+  and no real element tree comes close.
+
+  Also fixed on the way past: `AGENTS.md` listed `src/taffy/taffy.md`, a file
+  that does not exist.
