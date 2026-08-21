@@ -1114,6 +1114,10 @@ struct Style {
     float minH = 0;
     float maxW = 1e9f;
     float maxH = 1e9f;
+    // aspect_ratio, width over height. Only an image sets it, and it sets it
+    // from the decoded bitmap: gpui's `Img::request_layout` stamps the ratio
+    // on the style so a clamped width carries the height with it. 0 = unset.
+    float aspect = 0;
     float flexGrow = 0;
     float flexShrink = 1;
     Edges pad = {};
