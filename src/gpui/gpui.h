@@ -1895,6 +1895,60 @@ int LayoutModeRows(const LayoutMode& m);
 int LayoutModeMinRows(const LayoutMode& m);
 
 // state.rs InputBaseState. The text a themed Input is bound to, everything
+// ─── auto-scroll (crates/base/src/auto_scroll.rs) ─────────────────────────
+//
+// A drag that reaches the edge of a scrolling box keeps scrolling it while
+// the pointer stays there, faster the further out it goes. Rust drives it
+// with a 16 ms background task per state; here the frame loop is that clock,
+// so what a state carries is only the delta in force and where the pointer
+// was — the arithmetic is `AutoScrollComputeDelta` and is the same either way.
+// It lives beside InputState because that is what holds one; the logic is in
+// src/base/auto_scroll.cpp, the way the rest of the input engine is.
+
+// MIN_SPEED and MAX_SPEED, in DIPs per tick.
+const float kAutoScrollMinSpeed = 12.f;
+const float kAutoScrollMaxSpeed = 64.f;
+// INNER_ZONE: the trigger starts this far *inside* the box, so a drag still
+// scrolls in a full-screen window where the pointer cannot get outside the
+// element at all.
+const float kAutoScrollInnerZone = 16.f;
+// OUTER_RAMP: how far past the edge reaches MAX_SPEED. The ramp is the two
+// added together, which is what makes one smooth curve with no flat part.
+const float kAutoScrollOuterRamp = 80.f;
+
+// compute_delta: how far a pointer at `y` should move the box, positive
+// toward the bottom. False inside the dead zone, where nothing scrolls.
+bool AutoScrollComputeDelta(float y, Bounds bounds, float* out);
+
+struct AutoScroll {
+    // The delta in force. Rust shares an `Option<Pixels>` with its task and
+    // writes None to stop it; `active` is that None.
+    float delta = 0;
+    bool active = false;
+    // last_drag_position: where the pointer was, so a tick can re-run the
+    // selection at the same place while the content moves under it.
+    Point lastDrag = {};
+    bool hasLastDrag = false;
+
+    bool IsActive() const { return active; }
+    // set(Some(d)) and set(None). The second stops the ticking but keeps the
+    // drag position, which is what a move back inside the box does.
+    void Set(float d) {
+        delta = d;
+        active = true;
+    }
+    void SetNone() {
+        delta = 0;
+        active = false;
+    }
+    // stop(): the ticking and the drag position both.
+    void Stop() {
+        SetNone();
+        lastDrag = {};
+        hasLastDrag = false;
+    }
+};
+
 // that edits it, and the undo history behind it. `onChange` is what Rust
 // spells cx.subscribe(&input_state, |ev: &InputEvent| ...).
 struct InputState {
@@ -1926,6 +1980,9 @@ struct InputState {
     int align = 0;
     // A press is down and every move until the release extends the selection.
     bool selecting = false;
+    // A selection drag that has reached the edge of a scrolled field keeps
+    // scrolling it. Single-line fields have nowhere to go and never set it.
+    AutoScroll autoScroll;
     // This field's caret clock, InputState::blink_cursor. Created on first
     // use, so an InputState stays a plain value.
     EntityId blink = {};
