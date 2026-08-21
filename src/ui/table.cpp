@@ -404,6 +404,7 @@ El* DataTable::IntoEl() {
     Listener rowClick = ListenTo(state, &TableState::OnRowClick, 0);
     Listener rowDown = ListenTo(state, &TableState::OnRowMouseDown, 0);
     Listener cellClick = ListenTo(state, &TableState::OnCellClick, 0);
+    Listener cellDown = ListenTo(state, &TableState::OnCellMouseDown, 0);
     El* bodyFixed = TableBody::New(cx, StrDup(a, fmt("%s-body-f", id)))
                         ->FlexCol()
                         ->Shrink0();
@@ -492,6 +493,10 @@ El* DataTable::IntoEl() {
             }
             // The selected cell, painted the way the selected row is: the
             // table's own active pair rather than a plain accent block.
+            if (s && s->rightClickedCellRow == r &&
+                s->rightClickedCellCol == c) {
+                td->Bg(RgbaOpacity(th.accent, 0.5f));
+            }
             if (s && s->mode == TableSelectionMode::Cell &&
                 s->selectedCellRow == r && s->selectedCellCol == c) {
                 ListActiveStyle sel = ListActiveStyleOf(
@@ -506,6 +511,7 @@ El* DataTable::IntoEl() {
             if (s && s->cellSelectable) {
                 BindClick(td, StrDup(a, fmt("%s-cell-%d-%d", id, r, c)),
                           ListenerArg(cellClick, TableCellPack(r, c)));
+                td->OnMouseDown(ListenerArg(cellDown, TableCellPack(r, c)));
             }
             if (cellEl) {
                 // render_td clips what it holds to the column. Dragging an
