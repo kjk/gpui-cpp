@@ -123,6 +123,15 @@ struct EditMap {
     // memcpy-only, and an ArenaVec is POD.
     Arena* a = nullptr;
     Vec<Entry> map;
+
+    // Rust's `add` walks the entries it already holds looking for one at the
+    // same index. That is linear per call and a table adds one entry per
+    // cell, which makes a document of tables quadratic in its cell count.
+    // This is that walk, replaced by an open-addressed table from `at` to
+    // `map` index + 1 (0 is an empty bucket). `buckets.len` is a power of two
+    // and always > `map.len`. It changes nothing about the entries or the
+    // events they produce; it only finds an existing one faster.
+    Vec<int32_t> buckets;
 };
 
 void EditMapAdd(EditMap& map, int32_t index, int32_t remove,

@@ -284,16 +284,48 @@ static void ShiftLinks(Vec<Event>& events, const Vec<Jump>& jumps) {
     }
 }
 
+// The bucket `at` belongs in: the first one on its probe chain that is empty
+// or already holds it. `buckets.len` is a power of two, so the mask is the
+// modulo. The multiply-and-fold spreads indices that differ by 1 or 2 — which
+// is most of what a resolver hands us — over the whole table instead of into
+// one run. Every bit of the product has to reach the low ones: a table's map
+// runs to six figures of entries, and a hash that only varies in 16 bits
+// piles all of them onto one probe chain.
+static int32_t BucketFor(const Vec<int32_t>& buckets,
+                         const Vec<EditMap::Entry>& entries, int32_t at) {
+    uint32_t h = (uint32_t)at * 2654435761u;
+    h ^= h >> 15;
+    int32_t mask = buckets.len - 1;
+    int32_t i = (int32_t)h & mask;
+    while (buckets[i] != 0 && entries[buckets[i] - 1].at != at) {
+        i = (i + 1) & mask;
+    }
+    return i;
+}
+
+// Grow to `wanted` buckets (a power of two) and re-place every entry.
+static void RehashBuckets(EditMap& map, int32_t wanted) {
+    map.buckets.Reset();
+    VecReserve(map.buckets, wanted);
+    map.buckets.len = wanted;
+    memset((void*)map.buckets.els, 0, (size_t)wanted * sizeof(int32_t));
+    for (int32_t i = 0; i < map.map.len; i++) {
+        map.buckets[BucketFor(map.buckets, map.map, map.map[i].at)] = i + 1;
+    }
+}
+
 static void AddImpl(EditMap& map, int32_t at, int32_t remove, const Event* add,
                     int32_t addLen, bool before) {
     if (remove == 0 && addLen == 0) {
         return;
     }
-    for (int32_t index = 0; index < map.map.len; index++) {
-        if (map.map[index].at != at) {
-            continue;
-        }
-        EditMap::Entry& e = map.map[index];
+    // Keep the load factor under 3/4, counting the entry this call may add.
+    if ((map.map.len + 1) * 4 >= map.buckets.len * 3) {
+        RehashBuckets(map, map.buckets.len > 0 ? map.buckets.len * 2 : 16);
+    }
+    int32_t bucket = BucketFor(map.buckets, map.map, at);
+    if (map.buckets[bucket] != 0) {
+        EditMap::Entry& e = map.map[map.buckets[bucket] - 1];
         e.remove += remove;
         if (before) {
             ArenaVec<Event> merged = {};
@@ -318,6 +350,7 @@ static void AddImpl(EditMap& map, int32_t at, int32_t remove, const Event* add,
         e.add.Append(map.a, add[i]);
     }
     map.map.Append(e);
+    map.buckets[bucket] = map.map.len;
 }
 
 void EditMapAdd(EditMap& map, int32_t index, int32_t remove, const Event* add,
@@ -330,18 +363,50 @@ void EditMapAddBefore(EditMap& map, int32_t index, int32_t remove,
     AddImpl(map, index, remove, add, addLen, true);
 }
 
-void EditMapConsume(EditMap& map, Vec<Event>& events) {
-    // sort_unstable_by(at). The map is short and its entries are POD, so an
-    // insertion sort is the whole of it.
-    for (int32_t i = 1; i < map.map.len; i++) {
-        EditMap::Entry e = map.map[i];
-        int32_t j = i - 1;
-        while (j >= 0 && map.map[j].at > e.at) {
-            map.map[j + 1] = map.map[j];
-            j--;
-        }
-        map.map[j + 1] = e;
+// sort_unstable_by(at), as a bottom-up merge sort. An insertion sort reads
+// better and is what this was, but the map is not always short — a table adds
+// an entry per cell and the resolver hands them over in an order that is
+// nowhere near sorted, which made a document of tables quadratic in its cell
+// count a second time over. Entries are trivially copyable, and no two share
+// an `at` (`add` merges those), so this reaches the same order an unstable
+// sort would.
+static void SortEntries(Vec<EditMap::Entry>& entries) {
+    int32_t n = entries.len;
+    if (n < 2) {
+        return;
     }
+    Vec<EditMap::Entry> scratch;
+    VecReserve(scratch, n);
+    scratch.len = n;
+    EditMap::Entry* src = entries.els;
+    EditMap::Entry* dst = scratch.els;
+    for (int32_t width = 1; width < n; width *= 2) {
+        for (int32_t lo = 0; lo < n; lo += width * 2) {
+            int32_t mid = lo + width < n ? lo + width : n;
+            int32_t hi = lo + width * 2 < n ? lo + width * 2 : n;
+            int32_t i = lo, j = mid, k = lo;
+            while (i < mid && j < hi) {
+                dst[k++] = src[j].at < src[i].at ? src[j++] : src[i++];
+            }
+            while (i < mid) {
+                dst[k++] = src[i++];
+            }
+            while (j < hi) {
+                dst[k++] = src[j++];
+            }
+        }
+        EditMap::Entry* t = src;
+        src = dst;
+        dst = t;
+    }
+    if (src != entries.els) {
+        memcpy((void*)entries.els, (const void*)src,
+               (size_t)n * sizeof(EditMap::Entry));
+    }
+}
+
+void EditMapConsume(EditMap& map, Vec<Event>& events) {
+    SortEntries(map.map);
     if (map.map.len == 0) {
         return;
     }
@@ -385,6 +450,12 @@ void EditMapConsume(EditMap& map, Vec<Event>& events) {
     out.len = 0;
     out.cap = 0;
     map.map.len = 0;
+    // The sort above moved the entries the buckets point at, and the map is
+    // empty now anyway.
+    if (map.buckets.len > 0) {
+        memset((void*)map.buckets.els, 0,
+               (size_t)map.buckets.len * sizeof(int32_t));
+    }
 }
 
 // ─── util/skip.rs ────────────────────────────────────────────────────────

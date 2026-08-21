@@ -27,12 +27,15 @@
    `tokenize` is `Parse` alone (bytes to events, which is nearly all of it)
    and `to_mdast` is `ToMdastCompile` over events that are already there.
 
-   One number to expect: a table costs about seven times what prose does per
-   byte. That is the crate's, not this port's — markdown-rs built --release
-   reads the same two shapes at 10.5 ms and 80.4 ms where this reads them at
-   9.4 ms and 66.8 ms — and it comes from the edit map both share, whose
-   `add` scans the entries it already holds for one at the same index. A
-   table adds one per cell. */
+   One number to expect: a table costs about one and a half times what prose
+   does per byte, and the ratio holds as the document grows. It did not use to.
+   markdown-rs and this port shared an edit map whose `add` scanned the entries
+   it already held for one at the same index and whose `consume` sorted them by
+   insertion sort — both linear per entry, and a table adds one entry per cell,
+   so a document of tables was quadratic in its cell count twice over. Reading
+   64 KB of tables cost 65 ms against markdown-rs's 80 ms; it is 14 ms here
+   now, and the 256 KB shape went from 1.0 s to 61 ms. The events produced are
+   the same; see `EditMap` in src/markdown/util.h. */
 
 #include "Bench.h"
 
@@ -254,14 +257,13 @@ static const MdSize kSizes[3] = {
     {1024 * 1024, false, true},
 };
 
-/* `largeBytes` overrides the -large size for one shape.
-
-   Tables get a quarter of what the others do. The edit map's cost is
-   quadratic in the number of entries and a table adds one per cell, so a
-   megabyte of them is 22 seconds a sample — ten of those is most of four
-   minutes for one row. The curve is already unmistakable at 256 KB: 16 KB,
-   64 KB and 256 KB come out at roughly 7 ms, 67 ms and 1.0 s, which is four
-   times the bytes for fifteen times the time. */
+/* `largeBytes` overrides the -large size for one shape. Every shape takes the
+   same three sizes now; the hook stays because the reason it was added is the
+   kind of thing that comes back. Tables used to run at a quarter of what the
+   others do: the edit map was quadratic in its entry count and a table adds
+   one entry per cell, so a megabyte of them was 22 seconds a sample. See
+   `EditMap` in src/markdown/util.h for what that cost was and what replaced
+   it. */
 static void RunShapeSized(const char* name, BuildFn build, int32_t largeBytes) {
     const char* group = "markdown/parse";
     for (int i = 0; i < 3; i++) {
@@ -394,7 +396,7 @@ static void RunPhases() {
 void BenchMarkdown() {
     RunShape("prose", BuildProse);
     RunShape("nested quotes and lists", BuildNested);
-    RunShapeSized("gfm tables", BuildTable, 256 * 1024);
+    RunShape("gfm tables", BuildTable);
     RunShape("character references", BuildEntities);
     RunPhases();
 }
