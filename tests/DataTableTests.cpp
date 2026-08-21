@@ -223,29 +223,97 @@ static void TheVisibleColumnsAreTheOnesUnderTheOffset() {
 
     // A pane that has not been laid out yet answers an empty range rather
     // than every column, which the range-of-one rule then swallows.
-    TableVisibleCols(&s, 0, 6, &first, &end);
+    TableVisibleCols(&s, &first, &end);
     utassert(first == 0 && end == 0);
 
     s.bodyBounds.w = 250;
-    TableVisibleCols(&s, 0, 6, &first, &end);
+    TableVisibleCols(&s, &first, &end);
     utassert(first == 0 && end == 3);
 
     // Slid over by one and a half columns: the second is still half on
     // screen, so it is still visible.
     s.scrollX = 150;
-    TableVisibleCols(&s, 0, 6, &first, &end);
+    TableVisibleCols(&s, &first, &end);
     utassert(first == 1 && end == 4);
 
     // Two pinned columns: the offset moves the rest, and the window over them
     // starts at display position 2.
     s.scrollX = 0;
-    TableVisibleCols(&s, 2, 6, &first, &end);
+    s.fixedCols = 2;
+    TableVisibleCols(&s, &first, &end);
     utassert(first == 2 && end == 5);
+}
+
+// scroll_to_col, which is what set_selected_col and set_selected_cell go
+// through. The offset is over the columns that move, so a pinned one asks
+// for the start of them and nothing else.
+static void ScrollingToAColumnBringsItIn() {
+    TableState s;
+    s.colCount = 6;
+    TableSeedColOrder(&s, 6);
+    TableEnsureCols(&s, 6);
+    for (int c = 0; c < 6; c++) {
+        s.colWidth[c] = 100;
+    }
+    s.bodyBounds.w = 250;
+
+    // A column already on screen does not move the offset.
+    TableScrollToCol(&s, 1, ScrollStrategy::Top);
+    utassert(s.scrollX == 0);
+    // One off the right end comes in from that side: its far edge lands on
+    // the viewport's, which is 500 - 250.
+    TableScrollToCol(&s, 4, ScrollStrategy::Top);
+    utassert(s.scrollX == 250);
+    // And one off the left comes back in from that side.
+    TableScrollToCol(&s, 0, ScrollStrategy::Top);
+    utassert(s.scrollX == 0);
+
+    // Pinned columns are not in the window at all: asking for one asks for
+    // the first that moves, which is Rust's saturating_sub.
+    s.fixedCols = 2;
+    s.scrollX = 200;
+    TableScrollToCol(&s, 0, ScrollStrategy::Top);
+    utassert(s.scrollX == 0);
+    // The last column, with two pinned: four move, so the content is 400
+    // wide and the offset can reach 150.
+    TableScrollToCol(&s, 5, ScrollStrategy::Top);
+    utassert(s.scrollX == 150);
+
+    // A pane that has not been laid out yet has nothing to scroll against.
+    s.bodyBounds.w = 0;
+    s.scrollX = 42;
+    TableScrollToCol(&s, 5, ScrollStrategy::Top);
+    utassert(s.scrollX == 42);
+}
+
+// refresh / prepare_col_groups: the table drops what it worked out for
+// itself, so the caller's declarations are taken again.
+static void ARefreshGivesTheColumnsBackToTheCaller() {
+    TableState s;
+    s.colCount = 4;
+    TableSeedColOrder(&s, 4);
+    for (int c = 0; c < 4; c++) {
+        TableSeedColWidth(&s, c, 100);
+    }
+    s.colWidth[1] = 180;
+    utassert(TableMoveColumn(&s, 0, 3));
+    utassert(TableColAt(&s, 0) == 1);
+
+    TableRefreshCols(&s);
+    // The widths are unseeded, so the next build takes what is declared.
+    TableSeedColWidth(&s, 1, 100);
+    utassert(s.colWidth[1] == 100);
+    // And the order is the caller's again.
+    TableSeedColOrder(&s, 4);
+    utassert(TableColAt(&s, 0) == 0);
+    utassert(TableColAt(&s, 3) == 3);
 }
 
 void TestDataTable() {
     TheDelegateHearsAboutTheRangeOnlyWhenItMoves();
     TheVisibleColumnsAreTheOnesUnderTheOffset();
+    ScrollingToAColumnBringsItIn();
+    ARefreshGivesTheColumnsBackToTheCaller();
     ARightClickMarksARowOrACellButNeverBoth();
     ACellIsOneNumber();
     AColumnKeepsItsWidthOnceItHasOne();
