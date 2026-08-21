@@ -60,7 +60,7 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 
 - **The GPU path stops at the tessellator.** Painting goes to a DXGI flip-model swap chain with an `ID2D1DeviceContext` on its back buffer, which is the shape GPUI's `directx_renderer.rs` has. What is still not GPUI's is what happens above that: D2D tessellates strokes and paths on the CPU (`FillNonOverlappingRectangles_SlowPath`) where GPUI rasterizes them in a shader, so a scene made of many thin antialiased paths costs more here — `fps_monitor` at Rust's window size reads 7.0 ms against Rust's 3.0 ms, nearly all of it tessellation.
 - **Process CPU %** is a Win32 times delta, not `sysinfo`; first sample is 0; values are in the same ballpark, not bit-identical.
-- **Icons** are Lucide's own SVG files: `AppNew` registers the default asset roots when nothing else has, so any app finds `assets/icons/*.svg` without asking. Where the folder is genuinely missing they fall back to the stroke sketches in `gpui.cpp`, which cover 42 of the 74 `IconName`s — the rest draw nothing.
+- **Icons** are Lucide's own SVG files: `AppNew` registers the default asset roots when nothing else has, so any app finds `assets/icons/*.svg` without asking. Where the folder is genuinely missing they fall back to the stroke sketches in `DrawIcon`, which cover all 74 `IconName`s.
 - **Markdown and HTML** are md4c plus `src/ui/html.cpp` behind `component::TextView` — headings, lists, tables, quotes, images, inline HTML and raw HTML blocks. The code fences are coloured by the scanner below rather than by tree-sitter.
 - **Nested scroll** in `table_in_scrollable` now uses a real inner `ScrollY` body plus thumbs.
 - **Syntax colouring is a scanner, not a parser.** `src/ui/syntax.cpp` is what a per-language scanner can carry of upstream's tree-sitter queries — comments, strings, numbers, keywords, type names, and what position alone settles, like a name before `(` being a call. It has no tree, so nothing that needs one — a rename, a semantic scope — can be asked of it. Code folding turned out not to be one of those: upstream's own fold extractor is "every named node spanning two rows or more", and its showcase highlighter finds the same blocks by scanning brace pairs, which is what this does.
@@ -394,3 +394,25 @@ cargo run -p system_monitor
 - 2026-08-21: A table right-click is an event. `TableEvent` in `table/state.rs` carries `RightClickedRow(Option<usize>)` and `RightClickedCell(usize, usize)` and ours had neither: we kept `rightClickedRow` as state and painted it, but never told anyone, so a caller could not hang a context menu off a row. Both are emitted now with the exclusivity Rust has — a cell mark clears the row one and the other way round — and `set_selected_row` emits `RightClickedRow(None)` beside `SelectRow`, which is the -1 row here. A cell right-click stops the press so the row under it does not also claim it, which is `cx.stop_propagation()` in `on_cell_right_click`. The DataTable story reports both on its status line where upstream's prints them.
 - 2026-08-21: `IndexPath`, and the two directions between it and a flat index. `crates/base/src/index_path.rs` is how Rust addresses a row of a sectioned list — section, row, column — and every list-shaped state upstream is keyed on one; this tree keys on the flat entry index with the section counts beside it, which is the same information said differently. The type is ported with its builders, `eq_row` and the ElementId form, and `ListIndexPathOf` / `ListEntryOf` convert both ways. Its first user is the list itself: a row element is named by its path the way `impl From<IndexPath> for ElementId` names Rust's, so the name holds still when a section above it grows and the flat index shifts under it. Re-keying `ListState`, `SearchableListState` and Combobox on it outright is not done and is a much larger change. 3688 checks.
 - 2026-08-21: The list module, audited against `crates/ui/src/list` — 1725 lines to our 917 — turned up three real gaps and no structural one: `cache.rs` is what `ListRowAt` and `ListRowCount` already work out, and every delegate hook has a counterpart. `render_loading` was five plain bars where `loading.rs` is three placeholder rows, each a wide bar over a narrower secondary one, and it is a delegate hook upstream, so `List::Loading(el)` replaces it. `render_initial` was missing: what a searchable list shows before anything has been typed, which Rust asks for only while the query is empty. `list/separator_item.rs` was missing — a disabled ListItem, never selected and never clickable; nothing calls it here and nothing calls it upstream either, where it is exported API just the same.
+
+- 2026-08-21: `DrawIcon` draws every icon in the set. It is the fallback an
+  app gets when no `assets/icons` folder is found, and it covered 42 of the 74
+  `IconName`s — the other 32 drew nothing at all, which is how the sort
+  chevrons went missing from `component::Table` earlier today. The 31 that were
+  left are written from the real lucide geometry in `assets/icons/*.svg` rather
+  than from memory, so the fallback and the file draw the same shape.
+
+  Three primitives went in with them, because the icons that were left needed
+  what the table did not have: `rect` for the many that are mostly a `<rect>`,
+  `arc` for a stretch of a circle (`loader-circle`'s gap, `chart-pie`'s wedge,
+  `palette`'s three quarters), and `fillPoly` for a solid shape — `star-fill`
+  has to read as filled beside the hollow `star`, and a stroked outline does
+  not. `github` is the one that is a drawing rather than a transcription: the
+  octocat is forty-odd curves, so it is a hand-authored silhouette filled as a
+  polygon. Drawn as a circle with arms and legs suggested it read as a smiley
+  face, which is worse than nothing; the silhouette reads as the mark.
+
+  Checked by running a copy of `story.exe` from a directory with no `assets`
+  above it — which is the only way to see this path now that `AppNew`
+  registers the default roots — with every `IconName` on the icon page at
+  40px.
