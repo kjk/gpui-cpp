@@ -166,6 +166,8 @@ function cppDir(rel: string): string[] {
 
 const libs = [
   "d2d1.lib",
+  "d3d11.lib",
+  "dxgi.lib",
   "dwrite.lib",
   "dwmapi.lib",
   "psapi.lib",

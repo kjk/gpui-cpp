@@ -168,21 +168,21 @@ static float HostDpi(HWND hwnd) {
     return (float)dpi;
 }
 
-static void RenderFrame(Window* win, HDC hdc) {
+static void RenderFrame(Window* win) {
     HWND hwnd = Hwnd(win);
     if (!hwnd) {
         return;
     }
     RECT rc = {};
     GetClientRect(hwnd, &rc);
-    // The DC render target is created at 96 dpi, so a DIP is a pixel.
+    // The render target is created at 96 dpi, so a DIP is a pixel.
     win->paint.dpi = 96;
     WINDOWPLACEMENT wp = {sizeof(wp)};
     GetWindowPlacement(hwnd, &wp);
     win->maximized = wp.showCmd == SW_SHOWMAXIMIZED;
     int pxW = rc.right - rc.left;
     int pxH = rc.bottom - rc.top;
-    WindowDrawFrame(win, hdc, pxW, pxH, (float)pxW, (float)pxH);
+    WindowDrawFrame(win, hwnd, pxW, pxH, (float)pxW, (float)pxH);
 }
 
 static int BorderPx() {
@@ -444,9 +444,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             WindowTimerTick(win);
             return 0;
         case WM_PAINT: {
+            // BeginPaint/EndPaint only to clear the update region — the
+            // frame goes to the window's own swap chain, not to this HDC.
             PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            RenderFrame(win, hdc);
+            BeginPaint(hwnd, &ps);
+            RenderFrame(win);
             EndPaint(hwnd, &ps);
             return 0;
         }

@@ -64,6 +64,16 @@ struct FpsApp {
     float tiltX = 0, tiltY = 0;
     double started = 0;
 
+    // -bench <secs>: measure instead of watch. The window still runs for real,
+    // but the frames it draws are collected here and written out as numbers,
+    // so a change can be compared against a run from before it rather than
+    // against a screenshot of the HUD.
+    double benchSecs = 0;
+    const char* benchOut = "out/fps_bench.txt";
+    uint64_t benchCursor = 0;
+    float benchDraws[4096];
+    int nBenchDraws = 0;
+
     static El* Render(FpsApp* self, Ctx* cx);
 };
 
@@ -332,7 +342,58 @@ static El* RenderLoadControls(FpsApp* app, Ctx* cx) {
         ->Child(LoadButton(cx, StrL("more"), StrL("+ load"), 1));
 }
 
+// Collect what the window drew since the last look, and when the run is up,
+// write the distribution out and quit. The first second is warm-up: the swap
+// chain and the font cache are still filling then, and those frames are not
+// what the steady state costs.
+static void BenchTick(FpsApp* app, Ctx* cx) {
+    double elapsed = TimeNow() - app->started;
+    FrameTiming timings[kFrameTraceCap];
+    int n = WindowCollectFrames(cx->win, &app->benchCursor, timings,
+                                kFrameTraceCap);
+    if (elapsed > 1.0) {
+        for (int i = 0; i < n && app->nBenchDraws < 4096; i++) {
+            app->benchDraws[app->nBenchDraws++] = timings[i].drawSecs;
+        }
+    }
+    if (elapsed < app->benchSecs) {
+        return;
+    }
+
+    int count = app->nBenchDraws;
+    for (int i = 1; i < count; i++) {
+        float v = app->benchDraws[i];
+        int j = i - 1;
+        for (; j >= 0 && app->benchDraws[j] > v; j--) {
+            app->benchDraws[j + 1] = app->benchDraws[j];
+        }
+        app->benchDraws[j + 1] = v;
+    }
+    double total = 0;
+    for (int i = 0; i < count; i++) {
+        total += app->benchDraws[i];
+    }
+    FILE* f = fopen(app->benchOut, "w");
+    if (f && count > 0) {
+        double secs = elapsed - 1.0;
+        fprintf(f, "frames    %d over %.1fs (%.1f fps)\n", count, secs,
+                secs > 0 ? count / secs : 0);
+        fprintf(f, "mean      %.3f ms\n", total / count * 1000);
+        fprintf(f, "median    %.3f ms\n", app->benchDraws[count / 2] * 1000);
+        fprintf(f, "p95       %.3f ms\n",
+                app->benchDraws[count * 95 / 100] * 1000);
+        fprintf(f, "max       %.3f ms\n", app->benchDraws[count - 1] * 1000);
+    }
+    if (f) {
+        fclose(f);
+    }
+    AppQuit(cx->win);
+}
+
 El* FpsApp::Render(FpsApp* app, Ctx* cx) {
+    if (app->benchSecs > 0) {
+        BenchTick(app, cx);
+    }
     // Ease toward the cursor rather than snapping, the way the original demo
     // drifts its camera.
     app->tiltX += (app->cursorTiltX - app->tiltX) * kEase;
@@ -351,11 +412,18 @@ El* FpsApp::Render(FpsApp* app, Ctx* cx) {
 }
 
 int GpuiMain(int argc, char** argv) {
-    (void)argc;
-    (void)argv;
     App* app = AppNew();
     Entity<FpsApp> view = EntityNew<FpsApp>(app);
     FpsApp* self = view.Get(app);
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-bench") == 0 && i + 1 < argc) {
+            self->benchSecs = atof(argv[++i]);
+        } else if (strcmp(argv[i], "-bench-out") == 0 && i + 1 < argc) {
+            self->benchOut = argv[++i];
+        } else if (strcmp(argv[i], "-curves") == 0 && i + 1 < argc) {
+            self->curves = atoi(argv[++i]);
+        }
+    }
     ThemeSet(app, ThemeMode::Dark);
     self->started = TimeNow();
     BuildGeom(self);

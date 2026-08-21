@@ -252,3 +252,37 @@ cargo run -p system_monitor
   Painting them needed a second array on `El`. The span painter partitions the text so that each glyph is drawn exactly once, which means it cannot take two runs over the same bytes — and a search match sits over whatever the highlighter already said about those bytes. So matches are `washes`: lo, hi and a colour, painted where the selection quad is and before the glyphs. The rows slice them out of the document's list the way they already slice the highlighter's.
   That turned up a real bug underneath. `PaintTextRange` — which is what draws the selection quad, and now the washes — measured its rects with weight 0 and line height 0 rather than the ones the run was laid out with. The mono family is a weight sentinel here, so in a code editor every quad was measured against the proportional font and drifted further from the glyphs the further along the line it was. The washes made it obvious because there are eight of them across a screen; the selection had it all along. It takes both now.
   The bar itself is `component::SearchPanel`, and it owns the two fields it holds, so a caller names only the field being searched. `Highlighter` puts one above its rows — Rust docks it at the top of the input through the overlay, and the overlay's other tenants are the LSP popovers, which are not ported. Enter and shift-enter walk the matches, escape closes it and gives the caret back to the editor, tab moves between the query and the replacement, and the case toggle, the prev/next pair, the `3/17` counter, Replace and Replace All are all where Rust puts them. Two icons came over from `crates/assets`: case-sensitive and replace.
+
+- 2026-08-21: The Windows backend presents through a swap chain now, which is
+  most of the reason `fps_monitor` was slow. Profiling it with `winperf`
+  (`winperf record -- fps_monitor.exe -bench 12`) put ~70% of the frame inside
+  `ID2D1DCRenderTarget`: `BindDC` and `EndDraw` each map a staging texture
+  through the DXGI/GDI interop and copy the whole surface back, so the window
+  paid a full readback twice per frame no matter what it drew. `PaintTarget` is
+  a `IDXGISwapChain1` (flip model, three buffers, `Present(0, 0)`) with an
+  `ID2D1DeviceContext` bound to its back buffer — the shape GPUI's own
+  `directx_renderer.rs` has, down to the buffer count and the sync interval.
+  `PaintTargetBegin` takes the HWND rather than an HDC; the offscreen target,
+  which has to hand its pixels back as a DIB, still uses a DC render target.
+
+  `ID2D1HwndRenderTarget` is the shorter version of the same idea and was
+  tried first: it is faster still, but its blt-model present never reaches the
+  redirection surface `PrintWindow(PW_RENDERFULLCONTENT)` reads, so every
+  `cmd/shot.ts` capture came out an empty rectangle. A flip-model chain
+  composites the way Rust's does and captures like it too.
+
+  `SetMaximumFrameLatency(1)` looked like the right call and cost ~20%: with a
+  single frame in flight `Present` blocks the draw on the previous frame's
+  scanout. GPUI leaves the latency at DXGI's default, and so does this now.
+
+  `fps_monitor` gained `-bench <secs>` (with `-bench-out` and `-curves`), which
+  runs the window for real, collects `WindowCollectFrames` after a one-second
+  warm-up and writes the distribution out — a number to compare against
+  instead of a screenshot of the HUD. On this machine at 800x600 the mean draw
+  went 7.2ms -> 3.4ms. Sized to Rust's own default window the HUD reads 7.0ms
+  against Rust's 3.0ms — a bigger window is fill-bound rather than
+  present-bound, so what is left shows up there. That remainder is nearly all
+  D2D tessellating ~2300 antialiased hairlines on the CPU (`FillNonOverlappingRectangles_SlowPath`),
+  where GPUI rasterizes paths in a shader; batching each colour run into one
+  stroked `Path` was tried and came out slower, since a D2D path geometry per
+  run costs more than the six `DrawLine` calls it replaces.
