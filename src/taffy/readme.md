@@ -82,12 +82,31 @@ pins behaviour rather than Rust specifics — `util/math.rs`, `util/resolve.rs`,
 
 The crate's larger generated suite lives in its `tests/` directory, which is
 not part of the published crate (its `Cargo.toml` `include` covers only `src/`
-and `examples/`), so it is not available to port.
+and `examples/`), so it takes the git checkout `port-upstream.md` clones.
 
 Three grid internals are reached through the seams `GridExplicitSizeForTest`,
 `GridChildMinMaxSpanForTest`, `GridSizeEstimateForTest`,
 `GridInitTracksForTest` and `GridPlaceForTest` in `compute.h`. They exist for
 the tests and have no other caller.
+
+## Benchmarks
+
+`bench/` ports the crate's own benchmarks — `benches/benches/flexbox.rs`,
+`grid.rs` and `tree_creation.rs`, and the tree builders in `benches/src/`.
+Run them with `bun cmd/bench.ts`. They come from the same checkout as the
+generated tests, for the same reason.
+
+Not ported: `benches/benches/mixed.rs`, which measures text leaves through
+`parley`. Its shape — flex and grid containers alternating, with real text at
+the leaves — is worth having, since measured leaves are where a real window
+spends its layout time, but with our own text measure substituted it would be
+a new benchmark rather than a port of that one.
+
+The random source is not Rust's. The benchmarks draw tree shapes from a
+ChaCha8 stream seeded 12345; this uses a PCG32 with the same seed, so a run is
+reproducible against itself but its trees are not the Rust's trees. Matching
+them would mean porting `rand`'s uniform sampling as well, and the numbers
+would still be a different machine's.
 
 ## Refreshing the port
 

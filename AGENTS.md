@@ -399,6 +399,29 @@ seam to reach the logic — `FrameSamplerIngest` is the drain half of
 `FrameSamplerTick`, split out so the rolling window can be driven without a
 window — add the seam rather than the harness.
 
+## Benchmarks
+
+```
+bun cmd/bench.ts                  # every benchmark, release, 10 samples
+bun cmd/bench.ts -small -large    # the node counts the crate gates by feature
+bun cmd/bench.ts -n=3 grid/deep   # fewer samples, one group
+```
+
+`bench/` holds ports of taffy's own benchmarks — large flexbox trees, wide and
+deep grids, and tree construction on its own. They come from the crate's
+`benches/` directory, which is a package of its own and is not published with
+the crate, so it comes from the git checkout `port-upstream.md` clones. Read a
+number only from a release build; a debug one measures the assertions.
+
+The harness is `bench/Bench.h` and `bench/bench.cpp`: criterion's
+`iter_batched`, without criterion. Setup builds a fresh tree and is not timed,
+the run is, and the row reports the median and the minimum over the samples.
+
+These exist because layout is the one thing here with an asymptotic
+complexity, and a wrong one hides: a grid item list sorted with an insertion
+sort was fine on every hand-written grid in the story gallery and took 94
+seconds on a 316x316 one. If you touch `src/taffy/`, run them.
+
 CI (`.github/workflows/build.yml`) runs `bun cmd/build.ts -rel -all` and then
 `bun cmd/test.ts -rel` on windows-latest, ubuntu-latest and macos-latest.
 Compiling every example on all three is most of the check, and the suite is the
@@ -457,13 +480,14 @@ cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
                        (`.work/` for builds; run by hand to publish gpui-cpp-dist)
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
+cmd/bench.ts           build bench/ and run it (-small, -large, -n=<count>)
+bench/                 ports of taffy's layout benchmarks
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/taffy/             the taffy layout crate, ported (see its readme.md)
 src/base.h/.cpp        vendored SumatraPDF subset
 src/base_win.cpp       Windows platform layer (memory, paths, strings)
 src/base_linux.cpp     the same, on POSIX
 src/gpui/gpui.h        App, Window, Entity, Ctx, El, theme, paint
-src/taffy/taffy.md     see src/taffy/readme.md — the ported layout crate
 src/gpui/paint.h       the portable 2D canvas and shaped-text API
 src/gpui/paint_win.cpp / paint_linux.cpp   its two backends
 src/gpui/platform.h    the seam between window_common.cpp and the OS window
