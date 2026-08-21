@@ -82,7 +82,7 @@ void ComputeRootLayout(TaffyTree* tree, NodeId root, SizeAvail availableSpace) {
         style.overflow.x == Overflow::Scroll ? style.scrollbarWidth : 0.0f};
     PointF location;
     if (IsRtl(style.direction) && widthOpt.IsSome()) {
-        location.x = widthOpt.val - output.size.width;
+        location.x = widthOpt.val - output.size.w;
     }
 
     Layout layout;
@@ -130,37 +130,37 @@ static void RoundLayoutInner(TaffyTree* tree, NodeId nodeId, float cumulativeX,
 
     layout.location.x = F32Round(unrounded.location.x);
     layout.location.y = F32Round(unrounded.location.y);
-    layout.size.width =
-        F32Round(cumulativeX + unrounded.size.width) - F32Round(cumulativeX);
-    layout.size.height =
-        F32Round(cumulativeY + unrounded.size.height) - F32Round(cumulativeY);
-    layout.scrollbarSize.width = F32Round(unrounded.scrollbarSize.width);
-    layout.scrollbarSize.height = F32Round(unrounded.scrollbarSize.height);
+    layout.size.w =
+        F32Round(cumulativeX + unrounded.size.w) - F32Round(cumulativeX);
+    layout.size.h =
+        F32Round(cumulativeY + unrounded.size.h) - F32Round(cumulativeY);
+    layout.scrollbarSize.w = F32Round(unrounded.scrollbarSize.w);
+    layout.scrollbarSize.h = F32Round(unrounded.scrollbarSize.h);
     layout.border.left =
         F32Round(cumulativeX + unrounded.border.left) - F32Round(cumulativeX);
     layout.border.right =
-        F32Round(cumulativeX + unrounded.size.width) -
-        F32Round(cumulativeX + unrounded.size.width - unrounded.border.right);
+        F32Round(cumulativeX + unrounded.size.w) -
+        F32Round(cumulativeX + unrounded.size.w - unrounded.border.right);
     layout.border.top =
         F32Round(cumulativeY + unrounded.border.top) - F32Round(cumulativeY);
     layout.border.bottom =
-        F32Round(cumulativeY + unrounded.size.height) -
-        F32Round(cumulativeY + unrounded.size.height - unrounded.border.bottom);
+        F32Round(cumulativeY + unrounded.size.h) -
+        F32Round(cumulativeY + unrounded.size.h - unrounded.border.bottom);
     layout.padding.left =
         F32Round(cumulativeX + unrounded.padding.left) - F32Round(cumulativeX);
     layout.padding.right =
-        F32Round(cumulativeX + unrounded.size.width) -
-        F32Round(cumulativeX + unrounded.size.width - unrounded.padding.right);
+        F32Round(cumulativeX + unrounded.size.w) -
+        F32Round(cumulativeX + unrounded.size.w - unrounded.padding.right);
     layout.padding.top =
         F32Round(cumulativeY + unrounded.padding.top) - F32Round(cumulativeY);
-    layout.padding.bottom = F32Round(cumulativeY + unrounded.size.height) -
-                            F32Round(cumulativeY + unrounded.size.height -
+    layout.padding.bottom = F32Round(cumulativeY + unrounded.size.h) -
+                            F32Round(cumulativeY + unrounded.size.h -
                                      unrounded.padding.bottom);
     layout.contentSize
-        .width = F32Round(cumulativeX + unrounded.contentSize.width) -
+        .w = F32Round(cumulativeX + unrounded.contentSize.w) -
                  F32Round(cumulativeX);
     layout.contentSize
-        .height = F32Round(cumulativeY + unrounded.contentSize.height) -
+        .h = F32Round(cumulativeY + unrounded.contentSize.h) -
                   F32Round(cumulativeY);
 
     tree->SetFinalLayout(nodeId, layout);
@@ -290,9 +290,9 @@ LayoutOutput ComputeLeafLayout(const LayoutInput& inputs, const Style& style,
                        .UnwrapOr(measuredSize + contentBoxInset.SumAxes()),
                    nodeMinSize, nodeMaxSize);
     SizeF size = {
-        clampedSize.width,
-        F32Max(clampedSize.height, aspectRatio.IsSome()
-                                       ? clampedSize.width / aspectRatio.val
+        clampedSize.w,
+        F32Max(clampedSize.h, aspectRatio.IsSome()
+                                       ? clampedSize.w / aspectRatio.val
                                        : 0.0f)};
     size = MaybeMax(size, AsOptional(pbSum));
 
@@ -300,8 +300,8 @@ LayoutOutput ComputeLeafLayout(const LayoutInput& inputs, const Style& style,
     out.size = size;
     out.contentSize = measuredSize + padding.SumAxes();
     out.marginsCanCollapseThrough = !hasStylesPreventingBeingCollapsedThrough &&
-                                    size.height == 0.0f &&
-                                    measuredSize.height == 0.0f;
+                                    size.h == 0.0f &&
+                                    measuredSize.h == 0.0f;
     return out;
 }
 
@@ -388,15 +388,15 @@ SizeF ComputeContentSizeContribution(PointF location, SizeF size,
                                      SizeF contentSize,
                                      PointOverflow overflow) {
     SizeF contribution = {overflow.x == Overflow::Visible
-                              ? F32Max(size.width, contentSize.width)
-                              : size.width,
+                              ? F32Max(size.w, contentSize.w)
+                              : size.w,
                           overflow.y == Overflow::Visible
-                              ? F32Max(size.height, contentSize.height)
-                              : size.height};
-    if (contribution.width > 0.0f && contribution.height > 0.0f) {
-        float maxX = F32Max(location.x + contribution.width, 0.0f);
+                              ? F32Max(size.h, contentSize.h)
+                              : size.h};
+    if (contribution.w > 0.0f && contribution.h > 0.0f) {
+        float maxX = F32Max(location.x + contribution.w, 0.0f);
         float minX = F32Min(location.x, 0.0f);
-        float maxY = F32Max(location.y + contribution.height, 0.0f);
+        float maxY = F32Max(location.y + contribution.h, 0.0f);
         float minY = F32Min(location.y, 0.0f);
         return {maxX - minX, maxY - minY};
     }

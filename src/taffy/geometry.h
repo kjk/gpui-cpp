@@ -24,6 +24,9 @@
 namespace taffy {
 
 using base::Arena;
+using base::PointF;
+using base::RectF;
+using base::SizeF;
 using base::Str;
 using base::Vec;
 
@@ -154,84 +157,110 @@ constexpr AbsoluteAxis CrossAxis(FlexDirection d) {
     return IsRow(d) ? AbsoluteAxis::Vertical : AbsoluteAxis::Horizontal;
 }
 
-// ─── SizeF ───────────────────────────────────────────────────────────────
+// ─── SizeF / PointF / RectF ──────────────────────────────────────────────
+//
+// The three float shapes live in base.h, because gpui has the same three and
+// there is no reason for two of each. What is here is everything taffy does
+// with them that the base has no business knowing: a flex direction, a
+// writing-mode axis, an aspect ratio. Rust has them as inherent methods on
+// `Size<f32>` and friends; free functions are how a type you do not own grows
+// an operation.
 
-// Rust's `Size<f32>`.
-struct SizeF {
-    float width = 0.0f;
-    float height = 0.0f;
-
-    static constexpr SizeF Zero() { return {0.0f, 0.0f}; }
-
-    constexpr float GetAbs(AbsoluteAxis a) const {
-        return a == AbsoluteAxis::Horizontal ? width : height;
+constexpr float GetAbs(SizeF s, AbsoluteAxis a) {
+    return a == AbsoluteAxis::Horizontal ? s.w : s.h;
+}
+constexpr float Get(SizeF s, AbstractAxis a) {
+    return a == AbstractAxis::Inline ? s.w : s.h;
+}
+constexpr void Set(SizeF* s, AbstractAxis a, float v) {
+    if (a == AbstractAxis::Inline) {
+        s->w = v;
+    } else {
+        s->h = v;
     }
-    constexpr float Get(AbstractAxis a) const {
-        return a == AbstractAxis::Inline ? width : height;
+}
+constexpr float Main(SizeF s, FlexDirection d) {
+    return IsRow(d) ? s.w : s.h;
+}
+constexpr float Cross(SizeF s, FlexDirection d) {
+    return IsRow(d) ? s.h : s.w;
+}
+constexpr void SetMain(SizeF* s, FlexDirection d, float v) {
+    if (IsRow(d)) {
+        s->w = v;
+    } else {
+        s->h = v;
     }
-    constexpr void Set(AbstractAxis a, float v) {
-        if (a == AbstractAxis::Inline) {
-            width = v;
-        } else {
-            height = v;
-        }
+}
+constexpr void SetCross(SizeF* s, FlexDirection d, float v) {
+    if (IsRow(d)) {
+        s->h = v;
+    } else {
+        s->w = v;
     }
-    constexpr float Main(FlexDirection d) const {
-        return IsRow(d) ? width : height;
-    }
-    constexpr float Cross(FlexDirection d) const {
-        return IsRow(d) ? height : width;
-    }
-    constexpr void SetMain(FlexDirection d, float v) {
-        if (IsRow(d)) {
-            width = v;
-        } else {
-            height = v;
-        }
-    }
-    constexpr void SetCross(FlexDirection d, float v) {
-        if (IsRow(d)) {
-            height = v;
-        } else {
-            width = v;
-        }
-    }
-    constexpr SizeF WithMain(FlexDirection d, float v) const {
-        SizeF out = *this;
-        out.SetMain(d, v);
-        return out;
-    }
-    constexpr SizeF WithCross(FlexDirection d, float v) const {
-        SizeF out = *this;
-        out.SetCross(d, v);
-        return out;
-    }
-    // Both components clamped against another size.
-    SizeF Max(SizeF rhs) const {
-        return {F32Max(width, rhs.width), F32Max(height, rhs.height)};
-    }
-    SizeF Min(SizeF rhs) const {
-        return {F32Min(width, rhs.width), F32Min(height, rhs.height)};
-    }
-    constexpr bool HasNonZeroArea() const {
-        return width > 0.0f && height > 0.0f;
-    }
-};
-
-constexpr bool operator==(SizeF a, SizeF b) {
-    return a.width == b.width && a.height == b.height;
+}
+constexpr SizeF WithMain(SizeF s, FlexDirection d, float v) {
+    SetMain(&s, d, v);
+    return s;
+}
+constexpr SizeF WithCross(SizeF s, FlexDirection d, float v) {
+    SetCross(&s, d, v);
+    return s;
+}
+// Both components clamped against another size.
+inline SizeF Max(SizeF a, SizeF b) {
+    return {F32Max(a.w, b.w), F32Max(a.h, b.h)};
+}
+inline SizeF Min(SizeF a, SizeF b) {
+    return {F32Min(a.w, b.w), F32Min(a.h, b.h)};
+}
+constexpr bool HasNonZeroArea(SizeF s) {
+    return s.w > 0.0f && s.h > 0.0f;
 }
 
-constexpr bool operator!=(SizeF a, SizeF b) {
-    return !(a == b);
+constexpr float Get(PointF p, AbstractAxis a) {
+    return a == AbstractAxis::Inline ? p.x : p.y;
+}
+constexpr void Set(PointF* p, AbstractAxis a, float v) {
+    if (a == AbstractAxis::Inline) {
+        p->x = v;
+    } else {
+        p->y = v;
+    }
+}
+constexpr float Main(PointF p, FlexDirection d) {
+    return IsRow(d) ? p.x : p.y;
+}
+constexpr float Cross(PointF p, FlexDirection d) {
+    return IsRow(d) ? p.y : p.x;
+}
+constexpr PointF Transpose(PointF p) {
+    return {p.y, p.x};
+}
+constexpr SizeF IntoSize(PointF p) {
+    return {p.x, p.y};
 }
 
-constexpr SizeF operator+(SizeF a, SizeF b) {
-    return {a.width + b.width, a.height + b.height};
+constexpr float GridAxisSum(RectF r, AbsoluteAxis a) {
+    return a == AbsoluteAxis::Horizontal ? r.left + r.right : r.top + r.bottom;
 }
-
-constexpr SizeF operator-(SizeF a, SizeF b) {
-    return {a.width - b.width, a.height - b.height};
+constexpr float MainAxisSum(RectF r, FlexDirection d) {
+    return IsRow(d) ? r.left + r.right : r.top + r.bottom;
+}
+constexpr float CrossAxisSum(RectF r, FlexDirection d) {
+    return IsRow(d) ? r.top + r.bottom : r.left + r.right;
+}
+constexpr float MainStart(RectF r, FlexDirection d) {
+    return IsRow(d) ? r.left : r.top;
+}
+constexpr float MainEnd(RectF r, FlexDirection d) {
+    return IsRow(d) ? r.right : r.bottom;
+}
+constexpr float CrossStart(RectF r, FlexDirection d) {
+    return IsRow(d) ? r.top : r.left;
+}
+constexpr float CrossEnd(RectF r, FlexDirection d) {
+    return IsRow(d) ? r.bottom : r.right;
 }
 
 // ─── SizeOptF ────────────────────────────────────────────────────────────
@@ -290,7 +319,7 @@ struct SizeOptF {
         }
     }
     constexpr SizeF UnwrapOr(SizeF alt) const {
-        return {width.UnwrapOr(alt.width), height.UnwrapOr(alt.height)};
+        return {width.UnwrapOr(alt.w), height.UnwrapOr(alt.h)};
     }
     constexpr SizeOptF Or(SizeOptF alt) const {
         return {width.Or(alt.width), height.Or(alt.height)};
@@ -325,41 +354,6 @@ constexpr bool operator!=(SizeOptF a, SizeOptF b) {
 
 // ─── PointF / PointOptF ──────────────────────────────────────────────────
 
-// A 2-dimensional coordinate. With a rect, this is the top-left corner.
-struct PointF {
-    float x = 0.0f;
-    float y = 0.0f;
-
-    static constexpr PointF Zero() { return {0.0f, 0.0f}; }
-
-    constexpr float Get(AbstractAxis a) const {
-        return a == AbstractAxis::Inline ? x : y;
-    }
-    constexpr void Set(AbstractAxis a, float v) {
-        if (a == AbstractAxis::Inline) {
-            x = v;
-        } else {
-            y = v;
-        }
-    }
-    constexpr float Main(FlexDirection d) const { return IsRow(d) ? x : y; }
-    constexpr float Cross(FlexDirection d) const { return IsRow(d) ? y : x; }
-    constexpr PointF Transpose() const { return {y, x}; }
-    constexpr SizeF IntoSize() const { return {x, y}; }
-};
-
-constexpr bool operator==(PointF a, PointF b) {
-    return a.x == b.x && a.y == b.y;
-}
-
-constexpr bool operator!=(PointF a, PointF b) {
-    return !(a == b);
-}
-
-constexpr PointF operator+(PointF a, PointF b) {
-    return {a.x + b.x, a.y + b.y};
-}
-
 struct PointOptF {
     Optf x;
     Optf y;
@@ -386,61 +380,6 @@ struct LineBool {
 };
 
 // ─── RectF / RectOptF ────────────────────────────────────────────────────
-
-// An axis-aligned rectangle, or a set of four edge values (padding, border,
-// margin). The axis sums below are the *edge totals*, not a width or height.
-struct RectF {
-    float left = 0.0f;
-    float right = 0.0f;
-    float top = 0.0f;
-    float bottom = 0.0f;
-
-    static constexpr RectF Zero() { return {0.0f, 0.0f, 0.0f, 0.0f}; }
-    static constexpr RectF New(float l, float r, float t, float b) {
-        return {l, r, t, b};
-    }
-
-    constexpr float HorizontalAxisSum() const { return left + right; }
-    constexpr float VerticalAxisSum() const { return top + bottom; }
-    constexpr SizeF SumAxes() const { return {left + right, top + bottom}; }
-    constexpr float GridAxisSum(AbsoluteAxis a) const {
-        return a == AbsoluteAxis::Horizontal ? left + right : top + bottom;
-    }
-    constexpr float MainAxisSum(FlexDirection d) const {
-        return IsRow(d) ? left + right : top + bottom;
-    }
-    constexpr float CrossAxisSum(FlexDirection d) const {
-        return IsRow(d) ? top + bottom : left + right;
-    }
-    constexpr float MainStart(FlexDirection d) const {
-        return IsRow(d) ? left : top;
-    }
-    constexpr float MainEnd(FlexDirection d) const {
-        return IsRow(d) ? right : bottom;
-    }
-    constexpr float CrossStart(FlexDirection d) const {
-        return IsRow(d) ? top : left;
-    }
-    constexpr float CrossEnd(FlexDirection d) const {
-        return IsRow(d) ? bottom : right;
-    }
-    constexpr LineF HorizontalComponents() const { return {left, right}; }
-    constexpr LineF VerticalComponents() const { return {top, bottom}; }
-};
-
-constexpr bool operator==(RectF a, RectF b) {
-    return a.left == b.left && a.right == b.right && a.top == b.top &&
-           a.bottom == b.bottom;
-}
-
-constexpr bool operator!=(RectF a, RectF b) {
-    return !(a == b);
-}
-
-constexpr RectF operator+(RectF a, RectF b) {
-    return {a.left + b.left, a.right + b.right, a.top + b.top,
-            a.bottom + b.bottom};
-}
 
 struct RectOptF {
     Optf left;

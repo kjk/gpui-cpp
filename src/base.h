@@ -424,6 +424,100 @@ struct ArenaVec {
     }
 };
 
+// ─── float geometry ──────────────────────────────────────────────────────
+//
+// One point, one size and one edge-set, shared by gpui and by the taffy port.
+// They were two sets before: taffy's `SizeF`/`PointF`/`RectF` (its `Size<f32>`,
+// `Point<f32>` and `Rect<f32>`) and gpui's `Size`/`Point`/`Edges`, identical
+// in shape and converted at the seam between them. They are the same types
+// now, and gpui keeps its own names for them as aliases, since `Size` and
+// `Edges` read better in a widget than `SizeF` and `RectF` do.
+//
+// Only what both sides use is a method here. Everything taffy does with a
+// flex direction or a writing-mode axis — `Main`, `Cross`, `SetMain`, the
+// `Rect` edge pickers — is a free function in `namespace taffy`, because the
+// axis enums are taffy's and have no business in the base.
+
+// Rust's `Point<f32>`. With a rect, the top-left corner.
+struct PointF {
+    float x = 0.0f;
+    float y = 0.0f;
+
+    static constexpr PointF Zero() { return {0.0f, 0.0f}; }
+};
+
+constexpr bool operator==(PointF a, PointF b) {
+    return a.x == b.x && a.y == b.y;
+}
+
+constexpr bool operator!=(PointF a, PointF b) {
+    return !(a == b);
+}
+
+constexpr PointF operator+(PointF a, PointF b) {
+    return {a.x + b.x, a.y + b.y};
+}
+
+// Rust's `Size<f32>`. Rust spells the fields `width` and `height`; they are
+// `w` and `h` here, which is what gpui has always called them and what the
+// taffy port's own `SizeOptF`, `SizeDim` and `SizeAvail` — which are not this
+// type — still spell out in full.
+struct SizeF {
+    float w = 0.0f;
+    float h = 0.0f;
+
+    static constexpr SizeF Zero() { return {0.0f, 0.0f}; }
+};
+
+constexpr bool operator==(SizeF a, SizeF b) {
+    return a.w == b.w && a.h == b.h;
+}
+
+constexpr bool operator!=(SizeF a, SizeF b) {
+    return !(a == b);
+}
+
+constexpr SizeF operator+(SizeF a, SizeF b) {
+    return {a.w + b.w, a.h + b.h};
+}
+
+constexpr SizeF operator-(SizeF a, SizeF b) {
+    return {a.w - b.w, a.h - b.h};
+}
+
+// Rust's `Rect<f32>`: an axis-aligned rectangle, or — which is all either
+// caller uses it for — a set of four edge values, so gpui spells it `Edges`.
+// The axis sums are the *edge totals*, not a width or a height.
+struct RectF {
+    float left = 0.0f;
+    float right = 0.0f;
+    float top = 0.0f;
+    float bottom = 0.0f;
+
+    static constexpr RectF Zero() { return {0.0f, 0.0f, 0.0f, 0.0f}; }
+    static constexpr RectF New(float l, float r, float t, float b) {
+        return {l, r, t, b};
+    }
+
+    constexpr float HorizontalAxisSum() const { return left + right; }
+    constexpr float VerticalAxisSum() const { return top + bottom; }
+    constexpr SizeF SumAxes() const { return {left + right, top + bottom}; }
+};
+
+constexpr bool operator==(RectF a, RectF b) {
+    return a.left == b.left && a.right == b.right && a.top == b.top &&
+           a.bottom == b.bottom;
+}
+
+constexpr bool operator!=(RectF a, RectF b) {
+    return !(a == b);
+}
+
+constexpr RectF operator+(RectF a, RectF b) {
+    return {a.left + b.left, a.right + b.right, a.top + b.top,
+            a.bottom + b.bottom};
+}
+
 // A calendar date, which is all the date widgets need out of the clock.
 struct LocalDate {
     int year = 0;

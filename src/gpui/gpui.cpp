@@ -2467,10 +2467,10 @@ static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY) {
                                  .GetLayout(taffy::NodeId{e->layoutNode});
     e->x = originX + l.location.x;
     e->y = originY + l.location.y;
-    e->w = l.size.width;
-    e->h = l.size.height;
-    e->contentW = l.contentSize.width;
-    e->contentH = l.contentSize.height;
+    e->w = l.size.w;
+    e->h = l.size.h;
+    e->contentW = l.contentSize.w;
+    e->contentH = l.contentSize.h;
 
     // The shaped run paint wants, taken from the text cache at the size
     // layout settled on. Releasing our reference is safe because a cached run
@@ -2507,7 +2507,7 @@ static void PlaceAnchored(El* e) {
             s.absLeftRel == 0 && s.absRightRel == 0) {
             continue;
         }
-        float innerW = e->w - e->style.pad.Horizontal();
+        float innerW = e->w - e->style.pad.HorizontalAxisSum();
         if (innerW < 0) {
             innerW = 0;
         }
@@ -4298,8 +4298,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         if (!seen) {
             e->input->inputBounds = e->Bounds();
             // The box the field scrolls inside, less what it pads by.
-            e->input->viewW = e->w - e->style.pad.Horizontal();
-            e->input->viewH = e->h - e->style.pad.Vertical();
+            e->input->viewW = e->w - e->style.pad.HorizontalAxisSum();
+            e->input->viewH = e->h - e->style.pad.VerticalAxisSum();
             ctx->inputs.Append(e->input);
         }
     }

@@ -582,7 +582,7 @@ float TaffyTree::MeasureChildSize(NodeId node, SizeOptF knownDimensions,
     in.axis = ToRequestedAxis(axis);
     in.runMode = RunMode::ComputeSize;
     in.verticalMarginsAreCollapsible = verticalMarginsAreCollapsible;
-    return ComputeChildLayout(node, in).size.GetAbs(axis);
+    return GetAbs(ComputeChildLayout(node, in).size, axis);
 }
 
 SizeF TaffyTree::MeasureChildSizeBoth(NodeId node, SizeOptF knownDimensions,
@@ -648,9 +648,9 @@ static void PrintNode(TaffyTree* tree, NodeId node, bool hasSibling,
         "%s%s%s [x: %-4g y: %-4g w: %-4g h: %-4g "
         "content_w: %-4g content_h: %-4g",
         Str(linesString), Str(fork), Str(displayStr), (double)layout.location.x,
-        (double)layout.location.y, (double)layout.size.width,
-        (double)layout.size.height, (double)layout.contentSize.width,
-        (double)layout.contentSize.height));
+        (double)layout.location.y, (double)layout.size.w,
+        (double)layout.size.h, (double)layout.contentSize.w,
+        (double)layout.contentSize.h));
     base::log(
         base::fmt(" border: l:%g r:%g t:%g b:%g, "
                   "padding: l:%g r:%g t:%g b:%g] (%llu)\n",

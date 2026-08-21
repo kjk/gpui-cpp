@@ -204,15 +204,15 @@ inline SizeOptF MaybeMax(SizeOptF a, SizeOptF b) {
 }
 
 inline SizeOptF MaybeMax(SizeOptF a, SizeF b) {
-    return {MaybeMax(a.width, b.width), MaybeMax(a.height, b.height)};
+    return {MaybeMax(a.width, b.w), MaybeMax(a.height, b.h)};
 }
 
 inline SizeOptF MaybeAdd(SizeOptF a, SizeF b) {
-    return {MaybeAdd(a.width, b.width), MaybeAdd(a.height, b.height)};
+    return {MaybeAdd(a.width, b.w), MaybeAdd(a.height, b.h)};
 }
 
 inline SizeOptF MaybeSub(SizeOptF a, SizeF b) {
-    return {MaybeSub(a.width, b.width), MaybeSub(a.height, b.height)};
+    return {MaybeSub(a.width, b.w), MaybeSub(a.height, b.h)};
 }
 
 inline SizeOptF MaybeSub(SizeOptF a, SizeOptF b) {
@@ -225,28 +225,28 @@ inline SizeOptF MaybeClamp(SizeOptF a, SizeOptF lo, SizeOptF hi) {
 }
 
 inline SizeF MaybeClamp(SizeF a, SizeOptF lo, SizeOptF hi) {
-    return {MaybeClamp(a.width, lo.width, hi.width),
-            MaybeClamp(a.height, lo.height, hi.height)};
+    return {MaybeClamp(a.w, lo.width, hi.width),
+            MaybeClamp(a.h, lo.height, hi.height)};
 }
 
 inline SizeF MaybeMax(SizeF a, SizeOptF b) {
-    return {MaybeMax(a.width, b.width), MaybeMax(a.height, b.height)};
+    return {MaybeMax(a.w, b.width), MaybeMax(a.h, b.height)};
 }
 
 inline SizeF MaybeMin(SizeF a, SizeOptF b) {
-    return {MaybeMin(a.width, b.width), MaybeMin(a.height, b.height)};
+    return {MaybeMin(a.w, b.width), MaybeMin(a.h, b.height)};
 }
 
 inline SizeF MaybeAdd(SizeF a, SizeOptF b) {
-    return {MaybeAdd(a.width, b.width), MaybeAdd(a.height, b.height)};
+    return {MaybeAdd(a.w, b.width), MaybeAdd(a.h, b.height)};
 }
 
 inline SizeF MaybeSub(SizeF a, SizeOptF b) {
-    return {MaybeSub(a.width, b.width), MaybeSub(a.height, b.height)};
+    return {MaybeSub(a.w, b.width), MaybeSub(a.h, b.height)};
 }
 
 inline SizeAvail MaybeSub(SizeAvail a, SizeF b) {
-    return {MaybeSub(a.width, b.width), MaybeSub(a.height, b.height)};
+    return {MaybeSub(a.width, b.w), MaybeSub(a.height, b.h)};
 }
 
 inline SizeAvail MaybeClamp(SizeAvail a, SizeOptF lo, SizeOptF hi) {
@@ -261,7 +261,7 @@ inline SizeAvail MaybeSet(SizeAvail a, SizeOptF v) {
 // Rust writes this as `Size::map(Some)` — a definite size seen as an
 // everywhere-Some optional one.
 inline SizeOptF AsOptional(SizeF s) {
-    return {Optf(s.width), Optf(s.height)};
+    return {Optf(s.w), Optf(s.h)};
 }
 
 } // namespace taffy

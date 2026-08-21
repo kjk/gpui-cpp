@@ -50,7 +50,7 @@ struct Segment {
                         float bfcWidth) const {
         int slot = (int)direction;
         return insets[slot] == 0.0f ||
-               (bfcWidth - floatedBox.width - InsetSum()) >= 0.0f;
+               (bfcWidth - floatedBox.w - InsetSum()) >= 0.0f;
     }
     float InsetSum() const { return insets[0] + insets[1]; }
     bool Contains(float y) const { return y >= yStart && y < yEnd; }
@@ -152,7 +152,7 @@ struct FloatContext {
             return {xInset, y};
         }
         rightFloats.Append(placed);
-        return {availableWidth - xInset - floatedBox.width, y};
+        return {availableWidth - xInset - floatedBox.w, y};
     }
 
     // The end segment of the last float on the side(s) `clear` names, or -1.
@@ -280,7 +280,7 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
             }
             const Segment& endSegment = segments[endIdx];
             fitter.UnionInsets(endSegment.insets);
-            if (!fitter.FitsHorizontally(floatedBox.width)) {
+            if (!fitter.FitsHorizontally(floatedBox.w)) {
                 startIdx++;
                 if (endIdx < startIdx) {
                     endIdx = startIdx;
@@ -291,7 +291,7 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
             if (endIdx != startIdx) {
                 fitter.AddHeight(endSegment.yEnd - endSegment.yStart);
             }
-            if (!fitter.FitsVertically(floatedBox.height)) {
+            if (!fitter.FitsVertically(floatedBox.h)) {
                 endIdx++;
                 continue;
             }
@@ -309,13 +309,13 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
     }
 
     PlacedFloatedBox out;
-    out.width = floatedBox.width;
-    out.height = floatedBox.height;
+    out.width = floatedBox.w;
+    out.height = floatedBox.h;
     out.y = startY;
     out.xInset = placedInset;
 
     // A zero-sized box takes up no space and needs no segment.
-    if (floatedBox.width == 0.0f || floatedBox.height == 0.0f) {
+    if (floatedBox.w == 0.0f || floatedBox.h == 0.0f) {
         return out;
     }
 
@@ -331,10 +331,10 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
         float newStartY = F32Max(lastYEnd, startY);
         Segment seg;
         seg.yStart = newStartY;
-        seg.yEnd = newStartY + floatedBox.height;
+        seg.yEnd = newStartY + floatedBox.h;
         seg.insets[0] = containingBlockInsets[0];
         seg.insets[1] = containingBlockInsets[1];
-        seg.insets[slot] += floatedBox.width;
+        seg.insets[slot] += floatedBox.w;
         segments.Append(seg);
 
         int si = segments.len - 1;
@@ -368,13 +368,13 @@ PlacedFloatedBox FloatContext::PlaceFloatedBoxInner(
         ei = segments.len - 1;
     } else {
         ei = foundEnd;
-        float endY = startY + floatedBox.height;
+        float endY = startY + floatedBox.h;
         if (endY != segments[ei].yEnd) {
             SubdivideSegment(ei, endY);
         }
     }
 
-    float placedInsetPlusWidth = placedInset + floatedBox.width;
+    float placedInsetPlusWidth = placedInset + floatedBox.w;
     for (int i = si; i <= ei && i < segments.len; i++) {
         segments[i].insets[slot] = placedInsetPlusWidth;
     }
@@ -513,7 +513,7 @@ struct BlockContext {
         pos.y -= yOffset;
         pos.x -= insets[0];
         floatContentContribution =
-            F32Max(floatContentContribution, pos.y + floatedBox.height);
+            F32Max(floatContentContribution, pos.y + floatedBox.h);
         return pos;
     }
     ContentSlot FindContentSlot(float minY, Clear clear, int after) const {
@@ -673,7 +673,7 @@ float DetermineContentBasedContainerWidth(TaffyTree* tree,
                 SizingMode::InherentSize, AbsoluteAxis::Horizontal,
                 LineBool::True());
         }
-        width = F32Max(width, item.paddingBorderSum.width) + itemXMarginSum;
+        width = F32Max(width, item.paddingBorderSum.w) + itemXMarginSum;
 
         if (IsFloated(item.floatMode)) {
             floatContribution.AddFloat(width);
@@ -784,7 +784,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
             tree->SetUnroundedLayout(item.nodeId, layout);
 
             res.inflowContentSize =
-                res.inflowContentSize.Max(ComputeContentSizeContribution(
+                Max(res.inflowContentSize, ComputeContentSizeContribution(
                     location, itemLayout.size, itemLayout.contentSize,
                     item.overflow));
             continue;
@@ -880,7 +880,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
         // Expand auto margins to fill the available space. Vertical auto
         // margins on a relatively positioned block item simply resolve to 0.
         // https://www.w3.org/TR/CSS21/visudet.html#abs-non-replaced-width
-        float freeXSpace = F32Max(0.0f, stretchWidth - finalSize.width);
+        float freeXSpace = F32Max(0.0f, stretchWidth - finalSize.w);
         int autoMarginCount = (itemMargin.left.IsSome() ? 0 : 1) +
                               (itemMargin.right.IsSome() ? 0 : 1);
         float xAxisAutoMarginSize =
@@ -925,7 +925,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
                                        ? resolvedContentBoxInset.left
                                        : containerOuterWidth -
                                              resolvedContentBoxInset.right -
-                                             finalSize.width,
+                                             finalSize.w,
                                    F32Max(unclearedY, clearPos)};
         } else {
             // TODO(taffy): handle inset and margins.
@@ -933,7 +933,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
                                        ? floatAvoidingPosition.x
                                        : floatAvoidingPosition.x +
                                              floatAvoidingWidth -
-                                             finalSize.width,
+                                             finalSize.w,
                                    floatAvoidingPosition.y};
         }
 
@@ -944,7 +944,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
                                   resolvedMargin.left
                             : containerOuterWidth -
                                   resolvedContentBoxInset.right -
-                                  finalSize.width - resolvedMargin.right +
+                                  finalSize.w - resolvedMargin.right +
                                   insetOffset.x,
                         F32Max(committedYOffset, clearPos) + yMarginOffset +
                             insetOffset.y};
@@ -954,13 +954,13 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
                             ? floatAvoidingPosition.x + resolvedMargin.left +
                                   insetOffset.x
                             : floatAvoidingPosition.x + floatAvoidingWidth -
-                                  finalSize.width - resolvedMargin.right +
+                                  finalSize.w - resolvedMargin.right +
                                   insetOffset.x,
                         floatAvoidingPosition.y + insetOffset.y};
         }
 
         // Legacy text-align on the block container shifts the item.
-        float itemOuterWidth = itemLayout.size.width + resolvedMargin
+        float itemOuterWidth = itemLayout.size.w + resolvedMargin
                                                            .HorizontalAxisSum();
         if (itemOuterWidth < containerInnerWidth) {
             float free = containerInnerWidth - itemOuterWidth;
@@ -996,7 +996,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
         item.finalLayout.margin = resolvedMargin;
 
         res.inflowContentSize =
-            res.inflowContentSize.Max(ComputeContentSizeContribution(
+            Max(res.inflowContentSize, ComputeContentSizeContribution(
                 {location.x - resolvedContentBoxInset.left,
                  location.y - resolvedContentBoxInset.top},
                 finalSize, itemLayout.contentSize, item.overflow));
@@ -1018,11 +1018,11 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
                                              .CollapseWithSet(topMarginSet)
                                              .CollapseWithSet(bottomMarginSet);
             yOffsetForAbsolute =
-                committedYOffset + itemLayout.size.height + yMarginOffset;
+                committedYOffset + itemLayout.size.h + yMarginOffset;
             yOffsetForFloat = yOffsetForAbsolute;
         } else {
             committedYOffset =
-                location.y - insetOffset.y + itemLayout.size.height;
+                location.y - insetOffset.y + itemLayout.size.h;
             activeCollapsibleMarginSet = bottomMarginSet;
             yOffsetForAbsolute = committedYOffset + activeCollapsibleMarginSet
                                                         .Resolve();
@@ -1046,8 +1046,8 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
                                               SizeF areaSize, PointF areaOffset,
                                               Direction direction) {
     CalcResolver calc = tree->calc;
-    float areaWidth = areaSize.width;
-    float areaHeight = areaSize.height;
+    float areaWidth = areaSize.w;
+    float areaHeight = areaSize.h;
     SizeF absoluteContentSize = SizeF::Zero();
 
     for (int i = 0; i < items.len; i++) {
@@ -1140,13 +1140,13 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
         // resolve to 0.
         // https://www.w3.org/TR/CSS21/visudet.html#abs-non-replaced-width
         PointF absoluteAutoMarginSpace = {
-            right.IsSome() ? areaSize.width - right.val - left.UnwrapOr(0.0f)
-                           : finalSize.width,
-            bottom.IsSome() ? areaSize.height - bottom.val - top.UnwrapOr(0.0f)
-                            : finalSize.height};
-        SizeF freeSpace = {absoluteAutoMarginSpace.x - finalSize.width -
+            right.IsSome() ? areaSize.w - right.val - left.UnwrapOr(0.0f)
+                           : finalSize.w,
+            bottom.IsSome() ? areaSize.h - bottom.val - top.UnwrapOr(0.0f)
+                            : finalSize.h};
+        SizeF freeSpace = {absoluteAutoMarginSpace.x - finalSize.w -
                                nonAutoMargin.HorizontalAxisSum(),
-                           absoluteAutoMarginSpace.y - finalSize.height -
+                           absoluteAutoMarginSpace.y - finalSize.h -
                                nonAutoMargin.VerticalAxisSum()};
 
         int autoW =
@@ -1155,22 +1155,22 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
             (margin.top.IsSome() ? 0 : 1) + (margin.bottom.IsSome() ? 0 : 1);
         SizeF autoMarginSize;
         if (autoW == 2 && (!styleSize.width.IsSome() ||
-                           styleSize.width.val >= freeSpace.width)) {
-            autoMarginSize.width = 0.0f;
+                           styleSize.width.val >= freeSpace.w)) {
+            autoMarginSize.w = 0.0f;
         } else if (autoW > 0) {
-            autoMarginSize.width = freeSpace.width / (float)autoW;
+            autoMarginSize.w = freeSpace.w / (float)autoW;
         }
         if (autoH == 2 && (!styleSize.height.IsSome() ||
-                           styleSize.height.val >= freeSpace.height)) {
-            autoMarginSize.height = 0.0f;
+                           styleSize.height.val >= freeSpace.h)) {
+            autoMarginSize.h = 0.0f;
         } else if (autoH > 0) {
-            autoMarginSize.height = freeSpace.height / (float)autoH;
+            autoMarginSize.h = freeSpace.h / (float)autoH;
         }
         RectF autoMargin = {
-            margin.left.IsSome() ? 0.0f : autoMarginSize.width,
-            margin.right.IsSome() ? 0.0f : autoMarginSize.width,
-            margin.top.IsSome() ? 0.0f : autoMarginSize.height,
-            margin.bottom.IsSome() ? 0.0f : autoMarginSize.height};
+            margin.left.IsSome() ? 0.0f : autoMarginSize.w,
+            margin.right.IsSome() ? 0.0f : autoMarginSize.w,
+            margin.top.IsSome() ? 0.0f : autoMarginSize.h,
+            margin.bottom.IsSome() ? 0.0f : autoMarginSize.h};
         RectF resolvedMargin = {margin.left.UnwrapOr(autoMargin.left),
                                 margin.right.UnwrapOr(autoMargin.right),
                                 margin.top.UnwrapOr(autoMargin.top),
@@ -1178,17 +1178,17 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
 
         float xOffset;
         if (left.IsSome() && right.IsSome()) {
-            xOffset = IsRtl(direction) ? areaSize.width - finalSize.width -
+            xOffset = IsRtl(direction) ? areaSize.w - finalSize.w -
                                              right.val - resolvedMargin.right
                                        : left.val + resolvedMargin.left;
         } else if (left.IsSome()) {
             xOffset = left.val + resolvedMargin.left;
         } else if (right.IsSome()) {
-            xOffset = areaSize.width - finalSize.width - right.val -
+            xOffset = areaSize.w - finalSize.w - right.val -
                       resolvedMargin.right;
         } else {
             xOffset = IsRtl(direction)
-                          ? item.staticPosition.x - finalSize.width -
+                          ? item.staticPosition.x - finalSize.w -
                                 resolvedMargin.right - areaOffset.x
                           : item.staticPosition.x + resolvedMargin.left -
                                 areaOffset.x;
@@ -1198,7 +1198,7 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
         if (top.IsSome()) {
             yLocation = top.val + resolvedMargin.top + areaOffset.y;
         } else if (bottom.IsSome()) {
-            yLocation = areaSize.height - finalSize.height - bottom.val -
+            yLocation = areaSize.h - finalSize.h - bottom.val -
                         resolvedMargin.bottom + areaOffset.y;
         } else {
             yLocation = item.staticPosition.y + resolvedMargin.top;
@@ -1224,10 +1224,11 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
 
         PointF relativeLocation = {location.x - areaOffset.x,
                                    location.y - areaOffset.y};
-        absoluteContentSize = absoluteContentSize
-                                  .Max(ComputeContentSizeContribution(
-                                      relativeLocation, finalSize,
-                                      layoutOutput.contentSize, item.overflow));
+        absoluteContentSize =
+            Max(absoluteContentSize,
+                ComputeContentSizeContribution(relativeLocation, finalSize,
+                                               layoutOutput.contentSize,
+                                               item.overflow));
     }
 
     return absoluteContentSize;
@@ -1333,7 +1334,7 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
             contentBoxInset.HorizontalAxisSum();
         containerOuterWidth =
             MaybeMax(MaybeClamp(intrinsicWidth, minSize.width, maxSize.width),
-                     Optf(paddingBorderSize.width));
+                     Optf(paddingBorderSize.w));
     }
 
     if (runMode == RunMode::ComputeSize && knownDimensions.height.IsSome()) {
@@ -1374,7 +1375,7 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
     float containerOuterHeight =
         MaybeMax(knownDimensions.height.UnwrapOr(MaybeClamp(
                      intrinsicOuterHeight, minSize.height, maxSize.height)),
-                 Optf(paddingBorderSize.height));
+                 Optf(paddingBorderSize.h));
     SizeF finalOuterSize = {containerOuterWidth, containerOuterHeight};
 
     // Apply align-content to the in-flow non-floated items. Block layout
@@ -1412,7 +1413,7 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
                 }
                 const Layout& l = items[i].finalLayout;
                 inflowContentSize =
-                    inflowContentSize.Max(ComputeContentSizeContribution(
+                    Max(inflowContentSize, ComputeContentSizeContribution(
                         {l.location.x - resolvedContentBoxInset.left,
                          l.location.y - resolvedContentBoxInset.top},
                         l.size, l.contentSize, items[i].overflow));
@@ -1468,7 +1469,7 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
     SizeF absoluteContentSize = PerformAbsoluteLayoutOnAbsoluteChildren(
         tree, items, absolutePositionArea, absolutePositionOffset, direction);
 
-    output.contentSize = inflowContentSize.Max(absoluteContentSize);
+    output.contentSize = Max(inflowContentSize, absoluteContentSize);
 
     // 5. Hidden children.
     int len = tree->ChildCount(nodeId);

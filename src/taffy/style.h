@@ -641,8 +641,8 @@ struct SizeAvail {
         return {AvailableSpace::MinContent(), AvailableSpace::MinContent()};
     }
     static SizeAvail Definite(SizeF s) {
-        return {AvailableSpace::Definite(s.width),
-                AvailableSpace::Definite(s.height)};
+        return {AvailableSpace::Definite(s.w),
+                AvailableSpace::Definite(s.h)};
     }
     static SizeAvail From(SizeOptF s) {
         return {AvailableSpace::From(s.width), AvailableSpace::From(s.height)};
