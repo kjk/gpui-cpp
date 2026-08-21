@@ -2026,7 +2026,14 @@ struct LayoutMode {
     int maxRows = 0; // 0 = usize::MAX
     int tabSize = 4;
     bool lineNumber = false;
+    // LayoutMode::CodeEditor { folding }. Rust defaults it on and the story
+    // turns it off; it is off here until something asks, because a plain
+    // textarea has no gutter to hang the chevrons in.
+    bool folding = false;
 };
+
+// LayoutMode::is_folding(): a code editor, with folding left on.
+bool LayoutModeIsFolding(const LayoutMode& m);
 
 void LayoutModeSetRows(LayoutMode* m, int rows);
 int LayoutModeRows(const LayoutMode& m);
@@ -2151,6 +2158,84 @@ void SearchMatcherCursorByOffset(SearchMatcher* m, int offset);
 bool SearchMatcherNext(SearchMatcher* m, Selection* out);
 bool SearchMatcherPrev(SearchMatcher* m, Selection* out);
 
+/* Port of crates/base/src/input/editor/display_map — the folding half.
+
+   Rust's display map is two projections stacked: buffer -> wrap (soft wrap)
+   and wrap -> display (folding). The rows here are logical lines already — a
+   soft-wrapped line is one row as tall as the text in it, so `rowBoxes` is
+   indexed by line and the wrap projection has nowhere to live — which leaves
+   the fold projection, and its two ends are line and display row rather than
+   wrap row and display row. Everything else is `fold_map.rs` as written.
+
+   Where the candidates come from is the themed layer's business, the way it
+   is Rust's: `apply_highlighter_fold_candidates` takes whatever the
+   highlighter found. */
+
+// folding.rs FoldRange. A foldable run of lines, both ends inclusive.
+struct FoldRange {
+    int startLine = 0;
+    int endLine = 0;
+};
+
+// fold_map.rs FoldMap. `candidates` is what could be folded and `folded` is
+// what is; the two index vectors are the projection built from them, rebuilt
+// lazily because a keystroke changes the text far more often than it changes
+// which lines are hidden.
+struct FoldMap {
+    // Sorted by startLine, at most one range per startLine.
+    Vec<FoldRange> candidates;
+    // A subset of `candidates`, sorted the same way.
+    Vec<FoldRange> folded;
+    // display row -> line (fold_map's `visible_wrap_rows`).
+    Vec<int> visibleLines;
+    // line -> display row, -1 for a line inside a closed fold.
+    Vec<int> lineToDisplayRow;
+    bool needsRebuild = true;
+    // The line count the projection was last built against, so a rebuild can
+    // be skipped when neither the text nor the folds have moved.
+    int cachedLineCount = 0;
+};
+
+// set_candidates: a full replacement. Sorts, drops all but the first range
+// per start line, and forgets any fold whose candidate is gone.
+void FoldMapSetCandidates(FoldMap* m, const FoldRange* ranges, int n);
+// set_folded / toggle_fold. A start line that is not a candidate is ignored.
+void FoldMapSetFolded(FoldMap* m, int startLine, bool folded);
+void FoldMapToggle(FoldMap* m, int startLine);
+bool FoldMapIsFolded(const FoldMap* m, int startLine);
+bool FoldMapIsCandidate(const FoldMap* m, int startLine);
+// clear_folds: everything opens, the candidates stay.
+void FoldMapClearFolds(FoldMap* m);
+// adjust_folds_for_edit: a fold or a candidate overlapping the edited lines
+// is dropped, and one after them is shifted by however many lines the edit
+// added or removed. Cheaper than re-extracting on every keystroke, and what
+// keeps a fold attached to its text while it is typed above.
+void FoldMapAdjustForEdit(FoldMap* m, int editStartLine, int editEndLine,
+                          int lineDelta);
+// rebuild: the projection, against a document of `lineCount` lines. A no-op
+// unless something moved.
+void FoldMapRebuild(FoldMap* m, int lineCount);
+// How many rows are on screen — the line count when nothing is folded.
+int FoldMapDisplayRowCount(const FoldMap* m);
+// wrap_row_to_display_row / display_row_to_wrap_row, on lines. -1 for a line
+// that is hidden, or a display row past the end.
+int FoldMapDisplayRow(const FoldMap* m, int line);
+int FoldMapLineAt(const FoldMap* m, int displayRow);
+// True when a closed fold hides the line outright.
+bool FoldMapLineHidden(const FoldMap* m, int line);
+// nearest_visible_display_row, answered as a line: the line itself when it is
+// visible, and the nearest one above it when it is not.
+int FoldMapNearestVisibleLine(const FoldMap* m, int line);
+
+// One chevron's box, from the frame the gutter last built. Rust inserts a
+// hitbox per icon during prepaint and hangs a mouse-down listener on it; a
+// press here is routed by the window through the field it landed in, so what
+// the frame has to leave behind is where the icons were.
+struct FoldIconBox {
+    int line = 0;
+    Bounds bounds = {};
+};
+
 // SearchSession: the panel's state, kept on the field so it survives the
 // panel being closed and opened again.
 struct SearchSession {
@@ -2205,6 +2290,15 @@ struct InputState {
     bool searchable = false;
     bool replaceable = true;
     SearchSession search;
+    // Code folding. The projection survives an edit; the icon boxes are the
+    // last frame's and are rebuilt with it.
+    FoldMap folds;
+    Vec<FoldIconBox> foldIcons;
+    // The line-number cell of the first row, which is what says where the
+    // gutter is. Rust hangs a hitbox over the whole column and shows the
+    // chevrons while it is hovered; the column is the same x for every row,
+    // so one row's cell locates it.
+    Bounds gutterBox = {};
     bool softWrap = true;
     // text_align: 0 left, 1 center, 2 right.
     int align = 0;
@@ -2478,6 +2572,14 @@ void InputBlur(InputState* s, App* app, Window* win);
 // index_for_mouse_position: the offset a press at (x, y) lands on, against the
 // run the element last painted.
 int InputIndexForPosition(const InputState* s, PaintCtx* ctx, float x, float y);
+// The fold chevron a press at (x, y) landed on, or -1. The boxes are the ones
+// the last frame's gutter left behind.
+int InputFoldIconAt(const InputState* s, float x, float y);
+// Open or close the fold that starts on `line`, and redraw.
+void InputToggleFold(InputState* s, App* app, Window* win, int line);
+// apply_highlighter_fold_candidates: what the highlighter found, taken only
+// when this field is a code editor with folding on.
+void InputSetFoldCandidates(InputState* s, const FoldRange* ranges, int n);
 // The field a press at (x, y) landed in, or null.
 InputState* InputAtPosition(PaintCtx* ctx, float x, float y);
 

@@ -125,9 +125,91 @@ static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
     return m;
 }
 
+Highlighter* Highlighter::Folding(bool v) {
+    folding = v;
+    return this;
+}
+
 Highlighter* Highlighter::Searchable(bool v) {
     searchable = v;
     return this;
+}
+
+/* Fold candidates — crates/ui/src/highlighter/input_adapter.rs
+   extract_fold_ranges.
+
+   Rust walks the tree-sitter tree and offers every named node that spans two
+   rows or more; the showcase's own highlighter, which has no tree either,
+   scans the text for brace pairs instead (`brace_fold_ranges` in
+   examples/showcase/syntect_highlighter.rs). This is the second of the two,
+   run over the lexer rather than over raw characters — so a brace inside a
+   string or a comment is not a brace, which is what the hand-rolled quote and
+   `//` tracking in Rust's version is doing by hand and does less well.
+
+   A language with no braces has no candidates, which is where this stops
+   short of the tree: Rust would fold a Python suite and this cannot see one.
+*/
+
+// Rust bounds this by the tree; a document with more foldable blocks than
+// this has more chevrons than a gutter can show anyway.
+static const int kMaxFoldRanges = 512;
+
+static int FoldCandidates(Str text, SyntaxLang lang, FoldRange* out, int cap) {
+    if (text.len == 0 || cap <= 0) {
+        return 0;
+    }
+    // The line each byte is on, walked alongside the scan so a token's line
+    // is known without searching for it.
+    int starts[64];
+    int nOpen = 0;
+    int n = 0;
+    int line = 0;
+    int at = 0;
+    SyntaxLexer lx = {};
+    SyntaxLexStart(&lx, lang, text);
+    while (SyntaxLexNext(&lx)) {
+        int tokStart = (int)(lx.text.s - text.s);
+        // Everything between the last token and this one, plus the token
+        // itself when it is not one that can hold a brace.
+        for (; at < tokStart && at < text.len; at++) {
+            if (text.s[at] == '\n') {
+                line++;
+            }
+        }
+        bool literal =
+            lx.tok == SyntaxTok::String || lx.tok == SyntaxTok::Comment;
+        for (int i = 0; i < lx.text.len; i++) {
+            char c = lx.text.s[i];
+            if (c == '\n') {
+                line++;
+                continue;
+            }
+            if (literal) {
+                continue;
+            }
+            if (c == '{') {
+                if (nOpen < (int)(sizeof(starts) / sizeof(starts[0]))) {
+                    starts[nOpen] = line;
+                }
+                nOpen++;
+            } else if (c == '}' && nOpen > 0) {
+                nOpen--;
+                if (nOpen >= (int)(sizeof(starts) / sizeof(starts[0]))) {
+                    continue;
+                }
+                int startLine = starts[nOpen];
+                // A block that opens and closes on one line has nothing to
+                // hide, and Rust drops it the same way.
+                if (startLine < line && n < cap) {
+                    out[n].startLine = startLine;
+                    out[n].endLine = line;
+                    n++;
+                }
+            }
+        }
+        at = tokStart + lx.text.len;
+    }
+    return n;
 }
 
 El* Highlighter::IntoEl() {
@@ -148,6 +230,19 @@ El* Highlighter::IntoEl() {
     }
     if (indentGuides) {
         style.indentGuide = RgbaOpacity(th.border, 0.8f);
+    }
+    if (state) {
+        // This façade is Rust's code editor — the highlighter is bound to
+        // an EditorState, whose LayoutMode is CodeEditor — so it is what
+        // says so, rather than every caller having to.
+        state->mode.kind = LayoutModeKind::CodeEditor;
+        state->mode.folding = folding;
+    }
+    if (state && folding) {
+        FoldRange ranges[kMaxFoldRanges];
+        int nRanges =
+            FoldCandidates(InputValue(state), lang, ranges, kMaxFoldRanges);
+        InputSetFoldCandidates(state, ranges, nRanges);
     }
     // The language's captures first, the caller's decorations laid over them:
     // a decoration takes the range it covers away from whatever the scanner
