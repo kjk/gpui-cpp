@@ -4,8 +4,8 @@
    Rust hands the source to html5ever, walks the RcDom and folds it into the
    BlockNode tree node.rs renders. There is no html5ever here and no room for
    one (hard rule 3), so this is a tokenizer and a stack of open elements that
-   fold the same tags into ui/text.h's MdNode — the tree md4c already builds.
-   One renderer walks both, which is exactly how Rust arranges it.
+   fold the same tags into ui/text.h's MdNode — the tree src/markdown already
+   builds. One renderer walks both, which is exactly how Rust arranges it.
 
    The subset is Rust's: the block elements it lists, the inline marks it
    understands (b/strong, i/em, code, u, s/del, mark, a), tables with their
@@ -28,8 +28,8 @@ MdNode* HtmlParse(Arena* a, Str source);
 void HtmlParseInto(Arena* a, MdNode* parent, Str source);
 
 // One inline tag as it appears inside a markdown paragraph: `<b>`, `</b>`,
-// `<a href="..">`, `<br>`, `<img alt="..">`. md4c hands those over as raw
-// text (MD_TEXT_HTML) and text.cpp turns them into marks with this.
+// `<a href="..">`, `<br>`, `<img alt="..">`. The markdown parser hands those
+// over as an mdast Html node and text.cpp turns them into marks with this.
 struct HtmlInlineTag {
     // The MdMark bits the tag sets, or clears when `close`.
     uint8_t mark = 0;

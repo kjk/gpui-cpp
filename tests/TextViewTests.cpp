@@ -96,11 +96,13 @@ static void TestMarkdownBlocks(Arena* a) {
     utassert(list->kind == MdKind::List);
     utassert(!list->ordered);
     utassert(Children(list) == 2);
-    utassert(TextIs(a, Child(list, 1), "two"));
+    // An item holds blocks: mdast gives even a tight list item a paragraph
+    // of its own.
+    utassert(TextIs(a, Child(Child(list, 1), 0), "two"));
 }
 
 // The delimiter row's colons, which node.rs render_wrap_table aligns each
-// column by. md4c reports them as MD_ALIGN on every cell of the column.
+// column by. mdast reports them once per column, as `Table::align`.
 static void TestMarkdownTableAlign(Arena* a) {
     MdNode* doc = MdParse(a, StrL("| a | b | c |\n"
                                   "|:--|:-:|--:|\n"
@@ -117,8 +119,9 @@ static void TestMarkdownTableAlign(Arena* a) {
     utassert(Child(body, 2)->align == MdAlignRight);
 }
 
-// Inline HTML inside a paragraph: md4c hands the tags over as raw text and
-// text.cpp turns them into the marks html5ever would have produced.
+// Inline HTML inside a paragraph: the parser hands the tags over as mdast
+// Html nodes and text.cpp turns them into the marks html5ever would have
+// produced.
 static void TestMarkdownInlineHtml(Arena* a) {
     MdNode* doc = MdParse(
         a, StrL("Plain <b>bold</b> and <a href=\"http://x/\">link</a>.\n"));

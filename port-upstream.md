@@ -1,6 +1,6 @@
 # Upstream pins
 
-**Source of truth for which checkin we are porting: [`cmd/versions.ts`](cmd/versions.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`). `bun cmd/build.ts`, `bun cmd/run.ts`, and `bun cmd/versions.ts` clone or reset `.work/gpui-component` to that SHA.
+**Source of truth for which checkin we are porting: [`cmd/versions.ts`](cmd/versions.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`). `bun cmd/build.ts`, `bun cmd/run.ts`, and `bun cmd/versions.ts` clone or reset `.work/gpui-component` to that SHA.
 
 This file is the ingest playbook. Diff Rust from the SHA in `cmd/versions.ts`, not `HEAD`.
 
@@ -55,7 +55,7 @@ git diff <gpuiComponent.sha> origin/main -- <path>
 
 Local cargo checkout (after a rust build): `%USERPROFILE%\.cargo\git\checkouts\zed-*\<zedGpui.sha prefix>\`
 
-We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Blade, entity/observer, cosmic-text, font-kit. Taffy *is* ported — see below.
+We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Blade, entity/observer, cosmic-text, font-kit. Taffy and `markdown` *are* ported — see below.
 
 ## taffy (a crate we port)
 
@@ -94,12 +94,51 @@ need the clone above. `bench/` is the port of `benches/benches/flexbox.rs`,
 `benches/benches/mixed.rs` is not ported, because it measures text through
 `parley`.
 
+## markdown (a crate we port)
+
+`src/markdown/` is a C++ port of
+[markdown-rs](https://github.com/wooorm/markdown-rs) at the version
+`crates/ui/Cargo.toml` asks for — currently `markdown = { version = "1.0.0",
+features = ["serde"] }`. It is the parser, not a reference: every
+`component::TextView` in this tree reads its mdast, the way
+`crates/ui/src/text/format/markdown.rs` reads the crate's.
+
+**It moves when the gpui-component pin moves.** After bumping
+`gpuiComponent.sha`, check whether the resolved `markdown` changed:
+
+```
+grep -A3 'name = "markdown"' .work/gpui-component/Cargo.lock
+```
+
+If it did, set `markdown.version` in `cmd/versions.ts` to the new one and diff
+the crate between the two versions:
+
+```
+git clone https://github.com/wooorm/markdown-rs .work/markdown-rs   # once
+git -C .work/markdown-rs log --oneline 1.0.0..NEW -- src
+git -C .work/markdown-rs diff 1.0.0 NEW -- src/construct/gfm_table.rs
+```
+
+`src/markdown/readme.md` has the file-for-file map from the Rust modules to
+the C++ files, and every state function keeps the name the crate's `StateName`
+enum gives it, so a diff applies mechanically.
+
+As with taffy, the crate's own test suite is in its `tests/` directory, which
+the published crate does not carry (`include` covers `src/` only); it needs the
+clone above. `tests/MarkdownTests.cpp` ports the `#[cfg(test)]` modules inside
+`src/` and adds an end-to-end check per construct. The readme records the
+differential run the port was checked with — 3283 documents, both parsers'
+event streams and trees compared — and how to repeat it.
+
+MDX and `to_html` are not ported, for reasons the readme gives.
+
 ## Not ported (do not pin / do not chase)
 
 `sysinfo`, `battery`, `smol`, `reqwest` (zed fork), ropey, tree-sitter, syntect, html5ever, resvg — C++ uses Win32 / our own code instead.
 
 taffy's own transitive dependencies — `arrayvec`, `grid`, `slotmap`,
 `cssparser` — are not ported either; the C++ port uses `Vec`, a flat occupancy
-matrix, its own generational slots, and no CSS parser.
+matrix, its own generational slots, and no CSS parser. `markdown`'s one
+dependency, `unicode-id`, belongs to MDX, which is not ported.
 
 `src/base.h` / `src/base.cpp` are SumatraPDF, not gpui-component.

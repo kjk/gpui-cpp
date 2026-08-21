@@ -4,7 +4,7 @@ This repository is a C++ port of [longbridge/gpui-component](https://github.com/
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
-**Upstream pins** — source of truth: [`cmd/versions.ts`](cmd/versions.ts) (`gpuiComponent`, `zedGpui`). How to ingest a later checkin: `port-upstream.md`.
+**Upstream pins** — source of truth: [`cmd/versions.ts`](cmd/versions.ts) (`gpuiComponent`, `zedGpui`, and the two crates we port, `taffy` and `markdown`). How to ingest a later checkin: `port-upstream.md`.
 
 ## Goal
 
@@ -48,9 +48,10 @@ Matching means:
 
 It does **not** mean a line-for-line clone of Zed's GPUI renderer or Blade.
 Those are the layer *under* gpui-component, and we reimplement a subset of them
-rather than port them. **Taffy is the exception**: `src/taffy/` is a full C++
-port of the taffy crate at the version gpui-component pins, and every box in
-this tree is laid out by it. See `src/taffy/readme.md`.
+rather than port them. **Two crates are the exception**, and both are full C++
+ports at the version gpui-component pins: `src/taffy/` lays out every box in
+this tree, and `src/markdown/` parses every `TextView`. See
+`src/taffy/readme.md` and `src/markdown/readme.md`.
 
 ## Non-goals
 
@@ -68,8 +69,8 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   and syntect (so `highlighter` stays the small hand-written lexer it is), a
   webview, an LSP client, resvg, ropey, html5ever. Where Rust reaches for one
   of these and the feature is still worth having, write the small version this
-  tree needs — `ext/md4c` is the one exception, and `port-upstream.md` lists
-  the rest
+  tree needs, or port the crate the way `src/taffy` and `src/markdown` are
+  ported; `port-upstream.md` lists which is which
 
 A thing that is *not* ported for a reason other than these belongs in
 `port-progress.md` with the reason, so the next session does not have to
@@ -79,7 +80,7 @@ rediscover it.
 
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout. All of `src/` lives in `namespace gpui` (themed widgets in `gpui::component`). Examples `#include "gpui.h"` and `using namespace gpui;`.
-3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. The one vendored library is `ext/md4c` — the CommonMark parser behind `component::TextView`, a single C file with no dependencies, checked in with its version and refresh commands in `ext/md4c/readme.md` and amalgamated into `gpui.h` / `gpui.cpp` along with `src/**`. Adding a second one needs the same bar: no build system of its own, no transitive dependencies, and a reason the tree cannot write it itself.
+3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no vendored library and no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). Vendoring one would need a bar nothing has cleared: no build system of its own, no transitive dependencies, and a reason neither of those two routes works.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
 6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
@@ -113,7 +114,8 @@ C++ stack we implement:
 examples/system_monitor.cpp   MonitorApp: a view entity with Render(self, cx)
         │
         ▼
-src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root
+src/ui/     Theme, TitleBar, TabBar, AreaChart, Progress, Icon, Table, Root;
+            component::TextView parses through src/markdown
         │
         ▼
 src/base/   unstyled primitives the themed layer is built from
@@ -125,6 +127,7 @@ src/gpui/   App + Window + entity store, hit-test, timer, frame arena;
         │
         ▼
 src/taffy/  the taffy crate, ported; every El box is laid out by it
+src/markdown/  the markdown crate, ported; every TextView is parsed by it
         │
         ▼
 src/gpui/paint_win.cpp     Direct2D + DirectWrite
@@ -164,7 +167,7 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 `Key*` constants in `Gpui.h` (the Win32 `VK_*` values, which the X11 window
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
-`cmd/build-dist.ts` amalgamates `src/` plus `ext/md4c` into two files:
+`cmd/build-dist.ts` amalgamates `src/` into two files:
 `gpui.h` and `gpui.cpp`. Both are the same on every platform. `.work/` is gitignored and is what
 every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
 it. The published copy is a repo of its own,
@@ -188,8 +191,7 @@ marker says and a diagnostic lands where you expect. Each `_win.cpp` /
 GPUI_OS_*`, so `<windows.h>`, `<X11/Xlib.h>` and `<Cocoa/Cocoa.h>` still never
 reach one translation unit — the preprocessor drops the other two halves before
 anything parses them. macOS compiles the whole file as Objective-C++, because
-the mac half is. md4c is the tail of both outputs: `md4c.h` at the end of
-`gpui.h`, `md4c.c` at the end of `gpui.cpp`.
+the mac half is.
 
 ## Source of truth for visuals
 
@@ -325,6 +327,33 @@ whose `Cargo.lock` resolves a different taffy, the port moves with it — bump
 `taffy.version` there and diff the crate. `src/taffy/readme.md` has the
 file-for-file map and `port-upstream.md` has the procedure.
 
+## Markdown
+
+`src/markdown/` is a C++ port of
+[markdown-rs](https://github.com/wooorm/markdown-rs) 1.0.0 — the `markdown`
+crate `crates/ui/Cargo.toml` asks for, and therefore the one that defines what
+a `TextView`'s source *means*. CommonMark and GFM both, tables, footnotes and
+task lists included. It lives in `namespace markdown`, not `gpui`: `CharKind`,
+`Name`, `Link`, `Point` and `Node` exist in both and mean different things.
+
+`MdParse` in `src/ui/text.cpp` is the seam. It calls
+`markdown::ToMdast(a, source, ParseOptions::Gfm())` and folds the mdast into
+the `MdNode` tree the renderer walks, which is what
+`crates/ui/src/text/format/markdown.rs` does with `ast_to_node` and
+`parse_paragraph`. Raw HTML — a block, an inline tag, or a whole document —
+goes through `src/ui/html.cpp` into the same tree, since there is no
+html5ever here.
+
+When a parsing question comes up, the answer is in `src/markdown/`, and behind
+that in the Rust crate. Do not add a special case to `MdParse` for something
+CommonMark already has a rule for.
+
+**The port is kept current**, on the same terms as taffy: bump
+`markdown.version` in `cmd/versions.ts` and diff the crate.
+`src/markdown/readme.md` has the file-for-file map — including what is
+deliberately not ported, MDX and `to_html` — and `port-upstream.md` has the
+procedure.
+
 ## Code style (match SumatraPDF `src/base`)
 
 ```cpp
@@ -450,8 +479,8 @@ AGENTS.md              this file
 port.md                phased porting plan
 port-progress.md       what is done / what is next
 port-upstream.md       how to ingest later checkins (pins live in cmd/versions.ts)
-cmd/versions.ts        exact gpui-component + zed gpui SHAs and the taffy
-                       version we are porting
+cmd/versions.ts        exact gpui-component + zed gpui SHAs, and the taffy and
+                       markdown crate versions we are porting
 cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
 cmd/build.ts           dispatches to build-windows.ts / build-linux.ts by host
 cmd/build-windows.ts   MSVC compile/link via bun; also clones the pinned Rust spec
@@ -476,7 +505,7 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
                        takes -gpui-* out of argv before the example parses it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
-cmd/build-dist.ts      amalgamate src/** + ext/md4c into gpui.h + gpui.cpp
+cmd/build-dist.ts      amalgamate src/** into gpui.h + gpui.cpp
                        (`.work/` for builds; run by hand to publish gpui-cpp-dist)
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests
@@ -484,6 +513,7 @@ cmd/bench.ts           build bench/ and run it (-small, -large, -n=<count>)
 bench/                 ports of taffy's layout benchmarks
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 src/taffy/             the taffy layout crate, ported (see its readme.md)
+src/markdown/          the markdown crate, ported (see its readme.md)
 src/base.h/.cpp        vendored SumatraPDF subset
 src/base_win.cpp       Windows platform layer (memory, paths, strings)
 src/base_linux.cpp     the same, on POSIX

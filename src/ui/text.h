@@ -1,10 +1,12 @@
 /* Themed markdown view — crates/ui/src/text.
 
    Rust parses with the `markdown` crate into an mdast, folds that into its own
-   BlockNode tree (text/node.rs) and renders the tree. This is the same shape:
-   md4c (ext/md4c) parses SAX-style, its callbacks build the MdNode tree below,
-   and TextView::IntoEl walks it. md4c runs in the GitHub dialect, so tables,
-   strikethrough, task lists and bare-URL autolinks all work.
+   BlockNode tree (text/node.rs) and renders the tree. This is the same shape
+   and the same parser: src/markdown is that crate ported (see
+   src/markdown/readme.md), text.cpp folds the mdast it returns into the MdNode
+   tree below, and TextView::IntoEl walks it. It runs in the GFM dialect, the
+   one markdown_ext.rs asks for, so tables, strikethrough, task lists,
+   footnotes and bare-URL autolinks all work.
 
    Raw HTML is the other half. Rust parses it with html5ever and folds the
    DOM into the same BlockNode tree (text/format/html.rs); here ui/html.cpp is
@@ -92,7 +94,8 @@ enum class MdKind : uint8_t {
     Group,
 };
 
-// MD_ALIGN, repeated so ui/html.cpp does not have to include md4c.h.
+// mdast's AlignKind, repeated so ui/html.cpp — which has no mdast of its own
+// — can say the same thing.
 enum MdAlign : uint8_t {
     MdAlignDefault = 0,
     MdAlignLeft = 1,
