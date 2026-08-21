@@ -103,6 +103,34 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         win->prevInput = win->input;
     }
 
+    // AutoScroll's tick. Rust spawns a 16 ms background task per state; the
+    // frame is that clock here, so one tick is one frame and the request for
+    // the next keeps it running while the pointer stays out at the edge. The
+    // selection is re-run at the pointer's last place, since the content has
+    // moved under it.
+    if (win->input && win->input->autoScroll.IsActive() && win->mouseDown) {
+        InputState* s = win->input;
+        float was = s->scrollY;
+        s->scrollY += s->autoScroll.delta;
+        if (s->scrollY < 0) {
+            s->scrollY = 0;
+        }
+        float most = s->contentH - s->viewH;
+        if (most < 0) {
+            most = 0;
+        }
+        if (s->scrollY > most) {
+            s->scrollY = most;
+        }
+        if (s->scrollY != was && s->autoScroll.hasLastDrag) {
+            InputSelectTo(
+                s, win->app, win,
+                InputIndexForPosition(s, &win->paint, s->autoScroll.lastDrag.x,
+                                      s->autoScroll.lastDrag.y));
+        }
+        WindowRequestAnimationFrame(win);
+    }
+
     // The window's own selection, before the view builds: an application
     // only says Selectable() on its text, the way Rust has the window drive
     // every registered run.
@@ -728,8 +756,22 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     // held is `win->mouseDown` rather than the move event's own flag, the same
     // signal the slider drag and on_drag_move above go by.
     if (win->input && win->input->selecting && win->mouseDown) {
-        InputSelectTo(win->input, win->app, win,
-                      InputIndexForPosition(win->input, &win->paint, x, y));
+        InputState* s = win->input;
+        s->autoScroll.lastDrag = Point{x, y};
+        s->autoScroll.hasLastDrag = true;
+        InputSelectTo(s, win->app, win,
+                      InputIndexForPosition(s, &win->paint, x, y));
+        // A drag that has reached the edge of a field with somewhere to go
+        // keeps scrolling it until the pointer comes back in. A single-line
+        // field has nowhere to go, which is why Rust asks the same question.
+        float delta = 0;
+        if (!InputIsSingleLine(s) &&
+            AutoScrollComputeDelta(y, s->inputBounds, &delta)) {
+            s->autoScroll.Set(delta);
+            AppInvalidate(win);
+        } else {
+            s->autoScroll.SetNone();
+        }
     }
     if (win->mouseDown) {
         AppInvalidate(win);
@@ -1005,6 +1047,7 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
     if (win->input && win->input->selecting) {
         win->input->selecting = false;
         win->input->hasSelectedWordRange = false;
+        win->input->autoScroll.Stop();
     }
     // The click, last: GPUI's on_click fires from the release, and only when
     // the same button that went down comes up over the element that took it.

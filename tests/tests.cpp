@@ -31,6 +31,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
+    TestAutoScroll();
     TestThemeRegistry();
     TestPositioner();
     TestScale();
