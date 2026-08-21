@@ -9,8 +9,9 @@
  *     and the style-typed ones (`SizeDim`, `SizeAvail`, `RectLp`, …) live in
  *     style.h next to the types they hold. Each carries only the operations
  *     taffy performs on it, which is why they are not all alike.
- *   - `Option<f32>` is `Optf`. The optional enums taffy carries get one
- *     concrete struct each, also in style.h.
+ *   - `Option<f32>` is `Optf`, an alias for `float` with one reserved NaN
+ *     bit pattern standing for `None` — see the block below. The optional
+ *     enums taffy carries get one concrete struct each, also in style.h.
  */
 
 #ifndef GPUI_TAFFY_GEOMETRY_H_
@@ -32,37 +33,76 @@ using base::Vec;
 
 // ─── Option<f32> ─────────────────────────────────────────────────────────
 
-// Rust's `Option<f32>`. POD, so it lives in a Vec and memcpys.
-struct Optf {
-    float val = 0.0f;
-    bool has = false;
+// Rust's `Option<f32>`, as a bare `float`.
+//
+// The obvious port is a `{ float, bool }` pair, and that is what this was:
+// eight bytes for four bits of information, doubling every `Size`, `Rect` and
+// `Line` of them that layout carries. Instead `None` is one reserved bit
+// pattern — the NaN tagging V8 uses to fit a pointer beside a double, minus
+// the pointer. A float has 2^23 quiet NaNs and layout has a use for none of
+// them, so one is spent on `None` and every other bit pattern, NaN included,
+// is `Some`.
+//
+// Reserving a single pattern rather than "any NaN" is deliberate: taffy does
+// arithmetic that can produce a NaN of its own (`INFINITY - INFINITY` in
+// `MaybeSub`, a zero aspect ratio), `F32Min` / `F32Max` have a rule for one,
+// and turning that into a `None` would change what layout computes.
+//
+// The type is an alias, not a wrapper, so `Optf` and `float` are the same
+// type and a plain float is simply an `Optf` that is always `Some`. That is
+// what collapses the three overload families in math.h — `Optf op Optf`,
+// `Optf op float`, `float op Optf` — into one function each, and it is why
+// there is no distinct-typedef version of this: the whole point of the tag is
+// that the two are interchangeable. The name stays because it says which
+// values may be `None`.
+using Optf = float;
 
-    constexpr Optf() = default;
-    constexpr explicit Optf(float v) : val(v), has(true) {}
-
-    constexpr bool IsSome() const { return has; }
-    constexpr bool IsNone() const { return !has; }
-    // Rust's `Option::unwrap`. A None here is a layout bug, not input.
-    constexpr float Unwrap() const { return val; }
-    constexpr float UnwrapOr(float alt) const { return has ? val : alt; }
-    constexpr Optf Or(Optf alt) const { return has ? *this : alt; }
-};
-
-// Rust spells these `Some(x)` and `None`.
-constexpr Optf Some(float v) {
-    return Optf(v);
-}
+// A quiet NaN (exponent all ones, mantissa MSB set) with a payload nothing
+// else produces: x86 makes 0xffc00000 for an invalid operation, and NaN
+// propagation copies an operand's payload rather than inventing this one.
+inline constexpr uint32_t kOptfNoneBits = 0x7fc0beefu;
 
 constexpr Optf None() {
-    return Optf();
+    return __builtin_bit_cast(float, kOptfNoneBits);
 }
 
-constexpr bool operator==(Optf a, Optf b) {
-    return a.has == b.has && (!a.has || a.val == b.val);
+// Rust spells this `Some(x)`. A no-op; it is here so a call site can say
+// which of the two it means.
+constexpr Optf Some(float v) {
+    return v;
 }
 
-constexpr bool operator!=(Optf a, Optf b) {
-    return !(a == b);
+constexpr bool IsNone(Optf v) {
+    return __builtin_bit_cast(uint32_t, v) == kOptfNoneBits;
+}
+
+constexpr bool IsSome(Optf v) {
+    return __builtin_bit_cast(uint32_t, v) != kOptfNoneBits;
+}
+
+// Rust's `Option::unwrap`. A None here is a layout bug, not input, so this is
+// the same no-op cast `Some` is.
+constexpr float Unwrap(Optf v) {
+    return v;
+}
+
+constexpr float UnwrapOr(Optf v, float alt) {
+    return IsSome(v) ? v : alt;
+}
+
+constexpr Optf Or(Optf v, Optf alt) {
+    return IsSome(v) ? v : alt;
+}
+
+// `==` on two Optf is float comparison, and None is a NaN, so None == None
+// would be false. Rust's `Option<f32>: PartialEq` says the two Nones are
+// equal, and this is that.
+constexpr bool OptfEq(Optf a, Optf b) {
+    return IsNone(a) ? IsNone(b) : (a == b);
+}
+
+constexpr bool OptfNe(Optf a, Optf b) {
+    return !OptfEq(a, b);
 }
 
 // ─── f32 helpers — taffy/src/util/sys.rs ─────────────────────────────────
@@ -263,103 +303,69 @@ constexpr float CrossEnd(RectF r, FlexDirection d) {
     return IsRow(d) ? r.bottom : r.right;
 }
 
-// ─── SizeOptF ────────────────────────────────────────────────────────────
+// ─── SizeOptF / PointOptF / RectOptF ─────────────────────────────────────
+//
+// Rust's `Size<Option<f32>>`, `Point<Option<f32>>` and `Rect<Option<f32>>`.
+// An `Optf` is a float (see above), so these are the float shapes themselves
+// — the same eight and sixteen bytes, and no conversion between the definite
+// and the optional view of one. The aliases stay because a signature saying
+// `SizeOptF` says its components may be `None`, which `SizeF` does not; the
+// two default differently, so a value that starts out unknown has to be
+// spelled `SizeOptFNone()` rather than left to `{}`.
 
-// Rust's `Size<Option<f32>>`.
-struct SizeOptF {
-    Optf width;
-    Optf height;
+using SizeOptF = SizeF;
+using PointOptF = PointF;
+using RectOptF = RectF;
 
-    static constexpr SizeOptF None() { return {}; }
-    static constexpr SizeOptF New(float w, float h) {
-        return {Optf(w), Optf(h)};
-    }
-    // Rust's `Size::<Option<f32>>::from_cross`.
-    static constexpr SizeOptF FromCross(FlexDirection d, Optf v) {
-        SizeOptF out;
-        if (IsRow(d)) {
-            out.height = v;
-        } else {
-            out.width = v;
-        }
-        return out;
-    }
-
-    constexpr Optf GetAbs(AbsoluteAxis a) const {
-        return a == AbsoluteAxis::Horizontal ? width : height;
-    }
-    constexpr Optf Get(AbstractAxis a) const {
-        return a == AbstractAxis::Inline ? width : height;
-    }
-    constexpr void Set(AbstractAxis a, Optf v) {
-        if (a == AbstractAxis::Inline) {
-            width = v;
-        } else {
-            height = v;
-        }
-    }
-    constexpr Optf Main(FlexDirection d) const {
-        return IsRow(d) ? width : height;
-    }
-    constexpr Optf Cross(FlexDirection d) const {
-        return IsRow(d) ? height : width;
-    }
-    constexpr void SetMain(FlexDirection d, Optf v) {
-        if (IsRow(d)) {
-            width = v;
-        } else {
-            height = v;
-        }
-    }
-    constexpr void SetCross(FlexDirection d, Optf v) {
-        if (IsRow(d)) {
-            height = v;
-        } else {
-            width = v;
-        }
-    }
-    constexpr SizeF UnwrapOr(SizeF alt) const {
-        return {width.UnwrapOr(alt.w), height.UnwrapOr(alt.h)};
-    }
-    constexpr SizeOptF Or(SizeOptF alt) const {
-        return {width.Or(alt.width), height.Or(alt.height)};
-    }
-    constexpr bool BothAxisDefined() const {
-        return width.IsSome() && height.IsSome();
-    }
-    // If one axis is Some and the other None, fill the None one in from the
-    // ratio. Anything else is returned unchanged.
-    constexpr SizeOptF MaybeApplyAspectRatio(Optf aspectRatio) const {
-        if (!aspectRatio.IsSome()) {
-            return *this;
-        }
-        float ratio = aspectRatio.val;
-        if (width.IsSome() && !height.IsSome()) {
-            return {width, Optf(width.val / ratio)};
-        }
-        if (!width.IsSome() && height.IsSome()) {
-            return {Optf(height.val * ratio), height};
-        }
-        return *this;
-    }
-};
-
-constexpr bool operator==(SizeOptF a, SizeOptF b) {
-    return a.width == b.width && a.height == b.height;
+constexpr SizeOptF SizeOptFNone() {
+    return {None(), None()};
 }
 
-constexpr bool operator!=(SizeOptF a, SizeOptF b) {
-    return !(a == b);
+constexpr PointOptF PointOptFNone() {
+    return {None(), None()};
 }
 
-// ─── PointF / PointOptF ──────────────────────────────────────────────────
+constexpr RectOptF RectOptFNone() {
+    return {None(), None(), None(), None()};
+}
 
-struct PointOptF {
-    Optf x;
-    Optf y;
+// Rust's `Size::<Option<f32>>::from_cross`.
+constexpr SizeOptF SizeOptFFromCross(FlexDirection d, Optf v) {
+    return IsRow(d) ? SizeOptF{None(), v} : SizeOptF{v, None()};
+}
 
-    static constexpr PointOptF None() { return {}; }
-};
+constexpr SizeF UnwrapOr(SizeOptF s, SizeF alt) {
+    return {UnwrapOr(s.w, alt.w), UnwrapOr(s.h, alt.h)};
+}
+
+constexpr SizeOptF Or(SizeOptF s, SizeOptF alt) {
+    return {Or(s.w, alt.w), Or(s.h, alt.h)};
+}
+
+constexpr bool BothAxisDefined(SizeOptF s) {
+    return IsSome(s.w) && IsSome(s.h);
+}
+
+// If one axis is Some and the other None, fill the None one in from the
+// ratio. Anything else is returned unchanged.
+constexpr SizeOptF MaybeApplyAspectRatio(SizeOptF s, Optf aspectRatio) {
+    if (IsNone(aspectRatio)) {
+        return s;
+    }
+    if (IsSome(s.w) && IsNone(s.h)) {
+        return {s.w, s.w / aspectRatio};
+    }
+    if (IsNone(s.w) && IsSome(s.h)) {
+        return {s.h * aspectRatio, s.h};
+    }
+    return s;
+}
+
+// `==` on two SizeOptF is float comparison and None is a NaN, so the two
+// Nones would not compare equal. This is Rust's `PartialEq`, component-wise.
+constexpr bool SizeOptFEq(SizeOptF a, SizeOptF b) {
+    return OptfEq(a.w, b.w) && OptfEq(a.h, b.h);
+}
 
 // ─── LineF / LineBool ────────────────────────────────────────────────────
 
@@ -377,28 +383,6 @@ struct LineBool {
 
     static constexpr LineBool True() { return {true, true}; }
     static constexpr LineBool False() { return {false, false}; }
-};
-
-// ─── RectF / RectOptF ────────────────────────────────────────────────────
-
-struct RectOptF {
-    Optf left;
-    Optf right;
-    Optf top;
-    Optf bottom;
-
-    constexpr Optf MainStart(FlexDirection d) const {
-        return IsRow(d) ? left : top;
-    }
-    constexpr Optf MainEnd(FlexDirection d) const {
-        return IsRow(d) ? right : bottom;
-    }
-    constexpr Optf CrossStart(FlexDirection d) const {
-        return IsRow(d) ? top : left;
-    }
-    constexpr Optf CrossEnd(FlexDirection d) const {
-        return IsRow(d) ? bottom : right;
-    }
 };
 
 // ─── slices ──────────────────────────────────────────────────────────────

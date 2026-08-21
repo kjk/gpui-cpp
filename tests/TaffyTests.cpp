@@ -26,69 +26,69 @@ using namespace taffy;
 static void TestMaybeMathOptOpt() {
     TestSuite("taffy::util::math (Option<f32> op Option<f32>)");
 
-    utassert(MaybeMin(Optf(3.0f), Optf(5.0f)) == Optf(3.0f));
-    utassert(MaybeMin(Optf(5.0f), Optf(3.0f)) == Optf(3.0f));
-    utassert(MaybeMin(Optf(3.0f), Optf()) == Optf(3.0f));
-    utassert(MaybeMin(Optf(), Optf(3.0f)) == Optf());
-    utassert(MaybeMin(Optf(), Optf()) == Optf());
+    utassert(OptfEq(MaybeMin(Some(3.0f), Some(5.0f)), Some(3.0f)));
+    utassert(OptfEq(MaybeMin(Some(5.0f), Some(3.0f)), Some(3.0f)));
+    utassert(OptfEq(MaybeMin(Some(3.0f), None()), Some(3.0f)));
+    utassert(OptfEq(MaybeMin(None(), Some(3.0f)), None()));
+    utassert(OptfEq(MaybeMin(None(), None()), None()));
 
-    utassert(MaybeMax(Optf(3.0f), Optf(5.0f)) == Optf(5.0f));
-    utassert(MaybeMax(Optf(5.0f), Optf(3.0f)) == Optf(5.0f));
-    utassert(MaybeMax(Optf(3.0f), Optf()) == Optf(3.0f));
-    utassert(MaybeMax(Optf(), Optf(3.0f)) == Optf());
-    utassert(MaybeMax(Optf(), Optf()) == Optf());
+    utassert(OptfEq(MaybeMax(Some(3.0f), Some(5.0f)), Some(5.0f)));
+    utassert(OptfEq(MaybeMax(Some(5.0f), Some(3.0f)), Some(5.0f)));
+    utassert(OptfEq(MaybeMax(Some(3.0f), None()), Some(3.0f)));
+    utassert(OptfEq(MaybeMax(None(), Some(3.0f)), None()));
+    utassert(OptfEq(MaybeMax(None(), None()), None()));
 
-    utassert(MaybeAdd(Optf(3.0f), Optf(5.0f)) == Optf(8.0f));
-    utassert(MaybeAdd(Optf(5.0f), Optf(3.0f)) == Optf(8.0f));
-    utassert(MaybeAdd(Optf(3.0f), Optf()) == Optf(3.0f));
-    utassert(MaybeAdd(Optf(), Optf(3.0f)) == Optf());
-    utassert(MaybeAdd(Optf(), Optf()) == Optf());
+    utassert(OptfEq(MaybeAdd(Some(3.0f), Some(5.0f)), Some(8.0f)));
+    utassert(OptfEq(MaybeAdd(Some(5.0f), Some(3.0f)), Some(8.0f)));
+    utassert(OptfEq(MaybeAdd(Some(3.0f), None()), Some(3.0f)));
+    utassert(OptfEq(MaybeAdd(None(), Some(3.0f)), None()));
+    utassert(OptfEq(MaybeAdd(None(), None()), None()));
 
-    utassert(MaybeSub(Optf(3.0f), Optf(5.0f)) == Optf(-2.0f));
-    utassert(MaybeSub(Optf(5.0f), Optf(3.0f)) == Optf(2.0f));
-    utassert(MaybeSub(Optf(3.0f), Optf()) == Optf(3.0f));
-    utassert(MaybeSub(Optf(), Optf(3.0f)) == Optf());
-    utassert(MaybeSub(Optf(), Optf()) == Optf());
+    utassert(OptfEq(MaybeSub(Some(3.0f), Some(5.0f)), Some(-2.0f)));
+    utassert(OptfEq(MaybeSub(Some(5.0f), Some(3.0f)), Some(2.0f)));
+    utassert(OptfEq(MaybeSub(Some(3.0f), None()), Some(3.0f)));
+    utassert(OptfEq(MaybeSub(None(), Some(3.0f)), None()));
+    utassert(OptfEq(MaybeSub(None(), None()), None()));
 }
 
 static void TestMaybeMathOptFloat() {
     TestSuite("taffy::util::math (Option<f32> op f32)");
 
-    utassert(MaybeMin(Optf(3.0f), 5.0f) == Optf(3.0f));
-    utassert(MaybeMin(Optf(5.0f), 3.0f) == Optf(3.0f));
-    utassert(MaybeMin(Optf(), 3.0f) == Optf());
+    utassert(OptfEq(MaybeMin(Some(3.0f), 5.0f), Some(3.0f)));
+    utassert(OptfEq(MaybeMin(Some(5.0f), 3.0f), Some(3.0f)));
+    utassert(OptfEq(MaybeMin(None(), 3.0f), None()));
 
-    utassert(MaybeMax(Optf(3.0f), 5.0f) == Optf(5.0f));
-    utassert(MaybeMax(Optf(5.0f), 3.0f) == Optf(5.0f));
-    utassert(MaybeMax(Optf(), 3.0f) == Optf());
+    utassert(OptfEq(MaybeMax(Some(3.0f), 5.0f), Some(5.0f)));
+    utassert(OptfEq(MaybeMax(Some(5.0f), 3.0f), Some(5.0f)));
+    utassert(OptfEq(MaybeMax(None(), 3.0f), None()));
 
-    utassert(MaybeAdd(Optf(3.0f), 5.0f) == Optf(8.0f));
-    utassert(MaybeAdd(Optf(5.0f), 3.0f) == Optf(8.0f));
-    utassert(MaybeAdd(Optf(), 3.0f) == Optf());
+    utassert(OptfEq(MaybeAdd(Some(3.0f), 5.0f), Some(8.0f)));
+    utassert(OptfEq(MaybeAdd(Some(5.0f), 3.0f), Some(8.0f)));
+    utassert(OptfEq(MaybeAdd(None(), 3.0f), None()));
 
-    utassert(MaybeSub(Optf(3.0f), 5.0f) == Optf(-2.0f));
-    utassert(MaybeSub(Optf(5.0f), 3.0f) == Optf(2.0f));
-    utassert(MaybeSub(Optf(), 3.0f) == Optf());
+    utassert(OptfEq(MaybeSub(Some(3.0f), 5.0f), Some(-2.0f)));
+    utassert(OptfEq(MaybeSub(Some(5.0f), 3.0f), Some(2.0f)));
+    utassert(OptfEq(MaybeSub(None(), 3.0f), None()));
 }
 
 static void TestMaybeMathFloatOpt() {
     TestSuite("taffy::util::math (f32 op Option<f32>)");
 
-    utassertnear(MaybeMin(3.0f, Optf(5.0f)), 3.0f);
-    utassertnear(MaybeMin(5.0f, Optf(3.0f)), 3.0f);
-    utassertnear(MaybeMin(3.0f, Optf()), 3.0f);
+    utassertnear(MaybeMin(3.0f, Some(5.0f)), 3.0f);
+    utassertnear(MaybeMin(5.0f, Some(3.0f)), 3.0f);
+    utassertnear(MaybeMin(3.0f, None()), 3.0f);
 
-    utassertnear(MaybeMax(3.0f, Optf(5.0f)), 5.0f);
-    utassertnear(MaybeMax(5.0f, Optf(3.0f)), 5.0f);
-    utassertnear(MaybeMax(3.0f, Optf()), 3.0f);
+    utassertnear(MaybeMax(3.0f, Some(5.0f)), 5.0f);
+    utassertnear(MaybeMax(5.0f, Some(3.0f)), 5.0f);
+    utassertnear(MaybeMax(3.0f, None()), 3.0f);
 
-    utassertnear(MaybeAdd(3.0f, Optf(5.0f)), 8.0f);
-    utassertnear(MaybeAdd(5.0f, Optf(3.0f)), 8.0f);
-    utassertnear(MaybeAdd(3.0f, Optf()), 3.0f);
+    utassertnear(MaybeAdd(3.0f, Some(5.0f)), 8.0f);
+    utassertnear(MaybeAdd(5.0f, Some(3.0f)), 8.0f);
+    utassertnear(MaybeAdd(3.0f, None()), 3.0f);
 
-    utassertnear(MaybeSub(3.0f, Optf(5.0f)), -2.0f);
-    utassertnear(MaybeSub(5.0f, Optf(3.0f)), 2.0f);
-    utassertnear(MaybeSub(3.0f, Optf()), 3.0f);
+    utassertnear(MaybeSub(3.0f, Some(5.0f)), -2.0f);
+    utassertnear(MaybeSub(5.0f, Some(3.0f)), 2.0f);
+    utassertnear(MaybeSub(3.0f, None()), 3.0f);
 }
 
 // ─── src/util/resolve.rs ─────────────────────────────────────────────────
@@ -104,88 +104,92 @@ static void TestMaybeResolveDimension() {
     TestSuite("taffy::util::resolve (maybe_resolve_dimension)");
 
     // Auto always resolves to None, whatever the context.
-    utassert(Dimension::Auto().MaybeResolve(Optf(), NoCalc()) == Optf());
-    utassert(Dimension::Auto().MaybeResolve(Optf(5.0f), NoCalc()) == Optf());
-    utassert(Dimension::Auto().MaybeResolve(Optf(-5.0f), NoCalc()) == Optf());
-    utassert(Dimension::Auto().MaybeResolve(Optf(0.0f), NoCalc()) == Optf());
+    utassert(OptfEq(Dimension::Auto().MaybeResolve(None(), NoCalc()), None()));
+    utassert(
+        OptfEq(Dimension::Auto().MaybeResolve(Some(5.0f), NoCalc()), None()));
+    utassert(
+        OptfEq(Dimension::Auto().MaybeResolve(Some(-5.0f), NoCalc()), None()));
+    utassert(
+        OptfEq(Dimension::Auto().MaybeResolve(Some(0.0f), NoCalc()), None()));
 
     // A length is its own value, whatever the context.
-    utassert(Dimension::Length(1.0f)
-                 .MaybeResolve(Optf(), NoCalc()) == Optf(1.0f));
-    utassert(Dimension::Length(1.0f)
-                 .MaybeResolve(Optf(5.0f), NoCalc()) == Optf(1.0f));
-    utassert(Dimension::Length(1.0f)
-                 .MaybeResolve(Optf(-5.0f), NoCalc()) == Optf(1.0f));
-    utassert(Dimension::Length(1.0f)
-                 .MaybeResolve(Optf(0.0f), NoCalc()) == Optf(1.0f));
+    utassert(OptfEq(Dimension::Length(1.0f).MaybeResolve(None(), NoCalc()),
+                    Some(1.0f)));
+    utassert(OptfEq(Dimension::Length(1.0f).MaybeResolve(Some(5.0f), NoCalc()),
+                    Some(1.0f)));
+    utassert(OptfEq(Dimension::Length(1.0f).MaybeResolve(Some(-5.0f), NoCalc()),
+                    Some(1.0f)));
+    utassert(OptfEq(Dimension::Length(1.0f).MaybeResolve(Some(0.0f), NoCalc()),
+                    Some(1.0f)));
 
     // A percentage needs a context, and multiplies by it.
-    utassert(Dimension::Percent(1.0f).MaybeResolve(Optf(), NoCalc()) == Optf());
-    utassert(Dimension::Percent(1.0f)
-                 .MaybeResolve(Optf(5.0f), NoCalc()) == Optf(5.0f));
-    utassert(Dimension::Percent(1.0f)
-                 .MaybeResolve(Optf(-5.0f), NoCalc()) == Optf(-5.0f));
-    utassert(Dimension::Percent(1.0f)
-                 .MaybeResolve(Optf(50.0f), NoCalc()) == Optf(50.0f));
+    utassert(OptfEq(Dimension::Percent(1.0f).MaybeResolve(None(), NoCalc()),
+                    None()));
+    utassert(OptfEq(Dimension::Percent(1.0f).MaybeResolve(Some(5.0f), NoCalc()),
+                    Some(5.0f)));
+    utassert(
+        OptfEq(Dimension::Percent(1.0f).MaybeResolve(Some(-5.0f), NoCalc()),
+               Some(-5.0f)));
+    utassert(
+        OptfEq(Dimension::Percent(1.0f).MaybeResolve(Some(50.0f), NoCalc()),
+               Some(50.0f)));
 }
 
 static void TestMaybeResolveSizeDimension() {
     TestSuite("taffy::util::resolve (maybe_resolve_size_dimension)");
 
     SizeDim autoSize = SizeDim::Auto();
-    utassert(autoSize
-                 .MaybeResolve(SizeOptF::None(), NoCalc()) == SizeOptF::None());
-    utassert(autoSize.MaybeResolve(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
-             SizeOptF::None());
-    utassert(autoSize.MaybeResolve(SizeOptF::New(-5.0f, -5.0f), NoCalc()) ==
-             SizeOptF::None());
-    utassert(autoSize.MaybeResolve(SizeOptF::New(0.0f, 0.0f), NoCalc()) ==
-             SizeOptF::None());
+    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptFNone(), NoCalc()),
+                        SizeOptFNone()));
+    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptF{5.0f, 5.0f}, NoCalc()),
+                        SizeOptFNone()));
+    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptF{-5.0f, -5.0f}, NoCalc()),
+                        SizeOptFNone()));
+    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptF{0.0f, 0.0f}, NoCalc()),
+                        SizeOptFNone()));
 
     SizeDim lengths = SizeDim::FromLengths(5.0f, 5.0f);
-    utassert(lengths.MaybeResolve(SizeOptF::None(), NoCalc()) ==
-             SizeOptF::New(5.0f, 5.0f));
-    utassert(lengths.MaybeResolve(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
-             SizeOptF::New(5.0f, 5.0f));
-    utassert(lengths.MaybeResolve(SizeOptF::New(-5.0f, -5.0f), NoCalc()) ==
-             SizeOptF::New(5.0f, 5.0f));
-    utassert(lengths.MaybeResolve(SizeOptF::New(0.0f, 0.0f), NoCalc()) ==
-             SizeOptF::New(5.0f, 5.0f));
+    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptFNone(), NoCalc()),
+                        SizeOptF{5.0f, 5.0f}));
+    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptF{5.0f, 5.0f}, NoCalc()),
+                        SizeOptF{5.0f, 5.0f}));
+    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptF{-5.0f, -5.0f}, NoCalc()),
+                        SizeOptF{5.0f, 5.0f}));
+    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptF{0.0f, 0.0f}, NoCalc()),
+                        SizeOptF{5.0f, 5.0f}));
 
     SizeDim percents = SizeDim::FromPercent(5.0f, 5.0f);
-    utassert(percents
-                 .MaybeResolve(SizeOptF::None(), NoCalc()) == SizeOptF::None());
-    utassert(percents.MaybeResolve(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
-             SizeOptF::New(25.0f, 25.0f));
-    utassert(percents.MaybeResolve(SizeOptF::New(-5.0f, -5.0f), NoCalc()) ==
-             SizeOptF::New(-25.0f, -25.0f));
-    utassert(percents.MaybeResolve(SizeOptF::New(0.0f, 0.0f), NoCalc()) ==
-             SizeOptF::New(0.0f, 0.0f));
+    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptFNone(), NoCalc()),
+                        SizeOptFNone()));
+    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptF{5.0f, 5.0f}, NoCalc()),
+                        SizeOptF{25.0f, 25.0f}));
+    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptF{-5.0f, -5.0f}, NoCalc()),
+                        SizeOptF{-25.0f, -25.0f}));
+    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptF{0.0f, 0.0f}, NoCalc()),
+                        SizeOptF{0.0f, 0.0f}));
 }
 
 static void TestResolveOrZeroDimension() {
     TestSuite("taffy::util::resolve (resolve_or_zero_dimension)");
 
     SizeDim autoSize = SizeDim::Auto();
-    utassert(autoSize
-                 .ResolveOrZero(SizeOptF::None(), NoCalc()) == SizeF::Zero());
-    utassert(autoSize.ResolveOrZero(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
+    utassert(autoSize.ResolveOrZero(SizeOptFNone(), NoCalc()) == SizeF::Zero());
+    utassert(autoSize.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
              SizeF::Zero());
 
     SizeDim lengths = SizeDim::FromLengths(5.0f, 5.0f);
-    utassert(lengths.ResolveOrZero(SizeOptF::None(), NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeOptFNone(), NoCalc()) ==
              (SizeF{5.0f, 5.0f}));
-    utassert(lengths.ResolveOrZero(SizeOptF::New(-5.0f, -5.0f), NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeOptF{-5.0f, -5.0f}, NoCalc()) ==
              (SizeF{5.0f, 5.0f}));
 
     SizeDim percents = SizeDim::FromPercent(5.0f, 5.0f);
-    utassert(percents
-                 .ResolveOrZero(SizeOptF::None(), NoCalc()) == SizeF::Zero());
-    utassert(percents.ResolveOrZero(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeOptFNone(), NoCalc()) == SizeF::Zero());
+    utassert(percents.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
              (SizeF{25.0f, 25.0f}));
-    utassert(percents.ResolveOrZero(SizeOptF::New(-5.0f, -5.0f), NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeOptF{-5.0f, -5.0f}, NoCalc()) ==
              (SizeF{-25.0f, -25.0f}));
-    utassert(percents.ResolveOrZero(SizeOptF::New(0.0f, 0.0f), NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeOptF{0.0f, 0.0f}, NoCalc()) ==
              SizeF::Zero());
 }
 
@@ -193,32 +197,30 @@ static void TestResolveOrZeroRect() {
     TestSuite("taffy::util::resolve (resolve_or_zero_rect)");
 
     RectLpa autoRect = RectLpa::Auto();
-    utassert(autoRect
-                 .ResolveOrZero(SizeOptF::None(), NoCalc()) == RectF::Zero());
-    utassert(autoRect.ResolveOrZero(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
+    utassert(autoRect.ResolveOrZero(SizeOptFNone(), NoCalc()) == RectF::Zero());
+    utassert(autoRect.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
              RectF::Zero());
 
     RectLp lengths = {
         LengthPercentage::Length(5.0f), LengthPercentage::Length(5.0f),
         LengthPercentage::Length(5.0f), LengthPercentage::Length(5.0f)};
-    utassert(lengths.ResolveOrZero(SizeOptF::None(), NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeOptFNone(), NoCalc()) ==
              RectF::New(5.0f, 5.0f, 5.0f, 5.0f));
-    utassert(lengths.ResolveOrZero(SizeOptF::New(0.0f, 0.0f), NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeOptF{0.0f, 0.0f}, NoCalc()) ==
              RectF::New(5.0f, 5.0f, 5.0f, 5.0f));
 
     RectLp percents = {
         LengthPercentage::Percent(5.0f), LengthPercentage::Percent(5.0f),
         LengthPercentage::Percent(5.0f), LengthPercentage::Percent(5.0f)};
-    utassert(percents
-                 .ResolveOrZero(SizeOptF::None(), NoCalc()) == RectF::Zero());
-    utassert(percents.ResolveOrZero(SizeOptF::New(5.0f, 5.0f), NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeOptFNone(), NoCalc()) == RectF::Zero());
+    utassert(percents.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
              RectF::New(25.0f, 25.0f, 25.0f, 25.0f));
-    utassert(percents.ResolveOrZero(SizeOptF::New(-5.0f, -5.0f), NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeOptF{-5.0f, -5.0f}, NoCalc()) ==
              RectF::New(-25.0f, -25.0f, -25.0f, -25.0f));
     // The Optf overload resolves every side against the same context.
-    utassert(percents.ResolveOrZero(Optf(5.0f), NoCalc()) ==
+    utassert(percents.ResolveOrZero(Some(5.0f), NoCalc()) ==
              RectF::New(25.0f, 25.0f, 25.0f, 25.0f));
-    utassert(percents.ResolveOrZero(Optf(), NoCalc()) == RectF::Zero());
+    utassert(percents.ResolveOrZero(None(), NoCalc()) == RectF::Zero());
 }
 
 // ─── src/style/alignment.rs ──────────────────────────────────────────────
@@ -345,7 +347,7 @@ static void TestStyleDefaults() {
     utassert(s.size == SizeDim::Auto());
     utassert(s.minSize == SizeDim::Auto());
     utassert(s.maxSize == SizeDim::Auto());
-    utassert(!s.aspectRatio.IsSome());
+    utassert(!IsSome(s.aspectRatio));
     utassert(!s.alignItems.IsSome());
     utassert(!s.alignSelf.IsSome());
     utassert(!s.justifyItems.IsSome());
@@ -413,7 +415,7 @@ static SizeF SizeMeasureFunction(SizeOptF knownDimensions,
     (void)style;
     (void)userData;
     SizeF ctx = nodeContext ? *(SizeF*)nodeContext : SizeF::Zero();
-    return knownDimensions.UnwrapOr(ctx);
+    return UnwrapOr(knownDimensions, ctx);
 }
 
 static void TestTaffyTreeBasics() {
@@ -1088,10 +1090,10 @@ static ExplicitSizeResult RunExplicitSize(const taffy::Style& style,
                                           SizeOptF containerSize,
                                           bool maxRepetitions) {
     ExplicitSizeResult r;
-    GridExplicitSizeForTest(style, containerSize.width, maxRepetitions,
+    GridExplicitSizeForTest(style, containerSize.w, maxRepetitions,
                             AbsoluteAxis::Horizontal, NoCalc(), &r.colReps,
                             &r.colCount);
-    GridExplicitSizeForTest(style, containerSize.height, maxRepetitions,
+    GridExplicitSizeForTest(style, containerSize.h, maxRepetitions,
                             AbsoluteAxis::Vertical, NoCalc(), &r.rowReps,
                             &r.rowCount);
     return r;
@@ -1171,7 +1173,7 @@ static void TestExplicitGridSizing() {
         s.gridTemplateColumns = GridTemplateOf(&c, 1);
         s.gridTemplateRows = GridTemplateOf(&rr, 1);
         ExplicitSizeResult r =
-            RunExplicitSize(s, SizeOptF::New(120.0f, 80.0f), kMin);
+            RunExplicitSize(s, SizeOptF{120.0f, 80.0f}, kMin);
         utassert(r.colCount == 3);
         utassert(r.rowCount == 4);
         utassert(r.colReps == 3);
@@ -1192,7 +1194,7 @@ static void TestExplicitGridSizing() {
         s.gridTemplateColumns = GridTemplateOf(&c, 1);
         s.gridTemplateRows = GridTemplateOf(&rr, 1);
         ExplicitSizeResult r =
-            RunExplicitSize(s, SizeOptF::New(140.0f, 90.0f), kMin);
+            RunExplicitSize(s, SizeOptF{140.0f, 90.0f}, kMin);
         utassert(r.colCount == 4);
         utassert(r.rowCount == 5);
         utassert(r.colReps == 4);
@@ -1307,7 +1309,7 @@ static void TestExplicitGridSizing() {
         s.gridTemplateColumns = GridTemplateOf(&c, 1);
         s.gridTemplateRows = GridTemplateOf(&rr, 1);
         ExplicitSizeResult r =
-            RunExplicitSize(s, SizeOptF::New(100.0f, 80.0f), kMax);
+            RunExplicitSize(s, SizeOptF{100.0f, 80.0f}, kMax);
         utassert(r.colCount == 5); // 40px horizontal padding
         utassert(r.rowCount == 4); // 40px vertical padding
         utassert(r.colReps == 5);

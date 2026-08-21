@@ -32,28 +32,28 @@ static Optf MaybeResolveRaw(CompactLength raw, Optf context,
                             CalcResolver calc) {
     switch (raw.Tag()) {
         case CompactLength::kAutoTag:
-            return Optf();
+            return None();
         case CompactLength::kLengthTag:
-            return Optf(raw.Value());
+            return Some(raw.Value());
         case CompactLength::kPercentTag:
-            return context.IsSome() ? Optf(context.val * raw.Value()) : Optf();
+            return IsSome(context) ? Some(context * raw.Value()) : None();
         default:
             break;
     }
-    if (raw.IsCalc() && context.IsSome()) {
-        return Optf(calc.Resolve(raw.CalcValue(), context.val));
+    if (raw.IsCalc() && IsSome(context)) {
+        return Some(calc.Resolve(raw.CalcValue(), context));
     }
-    return Optf();
+    return None();
 }
 
 static float ResolveOrZeroRaw(CompactLength raw, Optf context,
                               CalcResolver calc) {
-    return MaybeResolveRaw(raw, context, calc).UnwrapOr(0.0f);
+    return UnwrapOr(MaybeResolveRaw(raw, context, calc), 0.0f);
 }
 
 Optf LengthPercentageAuto::ResolveToOption(float context,
                                            CalcResolver calc) const {
-    return MaybeResolveRaw(raw, Optf(context), calc);
+    return MaybeResolveRaw(raw, Some(context), calc);
 }
 
 Optf LengthPercentageAuto::MaybeResolve(Optf context, CalcResolver calc) const {
@@ -65,18 +65,18 @@ Optf Dimension::MaybeResolve(Optf context, CalcResolver calc) const {
 }
 
 SizeOptF SizeDim::MaybeResolve(SizeOptF context, CalcResolver calc) const {
-    return {MaybeResolveRaw(width.raw, context.width, calc),
-            MaybeResolveRaw(height.raw, context.height, calc)};
+    return {MaybeResolveRaw(width.raw, context.w, calc),
+            MaybeResolveRaw(height.raw, context.h, calc)};
 }
 
 SizeF SizeDim::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
-    return {ResolveOrZeroRaw(width.raw, context.width, calc),
-            ResolveOrZeroRaw(height.raw, context.height, calc)};
+    return {ResolveOrZeroRaw(width.raw, context.w, calc),
+            ResolveOrZeroRaw(height.raw, context.h, calc)};
 }
 
 SizeF SizeLp::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
-    return {ResolveOrZeroRaw(width.raw, context.width, calc),
-            ResolveOrZeroRaw(height.raw, context.height, calc)};
+    return {ResolveOrZeroRaw(width.raw, context.w, calc),
+            ResolveOrZeroRaw(height.raw, context.h, calc)};
 }
 
 SizeF SizeLp::ResolveOrZero(Optf context, CalcResolver calc) const {
@@ -87,10 +87,10 @@ SizeF SizeLp::ResolveOrZero(Optf context, CalcResolver calc) const {
 // A Rect resolves its left/right against the width and its top/bottom against
 // the height, which is why the Size and the Optf overloads differ.
 RectF RectLp::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
-    return {ResolveOrZeroRaw(left.raw, context.width, calc),
-            ResolveOrZeroRaw(right.raw, context.width, calc),
-            ResolveOrZeroRaw(top.raw, context.height, calc),
-            ResolveOrZeroRaw(bottom.raw, context.height, calc)};
+    return {ResolveOrZeroRaw(left.raw, context.w, calc),
+            ResolveOrZeroRaw(right.raw, context.w, calc),
+            ResolveOrZeroRaw(top.raw, context.h, calc),
+            ResolveOrZeroRaw(bottom.raw, context.h, calc)};
 }
 
 RectF RectLp::ResolveOrZero(Optf context, CalcResolver calc) const {
@@ -101,10 +101,10 @@ RectF RectLp::ResolveOrZero(Optf context, CalcResolver calc) const {
 }
 
 RectF RectLpa::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
-    return {ResolveOrZeroRaw(left.raw, context.width, calc),
-            ResolveOrZeroRaw(right.raw, context.width, calc),
-            ResolveOrZeroRaw(top.raw, context.height, calc),
-            ResolveOrZeroRaw(bottom.raw, context.height, calc)};
+    return {ResolveOrZeroRaw(left.raw, context.w, calc),
+            ResolveOrZeroRaw(right.raw, context.w, calc),
+            ResolveOrZeroRaw(top.raw, context.h, calc),
+            ResolveOrZeroRaw(bottom.raw, context.h, calc)};
 }
 
 RectF RectLpa::ResolveOrZero(Optf context, CalcResolver calc) const {
@@ -122,10 +122,10 @@ RectOptF RectLpa::MaybeResolve(Optf context, CalcResolver calc) const {
 }
 
 RectOptF RectLpa::MaybeResolveZip(SizeOptF context, CalcResolver calc) const {
-    return {MaybeResolveRaw(left.raw, context.width, calc),
-            MaybeResolveRaw(right.raw, context.width, calc),
-            MaybeResolveRaw(top.raw, context.height, calc),
-            MaybeResolveRaw(bottom.raw, context.height, calc)};
+    return {MaybeResolveRaw(left.raw, context.w, calc),
+            MaybeResolveRaw(right.raw, context.w, calc),
+            MaybeResolveRaw(top.raw, context.h, calc),
+            MaybeResolveRaw(bottom.raw, context.h, calc)};
 }
 
 // ─── grid coordinates ────────────────────────────────────────────────────
@@ -288,9 +288,9 @@ bool MaxTrackSizingFunction::HasDefiniteValue(Optf parentSize) const {
         case CompactLength::kLengthTag:
             return true;
         case CompactLength::kPercentTag:
-            return parentSize.IsSome();
+            return IsSome(parentSize);
         default:
-            return raw.IsCalc() && parentSize.IsSome();
+            return raw.IsCalc() && IsSome(parentSize);
     }
 }
 
@@ -298,27 +298,25 @@ Optf MaxTrackSizingFunction::DefiniteValue(Optf parentSize,
                                            CalcResolver calc) const {
     switch (raw.Tag()) {
         case CompactLength::kLengthTag:
-            return Optf(raw.Value());
+            return Some(raw.Value());
         case CompactLength::kPercentTag:
-            return parentSize.IsSome() ? Optf(raw.Value() * parentSize.val)
-                                       : Optf();
+            return IsSome(parentSize) ? Some(raw.Value() * parentSize) : None();
         default:
             break;
     }
-    if (raw.IsCalc() && parentSize.IsSome()) {
-        return Optf(calc.Resolve(raw.CalcValue(), parentSize.val));
+    if (raw.IsCalc() && IsSome(parentSize)) {
+        return Some(calc.Resolve(raw.CalcValue(), parentSize));
     }
-    return Optf();
+    return None();
 }
 
 Optf MaxTrackSizingFunction::DefiniteLimit(Optf parentSize,
                                            CalcResolver calc) const {
     switch (raw.Tag()) {
         case CompactLength::kFitContentPxTag:
-            return Optf(raw.Value());
+            return Some(raw.Value());
         case CompactLength::kFitContentPercentTag:
-            return parentSize.IsSome() ? Optf(raw.Value() * parentSize.val)
-                                       : Optf();
+            return IsSome(parentSize) ? Some(raw.Value() * parentSize) : None();
         default:
             return DefiniteValue(parentSize, calc);
     }
@@ -328,17 +326,16 @@ Optf MinTrackSizingFunction::DefiniteValue(Optf parentSize,
                                            CalcResolver calc) const {
     switch (raw.Tag()) {
         case CompactLength::kLengthTag:
-            return Optf(raw.Value());
+            return Some(raw.Value());
         case CompactLength::kPercentTag:
-            return parentSize.IsSome() ? Optf(raw.Value() * parentSize.val)
-                                       : Optf();
+            return IsSome(parentSize) ? Some(raw.Value() * parentSize) : None();
         default:
             break;
     }
-    if (raw.IsCalc() && parentSize.IsSome()) {
-        return Optf(calc.Resolve(raw.CalcValue(), parentSize.val));
+    if (raw.IsCalc() && IsSome(parentSize)) {
+        return Some(calc.Resolve(raw.CalcValue(), parentSize));
     }
-    return Optf();
+    return None();
 }
 
 } // namespace taffy

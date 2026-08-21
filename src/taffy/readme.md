@@ -64,11 +64,26 @@ Each of these is also stated in a comment at the place it applies.
   method names are the trait method names.
 - **No templates on the containers.** `Size<T>`, `Point<T>`, `Rect<T>` and
   `Line<T>` become one struct per element type the algorithms actually carry:
-  `SizeF`, `SizeOptF`, `SizeDim`, `SizeAvail`, `SizeLp`, `RectF`, `RectOptF`,
-  `RectLp`, `RectLpa`, `PointF`, `PointOptF`, `PointOverflow`, `LineF`,
-  `LineBool`, `LineOzl`, `LinePlacement`, `LinePlain`. `Option<f32>` is `Optf`,
-  and the optional enums get one struct each. The only template left is
-  `Slice<T>`.
+  `SizeF`, `SizeDim`, `SizeAvail`, `SizeLp`, `RectF`, `RectLp`, `RectLpa`,
+  `PointF`, `PointOverflow`, `LineF`, `LineBool`, `LineOzl`, `LinePlacement`,
+  `LinePlain`. The optional enums get one struct each. The only template left
+  is `Slice<T>`.
+- **`Option<f32>` is a NaN-tagged `float`.** `Optf` is `using Optf = float`
+  with one reserved quiet-NaN bit pattern (`0x7fc0beef`) standing for `None`;
+  `Some`, `None`, `IsSome`, `UnwrapOr` and `Or` are free functions over it.
+  `SizeOptF`, `PointOptF` and `RectOptF` are therefore aliases of `SizeF`,
+  `PointF` and `RectF` rather than types of their own, which halves every
+  optional size, point and rect layout carries and drops the conversions
+  between the definite and optional views of one. Reserving a single pattern
+  rather than "any NaN" keeps the NaNs taffy's own arithmetic can produce
+  meaning what they meant. It is also what collapses math.rs's `MaybeMath`
+  overloads: `Optf op Optf`, `Optf op float` and `float op Optf` are one
+  function now, because a plain float is an `Optf` that is always `Some`. A
+  value that starts out unknown has to say so — `SizeOptFNone()`, not `{}` —
+  since the alias defaults to zero, and two of them compare with `OptfEq` /
+  `SizeOptFEq`, because `None == None` is a NaN comparison. Measured on
+  `bench/`, this takes 23-33% off the flexbox benchmarks and 17-19% off the
+  grid ones.
 - **`Style` owns nothing.** Its grid track lists are arena-backed `Slice<T>`
   rather than `Vec<T>`, and a custom ident is a `Str` pointing into that arena.
   A `Style` therefore copies as bytes; whoever built it owns the arena.

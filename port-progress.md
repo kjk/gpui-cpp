@@ -965,3 +965,63 @@ cargo run -p system_monitor
   a thousand times faster, and prints the bounding box, which usually names
   the widget that moved. It carries a 40-line PNG decoder: the only PNGs it
   sees are the ones `cmd/winapi.ts` writes.
+- 2026-08-22: `Option<f32>` is a NaN-tagged float. `taffy::Optf` was a
+  `{ float, bool }` pair: eight bytes for one bit, and it doubled every
+  `Size`, `Point` and `Rect` of them layout carries. It is `using Optf =
+  float` now, with one reserved quiet NaN — `0x7fc0beef` — standing for
+  `None`, which is V8's NaN tagging with nothing in the payload. `SizeOptF`,
+  `PointOptF` and `RectOptF` become aliases of `SizeF`, `PointF` and `RectF`,
+  so `Size<Option<f32>>` and `Size<f32>` are one type and nothing converts
+  between them; the methods that were on them are free functions, the way
+  `Main` and `Cross` already were.
+
+  Reserving one bit pattern rather than "any NaN" is the whole correctness
+  argument. taffy's own arithmetic can make a NaN — `INFINITY - INFINITY` in
+  `MaybeSub`, a zero aspect ratio — and `F32Min` / `F32Max` have a rule for
+  one, which is why they exist. Reading every NaN as `None` would quietly
+  change what layout computes; reading exactly one does not, because nothing
+  produces that payload (x86 makes `0xffc00000`, and propagation copies an
+  operand's).
+
+  The alias is what collapsed `math.h`. Rust's `MaybeMath<In, Out>` trait was
+  three overload families here — `Optf op Optf`, `Optf op float`,
+  `float op Optf` — and they are one function each now, because a plain float
+  *is* an `Optf` that is always `Some`, so the None-left arm never fires for
+  it. Same for the size-wise ones: nine mixed `SizeOptF` / `SizeF` overloads
+  became five. That is also the answer to "make it a distinct typedef so a
+  mismatch is caught": a wrapper would put the three families back and, on
+  MSVC x64, pass a one-float struct in an integer register. The two being
+  interchangeable is the point of the tag.
+
+  Two traps, both silent rather than loud. A `SizeOptF` used to default to
+  `{None, None}` and now defaults to `{0, 0}`, so every declaration that
+  relied on that says `SizeOptFNone()`; and `None == None` is a NaN
+  comparison, so the tests compare with `OptfEq` / `SizeOptFEq`. Everything
+  else was compiler-driven the way the `SizeF` merge was — build, read the
+  `C2039: 'width' is not a member of 'base::SizeF'` lines, rewrite exactly
+  those sites, repeat — which is what separates a `SizeOptF.width` from a
+  `SizeDim.width` on the same line.
+
+  Faster by more than the byte count suggests, because the shrink is in the
+  values the hot loops copy: flexbox 20-30%, grid 15-20%, tree creation and
+  the markdown control group unchanged.
+
+  | `bun cmd/bench.ts -n=20`, median | before | after |     |
+  | ------------------------------- | ------- | -------- | ---- |
+  | flexbox/huge nested, 10000      | 9.02 ms | 6.04 ms  | -33% |
+  | flexbox/wide tree, 10000        | 12.61 ms | 9.70 ms | -23% |
+  | flexbox/deep auto, 10000        | 33.53 ms | 22.48 ms | -33% |
+  | flexbox/deep random, 10000      | 13.05 ms | 9.61 ms | -26% |
+  | flexbox/super deep, 100 levels  | 1.04 ms | 0.764 ms | -27% |
+  | grid/wide 316x316               | 299.2 ms | 249.6 ms | -17% |
+  | grid/deep 2x2, 16384            | 147.7 ms | 122.9 ms | -17% |
+  | grid/deep 3x3, 6561             | 48.87 ms | 39.65 ms | -19% |
+  | grid/superdeep, 1000 levels     | 7.98 ms | 7.48 ms  | -6%  |
+  | tree creation, 100000           | 35.19 ms | 34.41 ms | ~0   |
+  | markdown/parse prose            | 8.80 ms | 8.93 ms  | ~0   |
+
+  Verified: `bun cmd/test.ts -rel` (6880 checks, taffy's own suite among
+  them), `bun cmd/build.ts -rel -all`, and 17 example captures against a build
+  of the commit before it — 15 pixel-identical, and the two that differed
+  (`system_monitor`, `fps_monitor`) differ the same way when the same binary
+  is shot twice, because they draw live CPU and frame timings.

@@ -26,12 +26,12 @@ static uint32_t ToBits(float v) {
 }
 
 static uint32_t OptionCacheKey(Optf v) {
-    return v.IsSome() ? ToBits(v.val) : kInfinityBits;
+    return IsSome(v) ? ToBits(v) : kInfinityBits;
 }
 
 static uint64_t SizeOptionCacheKey(SizeOptF s) {
-    return ((uint64_t)OptionCacheKey(s.width) << 32) |
-           (uint64_t)OptionCacheKey(s.height);
+    return ((uint64_t)OptionCacheKey(s.w) << 32) |
+           (uint64_t)OptionCacheKey(s.h);
 }
 
 static uint32_t AvailableSpaceCacheKey(AvailableSpace a) {
@@ -47,12 +47,12 @@ static uint32_t AvailableSpaceCacheKey(AvailableSpace a) {
 
 // A known dimension wins; when there is none, the available space stands in.
 static uint32_t MixedCacheKey(Optf kd, AvailableSpace avs) {
-    return kd.IsSome() ? ToBits(kd.val) : AvailableSpaceCacheKey(avs);
+    return IsSome(kd) ? ToBits(kd) : AvailableSpaceCacheKey(avs);
 }
 
 static uint64_t SizeMixedCacheKey(SizeOptF kd, SizeAvail avs) {
-    return ((uint64_t)MixedCacheKey(kd.width, avs.width) << 32) |
-           (uint64_t)MixedCacheKey(kd.height, avs.height);
+    return ((uint64_t)MixedCacheKey(kd.w, avs.width) << 32) |
+           (uint64_t)MixedCacheKey(kd.h, avs.height);
 }
 
 CacheKey CacheKey::From(const LayoutInput& input) {
@@ -98,8 +98,8 @@ uint64_t CacheKey::XAxisParentSize() const {
 // generally sized under one or the other, not both.
 static int ComputeCacheSlot(SizeOptF knownDimensions,
                             SizeAvail availableSpace) {
-    bool hasKnownWidth = knownDimensions.width.IsSome();
-    bool hasKnownHeight = knownDimensions.height.IsSome();
+    bool hasKnownWidth = IsSome(knownDimensions.w);
+    bool hasKnownHeight = IsSome(knownDimensions.h);
 
     if (hasKnownWidth && hasKnownHeight) {
         return 0;

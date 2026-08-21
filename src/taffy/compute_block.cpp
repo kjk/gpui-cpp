@@ -176,13 +176,13 @@ struct FloatContext {
     Optf ClearedThreshold(Clear clear) const {
         int idx = ClearedSegment(clear);
         if (idx < 0) {
-            return Optf();
+            return None();
         }
         int at = idx > 1 ? idx - 1 : 0;
         if (at >= segments.len) {
-            return Optf();
+            return None();
         }
-        return Optf(segments[at].yEnd);
+        return Some(segments[at].yEnd);
     }
 
     ContentSlot FindContentSlot(float minY,
@@ -525,10 +525,10 @@ struct BlockContext {
     }
     Optf ClearedThreshold(Clear clear) const {
         Optf t = bfc->floatContext.ClearedThreshold(clear);
-        if (t.IsSome()) {
-            return Optf(t.val - yOffset);
+        if (IsSome(t)) {
+            return Some(t - yOffset);
         }
-        return Optf();
+        return None();
     }
     void AddChildFloatedContentHeightContribution(float childContribution) {
         floatContentContribution =
@@ -558,9 +558,9 @@ struct BlockItem {
     Float floatMode = Float::None;
     Clear clear = Clear::None;
 
-    SizeOptF size;
-    SizeOptF minSize;
-    SizeOptF maxSize;
+    SizeOptF size = SizeOptFNone();
+    SizeOptF minSize = SizeOptFNone();
+    SizeOptF maxSize = SizeOptFNone();
 
     PointOverflow overflow;
     float scrollbarWidth = 0.0f;
@@ -622,15 +622,18 @@ void GenerateItemList(TaffyTree* tree, NodeId node, SizeOptF nodeInnerSize,
                            cs.position != Position::Absolute && isNotFloated &&
                            !isScrollContainer;
 
-        item.size = MaybeAdd(cs.size.MaybeResolve(nodeInnerSize, calc)
-                                 .MaybeApplyAspectRatio(aspectRatio),
-                             boxSizingAdjustment);
-        item.minSize = MaybeAdd(cs.minSize.MaybeResolve(nodeInnerSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-        item.maxSize = MaybeAdd(cs.maxSize.MaybeResolve(nodeInnerSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
+        item.size = MaybeAdd(
+            MaybeApplyAspectRatio(cs.size.MaybeResolve(nodeInnerSize, calc),
+                                  aspectRatio),
+            boxSizingAdjustment);
+        item.minSize = MaybeAdd(
+            MaybeApplyAspectRatio(cs.minSize.MaybeResolve(nodeInnerSize, calc),
+                                  aspectRatio),
+            boxSizingAdjustment);
+        item.maxSize = MaybeAdd(
+            MaybeApplyAspectRatio(cs.maxSize.MaybeResolve(nodeInnerSize, calc),
+                                  aspectRatio),
+            boxSizingAdjustment);
         item.inset = cs.inset;
         item.margin = cs.margin;
         item.padding = padding;
@@ -663,13 +666,13 @@ float DetermineContentBasedContainerWidth(TaffyTree* tree,
             item.margin.ResolveOrZero(availableSpace.width.IntoOption(), calc)
                 .HorizontalAxisSum();
         float width;
-        if (knownDimensions.width.IsSome()) {
-            width = knownDimensions.width.val;
+        if (IsSome(knownDimensions.w)) {
+            width = knownDimensions.w;
         } else {
             SizeAvail childAvail = availableSpace;
             childAvail.width = MaybeSub(childAvail.width, itemXMarginSum);
             width = tree->MeasureChildSize(
-                item.nodeId, knownDimensions, SizeOptF::None(), childAvail,
+                item.nodeId, knownDimensions, SizeOptFNone(), childAvail,
                 SizingMode::InherentSize, AbsoluteAxis::Horizontal,
                 LineBool::True());
         }
@@ -706,7 +709,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
     Optf percentageResolutionHeight =
         MaybeSub(containerPercentageResolutionHeight, resolvedContentBoxInset
                                                           .VerticalAxisSum());
-    SizeOptF parentSize = {Optf(containerInnerWidth),
+    SizeOptF parentSize = {Some(containerInnerWidth),
                            percentageResolutionHeight};
     // Vertical available space in block flow is indefinite, NOT a min-content
     // constraint: MaxContent is taffy's spelling of "indefinite". MinContent
@@ -743,10 +746,10 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
         }
 
         RectOptF itemMargin =
-            item.margin.MaybeResolve(Optf(containerOuterWidth), calc);
+            item.margin.MaybeResolve(Some(containerOuterWidth), calc);
         RectF itemNonAutoMargin = {
-            itemMargin.left.UnwrapOr(0.0f), itemMargin.right.UnwrapOr(0.0f),
-            itemMargin.top.UnwrapOr(0.0f), itemMargin.bottom.UnwrapOr(0.0f)};
+            UnwrapOr(itemMargin.left, 0.0f), UnwrapOr(itemMargin.right, 0.0f),
+            UnwrapOr(itemMargin.top, 0.0f), UnwrapOr(itemMargin.bottom, 0.0f)};
         float itemNonAutoXMarginSum = itemNonAutoMargin.HorizontalAxisSum();
 
         SizeF scrollbarSize = {
@@ -759,7 +762,7 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
             hasActiveFloats = true;
 
             LayoutOutput itemLayout = tree->PerformChildLayout(
-                item.nodeId, SizeOptF::None(), parentSize,
+                item.nodeId, SizeOptFNone(), parentSize,
                 SizeAvail::MaxContent(), SizingMode::InherentSize,
                 LineBool::True());
             SizeF marginBox = itemLayout.size + itemNonAutoMargin.SumAxes();
@@ -822,14 +825,13 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
             }
         }
 
-        SizeOptF knownDimensions;
+        SizeOptF knownDimensions = SizeOptFNone();
         if (!item.isTable) {
             // TODO(taffy): allow stretch sizing to be conditional; table
             // children of blocks do not stretch fit.
             SizeOptF sized = item.size;
-            sized.width =
-                Optf(MaybeClamp(sized.width.UnwrapOr(stretchWidth),
-                                item.minSize.width, item.maxSize.width));
+            sized.w = Some(MaybeClamp(UnwrapOr(sized.w, stretchWidth),
+                                      item.minSize.w, item.maxSize.w));
             knownDimensions = MaybeClamp(sized, item.minSize, item.maxSize);
         }
 
@@ -844,13 +846,13 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
         inputs.verticalMarginsAreCollapsible =
             item.isInSameBfc ? LineBool::True() : LineBool::False();
 
-        float clearPos = blockCtx->ClearedThreshold(item.clear).UnwrapOr(0.0f);
+        float clearPos = UnwrapOr(blockCtx->ClearedThreshold(item.clear), 0.0f);
 
         LayoutOutput itemLayout;
         if (item.isInSameBfc) {
             // A same-BFC child always has a defined width, from stretch
             // sizing.
-            float width = knownDimensions.width.UnwrapOr(stretchWidth);
+            float width = UnwrapOr(knownDimensions.w, stretchWidth);
 
             // TODO(taffy): account for auto margins.
             float insetLeft = itemNonAutoMargin.left + contentBoxInset.left;
@@ -872,38 +874,38 @@ InFlowResult PerformFinalLayoutOnInFlowChildren(
 
         CollapsibleMarginSet topMarginSet =
             itemLayout.topMargin
-                .CollapseWithMargin(itemMargin.top.UnwrapOr(0.0f));
+                .CollapseWithMargin(UnwrapOr(itemMargin.top, 0.0f));
         CollapsibleMarginSet bottomMarginSet =
             itemLayout.bottomMargin
-                .CollapseWithMargin(itemMargin.bottom.UnwrapOr(0.0f));
+                .CollapseWithMargin(UnwrapOr(itemMargin.bottom, 0.0f));
 
         // Expand auto margins to fill the available space. Vertical auto
         // margins on a relatively positioned block item simply resolve to 0.
         // https://www.w3.org/TR/CSS21/visudet.html#abs-non-replaced-width
         float freeXSpace = F32Max(0.0f, stretchWidth - finalSize.w);
-        int autoMarginCount = (itemMargin.left.IsSome() ? 0 : 1) +
-                              (itemMargin.right.IsSome() ? 0 : 1);
+        int autoMarginCount = (IsSome(itemMargin.left) ? 0 : 1) +
+                              (IsSome(itemMargin.right) ? 0 : 1);
         float xAxisAutoMarginSize =
             autoMarginCount > 0 ? freeXSpace / (float)autoMarginCount : 0.0f;
-        RectF resolvedMargin = {itemMargin.left.UnwrapOr(xAxisAutoMarginSize),
-                                itemMargin.right.UnwrapOr(xAxisAutoMarginSize),
+        RectF resolvedMargin = {UnwrapOr(itemMargin.left, xAxisAutoMarginSize),
+                                UnwrapOr(itemMargin.right, xAxisAutoMarginSize),
                                 topMarginSet.Resolve(),
                                 bottomMarginSet.Resolve()};
 
         RectOptF inset = item.inset.MaybeResolveZip(
-            {Optf(containerInnerWidth), Optf(0.0f)}, calc);
+            {Some(containerInnerWidth), Some(0.0f)}, calc);
         Optf negRight = inset.right;
-        if (negRight.IsSome()) {
-            negRight.val = -negRight.val;
+        if (IsSome(negRight)) {
+            negRight = -negRight;
         }
         Optf negBottom = inset.bottom;
-        if (negBottom.IsSome()) {
-            negBottom.val = -negBottom.val;
+        if (IsSome(negBottom)) {
+            negBottom = -negBottom;
         }
         PointF insetOffset = {IsRtl(direction)
-                                  ? negRight.Or(inset.left).UnwrapOr(0.0f)
-                                  : inset.left.Or(negRight).UnwrapOr(0.0f),
-                              inset.top.Or(negBottom).UnwrapOr(0.0f)};
+                                  ? UnwrapOr(Or(negRight, inset.left), 0.0f)
+                                  : UnwrapOr(Or(inset.left, negRight), 0.0f),
+                              UnwrapOr(Or(inset.top, negBottom), 0.0f)};
 
         if (item.isInSameBfc && (!isCollapsingWithFirstMarginSet ||
                                  !ownMarginsCollapseWithChildren.start)) {
@@ -1062,9 +1064,9 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
         }
 
         Optf aspectRatio = cs.aspectRatio;
-        RectOptF margin = cs.margin.MaybeResolve(Optf(areaWidth), calc);
-        RectF padding = cs.padding.ResolveOrZero(Optf(areaWidth), calc);
-        RectF border = cs.border.ResolveOrZero(Optf(areaWidth), calc);
+        RectOptF margin = cs.margin.MaybeResolve(Some(areaWidth), calc);
+        RectF padding = cs.padding.ResolveOrZero(Some(areaWidth), calc);
+        RectF border = cs.border.ResolveOrZero(Some(areaWidth), calc);
         SizeF paddingBorderSum = (padding + border).SumAxes();
         SizeF boxSizingAdjustment = cs.boxSizing == BoxSizing::ContentBox
                                         ? paddingBorderSum
@@ -1076,53 +1078,52 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
         Optf top = inset.top;
         Optf bottom = inset.bottom;
 
-        SizeOptF styleSize =
-            MaybeAdd(cs.size.MaybeResolve(AsOptional(areaSize), calc)
-                         .MaybeApplyAspectRatio(aspectRatio),
-                     boxSizingAdjustment);
+        SizeOptF styleSize = MaybeAdd(
+            MaybeApplyAspectRatio(
+                cs.size.MaybeResolve(AsOptional(areaSize), calc), aspectRatio),
+            boxSizingAdjustment);
         SizeOptF minSize = MaybeMax(
-            MaybeAdd(cs.minSize.MaybeResolve(AsOptional(areaSize), calc)
-                         .MaybeApplyAspectRatio(aspectRatio),
-                     boxSizingAdjustment)
-                .Or(AsOptional(paddingBorderSum)),
+            Or(MaybeAdd(MaybeApplyAspectRatio(
+                            cs.minSize.MaybeResolve(AsOptional(areaSize), calc),
+                            aspectRatio),
+                        boxSizingAdjustment),
+               AsOptional(paddingBorderSum)),
             paddingBorderSum);
         SizeOptF maxSize =
-            MaybeAdd(cs.maxSize.MaybeResolve(AsOptional(areaSize), calc)
-                         .MaybeApplyAspectRatio(aspectRatio),
+            MaybeAdd(MaybeApplyAspectRatio(
+                         cs.maxSize.MaybeResolve(AsOptional(areaSize), calc),
+                         aspectRatio),
                      boxSizingAdjustment);
         SizeOptF knownDimensions = MaybeClamp(styleSize, minSize, maxSize);
 
-        if (!knownDimensions.width.IsSome() && left.IsSome() &&
-            right.IsSome()) {
+        if (!IsSome(knownDimensions.w) && IsSome(left) && IsSome(right)) {
             float newWidthRaw =
                 MaybeSub(MaybeSub(areaWidth, margin.left), margin.right) -
-                left.val - right.val;
-            knownDimensions.width = Optf(F32Max(newWidthRaw, 0.0f));
+                left - right;
+            knownDimensions.w = Some(F32Max(newWidthRaw, 0.0f));
             knownDimensions =
-                MaybeClamp(knownDimensions.MaybeApplyAspectRatio(aspectRatio),
+                MaybeClamp(MaybeApplyAspectRatio(knownDimensions, aspectRatio),
                            minSize, maxSize);
         }
-        if (!knownDimensions.height.IsSome() && top.IsSome() &&
-            bottom.IsSome()) {
+        if (!IsSome(knownDimensions.h) && IsSome(top) && IsSome(bottom)) {
             float newHeightRaw =
                 MaybeSub(MaybeSub(areaHeight, margin.top), margin.bottom) -
-                top.val - bottom.val;
-            knownDimensions.height = Optf(F32Max(newHeightRaw, 0.0f));
+                top - bottom;
+            knownDimensions.h = Some(F32Max(newHeightRaw, 0.0f));
             knownDimensions =
-                MaybeClamp(knownDimensions.MaybeApplyAspectRatio(aspectRatio),
+                MaybeClamp(MaybeApplyAspectRatio(knownDimensions, aspectRatio),
                            minSize, maxSize);
         }
 
-        SizeAvail childAvail = {
-            AvailableSpace::Definite(
-                MaybeClamp(areaWidth, minSize.width, maxSize.width)),
-            AvailableSpace::Definite(
-                MaybeClamp(areaHeight, minSize.height, maxSize.height))};
+        SizeAvail childAvail = {AvailableSpace::Definite(MaybeClamp(
+                                    areaWidth, minSize.w, maxSize.w)),
+                                AvailableSpace::Definite(MaybeClamp(
+                                    areaHeight, minSize.h, maxSize.h))};
 
         SizeF measuredSize = tree->MeasureChildSizeBoth(
             item.nodeId, knownDimensions, AsOptional(areaSize), childAvail,
             SizingMode::ContentSize, LineBool::False());
-        SizeF finalSize = MaybeClamp(knownDimensions.UnwrapOr(measuredSize),
+        SizeF finalSize = MaybeClamp(UnwrapOr(knownDimensions, measuredSize),
                                      minSize, maxSize);
 
         LayoutOutput layoutOutput = tree->PerformChildLayout(
@@ -1130,62 +1131,60 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
             childAvail, SizingMode::ContentSize, LineBool::False());
 
         RectF nonAutoMargin = {
-            left.IsSome() ? margin.left.UnwrapOr(0.0f) : 0.0f,
-            right.IsSome() ? margin.right.UnwrapOr(0.0f) : 0.0f,
-            top.IsSome() ? margin.top.UnwrapOr(0.0f) : 0.0f,
-            bottom.IsSome() ? margin.bottom.UnwrapOr(0.0f) : 0.0f};
+            IsSome(left) ? UnwrapOr(margin.left, 0.0f) : 0.0f,
+            IsSome(right) ? UnwrapOr(margin.right, 0.0f) : 0.0f,
+            IsSome(top) ? UnwrapOr(margin.top, 0.0f) : 0.0f,
+            IsSome(bottom) ? UnwrapOr(margin.bottom, 0.0f) : 0.0f};
 
         // Auto margins on an absolutely positioned element in a block
         // container only resolve if the matching inset is set; otherwise they
         // resolve to 0.
         // https://www.w3.org/TR/CSS21/visudet.html#abs-non-replaced-width
         PointF absoluteAutoMarginSpace = {
-            right.IsSome() ? areaSize.w - right.val - left.UnwrapOr(0.0f)
-                           : finalSize.w,
-            bottom.IsSome() ? areaSize.h - bottom.val - top.UnwrapOr(0.0f)
-                            : finalSize.h};
+            IsSome(right) ? areaSize.w - right - UnwrapOr(left, 0.0f)
+                          : finalSize.w,
+            IsSome(bottom) ? areaSize.h - bottom - UnwrapOr(top, 0.0f)
+                           : finalSize.h};
         SizeF freeSpace = {absoluteAutoMarginSpace.x - finalSize.w -
                                nonAutoMargin.HorizontalAxisSum(),
                            absoluteAutoMarginSpace.y - finalSize.h -
                                nonAutoMargin.VerticalAxisSum()};
 
         int autoW =
-            (margin.left.IsSome() ? 0 : 1) + (margin.right.IsSome() ? 0 : 1);
+            (IsSome(margin.left) ? 0 : 1) + (IsSome(margin.right) ? 0 : 1);
         int autoH =
-            (margin.top.IsSome() ? 0 : 1) + (margin.bottom.IsSome() ? 0 : 1);
+            (IsSome(margin.top) ? 0 : 1) + (IsSome(margin.bottom) ? 0 : 1);
         SizeF autoMarginSize;
-        if (autoW == 2 && (!styleSize.width.IsSome() ||
-                           styleSize.width.val >= freeSpace.w)) {
+        if (autoW == 2 &&
+            (!IsSome(styleSize.w) || styleSize.w >= freeSpace.w)) {
             autoMarginSize.w = 0.0f;
         } else if (autoW > 0) {
             autoMarginSize.w = freeSpace.w / (float)autoW;
         }
-        if (autoH == 2 && (!styleSize.height.IsSome() ||
-                           styleSize.height.val >= freeSpace.h)) {
+        if (autoH == 2 &&
+            (!IsSome(styleSize.h) || styleSize.h >= freeSpace.h)) {
             autoMarginSize.h = 0.0f;
         } else if (autoH > 0) {
             autoMarginSize.h = freeSpace.h / (float)autoH;
         }
-        RectF autoMargin = {
-            margin.left.IsSome() ? 0.0f : autoMarginSize.w,
-            margin.right.IsSome() ? 0.0f : autoMarginSize.w,
-            margin.top.IsSome() ? 0.0f : autoMarginSize.h,
-            margin.bottom.IsSome() ? 0.0f : autoMarginSize.h};
-        RectF resolvedMargin = {margin.left.UnwrapOr(autoMargin.left),
-                                margin.right.UnwrapOr(autoMargin.right),
-                                margin.top.UnwrapOr(autoMargin.top),
-                                margin.bottom.UnwrapOr(autoMargin.bottom)};
+        RectF autoMargin = {IsSome(margin.left) ? 0.0f : autoMarginSize.w,
+                            IsSome(margin.right) ? 0.0f : autoMarginSize.w,
+                            IsSome(margin.top) ? 0.0f : autoMarginSize.h,
+                            IsSome(margin.bottom) ? 0.0f : autoMarginSize.h};
+        RectF resolvedMargin = {UnwrapOr(margin.left, autoMargin.left),
+                                UnwrapOr(margin.right, autoMargin.right),
+                                UnwrapOr(margin.top, autoMargin.top),
+                                UnwrapOr(margin.bottom, autoMargin.bottom)};
 
         float xOffset;
-        if (left.IsSome() && right.IsSome()) {
-            xOffset = IsRtl(direction) ? areaSize.w - finalSize.w -
-                                             right.val - resolvedMargin.right
-                                       : left.val + resolvedMargin.left;
-        } else if (left.IsSome()) {
-            xOffset = left.val + resolvedMargin.left;
-        } else if (right.IsSome()) {
-            xOffset = areaSize.w - finalSize.w - right.val -
-                      resolvedMargin.right;
+        if (IsSome(left) && IsSome(right)) {
+            xOffset = IsRtl(direction) ? areaSize.w - finalSize.w - right -
+                                             resolvedMargin.right
+                                       : left + resolvedMargin.left;
+        } else if (IsSome(left)) {
+            xOffset = left + resolvedMargin.left;
+        } else if (IsSome(right)) {
+            xOffset = areaSize.w - finalSize.w - right - resolvedMargin.right;
         } else {
             xOffset = IsRtl(direction)
                           ? item.staticPosition.x - finalSize.w -
@@ -1195,10 +1194,10 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree,
         }
 
         float yLocation;
-        if (top.IsSome()) {
-            yLocation = top.val + resolvedMargin.top + areaOffset.y;
-        } else if (bottom.IsSome()) {
-            yLocation = areaSize.h - finalSize.h - bottom.val -
+        if (IsSome(top)) {
+            yLocation = top + resolvedMargin.top + areaOffset.y;
+        } else if (IsSome(bottom)) {
+            yLocation = areaSize.h - finalSize.h - bottom -
                         resolvedMargin.bottom + areaOffset.y;
         } else {
             yLocation = item.staticPosition.y + resolvedMargin.top;
@@ -1251,8 +1250,8 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
     RectLp rawBorder = style.border;
     RectLpa rawMargin = style.margin;
     Optf aspectRatio = style.aspectRatio;
-    RectF padding = rawPadding.ResolveOrZero(parentSize.width, calc);
-    RectF border = rawBorder.ResolveOrZero(parentSize.width, calc);
+    RectF padding = rawPadding.ResolveOrZero(parentSize.w, calc);
+    RectF border = rawBorder.ResolveOrZero(parentSize.w, calc);
     Direction direction = style.direction;
 
     // A node that scrolls vertically needs *horizontal* space reserved for
@@ -1273,15 +1272,18 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
     SizeF boxSizingAdjustment = style.boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
                                     : SizeF::Zero();
-    SizeOptF size = MaybeAdd(style.size.MaybeResolve(parentSize, calc)
-                                 .MaybeApplyAspectRatio(aspectRatio),
-                             boxSizingAdjustment);
-    SizeOptF minSize = MaybeAdd(style.minSize.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-    SizeOptF maxSize = MaybeAdd(style.maxSize.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
+    SizeOptF size =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.size.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF minSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.minSize.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF maxSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.maxSize.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
 
     // css-sizing-4: a definite size in one axis transfers through
     // `aspect-ratio` to make the other definite. Deriving it from
@@ -1291,10 +1293,11 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
     // passes stay content-based. Only a newly-filled axis is adopted and
     // clamped; an incoming known size is left as the parent resolved it,
     // since re-clamping would undo padding/border overrides.
-    SizeOptF derived = MaybeClamp(
-        knownDimensionsIn.MaybeApplyAspectRatio(aspectRatio), minSize, maxSize);
-    SizeOptF knownDimensions = {knownDimensionsIn.width.Or(derived.width),
-                                knownDimensionsIn.height.Or(derived.height)};
+    SizeOptF derived =
+        MaybeClamp(MaybeApplyAspectRatio(knownDimensionsIn, aspectRatio),
+                   minSize, maxSize);
+    SizeOptF knownDimensions = {Or(knownDimensionsIn.w, derived.w),
+                                Or(knownDimensionsIn.h, derived.h)};
     SizeOptF containerContentBoxSize =
         MaybeSub(knownDimensions, contentBoxInset.SumAxes());
 
@@ -1307,13 +1310,13 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
             border.top == 0.0f,
         verticalMarginsAreCollapsible.end && !isScrollContainer &&
             style.position == Position::Relative && padding.bottom == 0.0f &&
-            border.bottom == 0.0f && !size.height.IsSome()};
+            border.bottom == 0.0f && !IsSome(size.h)};
     bool hasStylesPreventingBeingCollapsedThrough =
         !style.IsBlock() || blockCtx->IsBfcRoot() || isScrollContainer ||
         style.position == Position::Absolute || padding.top > 0.0f ||
         padding.bottom > 0.0f || border.top > 0.0f || border.bottom > 0.0f ||
-        (size.height.IsSome() && size.height.val > 0.0f) ||
-        (minSize.height.IsSome() && minSize.height.val > 0.0f);
+        (IsSome(size.h) && size.h > 0.0f) ||
+        (IsSome(minSize.h) && minSize.h > 0.0f);
 
     TextAlign textAlign = style.textAlign;
     OptAlignContent alignContent = style.alignContent;
@@ -1324,8 +1327,8 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
 
     // 2. Compute the container width.
     float containerOuterWidth;
-    if (knownDimensions.width.IsSome()) {
-        containerOuterWidth = knownDimensions.width.val;
+    if (IsSome(knownDimensions.w)) {
+        containerOuterWidth = knownDimensions.w;
     } else {
         AvailableSpace availableWidth =
             MaybeSub(availableSpace.width, contentBoxInset.HorizontalAxisSum());
@@ -1333,13 +1336,13 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
             DetermineContentBasedContainerWidth(tree, items, availableWidth) +
             contentBoxInset.HorizontalAxisSum();
         containerOuterWidth =
-            MaybeMax(MaybeClamp(intrinsicWidth, minSize.width, maxSize.width),
-                     Optf(paddingBorderSize.w));
+            MaybeMax(MaybeClamp(intrinsicWidth, minSize.w, maxSize.w),
+                     Some(paddingBorderSize.w));
     }
 
-    if (runMode == RunMode::ComputeSize && knownDimensions.height.IsSome()) {
+    if (runMode == RunMode::ComputeSize && IsSome(knownDimensions.h)) {
         return LayoutOutput::FromOuterSize(
-            {containerOuterWidth, knownDimensions.height.val});
+            {containerOuterWidth, knownDimensions.h});
     }
     if (runMode == RunMode::ComputeSize &&
         inputs.axis == RequestedAxis::Horizontal) {
@@ -1347,14 +1350,13 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
     }
 
     Optf containerPercentageResolutionHeight =
-        knownDimensions.height.Or(MaybeMax(size.height, minSize.height))
-            .Or(minSize.height);
+        Or(Or(knownDimensions.h, MaybeMax(size.h, minSize.h)), minSize.h);
 
     // 3. Final item layout.
     RectF resolvedPadding = rawPadding
-                                .ResolveOrZero(Optf(containerOuterWidth), calc);
+                                .ResolveOrZero(Some(containerOuterWidth), calc);
     RectF resolvedBorder = rawBorder
-                               .ResolveOrZero(Optf(containerOuterWidth), calc);
+                               .ResolveOrZero(Some(containerOuterWidth), calc);
     RectF resolvedContentBoxInset =
         resolvedPadding + resolvedBorder + scrollbarGutter;
 
@@ -1372,10 +1374,10 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
             intrinsicOuterHeight, blockCtx->FloatedContentHeightContribution());
     }
 
-    float containerOuterHeight =
-        MaybeMax(knownDimensions.height.UnwrapOr(MaybeClamp(
-                     intrinsicOuterHeight, minSize.height, maxSize.height)),
-                 Optf(paddingBorderSize.h));
+    float containerOuterHeight = MaybeMax(
+        UnwrapOr(knownDimensions.h,
+                 MaybeClamp(intrinsicOuterHeight, minSize.h, maxSize.h)),
+        Some(paddingBorderSize.h));
     SizeF finalOuterSize = {containerOuterWidth, containerOuterHeight};
 
     // Apply align-content to the in-flow non-floated items. Block layout
@@ -1434,17 +1436,16 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
 
     LayoutOutput output;
     output.size = finalOuterSize;
-    output.topMargin = ownMarginsCollapseWithChildren.start
-                           ? inFlow.firstChildTopMarginSet
-                           : CollapsibleMarginSet::FromMargin(
-                                 rawMargin.MaybeResolve(parentSize.width, calc)
-                                     .top.UnwrapOr(0.0f));
-    output
-        .bottomMargin = ownMarginsCollapseWithChildren.end
-                            ? inFlow.lastChildBottomMarginSet
-                            : CollapsibleMarginSet::FromMargin(
-                                  rawMargin.MaybeResolve(parentSize.width, calc)
-                                      .bottom.UnwrapOr(0.0f));
+    output.topMargin =
+        ownMarginsCollapseWithChildren.start
+            ? inFlow.firstChildTopMarginSet
+            : CollapsibleMarginSet::FromMargin(UnwrapOr(
+                  rawMargin.MaybeResolve(parentSize.w, calc).top, 0.0f));
+    output.bottomMargin =
+        ownMarginsCollapseWithChildren.end
+            ? inFlow.lastChildBottomMarginSet
+            : CollapsibleMarginSet::FromMargin(UnwrapOr(
+                  rawMargin.MaybeResolve(parentSize.w, calc).bottom, 0.0f));
     output.marginsCanCollapseThrough = canBeCollapsedThrough;
 
     // The margin-collapsing outputs matter to the parent's intrinsic height,
@@ -1477,10 +1478,9 @@ LayoutOutput ComputeInner(TaffyTree* tree, NodeId nodeId,
         NodeId child = tree->GetChildId(nodeId, order);
         if (tree->GetStyle(child).BoxGenMode() == BoxGenerationMode::None) {
             tree->SetUnroundedLayout(child, Layout::WithOrder((uint32_t)order));
-            tree->PerformChildLayout(child, SizeOptF::None(), SizeOptF::None(),
-                                     SizeAvail::MaxContent(),
-                                     SizingMode::InherentSize,
-                                     LineBool::False());
+            tree->PerformChildLayout(
+                child, SizeOptFNone(), SizeOptFNone(), SizeAvail::MaxContent(),
+                SizingMode::InherentSize, LineBool::False());
         }
     }
 
@@ -1503,54 +1503,54 @@ LayoutOutput ComputeBlockLayout(TaffyTree* tree, NodeId nodeId,
     bool isScrollContainer = IsScrollContainer(style.overflow.x) ||
                              IsScrollContainer(style.overflow.y);
     Optf aspectRatio = style.aspectRatio;
-    RectF padding = style.padding.ResolveOrZero(parentSize.width, calc);
-    RectF border = style.border.ResolveOrZero(parentSize.width, calc);
+    RectF padding = style.padding.ResolveOrZero(parentSize.w, calc);
+    RectF border = style.border.ResolveOrZero(parentSize.w, calc);
     SizeF paddingBorderSize = (padding + border).SumAxes();
     SizeF boxSizingAdjustment = style.boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
                                     : SizeF::Zero();
 
-    SizeOptF minSize = MaybeAdd(style.minSize.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-    SizeOptF maxSize = MaybeAdd(style.maxSize.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-    SizeOptF clampedStyleSize;
+    SizeOptF minSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.minSize.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF maxSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.maxSize.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF clampedStyleSize = SizeOptFNone();
     if (inputs.sizingMode == SizingMode::InherentSize) {
-        clampedStyleSize =
-            MaybeClamp(MaybeAdd(style.size.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment),
-                       minSize, maxSize);
+        clampedStyleSize = MaybeClamp(
+            MaybeAdd(
+                MaybeApplyAspectRatio(style.size.MaybeResolve(parentSize, calc),
+                                      aspectRatio),
+                boxSizingAdjustment),
+            minSize, maxSize);
     }
 
     // If both min and max are set in an axis and max <= min, that determines
     // the size in that axis.
-    SizeOptF minMaxDefiniteSize;
-    if (minSize.width.IsSome() && maxSize.width.IsSome() &&
-        maxSize.width.val <= minSize.width.val) {
-        minMaxDefiniteSize.width = minSize.width;
+    SizeOptF minMaxDefiniteSize = SizeOptFNone();
+    if (IsSome(minSize.w) && IsSome(maxSize.w) && maxSize.w <= minSize.w) {
+        minMaxDefiniteSize.w = minSize.w;
     }
-    if (minSize.height.IsSome() && maxSize.height.IsSome() &&
-        maxSize.height.val <= minSize.height.val) {
-        minMaxDefiniteSize.height = minSize.height;
+    if (IsSome(minSize.h) && IsSome(maxSize.h) && maxSize.h <= minSize.h) {
+        minMaxDefiniteSize.h = minSize.h;
     }
 
     SizeOptF styledBasedKnownDimensions =
-        MaybeMax(knownDimensions.Or(minMaxDefiniteSize).Or(clampedStyleSize),
+        MaybeMax(Or(Or(knownDimensions, minMaxDefiniteSize), clampedStyleSize),
                  paddingBorderSize);
 
     if (runMode == RunMode::ComputeSize) {
-        if (styledBasedKnownDimensions.BothAxisDefined()) {
+        if (BothAxisDefined(styledBasedKnownDimensions)) {
             return LayoutOutput::FromOuterSize(
-                {styledBasedKnownDimensions.width.val,
-                 styledBasedKnownDimensions.height.val});
+                {styledBasedKnownDimensions.w, styledBasedKnownDimensions.h});
         }
         if (inputs.axis == RequestedAxis::Horizontal &&
-            styledBasedKnownDimensions.width.IsSome()) {
+            IsSome(styledBasedKnownDimensions.w)) {
             return LayoutOutput::FromOuterSize(
-                {styledBasedKnownDimensions.width.val, 0.0f});
+                {styledBasedKnownDimensions.w, 0.0f});
         }
     }
 

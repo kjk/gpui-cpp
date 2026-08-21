@@ -150,12 +150,12 @@ struct CalcResolver {
 inline Optf ResolvedPercentageSize(CompactLength cl, float parentSize,
                                    CalcResolver calc) {
     if (cl.Tag() == CompactLength::kPercentTag) {
-        return Optf(cl.Value() * parentSize);
+        return Some(cl.Value() * parentSize);
     }
     if (cl.IsCalc()) {
-        return Optf(calc.Resolve(cl.CalcValue(), parentSize));
+        return Some(calc.Resolve(cl.CalcValue(), parentSize));
     }
-    return Optf();
+    return None();
 }
 
 // ─── Dimension / LengthPercentage / LengthPercentageAuto ─────────────────
@@ -220,8 +220,8 @@ struct Dimension {
     Optf MaybeResolve(Optf context, CalcResolver calc) const;
     // Some(len) only for the Length variant.
     Optf IntoOption() const {
-        return raw.Tag() == CompactLength::kLengthTag ? Optf(raw.Value())
-                                                      : Optf();
+        return raw.Tag() == CompactLength::kLengthTag ? Some(raw.Value())
+                                                      : None();
     }
 };
 
@@ -264,12 +264,12 @@ struct AvailableSpace {
     static AvailableSpace Zero() { return Definite(0.0f); }
     // Rust's `From<Option<f32>>`: None becomes MaxContent.
     static AvailableSpace From(Optf v) {
-        return v.IsSome() ? Definite(v.val) : MaxContent();
+        return IsSome(v) ? Definite(v) : MaxContent();
     }
 
     bool IsDefinite() const { return kind == Kind::Definite; }
     Optf IntoOption() const {
-        return kind == Kind::Definite ? Optf(value) : Optf();
+        return kind == Kind::Definite ? Some(value) : None();
     }
     float UnwrapOr(float def) const {
         return kind == Kind::Definite ? value : def;
@@ -281,7 +281,7 @@ struct AvailableSpace {
         return kind == Kind::Definite ? *this : def;
     }
     AvailableSpace MaybeSet(Optf v) const {
-        return v.IsSome() ? Definite(v.val) : *this;
+        return IsSome(v) ? Definite(v) : *this;
     }
     float ComputeFreeSpace(float usedSpace) const {
         switch (kind) {
@@ -496,7 +496,7 @@ constexpr bool IsScrollContainer(Overflow o) {
 // Some(0.0) when the overflow mode forces the automatic minimum size of a
 // flex/grid item to 0, else None.
 constexpr Optf MaybeIntoAutomaticMinSize(Overflow o) {
-    return IsScrollContainer(o) ? Optf(0.0f) : Optf();
+    return IsScrollContainer(o) ? Some(0.0f) : None();
 }
 
 // The direction of text, table and grid columns, and horizontal overflow.
@@ -645,7 +645,7 @@ struct SizeAvail {
                 AvailableSpace::Definite(s.h)};
     }
     static SizeAvail From(SizeOptF s) {
-        return {AvailableSpace::From(s.width), AvailableSpace::From(s.height)};
+        return {AvailableSpace::From(s.w), AvailableSpace::From(s.h)};
     }
 
     AvailableSpace GetAbs(AbsoluteAxis a) const {
@@ -685,7 +685,7 @@ struct SizeAvail {
         return {width.IntoOption(), height.IntoOption()};
     }
     SizeAvail MaybeSet(SizeOptF v) const {
-        return {width.MaybeSet(v.width), height.MaybeSet(v.height)};
+        return {width.MaybeSet(v.w), height.MaybeSet(v.h)};
     }
 };
 
@@ -1293,7 +1293,7 @@ struct Style {
     SizeDim size;
     SizeDim minSize;
     SizeDim maxSize;
-    Optf aspectRatio;
+    Optf aspectRatio = None();
 
     // Spacing
     RectLpa margin;
