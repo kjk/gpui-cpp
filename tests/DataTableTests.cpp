@@ -185,7 +185,67 @@ static void ARightClickMarksARowOrACellButNeverBoth() {
     utassert(s.selectedRow == -1);
 }
 
+// update_visible_range_if_need: the delegate is told only when the range
+// actually moved, and never about a range of one — Rust skips that because
+// its virtual list lays a single item out to measure with, and here it is the
+// frame before the pane has been laid out at all.
+static void TheDelegateHearsAboutTheRangeOnlyWhenItMoves() {
+    TableState s;
+    utassert(TableVisibleRowsChanged(&s, 0, 20));
+    // The same range again says nothing.
+    utassert(!TableVisibleRowsChanged(&s, 0, 20));
+    utassert(TableVisibleRowsChanged(&s, 5, 25));
+    utassert(s.visibleRange.rowFirst == 5 && s.visibleRange.rowEnd == 25);
+    // A range of one is the measuring pass, and does not even overwrite what
+    // was last reported.
+    utassert(!TableVisibleRowsChanged(&s, 0, 1));
+    utassert(!TableVisibleRowsChanged(&s, 0, 0));
+    utassert(s.visibleRange.rowFirst == 5 && s.visibleRange.rowEnd == 25);
+
+    // The two axes are independent.
+    utassert(TableVisibleColsChanged(&s, 2, 9));
+    utassert(!TableVisibleColsChanged(&s, 2, 9));
+    utassert(s.visibleRange.rowFirst == 5);
+    utassert(s.visibleRange.colFirst == 2 && s.visibleRange.colEnd == 9);
+}
+
+// Which columns overlap the scrolling pane. The pinned ones are never in it —
+// they do not move under the offset, so the window starts after them.
+static void TheVisibleColumnsAreTheOnesUnderTheOffset() {
+    TableState s;
+    s.colCount = 6;
+    TableSeedColOrder(&s, 6);
+    TableEnsureCols(&s, 6);
+    for (int c = 0; c < 6; c++) {
+        s.colWidth[c] = 100;
+    }
+    int first = -1, end = -1;
+
+    // A pane that has not been laid out yet answers an empty range rather
+    // than every column, which the range-of-one rule then swallows.
+    TableVisibleCols(&s, 0, 6, &first, &end);
+    utassert(first == 0 && end == 0);
+
+    s.bodyBounds.w = 250;
+    TableVisibleCols(&s, 0, 6, &first, &end);
+    utassert(first == 0 && end == 3);
+
+    // Slid over by one and a half columns: the second is still half on
+    // screen, so it is still visible.
+    s.scrollX = 150;
+    TableVisibleCols(&s, 0, 6, &first, &end);
+    utassert(first == 1 && end == 4);
+
+    // Two pinned columns: the offset moves the rest, and the window over them
+    // starts at display position 2.
+    s.scrollX = 0;
+    TableVisibleCols(&s, 2, 6, &first, &end);
+    utassert(first == 2 && end == 5);
+}
+
 void TestDataTable() {
+    TheDelegateHearsAboutTheRangeOnlyWhenItMoves();
+    TheVisibleColumnsAreTheOnesUnderTheOffset();
     ARightClickMarksARowOrACellButNeverBoth();
     ACellIsOneNumber();
     AColumnKeepsItsWidthOnceItHasOne();

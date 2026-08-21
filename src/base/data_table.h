@@ -88,6 +88,16 @@ extern const Str kTableColDrag;
 // The resize handle's width, straddling the column's right edge.
 const float kTableResizeHandleW = 2;
 
+// TableVisibleRange: which rows and which columns the table last built, as
+// two half-open ranges. Rust keeps the pair on the state and hands each half
+// to the delegate when it moves.
+struct TableVisibleRange {
+    int rowFirst = 0;
+    int rowEnd = 0;
+    int colFirst = 0;
+    int colEnd = 0;
+};
+
 // What a table is between frames: the selection, what is sorted by what, and
 // the flags that say which of those a user is allowed to move. The rows and
 // columns themselves stay with the delegate, which is the caller here.
@@ -168,6 +178,14 @@ struct TableState {
     // Rust keeps the flag on the state rather than the column so one toggle
     // releases all of them at once.
     bool colFixed = true;
+    // Where the scrolling pane was last painted, which is the width a column
+    // is on-screen or not against. It is a frame behind, the way any bounds
+    // read at build time is; the range-of-one rule below covers the first
+    // frame, where it is still zero.
+    Bounds bodyBounds = {};
+    // visible_range: what was last built, and what the delegate was last
+    // told about.
+    TableVisibleRange visibleRange = {};
     // delegate.loading() / has_more() / load_more_threshold().
     bool loading = false;
     bool hasMore = false;
@@ -248,6 +266,18 @@ inline int TableCellRow(intptr_t packed) {
 inline int TableCellCol(intptr_t packed) {
     return (int)(packed & 0xfff);
 }
+// update_visible_range_if_need, one axis at a time: the range is written
+// down and true comes back when it moved, which is when the delegate wants
+// telling. A range of one is skipped — Rust's virtual list measures with a
+// single item, and here it is the frame before anything has been laid out.
+bool TableVisibleRowsChanged(TableState* s, int first, int end);
+bool TableVisibleColsChanged(TableState* s, int first, int end);
+// The columns whose slot overlaps the scrolling pane, in display positions.
+// Rust culls the ones outside it; this tree builds them all, so this answers
+// the same question without being what decides anything.
+void TableVisibleCols(const TableState* s, int nFixed, int nCols, int* first,
+                      int* end);
+
 // load_more_if_need: the last row built is within the threshold of the end,
 // and the delegate says there is more.
 bool TableShouldLoadMore(const TableState* s, int visibleEnd);

@@ -115,6 +115,15 @@ struct DataTableStory {
     bool seeded = false;
     // What the last table event said, shown under the table.
     Str message = {};
+    // dump_csv: the click asks, and the frame that has the built table
+    // answers — the table is a per-frame builder here, so a handler between
+    // frames has nothing to dump.
+    bool wantExport = false;
+    // visible_rows_changed / visible_columns_changed: the story keeps what
+    // it was last told and shows it in the status line, which is the whole
+    // demonstration of the two hooks.
+    int visRowFirst = 0, visRowEnd = 0;
+    int visColFirst = 0, visColEnd = 0;
     // The order the rows are shown in, which is what the delegate's
     // perform_sort rewrites.
     int order[17] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
@@ -239,6 +248,15 @@ static void DtMenuOpen(DataTableStory* self, Ctx* cx, const ClickEvent*,
     self->openMenu = self->openMenu == (int)which ? 0 : (int)which;
     Notify(cx);
 }
+// dump_csv. Rust hands the pair to the `csv` crate and then to a save
+// dialog; this tree has neither, so the click asks for the dump and the
+// count and the header row come back in the message line under the table.
+static void DtExport(DataTableStory* self, Ctx* cx, const ClickEvent*) {
+    (void)cx;
+    self->wantExport = true;
+    Notify(cx);
+}
+
 static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t act) {
     if (act >= DtActGoTo) {
@@ -438,6 +456,68 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
     }
 }
 
+// visible_rows_changed / visible_columns_changed. Rust's note that these
+// must be fast holds here for the same reason: they run while the frame's
+// tree is being built, so a repaint from one would loop.
+static void DtVisibleRows(Ctx* cx, void* data, int first, int end) {
+    DataTableStory* self = (DataTableStory*)data;
+    (void)cx;
+    self->visRowFirst = first;
+    self->visRowEnd = end;
+}
+
+static void DtVisibleCols(Ctx* cx, void* data, int first, int end) {
+    DataTableStory* self = (DataTableStory*)data;
+    (void)cx;
+    self->visColFirst = first;
+    self->visColEnd = end;
+}
+
+// cell_text: the same values render_td shows, as text. Rust keeps the two
+// apart as well — one builds an element and the other a string, and only the
+// string is what an export reads.
+static Str DtCellText(Ctx* cx, void* data, int row, int col) {
+    DataTableStory* self = (DataTableStory*)data;
+    const int nStocks = (int)(sizeof(kStocks) / sizeof(kStocks[0]));
+    const Stock& s = kStocks[self->order[row % nStocks]];
+    switch (col) {
+        case 0:
+            return StoryFmt(cx, "%d", row);
+        case 1:
+            return Str(s.market);
+        case 2:
+            return Str(s.name);
+        case 3:
+            return Str(s.symbol);
+        case 4:
+            return Str(s.price);
+        case 5:
+            return Str(s.chg);
+        case 6:
+            return Str(s.pct);
+        default:
+            break;
+    }
+    if (col >= kBaseColumns) {
+        return StrL("--");
+    }
+    float n = DtNoise(row, col);
+    switch (kCellKinds[col - 7]) {
+        case DtCell::Compact:
+            return DtCompact(cx, n * 1e9f);
+        case DtCell::Int:
+            return StoryFmt(cx, "%.0f", (double)(n * 1000.f));
+        case DtCell::Rate:
+            return StoryFmt(cx, "%.2f%%", (double)(n * 100.f));
+        case DtCell::Change:
+            return StoryFmt(cx, "%+.2f", (double)((n - 0.5f) * 200.f));
+        case DtCell::Percent:
+            return StoryFmt(cx, "%+.2f%%", (double)((n - 0.5f) * 20.f));
+        default:
+            return StoryFmt(cx, "%.2f", (double)(n * 1000.f));
+    }
+}
+
 El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -525,6 +605,7 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
             ->JustifyCenter()
             ->HoverBg(th.tokens.muted)
             ->Child(StoryTxt(cx, StrL("Export CSV"), 14, th.foreground));
+    component::BindClick(exportBtn, StrL("dt-dump-csv"), Listen(cx, &DtExport));
     group->Child(exportBtn);
     toolbarRow->Child(group);
     page->Child(toolbarRow);
@@ -639,16 +720,37 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
             ->H(520)
             ->RowHeight(kSizeRowH[self->size])
             ->Stripe(self->options[DtOptStriped])
-            ->ContextMenu(DtContextMenu);
+            ->ContextMenu(DtContextMenu)
+            ->OnVisibleRows(DtVisibleRows)
+            ->OnVisibleCols(DtVisibleCols)
+            ->CellText(DtCellText);
     if (self->options[DtOptGroupHeaders]) {
         table->GroupHeader(kGroup1, 6)->GroupHeader(kGroup2, 12);
+    }
+    if (self->wantExport) {
+        self->wantExport = false;
+        Vec<Str> heads, cells;
+        table->Dump(&heads, &cells);
+        StrBuilder sb;
+        for (int i = 0; i < heads.len && i < 4; i++) {
+            sb.Append(i ? StrL(", ") : StrL(""));
+            sb.Append(heads[i]);
+        }
+        Str headLine = sb.TakeStr();
+        StrFree(self->message);
+        self->message = StrDup(fmt(
+            "Dumped %d rows × %d columns · %s, … · "
+            "first row: %s, %s, %s",
+            kRowCounts[self->rowCount], nColumns, headLine,
+            cells.len > 0 ? cells[0] : Str(), cells.len > 1 ? cells[1] : Str(),
+            cells.len > 2 ? cells[2] : Str()));
+        StrFree(headLine);
+        heads.Reset();
+        cells.Reset();
     }
     El* box = table->IntoEl();
 
     // The status line under the table: min_h_9, px_3, muted at 35%, text_xs.
-    VirtualRange vis = VirtualListVisibleRows(kRowCounts[self->rowCount],
-                                              kSizeRowH[self->size],
-                                              st ? st->scrollY : 0, 520);
     El* status = Div(a)
                      ->FlexRow()
                      ->W(kFill)
@@ -667,8 +769,12 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         right->Child(
             component::Spinner::New(cx)->WithSize(UiSize::XSmall)->IntoEl());
     }
-    right->Child(TextEl(a, StoryFmt(cx, "Current · rows %d..%d · columns 0..%d",
-                                    vis.first, vis.end, nColumns - 1)));
+    // Both ranges are the table's now, handed over as it built: the story
+    // no longer works out for itself which rows are on screen.
+    right
+        ->Child(TextEl(a, StoryFmt(cx, "Current · rows %d..%d · columns %d..%d",
+                                   self->visRowFirst, self->visRowEnd,
+                                   self->visColFirst, self->visColEnd)));
     if (st && st->selectedCellRow >= 0) {
         right->Child(TextEl(a, StoryFmt(cx, "· cell %d:%d", st->selectedCellRow,
                                         st->selectedCellCol)));
