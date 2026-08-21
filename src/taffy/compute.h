@@ -11,7 +11,7 @@
 #ifndef GPUI_TAFFY_COMPUTE_H_
 #define GPUI_TAFFY_COMPUTE_H_
 
-#include "taffy/math.h"
+#include "taffy/taffy_math.h"
 #include "taffy/taffy_tree.h"
 
 namespace taffy {
