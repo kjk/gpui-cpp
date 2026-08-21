@@ -1,6 +1,6 @@
 # gpui2 — C++ port of gpui-component
 
-This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows, Linux and macOS**. The north-star deliverable is the `system_monitor` example: a dark-theme desktop window with live CPU/memory area charts, a sortable process table, a custom title bar with segmented tabs, and a status bar.
+This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows, Linux and macOS**. The goal is to port **as much of the Rust as this tree can hold**: every module of `crates/base` and `crates/ui`, the story gallery, the showcase and the examples. Assume a thing is in scope until a hard rule below says otherwise; the answer to "should we port X?" is yes unless X needs a dependency or a runtime we have ruled out.
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
@@ -8,7 +8,19 @@ The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not t
 
 ## Goal
 
-Ship the gpui-component examples as native C++ desktop apps, starting with `system_monitor` and continuing one example at a time.
+Port gpui-component to C++, module by module, and ship its examples as native
+desktop apps. `system_monitor` was the first milestone and is done; the story
+gallery and the showcase came after it, and the work now is depth — the parts
+of a ported module that were left behind. `port-progress.md` is the running
+log of what has been done and what a session found; read its tail before
+picking up something new.
+
+Fidelity is the bar. When a widget's look or numbers are in question, read the
+Rust file under `.work/gpui-component/` at the SHA in `cmd/versions.ts` and
+copy the constants. Where this tree has to differ — because the runtime does
+not have the seam Rust does, or a dependency is out — say so in the comment
+where it differs and in the progress log, rather than quietly doing something
+else.
 
 ```
 bun cmd/build.ts system_monitor
@@ -34,17 +46,30 @@ Matching means:
 - same refresh cadence (500 ms) and history length (120 samples)
 - same interaction: tab switch, column sort, window drag, min/max/close, Alt+F4, vertical scroll
 
-It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy, Blade, or the unused 60+ gpui-component widgets.
+It does **not** mean a line-for-line clone of Zed's GPUI renderer, Taffy or Blade. Those are the layer *under* gpui-component, and we reimplement a subset of them rather than port them.
 
-## Non-goals (until system_monitor is done)
+## Non-goals
+
+These are the standing exclusions. Everything else in gpui-component is in
+scope, and a module being large or unglamorous is not a reason to skip it.
 
 - WASM
 - The full GPUI GPU scene graph or async executor. We do have `App`/`Window`/
-  `Entity`/`Ctx` — see below — but not refcounted entities, observers,
-  `EventEmitter`, actions/key bindings, or `Task`
-- The unused story-gallery widgets (editor, tree-sitter, webview, date picker, …)
+  `Entity`/`Ctx`, actions and a keymap, `EventEmitter` and window
+  subscriptions — see below — but not refcounted entities, observers, or
+  `Task`
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
 - Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
+- Anything that needs a third-party C++ library, by hard rule 3: tree-sitter
+  and syntect (so `highlighter` stays the small hand-written lexer it is), a
+  webview, an LSP client, resvg, ropey, html5ever. Where Rust reaches for one
+  of these and the feature is still worth having, write the small version this
+  tree needs — `ext/md4c` is the one exception, and `port-upstream.md` lists
+  the rest
+
+A thing that is *not* ported for a reason other than these belongs in
+`port-progress.md` with the reason, so the next session does not have to
+rediscover it.
 
 ## Hard rules
 
@@ -418,7 +443,7 @@ assets/icons/          Lucide SVGs for sidebar
 assets/markdown_table/ report.md for the markdown_table example
 ```
 
-## How to extend after system_monitor
+## How to port a module
 
 Port **gpui-base unstyled primitives** into `src/base/`, one Rust module at a time (`crates/base/src/<name>.rs`). Keep the type name (`Button`, `Checkbox`, `Accordion`, …).
 
