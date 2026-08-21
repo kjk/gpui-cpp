@@ -881,12 +881,19 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // on_mouse_down — which is how a popover opens on the right button — and
     // stops before the click path, the focus move and the caret below.
     if (!in.IsFocusing()) {
-        const HitRect* other = HitTestRect(&win->paint, x, y);
-        if (other && other->onMouseDown.IsValid()) {
-            MouseDownEvent ev = in;
-            ev.el = other->bounds;
-            ListenerCall(win->app, win, other->onMouseDown, &ev);
-        }
+        // Over the whole chain, not just the element the press landed on: a
+        // table row marks itself as right-clicked and the context menu that
+        // wraps the table opens, both from the one press. That is why
+        // `cx.stop_propagation()` exists on this path at all — a cell that
+        // takes a secondary press keeps the row under it from taking it too.
+        Vec<int> chain;
+        HitChain(win, x, y, &chain);
+        MouseDownEvent ev = in;
+        DispatchChain(
+            win, chain, &ev, [](const HitRect& hr, DispatchPhase phase) {
+                return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
+            });
+        chain.Reset();
         ClearPendingClick(win);
         AppInvalidate(win);
         return;

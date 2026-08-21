@@ -273,6 +273,34 @@ static void DtMenuAct(DataTableStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// TableDelegate::context_menu. A secondary press on a row opens this where
+// the pointer is: the row it was opened on, then the five sizes the toolbar
+// also offers. The row line carries `OpenDetail(row_ix)` in Rust, which
+// nothing handles, so it does nothing here either.
+static void OnDtContextItem(DataTableStory* self, Ctx* cx, const ClickEvent*,
+                            intptr_t ix) {
+    // 0 is the row line, 1 the separator, and the sizes follow.
+    int size = (int)ix - 2;
+    if (size >= 0 && size < kNSizes) {
+        self->size = size;
+        Notify(cx);
+    }
+}
+
+static component::PopupMenu* DtContextMenu(Ctx* cx, void* data, int row,
+                                           component::PopupMenu* menu) {
+    (void)data;
+    menu->Menu(StoryFmt(cx, "Selected Row: %d", row))->Separator();
+    for (int i = 0; i < kNSizes; i++) {
+        menu->Menu(StoryFmt(cx, "Size %s", kSizeLabels[i]));
+    }
+    PopupMenuState* st = menu->state.Get(cx);
+    if (st) {
+        st->onConfirm = Listen(cx, &OnDtContextItem);
+    }
+    return menu;
+}
+
 // The base columns' count, which is where the "Column N" extras start.
 static const int kBaseColumns = 45;
 
@@ -610,7 +638,8 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
             ->Rows(kRowCounts[self->rowCount], self, DtCellFor)
             ->H(520)
             ->RowHeight(kSizeRowH[self->size])
-            ->Stripe(self->options[DtOptStriped]);
+            ->Stripe(self->options[DtOptStriped])
+            ->ContextMenu(DtContextMenu);
     if (self->options[DtOptGroupHeaders]) {
         table->GroupHeader(kGroup1, 6)->GroupHeader(kGroup2, 12);
     }

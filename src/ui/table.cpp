@@ -217,7 +217,44 @@ static El* GroupBand(Ctx* cx, Str label, float w, bool last) {
     return e;
 }
 
+DataTable* DataTable::ContextMenu(PopupMenu* (*fn)(Ctx*, void*, int,
+                                                   PopupMenu*)) {
+    contextMenu = fn;
+    return this;
+}
+
+// `.context_menu(..)` on the inner table: the menu is built from the row the
+// last secondary press marked, and the wrapper is what catches the press —
+// so it has to be there before there is a row, which is why the menu is
+// built empty when nothing is marked. A menu with no items renders nothing,
+// which is the trait default answering the menu back untouched.
+static El* WrapContextMenu(Ctx* cx, Str id, El* box, const TableState* s,
+                           PopupMenu* (*build)(Ctx*, void*, int, PopupMenu*),
+                           void* data) {
+    Arena* a = cx->a;
+    PopupMenu* menu = PopupMenu::New(cx, StrDup(a, fmt("%s-ctx-menu", id)));
+    if (s && s->rightClickedRow >= 0) {
+        menu = build(cx, data, s->rightClickedRow, menu);
+    }
+    if (!menu) {
+        return box;
+    }
+    El* wrap = Div(a)->FlexCol()->W(kFill)->Child(box);
+    return ContextMenu::New(cx, StrDup(a, fmt("%s-ctx", id)))
+        ->Child(wrap)
+        ->Menu(menu)
+        ->IntoEl();
+}
+
 El* DataTable::IntoEl() {
+    El* box = BuildEl();
+    if (!contextMenu) {
+        return box;
+    }
+    return WrapContextMenu(cx, id, box, state.Get(cx), contextMenu, data);
+}
+
+El* DataTable::BuildEl() {
     const Theme& th = cx->theme();
     TableState* s = state.Get(cx);
     if (s) {

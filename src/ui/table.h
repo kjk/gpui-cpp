@@ -1,6 +1,7 @@
 /* Themed table — crates/ui/src/table */
 
 #include "ui/sizing.h"
+#include "ui/menu.h"
 #include "base/data_table.h"
 
 namespace gpui {
@@ -55,6 +56,13 @@ struct DataTable {
     float h = 0;
     // render_empty: what a table with no rows shows. Null takes Rust's own.
     El* empty = nullptr;
+    // TableDelegate::context_menu(row_ix, menu). A secondary press marks a
+    // row — which is what `right_clicked_row` is — and the table hands that
+    // row and a menu of its own to the caller, which fills the menu in and
+    // hands it back. The trait's default answers it back untouched, so a
+    // table that sets nothing here has no menu; null is the same thing.
+    PopupMenu* (*contextMenu)(Ctx* cx, void* data, int row,
+                              PopupMenu* menu) = nullptr;
     // Size::table_row_height, which is what with_size(..) comes to here: 26 /
     // 30 / 32 / 40, or an explicit pixel height.
     float rowHeight = 32;
@@ -70,7 +78,10 @@ struct DataTable {
     DataTable* GroupHeader(const TableGroupCell* cells, int n);
     DataTable* H(float px);
     DataTable* Empty(El* e);
+    DataTable* ContextMenu(PopupMenu* (*fn)(Ctx*, void*, int, PopupMenu*));
     El* IntoEl();
+    // The table itself, before the context menu is hung off it.
+    El* BuildEl();
     // The width a column is drawn at: the table's own once a drag has moved
     // it, and what the caller declared until then.
     float ColWidth(const TableState* s, int col) const;
