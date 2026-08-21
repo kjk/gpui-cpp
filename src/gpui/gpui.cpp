@@ -2943,6 +2943,49 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
     auto ring = [&](float u, float v, float rx, float ry) {
         CanvasEllipse(ctx, PX(u), PY(v), rx, ry, sw, c);
     };
+    // The radius a lucide `r` names, in the units `ring` and `dot` take.
+    auto R = [&](float u) { return u * s / 24.f; };
+    // A `<rect>` in viewBox units, which several of these are mostly made of.
+    auto rect = [&](float u, float v, float w, float h, float r) {
+        DrawRoundStroke(ctx, PX(u), PY(v), w * s / 24.f, h * s / 24.f,
+                        r * s / 24.f, sw, c);
+    };
+    // A stretch of a circle, as a polyline. Angles are degrees, zero at three
+    // o'clock and growing clockwise, which is the direction the y axis runs;
+    // a1 below a0 sweeps the other way. There is no arc primitive on the
+    // canvas and these want one — a spinner, a pie, a globe.
+    auto arc = [&](float u, float v, float r, float a0, float a1) {
+        const float kStep = 9.f;
+        int steps = (int)(fabsf(a1 - a0) / kStep) + 1;
+        float px = 0, py = 0;
+        for (int i = 0; i <= steps; i++) {
+            float t = a0 + (a1 - a0) * (float)i / (float)steps;
+            float rad = t * 3.14159265f / 180.f;
+            float qx = PX(u + r * cosf(rad));
+            float qy = PY(v + r * sinf(rad));
+            if (i > 0) {
+                CanvasLine(ctx, px, py, qx, qy, sw, c);
+            }
+            px = qx;
+            py = qy;
+        }
+    };
+    // A closed polygon, filled. The one icon in the set that is a solid shape
+    // rather than a stroke is star-fill, and a stroked outline would not read
+    // as the filled star beside the hollow one.
+    auto fillPoly = [&](const float* pts, int n) {
+        Path* path = PathNew(ctx, false);
+        if (!path) {
+            return;
+        }
+        PathMoveTo(path, PX(pts[0]), PY(pts[1]));
+        for (int i = 1; i < n; i++) {
+            PathLineTo(path, PX(pts[i * 2]), PY(pts[i * 2 + 1]));
+        }
+        PathClose(path);
+        PathFill(ctx, path, c);
+        PathFree(path);
+    };
     switch (name) {
         case IconName::WindowMinimize:
             line(5, 16, 19, 16);
@@ -3218,6 +3261,296 @@ static void DrawIcon(PaintCtx* ctx, IconName name, float x, float y, float s,
         case IconName::Maximize:
             DrawRoundStroke(ctx, x + s * 0.22f, y + s * 0.22f, s * 0.56f,
                             s * 0.56f, 1, sw, c);
+            break;
+        case IconName::Inbox:
+            // The tray's lip, then the body it folds into.
+            line(22, 12, 16, 12);
+            line(16, 12, 14, 15);
+            line(14, 15, 10, 15);
+            line(10, 15, 8, 12);
+            line(8, 12, 2, 12);
+            line(5.45f, 5.11f, 2, 12);
+            line(5.45f, 5.11f, 7.24f, 4);
+            line(7.24f, 4, 16.76f, 4);
+            line(16.76f, 4, 18.55f, 5.11f);
+            line(18.55f, 5.11f, 22, 12);
+            line(2, 12, 2, 18);
+            line(22, 12, 22, 18);
+            line(2, 18, 4, 20);
+            line(4, 20, 20, 20);
+            line(20, 20, 22, 18);
+            break;
+        case IconName::Bot:
+            line(12, 8, 12, 4);
+            line(12, 4, 8, 4);
+            rect(4, 8, 16, 12, 2);
+            line(2, 14, 4, 14);
+            line(20, 14, 22, 14);
+            line(9, 13, 9, 15);
+            line(15, 13, 15, 15);
+            break;
+        case IconName::LayoutDashboard:
+            rect(3, 3, 7, 9, 1);
+            rect(14, 3, 7, 5, 1);
+            rect(14, 12, 7, 9, 1);
+            rect(3, 16, 7, 5, 1);
+            break;
+        case IconName::Calendar:
+            line(8, 2, 8, 6);
+            line(16, 2, 16, 6);
+            rect(3, 4, 18, 18, 2);
+            line(3, 10, 21, 10);
+            break;
+        case IconName::Folder:
+            line(2, 5, 4, 3);
+            line(4, 3, 7.93f, 3);
+            line(7.93f, 3, 10.41f, 5.1f);
+            line(10.41f, 5.1f, 12.1f, 6);
+            line(12.1f, 6, 20, 6);
+            line(20, 6, 22, 8);
+            line(22, 8, 22, 18);
+            line(22, 18, 20, 20);
+            line(20, 20, 4, 20);
+            line(4, 20, 2, 18);
+            line(2, 18, 2, 5);
+            break;
+        case IconName::FolderOpen:
+            // The back of the folder, and the flap tipped forward over it.
+            line(2, 18, 2, 5);
+            line(2, 5, 4, 3);
+            line(4, 3, 7.9f, 3);
+            line(7.9f, 3, 9.59f, 3.9f);
+            line(9.59f, 3.9f, 10.4f, 5.1f);
+            line(10.4f, 5.1f, 12.07f, 6);
+            line(12.07f, 6, 18, 6);
+            line(18, 6, 20, 8);
+            line(20, 8, 20, 10);
+            line(6, 14, 7.5f, 11.1f);
+            line(7.5f, 11.1f, 9.24f, 10);
+            line(9.24f, 10, 20, 10);
+            line(20, 10, 21.94f, 12.5f);
+            line(21.94f, 12.5f, 20.4f, 18.5f);
+            line(20.4f, 18.5f, 18.45f, 20);
+            line(18.45f, 20, 4, 20);
+            line(4, 20, 2, 18);
+            break;
+        case IconName::File:
+            line(14, 2, 6, 2);
+            line(6, 2, 4, 4);
+            line(4, 4, 4, 20);
+            line(4, 20, 6, 22);
+            line(6, 22, 18, 22);
+            line(18, 22, 20, 20);
+            line(20, 20, 20, 7);
+            line(20, 7, 15, 2);
+            // The dog-eared corner.
+            line(14, 2, 14, 6);
+            line(14, 6, 16, 8);
+            line(16, 8, 20, 8);
+            break;
+        case IconName::Settings: {
+            // A cog: the hub, the body, and eight teeth standing off it. The
+            // real path is twenty-odd arcs; this is the shape they make.
+            ring(12, 12, R(3), R(3));
+            ring(12, 12, R(7.4f), R(7.4f));
+            for (int i = 0; i < 8; i++) {
+                float rad = (float)i * 3.14159265f / 4.f;
+                float cs = cosf(rad), sn = sinf(rad);
+                line(12 + cs * 7.f, 12 + sn * 7.f, 12 + cs * 9.6f,
+                     12 + sn * 9.6f);
+            }
+            break;
+        }
+        case IconName::Settings2:
+            line(20, 7, 11, 7);
+            line(14, 17, 5, 17);
+            ring(17, 17, R(3), R(3));
+            ring(7, 7, R(3), R(3));
+            break;
+        case IconName::GalleryVerticalEnd:
+            line(7, 2, 17, 2);
+            line(5, 6, 19, 6);
+            rect(3, 10, 18, 12, 2);
+            break;
+        case IconName::CircleUser:
+            ring(12, 12, R(10), R(10));
+            ring(12, 10, R(3), R(3));
+            line(7, 20.66f, 7, 19);
+            line(7, 19, 9, 17);
+            line(9, 17, 15, 17);
+            line(15, 17, 17, 19);
+            line(17, 19, 17, 20.66f);
+            break;
+        case IconName::User:
+            ring(12, 7, R(4), R(4));
+            line(19, 21, 19, 19);
+            line(19, 19, 15, 15);
+            line(15, 15, 9, 15);
+            line(9, 15, 5, 19);
+            line(5, 19, 5, 21);
+            break;
+        case IconName::PanelLeft:
+            rect(3, 3, 18, 18, 2);
+            line(9, 3, 9, 21);
+            break;
+        case IconName::PanelLeftOpen:
+            rect(3, 3, 18, 18, 2);
+            line(9, 3, 9, 21);
+            line(14, 9, 17, 12);
+            line(17, 12, 14, 15);
+            break;
+        case IconName::PanelLeftClose:
+            rect(3, 3, 18, 18, 2);
+            line(9, 3, 9, 21);
+            line(16, 15, 13, 12);
+            line(13, 12, 16, 9);
+            break;
+        case IconName::PanelRightOpen:
+            rect(3, 3, 18, 18, 2);
+            line(15, 3, 15, 21);
+            line(10, 15, 7, 12);
+            line(7, 12, 10, 9);
+            break;
+        case IconName::PanelRightClose:
+            rect(3, 3, 18, 18, 2);
+            line(15, 3, 15, 21);
+            line(8, 9, 11, 12);
+            line(11, 12, 8, 15);
+            break;
+        case IconName::LoaderCircle:
+            // Not the whole ring: the gap is what shows it turning. The real
+            // one is a single arc from three o'clock most of the way round.
+            arc(12, 12, 10, 0, 288);
+            break;
+        case IconName::Ellipsis:
+            dot(5, 12, R(1.1f));
+            dot(12, 12, R(1.1f));
+            dot(19, 12, R(1.1f));
+            break;
+        case IconName::SquareTerminal:
+            rect(3, 3, 18, 18, 2);
+            line(7, 11, 9, 9);
+            line(9, 9, 7, 7);
+            line(11, 13, 15, 13);
+            break;
+        case IconName::BookOpen:
+            line(12, 7, 12, 21);
+            line(2, 17, 2, 4);
+            line(2, 4, 3, 3);
+            line(3, 3, 8, 3);
+            line(8, 3, 12, 7);
+            line(2, 17, 3, 18);
+            line(3, 18, 9, 18);
+            line(9, 18, 12, 21);
+            line(12, 7, 16, 3);
+            line(16, 3, 21, 3);
+            line(21, 3, 22, 4);
+            line(22, 4, 22, 17);
+            line(22, 17, 21, 18);
+            line(21, 18, 15, 18);
+            line(15, 18, 12, 21);
+            break;
+        case IconName::Frame:
+            line(22, 6, 2, 6);
+            line(22, 18, 2, 18);
+            line(6, 2, 6, 22);
+            line(18, 2, 18, 22);
+            break;
+        case IconName::ChartPie:
+            // The cut wedge, then the rest of the circle around it.
+            line(12, 12, 12, 2);
+            line(12, 12, 22, 12);
+            arc(12, 12, 10, 270, 360);
+            arc(12, 12, 10, 23, 246);
+            break;
+        case IconName::Palette:
+            // Three quarters of a disc, the thumb notch, and the four wells.
+            arc(12, 12, 10, 270, 90);
+            line(12, 22, 13.65f, 20.31f);
+            line(13.65f, 20.31f, 13.21f, 18.06f);
+            line(13.21f, 18.06f, 14.88f, 16.39f);
+            line(14.88f, 16.39f, 16.88f, 16.39f);
+            line(16.88f, 16.39f, 21.97f, 10.95f);
+            arc(12, 12, 10, 354, 270);
+            dot(13.5f, 6.5f, R(1.f));
+            dot(17.5f, 10.5f, R(1.f));
+            dot(8.5f, 7.5f, R(1.f));
+            dot(6.5f, 12.5f, R(1.f));
+            break;
+        case IconName::StarFill: {
+            static const float kStar[] = {
+                12,     2,      15.09f, 8.26f, 22,     9.27f, 17,
+                14.14f, 18.18f, 21.02f, 12,    17.77f, 5.82f, 21.02f,
+                7,      14.14f, 2,      9.27f, 8.91f,  8.26f,
+            };
+            fillPoly(kStar, 10);
+            break;
+        }
+        case IconName::Minimize:
+            line(4, 14, 10, 14);
+            line(10, 14, 10, 20);
+            line(20, 10, 14, 10);
+            line(14, 10, 14, 4);
+            line(14, 10, 21, 3);
+            line(3, 21, 10, 14);
+            break;
+        case IconName::Map:
+            line(3, 6.6f, 9, 3.6f);
+            line(9, 3.6f, 15, 6.6f);
+            line(15, 6.6f, 21, 3.6f);
+            line(21, 3.6f, 21, 17.4f);
+            line(21, 17.4f, 15, 20.4f);
+            line(15, 20.4f, 9, 17.4f);
+            line(9, 17.4f, 3, 20.4f);
+            line(3, 20.4f, 3, 6.6f);
+            line(9, 3.6f, 9, 17.4f);
+            line(15, 6.6f, 15, 20.4f);
+            break;
+        case IconName::Globe:
+            ring(12, 12, R(10), R(10));
+            // The meridian, which lucide draws as two arcs meeting at the
+            // poles and reads as an ellipse the width of the sphere's waist.
+            ring(12, 12, R(4.5f), R(10));
+            line(2, 12, 22, 12);
+            break;
+        case IconName::Github: {
+            // The octocat is a single path of forty-odd curves. This is its
+            // silhouette as a filled polygon — the head with its two tufts,
+            // the two legs and the arm reaching left — which is what the mark
+            // reads as at icon sizes. github.svg is the real one.
+            static const float kOctocat[] = {
+                12,    3.5f,  14.6f, 4.4f,  17.2f, 3.6f,  17.9f, 6.2f,  19.2f,
+                8.2f,  19.2f, 11.f,  17.6f, 13.4f, 14.8f, 14.3f, 15.6f, 15.6f,
+                15.6f, 20.5f, 13.f,  21.3f, 13.f,  17.f,  11.f,  17.f,  11.f,
+                21.3f, 8.4f,  20.5f, 8.4f,  18.f,  6.2f,  17.4f, 5.f,   15.4f,
+                6.6f,  15.8f, 8.4f,  15.2f, 9.2f,  14.3f, 6.4f,  13.4f, 4.8f,
+                11.f,  4.8f,  8.2f,  6.1f,  6.2f,  6.8f,  3.6f,  9.4f,  4.4f,
+            };
+            fillPoly(kOctocat, 27);
+            break;
+        }
+        case IconName::ExternalLink:
+            line(15, 3, 21, 3);
+            line(21, 3, 21, 9);
+            line(10, 14, 21, 3);
+            line(18, 13, 18, 19);
+            line(18, 19, 16, 21);
+            line(16, 21, 5, 21);
+            line(5, 21, 3, 19);
+            line(3, 19, 3, 8);
+            line(3, 8, 5, 6);
+            line(5, 6, 11, 6);
+            break;
+        case IconName::HeartOff:
+            line(2, 2, 22, 22);
+            line(16.5f, 16.5f, 12, 21);
+            line(12, 21, 5, 14);
+            line(5, 14, 2, 8.5f);
+            line(2, 8.5f, 4.14f, 4.15f);
+            line(8.76f, 3.1f, 12, 5);
+            line(12, 5, 16.5f, 3);
+            line(16.5f, 3, 22, 8.5f);
+            line(22, 8.5f, 19.33f, 13.67f);
             break;
         default:
             break;
