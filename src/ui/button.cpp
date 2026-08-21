@@ -143,8 +143,10 @@ El* Button::IntoEl() {
     // The default variant is the background with an input-colored border, not
     // a secondary fill: crates/ui falls `button` back to the theme background
     // in light mode, and hovers toward the input color.
-    Rgba bg = th.background, fg = th.foreground,
-         hover = RgbaOpacity(th.inputBorder, 0.5f), bd = th.inputBorder;
+    // bg and hover are Backgrounds, not colours: a theme may spell either as
+    // a gradient, and a button is where most of them land.
+    Background bg = th.background, hover = RgbaOpacity(th.inputBorder, 0.5f);
+    Rgba fg = th.foreground, bd = th.inputBorder;
     // The status variants are washes, not fills: crates/ui's button_danger and
     // friends are the status color mixed 20% toward transparent, with the
     // color itself as the text and the same wash as the border. Outlined, the
@@ -200,7 +202,7 @@ El* Button::IntoEl() {
         bg = RgbaOpacity(accent, 0.2f);
         fg = accent;
         hover = RgbaOpacity(accent, 0.3f);
-        bd = bg;
+        bd = bg.color;
     }
     if (hasCustom) {
         fg = custom;
@@ -309,7 +311,7 @@ El* Button::IntoEl() {
             e->Border(borderW, bd);
         }
     }
-    if (bg.a) {
+    if (bg.gradient || bg.color.a) {
         e->Bg(bg);
     }
     if (!disabled) {

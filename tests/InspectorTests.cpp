@@ -37,7 +37,7 @@ static void WhatComesOutReadsBackIn() {
     utassert(fields & StyleFieldBg);
     utassert(fields & StyleFieldColor);
     utassert(fields & StyleFieldWidth);
-    utassert(back.bg.r == 0x17 && back.bg.g == 0x17 && back.bg.b == 0x17);
+    utassert(back.bg.color.r == 0x17 && back.bg.color.g == 0x17 && back.bg.color.b == 0x17);
     utassert(back.color.a == 0x80);
     utassert(back.borderColor.b == 0x26);
     utassertnear(back.pad.left, 10.f);
@@ -69,7 +69,7 @@ static void AnEditNamesOnlyWhatItChanged() {
                            StrL("{ \"background\": \"#f00\", \"padding\": 5 }"),
                            &t, &fields, &err));
     utassert(fields == (StyleFieldBg | StyleFieldPad));
-    utassert(t.bg.r == 255 && t.bg.g == 0 && t.bg.b == 0);
+    utassert(t.bg.color.r == 255 && t.bg.color.g == 0 && t.bg.color.b == 0);
     utassertnear(t.pad.top, 5.f);
     utassertnear(t.pad.left, 5.f);
     ArenaDelete(a);

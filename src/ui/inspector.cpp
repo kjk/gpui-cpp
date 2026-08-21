@@ -68,7 +68,7 @@ Str StyleToJson(Arena* a, const Style& style) {
     StrBuilder sb;
     sb.Append(StrL("{\n"));
     if (style.hasBg) {
-        JsonColor(sb, "background", style.bg);
+        JsonColor(sb, "background", style.bg.color);
     }
     if (style.hasColor) {
         JsonColor(sb, "color", style.color);
@@ -185,8 +185,8 @@ bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
         *error = StrDup(StrL("expected a JSON object"));
         return false;
     }
-    if (!ReadColor(root, "background", &style->bg, StyleFieldBg, fields,
-                   error) ||
+    Rgba bg = style->bg.color;
+    if (!ReadColor(root, "background", &bg, StyleFieldBg, fields, error) ||
         !ReadColor(root, "color", &style->color, StyleFieldColor, fields,
                    error) ||
         !ReadColor(root, "border_color", &style->borderColor,
@@ -206,6 +206,7 @@ bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
                  error)) {
         return false;
     }
+    style->bg = bg;
     const JsonValue* pad = JsonGet(root, "padding");
     if (pad && pad->kind == JsonKind::Number) {
         float v = (float)pad->num;

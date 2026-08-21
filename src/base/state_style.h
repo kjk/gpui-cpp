@@ -37,11 +37,11 @@ struct StateStyle {
     Style style = {};
     uint32_t set = 0;
 
-    StateStyle& Bg(Rgba c);
+    StateStyle& Bg(Background c);
     StateStyle& Fg(Rgba c);
     StateStyle& Border(float w, Rgba c);
     StateStyle& Radius(float v);
-    StateStyle& HoverBg(Rgba c);
+    StateStyle& HoverBg(Background c);
     StateStyle& HoverFg(Rgba c);
     StateStyle& Opacity(float v);
 
