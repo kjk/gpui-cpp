@@ -686,3 +686,51 @@ cargo run -p system_monitor
   holding a column of fixed-height children, whose numbers came from running
   the same tree through the Rust crate. The C++ engine already matched it —
   the port is faithful, the translation into it was not.
+- 2026-08-21: `div()` is a block container, and the four things that came
+  loose when it became one. `gpui::Style` had no display property: every box
+  in the tree was a flex container, because the old engine only knew how to be
+  one and the taffy port kept that by hardcoding `taffy::Display::Flex`. GPUI's
+  `div()` is `display: block`, `.flex()` is what turns the flex model on, and
+  `h_flex()`/`v_flex()` are `div().flex().flex_row()` / `.flex_col()`. `Style`
+  carries a `Display` now, defaulting to `Block`, and `FlexRow`/`FlexCol`/the
+  new `Flex` set it.
+
+  The one deviation, and it is deliberate: the alignment setters —
+  `ItemsCenter`, `JustifyBetween`, `Gap` and their neighbours — also turn the
+  flex model on. Rust does not do that; `div().items_center()` there is a
+  block container with a property that does nothing. But a Rust caller who
+  wants a row writes `h_flex()`, and this tree's callers wrote the alignment
+  instead, because until now every box was already a flex container. Reading
+  the intent from the alignment is what keeps those several hundred call sites
+  meaning what the person who wrote them saw. A bare `Div()` — no alignment,
+  no gap — is the block container `div()` is, and that is the case that
+  changed.
+
+  `table_in_scrollable` is what this was for. Its page is
+  `div().size_full().overflow_y_scrollbar()` holding a `v_flex` column of 400
+  + 300 + 800, which is taller than the 700 window and meant to be: that is
+  what the scroll container is for. As a flex container the page had a deficit
+  to share out, so it squashed the 400px filler to 112. As a block container
+  it does not stretch or shrink anything, the column overflows, and the page
+  scrolls. Ground truth agreed the engine was right and the translation was
+  wrong — the same tree through the Rust crate squashes it identically.
+
+  What else moved, from a sweep of 15 examples and all 65 story pages against
+  the same tree before the change. 4 examples and 16 pages differ, and every
+  one of them differs by getting closer to the Rust:
+
+  - `rich_text`'s table fits its three columns instead of running the third
+    one off the right edge, and its paragraphs wrap. This was on the list as
+    its own bug; a block container is the answer to it too.
+  - The Form page's fields fill the row, which is what a full-width form
+    field is.
+  - `date_picker`'s sections stack. They say `.v_flex()` in the Rust and
+    `FlexCol()` here, and were being laid out as several columns side by side
+    — flex-wrap in a column direction, wrapping because the height was
+    constrained. Nothing constrains it now.
+  - `avatar`'s two groups stack, for the same reason and the same
+    `.v_flex()`.
+  - `virtual_list`'s rows have the `gap_1` between them that the Rust asks
+    for. They were being shrunk flush against each other.
+
+  `system_monitor` also differs, on the CPU line, because it is live data.
