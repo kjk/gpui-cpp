@@ -508,7 +508,7 @@ struct LeafMeasureCtx {
     const Style* style;
 };
 
-static SizeF LeafMeasureThunk(SizeOptF knownDimensions,
+static SizeF LeafMeasureThunk(SizeFOpt knownDimensions,
                               SizeAvail availableSpace, void* ctx) {
     LeafMeasureCtx* c = (LeafMeasureCtx*)ctx;
     if (!c->tree->measureFn) {
@@ -570,8 +570,8 @@ LayoutOutput TaffyTree::ComputeChildLayout(NodeId node, LayoutInput inputs) {
     return ComputeBlockChildLayout(node, inputs, nullptr);
 }
 
-float TaffyTree::MeasureChildSize(NodeId node, SizeOptF knownDimensions,
-                                  SizeOptF parentSize, SizeAvail availableSpace,
+float TaffyTree::MeasureChildSize(NodeId node, SizeFOpt knownDimensions,
+                                  SizeFOpt parentSize, SizeAvail availableSpace,
                                   SizingMode sizingMode, AbsoluteAxis axis,
                                   LineBool verticalMarginsAreCollapsible) {
     LayoutInput in;
@@ -585,8 +585,8 @@ float TaffyTree::MeasureChildSize(NodeId node, SizeOptF knownDimensions,
     return GetAbs(ComputeChildLayout(node, in).size, axis);
 }
 
-SizeF TaffyTree::MeasureChildSizeBoth(NodeId node, SizeOptF knownDimensions,
-                                      SizeOptF parentSize,
+SizeF TaffyTree::MeasureChildSizeBoth(NodeId node, SizeFOpt knownDimensions,
+                                      SizeFOpt parentSize,
                                       SizeAvail availableSpace,
                                       SizingMode sizingMode,
                                       LineBool verticalMarginsAreCollapsible) {
@@ -602,7 +602,7 @@ SizeF TaffyTree::MeasureChildSizeBoth(NodeId node, SizeOptF knownDimensions,
 }
 
 LayoutOutput TaffyTree::PerformChildLayout(
-    NodeId node, SizeOptF knownDimensions, SizeOptF parentSize,
+    NodeId node, SizeFOpt knownDimensions, SizeFOpt parentSize,
     SizeAvail availableSpace, SizingMode sizingMode,
     LineBool verticalMarginsAreCollapsible) {
     LayoutInput in;

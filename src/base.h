@@ -461,7 +461,7 @@ constexpr PointF operator+(PointF a, PointF b) {
 // Rust's `Size<f32>`. Rust spells the fields `width` and `height`; they are
 // `w` and `h` here, which is what gpui has always called them and what the
 // taffy port's own `SizeDim` and `SizeAvail` — which are not this type — still
-// spell out in full. Taffy's `SizeOptF` *is* this type: an `Option<f32>` there
+// spell out in full. Taffy's `SizeFOpt` *is* this type: an `Option<f32>` there
 // is a NaN-tagged float, so `Size<Option<f32>>` is `Size<f32>`.
 struct SizeF {
     float w = 0.0f;

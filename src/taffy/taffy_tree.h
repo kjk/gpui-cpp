@@ -32,7 +32,7 @@ struct BlockContext;
 // Computes the intrinsic size of a leaf node. Rust passes a closure that
 // captures the tree; the context and userData here are what it would have
 // captured.
-using MeasureFn = SizeF (*)(SizeOptF knownDimensions, SizeAvail availableSpace,
+using MeasureFn = SizeF (*)(SizeFOpt knownDimensions, SizeAvail availableSpace,
                             NodeId node, void* nodeContext, const Style* style,
                             void* userData);
 
@@ -177,16 +177,16 @@ struct TaffyTree {
                                          BlockContext* blockCtx);
 
     // Rust's `LayoutPartialTreeExt` conveniences.
-    float MeasureChildSize(NodeId node, SizeOptF knownDimensions,
-                           SizeOptF parentSize, SizeAvail availableSpace,
+    float MeasureChildSize(NodeId node, SizeFOpt knownDimensions,
+                           SizeFOpt parentSize, SizeAvail availableSpace,
                            SizingMode sizingMode, AbsoluteAxis axis,
                            LineBool verticalMarginsAreCollapsible);
-    SizeF MeasureChildSizeBoth(NodeId node, SizeOptF knownDimensions,
-                               SizeOptF parentSize, SizeAvail availableSpace,
+    SizeF MeasureChildSizeBoth(NodeId node, SizeFOpt knownDimensions,
+                               SizeFOpt parentSize, SizeAvail availableSpace,
                                SizingMode sizingMode,
                                LineBool verticalMarginsAreCollapsible);
-    LayoutOutput PerformChildLayout(NodeId node, SizeOptF knownDimensions,
-                                    SizeOptF parentSize,
+    LayoutOutput PerformChildLayout(NodeId node, SizeFOpt knownDimensions,
+                                    SizeFOpt parentSize,
                                     SizeAvail availableSpace,
                                     SizingMode sizingMode,
                                     LineBool verticalMarginsAreCollapsible);

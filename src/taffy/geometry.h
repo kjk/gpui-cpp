@@ -303,52 +303,52 @@ constexpr float CrossEnd(RectF r, FlexDirection d) {
     return IsRow(d) ? r.bottom : r.right;
 }
 
-// ─── SizeOptF / PointOptF / RectOptF ─────────────────────────────────────
+// ─── SizeFOpt / PointFOpt / RectFOpt ─────────────────────────────────────
 //
 // Rust's `Size<Option<f32>>`, `Point<Option<f32>>` and `Rect<Option<f32>>`.
 // An `Optf` is a float (see above), so these are the float shapes themselves
 // — the same eight and sixteen bytes, and no conversion between the definite
 // and the optional view of one. The aliases stay because a signature saying
-// `SizeOptF` says its components may be `None`, which `SizeF` does not; the
+// `SizeFOpt` says its components may be `None`, which `SizeF` does not; the
 // two default differently, so a value that starts out unknown has to be
-// spelled `SizeOptFNone()` rather than left to `{}`.
+// spelled `SizeFOptNone()` rather than left to `{}`.
 
-using SizeOptF = SizeF;
-using PointOptF = PointF;
-using RectOptF = RectF;
+using SizeFOpt = SizeF;
+using PointFOpt = PointF;
+using RectFOpt = RectF;
 
-constexpr SizeOptF SizeOptFNone() {
+constexpr SizeFOpt SizeFOptNone() {
     return {None(), None()};
 }
 
-constexpr PointOptF PointOptFNone() {
+constexpr PointFOpt PointFOptNone() {
     return {None(), None()};
 }
 
-constexpr RectOptF RectOptFNone() {
+constexpr RectFOpt RectFOptNone() {
     return {None(), None(), None(), None()};
 }
 
 // Rust's `Size::<Option<f32>>::from_cross`.
-constexpr SizeOptF SizeOptFFromCross(FlexDirection d, Optf v) {
-    return IsRow(d) ? SizeOptF{None(), v} : SizeOptF{v, None()};
+constexpr SizeFOpt SizeFOptFromCross(FlexDirection d, Optf v) {
+    return IsRow(d) ? SizeFOpt{None(), v} : SizeFOpt{v, None()};
 }
 
-constexpr SizeF UnwrapOr(SizeOptF s, SizeF alt) {
+constexpr SizeF UnwrapOr(SizeFOpt s, SizeF alt) {
     return {UnwrapOr(s.w, alt.w), UnwrapOr(s.h, alt.h)};
 }
 
-constexpr SizeOptF Or(SizeOptF s, SizeOptF alt) {
+constexpr SizeFOpt Or(SizeFOpt s, SizeFOpt alt) {
     return {Or(s.w, alt.w), Or(s.h, alt.h)};
 }
 
-constexpr bool BothAxisDefined(SizeOptF s) {
+constexpr bool BothAxisDefined(SizeFOpt s) {
     return IsSome(s.w) && IsSome(s.h);
 }
 
 // If one axis is Some and the other None, fill the None one in from the
 // ratio. Anything else is returned unchanged.
-constexpr SizeOptF MaybeApplyAspectRatio(SizeOptF s, Optf aspectRatio) {
+constexpr SizeFOpt MaybeApplyAspectRatio(SizeFOpt s, Optf aspectRatio) {
     if (IsNone(aspectRatio)) {
         return s;
     }
@@ -361,9 +361,9 @@ constexpr SizeOptF MaybeApplyAspectRatio(SizeOptF s, Optf aspectRatio) {
     return s;
 }
 
-// `==` on two SizeOptF is float comparison and None is a NaN, so the two
+// `==` on two SizeFOpt is float comparison and None is a NaN, so the two
 // Nones would not compare equal. This is Rust's `PartialEq`, component-wise.
-constexpr bool SizeOptFEq(SizeOptF a, SizeOptF b) {
+constexpr bool SizeFOptEq(SizeFOpt a, SizeFOpt b) {
     return OptfEq(a.w, b.w) && OptfEq(a.h, b.h);
 }
 

@@ -29,7 +29,7 @@ static uint32_t OptionCacheKey(Optf v) {
     return IsSome(v) ? ToBits(v) : kInfinityBits;
 }
 
-static uint64_t SizeOptionCacheKey(SizeOptF s) {
+static uint64_t SizeOptionCacheKey(SizeFOpt s) {
     return ((uint64_t)OptionCacheKey(s.w) << 32) |
            (uint64_t)OptionCacheKey(s.h);
 }
@@ -50,7 +50,7 @@ static uint32_t MixedCacheKey(Optf kd, AvailableSpace avs) {
     return IsSome(kd) ? ToBits(kd) : AvailableSpaceCacheKey(avs);
 }
 
-static uint64_t SizeMixedCacheKey(SizeOptF kd, SizeAvail avs) {
+static uint64_t SizeMixedCacheKey(SizeFOpt kd, SizeAvail avs) {
     return ((uint64_t)MixedCacheKey(kd.w, avs.width) << 32) |
            (uint64_t)MixedCacheKey(kd.h, avs.height);
 }
@@ -96,7 +96,7 @@ uint64_t CacheKey::XAxisParentSize() const {
 //
 // Definite available space shares a slot with MaxContent because a node is
 // generally sized under one or the other, not both.
-static int ComputeCacheSlot(SizeOptF knownDimensions,
+static int ComputeCacheSlot(SizeFOpt knownDimensions,
                             SizeAvail availableSpace) {
     bool hasKnownWidth = IsSome(knownDimensions.w);
     bool hasKnownHeight = IsSome(knownDimensions.h);

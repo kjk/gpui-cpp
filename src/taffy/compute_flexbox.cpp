@@ -30,9 +30,9 @@ struct FlexItem {
     // The order of the node relative to its siblings.
     uint32_t order = 0;
 
-    SizeOptF size = SizeOptFNone();
-    SizeOptF minSize = SizeOptFNone();
-    SizeOptF maxSize = SizeOptFNone();
+    SizeFOpt size = SizeFOptNone();
+    SizeFOpt minSize = SizeFOptNone();
+    SizeFOpt maxSize = SizeFOptNone();
     AlignSelf alignSelf;
 
     PointOverflow overflow;
@@ -44,7 +44,7 @@ struct FlexItem {
     // automatic minimum sizes.
     float resolvedMinimumMainSize = 0.0f;
 
-    RectOptF inset = RectOptFNone();
+    RectFOpt inset = RectFOptNone();
     RectF margin;
     RectBool marginIsAuto;
     RectF padding;
@@ -99,8 +99,8 @@ struct AlgoConstants {
     bool isWrap = false;
     bool isWrapReverse = false;
 
-    SizeOptF minSize = SizeOptFNone();
-    SizeOptF maxSize = SizeOptFNone();
+    SizeFOpt minSize = SizeFOptNone();
+    SizeFOpt maxSize = SizeFOptNone();
     RectF margin;
     RectF border;
     // padding + border + scrollbar gutter.
@@ -113,8 +113,8 @@ struct AlgoConstants {
 
     // The border-box and content-box sizes of the node being laid out, if
     // known.
-    SizeOptF nodeOuterSize = SizeOptFNone();
-    SizeOptF nodeInnerSize = SizeOptFNone();
+    SizeFOpt nodeOuterSize = SizeFOptNone();
+    SizeFOpt nodeInnerSize = SizeFOptNone();
 
     // The size of the virtual container holding the flex items, and of the
     // internal container.
@@ -141,7 +141,7 @@ Optf Filter(Optf v, bool keep) {
 // ─── compute_constants ───────────────────────────────────────────────────
 
 AlgoConstants ComputeConstants(TaffyTree* tree, const Style& style,
-                               SizeOptF knownDimensions, SizeOptF parentSize) {
+                               SizeFOpt knownDimensions, SizeFOpt parentSize) {
     CalcResolver calc = tree->calc;
     AlgoConstants c;
     c.dir = style.flexDirection;
@@ -182,7 +182,7 @@ AlgoConstants ComputeConstants(TaffyTree* tree, const Style& style,
 
     c.nodeOuterSize = knownDimensions;
     c.nodeInnerSize = MaybeSub(c.nodeOuterSize, c.contentBoxInset.SumAxes());
-    c.gap = style.gap.ResolveOrZero(Or(c.nodeInnerSize, SizeOptF{0, 0}), calc);
+    c.gap = style.gap.ResolveOrZero(Or(c.nodeInnerSize, SizeFOpt{0, 0}), calc);
 
     c.minSize =
         MaybeAdd(MaybeApplyAspectRatio(
@@ -256,7 +256,7 @@ void GenerateAnonymousFlexItems(TaffyTree* tree, NodeId node,
 // 9.2 Line Length Determination —
 // https://www.w3.org/TR/css-flexbox-1/#algo-available
 
-SizeAvail DetermineAvailableSpace(SizeOptF knownDimensions,
+SizeAvail DetermineAvailableSpace(SizeFOpt knownDimensions,
                                   SizeAvail outerAvailableSpace,
                                   const AlgoConstants& c) {
     // min/max/preferred size styles have already been folded into
@@ -296,7 +296,7 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
         const Style& cs = tree->GetStyle(child.node);
 
         Optf crossAxisParentSize = Cross(c.nodeInnerSize, dir);
-        SizeOptF childParentSize = SizeOptFFromCross(dir, crossAxisParentSize);
+        SizeFOpt childParentSize = SizeFOptFromCross(dir, crossAxisParentSize);
 
         float crossAxisMarginSum = CrossAxisSum(c.margin, dir);
         Optf childMinCross =
@@ -327,7 +327,7 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
                 break;
         }
 
-        SizeOptF childKnownDimensions = child.size;
+        SizeFOpt childKnownDimensions = child.size;
         SetMain(&childKnownDimensions, dir, None());
         if (child.alignSelf.keyword == AlignItemsKeyword::Stretch &&
             !child.marginIsAuto.CrossStart(dir) &&
@@ -391,7 +391,7 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
                                MainAxisSum(child.padding, dir) -
                                MainAxisSum(child.border, dir);
 
-        SizeOptF paddingBorderAxesSums =
+        SizeFOpt paddingBorderAxesSums =
             AsOptional((child.padding + child.border).SumAxes());
 
         // The main-axis `parent_size` is deliberately left unset below: it is
@@ -399,7 +399,7 @@ void DetermineFlexBaseSize(TaffyTree* tree, const AlgoConstants& c,
         // not contribute to a min-content contribution in that same axis. The
         // cross axis keeps its usual values so wrapping content wraps right.
         // https://drafts.csswg.org/css-sizing-3/#min-percentage-contribution
-        SizeOptF automaticMin = {MaybeIntoAutomaticMinSize(child.overflow.x),
+        SizeFOpt automaticMin = {MaybeIntoAutomaticMinSize(child.overflow.x),
                                  MaybeIntoAutomaticMinSize(child.overflow.y)};
         Optf styleMinMainSize = Main(Or(child.minSize, automaticMin), dir);
 
@@ -615,7 +615,7 @@ void DetermineContainerMainSize(TaffyTree* tree, SizeAvail availableSpace,
                         childAvailableSpace
                             .SetCross(dir, crossAxisAvailableSpace);
 
-                        SizeOptF childKnownDimensions = item.size;
+                        SizeFOpt childKnownDimensions = item.size;
                         SetMain(&childKnownDimensions, dir, None());
                         if (item.alignSelf
                                     .keyword == AlignItemsKeyword::Stretch &&
@@ -916,7 +916,7 @@ void DetermineHypotheticalCrossSize(TaffyTree* tree, FlexLine* line,
         if (IsSome(childCross)) {
             childInnerCross = childCross;
         } else {
-            SizeOptF known = {c.isRow ? Some(child.targetSize.w) : childCross,
+            SizeFOpt known = {c.isRow ? Some(child.targetSize.w) : childCross,
                               c.isRow ? childCross : Some(child.targetSize.h)};
             SizeAvail avail = {c.isRow ? childKnownMain : childAvailableCross,
                                c.isRow ? childAvailableCross : childKnownMain};
@@ -938,7 +938,7 @@ void DetermineHypotheticalCrossSize(TaffyTree* tree, FlexLine* line,
 
 // ─── calculate_children_base_lines ───────────────────────────────────────
 
-void CalculateChildrenBaseLines(TaffyTree* tree, SizeOptF nodeSize,
+void CalculateChildrenBaseLines(TaffyTree* tree, SizeFOpt nodeSize,
                                 SizeAvail availableSpace, Vec<FlexLine>* lines,
                                 const AlgoConstants& c) {
     // Baselines are only computed for flex rows: baseline alignment is only
@@ -967,7 +967,7 @@ void CalculateChildrenBaseLines(TaffyTree* tree, SizeOptF nodeSize,
             if (child.alignSelf.keyword != AlignItemsKeyword::Baseline) {
                 continue;
             }
-            SizeOptF known = {c.isRow ? Some(child.targetSize.w)
+            SizeFOpt known = {c.isRow ? Some(child.targetSize.w)
                                       : Some(child.hypotheticalInnerSize.w),
                               c.isRow ? Some(child.hypotheticalInnerSize.h)
                                       : Some(child.targetSize.h)};
@@ -989,7 +989,7 @@ void CalculateChildrenBaseLines(TaffyTree* tree, SizeOptF nodeSize,
 //
 // https://www.w3.org/TR/css-flexbox-1/#algo-cross-line
 
-void CalculateCrossSize(Vec<FlexLine>* lines, SizeOptF nodeSize,
+void CalculateCrossSize(Vec<FlexLine>* lines, SizeFOpt nodeSize,
                         const AlgoConstants& c) {
     FlexDirection dir = c.dir;
     if (lines->len == 0) {
@@ -1050,7 +1050,7 @@ void CalculateCrossSize(Vec<FlexLine>* lines, SizeOptF nodeSize,
 //
 // https://www.w3.org/TR/css-flexbox-1/#algo-line-stretch
 
-void HandleAlignContentStretch(Vec<FlexLine>* lines, SizeOptF nodeSize,
+void HandleAlignContentStretch(Vec<FlexLine>* lines, SizeFOpt nodeSize,
                                const AlgoConstants& c) {
     if (c.alignContent.keyword != AlignContentKeyword::Stretch ||
         lines->len == 0) {
@@ -1111,7 +1111,7 @@ void DetermineUsedCrossSize(TaffyTree* tree, Vec<FlexLine>* lines,
                 SizeF boxSizingAdjustment =
                     cs.boxSizing == BoxSizing::ContentBox ? pbSum
                                                           : SizeF::Zero();
-                SizeOptF maxSizeIgnoringAspectRatio =
+                SizeFOpt maxSizeIgnoringAspectRatio =
                     MaybeAdd(cs.maxSize.MaybeResolve(c.nodeInnerSize, calc),
                              boxSizingAdjustment);
                 used =
@@ -1294,7 +1294,7 @@ void ResolveCrossAxisAutoMargins(Vec<FlexLine>* lines, const AlgoConstants& c) {
 //
 // https://www.w3.org/TR/css-flexbox-1/#algo-cross-container
 
-float DetermineContainerCrossSize(Vec<FlexLine>* lines, SizeOptF nodeSize,
+float DetermineContainerCrossSize(Vec<FlexLine>* lines, SizeFOpt nodeSize,
                                   AlgoConstants* c) {
     FlexDirection dir = c->dir;
     float totalCrossAxisGap = SumAxisGaps(Cross(c->gap, dir), lines->len);
@@ -1348,7 +1348,7 @@ void AlignFlexLinesPerAlignContent(Vec<FlexLine>* lines, const AlgoConstants& c,
 void CalculateFlexItem(TaffyTree* tree, FlexItem* item, float* totalOffsetMain,
                        float totalOffsetCross, float lineOffsetCross,
                        SizeF* totalContentSize, SizeF containerSize,
-                       SizeOptF nodeInnerSize, FlexDirection direction,
+                       SizeFOpt nodeInnerSize, FlexDirection direction,
                        Direction layoutDirection) {
     LayoutOutput layoutOutput = tree->PerformChildLayout(
         item->node, AsOptional(item->targetSize), nodeInnerSize,
@@ -1449,7 +1449,7 @@ void CalculateFlexItem(TaffyTree* tree, FlexItem* item, float* totalOffsetMain,
 
 void CalculateLayoutLine(TaffyTree* tree, FlexLine* line,
                          float* totalOffsetCross, SizeF* contentSize,
-                         SizeF containerSize, SizeOptF nodeInnerSize,
+                         SizeF containerSize, SizeFOpt nodeInnerSize,
                          RectF paddingBorder, FlexDirection direction,
                          Direction layoutDirection) {
     float totalOffsetMain =
@@ -1532,7 +1532,7 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
         float scrollbarWidth = cs.scrollbarWidth;
         Optf aspectRatio = cs.aspectRatio;
         AlignSelf alignSelf = cs.alignSelf.UnwrapOr(c.alignItems);
-        RectOptF margin = cs.margin
+        RectFOpt margin = cs.margin
                               .MaybeResolve(Some(insetRelativeSize.w), calc);
         RectF padding = cs.padding
                             .ResolveOrZero(Some(insetRelativeSize.w), calc);
@@ -1543,19 +1543,19 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                                         : SizeF::Zero();
 
         // Insets resolve against the container size minus its border.
-        RectOptF inset =
+        RectFOpt inset =
             cs.inset.MaybeResolveZip(AsOptional(insetRelativeSize), calc);
         Optf left = inset.left;
         Optf right = inset.right;
         Optf top = inset.top;
         Optf bottom = inset.bottom;
 
-        SizeOptF styleSize = MaybeAdd(
+        SizeFOpt styleSize = MaybeAdd(
             MaybeApplyAspectRatio(
                 cs.size.MaybeResolve(AsOptional(insetRelativeSize), calc),
                 aspectRatio),
             boxSizingAdjustment);
-        SizeOptF minSize =
+        SizeFOpt minSize =
             MaybeMax(Or(MaybeAdd(MaybeApplyAspectRatio(
                                      cs.minSize.MaybeResolve(
                                          AsOptional(insetRelativeSize), calc),
@@ -1563,12 +1563,12 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
                                  boxSizingAdjustment),
                         AsOptional(paddingBorderSum)),
                      paddingBorderSum);
-        SizeOptF maxSize = MaybeAdd(
+        SizeFOpt maxSize = MaybeAdd(
             MaybeApplyAspectRatio(
                 cs.maxSize.MaybeResolve(AsOptional(insetRelativeSize), calc),
                 aspectRatio),
             boxSizingAdjustment);
-        SizeOptF knownDimensions = MaybeClamp(styleSize, minSize, maxSize);
+        SizeFOpt knownDimensions = MaybeClamp(styleSize, minSize, maxSize);
 
         // Fill in the width from left/right (and reapply the aspect ratio) if
         // the width is not known and both insets are set.
@@ -1823,8 +1823,8 @@ SizeF PerformAbsoluteLayoutOnAbsoluteChildren(TaffyTree* tree, NodeId node,
 
 LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
                                 const LayoutInput& inputs) {
-    SizeOptF knownDimensions = inputs.knownDimensions;
-    SizeOptF parentSize = inputs.parentSize;
+    SizeFOpt knownDimensions = inputs.knownDimensions;
+    SizeFOpt parentSize = inputs.parentSize;
     RunMode runMode = inputs.runMode;
 
     AlgoConstants constants = ComputeConstants(tree, tree->GetStyle(node),
@@ -1941,7 +1941,7 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
         if (tree->GetStyle(child).BoxGenMode() == BoxGenerationMode::None) {
             tree->SetUnroundedLayout(child, Layout::WithOrder((uint32_t)order));
             tree->PerformChildLayout(
-                child, SizeOptFNone(), SizeOptFNone(), SizeAvail::MaxContent(),
+                child, SizeFOptNone(), SizeFOptNone(), SizeAvail::MaxContent(),
                 SizingMode::InherentSize, LineBool::False());
         }
     }
@@ -1972,7 +1972,7 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
 
     return LayoutOutput::FromSizesAndBaselines(
         constants.containerSize, Max(inflowContentSize, absoluteContentSize),
-        PointOptF{None(), firstVerticalBaseline});
+        PointFOpt{None(), firstVerticalBaseline});
 }
 
 } // namespace
@@ -1982,8 +1982,8 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
 LayoutOutput ComputeFlexboxLayout(TaffyTree* tree, NodeId node,
                                   const LayoutInput& inputs) {
     CalcResolver calc = tree->calc;
-    SizeOptF knownDimensions = inputs.knownDimensions;
-    SizeOptF parentSize = inputs.parentSize;
+    SizeFOpt knownDimensions = inputs.knownDimensions;
+    SizeFOpt parentSize = inputs.parentSize;
     RunMode runMode = inputs.runMode;
     const Style& style = tree->GetStyle(node);
 
@@ -1995,15 +1995,15 @@ LayoutOutput ComputeFlexboxLayout(TaffyTree* tree, NodeId node,
                                     ? paddingBorderSum
                                     : SizeF::Zero();
 
-    SizeOptF minSize =
+    SizeFOpt minSize =
         MaybeAdd(MaybeApplyAspectRatio(
                      style.minSize.MaybeResolve(parentSize, calc), aspectRatio),
                  boxSizingAdjustment);
-    SizeOptF maxSize =
+    SizeFOpt maxSize =
         MaybeAdd(MaybeApplyAspectRatio(
                      style.maxSize.MaybeResolve(parentSize, calc), aspectRatio),
                  boxSizingAdjustment);
-    SizeOptF clampedStyleSize = SizeOptFNone();
+    SizeFOpt clampedStyleSize = SizeFOptNone();
     if (inputs.sizingMode == SizingMode::InherentSize) {
         clampedStyleSize = MaybeClamp(
             MaybeAdd(
@@ -2015,7 +2015,7 @@ LayoutOutput ComputeFlexboxLayout(TaffyTree* tree, NodeId node,
 
     // If both min and max are set in an axis and max <= min, that determines
     // the size in that axis.
-    SizeOptF minMaxDefiniteSize = SizeOptFNone();
+    SizeFOpt minMaxDefiniteSize = SizeFOptNone();
     if (IsSome(minSize.w) && IsSome(maxSize.w) && maxSize.w <= minSize.w) {
         minMaxDefiniteSize.w = minSize.w;
     }
@@ -2024,7 +2024,7 @@ LayoutOutput ComputeFlexboxLayout(TaffyTree* tree, NodeId node,
     }
 
     // The container's size is floored by its padding and border.
-    SizeOptF styledBasedKnownDimensions = Or(
+    SizeFOpt styledBasedKnownDimensions = Or(
         knownDimensions,
         MaybeMax(Or(minMaxDefiniteSize, clampedStyleSize), paddingBorderSum));
 

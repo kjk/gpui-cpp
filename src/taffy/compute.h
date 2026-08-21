@@ -31,7 +31,7 @@ void RoundLayout(TaffyTree* tree, NodeId node);
 
 // Measures a leaf's intrinsic size. Rust passes a closure; the void* is what
 // it would have captured.
-using LeafMeasureFn = SizeF (*)(SizeOptF knownDimensions,
+using LeafMeasureFn = SizeF (*)(SizeFOpt knownDimensions,
                                 SizeAvail availableSpace, void* ctx);
 
 // Apply padding, border and aspect-ratio to a childless node, then defer to

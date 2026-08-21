@@ -2249,7 +2249,7 @@ struct LayoutMeasureCtx {
 
 // The width a text run may use: a known width wins, then a definite
 // constraint if the run wraps or truncates, else unconstrained.
-static float TextMeasureWidth(const El* e, taffy::SizeOptF known,
+static float TextMeasureWidth(const El* e, taffy::SizeFOpt known,
                               taffy::SizeAvail avail) {
     if (taffy::IsSome(known.w)) {
         return known.w;
@@ -2283,7 +2283,7 @@ static float TextMeasureWidth(const El* e, taffy::SizeOptF known,
 // it quantises text boxes while the padding, gaps and borders around them
 // stay where they were. Whole model or none of it; port-progress.md has the
 // numbers.
-static taffy::SizeF LayoutMeasure(taffy::SizeOptF known, taffy::SizeAvail avail,
+static taffy::SizeF LayoutMeasure(taffy::SizeFOpt known, taffy::SizeAvail avail,
                                   taffy::NodeId node, void* nodeContext,
                                   const taffy::Style* nodeStyle,
                                   void* userData) {
