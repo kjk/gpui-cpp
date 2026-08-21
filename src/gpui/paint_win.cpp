@@ -3,7 +3,10 @@
 #include "gpui/paint.h"
 
 #include <d2d1.h>
+#include <d2d1_1.h>
+#include <d3d11.h>
 #include <dwrite.h>
+#include <dxgi1_2.h>
 #include <math.h>
 #include <wincodec.h>
 
@@ -22,7 +25,14 @@ static void Rel(T** p) {
 }
 
 struct PaintApp {
-    ID2D1Factory* d2d = nullptr;
+    ID2D1Factory1* d2d = nullptr;
+    // The D3D11 device the swap chains and the D2D device context all share.
+    // Made lazily, with the first window, so a run that only ever paints
+    // offscreen never pays for it.
+    ID3D11Device* d3d = nullptr;
+    IDXGIDevice1* dxgi = nullptr;
+    IDXGIFactory2* dxgiFactory = nullptr;
+    ID2D1Device* d2dDevice = nullptr;
     IDWriteFactory* dwrite = nullptr;
     IDWriteTextFormat* font12 = nullptr;
     IDWriteTextFormat* font14 = nullptr;
@@ -32,10 +42,29 @@ struct PaintApp {
     IDWriteTextFormat* fontMono = nullptr;
 };
 
-// A DC render target is bound to a fresh HDC every WM_PAINT, so the target
-// itself survives across frames and only the binding changes.
+// The window target is a DXGI flip-model swap chain with a D2D device context
+// drawing into its back buffer, which is the shape GPUI's own Windows renderer
+// has. The DC render target it used to be looks simpler — bind a fresh HDC
+// every WM_PAINT and let GDI blit — but D2D has no GPU path to an HDC: BindDC
+// and EndDraw each map a staging texture through the DXGI/GDI interop and copy
+// the whole surface across the bus, which profiling (winperf against the
+// fps_monitor example) showed costing ~70% of the frame.
+//
+// Not ID2D1HwndRenderTarget either, which would have been the one-line
+// version: its blt-model presentation never reaches the redirection surface
+// PrintWindow(PW_RENDERFULLCONTENT) reads, so every window came out blank in
+// cmd/shot.ts. A flip-model chain composites the way Rust's does and captures.
+//
+// Only the offscreen target, which has to hand its pixels back as a DIB, still
+// uses a DC render target.
 struct PaintTarget {
     ID2D1DCRenderTarget* dcRt = nullptr;
+    IDXGISwapChain1* swap = nullptr;
+    ID2D1DeviceContext* dc = nullptr;
+    ID2D1Bitmap1* backBuffer = nullptr;
+    HWND hwnd = nullptr;
+    int pxW = 0;
+    int pxH = 0;
     ID2D1RenderTarget* rt = nullptr;
     ID2D1SolidColorBrush* brush = nullptr;
 };
@@ -89,6 +118,10 @@ void PaintAppFree(PaintApp* pa) {
     Rel(&pa->font24);
     Rel(&pa->fontMono);
     Rel(&pa->dwrite);
+    Rel(&pa->d2dDevice);
+    Rel(&pa->dxgiFactory);
+    Rel(&pa->dxgi);
+    Rel(&pa->d3d);
     Rel(&pa->d2d);
     delete pa;
 }
@@ -99,42 +132,184 @@ void PaintTargetFree(PaintCtx* ctx) {
     }
     Rel(&ctx->rt->brush);
     Rel(&ctx->rt->dcRt);
+    if (ctx->rt->dc) {
+        ctx->rt->dc->SetTarget(nullptr);
+    }
+    Rel(&ctx->rt->backBuffer);
+    Rel(&ctx->rt->dc);
+    Rel(&ctx->rt->swap);
     delete ctx->rt;
     ctx->rt = nullptr;
+}
+
+// The shared D3D11 / D2D device, made once and kept for the process. BGRA
+// support is what lets D2D interop with the D3D device at all; the
+// single-threaded flag matches the single-threaded D2D factory above.
+static bool EnsureDevice(PaintApp* pa) {
+    if (pa->d2dDevice) {
+        return true;
+    }
+    UINT flags =
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED;
+    D3D_FEATURE_LEVEL levels[] = {
+        D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3,  D3D_FEATURE_LEVEL_9_1,
+    };
+    UINT nLevels = (UINT)(sizeof(levels) / sizeof(levels[0]));
+    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                                   flags, levels, nLevels, D3D11_SDK_VERSION,
+                                   &pa->d3d, nullptr, nullptr);
+    if (FAILED(hr)) {
+        // No hardware device — a VM without a GPU, or a driver that failed to
+        // start. WARP draws the same pixels on the CPU rather than nothing.
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags,
+                               levels, nLevels, D3D11_SDK_VERSION, &pa->d3d,
+                               nullptr, nullptr);
+    }
+    if (FAILED(hr)) {
+        logf("D3D11CreateDevice failed %08x", (unsigned)hr);
+        return false;
+    }
+    hr = pa->d3d->QueryInterface(__uuidof(IDXGIDevice1), (void**)&pa->dxgi);
+    if (FAILED(hr)) {
+        Rel(&pa->d3d);
+        return false;
+    }
+    // The frame latency is left at DXGI's default of three, which is what
+    // GPUI's renderer does. Pinning it to 1 reads like lower latency and
+    // measured ~20% slower here: with one frame in flight, Present blocks the
+    // draw on the previous frame's scanout instead of letting the next one
+    // start.
+    IDXGIAdapter* adapter = nullptr;
+    if (SUCCEEDED(pa->dxgi->GetAdapter(&adapter)) && adapter) {
+        adapter->GetParent(__uuidof(IDXGIFactory2), (void**)&pa->dxgiFactory);
+        adapter->Release();
+    }
+    if (!pa->dxgiFactory) {
+        Rel(&pa->dxgi);
+        Rel(&pa->d3d);
+        return false;
+    }
+    hr = pa->d2d->CreateDevice(pa->dxgi, &pa->d2dDevice);
+    if (FAILED(hr)) {
+        logf("ID2D1Factory1::CreateDevice failed %08x", (unsigned)hr);
+        Rel(&pa->dxgiFactory);
+        Rel(&pa->dxgi);
+        Rel(&pa->d3d);
+        return false;
+    }
+    return true;
+}
+
+// Point the device context at the swap chain's current back buffer. Called
+// when the chain is made and again after every resize, since ResizeBuffers
+// hands out new surfaces.
+static bool BindBackBuffer(PaintTarget* t) {
+    Rel(&t->backBuffer);
+    IDXGISurface* surface = nullptr;
+    HRESULT hr = t->swap
+                     ->GetBuffer(0, __uuidof(IDXGISurface), (void**)&surface);
+    if (FAILED(hr)) {
+        return false;
+    }
+    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
+        96.f, 96.f);
+    hr = t->dc->CreateBitmapFromDxgiSurface(surface, &props, &t->backBuffer);
+    surface->Release();
+    if (FAILED(hr)) {
+        return false;
+    }
+    t->dc->SetTarget(t->backBuffer);
+    return true;
 }
 
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     if (!ctx || !ctx->pa) {
         return false;
     }
+    HWND hwnd = (HWND)native;
+    if (!hwnd || pxW <= 0 || pxH <= 0) {
+        return false;
+    }
+    if (!EnsureDevice(ctx->pa)) {
+        return false;
+    }
+    // A target belongs to the window it was made for; a window that changed
+    // wants a new chain. A size change only needs ResizeBuffers, which keeps
+    // the device context and everything cached on it.
+    if (ctx->rt && ctx->rt->hwnd != hwnd) {
+        PaintTargetFree(ctx);
+    }
     if (!ctx->rt) {
         auto* t = new PaintTarget();
-        D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_DEFAULT,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                              D2D1_ALPHA_MODE_IGNORE),
-            96.f, 96.f);
-        HRESULT hr = ctx->pa->d2d->CreateDCRenderTarget(&rtp, &t->dcRt);
+        t->hwnd = hwnd;
+        DXGI_SWAP_CHAIN_DESC1 desc = {};
+        desc.Width = (UINT)pxW;
+        desc.Height = (UINT)pxH;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        // Three buffers and FLIP_SEQUENTIAL, matching GPUI's own DirectX
+        // renderer (directx_renderer.rs BUFFER_COUNT). Flipping is what puts
+        // the frame on the redirection surface DWM composites and
+        // PrintWindow(PW_RENDERFULLCONTENT) reads; SEQUENTIAL keeps the back
+        // buffer's contents across a present, so a frame that only redraws
+        // part of the window still comes out whole.
+        desc.BufferCount = 3;
+        desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+        HRESULT hr = ctx->pa->dxgiFactory->CreateSwapChainForHwnd(
+            ctx->pa->d3d, hwnd, &desc, nullptr, nullptr, &t->swap);
         if (FAILED(hr)) {
-            logf("CreateDCRenderTarget failed %08x", (unsigned)hr);
+            logf("CreateSwapChainForHwnd failed %08x", (unsigned)hr);
             delete t;
             return false;
         }
-        t->rt = t->dcRt;
+        // The window handles its own resizing; DXGI's Alt+Enter fullscreen
+        // would fight the message loop for it.
+        ctx->pa->dxgiFactory
+            ->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+        hr = ctx->pa->d2dDevice->CreateDeviceContext(
+            D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &t->dc);
+        if (FAILED(hr)) {
+            Rel(&t->swap);
+            delete t;
+            return false;
+        }
+        t->dc->SetDpi(96.f, 96.f);
+        if (!BindBackBuffer(t)) {
+            Rel(&t->dc);
+            Rel(&t->swap);
+            delete t;
+            return false;
+        }
+        t->rt = t->dc;
+        t->pxW = pxW;
+        t->pxH = pxH;
         hr = t->rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1), &t->brush);
         if (FAILED(hr)) {
-            Rel(&t->dcRt);
+            t->dc->SetTarget(nullptr);
+            Rel(&t->backBuffer);
+            Rel(&t->dc);
+            Rel(&t->swap);
             delete t;
             return false;
         }
         ctx->rt = t;
-    }
-    RECT rc = {0, 0, pxW, pxH};
-    HRESULT hr = ctx->rt->dcRt->BindDC((HDC)native, &rc);
-    if (FAILED(hr)) {
-        logf("BindDC failed %08x", (unsigned)hr);
-        PaintTargetFree(ctx);
-        return false;
+    } else if (ctx->rt->pxW != pxW || ctx->rt->pxH != pxH) {
+        PaintTarget* t = ctx->rt;
+        t->dc->SetTarget(nullptr);
+        Rel(&t->backBuffer);
+        HRESULT hr = t->swap->ResizeBuffers(0, (UINT)pxW, (UINT)pxH,
+                                            DXGI_FORMAT_UNKNOWN, 0);
+        if (FAILED(hr) || !BindBackBuffer(t)) {
+            PaintTargetFree(ctx);
+            return false;
+        }
+        t->pxW = pxW;
+        t->pxH = pxH;
     }
     ctx->rt->rt->BeginDraw();
     ctx->rt->rt->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -253,6 +428,17 @@ bool PaintTargetEnd(PaintCtx* ctx) {
     if (hr == D2DERR_RECREATE_TARGET) {
         PaintTargetFree(ctx);
         return false;
+    }
+    if (SUCCEEDED(hr) && ctx->rt->swap) {
+        // Sync interval 0, the way GPUI's renderer presents. On a flip-model
+        // chain that hands the frame straight to DWM, which composites it at
+        // the next vblank anyway, so nothing tears — but the draw is not held
+        // waiting for the scanout, which is what would show up as frame time.
+        HRESULT ph = ctx->rt->swap->Present(0, 0);
+        if (ph == DXGI_ERROR_DEVICE_REMOVED || ph == DXGI_ERROR_DEVICE_RESET) {
+            PaintTargetFree(ctx);
+            return false;
+        }
     }
     return true;
 }

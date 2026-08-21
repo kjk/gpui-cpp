@@ -39,8 +39,13 @@ const float kLineHeight = 1.618034f;
 PaintApp* PaintAppNew();
 void PaintAppFree(PaintApp* pa);
 
-// Bind `native` — the HDC on Windows, the cairo surface on Linux — as this
+// Bind `native` — the HWND on Windows, the cairo surface on Linux — as this
 // frame's target and open a drawing batch. False means skip the frame.
+//
+// Windows takes the window, not a device context, because the frame goes to
+// the window's own swap chain: D2D has no GPU path to an HDC, and the DC
+// render target this used to be spent most of the frame copying its surface
+// back through the GDI interop.
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH);
 // An offscreen square of pixels rather than a window: transparent to start
 // with, and read back as premultiplied BGRA, top-down, by
