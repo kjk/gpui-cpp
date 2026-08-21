@@ -50,7 +50,7 @@ using base::Vec;
 //
 // The type is an alias, not a wrapper, so `Optf` and `float` are the same
 // type and a plain float is simply an `Optf` that is always `Some`. That is
-// what collapses the three overload families in math.h — `Optf op Optf`,
+// what collapses the three overload families in taffy_math.h — `Optf op Optf`,
 // `Optf op float`, `float op Optf` — into one function each, and it is why
 // there is no distinct-typedef version of this: the whole point of the tag is
 // that the two are interchangeable. The name stays because it says which

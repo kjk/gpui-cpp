@@ -16,7 +16,7 @@ gpui-component and Zed GPUI pins, and moves when they do — see
 | ----------------------------------- | ----------------------- |
 | `src/geometry.rs`                   | `geometry.h`            |
 | `src/util/sys.rs` (the f32 helpers) | `geometry.h`            |
-| `src/util/math.rs`                  | `math.h`                |
+| `src/util/math.rs`                  | `taffy_math.h`          |
 | `src/util/resolve.rs`               | `style.h` / `style.cpp` |
 | `src/style/*.rs`                    | `style.h` / `style.cpp` |
 | `src/tree/{node,layout,cache}.rs`   | `tree.h` / `tree.cpp`   |
