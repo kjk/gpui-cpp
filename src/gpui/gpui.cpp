@@ -177,6 +177,93 @@ void BackgroundLine(const Background& b, Bounds box, Point* p0, Point* p1) {
     p1->y = sy + dy * len * b.to.percentage;
 }
 
+void ThemeTokensReset(Theme* t) {
+    if (!t) {
+        return;
+    }
+    if (!t->tokens.background.gradient) {
+        t->tokens.background = t->background;
+    }
+    if (!t->tokens.titleBar.gradient) {
+        t->tokens.titleBar = t->titleBar;
+    }
+    if (!t->tokens.statusBar.gradient) {
+        t->tokens.statusBar = t->statusBar;
+    }
+    if (!t->tokens.tabBar.gradient) {
+        t->tokens.tabBar = t->tabBar;
+    }
+    if (!t->tokens.tabActiveBg.gradient) {
+        t->tokens.tabActiveBg = t->tabActiveBg;
+    }
+    if (!t->tokens.primary.gradient) {
+        t->tokens.primary = t->primary;
+    }
+    if (!t->tokens.secondary.gradient) {
+        t->tokens.secondary = t->secondary;
+    }
+    if (!t->tokens.accent.gradient) {
+        t->tokens.accent = t->accent;
+    }
+    if (!t->tokens.muted.gradient) {
+        t->tokens.muted = t->muted;
+    }
+    if (!t->tokens.danger.gradient) {
+        t->tokens.danger = t->danger;
+    }
+    if (!t->tokens.info.gradient) {
+        t->tokens.info = t->info;
+    }
+    if (!t->tokens.success.gradient) {
+        t->tokens.success = t->success;
+    }
+    if (!t->tokens.warning.gradient) {
+        t->tokens.warning = t->warning;
+    }
+    if (!t->tokens.progress.gradient) {
+        t->tokens.progress = t->progress;
+    }
+    if (!t->tokens.scrollbarThumb.gradient) {
+        t->tokens.scrollbarThumb = t->scrollbarThumb;
+    }
+    if (!t->tokens.skeleton.gradient) {
+        t->tokens.skeleton = t->skeleton;
+    }
+    if (!t->tokens.selection.gradient) {
+        t->tokens.selection = t->selection;
+    }
+    if (!t->tokens.listActive.gradient) {
+        t->tokens.listActive = t->listActive;
+    }
+    if (!t->tokens.tableBg.gradient) {
+        t->tokens.tableBg = t->tableBg;
+    }
+    if (!t->tokens.tableActive.gradient) {
+        t->tokens.tableActive = t->tableActive;
+    }
+    if (!t->tokens.tableEven.gradient) {
+        t->tokens.tableEven = t->tableEven;
+    }
+    if (!t->tokens.tableHead.gradient) {
+        t->tokens.tableHead = t->tableHead;
+    }
+    if (!t->tokens.sidebarAccent.gradient) {
+        t->tokens.sidebarAccent = t->sidebarAccent;
+    }
+    if (!t->tokens.sidebarPrimary.gradient) {
+        t->tokens.sidebarPrimary = t->sidebarPrimary;
+    }
+    if (!t->tokens.overlay.gradient) {
+        t->tokens.overlay = t->overlay;
+    }
+    if (!t->tokens.switchThumb.gradient) {
+        t->tokens.switchThumb = t->switchThumb;
+    }
+    if (!t->tokens.sliderThumb.gradient) {
+        t->tokens.sliderThumb = t->sliderThumb;
+    }
+}
+
 const Theme& ThemeDefaultDark() {
     static Theme t;
     static bool init = false;
@@ -255,6 +342,12 @@ const Theme& ThemeDefaultDark() {
         t.descListLabelFg = Rgb(0xf5, 0xf5, 0xf5);
         t.radius = 6;
         t.radiusLg = 8;
+        // The three that only exist so a theme can spell them as gradients,
+        // on the fallbacks schema.rs gives them.
+        t.statusBar = t.titleBar;
+        t.switchThumb = t.background;
+        t.sliderThumb = t.background;
+        ThemeTokensReset(&t);
         init = true;
     }
     return t;
@@ -336,6 +429,12 @@ const Theme& ThemeDefaultLight() {
         t.descListLabelFg = Rgb(0x17, 0x17, 0x17);
         t.radius = 6;
         t.radiusLg = 8;
+        // The three that only exist so a theme can spell them as gradients,
+        // on the fallbacks schema.rs gives them.
+        t.statusBar = t.titleBar;
+        t.switchThumb = t.background;
+        t.sliderThumb = t.background;
+        ThemeTokensReset(&t);
         init = true;
     }
     return t;

@@ -105,6 +105,48 @@ constexpr float kPi = 3.14159265358979f;
 
 struct App;
 
+// ThemeTokens — crates/ui/src/theme/theme_color.rs.
+//
+// Upstream keeps the palette twice: `ThemeColor`, where every token is one
+// `Hsla`, and `ThemeTokens`, where every token is a `ThemeToken { color,
+// background }` — the same colour plus the fill it actually paints with,
+// which a theme file may spell as a gradient. `Theme` here is the first; this
+// is the second, for the tokens `schema.rs` reads with
+// `apply_background_color!` rather than `apply_color!`.
+//
+// A token's `color` always equals the flat field of the same name, so code
+// that wants one colour goes on reading `theme.primary` and code that paints
+// a surface reads `theme.tokens.primary`. Only the second can be a gradient.
+struct ThemeTokens {
+    Background background = {};
+    Background titleBar = {};
+    Background statusBar = {};
+    Background tabBar = {};
+    Background tabActiveBg = {};
+    Background primary = {};
+    Background secondary = {};
+    Background accent = {};
+    Background muted = {};
+    Background danger = {};
+    Background info = {};
+    Background success = {};
+    Background warning = {};
+    Background progress = {};
+    Background scrollbarThumb = {};
+    Background skeleton = {};
+    Background selection = {};
+    Background listActive = {};
+    Background tableBg = {};
+    Background tableActive = {};
+    Background tableEven = {};
+    Background tableHead = {};
+    Background sidebarAccent = {};
+    Background sidebarPrimary = {};
+    Background overlay = {};
+    Background switchThumb = {};
+    Background sliderThumb = {};
+};
+
 struct Theme {
     Rgba background;
     Rgba foreground;
@@ -127,6 +169,10 @@ struct Theme {
     Rgba dragBorder;
     Rgba titleBar;
     Rgba titleBarBorder;
+    // status_bar.background, which falls back to the title bar — the two are
+    // the same surface at opposite ends of the window, and most themes only
+    // name one of them.
+    Rgba statusBar;
     Rgba tabBar;
     Rgba tabActiveBg;
     Rgba tabActiveFg;
@@ -185,6 +231,11 @@ struct Theme {
     Rgba warning;
     Rgba warningFg;
     Rgba skeleton;
+    // switch.thumb.background and slider.thumb.background, both of which fall
+    // back to the window background. They are fields of their own only so a
+    // theme that spells either as a gradient gets one.
+    Rgba switchThumb;
+    Rgba sliderThumb;
     // theme.overlay: what a dialog backdrop tints the page with. 5% black in
     // light, 20% in dark (default-theme.json).
     Rgba overlay;
@@ -198,7 +249,16 @@ struct Theme {
     // crates/ui/src/theme/mod.rs: radius 6, radius_lg 8 (Dialog, Notification).
     float radius;
     float radiusLg;
+    // The renderable half of the palette, for the tokens a theme file may
+    // spell as a gradient. Every one of these carries the flat colour of the
+    // same name, so reading a token instead of a field is never wrong.
+    ThemeTokens tokens = {};
 };
+
+// Every token set to the flat colour of the same name — for a palette built
+// in code, and for the tokens a resolved theme file left alone. A token that
+// already carries a gradient is kept.
+void ThemeTokensReset(Theme* t);
 
 enum class ThemeMode : uint8_t {
     Light,

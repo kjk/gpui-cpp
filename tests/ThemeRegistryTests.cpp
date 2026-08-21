@@ -120,9 +120,121 @@ static void TheDefaultThemeResolvesToTheDefaultPalette() {
     }
 }
 
+// try_parse_background: everything above, and a two-stop linear-gradient.
+// The two cases here are upstream's own tests in color.rs.
+static Background Bg(const char* str) {
+    Background b;
+    utassert(ThemeParseBackground(Str(str), &b));
+    return b;
+}
+
+static void ABackgroundIsAColourOrAGradient() {
+    // A plain colour is a solid fill and nothing more.
+    Background solid = Bg("#4F46E5");
+    utassert(BackgroundIsSolid(solid) && Is(solid.color, 0x4f46e5));
+
+    // test_try_parse_background_linear_gradient
+    Background g = Bg("linear-gradient(135deg, #4F46E5, #06B6D4)");
+    utassert(g.gradient);
+    utassertnear(g.angle, 135.f);
+    utassert(Is(g.from.color, 0x4f46e5));
+    utassertnear(g.from.percentage, 0.f);
+    utassert(Is(g.to.color, 0x06b6d4));
+    utassertnear(g.to.percentage, 1.f);
+    // try_parse_theme_color: the flat colour is the first stop.
+    utassert(Is(g.color, 0x4f46e5));
+
+    // test_try_parse_background_linear_gradient_direction_and_stops
+    Background d = Bg("linear-gradient(to right, red-500 25%, blue-600 75%)");
+    utassertnear(d.angle, 90.f);
+    utassert(Is(d.from.color, 0xef4444));
+    utassertnear(d.from.percentage, 0.25f);
+    utassert(Is(d.to.color, 0x2563eb));
+    utassertnear(d.to.percentage, 0.75f);
+
+    // Two stops and no angle is `to bottom`, which is 180.
+    utassertnear(Bg("linear-gradient(#fff, #000)").angle, 180.f);
+    // The eight directions, and a negative angle wrapping the way
+    // rem_euclid(360) does.
+    utassertnear(Bg("linear-gradient(to top, #fff, #000)").angle, 0.f);
+    utassertnear(Bg("linear-gradient(to bottom left, #fff, #000)").angle,
+                 225.f);
+    utassertnear(Bg("linear-gradient(-90deg, #fff, #000)").angle, 270.f);
+    // Case and spacing are the file's business, not the parser's.
+    utassertnear(Bg("  LINEAR-GRADIENT( TO RIGHT , #fff , #000 )").angle, 90.f);
+
+    // What the grammar refuses, which is what leaves a token on its fallback.
+    Background junk;
+    utassert(!ThemeParseBackground(StrL("linear-gradient(#fff)"), &junk));
+    utassert(!ThemeParseBackground(StrL("linear-gradient(#fff, #000, #123)"),
+                                   &junk));
+    utassert(!ThemeParseBackground(StrL("linear-gradient(9turn, #fff, #000)"),
+                                   &junk));
+    utassert(!ThemeParseBackground(StrL("linear-gradient(to sideways, a, b)"),
+                                   &junk));
+    utassert(!ThemeParseBackground(StrL("linear-gradient(#fff, notacolour)"),
+                                   &junk));
+    utassert(!ThemeParseBackground(StrL("radial-gradient(#fff, #000)"), &junk));
+}
+
+// apply_background_color!: the token carries the gradient, the flat field
+// beside it carries its first stop, and a token nobody named falls back
+// through the same chain the colours do.
+static void AGradientReachesTheTokenAndItsFallbacks() {
+    const char* doc =
+        "{ \"name\": \"grad-set\", \"themes\": [ { \"name\": \"Grad\", "
+        "\"mode\": \"light\", \"colors\": { "
+        "\"primary.background\": \"linear-gradient(180deg, #1E293B, "
+        "#0F172A)\", "
+        "\"title_bar.background\": \"linear-gradient(to right, #FFFFFF, "
+        "#F8FAFC)\", "
+        "\"selection.background\": \"linear-gradient(180deg, #1D4ED8, "
+        "#1D4ED8FF)\" "
+        "} } ] }";
+    utassert(ThemeRegistryLoadStr(Str(doc)) >= 1);
+    const ThemeConfig* cfg = ThemeRegistryFind(StrL("Grad"));
+    utassert(cfg != nullptr);
+
+    Theme t = {};
+    ThemeConfigResolve(&t, cfg, ThemeDefaultLight());
+
+    // The gradient lands on the token; the flat field is its first stop, so
+    // code that wants one colour still gets a sensible one.
+    utassert(t.tokens.primary.gradient);
+    utassert(Is(t.tokens.primary.from.color, 0x1e293b));
+    utassert(Is(t.tokens.primary.to.color, 0x0f172a));
+    utassert(Is(t.primary, 0x1e293b));
+    utassertnear(t.tokens.titleBar.angle, 90.f);
+
+    // A token the file leaves out falls back through the chain, gradient and
+    // all: progress.bar and the sidebar's primary both fall back to primary.
+    utassert(t.tokens.progress.gradient);
+    utassert(Is(t.tokens.progress.to.color, 0x0f172a));
+    utassert(t.tokens.sidebarPrimary.gradient);
+    // status_bar falls back to the title bar, which the file did name.
+    utassertnear(t.tokens.statusBar.angle, 90.f);
+    utassert(t.tokens.statusBar.gradient);
+
+    // And one nobody touched is simply its flat colour.
+    utassert(!t.tokens.tableHead.gradient);
+    utassert(Is(t.tokens.tableHead.color,
+                (uint32_t)((t.tableHead.r << 16) | (t.tableHead.g << 8) |
+                           t.tableHead.b),
+                t.tableHead.a));
+
+    // The selection is capped at a third whatever the file spells, and a
+    // gradient is capped stop by stop rather than scaled, so the opaque
+    // second stop comes down too.
+    utassert(t.selection.a <= 0x4d + 1);
+    utassert(t.tokens.selection.from.color.a <= 0x4d + 1);
+    utassert(t.tokens.selection.to.color.a <= 0x4d + 1);
+}
+
 void TestThemeRegistry() {
     TestSuite("theme_registry");
     AColourIsAHexOrAName();
     TheDefaultsAreInTheTable();
     TheDefaultThemeResolvesToTheDefaultPalette();
+    ABackgroundIsAColourOrAGradient();
+    AGradientReachesTheTokenAndItsFallbacks();
 }

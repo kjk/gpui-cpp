@@ -13,8 +13,7 @@
    grammar is `color.rs`: a hex string, or a shadcn name with an optional scale
    and an optional percentage — `neutral-200`, `white`, `red-500/40`.
 
-   What is deliberately not here: the gradient half of `try_parse_background`
-   (a `Theme` field is one colour, not a `Background`), the highlight styles
+   What is deliberately not here: the highlight styles
    (our colouring is a scanner, not tree-sitter), and the directory watcher —
    Rust reloads themes when the folder changes, and nothing in this tree
    watches a folder. */
@@ -46,6 +45,17 @@ extern const char* const kDefaultThemeJson;
 // hue carries falls back to 500, the way `ColorName::scale` does. False for
 // anything else, which is what leaves a token on its fallback.
 bool ThemeParseColor(Str s, Rgba* out);
+
+// try_parse_background. Everything `ThemeParseColor` takes, and CSS two-stop
+// `linear-gradient(...)` besides: an angle in degrees or one of the eight
+// `to ..` directions, then two colour stops with optional percentages.
+//
+//     linear-gradient(180deg, #1E293B, #0F172A)
+//     linear-gradient(to right, red-500 25%, blue-600 75%)
+//
+// A gradient's `color` is its first stop, which is what `try_parse_theme_color`
+// keeps for the flat palette field beside the renderable token.
+bool ThemeParseBackground(Str s, Background* out);
 
 // ─── one theme out of a theme file ───────────────────────────────────────
 

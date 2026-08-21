@@ -211,6 +211,236 @@ bool ThemeParseColor(Str s, Rgba* out) {
     return true;
 }
 
+// ─── the gradient grammar — color.rs parse_linear_gradient ───────────────
+
+static Str TrimStr(Str s) {
+    while (s.len > 0 && (s.s[0] == ' ' || s.s[0] == '\t' || s.s[0] == '\n' ||
+                         s.s[0] == '\r')) {
+        s.s++;
+        s.len--;
+    }
+    while (s.len > 0) {
+        char c = s.s[s.len - 1];
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            break;
+        }
+        s.len--;
+    }
+    return s;
+}
+
+static bool EqIgnoreCase(Str s, const char* lit) {
+    int n = 0;
+    while (lit[n]) {
+        n++;
+    }
+    if (s.len != n) {
+        return false;
+    }
+    for (int i = 0; i < n; i++) {
+        char c = s.s[i];
+        if (c >= 'A' && c <= 'Z') {
+            c = (char)(c - 'A' + 'a');
+        }
+        if (c != lit[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool StartsWithIgnoreCase(Str s, const char* lit) {
+    int n = 0;
+    while (lit[n]) {
+        n++;
+    }
+    if (s.len < n) {
+        return false;
+    }
+    return EqIgnoreCase(Str(s.s, n), lit);
+}
+
+// split_top_level_commas: a comma inside parentheses belongs to whatever is
+// there — `rgb(1, 2, 3)` is one stop, not three.
+static int SplitTopLevelCommas(Str inner, Str* out, int cap) {
+    int n = 0;
+    int depth = 0;
+    int start = 0;
+    for (int i = 0; i < inner.len; i++) {
+        char c = inner.s[i];
+        if (c == '(') {
+            depth++;
+        } else if (c == ')') {
+            if (depth > 0) {
+                depth--;
+            }
+        } else if (c == ',' && depth == 0) {
+            if (n < cap) {
+                out[n] = TrimStr(Str(inner.s + start, i - start));
+            }
+            n++;
+            start = i + 1;
+        }
+    }
+    if (n < cap) {
+        out[n] = TrimStr(Str(inner.s + start, inner.len - start));
+    }
+    n++;
+    return n;
+}
+
+// parse_linear_gradient_direction: the eight `to ..` keywords, as degrees.
+static bool ParseGradientDirection(Str dir, float* out) {
+    bool top = false, right = false, bottom = false, left = false;
+    int i = 0;
+    while (i < dir.len) {
+        while (i < dir.len && (dir.s[i] == ' ' || dir.s[i] == '\t')) {
+            i++;
+        }
+        int start = i;
+        while (i < dir.len && dir.s[i] != ' ' && dir.s[i] != '\t') {
+            i++;
+        }
+        if (i == start) {
+            break;
+        }
+        Str word = Str(dir.s + start, i - start);
+        if (EqIgnoreCase(word, "top")) {
+            top = true;
+        } else if (EqIgnoreCase(word, "right")) {
+            right = true;
+        } else if (EqIgnoreCase(word, "bottom")) {
+            bottom = true;
+        } else if (EqIgnoreCase(word, "left")) {
+            left = true;
+        } else {
+            return false;
+        }
+    }
+    if (top && !right && !bottom && !left) {
+        *out = 0.f;
+    } else if (!top && right && !bottom && !left) {
+        *out = 90.f;
+    } else if (!top && !right && bottom && !left) {
+        *out = 180.f;
+    } else if (!top && !right && !bottom && left) {
+        *out = 270.f;
+    } else if (top && right && !bottom && !left) {
+        *out = 45.f;
+    } else if (!top && right && bottom && !left) {
+        *out = 135.f;
+    } else if (!top && !right && bottom && left) {
+        *out = 225.f;
+    } else if (top && !right && !bottom && left) {
+        *out = 315.f;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// parse_linear_gradient_angle: `135deg`, or `to bottom right`.
+static bool ParseGradientAngle(Str angle, float* out) {
+    angle = TrimStr(angle);
+    if (angle.len > 3 && EqIgnoreCase(Str(angle.s + angle.len - 3, 3), "deg")) {
+        Str num = TrimStr(Str(angle.s, angle.len - 3));
+        float deg = ParseFloatOr(num.s, num.len, 1e30f);
+        if (deg >= 1e29f) {
+            return false;
+        }
+        // rem_euclid(360): a negative angle comes back positive.
+        deg = fmodf(deg, 360.f);
+        if (deg < 0) {
+            deg += 360.f;
+        }
+        *out = deg;
+        return true;
+    }
+    if (StartsWithIgnoreCase(angle, "to ")) {
+        return ParseGradientDirection(TrimStr(Str(angle.s + 3, angle.len - 3)),
+                                      out);
+    }
+    return false;
+}
+
+// parse_linear_color_stop: a colour, and optionally where along the line it
+// sits — `red-500 25%`. Without one it takes the end it was given.
+static bool ParseColorStop(Str stop, float defaultPct, ColorStop* out) {
+    stop = TrimStr(stop);
+    if (stop.len <= 0) {
+        return false;
+    }
+    float pct = defaultPct;
+    if (stop.s[stop.len - 1] == '%') {
+        // The percentage is the last whitespace-separated word.
+        int i = stop.len - 1;
+        while (i > 0 && stop.s[i - 1] != ' ' && stop.s[i - 1] != '\t') {
+            i--;
+        }
+        float v = ParseFloatOr(stop.s + i, stop.len - 1 - i, 1e30f);
+        if (v >= 1e29f) {
+            return false;
+        }
+        pct = Clamp01f(v / 100.f);
+        stop = TrimStr(Str(stop.s, i));
+        if (stop.len <= 0) {
+            return false;
+        }
+    }
+    Rgba c;
+    if (!ThemeParseColor(stop, &c)) {
+        return false;
+    }
+    out->color = c;
+    out->percentage = pct;
+    return true;
+}
+
+static bool ParseLinearGradient(Str s, Background* out) {
+    s = TrimStr(s);
+    if (!StartsWithIgnoreCase(s, "linear-gradient(") || s.s[s.len - 1] != ')') {
+        return false;
+    }
+    const int kPrefix = 16; // "linear-gradient("
+    Str inner = Str(s.s + kPrefix, s.len - kPrefix - 1);
+    Str parts[4] = {};
+    int n = SplitTopLevelCommas(inner, parts, 4);
+    float angle = 180.f;
+    Str fromS = {}, toS = {};
+    if (n == 2) {
+        fromS = parts[0];
+        toS = parts[1];
+    } else if (n == 3) {
+        if (!ParseGradientAngle(parts[0], &angle)) {
+            return false;
+        }
+        fromS = parts[1];
+        toS = parts[2];
+    } else {
+        // Rust takes exactly two stops; anything else is an error, which
+        // leaves the token on its fallback.
+        return false;
+    }
+    ColorStop from = {}, to = {};
+    if (!ParseColorStop(fromS, 0.f, &from) || !ParseColorStop(toS, 1.f, &to)) {
+        return false;
+    }
+    *out = BackgroundLinear(angle, from, to);
+    return true;
+}
+
+bool ThemeParseBackground(Str s, Background* out) {
+    if (!s.s || s.len <= 0 || !out) {
+        return false;
+    }
+    Rgba c;
+    if (ThemeParseColor(s, &c)) {
+        *out = Background(c);
+        return true;
+    }
+    return ParseLinearGradient(s, out);
+}
+
 // ─── the colour maths the fallbacks are written in ───────────────────────
 
 // gpui::transparent_black(), which every `mix_oklab` toward nothing takes.
@@ -334,7 +564,10 @@ static const char* const kKeyAliases[][2] = {
     {"description_list.label.foreground", "description_list_label.foreground"},
 };
 
-static Rgba Pick(const JsonValue* colors, const char* key, Rgba fb) {
+// The string a token's key names, under the schema's spelling or the one
+// default-theme.json uses. Null for a key the file leaves out, and for a
+// value that is not a string.
+static const JsonValue* FindColor(const JsonValue* colors, const char* key) {
     const JsonValue* v = JsonGet(colors, key);
     if (!v) {
         for (size_t i = 0; i < sizeof(kKeyAliases) / sizeof(kKeyAliases[0]);
@@ -345,7 +578,12 @@ static Rgba Pick(const JsonValue* colors, const char* key, Rgba fb) {
             }
         }
     }
-    if (!v || v->kind != JsonKind::String) {
+    return (v && v->kind == JsonKind::String) ? v : nullptr;
+}
+
+static Rgba Pick(const JsonValue* colors, const char* key, Rgba fb) {
+    const JsonValue* v = FindColor(colors, key);
+    if (!v) {
         return fb;
     }
     Rgba c;
@@ -353,6 +591,27 @@ static Rgba Pick(const JsonValue* colors, const char* key, Rgba fb) {
         return fb;
     }
     return c;
+}
+
+// apply_background_color!: the same read, with a gradient allowed through.
+static Background PickBg(const JsonValue* colors, const char* key,
+                         Background fb) {
+    const JsonValue* v = FindColor(colors, key);
+    if (!v) {
+        return fb;
+    }
+    Background b;
+    if (!ThemeParseBackground(v->str, &b)) {
+        return fb;
+    }
+    return b;
+}
+
+// The token takes the fill; the flat field beside it takes the token's
+// colour, which for a gradient is its first stop.
+static void SetToken(Rgba* flat, Background* tok, Background b) {
+    *flat = b.color;
+    *tok = b;
 }
 
 // The last step of apply_config: a highlight that is allowed to cover a row
@@ -363,6 +622,20 @@ static Rgba ClampAlpha(Rgba c, float max) {
         return c;
     }
     return Rgba8(c.r, c.g, c.b, cap);
+}
+
+// The same cap over a token. A value the file named has each of its stops
+// capped on its own, so a bright second stop cannot push the highlight past
+// the cap; one that came from a fallback is scaled as a whole, which is what
+// `Background::opacity` does and what Rust's `clamp_alpha` falls back to.
+static void ClampToken(Rgba* flat, Background* tok, bool raw, float max) {
+    float a = tok->color.a / 255.f;
+    float target = a < max ? a : max;
+    Background b = raw ? BackgroundClampAlpha(*tok, max)
+                       : BackgroundOpacity(*tok, a > 0 ? target / a : 1.f);
+    b.color = ClampAlpha(tok->color, max);
+    *tok = b;
+    *flat = b.color;
 }
 
 void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
@@ -377,7 +650,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     const float hoverOpacity = 0.9f;
     const Rgba clear = Transparent();
 
-    out->background = Pick(c, "background", base.background);
+    SetToken(&out->background, &out->tokens.background,
+             PickBg(c, "background", base.tokens.background));
 
     // The base colours, which the semantic ones fall back to. Their `.light`
     // halves are the background blended with 80% of the base, and nothing in
@@ -392,7 +666,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     out->border = Pick(c, "border", base.border);
     out->foreground = Pick(c, "foreground", base.foreground);
     out->inputBorder = Pick(c, "input.border", out->border);
-    out->muted = Pick(c, "muted.background", base.muted);
+    SetToken(&out->muted, &out->tokens.muted,
+             PickBg(c, "muted.background", base.tokens.muted));
     out->mutedFg = Pick(c, "muted.foreground",
                         Blend(out->muted, RgbaOpacity(out->foreground, 0.7f)));
 
@@ -401,7 +676,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     out->inputBg =
         dark ? MixOklab(out->inputBorder, clear, 0.3f) : out->background;
 
-    out->primary = Pick(c, "primary.background", base.primary);
+    SetToken(&out->primary, &out->tokens.primary,
+             PickBg(c, "primary.background", base.tokens.primary));
     out->primaryFg = Pick(c, "primary.foreground", out->foreground);
     Rgba primaryHover =
         Pick(c, "primary.hover.background",
@@ -411,7 +687,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     (void)primaryHover;
     (void)primaryActive;
 
-    out->secondary = Pick(c, "secondary.background", base.secondary);
+    SetToken(&out->secondary, &out->tokens.secondary,
+             PickBg(c, "secondary.background", base.tokens.secondary));
     out->secondaryFg = Pick(c, "secondary.foreground", out->foreground);
     out->secondaryHover =
         Pick(c, "secondary.hover.background",
@@ -419,14 +696,18 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     out->secondaryActive = Pick(c, "secondary.active.background",
                                 Darken(out->secondary, activeDarken));
 
-    out->success = Pick(c, "success.background", out->green);
+    SetToken(&out->success, &out->tokens.success,
+             PickBg(c, "success.background", out->green));
     out->successFg = Pick(c, "success.foreground", out->primaryFg);
-    out->info = Pick(c, "info.background", out->cyan);
+    SetToken(&out->info, &out->tokens.info,
+             PickBg(c, "info.background", out->cyan));
     out->infoFg = Pick(c, "info.foreground", out->primaryFg);
-    out->warning = Pick(c, "warning.background", out->yellow);
+    SetToken(&out->warning, &out->tokens.warning,
+             PickBg(c, "warning.background", out->yellow));
     out->warningFg = Pick(c, "warning.foreground", out->primaryFg);
 
-    out->accent = Pick(c, "accent.background", out->secondary);
+    SetToken(&out->accent, &out->tokens.accent,
+             PickBg(c, "accent.background", out->tokens.secondary));
     Rgba accentFg = Pick(c, "accent.foreground", out->foreground);
     out->groupBox =
         Pick(c, "group_box.background",
@@ -443,7 +724,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     out->chartBullish = Pick(c, "chart_bullish", out->green);
     out->chartBearish = Pick(c, "chart_bearish", out->red);
 
-    out->danger = Pick(c, "danger.background", out->red);
+    SetToken(&out->danger, &out->tokens.danger,
+             PickBg(c, "danger.background", out->red));
     out->dangerFg = Pick(c, "danger.foreground", out->primaryFg);
     out->descListLabel =
         Pick(c, "description_list.label.background",
@@ -452,56 +734,86 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
         Pick(c, "description_list.label.foreground", out->mutedFg);
     out->dragBorder = Pick(c, "drag.border", RgbaOpacity(out->primary, 0.65f));
 
-    Rgba list = Pick(c, "list.background", out->background);
-    out->listActive =
-        Pick(c, "list.active.background",
-             Blend(out->background, RgbaOpacity(out->primary, 0.1f)));
+    Background list = PickBg(c, "list.background", out->tokens.background);
+    SetToken(&out->listActive, &out->tokens.listActive,
+             PickBg(c, "list.active.background",
+                    Blend(out->background, RgbaOpacity(out->primary, 0.1f))));
     out->listActiveBorder =
         Pick(c, "list.active.border",
              Blend(out->background, RgbaOpacity(out->primary, 0.6f)));
-    Rgba listEven = Pick(c, "list.even.background", list);
-    Rgba listHead = Pick(c, "list.head.background", list);
+    Background listEven = PickBg(c, "list.even.background", list);
+    Background listHead = PickBg(c, "list.head.background", list);
 
-    out->progress = Pick(c, "progress.bar.background", out->primary);
+    SetToken(&out->progress, &out->tokens.progress,
+             PickBg(c, "progress.bar.background", out->tokens.primary));
     out->ring = Pick(c, "ring", out->blue);
-    out->scrollbarThumb = Pick(c, "scrollbar.thumb.background", out->accent);
-    out->selection = Pick(c, "selection.background", out->primary);
+    SetToken(&out->scrollbarThumb, &out->tokens.scrollbarThumb,
+             PickBg(c, "scrollbar.thumb.background", out->tokens.accent));
+    SetToken(&out->selection, &out->tokens.selection,
+             PickBg(c, "selection.background", out->tokens.primary));
 
     out->sidebar =
         Pick(c, "sidebar.background",
              Blend(out->background, RgbaOpacity(out->border, 0.15f)));
-    out->sidebarAccent = Pick(c, "sidebar.accent.background", out->accent);
+    SetToken(&out->sidebarAccent, &out->tokens.sidebarAccent,
+             PickBg(c, "sidebar.accent.background", out->tokens.accent));
     out->sidebarAccentFg = Pick(c, "sidebar.accent.foreground", accentFg);
     out->sidebarBorder = Pick(c, "sidebar.border", out->border);
     out->sidebarFg = Pick(c, "sidebar.foreground", out->foreground);
-    out->sidebarPrimary = Pick(c, "sidebar.primary.background", out->primary);
+    SetToken(&out->sidebarPrimary, &out->tokens.sidebarPrimary,
+             PickBg(c, "sidebar.primary.background", out->tokens.primary));
     out->sidebarPrimaryFg =
         Pick(c, "sidebar.primary.foreground", out->primaryFg);
 
-    out->skeleton = Pick(c, "skeleton.background", out->secondary);
-    out->tabActiveBg = Pick(c, "tab.active.background", out->background);
+    SetToken(&out->skeleton, &out->tokens.skeleton,
+             PickBg(c, "skeleton.background", out->tokens.secondary));
+    SetToken(&out->tabActiveBg, &out->tokens.tabActiveBg,
+             PickBg(c, "tab.active.background", out->tokens.background));
     out->tabActiveFg = Pick(c, "tab.active.foreground", out->foreground);
-    out->tabBar = Pick(c, "tab_bar.background", out->background);
+    SetToken(&out->tabBar, &out->tokens.tabBar,
+             PickBg(c, "tab_bar.background", out->tokens.background));
     out->tabFg = Pick(c, "tab.foreground", out->foreground);
 
-    out->tableBg = Pick(c, "table.background", list);
-    out->tableActive = Pick(c, "table.active.background", out->listActive);
+    SetToken(&out->tableBg, &out->tokens.tableBg,
+             PickBg(c, "table.background", list));
+    SetToken(&out->tableActive, &out->tokens.tableActive,
+             PickBg(c, "table.active.background", out->tokens.listActive));
     out->tableActiveBorder =
         Pick(c, "table.active.border", out->listActiveBorder);
-    out->tableEven = Pick(c, "table.even.background", listEven);
-    out->tableHead = Pick(c, "table.head.background", listHead);
+    SetToken(&out->tableEven, &out->tokens.tableEven,
+             PickBg(c, "table.even.background", listEven));
+    SetToken(&out->tableHead, &out->tokens.tableHead,
+             PickBg(c, "table.head.background", listHead));
     out->tableHeadFg = Pick(c, "table.head.foreground", out->mutedFg);
     out->tableRowBorder = Pick(c, "table.row.border", out->border);
 
-    out->titleBar = Pick(c, "title_bar.background", out->background);
+    SetToken(&out->titleBar, &out->tokens.titleBar,
+             PickBg(c, "title_bar.background", out->tokens.background));
     out->titleBarBorder = Pick(c, "title_bar.border", out->border);
-    out->overlay = Pick(c, "overlay", base.overlay);
+    SetToken(&out->overlay, &out->tokens.overlay,
+             PickBg(c, "overlay", base.tokens.overlay));
+
+    // status_bar falls back to the title bar, and the switch and slider
+    // thumbs to the window background — the three tokens this tree keeps only
+    // so a theme that spells one as a gradient gets one.
+    SetToken(&out->statusBar, &out->tokens.statusBar,
+             PickBg(c, "status_bar.background", out->tokens.titleBar));
+    SetToken(&out->switchThumb, &out->tokens.switchThumb,
+             PickBg(c, "switch.thumb.background", out->tokens.background));
+    SetToken(&out->sliderThumb, &out->tokens.sliderThumb,
+             PickBg(c, "slider.thumb.background", out->tokens.background));
 
     // The three that are painted over text, capped however the file spells
     // them: a row highlight at a fifth, a text selection at a third.
-    out->listActive = ClampAlpha(out->listActive, 0.2f);
-    out->tableActive = ClampAlpha(out->tableActive, 0.2f);
-    out->selection = ClampAlpha(out->selection, 0.3f);
+    ClampToken(&out->listActive, &out->tokens.listActive,
+               FindColor(c, "list.active.background") != nullptr, 0.2f);
+    ClampToken(&out->tableActive, &out->tokens.tableActive,
+               FindColor(c, "table.active.background") != nullptr, 0.2f);
+    ClampToken(&out->selection, &out->tokens.selection,
+               FindColor(c, "selection.background") != nullptr, 0.3f);
+
+    // Everything the file did not spell as a gradient is its flat colour.
+    ThemeTokensReset(out);
 
     // Theme::apply_config's metrics. `radius_lg` follows the radius the way
     // ThemeSetRadius does when the file names only the one.
