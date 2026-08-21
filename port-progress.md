@@ -932,16 +932,16 @@ cargo run -p system_monitor
   is the field naming the tree already had everywhere, and taking it made the
   gpui side of this change fourteen lines instead of eighty-five — the whole
   of it is the four assignments at the taffy seam and three `Edges` accessors
-  renamed. taffy's own `SizeOptF`, `SizeDim` and `SizeAvail`, which are not
+  renamed. taffy's own `SizeFOpt`, `SizeDim` and `SizeAvail`, which are not
   this type, still spell their fields out.
 
   The rename across ~150 call sites was driven by the compiler rather than by
   a regex: build, read the `C2039: 'Main' is not a member of 'base::SizeF'`
   lines, rewrite exactly those sites, repeat. That matters because `Bounds`
-  also has `.w`, and `SizeOptF` also has `Main` — a textual pass would have
+  also has `.w`, and `SizeFOpt` also has `Main` — a textual pass would have
   hit both. It is self-checking too: where the rewriter over-reached on a line
   holding two types, the next round failed naming the other one, which is how
-  the nine mixed-type overloads in `math.h` (`MaybeMax(SizeOptF, SizeF)` and
+  the nine mixed-type overloads in `math.h` (`MaybeMax(SizeFOpt, SizeF)` and
   its neighbours) were found.
 
   One real trap, caught by a test: `Edges` was `{top, right, bottom, left}`
@@ -969,8 +969,8 @@ cargo run -p system_monitor
   `{ float, bool }` pair: eight bytes for one bit, and it doubled every
   `Size`, `Point` and `Rect` of them layout carries. It is `using Optf =
   float` now, with one reserved quiet NaN — `0x7fc0beef` — standing for
-  `None`, which is V8's NaN tagging with nothing in the payload. `SizeOptF`,
-  `PointOptF` and `RectOptF` become aliases of `SizeF`, `PointF` and `RectF`,
+  `None`, which is V8's NaN tagging with nothing in the payload. `SizeFOpt`,
+  `PointFOpt` and `RectFOpt` become aliases of `SizeF`, `PointF` and `RectF`,
   so `Size<Option<f32>>` and `Size<f32>` are one type and nothing converts
   between them; the methods that were on them are free functions, the way
   `Main` and `Cross` already were.
@@ -987,19 +987,19 @@ cargo run -p system_monitor
   three overload families here — `Optf op Optf`, `Optf op float`,
   `float op Optf` — and they are one function each now, because a plain float
   *is* an `Optf` that is always `Some`, so the None-left arm never fires for
-  it. Same for the size-wise ones: nine mixed `SizeOptF` / `SizeF` overloads
+  it. Same for the size-wise ones: nine mixed `SizeFOpt` / `SizeF` overloads
   became five. That is also the answer to "make it a distinct typedef so a
   mismatch is caught": a wrapper would put the three families back and, on
   MSVC x64, pass a one-float struct in an integer register. The two being
   interchangeable is the point of the tag.
 
-  Two traps, both silent rather than loud. A `SizeOptF` used to default to
+  Two traps, both silent rather than loud. A `SizeFOpt` used to default to
   `{None, None}` and now defaults to `{0, 0}`, so every declaration that
-  relied on that says `SizeOptFNone()`; and `None == None` is a NaN
-  comparison, so the tests compare with `OptfEq` / `SizeOptFEq`. Everything
+  relied on that says `SizeFOptNone()`; and `None == None` is a NaN
+  comparison, so the tests compare with `OptfEq` / `SizeFOptEq`. Everything
   else was compiler-driven the way the `SizeF` merge was — build, read the
   `C2039: 'width' is not a member of 'base::SizeF'` lines, rewrite exactly
-  those sites, repeat — which is what separates a `SizeOptF.width` from a
+  those sites, repeat — which is what separates a `SizeFOpt.width` from a
   `SizeDim.width` on the same line.
 
   Faster by more than the byte count suggests, because the shrink is in the

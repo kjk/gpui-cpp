@@ -113,41 +113,41 @@ inline AvailableSpace MaybeClamp(AvailableSpace a, Optf lo, Optf hi) {
 
 // ─── the same, component-wise over a size ────────────────────────────────
 
-inline SizeOptF MaybeMin(SizeOptF a, SizeOptF b) {
+inline SizeFOpt MaybeMin(SizeFOpt a, SizeFOpt b) {
     return {MaybeMin(a.w, b.w), MaybeMin(a.h, b.h)};
 }
 
-inline SizeOptF MaybeMax(SizeOptF a, SizeOptF b) {
+inline SizeFOpt MaybeMax(SizeFOpt a, SizeFOpt b) {
     return {MaybeMax(a.w, b.w), MaybeMax(a.h, b.h)};
 }
 
-inline SizeOptF MaybeAdd(SizeOptF a, SizeOptF b) {
+inline SizeFOpt MaybeAdd(SizeFOpt a, SizeFOpt b) {
     return {MaybeAdd(a.w, b.w), MaybeAdd(a.h, b.h)};
 }
 
-inline SizeOptF MaybeSub(SizeOptF a, SizeOptF b) {
+inline SizeFOpt MaybeSub(SizeFOpt a, SizeFOpt b) {
     return {MaybeSub(a.w, b.w), MaybeSub(a.h, b.h)};
 }
 
-inline SizeOptF MaybeClamp(SizeOptF a, SizeOptF lo, SizeOptF hi) {
+inline SizeFOpt MaybeClamp(SizeFOpt a, SizeFOpt lo, SizeFOpt hi) {
     return {MaybeClamp(a.w, lo.w, hi.w), MaybeClamp(a.h, lo.h, hi.h)};
 }
 
-inline SizeAvail MaybeSub(SizeAvail a, SizeOptF b) {
+inline SizeAvail MaybeSub(SizeAvail a, SizeFOpt b) {
     return {MaybeSub(a.width, b.w), MaybeSub(a.height, b.h)};
 }
 
-inline SizeAvail MaybeClamp(SizeAvail a, SizeOptF lo, SizeOptF hi) {
+inline SizeAvail MaybeClamp(SizeAvail a, SizeFOpt lo, SizeFOpt hi) {
     return {MaybeClamp(a.width, lo.w, hi.w), MaybeClamp(a.height, lo.h, hi.h)};
 }
 
-inline SizeAvail MaybeSet(SizeAvail a, SizeOptF v) {
+inline SizeAvail MaybeSet(SizeAvail a, SizeFOpt v) {
     return a.MaybeSet(v);
 }
 
 // Rust writes this as `Size::map(Some)` — a definite size seen as an
 // everywhere-Some optional one. Nothing to do: it already is one.
-constexpr SizeOptF AsOptional(SizeF s) {
+constexpr SizeFOpt AsOptional(SizeF s) {
     return s;
 }
 

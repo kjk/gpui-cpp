@@ -139,57 +139,57 @@ static void TestMaybeResolveSizeDimension() {
     TestSuite("taffy::util::resolve (maybe_resolve_size_dimension)");
 
     SizeDim autoSize = SizeDim::Auto();
-    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptFNone(), NoCalc()),
-                        SizeOptFNone()));
-    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptF{5.0f, 5.0f}, NoCalc()),
-                        SizeOptFNone()));
-    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptF{-5.0f, -5.0f}, NoCalc()),
-                        SizeOptFNone()));
-    utassert(SizeOptFEq(autoSize.MaybeResolve(SizeOptF{0.0f, 0.0f}, NoCalc()),
-                        SizeOptFNone()));
+    utassert(SizeFOptEq(autoSize.MaybeResolve(SizeFOptNone(), NoCalc()),
+                        SizeFOptNone()));
+    utassert(SizeFOptEq(autoSize.MaybeResolve(SizeFOpt{5.0f, 5.0f}, NoCalc()),
+                        SizeFOptNone()));
+    utassert(SizeFOptEq(autoSize.MaybeResolve(SizeFOpt{-5.0f, -5.0f}, NoCalc()),
+                        SizeFOptNone()));
+    utassert(SizeFOptEq(autoSize.MaybeResolve(SizeFOpt{0.0f, 0.0f}, NoCalc()),
+                        SizeFOptNone()));
 
     SizeDim lengths = SizeDim::FromLengths(5.0f, 5.0f);
-    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptFNone(), NoCalc()),
-                        SizeOptF{5.0f, 5.0f}));
-    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptF{5.0f, 5.0f}, NoCalc()),
-                        SizeOptF{5.0f, 5.0f}));
-    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptF{-5.0f, -5.0f}, NoCalc()),
-                        SizeOptF{5.0f, 5.0f}));
-    utassert(SizeOptFEq(lengths.MaybeResolve(SizeOptF{0.0f, 0.0f}, NoCalc()),
-                        SizeOptF{5.0f, 5.0f}));
+    utassert(SizeFOptEq(lengths.MaybeResolve(SizeFOptNone(), NoCalc()),
+                        SizeFOpt{5.0f, 5.0f}));
+    utassert(SizeFOptEq(lengths.MaybeResolve(SizeFOpt{5.0f, 5.0f}, NoCalc()),
+                        SizeFOpt{5.0f, 5.0f}));
+    utassert(SizeFOptEq(lengths.MaybeResolve(SizeFOpt{-5.0f, -5.0f}, NoCalc()),
+                        SizeFOpt{5.0f, 5.0f}));
+    utassert(SizeFOptEq(lengths.MaybeResolve(SizeFOpt{0.0f, 0.0f}, NoCalc()),
+                        SizeFOpt{5.0f, 5.0f}));
 
     SizeDim percents = SizeDim::FromPercent(5.0f, 5.0f);
-    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptFNone(), NoCalc()),
-                        SizeOptFNone()));
-    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptF{5.0f, 5.0f}, NoCalc()),
-                        SizeOptF{25.0f, 25.0f}));
-    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptF{-5.0f, -5.0f}, NoCalc()),
-                        SizeOptF{-25.0f, -25.0f}));
-    utassert(SizeOptFEq(percents.MaybeResolve(SizeOptF{0.0f, 0.0f}, NoCalc()),
-                        SizeOptF{0.0f, 0.0f}));
+    utassert(SizeFOptEq(percents.MaybeResolve(SizeFOptNone(), NoCalc()),
+                        SizeFOptNone()));
+    utassert(SizeFOptEq(percents.MaybeResolve(SizeFOpt{5.0f, 5.0f}, NoCalc()),
+                        SizeFOpt{25.0f, 25.0f}));
+    utassert(SizeFOptEq(percents.MaybeResolve(SizeFOpt{-5.0f, -5.0f}, NoCalc()),
+                        SizeFOpt{-25.0f, -25.0f}));
+    utassert(SizeFOptEq(percents.MaybeResolve(SizeFOpt{0.0f, 0.0f}, NoCalc()),
+                        SizeFOpt{0.0f, 0.0f}));
 }
 
 static void TestResolveOrZeroDimension() {
     TestSuite("taffy::util::resolve (resolve_or_zero_dimension)");
 
     SizeDim autoSize = SizeDim::Auto();
-    utassert(autoSize.ResolveOrZero(SizeOptFNone(), NoCalc()) == SizeF::Zero());
-    utassert(autoSize.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
+    utassert(autoSize.ResolveOrZero(SizeFOptNone(), NoCalc()) == SizeF::Zero());
+    utassert(autoSize.ResolveOrZero(SizeFOpt{5.0f, 5.0f}, NoCalc()) ==
              SizeF::Zero());
 
     SizeDim lengths = SizeDim::FromLengths(5.0f, 5.0f);
-    utassert(lengths.ResolveOrZero(SizeOptFNone(), NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeFOptNone(), NoCalc()) ==
              (SizeF{5.0f, 5.0f}));
-    utassert(lengths.ResolveOrZero(SizeOptF{-5.0f, -5.0f}, NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeFOpt{-5.0f, -5.0f}, NoCalc()) ==
              (SizeF{5.0f, 5.0f}));
 
     SizeDim percents = SizeDim::FromPercent(5.0f, 5.0f);
-    utassert(percents.ResolveOrZero(SizeOptFNone(), NoCalc()) == SizeF::Zero());
-    utassert(percents.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeFOptNone(), NoCalc()) == SizeF::Zero());
+    utassert(percents.ResolveOrZero(SizeFOpt{5.0f, 5.0f}, NoCalc()) ==
              (SizeF{25.0f, 25.0f}));
-    utassert(percents.ResolveOrZero(SizeOptF{-5.0f, -5.0f}, NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeFOpt{-5.0f, -5.0f}, NoCalc()) ==
              (SizeF{-25.0f, -25.0f}));
-    utassert(percents.ResolveOrZero(SizeOptF{0.0f, 0.0f}, NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeFOpt{0.0f, 0.0f}, NoCalc()) ==
              SizeF::Zero());
 }
 
@@ -197,25 +197,25 @@ static void TestResolveOrZeroRect() {
     TestSuite("taffy::util::resolve (resolve_or_zero_rect)");
 
     RectLpa autoRect = RectLpa::Auto();
-    utassert(autoRect.ResolveOrZero(SizeOptFNone(), NoCalc()) == RectF::Zero());
-    utassert(autoRect.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
+    utassert(autoRect.ResolveOrZero(SizeFOptNone(), NoCalc()) == RectF::Zero());
+    utassert(autoRect.ResolveOrZero(SizeFOpt{5.0f, 5.0f}, NoCalc()) ==
              RectF::Zero());
 
     RectLp lengths = {
         LengthPercentage::Length(5.0f), LengthPercentage::Length(5.0f),
         LengthPercentage::Length(5.0f), LengthPercentage::Length(5.0f)};
-    utassert(lengths.ResolveOrZero(SizeOptFNone(), NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeFOptNone(), NoCalc()) ==
              RectF::New(5.0f, 5.0f, 5.0f, 5.0f));
-    utassert(lengths.ResolveOrZero(SizeOptF{0.0f, 0.0f}, NoCalc()) ==
+    utassert(lengths.ResolveOrZero(SizeFOpt{0.0f, 0.0f}, NoCalc()) ==
              RectF::New(5.0f, 5.0f, 5.0f, 5.0f));
 
     RectLp percents = {
         LengthPercentage::Percent(5.0f), LengthPercentage::Percent(5.0f),
         LengthPercentage::Percent(5.0f), LengthPercentage::Percent(5.0f)};
-    utassert(percents.ResolveOrZero(SizeOptFNone(), NoCalc()) == RectF::Zero());
-    utassert(percents.ResolveOrZero(SizeOptF{5.0f, 5.0f}, NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeFOptNone(), NoCalc()) == RectF::Zero());
+    utassert(percents.ResolveOrZero(SizeFOpt{5.0f, 5.0f}, NoCalc()) ==
              RectF::New(25.0f, 25.0f, 25.0f, 25.0f));
-    utassert(percents.ResolveOrZero(SizeOptF{-5.0f, -5.0f}, NoCalc()) ==
+    utassert(percents.ResolveOrZero(SizeFOpt{-5.0f, -5.0f}, NoCalc()) ==
              RectF::New(-25.0f, -25.0f, -25.0f, -25.0f));
     // The Optf overload resolves every side against the same context.
     utassert(percents.ResolveOrZero(Some(5.0f), NoCalc()) ==
@@ -406,7 +406,7 @@ static void TestCompactLength() {
 
 // Rust's `size_measure_function` from the same test module: the known
 // dimensions if given, else the size stashed in the node context.
-static SizeF SizeMeasureFunction(SizeOptF knownDimensions,
+static SizeF SizeMeasureFunction(SizeFOpt knownDimensions,
                                  SizeAvail availableSpace, NodeId node,
                                  void* nodeContext, const taffy::Style* style,
                                  void* userData) {
@@ -1087,7 +1087,7 @@ struct ExplicitSizeResult {
 };
 
 static ExplicitSizeResult RunExplicitSize(const taffy::Style& style,
-                                          SizeOptF containerSize,
+                                          SizeFOpt containerSize,
                                           bool maxRepetitions) {
     ExplicitSizeResult r;
     GridExplicitSizeForTest(style, containerSize.w, maxRepetitions,
@@ -1100,7 +1100,7 @@ static ExplicitSizeResult RunExplicitSize(const taffy::Style& style,
 }
 
 // The preferred size as an optional, which is what Rust's tests pass in.
-static SizeOptF PreferredSize(const taffy::Style& s) {
+static SizeFOpt PreferredSize(const taffy::Style& s) {
     return {s.size.width.IntoOption(), s.size.height.IntoOption()};
 }
 
@@ -1173,7 +1173,7 @@ static void TestExplicitGridSizing() {
         s.gridTemplateColumns = GridTemplateOf(&c, 1);
         s.gridTemplateRows = GridTemplateOf(&rr, 1);
         ExplicitSizeResult r =
-            RunExplicitSize(s, SizeOptF{120.0f, 80.0f}, kMin);
+            RunExplicitSize(s, SizeFOpt{120.0f, 80.0f}, kMin);
         utassert(r.colCount == 3);
         utassert(r.rowCount == 4);
         utassert(r.colReps == 3);
@@ -1194,7 +1194,7 @@ static void TestExplicitGridSizing() {
         s.gridTemplateColumns = GridTemplateOf(&c, 1);
         s.gridTemplateRows = GridTemplateOf(&rr, 1);
         ExplicitSizeResult r =
-            RunExplicitSize(s, SizeOptF{140.0f, 90.0f}, kMin);
+            RunExplicitSize(s, SizeFOpt{140.0f, 90.0f}, kMin);
         utassert(r.colCount == 4);
         utassert(r.rowCount == 5);
         utassert(r.colReps == 4);
@@ -1309,7 +1309,7 @@ static void TestExplicitGridSizing() {
         s.gridTemplateColumns = GridTemplateOf(&c, 1);
         s.gridTemplateRows = GridTemplateOf(&rr, 1);
         ExplicitSizeResult r =
-            RunExplicitSize(s, SizeOptF{100.0f, 80.0f}, kMax);
+            RunExplicitSize(s, SizeFOpt{100.0f, 80.0f}, kMax);
         utassert(r.colCount == 5); // 40px horizontal padding
         utassert(r.rowCount == 4); // 40px vertical padding
         utassert(r.colReps == 5);

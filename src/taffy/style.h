@@ -602,8 +602,8 @@ struct SizeDim {
     Dimension Main(FlexDirection d) const { return IsRow(d) ? width : height; }
     Dimension Cross(FlexDirection d) const { return IsRow(d) ? height : width; }
     // Rust's `MaybeResolve<Size<Option<f32>>>`.
-    SizeOptF MaybeResolve(SizeOptF context, CalcResolver calc) const;
-    SizeF ResolveOrZero(SizeOptF context, CalcResolver calc) const;
+    SizeFOpt MaybeResolve(SizeFOpt context, CalcResolver calc) const;
+    SizeF ResolveOrZero(SizeFOpt context, CalcResolver calc) const;
 };
 
 // Rust's `Size<LengthPercentage>` (the gap).
@@ -625,7 +625,7 @@ struct SizeLp {
     LengthPercentage Cross(FlexDirection d) const {
         return IsRow(d) ? height : width;
     }
-    SizeF ResolveOrZero(SizeOptF context, CalcResolver calc) const;
+    SizeF ResolveOrZero(SizeFOpt context, CalcResolver calc) const;
     SizeF ResolveOrZero(Optf context, CalcResolver calc) const;
 };
 
@@ -644,7 +644,7 @@ struct SizeAvail {
         return {AvailableSpace::Definite(s.w),
                 AvailableSpace::Definite(s.h)};
     }
-    static SizeAvail From(SizeOptF s) {
+    static SizeAvail From(SizeFOpt s) {
         return {AvailableSpace::From(s.w), AvailableSpace::From(s.h)};
     }
 
@@ -681,10 +681,10 @@ struct SizeAvail {
             width = v;
         }
     }
-    SizeOptF IntoOptions() const {
+    SizeFOpt IntoOptions() const {
         return {width.IntoOption(), height.IntoOption()};
     }
-    SizeAvail MaybeSet(SizeOptF v) const {
+    SizeAvail MaybeSet(SizeFOpt v) const {
         return {width.MaybeSet(v.w), height.MaybeSet(v.h)};
     }
 };
@@ -706,7 +706,7 @@ struct RectLp {
 
     static RectLp Zero() { return {}; }
 
-    RectF ResolveOrZero(SizeOptF context, CalcResolver calc) const;
+    RectF ResolveOrZero(SizeFOpt context, CalcResolver calc) const;
     RectF ResolveOrZero(Optf context, CalcResolver calc) const;
 };
 
@@ -735,14 +735,14 @@ struct RectLpa {
     LengthPercentageAuto CrossEnd(FlexDirection d) const {
         return IsRow(d) ? bottom : right;
     }
-    RectF ResolveOrZero(SizeOptF context, CalcResolver calc) const;
+    RectF ResolveOrZero(SizeFOpt context, CalcResolver calc) const;
     RectF ResolveOrZero(Optf context, CalcResolver calc) const;
     // Rust's `Rect::<LengthPercentageAuto>::maybe_resolve`, which keeps auto
     // as None instead of collapsing it to zero.
-    RectOptF MaybeResolve(Optf context, CalcResolver calc) const;
+    RectFOpt MaybeResolve(Optf context, CalcResolver calc) const;
     // The same, but resolving left/right against the width and top/bottom
     // against the height. Rust spells it `zip_size`.
-    RectOptF MaybeResolveZip(SizeOptF context, CalcResolver calc) const;
+    RectFOpt MaybeResolveZip(SizeFOpt context, CalcResolver calc) const;
 };
 
 // Rust's `Point<Overflow>`.

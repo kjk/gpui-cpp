@@ -64,17 +64,17 @@ Optf Dimension::MaybeResolve(Optf context, CalcResolver calc) const {
     return MaybeResolveRaw(raw, context, calc);
 }
 
-SizeOptF SizeDim::MaybeResolve(SizeOptF context, CalcResolver calc) const {
+SizeFOpt SizeDim::MaybeResolve(SizeFOpt context, CalcResolver calc) const {
     return {MaybeResolveRaw(width.raw, context.w, calc),
             MaybeResolveRaw(height.raw, context.h, calc)};
 }
 
-SizeF SizeDim::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
+SizeF SizeDim::ResolveOrZero(SizeFOpt context, CalcResolver calc) const {
     return {ResolveOrZeroRaw(width.raw, context.w, calc),
             ResolveOrZeroRaw(height.raw, context.h, calc)};
 }
 
-SizeF SizeLp::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
+SizeF SizeLp::ResolveOrZero(SizeFOpt context, CalcResolver calc) const {
     return {ResolveOrZeroRaw(width.raw, context.w, calc),
             ResolveOrZeroRaw(height.raw, context.h, calc)};
 }
@@ -86,7 +86,7 @@ SizeF SizeLp::ResolveOrZero(Optf context, CalcResolver calc) const {
 
 // A Rect resolves its left/right against the width and its top/bottom against
 // the height, which is why the Size and the Optf overloads differ.
-RectF RectLp::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
+RectF RectLp::ResolveOrZero(SizeFOpt context, CalcResolver calc) const {
     return {ResolveOrZeroRaw(left.raw, context.w, calc),
             ResolveOrZeroRaw(right.raw, context.w, calc),
             ResolveOrZeroRaw(top.raw, context.h, calc),
@@ -100,7 +100,7 @@ RectF RectLp::ResolveOrZero(Optf context, CalcResolver calc) const {
             ResolveOrZeroRaw(bottom.raw, context, calc)};
 }
 
-RectF RectLpa::ResolveOrZero(SizeOptF context, CalcResolver calc) const {
+RectF RectLpa::ResolveOrZero(SizeFOpt context, CalcResolver calc) const {
     return {ResolveOrZeroRaw(left.raw, context.w, calc),
             ResolveOrZeroRaw(right.raw, context.w, calc),
             ResolveOrZeroRaw(top.raw, context.h, calc),
@@ -114,14 +114,14 @@ RectF RectLpa::ResolveOrZero(Optf context, CalcResolver calc) const {
             ResolveOrZeroRaw(bottom.raw, context, calc)};
 }
 
-RectOptF RectLpa::MaybeResolve(Optf context, CalcResolver calc) const {
+RectFOpt RectLpa::MaybeResolve(Optf context, CalcResolver calc) const {
     return {MaybeResolveRaw(left.raw, context, calc),
             MaybeResolveRaw(right.raw, context, calc),
             MaybeResolveRaw(top.raw, context, calc),
             MaybeResolveRaw(bottom.raw, context, calc)};
 }
 
-RectOptF RectLpa::MaybeResolveZip(SizeOptF context, CalcResolver calc) const {
+RectFOpt RectLpa::MaybeResolveZip(SizeFOpt context, CalcResolver calc) const {
     return {MaybeResolveRaw(left.raw, context.w, calc),
             MaybeResolveRaw(right.raw, context.w, calc),
             MaybeResolveRaw(top.raw, context.h, calc),
