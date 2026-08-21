@@ -97,10 +97,14 @@ El* Checkbox::IntoEl() {
     // the caller reads is the `!checked` Rust passes on.
     CheckboxState state =
         checked ? CheckboxState::Checked : CheckboxState::Unchecked;
+    // h_flex().gap_2().items_start(): the box lines up with the *first* line
+    // of the label, not with the middle of the block. Centring looks the same
+    // on a one-line label and drops the box half a description lower on a
+    // labelled one, which is what it was doing.
     El* row = gpui::Checkbox::New(cx, id, state, disabled, onClick)
                   ->FocusRing(focusRing)
                   ->FlexRow()
-                  ->ItemsCenter()
+                  ->ItemsStart()
                   ->Gap(8);
     if (tooltip.s) {
         row->Tip(tooltip);
@@ -110,15 +114,34 @@ El* Checkbox::IntoEl() {
         row->W(w);
     }
     if (label.s || hint.s || child) {
-        El* col = Div(a)->FlexCol()->Gap(2);
+        // v_flex().line_height(relative(1.2)).gap_1(). Rust also puts
+        // flex_1 on this column; here that would make every checkbox row
+        // claim the whole width of whatever holds it, which lays a row of
+        // them out as a column, so the label measures itself instead.
+        El* col = Div(a)->FlexCol()->Gap(4);
         if (label.s) {
+            // line_height(relative(1.)): the label's line box is exactly the
+            // font size, so its first line is as tall as the 16px box beside
+            // it and the two share a top edge.
+            // text_xs / text_sm / text_base / text_lg, a step above the
+            // generic control font — the same table component::Radio
+            // spells out. This was UiFontPx, which is a step smaller.
+            float fontPx = size == UiSize::XSmall  ? 12.f
+                           : size == UiSize::Small ? 14.f
+                           : size == UiSize::Large ? 18.f
+                                                   : 16.f;
             col->Child(TextEl(a, label)
-                           ->Font(UiFontPx(size))
+                           ->Font(fontPx)
+                           ->LineHeight(1.f)
                            ->Fg(disabled ? th.mutedFg : th.foreground)
                            ->Wrap());
         }
         if (hint.s) {
-            col->Child(TextEl(a, hint)->Font(12)->Fg(th.mutedFg)->Wrap());
+            col->Child(TextEl(a, hint)
+                           ->Font(12)
+                           ->LineHeight(1.2f)
+                           ->Fg(th.mutedFg)
+                           ->Wrap());
         }
         if (child) {
             col->Child(child);
