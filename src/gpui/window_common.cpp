@@ -1537,6 +1537,9 @@ App* AppNew() {
     return app;
 }
 
+// Defined with AppOnShutdown below, and called from here.
+static void AppRunShutdownFns();
+
 void AppFree(App* app) {
     if (!app) {
         return;
@@ -1561,6 +1564,7 @@ void AppFree(App* app) {
     ImageCacheClear();
     ScrollFadeClear();
     StyleOverrideClearAll();
+    AppRunShutdownFns();
     PaintAppFree(app->paint);
     app->paint = nullptr;
     PlatShutdown(app);
@@ -1579,6 +1583,30 @@ void WindowRequestAnimationFrame(Window* win) {
     // Nothing else may be keeping the window awake: arm the clock now, the
     // way AppRequestAnim does.
     PlatSetTimer(win, WindowTimerMs(win));
+}
+
+// The teardowns src/base and src/ui have registered, in the order they came.
+static const int kMaxShutdownFns = 16;
+static void (*gShutdownFns[kMaxShutdownFns])() = {};
+static int gShutdownFnN = 0;
+
+void AppOnShutdown(void (*fn)()) {
+    if (!fn || gShutdownFnN >= kMaxShutdownFns) {
+        return;
+    }
+    for (int i = 0; i < gShutdownFnN; i++) {
+        if (gShutdownFns[i] == fn) {
+            return;
+        }
+    }
+    gShutdownFns[gShutdownFnN++] = fn;
+}
+
+static void AppRunShutdownFns() {
+    for (int i = 0; i < gShutdownFnN; i++) {
+        gShutdownFns[i]();
+    }
+    gShutdownFnN = 0;
 }
 
 void AppRefreshWindows(App* app) {
