@@ -1,10 +1,10 @@
-/* The CSS Grid layout algorithm — taffy/src/compute/grid/*, a partial
+/* The CSS Grid layout algorithm — all of taffy/src/compute/grid, a partial
  * implementation of CSS Grid Level 1: https://www.w3.org/TR/css-grid-1
  *
  * Rust splits this over `mod.rs`, `alignment.rs`, `explicit_grid.rs`,
- * `implicit_grid.rs`, `placement.rs`, `track_sizing.rs` and `types/*.rs`. They
- * are one file here, in that order, because every one of them is private to
- * the algorithm and none of them is named from outside it.
+ * `implicit_grid.rs`, `placement.rs`, `track_sizing.rs` and the `types`
+ * module. They are one file here, in that order, because every one of them is
+ * private to the algorithm and none of them is named from outside it.
  *
  * Deviations from the Rust:
  *   - `detailed_layout_info` is not produced. It exists for consumers that

@@ -1,4 +1,4 @@
-/* The layout algorithms — taffy/src/compute/*.
+/* The layout algorithms — everything under taffy/src/compute.
  *
  * Rust's compute functions take `&mut impl LayoutPartialTree`; here they take
  * a `TaffyTree*`, since there is one tree type (see taffy_tree.h).
