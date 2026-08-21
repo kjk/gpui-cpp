@@ -362,3 +362,23 @@ cargo run -p system_monitor
   example's own subfolder still asks, and `AssetsClear` still replaces what
   this found. The other 31 icons without a stroke fallback are still without
   one; they are only reached now if the assets folder is genuinely missing.
+
+- 2026-08-21: `component::Checkbox` lines its box up with the first line of
+  the label, the way `checkbox.rs` does. Rust's root is
+  `h_flex().gap_2().items_start().line_height(relative(1.))` and the label div
+  carries `line_height(relative(1.))` of its own, so the label's first line box
+  is exactly the font size and shares a top edge with the 16px indicator. Ours
+  was `ItemsCenter`, which looks identical on a one-line label and drops the
+  box half a description lower on a labelled one — measured against the Rust
+  window, the box sat 7px *below* the label ink where Rust puts it 3px above.
+  The description column was `gap_2` where Rust has `gap_1`, and the label was
+  drawn at `UiFontPx` — the generic control font — where Rust uses `text_base`,
+  a step above it. `component::Radio` already had all four right and spells the
+  font table out in a comment; the checkbox had drifted from it and now reads
+  the same.
+
+  Rust also puts `flex_1` on that column and this does not: here it would make
+  every checkbox row claim the full width of whatever holds it, which lays a
+  row of checkboxes out as a column and pushes the Disabled pair off the edge.
+  The label measures itself instead, so a wrapped label breaks a word later
+  than Rust's — visible on the story's two-line label and nowhere else.
