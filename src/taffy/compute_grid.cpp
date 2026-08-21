@@ -149,9 +149,9 @@ struct GridTrack {
             case CompactLength::kFitContentPxTag:
                 return maxTrackSizingFunction.raw.Value();
             case CompactLength::kFitContentPercentTag:
-                return axisAvailableGridSpace.IsSome()
-                           ? axisAvailableGridSpace.val * maxTrackSizingFunction
-                                                              .raw.Value()
+                return IsSome(axisAvailableGridSpace)
+                           ? axisAvailableGridSpace * maxTrackSizingFunction.raw
+                                                          .Value()
                            : INFINITY;
             default:
                 return INFINITY;
@@ -431,13 +431,13 @@ struct GridItem {
     SizeDim size;
     SizeDim minSize;
     SizeDim maxSize;
-    Optf aspectRatio;
+    Optf aspectRatio = None();
     RectLp padding;
     RectLp border;
     RectLpa margin;
     AlignSelf alignSelf;
     AlignSelf justifySelf;
-    Optf baseline;
+    Optf baseline = None();
     // Acts like an extra top margin, for baseline alignment.
     float baselineShim = 0.0f;
 
@@ -451,11 +451,11 @@ struct GridItem {
     bool crossesIntrinsicColumn = false;
 
     // Caches, valid for a single run of the track-sizing algorithm.
-    SizeOptF gridAreaSizeCache;
+    SizeOptF gridAreaSizeCache = SizeOptFNone();
     bool hasGridAreaSizeCache = false;
-    SizeOptF minContentContributionCache;
-    SizeOptF minimumContributionCache;
-    SizeOptF maxContentContributionCache;
+    SizeOptF minContentContributionCache = SizeOptFNone();
+    SizeOptF minimumContributionCache = SizeOptFNone();
+    SizeOptF maxContentContributionCache = SizeOptFNone();
 
     // Final position and height, for the container's baseline.
     float yPosition = 0.0f;
@@ -1026,10 +1026,10 @@ float TrackDefiniteValue(TrackSizingFunction fn, Optf parentSize,
                          CalcResolver calc) {
     Optf maxSize = fn.max.DefiniteValue(parentSize, calc);
     Optf minSize = fn.min.DefiniteValue(parentSize, calc);
-    if (maxSize.IsSome()) {
-        return MaybeMax(maxSize.val, minSize);
+    if (IsSome(maxSize)) {
+        return MaybeMax(maxSize, minSize);
     }
-    return minSize.UnwrapOr(0.0f);
+    return UnwrapOr(minSize, 0.0f);
 }
 
 struct ExplicitGridSize {
@@ -1103,9 +1103,9 @@ ExplicitGridSize ComputeExplicitGridSizeInAxis(
     uint16_t repetitionTrackCount = repetition->TrackCount();
 
     uint16_t numRepetitions = 1;
-    if (autoFitContainerSize.IsSome()) {
-        float innerContainerSize = autoFitContainerSize.val;
-        Optf parentSize = Optf(innerContainerSize);
+    if (IsSome(autoFitContainerSize)) {
+        float innerContainerSize = autoFitContainerSize;
+        Optf parentSize = Some(innerContainerSize);
 
         float nonRepeatingTrackUsedSpace = 0.0f;
         for (int i = 0; i < templ.len; i++) {
@@ -1128,8 +1128,7 @@ ExplicitGridSize ComputeExplicitGridSizeInAxis(
         SizeLp gapStyle = style.gap;
         LengthPercentage gapLp = gapStyle.GetAbs(axis);
         SizeLp asSize = {gapLp, gapLp};
-        float gapSize = asSize.ResolveOrZero(Optf(innerContainerSize), calc)
-                            .w;
+        float gapSize = asSize.ResolveOrZero(Some(innerContainerSize), calc).w;
 
         float perRepetitionTrackUsedSpace = 0.0f;
         for (int k = 0; k < repetition->tracks.len; k++) {
@@ -1352,7 +1351,7 @@ enum class TrackSizeEstimate : uint8_t {
 Optf EstimateTrackSize(const GridTrack& track, Optf basis,
                        TrackSizeEstimate kind, CalcResolver calc) {
     if (kind == TrackSizeEstimate::BaseSize) {
-        return Optf(track.baseSize);
+        return Some(track.baseSize);
     }
     return track.maxTrackSizingFunction.DefiniteValue(basis, calc);
 }
@@ -1371,7 +1370,7 @@ SizeF MarginsAxisSumsWithBaselineShims(const GridItem& item,
     // deliberately zeroed.
     RectLpa horizontalOnly = {m.left, m.right, LengthPercentageAuto::Zero(),
                               LengthPercentageAuto::Zero()};
-    RectF h = horizontalOnly.ResolveOrZero(Optf(0.0f), calc);
+    RectF h = horizontalOnly.ResolveOrZero(Some(0.0f), calc);
     RectLpa verticalOnly = {LengthPercentageAuto::Zero(),
                             LengthPercentageAuto::Zero(), m.top, m.bottom};
     RectF v = verticalOnly.ResolveOrZero(innerNodeWidth, calc);
@@ -1395,12 +1394,12 @@ Optf SpannedTrackLimit(const GridItem& item, AbstractAxis axis,
         Optf v = axisTracks[i]
                      .maxTrackSizingFunction
                      .DefiniteLimit(axisParentSize, calc);
-        if (!v.IsSome()) {
-            return Optf();
+        if (!IsSome(v)) {
+            return None();
         }
-        limit += v.val;
+        limit += v;
     }
-    return Optf(limit);
+    return Some(limit);
 }
 
 // The same, but excluding fit-content() arguments. Clamps automatic minimum
@@ -1415,12 +1414,12 @@ Optf SpannedFixedTrackLimit(const GridItem& item, AbstractAxis axis,
         Optf v = axisTracks[i]
                      .maxTrackSizingFunction
                      .DefiniteValue(axisParentSize, calc);
-        if (!v.IsSome()) {
-            return Optf();
+        if (!IsSome(v)) {
+            return None();
         }
-        limit += v.val;
+        limit += v;
     }
-    return Optf(limit);
+    return Some(limit);
 }
 
 // The known_dimensions handed to the child sizing functions. The point of this
@@ -1430,46 +1429,49 @@ SizeOptF ItemKnownDimensions(const GridItem& item, TaffyTree* tree,
                              SizeOptF gridAreaSize) {
     CalcResolver calc = tree->calc;
     SizeF margins =
-        MarginsAxisSumsWithBaselineShims(item, gridAreaSize.width, calc);
+        MarginsAxisSumsWithBaselineShims(item, gridAreaSize.w, calc);
     Optf aspectRatio = item.aspectRatio;
 
     // CSS resolves percentage padding and border against the inline size of
     // the containing block, which for a grid item under intrinsic measurement
     // is the grid area's width when that is definite.
-    RectF padding = item.padding.ResolveOrZero(gridAreaSize.width, calc);
-    RectF border = item.border.ResolveOrZero(gridAreaSize.width, calc);
+    RectF padding = item.padding.ResolveOrZero(gridAreaSize.w, calc);
+    RectF border = item.border.ResolveOrZero(gridAreaSize.w, calc);
     SizeF paddingBorderSize = (padding + border).SumAxes();
     SizeF boxSizingAdjustment = item.boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
                                     : SizeF::Zero();
-    SizeOptF inherentSize = MaybeAdd(item.size.MaybeResolve(gridAreaSize, calc)
-                                         .MaybeApplyAspectRatio(aspectRatio),
-                                     boxSizingAdjustment);
-    SizeOptF minSize = MaybeAdd(item.minSize.MaybeResolve(gridAreaSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-    SizeOptF maxSize = MaybeAdd(item.maxSize.MaybeResolve(gridAreaSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
+    SizeOptF inherentSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     item.size.MaybeResolve(gridAreaSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF minSize = MaybeAdd(
+        MaybeApplyAspectRatio(item.minSize.MaybeResolve(gridAreaSize, calc),
+                              aspectRatio),
+        boxSizingAdjustment);
+    SizeOptF maxSize = MaybeAdd(
+        MaybeApplyAspectRatio(item.maxSize.MaybeResolve(gridAreaSize, calc),
+                              aspectRatio),
+        boxSizingAdjustment);
 
     SizeOptF gridAreaMinusItemMargins = MaybeSub(gridAreaSize, margins);
 
-    Optf width = inherentSize.width;
-    if (!width.IsSome() && !item.margin.left.IsAuto() &&
+    Optf width = inherentSize.w;
+    if (!IsSome(width) && !item.margin.left.IsAuto() &&
         !item.margin.right.IsAuto() &&
         item.justifySelf.keyword == AlignItemsKeyword::Stretch) {
-        width = gridAreaMinusItemMargins.width;
+        width = gridAreaMinusItemMargins.w;
     }
-    SizeOptF sized = SizeOptF{width, inherentSize.height}
-                         .MaybeApplyAspectRatio(aspectRatio);
+    SizeOptF sized =
+        MaybeApplyAspectRatio(SizeOptF{width, inherentSize.h}, aspectRatio);
 
-    Optf height = sized.height;
-    if (!height.IsSome() && !item.margin.top.IsAuto() &&
+    Optf height = sized.h;
+    if (!IsSome(height) && !item.margin.top.IsAuto() &&
         !item.margin.bottom.IsAuto() &&
         item.alignSelf.keyword == AlignItemsKeyword::Stretch) {
-        height = gridAreaMinusItemMargins.height;
+        height = gridAreaMinusItemMargins.h;
     }
-    sized = SizeOptF{sized.width, height}.MaybeApplyAspectRatio(aspectRatio);
+    sized = MaybeApplyAspectRatio(SizeOptF{sized.w, height}, aspectRatio);
     return MaybeClamp(sized, minSize, maxSize);
 }
 
@@ -1481,7 +1483,7 @@ SizeOptF ItemGridAreaSize(const GridItem& item, AbstractAxis axis,
                           const GridTrack* otherAxisTracks,
                           SizeOptF availableSpace, TrackSizeEstimate estimate,
                           CalcResolver calc) {
-    SizeOptF size;
+    SizeOptF size = SizeOptFNone();
 
     {
         float sum = 0.0f;
@@ -1491,16 +1493,16 @@ SizeOptF ItemGridAreaSize(const GridItem& item, AbstractAxis axis,
         for (int i = from; i < to; i++) {
             const GridTrack& t = axisTracks[i];
             Optf mn = t.minTrackSizingFunction
-                          .DefiniteValue(availableSpace.Get(axis), calc);
+                          .DefiniteValue(Get(availableSpace, axis), calc);
             Optf mx = t.maxTrackSizingFunction
-                          .DefiniteValue(availableSpace.Get(axis), calc);
-            if (!mn.IsSome() || !mx.IsSome() || mn.val != mx.val) {
+                          .DefiniteValue(Get(availableSpace, axis), calc);
+            if (!IsSome(mn) || !IsSome(mx) || mn != mx) {
                 definite = false;
                 break;
             }
             sum += t.baseSize;
         }
-        size.Set(axis, definite ? Optf(sum) : Optf());
+        Set(&size, axis, definite ? Some(sum) : None());
     }
 
     {
@@ -1511,15 +1513,15 @@ SizeOptF ItemGridAreaSize(const GridItem& item, AbstractAxis axis,
         int to = item.TrackRangeEnd(other);
         for (int i = from; i < to; i++) {
             const GridTrack& t = otherAxisTracks[i];
-            Optf v =
-                EstimateTrackSize(t, availableSpace.Get(other), estimate, calc);
-            if (!v.IsSome()) {
+            Optf v = EstimateTrackSize(t, Get(availableSpace, other), estimate,
+                                       calc);
+            if (!IsSome(v)) {
                 definite = false;
                 break;
             }
-            sum += v.val + t.contentAlignmentAdjustment;
+            sum += v + t.contentAlignmentAdjustment;
         }
-        size.Set(other, definite ? Optf(sum) : Optf());
+        Set(&size, other, definite ? Some(sum) : None());
     }
 
     return size;
@@ -1546,12 +1548,11 @@ float ItemMinContentContribution(const GridItem& item, AbstractAxis axis,
     SizeOptF knownDimensions = ItemKnownDimensions(item, tree, gridAreaSize);
     // The child sees the grid area as its containing block during intrinsic
     // measurement, so percentage box properties resolve against it.
-    SizeAvail avail = {availableSpace.width.IsSome()
-                           ? AvailableSpace::Definite(availableSpace.width.val)
-                           : AvailableSpace::MinContent(),
-                       availableSpace.height.IsSome()
-                           ? AvailableSpace::Definite(availableSpace.height.val)
-                           : AvailableSpace::MinContent()};
+    SizeAvail avail = {
+        IsSome(availableSpace.w) ? AvailableSpace::Definite(availableSpace.w)
+                                 : AvailableSpace::MinContent(),
+        IsSome(availableSpace.h) ? AvailableSpace::Definite(availableSpace.h)
+                                 : AvailableSpace::MinContent()};
     return tree->MeasureChildSize(item.node, knownDimensions, gridAreaSize,
                                   avail, SizingMode::InherentSize,
                                   AsAbsNaive(axis), LineBool::False());
@@ -1560,13 +1561,13 @@ float ItemMinContentContribution(const GridItem& item, AbstractAxis axis,
 float ItemMinContentContributionCached(GridItem* item, AbstractAxis axis,
                                        TaffyTree* tree, SizeOptF gridAreaSize,
                                        SizeOptF availableSpace) {
-    Optf cached = item->minContentContributionCache.Get(axis);
-    if (cached.IsSome()) {
-        return cached.val;
+    Optf cached = Get(item->minContentContributionCache, axis);
+    if (IsSome(cached)) {
+        return cached;
     }
     float size = ItemMinContentContribution(*item, axis, tree, gridAreaSize,
                                             availableSpace);
-    item->minContentContributionCache.Set(axis, Optf(size));
+    Set(&item->minContentContributionCache, axis, Some(size));
     return size;
 }
 
@@ -1574,12 +1575,11 @@ float ItemMaxContentContribution(const GridItem& item, AbstractAxis axis,
                                  TaffyTree* tree, SizeOptF gridAreaSize,
                                  SizeOptF availableSpace) {
     SizeOptF knownDimensions = ItemKnownDimensions(item, tree, gridAreaSize);
-    SizeAvail avail = {availableSpace.width.IsSome()
-                           ? AvailableSpace::Definite(availableSpace.width.val)
-                           : AvailableSpace::MaxContent(),
-                       availableSpace.height.IsSome()
-                           ? AvailableSpace::Definite(availableSpace.height.val)
-                           : AvailableSpace::MaxContent()};
+    SizeAvail avail = {
+        IsSome(availableSpace.w) ? AvailableSpace::Definite(availableSpace.w)
+                                 : AvailableSpace::MaxContent(),
+        IsSome(availableSpace.h) ? AvailableSpace::Definite(availableSpace.h)
+                                 : AvailableSpace::MaxContent()};
     return tree->MeasureChildSize(item.node, knownDimensions, gridAreaSize,
                                   avail, SizingMode::InherentSize,
                                   AsAbsNaive(axis), LineBool::False());
@@ -1588,13 +1588,13 @@ float ItemMaxContentContribution(const GridItem& item, AbstractAxis axis,
 float ItemMaxContentContributionCached(GridItem* item, AbstractAxis axis,
                                        TaffyTree* tree, SizeOptF gridAreaSize,
                                        SizeOptF availableSpace) {
-    Optf cached = item->maxContentContributionCache.Get(axis);
-    if (cached.IsSome()) {
-        return cached.val;
+    Optf cached = Get(item->maxContentContributionCache, axis);
+    if (IsSome(cached)) {
+        return cached;
     }
     float size = ItemMaxContentContribution(*item, axis, tree, gridAreaSize,
                                             availableSpace);
-    item->maxContentContributionCache.Set(axis, Optf(size));
+    Set(&item->maxContentContributionCache, axis, Some(size));
     return size;
 }
 
@@ -1608,29 +1608,31 @@ float ItemMinimumContribution(GridItem* item, TaffyTree* tree,
                               int axisTrackCount, SizeOptF gridAreaSize,
                               SizeOptF innerNodeSize) {
     CalcResolver calc = tree->calc;
-    RectF padding = item->padding.ResolveOrZero(gridAreaSize.width, calc);
-    RectF border = item->border.ResolveOrZero(gridAreaSize.width, calc);
+    RectF padding = item->padding.ResolveOrZero(gridAreaSize.w, calc);
+    RectF border = item->border.ResolveOrZero(gridAreaSize.w, calc);
     SizeF paddingBorderSize = (padding + border).SumAxes();
     SizeF boxSizingAdjustment = item->boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
                                     : SizeF::Zero();
 
-    Optf size = MaybeAdd(item->size.MaybeResolve(gridAreaSize, calc)
-                             .MaybeApplyAspectRatio(item->aspectRatio),
-                         boxSizingAdjustment)
-                    .Get(axis);
-    if (!size.IsSome()) {
-        size = MaybeAdd(item->minSize.MaybeResolve(gridAreaSize, calc)
-                            .MaybeApplyAspectRatio(item->aspectRatio),
-                        boxSizingAdjustment)
-                   .Get(axis);
+    Optf size = Get(MaybeAdd(MaybeApplyAspectRatio(
+                                 item->size.MaybeResolve(gridAreaSize, calc),
+                                 item->aspectRatio),
+                             boxSizingAdjustment),
+                    axis);
+    if (!IsSome(size)) {
+        size = Get(MaybeAdd(MaybeApplyAspectRatio(
+                                item->minSize.MaybeResolve(gridAreaSize, calc),
+                                item->aspectRatio),
+                            boxSizingAdjustment),
+                   axis);
     }
-    if (!size.IsSome()) {
+    if (!IsSome(size)) {
         Overflow o =
             axis == AbstractAxis::Inline ? item->overflow.x : item->overflow.y;
         size = MaybeIntoAutomaticMinSize(o);
     }
-    if (!size.IsSome()) {
+    if (!IsSome(size)) {
         // The automatic minimum size is content-based only if the item spans
         // at least one track whose min sizing function is auto, and either it
         // spans one track or none of the tracks it spans is flexible.
@@ -1657,15 +1659,15 @@ float ItemMinimumContribution(GridItem* item, TaffyTree* tree,
             // maximum size is capped by it, with indefinite percentages
             // resolved against zero.
             if (item->isCompressibleReplaced) {
-                Optf pref = item->size.Get(axis).MaybeResolve(Optf(0.0f), calc);
+                Optf pref = item->size.Get(axis).MaybeResolve(Some(0.0f), calc);
                 Optf mx = item->maxSize.Get(axis)
-                              .MaybeResolve(Optf(0.0f), calc);
+                              .MaybeResolve(Some(0.0f), calc);
                 minimumContribution =
                     MaybeMin(MaybeMin(minimumContribution, pref), mx);
             }
-            size = Optf(minimumContribution);
+            size = Some(minimumContribution);
         } else {
-            size = Optf(0.0f);
+            size = Some(0.0f);
         }
     }
 
@@ -1673,8 +1675,8 @@ float ItemMinimumContribution(GridItem* item, TaffyTree* tree,
     // when that is definite. A fit-content() argument does not clamp the
     // content-based minimum the way a fixed max sizing function does.
     Optf limit = SpannedFixedTrackLimit(*item, axis, axisTracks,
-                                        innerNodeSize.Get(axis), calc);
-    return MaybeMin(size.val, limit);
+                                        Get(innerNodeSize, axis), calc);
+    return MaybeMin(size, limit);
 }
 
 float ItemMinimumContributionCached(GridItem* item, TaffyTree* tree,
@@ -1682,14 +1684,14 @@ float ItemMinimumContributionCached(GridItem* item, TaffyTree* tree,
                                     const GridTrack* axisTracks,
                                     int axisTrackCount, SizeOptF gridAreaSize,
                                     SizeOptF innerNodeSize) {
-    Optf cached = item->minimumContributionCache.Get(axis);
-    if (cached.IsSome()) {
-        return cached.val;
+    Optf cached = Get(item->minimumContributionCache, axis);
+    if (IsSome(cached)) {
+        return cached;
     }
     float size =
         ItemMinimumContribution(item, tree, axis, axisTracks, axisTrackCount,
                                 gridAreaSize, innerNodeSize);
-    item->minimumContributionCache.Set(axis, Optf(size));
+    Set(&item->minimumContributionCache, axis, Some(size));
     return size;
 }
 
@@ -2055,7 +2057,7 @@ struct IntrinsicSizeMeasurer {
     const GridTrack* otherAxisTracks;
     TrackSizeEstimate estimate;
     AbstractAxis axis;
-    SizeOptF innerNodeSize;
+    SizeOptF innerNodeSize = SizeOptFNone();
 
     CalcResolver Calc() const { return tree->calc; }
 
@@ -2067,9 +2069,9 @@ struct IntrinsicSizeMeasurer {
                                  const GridTrack* axisTracks) const {
         SizeOptF gridAreaSize = GridAreaSize(item, axisTracks);
         SizeOptF availableSpace = gridAreaSize;
-        availableSpace.Set(axis, Optf());
+        Set(&availableSpace, axis, None());
         SizeF marginAxisSums = MarginsAxisSumsWithBaselineShims(
-            *item, availableSpace.width, tree->calc);
+            *item, availableSpace.w, tree->calc);
         float contribution = ItemMinContentContributionCached(
             item, axis, tree, gridAreaSize, availableSpace);
         return contribution + Get(marginAxisSums, axis);
@@ -2078,9 +2080,9 @@ struct IntrinsicSizeMeasurer {
                                  const GridTrack* axisTracks) const {
         SizeOptF gridAreaSize = GridAreaSize(item, axisTracks);
         SizeOptF availableSpace = gridAreaSize;
-        availableSpace.Set(axis, Optf());
+        Set(&availableSpace, axis, None());
         SizeF marginAxisSums = MarginsAxisSumsWithBaselineShims(
-            *item, availableSpace.width, tree->calc);
+            *item, availableSpace.w, tree->calc);
         float contribution = ItemMaxContentContributionCached(
             item, axis, tree, gridAreaSize, availableSpace);
         return contribution + Get(marginAxisSums, axis);
@@ -2089,9 +2091,9 @@ struct IntrinsicSizeMeasurer {
                               int axisTrackCount) const {
         SizeOptF gridAreaSize = GridAreaSize(item, axisTracks);
         SizeOptF availableSpace = gridAreaSize;
-        availableSpace.Set(axis, Optf());
+        Set(&availableSpace, axis, None());
         SizeF marginAxisSums = MarginsAxisSumsWithBaselineShims(
-            *item, availableSpace.width, tree->calc);
+            *item, availableSpace.w, tree->calc);
         float contribution = ItemMinimumContributionCached(
             item, tree, axis, axisTracks, axisTrackCount, gridAreaSize,
             innerNodeSize);
@@ -2162,7 +2164,7 @@ float ComputeAlignmentGutterAdjustment(AlignContent alignment,
     if (innerGutterWeight == 0) {
         return 0.0f;
     }
-    if (!axisInnerNodeSize.IsSome()) {
+    if (!IsSome(axisInnerNodeSize)) {
         return 0.0f;
     }
 
@@ -2171,14 +2173,14 @@ float ComputeAlignmentGutterAdjustment(AlignContent alignment,
     for (int i = 0; i < nTracks; i++) {
         Optf v =
             EstimateTrackSize(tracks[i], axisInnerNodeSize, estimate, calc);
-        if (!v.IsSome()) {
+        if (!IsSome(v)) {
             definite = false;
             break;
         }
-        trackSizeSum += v.val;
+        trackSizeSum += v;
     }
     float freeSpace =
-        definite ? F32Max(0.0f, axisInnerNodeSize.val - trackSizeSum) : 0.0f;
+        definite ? F32Max(0.0f, axisInnerNodeSize - trackSizeSum) : 0.0f;
 
     int weightedTrackCount =
         (((nTracks - 3) / 2) * innerGutterWeight) + (2 * outerGutterWeight);
@@ -2264,14 +2266,14 @@ void InitializeTrackSizes(TaffyTree* tree, GridTrack* tracks, int n,
         GridTrack& t = tracks[i];
         // A fixed min sizing function resolves to a length and becomes the
         // initial base size; an intrinsic one starts at zero.
-        t.baseSize = t.minTrackSizingFunction
-                         .DefiniteValue(axisInnerNodeSize, calc)
-                         .UnwrapOr(0.0f);
+        t.baseSize = UnwrapOr(t.minTrackSizingFunction
+                                  .DefiniteValue(axisInnerNodeSize, calc),
+                              0.0f);
         // A fixed max sizing function becomes the initial growth limit; an
         // intrinsic or flexible one starts at infinity.
-        t.growthLimit = t.maxTrackSizingFunction
-                            .DefiniteValue(axisInnerNodeSize, calc)
-                            .UnwrapOr(INFINITY);
+        t.growthLimit = UnwrapOr(t.maxTrackSizingFunction
+                                     .DefiniteValue(axisInnerNodeSize, calc),
+                                 INFINITY);
         if (t.growthLimit < t.baseSize) {
             t.growthLimit = t.baseSize;
         }
@@ -2310,26 +2312,26 @@ void ResolveItemBaselines(TaffyTree* tree, AbstractAxis axis, GridItem* items,
         for (int i = start; i < end; i++) {
             GridItem& item = items[i];
             LayoutOutput out = tree->PerformChildLayout(
-                item.node, SizeOptF::None(), innerNodeSize,
+                item.node, SizeOptFNone(), innerNodeSize,
                 SizeAvail::MinContent(), SizingMode::InherentSize,
                 LineBool::False());
             RectLpa topOnly = {LengthPercentageAuto::Zero(),
                                LengthPercentageAuto::Zero(), item.margin.top,
                                LengthPercentageAuto::Zero()};
-            float marginTop =
-                topOnly.ResolveOrZero(innerNodeSize.width, tree->calc).top;
-            item.baseline = Optf(
-                out.firstBaselines.y.UnwrapOr(out.size.h) + marginTop);
+            float marginTop = topOnly.ResolveOrZero(innerNodeSize.w, tree->calc)
+                                  .top;
+            item.baseline =
+                Some(UnwrapOr(out.firstBaselines.y, out.size.h) + marginTop);
         }
 
         float rowMaxBaseline = 0.0f;
         for (int i = start; i < end; i++) {
             rowMaxBaseline =
-                F32Max(rowMaxBaseline, items[i].baseline.UnwrapOr(0.0f));
+                F32Max(rowMaxBaseline, UnwrapOr(items[i].baseline, 0.0f));
         }
         for (int i = start; i < end; i++) {
             items[i].baselineShim =
-                rowMaxBaseline - items[i].baseline.UnwrapOr(0.0f);
+                rowMaxBaseline - UnwrapOr(items[i].baseline, 0.0f);
         }
         start = end;
     }
@@ -2596,7 +2598,7 @@ void ResolveIntrinsicTrackSizes(TaffyTree* tree, AbstractAxis axis,
         return CmpByCrossFlexThenSpanThenStart(a, b, axis);
     });
 
-    Optf axisInnerNodeSize = innerNodeSize.Get(axis);
+    Optf axisInnerNodeSize = Get(innerNodeSize, axis);
     float flexFactorSum = 0.0f;
     for (int i = 0; i < nAxisTracks; i++) {
         flexFactorSum += axisTracks[i].FlexFactor();
@@ -2636,7 +2638,7 @@ void ResolveIntrinsicTrackSizes(TaffyTree* tree, AbstractAxis axis,
                         // An indefinite, not-yet-resolved container size makes
                         // a percentage track behave as min-content, matching
                         // Chrome.
-                        if (!axisInnerNodeSize.IsSome()) {
+                        if (!IsSome(axisInnerNodeSize)) {
                             newBaseSize = F32Max(
                                 track.baseSize,
                                 sizer.MinContentContribution(item, axisTracks));
@@ -2685,7 +2687,7 @@ void ResolveIntrinsicTrackSizes(TaffyTree* tree, AbstractAxis axis,
                     default:
                         // calc() behaves like a percentage here.
                         if (track.minTrackSizingFunction.raw.IsCalc() &&
-                            !axisInnerNodeSize.IsSome()) {
+                            !IsSome(axisInnerNodeSize)) {
                             newBaseSize = F32Max(
                                 track.baseSize,
                                 sizer.MinContentContribution(item, axisTracks));
@@ -2725,7 +2727,7 @@ void ResolveIntrinsicTrackSizes(TaffyTree* tree, AbstractAxis axis,
                         t.growthLimitPlannedIncrease, maxContentContribution);
                 } else if (t.maxTrackSizingFunction.IsMaxContentAlike() ||
                            (t.maxTrackSizingFunction.UsesPercentage() &&
-                            !axisInnerNodeSize.IsSome())) {
+                            !IsSome(axisInnerNodeSize))) {
                     // An indefinite, not-yet-resolved container size makes a
                     // percentage track behave as auto, matching Chrome.
                     t.growthLimitPlannedIncrease = F32Max(
@@ -2787,9 +2789,8 @@ void ResolveIntrinsicTrackSizes(TaffyTree* tree, AbstractAxis axis,
             int count = item->TrackRangeEnd(axis) - from;
             if (space > 0.0f && count > 0) {
                 auto hasIntrinsicMin = [&](const GridTrack& t) {
-                    return !t.minTrackSizingFunction
-                                .DefiniteValue(axisInnerNodeSize, calc)
-                                .IsSome();
+                    return !IsSome(t.minTrackSizingFunction
+                                       .DefiniteValue(axisInnerNodeSize, calc));
                 };
                 if (IsScrollContainer(axisOverflow)) {
                     DistributeItemSpaceToBaseSize(
@@ -2954,7 +2955,7 @@ void ResolveIntrinsicTrackSizes(TaffyTree* tree, AbstractAxis axis,
             auto hasMaxContentMax = [&](const GridTrack& t) {
                 return t.maxTrackSizingFunction.IsMaxContentAlike() ||
                        (t.maxTrackSizingFunction.UsesPercentage() &&
-                        !axisInnerNodeSize.IsSome());
+                        !IsSome(axisInnerNodeSize));
             };
             for (int bi = 0; bi < batchLen; bi++) {
                 GridItem* item = &batch[bi];
@@ -3107,7 +3108,7 @@ void ExpandFlexibleTracks(TaffyTree* tree, AbstractAxis axis,
             // TODO(taffy): plumb an estimate of the other axis size in here
             // rather than passing none.
             float maxContentContribution = ItemMaxContentContributionCached(
-                item, axis, tree, SizeOptF::None(), SizeOptF::None());
+                item, axis, tree, SizeOptFNone(), SizeOptFNone());
             itemMax = F32Max(itemMax, FindSizeOfFr(axisTracks + from, count,
                                                    maxContentContribution));
         }
@@ -3127,8 +3128,8 @@ void ExpandFlexibleTracks(TaffyTree* tree, AbstractAxis axis,
                 hypotheticalGridSize += t.baseSize;
             }
         }
-        float minSize = axisMinSize.UnwrapOr(0.0f);
-        float maxSize = axisMaxSize.UnwrapOr(INFINITY);
+        float minSize = UnwrapOr(axisMinSize, 0.0f);
+        float maxSize = UnwrapOr(axisMaxSize, INFINITY);
         if (hypotheticalGridSize < minSize) {
             flexFraction = FindSizeOfFr(axisTracks, nAxisTracks, minSize);
         } else if (hypotheticalGridSize > maxSize) {
@@ -3168,7 +3169,7 @@ void StretchAutoTracks(GridTrack* axisTracks, int n, Optf axisMinSize,
     if (axisAvailableSpaceForExpansion.IsDefinite()) {
         freeSpace = axisAvailableSpaceForExpansion.ComputeFreeSpace(usedSpace);
     } else {
-        freeSpace = axisMinSize.IsSome() ? axisMinSize.val - usedSpace : 0.0f;
+        freeSpace = IsSome(axisMinSize) ? axisMinSize - usedSpace : 0.0f;
     }
     if (freeSpace > 0.0f) {
         float extra = freeSpace / (float)numAutoTracks;
@@ -3191,7 +3192,7 @@ void TrackSizingAlgorithm(TaffyTree* tree, AbstractAxis axis, Optf axisMinSize,
                           TrackSizeEstimate estimate,
                           bool hasBaselineAlignedItem) {
     // 11.4 Initialise Track sizes.
-    Optf percentageBasis = innerNodeSize.Get(axis).Or(axisMinSize);
+    Optf percentageBasis = Or(Get(innerNodeSize, axis), axisMinSize);
     InitializeTrackSizes(tree, axisTracks, nAxisTracks, percentageBasis);
 
     // 11.5.1 Shim item baselines.
@@ -3214,7 +3215,7 @@ void TrackSizingAlgorithm(TaffyTree* tree, AbstractAxis axis, Optf axisMinSize,
     // The extra amount added to each spanned gutter when estimating an item's
     // size in the opposite axis.
     float gutterAlignmentAdjustment = ComputeAlignmentGutterAdjustment(
-        otherAxisAlignment, innerNodeSize.Get(Other(axis)), otherAxisTracks,
+        otherAxisAlignment, Get(innerNodeSize, Other(axis)), otherAxisTracks,
         nOtherAxisTracks, estimate, tree->calc);
     if (nOtherAxisTracks > 3) {
         for (int i = 2; i < nOtherAxisTracks; i += 2) {
@@ -3229,7 +3230,7 @@ void TrackSizingAlgorithm(TaffyTree* tree, AbstractAxis axis, Optf axisMinSize,
         availableGridSpace.Get(axis), innerNodeSize, estimate);
 
     // 11.6 Maximise Tracks.
-    MaximiseTracks(axisTracks, nAxisTracks, innerNodeSize.Get(axis),
+    MaximiseTracks(axisTracks, nAxisTracks, Get(innerNodeSize, axis),
                    availableGridSpace.Get(axis));
 
     // The last two expansion steps should only expand into space the grid
@@ -3237,10 +3238,9 @@ void TrackSizingAlgorithm(TaffyTree* tree, AbstractAxis axis, Optf axisMinSize,
     // available space is mapped to max-content when the inner node size is
     // unknown.
     AvailableSpace axisAvailableSpaceForExpansion;
-    Optf innerAxis = innerNodeSize.Get(axis);
-    if (innerAxis.IsSome()) {
-        axisAvailableSpaceForExpansion =
-            AvailableSpace::Definite(innerAxis.val);
+    Optf innerAxis = Get(innerNodeSize, axis);
+    if (IsSome(innerAxis)) {
+        axisAvailableSpaceForExpansion = AvailableSpace::Definite(innerAxis);
     } else if (availableGridSpace.Get(axis)
                    .kind == AvailableSpace::Kind::MinContent) {
         axisAvailableSpaceForExpansion = AvailableSpace::MinContent();
@@ -3330,18 +3330,19 @@ AlignedAxis AlignItemWithinArea(LineF gridArea, AlignSelf alignmentStyle,
     Optf marginStart = vertical ? marginLine.top : marginLine.left;
     Optf marginEnd = vertical ? marginLine.bottom : marginLine.right;
 
-    LineF nonAutoMargin = {marginStart.UnwrapOr(0.0f) + baselineShim,
-                           marginEnd.UnwrapOr(0.0f)};
+    LineF nonAutoMargin = {UnwrapOr(marginStart, 0.0f) + baselineShim,
+                           UnwrapOr(marginEnd, 0.0f)};
     float gridAreaSize = F32Max(gridArea.end - gridArea.start, 0.0f);
     float freeSpace =
         F32Max(gridAreaSize - resolvedSize - nonAutoMargin.Sum(), 0.0f);
 
     int autoMarginCount =
-        (marginStart.IsSome() ? 0 : 1) + (marginEnd.IsSome() ? 0 : 1);
+        (IsSome(marginStart) ? 0 : 1) + (IsSome(marginEnd) ? 0 : 1);
     float autoMarginSize =
         autoMarginCount > 0 ? freeSpace / (float)autoMarginCount : 0.0f;
-    LineF resolvedMargin = {marginStart.UnwrapOr(autoMarginSize) + baselineShim,
-                            marginEnd.UnwrapOr(autoMarginSize)};
+    LineF resolvedMargin = {
+        UnwrapOr(marginStart, autoMarginSize) + baselineShim,
+        UnwrapOr(marginEnd, autoMarginSize)};
 
     bool overflows = resolvedSize + nonAutoMargin.Sum() > gridAreaSize;
     AlignItemsKeyword keyword =
@@ -3373,28 +3374,28 @@ AlignedAxis AlignItemWithinArea(LineF gridArea, AlignSelf alignmentStyle,
 
     float offsetWithinArea = alignmentBasedOffset;
     if (position == Position::Absolute) {
-        if (insetStart.IsSome() && insetEnd.IsSome()) {
-            offsetWithinArea = IsRtl(direction)
-                                   ? gridAreaSize - insetEnd.val -
-                                         resolvedSize - nonAutoMargin.end
-                                   : insetStart.val + nonAutoMargin.start;
-        } else if (insetStart.IsSome()) {
-            offsetWithinArea = insetStart.val + nonAutoMargin.start;
-        } else if (insetEnd.IsSome()) {
+        if (IsSome(insetStart) && IsSome(insetEnd)) {
             offsetWithinArea =
-                gridAreaSize - insetEnd.val - resolvedSize - nonAutoMargin.end;
+                IsRtl(direction)
+                    ? gridAreaSize - insetEnd - resolvedSize - nonAutoMargin.end
+                    : insetStart + nonAutoMargin.start;
+        } else if (IsSome(insetStart)) {
+            offsetWithinArea = insetStart + nonAutoMargin.start;
+        } else if (IsSome(insetEnd)) {
+            offsetWithinArea =
+                gridAreaSize - insetEnd - resolvedSize - nonAutoMargin.end;
         }
     }
 
     float start = gridArea.start + offsetWithinArea;
     if (position == Position::Relative) {
         Optf negEnd = insetEnd;
-        if (negEnd.IsSome()) {
-            negEnd.val = -negEnd.val;
+        if (IsSome(negEnd)) {
+            negEnd = -negEnd;
         }
         Optf relativeInset =
-            IsRtl(direction) ? negEnd.Or(insetStart) : insetStart.Or(negEnd);
-        start += relativeInset.UnwrapOr(0.0f);
+            IsRtl(direction) ? Or(negEnd, insetStart) : Or(insetStart, negEnd);
+        start += UnwrapOr(relativeInset, 0.0f);
     }
     return {start, resolvedMargin};
 }
@@ -3425,26 +3426,28 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
 
     RectOptF inset = style.inset
                          .MaybeResolveZip(AsOptional(gridAreaSize), calc);
-    RectF padding = style.padding.ResolveOrZero(Optf(gridAreaSize.w), calc);
-    RectF border = style.border.ResolveOrZero(Optf(gridAreaSize.w), calc);
+    RectF padding = style.padding.ResolveOrZero(Some(gridAreaSize.w), calc);
+    RectF border = style.border.ResolveOrZero(Some(gridAreaSize.w), calc);
     SizeF paddingBorderSize = (padding + border).SumAxes();
     SizeF boxSizingAdjustment = style.boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
                                     : SizeF::Zero();
 
     SizeOptF gridAreaOpt = AsOptional(gridAreaSize);
-    SizeOptF inherentSize = MaybeAdd(style.size.MaybeResolve(gridAreaOpt, calc)
-                                         .MaybeApplyAspectRatio(aspectRatio),
-                                     boxSizingAdjustment);
-    SizeOptF minSize =
-        MaybeMax(MaybeAdd(style.minSize.MaybeResolve(gridAreaOpt, calc),
-                          boxSizingAdjustment)
-                     .Or(AsOptional(paddingBorderSize)),
-                 paddingBorderSize)
-            .MaybeApplyAspectRatio(aspectRatio);
-    SizeOptF maxSize = MaybeAdd(style.maxSize.MaybeResolve(gridAreaOpt, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
+    SizeOptF inherentSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.size.MaybeResolve(gridAreaOpt, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF minSize = MaybeApplyAspectRatio(
+        MaybeMax(Or(MaybeAdd(style.minSize.MaybeResolve(gridAreaOpt, calc),
+                             boxSizingAdjustment),
+                    AsOptional(paddingBorderSize)),
+                 paddingBorderSize),
+        aspectRatio);
+    SizeOptF maxSize = MaybeAdd(
+        MaybeApplyAspectRatio(style.maxSize.MaybeResolve(gridAreaOpt, calc),
+                              aspectRatio),
+        boxSizingAdjustment);
 
     // Default alignment when neither the parent nor the item sets one. An item
     // with a preferred aspect ratio but no width or height stretches its width
@@ -3452,60 +3455,60 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
     // https://www.w3.org/TR/css-grid-1/#grid-item-sizing
     AlignItems horizontalAlignment =
         justifySelf.Or(containerJustifyItems)
-            .UnwrapOr(inherentSize.width.IsSome()
+            .UnwrapOr(IsSome(inherentSize.w)
                           ? AlignItems{AlignItemsKeyword::Start}
                           : AlignItems{AlignItemsKeyword::Stretch});
     AlignItems verticalAlignment =
         alignSelf.Or(containerAlignItems)
-            .UnwrapOr((inherentSize.height.IsSome() || aspectRatio.IsSome())
+            .UnwrapOr((IsSome(inherentSize.h) || IsSome(aspectRatio))
                           ? AlignItems{AlignItemsKeyword::Start}
                           : AlignItems{AlignItemsKeyword::Stretch});
 
     // Not a bug: the CSS spec has both horizontal and vertical margins resolve
     // against the *width* of the grid area.
-    RectOptF margin = style.margin.MaybeResolve(Optf(gridAreaSize.w), calc);
+    RectOptF margin = style.margin.MaybeResolve(Some(gridAreaSize.w), calc);
 
     SizeF gridAreaMinusItemMarginsSize = {
         MaybeSub(MaybeSub(gridAreaSize.w, margin.left), margin.right),
         MaybeSub(MaybeSub(gridAreaSize.h, margin.top), margin.bottom) -
             baselineShim};
 
-    Optf width = inherentSize.width;
-    if (!width.IsSome()) {
-        if (position == Position::Absolute && inset.left.IsSome() &&
-            inset.right.IsSome()) {
-            width = Optf(F32Max(gridAreaMinusItemMarginsSize.w -
-                                    inset.left.val - inset.right.val,
-                                0.0f));
-        } else if (margin.left.IsSome() && margin.right.IsSome() &&
+    Optf width = inherentSize.w;
+    if (!IsSome(width)) {
+        if (position == Position::Absolute && IsSome(inset.left) &&
+            IsSome(inset.right)) {
+            width = Some(F32Max(
+                gridAreaMinusItemMarginsSize.w - inset.left - inset.right,
+                0.0f));
+        } else if (IsSome(margin.left) && IsSome(margin.right) &&
                    horizontalAlignment.keyword == AlignItemsKeyword::Stretch &&
                    position != Position::Absolute) {
-            width = Optf(gridAreaMinusItemMarginsSize.w);
+            width = Some(gridAreaMinusItemMarginsSize.w);
         }
     }
-    SizeOptF sized = SizeOptF{width, inherentSize.height}
-                         .MaybeApplyAspectRatio(aspectRatio);
+    SizeOptF sized =
+        MaybeApplyAspectRatio(SizeOptF{width, inherentSize.h}, aspectRatio);
 
-    Optf height = sized.height;
-    if (!height.IsSome()) {
-        if (position == Position::Absolute && inset.top.IsSome() &&
-            inset.bottom.IsSome()) {
-            height = Optf(F32Max(gridAreaMinusItemMarginsSize.h -
-                                     inset.top.val - inset.bottom.val,
-                                 0.0f));
-        } else if (margin.top.IsSome() && margin.bottom.IsSome() &&
+    Optf height = sized.h;
+    if (!IsSome(height)) {
+        if (position == Position::Absolute && IsSome(inset.top) &&
+            IsSome(inset.bottom)) {
+            height = Some(F32Max(
+                gridAreaMinusItemMarginsSize.h - inset.top - inset.bottom,
+                0.0f));
+        } else if (IsSome(margin.top) && IsSome(margin.bottom) &&
                    verticalAlignment.keyword == AlignItemsKeyword::Stretch &&
                    position != Position::Absolute) {
-            height = Optf(gridAreaMinusItemMarginsSize.h);
+            height = Some(gridAreaMinusItemMarginsSize.h);
         }
     }
-    sized = SizeOptF{sized.width, height}.MaybeApplyAspectRatio(aspectRatio);
+    sized = MaybeApplyAspectRatio(SizeOptF{sized.w, height}, aspectRatio);
     sized = MaybeClamp(sized, minSize, maxSize);
 
     SizeAvail avail = SizeAvail::Definite(gridAreaMinusItemMarginsSize);
     SizeOptF size = sized;
     if (position == Position::Absolute &&
-        (!sized.width.IsSome() || !sized.height.IsSome())) {
+        (!IsSome(sized.w) || !IsSome(sized.h))) {
         SizeF measured = tree->MeasureChildSizeBoth(
             node, sized, gridAreaOpt, avail, SizingMode::InherentSize,
             LineBool::False());
@@ -3517,7 +3520,7 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
                                  SizingMode::InherentSize, LineBool::False());
 
     SizeF finalSize =
-        MaybeClamp(size.UnwrapOr(layoutOutput.size), minSize, maxSize);
+        MaybeClamp(UnwrapOr(size, layoutOutput.size), minSize, maxSize);
 
     AlignedAxis xr = AlignItemWithinArea(
         {gridArea.left, gridArea.right},
@@ -3624,25 +3627,28 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     // 1. Available grid space.
     // https://www.w3.org/TR/css-grid-1/#available-grid-space
     Optf aspectRatio = style.aspectRatio;
-    RectF padding = style.padding.ResolveOrZero(parentSize.width, calc);
-    RectF border = style.border.ResolveOrZero(parentSize.width, calc);
+    RectF padding = style.padding.ResolveOrZero(parentSize.w, calc);
+    RectF border = style.border.ResolveOrZero(parentSize.w, calc);
     RectF paddingBorder = padding + border;
     SizeF paddingBorderSize = paddingBorder.SumAxes();
     SizeF boxSizingAdjustment = style.boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
                                     : SizeF::Zero();
 
-    SizeOptF minSize = MaybeAdd(style.minSize.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-    SizeOptF maxSize = MaybeAdd(style.maxSize.MaybeResolve(parentSize, calc)
-                                    .MaybeApplyAspectRatio(aspectRatio),
-                                boxSizingAdjustment);
-    SizeOptF preferredSize;
+    SizeOptF minSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.minSize.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF maxSize =
+        MaybeAdd(MaybeApplyAspectRatio(
+                     style.maxSize.MaybeResolve(parentSize, calc), aspectRatio),
+                 boxSizingAdjustment);
+    SizeOptF preferredSize = SizeOptFNone();
     if (inputs.sizingMode == SizingMode::InherentSize) {
-        preferredSize = MaybeAdd(style.size.MaybeResolve(parentSize, calc)
-                                     .MaybeApplyAspectRatio(aspectRatio),
-                                 boxSizingAdjustment);
+        preferredSize = MaybeAdd(
+            MaybeApplyAspectRatio(style.size.MaybeResolve(parentSize, calc),
+                                  aspectRatio),
+            boxSizingAdjustment);
     }
 
     // A node that scrolls vertically needs *horizontal* space reserved for its
@@ -3661,24 +3667,23 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
 
     AlignContent alignContent =
         style.alignContent.UnwrapOr(AlignContent{AlignContentKeyword::Stretch});
-    AlignContent justifyContent =
-        style.justifyContent
-            .UnwrapOr(AlignContent{AlignContentKeyword::Stretch});
+    AlignContent justifyContent = style.justifyContent.UnwrapOr(
+        AlignContent{AlignContentKeyword::Stretch});
     OptAlignItems alignItems = style.alignItems;
     OptAlignItems justifyItems = style.justifyItems;
 
-    SizeOptF sizeOrPreferred = knownDimensions.Or(preferredSize);
+    SizeOptF sizeOrPreferred = Or(knownDimensions, preferredSize);
     // The available space the grid is sized against: a known or preferred
     // size wins over what the parent offered, then min/max clamp it and the
     // padding+border floor it.
     SizeAvail constrainedAvailableSpace = availableSpace;
-    if (sizeOrPreferred.width.IsSome()) {
+    if (IsSome(sizeOrPreferred.w)) {
         constrainedAvailableSpace
-            .width = AvailableSpace::Definite(sizeOrPreferred.width.val);
+            .width = AvailableSpace::Definite(sizeOrPreferred.w);
     }
-    if (sizeOrPreferred.height.IsSome()) {
+    if (IsSome(sizeOrPreferred.h)) {
         constrainedAvailableSpace
-            .height = AvailableSpace::Definite(sizeOrPreferred.height.val);
+            .height = AvailableSpace::Definite(sizeOrPreferred.h);
     }
     constrainedAvailableSpace =
         MaybeClamp(constrainedAvailableSpace, minSize, maxSize);
@@ -3702,17 +3707,17 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     SizeOptF outerNodeSize = MaybeMax(
         MaybeClamp(sizeOrPreferred, minSize, maxSize), paddingBorderSize);
     SizeOptF innerNodeSize = {
-        MaybeSub(outerNodeSize.width, contentBoxInset.HorizontalAxisSum()),
-        MaybeSub(outerNodeSize.height, contentBoxInset.VerticalAxisSum())};
+        MaybeSub(outerNodeSize.w, contentBoxInset.HorizontalAxisSum()),
+        MaybeSub(outerNodeSize.h, contentBoxInset.VerticalAxisSum())};
 
     if (runMode == RunMode::ComputeSize) {
-        if (outerNodeSize.BothAxisDefined()) {
+        if (BothAxisDefined(outerNodeSize)) {
             return LayoutOutput::FromOuterSize(
-                {outerNodeSize.width.val, outerNodeSize.height.val});
+                {outerNodeSize.w, outerNodeSize.h});
         }
-        if (inputs.axis == RequestedAxis::Horizontal && outerNodeSize.width
-                                                            .IsSome()) {
-            return LayoutOutput::FromOuterSize({outerNodeSize.width.val, 0.0f});
+        if (inputs.axis == RequestedAxis::Horizontal &&
+            IsSome(outerNodeSize.w)) {
+            return LayoutOutput::FromOuterSize({outerNodeSize.w, 0.0f});
         }
     }
 
@@ -3720,29 +3725,29 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     //
     // Like innerNodeSize, except that an indefinite inner size falls back to a
     // min- or max-size style if the node has one.
-    SizeOptF autoFitContainerSize = MaybeSub(
-        MaybeMax(
-            MaybeClamp(outerNodeSize.Or(maxSize).Or(minSize), minSize, maxSize),
-            paddingBorderSize),
-        contentBoxInset.SumAxes());
+    SizeOptF autoFitContainerSize =
+        MaybeSub(MaybeMax(MaybeClamp(Or(Or(outerNodeSize, maxSize), minSize),
+                                     minSize, maxSize),
+                          paddingBorderSize),
+                 contentBoxInset.SumAxes());
 
     // With a definite size or max size, the number of repetitions is the
     // largest that does not overflow; with only a definite min size, the
     // smallest that meets it; otherwise the list repeats once.
     AutoRepeatStrategy colStrategy =
-        (outerNodeSize.width.IsSome() || maxSize.width.IsSome())
+        (IsSome(outerNodeSize.w) || IsSome(maxSize.w))
             ? AutoRepeatStrategy::MaxRepetitionsThatDoNotOverflow
             : AutoRepeatStrategy::MinRepetitionsThatDoOverflow;
     AutoRepeatStrategy rowStrategy =
-        (outerNodeSize.height.IsSome() || maxSize.height.IsSome())
+        (IsSome(outerNodeSize.h) || IsSome(maxSize.h))
             ? AutoRepeatStrategy::MaxRepetitionsThatDoNotOverflow
             : AutoRepeatStrategy::MinRepetitionsThatDoOverflow;
 
     ExplicitGridSize colSize = ComputeExplicitGridSizeInAxis(
-        style, autoFitContainerSize.width, colStrategy, calc,
+        style, autoFitContainerSize.w, colStrategy, calc,
         AbsoluteAxis::Horizontal);
     ExplicitGridSize rowSize = ComputeExplicitGridSizeInAxis(
-        style, autoFitContainerSize.height, rowStrategy, calc,
+        style, autoFitContainerSize.h, rowStrategy, calc,
         AbsoluteAxis::Vertical);
 
     NamedLineResolver nameResolver;
@@ -3794,11 +3799,11 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     Vec<GridItem> items;
     CellOccupancyMatrix cellOccupancyMatrix;
     cellOccupancyMatrix.Init(estColCounts, estRowCounts);
-    PlaceGridItems(&cellOccupancyMatrix, &items, tree, children, direction,
-                   style.gridAutoFlow,
-                   alignItems.UnwrapOr(AlignItems{AlignItemsKeyword::Stretch}),
-                   justifyItems
-                       .UnwrapOr(AlignItems{AlignItemsKeyword::Stretch}));
+    PlaceGridItems(
+        &cellOccupancyMatrix, &items, tree, children, direction,
+        style.gridAutoFlow,
+        alignItems.UnwrapOr(AlignItems{AlignItemsKeyword::Stretch}),
+        justifyItems.UnwrapOr(AlignItems{AlignItemsKeyword::Stretch}));
 
     // Auto-placement can add tracks, so the counts are read back here.
     TrackCounts finalColCounts = cellOccupancyMatrix
@@ -3848,8 +3853,8 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     }
 
     TrackSizingAlgorithm(
-        tree, AbstractAxis::Inline, minSize.Get(AbstractAxis::Inline),
-        maxSize.Get(AbstractAxis::Inline), justifyContent, alignContent,
+        tree, AbstractAxis::Inline, Get(minSize, AbstractAxis::Inline),
+        Get(maxSize, AbstractAxis::Inline), justifyContent, alignContent,
         availableGridSpace, innerNodeSize, columns.els, columns.len, rows.els,
         rows.len, items.els, items.len,
         TrackSizeEstimate::MaxTrackSizingFunction, hasBaselineAlignedItem);
@@ -3857,8 +3862,8 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     for (int i = 0; i < columns.len; i++) {
         initialColumnSum += columns[i].baseSize;
     }
-    if (!innerNodeSize.width.IsSome()) {
-        innerNodeSize.width = Optf(initialColumnSum);
+    if (!IsSome(innerNodeSize.w)) {
+        innerNodeSize.w = Some(initialColumnSum);
     }
 
     for (int i = 0; i < items.len; i++) {
@@ -3866,8 +3871,8 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     }
 
     TrackSizingAlgorithm(
-        tree, AbstractAxis::Block, minSize.Get(AbstractAxis::Block),
-        maxSize.Get(AbstractAxis::Block), alignContent, justifyContent,
+        tree, AbstractAxis::Block, Get(minSize, AbstractAxis::Block),
+        Get(maxSize, AbstractAxis::Block), alignContent, justifyContent,
         availableGridSpace, innerNodeSize, rows.els, rows.len, columns.els,
         columns.len, items.els, items.len, TrackSizeEstimate::BaseSize,
         // TODO(taffy): baseline alignment in the block axis.
@@ -3876,22 +3881,22 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     for (int i = 0; i < rows.len; i++) {
         initialRowSum += rows[i].baseSize;
     }
-    if (!innerNodeSize.height.IsSome()) {
-        innerNodeSize.height = Optf(initialRowSum);
+    if (!IsSome(innerNodeSize.h)) {
+        innerNodeSize.h = Some(initialRowSum);
     }
 
     // 6. Container size.
-    SizeOptF resolvedStyleSize = knownDimensions.Or(preferredSize);
+    SizeOptF resolvedStyleSize = Or(knownDimensions, preferredSize);
     SizeF containerBorderBox = {
-        F32Max(MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Inline)
-                              .UnwrapOr(initialColumnSum +
-                                        contentBoxInset.HorizontalAxisSum()),
-                          minSize.width, maxSize.width),
+        F32Max(MaybeClamp(UnwrapOr(Get(resolvedStyleSize, AbstractAxis::Inline),
+                                   initialColumnSum + contentBoxInset
+                                                          .HorizontalAxisSum()),
+                          minSize.w, maxSize.w),
                paddingBorderSize.w),
-        F32Max(MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Block)
-                              .UnwrapOr(initialRowSum + contentBoxInset
-                                                            .VerticalAxisSum()),
-                          minSize.height, maxSize.height),
+        F32Max(MaybeClamp(
+                   UnwrapOr(Get(resolvedStyleSize, AbstractAxis::Block),
+                            initialRowSum + contentBoxInset.VerticalAxisSum()),
+                   minSize.h, maxSize.h),
                paddingBorderSize.h)};
     SizeF containerContentBox = {
         F32Max(0.0f, containerBorderBox.w - contentBoxInset
@@ -3965,17 +3970,17 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
                 *item, AbstractAxis::Inline, columns.els, rows.els,
                 innerNodeSize, TrackSizeEstimate::BaseSize, calc);
             SizeOptF avail = gridAreaSize;
-            avail.Set(AbstractAxis::Inline, Optf());
+            Set(&avail, AbstractAxis::Inline, None());
             float newMinContent = ItemMinContentContribution(
                 *item, AbstractAxis::Inline, tree, gridAreaSize, avail);
             bool changed =
-                !(item->minContentContributionCache.width.IsSome() &&
-                  item->minContentContributionCache.width.val == newMinContent);
+                !(IsSome(item->minContentContributionCache.w) &&
+                  item->minContentContributionCache.w == newMinContent);
             item->gridAreaSizeCache = gridAreaSize;
             item->hasGridAreaSizeCache = true;
-            item->minContentContributionCache.width = Optf(newMinContent);
-            item->maxContentContributionCache.width = Optf();
-            item->minimumContributionCache.width = Optf();
+            item->minContentContributionCache.w = Some(newMinContent);
+            item->maxContentContributionCache.w = None();
+            item->minimumContributionCache.w = None();
             if (changed) {
                 intrinsicColumnContributionChanged = true;
             }
@@ -3984,17 +3989,17 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     } else {
         for (int i = 0; i < items.len; i++) {
             items[i].hasGridAreaSizeCache = false;
-            items[i].minContentContributionCache.width = Optf();
-            items[i].maxContentContributionCache.width = Optf();
-            items[i].minimumContributionCache.width = Optf();
+            items[i].minContentContributionCache.w = None();
+            items[i].maxContentContributionCache.w = None();
+            items[i].minimumContributionCache.w = None();
         }
     }
 
     bool intrinsicRowContributionChanged = false;
     if (rerunColumnSizing) {
         TrackSizingAlgorithm(
-            tree, AbstractAxis::Inline, minSize.Get(AbstractAxis::Inline),
-            maxSize.Get(AbstractAxis::Inline), justifyContent, alignContent,
+            tree, AbstractAxis::Inline, Get(minSize, AbstractAxis::Inline),
+            Get(maxSize, AbstractAxis::Inline), justifyContent, alignContent,
             availableGridSpace, innerNodeSize, columns.els, columns.len,
             rows.els, rows.len, items.els, items.len,
             TrackSizeEstimate::BaseSize, hasBaselineAlignedItem);
@@ -4012,18 +4017,17 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
                     *item, AbstractAxis::Block, rows.els, columns.els,
                     innerNodeSize, TrackSizeEstimate::BaseSize, calc);
                 SizeOptF avail = gridAreaSize;
-                avail.Set(AbstractAxis::Block, Optf());
+                Set(&avail, AbstractAxis::Block, None());
                 float newMinContent = ItemMinContentContribution(
                     *item, AbstractAxis::Block, tree, gridAreaSize, avail);
                 bool changed =
-                    !(item->minContentContributionCache.height.IsSome() &&
-                      item->minContentContributionCache.height
-                              .val == newMinContent);
+                    !(IsSome(item->minContentContributionCache.h) &&
+                      item->minContentContributionCache.h == newMinContent);
                 item->gridAreaSizeCache = gridAreaSize;
                 item->hasGridAreaSizeCache = true;
-                item->minContentContributionCache.height = Optf(newMinContent);
-                item->maxContentContributionCache.height = Optf();
-                item->minimumContributionCache.height = Optf();
+                item->minContentContributionCache.h = Some(newMinContent);
+                item->maxContentContributionCache.h = None();
+                item->minimumContributionCache.h = None();
                 if (changed) {
                     intrinsicRowContributionChanged = true;
                 }
@@ -4032,16 +4036,16 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         } else {
             for (int i = 0; i < items.len; i++) {
                 items[i].hasGridAreaSizeCache = false;
-                items[i].minContentContributionCache.height = Optf();
-                items[i].maxContentContributionCache.height = Optf();
-                items[i].minimumContributionCache.height = Optf();
+                items[i].minContentContributionCache.h = None();
+                items[i].maxContentContributionCache.h = None();
+                items[i].minimumContributionCache.h = None();
             }
         }
 
         if (rerunRowSizing) {
             TrackSizingAlgorithm(
-                tree, AbstractAxis::Block, minSize.Get(AbstractAxis::Block),
-                maxSize.Get(AbstractAxis::Block), alignContent, justifyContent,
+                tree, AbstractAxis::Block, Get(minSize, AbstractAxis::Block),
+                Get(maxSize, AbstractAxis::Block), alignContent, justifyContent,
                 availableGridSpace, innerNodeSize, rows.els, rows.len,
                 columns.els, columns.len, items.els, items.len,
                 TrackSizeEstimate::BaseSize, false);
@@ -4060,10 +4064,11 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         }
         if (intrinsicColumnContributionChanged && !hasPercentageColumn) {
             containerBorderBox.w = F32Max(
-                MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Inline)
-                               .UnwrapOr(finalColumnSum +
-                                         contentBoxInset.HorizontalAxisSum()),
-                           minSize.width, maxSize.width),
+                MaybeClamp(
+                    UnwrapOr(Get(resolvedStyleSize, AbstractAxis::Inline),
+                             finalColumnSum + contentBoxInset
+                                                  .HorizontalAxisSum()),
+                    minSize.w, maxSize.w),
                 paddingBorderSize.w);
             containerContentBox
                 .w = F32Max(0.0f, containerBorderBox.w -
@@ -4071,10 +4076,10 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         }
         if (intrinsicRowContributionChanged && !hasPercentageRow) {
             containerBorderBox.h = F32Max(
-                MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Block)
-                               .UnwrapOr(finalRowSum + contentBoxInset
-                                                           .VerticalAxisSum()),
-                           minSize.height, maxSize.height),
+                MaybeClamp(
+                    UnwrapOr(Get(resolvedStyleSize, AbstractAxis::Block),
+                             finalRowSum + contentBoxInset.VerticalAxisSum()),
+                    minSize.h, maxSize.h),
                 paddingBorderSize.h);
             containerContentBox
                 .h = F32Max(0.0f, containerBorderBox.h -
@@ -4130,10 +4135,9 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
 
         if (cs.BoxGenMode() == BoxGenerationMode::None) {
             tree->SetUnroundedLayout(child, Layout::WithOrder(order));
-            tree->PerformChildLayout(child, SizeOptF::None(), SizeOptF::None(),
-                                     SizeAvail::MaxContent(),
-                                     SizingMode::InherentSize,
-                                     LineBool::False());
+            tree->PerformChildLayout(
+                child, SizeOptFNone(), SizeOptFNone(), SizeAvail::MaxContent(),
+                SizingMode::InherentSize, LineBool::False());
             order += 1;
             continue;
         }
@@ -4233,10 +4237,10 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
             }
         }
         float gridContainerBaseline =
-            chosen->yPosition + chosen->baseline.UnwrapOr(chosen->height);
+            chosen->yPosition + UnwrapOr(chosen->baseline, chosen->height);
         out = LayoutOutput::FromSizesAndBaselines(
             containerBorderBox, itemContentSizeContribution,
-            PointOptF{Optf(), Optf(gridContainerBaseline)});
+            PointOptF{None(), Some(gridContainerBaseline)});
     }
 
     items.Reset();

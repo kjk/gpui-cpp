@@ -2205,7 +2205,7 @@ static taffy::Style ToTaffyStyle(const El* e) {
 
     t.size = {ToDim(s.width, s.widthFrac), ToDim(s.height, 0)};
     if (s.aspect > 0) {
-        t.aspectRatio = taffy::Optf(s.aspect);
+        t.aspectRatio = taffy::Some(s.aspect);
     }
     // An unset min is `auto`: a flex item may not shrink below its own
     // content, which is CSS's default and Rust's. An explicit zero is the
@@ -2251,8 +2251,8 @@ struct LayoutMeasureCtx {
 // constraint if the run wraps or truncates, else unconstrained.
 static float TextMeasureWidth(const El* e, taffy::SizeOptF known,
                               taffy::SizeAvail avail) {
-    if (known.width.IsSome()) {
-        return known.width.val;
+    if (taffy::IsSome(known.w)) {
+        return known.w;
     }
     if (!(e->style.wrap || e->style.truncate)) {
         return 0.0f;
@@ -2302,18 +2302,20 @@ static taffy::SizeF LayoutMeasure(taffy::SizeOptF known, taffy::SizeAvail avail,
             float measW = TextMeasureWidth(e, known, avail);
             Size text = MeasureText(ctx, e->text, font, measW, e->style.wrap,
                                     ElTextWeight(e), e->style.lineHeight);
-            return {known.width.UnwrapOr(text.w), known.height
-                                                      .UnwrapOr(text.h)};
+            return {taffy::UnwrapOr(known.w, text.w),
+                    taffy::UnwrapOr(known.h, text.h)};
         }
         case ElKind::Icon:
-            return {known.width.UnwrapOr(16.0f), known.height.UnwrapOr(16.0f)};
+            return {taffy::UnwrapOr(known.w, 16.0f),
+                    taffy::UnwrapOr(known.h, 16.0f)};
         case ElKind::Progress:
-            return {known.width.UnwrapOr(48.0f), known.height.UnwrapOr(8.0f)};
+            return {taffy::UnwrapOr(known.w, 48.0f),
+                    taffy::UnwrapOr(known.h, 8.0f)};
         case ElKind::Image: {
             float availW = avail.width.IsDefinite() ? avail.width.value : 0.0f;
             Size sz =
-                LayoutImageSize(ctx, e, known.width.UnwrapOr(0.0f),
-                                known.height.UnwrapOr(0.0f), availW, font);
+                LayoutImageSize(ctx, e, taffy::UnwrapOr(known.w, 0.0f),
+                                taffy::UnwrapOr(known.h, 0.0f), availW, font);
             return {sz.w, sz.h};
         }
         default:

@@ -130,8 +130,8 @@ void TreeBuilder::BuildSuperDeepHierarchy(uint32_t depth,
 }
 
 void TreeBuilder::ComputeLayout(Optf availableWidth, Optf availableHeight) {
-    SizeOptF avail;
-    avail.width = availableWidth;
-    avail.height = availableHeight;
+    SizeOptF avail = SizeOptFNone();
+    avail.w = availableWidth;
+    avail.h = availableHeight;
     tree.ComputeLayout(root, SizeAvail::From(avail));
 }

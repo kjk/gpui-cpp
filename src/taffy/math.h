@@ -4,6 +4,13 @@
  * Rust states the rule once, as the `MaybeMath<In, Out>` trait: if the
  * left-hand value is None the result is None, and a None right-hand value is
  * skipped. With no traits, each pairing taffy actually uses is an overload.
+ *
+ * There used to be three overloads of each — `Optf op Optf`, `Optf op float`
+ * and `float op Optf` — because `Option<f32>` was a distinct struct. An
+ * `Optf` is now a `float` (geometry.h), so a plain float is an `Optf` that
+ * happens to be Some and the three collapse into one. The rule reads the same
+ * either way, which is why they collapse rather than conflict: the None-left
+ * arm never fires for a value that cannot be None.
  */
 
 #ifndef GPUI_TAFFY_MATH_H_
@@ -16,165 +23,76 @@ namespace taffy {
 // ─── Optf op Optf ────────────────────────────────────────────────────────
 
 inline Optf MaybeMin(Optf a, Optf b) {
-    if (!a.IsSome()) {
-        return Optf();
+    if (IsNone(a)) {
+        return None();
     }
-    return b.IsSome() ? Optf(F32Min(a.val, b.val)) : a;
+    return IsSome(b) ? F32Min(a, b) : a;
 }
 
 inline Optf MaybeMax(Optf a, Optf b) {
-    if (!a.IsSome()) {
-        return Optf();
+    if (IsNone(a)) {
+        return None();
     }
-    return b.IsSome() ? Optf(F32Max(a.val, b.val)) : a;
+    return IsSome(b) ? F32Max(a, b) : a;
 }
 
 inline Optf MaybeAdd(Optf a, Optf b) {
-    if (!a.IsSome()) {
-        return Optf();
+    if (IsNone(a)) {
+        return None();
     }
-    return b.IsSome() ? Optf(a.val + b.val) : a;
+    return IsSome(b) ? a + b : a;
 }
 
 inline Optf MaybeSub(Optf a, Optf b) {
-    if (!a.IsSome()) {
-        return Optf();
+    if (IsNone(a)) {
+        return None();
     }
-    return b.IsSome() ? Optf(a.val - b.val) : a;
+    return IsSome(b) ? a - b : a;
 }
 
 inline Optf MaybeClamp(Optf a, Optf lo, Optf hi) {
-    if (!a.IsSome()) {
-        return Optf();
+    if (IsNone(a)) {
+        return None();
     }
-    float v = a.val;
-    if (hi.IsSome()) {
-        v = F32Min(v, hi.val);
-    }
-    if (lo.IsSome()) {
-        v = F32Max(v, lo.val);
-    }
-    return Optf(v);
-}
-
-// ─── Optf op float ───────────────────────────────────────────────────────
-
-inline Optf MaybeMin(Optf a, float b) {
-    return a.IsSome() ? Optf(F32Min(a.val, b)) : Optf();
-}
-
-inline Optf MaybeMax(Optf a, float b) {
-    return a.IsSome() ? Optf(F32Max(a.val, b)) : Optf();
-}
-
-inline Optf MaybeAdd(Optf a, float b) {
-    return a.IsSome() ? Optf(a.val + b) : Optf();
-}
-
-inline Optf MaybeSub(Optf a, float b) {
-    return a.IsSome() ? Optf(a.val - b) : Optf();
-}
-
-inline Optf MaybeClamp(Optf a, float lo, float hi) {
-    return a.IsSome() ? Optf(F32Max(F32Min(a.val, hi), lo)) : Optf();
-}
-
-// ─── float op Optf ───────────────────────────────────────────────────────
-
-inline float MaybeMin(float a, Optf b) {
-    return b.IsSome() ? F32Min(a, b.val) : a;
-}
-
-inline float MaybeMax(float a, Optf b) {
-    return b.IsSome() ? F32Max(a, b.val) : a;
-}
-
-inline float MaybeAdd(float a, Optf b) {
-    return b.IsSome() ? a + b.val : a;
-}
-
-inline float MaybeSub(float a, Optf b) {
-    return b.IsSome() ? a - b.val : a;
-}
-
-inline float MaybeClamp(float a, Optf lo, Optf hi) {
     float v = a;
-    if (hi.IsSome()) {
-        v = F32Min(v, hi.val);
+    if (IsSome(hi)) {
+        v = F32Min(v, hi);
     }
-    if (lo.IsSome()) {
-        v = F32Max(v, lo.val);
+    if (IsSome(lo)) {
+        v = F32Max(v, lo);
     }
     return v;
 }
 
-// ─── AvailableSpace op float ─────────────────────────────────────────────
+// ─── AvailableSpace op Optf ──────────────────────────────────────────────
 //
 // A min against a concrete value makes an indefinite constraint definite; a
 // max, an add or a sub leaves it alone.
 
-inline AvailableSpace MaybeMin(AvailableSpace a, float b) {
+inline AvailableSpace MaybeMin(AvailableSpace a, Optf b) {
     if (a.kind == AvailableSpace::Kind::Definite) {
-        return AvailableSpace::Definite(F32Min(a.value, b));
+        return IsSome(b) ? AvailableSpace::Definite(F32Min(a.value, b)) : a;
     }
-    return AvailableSpace::Definite(b);
+    return IsSome(b) ? AvailableSpace::Definite(b) : a;
 }
 
-inline AvailableSpace MaybeMax(AvailableSpace a, float b) {
-    if (a.kind == AvailableSpace::Kind::Definite) {
+inline AvailableSpace MaybeMax(AvailableSpace a, Optf b) {
+    if (a.kind == AvailableSpace::Kind::Definite && IsSome(b)) {
         return AvailableSpace::Definite(F32Max(a.value, b));
     }
     return a;
 }
 
-inline AvailableSpace MaybeAdd(AvailableSpace a, float b) {
-    if (a.kind == AvailableSpace::Kind::Definite) {
+inline AvailableSpace MaybeAdd(AvailableSpace a, Optf b) {
+    if (a.kind == AvailableSpace::Kind::Definite && IsSome(b)) {
         return AvailableSpace::Definite(a.value + b);
     }
     return a;
 }
 
-inline AvailableSpace MaybeSub(AvailableSpace a, float b) {
-    if (a.kind == AvailableSpace::Kind::Definite) {
-        return AvailableSpace::Definite(a.value - b);
-    }
-    return a;
-}
-
-inline AvailableSpace MaybeClamp(AvailableSpace a, float lo, float hi) {
-    if (a.kind == AvailableSpace::Kind::Definite) {
-        return AvailableSpace::Definite(F32Max(F32Min(a.value, hi), lo));
-    }
-    return a;
-}
-
-// ─── AvailableSpace op Optf ──────────────────────────────────────────────
-
-inline AvailableSpace MaybeMin(AvailableSpace a, Optf b) {
-    if (a.kind == AvailableSpace::Kind::Definite) {
-        return b.IsSome() ? AvailableSpace::Definite(F32Min(a.value, b.val))
-                          : a;
-    }
-    return b.IsSome() ? AvailableSpace::Definite(b.val) : a;
-}
-
-inline AvailableSpace MaybeMax(AvailableSpace a, Optf b) {
-    if (a.kind == AvailableSpace::Kind::Definite && b.IsSome()) {
-        return AvailableSpace::Definite(F32Max(a.value, b.val));
-    }
-    return a;
-}
-
-inline AvailableSpace MaybeAdd(AvailableSpace a, Optf b) {
-    if (a.kind == AvailableSpace::Kind::Definite && b.IsSome()) {
-        return AvailableSpace::Definite(a.value + b.val);
-    }
-    return a;
-}
-
 inline AvailableSpace MaybeSub(AvailableSpace a, Optf b) {
-    if (a.kind == AvailableSpace::Kind::Definite && b.IsSome()) {
-        return AvailableSpace::Definite(a.value - b.val);
+    if (a.kind == AvailableSpace::Kind::Definite && IsSome(b)) {
+        return AvailableSpace::Definite(a.value - b);
     }
     return a;
 }
@@ -184,11 +102,11 @@ inline AvailableSpace MaybeClamp(AvailableSpace a, Optf lo, Optf hi) {
         return a;
     }
     float v = a.value;
-    if (hi.IsSome()) {
-        v = F32Min(v, hi.val);
+    if (IsSome(hi)) {
+        v = F32Min(v, hi);
     }
-    if (lo.IsSome()) {
-        v = F32Max(v, lo.val);
+    if (IsSome(lo)) {
+        v = F32Max(v, lo);
     }
     return AvailableSpace::Definite(v);
 }
@@ -196,62 +114,31 @@ inline AvailableSpace MaybeClamp(AvailableSpace a, Optf lo, Optf hi) {
 // ─── the same, component-wise over a size ────────────────────────────────
 
 inline SizeOptF MaybeMin(SizeOptF a, SizeOptF b) {
-    return {MaybeMin(a.width, b.width), MaybeMin(a.height, b.height)};
+    return {MaybeMin(a.w, b.w), MaybeMin(a.h, b.h)};
 }
 
 inline SizeOptF MaybeMax(SizeOptF a, SizeOptF b) {
-    return {MaybeMax(a.width, b.width), MaybeMax(a.height, b.height)};
+    return {MaybeMax(a.w, b.w), MaybeMax(a.h, b.h)};
 }
 
-inline SizeOptF MaybeMax(SizeOptF a, SizeF b) {
-    return {MaybeMax(a.width, b.w), MaybeMax(a.height, b.h)};
-}
-
-inline SizeOptF MaybeAdd(SizeOptF a, SizeF b) {
-    return {MaybeAdd(a.width, b.w), MaybeAdd(a.height, b.h)};
-}
-
-inline SizeOptF MaybeSub(SizeOptF a, SizeF b) {
-    return {MaybeSub(a.width, b.w), MaybeSub(a.height, b.h)};
+inline SizeOptF MaybeAdd(SizeOptF a, SizeOptF b) {
+    return {MaybeAdd(a.w, b.w), MaybeAdd(a.h, b.h)};
 }
 
 inline SizeOptF MaybeSub(SizeOptF a, SizeOptF b) {
-    return {MaybeSub(a.width, b.width), MaybeSub(a.height, b.height)};
+    return {MaybeSub(a.w, b.w), MaybeSub(a.h, b.h)};
 }
 
 inline SizeOptF MaybeClamp(SizeOptF a, SizeOptF lo, SizeOptF hi) {
-    return {MaybeClamp(a.width, lo.width, hi.width),
-            MaybeClamp(a.height, lo.height, hi.height)};
+    return {MaybeClamp(a.w, lo.w, hi.w), MaybeClamp(a.h, lo.h, hi.h)};
 }
 
-inline SizeF MaybeClamp(SizeF a, SizeOptF lo, SizeOptF hi) {
-    return {MaybeClamp(a.w, lo.width, hi.width),
-            MaybeClamp(a.h, lo.height, hi.height)};
-}
-
-inline SizeF MaybeMax(SizeF a, SizeOptF b) {
-    return {MaybeMax(a.w, b.width), MaybeMax(a.h, b.height)};
-}
-
-inline SizeF MaybeMin(SizeF a, SizeOptF b) {
-    return {MaybeMin(a.w, b.width), MaybeMin(a.h, b.height)};
-}
-
-inline SizeF MaybeAdd(SizeF a, SizeOptF b) {
-    return {MaybeAdd(a.w, b.width), MaybeAdd(a.h, b.height)};
-}
-
-inline SizeF MaybeSub(SizeF a, SizeOptF b) {
-    return {MaybeSub(a.w, b.width), MaybeSub(a.h, b.height)};
-}
-
-inline SizeAvail MaybeSub(SizeAvail a, SizeF b) {
+inline SizeAvail MaybeSub(SizeAvail a, SizeOptF b) {
     return {MaybeSub(a.width, b.w), MaybeSub(a.height, b.h)};
 }
 
 inline SizeAvail MaybeClamp(SizeAvail a, SizeOptF lo, SizeOptF hi) {
-    return {MaybeClamp(a.width, lo.width, hi.width),
-            MaybeClamp(a.height, lo.height, hi.height)};
+    return {MaybeClamp(a.width, lo.w, hi.w), MaybeClamp(a.height, lo.h, hi.h)};
 }
 
 inline SizeAvail MaybeSet(SizeAvail a, SizeOptF v) {
@@ -259,9 +146,9 @@ inline SizeAvail MaybeSet(SizeAvail a, SizeOptF v) {
 }
 
 // Rust writes this as `Size::map(Some)` — a definite size seen as an
-// everywhere-Some optional one.
-inline SizeOptF AsOptional(SizeF s) {
-    return {Optf(s.w), Optf(s.h)};
+// everywhere-Some optional one. Nothing to do: it already is one.
+constexpr SizeOptF AsOptional(SizeF s) {
+    return s;
 }
 
 } // namespace taffy

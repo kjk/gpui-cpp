@@ -93,7 +93,7 @@ static void SuperDeepSetup(FlexCase* c) {
 // Every flexbox benchmark lays out against `compute_layout(None, None)`,
 // which is max-content in both axes.
 static void FlexRun(FlexCase* c) {
-    c->b.ComputeLayout(Optf(), Optf());
+    c->b.ComputeLayout(None(), None());
     BenchKeep(&c->b.tree);
 }
 

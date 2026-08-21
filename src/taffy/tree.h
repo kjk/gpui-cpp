@@ -114,12 +114,12 @@ struct LayoutInput {
     // Which axis the caller needs the size of.
     RequestedAxis axis = RequestedAxis::Both;
 
-    // Dimensions to take as fixed. `knownDimensions.width = Some(W)` asks
+    // Dimensions to take as fixed. `knownDimensions.w = Some(W)` asks
     // "what would the height of this node be, assuming the width is W"; both
     // set means "your size is exactly WxH, lay out your children".
-    SizeOptF knownDimensions;
+    SizeOptF knownDimensions = SizeOptFNone();
     // The parent's size, for percentage resolution.
-    SizeOptF parentSize;
+    SizeOptF parentSize = SizeOptFNone();
     // A soft constraint, used for wrapping.
     SizeAvail availableSpace = SizeAvail::MaxContent();
     // Block layout only, for margin collapsing. LineBool::False() otherwise.
@@ -137,13 +137,13 @@ struct LayoutInput {
 //
 // A baseline is the line text sits on. A node likely has one if it is a text
 // node or contains children that may be. A node with no baseline (or one that
-// is not sure how to compute it) reports PointOptF::None().
+// is not sure how to compute it) reports PointOptFNone().
 struct LayoutOutput {
     SizeF size;
     // The size of the content within the node.
     SizeF contentSize;
     // The first baseline in each dimension, if any.
-    PointOptF firstBaselines;
+    PointOptF firstBaselines = PointOptFNone();
     // Margins that can be collapsed with, for block layout. Zero elsewhere.
     CollapsibleMarginSet topMargin;
     CollapsibleMarginSet bottomMargin;
@@ -163,7 +163,7 @@ struct LayoutOutput {
         return out;
     }
     static LayoutOutput FromSizes(SizeF size, SizeF contentSize) {
-        return FromSizesAndBaselines(size, contentSize, PointOptF::None());
+        return FromSizesAndBaselines(size, contentSize, PointOptFNone());
     }
     static LayoutOutput FromOuterSize(SizeF size) {
         return FromSizes(size, SizeF::Zero());

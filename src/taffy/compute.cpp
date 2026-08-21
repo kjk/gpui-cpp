@@ -10,7 +10,7 @@ namespace taffy {
 // ─── compute_root_layout ─────────────────────────────────────────────────
 
 void ComputeRootLayout(TaffyTree* tree, NodeId root, SizeAvail availableSpace) {
-    SizeOptF knownDimensions;
+    SizeOptF knownDimensions = SizeOptFNone();
     CalcResolver calc = tree->calc;
 
     {
@@ -19,50 +19,51 @@ void ComputeRootLayout(TaffyTree* tree, NodeId root, SizeAvail availableSpace) {
 
         if (style.IsBlock()) {
             Optf aspectRatio = style.aspectRatio;
-            RectF margin = style.margin.ResolveOrZero(parentSize.width, calc);
-            RectF padding = style.padding.ResolveOrZero(parentSize.width, calc);
-            RectF border = style.border.ResolveOrZero(parentSize.width, calc);
+            RectF margin = style.margin.ResolveOrZero(parentSize.w, calc);
+            RectF padding = style.padding.ResolveOrZero(parentSize.w, calc);
+            RectF border = style.border.ResolveOrZero(parentSize.w, calc);
             SizeF paddingBorderSize = (padding + border).SumAxes();
             SizeF boxSizingAdjustment = style.boxSizing == BoxSizing::ContentBox
                                             ? paddingBorderSize
                                             : SizeF::Zero();
 
-            SizeOptF minSize =
-                MaybeAdd(style.minSize.MaybeResolve(parentSize, calc)
-                             .MaybeApplyAspectRatio(aspectRatio),
-                         boxSizingAdjustment);
-            SizeOptF maxSize =
-                MaybeAdd(style.maxSize.MaybeResolve(parentSize, calc)
-                             .MaybeApplyAspectRatio(aspectRatio),
-                         boxSizingAdjustment);
-            SizeOptF clampedStyleSize =
-                MaybeClamp(MaybeAdd(style.size.MaybeResolve(parentSize, calc)
-                                        .MaybeApplyAspectRatio(aspectRatio),
-                                    boxSizingAdjustment),
-                           minSize, maxSize);
+            SizeOptF minSize = MaybeAdd(
+                MaybeApplyAspectRatio(
+                    style.minSize.MaybeResolve(parentSize, calc), aspectRatio),
+                boxSizingAdjustment);
+            SizeOptF maxSize = MaybeAdd(
+                MaybeApplyAspectRatio(
+                    style.maxSize.MaybeResolve(parentSize, calc), aspectRatio),
+                boxSizingAdjustment);
+            SizeOptF clampedStyleSize = MaybeClamp(
+                MaybeAdd(
+                    MaybeApplyAspectRatio(
+                        style.size.MaybeResolve(parentSize, calc), aspectRatio),
+                    boxSizingAdjustment),
+                minSize, maxSize);
 
             // If both min and max are set in an axis and max <= min, that
             // determines the size in that axis.
-            SizeOptF minMaxDefiniteSize;
-            if (minSize.width.IsSome() && maxSize.width.IsSome() &&
-                maxSize.width.val <= minSize.width.val) {
-                minMaxDefiniteSize.width = minSize.width;
+            SizeOptF minMaxDefiniteSize = SizeOptFNone();
+            if (IsSome(minSize.w) && IsSome(maxSize.w) &&
+                maxSize.w <= minSize.w) {
+                minMaxDefiniteSize.w = minSize.w;
             }
-            if (minSize.height.IsSome() && maxSize.height.IsSome() &&
-                maxSize.height.val <= minSize.height.val) {
-                minMaxDefiniteSize.height = minSize.height;
+            if (IsSome(minSize.h) && IsSome(maxSize.h) &&
+                maxSize.h <= minSize.h) {
+                minMaxDefiniteSize.h = minSize.h;
             }
 
             // Block nodes stretch their width to the available space when it
             // is definite.
-            SizeOptF availableSpaceBasedSize;
-            availableSpaceBasedSize.width = MaybeSub(
+            SizeOptF availableSpaceBasedSize = SizeOptFNone();
+            availableSpaceBasedSize.w = MaybeSub(
                 availableSpace.width.IntoOption(), margin.HorizontalAxisSum());
 
-            knownDimensions = MaybeMax(knownDimensions.Or(minMaxDefiniteSize)
-                                           .Or(clampedStyleSize)
-                                           .Or(availableSpaceBasedSize),
-                                       paddingBorderSize);
+            SizeOptF known = Or(knownDimensions, minMaxDefiniteSize);
+            known = Or(known, clampedStyleSize);
+            known = Or(known, availableSpaceBasedSize);
+            knownDimensions = MaybeMax(known, paddingBorderSize);
         }
     }
 
@@ -81,8 +82,8 @@ void ComputeRootLayout(TaffyTree* tree, NodeId root, SizeAvail availableSpace) {
         style.overflow.y == Overflow::Scroll ? style.scrollbarWidth : 0.0f,
         style.overflow.x == Overflow::Scroll ? style.scrollbarWidth : 0.0f};
     PointF location;
-    if (IsRtl(style.direction) && widthOpt.IsSome()) {
-        location.x = widthOpt.val - output.size.w;
+    if (IsRtl(style.direction) && IsSome(widthOpt)) {
+        location.x = widthOpt - output.size.w;
     }
 
     Layout layout;
@@ -187,33 +188,34 @@ LayoutOutput ComputeLeafLayout(const LayoutInput& inputs, const Style& style,
 
     // Both horizontal and vertical percentage padding/border resolve against
     // the container's inline size (i.e. its width). That is CSS, not a bug.
-    RectF margin = style.margin.ResolveOrZero(parentSize.width, calc);
-    RectF padding = style.padding.ResolveOrZero(parentSize.width, calc);
-    RectF border = style.border.ResolveOrZero(parentSize.width, calc);
+    RectF margin = style.margin.ResolveOrZero(parentSize.w, calc);
+    RectF padding = style.padding.ResolveOrZero(parentSize.w, calc);
+    RectF border = style.border.ResolveOrZero(parentSize.w, calc);
     RectF paddingBorder = padding + border;
     SizeF pbSum = paddingBorder.SumAxes();
     SizeF boxSizingAdjustment =
         style.boxSizing == BoxSizing::ContentBox ? pbSum : SizeF::Zero();
 
     // In ContentSize mode the node's own size styles are ignored.
-    SizeOptF nodeSize;
-    SizeOptF nodeMinSize;
-    SizeOptF nodeMaxSize;
-    Optf aspectRatio;
+    SizeOptF nodeSize = SizeOptFNone();
+    SizeOptF nodeMinSize = SizeOptFNone();
+    SizeOptF nodeMaxSize = SizeOptFNone();
+    Optf aspectRatio = None();
     if (inputs.sizingMode == SizingMode::ContentSize) {
         nodeSize = knownDimensions;
     } else {
         aspectRatio = style.aspectRatio;
-        SizeOptF styleSize = MaybeAdd(style.size.MaybeResolve(parentSize, calc)
-                                          .MaybeApplyAspectRatio(aspectRatio),
-                                      boxSizingAdjustment);
-        SizeOptF styleMinSize =
-            MaybeAdd(style.minSize.MaybeResolve(parentSize, calc)
-                         .MaybeApplyAspectRatio(aspectRatio),
-                     boxSizingAdjustment);
+        SizeOptF styleSize = MaybeAdd(
+            MaybeApplyAspectRatio(style.size.MaybeResolve(parentSize, calc),
+                                  aspectRatio),
+            boxSizingAdjustment);
+        SizeOptF styleMinSize = MaybeAdd(
+            MaybeApplyAspectRatio(style.minSize.MaybeResolve(parentSize, calc),
+                                  aspectRatio),
+            boxSizingAdjustment);
         SizeOptF styleMaxSize = MaybeAdd(
             style.maxSize.MaybeResolve(parentSize, calc), boxSizingAdjustment);
-        nodeSize = knownDimensions.Or(styleSize);
+        nodeSize = Or(knownDimensions, styleSize);
         nodeMinSize = styleMinSize;
         nodeMaxSize = styleMaxSize;
     }
@@ -234,14 +236,13 @@ LayoutOutput ComputeLeafLayout(const LayoutInput& inputs, const Style& style,
         IsScrollContainer(style.overflow.y) ||
         style.position == Position::Absolute || padding.top > 0.0f ||
         padding.bottom > 0.0f || border.top > 0.0f || border.bottom > 0.0f ||
-        (nodeSize.height.IsSome() && nodeSize.height.val > 0.0f) ||
-        (nodeMinSize.height.IsSome() && nodeMinSize.height.val > 0.0f);
+        (IsSome(nodeSize.h) && nodeSize.h > 0.0f) ||
+        (IsSome(nodeMinSize.h) && nodeMinSize.h > 0.0f);
 
     // Return early if both dimensions are already known.
     if (inputs.runMode == RunMode::ComputeSize &&
-        hasStylesPreventingBeingCollapsedThrough &&
-        nodeSize.BothAxisDefined()) {
-        SizeF size = {nodeSize.width.val, nodeSize.height.val};
+        hasStylesPreventingBeingCollapsedThrough && BothAxisDefined(nodeSize)) {
+        SizeF size = {nodeSize.w, nodeSize.h};
         size = MaybeMax(MaybeClamp(size, nodeMinSize, nodeMaxSize),
                         AsOptional(pbSum));
         LayoutOutput out;
@@ -250,50 +251,47 @@ LayoutOutput ComputeLeafLayout(const LayoutInput& inputs, const Style& style,
     }
 
     SizeAvail availableSpace;
-    availableSpace.width =
-        MaybeSub(knownDimensions.width.IsSome()
-                     ? AvailableSpace::Definite(knownDimensions.width.val)
-                     : availableSpaceIn.width,
-                 margin.HorizontalAxisSum())
-            .MaybeSet(knownDimensions.width)
-            .MaybeSet(nodeSize.width);
+    AvailableSpace availWidth =
+        IsSome(knownDimensions.w) ? AvailableSpace::Definite(knownDimensions.w)
+                                  : availableSpaceIn.width;
+    availableSpace.width = MaybeSub(availWidth, margin.HorizontalAxisSum())
+                               .MaybeSet(knownDimensions.w)
+                               .MaybeSet(nodeSize.w);
     if (availableSpace.width.IsDefinite()) {
-        availableSpace.width = AvailableSpace::Definite(
-            MaybeClamp(availableSpace.width.value, nodeMinSize.width,
-                       nodeMaxSize.width) -
-            contentBoxInset.HorizontalAxisSum());
+        availableSpace.width =
+            AvailableSpace::Definite(MaybeClamp(availableSpace.width.value,
+                                                nodeMinSize.w, nodeMaxSize.w) -
+                                     contentBoxInset.HorizontalAxisSum());
     }
-    availableSpace.height =
-        MaybeSub(knownDimensions.height.IsSome()
-                     ? AvailableSpace::Definite(knownDimensions.height.val)
-                     : availableSpaceIn.height,
-                 margin.VerticalAxisSum())
-            .MaybeSet(knownDimensions.height)
-            .MaybeSet(nodeSize.height);
+    AvailableSpace availHeight =
+        IsSome(knownDimensions.h) ? AvailableSpace::Definite(knownDimensions.h)
+                                  : availableSpaceIn.height;
+    availableSpace.height = MaybeSub(availHeight, margin.VerticalAxisSum())
+                                .MaybeSet(knownDimensions.h)
+                                .MaybeSet(nodeSize.h);
     if (availableSpace.height.IsDefinite()) {
-        availableSpace.height = AvailableSpace::Definite(
-            MaybeClamp(availableSpace.height.value, nodeMinSize.height,
-                       nodeMaxSize.height) -
-            contentBoxInset.VerticalAxisSum());
+        availableSpace.height =
+            AvailableSpace::Definite(MaybeClamp(availableSpace.height.value,
+                                                nodeMinSize.h, nodeMaxSize.h) -
+                                     contentBoxInset.VerticalAxisSum());
     }
 
     // PerformHiddenLayout never reaches here; Rust spells that unreachable!().
     SizeOptF measureKnown = inputs.runMode == RunMode::ComputeSize
                                 ? knownDimensions
-                                : SizeOptF::None();
+                                : SizeOptFNone();
     SizeF measuredSize = measure
                              ? measure(measureKnown, availableSpace, measureCtx)
                              : SizeF::Zero();
 
     SizeF clampedSize =
-        MaybeClamp(knownDimensions.Or(nodeSize)
-                       .UnwrapOr(measuredSize + contentBoxInset.SumAxes()),
+        MaybeClamp(UnwrapOr(Or(knownDimensions, nodeSize),
+                            measuredSize + contentBoxInset.SumAxes()),
                    nodeMinSize, nodeMaxSize);
     SizeF size = {
         clampedSize.w,
-        F32Max(clampedSize.h, aspectRatio.IsSome()
-                                       ? clampedSize.w / aspectRatio.val
-                                       : 0.0f)};
+        F32Max(clampedSize.h,
+               IsSome(aspectRatio) ? clampedSize.w / aspectRatio : 0.0f)};
     size = MaybeMax(size, AsOptional(pbSum));
 
     LayoutOutput out;
