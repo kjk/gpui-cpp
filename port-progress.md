@@ -1025,3 +1025,20 @@ cargo run -p system_monitor
   of the commit before it — 15 pixel-identical, and the two that differed
   (`system_monitor`, `fps_monitor`) differ the same way when the same binary
   is shot twice, because they draw live CPU and frame timings.
+
+- 2026-08-22: The markdown edit map is no longer quadratic. `util/edit_map.rs`'s `add` scans the entries it holds for one at the same index and its `consume` sorts them by insertion sort; a GFM table adds one entry per cell, so a document of tables paid for its cell count twice over — 16 KB / 64 KB / 256 KB of tables read at 7.2 ms / 65 ms / 1.0 s, and a megabyte took 22 s a sample, which is why the bench capped that one shape at 256 KB. `add` now finds its entry through an open-addressed table keyed by `at`, and `consume` merge-sorts. Entries, order and events are unchanged (no two entries share an `at`, so a stable sort lands where `sort_unstable_by` would).
+
+  One trap worth writing down: the first hash was `(at * 2654435761) >> 16` masked to the table, which varies in only 16 bits. Under 65 k entries it looked like a fix — 65 ms to 14 ms at 64 KB — and above that every entry piled onto one probe chain, so 256 KB stayed at 550 ms and the win read as "there must be a third quadratic". There was not; the fold (`h ^= h >> 15`) is the whole difference between 550 ms and 61 ms. The table shape now takes the same 1 MB `-large` size as every other shape.
+
+  | `bun cmd/bench.ts -small -large markdown`, median | before | after |     |
+  | ------------------------------------------------- | -------- | -------- | ---- |
+  | tables, 16 KB                                     | 7.18 ms  | 3.57 ms  | -50% |
+  | tables, 64 KB                                     | 65.13 ms | 13.66 ms | -79% |
+  | tables, 256 KB (the old `-large` size)             | 1010 ms  | 60.8 ms  | -94% |
+  | tables, 1 MB                                      | 20.4 s   | 249 ms   | -99% |
+  | prose, 1 MB                                       | 265.6 ms | 141.6 ms | -47% |
+  | nested quotes and lists, 1 MB                     | 640.8 ms | 161.2 ms | -75% |
+  | character references, 1 MB                        | 128.2 ms | 99.6 ms  | -22% |
+  | prose, 64 KB                                      | 9.06 ms  | 8.68 ms  | -4%  |
+
+  The 1 MB rows are the merge sort, not the index: the map is one entry per resolver edit for those shapes, and the sort was what grew. Verified with `bun cmd/test.ts` and `-dbg` (6880 checks each).

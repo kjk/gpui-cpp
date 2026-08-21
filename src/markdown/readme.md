@@ -118,6 +118,15 @@ Each of these is also stated in a comment at the place it applies.
   nothing rather than to a space, which is what markdown-rs 1.0.0 does (its
   doc comment claims otherwise) and therefore what a reference has to do to
   find the definitions it finds.
+- **The edit map indexes and merge-sorts.** `util/edit_map.rs`'s `add` walks
+  the entries it already holds looking for one at the same index, and its
+  `consume` sorts them; both are written for a map that stays short. A GFM
+  table adds an entry per cell, so a document of tables is quadratic in its
+  cell count twice over — 1 MB of them took 22 seconds. Here `add` finds its
+  entry through an open-addressed table keyed by `at`, and `consume` sorts
+  with a bottom-up merge sort. Same entries, same order (no two entries share
+  an `at`, so a stable sort lands where `sort_unstable_by` would), same
+  events; `bench/MarkdownBench.cpp` measures it.
 - **The character reference table is sorted.** The crate walks its 2125 pairs
   with `find`, so their order is nearly-but-not-quite ascending (`emsp14`
   before `emsp`, `sup3` before `sup`); here they are sorted so `DecodeNamed`
