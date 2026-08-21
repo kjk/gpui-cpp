@@ -6,6 +6,8 @@
 namespace gpui {
 
 void AssetsClear();
+// How many roots are registered.
+int AssetsRootCount();
 void AssetsAddRoot(Str dir);
 // Walk cwd and the exe directory looking for assets/<exampleName>.
 void AssetsAddDefaultRoots(Str exampleName);

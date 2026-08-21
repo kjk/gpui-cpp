@@ -25,10 +25,20 @@ struct MonitorApp {
     int histN = 0;
     int timeIndex = 0;
     int tab = 0;
+    // Column::new("cpu", ..).sortable().sort(ColumnSort::Descending): the
+    // process list starts sorted by CPU, heaviest first, and the other three
+    // columns start at Default.
     ProcessSort sort = ProcessSort::Cpu;
-    bool sortDesc = true;
+    ColumnSort sortOrder = ColumnSort::Descending;
     float tableScroll = 0;
 };
+
+// sort_processes: `is_descending = matches!(self.sort_order,
+// ColumnSort::Descending)`, so a column cycled back to Default sorts ascending
+// rather than going back to whatever order the list arrived in.
+static bool SortIsDesc(ColumnSort s) {
+    return s == ColumnSort::Descending;
+}
 
 static void PushHist(MonitorApp* app, float cpu, float mem) {
     if (app->histN < kMaxHist) {
@@ -46,7 +56,8 @@ static void PushHist(MonitorApp* app, float cpu, float mem) {
 
 static void Collect(MonitorApp* app) {
     SysRefresh(&app->sys);
-    SysSortProcesses(&app->sys, app->sort, app->sortDesc, kKeepProcs);
+    SysSortProcesses(&app->sys, app->sort, SortIsDesc(app->sortOrder),
+                     kKeepProcs);
     PushHist(app, app->sys.cpu, app->sys.mem);
 }
 
@@ -81,16 +92,19 @@ static void PickTab(MonitorApp* app, Ctx* cx, const ClickEvent*, intptr_t ix) {
     Notify(cx);
 }
 
+// TableState::perform_sort. The cycle is three-stepped — Default becomes
+// Descending, Descending becomes Ascending, Ascending goes back to Default —
+// and every other column drops back to Default, since only one column carries
+// the sort. A two-state toggle here was the difference from Rust: the third
+// press had nowhere to go, so the column could never be given up.
 static void SortBy(MonitorApp* app, Ctx* cx, const ClickEvent*,
                    intptr_t which) {
     ProcessSort field = (ProcessSort)which;
-    if (app->sort == field) {
-        app->sortDesc = !app->sortDesc;
-    } else {
-        app->sort = field;
-        app->sortDesc = field != ProcessSort::Name && field != ProcessSort::Pid;
-    }
-    SysSortProcesses(&app->sys, app->sort, app->sortDesc, kKeepProcs);
+    ColumnSort was = app->sort == field ? app->sortOrder : ColumnSort::Default;
+    app->sort = field;
+    app->sortOrder = TableNextSort(was);
+    SysSortProcesses(&app->sys, app->sort, SortIsDesc(app->sortOrder),
+                     kKeepProcs);
     Notify(cx);
 }
 
@@ -185,11 +199,32 @@ static El* SystemTab(Arena* a, MonitorApp* app) {
 
 static const float kColW[4] = {70, 380, 80, 100};
 
-static Str SortMark(ProcessSort field, ProcessSort cur, bool desc) {
-    if (field != cur) {
-        return StrL("");
+// render_sort_icon. Every sortable column carries one: the two chevrons at
+// half opacity while the column is not the sorted one, and the single chevron
+// the sort is in at full. Rust draws SortAscending / SortDescending glyphs,
+// which this tree's icon set does not have, so it stands the same two chevrons
+// in that component::Table does.
+static El* SortIcon(Arena* a, const Theme& th, ColumnSort sort) {
+    IconName name = IconName::ChevronsUpDown;
+    bool on = true;
+    switch (sort) {
+        case ColumnSort::Ascending:
+            name = IconName::ChevronUp;
+            break;
+        case ColumnSort::Descending:
+            name = IconName::ChevronDown;
+            break;
+        default:
+            on = false;
+            break;
     }
-    return desc ? StrL(" ↓") : StrL(" ↑");
+    return Div(a)
+        ->Pad(2)
+        ->Radius(th.radius * 0.5f)
+        ->HoverBg(th.tokens.secondary)
+        ->Child(
+            IconEl(a, name, 12)
+                ->Fg(on ? th.secondaryFg : RgbaOpacity(th.secondaryFg, 0.5f)));
 }
 
 static El* ProcTableHeader(Ctx* cx, MonitorApp* app) {
@@ -201,15 +236,23 @@ static El* ProcTableHeader(Ctx* cx, MonitorApp* app) {
     El* row = Div(a)->FlexRow()->H(28)->Shrink0()->ItemsCenter()->Bg(
         th.tokens.tableHead);
     for (int i = 0; i < 4; i++) {
-        TempStr lab = fmt("%s%s", Str(names[i]),
-                          SortMark(fields[i], app->sort, app->sortDesc));
-        row->Child(Div(a)
-                       ->W(kColW[i])
-                       ->H(28)
-                       ->PadX(8)
-                       ->ItemsCenter()
-                       ->OnClick(Listen(cx, &SortBy, (intptr_t)fields[i]))
-                       ->Child(TextEl(a, lab)->Font(12)->Fg(th.tableHeadFg)));
+        ColumnSort sort =
+            fields[i] == app->sort ? app->sortOrder : ColumnSort::Default;
+        // The icon is the hit box, not the whole cell — Rust hangs
+        // perform_sort off the icon and leaves the head to the column itself,
+        // and component::Table does the same.
+        El* icon = SortIcon(a, th, sort)
+                       ->OnClick(Listen(cx, &SortBy, (intptr_t)fields[i]));
+        row->Child(
+            Div(a)
+                ->W(kColW[i])
+                ->H(28)
+                ->PadX(8)
+                ->FlexRow()
+                ->ItemsCenter()
+                ->JustifyBetween()
+                ->Child(TextEl(a, Str(names[i]))->Font(12)->Fg(th.tableHeadFg))
+                ->Child(icon));
     }
     return row;
 }
@@ -357,6 +400,10 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    // Without a root the icons fall back to the built-in strokes, which
+    // only cover part of the set — the sort chevrons in the process
+    // table's head were among the ones that drew nothing.
+    AssetsAddDefaultRoots(Str{});
     Entity<MonitorApp> view = EntityNew<MonitorApp>(app);
     MonitorApp* self = view.Get(app);
     (void)self;
