@@ -3,8 +3,9 @@
    report reaches the terminal.
 
    This file is criterion's replacement: the sample loop, the timer and the
-   report. The benchmarks themselves are in the files beside it, each named
-   after the one in taffy's `benches/benches/` it came from. */
+   report. The benchmarks themselves are in the files beside it: the layout
+   ones each named after the one in taffy's `benches/benches/` it came from,
+   and `MarkdownBench.cpp`, which is ours. */
 
 #include "Bench.h"
 
@@ -136,7 +137,7 @@ int GpuiMain(int argc, char** argv) {
         }
     }
 
-    printf("taffy benchmarks: %d samples", gBenchSamples);
+    printf("benchmarks: %d samples", gBenchSamples);
     if (gBenchSmall) {
         printf(", +small");
     }
@@ -152,6 +153,7 @@ int GpuiMain(int argc, char** argv) {
     BenchTreeCreation();
     BenchFlexbox();
     BenchGrid();
+    BenchMarkdown();
     printf("\nelapsed %.1fs\n", TimeNow() - started);
     return 0;
 }

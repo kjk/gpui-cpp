@@ -1,9 +1,11 @@
-/* The benchmark harness, and the tree builders the benchmarks share.
+/* The benchmark harness, and the tree builders the layout benchmarks share.
 
-   Ports of the benchmarks in taffy's `benches/` directory, one file per Rust
-   one. That directory is a crate of its own — `taffy_benchmarks` — and is not
-   part of the published crate, so it comes from the git checkout the recipe
-   in port-upstream.md clones.
+   Most of what runs here is a port of the benchmarks in taffy's `benches/`
+   directory, one file per Rust one. That directory is a crate of its own —
+   `taffy_benchmarks` — and is not part of the published crate, so it comes
+   from the git checkout the recipe in port-upstream.md clones.
+   `MarkdownBench.cpp` is not a port: markdown-rs carries no benchmarks to
+   translate, so those cases are ours, and that file says what each measures.
 
    The Rust runs on criterion, which warms up, estimates a sample count and
    reports a confidence interval. This runs a fixed number of samples and
@@ -133,9 +135,11 @@ struct TreeBuilder {
     void ComputeLayout(taffy::Optf availableWidth, taffy::Optf availableHeight);
 };
 
-// The benchmark files.
+// The benchmark files. The first three are taffy's; the last is ours, and
+// says why in its own header.
 void BenchFlexbox();
 void BenchGrid();
 void BenchTreeCreation();
+void BenchMarkdown();
 
 #endif // GPUI_BENCH_H_

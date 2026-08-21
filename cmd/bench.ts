@@ -2,10 +2,13 @@
 //                                                       [-large] [-n=<count>]
 //                                                       [<filter>]
 //
-// The benchmarks live in bench/ and are ports of the ones in taffy's
+// The benchmarks live in bench/. The layout ones are ports of taffy's
 // benches/ directory, which is a crate of its own and not part of the
-// published crate — see port-upstream.md for the checkout. The runner is an
-// ordinary build target, so every flag build.ts takes works here too.
+// published crate — see port-upstream.md for the checkout. The markdown ones
+// are ours: markdown-rs carries none to port. The runner is an ordinary build
+// target, so every flag build.ts takes works here too.
+//
+//   bun cmd/bench.ts markdown     # just the parser, after changing it
 //
 // Release is the default and the only setting worth reading a number from; a
 // debug build measures the assertions, not the layout.
