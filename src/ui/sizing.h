@@ -44,15 +44,18 @@ inline float UiIconPx(UiSize s) {
 // are padded by hand; this is what the loading view measures its rows with,
 // which is the one place Rust reads the scale rather than a constant.
 inline Edges UiTableCellPadding(UiSize s) {
+    // Edges::New is left, right, top, bottom — the shared Rect's field order,
+    // which is not the one Rust's Edges<Pixels> lists. Named rather than
+    // braced so a reader does not have to remember which.
     switch (s) {
         case UiSize::XSmall:
-            return Edges{2, 4, 2, 4};
+            return Edges::New(4, 4, 2, 2);
         case UiSize::Small:
-            return Edges{3, 6, 3, 6};
+            return Edges::New(6, 6, 3, 3);
         case UiSize::Large:
-            return Edges{8, 12, 8, 12};
+            return Edges::New(12, 12, 8, 8);
         default:
-            return Edges{4, 8, 4, 8};
+            return Edges::New(8, 8, 4, 4);
     }
 }
 

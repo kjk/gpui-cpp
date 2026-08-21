@@ -914,3 +914,54 @@ cargo run -p system_monitor
   `bun cmd/test.ts` (6880 checks), and screenshots of `hello_world`, the
   DataTable story page and the Introduction page, which is the markdown port
   end to end.
+- 2026-08-21: One point, one size, one edge-set. `SizeF`, `PointF` and `RectF`
+  moved from `src/taffy/geometry.h` into `base.h`, and gpui's `Size`, `Point`
+  and `Edges` are aliases for them. There were two sets of the same three
+  shapes before, converted at the seam between the two modules; there is one
+  now.
+
+  What stayed a method is what both sides use: the fields, `Zero`, the
+  comparison and arithmetic operators, and `Rect`'s three axis sums. What
+  taffy does with a flex direction or a writing-mode axis — `Main`, `Cross`,
+  `SetMain`, `WithCross`, the `Rect` edge pickers, and the axis-free `Max`,
+  `Min`, `Transpose` and `IntoSize` that only taffy calls — is a free function
+  in `namespace taffy` now, because `FlexDirection` is taffy's and has no
+  business in the base. `size.Main(dir)` reads `Main(size, dir)`.
+
+  `SizeF` keeps gpui's `.w` / `.h` rather than Rust's `width` / `height`. That
+  is the field naming the tree already had everywhere, and taking it made the
+  gpui side of this change fourteen lines instead of eighty-five — the whole
+  of it is the four assignments at the taffy seam and three `Edges` accessors
+  renamed. taffy's own `SizeOptF`, `SizeDim` and `SizeAvail`, which are not
+  this type, still spell their fields out.
+
+  The rename across ~150 call sites was driven by the compiler rather than by
+  a regex: build, read the `C2039: 'Main' is not a member of 'base::SizeF'`
+  lines, rewrite exactly those sites, repeat. That matters because `Bounds`
+  also has `.w`, and `SizeOptF` also has `Main` — a textual pass would have
+  hit both. It is self-checking too: where the rewriter over-reached on a line
+  holding two types, the next round failed naming the other one, which is how
+  the nine mixed-type overloads in `math.h` (`MaybeMax(SizeOptF, SizeF)` and
+  its neighbours) were found.
+
+  One real trap, caught by a test: `Edges` was `{top, right, bottom, left}`
+  and the shared `Rect` is `{left, right, top, bottom}`, so a braced
+  initialiser silently changed meaning. `InspectorTests` failed on `pad.left`
+  and pointed at the two places that did it — that test and
+  `UiTableCellPadding`, which is button and table-cell padding. Both name the
+  order now through `Edges::New(l, r, t, b)`.
+
+  Verified as a pixel-for-pixel no-op: 65 story pages and 28 example captures
+  against a build of the commit before it. Five differed and none of the five
+  was this change — `skeleton` and `spinner` animate, `system_monitor` is live
+  CPU, and `tree` and the Form page reproduced identical once the two shots
+  came from the same directory instead of a worktree and the main tree.
+- 2026-08-21: `cmd/imgdiff.ts`, because the sweep was not what was slow.
+  Comparing one sweep took six and a half minutes and taking it took eighty
+  seconds. The comparison was a per-pixel loop in PowerShell — 4.1 s an image
+  pair — and two thirds of that was spent proving identical files identical.
+  The encoder is deterministic, so a byte compare answers most pairs outright.
+  `bun cmd/imgdiff.ts A B -skip=32 -bbox` does the same 93-pair job in 0.2 s,
+  a thousand times faster, and prints the bounding box, which usually names
+  the widget that moved. It carries a 40-line PNG decoder: the only PNGs it
+  sees are the ones `cmd/winapi.ts` writes.

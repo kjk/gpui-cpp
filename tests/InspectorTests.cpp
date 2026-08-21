@@ -19,7 +19,7 @@ static void WhatComesOutReadsBackIn() {
     s.hasColor = true;
     s.color = Rgba{0xfa, 0xfa, 0xfa, 0x80};
     s.borderColor = Rgba{0x26, 0x26, 0x26, 255};
-    s.pad = Edges{4, 12, 6, 10};
+    s.pad = Edges::New(10, 12, 4, 6); // left, right, top, bottom
     s.gap = 8;
     s.radius = 6;
     s.border = 1;

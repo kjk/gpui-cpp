@@ -1129,7 +1129,7 @@ ExplicitGridSize ComputeExplicitGridSizeInAxis(
         LengthPercentage gapLp = gapStyle.GetAbs(axis);
         SizeLp asSize = {gapLp, gapLp};
         float gapSize = asSize.ResolveOrZero(Optf(innerContainerSize), calc)
-                            .width;
+                            .w;
 
         float perRepetitionTrackUsedSpace = 0.0f;
         for (int k = 0; k < repetition->tracks.len; k++) {
@@ -2072,7 +2072,7 @@ struct IntrinsicSizeMeasurer {
             *item, availableSpace.width, tree->calc);
         float contribution = ItemMinContentContributionCached(
             item, axis, tree, gridAreaSize, availableSpace);
-        return contribution + marginAxisSums.Get(axis);
+        return contribution + Get(marginAxisSums, axis);
     }
     float MaxContentContribution(GridItem* item,
                                  const GridTrack* axisTracks) const {
@@ -2083,7 +2083,7 @@ struct IntrinsicSizeMeasurer {
             *item, availableSpace.width, tree->calc);
         float contribution = ItemMaxContentContributionCached(
             item, axis, tree, gridAreaSize, availableSpace);
-        return contribution + marginAxisSums.Get(axis);
+        return contribution + Get(marginAxisSums, axis);
     }
     float MinimumContribution(GridItem* item, const GridTrack* axisTracks,
                               int axisTrackCount) const {
@@ -2095,7 +2095,7 @@ struct IntrinsicSizeMeasurer {
         float contribution = ItemMinimumContributionCached(
             item, tree, axis, axisTracks, axisTrackCount, gridAreaSize,
             innerNodeSize);
-        return contribution + marginAxisSums.Get(axis);
+        return contribution + Get(marginAxisSums, axis);
     }
 };
 
@@ -2319,7 +2319,7 @@ void ResolveItemBaselines(TaffyTree* tree, AbstractAxis axis, GridItem* items,
             float marginTop =
                 topOnly.ResolveOrZero(innerNodeSize.width, tree->calc).top;
             item.baseline = Optf(
-                out.firstBaselines.y.UnwrapOr(out.size.height) + marginTop);
+                out.firstBaselines.y.UnwrapOr(out.size.h) + marginTop);
         }
 
         float rowMaxBaseline = 0.0f;
@@ -3425,8 +3425,8 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
 
     RectOptF inset = style.inset
                          .MaybeResolveZip(AsOptional(gridAreaSize), calc);
-    RectF padding = style.padding.ResolveOrZero(Optf(gridAreaSize.width), calc);
-    RectF border = style.border.ResolveOrZero(Optf(gridAreaSize.width), calc);
+    RectF padding = style.padding.ResolveOrZero(Optf(gridAreaSize.w), calc);
+    RectF border = style.border.ResolveOrZero(Optf(gridAreaSize.w), calc);
     SizeF paddingBorderSize = (padding + border).SumAxes();
     SizeF boxSizingAdjustment = style.boxSizing == BoxSizing::ContentBox
                                     ? paddingBorderSize
@@ -3463,24 +3463,24 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
 
     // Not a bug: the CSS spec has both horizontal and vertical margins resolve
     // against the *width* of the grid area.
-    RectOptF margin = style.margin.MaybeResolve(Optf(gridAreaSize.width), calc);
+    RectOptF margin = style.margin.MaybeResolve(Optf(gridAreaSize.w), calc);
 
     SizeF gridAreaMinusItemMarginsSize = {
-        MaybeSub(MaybeSub(gridAreaSize.width, margin.left), margin.right),
-        MaybeSub(MaybeSub(gridAreaSize.height, margin.top), margin.bottom) -
+        MaybeSub(MaybeSub(gridAreaSize.w, margin.left), margin.right),
+        MaybeSub(MaybeSub(gridAreaSize.h, margin.top), margin.bottom) -
             baselineShim};
 
     Optf width = inherentSize.width;
     if (!width.IsSome()) {
         if (position == Position::Absolute && inset.left.IsSome() &&
             inset.right.IsSome()) {
-            width = Optf(F32Max(gridAreaMinusItemMarginsSize.width -
+            width = Optf(F32Max(gridAreaMinusItemMarginsSize.w -
                                     inset.left.val - inset.right.val,
                                 0.0f));
         } else if (margin.left.IsSome() && margin.right.IsSome() &&
                    horizontalAlignment.keyword == AlignItemsKeyword::Stretch &&
                    position != Position::Absolute) {
-            width = Optf(gridAreaMinusItemMarginsSize.width);
+            width = Optf(gridAreaMinusItemMarginsSize.w);
         }
     }
     SizeOptF sized = SizeOptF{width, inherentSize.height}
@@ -3490,13 +3490,13 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
     if (!height.IsSome()) {
         if (position == Position::Absolute && inset.top.IsSome() &&
             inset.bottom.IsSome()) {
-            height = Optf(F32Max(gridAreaMinusItemMarginsSize.height -
+            height = Optf(F32Max(gridAreaMinusItemMarginsSize.h -
                                      inset.top.val - inset.bottom.val,
                                  0.0f));
         } else if (margin.top.IsSome() && margin.bottom.IsSome() &&
                    verticalAlignment.keyword == AlignItemsKeyword::Stretch &&
                    position != Position::Absolute) {
-            height = Optf(gridAreaMinusItemMarginsSize.height);
+            height = Optf(gridAreaMinusItemMarginsSize.h);
         }
     }
     sized = SizeOptF{sized.width, height}.MaybeApplyAspectRatio(aspectRatio);
@@ -3521,11 +3521,11 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
 
     AlignedAxis xr = AlignItemWithinArea(
         {gridArea.left, gridArea.right},
-        justifySelf.UnwrapOr(horizontalAlignment), finalSize.width, position,
+        justifySelf.UnwrapOr(horizontalAlignment), finalSize.w, position,
         inset, false, margin, 0.0f, direction);
     AlignedAxis yr = AlignItemWithinArea(
         {gridArea.top, gridArea.bottom}, alignSelf.UnwrapOr(verticalAlignment),
-        finalSize.height, position, inset, true, margin, baselineShim,
+        finalSize.h, position, inset, true, margin, baselineShim,
         Direction::Ltr);
 
     SizeF scrollbarSize = {
@@ -3547,7 +3547,7 @@ AlignedItem AlignAndPositionItem(TaffyTree* tree, NodeId node, uint32_t order,
     SizeF contribution = ComputeContentSizeContribution(
         {xr.start - gridArea.left, yr.start - gridArea.top}, finalSize,
         layoutOutput.contentSize, overflow);
-    return {contribution, yr.start, finalSize.height};
+    return {contribution, yr.start, finalSize.h};
 }
 
 // ─── mod.rs ──────────────────────────────────────────────────────────────
@@ -3683,9 +3683,9 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
     constrainedAvailableSpace =
         MaybeClamp(constrainedAvailableSpace, minSize, maxSize);
     constrainedAvailableSpace.width =
-        MaybeMax(constrainedAvailableSpace.width, paddingBorderSize.width);
+        MaybeMax(constrainedAvailableSpace.width, paddingBorderSize.w);
     constrainedAvailableSpace.height =
-        MaybeMax(constrainedAvailableSpace.height, paddingBorderSize.height);
+        MaybeMax(constrainedAvailableSpace.height, paddingBorderSize.h);
 
     SizeAvail availableGridSpace = constrainedAvailableSpace;
     if (availableGridSpace.width.IsDefinite()) {
@@ -3887,16 +3887,16 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
                               .UnwrapOr(initialColumnSum +
                                         contentBoxInset.HorizontalAxisSum()),
                           minSize.width, maxSize.width),
-               paddingBorderSize.width),
+               paddingBorderSize.w),
         F32Max(MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Block)
                               .UnwrapOr(initialRowSum + contentBoxInset
                                                             .VerticalAxisSum()),
                           minSize.height, maxSize.height),
-               paddingBorderSize.height)};
+               paddingBorderSize.h)};
     SizeF containerContentBox = {
-        F32Max(0.0f, containerBorderBox.width - contentBoxInset
+        F32Max(0.0f, containerBorderBox.w - contentBoxInset
                                                     .HorizontalAxisSum()),
-        F32Max(0.0f, containerBorderBox.height - contentBoxInset
+        F32Max(0.0f, containerBorderBox.h - contentBoxInset
                                                      .VerticalAxisSum())};
 
     if (runMode == RunMode::ComputeSize) {
@@ -3917,9 +3917,9 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         for (int i = 0; i < columns.len; i++) {
             GridTrack& c = columns[i];
             Optf mn = c.minTrackSizingFunction.ResolvedPercentageSize(
-                containerContentBox.width, calc);
+                containerContentBox.w, calc);
             Optf mx = c.maxTrackSizingFunction.ResolvedPercentageSize(
-                containerContentBox.width, calc);
+                containerContentBox.w, calc);
             c.baseSize = MaybeClamp(c.baseSize, mn, mx);
         }
     }
@@ -3927,9 +3927,9 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         for (int i = 0; i < rows.len; i++) {
             GridTrack& r = rows[i];
             Optf mn = r.minTrackSizingFunction.ResolvedPercentageSize(
-                containerContentBox.height, calc);
+                containerContentBox.h, calc);
             Optf mx = r.maxTrackSizingFunction.ResolvedPercentageSize(
-                containerContentBox.height, calc);
+                containerContentBox.h, calc);
             r.baseSize = MaybeClamp(r.baseSize, mn, mx);
         }
     }
@@ -4059,43 +4059,43 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
             finalRowSum += rows[i].baseSize;
         }
         if (intrinsicColumnContributionChanged && !hasPercentageColumn) {
-            containerBorderBox.width = F32Max(
+            containerBorderBox.w = F32Max(
                 MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Inline)
                                .UnwrapOr(finalColumnSum +
                                          contentBoxInset.HorizontalAxisSum()),
                            minSize.width, maxSize.width),
-                paddingBorderSize.width);
+                paddingBorderSize.w);
             containerContentBox
-                .width = F32Max(0.0f, containerBorderBox.width -
+                .w = F32Max(0.0f, containerBorderBox.w -
                                           contentBoxInset.HorizontalAxisSum());
         }
         if (intrinsicRowContributionChanged && !hasPercentageRow) {
-            containerBorderBox.height = F32Max(
+            containerBorderBox.h = F32Max(
                 MaybeClamp(resolvedStyleSize.Get(AbstractAxis::Block)
                                .UnwrapOr(finalRowSum + contentBoxInset
                                                            .VerticalAxisSum()),
                            minSize.height, maxSize.height),
-                paddingBorderSize.height);
+                paddingBorderSize.h);
             containerContentBox
-                .height = F32Max(0.0f, containerBorderBox.height -
+                .h = F32Max(0.0f, containerBorderBox.h -
                                            contentBoxInset.VerticalAxisSum());
         }
     }
 
     // 8. Track alignment.
     float inlineSizeWithoutScrollbar =
-        F32Max(containerBorderBox.width - paddingBorderSize.width, 0.0f);
+        F32Max(containerBorderBox.w - paddingBorderSize.w, 0.0f);
     float inlineScrollbarGutterForAlignment =
         F32Min(scrollbarGutter.x, inlineSizeWithoutScrollbar);
     AlignTracks(
-        containerContentBox.Get(AbstractAxis::Inline),
+        Get(containerContentBox, AbstractAxis::Inline),
         {padding.left +
              (IsRtl(direction) ? inlineScrollbarGutterForAlignment : 0.0f),
          padding.right +
              (IsRtl(direction) ? 0.0f : inlineScrollbarGutterForAlignment)},
         {border.left, border.right}, columns.els, columns.len, justifyContent,
         IsRtl(direction));
-    AlignTracks(containerContentBox.Get(AbstractAxis::Block),
+    AlignTracks(Get(containerContentBox, AbstractAxis::Block),
                 {padding.top, padding.bottom}, {border.top, border.bottom},
                 rows.els, rows.len, alignContent, false);
 
@@ -4118,8 +4118,8 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
             alignItems, item.baselineShim, direction);
         item.yPosition = placed.yPosition;
         item.height = placed.height;
-        itemContentSizeContribution = itemContentSizeContribution
-                                          .Max(placed.contentSizeContribution);
+        itemContentSizeContribution = Max(itemContentSizeContribution,
+                                          placed.contentSizeContribution);
     }
 
     // Hidden and absolutely positioned children.
@@ -4188,7 +4188,7 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         gridArea.bottom =
             rowEndIdx >= 0
                 ? rows[rowEndIdx].offset
-                : containerBorderBox.height - border.bottom - scrollbarGutter.y;
+                : containerBorderBox.h - border.bottom - scrollbarGutter.y;
         gridArea
             .left = colStartIdx >= 0
                         ? columns[colStartIdx].offset
@@ -4197,16 +4197,16 @@ LayoutOutput ComputeGridLayout(TaffyTree* tree, NodeId node,
         gridArea.right =
             colEndIdx >= 0
                 ? columns[colEndIdx].offset
-                : (IsRtl(direction) ? containerBorderBox.width - border.right
-                                    : containerBorderBox.width - border.right -
+                : (IsRtl(direction) ? containerBorderBox.w - border.right
+                                    : containerBorderBox.w - border.right -
                                           scrollbarGutter.x);
 
         // TODO(taffy): baseline alignment for absolutely positioned items.
         AlignedItem placed =
             AlignAndPositionItem(tree, child, order, gridArea, justifyItems,
                                  alignItems, 0.0f, direction);
-        itemContentSizeContribution = itemContentSizeContribution
-                                          .Max(placed.contentSizeContribution);
+        itemContentSizeContribution = Max(itemContentSizeContribution,
+                                          placed.contentSizeContribution);
         order += 1;
     }
 

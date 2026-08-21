@@ -38,8 +38,8 @@ static void AnOpenSheetPushesTheNotificationsIn() {
     // With no sheet open they fill the window.
     e = RootNotificationInsets(false, SheetPlacement::Right, 350);
     utassertnear(e.right, 0.f);
-    utassertnear(e.Horizontal(), 0.f);
-    utassertnear(e.Vertical(), 0.f);
+    utassertnear(e.HorizontalAxisSum(), 0.f);
+    utassertnear(e.VerticalAxisSum(), 0.f);
 }
 
 void TestRoot() {

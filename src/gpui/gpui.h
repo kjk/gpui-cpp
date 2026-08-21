@@ -349,27 +349,18 @@ inline bool AxisIsHorizontal(Axis a) {
     return a == Axis::Horizontal;
 }
 
-struct Point {
-    float x = 0;
-    float y = 0;
-};
-
-struct Size {
-    float w = 0;
-    float h = 0;
-};
-
-// Edges<Pixels>: the four insets of a box, in Rust's field order. Ahead of
-// Bounds, which insets by one.
-struct Edges {
-    float top = 0;
-    float right = 0;
-    float bottom = 0;
-    float left = 0;
-
-    float Horizontal() const { return left + right; }
-    float Vertical() const { return top + bottom; }
-};
+// The three float shapes are `base::PointF` / `SizeF` / `RectF`, shared with
+// the taffy port — one definition, no conversion at the seam. gpui keeps its
+// own names for them: `Size` and `Edges` read better in a widget than `SizeF`
+// and `RectF` do, and `Edges<Pixels>` is what Rust calls the second one.
+//
+// `Size` keeps the `.w` / `.h` it always had. `Edges` does not keep its field
+// *order*: the shared one is left, right, top, bottom, where Rust's
+// Edges<Pixels> is top, right, bottom, left, so a braced `Edges{...}` means
+// something different than it used to. `Edges::New(l, r, t, b)` says which.
+using Point = base::PointF;
+using Size = base::SizeF;
+using Edges = base::RectF;
 
 // Bounds<Pixels>. Rust composes it from an origin and a size; here the four
 // floats are the struct, so there is no `.origin` or `.size` to reach for.
@@ -390,7 +381,8 @@ struct Bounds {
     Bounds Inset(float d) const { return {x + d, y + d, w - d - d, h - d - d}; }
     // Bounds::extend, negated the same way: the content box inside padding.
     Bounds Inset(Edges e) const {
-        return {x + e.left, y + e.top, w - e.Horizontal(), h - e.Vertical()};
+        return {x + e.left, y + e.top, w - e.HorizontalAxisSum(),
+                h - e.VerticalAxisSum()};
     }
 };
 

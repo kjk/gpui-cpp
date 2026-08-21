@@ -197,11 +197,11 @@ struct Layout {
     }
 
     float ContentBoxWidth() const {
-        return size.width - padding.left - padding.right - border.left -
+        return size.w - padding.left - padding.right - border.left -
                border.right;
     }
     float ContentBoxHeight() const {
-        return size.height - padding.top - padding.bottom - border.top -
+        return size.h - padding.top - padding.bottom - border.top -
                border.bottom;
     }
     SizeF ContentBoxSize() const {
@@ -215,14 +215,14 @@ struct Layout {
 
     // Content width minus width, floored at zero.
     float ScrollWidth() const {
-        return F32Max(0.0f, contentSize.width +
-                                F32Min(scrollbarSize.width, size.width) -
-                                size.width + border.right);
+        return F32Max(0.0f, contentSize.w +
+                                F32Min(scrollbarSize.w, size.w) -
+                                size.w + border.right);
     }
     float ScrollHeight() const {
-        return F32Max(0.0f, contentSize.height +
-                                F32Min(scrollbarSize.height, size.height) -
-                                size.height + border.bottom);
+        return F32Max(0.0f, contentSize.h +
+                                F32Min(scrollbarSize.h, size.h) -
+                                size.h + border.bottom);
     }
 };
 

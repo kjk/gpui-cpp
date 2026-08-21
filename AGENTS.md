@@ -508,6 +508,12 @@ cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client c
                        -half=left|right sizes the window the way compare-story.ts does,
                        so a baseline shot is the same pixels as the compare capture
                        (-half=right is our side of the pair); sweep story pages with it.
+cmd/imgdiff.ts         compare two shots, or two directories of them, and exit 1 if
+                       anything differs. -skip=32 ignores the title bar, whose active
+                       and inactive states are capture noise; -bbox prints where the
+                       difference is, which usually names the widget; -tol sets what
+                       counts as more than antialiasing. Identical renders are
+                       identical files, so most pairs cost a byte compare.
                        It passes -gpui-window=X,Y,W,H, a runtime flag every example
                        understands: the window opens at that outer rect instead of
                        being moved into it, so the tree is laid out once. The runtime

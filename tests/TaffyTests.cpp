@@ -697,13 +697,13 @@ static void TestTaffyTreeMeasure() {
         NodeId node = tree.NewLeafWithContext(taffy::Style{}, &bigger);
         tree.ComputeLayoutWithMeasure(node, SizeAvail::MaxContent(),
                                       SizeMeasureFunction, nullptr);
-        utassertnear(tree.GetLayout(node).size.width, 200.0f);
+        utassertnear(tree.GetLayout(node).size.w, 200.0f);
 
         SizeF smaller = {100.0f, 100.0f};
         tree.SetNodeContext(node, &smaller, true);
         tree.ComputeLayoutWithMeasure(node, SizeAvail::MaxContent(),
                                       SizeMeasureFunction, nullptr);
-        utassertnear(tree.GetLayout(node).size.width, 100.0f);
+        utassertnear(tree.GetLayout(node).size.w, 100.0f);
         tree.Free();
     }
 
@@ -714,13 +714,13 @@ static void TestTaffyTreeMeasure() {
         NodeId node = tree.NewLeaf(taffy::Style{});
         tree.ComputeLayoutWithMeasure(node, SizeAvail::MaxContent(),
                                       SizeMeasureFunction, nullptr);
-        utassertnear(tree.GetLayout(node).size.width, 0.0f);
+        utassertnear(tree.GetLayout(node).size.w, 0.0f);
 
         SizeF hundred = {100.0f, 100.0f};
         tree.SetNodeContext(node, &hundred, true);
         tree.ComputeLayoutWithMeasure(node, SizeAvail::MaxContent(),
                                       SizeMeasureFunction, nullptr);
-        utassertnear(tree.GetLayout(node).size.width, 100.0f);
+        utassertnear(tree.GetLayout(node).size.w, 100.0f);
         tree.Free();
     }
 }
@@ -736,8 +736,8 @@ static void TestTaffyTreeLayout() {
         s.size = SizeDim::FromLengths(10.0f, 10.0f);
         NodeId node = tree.NewLeaf(s);
         tree.ComputeLayout(node, SizeAvail::Definite({100.0f, 100.0f}));
-        utassertnear(tree.GetLayout(node).size.width, 10.0f);
-        utassertnear(tree.GetLayout(node).size.height, 10.0f);
+        utassertnear(tree.GetLayout(node).size.w, 10.0f);
+        utassertnear(tree.GetLayout(node).size.h, 10.0f);
         tree.Free();
     }
 
@@ -832,12 +832,12 @@ static void TestFlexboxLayout() {
         NodeId root = tree.NewWithChildren(rootStyle, kids, 3);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
-        utassertnear(tree.GetLayout(root).size.width, 300.0f);
+        utassertnear(tree.GetLayout(root).size.w, 300.0f);
         for (int i = 0; i < 3; i++) {
             const Layout& l = tree.GetLayout(kids[i]);
-            utassertnear(l.size.width, 100.0f);
+            utassertnear(l.size.w, 100.0f);
             // align-items defaults to stretch, so each fills the cross axis.
-            utassertnear(l.size.height, 60.0f);
+            utassertnear(l.size.h, 60.0f);
             utassertnear(l.location.x, 100.0f * (float)i);
             utassertnear(l.location.y, 0.0f);
         }
@@ -865,8 +865,8 @@ static void TestFlexboxLayout() {
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         // 5 + 20 + 8 + 20 + 5
-        utassertnear(tree.GetLayout(root).size.height, 58.0f);
-        utassertnear(tree.GetLayout(root).size.width, 50.0f);
+        utassertnear(tree.GetLayout(root).size.h, 58.0f);
+        utassertnear(tree.GetLayout(root).size.w, 50.0f);
         utassertnear(tree.GetLayout(c0).location.y, 5.0f);
         utassertnear(tree.GetLayout(c1).location.y, 33.0f);
         utassertnear(tree.GetLayout(c0).location.x, 5.0f);
@@ -913,8 +913,8 @@ static void TestFlexboxLayout() {
         NodeId root = tree.NewWithChildren(rootStyle, kids, 2);
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
-        utassertnear(tree.GetLayout(c0).size.width, 150.0f);
-        utassertnear(tree.GetLayout(c1).size.width, 150.0f);
+        utassertnear(tree.GetLayout(c0).size.w, 150.0f);
+        utassertnear(tree.GetLayout(c1).size.w, 150.0f);
         utassertnear(tree.GetLayout(c1).location.x, 150.0f);
         tree.Free();
     }
@@ -974,8 +974,8 @@ static void TestBlockLayout() {
 
         utassertnear(tree.GetLayout(c0).location.y, 0.0f);
         utassertnear(tree.GetLayout(c1).location.y, 20.0f);
-        utassertnear(tree.GetLayout(c0).size.width, 120.0f);
-        utassertnear(tree.GetLayout(c1).size.width, 120.0f);
+        utassertnear(tree.GetLayout(c0).size.w, 120.0f);
+        utassertnear(tree.GetLayout(c1).size.w, 120.0f);
         tree.Free();
     }
 
@@ -1645,8 +1645,8 @@ static void TestGridLayout() {
 
         utassertnear(tree.GetLayout(kids[0]).location.x, 0.0f);
         utassertnear(tree.GetLayout(kids[0]).location.y, 0.0f);
-        utassertnear(tree.GetLayout(kids[0]).size.width, 100.0f);
-        utassertnear(tree.GetLayout(kids[0]).size.height, 50.0f);
+        utassertnear(tree.GetLayout(kids[0]).size.w, 100.0f);
+        utassertnear(tree.GetLayout(kids[0]).size.h, 50.0f);
         utassertnear(tree.GetLayout(kids[1]).location.x, 100.0f);
         utassertnear(tree.GetLayout(kids[1]).location.y, 0.0f);
         utassertnear(tree.GetLayout(kids[2]).location.x, 0.0f);
@@ -1678,8 +1678,8 @@ static void TestGridLayout() {
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         // 60 + 10 + 40
-        utassertnear(tree.GetLayout(root).size.width, 110.0f);
-        utassertnear(tree.GetLayout(root).size.height, 24.0f);
+        utassertnear(tree.GetLayout(root).size.w, 110.0f);
+        utassertnear(tree.GetLayout(root).size.h, 24.0f);
         utassertnear(tree.GetLayout(c0).location.x, 0.0f);
         utassertnear(tree.GetLayout(c1).location.x, 70.0f);
         tree.Free();
@@ -1699,7 +1699,7 @@ static void TestGridLayout() {
         tree.ComputeLayout(root, SizeAvail::MaxContent());
 
         utassertnear(tree.GetLayout(wide).location.x, 0.0f);
-        utassertnear(tree.GetLayout(wide).size.width, 200.0f);
+        utassertnear(tree.GetLayout(wide).size.w, 200.0f);
         tree.Free();
     }
 }
@@ -1762,14 +1762,14 @@ static void TestScrollColumnDoesNotShrink() {
 
     tree.ComputeLayout(root, SizeAvail::Definite(SizeF{700.0f, 700.0f}));
 
-    utassertnear(tree.GetLayout(page).size.width, 700.0f);
-    utassertnear(tree.GetLayout(col).size.width, 700.0f);
-    utassertnear(tree.GetLayout(a).size.width, 668.0f);
-    utassertnear(tree.GetLayout(page).size.height, 700.0f);
-    utassertnear(tree.GetLayout(col).size.height, 1564.0f);
-    utassertnear(tree.GetLayout(a).size.height, 400.0f);
-    utassertnear(tree.GetLayout(b).size.height, 300.0f);
-    utassertnear(tree.GetLayout(c).size.height, 800.0f);
+    utassertnear(tree.GetLayout(page).size.w, 700.0f);
+    utassertnear(tree.GetLayout(col).size.w, 700.0f);
+    utassertnear(tree.GetLayout(a).size.w, 668.0f);
+    utassertnear(tree.GetLayout(page).size.h, 700.0f);
+    utassertnear(tree.GetLayout(col).size.h, 1564.0f);
+    utassertnear(tree.GetLayout(a).size.h, 400.0f);
+    utassertnear(tree.GetLayout(b).size.h, 300.0f);
+    utassertnear(tree.GetLayout(c).size.h, 800.0f);
     utassertnear(tree.GetLayout(b).location.y, 432.0f);
 
     tree.Free();
