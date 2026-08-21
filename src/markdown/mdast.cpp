@@ -6,10 +6,10 @@
 
 namespace markdown {
 
-using gpui::Alloc;
+using base::Alloc;
 
 Node* NodeNew(Arena* a, NodeKind kind) {
-    Node* node = gpui::ArenaNew<Node>(a);
+    Node* node = base::ArenaNew<Node>(a);
     node->kind = kind;
     return node;
 }

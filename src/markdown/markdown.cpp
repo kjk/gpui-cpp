@@ -28,14 +28,14 @@ Node* ToMdast(Arena* a, Str source, const ParseOptions& options) {
     parseState.a = a;
     // The parse's own working memory, thrown away whole below, so none of it
     // is left in the caller's arena.
-    parseState.scratch = gpui::ArenaNew();
+    parseState.scratch = base::ArenaNew();
     parseState.options = &options;
     parseState.bytes = source;
 
     Vec<Event> events = Parse(&parseState);
     Node* tree = ToMdastCompile(events, &parseState);
 
-    gpui::ArenaDelete(parseState.scratch);
+    base::ArenaDelete(parseState.scratch);
     return tree;
 }
 

@@ -3,6 +3,16 @@
 #include "base.h"
 #include "taffy/taffy_tree.h"
 
+// The base lives in `namespace base` so that `src/taffy` and `src/markdown` —
+// ports of crates that have never heard of gpui — can be written against it
+// and nothing else. gpui is the one module that treats it as its own
+// vocabulary, so it takes the whole namespace in: `Str`, `Vec`, `Arena`,
+// `fmt` and the rest are spelled unqualified below, and qualified lookup
+// still finds them, so `gpui::Str` outside names what it always did.
+namespace gpui {
+using namespace base;
+}
+
 // ─── color ────────────────────────────────────────────────────────────────
 
 namespace gpui {

@@ -5,7 +5,7 @@
 
 #include <psapi.h>
 
-namespace gpui {
+namespace base {
 
 uint64_t PlatPageSize() {
     static uint64_t pageSize = 0;
@@ -184,4 +184,4 @@ bool PlatSelfUsage(uint64_t* cpu100ns, uint64_t* memBytes) {
     return true;
 }
 
-} // namespace gpui
+} // namespace base

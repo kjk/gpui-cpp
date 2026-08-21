@@ -11,8 +11,8 @@
 
 namespace markdown {
 
-using gpui::Str;
-using gpui::Vec;
+using base::Str;
+using base::Vec;
 
 // event.rs Name. The MDX names are gone with the MDX constructs; see the
 // readme.

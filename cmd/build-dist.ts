@@ -429,10 +429,48 @@ function collapseBlankRuns(text: string): string {
   return text.replace(/\n{3,}/g, "\n\n");
 }
 
+// src/taffy and src/markdown are ports of crates that have never heard of
+// gpui, and they are kept that way on purpose: each is written against
+// base.h and its own headers, so it can be read against the Rust without
+// this tree's vocabulary in the way, and lifted out of it without untangling
+// anything. The amalgam compiles the whole of src/ as one translation unit,
+// so nothing else would notice the day one of them reached for a gpui type.
+// This does.
+const isolatedDirs = ["src/taffy/", "src/markdown/"];
+
+function checkIsolation(files: string[]): void {
+  const bad: string[] = [];
+  for (const rel of files) {
+    const dir = isolatedDirs.find((d) => rel.startsWith(d));
+    if (!dir) {
+      continue;
+    }
+    const text = readLf(rel);
+    const own = dir.slice("src/".length);
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const inc = quotedIncRe.exec(lines[i]);
+      if (inc && inc[1] !== "base.h" && !inc[1].startsWith(own)) {
+        bad.push(`${rel}:${i + 1}: includes "${inc[1]}"`);
+      }
+    }
+    // A comment may name gpui; code may not.
+    const code = stripComments(text);
+    const hit = /\bgpui\s*::/.exec(code);
+    if (hit) {
+      bad.push(`${rel}: names gpui::`);
+    }
+  }
+  if (bad.length > 0) {
+    throw new Error("src/taffy and src/markdown may only use base.h and their own headers:\n  " + bad.join("\n  "));
+  }
+}
+
 export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const outDir = opts.outDir;
   const headers = listSrc(".h");
   const allCpps = preferredCppOrder(listSrc(".cpp"));
+  checkIsolation([...headers, ...allCpps]);
   const cpps = allCpps.filter((f) => filePlatforms(f).length === 0);
   const platCpps = allCpps.filter((f) => filePlatforms(f).length > 0);
   if (headers.length === 0 || cpps.length === 0) {

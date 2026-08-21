@@ -22,8 +22,8 @@
 
 namespace markdown {
 
-using gpui::Arena;
-using gpui::ArenaVec;
+using base::Arena;
+using base::ArenaVec;
 
 // ─── strings ─────────────────────────────────────────────────────────────
 

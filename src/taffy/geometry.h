@@ -23,9 +23,9 @@
 
 namespace taffy {
 
-using gpui::Arena;
-using gpui::Str;
-using gpui::Vec;
+using base::Arena;
+using base::Str;
+using base::Vec;
 
 // ─── Option<f32> ─────────────────────────────────────────────────────────
 

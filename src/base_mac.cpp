@@ -6,7 +6,7 @@
 #include <mach/mach.h>
 #include <mach-o/dyld.h>
 
-namespace gpui {
+namespace base {
 
 void PlatDirNameInPlace(char* path);
 
@@ -57,4 +57,4 @@ bool PlatSelfUsage(uint64_t* cpu100ns, uint64_t* memBytes) {
     return true;
 }
 
-} // namespace gpui
+} // namespace base

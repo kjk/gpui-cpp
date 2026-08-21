@@ -12,7 +12,7 @@
 
 namespace markdown {
 
-using gpui::Str;
+using base::Str;
 
 // The maximum size of a scheme in an autolink: `mailto`.
 constexpr int kAutolinkSchemeSizeMax = 32;

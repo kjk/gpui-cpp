@@ -57,7 +57,7 @@ State LabelEndAfter(Tokenizer* t) {
         // The footnote call is not defined: it is a link with a `^` in it.
         t->tokenizeState.labelStarts[startIndex].kind =
             LabelKind::GfmUndefinedFootnote;
-        char* caret = (char*)gpui::Alloc(a, id.len + 2);
+        char* caret = (char*)base::Alloc(a, id.len + 2);
         caret[0] = '^';
         if (id.len > 0) {
             memcpy(caret + 1, id.s, (size_t)id.len);

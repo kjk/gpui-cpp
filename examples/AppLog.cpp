@@ -50,7 +50,7 @@ static void LogToConsole(Str s) {
 #endif
 }
 
-void gpui::log(Str s) {
+void base::log(Str s) {
     LogToConsole(s);
     LogToFile(s);
 }

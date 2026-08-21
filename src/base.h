@@ -54,7 +54,17 @@
 #include <limits.h>
 #endif
 
-namespace gpui {
+// The SumatraPDF base this tree is built on — Str, Vec, Arena, Func0/Func1,
+// fmt/logf, the Plat* platform shims — in a namespace of its own.
+//
+// It is `base` rather than `gpui` so that a module which is a port of a crate
+// that has never heard of gpui can be written against this and nothing else.
+// `src/taffy` and `src/markdown` are those modules: they include this header,
+// they name `base::Str` and `base::Arena`, and they reach for no other part
+// of the tree. gpui itself pulls the whole namespace in with a using-directive
+// (see the top of gpui.h), so its own code writes `Str` unqualified the way it
+// always has, and `gpui::Str` still names this type for a caller outside.
+namespace base {
 
 // The longest path we put on the stack. Windows spells it MAX_PATH; Linux
 // PATH_MAX, which is 4096 and too big for the fixed arrays here.
@@ -83,7 +93,7 @@ void log(Str s);
 
 using TempStr = Str;
 
-#define StrL(lit) ::gpui::Str((char*)(lit), (int)(sizeof(lit) - 1))
+#define StrL(lit) ::base::Str((char*)(lit), (int)(sizeof(lit) - 1))
 
 Str AllocStrTemp(int size);
 
@@ -525,4 +535,4 @@ template <typename... TArgs>
 inline void logf(const char* format, const TArgs&... args) {
     log(FormatTemp(format, args...));
 }
-} // namespace gpui
+} // namespace base

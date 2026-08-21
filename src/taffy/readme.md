@@ -31,6 +31,15 @@ crate of its own rather than part of gpui-component. `gpui::Style` and
 `taffy::Style` both exist and mean different things; so do `Overflow`,
 `Position` and `Display`.
 
+The dependency goes one way and stops early: this directory includes
+`base.h` and its own headers, and nothing else in the tree. `Str`, `Vec`,
+`Arena` and `Alloc` are `base::`, which is the namespace the SumatraPDF base
+lives in for exactly this reason; no gpui header is included here and no
+`gpui::` name appears in the code. `cmd/build-dist.ts` fails the build if that
+stops being true, because the amalgam compiles all of `src/` as one
+translation unit and would not otherwise notice. Anything this port comes to
+need from the tree belongs in `base`, or it does not belong to this port.
+
 ## What is ported
 
 The default feature set of the crate as gpui builds it: `std`, `taffy_tree`,
