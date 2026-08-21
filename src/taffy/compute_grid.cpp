@@ -550,7 +550,7 @@ void StableSort(T* items, int n, Less less) {
         return;
     }
 
-    T* scratch = (T*)gpui::Alloc(nullptr, n * (int)sizeof(T));
+    T* scratch = (T*)base::Alloc(nullptr, n * (int)sizeof(T));
     if (!scratch) {
         // Out of memory for the scratch half. The insertion sort still sorts,
         // just slowly, and a sorted list is what the caller needs.
@@ -573,7 +573,7 @@ void StableSort(T* items, int n, Less less) {
     if (src != items) {
         memcpy((void*)items, (const void*)src, (size_t)n * sizeof(T));
     }
-    gpui::Free(nullptr, (void*)scratch);
+    base::Free(nullptr, (void*)scratch);
 }
 
 // ─── types/named.rs ──────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
 
 namespace taffy {
 
-using gpui::Str;
+using base::Str;
 
 // ─── node slots ──────────────────────────────────────────────────────────
 //
@@ -42,7 +42,7 @@ void TaffyTree::Init(int capacity) {
     liveCount = 0;
     useRounding = true;
     if (capacity > 0) {
-        gpui::VecReserve(slots, capacity);
+        base::VecReserve(slots, capacity);
     }
 }
 
@@ -644,15 +644,15 @@ static void PrintNode(TaffyTree* tree, NodeId node, bool hasSibling,
 
     // The formatter takes at most 32 directives per call and rejects a bare
     // `const char*`, so the line is built in two halves out of `Str`s.
-    gpui::log(gpui::fmt(
+    base::log(base::fmt(
         "%s%s%s [x: %-4g y: %-4g w: %-4g h: %-4g "
         "content_w: %-4g content_h: %-4g",
         Str(linesString), Str(fork), Str(displayStr), (double)layout.location.x,
         (double)layout.location.y, (double)layout.size.width,
         (double)layout.size.height, (double)layout.contentSize.width,
         (double)layout.contentSize.height));
-    gpui::log(
-        gpui::fmt(" border: l:%g r:%g t:%g b:%g, "
+    base::log(
+        base::fmt(" border: l:%g r:%g t:%g b:%g, "
                   "padding: l:%g r:%g t:%g b:%g] (%llu)\n",
                   (double)layout.border.left, (double)layout.border.right,
                   (double)layout.border.top, (double)layout.border.bottom,
@@ -685,7 +685,7 @@ static void PrintNode(TaffyTree* tree, NodeId node, bool hasSibling,
 }
 
 void TaffyTree::PrintTree(NodeId root) {
-    gpui::log(StrL("TREE\n"));
+    base::log(StrL("TREE\n"));
     PrintNode(this, root, false, "", 0);
 }
 

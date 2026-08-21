@@ -883,3 +883,34 @@ cargo run -p system_monitor
   worth doing only with a reason better than "the screenshots differ from an
   engine that is gone". `LayoutMeasure` carries the finding in a comment so
   the next reader does not spend the afternoon rediscovering it.
+- 2026-08-21: `namespace base`, so the two ported crates depend on it and
+  nothing else. `src/base.h` / `src/base.cpp` and the three platform halves —
+  `Str`, `Vec`, `Arena`, `Func0`/`Func1`, `fmt`/`logf`, the `Plat*` shims —
+  moved out of `namespace gpui` into `namespace base`.
+
+  The reason is `src/taffy` and `src/markdown`. Both are ports of crates that
+  have never heard of gpui, and both were already written that way in spirit:
+  each included `base.h` and its own headers and nothing else, and reached for
+  `gpui::Str`, `gpui::Arena` and `gpui::Alloc` only because that was where the
+  base happened to live. Now the name says what the dependency is. Each names
+  `base::`, and a reader can check the port against the Rust — or lift it out
+  of this tree entirely — without deciding what part of gpui came with it.
+
+  gpui is the one module that treats the base as its own vocabulary, so
+  `gpui.h` takes the whole namespace in with a using-directive. Its own code
+  goes on writing `Str` unqualified, and qualified lookup still reaches through
+  the directive, so `gpui::Str` outside names what it always did and no example
+  or test changed. The one thing that had to move is a definition:
+  `examples/AppLog.cpp` implements the `log` the base declares, and a
+  definition has to name the namespace the declaration is in.
+
+  `cmd/build-dist.ts` fails the build if either directory includes anything but
+  `base.h` and its own headers, or names `gpui::` outside a comment. That guard
+  is not decoration: the amalgam compiles the whole of `src/` as a single
+  translation unit, so the compiler would never notice the day one of them
+  reached across. Checked by breaking it on purpose before trusting it.
+
+  Verified: `bun cmd/build.ts -rel -all`, `-dbg -all`, `bench`,
+  `bun cmd/test.ts` (6880 checks), and screenshots of `hello_world`, the
+  DataTable story page and the Introduction page, which is the markdown port
+  end to end.

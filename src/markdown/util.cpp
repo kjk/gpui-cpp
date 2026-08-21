@@ -4,7 +4,7 @@
 
 namespace markdown {
 
-using gpui::Alloc;
+using base::Alloc;
 
 // ─── strings ─────────────────────────────────────────────────────────────
 

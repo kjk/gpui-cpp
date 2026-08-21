@@ -14,7 +14,7 @@
 
 namespace markdown {
 
-using gpui::Alloc;
+using base::Alloc;
 
 // to_mdast.rs Reference. `reference_kind: Option<ReferenceKind>` is the kind
 // plus its flag.

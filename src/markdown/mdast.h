@@ -21,9 +21,9 @@
 
 namespace markdown {
 
-using gpui::Arena;
-using gpui::ArenaVec;
-using gpui::Str;
+using base::Arena;
+using base::ArenaVec;
+using base::Str;
 
 // unist::Point.
 struct UnistPoint {

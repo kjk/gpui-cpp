@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-namespace gpui {
+namespace base {
 
 template <typename T, size_t N>
 char (&DimofSizeHelper(T (&array)[N]))[N];
@@ -1388,4 +1388,4 @@ static int VsnprintfUtf8(Str buf, const char* fmt, va_list args) {
 #endif
     return vsnprintf(buf.s, (size_t)buf.len, fmt, args);
 }
-} // namespace gpui
+} // namespace base

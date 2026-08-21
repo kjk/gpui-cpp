@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-namespace gpui {
+namespace base {
 
 uint64_t PlatPageSize() {
     static uint64_t pageSize = 0;
@@ -173,4 +173,4 @@ int PlatCoreCount() {
     return n > 0 ? (int)n : 1;
 }
 
-} // namespace gpui
+} // namespace base
