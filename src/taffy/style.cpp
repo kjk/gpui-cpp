@@ -1,4 +1,4 @@
-/* Out-of-line half of the style layer — taffy/src/style/*.rs, plus the
+/* Out-of-line half of the style layer — all of taffy/src/style, plus the
  * resolution helpers from taffy/src/util/resolve.rs that turn a
  * context-dependent dimension into a concrete one.
  */

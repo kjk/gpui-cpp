@@ -1,6 +1,6 @@
 /* Root, hidden, leaf and rounding passes plus the shared alignment and
  * content-size helpers — taffy/src/compute/mod.rs, compute/leaf.rs and
- * compute/common/*.rs.
+ * the two files of compute/common.
  */
 
 #include "taffy/compute.h"

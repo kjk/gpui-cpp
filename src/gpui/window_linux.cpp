@@ -23,9 +23,11 @@
 
 namespace gpui {
 
-// X11's `Window` is an unsigned long; inside namespace gpui the unqualified
-// name is ours, so the X one is always spelled ::Window.
+// X11's `Window` is an unsigned long and its `Display` is a struct; inside
+// namespace gpui both unqualified names are ours — `Window` and the `Display`
+// style enum — so the X ones are always spelled ::Window and ::Display.
 using XWindow = ::Window;
+using XDisplay = ::Display;
 
 struct PlatWindow {
     XWindow xwin = 0;
@@ -54,7 +56,7 @@ struct PlatWindow {
 
 // One display per process. GPUI's App is a singleton in practice, and an X
 // connection is the one piece of state every window here shares.
-static Display* gDpy = nullptr;
+static XDisplay* gDpy = nullptr;
 static int gScreen = 0;
 static XWindow gRoot = 0;
 static XIM gXim = nullptr;

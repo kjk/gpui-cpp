@@ -10,9 +10,15 @@
 #include "taffy/compute.h"
 
 namespace taffy {
-namespace {
 
 // ─── float placement — taffy/src/compute/float.rs ────────────────────────
+//
+// This group is not in the anonymous namespace the rest of the file uses.
+// `BlockFormattingContext` embeds a `FloatContext` by value and is reached
+// through `BlockContext`, which `taffy_tree.h` names in the signature of
+// `ComputeBlockChildLayout` — so it has external linkage, and a struct with
+// external linkage may not have a field whose type is internal to one
+// translation unit (gcc's -Wsubobject-linkage).
 //
 // The rules that govern floats are in CSS 2.2 §9.5:
 // https://www.w3.org/TR/CSS22/visuren.html#floats
@@ -448,8 +454,6 @@ struct FloatIntrinsicWidthCalculator {
     }
     float Result() const { return contribution; }
 };
-
-} // namespace
 
 // ─── the block formatting context ────────────────────────────────────────
 
