@@ -51,6 +51,12 @@ enum class TableEventKind : uint8_t {
     SelectCell,
     DoubleClickedRow,
     DoubleClickedCell,
+    // RightClickedRow(Option<usize>) / RightClickedCell(usize, usize): what a
+    // context menu hangs off. The row one carries -1 for Rust's None, which
+    // is what a keyboard selection sends to say the right-clicked row is no
+    // longer the one under the pointer.
+    RightClickedRow,
+    RightClickedCell,
     Sort,
     ColumnWidthsChanged,
     // MoveColumn(from, to): a column head was dragged into another place.
@@ -96,6 +102,10 @@ struct TableState {
     // right_clicked_row: the row under a secondary press, cleared by the next
     // selection.
     int rightClickedRow = -1;
+    // right_clicked_cell. The two are exclusive: the cell one clears the row
+    // and the row one clears the cell.
+    int rightClickedCellRow = -1;
+    int rightClickedCellCol = -1;
     bool rowSelectable = true;
     bool colSelectable = true;
     bool cellSelectable = false;
@@ -185,6 +195,10 @@ struct TableState {
                             intptr_t packed);
     static void OnRowMouseDown(TableState* self, Ctx* cx,
                                const MouseDownEvent* ev, intptr_t row);
+    // on_cell_right_click, when the table is cell-selectable. It stops the
+    // press, so the row under it does not also mark itself.
+    static void OnCellMouseDown(TableState* self, Ctx* cx,
+                                const MouseDownEvent* ev, intptr_t packed);
     static void OnHeadClick(TableState* self, Ctx* cx, const ClickEvent* ev,
                             intptr_t col);
     static void OnSortClick(TableState* self, Ctx* cx, const ClickEvent* ev,

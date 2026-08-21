@@ -192,6 +192,18 @@ static void OnTableEvent(DataTableStory* self, Ctx* cx, const TableEvent* ev) {
             self->message =
                 StrDup(fmt("Double clicked cell %d:%d", ev->row, ev->col));
             break;
+        // The story prints these; here they say the same thing on the status
+        // line. A row event with -1 is Rust's RightClickedRow(None), which
+        // says the mark has gone rather than that a row was clicked.
+        case TableEventKind::RightClickedRow:
+            self->message = ev->row >= 0
+                                ? StrDup(fmt("Right clicked row %d", ev->row))
+                                : StrDup(StrL("Right click cleared"));
+            break;
+        case TableEventKind::RightClickedCell:
+            self->message =
+                StrDup(fmt("Right clicked cell %d:%d", ev->row, ev->col));
+            break;
         case TableEventKind::MoveColumn:
             self->message =
                 StrDup(fmt("Moved column %d to %d", ev->col, ev->row));

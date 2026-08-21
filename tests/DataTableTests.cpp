@@ -159,7 +159,34 @@ static void ACellIsOneNumber() {
     utassert(TableCellCol(TableCellPack(1000000, 4095)) == 4095);
 }
 
+// The two right-click marks are exclusive, and a selection made any other
+// way clears both — state.rs emits RightClickedRow(None) beside SelectRow so
+// a context menu hanging off the old row is told to go.
+static void ARightClickMarksARowOrACellButNeverBoth() {
+    TableState s;
+    s.rowCount = 8;
+    s.colCount = 3;
+    s.rowSelectable = true;
+
+    s.rightClickedRow = 4;
+    s.rightClickedCellRow = -1;
+    s.rightClickedCellCol = -1;
+    utassert(s.rightClickedRow == 4);
+
+    // A cell mark replaces the row one outright.
+    s.rightClickedCellRow = 2;
+    s.rightClickedCellCol = 1;
+    s.rightClickedRow = -1;
+    utassert(s.rightClickedRow == -1);
+    utassert(s.rightClickedCellRow == 2 && s.rightClickedCellCol == 1);
+
+    // And the row that a cell mark names is not the selected row: the two
+    // live in different fields, so a table can paint both.
+    utassert(s.selectedRow == -1);
+}
+
 void TestDataTable() {
+    ARightClickMarksARowOrACellButNeverBoth();
     ACellIsOneNumber();
     AColumnKeepsItsWidthOnceItHasOne();
     AResizeIsClamped();

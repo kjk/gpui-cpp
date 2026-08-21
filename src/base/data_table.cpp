@@ -162,11 +162,19 @@ void TableSetSelectedRow(TableState* s, Ctx* cx, int row) {
     }
     s->mode = TableSelectionMode::Row;
     s->rightClickedRow = -1;
+    s->rightClickedCellRow = -1;
+    s->rightClickedCellCol = -1;
     s->selectedRow = row;
     s->selectedCellRow = -1;
     s->selectedCellCol = -1;
     Notify(cx);
     TableEmit(s, cx, TableEventKind::SelectRow, row, -1, ColumnSort::Default);
+    // set_selected_row emits RightClickedRow(None) beside it: whatever was
+    // right-clicked is no longer what the selection is about, so a context
+    // menu hanging off it is told to go. The marks themselves were cleared
+    // above, before the row moved.
+    TableEmit(s, cx, TableEventKind::RightClickedRow, -1, -1,
+              ColumnSort::Default);
 }
 
 void TableSetSelectedCol(TableState* s, Ctx* cx, int col) {
@@ -410,7 +418,31 @@ void TableState::OnRowMouseDown(TableState* self, Ctx* cx,
     if (ev->button != MouseButton::Right) {
         return;
     }
+    // on_row_right_click. The two right-click marks are exclusive, so this
+    // clears the cell one.
     self->rightClickedRow = (int)row;
+    self->rightClickedCellRow = -1;
+    self->rightClickedCellCol = -1;
+    TableEmit(self, cx, TableEventKind::RightClickedRow, (int)row, -1,
+              ColumnSort::Default);
+    Notify(cx);
+}
+
+void TableState::OnCellMouseDown(TableState* self, Ctx* cx,
+                                 const MouseDownEvent* ev, intptr_t packed) {
+    if (ev->button != MouseButton::Right || !self->cellSelectable) {
+        return;
+    }
+    // on_cell_right_click stops the press here, so the row under the cell
+    // does not also claim it.
+    WindowStopPropagation(cx);
+    int row = TableCellRow(packed);
+    int col = TableCellCol(packed);
+    self->rightClickedCellRow = row;
+    self->rightClickedCellCol = col;
+    self->rightClickedRow = -1;
+    TableEmit(self, cx, TableEventKind::RightClickedCell, row, col,
+              ColumnSort::Default);
     Notify(cx);
 }
 
