@@ -81,11 +81,39 @@ Root* Root::Dialog(El* e, bool overlay) {
     return this;
 }
 
+Root* Root::UseWindowLayers(bool v) {
+    windowLayers = v;
+    return this;
+}
+
 El* Root::IntoEl() {
     const Theme& th = cx->theme();
     El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.background);
     if (child) {
         e->Child(child);
+    }
+
+    // What `window.open_dialog` / `open_sheet` / `push_notification` left on
+    // the window, rendered alongside whatever the page passed in. Rust's Root
+    // owns these outright; here they join the page's, so a tree that built
+    // its own layers keeps working and one that opens a dialog from a handler
+    // with no view of its own also does.
+    if (windowLayers) {
+        if (gpui::WindowLayers* wl = WindowLayersOf(cx->win)) {
+            if (!notifications && wl->notifications.IsValid()) {
+                notifications = NotificationList::New(cx, wl->notifications)
+                                    ->IntoEl();
+            }
+            if (!sheet && wl->hasSheet) {
+                if (El* s = EntityRender(cx->app, cx->win, a, wl->sheet.view)) {
+                    Sheet(s, wl->sheet.placement, wl->sheet.size);
+                }
+            }
+            for (int i = 0; i < wl->dialogs.len; i++) {
+                Dialog(EntityRender(cx->app, cx->win, a, wl->dialogs[i].view),
+                       wl->dialogs[i].overlay);
+            }
+        }
     }
 
     // The notification layer covers the window, less the room the sheet takes

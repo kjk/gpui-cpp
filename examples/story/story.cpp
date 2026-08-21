@@ -790,33 +790,20 @@ static El* StoryTitleMenuItem(Ctx* cx, const char* label, bool semibold) {
         ->Child(text);
 }
 
-// The window's notification list. Rust hangs it off the window — Root renders
-// it and `window.notifications(cx)` reads it — so it is the app's here rather
-// than the notification page's, and a notification outlives leaving that page.
+// The window's notification list, which is now the runtime's:
+// `window.notifications(cx)` and `window.push_notification(..)` are
+// WindowExt, so a page pushes one without the app entity being in the way and
+// a notification outlives leaving the page that raised it.
 Entity<component::NotificationListState> StoryNotifications(Ctx* cx) {
-    Entity<StoryApp> app;
-    app.id = cx->win->root;
-    StoryApp* self = app.Get(cx);
-    return self ? self->notifications
-                : Entity<component::NotificationListState>{};
+    return WindowNotifications(cx);
 }
 
 void StoryPushNotification(Ctx* cx, Str message) {
-    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
-    if (!st) {
-        return;
-    }
-    component::NotificationItem item;
-    item.kind = component::NotificationKind::Info;
-    item.message = message;
-    // Notification::timeout, Duration::from_secs(5).
-    NotificationPush(st, item, 5000);
-    Notify(cx);
+    WindowPushNotification(cx, component::NotificationKind::Info, message);
 }
 
 static int StoryNotificationCount(Ctx* cx) {
-    component::NotificationListState* st = StoryNotifications(cx).Get(cx);
-    return st ? st->n : 0;
+    return WindowNotificationCount(cx);
 }
 
 // AppTitleBar's FontSizeSelector, which is the Appearance menu behind the
@@ -979,6 +966,80 @@ static void OnWindowMenuItem(StoryApp*, Ctx* cx, const ClickEvent*,
     }
 }
 
+// The About dialog, which the Help menu raises. It is an entity of its own
+// rather than something a page renders, which is what WindowExt is for: the
+// menu handler has no view that draws dialogs and does not need one, and the
+// dialog outlives whichever page happens to be showing. Rust writes the same
+// thing as `window.open_alert_dialog(cx, |alert, ..| ..)`.
+struct AboutDialog {
+    static void OnClose(AboutDialog*, Ctx* cx, const ClickEvent*) {
+        WindowCloseDialog(cx);
+    }
+
+    static El* Render(AboutDialog*, Ctx* cx) {
+        Arena* a = cx->a;
+        const Theme& th = cx->theme();
+        El* body = Div(a)->FlexCol()->Gap(8)->W(kFill);
+        body->Child(
+            StoryTxt(cx,
+                     StrL("A C++ port of longbridge/gpui-component: the "
+                          "same components, the same theme, no Rust and "
+                          "no STL."),
+                     14, th.mutedFg)
+                ->W(kFill)
+                ->Wrap());
+        body->Child(StoryTxt(cx, StrL("github.com/longbridge/gpui-component"),
+                             14, th.mutedFg)
+                        ->W(kFill));
+        Listener close = Listen(cx, &AboutDialog::OnClose);
+        return component::Dialog::New(cx)
+            ->Open(true)
+            ->Title(StrL("GPUI Component"))
+            ->Description(StrL("Component showcase  v0.5.1"))
+            ->Body(body)
+            ->W(420)
+            ->CloseButton()
+            ->OkText(StrL("Close"))
+            ->OnOk(close)
+            ->OnClose(close)
+            ->OnCancel(close)
+            ->IntoEl(WindowSize(cx->win));
+    }
+};
+
+static void OnHelpMenuItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    if (ix == 0) {
+        OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+    } else if (ix == 1) {
+        // window.open_dialog(cx, ..): the window takes the entity and Root
+        // draws it, whatever page is up.
+        WindowOpenDialog(cx, EntityNew<AboutDialog>(cx->app));
+    }
+}
+
+static El* HelpMenu(Ctx* cx) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("story-help-menu"));
+    menu->Menu(StrL("Documentation"));
+    menu->Menu(StrL("About GPUI Component"));
+    if (PopupMenuState* st = menu->state.Get(cx)) {
+        st->onConfirm = Listen(cx, &OnHelpMenuItem);
+    }
+    return component::DropdownMenu::New(cx, StrL("story-help"))
+        ->Trigger(Div(a)
+                      ->H(28)
+                      ->PadX(8)
+                      ->ItemsCenter()
+                      ->Radius(th.radius)
+                      ->HoverBg(th.muted)
+                      ->Cursor(CursorKind::Pointer)
+                      ->Child(StoryTxt(cx, StrL("Help"), 14, th.foreground)))
+        ->Menu(menu)
+        ->IntoEl();
+}
+
 static El* WindowMenu(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -1059,7 +1120,7 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
                     ->Child(StoryTitleMenuItem(cx, "GPUI Component", true))
                     ->Child(StoryTitleMenuItem(cx, "Edit", false))
                     ->Child(WindowMenu(cx))
-                    ->Child(StoryTitleMenuItem(cx, "Help", false));
+                    ->Child(HelpMenu(cx));
     El* tools =
         Div(a)
             ->FlexRow()
@@ -1142,14 +1203,6 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!app->seeded) {
         app->seeded = true;
-        app->notifications =
-            EntityNewState<component::NotificationListState>(cx->app);
-        // Rust spawns a task that advances the list every 50 ms; a window
-        // timer is the same clock.
-        app->notifyTimer = WindowSetInterval(
-            cx->win, component::kNotificationTickMs,
-            ListenTo(app->notifications,
-                     &component::NotificationListState::OnTick));
     }
     // The window's outermost view is a Root, which is what Rust puts under
     // every window: the page, and over it the layers the window owns.
@@ -1195,8 +1248,6 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     return component::Root::New(cx)
         ->Bordered(cx->win->opts.clientTitleBar)
         ->Child(root)
-        ->Notifications(component::NotificationList::New(cx, app->notifications)
-                            ->IntoEl())
         ->IntoEl();
 }
 

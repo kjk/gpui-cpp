@@ -10,6 +10,7 @@
 #include "ui/sizing.h"
 #include "ui/sheet.h"
 #include "ui/window_border.h"
+#include "ui/window_ext.h"
 
 namespace gpui {
 
@@ -46,6 +47,11 @@ struct Root {
     ArenaVec<El*> dialogs;
     ArenaVec<bool> dialogOverlay;
 
+    // WindowExt's layers are drawn as well as the ones the page passed in,
+    // which is what lets a handler with no view of its own raise a dialog.
+    // A page that wants only its own turns this off.
+    bool windowLayers = true;
+
     static Root* New(Ctx* cx);
     Root* Bordered(bool v);
     Root* ShadowSize(float v);
@@ -57,6 +63,7 @@ struct Root {
     // open_dialog: one call per dialog, in the order they were opened.
     // `overlay` is the dialog's own has_overlay.
     Root* Dialog(El* e, bool overlay = true);
+    Root* UseWindowLayers(bool v);
     El* IntoEl();
 };
 
