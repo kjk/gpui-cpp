@@ -981,6 +981,10 @@ Str IconNamePath(IconName name) {
             return StrL("icons/chevron-left.svg");
         case IconName::ChevronRight:
             return StrL("icons/chevron-right.svg");
+        case IconName::CaseSensitive:
+            return StrL("icons/case-sensitive.svg");
+        case IconName::Replace:
+            return StrL("icons/replace.svg");
         case IconName::ChevronUp:
             return StrL("icons/chevron-up.svg");
         case IconName::Check:

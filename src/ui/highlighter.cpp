@@ -125,8 +125,16 @@ static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
     return m;
 }
 
+Highlighter* Highlighter::Searchable(bool v) {
+    searchable = v;
+    return this;
+}
+
 El* Highlighter::IntoEl() {
     const Theme& th = cx->theme();
+    if (state) {
+        state->searchable = searchable;
+    }
     InputEditorStyle style;
     style.foreground = th.foreground;
     style.mutedForeground = th.mutedFg;
@@ -153,20 +161,41 @@ El* Highlighter::IntoEl() {
     }
     style.spans = n > 0 ? spans : nullptr;
     style.nSpans = n;
-    El* editor = gpui::Editor::New(cx, state, style);
-    if (h <= 0) {
-        return editor;
+    // layout_search_matches: the matches are painted only while the bar is
+    // open, which is when Rust builds paths for them at all.
+    if (state && state->search.open) {
+        const SearchMatcher* m = &state->search.matcher;
+        style.matches = m->ranges.els;
+        style.nMatches = m->ranges.len;
+        style.currentMatch = SearchMatcherIndex(m);
+        style.matchBg = RgbaOpacity(th.warning, 0.35f);
+        style.currentMatchBg = RgbaOpacity(th.warning, 0.75f);
     }
-    // The scroll handle is the editor's: the rows slide under this box as the
-    // caret moves, and the wheel moves them too.
-    return InputBase::New(cx, id, HashClickId(id))
-        ->BindInput(state)
+    El* editor = gpui::Editor::New(cx, state, style);
+    El* scroller = editor;
+    if (h > 0) {
+        // The scroll handle is the editor's: the rows slide under this box as
+        // the caret moves, and the wheel moves them too.
+        scroller = InputBase::New(cx, id, HashClickId(id))
+                       ->BindInput(state)
+                       ->FlexCol()
+                       ->W(kFill)
+                       ->H(h)
+                       ->ClipY()
+                       ->ScrollY(state ? state->scrollY : 0)
+                       ->Child(editor);
+    }
+    if (!searchable) {
+        return scroller;
+    }
+    // The bar sits over the rows and takes its height off them, the way
+    // Rust's overlay docks it at the top of the input.
+    return Div(a)
         ->FlexCol()
         ->W(kFill)
-        ->H(h)
-        ->ClipY()
-        ->ScrollY(state ? state->scrollY : 0)
-        ->Child(editor);
+        ->Child(SearchPanel::New(cx, StrDup(a, fmt("%s-search", id)), state)
+                    ->IntoEl())
+        ->Child(scroller);
 }
 
 } // namespace component

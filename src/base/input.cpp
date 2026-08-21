@@ -15,6 +15,49 @@ El* InputBase::New(Ctx* cx, Str id, int clickId) {
     return UiRoot(a, id, clickId);
 }
 
+// The search matches that fall inside one row, rebased onto it, as washes.
+// The document's are in order, so a walk over the rows carries on where the
+// last one left off — `*at` is where that is.
+static El* RowMatchWashes(Arena* a, El* el, const InputEditorStyle& style,
+                          int start, int len, int* at) {
+    if (style.nMatches <= 0) {
+        return el;
+    }
+    while (*at < style.nMatches && style.matches[*at].end <= start) {
+        (*at)++;
+    }
+    int first = *at, count = 0;
+    while (first + count < style.nMatches && style.matches[first + count]
+                                                     .start < start + len) {
+        count++;
+    }
+    if (count <= 0) {
+        return el;
+    }
+    auto* w = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * count);
+    int n = 0;
+    for (int k = 0; k < count; k++) {
+        int ix = first + k;
+        int lo = style.matches[ix].start - start;
+        int hi = style.matches[ix].end - start;
+        if (lo < 0) {
+            lo = 0;
+        }
+        if (hi > len) {
+            hi = len;
+        }
+        if (hi <= lo) {
+            continue;
+        }
+        w[n].lo = lo;
+        w[n].hi = hi;
+        w[n].bg =
+            ix == style.currentMatch ? style.currentMatchBg : style.matchBg;
+        n++;
+    }
+    return n > 0 ? el->Washes(w, n) : el;
+}
+
 // Input::LINE_HEIGHT is 1.25rem — 20 px at the 16 px root, whatever the text
 // size is, rather than the phi box every other line of text gets.
 static const float kInputLineH = 20.f;
@@ -118,6 +161,12 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
                  ->LineHeight(lineMult)
                  ->Fg(style.foreground)
                  ->BindInput(state);
+    // A single-line field is one row, so the whole document is its slice.
+    // A masked one is not searched: what it holds is not what it shows.
+    if (!masked) {
+        int matchAt = 0;
+        RowMatchWashes(a, el, style, 0, run.len, &matchAt);
+    }
     if (!sel.IsEmpty()) {
         el->SelRange(sel.start, sel.end, style.selection);
     }
@@ -213,8 +262,10 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     if (style.indentGuide.a != 0 && style.indentWidth > 0) {
         colW = font * 0.6f;
     }
-    // The document's runs, sliced per row below.
+    // The document's runs, sliced per row below, and the search matches
+    // beside them.
     int spanAt = 0;
+    int matchAt = 0;
     for (int row = 0; row < rows; row++) {
         int start = RopeLineStartOffset(text, row);
         Str line = RopeSliceLine(text, row);
@@ -262,6 +313,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 }
             }
         }
+        RowMatchWashes(a, el, style, start, line.len, &matchAt);
         if (state->softWrap) {
             // flex_1: the run is bounded by what the gutter leaves, so it
             // breaks at the text column's edge and its second line starts
@@ -660,8 +712,9 @@ void InputScrollToCaret(InputState* s, float caretX, float caretY,
     float wasY = s->scrollY;
     float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
 
-    // Sideways: the caret keeps a margin from either edge of the box.
-    if (s->viewW > 0) {
+    // Sideways: the caret keeps a margin from either edge of the box. A
+    // negative x is "leave it where it is" — see InputScrollToOffset.
+    if (s->viewW > 0 && caretX >= 0) {
         if (caretX - kInputRightMargin < s->scrollX) {
             s->scrollX = caretX - kInputRightMargin;
         } else if (caretX + kInputRightMargin > s->scrollX + s->viewW) {
@@ -716,6 +769,19 @@ void InputScrollToCursor(InputState* s, InputMoveDir dir) {
         caretY = s->rowBoxes[row].y - s->rowBoxes[0].y;
     }
     InputScrollToCaret(s, s->caretX, caretY, dir);
+}
+
+void InputScrollToOffset(InputState* s, int offset, InputMoveDir dir) {
+    if (!s) {
+        return;
+    }
+    float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
+    int row = RopeOffsetToPoint(InputValue(s), offset).row;
+    float y = (float)row * lineH;
+    if (row < s->rowBoxes.len && s->rowBoxes.len > 0) {
+        y = s->rowBoxes[row].y - s->rowBoxes[0].y;
+    }
+    InputScrollToCaret(s, -1, y, dir);
 }
 
 void InputMoveTo(InputState* s, App* app, Window* win, int offset) {
@@ -1001,6 +1067,9 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     s->imeMarking = false;
     s->imeMarked = {};
     UpdatePreferredColumn(s);
+    // update_search: every edit goes through here, so a find bar left open
+    // follows what is typed.
+    InputUpdateSearch(s);
     if (InputIsMultiLine(s) && s->mode.kind == LayoutModeKind::AutoGrow) {
         LayoutModeSetRows(&s->mode, RopeLinesLen(InputValue(s)));
     }
@@ -1857,6 +1926,15 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             InputReplaceTextInRange(s, app, win, nullptr, text);
             return true;
         }
+        case InputAction::Search:
+        case InputAction::Replace:
+            // on_action_search / on_action_replace, both of which are the
+            // same call with the replace row already out or not.
+            if (!s->searchable) {
+                return false;
+            }
+            InputOpenSearch(s, app, win, action == InputAction::Replace);
+            return true;
         case InputAction::Undo:
             DoUndo(s, app, win);
             Notify(app, win);
@@ -1875,7 +1953,6 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
 // the `ctrl-` ones below them and land on the same actions.
 InputAction InputActionForKey(const InputState* s, int vk, bool shift,
                               bool ctrl, bool alt) {
-    (void)s;
     bool word = ctrl || alt; // ctrl- off macOS, alt- on it
     switch (vk) {
         case KeyLeft:
@@ -1962,9 +2039,198 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
                              : InputAction::MoveEnd;
             }
             return InputAction::None;
+        case KeyF:
+            // cmd-f / ctrl-f, and ctrl-h beside it. Both are the find bar,
+            // and a field that is not searchable answers neither.
+            return ctrl && s && s->searchable ? InputAction::Search
+                                              : InputAction::None;
+        case KeyH:
+            return ctrl && s && s->searchable ? InputAction::Replace
+                                              : InputAction::None;
         default:
             return InputAction::None;
     }
+}
+
+// ─── the find bar ─────────────────────────────────────────────────────────
+
+bool InputIsReplaceable(const InputState* s) {
+    return s && s->replaceable && InputIsEditable(s);
+}
+
+void InputUpdateSearch(InputState* s) {
+    if (s) {
+        SearchMatcherUpdate(&s->search.matcher, InputValue(s));
+    }
+}
+
+// last_layout.visible_range_offset.start. Rust knows which rows it laid out;
+// this tree builds them all, so the first visible one is worked back out of
+// how far the field has scrolled. Same answer, one frame stale.
+static int FirstVisibleOffset(const InputState* s) {
+    Str text = InputValue(s);
+    if (s->scrollY <= 0) {
+        return 0;
+    }
+    int row = 0;
+    if (s->rowBoxes.len > 0) {
+        float top = s->rowBoxes[0].y + s->scrollY;
+        while (row + 1 < s->rowBoxes.len && s->rowBoxes[row + 1].y <= top) {
+            row++;
+        }
+    } else {
+        float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
+        row = (int)(s->scrollY / lineH);
+    }
+    return RopeLineStartOffset(text, row);
+}
+
+void InputOpenSearch(InputState* s, App* app, Window* win, bool replaceMode) {
+    if (!s || !s->searchable) {
+        return;
+    }
+    s->search.open = true;
+    s->search.replaceMode = replaceMode && InputIsReplaceable(s);
+    // Whatever is selected becomes the query, which is what makes ctrl-f on
+    // a word search for that word. An empty selection leaves the last one.
+    Str selected = InputSelectedValue(s);
+    if (selected.len > 0) {
+        StrFree(s->search.query);
+        s->search.query = StrDup(selected);
+    }
+    s->search.anchorOffset = FirstVisibleOffset(s);
+    SearchMatcherUpdateQuery(&s->search.matcher, s->search.query,
+                             s->search.caseInsensitive);
+    SearchMatcherUpdate(&s->search.matcher, InputValue(s));
+    SearchMatcherCursorByOffset(&s->search.matcher, s->search.anchorOffset);
+    Notify(app, win);
+}
+
+void InputCloseSearch(InputState* s, App* app, Window* win) {
+    if (!s) {
+        return;
+    }
+    s->search.open = false;
+    Notify(app, win);
+}
+
+void InputSetSearchReplaceMode(InputState* s, App* app, Window* win, bool on) {
+    if (!s) {
+        return;
+    }
+    s->search.replaceMode = on && InputIsReplaceable(s);
+    Notify(app, win);
+}
+
+void InputSetSearchQuery(InputState* s, App* app, Window* win, Str query,
+                         bool insensitive) {
+    if (!s) {
+        return;
+    }
+    SearchSessionSetQuery(&s->search, query, insensitive);
+    SearchMatcherUpdate(&s->search.matcher, InputValue(s));
+    Notify(app, win);
+}
+
+bool InputSearchNext(InputState* s, App* app, Window* win, Selection* out) {
+    if (!s) {
+        return false;
+    }
+    int was = SearchMatcherIndex(&s->search.matcher);
+    Selection r = {};
+    if (!SearchMatcherNext(&s->search.matcher, &r)) {
+        return false;
+    }
+    // A step that wrapped back to the top is not a downward move, so the
+    // clamp that stops a scroll going the wrong way is not applied to it.
+    InputMoveDir dir = SearchMatcherIndex(&s->search.matcher) > was
+                           ? InputMoveDir::Down
+                           : InputMoveDir::None;
+    InputScrollToOffset(s, r.end, dir);
+    Notify(app, win);
+    if (out) {
+        *out = r;
+    }
+    return true;
+}
+
+bool InputSearchPrev(InputState* s, App* app, Window* win, Selection* out) {
+    if (!s) {
+        return false;
+    }
+    int was = SearchMatcherIndex(&s->search.matcher);
+    Selection r = {};
+    if (!SearchMatcherPrev(&s->search.matcher, &r)) {
+        return false;
+    }
+    InputMoveDir dir = SearchMatcherIndex(&s->search.matcher) < was
+                           ? InputMoveDir::Up
+                           : InputMoveDir::None;
+    InputScrollToOffset(s, r.start, dir);
+    Notify(app, win);
+    if (out) {
+        *out = r;
+    }
+    return true;
+}
+
+bool InputSearchReplaceOne(InputState* s, App* app, Window* win, Str with) {
+    if (!InputIsReplaceable(s)) {
+        return false;
+    }
+    SearchMatcher* m = &s->search.matcher;
+    Selection r = {};
+    if (!SearchMatcherCurrent(m, &r)) {
+        return false;
+    }
+    // Where the view goes afterwards is the match *after* this one, so a run
+    // of replacements walks down the document rather than standing still.
+    Selection next = r;
+    SearchMatcherPeek(m, &next);
+    bool down = SearchMatcherHasNextWithoutWrap(m);
+    if (!down) {
+        // The last match: what replaces it leaves the cursor at the top,
+        // which is where the shorter list starts again.
+        SearchMatcherSetIndex(m, 0);
+    }
+    SearchMatcherBeginReplacement(m);
+    InputScrollToOffset(s, next.end,
+                        down ? InputMoveDir::Down : InputMoveDir::None);
+    // Rust calls the silent form, which only skips the LSP hook this port
+    // does not have.
+    InputReplaceTextInRange(s, app, win, &r, with);
+    return true;
+}
+
+int InputSearchReplaceAll(InputState* s, App* app, Window* win, Str with) {
+    if (!InputIsReplaceable(s)) {
+        return 0;
+    }
+    SearchMatcher* m = &s->search.matcher;
+    int count = SearchMatcherLen(m);
+    if (count == 0) {
+        return 0;
+    }
+    // Back to front, so the offsets ahead of each edit are still good. Rust
+    // builds the whole new text and writes it in one go, and so does this —
+    // one undo step for the lot.
+    Str text = InputValue(s);
+    StrBuilder sb;
+    int at = 0;
+    for (int i = 0; i < count; i++) {
+        Selection r = m->ranges[i];
+        sb.Append(Str(text.s + at, r.start - at));
+        sb.Append(with);
+        at = r.end;
+    }
+    sb.Append(Str(text.s + at, text.len - at));
+    Str whole = sb.TakeStr();
+    SearchMatcherBeginReplacement(m);
+    Selection all = {0, text.len};
+    InputReplaceTextInRange(s, app, win, &all, whole);
+    StrFree(whole);
+    InputScrollToOffset(s, 0, InputMoveDir::Down);
+    return count;
 }
 
 // ─── focus ────────────────────────────────────────────────────────────────

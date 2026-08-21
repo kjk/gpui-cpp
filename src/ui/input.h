@@ -63,6 +63,21 @@ struct Input {
     El* IntoEl();
 };
 
+// SearchPanel, crates/ui/src/input/search.rs: the find bar over a searchable
+// field. Rust hangs it off the input's overlay; here the caller puts it above
+// the field it searches, which is where it renders. It owns the two fields it
+// holds — the query and the replacement — so the caller names only the field
+// being searched, and it answers nothing at all while the session is closed.
+struct SearchPanel {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    Str id = {};
+    InputState* target = nullptr;
+
+    static SearchPanel* New(Ctx* cx, Str id, InputState* target);
+    El* IntoEl();
+};
+
 struct Textarea {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
