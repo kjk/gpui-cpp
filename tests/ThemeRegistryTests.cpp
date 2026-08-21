@@ -2,6 +2,10 @@
 
 #include "Test.h"
 
+// offsetof, for the token table below. MSVC and libc++ hand it over through
+// one of the headers base.h already pulls in; libstdc++ does not, so gcc
+// wants it named.
+#include <stddef.h>
 #include <stdio.h>
 
 static Rgba Parsed(const char* s) {
@@ -66,31 +70,79 @@ static void TheDefaultThemeResolvesToTheDefaultPalette() {
         const char* name;
         size_t off;
     };
-#define TOK(f) {#f, offsetof(Theme, f)}
+#define TOK(f)                 \
+    {                          \
+        #f, offsetof(Theme, f) \
+    }
     static const Token kTokens[] = {
-        TOK(background),      TOK(foreground),      TOK(border),
-        TOK(mutedFg),         TOK(inputBorder),     TOK(inputBg),
-        TOK(ring),            TOK(caret),           TOK(selection),
-        TOK(dragBorder),      TOK(chart1),          TOK(chart2),
-        TOK(chart3),          TOK(chart4),          TOK(chart5),
-        TOK(chartBullish),    TOK(chartBearish),
-        TOK(titleBar),        TOK(titleBarBorder),  TOK(tabBar),
-        TOK(tabActiveBg),     TOK(tabActiveFg),     TOK(tabFg),
-        TOK(tableBg),         TOK(tableHead),       TOK(tableHeadFg),
-        TOK(tableRowBorder),  TOK(tableEven),       TOK(listActive),
-        TOK(listActiveBorder), TOK(tableActive),    TOK(tableActiveBorder),
-        TOK(progress),        TOK(red),             TOK(green),
-        TOK(blue),            TOK(yellow),          TOK(cyan),
-        TOK(magenta),         TOK(danger),          TOK(dangerFg),
-        TOK(secondaryHover),  TOK(secondaryActive), TOK(secondaryFg),
-        TOK(secondary),       TOK(muted),           TOK(accent),
-        TOK(primary),         TOK(primaryFg),       TOK(sidebar),
-        TOK(sidebarFg),       TOK(sidebarPrimary),  TOK(sidebarPrimaryFg),
-        TOK(sidebarAccent),   TOK(sidebarAccentFg), TOK(sidebarBorder),
-        TOK(scrollbarThumb),  TOK(info),            TOK(infoFg),
-        TOK(success),         TOK(successFg),       TOK(warning),
-        TOK(warningFg),       TOK(skeleton),        TOK(overlay),
-        TOK(groupBox),        TOK(groupBoxFg),      TOK(descListLabel),
+        TOK(background),
+        TOK(foreground),
+        TOK(border),
+        TOK(mutedFg),
+        TOK(inputBorder),
+        TOK(inputBg),
+        TOK(ring),
+        TOK(caret),
+        TOK(selection),
+        TOK(dragBorder),
+        TOK(chart1),
+        TOK(chart2),
+        TOK(chart3),
+        TOK(chart4),
+        TOK(chart5),
+        TOK(chartBullish),
+        TOK(chartBearish),
+        TOK(titleBar),
+        TOK(titleBarBorder),
+        TOK(tabBar),
+        TOK(tabActiveBg),
+        TOK(tabActiveFg),
+        TOK(tabFg),
+        TOK(tableBg),
+        TOK(tableHead),
+        TOK(tableHeadFg),
+        TOK(tableRowBorder),
+        TOK(tableEven),
+        TOK(listActive),
+        TOK(listActiveBorder),
+        TOK(tableActive),
+        TOK(tableActiveBorder),
+        TOK(progress),
+        TOK(red),
+        TOK(green),
+        TOK(blue),
+        TOK(yellow),
+        TOK(cyan),
+        TOK(magenta),
+        TOK(danger),
+        TOK(dangerFg),
+        TOK(secondaryHover),
+        TOK(secondaryActive),
+        TOK(secondaryFg),
+        TOK(secondary),
+        TOK(muted),
+        TOK(accent),
+        TOK(primary),
+        TOK(primaryFg),
+        TOK(sidebar),
+        TOK(sidebarFg),
+        TOK(sidebarPrimary),
+        TOK(sidebarPrimaryFg),
+        TOK(sidebarAccent),
+        TOK(sidebarAccentFg),
+        TOK(sidebarBorder),
+        TOK(scrollbarThumb),
+        TOK(info),
+        TOK(infoFg),
+        TOK(success),
+        TOK(successFg),
+        TOK(warning),
+        TOK(warningFg),
+        TOK(skeleton),
+        TOK(overlay),
+        TOK(groupBox),
+        TOK(groupBoxFg),
+        TOK(descListLabel),
         TOK(descListLabelFg),
     };
 #undef TOK
@@ -110,10 +162,11 @@ static void TheDefaultThemeResolvesToTheDefaultPalette() {
             Rgba b = *(const Rgba*)((const char*)bases[m] + kTokens[i].off);
             bool same = a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
             if (!same) {
-                printf("  theme drift %s.%s: file %02x%02x%02x%02x, "
-                       "hardcoded %02x%02x%02x%02x\n",
-                       names[m], kTokens[i].name, a.r, a.g, a.b, a.a, b.r, b.g,
-                       b.b, b.a);
+                printf(
+                    "  theme drift %s.%s: file %02x%02x%02x%02x, "
+                    "hardcoded %02x%02x%02x%02x\n",
+                    names[m], kTokens[i].name, a.r, a.g, a.b, a.a, b.r, b.g,
+                    b.b, b.a);
             }
             utassert(same);
         }
