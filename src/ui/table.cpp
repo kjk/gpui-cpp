@@ -366,6 +366,11 @@ El* DataTable::BuildEl() {
         }
     }
     int nFixed = FixedColCount(this, s);
+    if (s) {
+        // fixed_left_cols_count, written down so a scroll between frames can
+        // read it — the columns are the caller's and a click has none.
+        s->fixedCols = nFixed;
+    }
     float scrollX = s ? s->scrollX : 0;
 
     El* box = gpui::Table::New(cx, id)
@@ -586,7 +591,7 @@ El* DataTable::BuildEl() {
             visibleRowsChanged(cx, data, range.first, range.end);
         }
         int cFirst = 0, cEnd = 0;
-        TableVisibleCols(s, nFixed, nColumns, &cFirst, &cEnd);
+        TableVisibleCols(s, &cFirst, &cEnd);
         if (TableVisibleColsChanged(s, cFirst, cEnd) && visibleColsChanged) {
             visibleColsChanged(cx, data, cFirst, cEnd);
         }

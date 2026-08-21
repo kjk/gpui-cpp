@@ -167,6 +167,11 @@ void TableSetSelectedRow(TableState* s, Ctx* cx, int row) {
     s->selectedRow = row;
     s->selectedCellRow = -1;
     s->selectedCellCol = -1;
+    // set_selected_row scrolls the row into view. Rust picks Bottom going
+    // down and Top coming back up, and both fall into the same branch — the
+    // one that scrolls as little as it can — so a walk with the arrow keys
+    // moves a row at a time and a row already in view does not move at all.
+    TableScrollToRow(s, row, ScrollStrategy::Top);
     Notify(cx);
     TableEmit(s, cx, TableEventKind::SelectRow, row, -1, ColumnSort::Default);
     // set_selected_row emits RightClickedRow(None) beside it: whatever was
@@ -183,6 +188,7 @@ void TableSetSelectedCol(TableState* s, Ctx* cx, int col) {
     }
     s->mode = TableSelectionMode::Column;
     s->selectedCol = col;
+    TableScrollToCol(s, col, ScrollStrategy::Top);
     Notify(cx);
     TableEmit(s, cx, TableEventKind::SelectCol, -1, col, ColumnSort::Default);
 }
@@ -195,6 +201,10 @@ void TableSetSelectedCell(TableState* s, Ctx* cx, int row, int col) {
     s->mode = TableSelectionMode::Cell;
     s->selectedCellRow = row;
     s->selectedCellCol = col;
+    // Rust centres the row and brings the column in from whichever side it
+    // is off, which is the pair of strategies here too.
+    TableScrollToRow(s, row, ScrollStrategy::Center);
+    TableScrollToCol(s, col, ScrollStrategy::Top);
     Notify(cx);
     TableEmit(s, cx, TableEventKind::SelectCell, row, col, ColumnSort::Default);
 }
@@ -556,8 +566,8 @@ bool TableVisibleColsChanged(TableState* s, int first, int end) {
     return true;
 }
 
-void TableVisibleCols(const TableState* s, int nFixed, int nCols, int* first,
-                      int* end) {
+void TableVisibleCols(const TableState* s, int* first, int* end) {
+    int nFixed = s->fixedCols, nCols = s->colCount;
     // The pinned columns are always on screen, so the window the offset moves
     // over starts after them. A pane that has not been laid out yet has no
     // width, and answers an empty range rather than every column.
@@ -598,6 +608,49 @@ void TableScrollToRow(TableState* s, int row, ScrollStrategy strategy) {
     }
     s->scrollY = VirtualListScrollToRow(s->rowCount, s->rowH, row, s->scrollY,
                                         s->viewportH, strategy);
+}
+
+void TableScrollToCol(TableState* s, int col, ScrollStrategy strategy) {
+    float viewport = s->bodyBounds.w;
+    if (viewport <= 0) {
+        return;
+    }
+    int d = TableDisplayOfCol(s, col);
+    if (d < 0) {
+        return;
+    }
+    // saturating_sub: a pinned column is already on screen, and asking for
+    // one asks for the start of what moves.
+    d -= s->fixedCols;
+    if (d < 0) {
+        d = 0;
+    }
+    int n = s->colCount - s->fixedCols;
+    if (n <= 0) {
+        return;
+    }
+    // The widths of the columns that move, in the order they are shown in —
+    // which the display order is and the caller's array is not.
+    Vec<float> w;
+    for (int i = s->fixedCols; i < s->colCount; i++) {
+        int c = TableColAt(s, i);
+        w.Append(c < s->colWidth.len ? s->colWidth[c] : 0);
+    }
+    s->scrollX =
+        VirtualListScrollToItem(w.els, n, d, s->scrollX, viewport, strategy);
+    w.Reset();
+}
+
+void TableRefreshCols(TableState* s) {
+    // A zero width is a column that has not been seeded, which is what makes
+    // the next build take the caller's declaration again.
+    for (int i = 0; i < s->colWidth.len; i++) {
+        s->colWidth[i] = 0;
+    }
+    s->colOrderSeeded = false;
+    s->resizingCol = -1;
+    s->draggingCol = -1;
+    s->dropGap = -1;
 }
 
 void TableState::OnResizeDrag(TableState* self, Ctx* cx,

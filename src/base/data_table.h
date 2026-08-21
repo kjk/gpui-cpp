@@ -174,6 +174,11 @@ struct TableState {
     // under a head that goes with it.
     float scrollX = 0;
     float viewportW = 0;
+    // fixed_left_cols_count(): how many columns are pinned to the left right
+    // now, which the themed table works out from the columns and writes here
+    // as it builds. It has to be on the state because a scroll is a click,
+    // and a click has no columns to count.
+    int fixedCols = 0;
     // col_fixed: whether the columns that asked to be pinned actually are.
     // Rust keeps the flag on the state rather than the column so one toggle
     // releases all of them at once.
@@ -275,14 +280,29 @@ bool TableVisibleColsChanged(TableState* s, int first, int end);
 // The columns whose slot overlaps the scrolling pane, in display positions.
 // Rust culls the ones outside it; this tree builds them all, so this answers
 // the same question without being what decides anything.
-void TableVisibleCols(const TableState* s, int nFixed, int nCols, int* first,
-                      int* end);
+void TableVisibleCols(const TableState* s, int* first, int* end);
 
 // load_more_if_need: the last row built is within the threshold of the end,
 // and the delegate says there is more.
 bool TableShouldLoadMore(const TableState* s, int visibleEnd);
 // scroll_to_row, against the height the body was last laid out at.
 void TableScrollToRow(TableState* s, int row, ScrollStrategy strategy);
+// scroll_to_col, against the width the scrolling pane was last laid out at.
+// The column is the caller's, and what moves is its place in the display
+// order less the pinned ones — Rust's `col_ix.saturating_sub(fixed_left_
+// cols_count())`, since the pinned columns do not move under the offset.
+void TableScrollToCol(TableState* s, int col, ScrollStrategy strategy);
+
+// TableState::refresh, which is `prepare_col_groups`: the widths and the
+// order the table has of its own are dropped, so the caller's declarations
+// are taken again on the next build. Rust rebuilds `col_groups` from the
+// delegate, which loses a dragged width and a moved column the same way.
+//
+// `refresh_header_layout` has no counterpart. Rust caches the header cells
+// and that call is what invalidates the cache; here the group bands are
+// summed from the current widths in the current order every time the table
+// is built, so there is nothing to invalidate.
+void TableRefreshCols(TableState* s);
 
 // The width a column is being drawn at, which is the caller's until the table
 // has one of its own.
