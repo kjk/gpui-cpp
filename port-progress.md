@@ -619,9 +619,9 @@ cargo run -p system_monitor
 
   One harness detail. Layout recurses once per level, and `superdeep` nests a
   thousand of them, which overflows Windows' 1 MB default stack — Rust's main
-  thread gets 8 MB. The bench binary links with `/STACK:67108864`; reserve is
-  address space, and pages commit as the stack grows. Nothing else needs it,
-  and no real element tree comes close.
+  thread gets 8 MB. The bench binary links with `/STACK:8388608`, the same
+  8 MB; reserve is address space, and pages commit as the stack grows. Nothing
+  else needs it, and no real element tree comes close.
 
   Also fixed on the way past: `AGENTS.md` listed `src/taffy/taffy.md`, a file
   that does not exist.
