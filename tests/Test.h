@@ -33,6 +33,7 @@ bool TestNear(float a, float b);
 
 #define utassertnear(a, b) utassert(TestNear((a), (b)))
 
+void TestIndexPath();
 void TestAutoScroll();
 void TestThemeRegistry();
 void TestPositioner();

@@ -137,6 +137,38 @@ ListRow ListRowAt(const ListState* s, int rowIx) {
     return r;
 }
 
+IndexPath ListIndexPathOf(const ListState* s, int entry) {
+    IndexPath p;
+    p.row = -1;
+    if (!s || entry < 0) {
+        return p;
+    }
+    int seen = 0;
+    for (int i = 0; i < s->sectionCounts.len; i++) {
+        int n = s->sectionCounts[i];
+        if (entry < seen + n) {
+            p.section = i;
+            p.row = entry - seen;
+            return p;
+        }
+        seen += n;
+    }
+    return p;
+}
+
+int ListEntryOf(const ListState* s, IndexPath path) {
+    if (!s || path.section < 0 || path.row < 0 ||
+        path.section >= s->sectionCounts.len ||
+        path.row >= s->sectionCounts[path.section]) {
+        return -1;
+    }
+    int seen = 0;
+    for (int i = 0; i < path.section; i++) {
+        seen += s->sectionCounts[i];
+    }
+    return seen + path.row;
+}
+
 int ListRowOfEntry(const ListState* s, int entry) {
     if (entry < 0) {
         return -1;

@@ -1,6 +1,7 @@
 /* Unstyled list — crates/ui/src/list/list.rs */
 
 #include "gpui/gpui.h"
+#include "base/index_path.h"
 #include "base/virtual_list.h"
 
 namespace gpui {
@@ -71,6 +72,10 @@ struct ListRow {
     // Rust's IndexPath and the position the selection is kept as.
     int row = 0;
     int entry = -1;
+
+    // The same place under the name Rust addresses it by. A header or a
+    // footer has a section but no row, which is what its `row` of 0 means.
+    IndexPath Path() const { return IndexPath{section, row, 0}; }
 };
 
 // What a list is between frames. Rust splits this across ListState and the
@@ -138,6 +143,11 @@ int ListRowCount(const ListState* s);
 ListRow ListRowAt(const ListState* s, int rowIx);
 // Where an item sits among the flattened rows, or -1.
 int ListRowOfEntry(const ListState* s, int entry);
+// The two directions between the flat entry index this tree keys on and the
+// IndexPath Rust keys on. An entry outside the list is section 0, row -1;
+// a path outside it is -1.
+IndexPath ListIndexPathOf(const ListState* s, int entry);
+int ListEntryOf(const ListState* s, IndexPath path);
 // scroll_to_item, against the height the list was last laid out at.
 void ListScrollToItem(ListState* s, int entry, ScrollStrategy strategy);
 // load_more: true when the last row built is within the threshold of the end
