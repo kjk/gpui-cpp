@@ -181,7 +181,7 @@ El* Dialog::Header() {
     }
     if (description.s && description.len > 0) {
         head->Child(DialogDescription::New(cx)->Child(TextEl(a, description)
-                                                          ->Font(13)
+                                                          ->Font(14)
                                                           ->Fg(th.mutedFg)
                                                           ->Wrap()
                                                           ->W(kFill)));

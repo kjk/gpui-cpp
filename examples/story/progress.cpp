@@ -144,13 +144,14 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
                    ->Border(1, th.border)
                    ->Radius(th.radius);
     El* head = Div(a)->FlexRow()->W(kFill)->JustifyBetween()->ItemsCenter();
+    // div().font_medium() beside a div().text_sm().text_color(muted).
     head->Child(
-        StoryTxt(cx, StrL("Uploading design-assets.zip"), 14, th.foreground)
-            ->Semibold());
+        StoryTxt(cx, StrL("Uploading design-assets.zip"), 16, th.foreground)
+            ->Medium());
     head->Child(StoryTxt(cx,
                          self->loading ? StrL("Uploading…")
                                        : StoryFmt(cx, "%.0f%%", self->value),
-                         13, th.mutedFg));
+                         14, th.mutedFg));
     card->Child(head);
     card->Child(component::Progress::New(cx)
                     ->Id(StrL("upload"))
@@ -184,10 +185,10 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
                        ->Size(80)
                        ->IntoEl());
     El* circText = Div(a)->FlexCol()->Gap(4);
-    circText->Child(StoryTxt(cx, StrL("Analyzing project"), 14, th.foreground)
-                        ->Semibold());
+    circText->Child(StoryTxt(cx, StrL("Analyzing project"), 16, th.foreground)
+                        ->Medium());
     circText->Child(StoryTxt(cx, StrL("Scanning components and dependencies."),
-                             13, th.mutedFg));
+                             14, th.mutedFg));
     circBox->Child(circText);
     StorySectionAdd(circ, circBox);
     page->Child(circ);

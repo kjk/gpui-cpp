@@ -45,7 +45,9 @@ static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
         t->Child(IconEl(a, icon, 14)->Fg(th.foreground));
     }
     if (label) {
-        t->Child(StoryTxt(cx, Str(label), 13, th.foreground));
+        // Toggle is text_xs at XSmall and text_sm at Small; Medium and Large
+        // name no size and read at the base (button/toggle.rs).
+        t->Child(StoryTxt(cx, Str(label), 16, th.foreground));
     }
     return t;
 }
@@ -73,7 +75,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
         cx, "Variants", "Ghost and outline treatments for different surfaces.");
     StorySectionBody(vars)->W(512)->FlexCol()->ItemsCenter()->Gap(16);
     El* varsCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    varsCol->Child(StoryTxt(cx, StrL("Ghost"), 13, th.foreground)->Semibold());
+    varsCol->Child(StoryTxt(cx, StrL("Ghost"), 14, th.foreground)->Medium());
     El* ghost = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
     ghost->Child(ToggleChip(cx, onToggle, 1, nullptr, IconName::Bell,
                             self->toggles[1], false));
@@ -83,7 +85,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
                             self->toggles[3], false));
     varsCol->Child(ghost);
     varsCol
-        ->Child(StoryTxt(cx, StrL("Outline"), 13, th.foreground)->Semibold());
+        ->Child(StoryTxt(cx, StrL("Outline"), 14, th.foreground)->Medium());
     El* outline = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
     outline->Child(ToggleChip(cx, onToggle, 4, nullptr, IconName::Bell,
                               self->toggles[4], true));

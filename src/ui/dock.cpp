@@ -20,7 +20,6 @@ El* DockInvalidPanelRender(Ctx* cx, void* data) {
         ->Child(TextEl(a, StrDup(a, fmt("The `%s` panel type is not "
                                         "registered in PanelRegistry.",
                                         name)))
-                    ->Font(13)
                     ->Fg(th.mutedFg));
 }
 
@@ -207,8 +206,10 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
                 tab->BorderL(2, th.primary);
             }
         }
+        // Tab::new().label(..): a tab's label is the tab bar's own size,
+        // which is text_sm at Medium.
         tab->Child(TextEl(a, def.title)
-                       ->Font(13)
+                       ->Font(14)
                        ->Fg(on ? th.tabActiveFg : th.tabFg)
                        ->LineHeight(1.f));
         if (def.closable) {
@@ -415,8 +416,8 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
         ->Border(1, th.border)
         ->Bg(th.tokens.tabActiveBg)
         ->Opacity(0.75f)
+        // DragPanel names no size, so the drag preview reads at the base.
         ->Child(TextEl(a, s->panels[panelIx].title)
-                    ->Font(13)
                     ->Fg(th.tabFg)
                     ->LineHeight(1.f))
         ->Deferred();

@@ -190,7 +190,7 @@ static component::Dialog* Alert(AlertDialogStory* self, Ctx* cx) {
         case AlertNoTitle:
             // confirm(): no heading, just the question and OK / Cancel.
             return d->Confirm()
-                ->Body(StoryTxt(cx, StrL("Continue with this action?"), 13,
+                ->Body(StoryTxt(cx, StrL("Continue with this action?"), 16,
                                 th.foreground)
                            ->Wrap()
                            ->W(kFill));
@@ -232,7 +232,7 @@ static component::Dialog* Alert(AlertDialogStory* self, Ctx* cx) {
         case AlertConfirm:
             return d->Confirm()
                 ->Title(StrL("Are you sure?"))
-                ->Body(StoryTxt(cx, StrL("Continue with this action?"), 13,
+                ->Body(StoryTxt(cx, StrL("Continue with this action?"), 16,
                                 th.foreground)
                            ->Wrap()
                            ->W(kFill));

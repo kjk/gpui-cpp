@@ -167,10 +167,11 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
                 ->OnChange(Listen(cx, &OnSliderChange))
                 ->IntoEl());
         El* cap = Div(a)->FlexCol()->ItemsCenter();
-        cap->Child(StoryTxt(cx, Str(kChannels[i]), 13, th.foreground));
+        // Neither line names a size, so both read at the base.
+        cap->Child(StoryTxt(cx, Str(kChannels[i]), 16, th.foreground));
         // Hue reads in degrees, the other three in percent.
         float shown = self->hsl[i].value.End() * (i == 0 ? 360.f : 100.f);
-        cap->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", shown), 13, th.mutedFg));
+        cap->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", shown), 16, th.mutedFg));
         col->Child(cap);
         StorySectionAdd(picker, col);
     }

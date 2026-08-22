@@ -49,8 +49,9 @@ El* Table::IntoEl() {
             row->Child(TableCell::New(cx, StrDup(a, fmt("c%d", c)))
                            ->Pad(8)
                            ->Flex1()
+                           // Table is text_sm, and every cell reads at it.
                            ->Child(TextEl(a, Str(rows[r][c]))
-                                       ->Font(13)
+                                       ->Font(14)
                                        ->Fg(th.foreground)));
         }
         body->Child(row);
