@@ -204,7 +204,7 @@ static void TestMarkdownFlow(Arena* a) {
     utassert(root->children.len == 1);
     Node* heading = Child(root, 0);
     utassert(heading->kind == NodeKind::Heading);
-    utassert(heading->depth == 1);
+    utassert(heading->startOrDepth == 1);
     utassert(TextIs(a, heading, "Hi Earth!"));
     utassert(Child(heading, 1)->kind == NodeKind::Emphasis);
     // Positions are byte offsets into the source.
@@ -213,7 +213,7 @@ static void TestMarkdownFlow(Arena* a) {
 
     root = Parse(a, "Setext\n===\n");
     utassert(Child(root, 0)->kind == NodeKind::Heading);
-    utassert(Child(root, 0)->depth == 1);
+    utassert(Child(root, 0)->startOrDepth == 1);
 
     root = Parse(a, "a\n\n> b\n>\n> c\n");
     utassert(root->children.len == 2);
@@ -251,7 +251,7 @@ static void TestMarkdownLists(Arena* a) {
     list = Child(root, 0);
     utassert(list->Has(NodeOrdered));
     utassert(list->Has(NodeHasStart));
-    utassert(list->start == 3);
+    utassert(list->startOrDepth == 3);
 
     // A blank line between items makes the list loose.
     root = Parse(a, "- one\n\n- two\n");

@@ -123,10 +123,10 @@ enum NodeFlag : uint8_t {
     NodeHasChecked = 1 << 5,
 };
 
-// The fields are ordered largest first so the struct packs with no padding at
-// all: three 24-byte members, then the eight strings and the one number at
-// four bytes each, then the four single bytes. 112 bytes, where the order
-// they were written in with a Str per string cost 232.
+// The fields are ordered largest first: three 24-byte members, then the
+// eight strings and the one number at four bytes each, then three single
+// bytes and one of tail padding. 112 bytes, where the order they were
+// written in with a Str per string cost 232.
 struct Node {
     // Root, Paragraph, Heading, Blockquote, List, ListItem, Emphasis, Strong,
     // Link, LinkReference, FootnoteDefinition, Table, TableRow, TableCell,
@@ -166,13 +166,14 @@ struct Node {
     ArenaStr lang = kArenaStrNone;
     ArenaStr meta = kArenaStrNone;
 
-    // List: the number the first item counts from. `NodeHasStart` says
-    // whether there is one.
-    uint32_t start = 0;
+    // Two fields that cannot both be live, so they are one. A List's
+    // `start` is the number its first item counts from, and `NodeHasStart`
+    // says whether it has one; a Heading's is its level, 1..=6. No node is
+    // both kinds, which is what makes the fusing safe rather than clever —
+    // `kind` says which of the two a given node means.
+    uint32_t startOrDepth = 0;
 
     NodeKind kind = NodeKind::Root;
-    // Heading: 1..=6.
-    uint8_t depth = 0;
     // LinkReference, ImageReference.
     ReferenceKind referenceKind = ReferenceKind::Shortcut;
     // The NodeFlag bits.
@@ -185,9 +186,12 @@ struct Node {
 };
 
 // The packing is the point, so it is checked rather than hoped for: three
-// 24-byte members, eight 4-byte strings, one 4-byte number and four single
-// bytes, with nothing left over. Adding a field in the wrong place costs
-// eight bytes a node and would otherwise go unnoticed.
+// 24-byte members, eight 4-byte strings, one 4-byte number and three single
+// bytes, rounded up to the 8 the ArenaVecs align to. The arithmetic below
+// still reads 4 for that last group because the byte fusing start and depth
+// freed went into the padding rather than off the struct — one more
+// single-byte field would cost nothing, and a field put anywhere else costs
+// eight a node, which would otherwise go unnoticed.
 static_assert(sizeof(Node) == 3 * 24 + 8 * 4 + 4 + 4,
               "Node has picked up padding; order the fields largest first");
 

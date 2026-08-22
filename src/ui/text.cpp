@@ -341,7 +341,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             break;
         case md::NodeKind::Heading: {
             MdNode* h = Push(b, MdKind::Heading);
-            h->level = n->depth == 0 ? 1 : n->depth;
+            h->level = n->startOrDepth == 0 ? 1 : (uint8_t)n->startOrDepth;
             MdInline(b, n);
             Pop(b);
             break;
@@ -354,7 +354,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
         case md::NodeKind::List: {
             MdNode* l = Push(b, MdKind::List);
             l->ordered = n->Has(md::NodeOrdered);
-            l->start = n->Has(md::NodeHasStart) ? (int)n->start : 1;
+            l->start = n->Has(md::NodeHasStart) ? (int)n->startOrDepth : 1;
             MdBlockChildren(b, n);
             Pop(b);
             break;

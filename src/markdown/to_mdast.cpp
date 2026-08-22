@@ -542,15 +542,15 @@ static void OnExitGfmTaskListItemValue(CompileContext* c) {
 
 static void OnExitHeadingAtxSequence(CompileContext* c) {
     Node* node = TailMut(c);
-    if (node->depth == 0) {
-        node->depth = (uint8_t)ExitSlice(c).Len();
+    if (node->startOrDepth == 0) {
+        node->startOrDepth = (uint32_t)ExitSlice(c).Len();
     }
 }
 
 static void OnExitHeadingSetextUnderlineSequence(CompileContext* c) {
     Position position = PositionFromExitEvent(*c->events, c->index);
     uint8_t head = (uint8_t)c->bytes.s[position.start.index];
-    TailMut(c)->depth = head == '-' ? 2 : 1;
+    TailMut(c)->startOrDepth = head == '-' ? 2 : 1;
 }
 
 static void OnExitLabelText(CompileContext* c) {
@@ -689,7 +689,7 @@ static void OnExitListItemValue(CompileContext* c) {
     }
     Node* node = TailPenultimateMut(c);
     if (!node->Has(NodeHasStart)) {
-        node->start = start;
+        node->startOrDepth = start;
         node->Set(NodeHasStart, true);
     }
 }
