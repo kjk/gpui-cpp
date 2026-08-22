@@ -2227,3 +2227,38 @@ cargo run -p system_monitor
 
   Since the Str-per-node baseline: prose 1646 -> 358 KB, nested 1068 -> 159,
   tables 2926 -> 403, entities 660 -> 74, and a Node 144 -> 28 bytes.
+
+- 2026-08-22: The reference kind rides in `flags`, and the length moves next
+  to the bytes. Three values need two bits and the flags used six of the
+  eight, so `referenceKind` gives up its byte — and a byte here was worth
+  four, because 25 bytes round to 28 where 24 round to themselves.
+  `NodeRefKind` and `NodeSetRefKind` reach it; `kind` stays a plain field, so
+  the switches on it are untouched.
+
+  That alone left 26, which is still 28: `srcLen` sat between two four-byte
+  fields and cost two bytes of padding. Beside `kind` and `flags` it is free.
+
+  **24 bytes, down from 28** — and worth eight a node rather than four,
+  because `NodeNew` pushes through `Alloc`, which aligns to eight, so a
+  28-byte node was handed 32. There is no padding left to hide a field in:
+  the next one costs four bytes a node, and there are no spare flag bits
+  either.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose          358.3 KB   5.58x     321.2 KB   5.00x    -10.4%
+    nested         159.1 KB   2.48x     136.5 KB   2.13x    -14.2%
+    gfm tables     402.9 KB   6.29x     341.9 KB   5.33x    -15.1%
+    entities        73.7 KB   1.15x      70.4 KB   1.10x     -4.5%
+
+  Fastest of three runs either side: prose 8.25 -> 8.14 ms, nested 9.28 ->
+  9.35, tables 12.58 -> 12.51, entities 5.79 -> 5.83, `tokenize` 7.62 ->
+  7.64, `to_mdast` 0.296 -> 0.301.
+
+  Those two eight-byte steps pin the node count: prose is about 4,600 nodes,
+  so nodes are roughly 110 KB of its 321. The next boundary is 16 bytes and
+  only one combination reaches it — `srcStart`, `srcLen` and `perKind` all
+  going the way the strings went, into records only the nodes that need them
+  pay for. Partial moves buy nothing: without all three the struct still
+  rounds back up to 24.

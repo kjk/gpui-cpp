@@ -603,14 +603,14 @@ static void OnExitMedia(CompileContext* c) {
         Keep(c, node, NodeStrKind::Label, reference.label);
     } else if (node->kind == NodeKind::Image) {
         node->kind = NodeKind::ImageReference;
-        node->referenceKind = reference.kind;
+        NodeSetRefKind(node, reference.kind);
         Keep(c, node, NodeStrKind::Identifier, reference.identifier);
         Keep(c, node, NodeStrKind::Label, reference.label);
         NodeClearStr(c->a, node, NodeStrKind::Url);
         NodeClearStr(c->a, node, NodeStrKind::Title);
     } else if (node->kind == NodeKind::Link) {
         node->kind = NodeKind::LinkReference;
-        node->referenceKind = reference.kind;
+        NodeSetRefKind(node, reference.kind);
         Keep(c, node, NodeStrKind::Identifier, reference.identifier);
         Keep(c, node, NodeStrKind::Label, reference.label);
         NodeClearStr(c->a, node, NodeStrKind::Url);

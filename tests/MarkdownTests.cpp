@@ -379,10 +379,10 @@ static void TestMarkdownLinks(Arena* a) {
     utassert(Is(definition, NodeStrKind::Url, "/f"));
     Node* shortcut = Child(Child(root, 1), 0);
     utassert(shortcut->kind == NodeKind::LinkReference);
-    utassert(shortcut->referenceKind == ReferenceKind::Shortcut);
+    utassert(NodeRefKind(shortcut) == ReferenceKind::Shortcut);
     utassert(Is(shortcut, NodeStrKind::Identifier, "foo"));
-    utassert(Child(Child(root, 2), 0)->referenceKind == ReferenceKind::Full);
-    utassert(Child(Child(root, 3), 0)->referenceKind ==
+    utassert(NodeRefKind(Child(Child(root, 2), 0)) == ReferenceKind::Full);
+    utassert(NodeRefKind(Child(Child(root, 3), 0)) ==
              ReferenceKind::Collapsed);
 
     // An undefined reference is not a link at all.

@@ -180,13 +180,17 @@ enum NodeFlag : uint8_t {
     // The pair is Rust's `Option<bool>`.
     NodeChecked = 1 << 4,
     NodeHasChecked = 1 << 5,
+    // Bits 6 and 7 are the reference kind, which is not a flag and does not
+    // belong to `Has`. `NodeRefKind` and `NodeSetRefKind` are how it is
+    // reached; nothing else may take these two.
+    NodeRefKindMask = 3 << 6,
 };
 
-// Five offsets, the length and three single bytes with three of padding
-// behind them: 28 bytes, where the order they were written in with a Str per
-// string, a child vector, an alignment vector and a full unist Position cost
-// 256 — and where holding one pointer would put the whole struct back on an
-// eight-byte alignment.
+// Five offsets, the length and two single bytes: 24 bytes with nothing left
+// over, where the order they were written in with a Str per string, a child
+// vector, an alignment vector and a full unist Position cost 256 — and where
+// holding one pointer would put the whole struct back on an eight-byte
+// alignment.
 struct Node {
     // The children, as a ring rather than a vector. `lastKid` is the last of
     // them and every child points at the one after it, the last one back at
@@ -225,7 +229,6 @@ struct Node {
     // is a diagnostic, and the constructs whose extent is acted on are all
     // far shorter than that.
     uint32_t srcStart = 0;
-    uint16_t srcLen = 0;
 
     // The strings a node carries, as a list in the arena rather than eight
     // fields. `firstStr` is the newest of them; each record names the next:
@@ -259,10 +262,18 @@ struct Node {
     // before this is read, and every reader below does.
     uint32_t perKind = 0;
 
+    // How far the node runs from `srcStart`, capped as described above. It
+    // sits down here with the bytes rather than up with the offset it
+    // belongs to: two bytes between two four-byte fields is two bytes of
+    // padding, and beside `kind` and `flags` it is free.
+    uint16_t srcLen = 0;
+
     NodeKind kind = NodeKind::Root;
-    // LinkReference, ImageReference.
-    ReferenceKind referenceKind = ReferenceKind::Shortcut;
-    // The NodeFlag bits.
+    // The NodeFlag bits, and the reference kind in the top two of them.
+    // Three values need two bits and the flags used six of the eight, so
+    // this is the byte that was already here rather than one of its own —
+    // and a byte of its own was four, because 25 bytes round to 28 where 24
+    // round to themselves. `NodeRefKind` reads it.
     uint8_t flags = 0;
 
     bool Has(NodeFlag f) const { return (flags & f) != 0; }
@@ -272,12 +283,12 @@ struct Node {
 };
 
 // The packing is the point, so it is checked rather than hoped for: five
-// 4-byte offsets, the 2-byte length and three single bytes, rounded up to
-// the 4 everything in here now aligns to. Three bytes of that last 8 are
-// padding — three more single-byte fields, or one more 2-byte one, would
-// cost nothing, where a field of eight bytes would cost eight more than
-// itself and would otherwise go unnoticed.
-static_assert(sizeof(Node) == 5 * 4 + 8,
+// 4-byte offsets, the 2-byte length and two single bytes, with nothing left
+// over. There is no padding to hide a new field in any more — the next one
+// costs four bytes a node, or two bits of `flags` if it can be made to fit
+// there, and 24 is what an arena that pushes nodes eight-aligned actually
+// hands out.
+static_assert(sizeof(Node) == 5 * 4 + 4,
               "Node has picked up padding; order the fields largest first");
 
 // The longest span a node can name. A node that runs further reports this,
@@ -327,6 +338,18 @@ void NodeClearStr(Arena* a, Node* n, NodeStrKind k);
 // arena, which is what a text node's value being built one Data event at a
 // time relies on.
 void NodeGrowStr(Arena* a, Node* n, NodeStrKind k, Str more);
+
+// LinkReference, ImageReference: which of the three spellings the reference
+// was written in. It rides in the top two bits of `flags`, where a field of
+// its own would have cost four bytes of padding.
+inline ReferenceKind NodeRefKind(const Node* n) {
+    return (ReferenceKind)((n->flags & NodeRefKindMask) >> 6);
+}
+
+inline void NodeSetRefKind(Node* n, ReferenceKind k) {
+    n->flags = (uint8_t)((n->flags & ~NodeRefKindMask) |
+                         (((uint8_t)k & 3) << 6));
+}
 
 Node* NodeNew(Arena* a, NodeKind kind);
 
