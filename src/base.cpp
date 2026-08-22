@@ -1096,36 +1096,47 @@ Str StrBuilder::TakeStr() {
 // ───────────────────────────────────────────────────────────────
 
 /*
-Fmt is type-safe printf()-like system. Every directive starts with '%':
-the usual %d / %s / %f etc., plus two that take an argument of any type:
+Fmt is a type-safe printf()-like system. `fmt(format, args...)` formats into
+the temp arena and answers a Str, `logf` formats and logs, and anything that
+has to outlive the frame is `StrDup(a, fmt(..))`. An argument is wrapped in a
+FmtArg by the variadic template, so the argument's own type is known at the
+point of the call and nothing is promoted through `...`.
 
-  %{}   the next argument, whatever its type (same as %v)
-  %{$n} the n-th argument (0-based), whatever its type
+Every directive starts with '%': the usual %d / %i / %u / %o / %x / %X / %c /
+%p / %s / %S and the float set %f %F %e %E %g %G %a %A, plus three that take
+an argument of any type:
+
+  %v    the next argument, whatever its type
+  %{}   the same thing
+  %{n}  the n-th argument (0-based), whatever its type
+
+Flags, width and precision are captured verbatim and handed to snprintf, so
+"%-8.3f" and "%05d" mean what they mean in printf. A length modifier is
+normalized to an explicit 32- or 64-bit width, so %ld, %zu and %I64d come out
+the same on every platform. %s is the exception: its padding and truncation
+are done here, because a Str is not required to be NUL-terminated.
 
 %% is the only escape; '{' on its own is ordinary text, so registry paths,
-GUIDs, CSS and JS templates pass through untouched.
+GUIDs, CSS and JS templates pass through untouched. Note that positionals are
+spelled %{0}, not %{$0} — a '$' there is a parse error.
 
-Type safety is achieved by using strongly typed methods for adding arguments
-(i(), c(), s() etc.). We also verify that the type of the argument matches
-the type of formatting directive.
+The types are checked rather than trusted, at format time and not by the
+compiler: an integer directive takes any integer-like argument (char, int or
+pointer, which is printf's own leniency — an HWND under %x, an int under %c),
+a float directive takes a float or a double, and %s takes a Str and nothing
+else. FmtArg(const char*) is deleted, so a literal has to be written StrL("..").
 
-Positional directives are useful in translations with more than 1 argument
-because in some languages translation is akward if you can't re-arrange
-the order of arguments.
+A format that does not hold up answers an empty Str rather than a partial
+one. That covers a type that does not match its directive, a %{n} naming an
+argument that was not passed, and a positional format that skips a number —
+%{0} and %{2} with no %{1} is rejected, because the arguments it does not
+name could not be checked.
 
-Idiomatic usage:
-Fmt fmt("%d = %s");
-char *s = fmt.i(5).s("5").Get(); // returns "5 = 5"
-// s is valid until fmt is valid
-// use .GetDup() to get a copy that must be free()d
-// you can re-use fmt as:
-s = fmt.ParseFormat("%{1} = %{2} + %{0}").i(3).s("3").s(L"
-
-You can mix %-style and %{$n} directives but beware, as the rule for assigning
-argument number to a plain % directive is simple (n-th argument position for
-n-th % directive) but it's easy to mis-count when adding %{$n} to the mix.
-
-TODO: similar approach could be used for type-safe scanf() replacement.
+Positional directives are useful in translations with more than one argument,
+because in some languages the translation is awkward if the arguments cannot
+be re-arranged. Mixing them with plain % directives works but is easy to
+mis-count: a plain directive takes the n-th argument for the n-th directive,
+and %{n} does not move that counter.
 */
 
 // formatting instruction
@@ -1421,13 +1432,21 @@ static bool ParseFormat(Fmt& o, Str fmtStr) {
 
 // format a single value into a caller-provided buffer via snprintf,
 // NUL-terminating even on truncation. Avoids allocating (assuming vsnprintf
-// doesn't allocate).
-static void bufFmt(Str buf, const char* fmt, ...) {
+// doesn't allocate). Answers what it wrote, so a caller appending the result
+// does not have to walk the buffer again.
+static Str bufFmt(Str buf, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    VsnprintfUtf8(buf, fmt, args);
+    int n = VsnprintfUtf8(buf, fmt, args);
     va_end(args);
     buf.s[buf.len - 1] = 0;
+    // vsnprintf answers the length it wanted, which is more than it wrote
+    // when the buffer was too small — and MSVC's answers -1 in that case
+    // rather than the length. Either way the terminator says what landed.
+    if (n < 0 || n >= buf.len) {
+        n = (int)strlen(buf.s);
+    }
+    return Str(buf.s, n);
 }
 
 // default formatting for {n} positional and %v: format by the arg's runtime
@@ -1440,21 +1459,17 @@ static void evalDefault(Fmt& fmt, const FmtArg& arg) {
             fmt.res.AppendChar(arg.c);
             break;
         case FmtArg::Kind::Int:
-            bufFmt(buf, "%lld", (long long)arg.i);
-            fmt.res.Append(fmt.buf);
+            fmt.res.Append(bufFmt(buf, "%lld", (long long)arg.i));
             break;
         case FmtArg::Kind::Ptr:
-            bufFmt(buf, "%p", arg.ptr);
-            fmt.res.Append(fmt.buf);
+            fmt.res.Append(bufFmt(buf, "%p", arg.ptr));
             break;
         case FmtArg::Kind::Float:
             // Note: %G, unlike %f, avoids trailing '0'
-            bufFmt(buf, "%G", (double)arg.f);
-            fmt.res.Append(fmt.buf);
+            fmt.res.Append(bufFmt(buf, "%G", (double)arg.f));
             break;
         case FmtArg::Kind::Double:
-            bufFmt(buf, "%G", arg.d);
-            fmt.res.Append(fmt.buf);
+            fmt.res.Append(bufFmt(buf, "%G", arg.d));
             break;
         case FmtArg::Kind::Str:
             fmt.res.Append(arg.str);
@@ -1482,7 +1497,6 @@ static int64_t argToI64(const FmtArg& arg) {
 // 32/64-bit value width matches printf. %s padding/truncation is done by hand
 // to avoid relying on the Str being NUL-terminated.
 static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
-    char* buf = fmt.buf;
     Str bufS(fmt.buf, (int)dimof(fmt.buf));
 
     if (inst.conv == 's' || inst.conv == 'S') {
@@ -1516,6 +1530,9 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
     }
     char conv = inst.conv;
     int64_t ival = argToI64(arg);
+    // what bufFmt wrote, for the two cases that reach it from either side of
+    // an if.
+    Str out;
     switch (conv) {
         case 'd':
         case 'i':
@@ -1524,13 +1541,13 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 fbuf[k++] = 'l';
                 fbuf[k++] = 'd';
                 fbuf[k] = 0;
-                bufFmt(bufS, fbuf, (long long)ival);
+                out = bufFmt(bufS, fbuf, (long long)ival);
             } else {
                 fbuf[k++] = 'd';
                 fbuf[k] = 0;
-                bufFmt(bufS, fbuf, (int)ival);
+                out = bufFmt(bufS, fbuf, (int)ival);
             }
-            fmt.res.Append(buf);
+            fmt.res.Append(out);
             break;
         case 'u':
         case 'o':
@@ -1541,19 +1558,19 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
                 fbuf[k++] = 'l';
                 fbuf[k++] = conv;
                 fbuf[k] = 0;
-                bufFmt(bufS, fbuf, (unsigned long long)ival);
+                out = bufFmt(bufS, fbuf, (unsigned long long)ival);
             } else {
                 fbuf[k++] = conv;
                 fbuf[k] = 0;
-                bufFmt(bufS, fbuf, (unsigned int)(unsigned long long)ival);
+                out =
+                    bufFmt(bufS, fbuf, (unsigned int)(unsigned long long)ival);
             }
-            fmt.res.Append(buf);
+            fmt.res.Append(out);
             break;
         case 'c':
             fbuf[k++] = 'c';
             fbuf[k] = 0;
-            bufFmt(bufS, fbuf, (int)ival);
-            fmt.res.Append(buf);
+            fmt.res.Append(bufFmt(bufS, fbuf, (int)ival));
             break;
         case 'f':
         case 'F':
@@ -1566,8 +1583,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             fbuf[k++] = conv;
             fbuf[k] = 0;
             double dv = (arg.t == FmtArg::Kind::Double) ? arg.d : (double)arg.f;
-            bufFmt(bufS, fbuf, dv);
-            fmt.res.Append(buf);
+            fmt.res.Append(bufFmt(bufS, fbuf, dv));
         } break;
         case 'p': {
             // flags/width are uncommon (and platform-specific) for %p; emit
@@ -1575,8 +1591,7 @@ static void evalPercInst(Fmt& fmt, const Inst& inst, const FmtArg& arg) {
             const void* pv = (arg.t == FmtArg::Kind::Ptr)
                                  ? arg.ptr
                                  : (const void*)(intptr_t)ival;
-            bufFmt(bufS, "%p", pv);
-            fmt.res.Append(buf);
+            fmt.res.Append(bufFmt(bufS, "%p", pv));
         } break;
         default:
             break;
@@ -1651,7 +1666,7 @@ static Str FormatArgs(Arena* a, const char* fmt, const FmtArg** args,
     // heap allocations at all (matters for the crash handler's pre-allocated
     // arena). TakeStr() then returns that arena buffer without a second copy.
     f.res.a = a;
-    bool ok = ParseFormat(f, fmt);
+    bool ok = ParseFormat(f, Str(fmt));
     if (!ok) {
         return {};
     }
