@@ -257,7 +257,7 @@ static void TestMarkdownFlow(Arena* a) {
     TestSuite("markdown flow");
     Node* root = Parse(a, "# Hi *Earth*!\n");
     utassert(root->kind == NodeKind::Root);
-    utassert(root->children.len == 1);
+    utassert(NodeChildCount(gParsedInto, root) == 1);
     Node* heading = Child(root, 0);
     utassert(heading->kind == NodeKind::Heading);
     utassert(heading->startOrDepth == 1);
@@ -274,10 +274,10 @@ static void TestMarkdownFlow(Arena* a) {
     utassert(Child(root, 0)->startOrDepth == 1);
 
     root = Parse(a, "a\n\n> b\n>\n> c\n");
-    utassert(root->children.len == 2);
+    utassert(NodeChildCount(gParsedInto, root) == 2);
     utassert(Child(root, 0)->kind == NodeKind::Paragraph);
     utassert(Child(root, 1)->kind == NodeKind::Blockquote);
-    utassert(Child(root, 1)->children.len == 2);
+    utassert(NodeChildCount(gParsedInto, Child(root, 1)) == 2);
 
     root = Parse(a, "***\n");
     utassert(Child(root, 0)->kind == NodeKind::ThematicBreak);
@@ -302,7 +302,7 @@ static void TestMarkdownLists(Arena* a) {
     utassert(list->kind == NodeKind::List);
     utassert(!list->Has(NodeOrdered));
     utassert(!list->Has(NodeSpread));
-    utassert(list->children.len == 2);
+    utassert(NodeChildCount(gParsedInto, list) == 2);
     utassert(TextIs(a, Child(list, 1), "two"));
 
     root = Parse(a, "3. three\n4. four\n");
@@ -405,10 +405,10 @@ static void TestMarkdownTable(Arena* a) {
     utassert(table->align[1] == AlignKind::Left);
     utassert(table->align[2] == AlignKind::Center);
     utassert(table->align[3] == AlignKind::Right);
-    utassert(table->children.len == 2);
+    utassert(NodeChildCount(gParsedInto, table) == 2);
     Node* head = Child(table, 0);
     utassert(head->kind == NodeKind::TableRow);
-    utassert(head->children.len == 4);
+    utassert(NodeChildCount(gParsedInto, head) == 4);
     utassert(Child(head, 0)->kind == NodeKind::TableCell);
     utassert(TextIs(a, Child(head, 2), "c"));
     utassert(TextIs(a, Child(Child(table, 1), 3), "4"));
@@ -463,7 +463,7 @@ static void TestMarkdownDocument(Arena* a) {
                        "---\n"
                        "\n"
                        "![img](/i.png)\n");
-    utassert(root->children.len == 8);
+    utassert(NodeChildCount(gParsedInto, root) == 8);
     utassert(Child(root, 0)->kind == NodeKind::Heading);
     utassert(Child(root, 1)->kind == NodeKind::Paragraph);
     utassert(Child(root, 2)->kind == NodeKind::Blockquote);
@@ -476,7 +476,7 @@ static void TestMarkdownDocument(Arena* a) {
     // The empty document is a root with nothing in it.
     root = ToMdast(a, StrL(""), ParseOptions::Gfm());
     utassert(root->kind == NodeKind::Root);
-    utassert(root->children.len == 0);
+    utassert(NodeChildCount(gParsedInto, root) == 0);
 }
 
 void TestMarkdown() {

@@ -203,7 +203,7 @@ static void OnEnterBuffer(CompileContext* c) {
 
 static void OnEnterData(CompileContext* c) {
     Node* parent = TailMut(c);
-    Node* last = NodeChild(c->a, parent, parent->children.len - 1);
+    Node* last = NodeLastChild(c->a, parent);
     if (last && last->kind == NodeKind::Text) {
         TailPushAgain(c, last);
     } else {
@@ -558,8 +558,9 @@ static void OnExitLabelText(CompileContext* c) {
 
     Node* node = TailMut(c);
     if (node->kind == NodeKind::Link) {
-        node->children = fragment->children;
-        fragment->children = ArenaVec<ArenaNode>{};
+        // The whole ring moves across, which is the one offset naming it.
+        node->lastKid = fragment->lastKid;
+        fragment->lastKid = ArenaNode{};
     } else if (node->kind == NodeKind::Image) {
         node->alt = Keep(c, label);
     }
@@ -573,7 +574,7 @@ static void OnExitLineEnding(CompileContext* c) {
     if (c->hardBreakAfter) {
         uint32_t end = OffsetOf((*c->events)[c->index]);
         Node* node = TailMut(c);
-        Node* tail = NodeChild(c->a, node, node->children.len - 1);
+        Node* tail = NodeLastChild(c->a, node);
         NodeSetSrcEnd(tail, end);
         c->hardBreakAfter = false;
         return;
@@ -603,7 +604,7 @@ static void OnExitMedia(CompileContext* c) {
         return;
     }
     Node* parent = TailMut(c);
-    Node* node = NodeChild(c->a, parent, parent->children.len - 1);
+    Node* node = NodeLastChild(c->a, parent);
     if (node->kind == NodeKind::FootnoteReference) {
         node->identifier = Keep(c, reference.identifier);
         node->label = Keep(c, reference.label);
@@ -626,11 +627,11 @@ static void OnExitMedia(CompileContext* c) {
 
 static void OnExitListItem(CompileContext* c) {
     Node* item = TailMut(c);
-    Node* first = NodeChild(c->a, item, 0);
+    Node* first = NodeFirstChild(c->a, item);
     if (item->Has(NodeHasChecked) && first &&
         first->kind == NodeKind::Paragraph) {
         Node* paragraph = first;
-        Node* firstInParagraph = NodeChild(c->a, paragraph, 0);
+        Node* firstInParagraph = NodeFirstChild(c->a, paragraph);
         if (firstInParagraph &&
             firstInParagraph->kind == NodeKind::Text) {
             Node* text = firstInParagraph;
@@ -653,16 +654,15 @@ static void OnExitListItem(CompileContext* c) {
                 }
             }
             if (start == value.len) {
-                // Remove the empty text: the paragraph was only a
-                // checkbox. Two cursors one apart, shifting the rest down.
-                ArenaVec<ArenaNode>::Iter dst =
-                    paragraph->children.begin();
-                ArenaVec<ArenaNode>::Iter src = dst;
-                ++src;
-                for (; src != paragraph->children.end(); ++dst, ++src) {
-                    *dst = *src;
+                // Remove the empty text: the paragraph was only a checkbox.
+                // Dropping the first of a ring is the last one's link, or
+                // the ring itself when the two are the same node.
+                Node* last = NodeLastChild(c->a, paragraph);
+                if (last == text) {
+                    paragraph->lastKid = ArenaNode{};
+                } else {
+                    last->sibling = text->sibling;
                 }
-                paragraph->children.Pop();
             } else {
                 text->value =
                     Keep(c, Str(value.s + start, value.len - start));

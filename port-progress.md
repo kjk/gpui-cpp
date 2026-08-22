@@ -2049,3 +2049,57 @@ cargo run -p system_monitor
   bytes of padding where there was one 4-byte field and one, so the next
   small field on a Node is free — and the field after that. What it costs is
   the exact end of anything longer than 64 KB.
+
+- 2026-08-22: A node's children are a ring, not a vector. `ArenaVec<ArenaNode>
+  children` was 24 bytes in every node plus an arena segment in every node
+  that had any. It is two offsets now: `lastKid` in the parent names the last
+  child, each child's `sibling` names the next, and the last child's wraps
+  back to the first.
+
+  The ring is what makes it two offsets and not three. Appending is all the
+  parse ever does to a child list, and appending to a ring is three stores
+  with no walk; `NodeLastChild` — "the child still being built", which the
+  compiler asks for constantly — is the offset the parent already holds. A
+  plain first/next list would have wanted the first and the last in the
+  parent, 12 bytes and an 88-byte Node.
+
+  Not the single tagged offset that was asked for. A node with children and a
+  next sibling — a paragraph among paragraphs, an item among items, most of
+  any tree — needs two distinct references, and one field holds one; the tag
+  chooses which of the two it means rather than letting it mean both.
+  Threading the last child's link back up does not recover it either, because
+  nothing then says how many levels to pop.
+
+  **80 bytes, down from 96.** One 24-byte member, eight 4-byte strings, four
+  4-byte offsets, the 2-byte length and three single bytes, with three of
+  padding.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose          828.0 KB  12.90x     619.0 KB   9.64x    -25.2%
+    nested         462.2 KB   7.21x     308.8 KB   4.82x    -33.2%
+    gfm tables    1379.6 KB  21.53x     898.7 KB  14.02x    -34.9%
+    entities       120.0 KB   1.87x      98.9 KB   1.54x    -17.6%
+
+  Three runs either side, medians: prose 8.66/8.99/8.61 -> 8.43/8.60/8.59 ms,
+  nested 9.50/9.88/9.76 -> 9.49/9.44/9.52, tables 12.99/13.19/12.85 ->
+  13.19/12.74/13.12, entities 5.87/6.05/6.02 -> 5.85/5.86/5.98, with
+  `tokenize` at 7.73/7.99/7.68 -> 7.96/7.95/7.94. The `to_mdast` phase on its
+  own, which is where the segments were being allocated, went 0.389/0.403/
+  0.445 -> 0.342/0.311/0.343.
+
+  What moved at the call sites: four `NodeChild(a, n, len - 1)` became
+  `NodeLastChild`, two `NodeChild(a, n, 0)` became `NodeFirstChild`, the link
+  fragment's steal is one offset crossing over, and dropping the task list's
+  emptied text node is one link rewrite where it was a vector shifted down.
+  `NodeChildCount` is a walk and exists for the tests; nothing in the parse
+  or in TextView counts children.
+
+  The cost to know about: `NodeChild(a, n, i)` walks where it used to index.
+  Every caller asks for the first or the last, so nothing here regressed, but
+  indexing in a loop would now be quadratic.
+
+  Since the Str-per-node baseline: prose 1646 -> 619 KB, nested 1068 -> 309,
+  tables 2926 -> 899, entities 660 -> 99, and a Node, measured then
+  and now, 144 -> 80 bytes.
