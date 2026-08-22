@@ -1644,3 +1644,82 @@ cargo run -p system_monitor
   its shapes take the caller's colour and come out as outlines. Resolving a
   `url(#..)` to its first `<stop stop-color>` is the obvious next one and was
   not done here.
+
+- 2026-08-22: Actions and key bindings, seven commits, measured against what
+  gpui-component actually uses rather than against gpui's whole surface.
+
+  **An action carries what its binding said.** Rust puts fields on the action
+  type — `Confirm { secondary }`, `Enter { secondary, shift }`,
+  `SelectScrollbarMode(mode)`, `MenuClick(name)`, and the enum actions the
+  data-table story declares — and matches the whole value. An action here is
+  the hash of its name, so the port had been spelling one action's two
+  payloads as two actions: a `ui::ConfirmSecondary` that exists nowhere
+  upstream. `KeyBinding::arg` and `ActionEvent::arg` are the payload; a
+  number, a bool or an enum is itself and anything larger is a pointer.
+
+  **A click can dispatch one.** `window.dispatch_action` is called 17 times
+  upstream and is how a dialog is wired: the Cancel button dispatches what its
+  escape key resolves to, so the dialog declares `on_action` once. The seam is
+  `El::OnClickAction`, and it walks the *hit chain* outwards rather than
+  reading the element under the pointer — `AlertDialogCancel` wraps a Button,
+  so the wrapper that names the action is the parent of what was hit. Without
+  that the click reached nothing, which is how it was found. Escape closes the
+  showcase alert now, which it never did.
+
+  **Command is not Control.** window_mac.cpp folded them onto one flag, which
+  works until a keymap names them apart — and state.rs does: on macOS it binds
+  `ctrl-backspace` and `cmd-backspace` to different actions in the same
+  context, `ctrl-shift-a` beside `cmd-a`, and `ctrl-cmd-space`, which needs
+  both at once and could not be written here at all. `KeyChord::platform` is
+  GPUI's `Modifiers::platform`; `cmd-` is that key, `ctrl-` is control, and
+  `secondary-` is the shortcut modifier — the platform key on macOS, control
+  elsewhere. All three platform layers report it.
+
+  **The field's keyboard is a keymap.** `state.rs::init` is 74 bindings in an
+  `Input` key context; here they were a `switch` over the key code with
+  `word = ctrl || alt` standing in for the two `#[cfg]` sets. `input_keys.cpp`
+  is that function, 71 of its bindings (all but ShowCharacterPalette and
+  ToggleCodeActions, which have no counterpart), and `El::BindInput` declares
+  the context. Five chords are ours and not upstream's, commented where they
+  are bound: ctrl-home / ctrl-end / the two shifted, because state.rs spells
+  the document ends cmd-up / cmd-down and binds them on macOS only; and
+  ctrl-shift-z, because upstream's only non-macOS redo is ctrl-y.
+
+  The window resolves a chord **once** and hands the answer on. The matcher
+  holds a half-finished sequence on itself, so asking twice for one keystroke
+  would append that chord twice — `WindowResolveKeyAction` is the front half
+  alone.
+
+  **The chord an action is reached by.** `KeymapBindingForAction` runs the
+  matcher's own search backwards, so the answer is the binding that chord
+  would really fire. `Kbd::ForAction` is the themed half, and a menu row that
+  names an action shows whatever is bound to it in the menu's
+  `ActionContext` — `menu.action_context(handle)`.
+
+  **The story's Edit menu is real.** It was an inert label with a hover
+  background. It is now app_menus.rs's eleven rows, every one naming an input
+  action and carrying no handler: choosing one dispatches to whatever field
+  has the keyboard, and the shortcut beside it comes from the keymap.
+
+  One visible oddity, kept because it is faithful: the Delete row shows
+  Shift+Delete. Both `delete` and `shift-delete` are bound to `input::Delete`
+  and the later binding has the higher precedence, which is the rule the
+  matcher applies and the rule
+  `highest_precedence_binding_for_action` applies upstream. Preferring the
+  chord with fewer modifiers would be a display heuristic of our own.
+
+  The macOS run earned its keep twice. It caught the bracket indent pair in
+  the modifier split, and then four places where the old switch differed from
+  upstream: ctrl-a and ctrl-e are the emacs bindings state.rs adds there
+  rather than nothing, cmd-backspace is DeleteToBeginningOfLine where
+  ctrl-backspace is Backspace, cmd-y is not a chord, and the document ends are
+  cmd-up / cmd-down. The Windows run was green through all of it.
+
+  Deliberately not ported, because gpui-component uses none of them:
+  capture-phase action dispatch, `on_key_up`, `NoAction` / unbinding, an
+  action registry or command palette, and JSON keymap files — the last is
+  Zed's, not this library's. `ShowCharacterPalette` and `ToggleCodeActions`
+  have no counterpart here and are the only two bindings of the input's 74
+  left out.
+
+  16622 -> 16687 checks on Windows and Linux, 16695 on macOS.

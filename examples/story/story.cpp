@@ -1046,6 +1046,49 @@ static El* HelpMenu(Ctx* cx) {
         ->IntoEl();
 }
 
+// app_menus.rs's Edit menu. Every row names one of the input's actions and
+// carries no handler of its own: choosing it dispatches the action to
+// whatever field has the keyboard, which is the same handler the chord
+// reaches, and the shortcut on the right is looked up in the keymap rather
+// than typed here.
+static El* EditMenu(Ctx* cx) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("story-edit-menu"))
+            ->MinW(220)
+            // The field's own key context, which is where those actions are
+            // bound and so where their chords are found.
+            ->ActionContext("Input")
+            ->MenuWithAction(StrL("Undo"), input::Undo())
+            ->MenuWithAction(StrL("Redo"), input::Redo())
+            ->Separator()
+            ->MenuWithAction(StrL("Cut"), input::Cut())
+            ->MenuWithAction(StrL("Copy"), input::Copy())
+            ->MenuWithAction(StrL("Paste"), input::Paste())
+            ->Separator()
+            ->MenuWithAction(StrL("Delete"), input::Delete())
+            ->MenuWithAction(StrL("Delete Previous Word"),
+                             input::DeleteToPreviousWordStart())
+            ->MenuWithAction(StrL("Delete Next Word"),
+                             input::DeleteToNextWordEnd())
+            ->Separator()
+            ->MenuWithAction(StrL("Find"), input::Search())
+            ->Separator()
+            ->MenuWithAction(StrL("Select All"), input::SelectAll());
+    return component::DropdownMenu::New(cx, StrL("story-edit"))
+        ->Trigger(Div(a)
+                      ->H(28)
+                      ->PadX(8)
+                      ->ItemsCenter()
+                      ->Radius(th.radius)
+                      ->HoverBg(th.tokens.muted)
+                      ->Cursor(CursorKind::Pointer)
+                      ->Child(StoryTxt(cx, StrL("Edit"), 14, th.foreground)))
+        ->Menu(menu)
+        ->IntoEl();
+}
+
 static El* WindowMenu(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -1124,7 +1167,7 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
                     ->H(kFill)
                     ->ItemsCenter()
                     ->Child(StoryTitleMenuItem(cx, "GPUI Component", true))
-                    ->Child(StoryTitleMenuItem(cx, "Edit", false))
+                    ->Child(EditMenu(cx))
                     ->Child(WindowMenu(cx))
                     ->Child(HelpMenu(cx));
     El* tools =
