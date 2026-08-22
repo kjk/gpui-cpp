@@ -180,8 +180,8 @@ static void TailPop(CompileContext* c) {
     TreeFrame& frame = TreeTail(c);
     Node* node = DelveMut(frame.tree, frame.stack, frame.stack.len);
     node->position.end = end;
-    frame.stack.len -= 1;
-    frame.eventStack.len -= 1;
+    frame.stack.Pop();
+    frame.eventStack.Pop();
 }
 
 // ─── enter ───────────────────────────────────────────────────────────────
@@ -639,7 +639,7 @@ static void OnExitListItem(CompileContext* c) {
                 for (int32_t i = 0; i + 1 < paragraph->children.len; i++) {
                     paragraph->children[i] = paragraph->children[i + 1];
                 }
-                paragraph->children.len -= 1;
+                paragraph->children.Pop();
             } else {
                 text->value = Str(value.s + start, value.len - start);
                 text->position.start = point;

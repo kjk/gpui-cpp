@@ -479,7 +479,10 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     // The first pass is the topology alone: the columns are all the label
     // margins need, and the margins are what the extent depends on.
     SankeyGraph g;
-    if (SankeyTopology(&gen, c->nodes.len, c->links.els, c->links.len, &g) !=
+    // The links as an array: the generator takes a `const SankeyLink*`, and
+    // the builder's ArenaVec is segmented.
+    const SankeyLink* links = c->links.Flatten(GetTempArena());
+    if (SankeyTopology(&gen, c->nodes.len, links, c->links.len, &g) !=
         SankeyError::None) {
         return;
     }
@@ -490,7 +493,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     Arena* ta = GetTempArena();
     int nNodes = c->nodes.len;
     double* raw = (double*)Alloc(ta, (int)sizeof(double) * nNodes);
-    SankeyChartThroughput(c->links.els, c->links.len, raw, nNodes);
+    SankeyChartThroughput(links, c->links.len, raw, nNodes);
     Str* values = (Str*)Alloc(ta, (int)sizeof(Str) * nNodes);
     for (int i = 0; i < c->nodes.len; i++) {
         values[i] = c->showValues ? fmt("%.0f", raw[i]) : c->nodes[i].value;

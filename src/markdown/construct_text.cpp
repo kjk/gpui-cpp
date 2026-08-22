@@ -598,7 +598,7 @@ static void GetSequences(Tokenizer* t, Vec<Sequence>& sequences) {
         } else if (enter.kind == Kind::Enter) {
             stack.Append(a, index);
         } else if (stack.len > 0) {
-            stack.len -= 1;
+            stack.Pop();
         }
         index += 1;
     }

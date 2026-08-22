@@ -414,6 +414,21 @@ Str AllocStrTemp(int size) {
 // Updates *els and *cap. len is not modified (caller owns logical length).
 // Grow/shrink vec-like storage to newCap elements (+1 trailing zero pad).
 // Updates *els and *cap; keeps min(len, newCap) elements.
+GPUI_NOINLINE void* ArenaVecAlloc(Arena* a, int count, int elSize, int align,
+                                  int hdrSize) {
+    if (!a || count <= 0 || elSize <= 0 || hdrSize < 0) {
+        return nullptr;
+    }
+    if (align < 8) {
+        align = 8;
+    }
+    if (count > (INT_MAX - hdrSize) / elSize) {
+        return nullptr;
+    }
+    return a
+        ->Push((uint64_t)(hdrSize + count * elSize), (uint64_t)align, false);
+}
+
 GPUI_NOINLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
                               int newCap, int elSize) {
     // newCap+1 must fit in int; newElCount * elSize must not overflow.

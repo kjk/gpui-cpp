@@ -329,26 +329,21 @@ static void AddImpl(EditMap& map, int32_t at, int32_t remove, const Event* add,
         e.remove += remove;
         if (before) {
             ArenaVec<Event> merged = {};
-            for (int32_t i = 0; i < addLen; i++) {
-                merged.Append(map.a, add[i]);
-            }
+            merged.Reserve(map.a, addLen + e.add.len);
+            merged.AppendMany(map.a, add, addLen);
             for (int32_t i = 0; i < e.add.len; i++) {
                 merged.Append(map.a, e.add[i]);
             }
             e.add = merged;
         } else {
-            for (int32_t i = 0; i < addLen; i++) {
-                e.add.Append(map.a, add[i]);
-            }
+            e.add.AppendMany(map.a, add, addLen);
         }
         return;
     }
     EditMap::Entry e;
     e.at = at;
     e.remove = remove;
-    for (int32_t i = 0; i < addLen; i++) {
-        e.add.Append(map.a, add[i]);
-    }
+    e.add.AppendMany(map.a, add, addLen);
     map.map.Append(e);
     map.buckets[bucket] = map.map.len;
 }

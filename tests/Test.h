@@ -98,3 +98,4 @@ void TestEventEmitter();
 void TestListSettings();
 void TestStateStyle();
 void TestClick();
+void TestArenaVec();
