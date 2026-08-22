@@ -64,6 +64,20 @@ static El* RenderPanel(Ctx* cx, void* data) {
     return box;
 }
 
+// Panel::title_suffix. Rust's dock example gives every panel a pair of icon
+// buttons in its own tab bar; this is the same hook, and it is what proves
+// the bar leaves room for one.
+static El* RenderPanelSuffix(Ctx* cx, void* data) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    const DockPanelData* d = (const DockPanelData*)data;
+    El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(2)->PadX(4);
+    row->Child(IconEl(a, IconName::Info, 14)->Fg(th.mutedFg));
+    row->Child(IconEl(a, IconName::Search, 14)->Fg(th.mutedFg));
+    (void)d;
+    return row;
+}
+
 void DockStory::OnDockEvent(DockStory* self, Ctx* cx, const DockEvent*) {
     if (self->message.s) {
         StrFree(self->message);
@@ -94,6 +108,7 @@ static void Seed(DockStory* self, Ctx* cx) {
         def.name = Str(kPanels[i].name);
         def.title = Str(kPanels[i].title);
         def.render = RenderPanel;
+        def.titleSuffix = RenderPanelSuffix;
         def.data = &kPanels[i];
         panel[i] = DockAddPanelDef(s, def);
     }

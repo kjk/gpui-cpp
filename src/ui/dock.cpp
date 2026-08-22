@@ -246,6 +246,16 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     }
     strip->Child(rest);
     bar->Child(strip);
+    // `.children(panel.title_suffix(..))`: the active panel's own bar
+    // content, after the tabs and before the group's own buttons.
+    if (!collapsed && n.panel.len > 0) {
+        const DockPanelDef& def = s->panels[n.panel[n.activeIx]];
+        if (def.titleSuffix) {
+            if (El* suffix = def.titleSuffix(cx, def.data)) {
+                bar->Child(suffix->Shrink0());
+            }
+        }
+    }
     if (!collapsed && n.panel.len > 0 &&
         s->panels[n.panel[n.activeIx]].zoomable) {
         int panelIx = n.panel[n.activeIx];
