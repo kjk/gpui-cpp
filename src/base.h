@@ -417,17 +417,16 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
 // abandoned blocks are never reused. Segments never move, so a build is one
 // store per element and the only waste is the tail of the last segment.
 // Parsing 64 KB of markdown took 3257 KB of scratch arena the old way and
-// takes 1589 KB this way, in fewer allocations.
+// takes 1538 KB this way, in fewer allocations.
 //
 // Two things follow from segments never moving. A `T*` or a `T&` taken from
 // the vec stays good across an append, which the flat version could not
-// promise. And the elements are not contiguous, so there is no `els` to hand
-// to something that wants an array — `Flatten` is that, and it costs nothing
+// promise. And the elements are not contiguous, so there is no one array to
+// hand to something that wants one — `Flatten` is that, and it costs nothing
 // for a vec that never left its first segment, which is most of them.
 template <typename T>
 struct ArenaVecSegment {
     ArenaVecSegment<T>* next;
-    T* els;
     // The segment an index last landed in, for the walk `operator[]` would
     // otherwise start from the beginning every time. Only the first
     // segment's copy is used — it lives in the segment rather than in the
@@ -438,13 +437,26 @@ struct ArenaVecSegment {
     // with the cache in it would cost, changing nothing else, made the
     // markdown table benchmark 10% slower on its own.
     ArenaVecSegment<T>* cache;
-    // Index of `els[0]` in the vec: the sum of the lengths before this one.
+    // Index of this segment's first element in the vec: the sum of the
+    // lengths before it.
     int base;
     int len;
     // Only the last segment ever takes an append, so a capacity per segment
     // looks redundant — but `Truncate` makes an earlier segment the active
     // one again and has to know how much room it has.
     int cap;
+
+    // The elements sit right behind the header, in the same arena block, so
+    // where they are is an add on a pointer the caller already has rather
+    // than a field to store and load. The offset is a constant per T.
+    // A function and not a constant: inside its own definition the class is
+    // only complete in a member function body, and `sizeof` needs it.
+    static constexpr int HeaderSize() {
+        return ((int)sizeof(ArenaVecSegment<T>) + (int)alignof(T) - 1) &
+               ~((int)alignof(T) - 1);
+    }
+
+    T* Els() const { return (T*)((char*)(void*)this + HeaderSize()); }
 };
 
 // The first three segment sizes, then doubling. The progression started at
@@ -475,7 +487,7 @@ struct ArenaVec {
         // of two fields in the same cache line, and never writes.
         Segment* seg = first;
         if (seg == last) {
-            return seg->els[idx];
+            return seg->Els()[idx];
         }
         Segment* cached = seg->cache;
         if (cached && idx >= cached->base) {
@@ -491,7 +503,7 @@ struct ArenaVec {
         if (seg != cached) {
             first->cache = seg;
         }
-        return seg->els[idx - seg->base];
+        return seg->Els()[idx - seg->base];
     }
 
     bool Append(Arena* a, const T& el) {
@@ -502,7 +514,7 @@ struct ArenaVec {
                 return false;
             }
         }
-        seg->els[seg->len++] = el;
+        seg->Els()[seg->len++] = el;
         len++;
         return true;
     }
@@ -519,7 +531,7 @@ struct ArenaVec {
             int room = seg->cap - seg->len;
             int take = n < room ? n : room;
             for (int i = 0; i < take; i++) {
-                seg->els[seg->len + i] = src[i];
+                seg->Els()[seg->len + i] = src[i];
             }
             seg->len += take;
             len += take;
@@ -574,7 +586,7 @@ struct ArenaVec {
             return nullptr;
         }
         if (first == last) {
-            return first->els;
+            return first->Els();
         }
         T* out = (T*)ArenaVecAlloc(a, len, (int)sizeof(T), (int)alignof(T));
         if (!out) {
@@ -583,7 +595,7 @@ struct ArenaVec {
         int at = 0;
         for (Segment* s = first; s && at < len; s = s->next) {
             for (int i = 0; i < s->len; i++) {
-                out[at++] = s->els[i];
+                out[at++] = s->Els()[i];
             }
         }
         return out;
@@ -617,14 +629,13 @@ struct ArenaVec {
             cap = want;
         }
         int align = (int)alignof(T) > 8 ? (int)alignof(T) : 8;
-        int hdr = ((int)sizeof(Segment) + align - 1) & ~(align - 1);
-        void* mem = ArenaVecAlloc(a, cap, (int)sizeof(T), align, hdr);
+        void* mem =
+            ArenaVecAlloc(a, cap, (int)sizeof(T), align, Segment::HeaderSize());
         if (!mem) {
             return nullptr;
         }
         Segment* seg = (Segment*)mem;
         seg->next = nullptr;
-        seg->els = (T*)((char*)mem + hdr);
         seg->cache = nullptr;
         seg->base = len;
         seg->len = 0;
