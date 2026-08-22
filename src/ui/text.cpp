@@ -37,8 +37,9 @@ struct MdBuild {
 
 // A node's strings are ArenaStr — an offset into the arena the tree was
 // parsed into, which is the builder's own. This reads one back.
-static Str V(MdBuild* b, base::ArenaStr s) {
-    return md::NodeStr(b->a, s);
+// One of a node's strings, or an empty Str when it does not carry that one.
+static Str V(MdBuild* b, const md::Node* n, md::NodeStrKind k) {
+    return md::NodeGetStr(b->a, n, k);
 }
 
 static MdNode* Push(MdBuild* b, MdKind k) {
@@ -207,7 +208,7 @@ static Str MdDefUrl(MdBuild* b, Str identifier) {
 static void MdInlineNode(MdBuild* b, const md::Node* n) {
     switch (n->kind) {
         case md::NodeKind::Text:
-            AddText(b, V(b, n->value));
+            AddText(b, V(b, n, md::NodeStrKind::Value));
             break;
         case md::NodeKind::Emphasis:
             MdMarked(b, n, MdItalic);
@@ -222,7 +223,7 @@ static void MdInlineNode(MdBuild* b, const md::Node* n) {
         case md::NodeKind::InlineMath: {
             uint8_t saved = b->marks;
             b->marks = (uint8_t)(b->marks | MdCode);
-            AddText(b, V(b, n->value));
+            AddText(b, V(b, n, md::NodeStrKind::Value));
             b->marks = saved;
             break;
         }
@@ -236,30 +237,32 @@ static void MdInlineNode(MdBuild* b, const md::Node* n) {
         case md::NodeKind::LinkReference: {
             Str saved = b->href;
             b->href = n->kind == md::NodeKind::Link
-                          ? V(b, n->url)
-                          : MdDefUrl(b, V(b, n->identifier));
+                          ? V(b, n, md::NodeStrKind::Url)
+                          : MdDefUrl(b, V(b, n, md::NodeStrKind::Identifier));
             MdMarked(b, n, MdLink);
             b->href = saved;
             break;
         }
         case md::NodeKind::Image:
-            AddImage(b, V(b, n->url), V(b, n->alt), 0, 0);
+            AddImage(b, V(b, n, md::NodeStrKind::Url),
+                     V(b, n, md::NodeStrKind::Alt), 0, 0);
             break;
         case md::NodeKind::ImageReference:
-            AddImage(b, MdDefUrl(b, V(b, n->identifier)), V(b, n->alt), 0, 0);
+            AddImage(b, MdDefUrl(b, V(b, n, md::NodeStrKind::Identifier)),
+                     V(b, n, md::NodeStrKind::Alt), 0, 0);
             break;
         case md::NodeKind::FootnoteReference: {
             // markdown.rs renders the call as an italic `[id]`.
             uint8_t saved = b->marks;
             b->marks = (uint8_t)(b->marks | MdItalic);
             AddText(b, StrL("["));
-            AddText(b, V(b, n->identifier));
+            AddText(b, V(b, n, md::NodeStrKind::Identifier));
             AddText(b, StrL("]"));
             b->marks = saved;
             break;
         }
         case md::NodeKind::Html:
-            MdInlineHtml(b, V(b, n->value));
+            MdInlineHtml(b, V(b, n, md::NodeStrKind::Value));
             break;
         default:
             // Anything else is not inline content; Rust warns and drops it.
@@ -369,16 +372,17 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             Pop(b);
             break;
         case md::NodeKind::Code:
-            MdCodeBlock(b, V(b, n->value), V(b, n->lang));
+            MdCodeBlock(b, V(b, n, md::NodeStrKind::Value),
+                        V(b, n, md::NodeStrKind::Lang));
             break;
         case md::NodeKind::Math:
-            MdCodeBlock(b, V(b, n->value), {});
+            MdCodeBlock(b, V(b, n, md::NodeStrKind::Value), {});
             break;
         case md::NodeKind::Yaml:
-            MdCodeBlock(b, V(b, n->value), StrL("yml"));
+            MdCodeBlock(b, V(b, n, md::NodeStrKind::Value), StrL("yml"));
             break;
         case md::NodeKind::Toml:
-            MdCodeBlock(b, V(b, n->value), StrL("toml"));
+            MdCodeBlock(b, V(b, n, md::NodeStrKind::Value), StrL("toml"));
             break;
         case md::NodeKind::Table:
             MdTable(b, n);
@@ -387,7 +391,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             // The raw source of the block; MdExpandHtml below turns it into
             // children.
             Push(b, MdKind::Html);
-            AddText(b, V(b, n->value));
+            AddText(b, V(b, n, md::NodeStrKind::Value));
             Pop(b);
             break;
         case md::NodeKind::Break:
@@ -402,7 +406,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             uint8_t saved = b->marks;
             b->marks = (uint8_t)(b->marks | MdItalic);
             AddText(b, StrL("["));
-            AddText(b, V(b, n->identifier));
+            AddText(b, V(b, n, md::NodeStrKind::Identifier));
             AddText(b, StrL("]: "));
             b->marks = saved;
             for (const md::Node* c : md::NodeKids(b->a, n)) {
@@ -411,7 +415,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
                 if (md::NodeHasChildren(c->kind)) {
                     MdInline(b, c);
                 } else {
-                    AddText(b, V(b, c->value));
+                    AddText(b, V(b, c, md::NodeStrKind::Value));
                 }
             }
             Pop(b);
@@ -429,8 +433,8 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
 static void MdCollectDefs(MdBuild* b, const md::Node* n) {
     if (n->kind == md::NodeKind::Definition) {
         MdDef def;
-        def.identifier = V(b, n->identifier);
-        def.url = V(b, n->url);
+        def.identifier = V(b, n, md::NodeStrKind::Identifier);
+        def.url = V(b, n, md::NodeStrKind::Url);
         b->defs.Append(b->a, def);
         return;
     }

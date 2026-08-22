@@ -2178,3 +2178,52 @@ cargo run -p system_monitor
 
   Since the Str-per-node baseline: prose 1646 -> 484 KB, nested 1068 -> 234,
   tables 2926 -> 646, entities 660 -> 86, and a Node 144 -> 56 bytes.
+
+- 2026-08-22: A node's strings are a list in the arena, not eight fields.
+  Eight offsets was 32 of a 56-byte Node, and seven of them were unset on
+  nearly every node in a tree: a Text node carries a value and nothing else,
+  and most nodes carry nothing at all. One offset now, at a list of records:
+
+      [u32 next][u8 kind][varint len][len bytes][NUL]
+
+  `next` goes through memcpy — the records are byte-aligned, because rounding
+  each to four would give back what the varint and the packing saved, and a
+  misaligned load is the compiler's business to know about rather than ours
+  to risk. New records go on the head, so storing is O(1); the walk that
+  finds a kind is at most eight long and is nearly always one or none.
+
+  `NodeGetStr(a, n, kind)` reads, `NodeSetStr` stores, `NodeClearStr` takes
+  away, `NodeGrowStr` appends. Growing still happens in place while the
+  record is the newest thing in the arena, which is what a text node's value
+  arriving one Data event at a time depends on; it rebuilds at the end
+  otherwise, as ArenaStrAppend did.
+
+  **28 bytes, down from 56.** A stored string costs five bytes more than
+  before — the `next` and the `kind` — and a node that stores none saves 28.
+  Most store none, and none ever stored more than three.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose          483.9 KB   7.54x     358.3 KB   5.58x    -26.0%
+    nested         233.7 KB   3.65x     159.1 KB   2.48x    -31.9%
+    gfm tables     646.1 KB  10.08x     402.9 KB   6.29x    -37.6%
+    entities        86.1 KB   1.34x      73.7 KB   1.15x    -14.4%
+
+  Fastest of three runs either side: prose 8.37 -> 8.25 ms, nested 9.52 ->
+  9.28, tables 12.66 -> 12.58, entities 5.92 -> 5.79, `tokenize` 7.65 ->
+  7.62, `to_mdast` 0.307 -> 0.296. The list walk costs less than the smaller
+  nodes save.
+
+  One bug worth writing down, because the refactor looked mechanical and was
+  not. `TailMut(c)->url = Keep(c, NodeToString(c->a, Resume(c)))` became
+  `Keep(c, TailMut(c), Url, NodeToString(c->a, Resume(c)))` — and an
+  assignment sequences its right side first where the order two arguments are
+  evaluated in is the compiler's to choose. `Resume` pops the stack `TailMut`
+  reads. MSVC and Linux clang both went right to left and passed; Apple clang
+  on arm64 went left to right and the tests took a SIGSEGV with no output.
+  Seven sites, each now a statement of its own with a comment saying why.
+  Turning a field assignment into a setter call is where this lives.
+
+  Since the Str-per-node baseline: prose 1646 -> 358 KB, nested 1068 -> 159,
+  tables 2926 -> 403, entities 660 -> 74, and a Node 144 -> 28 bytes.

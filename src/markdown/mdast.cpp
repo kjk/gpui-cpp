@@ -38,9 +38,9 @@ bool NodeHasChildren(NodeKind kind) {
     }
 }
 
-// The value a node contributes to `NodeToString`: its own, or nothing when
-// its children are what it is made of.
-static ArenaStr NodeOwnValue(const Node* node) {
+// Whether a node's own value is what it contributes to `NodeToString`, or
+// whether its children are what it is made of.
+static bool NodeHasOwnValue(const Node* node) {
     switch (node->kind) {
         case NodeKind::Toml:
         case NodeKind::Yaml:
@@ -50,9 +50,9 @@ static ArenaStr NodeOwnValue(const Node* node) {
         case NodeKind::Text:
         case NodeKind::Code:
         case NodeKind::Math:
-            return node->value;
+            return true;
         default:
-            return kArenaStrNone;
+            return false;
     }
 }
 
@@ -66,7 +66,10 @@ static int32_t NodeToStringLen(Arena* a, const Node* node) {
         }
         return len;
     }
-    return (int32_t)base::ArenaStrLen(a, NodeOwnValue(node));
+    if (!NodeHasOwnValue(node)) {
+        return 0;
+    }
+    return NodeGetStrLen(a, node, NodeStrKind::Value);
 }
 
 static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
@@ -77,7 +80,8 @@ static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
         }
         return at;
     }
-    Str value = NodeStr(a, NodeOwnValue(node));
+    Str value = NodeHasOwnValue(node) ? NodeGetStr(a, node, NodeStrKind::Value)
+                                      : Str{};
     if (value.len > 0) {
         memcpy(out + at, value.s, (size_t)value.len);
         at += value.len;
@@ -96,6 +100,193 @@ Str NodeToString(Arena* a, const Node* node) {
     int32_t at = NodeToStringFill(a, node, out, 0);
     out[at] = 0;
     return Str(out, at);
+}
+
+// ─── a node's strings ────────────────────────────────────────────────────
+//
+// One record a string, in the arena the node is in:
+//
+//     [u32 next][u8 kind][varint len][len bytes][NUL]
+//
+// `next` is read and written through memcpy: the records are byte-aligned,
+// because rounding each one up to four would give back what the varint and
+// the packing just saved, and a misaligned load is the compiler's business
+// to know about rather than ours to risk.
+
+constexpr int32_t kRecNext = 0;
+constexpr int32_t kRecKind = 4;
+constexpr int32_t kRecLen = 5;
+
+static char* RecAt(Arena* a, ArenaStr off) {
+    return off == kArenaStrNone ? nullptr : (char*)base::ArenaAtOffset(a, off);
+}
+
+static ArenaStr RecNext(const char* rec) {
+    ArenaStr next = kArenaStrNone;
+    memcpy(&next, rec + kRecNext, sizeof(next));
+    return next;
+}
+
+static void RecSetNext(char* rec, ArenaStr next) {
+    memcpy(rec + kRecNext, &next, sizeof(next));
+}
+
+// The bytes, and where the length that measures them was written.
+static Str RecStr(const char* rec, int32_t* headOut = nullptr) {
+    uint32_t len = 0;
+    int32_t head = kRecLen + base::VarintGet(rec + kRecLen, &len);
+    if (headOut) {
+        *headOut = head;
+    }
+    return Str((char*)rec + head, (int32_t)len);
+}
+
+// The record of this kind, and the one naming it — which a walk has to keep
+// hold of, because taking a record out of the list is the predecessor's
+// `next` and there is no way back to it.
+static char* FindRec(Arena* a, const Node* n, NodeStrKind k, char** prevOut) {
+    char* prev = nullptr;
+    for (ArenaStr at = n->firstStr; at != kArenaStrNone;) {
+        char* rec = RecAt(a, at);
+        if (!rec) {
+            break;
+        }
+        if ((NodeStrKind)(uint8_t)rec[kRecKind] == k) {
+            if (prevOut) {
+                *prevOut = prev;
+            }
+            return rec;
+        }
+        prev = rec;
+        at = RecNext(rec);
+    }
+    if (prevOut) {
+        *prevOut = nullptr;
+    }
+    return nullptr;
+}
+
+// A record with room for `len` bytes, written into the list's head. The
+// bytes themselves are the caller's to fill.
+static char* RecNew(Arena* a, Node* n, NodeStrKind k, uint32_t len,
+                    int32_t* headOut) {
+    int32_t head = kRecLen + base::VarintSize(len);
+    // Byte-aligned, like the strings themselves: rounding a record up to
+    // four would give back what the varint saved.
+    char* rec = (char*)a->Push((uint64_t)head + len + 1, 1, false);
+    if (!rec) {
+        return nullptr;
+    }
+    ArenaStr at = (ArenaStr)base::ArenaOffsetOf(a, rec);
+    RecSetNext(rec, n->firstStr);
+    rec[kRecKind] = (char)(uint8_t)k;
+    base::VarintPut(rec + kRecLen, len);
+    rec[head + len] = 0;
+    n->firstStr = at;
+    *headOut = head;
+    return rec;
+}
+
+Str NodeGetStr(Arena* a, const Node* n, NodeStrKind k) {
+    char* rec = FindRec(a, n, k, nullptr);
+    return rec ? RecStr(rec) : Str{};
+}
+
+int32_t NodeGetStrLen(Arena* a, const Node* n, NodeStrKind k) {
+    char* rec = FindRec(a, n, k, nullptr);
+    return rec ? RecStr(rec).len : 0;
+}
+
+bool NodeHasStr(Arena* a, const Node* n, NodeStrKind k) {
+    return FindRec(a, n, k, nullptr) != nullptr;
+}
+
+void NodeClearStr(Arena* a, Node* n, NodeStrKind k) {
+    char* prev = nullptr;
+    char* rec = FindRec(a, n, k, &prev);
+    if (!rec) {
+        return;
+    }
+    // The record stays where it is; nothing here frees. The node stops
+    // naming it, which is all "unset" ever meant.
+    if (prev) {
+        RecSetNext(prev, RecNext(rec));
+    } else {
+        n->firstStr = RecNext(rec);
+    }
+}
+
+void NodeSetStr(Arena* a, Node* n, NodeStrKind k, Str s) {
+    if (!a || !n) {
+        return;
+    }
+    NodeClearStr(a, n, k);
+    if (!s.s || s.len <= 0) {
+        return;
+    }
+    int32_t head = 0;
+    char* rec = RecNew(a, n, k, (uint32_t)s.len, &head);
+    if (rec) {
+        memcpy(rec + head, s.s, (size_t)s.len);
+    }
+}
+
+void NodeGrowStr(Arena* a, Node* n, NodeStrKind k, Str more) {
+    if (!a || !n || !more.s || more.len <= 0) {
+        return;
+    }
+    char* prev = nullptr;
+    char* rec = FindRec(a, n, k, &prev);
+    if (!rec) {
+        NodeSetStr(a, n, k, more);
+        return;
+    }
+
+    int32_t head = 0;
+    Str had = RecStr(rec, &head);
+    uint32_t nlen = (uint32_t)had.len + (uint32_t)more.len;
+    int32_t nhead = kRecLen + base::VarintSize(nlen);
+
+    uint64_t used = base::ArenaUsed(a);
+    uint64_t end = (uint64_t)base::ArenaOffsetOf(a, rec) + (uint64_t)head +
+                   (uint64_t)had.len + 1;
+    // The newest record in the arena grows where it stands: the terminator's
+    // own byte is already ours, so only the difference is asked for. A
+    // length that has outgrown its varint asks for that byte as well.
+    bool newest = end == used;
+    uint64_t want = newest ? (uint64_t)(nhead - head) + (uint64_t)more.len
+                           : (uint64_t)nhead + nlen + 1;
+    char* dst = (char*)a->Push(want, 1, false);
+    if (!dst) {
+        return;
+    }
+    uint64_t at = base::ArenaOffsetOf(a, dst);
+
+    // A push that chained onto a new block is not contiguous after all.
+    if (newest && at == used) {
+        if (nhead != head) {
+            memmove(rec + nhead, rec + head, (size_t)had.len);
+        }
+        base::VarintPut(rec + kRecLen, nlen);
+        memcpy(rec + nhead + had.len, more.s, (size_t)more.len);
+        rec[nhead + nlen] = 0;
+        return;
+    }
+
+    // Somewhere else: the record is rebuilt at the end and the old one taken
+    // out of the list, which is what concatenating always did.
+    dst[kRecKind] = (char)(uint8_t)k;
+    base::VarintPut(dst + kRecLen, nlen);
+    memcpy(dst + nhead, had.s, (size_t)had.len);
+    memcpy(dst + nhead + had.len, more.s, (size_t)more.len);
+    dst[nhead + nlen] = 0;
+    if (prev) {
+        RecSetNext(prev, RecNext(rec));
+    } else {
+        n->firstStr = RecNext(rec);
+    }
+    RecSetNext(dst, n->firstStr);
+    n->firstStr = (ArenaStr)at;
 }
 
 // ─── a Table's alignments ────────────────────────────────────────────────
