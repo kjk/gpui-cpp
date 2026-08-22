@@ -1958,3 +1958,25 @@ cargo run -p system_monitor
   Since the Str-per-node baseline four entries ago: prose 1646 -> 918 KB,
   nested 1068 -> 512, tables 2926 -> 1544, entities 660 -> 128. The entity
   shape is 2.00x its source, where it was 10.28x.
+
+- 2026-08-22: `start` and `depth` are one field. A List's `start` and a
+  Heading's `depth` are set by different constructs on different kinds and
+  read by different branches; no node is ever both, so they are one
+  `uint32_t startOrDepth` and `kind` says which of the two a given node
+  means.
+
+  **It does not make the Node smaller, and the arithmetic says why.** Three
+  24-byte members and eight 4-byte strings is 104; the number makes 108; the
+  three remaining single bytes make 111; and the ArenaVecs align the struct
+  to 8, so it is 112 either way. The byte the fusing freed went into the tail
+  padding rather than off the end. `sizeof(Node)` is 112 before and after,
+  the four shapes' arena figures are identical to the byte — 918.0 / 512.3 /
+  1543.6 / 128.5 KB — and the times are where they were: prose
+  8.55/8.74/8.52 -> 8.77/9.09/8.63 ms, nested 9.72/9.87/9.63 ->
+  9.55/9.91/9.50, tables 13.20/12.90/12.97 -> 13.27/13.41/13.41, entities
+  5.93/5.88/5.93 -> 5.90/6.10/5.83, `tokenize` 7.62/7.78/7.77 ->
+  7.71/8.09/7.65.
+
+  What it buys is the invariant written down instead of assumed, and one
+  single-byte field's worth of room for free: the next flag or small enum
+  fits in the padding, where before it would have cost eight bytes a node.
