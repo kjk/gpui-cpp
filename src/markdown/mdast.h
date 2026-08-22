@@ -82,6 +82,29 @@ enum class AlignKind : uint8_t {
     None,
 };
 
+// A Table's column alignments, which is the one list a node holds that is
+// not a list of nodes: a count and two bits a column, in one arena
+// allocation the node names by offset.
+//
+//     [varint count][2 bits a column, four to a byte, lowest bits first]
+//
+// A vector of them was 24 bytes in every node for something only Tables
+// have, and a byte a column in an arena segment of its own. This is four
+// bytes in the node and, for the eight-column table that is already wide,
+// three bytes in the arena: one for the count, two for the columns. The
+// whole list is known at the moment the table is entered, so it is counted,
+// allocated once and filled — a vector's growth was never needed.
+using ArenaAlign = uint32_t;
+constexpr ArenaAlign kArenaAlignNone = 0;
+
+static_assert((int)AlignKind::None < 4, "an alignment has to fit in 2 bits");
+
+// `count` columns, all of them AlignKind::Left until set.
+ArenaAlign ArenaAlignNew(Arena* a, int32_t count);
+int32_t ArenaAlignCount(Arena* a, ArenaAlign al);
+AlignKind ArenaAlignAt(Arena* a, ArenaAlign al, int32_t i);
+void ArenaAlignSet(Arena* a, ArenaAlign al, int32_t i, AlignKind k);
+
 // mdast.rs Node, one variant per member. MdxJsxFlowElement, MdxJsxTextElement,
 // MdxjsEsm, MdxFlowExpression and MdxTextExpression are not here: the MDX
 // constructs are not ported.
@@ -137,14 +160,16 @@ enum NodeFlag : uint8_t {
     NodeHasChecked = 1 << 5,
 };
 
-// The fields are ordered largest first: the one 24-byte member, then the
-// eight strings and the four offsets at four bytes each, then the length and
-// three single bytes, with three of tail padding. 80 bytes, where the order
-// they were written in with a Str per string, a child vector and a full
-// unist Position cost 256.
+// Everything in here is four bytes or fewer now, so the order is the eight
+// strings and the five offsets, then the length and three single bytes with
+// three of padding behind them. 60 bytes, where the order they were written
+// in with a Str per string, a child vector, an alignment vector and a full
+// unist Position cost 256 — and where holding one pointer would put the
+// whole struct back on an eight-byte alignment.
 struct Node {
-    // Table.
-    ArenaVec<AlignKind> align = {};
+    // Table: the column alignments, or `kArenaAlignNone`.
+    // `ArenaAlignAt(a, n->align, col)` reads one.
+    ArenaAlign align = kArenaAlignNone;
 
     // The children, as a ring rather than a vector. `lastKid` is the last of
     // them and every child points at the one after it, the last one back at
@@ -230,13 +255,13 @@ struct Node {
     }
 };
 
-// The packing is the point, so it is checked rather than hoped for: one
-// 24-byte member, eight 4-byte strings, four 4-byte offsets, the 2-byte
-// length and three single bytes, rounded up to the 8 the ArenaVec aligns
-// to. Three bytes of that last 8 are padding — three more single-byte
-// fields, or one more 2-byte one, would cost nothing, where a field put
-// anywhere else costs eight a node and would otherwise go unnoticed.
-static_assert(sizeof(Node) == 24 + (8 + 4) * 4 + 8,
+// The packing is the point, so it is checked rather than hoped for: eight
+// 4-byte strings, five 4-byte offsets, the 2-byte length and three single
+// bytes, rounded up to the 4 everything in here now aligns to. Three bytes
+// of that last 8 are padding — three more single-byte fields, or one more
+// 2-byte one, would cost nothing, where a field of eight bytes would cost
+// eight more than itself and would otherwise go unnoticed.
+static_assert(sizeof(Node) == (8 + 5) * 4 + 8,
               "Node has picked up padding; order the fields largest first");
 
 // The longest span a node can name. A node that runs further reports this,

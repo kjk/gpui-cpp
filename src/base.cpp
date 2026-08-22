@@ -320,7 +320,7 @@ static Arena* ArenaBlockAt(Arena* arena, uint64_t pos) {
 // The length, ahead of the bytes, in as few of them as it fits: seven bits
 // to a byte, low bits first, the high bit saying another follows. Under 128
 // characters is one byte, which is nearly every string anything here stores.
-static int VarintSize(uint32_t v) {
+int VarintSize(uint32_t v) {
     int n = 1;
     while (v >= 0x80) {
         v >>= 7;
@@ -329,7 +329,7 @@ static int VarintSize(uint32_t v) {
     return n;
 }
 
-static int VarintPut(char* dst, uint32_t v) {
+int VarintPut(char* dst, uint32_t v) {
     int n = 0;
     while (v >= 0x80) {
         dst[n++] = (char)(v | 0x80);
@@ -339,7 +339,7 @@ static int VarintPut(char* dst, uint32_t v) {
     return n;
 }
 
-static int VarintGet(const char* src, uint32_t* out) {
+int VarintGet(const char* src, uint32_t* out) {
     uint32_t v = 0;
     int shift = 0;
     int n = 0;

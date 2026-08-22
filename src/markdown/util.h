@@ -170,8 +170,10 @@ Str NormalizeIdentifier(Arena* a, Str value);
 
 bool ListLoose(const Vec<Event>& events, int32_t index, bool includeItems);
 bool ListItemLoose(const Vec<Event>& events, int32_t index);
-void GfmTableAlign(const Vec<Event>& events, int32_t index, Arena* a,
-                   ArenaVec<AlignKind>* out);
+// The delimiter row read twice: once to count the columns, once to fill in
+// the one allocation that holds them. Nothing in between allocates, so the
+// second walk is over the same events with the answers already known.
+ArenaAlign GfmTableAlign(const Vec<Event>& events, int32_t index, Arena* a);
 
 // ─── util/character_reference.rs ─────────────────────────────────────────
 

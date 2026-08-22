@@ -98,6 +98,69 @@ Str NodeToString(Arena* a, const Node* node) {
     return Str(out, at);
 }
 
+// ─── a Table's alignments ────────────────────────────────────────────────
+
+// Both halves at once: how many columns, and the bytes their codes live in
+// one past the count — which has to be decoded to know where that is, the
+// price of not spending four bytes on it.
+static uint8_t* AlignAt(Arena* a, ArenaAlign al, int32_t* count) {
+    *count = 0;
+    if (al == kArenaAlignNone) {
+        return nullptr;
+    }
+    char* p = (char*)base::ArenaAtOffset(a, al);
+    if (!p) {
+        return nullptr;
+    }
+    uint32_t n = 0;
+    int head = base::VarintGet(p, &n);
+    *count = (int32_t)n;
+    return (uint8_t*)p + head;
+}
+
+ArenaAlign ArenaAlignNew(Arena* a, int32_t count) {
+    if (!a || count <= 0) {
+        return kArenaAlignNone;
+    }
+    int32_t head = base::VarintSize((uint32_t)count);
+    int32_t bytes = (count + 3) / 4;
+    // Byte-aligned, like a string: the block is a count and some bits, and
+    // rounding it up to eight would give back what the varint just saved.
+    char* mem = (char*)a->Push((uint64_t)(head + bytes), 1, false);
+    if (!mem) {
+        return kArenaAlignNone;
+    }
+    memset(mem, 0, (size_t)(head + bytes));
+    base::VarintPut(mem, (uint32_t)count);
+    return (ArenaAlign)base::ArenaOffsetOf(a, mem);
+}
+
+int32_t ArenaAlignCount(Arena* a, ArenaAlign al) {
+    int32_t count = 0;
+    AlignAt(a, al, &count);
+    return count;
+}
+
+AlignKind ArenaAlignAt(Arena* a, ArenaAlign al, int32_t i) {
+    int32_t count = 0;
+    uint8_t* bits = AlignAt(a, al, &count);
+    if (!bits || i < 0 || i >= count) {
+        return AlignKind::None;
+    }
+    return (AlignKind)((bits[i / 4] >> ((i % 4) * 2)) & 3);
+}
+
+void ArenaAlignSet(Arena* a, ArenaAlign al, int32_t i, AlignKind k) {
+    int32_t count = 0;
+    uint8_t* bits = AlignAt(a, al, &count);
+    if (!bits || i < 0 || i >= count) {
+        return;
+    }
+    int32_t shift = (i % 4) * 2;
+    uint8_t was = (uint8_t)(bits[i / 4] & ~(3 << shift));
+    bits[i / 4] = (uint8_t)(was | (((uint8_t)k & 3) << shift));
+}
+
 // Walking the source once, by the tokenizer's own rules — see the header for
 // which of them matter. The two offsets are visited in the one pass, so a
 // position costs a scan of the source up to its end and nothing per node.

@@ -308,8 +308,8 @@ static void MdTable(MdBuild* b, const md::Node* n) {
             }
             int32_t column = cellIndex++;
             MdNode* c = Push(b, MdKind::Cell);
-            if (column < n->align.len) {
-                switch (n->align[column]) {
+            if (column < md::ArenaAlignCount(b->a, n->align)) {
+                switch (md::ArenaAlignAt(b->a, n->align, column)) {
                     case md::AlignKind::Left:
                         c->align = MdAlignLeft;
                         break;
