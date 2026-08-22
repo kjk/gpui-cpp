@@ -690,7 +690,10 @@ bool CharacterReferenceValueTest(uint8_t marker, uint8_t byte) {
     return IsAsciiDigit(byte);
 }
 
-Str DecodeNamed(Arena* a, Str name) {
+// The table entry for a name, or null. The value is a NUL-terminated run in
+// `kCharacterReferenceValues`, which outlives every caller — so a caller that
+// wants it in an arena copies it and one that does not need not.
+static const char* NamedValue(Str name) {
     // The table is sorted by name, so this is a binary search where Rust
     // walks the 2125 entries with `find`.
     int32_t lo = 0;
@@ -710,15 +713,21 @@ Str DecodeNamed(Arena* a, Str name) {
         } else if (cmp > 0) {
             hi = mid - 1;
         } else {
-            const char* value =
-                kCharacterReferenceValues + kCharacterReferences[mid].valueOff;
-            return StrOwn(a, value, (int32_t)strlen(value));
+            return kCharacterReferenceValues +
+                   kCharacterReferences[mid].valueOff;
         }
     }
-    return {};
+    return nullptr;
 }
 
-Str DecodeNumeric(Arena* a, Str value, int radix) {
+Str DecodeNamed(Arena* a, Str name) {
+    const char* value = NamedValue(name);
+    return value ? StrOwn(a, value, (int32_t)strlen(value)) : Str{};
+}
+
+// The codepoint a numeric reference names, already through the crate's own
+// rules about what is not one.
+static uint32_t DecodeNumericCp(Str value, int radix) {
     uint32_t cp = 0;
     bool overflow = false;
     for (int32_t i = 0; i < value.len; i++) {
@@ -742,9 +751,24 @@ Str DecodeNumeric(Arena* a, Str value, int radix) {
     bool bad = overflow || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ||
                cp <= 0x08 || cp == 0x0b || (cp >= 0x0e && cp <= 0x1f) ||
                (cp >= 0x7f && cp <= 0x9f);
+    return bad ? 0xfffd : cp;
+}
+
+Str DecodeNumeric(Arena* a, Str value, int radix) {
     char buf[4];
-    int32_t n = Utf8Encode(buf, bad ? 0xfffd : cp);
+    int32_t n = Utf8Encode(buf, DecodeNumericCp(value, radix));
     return StrOwn(a, buf, n);
+}
+
+// The two decoders without the copy: `DecodeNamed` finds a NUL-terminated
+// run in the static table, and `DecodeNumeric` encodes one codepoint.
+Str CharacterReferenceDecodeInto(char buf[4], Str value, uint8_t marker) {
+    if (marker == '#' || marker == 'x') {
+        uint32_t cp = DecodeNumericCp(value, marker == '#' ? 10 : 16);
+        return Str(buf, Utf8Encode(buf, cp));
+    }
+    const char* found = NamedValue(value);
+    return found ? Str((char*)found, (int32_t)strlen(found)) : Str{};
 }
 
 Str CharacterReferenceDecode(Arena* a, Str value, uint8_t marker) {

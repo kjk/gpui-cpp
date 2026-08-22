@@ -305,6 +305,23 @@ ArenaStr ArenaStrDup(Arena* a, Str src);
 // places that can avoid a copy rather than the general case.
 ArenaStr ArenaStrRef(Arena* a, Str s);
 
+// Growing one. A string built a piece at a time — a text node's value, an
+// autolink's URL — costs only the bytes appended, so long as it is still the
+// newest thing in the arena: `more` is pushed straight onto its end and the
+// length grows in place.
+//
+// That is the case worth having. Concatenating instead copies the whole
+// accumulated value every time, so a value built from N pieces leaves N-1
+// dead copies behind and costs O(total^2 / piece) bytes of arena. When the
+// string is not the newest — something else allocated in between — this
+// falls back to exactly that copy, so it is never wrong, only sometimes no
+// better.
+//
+// The terminator is what makes the in-place path fit: the byte holding it is
+// already the string's, so `more.len` new bytes are room for `more.len`
+// characters and a new terminator.
+ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more);
+
 // Reading one back. The Str points into the arena and lives exactly as long
 // as the arena's contents do.
 Str ArenaStrGet(Arena* a, ArenaStr s);
