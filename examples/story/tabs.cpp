@@ -251,8 +251,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                        ->Compact()
                        ->OnClick(Listen(cx, &RemoveDynamicTab))
                        ->IntoEl());
-    El* dynCol = Div(a)->FlexCol()->W(kFill)->Gap(8);
-    dynCol->Child(actions);
+    StorySectionAdd(dynamic, actions);
     El* dynBar = Div(a)
                      ->FlexRow()
                      ->W(kFill)
@@ -284,8 +283,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                      ->IntoEl());
         dynBar->Child(t);
     }
-    dynCol->Child(dynBar);
-    StorySectionAdd(dynamic, dynCol);
+    StorySectionAdd(dynamic, dynBar);
     page->Child(dynamic);
 
     // Filling Space: two segmented tabs. The section says they share the

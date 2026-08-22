@@ -74,8 +74,8 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     El* vars = StorySection(
         cx, "Variants", "Ghost and outline treatments for different surfaces.");
     StorySectionBody(vars)->W(512)->FlexCol()->ItemsCenter()->Gap(16);
-    El* varsCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    varsCol->Child(StoryTxt(cx, StrL("Ghost"), 14, th.foreground)->Medium());
+    StorySectionAdd(vars, StoryTxt(cx, StrL("Ghost"), 14, th.foreground)
+                              ->Medium());
     El* ghost = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
     ghost->Child(ToggleChip(cx, onToggle, 1, nullptr, IconName::Bell,
                             self->toggles[1], false));
@@ -83,9 +83,9 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
                             self->toggles[2], false));
     ghost->Child(ToggleChip(cx, onToggle, 3, nullptr, IconName::Check,
                             self->toggles[3], false));
-    varsCol->Child(ghost);
-    varsCol
-        ->Child(StoryTxt(cx, StrL("Outline"), 14, th.foreground)->Medium());
+    StorySectionAdd(vars, ghost);
+    StorySectionAdd(vars, StoryTxt(cx, StrL("Outline"), 14, th.foreground)
+                              ->Medium());
     El* outline = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
     outline->Child(ToggleChip(cx, onToggle, 4, nullptr, IconName::Bell,
                               self->toggles[4], true));
@@ -93,8 +93,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
                               self->toggles[5], true));
     outline->Child(ToggleChip(cx, onToggle, 6, nullptr, IconName::Check,
                               self->toggles[6], true));
-    varsCol->Child(outline);
-    StorySectionAdd(vars, varsCol);
+    StorySectionAdd(vars, outline);
     page->Child(vars);
 
     El* grp = StorySection(cx, "Group",

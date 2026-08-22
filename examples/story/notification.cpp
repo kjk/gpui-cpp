@@ -253,55 +253,55 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
 
     El* types = StorySection(cx, "Types",
                              "Use semantic treatments for common outcomes.");
-    El* typeRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->Wrap();
-    typeRow->Child(component::Button::New(cx, StrL("show-notify-info"))
-                       ->OnClick(Listen(cx, &ShowNotify, 1))
-                       ->Info()
-                       ->Label(StrL("Info"))
-                       ->IntoEl());
-    typeRow->Child(component::Button::New(cx, StrL("show-notify-success"))
-                       ->OnClick(Listen(cx, &ShowNotify, 2))
-                       ->Success()
-                       ->Label(StrL("Success"))
-                       ->IntoEl());
-    typeRow->Child(component::Button::New(cx, StrL("show-notify-warning"))
-                       ->OnClick(Listen(cx, &ShowNotify, 3))
-                       ->Warning()
-                       ->Label(StrL("Warning"))
-                       ->IntoEl());
-    typeRow->Child(component::Button::New(cx, StrL("show-notify-error"))
-                       ->OnClick(Listen(cx, &ShowNotify, 4))
-                       ->Danger()
-                       ->Label(StrL("Error"))
-                       ->IntoEl());
-    StorySectionAdd(types, typeRow);
+    StorySectionAdd(types, component::Button::New(cx, StrL("show-notify-info"))
+                               ->OnClick(Listen(cx, &ShowNotify, 1))
+                               ->Info()
+                               ->Label(StrL("Info"))
+                               ->IntoEl());
+    StorySectionAdd(types,
+                    component::Button::New(cx, StrL("show-notify-success"))
+                        ->OnClick(Listen(cx, &ShowNotify, 2))
+                        ->Success()
+                        ->Label(StrL("Success"))
+                        ->IntoEl());
+    StorySectionAdd(types,
+                    component::Button::New(cx, StrL("show-notify-warning"))
+                        ->OnClick(Listen(cx, &ShowNotify, 3))
+                        ->Warning()
+                        ->Label(StrL("Warning"))
+                        ->IntoEl());
+    StorySectionAdd(types, component::Button::New(cx, StrL("show-notify-error"))
+                               ->OnClick(Listen(cx, &ShowNotify, 4))
+                               ->Danger()
+                               ->Label(StrL("Error"))
+                               ->IntoEl());
     page->Child(types);
 
     El* titled = StorySection(cx, "Title and description",
                               "Pair a concise title with supporting detail.");
     // One button per type, as the story has.
-    El* titledRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
-    titledRow->Child(component::Button::New(cx, StrL("show-typed-info"))
-                         ->OnClick(Listen(cx, &ShowNotify, 5))
-                         ->Info()
-                         ->Label(StrL("Info"))
-                         ->IntoEl());
-    titledRow->Child(component::Button::New(cx, StrL("show-typed-success"))
-                         ->OnClick(Listen(cx, &ShowNotify, 6))
-                         ->Success()
-                         ->Label(StrL("Success"))
-                         ->IntoEl());
-    titledRow->Child(component::Button::New(cx, StrL("show-typed-warning"))
-                         ->OnClick(Listen(cx, &ShowNotify, 7))
-                         ->Warning()
-                         ->Label(StrL("Warning"))
-                         ->IntoEl());
-    titledRow->Child(component::Button::New(cx, StrL("show-typed-error"))
-                         ->OnClick(Listen(cx, &ShowNotify, 8))
-                         ->Danger()
-                         ->Label(StrL("Error"))
-                         ->IntoEl());
-    StorySectionAdd(titled, titledRow);
+    StorySectionAdd(titled, component::Button::New(cx, StrL("show-typed-info"))
+                                ->OnClick(Listen(cx, &ShowNotify, 5))
+                                ->Info()
+                                ->Label(StrL("Info"))
+                                ->IntoEl());
+    StorySectionAdd(titled,
+                    component::Button::New(cx, StrL("show-typed-success"))
+                        ->OnClick(Listen(cx, &ShowNotify, 6))
+                        ->Success()
+                        ->Label(StrL("Success"))
+                        ->IntoEl());
+    StorySectionAdd(titled,
+                    component::Button::New(cx, StrL("show-typed-warning"))
+                        ->OnClick(Listen(cx, &ShowNotify, 7))
+                        ->Warning()
+                        ->Label(StrL("Warning"))
+                        ->IntoEl());
+    StorySectionAdd(titled, component::Button::New(cx, StrL("show-typed-error"))
+                                ->OnClick(Listen(cx, &ShowNotify, 8))
+                                ->Danger()
+                                ->Label(StrL("Error"))
+                                ->IntoEl());
     page->Child(titled);
 
     El* unique =
@@ -355,17 +355,15 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     El* place = StorySection(cx, "Placement per notification",
                              "Override the global placement for a single "
                              "notification.");
-    El* anchorRow = Div(a)->FlexRow()->FlexWrap()->Gap(8)->ItemsCenter();
     for (int i = 0; i < kNAnchors; i++) {
-        anchorRow
-            ->Child(component::Button::New(
-                        cx, StoryFmt(cx, "show-notify-%s", kAnchorNames[i]))
-                        ->OnClick(Listen(cx, &ShowNotify, 30 + i))
-                        ->Outline()
-                        ->Label(Str(kAnchorNames[i]))
-                        ->IntoEl());
+        StorySectionAdd(place,
+                        component::Button::New(
+                            cx, StoryFmt(cx, "show-notify-%s", kAnchorNames[i]))
+                            ->OnClick(Listen(cx, &ShowNotify, 30 + i))
+                            ->Outline()
+                            ->Label(Str(kAnchorNames[i]))
+                            ->IntoEl());
     }
-    StorySectionAdd(place, anchorRow);
     page->Child(place);
 
     // Custom content: markdown the application owns.
@@ -383,18 +381,18 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
     El* manual = StorySection(cx, "Manual close",
                               "Keep a notification visible until it is "
                               "dismissed.");
-    El* manualRow = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    manualRow->Child(component::Button::New(cx, StrL("manual-open-notify"))
-                         ->OnClick(Listen(cx, &ShowNotify, 41))
-                         ->Outline()
-                         ->Label(StrL("Show"))
-                         ->IntoEl());
-    manualRow->Child(component::Button::New(cx, StrL("manual-close-notify"))
-                         ->OnClick(Listen(cx, &DismissAll))
-                         ->Outline()
-                         ->Label(StrL("Dismiss All"))
-                         ->IntoEl());
-    StorySectionAdd(manual, manualRow);
+    StorySectionAdd(manual,
+                    component::Button::New(cx, StrL("manual-open-notify"))
+                        ->OnClick(Listen(cx, &ShowNotify, 41))
+                        ->Outline()
+                        ->Label(StrL("Show"))
+                        ->IntoEl());
+    StorySectionAdd(manual,
+                    component::Button::New(cx, StrL("manual-close-notify"))
+                        ->OnClick(Listen(cx, &DismissAll))
+                        ->Outline()
+                        ->Label(StrL("Dismiss All"))
+                        ->IntoEl());
     page->Child(manual);
     // The stack itself, over the window in whichever corner its placement
     // names — what Root renders in Rust.

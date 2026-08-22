@@ -417,9 +417,8 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
         ->Bg(th.tokens.tabActiveBg)
         ->Opacity(0.75f)
         // DragPanel names no size, so the drag preview reads at the base.
-        ->Child(TextEl(a, s->panels[panelIx].title)
-                    ->Fg(th.tabFg)
-                    ->LineHeight(1.f))
+        ->Child(
+            TextEl(a, s->panels[panelIx].title)->Fg(th.tabFg)->LineHeight(1.f))
         ->Deferred();
 }
 

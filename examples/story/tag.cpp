@@ -124,7 +124,11 @@ El* TagStory::Render(TagStory* self, Ctx* cx) {
     // ColorName::all() minus Gray, as Tag::color paints each of them.
     El* colors = StorySection(cx, "Colors", nullptr);
     StorySectionBody(colors)->W(640);
+    // v_flex().w_full().gap_4() around one h_flex().w_full().gap_2()
+    // .flex_wrap() of every colour.
+    El* ccol = Div(a)->FlexCol()->W(kFill)->Gap(16);
     El* crow = Div(a)->FlexRow()->W(kFill)->Gap(8)->FlexWrap();
+    ccol->Child(crow);
     for (int i = 0; i < kNTagColors; i++) {
         crow->Child(component::Tag::New(cx, Str(kTagColors[i].name))
                         ->Custom(kTagColors[i].bg, kTagColors[i].fg,
@@ -132,7 +136,7 @@ El* TagStory::Render(TagStory* self, Ctx* cx) {
                         ->WithSize(self->toolbar.size)
                         ->IntoEl());
     }
-    StorySectionAdd(colors, crow);
+    StorySectionAdd(colors, ccol);
     page->Child(colors);
     return page;
 }
