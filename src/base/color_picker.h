@@ -11,8 +11,13 @@ namespace gpui {
 // and the value otherwise.
 //
 // The rest of the state is an open flag, an active tab, a hex field and four
-// HSLA sliders — and those sliders are SliderStates, which are already ported,
-// so a picker builds them rather than this doing it again.
+// HSLA sliders. Those last two are here rather than in the themed widget for
+// the reason they are in Rust: the panel is rebuilt every frame and the thumb
+// the pointer is dragging has to survive it.
+//
+// A picker's state is an entity, the way `Entity<ColorPickerState>` is, so the
+// widget can bind its own handlers to it — `component::ColorPickerStateFor`
+// is what hands one out.
 struct ColorPickerState {
     uint32_t value = 0;
     bool hasValue = false;
@@ -20,6 +25,32 @@ struct ColorPickerState {
     bool hasPreview = false;
     bool open = false;
     int activeTab = 0;
+    // HslaSliders: hue, saturation, lightness and alpha, each 0..1 in steps
+    // of 0.01, which is what `HslaSliders::new` builds.
+    SliderState sliders[4] = {};
+    InputState hexInput;
+    // needs_slider_sync: a value handed in before the first render has not
+    // reached the sliders or the field yet. `ColorPickerSyncPending` is the
+    // render-time flush.
+    bool needsSliderSync = true;
+    // The view's own listener, told the committed color as its argument.
+    // Rust emits ColorPickerEvent::Change and the view subscribes.
+    Listener onChange = {};
+
+    ColorPickerState();
+
+    // Handlers the themed picker binds to. They are here because the state is
+    // the entity — a widget rebuilt every frame has nothing to bind to.
+    static void OnToggleOpen(ColorPickerState* s, Ctx* cx, const ClickEvent*);
+    static void OnTab(ColorPickerState* s, Ctx* cx, const ClickEvent*,
+                      intptr_t ix);
+    static void OnSwatchClick(ColorPickerState* s, Ctx* cx, const ClickEvent*,
+                              intptr_t hex);
+    static void OnSwatchHover(ColorPickerState* s, Ctx* cx,
+                              const HoverEvent* ev, intptr_t hex);
+    static void OnSlider(ColorPickerState* s, Ctx* cx, const SliderEvent*);
+    static void OnHexChange(ColorPickerState* s, Ctx* cx, const InputEvent* ev);
+    static void OnHexFocus(ColorPickerState* s, Ctx* cx, const ClickEvent*);
 };
 
 // What the picker shows: preview_color while one is up, the committed value
@@ -38,6 +69,27 @@ bool ColorPickerClearPreview(ColorPickerState* s);
 // the picker holds.
 void ColorPickerSetValue(ColorPickerState* s, uint32_t color);
 void ColorPickerClearValue(ColorPickerState* s);
+
+// select_color: commit and close, which is what a palette swatch does.
+void ColorPickerSelect(ColorPickerState* s, uint32_t color);
+// update_color: commit without closing, which is what a slider drag does.
+void ColorPickerUpdateColor(ColorPickerState* s, uint32_t color);
+// set_open / toggle_open / set_active_tab.
+void ColorPickerSetOpen(ColorPickerState* s, bool open);
+void ColorPickerSetActiveTab(ColorPickerState* s, int tab);
+// sync_pending_value: push a value handed in before the first render out to
+// the sliders and the hex field. Called from the widget's build; a no-op once
+// nothing is pending.
+void ColorPickerSyncPending(ColorPickerState* s);
+// The color the four sliders currently describe.
+uint32_t ColorPickerSliderColor(const ColorPickerState* s);
+// "#rrggbb" / "#rgb" / "#rrggbbaa" / "#rgba" / bare hex. False when the text
+// is not a colour yet, which is every prefix of one while it is being typed.
+// A colour is packed 0xAARRGGBB when it is translucent and 0xRRGGBB when it
+// is not, which is what `RgbaHex` reads.
+bool ColorPickerParseHex(Str text, uint32_t* out);
+// hex_string: eight digits only when the colour is translucent.
+Str ColorPickerHexString(Arena* a, uint32_t color);
 
 struct ColorPicker {
     static El* New(Ctx* cx, Str id);

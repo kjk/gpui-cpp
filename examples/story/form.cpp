@@ -144,7 +144,7 @@ El* FormStory::Render(FormStory* self, Ctx* cx) {
                                ->OnClick(Listen(cx, &ToggleSubscribe))
                                ->IntoEl())
             ->LabelIndent(!self->horizontal || !self->twoColumns)
-            ->Field(Str{}, component::ColorPicker::New(cx)
+            ->Field(Str{}, component::ColorPicker::New(cx, StrL("form-color"))
                                ->WithSize(UiSize::Small)
                                ->Label(StrL("Theme color"))
                                ->IntoEl())

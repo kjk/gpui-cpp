@@ -187,6 +187,20 @@ Tabs* Tabs::Tab(Str label, IconName icon, bool disabled) {
     items.Append(a, it);
     return this;
 }
+Tabs* Tabs::W(float v) {
+    width = v;
+    return this;
+}
+Tabs* Tabs::WFill() {
+    width = kFill;
+    return this;
+}
+Tabs* Tabs::Flex1() {
+    if (items.len > 0) {
+        items[items.len - 1].flex1 = true;
+    }
+    return this;
+}
 Tabs* Tabs::Disabled(int ix, bool v) {
     if (ix >= 0 && ix < items.len) {
         items[ix].disabled = v;
@@ -419,7 +433,7 @@ El* Tabs::IntoEl() {
     El* bar = gpui::Tabs::New(cx, id)
                   ->FlexRow()
                   ->ItemsCenter()
-                  ->W(kFill)
+                  ->W(width)
                   ->H(h)
                   ->Radius(barRadius);
     if (variant == TabVariant::Tab) {
@@ -545,6 +559,21 @@ El* Tabs::IntoEl() {
                 label->MaxW(maxWidth - padX * 2)->Truncate();
             }
             inner->Child(label);
+        }
+        // Tab::flex_1(). Upstream wraps every tab of a variant that has an
+        // indicator — Segmented, Pill, Underline — in a
+        // `div().flex_shrink_0().on_prepaint(..)` so it can measure it, and
+        // the wrapper is what the bar lays out. The tab's own flex_1 then
+        // only fills that wrapper, which is content-sized, so those three
+        // variants never stretch however many tabs ask to. Reproduced rather
+        // than fixed: the colour picker's Palette/HSLA pair and the tabs
+        // story's "Filling Space" both look the way they do because of it.
+        bool wrapped = variant == TabVariant::Segmented ||
+                       variant == TabVariant::Pill ||
+                       variant == TabVariant::Underline;
+        if (item.flex1 && !wrapped) {
+            tab->Flex1();
+            inner->W(kFill);
         }
         tab->Child(inner);
         if (maxWidth > 0 && item.icon == IconName::None) {

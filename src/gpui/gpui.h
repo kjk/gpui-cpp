@@ -208,6 +208,16 @@ struct Theme {
     Rgba yellow;
     Rgba cyan;
     Rgba magenta;
+    // base.<hue>.light. A theme file may name them; where it does not they
+    // are the background blended with 80% of the base hue, which is what
+    // `apply_color!(red_light, fallback = ..)` in theme/schema.rs says. The
+    // colour picker's featured row is these twelve.
+    Rgba redLight;
+    Rgba greenLight;
+    Rgba blueLight;
+    Rgba yellowLight;
+    Rgba cyanLight;
+    Rgba magentaLight;
     // chart_1..chart_5, and the pair a candlestick closes on. Both themes
     // give them the same five blues (default-theme.json).
     Rgba chart1;

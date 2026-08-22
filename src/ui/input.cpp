@@ -247,7 +247,12 @@ El* Textarea::IntoEl() {
     // A row is one 1.25rem line box, like the single-line input; the border
     // sits outside the padded content, as in GPUI.
     int shownRows = rows > 0 ? rows : state ? LayoutModeRows(state->mode) : 2;
-    float h = height > 0 ? height : (float)shownRows * 20.f + 2 * 8 + 2;
+    // `.h(px(..))` or `.h(relative(1.))`: a caller that gives the editor a
+    // height means it, and kFill is the relative one — the inspector's pane
+    // is what asks for it. Everything else is `rows` line boxes.
+    float h = (height > 0 || height == kFill)
+                  ? height
+                  : (float)shownRows * 20.f + 2 * 8 + 2;
     El* box = InputBase::New(cx, id, HashClickId(id))
                   ->BindInput(state)
                   ->W(kFill)

@@ -124,13 +124,15 @@ El* EditorStory::Render(EditorStory* self, Ctx* cx) {
     // The tab bar on the left, the read-only switch on the right.
     El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
     // TabBar::new(..).w_64().underline()
-    head->Child(Div(a)->W(256)->Child(component::Tabs::New(cx)
-                                          ->Underline()
-                                          ->Tab(StrL("Code"))
-                                          ->Tab(StrL("Decorations"))
-                                          ->Selected(self->tab)
-                                          ->OnChange(Listen(cx, &SetEditorTab))
-                                          ->IntoEl()));
+    // TabBar::new(..).w_64(): the bar is 256 wide, not the row it sits in.
+    head->Child(Div(a)->Child(component::Tabs::New(cx)
+                                  ->W(256)
+                                  ->Underline()
+                                  ->Tab(StrL("Code"))
+                                  ->Tab(StrL("Decorations"))
+                                  ->Selected(self->tab)
+                                  ->OnChange(Listen(cx, &SetEditorTab))
+                                  ->IntoEl()));
     head->Child(component::Switch::New(cx, StrL("editor-read-only"))
                     ->Label(StrL("Read only"))
                     ->Checked(self->readOnly)

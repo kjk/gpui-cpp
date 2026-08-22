@@ -86,6 +86,7 @@ struct Textarea {
     // the same engine as an Input's, with InputKind::Textarea.
     InputState* state = nullptr;
     int rows = 0;
+    // The editor box height in pixels, or kFill for Rust's h(relative(1.)).
     float height = 0;
     bool softWrap = true;
     Listener onFocus;

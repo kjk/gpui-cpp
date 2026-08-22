@@ -6,30 +6,34 @@ namespace gpui {
 
 namespace component {
 
+// The state behind a picker. Rust's
+// `ColorPicker::new(&Entity<ColorPickerState>)` takes one the application made;
+// here the widget keeps it keyed by its id, the way Rating and PopupMenu keep
+// theirs, and this is how a view reaches it to seed a value or read the one
+// that is committed.
+Entity<ColorPickerState> ColorPickerStateFor(Ctx* cx, Str id);
+
 struct ColorPicker {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    uint32_t hex = 0;
-    // Without a value the trigger is an empty square, as in Rust.
-    bool hasValue = false;
+    Str id = {};
     Str label = {};
+    // icon(): the trigger is that icon rather than a square of the value.
+    IconName icon = IconName::None;
     UiSize size = UiSize::Medium;
-    bool open = false;
+    // featured_colors(): the top row of the palette panel. Null is the
+    // theme's own twelve — the six base hues and their light halves.
+    const uint32_t* featured = nullptr;
+    int nFeatured = 0;
+    // ColorPickerEvent::Change, with the committed colour as the argument.
     Listener onChange;
-    Listener onToggle;
-    // preview_color / clear_preview: a swatch under the pointer shows its
-    // color before anything is committed. The handler is told which one, and
-    // gets 0 when the pointer left.
-    Listener onPreview;
 
-    static ColorPicker* New(Ctx* cx);
-    ColorPicker* Hex(uint32_t h);
+    static ColorPicker* New(Ctx* cx, Str id);
     ColorPicker* Label(Str s);
+    ColorPicker* Icon(IconName v);
     ColorPicker* WithSize(UiSize s);
-    ColorPicker* Open(bool v);
+    ColorPicker* FeaturedColors(const uint32_t* colors, int n);
     ColorPicker* OnChange(Listener fn);
-    ColorPicker* OnToggle(Listener fn);
-    ColorPicker* OnPreview(Listener fn);
     El* IntoEl();
 };
 

@@ -322,25 +322,32 @@ static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
         cx->win->input = &e->input;
     }
 
-    El* box = Div(a)->FlexCol()->W(kFill)->Gap(6);
-    El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
-    head->Child(TextEl(a, StrL("JSON Styles"))->Font(14)->Fg(th.foreground));
+    // v_flex().flex_1().gap_y_3().h_2_5().flex_shrink_0(): the pane takes what
+    // the panel has left rather than a height of its own, and the editor
+    // inside it is h(relative(1.)).
+    El* box = Div(a)->FlexCol()->W(kFill)->GapY(12)->Flex1();
+    // h_flex().gap_x_2() with the label as the flex_1 child, which is what
+    // pushes the button to the end without a justification.
+    El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->GapX(8);
+    head->Child(Div(a)->Flex1()->Child(
+        TextEl(a, StrL("JSON Styles"))->Font(14)->Fg(th.foreground)));
     head->Child(Button::New(cx, StrL("style-reset"))
                     ->Label(StrL("Reset"))
-                    ->Ghost()
-                    ->WithSize(UiSize::XSmall)
+                    ->WithSize(UiSize::Small)
                     ->OnClick(ListenTo(ed, &InspectorEditor::OnReset))
                     ->IntoEl());
     box->Child(head);
-    box->Child(Textarea::New(cx, StrL("style-json"), &e->input)
-                   ->H(180)
-                   ->OnFocus(ListenTo(ed, &InspectorEditor::OnFocus))
-                   ->IntoEl());
+    El* body = Div(a)->FlexCol()->W(kFill)->GapY(4)->Flex1();
+    body->Child(Textarea::New(cx, StrL("style-json"), &e->input)
+                    ->H(kFill)
+                    ->OnFocus(ListenTo(ed, &InspectorEditor::OnFocus))
+                    ->IntoEl());
     if (e->error.s) {
-        box->Child(Alert::Error(cx, StrL("style-error"), e->error)
-                       ->WithSize(UiSize::XSmall)
-                       ->IntoEl());
+        body->Child(Alert::Error(cx, StrL("style-error"), e->error)
+                        ->WithSize(UiSize::XSmall)
+                        ->IntoEl());
     }
+    box->Child(body);
     return box;
 }
 
@@ -395,10 +402,18 @@ El* Inspector::IntoEl() {
     }
 
     const InspectorPick& p = st->pick;
-    // Rust leads with the element's source location; there is none here, so
-    // the element leads with what it is and which id it answers to.
+    // Rust leads with the element's source location, as a Link beside a
+    // Clipboard. GPUI stamps one on every element from `#[track_caller]`;
+    // nothing here records where an El was built, so there is nothing to
+    // show and the element leads with what it is and which id it answers to.
+    // Its "Rust Styles" pane is out for a harder reason: it is a code editor
+    // over the element's Rust source with an LSP completion provider behind
+    // it, and an LSP client is a standing non-goal (AGENTS.md). The JSON
+    // pane below is the half of DivInspector that can exist here.
     body->Child(TextEl(a, KindName(p.kind))->Font(14)->Fg(th.foreground));
-    DescriptionList* dl = DescriptionList::New(cx)->Columns(1);
+    // DescriptionList::new().columns(1).label_width(px(110.)).bordered(false)
+    DescriptionList* dl =
+        DescriptionList::New(cx)->Columns(1)->LabelWidth(110)->Bordered(false);
     if (p.elId.s) {
         dl->Item(StrL("id"), p.elId);
     }

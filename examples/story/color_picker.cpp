@@ -1,52 +1,42 @@
 #include "Story.h"
 
 struct ColorPickerStory {
-    // gpui_base::ColorPickerState: the committed color and the transient one
-    // a hover shows beside it. Everything on this page reads the preview when
-    // there is one and the value otherwise.
-    // Seeded with indigo_500, the way the Rust story seeds its state.
-    ColorPickerState color = {0x6366f1, true, 0, false, false, 0};
-    bool colorOpen = false;
+    // The committed colour, mirrored out of the picker's own
+    // ColorPickerState so the preview card beside it can show what is picked.
+    // Rust's story owns the Entity<ColorPickerState> and reads it the same
+    // way; here the widget keeps it keyed by its id.
+    uint32_t shown = 0x6366f1;
+    bool seeded = false;
     StoryToolbarState toolbar;
     static El* Render(ColorPickerStory* self, Ctx* cx);
 };
 
-static void ToggleColor(ColorPickerStory* self, Ctx* cx, const ClickEvent*) {
-    self->colorOpen = !self->colorOpen;
-    Notify(cx);
-}
+// ColorPickerEvent::Change: the picker hands over what it committed.
 static void SetColor(ColorPickerStory* self, Ctx* cx, const ClickEvent*,
                      intptr_t hex) {
-    ColorPickerSetValue(&self->color, (uint32_t)hex);
-    self->colorOpen = false;
+    self->shown = (uint32_t)hex;
     Notify(cx);
-}
-// preview_color while the pointer is on a swatch, clear_preview when it
-// leaves. The clear reports whether anything changed, which is Rust's early
-// return when the preview is already what is committed.
-static void PreviewColor(ColorPickerStory* self, Ctx* cx, const HoverEvent* ev,
-                         intptr_t hex) {
-    if (ev->hovered) {
-        ColorPickerPreview(&self->color, (uint32_t)hex);
-    } else if (!ColorPickerClearPreview(&self->color)) {
-        return;
-    }
-    Notify(cx);
-}
-
-// What the picker shows: the preview if one is up, the value otherwise.
-static uint32_t ShownHex(const ColorPickerStory* self) {
-    uint32_t hex = 0;
-    ColorPickerShown(&self->color, &hex);
-    return hex;
 }
 
 El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    uint32_t shown = ShownHex(self);
-    Rgba color = Rgb((uint8_t)((shown >> 16) & 0xff),
-                     (uint8_t)((shown >> 8) & 0xff), (uint8_t)(shown & 0xff));
+    // Seeded with indigo_500, the way the Rust story seeds its state.
+    Entity<ColorPickerState> st =
+        component::ColorPickerStateFor(cx, StrL("accent-color"));
+    if (ColorPickerState* s = st.Get(cx)) {
+        if (!self->seeded) {
+            self->seeded = true;
+            ColorPickerSetValue(s, 0x6366f1);
+        }
+        // What the card shows follows the picker, preview and all.
+        uint32_t hex = 0;
+        if (ColorPickerShown(s, &hex)) {
+            self->shown = hex;
+        }
+    }
+    uint32_t shown = self->shown;
+    Rgba color = RgbaHex(shown);
 
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
     page->Child(StoryToolbar(cx, self));
@@ -70,12 +60,8 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     text->Child(StoryTxt(cx, StrL("Used for primary actions and highlights."),
                          14, th.mutedFg));
     head->Child(text);
-    head->Child(component::ColorPicker::New(cx)
-                    ->Hex(shown)
-                    ->Open(self->colorOpen)
-                    ->OnToggle(Listen(cx, &ToggleColor))
+    head->Child(component::ColorPicker::New(cx, StrL("accent-color"))
                     ->OnChange(Listen(cx, &SetColor))
-                    ->OnPreview(Listen(cx, &PreviewColor))
                     ->IntoEl());
     card->Child(head);
 

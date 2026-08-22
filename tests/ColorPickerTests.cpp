@@ -29,19 +29,61 @@ static void ClearingAPreviewOfTheCommittedColorChangesNothing() {
     // Rust returns early here: the pointer crossed the swatch that is already
     // picked, so there is nothing to restore and nothing to repaint.
     utassert(!ColorPickerClearPreview(&s));
-    utassert(!s.hasPreview);
-    // And with no preview up at all there is still nothing to do.
+    // `update_value` leaves the preview *at* the value rather than dropping
+    // it, so what is displayed is still the committed colour.
+    uint32_t shown = 0;
+    utassert(ColorPickerShown(&s, &shown) && shown == 0x6366f0);
+    // And with nothing to restore there is still nothing to do.
     utassert(!ColorPickerClearPreview(&s));
 }
 
-static void CommittingDropsThePreview() {
+static void CommittingCarriesThePreviewWithIt() {
     ColorPickerState s;
     ColorPickerSetValue(&s, 0x6366f0);
     ColorPickerPreview(&s, 0x16a34a);
     ColorPickerSetValue(&s, 0x16a34a);
-    utassert(!s.hasPreview);
     uint32_t shown = 0;
     utassert(ColorPickerShown(&s, &shown) && shown == 0x16a34a);
+    utassert(s.value == 0x16a34a);
+}
+
+// parses_every_supported_hex_width / rejects_malformed_hex.
+static void HexParsing() {
+    uint32_t c = 0;
+    utassert(ColorPickerParseHex(StrL("#fff"), &c) && c == 0xffffff);
+    utassert(ColorPickerParseHex(StrL("ffffff"), &c) && c == 0xffffff);
+    utassert(ColorPickerParseHex(StrL("#6366F1"), &c) && c == 0x6366f1);
+    // The alpha widths carry theirs in the top byte, and an opaque colour
+    // packs the same as a plain six-digit one.
+    utassert(ColorPickerParseHex(StrL("#ff000080"), &c) && c == 0x80ff0000);
+    utassert(ColorPickerParseHex(StrL("#f008"), &c) && c == 0x88ff0000);
+    utassert(ColorPickerParseHex(StrL("#ff0000ff"), &c) && c == 0xff0000);
+    static const char* kBad[] = {"#nope", "#12",     "#1234567",
+                                 "",      "#+f0000", "#-fffff"};
+    for (int i = 0; i < 6; i++) {
+        utassert(!ColorPickerParseHex(Str(kBad[i]), &c));
+    }
+}
+
+// default_value_reaches_the_hex_field_and_sliders.
+static void SyncPendingSeedsTheFieldAndSliders() {
+    ColorPickerState s;
+    s.value = 0xff0000;
+    s.hasValue = true;
+    ColorPickerSyncPending(&s);
+    utassert(StrEqI(InputValue(&s.hexInput), StrL("#FF0000")));
+    // hsla(0, 1, 0.5): the lightness slider lands at a half.
+    utassertnear(s.sliders[2].value.End(), 0.5f);
+    // And it is a no-op the second time.
+    utassert(!s.needsSliderSync);
+}
+
+// formats_alpha_only_when_translucent.
+static void HexStringWidth() {
+    Arena* a = ArenaNew();
+    utassert(StrEqI(ColorPickerHexString(a, 0xff0000), StrL("#FF0000")));
+    utassert(StrEqI(ColorPickerHexString(a, 0x7fff0000), StrL("#FF00007F")));
+    ArenaDelete(a);
 }
 
 static void NoValueAndNoPreviewShowsNothing() {
@@ -62,6 +104,9 @@ void TestColorPicker() {
     TestSuite("color_picker");
     APreviewHidesTheValueWithoutReplacingIt();
     ClearingAPreviewOfTheCommittedColorChangesNothing();
-    CommittingDropsThePreview();
+    CommittingCarriesThePreviewWithIt();
+    HexParsing();
+    SyncPendingSeedsTheFieldAndSliders();
+    HexStringWidth();
     NoValueAndNoPreviewShowsNothing();
 }
