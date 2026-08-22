@@ -242,28 +242,28 @@ static void TestMarkdownLists(Arena* a) {
     Node* root = Parse(a, "- one\n- two\n");
     Node* list = Child(root, 0);
     utassert(list->kind == NodeKind::List);
-    utassert(!list->ordered);
-    utassert(!list->spread);
+    utassert(!list->Has(NodeOrdered));
+    utassert(!list->Has(NodeSpread));
     utassert(list->children.len == 2);
     utassert(TextIs(a, Child(list, 1), "two"));
 
     root = Parse(a, "3. three\n4. four\n");
     list = Child(root, 0);
-    utassert(list->ordered);
-    utassert(list->hasStart);
+    utassert(list->Has(NodeOrdered));
+    utassert(list->Has(NodeHasStart));
     utassert(list->start == 3);
 
     // A blank line between items makes the list loose.
     root = Parse(a, "- one\n\n- two\n");
-    utassert(Child(root, 0)->spread);
+    utassert(Child(root, 0)->Has(NodeSpread));
 
     // GFM task lists.
     root = Parse(a, "- [x] done\n- [ ] todo\n");
     list = Child(root, 0);
-    utassert(Child(list, 0)->hasChecked);
-    utassert(Child(list, 0)->checked);
-    utassert(Child(list, 1)->hasChecked);
-    utassert(!Child(list, 1)->checked);
+    utassert(Child(list, 0)->Has(NodeHasChecked));
+    utassert(Child(list, 0)->Has(NodeChecked));
+    utassert(Child(list, 1)->Has(NodeHasChecked));
+    utassert(!Child(list, 1)->Has(NodeChecked));
     // The checkbox is not part of the text.
     utassert(TextIs(a, Child(list, 0), "done"));
 }

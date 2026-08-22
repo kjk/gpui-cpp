@@ -172,9 +172,9 @@ static Node* Resume(CompileContext* c) {
 }
 
 static void TailPush(CompileContext* c, Node* child) {
-    if (!child->hasPosition) {
+    if (!child->Has(NodeHasPosition)) {
         child->position = PositionFromEvent((*c->events)[c->index]);
-        child->hasPosition = true;
+        child->Set(NodeHasPosition, true);
     }
     Node* node = TailMut(c);
     node->children.Append(c->a, child);
@@ -234,14 +234,15 @@ static void OnEnterGfmAutolinkLiteral(CompileContext* c) {
 
 static void OnEnterList(CompileContext* c) {
     Node* node = NodeNew(c->a, NodeKind::List);
-    node->ordered = (*c->events)[c->index].name == Name::ListOrdered;
-    node->spread = ListLoose(*c->events, c->index, false);
+    node->Set(NodeOrdered,
+              (*c->events)[c->index].name == Name::ListOrdered);
+    node->Set(NodeSpread, ListLoose(*c->events, c->index, false));
     TailPush(c, node);
 }
 
 static void OnEnterListItem(CompileContext* c) {
     Node* node = NodeNew(c->a, NodeKind::ListItem);
-    node->spread = ListItemLoose(*c->events, c->index);
+    node->Set(NodeSpread, ListItemLoose(*c->events, c->index));
     TailPush(c, node);
 }
 
@@ -536,8 +537,8 @@ static void OnExitGfmTaskListItemValue(CompileContext* c) {
     bool checked =
         (*c->events)[c->index].name == Name::GfmTaskListItemValueChecked;
     Node* ancestor = TailPenultimateMut(c);
-    ancestor->checked = checked;
-    ancestor->hasChecked = true;
+    ancestor->Set(NodeChecked, checked);
+    ancestor->Set(NodeHasChecked, true);
 }
 
 static void OnExitHeadingAtxSequence(CompileContext* c) {
@@ -633,7 +634,7 @@ static void OnExitMedia(CompileContext* c) {
 
 static void OnExitListItem(CompileContext* c) {
     Node* item = TailMut(c);
-    if (item->hasChecked && item->children.len > 0 &&
+    if (item->Has(NodeHasChecked) && item->children.len > 0 &&
         item->children[0]->kind == NodeKind::Paragraph) {
         Node* paragraph = item->children[0];
         if (paragraph->children.len > 0 &&
@@ -685,9 +686,9 @@ static void OnExitListItemValue(CompileContext* c) {
         start = start * 10 + (uint32_t)(value.s[i] - '0');
     }
     Node* node = TailPenultimateMut(c);
-    if (!node->hasStart) {
+    if (!node->Has(NodeHasStart)) {
         node->start = start;
-        node->hasStart = true;
+        node->Set(NodeHasStart, true);
     }
 }
 
@@ -865,7 +866,7 @@ Node* ToMdastCompile(const Vec<Event>& events, ParseState* parseState) {
 
     TreeFrame frame;
     frame.tree = NodeNew(context.a, NodeKind::Root);
-    frame.tree->hasPosition = true;
+    frame.tree->Set(NodeHasPosition, true);
     if (events.len > 0) {
         frame.tree->position.start = ToUnist(events[0].point);
         frame.tree->position.end = ToUnist(events[events.len - 1].point);

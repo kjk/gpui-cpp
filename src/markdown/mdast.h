@@ -91,18 +91,42 @@ enum class NodeKind : uint8_t {
     Paragraph,
 };
 
-struct Node {
-    NodeKind kind = NodeKind::Root;
+// mdast.rs's `Option<bool>` and the flags beside it, packed into one byte.
+// Six bools laid out one per byte cost eight of them once the struct is
+// padded; a Node is allocated by the thousand, so they are a mask instead.
+enum NodeFlag : uint8_t {
+    // Every node has a position once the parse is done. Rust's
+    // `Option<Position>` is None only for a node built by hand.
+    NodeHasPosition = 1 << 0,
+    // List: whether `start` says anything. Unordered lists count from
+    // nothing, which is Rust's `Option<u32>` being None.
+    NodeHasStart = 1 << 1,
+    // List.
+    NodeOrdered = 1 << 2,
+    // List, ListItem.
+    NodeSpread = 1 << 3,
+    // ListItem: the GFM task list checkbox, and whether there is one.
+    // The pair is Rust's `Option<bool>`.
+    NodeChecked = 1 << 4,
+    NodeHasChecked = 1 << 5,
+};
 
+// The fields are ordered largest first so the struct packs with no padding at
+// all: three 24-byte members, then the eight 8-byte strings, then the one
+// 4-byte number, then the four single bytes. 144 bytes, where the order they
+// were written in cost 168.
+struct Node {
     // Root, Paragraph, Heading, Blockquote, List, ListItem, Emphasis, Strong,
     // Link, LinkReference, FootnoteDefinition, Table, TableRow, TableCell,
     // Delete.
     ArenaVec<Node*> children = {};
 
-    // Every node has one once the parse is done; `hasPosition` is Rust's
-    // `Option<Position>`, which is None only for a node built by hand.
+    // Table.
+    ArenaVec<AlignKind> align = {};
+
+    // Where the node came from in the source. `NodeHasPosition` says whether
+    // it means anything.
     UnistPosition position = {};
-    bool hasPosition = false;
 
     // The eight strings a node may carry. They are ArenaStr rather than Str
     // because a Node is allocated by the thousand and holds all eight
@@ -128,26 +152,30 @@ struct Node {
     ArenaStr lang = kArenaStrNone;
     ArenaStr meta = kArenaStrNone;
 
-    // Table.
-    ArenaVec<AlignKind> align = {};
-
-    // List: the number the first item counts from. Optional (unordered lists
-    // have none).
+    // List: the number the first item counts from. `NodeHasStart` says
+    // whether there is one.
     uint32_t start = 0;
-    bool hasStart = false;
 
+    NodeKind kind = NodeKind::Root;
     // Heading: 1..=6.
     uint8_t depth = 0;
     // LinkReference, ImageReference.
     ReferenceKind referenceKind = ReferenceKind::Shortcut;
-    // List.
-    bool ordered = false;
-    // List, ListItem.
-    bool spread = false;
-    // ListItem: the GFM task list checkbox. Optional.
-    bool checked = false;
-    bool hasChecked = false;
+    // The NodeFlag bits.
+    uint8_t flags = 0;
+
+    bool Has(NodeFlag f) const { return (flags & f) != 0; }
+    void Set(NodeFlag f, bool on) {
+        flags = on ? (uint8_t)(flags | f) : (uint8_t)(flags & ~f);
+    }
 };
+
+// The packing is the point, so it is checked rather than hoped for: three
+// 24-byte members, eight 8-byte strings, one 4-byte number and four single
+// bytes, with nothing left over. Adding a field in the wrong place costs
+// eight bytes a node and would otherwise go unnoticed.
+static_assert(sizeof(Node) == 3 * 24 + 8 * 8 + 4 + 4,
+              "Node has picked up padding; order the fields largest first");
 
 Node* NodeNew(Arena* a, NodeKind kind);
 
