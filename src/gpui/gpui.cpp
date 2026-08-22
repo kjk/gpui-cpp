@@ -1428,6 +1428,12 @@ El* El::OnKeyDown(Listener fn) {
     return OnAction(ActionOf(StrL("gpui::KeyDown")), fn);
 }
 
+El* El::OnClickAction(uint32_t action, intptr_t arg) {
+    clickAction = action;
+    clickActionArg = arg;
+    return this;
+}
+
 El* El::OnAction(uint32_t action, Listener fn) {
     if (!action || !fn.IsValid()) {
         return this;
@@ -3658,7 +3664,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // recorded a hit rect, and whatever was around it if it did not.
     int outerHitParent = ctx->hitParent;
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
-        e->onHover.IsValid() || e->onMouseDown.IsValid() ||
+        e->clickAction || e->onHover.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
         e->onMouseUpOut.IsValid() || e->drag.IsValid() || e->onDrop.IsValid() ||
         e->cursor != CursorKind::Arrow || e->slider) {
@@ -3666,6 +3672,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.id = e->clickId;
         hr.bounds = e->Bounds();
         hr.onClick = e->onClick;
+        hr.clickAction = e->clickAction;
+        hr.clickActionArg = e->clickActionArg;
         hr.listener = e->listener;
         hr.onHover = e->onHover;
         hr.tooltip = e->style.tooltip;

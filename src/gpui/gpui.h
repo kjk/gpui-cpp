@@ -1303,6 +1303,9 @@ struct El {
     int clickId = 0;
     Func0 onClick;
     Listener listener;
+    // El::OnClickAction — dispatched from the release, beside onClick.
+    uint32_t clickAction = 0;
+    intptr_t clickActionArg = 0;
     // `div().on_hover(..)`. Fires with a HoverEvent when the pointer enters
     // the element and again when it leaves, never in between.
     Listener onHover;
@@ -1567,6 +1570,12 @@ struct El {
     // on_action::<A>(..). The listener is called with an ActionEvent; setting
     // its `propagate` passes the action on outwards, which is cx.propagate().
     El* OnAction(uint32_t action, Listener fn);
+    // `.on_click(|_, window, cx| window.dispatch_action(Box::new(Cancel), cx))`
+    // — the click runs whatever the keyboard's binding for that action runs,
+    // rather than the caller passing the same handler to both. The dispatch
+    // starts at the focused element, not at this one, which is what makes a
+    // dialog's Cancel button and its escape key one handler.
+    El* OnClickAction(uint32_t action, intptr_t arg = 0);
     // div().on_key_down(..): the raw keystroke, offered to the focused element
     // and then out through the elements above it, before the keymap resolves
     // the chord to an action. It is what a field that is not a text editor
@@ -1635,6 +1644,9 @@ struct HitRect {
     SliderState* slider = nullptr;
     Axis sliderAxis = Axis::Horizontal;
     InputState* input = nullptr;
+    // El::OnClickAction: the action a click dispatches, and what it carries.
+    uint32_t clickAction = 0;
+    intptr_t clickActionArg = 0;
 };
 
 // A scrolled box the frame painted, and the scrollbar drawn down its right

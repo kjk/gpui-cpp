@@ -5,8 +5,7 @@ using namespace gpui;
 
 enum {
     ClickAlertOpen = 210,
-    ClickAlertCancel = 211,
-    ClickAlertOk = 212
+    ClickAlertCancel = 211
 };
 
 static void OpenAlert(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
@@ -56,33 +55,30 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
                                     ->Wrap()
                                     ->MaxW(264)))
             ->Child(Div(a)->H(12))
-            ->Child(
-                Div(a)
-                    ->FlexRow()
-                    ->W(kFill)
-                    ->JustifyEnd()
-                    ->Gap(8)
-                    ->Child(AlertDialogCancel::New(cx, Listen(cx, &CloseAlert))
-                                ->Child(Button::New(cx, StrL("cancel-delete"))
-                                            ->H(28)
-                                            ->PadX(12)
-                                            ->ItemsCenter()
-                                            ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-                                            ->Child(TextEl(a, StrL("Cancel"))
-                                                        ->Font(12)
-                                                        ->Fg(Rgb(0x17, 0x17,
-                                                                 0x17)))))
-                    ->Child(AlertDialogAction::New(cx, Listen(cx, &CloseAlert))
-                                ->Child(Button::New(cx, StrL("confirm-delete"))
-                                            ->H(28)
-                                            ->PadX(12)
-                                            ->ItemsCenter()
-                                            ->Border(1, Rgb(0x17, 0x17, 0x17))
-                                            ->Bg(Rgb(0x17, 0x17, 0x17))
-                                            ->Child(TextEl(a, StrL("Delete"))
-                                                        ->Font(12)
-                                                        ->Fg(Rgb(0xff, 0xff,
-                                                                 0xff))))));
+            ->Child(Div(a)
+                        ->FlexRow()
+                        ->W(kFill)
+                        ->JustifyEnd()
+                        ->Gap(8)
+                        ->Child(AlertDialogCancel::New(cx)->Child(
+                            Button::New(cx, StrL("cancel-delete"))
+                                ->H(28)
+                                ->PadX(12)
+                                ->ItemsCenter()
+                                ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
+                                ->Child(TextEl(a, StrL("Cancel"))
+                                            ->Font(12)
+                                            ->Fg(Rgb(0x17, 0x17, 0x17)))))
+                        ->Child(AlertDialogAction::New(cx)->Child(
+                            Button::New(cx, StrL("confirm-delete"))
+                                ->H(28)
+                                ->PadX(12)
+                                ->ItemsCenter()
+                                ->Border(1, Rgb(0x17, 0x17, 0x17))
+                                ->Bg(Rgb(0x17, 0x17, 0x17))
+                                ->Child(TextEl(a, StrL("Delete"))
+                                            ->Font(12)
+                                            ->Fg(Rgb(0xff, 0xff, 0xff))))));
 
     El* backdrop = AlertDialogBackdrop::New(cx)
                        ->Absolute()
@@ -100,6 +96,12 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Child(panel);
+    // dialog.rs handles the alert's keyboard too — an alert has no bindings
+    // of its own, it rides the Dialog context — and the two buttons dispatch
+    // Cancel and Confirm rather than carrying a handler each, so this is the
+    // one place the page says what they do.
+    DialogBindKeys(cx, popup, StrL("showcase-alert"), Listen(cx, &CloseAlert),
+                   Listen(cx, &CloseAlert), {});
     root->Child(
         AlertDialog::New(cx)->Backdrop(backdrop)->Popup(popup)->IntoEl());
     return root;

@@ -23,23 +23,24 @@ El* AlertDialogDescription::New(Ctx* cx) {
 // The two answer parts. Rust gives each a click that dispatches Cancel or
 // Confirm, which is the same action the escape and enter bindings raise, so
 // they end in the dialog's own handlers rather than in one of their own.
-El* AlertDialogCancel::New(Ctx* cx, Listener onCancel) {
+El* AlertDialogCancel::New(Ctx* cx) {
     Arena* a = cx->a;
     Str id = StrL("alert-dialog-cancel");
-    El* e = Div(a)->Id(id)->Click(HashClickId(id))->FocusId(HashClickId(id));
-    if (onCancel.IsValid()) {
-        e->OnClick(onCancel);
-    }
-    return e;
+    return Div(a)
+        ->Id(id)
+        ->Click(HashClickId(id))
+        ->FocusId(HashClickId(id))
+        ->OnClickAction(action::Cancel());
 }
-El* AlertDialogAction::New(Ctx* cx, Listener onConfirm) {
+El* AlertDialogAction::New(Ctx* cx) {
     Arena* a = cx->a;
     Str id = StrL("alert-dialog-action");
-    El* e = Div(a)->Id(id)->Click(HashClickId(id))->FocusId(HashClickId(id));
-    if (onConfirm.IsValid()) {
-        e->OnClick(onConfirm);
-    }
-    return e;
+    // `Confirm { secondary: false }`, which is the plain payload.
+    return Div(a)
+        ->Id(id)
+        ->Click(HashClickId(id))
+        ->FocusId(HashClickId(id))
+        ->OnClickAction(action::Confirm());
 }
 // The trigger takes the press, not the click, as its Rust counterpart does.
 El* AlertDialogTrigger::New(Ctx* cx, Listener onOpen) {

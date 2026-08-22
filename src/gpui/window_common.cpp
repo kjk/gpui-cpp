@@ -1097,6 +1097,25 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
         if (hit && hit->onClick.IsValid()) {
             hit->onClick.Call();
         }
+        // El::OnClickAction, last. The element asked for an action rather
+        // than a handler, and the action walks out from the focus the way a
+        // chord's would — so a dialog's Cancel button reaches the same
+        // handler its escape key does.
+        //
+        // Out through the enclosing elements, not just the one the pointer
+        // landed on: the wrapper that names the action is an ancestor of the
+        // button that was actually hit, which is how Rust's Cancel and Action
+        // wrappers are written. The first one that names an action wins.
+        Vec<int> clickChain;
+        HitChain(win, in.x, in.y, &clickChain);
+        for (int k = 0; k < clickChain.len; k++) {
+            const HitRect& hr = win->paint.hits[clickChain[k]];
+            if (!hr.clickAction) {
+                continue;
+            }
+            WindowDispatchAction(win, hr.clickAction, hr.clickActionArg);
+            break;
+        }
     }
     ClearPendingClick(win);
     AppInvalidate(win);
