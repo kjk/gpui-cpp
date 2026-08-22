@@ -519,35 +519,64 @@ static void MaskFormatsWhileTyping() {
     utassert(ValueIs(s, "(123)456-7890"));
 }
 
-// The keymap state.rs::init installs, off macOS.
+// The keymap state.rs::init installs. Two chords in it are not the same key
+// on every platform, so the test says which modifier it means rather than
+// spelling one of them: `Sec` is the shortcut modifier — Command on macOS,
+// Control elsewhere — and `Word` is the word-wise one, which is the other.
+static InputAction Sec(const InputState* s, int vk, bool shift) {
+#if GPUI_OS_MAC
+    return InputActionForKey(s, vk, shift, false, false, true);
+#else
+    return InputActionForKey(s, vk, shift, true, false, false);
+#endif
+}
+
+static InputAction Word(const InputState* s, int vk, bool shift) {
+#if GPUI_OS_MAC
+    return InputActionForKey(s, vk, shift, false, true, false);
+#else
+    return InputActionForKey(s, vk, shift, true, false, false);
+#endif
+}
+
 static void ActionForKey() {
     InputState s;
     utassert(InputActionForKey(&s, KeyLeft, false, false, false) ==
              InputAction::MoveLeft);
     utassert(InputActionForKey(&s, KeyLeft, true, false, false) ==
              InputAction::SelectLeft);
-    utassert(InputActionForKey(&s, KeyLeft, false, true, false) ==
-             InputAction::MoveToPreviousWord);
-    utassert(InputActionForKey(&s, KeyRight, true, true, false) ==
-             InputAction::SelectToNextWordEnd);
+    utassert(Word(&s, KeyLeft, false) == InputAction::MoveToPreviousWord);
+    utassert(Word(&s, KeyRight, true) == InputAction::SelectToNextWordEnd);
     utassert(InputActionForKey(&s, KeyHome, false, false, false) ==
              InputAction::MoveHome);
     utassert(InputActionForKey(&s, KeyHome, true, false, false) ==
              InputAction::SelectToStartOfLine);
-    utassert(InputActionForKey(&s, KeyHome, false, true, false) ==
-             InputAction::MoveToStart);
-    utassert(InputActionForKey(&s, KeyBack, false, true, false) ==
+    utassert(Sec(&s, KeyHome, false) == InputAction::MoveToStart);
+    utassert(Word(&s, KeyBack, false) ==
              InputAction::DeleteToPreviousWordStart);
     utassert(InputActionForKey(&s, KeyDelete, false, false, false) ==
              InputAction::Delete);
+    utassert(Sec(&s, KeyA, false) == InputAction::SelectAll);
+    utassert(Sec(&s, KeyZ, false) == InputAction::Undo);
+    utassert(Sec(&s, KeyZ, true) == InputAction::Redo);
+    utassert(Sec(&s, KeyY, false) == InputAction::Redo);
+    utassert(Sec(&s, KeyC, false) == InputAction::Copy);
+    utassert(Sec(&s, KeyV, false) == InputAction::Paste);
+    utassert(Sec(&s, KeyX, false) == InputAction::Cut);
+
+    // On a Mac, Control is not the shortcut key and none of those answer to
+    // it: state.rs binds ctrl-backspace and cmd-backspace to different
+    // actions in the same context, which only works if the two stay apart.
+#if GPUI_OS_MAC
+    utassert(InputActionForKey(&s, KeyC, false, true, false) ==
+             InputAction::None);
     utassert(InputActionForKey(&s, KeyA, false, true, false) ==
-             InputAction::SelectAll);
-    utassert(InputActionForKey(&s, KeyZ, false, true, false) ==
-             InputAction::Undo);
-    utassert(InputActionForKey(&s, KeyZ, true, true, false) ==
-             InputAction::Redo);
-    utassert(InputActionForKey(&s, KeyY, false, true, false) ==
-             InputAction::Redo);
+             InputAction::None);
+    utassert(InputActionForKey(&s, KeyBack, false, true, false) ==
+             InputAction::Backspace);
+    utassert(InputActionForKey(&s, KeyBack, false, false, false, true) ==
+             InputAction::Backspace);
+#endif
     // Without the modifier a letter is text, not an action.
     utassert(InputActionForKey(&s, KeyA, false, false, false) ==
              InputAction::None);
@@ -558,11 +587,12 @@ static void ActionForKey() {
     // A modified tab belongs to whatever is outside the field.
     utassert(InputActionForKey(&s, KeyTab, false, true, false) ==
              InputAction::None);
-    utassert(InputActionForKey(&s, KeyRightBracket, false, true, false) ==
-             InputAction::Indent);
-    utassert(InputActionForKey(&s, KeyLeftBracket, false, true, false) ==
-             InputAction::Outdent);
-    // Without ctrl a bracket is text.
+    utassert(InputActionForKey(&s, KeyTab, false, false, false, true) ==
+             InputAction::None);
+    // cmd-] / cmd-[ on macOS, ctrl-] / ctrl-[ elsewhere.
+    utassert(Sec(&s, KeyRightBracket, false) == InputAction::Indent);
+    utassert(Sec(&s, KeyLeftBracket, false) == InputAction::Outdent);
+    // Without the shortcut modifier a bracket is text.
     utassert(InputActionForKey(&s, KeyLeftBracket, false, false, false) ==
              InputAction::None);
 }

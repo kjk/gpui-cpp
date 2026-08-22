@@ -4596,7 +4596,7 @@ bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev) {
 }
 
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                             bool alt) {
+                             bool alt, bool platform) {
     if (!win || !vk) {
         return false;
     }
@@ -4619,6 +4619,7 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
     chord.shift = shift;
     chord.ctrl = ctrl;
     chord.alt = alt;
+    chord.platform = platform;
     KeyMatch m = KeymapMatch(chord, contexts, nContexts);
     if (m.pending) {
         // Half of a sequence. Rust holds the keystroke on the matcher and

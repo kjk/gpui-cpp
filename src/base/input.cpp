@@ -2394,8 +2394,18 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
 // switch says the same thing. The `cmd-` bindings are the macOS spelling of
 // the `ctrl-` ones below them and land on the same actions.
 InputAction InputActionForKey(const InputState* s, int vk, bool shift,
-                              bool ctrl, bool alt) {
-    bool word = ctrl || alt; // ctrl- off macOS, alt- on it
+                              bool ctrl, bool alt, bool platform) {
+    // The shortcut modifier — Command on macOS, Control elsewhere — which is
+    // what every chord below that Rust spells `secondary-` wants. Control on
+    // a Mac is a different key and no longer answers to these.
+    const bool sec = KeySecondary(ctrl, platform);
+    // A word-wise move is alt- on macOS and ctrl- everywhere else, which is
+    // how state.rs splits its two binding sets.
+#if GPUI_OS_MAC
+    const bool word = alt;
+#else
+    const bool word = ctrl || alt;
+#endif
     switch (vk) {
         case KeyLeft:
             if (word) {
@@ -2420,14 +2430,14 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
         case KeyHome:
             // Rust spells the document ends cmd-up / cmd-down, which is what
             // ctrl-home / ctrl-end is everywhere else.
-            if (ctrl) {
+            if (sec) {
                 return shift ? InputAction::SelectToStart
                              : InputAction::MoveToStart;
             }
             return shift ? InputAction::SelectToStartOfLine
                          : InputAction::MoveHome;
         case KeyEnd:
-            if (ctrl) {
+            if (sec) {
                 return shift ? InputAction::SelectToEnd
                              : InputAction::MoveToEnd;
             }
@@ -2443,7 +2453,7 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
             return InputAction::Enter;
         case KeyTab:
             // tab / shift-tab. A modified tab is the window's, never text.
-            if (ctrl || alt) {
+            if (ctrl || alt || platform) {
                 return InputAction::None;
             }
             return shift ? InputAction::OutdentInline
@@ -2451,32 +2461,32 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
         case KeyRightBracket:
             // ctrl-] / ctrl-[, which macOS spells cmd-] / cmd-[ and the
             // window folds onto ctrl on the way in. The block pair.
-            return ctrl ? InputAction::Indent : InputAction::None;
+            return sec ? InputAction::Indent : InputAction::None;
         case KeyLeftBracket:
-            return ctrl ? InputAction::Outdent : InputAction::None;
+            return sec ? InputAction::Outdent : InputAction::None;
         case KeyEscape:
             return InputAction::Escape;
         case KeyA:
-            if (ctrl) {
+            if (sec) {
                 return shift ? InputAction::SelectToStartOfLine
                              : InputAction::SelectAll;
             }
             return InputAction::None;
         case KeyC:
-            return ctrl ? InputAction::Copy : InputAction::None;
+            return sec ? InputAction::Copy : InputAction::None;
         case KeyX:
-            return ctrl ? InputAction::Cut : InputAction::None;
+            return sec ? InputAction::Cut : InputAction::None;
         case KeyV:
-            return ctrl ? InputAction::Paste : InputAction::None;
+            return sec ? InputAction::Paste : InputAction::None;
         case KeyZ:
-            if (!ctrl) {
+            if (!sec) {
                 return InputAction::None;
             }
             return shift ? InputAction::Redo : InputAction::Undo;
         case KeyY:
-            return ctrl ? InputAction::Redo : InputAction::None;
+            return sec ? InputAction::Redo : InputAction::None;
         case KeyE:
-            if (ctrl) {
+            if (sec) {
                 return shift ? InputAction::SelectToEndOfLine
                              : InputAction::MoveEnd;
             }
@@ -2484,11 +2494,11 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
         case KeyF:
             // cmd-f / ctrl-f, and ctrl-h beside it. Both are the find bar,
             // and a field that is not searchable answers neither.
-            return ctrl && s && s->searchable ? InputAction::Search
-                                              : InputAction::None;
+            return sec && s && s->searchable ? InputAction::Search
+                                             : InputAction::None;
         case KeyH:
-            return ctrl && s && s->searchable ? InputAction::Replace
-                                              : InputAction::None;
+            return sec && s && s->searchable ? InputAction::Replace
+                                             : InputAction::None;
         default:
             return InputAction::None;
     }

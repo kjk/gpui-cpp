@@ -465,10 +465,12 @@ static void OnKeyPress(Window* win, XKeyEvent* ke) {
     bool shift = (ke->state & ShiftMask) != 0;
     bool ctrl = (ke->state & ControlMask) != 0;
     bool alt = (ke->state & Mod1Mask) != 0;
+    // Mod4 is Super, which is what `cmd-` names on this platform.
+    bool platform = (ke->state & Mod4Mask) != 0;
 
     int key = KeyFor(ks);
     if (key) {
-        WindowKeyDown(win, key, shift, ctrl, alt);
+        WindowKeyDown(win, key, shift, ctrl, alt, platform);
     }
     // Windows delivers backspace as WM_CHAR 8, and the bound InputState edits
     // on that; X11 only reports the keysym, so raise it here.
@@ -515,8 +517,8 @@ static void OnKeyRelease(Window* win, XKeyEvent* ke) {
     int key = KeyFor(ks);
     if (key) {
         WindowKeyUp(win, key, (ke->state & ShiftMask) != 0,
-                    (ke->state & ControlMask) != 0,
-                    (ke->state & Mod1Mask) != 0);
+                    (ke->state & ControlMask) != 0, (ke->state & Mod1Mask) != 0,
+                    (ke->state & Mod4Mask) != 0);
     }
 }
 

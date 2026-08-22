@@ -27,12 +27,22 @@ struct KeyChord {
     bool shift = false;
     bool ctrl = false;
     bool alt = false;
+    // Command on macOS, the Windows/Super key elsewhere — GPUI's
+    // `Modifiers::platform`, which is a modifier of its own and not a second
+    // name for control.
+    bool platform = false;
 };
 
 // Keystroke::parse. The modifiers Rust spells are `ctrl-`, `alt-`, `shift-`,
-// `cmd-` and `secondary-`; the last two are the platform's shortcut key,
-// which this port folds onto `ctrl` on every platform — a Cmd-C handler and a
-// Ctrl-C handler are the same handler here. The key name is GPUI's:
+// `cmd-` and `secondary-`. `cmd-` is the platform key; `secondary-` is the
+// shortcut modifier, which is the platform key on macOS and control
+// everywhere else — so one `secondary-c` binding is Cmd-C on a Mac and
+// Ctrl-C on the other two.
+//
+// They are not folded together. macOS binds `ctrl-backspace` and
+// `cmd-backspace` to different actions in the same context, and
+// `ctrl-cmd-space` needs both at once, so control and command have to stay
+// apart. The key name is GPUI's:
 // lowercase, with "enter", "escape", "tab", "space", "backspace", "delete",
 // the four arrows, "home", "end", "pageup", "pagedown", "f1".."f12", a letter
 // or a digit, or one of the punctuation keys.

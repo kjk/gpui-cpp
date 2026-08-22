@@ -16,13 +16,29 @@ static void AChordIsReadTheWayRustSpellsIt() {
     utassert(KeyChordParse(StrL("shift-tab"), &c));
     utassert(c.vk == KeyTab && c.shift && !c.ctrl);
 
-    // cmd- and secondary- are the platform's shortcut key, which this port
-    // folds onto ctrl everywhere — a Cmd-C handler and a Ctrl-C handler are
-    // the same handler.
+    // cmd- is the platform key and stands apart from control: macOS binds
+    // ctrl-backspace and cmd-backspace to different actions in the same
+    // context, so folding them would lose one of the two.
     utassert(KeyChordParse(StrL("cmd-c"), &c));
-    utassert(c.vk == 'C' && c.ctrl);
+    utassert(c.vk == 'C' && c.platform && !c.ctrl);
+    utassert(KeyChordParse(StrL("ctrl-cmd-space"), &c));
+    utassert(c.vk == KeySpace && c.ctrl && c.platform);
+
+    // secondary- is the shortcut modifier, which is the platform key on
+    // macOS and control everywhere else — one binding, the right chord on
+    // each.
     utassert(KeyChordParse(StrL("secondary-enter"), &c));
-    utassert(c.vk == KeyReturn && c.ctrl);
+#if GPUI_OS_MAC
+    utassert(c.vk == KeyReturn && c.platform && !c.ctrl);
+#else
+    utassert(c.vk == KeyReturn && c.ctrl && !c.platform);
+#endif
+
+    // Two chords that differ only in the platform key are two chords.
+    KeyChord withCmd = {}, withCtrl = {};
+    utassert(KeyChordParse(StrL("cmd-backspace"), &withCmd));
+    utassert(KeyChordParse(StrL("ctrl-backspace"), &withCtrl));
+    utassert(!KeyChordEq(withCmd, withCtrl));
 
     utassert(KeyChordParse(StrL("ctrl-shift-alt-i"), &c));
     utassert(c.vk == 'I' && c.ctrl && c.shift && c.alt);

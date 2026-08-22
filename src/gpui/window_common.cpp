@@ -253,7 +253,8 @@ static void SetMouseDown(Window* win, bool down) {
 
 static bool SliderKeyStep(Window* win, int key, bool ctrl, bool alt);
 
-void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
+void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
+                   bool platform) {
     if (!win) {
         return;
     }
@@ -272,14 +273,15 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     bool eaten = false;
     if (!held && win->input && win->input->focused) {
         InputAction action =
-            InputActionForKey(win->input, key, shift, ctrl, alt);
+            InputActionForKey(win->input, key, shift, ctrl, alt, platform);
         eaten = InputPerform(win->input, win->app, win, action, shift);
     }
     // Copy, once the focused field has had its go: a field with a selection
     // of its own copied that, and this is the page's selection — Rust's
     // TextSelection::selected_text, on the same chord. Nothing selected
     // leaves the key to whatever else wants it.
-    if (!held && !eaten && key == KeyC && ctrl && !shift && !alt) {
+    if (!held && !eaten && key == KeyC && KeySecondary(ctrl, platform) &&
+        !shift && !alt) {
         eaten = WindowSelectionCopy(win);
     }
     // The focused slider's arrows, before anything else looks at them: an
@@ -311,7 +313,8 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     // editing is Rust's innermost key context, so a binding further out
     // cannot take a keystroke away from it. An action that is handled ends
     // the keystroke here.
-    if (!eaten && WindowDispatchKeyAction(win, key, shift, ctrl, alt)) {
+    if (!eaten &&
+        WindowDispatchKeyAction(win, key, shift, ctrl, alt, platform)) {
         // The character the keystroke also arrives as is the keymap's now:
         // the second chord of a sequence is an ordinary letter, and typing it
         // into the field underneath is what the binding was there to stop.
@@ -336,6 +339,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
         ev.shift = shift;
         ev.ctrl = ctrl;
         ev.alt = alt;
+        ev.platform = platform;
         ListenerCall(win->app, win, win->onKey, &ev);
     }
     // Enter and Space both activate the focused element, and the press only
@@ -353,7 +357,9 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt) {
     AppInvalidate(win);
 }
 
-void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt) {
+void WindowKeyUp(Window* win, int key, bool shift, bool ctrl, bool alt,
+                 bool platform) {
+    (void)platform;
     if (!win) {
         return;
     }
