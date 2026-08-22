@@ -124,8 +124,11 @@ static UnistPosition PositionFromEvent(const Event& event) {
 
 static Node* DelveMut(Node* node, const ArenaVec<int32_t>& stack,
                       int32_t stackLen) {
-    for (int32_t i = 0; i < stackLen; i++) {
-        node = node->children[stack[i]];
+    // The stack is read in order, so it walks; `children` is indexed by what
+    // the stack says, which is not in order and cannot.
+    ArenaVec<int32_t>::Iter it = stack.begin();
+    for (int32_t i = 0; i < stackLen; i++, ++it) {
+        node = node->children[*it];
     }
     return node;
 }
@@ -635,9 +638,13 @@ static void OnExitListItem(CompileContext* c) {
                 }
             }
             if (start == value.len) {
-                // Remove the empty text: the paragraph was only a checkbox.
-                for (int32_t i = 0; i + 1 < paragraph->children.len; i++) {
-                    paragraph->children[i] = paragraph->children[i + 1];
+                // Remove the empty text: the paragraph was only a
+                // checkbox. Two cursors one apart, shifting the rest down.
+                ArenaVec<Node*>::Iter dst = paragraph->children.begin();
+                ArenaVec<Node*>::Iter src = dst;
+                ++src;
+                for (; src != paragraph->children.end(); ++dst, ++src) {
+                    *dst = *src;
                 }
                 paragraph->children.Pop();
             } else {

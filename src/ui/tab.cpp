@@ -375,8 +375,9 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
         s->onConfirm = tabs->onChange;
     }
     PopupMenu* menu = PopupMenu::New(cx, menuId, st)->Scrollable();
-    for (int i = 0; i < tabs->items.len; i++) {
-        const TabItem& it = tabs->items[i];
+    int i = -1;
+    for (const TabItem& it : tabs->items) {
+        i++;
         // A tab with no label is an icon-only one; Rust puts the icon in the
         // row, and falls back to "Unnamed" when there is neither.
         if (it.label.s) {
@@ -468,8 +469,9 @@ El* Tabs::IntoEl() {
         float dw = indW - selBox->w;
         sliding = (dx < -0.5f || dx > 0.5f) || (dw < -0.5f || dw > 0.5f);
     }
-    for (int i = 0; i < items.len; i++) {
-        const TabItem& item = items[i];
+    int i = -1;
+    for (const TabItem& item : items) {
+        i++;
         bool on = i == selected;
         TabStyle st = item.disabled      ? TabDisabled(variant, on, th)
                       : (on && !sliding) ? TabSelected(variant, th)

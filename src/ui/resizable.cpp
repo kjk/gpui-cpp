@@ -109,8 +109,8 @@ El* Resizable::IntoEl() {
         root->FlexCol();
     }
     if (!s) {
-        for (int i = 0; i < panels.len; i++) {
-            root->Child(panels[i]);
+        for (El* panel : panels) {
+            root->Child(panel);
         }
         return root;
     }
@@ -137,9 +137,11 @@ El* Resizable::IntoEl() {
         }
     }
     s->growIx = -1;
-    for (int i = 0; i < grows.len; i++) {
-        if (grows[i]) {
-            s->growIx = i;
+    int growIx = -1;
+    for (bool grow : grows) {
+        growIx++;
+        if (grow) {
+            s->growIx = growIx;
             break;
         }
     }

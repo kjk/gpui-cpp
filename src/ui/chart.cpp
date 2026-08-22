@@ -495,13 +495,17 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     double* raw = (double*)Alloc(ta, (int)sizeof(double) * nNodes);
     SankeyChartThroughput(links, c->links.len, raw, nNodes);
     Str* values = (Str*)Alloc(ta, (int)sizeof(Str) * nNodes);
-    for (int i = 0; i < c->nodes.len; i++) {
-        values[i] = c->showValues ? fmt("%.0f", raw[i]) : c->nodes[i].value;
+    int nodeIx = -1;
+    for (const SankeyChartNode& node : c->nodes) {
+        nodeIx++;
+        values[nodeIx] = c->showValues ? fmt("%.0f", raw[nodeIx]) : node.value;
     }
 
     bool hasLabels = false;
-    for (int i = 0; i < c->nodes.len; i++) {
-        if (c->nodes[i].label.s || values[i].s) {
+    nodeIx = -1;
+    for (const SankeyChartNode& node : c->nodes) {
+        nodeIx++;
+        if (node.label.s || values[nodeIx].s) {
             hasLabels = true;
         }
     }
@@ -511,13 +515,15 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     float left = 0;
     float right = 0;
     if (hasLabels) {
-        for (int i = 0; i < c->nodes.len; i++) {
+        nodeIx = -1;
+        for (const SankeyChartNode& node : c->nodes) {
+            int i = ++nodeIx;
             int layer = g.nodes[i].layer;
             if (layer != 0 && layer + 1 != layers) {
                 continue;
             }
             float labelW = 0;
-            Str lines[3] = {values[i], c->nodes[i].note, c->nodes[i].label};
+            Str lines[3] = {values[i], node.note, node.label};
             for (int k = 0; k < 3; k++) {
                 if (!lines[k].s) {
                     continue;
@@ -543,7 +549,9 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     float lineH = kPlotTextSize + kPlotTextGap;
     float top = 0;
     if (hasLabels && layers > 2) {
-        for (int i = 0; i < c->nodes.len; i++) {
+        nodeIx = -1;
+        for (const SankeyChartNode& node : c->nodes) {
+            int i = ++nodeIx;
             int layer = g.nodes[i].layer;
             if (layer == 0 || layer + 1 == layers) {
                 continue;
@@ -552,7 +560,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
             if (values[i].s) {
                 block += lineH;
             }
-            if (c->nodes[i].label.s) {
+            if (node.label.s) {
                 block += lineH;
             }
             if (block > 0 && block + kPlotTextGap > top) {
@@ -579,8 +587,10 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     const Theme& th = ThemeNow();
     Rgba palette[5] = {th.blue, th.green, th.yellow, th.magenta, th.cyan};
     Rgba* colors = (Rgba*)Alloc(ta, (int)sizeof(Rgba) * nNodes);
-    for (int i = 0; i < c->nodes.len; i++) {
-        colors[i] = c->nodes[i].hasColor ? c->nodes[i].color : palette[i % 5];
+    nodeIx = -1;
+    for (const SankeyChartNode& node : c->nodes) {
+        int i = ++nodeIx;
+        colors[i] = node.hasColor ? node.color : palette[i % 5];
     }
 
     // The ribbons first, under the nodes: a horizontal cubic through the

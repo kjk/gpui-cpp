@@ -331,9 +331,8 @@ static void DocumentResolve(Tokenizer* t) {
                 ArenaVec<Event> exits = t->tokenizeState.documentExits[line];
                 if (exits.len > 0) {
                     t->tokenizeState.documentExits[line] = ArenaVec<Event>{};
-                    for (int32_t exitIndex = 0; exitIndex < exits.len;
-                         exitIndex++) {
-                        exits[exitIndex].point = point;
+                    for (Event& exit : exits) {
+                        exit.point = point;
                     }
                     EditMapAdd(child->map, injectIndex, 0,
                                exits.Flatten(t->parseState->scratch),
@@ -364,9 +363,9 @@ static void DocumentResolve(Tokenizer* t) {
         ArenaVec<Event> exits = t->tokenizeState.documentExits[line];
         if (exits.len > 0) {
             t->tokenizeState.documentExits[line] = ArenaVec<Event>{};
-            for (int32_t exitIndex = 0; exitIndex < exits.len; exitIndex++) {
-                exits[exitIndex].point = t->point;
-                t->events.Append(exits[exitIndex]);
+            for (Event& exit : exits) {
+                exit.point = t->point;
+                t->events.Append(exit);
             }
         }
     }

@@ -169,8 +169,8 @@ static void MdInlineHtml(MdBuild* b, Str tag) {
 static void MdInlineNode(MdBuild* b, const md::Node* n);
 
 static void MdInlineChildren(MdBuild* b, const md::Node* n) {
-    for (int32_t i = 0; i < n->children.len; i++) {
-        MdInlineNode(b, n->children[i]);
+    for (const md::Node* child : n->children) {
+        MdInlineNode(b, child);
     }
 }
 
@@ -187,11 +187,11 @@ static void MdMarked(MdBuild* b, const md::Node* n, uint8_t mark) {
 // collected below. Empty when the definition is missing, which is what Rust's
 // LinkMark holds until the reference is resolved.
 static Str MdDefUrl(MdBuild* b, Str identifier) {
-    for (int32_t i = 0; i < b->defs.len; i++) {
-        if (b->defs[i].identifier.len == identifier.len &&
-            memcmp(b->defs[i].identifier.s, identifier.s,
-                   (size_t)identifier.len) == 0) {
-            return b->defs[i].url;
+    for (const MdDef& def : b->defs) {
+        if (def.identifier.len == identifier.len &&
+            memcmp(def.identifier.s, identifier.s, (size_t)identifier.len) ==
+                0) {
+            return def.url;
         }
     }
     return {};
@@ -268,8 +268,8 @@ static void MdInline(MdBuild* b, const md::Node* n) {
 static void MdBlockNode(MdBuild* b, const md::Node* n);
 
 static void MdBlockChildren(MdBuild* b, const md::Node* n) {
-    for (int32_t i = 0; i < n->children.len; i++) {
-        MdBlockNode(b, n->children[i]);
+    for (const md::Node* child : n->children) {
+        MdBlockNode(b, child);
     }
 }
 
@@ -285,22 +285,24 @@ static void MdCodeBlock(MdBuild* b, Str value, Str lang) {
 static void MdTable(MdBuild* b, const md::Node* n) {
     MdNode* table = Push(b, MdKind::Table);
     (void)table;
-    for (int32_t i = 0; i < n->children.len; i++) {
-        const md::Node* row = n->children[i];
+    int32_t rowIndex = 0;
+    for (const md::Node* row : n->children) {
+        int32_t at = rowIndex++;
         if (row->kind != md::NodeKind::TableRow) {
             continue;
         }
         MdNode* r = Push(b, MdKind::Row);
         // mdast has no thead: the first row is the head.
-        r->head = i == 0;
-        for (int32_t j = 0; j < row->children.len; j++) {
-            const md::Node* cell = row->children[j];
+        r->head = at == 0;
+        int32_t cellIndex = 0;
+        for (const md::Node* cell : row->children) {
             if (cell->kind != md::NodeKind::TableCell) {
                 continue;
             }
+            int32_t column = cellIndex++;
             MdNode* c = Push(b, MdKind::Cell);
-            if (j < n->align.len) {
-                switch (n->align[j]) {
+            if (column < n->align.len) {
+                switch (n->align[column]) {
                     case md::AlignKind::Left:
                         c->align = MdAlignLeft;
                         break;
@@ -396,8 +398,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             AddText(b, n->identifier);
             AddText(b, StrL("]: "));
             b->marks = saved;
-            for (int32_t i = 0; i < n->children.len; i++) {
-                const md::Node* c = n->children[i];
+            for (const md::Node* c : n->children) {
                 // Its children are blocks; their inline content joins the one
                 // paragraph, which is what Rust's parse_paragraph does.
                 if (md::NodeHasChildren(c->kind)) {
@@ -426,8 +427,8 @@ static void MdCollectDefs(MdBuild* b, const md::Node* n) {
         b->defs.Append(b->a, def);
         return;
     }
-    for (int32_t i = 0; i < n->children.len; i++) {
-        MdCollectDefs(b, n->children[i]);
+    for (const md::Node* child : n->children) {
+        MdCollectDefs(b, child);
     }
 }
 

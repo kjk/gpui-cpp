@@ -2,8 +2,8 @@
  * widget builders fill. Not a port: the Rust side has no equivalent, and the
  * tests the tree already has only ever exercise vecs small enough to sit in
  * one segment. These are the cases past that edge — the segment boundary, the
- * pop that hands an earlier segment back the appends, and the iteration cache
- * that has to be right in both directions. */
+ * pop that hands an earlier segment back the appends, and the iterator, which
+ * has to end where the elements do and not where the segments do. */
 
 #include "Test.h"
 
@@ -16,6 +16,73 @@ static void AnEmptyVecHasNothing() {
     utassert(v.len == 0);
     utassert(v.first == nullptr && v.last == nullptr);
     utassert(v.Flatten(nullptr) == nullptr);
+    utassert(!(v.begin() != v.end()));
+}
+
+static void TheIteratorWalksEverySegment() {
+    Arena* a = ArenaNew();
+    ArenaVec<int> v = {};
+    for (int i = 0; i < kMany; i++) {
+        v.Append(a, i);
+    }
+    utassert(v.first != v.last);
+    int seen = 0;
+    for (int el : v) {
+        utassert(el == seen);
+        seen++;
+    }
+    utassert(seen == kMany);
+
+    // Through a reference, which is how an event's point is rewritten in
+    // place.
+    for (int& el : v) {
+        el += 1000;
+    }
+    utassert(v[0] == 1000);
+    utassert(v[kMany - 1] == kMany - 1 + 1000);
+
+    // A vec of one element, and one that never got a segment at all.
+    ArenaVec<int> one = {};
+    one.Append(a, 7);
+    seen = 0;
+    for (int el : one) {
+        utassert(el == 7);
+        seen++;
+    }
+    utassert(seen == 1);
+    ArenaVec<int> none = {};
+    for (int el : none) {
+        (void)el;
+        utassert(false);
+    }
+    ArenaDelete(a);
+}
+
+static void TheIteratorSkipsTheSegmentsATruncateEmptied() {
+    Arena* a = ArenaNew();
+    ArenaVec<int> v = {};
+    for (int i = 0; i < kMany; i++) {
+        v.Append(a, i);
+    }
+    // Back into the first segment, with several empty ones still linked
+    // behind it — the walk has to end at the last element and not at the
+    // last segment.
+    v.Truncate(3);
+    utassert(v.last->next != nullptr);
+    int seen = 0;
+    for (int el : v) {
+        utassert(el == seen);
+        seen++;
+    }
+    utassert(seen == 3);
+
+    // And nothing at all left is still a walk that ends immediately.
+    v.Truncate(0);
+    for (int el : v) {
+        (void)el;
+        utassert(false);
+    }
+    ArenaDelete(a);
 }
 
 static void AppendsReadBackAcrossSegments() {
@@ -25,7 +92,9 @@ static void AppendsReadBackAcrossSegments() {
         utassert(v.Append(a, i * 3));
         utassert(v.len == i + 1);
     }
-    // Forward, which is what the cache is for.
+    // Forward. `Iter` is the way to do this; `v[i]` walks from the first
+    // segment every time, which is what the rest of the tree uses it for and
+    // what this is checking.
     for (int i = 0; i < kMany; i++) {
         utassert(v[i] == i * 3);
     }
@@ -194,6 +263,8 @@ static void ACopyOfTheHandleSeesTheSameElements() {
 void TestArenaVec() {
     TestSuite("arena_vec");
     AnEmptyVecHasNothing();
+    TheIteratorWalksEverySegment();
+    TheIteratorSkipsTheSegmentsATruncateEmptied();
     AppendsReadBackAcrossSegments();
     ElementsDoNotMoveWhenTheVecGrows();
     AppendManyFillsTheSameOrder();

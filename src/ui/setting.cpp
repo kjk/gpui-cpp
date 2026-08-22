@@ -63,8 +63,8 @@ bool SettingGroupMatches(const SettingGroup* g, Str query) {
     }
     // A group is shown when anything in it is: Rust drops a group whose
     // filtered items came out empty.
-    for (int i = 0; i < g->items.len; i++) {
-        if (SettingItemMatches(&g->items[i], query)) {
+    for (const SettingItem& it : g->items) {
+        if (SettingItemMatches(&it, query)) {
             return true;
         }
     }
@@ -75,8 +75,8 @@ bool SettingPageMatches(const SettingPage* p, Str query) {
     if (query.len <= 0) {
         return true;
     }
-    for (int i = 0; i < p->groups.len; i++) {
-        if (SettingGroupMatches(&p->groups[i], query)) {
+    for (const SettingGroup& g : p->groups) {
+        if (SettingGroupMatches(&g, query)) {
             return true;
         }
     }
@@ -591,8 +591,9 @@ El* Settings::IntoEl() {
                         ->IntoEl());
     }
     int selected = st ? st->page : 0;
-    for (int i = 0; i < pages.len; i++) {
-        const SettingPage& p = pages[i];
+    int i = -1;
+    for (const SettingPage& p : pages) {
+        i++;
         if (!SettingPageMatches(&p, query)) {
             continue;
         }
@@ -632,8 +633,10 @@ El* Settings::IntoEl() {
         if (!active) {
             continue;
         }
-        for (int g = 0; g < p.groups.len; g++) {
-            if (!SettingGroupMatches(&p.groups[g], query)) {
+        int g = -1;
+        for (const SettingGroup& group : p.groups) {
+            g++;
+            if (!SettingGroupMatches(&group, query)) {
                 continue;
             }
             El* sub = Div(a)
@@ -647,8 +650,7 @@ El* Settings::IntoEl() {
             if (st && st->group == g) {
                 sub->Bg(BackgroundOpacity(th.tokens.accent, 0.6f));
             }
-            sub->Child(
-                TextEl(a, p.groups[g].title)->Font(16)->Fg(th.foreground));
+            sub->Child(TextEl(a, group.title)->Font(16)->Fg(th.foreground));
             BindClick(sub, StrDup(a, fmt("%s-group-%d-%d", id, i, g)),
                       ListenTo(state, &SettingsState::OnGroupClick,
                                (intptr_t)(i * 64 + g)));
@@ -665,8 +667,9 @@ El* Settings::IntoEl() {
         // anything on it came out dirty, which only the fields know.
         bool anyDirty = false;
         El* body = Div(a)->FlexCol()->W(kFill)->Pad(16)->Gap(8);
-        for (int g = 0; g < p.groups.len; g++) {
-            const SettingGroup& grp = p.groups[g];
+        int g = -1;
+        for (const SettingGroup& grp : p.groups) {
+            g++;
             if (!SettingGroupMatches(&grp, query)) {
                 continue;
             }
@@ -679,14 +682,15 @@ El* Settings::IntoEl() {
                 card->Border(1, th.border);
             }
             int shown = 0;
-            for (int i = 0; i < grp.items.len; i++) {
-                const SettingItem& it = grp.items[i];
+            int itemIx = -1;
+            for (const SettingItem& it : grp.items) {
+                itemIx++;
                 if (!SettingItemMatches(&it, query)) {
                     continue;
                 }
                 card->Child(RenderItem(
                     cx, this, it,
-                    StrDup(a, fmt("%s-%d-%d-%d", id, selected, g, i)),
+                    StrDup(a, fmt("%s-%d-%d-%d", id, selected, g, itemIx)),
                     shown == 0, p.resettable, &anyDirty));
                 shown++;
             }
