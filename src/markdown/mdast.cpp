@@ -39,7 +39,7 @@ bool NodeHasChildren(NodeKind kind) {
 
 // The value a node contributes to `NodeToString`: its own, or nothing when
 // its children are what it is made of.
-static Str NodeOwnValue(const Node* node) {
+static ArenaStr NodeOwnValue(const Node* node) {
     switch (node->kind) {
         case NodeKind::Toml:
         case NodeKind::Yaml:
@@ -51,10 +51,11 @@ static Str NodeOwnValue(const Node* node) {
         case NodeKind::Math:
             return node->value;
         default:
-            return {};
+            return kArenaStrNone;
     }
 }
 
+// The length is in the word itself, so the first pass reads no arena at all.
 static int32_t NodeToStringLen(const Node* node) {
     if (NodeHasChildren(node->kind)) {
         int32_t len = 0;
@@ -63,17 +64,18 @@ static int32_t NodeToStringLen(const Node* node) {
         }
         return len;
     }
-    return NodeOwnValue(node).len;
+    return (int32_t)base::ArenaStrLen(NodeOwnValue(node));
 }
 
-static int32_t NodeToStringFill(const Node* node, char* out, int32_t at) {
+static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
+                                int32_t at) {
     if (NodeHasChildren(node->kind)) {
         for (const Node* child : node->children) {
-            at = NodeToStringFill(child, out, at);
+            at = NodeToStringFill(a, child, out, at);
         }
         return at;
     }
-    Str value = NodeOwnValue(node);
+    Str value = NodeStr(a, NodeOwnValue(node));
     if (value.len > 0) {
         memcpy(out + at, value.s, (size_t)value.len);
         at += value.len;
@@ -89,7 +91,7 @@ Str NodeToString(Arena* a, const Node* node) {
     if (!out) {
         return {};
     }
-    int32_t at = NodeToStringFill(node, out, 0);
+    int32_t at = NodeToStringFill(a, node, out, 0);
     out[at] = 0;
     return Str(out, at);
 }

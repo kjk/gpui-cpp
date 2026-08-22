@@ -18,7 +18,14 @@
 using namespace markdown;
 
 // The tree of a source, in an arena the caller owns.
+// A node's strings are ArenaStr — an offset into the arena the tree was
+// parsed into — so reading one back needs that arena. Every check here runs
+// against the tree the line above it parsed, so this is where Parse leaves
+// it rather than two hundred call sites threading it through.
+static Arena* gParsedInto = nullptr;
+
 static Node* Parse(Arena* a, const char* source) {
+    gParsedInto = a;
     return ToMdast(a, Str(source), ParseOptions::Gfm());
 }
 
@@ -33,6 +40,16 @@ static Node* Child(Node* n, int32_t ix) {
 static bool Is(Str s, const char* want) {
     int32_t len = (int32_t)strlen(want);
     return s.len == len && (len == 0 || memcmp(s.s, want, (size_t)len) == 0);
+}
+
+static bool Is(ArenaStr s, const char* want) {
+    return Is(base::ArenaStrGet(gParsedInto, s), want);
+}
+
+// Whether the node carried this string at all, which is what a null `s` used
+// to mean.
+static bool IsUnset(ArenaStr s) {
+    return !base::ArenaStrIsSet(s);
 }
 
 // The text of a node and everything under it.
@@ -217,7 +234,7 @@ static void TestMarkdownFlow(Arena* a) {
     root = Parse(a, "    indented\n");
     utassert(Child(root, 0)->kind == NodeKind::Code);
     utassert(Is(Child(root, 0)->value, "indented"));
-    utassert(Child(root, 0)->lang.s == nullptr);
+    utassert(IsUnset(Child(root, 0)->lang));
 }
 
 static void TestMarkdownLists(Arena* a) {

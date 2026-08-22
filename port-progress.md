@@ -1723,3 +1723,48 @@ cargo run -p system_monitor
   left out.
 
   16622 -> 16687 checks on Windows and Linux, 16695 on macOS.
+
+- 2026-08-22: A markdown `Node`'s eight strings are `ArenaStr`, which is an
+  offset and a length in one 64-bit word rather than a pointer and a length in
+  two. A Node carries all eight whichever kind it is, so that was half the
+  struct spent pointing into the arena the node is already in: **232 bytes ->
+  168**, and a parse allocates them by the thousand.
+
+  Measured at 64 KB of source, `bun cmd/bench.ts markdown`, with the
+  BenchMem row the previous commit added:
+
+    shape         before                after                 arena
+    prose         1646.1 KB  25.65x     1285.9 KB  20.04x     -21.9%
+    nested        1067.9 KB  16.67x      867.5 KB  13.54x     -18.8%
+    gfm tables    2926.0 KB  45.66x     2269.7 KB  35.41x     -22.4%
+    entities       660.2 KB  10.28x      626.2 KB   9.75x      -5.2%
+
+  Speed is unchanged, which is the result to want rather than a
+  disappointment: reading a string back is now an add rather than a
+  dereference, and the block the offset lands in is found by walking the
+  chain from the newest — one comparison while the arena is one block, which
+  is every parse here. prose 8.44 -> 8.61 ms, nested 9.75 -> 9.53, tables
+  12.99 -> 12.73, entities 5.89 -> 5.96, all inside the ~1% the runs move by
+  anyway. `to_mdast` alone is 0.38 ms either way.
+
+  The entities shape barely moves because its arena is mostly decoded
+  character data, not nodes; the table shape moves most because a table is
+  nodes almost all the way down.
+
+  `Keep(c, s)` in to_mdast.cpp is the one thing worth knowing about the
+  conversion. StrCat, NodeToString, IdentifierFrom and CharacterReferenceDecode
+  all allocate in the parse arena, so storing what they return is a lookup and
+  no second copy; a slice of the *source* bytes is not the arena's and has to
+  be copied in. Which of the two it is cannot be got wrong at a call site
+  because `Keep` asks the arena rather than the caller — `ArenaStrRef` first,
+  `ArenaStrDup` when that finds nothing.
+
+  What did not shrink, and is the next thing to look at if this matters more:
+  `OnExitData` is `node->value = StrCat(a, node->value, value)` once per data
+  event, so a text node of N events leaves N partial concatenations behind in
+  the arena. That is where prose's remaining 20x lives, and it is markdown-rs's
+  shape as much as ours.
+
+  Verified beyond the suite: `rich_text` renders pixel-identical, which
+  exercises every one of the eight strings — value, url, title, alt,
+  identifier, label, lang and meta — through TextView.

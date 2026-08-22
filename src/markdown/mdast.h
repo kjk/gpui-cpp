@@ -22,7 +22,10 @@
 namespace markdown {
 
 using base::Arena;
+using base::ArenaStr;
+using base::ArenaStrGet;
 using base::ArenaVec;
+using base::kArenaStrNone;
 using base::Str;
 
 // unist::Point.
@@ -101,23 +104,29 @@ struct Node {
     UnistPosition position = {};
     bool hasPosition = false;
 
+    // The eight strings a node may carry. They are ArenaStr rather than Str
+    // because a Node is allocated by the thousand and holds all eight
+    // whichever kind it is: sixteen bytes each of pointer and length is half
+    // the struct, spent pointing into the arena the node is already in.
+    // `NodeStr(a, ..)` reads one back.
+    //
     // Text, Html, Code, Math, InlineCode, InlineMath, Yaml, Toml.
-    Str value = {};
+    ArenaStr value = kArenaStrNone;
     // Link, Image, Definition.
-    Str url = {};
+    ArenaStr url = kArenaStrNone;
     // Link, Image, Definition. Optional.
-    Str title = {};
+    ArenaStr title = kArenaStrNone;
     // Image, ImageReference.
-    Str alt = {};
+    ArenaStr alt = kArenaStrNone;
     // Definition, LinkReference, ImageReference, FootnoteDefinition,
     // FootnoteReference.
-    Str identifier = {};
+    ArenaStr identifier = kArenaStrNone;
     // The same five. Optional.
-    Str label = {};
+    ArenaStr label = kArenaStrNone;
     // Code: the fence's info word and the rest of the fence. Math: the rest.
     // Both optional.
-    Str lang = {};
-    Str meta = {};
+    ArenaStr lang = kArenaStrNone;
+    ArenaStr meta = kArenaStrNone;
 
     // Table.
     ArenaVec<AlignKind> align = {};
@@ -141,6 +150,12 @@ struct Node {
 };
 
 Node* NodeNew(Arena* a, NodeKind kind);
+
+// One of a node's eight strings, read out of the arena it was parsed into.
+// The Str points into that arena and lives exactly as long as it does.
+inline Str NodeStr(Arena* a, ArenaStr s) {
+    return ArenaStrGet(a, s);
+}
 
 // mdast.rs `Node::children()`: whether this kind holds children at all.
 bool NodeHasChildren(NodeKind kind);
