@@ -79,7 +79,12 @@ struct Str {
     int len;
 
     Str() : s(nullptr), len(0) {}
-    Str(const char* s_) : s((char*)s_), len(0) {
+    // Explicit, so that a `const char*` cannot become a Str by accident:
+    // a string literal should go through StrL(), which knows the length at
+    // compile time, and a runtime pointer should say `Str(p)` where it means
+    // "walk this to its NUL". SumatraPDF's Str is explicit for the same
+    // reason.
+    explicit Str(const char* s_) : s((char*)s_), len(0) {
         len = s_ ? (int)strlen(s_) : 0;
     }
     explicit Str(const char* s_, int len_) : s((char*)s_), len(len_) {}

@@ -2311,3 +2311,33 @@ cargo run -p system_monitor
   bytes. What is left in the struct is two child links, the record list and
   two bytes of tag — there is no field left to take that anything still
   reads.
+
+- 2026-08-23: `Str(const char*)` is explicit, the way SumatraPDF's is, so a
+  `const char*` cannot become a Str by accident: a literal goes through
+  `StrL()`, which knows its length at compile time, and a runtime pointer
+  says `Str(p)` where it means "walk this to the NUL".
+
+  It caught nothing that should have been `StrL()`. Nine sites stopped
+  compiling, all of them in the formatter and all of them genuine runtime
+  buffers; a grep for `Str("..")`, which the compiler cannot flag, came back
+  empty on all three platforms. The discipline was already kept — the point
+  is that it is now kept by the compiler.
+
+  `bufFmt` answers the Str it wrote rather than nothing, so the nine sites
+  append the result directly instead of walking the buffer again with
+  strlen. The length comes from vsnprintf's return, falling back to strlen
+  when it truncated, because MSVC's `_vsnprintf_l` answers -1 there where
+  C99 answers the length it wanted.
+
+  `fmt()` had no tests. `tests/FmtTests.cpp` is 58 checks against the doc
+  block: the directives, flags and width and precision reaching snprintf
+  unchanged, the length modifier normalized so `%lld`, `%I64d`, `%jd` and
+  `%zu` agree on every platform, `%s` padding done by hand because a Str
+  need not be terminated, and a format that does not hold up answering an
+  empty Str rather than a partial one.
+
+  The doc block itself was SumatraPDF's, and described an API this tree does
+  not have — `Fmt fmt("%d = %s"); fmt.i(5).s("5").Get()`. It now describes
+  `fmt()` / `logf()` / `StrDup(a, fmt(..))`, and corrects the spelling of a
+  positional: it is `%{0}`, not `%{$0}`, which the parser rejects. Every
+  claim in it is now an assertion in the suite that passed.

@@ -102,3 +102,4 @@ void TestArenaVec();
 void TestDrawOps();
 void TestHttp();
 void TestArenaStr();
+void TestFmt();
