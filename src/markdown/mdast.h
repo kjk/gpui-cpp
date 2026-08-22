@@ -124,9 +124,9 @@ enum NodeFlag : uint8_t {
 };
 
 // The fields are ordered largest first so the struct packs with no padding at
-// all: three 24-byte members, then the eight 8-byte strings, then the one
-// 4-byte number, then the four single bytes. 144 bytes, where the order they
-// were written in cost 168.
+// all: three 24-byte members, then the eight strings and the one number at
+// four bytes each, then the four single bytes. 112 bytes, where the order
+// they were written in with a Str per string cost 232.
 struct Node {
     // Root, Paragraph, Heading, Blockquote, List, ListItem, Emphasis, Strong,
     // Link, LinkReference, FootnoteDefinition, Table, TableRow, TableCell,
@@ -142,9 +142,11 @@ struct Node {
 
     // The eight strings a node may carry. They are ArenaStr rather than Str
     // because a Node is allocated by the thousand and holds all eight
-    // whichever kind it is: sixteen bytes each of pointer and length is half
-    // the struct, spent pointing into the arena the node is already in.
-    // `NodeStr(a, ..)` reads one back.
+    // whichever kind it is: sixteen bytes each of pointer and length would be
+    // two thirds of the struct, spent on lengths and on pointing into the
+    // arena the node is already in. Four bytes each of offset, with the
+    // length varint-encoded beside the characters. `NodeStr(a, ..)` reads one
+    // back.
     //
     // Text, Html, Code, Math, InlineCode, InlineMath, Yaml, Toml.
     ArenaStr value = kArenaStrNone;
@@ -183,10 +185,10 @@ struct Node {
 };
 
 // The packing is the point, so it is checked rather than hoped for: three
-// 24-byte members, eight 8-byte strings, one 4-byte number and four single
+// 24-byte members, eight 4-byte strings, one 4-byte number and four single
 // bytes, with nothing left over. Adding a field in the wrong place costs
 // eight bytes a node and would otherwise go unnoticed.
-static_assert(sizeof(Node) == 3 * 24 + 8 * 8 + 4 + 4,
+static_assert(sizeof(Node) == 3 * 24 + 8 * 4 + 4 + 4,
               "Node has picked up padding; order the fields largest first");
 
 Node* NodeNew(Arena* a, NodeKind kind);

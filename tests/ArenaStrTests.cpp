@@ -1,8 +1,10 @@
 /* Not a port — `ArenaStr` is this tree's, not markdown-rs's.
 
-   A string packed into one 64-bit word: the length in the upper half, the
-   offset into the arena's position space in the lower. Half what a `Str`
-   costs, which is what an mdast Node holding eight of them is for.
+   Four bytes: where the string starts in the arena's position space. The
+   length lives with the characters, varint-encoded ahead of them, so a
+   string under 128 long carries it in one byte. A quarter of what a `Str`
+   costs in the holder, which is what an mdast Node holding eight of them is
+   for.
 
    `ArenaPtr<T>` is the same trade for a pointer: four bytes of offset into
    the same position space. */
@@ -13,7 +15,7 @@ static void WhatGoesInComesOut() {
     Arena* a = ArenaNew();
     ArenaStr s = ArenaStrDup(a, StrL("hello"));
     utassert(ArenaStrIsSet(s));
-    utassert(ArenaStrLen(s) == 5);
+    utassert(ArenaStrLen(a, s) == 5);
     utassert(StrSame(ArenaStrGet(a, s), StrL("hello")));
 
     // NUL-terminated the way StrDup's is, so a caller that needs a C string
@@ -56,33 +58,71 @@ static void ItSurvivesTheArenaChainingOn() {
 }
 
 // A slice of something the arena already holds does not need copying again.
-static void ARefNamesWhatIsAlreadyThere() {
+// The length is one byte ahead of the characters for anything short, so a
+// string costs one byte of arena more than its characters and terminator —
+// and four bytes less everywhere it is held, which is the trade.
+static void TheLengthRidesAlongInOneByte() {
     Arena* a = ArenaNew();
-    ArenaStr full = ArenaStrDup(a, StrL("hello world"));
-    Str got = ArenaStrGet(a, full);
+    uint64_t before = ArenaUsed(a);
+    ArenaStr s = ArenaStrDup(a, StrL("hello"));
+    utassert(ArenaUsed(a) == before + 1 + 5 + 1);
+    utassert(ArenaStrLen(a, s) == 5);
 
-    ArenaStr world = ArenaStrRef(a, Str(got.s + 6, 5));
-    utassert(ArenaStrIsSet(world));
-    utassert(StrSame(ArenaStrGet(a, world), StrL("world")));
-    // No copy: it names the same bytes.
-    utassert(ArenaStrGet(a, world).s == got.s + 6);
-
-    // A string that is not in this arena has no offset to name, and saying so
-    // beats answering an offset into somebody else's bytes.
-    utassert(!ArenaStrIsSet(ArenaStrRef(a, StrL("elsewhere"))));
+    // 127 is the last length that fits in one byte, 128 the first that needs
+    // two. Both read back as themselves, which is the boundary the decode
+    // gets wrong if the continuation bit is.
+    char buf[300];
+    for (int i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = (char)('a' + (i % 26));
+    }
+    for (int len = 126; len <= 130; len++) {
+        Arena* b = ArenaNew();
+        uint64_t was = ArenaUsed(b);
+        ArenaStr big = ArenaStrDup(b, Str(buf, len));
+        utassert(ArenaStrLen(b, big) == (uint32_t)len);
+        utassert(StrSame(ArenaStrGet(b, big), Str(buf, len)));
+        int want = len < 128 ? 1 : 2;
+        utassert(ArenaUsed(b) == was + (uint64_t)want + len + 1);
+        ArenaDelete(b);
+    }
     ArenaDelete(a);
 }
 
-static void TheWordIsLengthOverOffset() {
+// Growing past 127 characters is where the prefix needs a second byte and
+// the characters shift over to make room. The string it names does not move.
+static void GrowingPastTheOneByteLength() {
+    Arena* a = ArenaNew();
+    char buf[200];
+    for (int i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = (char)('a' + (i % 26));
+    }
+    ArenaStr s = ArenaStrDup(a, Str(buf, 120));
+    ArenaStr was = s;
+    uint64_t after = ArenaUsed(a);
+
+    // 120 -> 130: one byte for the ten characters' worth of prefix growth,
+    // ten for the characters.
+    s = ArenaStrAppend(a, s, Str(buf + 120, 10));
+    utassert(s == was);
+    utassert(ArenaStrLen(a, s) == 130);
+    utassert(StrSame(ArenaStrGet(a, s), Str(buf, 130)));
+    utassert(ArenaUsed(a) == after + 1 + 10);
+
+    Str got = ArenaStrGet(a, s);
+    utassert(got.s[got.len] == 0);
+    ArenaDelete(a);
+}
+
+static void TheWordIsAnOffsetAndNothingElse() {
     Arena* a = ArenaNew();
     ArenaStr s = ArenaStrDup(a, StrL("abcd"));
-    // Upper half the length, lower half the offset — which is what makes the
-    // whole thing eight bytes.
-    utassert((uint32_t)(s >> 32) == 4);
-    utassert((uint32_t)s > 0);
+    // The whole word is where the string starts; the length is in the arena
+    // with the characters, not in the holder.
+    utassert(s > 0);
+    utassert(ArenaStrGet(a, s).s == (char*)ArenaAtOffset(a, s) + 1);
     // The size is the whole point, so it is checked at compile time.
-    static_assert(sizeof(ArenaStr) == 8, "ArenaStr is one word");
-    static_assert(sizeof(Str) < 2 * sizeof(ArenaStr) + 1, "Str is two");
+    static_assert(sizeof(ArenaStr) == 4, "ArenaStr is an offset");
+    static_assert(sizeof(Str) >= 4 * sizeof(ArenaStr), "and a Str is four");
     ArenaDelete(a);
 }
 
@@ -102,7 +142,7 @@ static void AppendingToTheNewestCostsOnlyTheBytes() {
     s = ArenaStrAppend(a, s, StrL(" three"));
     utassert(StrSame(ArenaStrGet(a, s), StrL("one two three")));
     utassert(ArenaUsed(a) == after + 4 + 6);
-    utassert(ArenaStrLen(s) == 13);
+    utassert(ArenaStrLen(a, s) == 13);
 
     // Still NUL-terminated, which the in-place path has to keep true or the
     // next append would find the wrong end.
@@ -114,7 +154,7 @@ static void AppendingToTheNewestCostsOnlyTheBytes() {
     s = ArenaStrAppend(a, s, Str{});
     s = ArenaStrAppend(a, s, StrL(""));
     utassert(ArenaUsed(a) == before);
-    utassert(ArenaStrLen(s) == 13);
+    utassert(ArenaStrLen(a, s) == 13);
 
     // Appending to nothing is just storing it.
     ArenaStr fresh = ArenaStrAppend(a, kArenaStrNone, StrL("first"));
@@ -216,6 +256,7 @@ void TestArenaStr() {
     AppendingToAnOlderStringCopies();
     WhatGoesInComesOut();
     ItSurvivesTheArenaChainingOn();
-    ARefNamesWhatIsAlreadyThere();
-    TheWordIsLengthOverOffset();
+    TheLengthRidesAlongInOneByte();
+    GrowingPastTheOneByteLength();
+    TheWordIsAnOffsetAndNothingElse();
 }

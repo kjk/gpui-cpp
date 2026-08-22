@@ -317,43 +317,88 @@ static Arena* ArenaBlockAt(Arena* arena, uint64_t pos) {
     return node;
 }
 
+// The length, ahead of the bytes, in as few of them as it fits: seven bits
+// to a byte, low bits first, the high bit saying another follows. Under 128
+// characters is one byte, which is nearly every string anything here stores.
+static int VarintSize(uint32_t v) {
+    int n = 1;
+    while (v >= 0x80) {
+        v >>= 7;
+        n++;
+    }
+    return n;
+}
+
+static int VarintPut(char* dst, uint32_t v) {
+    int n = 0;
+    while (v >= 0x80) {
+        dst[n++] = (char)(v | 0x80);
+        v >>= 7;
+    }
+    dst[n++] = (char)v;
+    return n;
+}
+
+static int VarintGet(const char* src, uint32_t* out) {
+    uint32_t v = 0;
+    int shift = 0;
+    int n = 0;
+    for (;;) {
+        uint8_t b = (uint8_t)src[n++];
+        v |= (uint32_t)(b & 0x7f) << shift;
+        if ((b & 0x80) == 0) {
+            break;
+        }
+        shift += 7;
+    }
+    *out = v;
+    return n;
+}
+
+// Where an ArenaStr's first byte is, which is its length prefix and not its
+// characters.
+static char* ArenaStrAt(Arena* a, ArenaStr s) {
+    Arena* node = ArenaBlockAt(a, s);
+    if (!node) {
+        return nullptr;
+    }
+    return (char*)node + ((uint64_t)s - node->basePos);
+}
+
 ArenaStr ArenaStrDup(Arena* a, Str src) {
     if (!a || !src.s || src.len <= 0) {
         return kArenaStrNone;
     }
+    uint32_t len = (uint32_t)src.len;
+    int vlen = VarintSize(len);
     a->lock.Lock();
     // The position before the push is where the bytes land, but only once the
     // alignment the pusher applies is known — so the pointer is what says
     // where they went, and the position is worked back out of it.
-    char* dst = (char*)ArenaPushLocked(a, (uint64_t)src.len + 1, 1, false);
+    char* dst = (char*)ArenaPushLocked(a, (uint64_t)vlen + len + 1, 1, false);
     Arena* cur = a->current;
     uint64_t at = dst ? cur->basePos + (uint64_t)((char*)dst - (char*)cur) : 0;
     a->lock.Unlock();
     if (!dst) {
         return kArenaStrNone;
     }
-    memcpy(dst, src.s, (size_t)src.len);
-    dst[src.len] = 0;
-    return ((uint64_t)(uint32_t)src.len << 32) | (uint32_t)at;
+    VarintPut(dst, len);
+    memcpy(dst + vlen, src.s, (size_t)len);
+    dst[vlen + len] = 0;
+    return (ArenaStr)at;
 }
 
-ArenaStr ArenaStrRef(Arena* a, Str s) {
-    if (!a || !s.s || s.len <= 0) {
-        return kArenaStrNone;
+uint32_t ArenaStrLen(Arena* a, ArenaStr s) {
+    if (!ArenaStrIsSet(s)) {
+        return 0;
     }
-    // Which block holds it, by address. A string that is not in this arena
-    // has no offset to name, and answering kArenaStrNone for one is better
-    // than answering an offset into somebody else's bytes.
-    for (Arena* node = a->current; node; node = node->prev) {
-        char* lo = (char*)node;
-        char* hi = lo + node->pos;
-        if (s.s < lo || s.s + s.len > hi) {
-            continue;
-        }
-        uint64_t at = node->basePos + (uint64_t)(s.s - lo);
-        return ((uint64_t)(uint32_t)s.len << 32) | (uint32_t)at;
+    const char* p = ArenaStrAt(a, s);
+    if (!p) {
+        return 0;
     }
-    return kArenaStrNone;
+    uint32_t len = 0;
+    VarintGet(p, &len);
+    return len;
 }
 
 ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
@@ -363,19 +408,25 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
     if (!ArenaStrIsSet(s)) {
         return ArenaStrDup(a, more);
     }
-    uint32_t off = (uint32_t)s;
-    uint32_t len = ArenaStrLen(s);
 
     a->lock.Lock();
+    char* p = ArenaStrAt(a, s);
+    uint32_t len = 0;
+    int vlen = p ? VarintGet(p, &len) : 0;
     Arena* cur = a->current;
     uint64_t used = cur ? cur->basePos + cur->pos : 0;
     // One past the terminator is where the arena would allocate next, which
     // is what makes this string the newest one in it.
-    bool newest = (uint64_t)off + len + 1 == used;
-    // Only `more.len` bytes: the terminator's own byte is already ours, so
-    // the characters start there and the new terminator lands on the last
-    // byte pushed. The next append then finds the same invariant.
-    uint64_t want = newest ? (uint64_t)more.len : (uint64_t)len + more.len + 1;
+    bool newest = p && (uint64_t)s + vlen + len + 1 == used;
+    uint32_t nlen = len + (uint32_t)more.len;
+    int nvlen = VarintSize(nlen);
+    // In place, only the difference: the terminator's own byte is already
+    // ours, so the characters start there and the new terminator lands on the
+    // last byte pushed. A length that has outgrown its prefix asks for the
+    // byte or two that costs as well. The next append finds the same
+    // invariant either way.
+    uint64_t want = newest ? (uint64_t)(nvlen - vlen) + (uint64_t)more.len
+                           : (uint64_t)nvlen + nlen + 1;
     char* dst = (char*)ArenaPushLocked(a, want, 1, false);
     uint64_t at = 0;
     if (dst) {
@@ -390,19 +441,36 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
     // A push that chained onto a new block is not contiguous after all, so
     // the in-place path has to check rather than assume.
     if (newest && at == used) {
-        memcpy(dst - 1, more.s, (size_t)more.len);
-        dst[more.len - 1] = 0;
-        return ((uint64_t)(len + (uint32_t)more.len) << 32) | off;
+        if (nvlen != vlen) {
+            memmove(p + nvlen, p + vlen, (size_t)len);
+        }
+        VarintPut(p, nlen);
+        memcpy(p + nvlen + len, more.s, (size_t)more.len);
+        p[nvlen + nlen] = 0;
+        return s;
     }
     // Somewhere new: both halves are copied, which is what concatenating
     // always did.
-    Str was = ArenaStrGet(a, s);
-    if (was.len > 0) {
-        memcpy(dst, was.s, (size_t)was.len);
+    VarintPut(dst, nlen);
+    if (len > 0) {
+        memcpy(dst + nvlen, p + vlen, (size_t)len);
     }
-    memcpy(dst + len, more.s, (size_t)more.len);
-    dst[len + more.len] = 0;
-    return ((uint64_t)(len + (uint32_t)more.len) << 32) | (uint32_t)at;
+    memcpy(dst + nvlen + len, more.s, (size_t)more.len);
+    dst[nvlen + nlen] = 0;
+    return (ArenaStr)at;
+}
+
+Str ArenaStrGet(Arena* a, ArenaStr s) {
+    if (!ArenaStrIsSet(s)) {
+        return {};
+    }
+    char* p = ArenaStrAt(a, s);
+    if (!p) {
+        return {};
+    }
+    uint32_t len = 0;
+    int vlen = VarintGet(p, &len);
+    return Str(p + vlen, (int)len);
 }
 
 uint32_t ArenaOffsetOf(Arena* a, const void* p) {
@@ -429,18 +497,6 @@ void* ArenaAtOffset(Arena* a, uint32_t off) {
         return nullptr;
     }
     return (char*)node + ((uint64_t)off - node->basePos);
-}
-
-Str ArenaStrGet(Arena* a, ArenaStr s) {
-    if (!ArenaStrIsSet(s)) {
-        return {};
-    }
-    uint64_t at = (uint32_t)s;
-    Arena* node = ArenaBlockAt(a, at);
-    if (!node) {
-        return {};
-    }
-    return Str((char*)node + (at - node->basePos), (int)ArenaStrLen(s));
 }
 
 void* Arena::Alloc(int size) {
