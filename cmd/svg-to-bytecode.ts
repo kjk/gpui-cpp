@@ -60,7 +60,7 @@ const CUBIC = 2;
 const CLOSE = 3;
 
 type SvgOp = { cmd: number; x: number; y: number; x1: number; y1: number; x2: number; y2: number };
-type SvgShape = { start: number; count: number; fill: number | null };
+type SvgShape = { start: number; count: number; fill: number | null; stroke: number | null };
 
 type SvgIcon = {
   vbX: number;
@@ -87,6 +87,22 @@ const addLine = (ic: SvgIcon, x: number, y: number) => addOp(ic, LINE, x, y);
 const addClose = (ic: SvgIcon) => addOp(ic, CLOSE);
 const addCubic = (ic: SvgIcon, x1: number, y1: number, x2: number, y2: number, x: number, y: number) =>
   addOp(ic, CUBIC, x, y, x1, y1, x2, y2);
+
+// Four cubics, one per quadrant. addRoundRect below cannot stand in for
+// this: it takes one corner radius for both axes, so an <ellipse> drawn with
+// it comes out a stadium. <circle> still goes through addRoundRect, where its
+// bytes are what the compiled icon table holds.
+function addEllipse(ic: SvgIcon, cx: number, cy: number, rx: number, ry: number): void {
+  if (rx <= 0 || ry <= 0) return;
+  const kx = rx * 0.55228475;
+  const ky = ry * 0.55228475;
+  addMove(ic, cx + rx, cy);
+  addCubic(ic, cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry);
+  addCubic(ic, cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy);
+  addCubic(ic, cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry);
+  addCubic(ic, cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy);
+  addClose(ic);
+}
 
 function addRoundRect(ic: SvgIcon, x: number, y: number, w: number, h: number, rx: number): void {
   if (rx < 0) rx = 0;
@@ -485,12 +501,106 @@ function parseSvgColor(v: string): number | null {
   return ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0;
 }
 
-function endShape(ic: SvgIcon, start: number, tag: string): void {
+// The 2x3 affine SVG writes as `matrix(a b c d e f)`: x' = a*x + c*y + e and
+// y' = b*x + d*y + f. The mirror of SvgMatrix in src/gpui/svg.cpp.
+type Mat = { a: number; b: number; c: number; d: number; e: number; f: number };
+
+const identity: Mat = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
+function isIdentity(m: Mat): boolean {
+  return m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
+}
+
+// `m` applied after `n` — the order a nested <g> composes in.
+function matMul(m: Mat, n: Mat): Mat {
+  return {
+    a: m.a * n.a + m.c * n.b,
+    b: m.b * n.a + m.d * n.b,
+    c: m.a * n.c + m.c * n.d,
+    d: m.b * n.c + m.d * n.d,
+    e: m.a * n.e + m.c * n.f + m.e,
+    f: m.b * n.e + m.d * n.f + m.f,
+  };
+}
+
+// "translate(120 0) scale(.1)" and the rest of the list, in order. A function
+// this does not know is skipped rather than guessed at.
+function parseTransform(s: string): Mat {
+  let out = identity;
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && " ,\t\n\r".includes(s[i]!)) i++;
+    const nameAt = i;
+    while (i < s.length && s[i] !== "(") i++;
+    if (i >= s.length) break;
+    const fn = s.slice(nameAt, i).toLowerCase();
+    i++; // past (
+    const argAt = i;
+    while (i < s.length && s[i] !== ")") i++;
+    const sc = new Scan(s.slice(argAt, i));
+    if (i < s.length) i++; // past )
+    const v: number[] = [];
+    for (let k = 0; k < 6; k++) {
+      const n = sc.num();
+      if (n === null) break;
+      v.push(n);
+    }
+    let m = identity;
+    if (fn === "translate" && v.length >= 1) {
+      m = { ...identity, e: v[0]!, f: v.length >= 2 ? v[1]! : 0 };
+    } else if (fn === "scale" && v.length >= 1) {
+      m = { ...identity, a: v[0]!, d: v.length >= 2 ? v[1]! : v[0]! };
+    } else if (fn === "rotate" && v.length >= 1) {
+      const rad = (v[0]! * Math.PI) / 180;
+      const cs = Math.cos(rad);
+      const sn = Math.sin(rad);
+      m = { a: cs, b: sn, c: -sn, d: cs, e: 0, f: 0 };
+      if (v.length >= 3) {
+        // About a point rather than the origin.
+        const to = { ...identity, e: v[1]!, f: v[2]! };
+        const back = { ...identity, e: -v[1]!, f: -v[2]! };
+        m = matMul(to, matMul(m, back));
+      }
+    } else if (fn === "matrix" && v.length >= 6) {
+      m = { a: v[0]!, b: v[1]!, c: v[2]!, d: v[3]!, e: v[4]!, f: v[5]! };
+    }
+    out = matMul(out, m);
+  }
+  return out;
+}
+
+function endShape(ic: SvgIcon, start: number, tag: string, m: Mat): void {
   if (ic.ops.length <= start) return;
+  // The groups this shape sits in, and its own transform after them.
+  const own = getAttr(tag, "transform");
+  const full = own === null ? m : matMul(m, parseTransform(own));
+  if (!isIdentity(full)) {
+    for (let i = start; i < ic.ops.length; i++) {
+      const o = ic.ops[i]!;
+      if (o.cmd === CLOSE) continue; // carries no point
+      const x = o.x;
+      const y = o.y;
+      o.x = full.a * x + full.c * y + full.e;
+      o.y = full.b * x + full.d * y + full.f;
+      if (o.cmd === CUBIC) {
+        const x1 = o.x1;
+        const y1 = o.y1;
+        o.x1 = full.a * x1 + full.c * y1 + full.e;
+        o.y1 = full.b * x1 + full.d * y1 + full.f;
+        const x2 = o.x2;
+        const y2 = o.y2;
+        o.x2 = full.a * x2 + full.c * y2 + full.e;
+        o.y2 = full.b * x2 + full.d * y2 + full.f;
+      }
+    }
+  }
   const fillAttr = getAttr(tag, "fill");
   const fill = fillAttr === null ? null : parseSvgColor(fillAttr);
   if (fill !== null) ic.hasOwnColors = true;
-  ic.shapes.push({ start, count: ic.ops.length - start, fill });
+  const strokeAttr = getAttr(tag, "stroke");
+  const stroke = strokeAttr === null ? null : parseSvgColor(strokeAttr);
+  if (stroke !== null) ic.hasOwnColors = true;
+  ic.shapes.push({ start, count: ic.ops.length - start, fill, stroke });
 }
 
 function startsWithI(s: string, at: number, lit: string): boolean {
@@ -512,6 +622,14 @@ const hiddenContainers = [
   "radialgradient",
 ];
 
+// A <g> and not a <glyph>: the name has to end where the tag's whitespace or
+// its close begins.
+function isGroupTag(s: string, at: number): boolean {
+  if (at >= s.length || (s[at] !== "g" && s[at] !== "G")) return false;
+  const after = at + 1 < s.length ? s[at + 1]! : " ";
+  return " >/\t\n\r".includes(after);
+}
+
 function isHiddenContainer(s: string, at: number): boolean {
   for (const n of hiddenContainers) {
     if (!startsWithI(s, at, n)) continue;
@@ -529,6 +647,8 @@ function parseSvg(xml: string): SvgIcon {
   // How deep inside a <defs> / <clipPath> / <mask> / ... we are. Nothing is
   // drawn while this is above zero.
   let hidden = 0;
+  // The <g> transforms in force, innermost last.
+  const gstack: Mat[] = [];
   while (p < end) {
     if (xml[p] !== "<") {
       p++;
@@ -539,6 +659,7 @@ function parseSvg(xml: string): SvgIcon {
       const name = p + 1;
       while (p < end && xml[p] !== ">") p++;
       if (hidden > 0 && isHiddenContainer(xml, name)) hidden--;
+      else if (hidden === 0 && gstack.length > 0 && isGroupTag(xml, name)) gstack.pop();
       if (p < end) p++;
       continue;
     }
@@ -559,6 +680,21 @@ function parseSvg(xml: string): SvgIcon {
       continue;
     }
     if (hidden > 0) continue;
+
+    // <g transform=".."> — the one container that still says something about
+    // what is drawn inside it. Its fill and stroke are deliberately *not*
+    // inherited; src/gpui/svg.cpp says why.
+    if (isGroupTag(xml, tagStart)) {
+      if (!selfClosing) {
+        let cur = gstack.length > 0 ? gstack[gstack.length - 1]! : identity;
+        const tr = getAttr(tag, "transform");
+        if (tr !== null) cur = matMul(cur, parseTransform(tr));
+        gstack.push(cur);
+      }
+      continue;
+    }
+    // What the groups around this shape add up to.
+    const gm = gstack.length > 0 ? gstack[gstack.length - 1]! : identity;
 
     if (startsWithI(xml, tagStart, "svg")) {
       const vb = getAttr(tag, "viewBox");
@@ -592,7 +728,7 @@ function parseSvg(xml: string): SvgIcon {
       const start = ic.ops.length;
       const d = getAttr(tag, "d");
       if (d) parsePathD(ic, d);
-      endShape(ic, start, tag);
+      endShape(ic, start, tag, gm);
       continue;
     }
     if (startsWithI(xml, tagStart, "rect")) {
@@ -605,28 +741,28 @@ function parseSvg(xml: string): SvgIcon {
         attrF(tag, "height", 0),
         attrF(tag, "rx", 0),
       );
-      endShape(ic, start, tag);
+      endShape(ic, start, tag, gm);
       continue;
     }
     if (startsWithI(xml, tagStart, "polyline")) {
       const start = ic.ops.length;
       const pts = getAttr(tag, "points");
       if (pts) parsePolyline(ic, pts, false);
-      endShape(ic, start, tag);
+      endShape(ic, start, tag, gm);
       continue;
     }
     if (startsWithI(xml, tagStart, "polygon")) {
       const start = ic.ops.length;
       const pts = getAttr(tag, "points");
       if (pts) parsePolyline(ic, pts, true);
-      endShape(ic, start, tag);
+      endShape(ic, start, tag, gm);
       continue;
     }
     if (startsWithI(xml, tagStart, "line")) {
       const start = ic.ops.length;
       addMove(ic, attrF(tag, "x1", 0), attrF(tag, "y1", 0));
       addLine(ic, attrF(tag, "x2", 0), attrF(tag, "y2", 0));
-      endShape(ic, start, tag);
+      endShape(ic, start, tag, gm);
       continue;
     }
     if (startsWithI(xml, tagStart, "circle")) {
@@ -635,7 +771,14 @@ function parseSvg(xml: string): SvgIcon {
         cy = attrF(tag, "cy", 0),
         r = attrF(tag, "r", 0);
       addRoundRect(ic, cx - r, cy - r, r * 2, r * 2, r);
-      endShape(ic, start, tag);
+      endShape(ic, start, tag, gm);
+      continue;
+    }
+    // No icon under assets/icons has one; a picture from anywhere else may.
+    if (startsWithI(xml, tagStart, "ellipse")) {
+      const start = ic.ops.length;
+      addEllipse(ic, attrF(tag, "cx", 0), attrF(tag, "cy", 0), attrF(tag, "rx", 0), attrF(tag, "ry", 0));
+      endShape(ic, start, tag, gm);
       continue;
     }
   }
@@ -688,14 +831,23 @@ function encodeIcon(ic: SvgIcon): number[] {
     if (sh.fill !== null) {
       w.op(OP_COLOR);
       w.u32(sh.fill);
-    }
-    emitOps(w, ic, sh.start, sh.start + sh.count);
-    if (sh.fill !== null) {
+      emitOps(w, ic, sh.start, sh.start + sh.count);
       w.op(OP_FILL_PATH);
       w.op(OP_COLOR_RESET);
-    } else {
-      w.op(ic.filled ? OP_FILL_PATH : OP_STROKE_PATH);
     }
+    // A shape may be filled in one colour and drawn in another, and one op
+    // carries one colour, so that is two passes over the same points.
+    if (sh.stroke !== null) {
+      w.op(OP_COLOR);
+      w.u32(sh.stroke);
+      emitOps(w, ic, sh.start, sh.start + sh.count);
+      w.op(OP_STROKE_PATH);
+      w.op(OP_COLOR_RESET);
+    }
+    if (sh.fill !== null || sh.stroke !== null) continue;
+    // Named no colour of its own: the caller's.
+    emitOps(w, ic, sh.start, sh.start + sh.count);
+    w.op(ic.filled ? OP_FILL_PATH : OP_STROKE_PATH);
   }
   w.op(OP_END);
   return w.bytes;

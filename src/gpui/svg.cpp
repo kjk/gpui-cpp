@@ -38,6 +38,10 @@ struct SvgShape {
     int count = 0;
     bool hasFill = false;
     Rgba fill = {};
+    // A shape may name the colour it is drawn *with* as well as the one it is
+    // filled with, and the two are not the same question.
+    bool hasStroke = false;
+    Rgba stroke = {};
 };
 
 // The file, read but not yet encoded. It lives for the length of one
@@ -89,6 +93,24 @@ static void AddClose(SvgIcon* ic) {
     SvgOp o;
     o.cmd = kClose;
     AddOp(ic, o);
+}
+
+// Four cubics, one per quadrant. AddRoundRect below cannot stand in for this:
+// it takes one corner radius for both axes, so an <ellipse> drawn with it
+// comes out a stadium. <circle> still goes through AddRoundRect, where it has
+// always gone and where its bytes are what the compiled icon table holds.
+static void AddEllipse(SvgIcon* ic, float cx, float cy, float rx, float ry) {
+    if (rx <= 0 || ry <= 0) {
+        return;
+    }
+    float kx = rx * 0.55228475f;
+    float ky = ry * 0.55228475f;
+    AddMove(ic, cx + rx, cy);
+    AddCubic(ic, cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry);
+    AddCubic(ic, cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy);
+    AddCubic(ic, cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry);
+    AddCubic(ic, cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy);
+    AddClose(ic);
 }
 
 static void AddRoundRect(SvgIcon* ic, float x, float y, float w, float h,
@@ -586,12 +608,149 @@ static bool ParseSvgColor(Str s, Rgba* out) {
     return true;
 }
 
-// One drawn element is done: what it added, and the colour it named. Every
-// element gets one, `<line>` and `<polyline>` included — a shape that is not
-// on the list is a shape the per-colour encoding would drop.
-static void EndShape(SvgIcon* ic, int start, Str tag) {
+// ─── transform= ───────────────────────────────────────────────────────────
+//
+// The 2x3 affine SVG writes as `matrix(a b c d e f)`: x' = a*x + c*y + e and
+// y' = b*x + d*y + f. Everything else — translate, scale, rotate — is one of
+// these, and a list of them is their product, left to right.
+//
+// A shape's points are transformed as the shape is finished rather than as
+// the backend draws it, so the byte stream stays a flat list of coordinates
+// and `ExecuteDrawOps` never has to know a matrix exists.
+
+struct SvgMatrix {
+    float a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;
+
+    bool IsIdentity() const {
+        return a == 1 && b == 0 && c == 0 && d == 1 && e == 0 && f == 0;
+    }
+};
+
+// `m` applied after `n` — the order a nested <g> composes in, the outer one
+// last.
+static SvgMatrix MatMul(const SvgMatrix& m, const SvgMatrix& n) {
+    SvgMatrix r;
+    r.a = m.a * n.a + m.c * n.b;
+    r.b = m.b * n.a + m.d * n.b;
+    r.c = m.a * n.c + m.c * n.d;
+    r.d = m.b * n.c + m.d * n.d;
+    r.e = m.a * n.e + m.c * n.f + m.e;
+    r.f = m.b * n.e + m.d * n.f + m.f;
+    return r;
+}
+
+// What a shape outside any <g> is drawn through.
+static const SvgMatrix kIdentity;
+
+static void MatApply(const SvgMatrix& m, float* x, float* y) {
+    float px = *x;
+    float py = *y;
+    *x = m.a * px + m.c * py + m.e;
+    *y = m.b * px + m.d * py + m.f;
+}
+
+// "translate(120 0) scale(.1)" and the rest of the list, in order. A function
+// this does not know is skipped rather than guessed at — skewX and skewY are
+// the two it does not know.
+static SvgMatrix ParseTransform(Str s) {
+    SvgMatrix out;
+    if (!s.s || s.len <= 0) {
+        return out;
+    }
+    const char* p = s.s;
+    const char* end = s.s + s.len;
+    while (p < end) {
+        while (p < end && (*p == ' ' || *p == ',' || *p == '\t' || *p == '\n' ||
+                           *p == '\r')) {
+            p++;
+        }
+        const char* name = p;
+        while (p < end && *p != '(') {
+            p++;
+        }
+        if (p >= end) {
+            break;
+        }
+        int nameLen = (int)(p - name);
+        p++; // past (
+        const char* argStart = p;
+        while (p < end && *p != ')') {
+            p++;
+        }
+        PathScan sc{argStart, p};
+        if (p < end) {
+            p++; // past )
+        }
+        float v[6] = {};
+        int n = 0;
+        while (n < 6 && ParseNum(&sc, &v[n])) {
+            n++;
+        }
+        SvgMatrix m;
+        Str fn(name, nameLen);
+        if (StrEqI(fn, StrL("translate")) && n >= 1) {
+            m.e = v[0];
+            m.f = n >= 2 ? v[1] : 0;
+        } else if (StrEqI(fn, StrL("scale")) && n >= 1) {
+            m.a = v[0];
+            m.d = n >= 2 ? v[1] : v[0];
+        } else if (StrEqI(fn, StrL("rotate")) && n >= 1) {
+            float rad = v[0] * 3.14159265358979f / 180.f;
+            float cs = cosf(rad);
+            float sn = sinf(rad);
+            m.a = cs;
+            m.b = sn;
+            m.c = -sn;
+            m.d = cs;
+            if (n >= 3) {
+                // About a point rather than the origin: move it there, turn,
+                // move it back.
+                SvgMatrix to;
+                to.e = v[1];
+                to.f = v[2];
+                SvgMatrix back;
+                back.e = -v[1];
+                back.f = -v[2];
+                m = MatMul(to, MatMul(m, back));
+            }
+        } else if (StrEqI(fn, StrL("matrix")) && n >= 6) {
+            m.a = v[0];
+            m.b = v[1];
+            m.c = v[2];
+            m.d = v[3];
+            m.e = v[4];
+            m.f = v[5];
+        }
+        out = MatMul(out, m);
+    }
+    return out;
+}
+
+// One drawn element is done: where it landed, what it added, and the colours
+// it named. Every element gets one, `<line>` and `<polyline>` included — a
+// shape that is not on the list is a shape the per-colour encoding would drop.
+static void EndShape(SvgIcon* ic, int start, Str tag, const SvgMatrix& m) {
     if (ic->ops.len <= start) {
         return;
+    }
+    // The groups this shape sits in, and its own transform after them.
+    Str own;
+    SvgMatrix full = m;
+    if (GetAttrStr(tag, "transform", &own)) {
+        full = MatMul(m, ParseTransform(own));
+    }
+    if (!full.IsIdentity()) {
+        for (int i = start; i < ic->ops.len; i++) {
+            SvgOp& o = ic->ops[i];
+            if (o.cmd == kClose) {
+                continue; // carries no point
+            }
+            MatApply(full, &o.x, &o.y);
+            if (o.cmd == kCubic) {
+                MatApply(full, &o.x1, &o.y1);
+                MatApply(full, &o.x2, &o.y2);
+            }
+        }
     }
     SvgShape sh;
     sh.start = start;
@@ -601,6 +760,12 @@ static void EndShape(SvgIcon* ic, int start, Str tag) {
         sh.hasFill = true;
         ic->hasOwnColors = true;
     }
+    char stroke[64];
+    if (GetAttr(tag, "stroke", stroke, 64) &&
+        ParseSvgColor(Str(stroke), &sh.stroke)) {
+        sh.hasStroke = true;
+        ic->hasOwnColors = true;
+    }
     ic->shapes.Append(sh);
 }
 
@@ -608,6 +773,17 @@ static void EndShape(SvgIcon* ic, int start, Str tag) {
 // gradient stop, a filter's input, the contents of <defs>. A file that names
 // one and never uses it — a shields.io badge names two — would otherwise
 // paint it, which is how a 20-pixel badge grew a stripe down the page.
+// A <g> and not a <glyph>: the name has to end where the tag's whitespace or
+// its close begins, the same rule IsHiddenContainer applies.
+static bool IsGroupTag(const char* name, const char* end) {
+    if (end <= name || (name[0] != 'g' && name[0] != 'G')) {
+        return false;
+    }
+    char after = name + 1 < end ? name[1] : ' ';
+    return after == ' ' || after == '>' || after == '/' || after == '\t' ||
+           after == '\n' || after == '\r';
+}
+
 static bool IsHiddenContainer(const char* name, const char* end) {
     static const char* kNames[] = {
         "defs",   "clipPath", "mask",           "filter",        "pattern",
@@ -649,6 +825,12 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     // How deep inside a <defs> / <clipPath> / <mask> / ... we are. Nothing is
     // drawn while this is above zero.
     int hidden = 0;
+    // The <g> transforms in force, innermost last. Deeper than this and the
+    // file is doing something no picture does, so the extra groups draw
+    // untransformed rather than not at all.
+    constexpr int kMaxGroupDepth = 16;
+    SvgMatrix gstack[kMaxGroupDepth];
+    int gdepth = 0;
     while (p < end) {
         if (*p != '<') {
             p++;
@@ -662,6 +844,8 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             }
             if (hidden > 0 && IsHiddenContainer(name, p)) {
                 hidden--;
+            } else if (hidden == 0 && gdepth > 0 && IsGroupTag(name, p)) {
+                gdepth--;
             }
             if (p < end) {
                 p++;
@@ -697,6 +881,33 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         if (hidden > 0) {
             continue;
         }
+
+        // <g transform=".."> — the one container that still says something
+        // about what is drawn inside it. Its fill and stroke are deliberately
+        // *not* inherited: every window-chrome icon under assets/icons wraps
+        // its path in <g fill="#000000">, and honouring that would make the
+        // file a picture with a colour of its own and pin the title bar's
+        // buttons black instead of letting the theme colour them.
+        if (IsGroupTag(tagStart, tagStart + tag.len)) {
+            if (!selfClosing) {
+                SvgMatrix cur = gdepth > 0 && gdepth <= kMaxGroupDepth
+                                    ? gstack[gdepth - 1]
+                                    : kIdentity;
+                Str tr;
+                if (GetAttrStr(tag, "transform", &tr)) {
+                    cur = MatMul(cur, ParseTransform(tr));
+                }
+                if (gdepth < kMaxGroupDepth) {
+                    gstack[gdepth] = cur;
+                }
+                gdepth++;
+            }
+            continue;
+        }
+        // What the groups around this shape add up to.
+        const SvgMatrix& gm = gdepth > 0 && gdepth <= kMaxGroupDepth
+                                  ? gstack[gdepth - 1]
+                                  : kIdentity;
 
         if (StartsWithI(tagStart, end, "svg")) {
             char vb[64];
@@ -739,7 +950,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             if (GetAttrStr(tag, "d", &d)) {
                 ParsePathD(ic, d);
             }
-            EndShape(ic, start, tag);
+            EndShape(ic, start, tag, gm);
             continue;
         }
         if (StartsWithI(tagStart, end, "rect")) {
@@ -750,7 +961,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             float h = AttrF(tag, "height", 0);
             float rx = AttrF(tag, "rx", 0);
             AddRoundRect(ic, x, y, w, h, rx);
-            EndShape(ic, start, tag);
+            EndShape(ic, start, tag, gm);
             continue;
         }
         if (StartsWithI(tagStart, end, "polyline")) {
@@ -759,7 +970,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             if (GetAttrStr(tag, "points", &pts)) {
                 ParsePolyline(ic, pts, false);
             }
-            EndShape(ic, start, tag);
+            EndShape(ic, start, tag, gm);
             continue;
         }
         if (StartsWithI(tagStart, end, "polygon")) {
@@ -768,7 +979,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             if (GetAttrStr(tag, "points", &pts)) {
                 ParsePolyline(ic, pts, true);
             }
-            EndShape(ic, start, tag);
+            EndShape(ic, start, tag, gm);
             continue;
         }
         if (StartsWithI(tagStart, end, "line")) {
@@ -779,7 +990,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             float y2 = AttrF(tag, "y2", 0);
             AddMove(ic, x1, y1);
             AddLine(ic, x2, y2);
-            EndShape(ic, start, tag);
+            EndShape(ic, start, tag, gm);
             continue;
         }
         if (StartsWithI(tagStart, end, "circle")) {
@@ -788,7 +999,16 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             float cy = AttrF(tag, "cy", 0);
             float r = AttrF(tag, "r", 0);
             AddRoundRect(ic, cx - r, cy - r, r * 2, r * 2, r);
-            EndShape(ic, start, tag);
+            EndShape(ic, start, tag, gm);
+            continue;
+        }
+        // No icon under assets/icons has one; a picture from anywhere else
+        // may, and it used to be dropped without a word.
+        if (StartsWithI(tagStart, end, "ellipse")) {
+            int start = ic->ops.len;
+            AddEllipse(ic, AttrF(tag, "cx", 0), AttrF(tag, "cy", 0),
+                       AttrF(tag, "rx", 0), AttrF(tag, "ry", 0));
+            EndShape(ic, start, tag, gm);
             continue;
         }
     }
@@ -830,16 +1050,26 @@ static void EncodeIcon(const SvgIcon* ic, DrawOpsBuilder* b) {
         const SvgShape& sh = ic->shapes[i];
         if (sh.hasFill) {
             b->Color(sh.fill);
-        }
-        EmitOps(b, ic, sh.start, sh.start + sh.count);
-        if (sh.hasFill) {
+            EmitOps(b, ic, sh.start, sh.start + sh.count);
             b->Op(kOpFillPath);
             b->ColorReset();
-        } else if (ic->filled) {
-            b->Op(kOpFillPath);
-        } else {
-            b->Op(kOpStrokePath);
         }
+        // A shape may be filled in one colour and drawn in another, and one
+        // op carries one colour, so that is two passes over the same points.
+        // kOpFillStrokePath is the single-colour case and cannot say this.
+        if (sh.hasStroke) {
+            b->Color(sh.stroke);
+            EmitOps(b, ic, sh.start, sh.start + sh.count);
+            b->Op(kOpStrokePath);
+            b->ColorReset();
+        }
+        if (sh.hasFill || sh.hasStroke) {
+            continue;
+        }
+        // Named no colour of its own: the caller's, the way every shape in a
+        // plain icon is drawn.
+        EmitOps(b, ic, sh.start, sh.start + sh.count);
+        b->Op(ic->filled ? kOpFillPath : kOpStrokePath);
     }
     b->End();
 }

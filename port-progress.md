@@ -1596,3 +1596,51 @@ cargo run -p system_monitor
   the switch is honoured. The live path was checked by hand on all three
   platforms with a throwaway probe — 200, 1277 bytes, `image/svg+xml` from
   WinHTTP, NSURLSession and libcurl alike. 16567 checks on each.
+
+- 2026-08-22: Three more in the SVG reader, all of them older than the fetch
+  that turned them up and none of them reachable from `assets/icons`, which is
+  why the icon table never noticed.
+
+  `transform=` was read off nothing at all. A `<g transform="translate(..)">`
+  moved its contents nowhere, and the only reason the window-chrome icons
+  looked right is that `window-close.svg` and its two siblings wrap their path
+  in `translate(-120 0)` and `translate(120 0)`, which cancel. `SvgMatrix` is
+  the 2x3 affine, `ParseTransform` reads translate / scale / rotate / matrix
+  (skewX and skewY are skipped rather than guessed at), a 16-deep stack
+  follows `<g>` nesting, and `EndShape` applies the product to the points it
+  just emitted — so the byte stream stays a flat list of coordinates and
+  `ExecuteDrawOps` never learns a matrix exists. A shape's own `transform`
+  applies after the groups'.
+
+  `<g>` fill and stroke are deliberately **not** inherited, and that is the
+  trap worth writing down: every window-chrome icon wraps its path in
+  `<g fill="#000000">`, so honouring it would make the file a picture with a
+  colour of its own and pin the title bar's buttons black instead of letting
+  the theme colour them. Correct SVG, wrong result. Left alone on purpose.
+
+  `<ellipse>` was on none of the reader's lists and drew nothing. It cannot go
+  through `AddRoundRect` either — one corner radius for two axes makes a
+  stadium of anything wider than it is tall — so `AddEllipse` is four cubics
+  with a kappa per axis. `<circle>` still goes through `AddRoundRect`, where
+  its bytes are what the compiled table holds; the asymmetry is deliberate.
+
+  Only `fill=` was read off a shape, so a picture that named the colour it is
+  *drawn* with came out in the caller's. `SvgShape` gained a stroke colour,
+  and a shape that names both is two passes over the same points, since one op
+  carries one colour and `kOpFillStrokePath` is the single-colour case.
+
+  The proof is in two halves. `cmd/svg-to-bytecode.ts` mirrors all three, and
+  regenerating `asset_icons.cpp` gives byte-identical output — 21800 bytes,
+  73 icons — so nothing in the shipped set moved. And the new tests in
+  `DrawOpsTests.cpp` fail 12 checks against the reader as it was, which is
+  what says they are testing the fix rather than agreeing with it.
+
+  Visible result: the GitHub CI badge on the Introduction page. Its label and
+  status halves both drew at x=0 and overlapped; now they sit at 0..40 and
+  40..90 the way the file says. Correcting an earlier note in this log — the
+  badges do *not* all render in their own colours. The two shields.io ones do,
+  because they fill with plain hex; the GitHub one fills with
+  `url(#workflow-fill)`, a gradient reference this reader cannot resolve, so
+  its shapes take the caller's colour and come out as outlines. Resolving a
+  `url(#..)` to its first `<stop stop-color>` is the obvious next one and was
+  not done here.

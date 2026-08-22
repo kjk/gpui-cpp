@@ -154,6 +154,191 @@ static void ShortStreamStops() {
     utassert(true);
 }
 
+// ─── the reader, on SVG that is not a lucide icon ────────────────────────
+//
+// The three below are what an application's own picture may carry and every
+// file under assets/icons happens not to, so nothing in the table above
+// covers them.
+
+// The first point of the first MoveTo/LineTo in a stream, which is enough to
+// say where a shape landed.
+static bool FirstPoint(const uint8_t* d, int len, float* x, float* y) {
+    int at = 0;
+    while (at + 2 <= len) {
+        uint16_t op = (uint16_t)(d[at] | (d[at + 1] << 8));
+        int n = OpArgCount(op);
+        if (n < 0 || at + 2 + n * 4 > len) {
+            return false;
+        }
+        if (op == kOpMoveTo || op == kOpLineTo) {
+            *x = ReadF(d + at + 2);
+            *y = ReadF(d + at + 6);
+            return true;
+        }
+        at += 2 + n * 4;
+        if (op == kOpEnd) {
+            break;
+        }
+    }
+    return false;
+}
+
+// Whether the stream names a colour, and which.
+static bool FirstColor(const uint8_t* d, int len, uint32_t* out) {
+    int at = 0;
+    while (at + 2 <= len) {
+        uint16_t op = (uint16_t)(d[at] | (d[at + 1] << 8));
+        int n = OpArgCount(op);
+        if (n < 0 || at + 2 + n * 4 > len) {
+            return false;
+        }
+        if (op == kOpColor) {
+            memcpy(out, d + at + 2, 4);
+            return true;
+        }
+        at += 2 + n * 4;
+        if (op == kOpEnd) {
+            break;
+        }
+    }
+    return false;
+}
+
+static bool HasOp(const uint8_t* d, int len, uint16_t want) {
+    int at = 0;
+    while (at + 2 <= len) {
+        uint16_t op = (uint16_t)(d[at] | (d[at + 1] << 8));
+        int n = OpArgCount(op);
+        if (n < 0 || at + 2 + n * 4 > len) {
+            return false;
+        }
+        if (op == want) {
+            return true;
+        }
+        at += 2 + n * 4;
+        if (op == kOpEnd) {
+            break;
+        }
+    }
+    return false;
+}
+
+// transform= was read off nothing at all before this: a <g> that moved its
+// contents moved them nowhere. assets/icons/window-close.svg carries two
+// translates that cancel, which is why no icon ever showed it.
+static void AGroupTransformMovesWhatIsInsideIt() {
+    DrawOpsBuilder plain;
+    utassert(SvgToDrawOps(
+        StrL("<svg viewBox=\"0 0 24 24\"><path d=\"M2 3 L4 5\"/></svg>"),
+        &plain));
+    float x = 0, y = 0;
+    utassert(FirstPoint(plain.data.els, plain.data.len, &x, &y));
+    utassertnear(x, 2.f);
+    utassertnear(y, 3.f);
+
+    DrawOpsBuilder moved;
+    utassert(SvgToDrawOps(StrL("<svg viewBox=\"0 0 24 24\">"
+                               "<g transform=\"translate(10, 6)\">"
+                               "<path d=\"M2 3 L4 5\"/></g></svg>"),
+                          &moved));
+    utassert(FirstPoint(moved.data.els, moved.data.len, &x, &y));
+    utassertnear(x, 12.f);
+    utassertnear(y, 9.f);
+
+    // Nested groups compose, and the pair window-close.svg uses cancels.
+    DrawOpsBuilder cancels;
+    utassert(SvgToDrawOps(StrL("<svg viewBox=\"0 0 24 24\">"
+                               "<g transform=\"translate(-120, 0)\">"
+                               "<g transform=\"translate(120, 0)\">"
+                               "<path d=\"M2 3 L4 5\"/></g></g></svg>"),
+                          &cancels));
+    utassert(FirstPoint(cancels.data.els, cancels.data.len, &x, &y));
+    utassertnear(x, 2.f);
+    utassertnear(y, 3.f);
+
+    // A group's transform stops at its close tag.
+    DrawOpsBuilder after;
+    utassert(SvgToDrawOps(StrL("<svg viewBox=\"0 0 24 24\">"
+                               "<g transform=\"translate(10, 6)\"></g>"
+                               "<path d=\"M2 3 L4 5\"/></svg>"),
+                          &after));
+    utassert(FirstPoint(after.data.els, after.data.len, &x, &y));
+    utassertnear(x, 2.f);
+    utassertnear(y, 3.f);
+
+    // scale() and a shape's own transform, which applies after the groups'.
+    DrawOpsBuilder scaled;
+    utassert(SvgToDrawOps(StrL("<svg viewBox=\"0 0 24 24\">"
+                               "<g transform=\"scale(2)\">"
+                               "<path d=\"M2 3 L4 5\" "
+                               "transform=\"translate(1, 1)\"/></g></svg>"),
+                          &scaled));
+    utassert(FirstPoint(scaled.data.els, scaled.data.len, &x, &y));
+    utassertnear(x, 6.f);
+    utassertnear(y, 8.f);
+}
+
+// <ellipse> was on none of the reader's lists, so it drew nothing at all. It
+// cannot go through AddRoundRect either: one radius for two axes makes a
+// stadium of anything that is wider than it is tall.
+static void AnEllipseIsDrawnAndIsNotAStadium() {
+    DrawOpsBuilder b;
+    utassert(SvgToDrawOps(
+        StrL("<svg viewBox=\"0 0 24 24\">"
+             "<ellipse cx=\"12\" cy=\"6\" rx=\"10\" ry=\"2\"/></svg>"),
+        &b));
+    // It starts at the rightmost point of the ellipse.
+    float x = 0, y = 0;
+    utassert(FirstPoint(b.data.els, b.data.len, &x, &y));
+    utassertnear(x, 22.f);
+    utassertnear(y, 6.f);
+    // Curves, not the four lines a stadium's flat sides would be.
+    utassert(HasOp(b.data.els, b.data.len, kOpCubicTo));
+    utassert(!HasOp(b.data.els, b.data.len, kOpLineTo));
+
+    // No radius is nothing to draw rather than a crash or a point.
+    DrawOpsBuilder none;
+    utassert(!SvgToDrawOps(
+        StrL("<svg viewBox=\"0 0 24 24\"><ellipse cx=\"1\" cy=\"1\"/></svg>"),
+        &none));
+}
+
+// Only fill= was read off a shape, so a picture that named the colour it is
+// *drawn* with came out in the caller's instead.
+static void AShapeKeepsTheColourItIsStrokedWith() {
+    DrawOpsBuilder b;
+    utassert(SvgToDrawOps(StrL("<svg viewBox=\"0 0 24 24\">"
+                               "<path d=\"M2 3 L4 5\" fill=\"none\" "
+                               "stroke=\"#ff0000\"/></svg>"),
+                          &b));
+    uint32_t c = 0;
+    utassert(FirstColor(b.data.els, b.data.len, &c));
+    // kOpColor packs r,g,b,a low byte first.
+    utassert((c & 0xff) == 0xff);
+    utassert(((c >> 8) & 0xff) == 0);
+    utassert(((c >> 16) & 0xff) == 0);
+    utassert(HasOp(b.data.els, b.data.len, kOpStrokePath));
+
+    // Filled in one colour and drawn in another is two passes, since one op
+    // carries one colour.
+    DrawOpsBuilder both;
+    utassert(SvgToDrawOps(StrL("<svg viewBox=\"0 0 24 24\">"
+                               "<rect x=\"1\" y=\"1\" width=\"4\" height=\"4\" "
+                               "fill=\"#00ff00\" stroke=\"#0000ff\"/></svg>"),
+                          &both));
+    utassert(HasOp(both.data.els, both.data.len, kOpFillPath));
+    utassert(HasOp(both.data.els, both.data.len, kOpStrokePath));
+
+    // A shape that names neither is still the caller's colour, which is every
+    // lucide icon and what the table above already proves.
+    DrawOpsBuilder plain;
+    utassert(SvgToDrawOps(
+        StrL("<svg viewBox=\"0 0 24 24\"><path d=\"M2 3 L4 5\"/></svg>"),
+        &plain));
+    uint32_t unused = 0;
+    utassert(!FirstColor(plain.data.els, plain.data.len, &unused));
+}
+
 // Every icon in the generated table, reconverted from its file.
 static void GeneratedTableMatchesReader() {
     AssetsAddDefaultRoots({});
@@ -206,5 +391,8 @@ void TestDrawOps() {
     TestSuite("DrawOps");
     BuilderRoundTrip();
     ShortStreamStops();
+    AGroupTransformMovesWhatIsInsideIt();
+    AnEllipseIsDrawnAndIsNotAStadium();
+    AShapeKeepsTheColourItIsStrokedWith();
     GeneratedTableMatchesReader();
 }
