@@ -2262,3 +2262,52 @@ cargo run -p system_monitor
   going the way the strings went, into records only the nodes that need them
   pay for. Partial moves buy nothing: without all three the struct still
   rounds back up to 24.
+
+- 2026-08-22: A Node is 16 bytes, and where it came from is not kept. Two
+  fields left the struct and one field's worth of alignment left with them.
+
+  `srcStart` and `srcLen` are gone. Rust keeps a line, a column and an offset
+  at each end — 24 bytes on every node in a tree — and this port had it down
+  to the two offsets, which was 8; nothing in the parse read either, and
+  nothing outside it did. `GetUnistPosition(md, start, end)` stays, because
+  it is a function of a source and two numbers, but no node hands it one any
+  more: a caller wanting a position needs an offset of its own, an event's
+  `point.index` being the one the parse works in. That is the one real thing
+  this change spends, and it is written down here rather than buried in the
+  diff.
+
+  `perKind` — a List's start, a Heading's depth, a Table's alignments —
+  became a record in the list the strings already live in, varint-encoded,
+  read by `NodePerKind` and written by `NodeSetPerKind`. Those three kinds
+  pay about eight bytes for it; every other node pays nothing, where the
+  field cost four on all of them, and most nodes in a tree are a Text or a
+  Paragraph that has no such word.
+
+  `NodeNew` pushes at `alignof(Node)` rather than the eight `Alloc` uses,
+  which is the other half of what 16 means: the struct needs 4, and the
+  string records around it are byte-aligned, so the padding the arena used
+  to insert ahead of each node mostly goes as well.
+
+  **16 bytes, down from 24.** At 64 KB of source:
+
+    shape         before                after                arena
+    prose          321.2 KB   5.00x     272.0 KB   4.24x    -15.3%
+    nested         136.5 KB   2.13x     110.2 KB   1.72x    -19.3%
+    gfm tables     341.9 KB   5.33x     250.5 KB   3.91x    -26.7%
+    entities        70.4 KB   1.10x      65.6 KB   1.02x     -6.8%
+
+  Prose saved 49.2 KB where eight bytes times its roughly 4,600 nodes is 37;
+  the other twelve is the alignment padding that is no longer there.
+
+  Fastest of three runs either side: prose 8.38 -> 8.22 ms, nested 9.46 ->
+  9.26, tables 12.76 -> 12.92, entities 5.90 -> 5.85, `tokenize` 7.63 ->
+  7.57, `to_mdast` 0.300 -> 0.302. All of that is inside the spread — the
+  tables column moved 12.76 to 13.07 across the three baseline runs alone.
+  The record lookups cost nothing measurable and the smaller node buys
+  nothing measurable; this one is memory and not time.
+
+  Since the Str-per-node baseline (`b935eaa`): prose 1646 -> 272 KB, nested
+  1068 -> 110, tables 2926 -> 250, entities 660 -> 66, and a Node 232 -> 16
+  bytes. What is left in the struct is two child links, the record list and
+  two bytes of tag — there is no field left to take that anything still
+  reads.
