@@ -29,6 +29,15 @@ int KbdFormat(Keystroke stroke, char* out, int cap);
 // The same, into the frame arena.
 Str KbdFormatStr(Ctx* cx, Keystroke stroke);
 
+// Kbd::binding_for_action / binding_for_action_in. The chord bound to
+// `action`, as a Keystroke this platform can spell — so a menu row and a
+// tooltip show what is actually bound rather than what a caller remembered to
+// type. False when nothing is bound to it.
+//
+// `context` is a key context spelling — "Input", "PopupMenu" — or null to ask
+// only about the bindings that named no context.
+bool KeystrokeForAction(uint32_t action, const char* context, Keystroke* out);
+
 struct Kbd {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -39,6 +48,10 @@ struct Kbd {
     static Kbd* New(Ctx* cx, Str stroke);
     // The keystroke, spelled the way this platform spells it.
     static Kbd* New(Ctx* cx, Keystroke stroke);
+    // The chord bound to `action`, or null when nothing is — which is what a
+    // menu row with no shortcut shows.
+    static Kbd* ForAction(Ctx* cx, uint32_t action,
+                          const char* context = nullptr);
     Kbd* Appearance(bool v);
     Kbd* Outline();
     El* IntoEl();
