@@ -137,18 +137,34 @@ enum NodeFlag : uint8_t {
     NodeHasChecked = 1 << 5,
 };
 
-// The fields are ordered largest first: two 24-byte members, then the eight
-// strings and the three numbers at four bytes each, then three single bytes
-// and one of tail padding. 96 bytes, where the order they were written in
-// with a Str per string and a full unist Position cost 232.
+// The fields are ordered largest first: the one 24-byte member, then the
+// eight strings and the four offsets at four bytes each, then the length and
+// three single bytes, with three of tail padding. 80 bytes, where the order
+// they were written in with a Str per string, a child vector and a full
+// unist Position cost 256.
 struct Node {
-    // Root, Paragraph, Heading, Blockquote, List, ListItem, Emphasis, Strong,
-    // Link, LinkReference, FootnoteDefinition, Table, TableRow, TableCell,
-    // Delete. `NodeKids(a, n)` walks them, `NodeChild(a, n, i)` indexes.
-    ArenaVec<ArenaNode> children = {};
-
     // Table.
     ArenaVec<AlignKind> align = {};
+
+    // The children, as a ring rather than a vector. `lastKid` is the last of
+    // them and every child points at the one after it, the last one back at
+    // the first — so the first child is `lastKid->sibling`, appending is
+    // three stores, and a node with no children is one word of nothing.
+    //
+    // A vector cost 24 bytes in the node and an arena segment per node that
+    // had any; this is 4 here and 4 in each child, which the child was going
+    // to be padded out to anyway. `NodeKids(a, n)` walks them,
+    // `NodeChild(a, n, i)` indexes, `NodeChildCount(a, n)` counts.
+    //
+    // A ring and not a plain list because appending is what the parse does
+    // and nothing else: a plain list would need the parent to hold the first
+    // and the last, or every append to walk to the end.
+    ArenaNode lastKid = {};
+
+    // The next child of whatever holds this one, wrapping round to the first
+    // — meaningless on a node no `lastKid` names, which is the root and
+    // nothing else.
+    ArenaNode sibling = {};
 
     // Where the node came from: the byte offset into the source the parse
     // was given, and how many bytes it runs for. `NodeHasPosition` says
@@ -214,13 +230,13 @@ struct Node {
     }
 };
 
-// The packing is the point, so it is checked rather than hoped for: two
-// 24-byte members, eight 4-byte strings, two 4-byte numbers, the 2-byte
-// length and three single bytes, rounded up to the 8 the ArenaVecs align
+// The packing is the point, so it is checked rather than hoped for: one
+// 24-byte member, eight 4-byte strings, four 4-byte offsets, the 2-byte
+// length and three single bytes, rounded up to the 8 the ArenaVec aligns
 // to. Three bytes of that last 8 are padding — three more single-byte
 // fields, or one more 2-byte one, would cost nothing, where a field put
 // anywhere else costs eight a node and would otherwise go unnoticed.
-static_assert(sizeof(Node) == 2 * 24 + (8 + 2) * 4 + 8,
+static_assert(sizeof(Node) == 24 + (8 + 4) * 4 + 8,
               "Node has picked up padding; order the fields largest first");
 
 // The longest span a node can name. A node that runs further reports this,
@@ -250,48 +266,104 @@ inline void NodeMoveSrcStart(Node* n, uint32_t to) {
 
 Node* NodeNew(Arena* a, NodeKind kind);
 
-// Appending a child, which is where the offset is taken.
+// Appending a child: the new one takes the old last's place in the ring,
+// which is the whole of what the parse does to a child list.
 inline void NodeAddChild(Arena* a, Node* parent, Node* child) {
-    parent->children.Append(a, ArenaPtrOf(a, child));
+    ArenaNode at = ArenaPtrOf(a, child);
+    if (parent->lastKid.IsSet()) {
+        Node* last = ArenaPtrGet(a, parent->lastKid);
+        child->sibling = last->sibling;
+        last->sibling = at;
+    } else {
+        // A ring of one points at itself.
+        child->sibling = at;
+    }
+    parent->lastKid = at;
 }
 
-// The `i`th child, or null if there is no such child.
+// The last child, or null. The ring is arranged for this one to be free,
+// because "the child that is still being built" is what the parse asks for.
+inline Node* NodeLastChild(Arena* a, const Node* n) {
+    return n->lastKid.IsSet() ? ArenaPtrGet(a, n->lastKid) : nullptr;
+}
+
+// The first child as the offset the ring holds it by: one step past the
+// last. Nothing here needs to know where a node is to walk from it, which is
+// what keeps the walks off `ArenaPtrOf` and its block scan.
+inline ArenaNode NodeFirstKid(Arena* a, const Node* n) {
+    Node* last = NodeLastChild(a, n);
+    return last ? last->sibling : ArenaNode{};
+}
+
+// The first child, or null.
+inline Node* NodeFirstChild(Arena* a, const Node* n) {
+    ArenaNode first = NodeFirstKid(a, n);
+    return first.IsSet() ? ArenaPtrGet(a, first) : nullptr;
+}
+
+// The `i`th child, or null if there is no such child. A walk, where the
+// vector was an index — every caller here asks for the first or the last.
 inline Node* NodeChild(Arena* a, const Node* n, int i) {
-    if (i < 0 || i >= n->children.len) {
+    if (i < 0 || !n->lastKid.IsSet()) {
         return nullptr;
     }
-    return ArenaPtrGet(a, n->children[i]);
+    Node* last = ArenaPtrGet(a, n->lastKid);
+    Node* at = ArenaPtrGet(a, last->sibling);
+    for (int k = 0; k < i; k++) {
+        if (at == last) {
+            return nullptr;
+        }
+        at = ArenaPtrGet(a, at->sibling);
+    }
+    return at;
+}
+
+// How many children, which is a walk and so is not what a loop should test
+// against.
+inline int NodeChildCount(Arena* a, const Node* n) {
+    if (!n->lastKid.IsSet()) {
+        return 0;
+    }
+    Node* last = ArenaPtrGet(a, n->lastKid);
+    int count = 1;
+    for (Node* at = ArenaPtrGet(a, last->sibling); at != last;
+         at = ArenaPtrGet(a, at->sibling)) {
+        count++;
+    }
+    return count;
 }
 
 // The children as something a range-for reads:
 //
 //     for (Node* child : NodeKids(a, n)) { ... }
 //
-// The offsets are resolved one at a time as the walk reaches them, so this
-// is the ArenaVec walk with a lookup on the dereference and nothing else.
+// The ring has no end of its own, so the walk carries the last child and
+// stops on the step off it — which is what makes the iterator hold two
+// offsets where a vector's held one.
 struct NodeKidsRange {
     Arena* a;
-    ArenaVec<ArenaNode>::Iter it;
-    ArenaVec<ArenaNode>::Iter last;
+    ArenaNode at;
+    ArenaNode last;
 
     struct Iter {
         Arena* a;
-        ArenaVec<ArenaNode>::Iter it;
+        ArenaNode at;
+        ArenaNode last;
 
-        Node* operator*() const { return ArenaPtrGet(a, *it); }
+        Node* operator*() const { return ArenaPtrGet(a, at); }
         Iter& operator++() {
-            ++it;
+            at = at == last ? ArenaNode{} : ArenaPtrGet(a, at)->sibling;
             return *this;
         }
-        bool operator!=(const Iter& o) const { return it != o.it; }
+        bool operator!=(const Iter& o) const { return at != o.at; }
     };
 
-    Iter begin() const { return Iter{a, it}; }
-    Iter end() const { return Iter{a, last}; }
+    Iter begin() const { return Iter{a, at, last}; }
+    Iter end() const { return Iter{a, ArenaNode{}, last}; }
 };
 
 inline NodeKidsRange NodeKids(Arena* a, const Node* n) {
-    return NodeKidsRange{a, n->children.begin(), n->children.end()};
+    return NodeKidsRange{a, NodeFirstKid(a, n), n->lastKid};
 }
 
 // One of a node's eight strings, read out of the arena it was parsed into.
