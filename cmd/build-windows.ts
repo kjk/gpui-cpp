@@ -190,6 +190,8 @@ const libs = [
   "comctl32.lib",
   "oleaut32.lib",
   "shell32.lib",
+  // sys/http_win.cpp — the one thing here that talks to the network.
+  "winhttp.lib",
 ];
 
 function sourcesFor(name: string): string[] | null {

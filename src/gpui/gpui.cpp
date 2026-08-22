@@ -2146,20 +2146,34 @@ static void StampFg(El* e, Rgba c) {
 // max_w(relative(1.)) with object_fit(Contain), the pair node.rs gives a
 // markdown image.
 //
-// An image that will not decode is its alt text instead, measured here so the
-// line it sits in is the right height for it.
+// An image with no size to measure is its alt text instead, measured here so
+// the line it sits in is the right height for it.
+
+// The picture's own size, whichever of the two kinds it is: a bitmap's pixels
+// or a vector's viewBox. Zero when there is nothing to measure — a fetch
+// still running, a missing asset, a format the platform does not read.
+static Size ImageNaturalSize(PaintCtx* ctx, El* e) {
+    Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
+    if (img) {
+        return ImageSizePx(img);
+    }
+    int opsLen = 0;
+    const uint8_t* ops = ImageVectorForSrc(e->imgSrc, &opsLen);
+    Size vb = {};
+    if (ops && DrawOpsViewBox(ops, opsLen, &vb)) {
+        return vb;
+    }
+    return {};
+}
+
 static Size LayoutImageSize(PaintCtx* ctx, El* e, float wSpec, float hSpec,
                             float availW, float font) {
-    Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
-    if (!img) {
+    Size px = ImageNaturalSize(ctx, e);
+    if (px.w <= 0 || px.h <= 0) {
         Size text =
             MeasureText(ctx, e->text, font, availW > 0 ? availW : 0,
                         e->style.wrap, ElTextWeight(e), e->style.lineHeight);
         return {wSpec > 0 ? wSpec : text.w, hSpec > 0 ? hSpec : text.h};
-    }
-    Size px = ImageSizePx(img);
-    if (px.w <= 0 || px.h <= 0) {
-        return {wSpec > 0 ? wSpec : 0, hSpec > 0 ? hSpec : 0};
     }
     float aspect = px.h / px.w;
     float w = wSpec > 0 ? wSpec : (hSpec > 0 ? hSpec / aspect : px.w);
@@ -2432,11 +2446,7 @@ static bool ElIsMeasured(const El* e) {
 // text is measured as the text it is. That is our stand-in for gpui's
 // `fallback` element.
 static void ResolveImageStyle(PaintCtx* ctx, El* e) {
-    Image* img = ImageForSrc(ctx ? ctx->pa : nullptr, e->imgSrc);
-    if (!img) {
-        return;
-    }
-    Size px = ImageSizePx(img);
+    Size px = ImageNaturalSize(ctx, e);
     if (px.w <= 0 || px.h <= 0) {
         return;
     }
@@ -3886,21 +3896,25 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         }
         PaintCaret(ctx, e, font);
     } else if (e->kind == ElKind::Image) {
-        // What the src names locally: itself, or the asset an application
-        // shipped under the same file name as the URL the document wrote.
-        Str asset = ImageAssetFor(GetTempArena(), e->imgSrc);
-        Image* img = asset.s ? ImageForSrc(ctx->pa, asset) : nullptr;
+        // image.h resolves the src: the asset an application shipped, the
+        // data: URI, or the body a worker thread fetched. A fetch still
+        // running answers nothing, and the alt text below stands in until it
+        // lands.
+        Image* img = ImageForSrc(ctx->pa, e->imgSrc);
+        int opsLen = 0;
+        const uint8_t* ops =
+            img ? nullptr : ImageVectorForSrc(e->imgSrc, &opsLen);
         if (img) {
             ImageDraw(ctx, img, e->Bounds());
-        } else if (asset.len > 4 &&
-                   StrEqI(Str(asset.s + asset.len - 4, 4), StrL(".svg")) &&
-                   SvgDraw(ctx, asset, e->x, e->y, e->w < e->h ? e->w : e->h,
-                           e->style.hasColor ? e->style.color
-                                             : ThemeNow().foreground,
-                           0)) {
+        } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
+                              e->style.hasColor ? e->style.color
+                                                : ThemeNow().foreground,
+                              0)) {
             // An SVG is not a bitmap for any of the three backends to decode;
             // it is the vector the icon renderer already walks, and a picture
-            // with colours of its own keeps them.
+            // with colours of its own keeps them. Into the whole box, not a
+            // square inside it: an image element is laid out at the picture's
+            // own aspect, so the box is already the shape to draw into.
         } else if (e->text.s && e->text.len > 0) {
             // The alt text, in the color the text around it uses.
             float font =

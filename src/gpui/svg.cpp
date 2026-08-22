@@ -604,6 +604,33 @@ static void EndShape(SvgIcon* ic, int start, Str tag) {
     ic->shapes.Append(sh);
 }
 
+// Shapes inside one of these are a definition, not a drawing: a clip path, a
+// gradient stop, a filter's input, the contents of <defs>. A file that names
+// one and never uses it — a shields.io badge names two — would otherwise
+// paint it, which is how a 20-pixel badge grew a stripe down the page.
+static bool IsHiddenContainer(const char* name, const char* end) {
+    static const char* kNames[] = {
+        "defs",   "clipPath", "mask",           "filter",        "pattern",
+        "symbol", "marker",   "linearGradient", "radialGradient"};
+    for (const char* n : kNames) {
+        int len = (int)strlen(n);
+        if (end - name < len) {
+            continue;
+        }
+        if (StrCmpNI(name, n, len) != 0) {
+            continue;
+        }
+        // "clipPath" must not match "clipPathUnits": the name ends where
+        // the tag's whitespace or its close begins.
+        char after = name + len < end ? name[len] : ' ';
+        if (after == ' ' || after == '>' || after == '/' || after == '\t' ||
+            after == '\n' || after == '\r') {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->ops.Reset();
     ic->shapes.Reset();
@@ -619,6 +646,9 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     }
     const char* p = xml.s;
     const char* end = xml.s + xml.len;
+    // How deep inside a <defs> / <clipPath> / <mask> / ... we are. Nothing is
+    // drawn while this is above zero.
+    int hidden = 0;
     while (p < end) {
         if (*p != '<') {
             p++;
@@ -626,8 +656,12 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         }
         p++;
         if (p < end && *p == '/') {
+            const char* name = p + 1;
             while (p < end && *p != '>') {
                 p++;
+            }
+            if (hidden > 0 && IsHiddenContainer(name, p)) {
+                hidden--;
             }
             if (p < end) {
                 p++;
@@ -651,7 +685,18 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             break;
         }
         Str tag(tagStart, (int)(p - tagStart));
+        bool selfClosing = tag.len > 0 && tag.s[tag.len - 1] == '/';
         p++; // skip >
+
+        if (IsHiddenContainer(tagStart, tagStart + tag.len)) {
+            if (!selfClosing) {
+                hidden++;
+            }
+            continue;
+        }
+        if (hidden > 0) {
+            continue;
+        }
 
         if (StartsWithI(tagStart, end, "svg")) {
             char vb[64];
@@ -666,6 +711,17 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
                 ic->vbY = b;
                 ic->vbW = c > 0 ? c : 24;
                 ic->vbH = d > 0 ? d : 24;
+            } else {
+                // No viewBox: the coordinates are the viewport's, which
+                // width and height give. Every lucide icon has one and never
+                // reaches this; a badge has neither and drew at 24x24, which
+                // scaled an 86-wide file by three and a half.
+                float w = AttrF(tag, "width", 0);
+                float h = AttrF(tag, "height", 0);
+                if (w > 0 && h > 0) {
+                    ic->vbW = w;
+                    ic->vbH = h;
+                }
             }
             float sw = AttrF(tag, "stroke-width", 0);
             if (sw > 0) {
@@ -932,24 +988,26 @@ bool SvgViewBox(Str assetPath, Size* out) {
     return DrawOpsViewBox(ops, len, out);
 }
 
-bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
-             Rgba color, float turns) {
-    if (!ctx || !ctx->rt || size <= 0) {
-        return false;
-    }
-    int len = 0;
-    const uint8_t* ops = SvgDrawOpsFor(assetPath, &len);
-    if (!ops) {
+bool SvgDrawOps(PaintCtx* ctx, const uint8_t* ops, int len, float x, float y,
+                float w, float h, Rgba color, float turns) {
+    if (!ctx || !ctx->rt || w <= 0 || h <= 0 || !ops || len <= 0) {
         return false;
     }
     DrawOpsTarget t;
     t.x = x;
     t.y = y;
-    t.w = size;
-    t.h = size;
+    t.w = w;
+    t.h = h;
     t.color = color;
     t.turns = turns;
     return ExecuteDrawOps(ctx, ops, len, t);
+}
+
+bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
+             Rgba color, float turns) {
+    int len = 0;
+    const uint8_t* ops = SvgDrawOpsFor(assetPath, &len);
+    return SvgDrawOps(ctx, ops, len, x, y, size, size, color, turns);
 }
 
 Str IconNamePath(IconName name) {

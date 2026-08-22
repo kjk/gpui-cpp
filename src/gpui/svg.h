@@ -22,6 +22,14 @@ bool SvgViewBox(Str assetPath, Size* out);
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
              Rgba color, float turns = 0);
 
+// The same, for a byte stream already in hand rather than an asset path —
+// what a picture fetched over the network resolves to (gpui/image.h) — and
+// into a rectangle rather than a square. An icon is square and the two are
+// the same for it; a picture is whatever shape its viewBox says, and the box
+// an image element was laid out into already has that shape.
+bool SvgDrawOps(PaintCtx* ctx, const uint8_t* ops, int len, float x, float y,
+                float w, float h, Rgba color, float turns = 0);
+
 // The same icon, drawn into a square of pixels instead of onto a window:
 // `outBgra` takes px * px * 4 bytes of premultiplied BGRA, top down. What a
 // menu the OS draws needs, since it wants a bitmap of the icon rather than

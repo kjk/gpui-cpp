@@ -6,6 +6,7 @@
 #include "gpui/keymap.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
+#include "sys/http.h"
 #include "base/focus_trap.h"
 #include "base/text_selection.h"
 
@@ -194,6 +195,14 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // is GPUI's element state going with the element. Something that comes
     // back on screen starts its entrance again rather than resuming one.
     WindowMotionSweep(win);
+
+    // A picture is still on its way: this frame asked image.h for it and got
+    // nothing. Nothing else need be keeping the window awake, so arm the
+    // clock here — WindowTimerTick repaints while HttpFetchPending is
+    // non-zero, and the picture appears the frame after the worker lands.
+    if (HttpFetchPending() > 0) {
+        PlatSetTimer(win, WindowTimerMs(win));
+    }
 
     // Record the frame for the trace. GPUI times Window::draw, which is this
     // whole function: build the element tree, lay it out, paint it.
@@ -1501,7 +1510,10 @@ void WindowTimerTick(Window* win) {
     }
     win->timers.len = keep;
 
-    if (win->anim || win->animFrame || repaint) {
+    // A picture still on its way is a reason to come back: image.h answered
+    // nothing for it this frame and will answer the bitmap once the worker
+    // lands. WindowTimerMs below sets the pace.
+    if (win->anim || win->animFrame || repaint || HttpFetchPending() > 0) {
         AppInvalidate(win);
     }
     PlatSetTimer(win, WindowTimerMs(win));
@@ -1529,6 +1541,15 @@ int WindowTimerMs(Window* win) {
     double soonest = -1;
     if (win->anim || win->opts.anim || win->animFrame) {
         soonest = now + 0.016;
+    }
+    // A fetch in flight wants the window back, but not at frame rate: it
+    // takes as long as the network does and 20 Hz is soon enough to look
+    // immediate when it lands.
+    if (HttpFetchPending() > 0) {
+        double due = now + 0.05;
+        if (soonest < 0 || due < soonest) {
+            soonest = due;
+        }
     }
     for (int i = 0; i < win->timers.len; i++) {
         double due = win->timers[i].dueAt;

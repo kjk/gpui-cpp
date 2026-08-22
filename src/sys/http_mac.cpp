@@ -1,0 +1,104 @@
+/* NSURLSession, waited on. Foundation is already linked for the window, so
+   the GET costs nothing this build did not already carry — no libcurl, no
+   TLS of our own, and the system's proxy and root store for free.
+
+   The session is asynchronous by design and this call is not, so a semaphore
+   turns one into the other. That is fine here: HttpGet only ever runs on a
+   worker thread the fetch table started. */
+
+#include "sys/http.h"
+
+#import <Foundation/Foundation.h>
+
+namespace gpui {
+
+// "image/png; charset=..." -> "image/png", lowercased where it stands.
+static void TrimMediaType(Str* s) {
+    for (int i = 0; i < s->len; i++) {
+        char c = s->s[i];
+        if (c == ';' || c == ' ') {
+            s->len = i;
+            break;
+        }
+        if (c >= 'A' && c <= 'Z') {
+            s->s[i] = (char)(c - 'A' + 'a');
+        }
+    }
+}
+
+static Str StrFromNS(NSString* s) {
+    if (!s) {
+        return {};
+    }
+    const char* u = [s UTF8String];
+    if (!u) {
+        return {};
+    }
+    return StrDup(Str(u));
+}
+
+bool HttpGet(Str url, HttpRsp* out) {
+    if (!out || !HttpUrlIsRemote(url)) {
+        return false;
+    }
+    @autoreleasepool {
+        NSString* s = [[NSString alloc] initWithBytes:url.s
+                                               length:(NSUInteger)url.len
+                                             encoding:NSUTF8StringEncoding];
+        NSURL* u = s ? [NSURL URLWithString:s] : nil;
+        if (!u) {
+            return false;
+        }
+        NSMutableURLRequest* req = [NSMutableURLRequest
+             requestWithURL:u
+                cachePolicy:NSURLRequestUseProtocolCachePolicy
+            timeoutInterval:(NSTimeInterval)kHttpTimeoutMs / 1000.0];
+        [req setHTTPMethod:@"GET"];
+        [req setValue:@"gpui2/1.0" forHTTPHeaderField:@"User-Agent"];
+
+        __block NSData* body = nil;
+        __block NSHTTPURLResponse* rsp = nil;
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        NSURLSessionDataTask* task = [[NSURLSession sharedSession]
+            dataTaskWithRequest:req
+              completionHandler:^(NSData* d, NSURLResponse* r, NSError* e) {
+                if (!e && [r isKindOfClass:[NSHTTPURLResponse class]]) {
+                    body = d;
+                    rsp = (NSHTTPURLResponse*)r;
+                }
+                dispatch_semaphore_signal(done);
+              }];
+        [task resume];
+        // The timeout above is the request's; this is the backstop for a
+        // completion handler that never runs at all.
+        dispatch_time_t deadline =
+            dispatch_time(DISPATCH_TIME_NOW,
+                          (int64_t)(kHttpTimeoutMs + 5000) * NSEC_PER_MSEC);
+        if (dispatch_semaphore_wait(done, deadline) != 0) {
+            [task cancel];
+            return false;
+        }
+        if (!rsp) {
+            return false;
+        }
+        out->status = (int)[rsp statusCode];
+        Str ct = StrFromNS([rsp valueForHTTPHeaderField:@"Content-Type"]);
+        TrimMediaType(&ct);
+        out->contentType = ct;
+
+        NSUInteger n = body ? [body length] : 0;
+        if (n > (NSUInteger)kHttpMaxBody) {
+            return false; // refused, not truncated
+        }
+        if (n > 0) {
+            uint8_t* dst = out->body.AppendBlanks((int)n);
+            if (!dst) {
+                return false;
+            }
+            [body getBytes:dst length:n];
+        }
+        return true;
+    }
+}
+
+} // namespace gpui

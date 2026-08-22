@@ -65,6 +65,11 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   `Task`
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
 - Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
+- A network beyond one GET. `src/sys/http.h` fetches the bytes at an http(s)
+  URL with the OS's own client — WinHTTP, NSURLSession, libcurl — because a
+  remote image needs it. There is no POST, no session, no socket and no TLS
+  of ours, and a bigger client wants a bigger reason than "it would be tidy".
+  What it is for: `gpui/image.h`
 - Anything that needs a third-party C++ library, by hard rule 3: tree-sitter
   and syntect (so `highlighter` stays the small hand-written lexer it is), a
   webview, an LSP client, resvg, ropey, html5ever. Where Rust reaches for one
@@ -82,7 +87,7 @@ rediscover it.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout, and it is `namespace base`. Everything else in `src/` lives in `namespace gpui` (themed widgets in `gpui::component`), which takes the base in with a using-directive, so gpui code writes `Str` unqualified and `gpui::Str` still names it from outside. Examples `#include "gpui.h"` and `using namespace gpui;`.
 
    The two ported crates are the reason for the split. `src/taffy` and `src/markdown` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/build-dist.ts` fails the build if that stops being true. Keep it that way when adding to either — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
-3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`. macOS: clang++ with Cocoa, Core Graphics, Core Text and IOKit from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no vendored library and no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). Vendoring one would need a bar nothing has cleared: no build system of its own, no transitive dependencies, and a reason neither of those two routes works.
+3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs — plus WinHTTP for `src/sys/http_win.cpp`. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`, and libcurl the same way when it is installed (the one soft dependency: without it the tree still builds and only loses remote images). macOS: clang++ with Cocoa, Core Graphics, Core Text, IOKit and Foundation's NSURLSession from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no vendored library and no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). Vendoring one would need a bar nothing has cleared: no build system of its own, no transitive dependencies, and a reason neither of those two routes works.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
 6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
@@ -581,4 +586,4 @@ When a primitive needs a GPUI capability we do not have (text input, overlay), a
 
 ## Updating the vendored base
 
-If `src/base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/base.h` / `src/base.cpp`. Provide `log` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files.
+If `src/base.h` is missing an API you need, copy the corresponding bits from `C:\Users\kjk\src\sumatrapdf\src\base` into `src/base.h` / `src/base.cpp`. Provide `log` in `examples/AppLog.cpp` (linked into every example). Do not copy CrashHandler, GdiPlusUtil, Http, Zip, or other app-level Sumatra files — the HTTP client this tree does have is `src/sys/http.h`, written here against the OS's own library rather than copied from there.

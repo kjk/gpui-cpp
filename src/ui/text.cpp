@@ -1,5 +1,6 @@
 #include "ui/text.h"
 
+#include "gpui/image.h"
 #include "gpui/paint.h"
 #include "markdown/markdown.h"
 #include "ui/html.h"
@@ -673,12 +674,13 @@ El* TextView::ImageRun(MdRun* r, float font, Rgba color) {
     float h = r->imgH;
     // A vector picture knows its own shape, so a document that gave only one
     // dimension gets the other rather than a run of text's line height. A
-    // bitmap cannot answer that without being decoded, and a remote one
-    // cannot be decoded at all, so this is the SVG case only.
+    // bitmap cannot answer that without being decoded, so this is the SVG
+    // case only — the shipped asset, or one fetched, once it has arrived.
     if ((w > 0) != (h > 0)) {
         Size vb = {};
-        Str asset = ImageAssetFor(a, r->imgSrc);
-        if (asset.s && SvgViewBox(asset, &vb) && vb.w > 0 && vb.h > 0) {
+        int opsLen = 0;
+        const uint8_t* ops = ImageVectorForSrc(r->imgSrc, &opsLen);
+        if (ops && DrawOpsViewBox(ops, opsLen, &vb) && vb.w > 0 && vb.h > 0) {
             if (w > 0) {
                 h = w * (vb.h / vb.w);
             } else {

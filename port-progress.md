@@ -1531,3 +1531,68 @@ cargo run -p system_monitor
   SumatraPDF's `src/base`, whose `Str(const char*)` is implicit, and diverging
   there costs more than the enforcement is worth — the audit is cheap to
   repeat, and this entry says how.
+
+- 2026-08-22: A remote image is a picture now, not its alt text. The rule that
+  said it could not be — "a socket and a TLS stack this tree does not have" —
+  is gone from `gpui/image.h` and from AGENTS, and in its place is
+  `src/sys/http.h`: one GET, made with whatever client the OS already ships.
+  WinHTTP on Windows (`winhttp.lib`, the only library the link line gained),
+  NSURLSession on macOS (Foundation was already linked for the window, so it
+  cost nothing), libcurl on Linux through `pkg-config`. libcurl is the tree's
+  one **soft** dependency, unlike x11/cairo/pango: `cmd/build-linux.ts` probes
+  for it, defines `GPUI_HAVE_CURL` when it answers and says so when it does
+  not, so a machine without `libcurl4-openssl-dev` still builds and only loses
+  remote images. Verified both ways in WSL.
+
+  Nothing blocks. `HttpGet` is the blocking call and only a worker thread ever
+  makes it; `HttpFetch` is what a paint asks — a table of 24 slots, at most 4
+  transfers at once, answering Pending / Done / Failed and never waiting. A
+  Pending answer is the one thing `image.cpp` does not write into its cache,
+  since it is not final; a failure is remembered, or a page of unreachable
+  pictures would retry every one of them every frame. 16 MB and 15 s are the
+  caps, and a body over the cap is refused rather than truncated.
+
+  The repaint took two edits, and the second was the one that mattered.
+  `WindowTimerTick` keeps the window awake while `HttpFetchPending()` is
+  non-zero and `WindowTimerMs` paces that at 20 Hz rather than 60 — but a tick
+  only happens if a timer is already armed, and an idle window has none. So
+  `WindowDrawFrame` arms the clock itself when a fetch is outstanding. Without
+  that, the story gallery worked (something there is always animating) and
+  `rich_text` did not: the badge arrived in 407 ms and sat unclaimed until
+  shutdown. Worth remembering as the shape of the bug rather than the bug.
+
+  A remote src still prefers a shipped asset. `ImageAssetFor` looks the URL's
+  last path segment up in the asset roots first, so the story's own
+  `assets/story/logo.svg` answers upstream's README `<img src="https://...">`
+  and no request is made — offline, deterministic, and unchanged from before.
+  Only a URL nothing local answers is fetched.
+
+  Three fixes came out of pointing this at real files, each useful on its own:
+
+  - An SVG with no `viewBox` was drawn at 24x24. Every lucide icon has one, so
+    nothing had ever hit it; a shields.io badge has `width="86" height="20"`
+    and nothing else, and got scaled by three and a half. The viewport is the
+    fallback the spec already names.
+  - Shapes inside `<defs>` / `<clipPath>` / `<mask>` / `<filter>` / the
+    gradients were painted. A badge names a clip rect it never uses, which is
+    how a 20-pixel badge grew a stripe down the page. `IsHiddenContainer` plus
+    a depth counter in the tag scanner, mirrored in `cmd/svg-to-bytecode.ts` —
+    regenerating `asset_icons.cpp` after the change gives byte-identical
+    output, which is the proof the icons are untouched.
+  - A vector picture was drawn into a square of `min(w, h)` inside its box and
+    measured as its alt text. `ImageNaturalSize` answers the viewBox when
+    there is no bitmap, so an image element is laid out at the picture's own
+    aspect, and `SvgDrawOps` takes a `w` and an `h` — `ExecuteDrawOps` already
+    scaled the two axes independently. `SvgDraw` still passes a size twice,
+    because an icon is square.
+
+  What is still missing is `<text>`: the three badges on the Introduction page
+  now render as the right rounded rectangles in the right colours with no
+  words in them. That is the vector renderer's limit, not the fetch's, and it
+  is the same limit a shipped `.svg` has always had.
+
+  `HttpSetEnabled(false)` is the first line of `TestsMain`, so no suite ever
+  touches the network; `tests/HttpTests.cpp` checks the scheme rules and that
+  the switch is honoured. The live path was checked by hand on all three
+  platforms with a throwaway probe — 200, 1277 bytes, `image/svg+xml` from
+  WinHTTP, NSURLSession and libcurl alike. 16567 checks on each.

@@ -237,11 +237,11 @@ function findCompiler(): string {
 // x11 for the window, cairo + pangocairo for everything drawn in it.
 const pkgs = ["x11", "cairo", "pangocairo"];
 
-function pkgConfig(kind: "--cflags" | "--libs"): string[] {
-  const r = Bun.spawnSync(["pkg-config", kind, ...pkgs], { stdout: "pipe", stderr: "pipe" });
+function pkgConfigFor(names: string[], kind: "--cflags" | "--libs"): string[] {
+  const r = Bun.spawnSync(["pkg-config", kind, ...names], { stdout: "pipe", stderr: "pipe" });
   if ((r.exitCode ?? 1) !== 0) {
     console.error(new TextDecoder().decode(r.stderr).trim());
-    console.error(`pkg-config ${kind} ${pkgs.join(" ")} failed. Run: bash cmd/ubuntu-install-deps.sh`);
+    console.error(`pkg-config ${kind} ${names.join(" ")} failed. Run: bash cmd/ubuntu-install-deps.sh`);
     process.exit(1);
   }
   return new TextDecoder()
@@ -251,9 +251,32 @@ function pkgConfig(kind: "--cflags" | "--libs"): string[] {
     .filter((s) => s.length > 0);
 }
 
+function pkgConfig(kind: "--cflags" | "--libs"): string[] {
+  return pkgConfigFor(pkgs, kind);
+}
+
 const cxx = findCompiler();
 const pkgCflags = pkgConfig("--cflags");
 const pkgLibs = pkgConfig("--libs");
+
+// libcurl is sys/http_linux.cpp's client, and the only soft dependency here:
+// a machine without libcurl4-openssl-dev still builds, it just cannot fetch,
+// and a remote image renders as its alt text the way it did before there was
+// an HTTP client at all. GPUI_HAVE_CURL is what the source switches on.
+function haveCurl(): boolean {
+  const r = Bun.spawnSync(["pkg-config", "--exists", "libcurl"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return (r.exitCode ?? 1) === 0;
+}
+
+const curlFound = haveCurl();
+const curlCflags = curlFound ? [...pkgConfigFor(["libcurl"], "--cflags"), "-DGPUI_HAVE_CURL=1"] : [];
+const curlLibs = curlFound ? pkgConfigFor(["libcurl"], "--libs") : [];
+if (!curlFound) {
+  console.log("libcurl not found: remote images will not load. " + "Install it with: bash cmd/ubuntu-install-deps.sh");
+}
 
 function run(cmd: string[]) {
   const r = Bun.spawnSync(cmd, { cwd: root, stdout: "inherit", stderr: "inherit" });
@@ -367,8 +390,9 @@ function buildOne(name: string, debug: boolean, asan: boolean) {
     "-g",
     ...(debug ? ["-O0", "-DDEBUG"] : ["-O2", "-DNDEBUG"]),
     ...pkgCflags,
+    ...curlCflags,
   ];
-  const ldflags = [...pkgLibs, "-lm", "-lpthread"];
+  const ldflags = [...pkgLibs, ...curlLibs, "-lm", "-lpthread"];
   if (asan) {
     cflags.push("-fsanitize=address", "-fno-omit-frame-pointer");
     ldflags.push("-fsanitize=address");
