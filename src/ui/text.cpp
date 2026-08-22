@@ -353,8 +353,8 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             break;
         case md::NodeKind::List: {
             MdNode* l = Push(b, MdKind::List);
-            l->ordered = n->ordered;
-            l->start = n->hasStart ? (int)n->start : 1;
+            l->ordered = n->Has(md::NodeOrdered);
+            l->start = n->Has(md::NodeHasStart) ? (int)n->start : 1;
             MdBlockChildren(b, n);
             Pop(b);
             break;

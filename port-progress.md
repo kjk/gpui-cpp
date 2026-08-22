@@ -1832,3 +1832,43 @@ cargo run -p system_monitor
   What is left in prose's 20x is nodes and events, not strings — 3012 Text
   nodes at 168 bytes is 500 KB of the 1286, and the rest is the event list and
   the ArenaVec segments the children live in.
+
+- 2026-08-22: `Node` packs. The fields were in the order mdast.rs declares
+  them, which put a `bool` after a 24-byte member twice and left the six of
+  them one to a byte at the end: 24 bytes of the struct's 168 were padding and
+  slack. Ordered largest first — three 24-byte members, the eight 8-byte
+  strings, the one 4-byte number, four single bytes — it is **144 with no
+  padding at all**, and a `static_assert` on the arithmetic says so, since a
+  field added in the wrong place costs eight bytes a node and would otherwise
+  go unnoticed.
+
+  The six bools are one `uint8_t flags` and a `NodeFlag` enum:
+  NodeHasPosition, NodeHasStart, NodeOrdered, NodeSpread, NodeChecked,
+  NodeHasChecked, read with `Has(..)` and written with `Set(.., bool)`. The
+  last two are Rust's `Option<bool>` on a task list item, which is the pair
+  that has to stay together.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose         1285.9 KB  20.04x     1150.9 KB  17.93x    -10.5%
+    nested         729.2 KB  11.38x      654.0 KB  10.21x    -10.3%
+    gfm tables    2269.7 KB  35.41x     2023.6 KB  31.57x    -10.8%
+    entities       163.8 KB   2.55x      151.0 KB   2.35x     -7.8%
+
+  Three runs either side, and the times are where they were: prose
+  8.46/8.75/8.49 -> 8.48/8.38/8.35 ms, nested 9.58/9.53/9.43 ->
+  9.62/9.57/9.92, tables 13.15/12.80/12.92 -> 12.95/13.13/13.85, entities
+  5.78/5.86/5.99 -> 6.02/5.89/6.04. `tokenize`, which allocates no Nodes at
+  all, wandered 7.58 -> 7.93 -> 7.65 by itself, which is the width of the
+  noise band on this machine and the reason none of the above reads as a
+  change.
+
+  The saving is 24 bytes per node, so the shapes rank by how many nodes they
+  build rather than by how much text they hold: tables saved 246 KB, prose
+  135 KB, entities 13 KB.
+
+  Where a markdown parse's memory now goes, at 64 KB of prose: 3012 Text nodes
+  at 144 bytes is 434 KB of the 1151, and the rest is the event list and the
+  ArenaVec segments the children sit in. Since the three entries above it
+  started, prose is 1646 -> 1151 KB and the entity shape is 660 -> 151.
