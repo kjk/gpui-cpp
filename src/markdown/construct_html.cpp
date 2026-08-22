@@ -37,10 +37,17 @@ static Str TrimAscii(Str s) {
 
 // `HTML_RAW_NAMES.contains(&name)` / `HTML_BLOCK_NAMES.contains(&name)`,
 // against a name that is not lowercased first.
-static bool NamesContainI(const Str* names, int32_t namesLen, Str name) {
-    for (int32_t i = 0; i < namesLen; i++) {
-        if (StrEqAsciiI(names[i], name)) {
+// The name lists are SeqStrings runs. The compare stays this module's own —
+// `StrEqAsciiI`, which lowercases nothing but A-Z, because that is what a tag
+// name is by CommonMark and not what a locale might decide.
+static bool NamesContainI(SeqStrings names, Str name) {
+    int off = 0;
+    while (names[off]) {
+        if (StrEqAsciiI(SeqStrAt(names, off), name)) {
             return true;
+        }
+        if (!SeqStrAdvance(names, off)) {
+            break;
         }
     }
     return false;
@@ -165,12 +172,12 @@ State HtmlFlowTagName(Tokenizer* t) {
         t->tokenizeState.seen = false;
         t->tokenizeState.start = 0;
 
-        if (!slash && !closingTag && NamesContainI(kHtmlRawNames, 4, name)) {
+        if (!slash && !closingTag && NamesContainI(kHtmlRawNames, name)) {
             t->tokenizeState.marker = kHtmlRaw;
             t->concrete = true;
             return StateRetry(StateName::HtmlFlowContinuation);
         }
-        if (NamesContainI(kHtmlBlockNames, 62, name)) {
+        if (NamesContainI(kHtmlBlockNames, name)) {
             t->tokenizeState.marker = kHtmlBasic;
             if (slash) {
                 Consume(t);
@@ -413,7 +420,7 @@ State HtmlFlowContinuationRawEndTag(Tokenizer* t) {
         Slice slice = SliceFromIndices(t->parseState->bytes,
                                        t->tokenizeState.start, t->point.index);
         t->tokenizeState.start = 0;
-        if (NamesContainI(kHtmlRawNames, 4, slice.bytes)) {
+        if (NamesContainI(kHtmlRawNames, slice.bytes)) {
             Consume(t);
             return StateNext(StateName::HtmlFlowContinuationClose);
         }
