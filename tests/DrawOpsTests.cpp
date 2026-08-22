@@ -15,37 +15,42 @@
 
 #include <stdio.h>
 
-// How many f32 arguments each op takes; kOpColor's one u32 is read the same
-// way and compared as a float, which is exact for a byte-packed colour.
+// How many f32 arguments each op takes, in opcode order. The opcodes start at
+// zero and run without a gap, so this is one index rather than the switch it
+// was. kOpColor's one u32 is read the same way and compared as a float, which
+// is exact for a byte-packed colour.
+static const uint8_t kOpArgs[] = {
+    0, // kOpEnd
+    4, // kOpViewBox
+    1, // kOpStrokeWidth
+    1, // kOpColor
+    0, // kOpColorReset
+    4, // kOpLine
+    5, // kOpRect
+    5, // kOpFillRect
+    4, // kOpEllipse
+    4, // kOpFillEllipse
+    5, // kOpArc
+    2, // kOpMoveTo
+    2, // kOpLineTo
+    6, // kOpCubicTo
+    0, // kOpClosePath
+    0, // kOpFillPath
+    0, // kOpStrokePath
+    0, // kOpFillStrokePath
+};
+
+// An opcode added to drawops.h without a row here would read the next op's
+// count, which is a wrong answer rather than a missing one.
+static_assert(sizeof(kOpArgs) == (size_t)kOpFillStrokePath + 1,
+              "kOpArgs must have a row per opcode");
+
+// -1 for an opcode this reader does not know, which is what the walk stops on.
 static int OpArgCount(uint16_t op) {
-    switch (op) {
-        case kOpEnd:
-        case kOpColorReset:
-        case kOpClosePath:
-        case kOpFillPath:
-        case kOpStrokePath:
-        case kOpFillStrokePath:
-            return 0;
-        case kOpStrokeWidth:
-        case kOpColor:
-            return 1;
-        case kOpMoveTo:
-        case kOpLineTo:
-            return 2;
-        case kOpViewBox:
-        case kOpLine:
-        case kOpEllipse:
-        case kOpFillEllipse:
-            return 4;
-        case kOpRect:
-        case kOpFillRect:
-        case kOpArc:
-            return 5;
-        case kOpCubicTo:
-            return 6;
-        default:
-            return -1;
+    if (op >= sizeof(kOpArgs)) {
+        return -1;
     }
+    return kOpArgs[op];
 }
 
 static float ReadF(const uint8_t* p) {
