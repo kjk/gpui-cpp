@@ -614,6 +614,95 @@ bool StrContainsI(Str s, Str sub) {
     return false;
 }
 
+// ─── sequential strings ───────────────────────────────────────────────────
+//
+// See `SeqStrings` in base.h. Ported from SumatraPDF's `src/base/Str.cpp`;
+// what changes is that a string here is a `Str` rather than a `char*`, so a
+// caller comparing one does not walk it a second time to find its length.
+
+Str SeqStrAt(SeqStrings strs, int off) {
+    if (!strs || off < 0 || !strs[off]) {
+        return {};
+    }
+    return Str(strs + off);
+}
+
+bool SeqStrAdvance(SeqStrings strs, int& off, int* idxInOut) {
+    if (!strs || off < 0 || !strs[off]) {
+        off = -1;
+        if (idxInOut) {
+            *idxInOut = -1;
+        }
+        return false;
+    }
+    off += (int)strlen(strs + off) + 1;
+    if (!strs[off]) {
+        off = -1;
+        return false;
+    }
+    if (idxInOut) {
+        (*idxInOut)++;
+    }
+    return true;
+}
+
+// The two lookups differ only in how they compare, so they share the walk.
+static int SeqStrIndexCmp(SeqStrings strs, Str toFind, bool ignoreCase) {
+    if (!strs || !toFind) {
+        return -1;
+    }
+    int off = 0;
+    int idx = 0;
+    while (strs[off]) {
+        Str at = SeqStrAt(strs, off);
+        bool same = ignoreCase ? StrEqI(at, toFind)
+                               : (at.len == toFind.len &&
+                                  memcmp(at.s, toFind.s, (size_t)at.len) == 0);
+        if (same) {
+            return idx;
+        }
+        if (!SeqStrAdvance(strs, off)) {
+            break;
+        }
+        idx++;
+    }
+    return -1;
+}
+
+int SeqStrIndex(SeqStrings strs, Str toFind) {
+    return SeqStrIndexCmp(strs, toFind, false);
+}
+
+int SeqStrIndexIS(SeqStrings strs, Str toFind) {
+    return SeqStrIndexCmp(strs, toFind, true);
+}
+
+Str SeqStrByIndex(SeqStrings strs, int idx) {
+    if (idx < 0) {
+        return {};
+    }
+    int off = 0;
+    while (idx > 0) {
+        if (!SeqStrAdvance(strs, off)) {
+            return {};
+        }
+        idx--;
+    }
+    return SeqStrAt(strs, off);
+}
+
+int SeqStrCount(SeqStrings strs) {
+    if (!strs || !strs[0]) {
+        return 0;
+    }
+    int off = 0;
+    int n = 1;
+    while (SeqStrAdvance(strs, off)) {
+        n++;
+    }
+    return n;
+}
+
 static bool StrEqNI(Str s1, Str s2, int n) {
     if (s1.s == s2.s) {
         return true;

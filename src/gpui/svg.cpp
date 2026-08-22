@@ -803,33 +803,19 @@ bool SvgToDrawOps(Str xml, DrawOpsBuilder* out) {
 
 // ─── what an asset path draws ──────────────────────────────
 
-// The generated table, looked up. `kAssetIcons` is sorted by name, so this is
-// a binary search over 70-odd entries rather than a walk.
+// The generated table, looked up. The names are a SeqStrings run rather than
+// a pointer per icon, so this is a scan of about nine hundred bytes instead
+// of a binary search — which costs nothing that matters, because a path is
+// looked up once and `SvgDrawOpsFor` remembers the answer.
 const uint8_t* AssetIconFind(Str name, int* lenOut) {
     *lenOut = 0;
-    if (!name.s || name.len <= 0) {
+    int ix = SeqStrIndex(kAssetIconNames, name);
+    if (ix < 0 || ix >= kAssetIconsCount) {
         return nullptr;
     }
-    int lo = 0;
-    int hi = kAssetIconsCount - 1;
-    while (lo <= hi) {
-        int mid = (lo + hi) / 2;
-        const AssetIcon& e = kAssetIcons[mid];
-        int cmp = StrCmpNI(e.name, name.s, name.len);
-        if (cmp == 0 && e.name[name.len] != 0) {
-            cmp = 1; // a longer name sorts after the prefix asked for
-        }
-        if (cmp == 0) {
-            *lenOut = e.len;
-            return kAssetIconsData + e.offset;
-        }
-        if (cmp < 0) {
-            lo = mid + 1;
-        } else {
-            hi = mid - 1;
-        }
-    }
-    return nullptr;
+    const AssetIcon& e = kAssetIcons[ix];
+    *lenOut = e.len;
+    return kAssetIconsData + e.offset;
 }
 
 const uint8_t* AssetIconForPath(Str assetPath, int* lenOut) {

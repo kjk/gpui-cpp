@@ -1361,3 +1361,32 @@ cargo run -p system_monitor
   Verified with `bun cmd/test.ts` and `-dbg` (9948 checks, the markdown suite
   among them) and with `markdown_table` and `rich_text` screenshots against a
   build of the commit before, pixel-identical.
+
+- 2026-08-22: `SeqStrings`, ported from SumatraPDF's `src/base/Str.{h,cpp}`
+  into `src/base.{h,cpp}`. A run of NUL-terminated strings laid end to end and
+  ended by an empty one — `"red\0green\0blue\0"`, which as a C literal already
+  carries the final NUL — with `SeqStrAt`, `SeqStrAdvance`, `SeqStrIndex`,
+  `SeqStrIndexIS` and `SeqStrByIndex`. A string here is a `Str` rather than a
+  `char*`, so a caller comparing one does not walk it again for its length.
+  `SeqStrCount` is not one of Sumatra's: a run that parallels a table has to
+  be as long as the table, and something has to be able to say so.
+
+  `AssetIcon` uses it. The struct was `{const char* name, int offset, int
+  len}`; it is `{int offset, int len}` now, and the names are one
+  `kAssetIconNames` run in the same order — 73 pointers and 73 relocations
+  fewer, though the exe is the same size, because six hundred bytes of
+  `.rdata` disappear into the section padding. `cmd/svg-to-bytecode.ts` writes
+  both, and the row comments still name the icon so the generated file's diff
+  stays readable.
+
+  `AssetIconFind` is a `SeqStrIndex` scan rather than a binary search now.
+  That is a linear pass over about nine hundred bytes instead of seven
+  compares, which costs nothing that matters: an asset path is looked up once
+  and `SvgDrawOpsFor` remembers the answer. The drawops test gained the
+  invariant the two arrays now depend on — `SeqStrCount(kAssetIconNames) ==
+  kAssetIconsCount` — and checks that the name at each index finds that
+  index's row.
+
+  `-rel -all` / `-dbg -all` and `bun cmd/test.ts` in both (10168 checks), and
+  `sidebar` and `app_assets` are pixel-identical to a build from before, which
+  is the icons still coming out of the table.

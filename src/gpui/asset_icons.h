@@ -12,17 +12,19 @@
 
 namespace gpui {
 
-// Where one icon sits in kAssetIconsData. `name` is the file's base name
-// without the extension: "chevrons-up-down".
+// Where one icon sits in kAssetIconsData.
 struct AssetIcon {
-    const char* name;
     int offset;
     int len;
 };
 
 extern const uint8_t kAssetIconsData[];
 extern const int kAssetIconsDataLen;
-// Sorted by name, so the lookup is a binary search.
+// The icons' base names — "chevrons-up-down", no directory and no extension —
+// as one SeqStrings run, in the same order as kAssetIcons. A name is looked
+// up at most once per asset path and the answer is cached, so the scan costs
+// nothing worth a pointer table.
+extern const char kAssetIconNames[];
 extern const AssetIcon kAssetIcons[];
 extern const int kAssetIconsCount;
 
