@@ -83,8 +83,68 @@ static void TheWordIsLengthOverOffset() {
     ArenaDelete(a);
 }
 
+// Growing the newest string in an arena costs only the bytes appended. The
+// check is that it costs that and not more, since the whole point is the
+// copies it does not make.
+static void AppendingToTheNewestCostsOnlyTheBytes() {
+    Arena* a = ArenaNew();
+    ArenaStr s = ArenaStrDup(a, StrL("one"));
+    uint64_t after = ArenaUsed(a);
+
+    s = ArenaStrAppend(a, s, StrL(" two"));
+    utassert(StrSame(ArenaStrGet(a, s), StrL("one two")));
+    // Four characters more, and nothing else: no second copy of "one".
+    utassert(ArenaUsed(a) == after + 4);
+
+    s = ArenaStrAppend(a, s, StrL(" three"));
+    utassert(StrSame(ArenaStrGet(a, s), StrL("one two three")));
+    utassert(ArenaUsed(a) == after + 4 + 6);
+    utassert(ArenaStrLen(s) == 13);
+
+    // Still NUL-terminated, which the in-place path has to keep true or the
+    // next append would find the wrong end.
+    Str got = ArenaStrGet(a, s);
+    utassert(got.s[got.len] == 0);
+
+    // Appending nothing is not an allocation.
+    uint64_t before = ArenaUsed(a);
+    s = ArenaStrAppend(a, s, Str{});
+    s = ArenaStrAppend(a, s, StrL(""));
+    utassert(ArenaUsed(a) == before);
+    utassert(ArenaStrLen(s) == 13);
+
+    // Appending to nothing is just storing it.
+    ArenaStr fresh = ArenaStrAppend(a, kArenaStrNone, StrL("first"));
+    utassert(StrSame(ArenaStrGet(a, fresh), StrL("first")));
+    ArenaDelete(a);
+}
+
+// And when it is not the newest, it copies — which is what concatenating
+// always did, so the answer is right either way.
+static void AppendingToAnOlderStringCopies() {
+    Arena* a = ArenaNew();
+    ArenaStr first = ArenaStrDup(a, StrL("aa"));
+    ArenaStr second = ArenaStrDup(a, StrL("bb"));
+
+    // `first` is no longer at the end, so this cannot grow in place.
+    first = ArenaStrAppend(a, first, StrL("cc"));
+    utassert(StrSame(ArenaStrGet(a, first), StrL("aacc")));
+    // The one behind it is untouched, which is the thing a wrong in-place
+    // append would break.
+    utassert(StrSame(ArenaStrGet(a, second), StrL("bb")));
+
+    // And the copy is itself the newest now, so the next append is in place.
+    uint64_t after = ArenaUsed(a);
+    first = ArenaStrAppend(a, first, StrL("dd"));
+    utassert(StrSame(ArenaStrGet(a, first), StrL("aaccdd")));
+    utassert(ArenaUsed(a) == after + 2);
+    ArenaDelete(a);
+}
+
 void TestArenaStr() {
     TestSuite("arena_str");
+    AppendingToTheNewestCostsOnlyTheBytes();
+    AppendingToAnOlderStringCopies();
     WhatGoesInComesOut();
     ItSurvivesTheArenaChainingOn();
     ARefNamesWhatIsAlreadyThere();

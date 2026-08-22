@@ -54,24 +54,6 @@ struct CompileContext {
     int32_t index = 0;
 };
 
-// ─── strings ─────────────────────────────────────────────────────────────
-
-// `String::push_str`.
-static Str StrCat(Arena* a, Str head, Str tail) {
-    int32_t len = head.len + tail.len;
-    char* out = (char*)Alloc(a, len + 1);
-    if (!out) {
-        return head;
-    }
-    if (head.len > 0) {
-        memcpy(out, head.s, (size_t)head.len);
-    }
-    if (tail.len > 0) {
-        memcpy(out + head.len, tail.s, (size_t)tail.len);
-    }
-    out[len] = 0;
-    return Str(out, len);
-}
 
 // `normalize_identifier(..).to_lowercase()`, which is what an identifier on
 // the tree is. ASCII only, as in util.h.
@@ -140,8 +122,8 @@ static TreeFrame& TreeTail(CompileContext* c) {
 // A node's strings are ArenaStr — an offset and a length in one word rather
 // than a pointer and a length in two — so the compiler needs both directions.
 //
-// `Keep` is how one is stored. StrCat, NodeToString, IdentifierFrom and
-// CharacterReferenceDecode all allocate in the parse arena, so for those this
+// `Keep` is how one is stored. NodeToString and IdentifierFrom both
+// allocate in the parse arena, so for those this
 // is a lookup and no second copy; a slice of the source bytes, which are not
 // the arena's, is copied in. Which of the two it is cannot be got wrong from
 // the call site — this asks the arena rather than the caller.
@@ -155,6 +137,17 @@ static ArenaStr Keep(CompileContext* c, Str s) {
 
 static Str Get(CompileContext* c, ArenaStr s) {
     return NodeStr(c->a, s);
+}
+
+// A string built a piece at a time. A text node's value arrives one Data
+// event at a time and an autolink's URL in two or three parts, and
+// concatenating copied the whole of what was there on every one of them —
+// so a paragraph of N events left N-1 dead copies in the arena and cost
+// O(total^2 / piece) bytes to build. Nothing else allocates between two of
+// those events, so the value is still the newest thing in the arena and
+// grows in place.
+static ArenaStr Grow(CompileContext* c, ArenaStr s, Str more) {
+    return base::ArenaStrAppend(c->a, s, more);
 }
 
 static Node* TailMut(CompileContext* c) {
@@ -421,7 +414,7 @@ static void OnExit(CompileContext* c) {
 static void OnExitData(CompileContext* c) {
     Str value = ExitSlice(c).bytes;
     Node* node = TailMut(c);
-    node->value = Keep(c, StrCat(c->a, Get(c, node->value), value));
+    node->value = Grow(c, node->value, value);
     OnExit(c);
 }
 
@@ -429,22 +422,26 @@ static void OnExitAutolinkProtocol(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = Keep(c, StrCat(c->a, Get(c, link->url), value));
+    link->url = Grow(c, link->url, value);
 }
 
 static void OnExitAutolinkEmail(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = Keep(c, StrCat(c->a, Get(c, link->url), StrL("mailto:")));
-    link->url = Keep(c, StrCat(c->a, Get(c, link->url), value));
+    link->url = Grow(c, link->url, StrL("mailto:"));
+    link->url = Grow(c, link->url, value);
 }
 
 static void OnExitCharacterReferenceValue(CompileContext* c) {
-    Str value = CharacterReferenceDecode(c->a, ExitSlice(c).bytes,
-                                         c->characterReferenceMarker);
+    // Decoded in place rather than into the arena: an allocation here would
+    // sit between the node's value and the text being appended to it, and the
+    // value would stop growing in place and start being copied.
+    char buf[4];
+    Str value = CharacterReferenceDecodeInto(buf, ExitSlice(c).bytes,
+                                             c->characterReferenceMarker);
     Node* node = TailMut(c);
-    node->value = Keep(c, StrCat(c->a, Get(c, node->value), value));
+    node->value = Grow(c, node->value, value);
     c->characterReferenceMarker = 0;
 }
 
@@ -527,11 +524,11 @@ static void OnExitGfmAutolinkLiteral(CompileContext* c) {
     Name name = (*c->events)[c->index].name;
     Node* link = TailMut(c);
     if (name == Name::GfmAutolinkLiteralEmail) {
-        link->url = Keep(c, StrCat(c->a, Get(c, link->url), StrL("mailto:")));
+        link->url = Grow(c, link->url, StrL("mailto:"));
     } else if (name == Name::GfmAutolinkLiteralWww) {
-        link->url = Keep(c, StrCat(c->a, Get(c, link->url), StrL("http://")));
+        link->url = Grow(c, link->url, StrL("http://"));
     }
-    link->url = Keep(c, StrCat(c->a, Get(c, link->url), value));
+    link->url = Grow(c, link->url, value);
     OnExit(c);
 }
 

@@ -356,6 +356,55 @@ ArenaStr ArenaStrRef(Arena* a, Str s) {
     return kArenaStrNone;
 }
 
+ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
+    if (!a || !more.s || more.len <= 0) {
+        return s;
+    }
+    if (!ArenaStrIsSet(s)) {
+        return ArenaStrDup(a, more);
+    }
+    uint32_t off = (uint32_t)s;
+    uint32_t len = ArenaStrLen(s);
+
+    a->lock.Lock();
+    Arena* cur = a->current;
+    uint64_t used = cur ? cur->basePos + cur->pos : 0;
+    // One past the terminator is where the arena would allocate next, which
+    // is what makes this string the newest one in it.
+    bool newest = (uint64_t)off + len + 1 == used;
+    // Only `more.len` bytes: the terminator's own byte is already ours, so
+    // the characters start there and the new terminator lands on the last
+    // byte pushed. The next append then finds the same invariant.
+    uint64_t want = newest ? (uint64_t)more.len : (uint64_t)len + more.len + 1;
+    char* dst = (char*)ArenaPushLocked(a, want, 1, false);
+    uint64_t at = 0;
+    if (dst) {
+        Arena* after = a->current;
+        at = after->basePos + (uint64_t)((char*)dst - (char*)after);
+    }
+    a->lock.Unlock();
+    if (!dst) {
+        return s;
+    }
+
+    // A push that chained onto a new block is not contiguous after all, so
+    // the in-place path has to check rather than assume.
+    if (newest && at == used) {
+        memcpy(dst - 1, more.s, (size_t)more.len);
+        dst[more.len - 1] = 0;
+        return ((uint64_t)(len + (uint32_t)more.len) << 32) | off;
+    }
+    // Somewhere new: both halves are copied, which is what concatenating
+    // always did.
+    Str was = ArenaStrGet(a, s);
+    if (was.len > 0) {
+        memcpy(dst, was.s, (size_t)was.len);
+    }
+    memcpy(dst + len, more.s, (size_t)more.len);
+    dst[len + more.len] = 0;
+    return ((uint64_t)(len + (uint32_t)more.len) << 32) | (uint32_t)at;
+}
+
 Str ArenaStrGet(Arena* a, ArenaStr s) {
     if (!ArenaStrIsSet(s)) {
         return {};

@@ -181,6 +181,18 @@ bool CharacterReferenceValueTest(uint8_t marker, uint8_t byte);
 // Null when a named reference is not in the table.
 Str CharacterReferenceDecode(Arena* a, Str value, uint8_t marker);
 
+// The same, without an arena. Neither half of it needs one: a named
+// reference's text is a slice of the static table, and a numeric one is at
+// most the four bytes `buf` holds. The arena version copies that into the
+// arena, which is waste for a caller that is only going to copy it somewhere
+// else — and worse than waste in `to_mdast`, where an allocation between a
+// node's value and the text being appended to it is what stops the value
+// growing in place.
+//
+// The answer points either into the static table or into `buf`, so it lives
+// as long as the caller's own frame.
+Str CharacterReferenceDecodeInto(char buf[4], Str value, uint8_t marker);
+
 } // namespace markdown
 
 #endif // GPUI_MARKDOWN_UTIL_H_

@@ -1768,3 +1768,67 @@ cargo run -p system_monitor
   Verified beyond the suite: `rich_text` renders pixel-identical, which
   exercises every one of the eight strings — value, url, title, alt,
   identifier, label, lang and meta — through TextView.
+
+- 2026-08-22: The accumulating strings in `to_mdast` grow in place, and the
+  character-reference decode stopped allocating. Two changes, and a correction
+  to what the entry above said.
+
+  **The correction first.** That entry called `OnExitData`'s repeated
+  `StrCat` the place "where prose's remaining 20x lives". It is not. Counting
+  the appends in a 64 KB parse says so:
+
+    shape       fresh   grew   copied
+    prose        3012      0        0
+    nested        610   1830        0
+    tables       4725      0        0
+    entities      272   1904     2176
+
+  For prose and tables *every* append starts a string that was empty — a Text
+  node there gets one Data event, because emphasis, code spans and links break
+  the runs — so there was never anything to concatenate and nothing quadratic
+  to fix. Their memory did not move by a byte, and saying it would have was a
+  guess dressed up as a finding.
+
+  **`ArenaStrAppend`** is the in-place growth: if the string ends where the
+  arena's next allocation would begin, the new bytes are pushed straight onto
+  it. The terminator is what makes it fit — the byte holding it is already the
+  string's, so `more.len` new bytes are room for `more.len` characters *and* a
+  new terminator, and the next append finds the same invariant. When something
+  else has allocated in between it copies both halves, which is exactly what
+  concatenating always did, so it is never wrong.
+
+  That alone fixed nested (867.5 -> 729.2 KB) and half of entities, and left
+  2176 copies in the entity shape — one per reference. `Grow` cannot append in
+  place when something allocated between the node's value and the text being
+  appended, and `CharacterReferenceDecode(c->a, ..)` was that something.
+
+  **`CharacterReferenceDecodeInto`** takes a four-byte buffer instead of an
+  arena, which is all either half of it ever needed: a named reference's text
+  is a NUL-terminated run in the static table and a numeric one is one encoded
+  codepoint. The arena version copied that into the arena for a caller about
+  to copy it somewhere else. With the decode out of the way every append in
+  all four shapes grows in place — **copied is 0 everywhere**.
+
+  Where the four shapes ended up, against the Str-per-node baseline two
+  entries ago:
+
+    shape        original    ArenaStr      + append + decode
+    prose        1646.1 KB   1285.9 KB     1285.9 KB   -21.9%
+    nested       1067.9 KB    867.5 KB      729.2 KB   -31.7%
+    gfm tables   2926.0 KB   2269.7 KB     2269.7 KB   -22.4%
+    entities      660.2 KB    626.2 KB      163.8 KB   -75.2%
+
+  Entities went 10.28x its source to 2.55x. Speed is unchanged again — prose
+  8.44-8.48 ms, nested 9.47-9.63, tables 13.00-13.30, entities 5.82-5.98,
+  across three runs, all where they were.
+
+  One measurement lesson worth keeping: a single run had prose at 9.29 ms and
+  `tokenize` at 8.86 against 7.65 before. `tokenize` is `Parse` alone and runs
+  none of this code, which is what said the machine had drifted rather than
+  the change had cost anything. Re-running put everything back. A number that
+  moves in a case the change cannot reach is the cheapest drift detector there
+  is.
+
+  What is left in prose's 20x is nodes and events, not strings — 3012 Text
+  nodes at 168 bytes is 500 KB of the 1286, and the rest is the event list and
+  the ArenaVec segments the children live in.
