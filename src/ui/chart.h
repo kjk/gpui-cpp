@@ -49,8 +49,16 @@ struct AreaChart {
     // with linear_gradient(0., ..). Alpha 0 means "fade `fill` out".
     Rgba fillBottom = {};
     ChartStroke strokeStyle = ChartStroke::Natural;
+    // The series after the first, in the order `Y()` named them. Four is what
+    // the gallery's widest chart asks for; Rust's list has no bound, and the
+    // day one here does the array becomes an ArenaVec.
+    ChartSeriesExtra more[4] = {};
+    int nMore = 0;
 
     static AreaChart* New(Ctx* cx, const float* ys, int n);
+    // `.y(..)`: another series over the same axes. The `Stroke`, `Fill` and
+    // `Tooltip` after it belong to that series, the way Rust's chain does.
+    AreaChart* Y(const float* ys);
     // AreaChart::id: a chart with a name takes the pointer and shows a
     // crosshair and a tooltip for whatever it is over.
     AreaChart* Tooltip(Str name);

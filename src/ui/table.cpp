@@ -418,7 +418,11 @@ El* DataTable::BuildEl() {
 
     for (int g = 0; g < nGroupHeaders; g++) {
         El* gf = Div(a)->FlexRow()->Shrink0()->BorderB(1, th.border);
-        El* gsWrap = follow(Div(a)->FlexRow()->Flex1()->BorderB(1, th.border));
+        // The band fills the pane's width; it must not be a flex item along
+        // the pane's own axis, which is down. A basis of zero there would
+        // leave the band out of the pane's intrinsic height and the body
+        // would give that height back by shrinking.
+        El* gsWrap = follow(Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border));
         El* gs = Div(a)->FlexRow()->Shrink0();
         gsWrap->Child(gs);
         int col = 0;
@@ -450,7 +454,7 @@ El* DataTable::BuildEl() {
                         ->FlexRow()
                         ->Shrink0()
                         ->BorderB(1, th.border);
-    El* headWrap = follow(Div(a)->FlexRow()->Flex1()->BorderB(1, th.border));
+    El* headWrap = follow(Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border));
     El* headScroll = TableHeader::New(cx, StrDup(a, fmt("%s-head", id)))
                          ->FlexRow()
                          ->Shrink0();
