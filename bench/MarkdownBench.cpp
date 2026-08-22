@@ -292,6 +292,13 @@ static void RunShapeSized(const char* name, BuildFn build, int32_t largeBytes) {
         c.source = doc.AsStr();
         BenchCase(group, name, "bytes", doc.len, MkFunc0(MdSetup, &c),
                   MkFunc0(MdRun, &c));
+        // What the tree cost to hold, which is the other half of the number
+        // above: one more parse into a freshly reset arena, and how far the
+        // arena's position moved. Reported per byte of source as well, since
+        // that is what makes two document shapes comparable.
+        MdSetup(&c);
+        MdRun(&c);
+        BenchMem(group, name, doc.len, ArenaUsed(c.out));
 
         ArenaDelete(out);
         ArenaDelete(src);

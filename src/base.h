@@ -256,6 +256,59 @@ struct Arena {
 Arena* ArenaNew();
 void ArenaDelete(Arena* arena);
 
+// How many bytes the arena has handed out, across every block in its chain.
+// The chain shares one position space — a block's `basePos` is where it
+// starts in it — so this is the number a caller means by "how big did it
+// get".
+uint64_t ArenaUsed(Arena* arena);
+
+// ─── a string that costs eight bytes ──────────────────────────────────────
+//
+// A `Str` is a pointer and a length: sixteen bytes once the compiler has
+// padded it. A structure that holds several of them and is allocated by the
+// thousand — an mdast `Node` holds eight — spends most of its size on
+// pointers into an arena it already knows the name of.
+//
+// An ArenaStr is that pair packed into one 64-bit word: the length in the
+// upper half, the offset into the arena's position space in the lower. Half
+// the size, and no relocation, at the cost of needing the arena to read it
+// back.
+//
+// The offset is the same position space `PopTo` takes, so it stays valid as
+// the arena chains onto a new block. Nothing may be freed out from under it:
+// an ArenaStr into an arena that has been reset or popped past it is a
+// dangling pointer spelled differently.
+using ArenaStr = uint64_t;
+
+constexpr ArenaStr kArenaStrNone = 0;
+
+constexpr uint32_t ArenaStrLen(ArenaStr s) {
+    return (uint32_t)(s >> 32);
+}
+
+// Whether it names anything. A zero-length string that was allocated is still
+// a string — `IsSet` asks whether one was stored at all, which is what a
+// `Str` with a null `s` means.
+constexpr bool ArenaStrIsSet(ArenaStr s) {
+    return s != kArenaStrNone;
+}
+
+// Copies `src` into `a` and answers where it went. The bytes are
+// NUL-terminated the way StrDup's are, so a caller that needs a C string has
+// one. An empty or null `src` answers kArenaStrNone without allocating.
+ArenaStr ArenaStrDup(Arena* a, Str src);
+
+// The same, for a string already inside `a` — a slice of something the arena
+// holds. Answers where it is rather than copying it again, which is what a
+// parser that has already put the text in the arena wants. `s` must point
+// into `a`, and this is a walk of the chain, so it is for the handful of
+// places that can avoid a copy rather than the general case.
+ArenaStr ArenaStrRef(Arena* a, Str s);
+
+// Reading one back. The Str points into the arena and lives exactly as long
+// as the arena's contents do.
+Str ArenaStrGet(Arena* a, ArenaStr s);
+
 // The per-frame scratch arena that fmt() / AllocStrTemp() carve out of.
 Arena* GetTempArena();
 void ResetTempArena();

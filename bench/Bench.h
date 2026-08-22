@@ -51,6 +51,12 @@ extern const char* gBenchFilter;
 void BenchCase(const char* group, const char* name, const char* unit,
                int64_t param, Func0 setup, Func0 run);
 
+// The memory a case's output cost, printed in the same shape as its timing
+// row. `param` is the case's own number — the bytes of source — so the ratio
+// says how much arena a byte of document turns into.
+void BenchMem(const char* group, const char* name, int64_t param,
+              uint64_t bytes);
+
 // True if a case with this group and name would run. A benchmark whose setup
 // is expensive to even reach can ask first.
 bool BenchWanted(const char* group, const char* name);

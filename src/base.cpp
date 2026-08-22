@@ -295,6 +295,79 @@ void Arena::PopTo(uint64_t popPos) {
     lock.Unlock();
 }
 
+uint64_t ArenaUsed(Arena* arena) {
+    if (!arena) {
+        return 0;
+    }
+    Arena* cur = arena->current;
+    return cur ? cur->basePos + cur->pos : 0;
+}
+
+// ─── ArenaStr ─────────────────────────────────────────────────────────────
+//
+// The block a position lands in, found by walking back from the newest. The
+// chain is short — one block until an arena outgrows its reserve — and the
+// newest is where a just-allocated string is, so the common walk is one
+// comparison.
+static Arena* ArenaBlockAt(Arena* arena, uint64_t pos) {
+    Arena* node = arena ? arena->current : nullptr;
+    while (node && node->basePos > pos) {
+        node = node->prev;
+    }
+    return node;
+}
+
+ArenaStr ArenaStrDup(Arena* a, Str src) {
+    if (!a || !src.s || src.len <= 0) {
+        return kArenaStrNone;
+    }
+    a->lock.Lock();
+    // The position before the push is where the bytes land, but only once the
+    // alignment the pusher applies is known — so the pointer is what says
+    // where they went, and the position is worked back out of it.
+    char* dst = (char*)ArenaPushLocked(a, (uint64_t)src.len + 1, 1, false);
+    Arena* cur = a->current;
+    uint64_t at = dst ? cur->basePos + (uint64_t)((char*)dst - (char*)cur) : 0;
+    a->lock.Unlock();
+    if (!dst) {
+        return kArenaStrNone;
+    }
+    memcpy(dst, src.s, (size_t)src.len);
+    dst[src.len] = 0;
+    return ((uint64_t)(uint32_t)src.len << 32) | (uint32_t)at;
+}
+
+ArenaStr ArenaStrRef(Arena* a, Str s) {
+    if (!a || !s.s || s.len <= 0) {
+        return kArenaStrNone;
+    }
+    // Which block holds it, by address. A string that is not in this arena
+    // has no offset to name, and answering kArenaStrNone for one is better
+    // than answering an offset into somebody else's bytes.
+    for (Arena* node = a->current; node; node = node->prev) {
+        char* lo = (char*)node;
+        char* hi = lo + node->pos;
+        if (s.s < lo || s.s + s.len > hi) {
+            continue;
+        }
+        uint64_t at = node->basePos + (uint64_t)(s.s - lo);
+        return ((uint64_t)(uint32_t)s.len << 32) | (uint32_t)at;
+    }
+    return kArenaStrNone;
+}
+
+Str ArenaStrGet(Arena* a, ArenaStr s) {
+    if (!ArenaStrIsSet(s)) {
+        return {};
+    }
+    uint64_t at = (uint32_t)s;
+    Arena* node = ArenaBlockAt(a, at);
+    if (!node) {
+        return {};
+    }
+    return Str((char*)node + (at - node->basePos), (int)ArenaStrLen(s));
+}
+
 void* Arena::Alloc(int size) {
     if (size <= 0) {
         return nullptr;
