@@ -637,25 +637,39 @@ bool ListItemLoose(const Vec<Event>& events, int32_t index) {
     return false;
 }
 
-void GfmTableAlign(const Vec<Event>& events, int32_t index, Arena* a,
-                   ArenaVec<AlignKind>* out) {
+// One walk of the delimiter row, writing when there is somewhere to write
+// and counting either way. `out` is none on the counting pass.
+static int32_t ScanTableAlign(const Vec<Event>& events, int32_t index,
+                              Arena* a, ArenaAlign out) {
     bool inDelimiterRow = false;
+    int32_t count = 0;
     while (index < events.len) {
         const Event& event = events[index];
         if (inDelimiterRow) {
             if (event.kind == Kind::Enter) {
                 if (event.name == Name::GfmTableDelimiterCellValue) {
-                    out->Append(a, events[index + 1].name ==
-                                           Name::GfmTableDelimiterMarker
-                                       ? AlignKind::Left
-                                       : AlignKind::None);
+                    // A marker before the cell's text is a colon on the left.
+                    AlignKind kind = events[index + 1].name ==
+                                             Name::GfmTableDelimiterMarker
+                                         ? AlignKind::Left
+                                         : AlignKind::None;
+                    if (out != kArenaAlignNone) {
+                        ArenaAlignSet(a, out, count, kind);
+                    }
+                    count++;
                 }
             } else if (event.name == Name::GfmTableDelimiterCellValue) {
-                if (events[index - 1].name == Name::GfmTableDelimiterMarker) {
-                    int32_t at = out->len - 1;
-                    (*out)[at] = (*out)[at] == AlignKind::Left
-                                     ? AlignKind::Center
-                                     : AlignKind::Right;
+                // And one after it is a colon on the right, which either
+                // centres what the left colon started or stands alone.
+                if (count > 0 && events[index - 1].name ==
+                                     Name::GfmTableDelimiterMarker) {
+                    if (out != kArenaAlignNone) {
+                        AlignKind was = ArenaAlignAt(a, out, count - 1);
+                        ArenaAlignSet(a, out, count - 1,
+                                      was == AlignKind::Left
+                                          ? AlignKind::Center
+                                          : AlignKind::Right);
+                    }
                 }
             } else if (event.name == Name::GfmTableDelimiterRow) {
                 break;
@@ -666,6 +680,17 @@ void GfmTableAlign(const Vec<Event>& events, int32_t index, Arena* a,
         }
         index++;
     }
+    return count;
+}
+
+ArenaAlign GfmTableAlign(const Vec<Event>& events, int32_t index, Arena* a) {
+    int32_t count = ScanTableAlign(events, index, a, kArenaAlignNone);
+    if (count <= 0) {
+        return kArenaAlignNone;
+    }
+    ArenaAlign out = ArenaAlignNew(a, count);
+    ScanTableAlign(events, index, a, out);
+    return out;
 }
 
 // ─── util/character_reference.rs ─────────────────────────────────────────

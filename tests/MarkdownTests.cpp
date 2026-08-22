@@ -400,11 +400,15 @@ static void TestMarkdownTable(Arena* a) {
                           "| 1 | 2 | 3 | 4 |\n");
     Node* table = Child(root, 0);
     utassert(table->kind == NodeKind::Table);
-    utassert(table->align.len == 4);
-    utassert(table->align[0] == AlignKind::None);
-    utassert(table->align[1] == AlignKind::Left);
-    utassert(table->align[2] == AlignKind::Center);
-    utassert(table->align[3] == AlignKind::Right);
+    Arena* into = gParsedInto;
+    utassert(ArenaAlignCount(into, table->align) == 4);
+    utassert(ArenaAlignAt(into, table->align, 0) == AlignKind::None);
+    utassert(ArenaAlignAt(into, table->align, 1) == AlignKind::Left);
+    utassert(ArenaAlignAt(into, table->align, 2) == AlignKind::Center);
+    utassert(ArenaAlignAt(into, table->align, 3) == AlignKind::Right);
+    // Past the end, and a table with no alignments at all.
+    utassert(ArenaAlignAt(into, table->align, 4) == AlignKind::None);
+    utassert(ArenaAlignCount(into, kArenaAlignNone) == 0);
     utassert(NodeChildCount(gParsedInto, table) == 2);
     Node* head = Child(table, 0);
     utassert(head->kind == NodeKind::TableRow);
@@ -412,6 +416,46 @@ static void TestMarkdownTable(Arena* a) {
     utassert(Child(head, 0)->kind == NodeKind::TableCell);
     utassert(TextIs(a, Child(head, 2), "c"));
     utassert(TextIs(a, Child(Child(table, 1), 3), "4"));
+
+    // The column count is varint-encoded, so 128 columns is where it stops
+    // fitting in one byte. A table that wide is absurd and costs two.
+    const int32_t wide = 130;
+    char src[2 * (4 * 130 + 2) + 1];
+    int32_t at = 0;
+    for (int32_t row = 0; row < 2; row++) {
+        for (int32_t i = 0; i < wide; i++) {
+            // The four alignments cycling, so the packing is written and
+            // read back at every offset within a byte.
+            const char* cell = row == 0 ? "| h " : "| - ";
+            if (row == 1 && i % 4 == 1) {
+                cell = "|:- ";
+            } else if (row == 1 && i % 4 == 2) {
+                cell = "|:-:";
+            } else if (row == 1 && i % 4 == 3) {
+                cell = "| -:";
+            }
+            memcpy(src + at, cell, 4);
+            at += 4;
+        }
+        src[at++] = '|';
+        src[at++] = '\n';
+    }
+    src[at] = 0;
+    Node* wideRoot = Parse(a, src);
+    Node* wideTable = Child(wideRoot, 0);
+    utassert(wideTable->kind == NodeKind::Table);
+    utassert(ArenaAlignCount(gParsedInto, wideTable->align) == wide);
+    for (int32_t i = 0; i < wide; i++) {
+        AlignKind want = AlignKind::None;
+        if (i % 4 == 1) {
+            want = AlignKind::Left;
+        } else if (i % 4 == 2) {
+            want = AlignKind::Center;
+        } else if (i % 4 == 3) {
+            want = AlignKind::Right;
+        }
+        utassert(ArenaAlignAt(gParsedInto, wideTable->align, i) == want);
+    }
 }
 
 static void TestMarkdownHtmlAndFootnotes(Arena* a) {

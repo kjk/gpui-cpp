@@ -2103,3 +2103,50 @@ cargo run -p system_monitor
   Since the Str-per-node baseline: prose 1646 -> 619 KB, nested 1068 -> 309,
   tables 2926 -> 899, entities 660 -> 99, and a Node, measured then
   and now, 144 -> 80 bytes.
+
+- 2026-08-22: A Table's alignments are a count and two bits a column.
+  `ArenaVec<AlignKind> align` was the last 24-byte member of a Node, carried
+  by every node in the tree for something only Tables have, with an arena
+  segment and a byte a column behind it. It is a four-byte offset now, at a
+  block of
+
+      [varint count][2 bits a column, four to a byte, lowest bits first]
+
+  which for the eight-column table that is already wide is three bytes. The
+  block is pushed byte-aligned rather than through `Alloc`, which rounds to
+  eight and would have handed back exactly what the varint saved. The varint
+  helpers moved out of ArenaStr's part of base.cpp into base.h to do it —
+  same encoding, now with a name.
+
+  The whole list is known when the table is entered, so `GfmTableAlign` reads
+  the delimiter row twice: once to count the columns, once to fill the one
+  allocation. Nothing allocates in between, and a vector's growth was never
+  needed.
+
+  **60 bytes, down from 80** — more than the 20 the field gave up, because
+  with the last ArenaVec gone nothing in a Node is wider than four bytes and
+  `alignof(Node)` falls from 8 to 4. Any pointer-holding member put back
+  costs that again.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose          619.0 KB   9.64x     519.3 KB   8.09x    -16.1%
+    nested         308.8 KB   4.82x     256.3 KB   4.00x    -17.0%
+    gfm tables     898.7 KB  14.02x     710.3 KB  11.08x    -21.0%
+    entities        98.9 KB   1.54x      89.2 KB   1.39x     -9.8%
+
+  The varint's own share of that is 0.8 KB on the tables shape and nothing on
+  the other three, which have no tables; the rest is the smaller node and the
+  segment that is no longer allocated.
+
+  Three runs either side, medians: prose 8.43/8.60/8.59 -> 8.94/8.65/8.41 ms,
+  nested 9.49/9.44/9.52 -> 9.64/9.58/9.46, tables 13.19/12.74/13.12 ->
+  12.70/12.52/12.64, entities 5.85/5.86/5.98 -> 5.87/5.80/5.85, with
+  `tokenize` at 7.96/7.95/7.94 -> 7.62/7.62/7.74 and `to_mdast` at
+  0.342/0.311/0.343 -> 0.319/0.305/0.310. Reading an alignment is a block
+  lookup and a varint decode where it was an indexed load, once a cell at
+  render time, and it does not show.
+
+  Since the Str-per-node baseline: prose 1646 -> 519 KB, nested 1068 -> 256,
+  tables 2926 -> 710, entities 660 -> 89, and a Node 144 -> 60 bytes.

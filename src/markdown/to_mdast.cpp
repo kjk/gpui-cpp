@@ -328,7 +328,7 @@ static void Enter(CompileContext* c) {
             break;
         case Name::GfmTable: {
             Node* node = NodeNew(c->a, NodeKind::Table);
-            GfmTableAlign(*c->events, c->index, c->a, &node->align);
+            node->align = GfmTableAlign(*c->events, c->index, c->a);
             TailPush(c, node);
             c->gfmTableInside = true;
             break;

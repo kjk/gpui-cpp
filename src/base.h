@@ -262,6 +262,19 @@ void ArenaDelete(Arena* arena);
 // get".
 uint64_t ArenaUsed(Arena* arena);
 
+// ─── a number that costs as few bytes as it needs ─────────────────────────
+//
+// LEB128: seven bits to a byte, low bits first, the high bit saying another
+// follows. A value under 128 is one byte, which is the whole reason to have
+// it — a length written ahead of what it measures is nearly always small,
+// and four bytes for it is three wasted.
+int VarintSize(uint32_t v);
+// Writes `v` and answers how many bytes that took. `dst` needs
+// `VarintSize(v)` of room, which is at most five.
+int VarintPut(char* dst, uint32_t v);
+// Reads one back, answering how many bytes it was.
+int VarintGet(const char* src, uint32_t* out);
+
 // ─── a string that costs four bytes ───────────────────────────────────────
 //
 // A `Str` is a pointer and a length: sixteen bytes once the compiler has
