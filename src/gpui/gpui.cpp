@@ -1209,6 +1209,14 @@ El* El::BindSliderBounds(SliderState* s) {
 }
 El* El::BindInput(InputState* s) {
     input = s;
+    // InputState::key_context: every binding state.rs installs is scoped to
+    // it, so a field's own chords only resolve while a field has the
+    // keyboard. Declared here rather than by each caller, since an element
+    // bound to an InputState is the field.
+    if (s) {
+        InputInitKeys();
+        KeyContext(InputContext());
+    }
     return this;
 }
 // InputElement paints the selection as a quad under the run and the caret as
@@ -4595,10 +4603,17 @@ bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev) {
     return false;
 }
 
-bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                             bool alt, bool platform) {
+uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,
+                                bool alt, bool platform, intptr_t* arg,
+                                bool* pending) {
+    if (arg) {
+        *arg = 0;
+    }
+    if (pending) {
+        *pending = false;
+    }
     if (!win || !vk) {
-        return false;
+        return 0;
     }
     int ix = DispatchAnchor(win);
 
@@ -4625,12 +4640,30 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
         // Half of a sequence. Rust holds the keystroke on the matcher and
         // dispatches nothing; here that is "eaten", so nothing under the
         // keymap sees it either.
+        if (pending) {
+            *pending = true;
+        }
+        return 0;
+    }
+    if (arg) {
+        *arg = m.arg;
+    }
+    return m.action;
+}
+
+bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
+                             bool alt, bool platform) {
+    intptr_t arg = 0;
+    bool pending = false;
+    uint32_t action = WindowResolveKeyAction(win, vk, shift, ctrl, alt,
+                                             platform, &arg, &pending);
+    if (pending) {
         return true;
     }
-    if (!m.action) {
+    if (!action) {
         return false;
     }
-    return WindowDispatchAction(win, m.action, m.arg);
+    return WindowDispatchAction(win, action, arg);
 }
 
 // The handler half on its own: the chain over the focused element, then the

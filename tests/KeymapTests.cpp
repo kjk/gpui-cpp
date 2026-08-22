@@ -492,10 +492,75 @@ static void AnActionCanBeDispatchedWithoutAKeystroke() {
     KeymapClear();
 }
 
+// The input's chords come out of the keymap now, in the key context
+// El::BindInput declares. This is the window's own path: resolve the chord
+// against the contexts over the focused element, then read the action as the
+// edit it names.
+static void AFieldsChordsResolveInItsOwnContext() {
+    KeymapClear();
+    InputInitKeys();
+
+    Arena* a = ArenaNew();
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    InputState field;
+    // BindInput declares the context; nothing else in the tree does.
+    El* editor = Div(a)->FocusId(9)->BindInput(&field);
+    El* root = Div(a)->Child(editor);
+    FocusCollect(win, root);
+    win->focusId = 9;
+
+    intptr_t arg = 0;
+    bool pending = false;
+    auto resolve = [&](int vk, bool shift, bool ctrl, bool alt, bool plat) {
+        arg = 0;
+        pending = false;
+        uint32_t id = WindowResolveKeyAction(win, vk, shift, ctrl, alt, plat,
+                                             &arg, &pending);
+        return InputActionOf(id, arg);
+    };
+    // The shortcut modifier, whichever key it is on this platform.
+#if GPUI_OS_MAC
+    const bool secCtrl = false, secPlat = true;
+#else
+    const bool secCtrl = true, secPlat = false;
+#endif
+
+    utassert(resolve(KeyLeft, false, false, false, false) ==
+             InputAction::MoveLeft);
+    utassert(resolve(KeyA, false, secCtrl, false, secPlat) ==
+             InputAction::SelectAll);
+    utassert(resolve(KeyC, false, secCtrl, false, secPlat) ==
+             InputAction::Copy);
+    utassert(resolve(KeyZ, false, secCtrl, false, secPlat) ==
+             InputAction::Undo);
+    // `Enter { shift }` is one action with a payload, so the chord that
+    // carries it says so rather than being a second action.
+    utassert(resolve(KeyReturn, false, false, false, false) ==
+             InputAction::Enter);
+    utassert(!InputEnterShift(arg));
+    utassert(resolve(KeyReturn, true, false, false, false) ==
+             InputAction::Enter);
+    utassert(InputEnterShift(arg));
+
+    // Nothing focused is no Input context, so the field's chords resolve to
+    // nothing at all — which is what keeps a page's own ctrl-c out of a
+    // field's hands and a field's out of the page's.
+    win->focusId = 0;
+    utassert(resolve(KeyA, false, secCtrl, false, secPlat) ==
+             InputAction::None);
+
+    delete win;
+    ArenaDelete(a);
+    KeymapClear();
+}
+
 void TestKeymap() {
     TestSuite("keymap");
     ABindingCarriesTheActionsPayload();
     AnActionCanBeDispatchedWithoutAKeystroke();
+    AFieldsChordsResolveInItsOwnContext();
     AChordIsReadTheWayRustSpellsIt();
     TheInnermostContextWins();
     TheLastBindingForAChordWins();

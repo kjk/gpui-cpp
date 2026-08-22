@@ -2395,113 +2395,27 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
 // the `ctrl-` ones below them and land on the same actions.
 InputAction InputActionForKey(const InputState* s, int vk, bool shift,
                               bool ctrl, bool alt, bool platform) {
-    // The shortcut modifier — Command on macOS, Control elsewhere — which is
-    // what every chord below that Rust spells `secondary-` wants. Control on
-    // a Mac is a different key and no longer answers to these.
-    const bool sec = KeySecondary(ctrl, platform);
-    // A word-wise move is alt- on macOS and ctrl- everywhere else, which is
-    // how state.rs splits its two binding sets.
-#if GPUI_OS_MAC
-    const bool word = alt;
-#else
-    const bool word = ctrl || alt;
-#endif
-    switch (vk) {
-        case KeyLeft:
-            if (word) {
-                return shift ? InputAction::SelectToPreviousWordStart
-                             : InputAction::MoveToPreviousWord;
-            }
-            return shift ? InputAction::SelectLeft : InputAction::MoveLeft;
-        case KeyRight:
-            if (word) {
-                return shift ? InputAction::SelectToNextWordEnd
-                             : InputAction::MoveToNextWord;
-            }
-            return shift ? InputAction::SelectRight : InputAction::MoveRight;
-        case KeyUp:
-            return shift ? InputAction::SelectUp : InputAction::MoveUp;
-        case KeyDown:
-            return shift ? InputAction::SelectDown : InputAction::MoveDown;
-        case KeyPageUp:
-            return InputAction::MovePageUp;
-        case KeyPageDown:
-            return InputAction::MovePageDown;
-        case KeyHome:
-            // Rust spells the document ends cmd-up / cmd-down, which is what
-            // ctrl-home / ctrl-end is everywhere else.
-            if (sec) {
-                return shift ? InputAction::SelectToStart
-                             : InputAction::MoveToStart;
-            }
-            return shift ? InputAction::SelectToStartOfLine
-                         : InputAction::MoveHome;
-        case KeyEnd:
-            if (sec) {
-                return shift ? InputAction::SelectToEnd
-                             : InputAction::MoveToEnd;
-            }
-            return shift ? InputAction::SelectToEndOfLine
-                         : InputAction::MoveEnd;
-        case KeyBack:
-            return word ? InputAction::DeleteToPreviousWordStart
-                        : InputAction::Backspace;
-        case KeyDelete:
-            return word ? InputAction::DeleteToNextWordEnd
-                        : InputAction::Delete;
-        case KeyReturn:
-            return InputAction::Enter;
-        case KeyTab:
-            // tab / shift-tab. A modified tab is the window's, never text.
-            if (ctrl || alt || platform) {
-                return InputAction::None;
-            }
-            return shift ? InputAction::OutdentInline
-                         : InputAction::IndentInline;
-        case KeyRightBracket:
-            // ctrl-] / ctrl-[, which macOS spells cmd-] / cmd-[ and the
-            // window folds onto ctrl on the way in. The block pair.
-            return sec ? InputAction::Indent : InputAction::None;
-        case KeyLeftBracket:
-            return sec ? InputAction::Outdent : InputAction::None;
-        case KeyEscape:
-            return InputAction::Escape;
-        case KeyA:
-            if (sec) {
-                return shift ? InputAction::SelectToStartOfLine
-                             : InputAction::SelectAll;
-            }
-            return InputAction::None;
-        case KeyC:
-            return sec ? InputAction::Copy : InputAction::None;
-        case KeyX:
-            return sec ? InputAction::Cut : InputAction::None;
-        case KeyV:
-            return sec ? InputAction::Paste : InputAction::None;
-        case KeyZ:
-            if (!sec) {
-                return InputAction::None;
-            }
-            return shift ? InputAction::Redo : InputAction::Undo;
-        case KeyY:
-            return sec ? InputAction::Redo : InputAction::None;
-        case KeyE:
-            if (sec) {
-                return shift ? InputAction::SelectToEndOfLine
-                             : InputAction::MoveEnd;
-            }
-            return InputAction::None;
-        case KeyF:
-            // cmd-f / ctrl-f, and ctrl-h beside it. Both are the find bar,
-            // and a field that is not searchable answers neither.
-            return sec && s && s->searchable ? InputAction::Search
-                                             : InputAction::None;
-        case KeyH:
-            return sec && s && s->searchable ? InputAction::Replace
-                                             : InputAction::None;
-        default:
-            return InputAction::None;
+    // The table is `input_keys.cpp` now — state.rs::init, chord for chord —
+    // so this is the lookup and nothing else. It used to be a switch over the
+    // key code, which had no way to say that ctrl-a and cmd-a are different
+    // chords on a Mac and which no application could rebind.
+    InputInitKeys();
+    KeyChord c = {};
+    c.vk = vk;
+    c.shift = shift;
+    c.ctrl = ctrl;
+    c.alt = alt;
+    c.platform = platform;
+    uint32_t ctx = KeyContextOf(InputContext());
+    KeyMatch m = KeymapMatch(c, &ctx, 1);
+    InputAction act = InputActionOf(m.action, m.arg);
+    // Both open the find bar, and a field that is not searchable answers
+    // neither — Rust's handlers propagate instead of handling.
+    if ((act == InputAction::Search || act == InputAction::Replace) &&
+        !(s && s->searchable)) {
+        return InputAction::None;
     }
+    return act;
 }
 
 // ─── the find bar ─────────────────────────────────────────────────────────
