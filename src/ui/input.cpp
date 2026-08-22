@@ -95,8 +95,14 @@ static const float kInputTextSize = 14;
 
 El* Input::IntoEl() {
     const Theme& th = cx->theme();
-    El* col = Div(a)->FlexCol()->Gap(4);
-    if (label.s) {
+    // Rust's Input is the field and nothing else — `.flex().size_full()` — and
+    // a label above it is the caller's own div. `Input::Label` is this tree's
+    // addition, so the column only exists when one was asked for, and it is
+    // the column that then carries the width. A field wrapped in a box that
+    // does not carry it shrinks to its text the moment it is laid out in a
+    // row rather than a column.
+    El* col = label.s ? Div(a)->FlexCol()->Gap(4)->W(width) : nullptr;
+    if (col) {
         col->Child(TextEl(a, label)->Font(12)->Fg(th.foreground));
     }
     bool focused = state && state->focused && !disabled;
@@ -134,7 +140,7 @@ El* Input::IntoEl() {
     El* field = InputBase::New(cx, id, disabled ? 0 : HashClickId(id))
                     ->BindInput(disabled ? nullptr : state)
                     ->FlexRow()
-                    ->W(width)
+                    ->W(col ? kFill : width)
                     ->H(h)
                     ->PadX(padX)
                     ->PadY(padY)
@@ -198,6 +204,9 @@ El* Input::IntoEl() {
         } else if (onChange.IsValid()) {
             field->OnClick(onChange);
         }
+    }
+    if (!col) {
+        return field;
     }
     col->Child(field);
     return col;

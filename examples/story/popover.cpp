@@ -223,8 +223,10 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                               "Position content from each edge of the "
                               "trigger.");
     StorySectionBody(anchor)->W(kFill)->MinH(360)->FlexCol();
-    // A 360px band with a row of triggers pinned to each edge.
-    El* band = Div(a)->FlexCol()->W(kFill)->H(360)->JustifyBetween();
+    // Two absolute bands, top_0 and bottom_0 of the min_h_360 section, each
+    // an h_flex().items_center().justify_between() of three triggers. Rust
+    // pins them rather than spacing a column, so a popover that opens
+    // upward has the room above it.
     struct AnchorRow {
         int slots[3];
         const char* labels[3];
@@ -236,8 +238,18 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
          {"BottomLeft", "BottomCenter", "BottomRight"}},
     };
     for (int r = 0; r < 2; r++) {
-        El* row =
-            Div(a)->FlexRow()->W(kFill)->H(40)->ItemsCenter()->JustifyBetween();
+        El* band = Div(a)->Absolute()->Left(0)->W(kFill)->H(40);
+        if (r == 0) {
+            band->Top(0);
+        } else {
+            band->Bottom(0);
+        }
+        El* row = Div(a)
+                      ->FlexRow()
+                      ->W(kFill)
+                      ->H(kFill)
+                      ->ItemsCenter()
+                      ->JustifyBetween();
         for (int i = 0; i < 3; i++) {
             El* card = PopCard(cx, 600);
             card->Child(StoryTxt(cx,
@@ -253,8 +265,8 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                            ->IntoEl());
         }
         band->Child(row);
+        StorySectionAdd(anchor, band);
     }
-    StorySectionAdd(anchor, band);
     page->Child(anchor);
     return page;
 }

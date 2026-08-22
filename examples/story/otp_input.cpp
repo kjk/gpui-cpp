@@ -74,18 +74,16 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
     El* group = StorySection(cx, "Grouping",
                              "Cells can be shown as one or several groups.");
     StorySectionBody(group)->FlexCol()->Gap(16);
-    El* groupCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
-    groupCol
-        ->Child(component::OtpInput::New(cx, StrL("otp-small"), self->oneGroup)
-                    ->Groups(1)
-                    ->WithSize(self->toolbar.size)
-                    ->IntoEl());
-    groupCol->Child(
-        component::OtpInput::New(cx, StrL("otp-large"), self->threeGroups)
-            ->Groups(3)
-            ->WithSize(self->toolbar.size)
-            ->IntoEl());
-    StorySectionAdd(group, groupCol);
+    StorySectionAdd(
+        group, component::OtpInput::New(cx, StrL("otp-small"), self->oneGroup)
+                   ->Groups(1)
+                   ->WithSize(self->toolbar.size)
+                   ->IntoEl());
+    StorySectionAdd(group, component::OtpInput::New(cx, StrL("otp-large"),
+                                                    self->threeGroups)
+                               ->Groups(3)
+                               ->WithSize(self->toolbar.size)
+                               ->IntoEl());
     page->Child(group);
 
     El* csz = StorySection(cx, "Custom size", "Custom cell dimensions.");

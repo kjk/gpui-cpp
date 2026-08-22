@@ -103,21 +103,19 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     // wraps under it.
     El* focus = StorySection(cx, "Focus back test", nullptr);
     StorySectionBody(focus)->W(512);
-    El* focusRow =
-        Div(a)->FlexRow()->FlexWrap()->W(512)->Gap(16)->JustifyCenter();
-    focusRow->Child(
-        component::Input::New(cx, StrL("sheet-focus-input"), &self->focusInput)
-            ->OnFocus(Listen(cx, &FocusSheetInput))
-            ->IntoEl()
-            ->W(512));
-    focusRow->Child(component::Button::New(cx, StrL("test-action"))
+    StorySectionAdd(focus, component::Input::New(cx, StrL("sheet-focus-input"),
+                                                 &self->focusInput)
+                               ->OnFocus(Listen(cx, &FocusSheetInput))
+                               ->IntoEl()
+                               ->W(512));
+    StorySectionAdd(focus,
+                    component::Button::New(cx, StrL("test-action"))
                         ->Label(StrL("Test Action"))
                         ->Outline()
                         ->Tooltip(StrL("This button for test dispatch action, "
                                        "to make sure when Dialog close, this "
                                        "still can handle the action."))
                         ->IntoEl());
-    StorySectionAdd(focus, focusRow);
     page->Child(focus);
 
     if (self->open != SheetNone) {

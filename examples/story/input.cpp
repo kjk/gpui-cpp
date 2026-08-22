@@ -140,10 +140,6 @@ static component::Input* Field(InputStory* self, Ctx* cx, int slot,
 
 // section() is a justify_center wrapping row, so a readout that wraps under
 // its field is centered rather than pinned to the field's left edge.
-static El* Centered(Ctx* cx, El* child) {
-    return Div(cx->a)->FlexRow()->W(kFill)->JustifyCenter()->Child(child);
-}
-
 El* InputStory::Render(InputStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -178,32 +174,30 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default", "Text, email, and clearable inputs.");
     StorySectionBody(def)->W(512);
-    El* defCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    defCol->Child(Field(self, cx, InText, focus, clear)->Cleanable()->IntoEl());
-    defCol->Child(Field(self, cx, InEmail, focus, clear)->IntoEl());
-    StorySectionAdd(def, defCol);
+    StorySectionAdd(
+        def, Field(self, cx, InText, focus, clear)->Cleanable()->IntoEl());
+    StorySectionAdd(def, Field(self, cx, InEmail, focus, clear)->IntoEl());
     page->Child(def);
 
     El* states = StorySection(
         cx, "States", "Disabled, read-only and revealable password inputs.");
     StorySectionBody(states)->W(512);
-    El* stateCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    stateCol->Child(
-        Field(self, cx, InDisabled, focus, clear)->Disabled(true)->IntoEl());
-    stateCol->Child(Field(self, cx, InReadonly, focus, clear)->IntoEl());
-    stateCol->Child(Field(self, cx, InMask, focus, clear)
-                        ->Masked(!self->revealed[InMask])
-                        ->MaskToggle()
-                        ->OnToggleMask(ListenerArg(mask, InMask))
-                        ->Cleanable()
-                        ->IntoEl());
-    StorySectionAdd(states, stateCol);
+    StorySectionAdd(states, Field(self, cx, InDisabled, focus, clear)
+                                ->Disabled(true)
+                                ->IntoEl());
+    StorySectionAdd(states, Field(self, cx, InReadonly, focus, clear)
+                                ->IntoEl());
+    StorySectionAdd(states, Field(self, cx, InMask, focus, clear)
+                                ->Masked(!self->revealed[InMask])
+                                ->MaskToggle()
+                                ->OnToggleMask(ListenerArg(mask, InMask))
+                                ->Cleanable()
+                                ->IntoEl());
     page->Child(states);
 
     El* ct =
         StorySection(cx, "Content type", "Content types adapt input behavior.");
     StorySectionBody(ct)->W(512);
-    El* ctCol = Div(a)->FlexCol()->W(512)->Gap(16);
     for (size_t i = 0; i < sizeof(kContentTypes) / sizeof(kContentTypes[0]);
          i++) {
         const ContentTypeRow& row = kContentTypes[i];
@@ -218,9 +212,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                 ->OnToggleMask(ListenerArg(mask, row.slot));
         }
         line->Child(Div(a)->Flex1()->Child(in->IntoEl()));
-        ctCol->Child(line);
+        StorySectionAdd(ct, line);
     }
-    StorySectionAdd(ct, ctCol);
     page->Child(ct);
 
     El* align =
@@ -242,13 +235,14 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     El* affix = StorySection(cx, "Prefix and suffix",
                              "Add icons or actions inside the field.");
     StorySectionBody(affix)->W(512);
-    El* affixCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    affixCol->Child(Field(self, cx, InPrefix, focus, clear)
+    StorySectionAdd(affix,
+                    Field(self, cx, InPrefix, focus, clear)
                         ->Prefix(Div(a)->PadL(10)->Child(
                             IconEl(a, IconName::Search, 16)->Fg(th.mutedFg)))
                         ->Cleanable()
                         ->IntoEl());
-    affixCol->Child(Field(self, cx, InBoth, focus, clear)
+    StorySectionAdd(affix,
+                    Field(self, cx, InBoth, focus, clear)
                         ->Prefix(Div(a)->PadL(10)->Child(
                             IconEl(a, IconName::Search, 16)->Fg(th.mutedFg)))
                         ->Suffix(component::Button::New(cx, StrL("info"))
@@ -258,7 +252,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                                      ->IntoEl())
                         ->Cleanable()
                         ->IntoEl());
-    affixCol->Child(Field(self, cx, InSuffix, focus, clear)
+    StorySectionAdd(affix,
+                    Field(self, cx, InSuffix, focus, clear)
                         ->Suffix(component::Button::New(cx, StrL("info2"))
                                      ->Text()
                                      ->WithSize(UiSize::XSmall)
@@ -266,14 +261,13 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                                      ->IntoEl())
                         ->Cleanable()
                         ->IntoEl());
-    StorySectionAdd(affix, affixCol);
     page->Child(affix);
 
     El* composed = StorySection(cx, "Composed states",
                                 "Composed inputs support disabled state.");
     StorySectionBody(composed)->W(512);
-    El* composedCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    composedCol->Child(
+    StorySectionAdd(
+        composed,
         Field(self, cx, InComplete, focus, clear)
             ->Prefix(Div(a)->PadL(10)->Child(IconEl(a, IconName::Search, 16)
                                                  ->Fg(th.mutedFg)))
@@ -284,7 +278,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                          ->IntoEl())
             ->Cleanable()
             ->IntoEl());
-    composedCol->Child(
+    StorySectionAdd(
+        composed,
         Field(self, cx, InCompleteDisabled, focus, clear)
             ->Disabled(true)
             ->Prefix(Div(a)->PadL(10)->Child(IconEl(a, IconName::Search, 16)
@@ -296,27 +291,24 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                          ->IntoEl())
             ->Cleanable()
             ->IntoEl());
-    StorySectionAdd(composed, composedCol);
     page->Child(composed);
 
     El* currency = StorySection(cx, "Currency",
                                 "Format currency while retaining its value.");
     StorySectionBody(currency)->W(512);
-    El* currencyCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    currencyCol->Child(Field(self, cx, InCurrency, focus, clear)->IntoEl());
-    currencyCol->Child(
-        Centered(cx, StoryTxt(cx,
-                              StoryFmt(cx, "Value: \"%s\"",
-                                       InputCStr(&self->fields[InCurrency])),
-                              16, th.foreground)));
-    StorySectionAdd(currency, currencyCol);
+    StorySectionAdd(currency, Field(self, cx, InCurrency, focus, clear)
+                                  ->IntoEl());
+    StorySectionAdd(currency,
+                    StoryTxt(cx,
+                             StoryFmt(cx, "Value: \"%s\"",
+                                      InputCStr(&self->fields[InCurrency])),
+                             16, th.foreground));
     page->Child(currency);
 
     El* phone = StorySection(cx, "Phone mask",
                              "Expose formatted and raw phone values.");
     StorySectionBody(phone)->W(512);
-    El* phoneCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    phoneCol->Child(Field(self, cx, InPhone, focus, clear)->IntoEl());
+    StorySectionAdd(phone, Field(self, cx, InPhone, focus, clear)->IntoEl());
     El* phoneVals = Div(a)->FlexCol();
     phoneVals->Child(StoryTxt(
         cx, StoryFmt(cx, "Value: \"%s\"", InputCStr(&self->fields[InPhone])),
@@ -328,15 +320,14 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         StoryFmt(cx, "Unmask Value: \"%s\"",
                  StrDup(a, InputUnmaskValue(a, &self->fields[InPhone]))),
         16, th.foreground));
-    phoneCol->Child(Centered(cx, phoneVals));
-    StorySectionAdd(phone, phoneCol);
+    StorySectionAdd(phone, phoneVals);
     page->Child(phone);
 
     El* pattern = StorySection(cx, "Mask pattern",
                                "Combine letter and number placeholders.");
     StorySectionBody(pattern)->W(512);
-    El* patternCol = Div(a)->FlexCol()->W(512)->Gap(16);
-    patternCol->Child(Field(self, cx, InMaskPattern, focus, clear)->IntoEl());
+    StorySectionAdd(pattern, Field(self, cx, InMaskPattern, focus, clear)
+                                 ->IntoEl());
     El* patternVals = Div(a)->FlexCol();
     patternVals->Child(StoryTxt(
         cx,
@@ -347,8 +338,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         StoryFmt(cx, "Unmask Value: \"%s\"",
                  StrDup(a, InputUnmaskValue(a, &self->fields[InMaskPattern]))),
         16, th.foreground));
-    patternCol->Child(Centered(cx, patternVals));
-    StorySectionAdd(pattern, patternCol);
+    StorySectionAdd(pattern, patternVals);
     page->Child(pattern);
 
     El* validation =
@@ -375,9 +365,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
             ? StoryFmt(cx, "Value: Some(\"%s\")",
                        InputCStr(&self->fields[self->focusedField]))
             : StoryDup(cx, "Value: None");
-    StorySectionAdd(focusedSec,
-                    Centered(cx, StoryTxt(cx, focusedValue, 16, th.foreground))
-                        ->W(512));
+    StorySectionAdd(focusedSec, StoryTxt(cx, focusedValue, 16, th.foreground)
+                                    ->W(512));
     page->Child(focusedSec);
 
     El* custom = StorySection(cx, "Custom appearance",

@@ -1293,3 +1293,39 @@ cargo run -p system_monitor
   them; the three that moved by more than a fraction of a percent —
   hover-card, progress and toggle — were compared against the Rust gallery
   and each lines up with it now.
+
+- 2026-08-22: the second half of the layout pass — the element trees, not
+  just the styles on them. `section()` in Rust is a wrapping row that the
+  page hands widgets to directly; this tree had often built a row or a column
+  of its own and put the widgets in that instead. Where upstream really does
+  wrap — and it usually does — the port was already right: breadcrumb,
+  button's Progress, checkbox's Disabled, clipboard, combobox's Values,
+  hover-card's three, icon's Icon Buttons, kbd, label's three, resizable's
+  four, select's Values, separator's three, skeleton's two, slider's cards,
+  status-bar, table, textarea's first, tree and collapsible all match the
+  `h_flex`/`v_flex` upstream puts there. Sixteen that did not, now do:
+  eight sections of the input story, four of notification, and one each in
+  otp-input, sheet, toggle and tabs. The input story also loses its
+  `Centered()` helper — the section body already justifies to the centre, so
+  the wrapper existed only to undo the column it was inside.
+
+  Taking the wrapper off the input story turned up a real bug in
+  `component::Input`. Its root was a column for the optional label, and the
+  *field* inside carried `W(width)` — 100% of a box that is only as wide as
+  its content unless a parent stretches it. A column parent did stretch it,
+  which is why nobody noticed; in a row every field collapsed to its text.
+  The root carries the width now, and there is no column at all unless a
+  label was asked for — which is also what Rust's `Input` is: `.flex()
+  .size_full()`, with the label a div of the caller's own.
+
+  The popover story's Anchor section is the other shape change: two
+  `div().absolute().top_0()` / `.bottom_0()` bands over a `min_h(360)`
+  section, rather than a column that spaced them apart. It matters for what
+  it is demonstrating — a popover that opens upward needs the room above it
+  to be real.
+
+  `-rel -all` / `-dbg -all` and `bun cmd/test.ts` in both (9948 checks). Of
+  the 62 pages, the ones that moved are input (now pixel-for-pixel with the
+  Rust shot, where before every field was shrink-wrapped), notification (the
+  buttons take the section's gap_4 rather than a row's gap_2, as upstream
+  does) and tabs (five pixels of scrollbar). Nothing else moved at all.
