@@ -199,3 +199,12 @@ Two files are generated rather than typed, and their headers say so:
 `unicode.cpp` (the punctuation ranges). Both are transcriptions of the crate's
 own tables; regenerate them by transcribing `src/util/constant.rs` and
 `src/util/unicode.rs` again.
+
+The three lists in `constant.cpp` are `SeqStrings` runs — one NUL-terminated
+string after another, the run ended by an empty one — rather than arrays of
+`Str` or of `const char*`. The two tag-name lists are scanned end to end
+anyway, so they need nothing else; the character references keep a table of
+byte offsets beside them so the lookup is still the binary search their sort
+is for. Transcribing them again means writing the runs and, for the
+references, the offsets into them: `markdown constants` in `tests/` walks both
+runs against the table and fails if the two ever disagree.

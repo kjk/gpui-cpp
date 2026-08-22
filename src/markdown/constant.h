@@ -12,6 +12,9 @@
 
 namespace markdown {
 
+using base::SeqStrAdvance;
+using base::SeqStrAt;
+using base::SeqStrings;
 using base::Str;
 
 // The maximum size of a scheme in an autolink: `mailto`.
@@ -50,16 +53,23 @@ constexpr int kTabSize = 4;
 constexpr int kThematicBreakMarkerCountMin = 3;
 
 // HTML_BLOCK_NAMES: the tag names that open an HTML (flow) block of kind 6.
-extern const Str kHtmlBlockNames[62];
-// HTML_RAW_NAMES: the tag names that open an HTML (flow) block of kind 1.
-extern const Str kHtmlRawNames[4];
+// HTML_RAW_NAMES: the ones that open a block of kind 1. Both are scanned end
+// to end for a match, so both are `SeqStrings` runs rather than arrays of
+// `Str` — the same bytes, without a pointer and a length per name.
+extern const char kHtmlBlockNames[];
+extern const char kHtmlRawNames[];
 
 // CHARACTER_REFERENCES: name and value of every named character reference,
-// sensitive to casing, sorted the way the crate sorts them.
+// sensitive to casing, sorted the way the crate sorts them. The names and the
+// values are two `SeqStrings` runs and the table is byte offsets into them,
+// so the lookup is still the binary search the sort is for while the table
+// itself carries no pointer — and so no relocation — per entry.
 struct CharacterReference {
-    const char* name;
-    const char* value;
+    int32_t nameOff;
+    int32_t valueOff;
 };
+extern const char kCharacterReferenceNames[];
+extern const char kCharacterReferenceValues[];
 extern const CharacterReference kCharacterReferences[2125];
 
 } // namespace markdown

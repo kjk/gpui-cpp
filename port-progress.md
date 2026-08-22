@@ -1390,3 +1390,40 @@ cargo run -p system_monitor
   `-rel -all` / `-dbg -all` and `bun cmd/test.ts` in both (10168 checks), and
   `sidebar` and `app_assets` are pixel-identical to a build from before, which
   is the icons still coming out of the table.
+
+- 2026-08-22: the markdown tables are `SeqStrings` runs. `constant.cpp` held
+  the crate's three lists as arrays of pointers: `Str kHtmlBlockNames[62]`,
+  `Str kHtmlRawNames[4]`, and `CharacterReference kCharacterReferences[2125]`
+  of `{const char* name, const char* value}` — 2125 entries of two pointers
+  each, which is 34 KB of `.rdata` and 4250 relocations for a table whose
+  bytes were in the binary anyway.
+
+  The two tag-name lists are scanned end to end for a match, so they are runs
+  and nothing else; `NamesContainI` walks one with `SeqStrAdvance` and keeps
+  this module's own `StrEqAsciiI`, which lowercases A-Z and nothing else,
+  rather than taking `SeqStrIndexIS` and a locale's opinion of what a letter
+  is. The references keep a table beside their two runs, but of byte offsets
+  rather than pointers, so `DecodeNamed` is still the binary search the sort
+  exists for.
+
+  `markdown_table.exe` goes 919,040 -> 888,832 bytes, which is the 17 KB of
+  pointers and the relocations that pointed them.
+
+  | `bun cmd/bench.ts -n=15 markdown`, counterbalanced new/old/old/new | before | after |     |
+  | ------------------------------------------------------------------- | -------- | -------- | --- |
+  | parse prose, 64 KB                                                  | 8.43 ms  | 8.42 ms  | ~0  |
+  | parse nested quotes and lists, 64 KB                                | 9.46 ms  | 9.51 ms  | +0.5% |
+  | parse gfm tables, 64 KB                                             | 13.21 ms | 13.13 ms | -0.6% |
+  | parse character references, 64 KB                                   | 5.97 ms  | 5.93 ms  | -0.7% |
+  | tokenize, 64 KB                                                     | 7.67 ms  | 7.65 ms  | ~0  |
+  | to_mdast, 64 KB                                                     | 0.374 ms | 0.375 ms | ~0  |
+
+  Every row is inside this machine's noise, `character references` — the one
+  that leans on `DecodeNamed` — included, which is the point: the search still
+  indexes, only what it indexes into changed.
+
+  `tests/MarkdownTests.cpp` gained the invariant the split created: the two
+  runs are walked in step with the table and every entry's two offsets have to
+  be where the walk is, so an offset that landed inside a name — which would
+  still read as a string, just the wrong one — fails. That is 6379 of the
+  16547 checks.

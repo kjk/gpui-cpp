@@ -697,7 +697,8 @@ Str DecodeNamed(Arena* a, Str name) {
     int32_t hi = 2125 - 1;
     while (lo <= hi) {
         int32_t mid = (lo + hi) / 2;
-        const char* candidate = kCharacterReferences[mid].name;
+        const char* candidate =
+            kCharacterReferenceNames + kCharacterReferences[mid].nameOff;
         int32_t n = (int32_t)strlen(candidate);
         int32_t common = n < name.len ? n : name.len;
         int cmp = common == 0 ? 0 : memcmp(candidate, name.s, (size_t)common);
@@ -709,8 +710,9 @@ Str DecodeNamed(Arena* a, Str name) {
         } else if (cmp > 0) {
             hi = mid - 1;
         } else {
-            return StrOwn(a, kCharacterReferences[mid].value,
-                          (int32_t)strlen(kCharacterReferences[mid].value));
+            const char* value =
+                kCharacterReferenceValues + kCharacterReferences[mid].valueOff;
+            return StrOwn(a, value, (int32_t)strlen(value));
         }
     }
     return {};

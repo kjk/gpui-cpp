@@ -49,27 +49,52 @@ static void TestMarkdownConstants() {
     utassert(kCharacterReferenceDecimalSizeMax == fmt("%d", 0x10ffff).len);
     utassert(kCharacterReferenceHexadecimalSizeMax == fmt("%x", 0x10ffff).len);
 
+    // The two runs and the table are three parallel things now, so the walk
+    // has to agree with the offsets the table holds: an entry pointing a byte
+    // into the middle of a name would still read as a string, just the wrong
+    // one, and nothing else would notice.
+    utassert(base::SeqStrCount(kCharacterReferenceNames) == 2125);
+    utassert(base::SeqStrCount(kCharacterReferenceValues) == 2125);
+    int nameOff = 0;
+    int valueOff = 0;
     int32_t longestName = 0;
     for (int32_t i = 0; i < 2125; i++) {
-        int32_t len = (int32_t)strlen(kCharacterReferences[i].name);
-        if (len > longestName) {
-            longestName = len;
+        utassert(kCharacterReferences[i].nameOff == nameOff);
+        utassert(kCharacterReferences[i].valueOff == valueOff);
+        Str name = base::SeqStrAt(kCharacterReferenceNames, nameOff);
+        utassert(name.len > 0);
+        if (name.len > longestName) {
+            longestName = name.len;
         }
+        base::SeqStrAdvance(kCharacterReferenceNames, nameOff);
+        base::SeqStrAdvance(kCharacterReferenceValues, valueOff);
     }
     utassert(kCharacterReferenceNamedSizeMax == longestName);
 
     int32_t longestRaw = 0;
-    for (int32_t i = 0; i < 4; i++) {
-        if (kHtmlRawNames[i].len > longestRaw) {
-            longestRaw = kHtmlRawNames[i].len;
+    int rawOff = 0;
+    int rawCount = 0;
+    while (kHtmlRawNames[rawOff]) {
+        Str raw = base::SeqStrAt(kHtmlRawNames, rawOff);
+        if (raw.len > longestRaw) {
+            longestRaw = raw.len;
+        }
+        rawCount++;
+        if (!base::SeqStrAdvance(kHtmlRawNames, rawOff)) {
+            break;
         }
     }
+    utassert(rawCount == 4);
     utassert(kHtmlRawSizeMax == longestRaw);
+    utassert(base::SeqStrCount(kHtmlBlockNames) == 62);
 
-    // The table is sorted, which is what `DecodeNamed` binary searches.
+    // The names are sorted, which is what `DecodeNamed` binary searches.
     for (int32_t i = 1; i < 2125; i++) {
-        utassert(strcmp(kCharacterReferences[i - 1].name,
-                        kCharacterReferences[i].name) < 0);
+        const char* prev =
+            kCharacterReferenceNames + kCharacterReferences[i - 1].nameOff;
+        const char* cur =
+            kCharacterReferenceNames + kCharacterReferences[i].nameOff;
+        utassert(strcmp(prev, cur) < 0);
     }
 }
 
