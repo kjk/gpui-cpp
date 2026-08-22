@@ -1912,3 +1912,49 @@ cargo run -p system_monitor
 
   The shapes rank by children-per-node, not by node count — tables saved
   157 KB, prose 59 KB, entities 6 KB.
+
+- 2026-08-22: An ArenaStr is four bytes, and the length rides with the
+  characters. The word was an offset and a length packed into eight; now it
+  is the offset alone, and the length is varint-encoded ahead of the bytes it
+  measures:
+
+      [varint len][len bytes][NUL]
+
+  Under 128 characters — which is nearly every string a parse stores — that
+  is one byte. So a string costs one byte more in the arena and four bytes
+  less in every field that holds it, and a Node holds eight of them: **112
+  bytes, down from 144**, with the `static_assert` moved along to say so.
+
+  `ArenaStrLen` takes the arena now, since the length is in it. That is one
+  byte read and decoded, and every caller that wants the length is about to
+  touch the bytes anyway.
+
+  `ArenaStrRef` is gone. A length-prefixed string cannot alias a slice of
+  something else, so `Keep` copies always. That reads like a loss and is not:
+  what `NodeToString` and `IdentifierFrom` build ahead of it was already a
+  permanent allocation in the parse arena, so the ref saved a copy of a
+  string that stayed there regardless. The measurement below is the whole
+  change including those copies.
+
+  `ArenaStrAppend` still grows in place. Crossing 128 characters is the one
+  new case: the prefix needs a second byte, so the append asks for one more
+  and shifts the characters over. The string does not move, and the next
+  append finds the same invariant.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose         1091.9 KB  17.01x      918.0 KB  14.30x    -15.9%
+    nested         611.6 KB   9.55x      512.3 KB   8.00x    -16.2%
+    gfm tables    1866.9 KB  29.13x     1543.6 KB  24.09x    -17.3%
+    entities       144.9 KB   2.26x      128.5 KB   2.00x    -11.3%
+
+  Three runs either side, medians: prose 8.66/9.02/8.46 -> 8.55/8.74/8.52 ms,
+  nested 9.52/10.46/9.65 -> 9.72/9.87/9.63, tables 13.25/13.69/13.67 ->
+  13.20/12.90/12.97, entities 5.94/5.97/5.92 -> 5.93/5.88/5.93, with
+  `tokenize` at 7.75/7.88/7.82 -> 7.62/7.78/7.77. The varint decode on every
+  read does not show, and neither do the copies `Keep` no longer avoids.
+
+  Since the Str-per-node baseline four entries ago: prose 1646 -> 918 KB,
+  nested 1068 -> 512, tables 2926 -> 1544, entities 660 -> 128. The entity
+  shape is 2.00x its source, where it was 10.28x.

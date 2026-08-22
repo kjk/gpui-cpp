@@ -119,20 +119,21 @@ static TreeFrame& TreeTail(CompileContext* c) {
 // stack ends at the node it would have arrived at, so both of these are one
 // read. An empty stack is the tree itself, which is what a zero-length walk
 // came to.
-// A node's strings are ArenaStr — an offset and a length in one word rather
-// than a pointer and a length in two — so the compiler needs both directions.
+// A node's strings are ArenaStr — four bytes of offset, with the length
+// varint-encoded beside the characters — so the compiler needs both
+// directions.
 //
-// `Keep` is how one is stored. NodeToString and IdentifierFrom both
-// allocate in the parse arena, so for those this
-// is a lookup and no second copy; a slice of the source bytes, which are not
-// the arena's, is copied in. Which of the two it is cannot be got wrong from
-// the call site — this asks the arena rather than the caller.
+// `Keep` is how one is stored. It copies, always: the length prefix has to
+// sit immediately ahead of the characters, so a string that is already in
+// the arena but was not written as an ArenaStr cannot be pointed at, only
+// copied. What NodeToString and IdentifierFrom build ahead of it is a
+// working copy either way, and it stays in the arena either way, so this
+// costs the one copy and nothing that was not already spent.
 static ArenaStr Keep(CompileContext* c, Str s) {
     if (!s.s || s.len <= 0) {
         return kArenaStrNone;
     }
-    ArenaStr r = base::ArenaStrRef(c->a, s);
-    return base::ArenaStrIsSet(r) ? r : base::ArenaStrDup(c->a, s);
+    return base::ArenaStrDup(c->a, s);
 }
 
 static Str Get(CompileContext* c, ArenaStr s) {

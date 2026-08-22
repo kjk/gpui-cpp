@@ -65,7 +65,7 @@ static int32_t NodeToStringLen(Arena* a, const Node* node) {
         }
         return len;
     }
-    return (int32_t)base::ArenaStrLen(NodeOwnValue(node));
+    return (int32_t)base::ArenaStrLen(a, NodeOwnValue(node));
 }
 
 static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
