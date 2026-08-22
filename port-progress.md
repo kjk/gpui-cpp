@@ -1457,3 +1457,34 @@ cargo run -p system_monitor
   array becomes an `ArenaVec`.
 
   Of the 62 pages only those two moved.
+
+- 2026-08-22: `ui/dock`, enumerated against ground truth rather than against a
+  line count. The gallery has no dock page upstream, which is why this module
+  had never been compared — but `crates/story/examples/dock.rs` exists and
+  builds:
+
+      cd .work/gpui-component
+      cargo build --release -p gpui-component-story --example dock
+
+  (from PowerShell, not Git Bash, whose `link` shadows MSVC's). Its window is
+  the reference this entry is written against.
+
+  What the comparison says: the port matches in shape. The three docks around
+  a centre, the per-group tab strip that scrolls under pinned buttons, the
+  drop targets and their placeholder, zoom, the ⋯ menu, the dock toggle
+  buttons on the left-most centre group — `update_toggle_button_tab_panels`,
+  which we already place the same way — the saved layout and the panel
+  registry behind it are all here. The 4143-vs-461 gap is mostly Rust keeping
+  a `DockArea`, a `StackPanel` and a `TabPanel` as three entity types with
+  `insert_panel_before/after/at` between them; this tree's flat node array
+  says the same thing with `DockSplitAdd` and `DockTabsInsert`.
+
+  One hook was genuinely missing and it is what the Rust example's tab bars
+  show: `Panel::title_suffix`, the panel's own content in its group's tab bar,
+  between the tabs and the group's buttons. `DockPanelDef::titleSuffix` is
+  that, and the dock story gives every panel the pair of icon buttons Rust's
+  example does — which is also what proves the bar leaves room for one.
+
+  Not a gap, for the record: `Panel::menu_visible` / `toolbar_visible` are
+  flags on a trait we express as fields, and the ⓘ/🔍 in every Rust pane are
+  the example's own `title_suffix`, not a dock feature.

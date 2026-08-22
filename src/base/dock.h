@@ -62,6 +62,10 @@ struct DockPanelDef {
     Str name = {};
     Str title = {};
     El* (*render)(Ctx* cx, void* data) = nullptr;
+    // Panel::title_suffix: what the panel puts in its own tab bar, between
+    // the tabs and the group's zoom and menu buttons. A panel that wants a
+    // search box or a status of its own has nowhere else to put it.
+    El* (*titleSuffix)(Ctx* cx, void* data) = nullptr;
     void* data = nullptr;
     bool closable = true;
     bool zoomable = true;
