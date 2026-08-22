@@ -121,6 +121,25 @@ PopupMenu* PopupMenu::Icon(IconName v) {
     }
     return this;
 }
+PopupMenu* PopupMenu::ActionContext(const char* ctx) {
+    actionContext = ctx;
+    return this;
+}
+
+PopupMenu* PopupMenu::MenuWithAction(Str label, uint32_t action, intptr_t arg) {
+    Menu(label);
+    return Action(action, arg);
+}
+
+PopupMenu* PopupMenu::Action(uint32_t action, intptr_t arg) {
+    if (items.len > 0) {
+        MenuItem* it = &items[items.len - 1];
+        it->action = action;
+        it->actionArg = arg;
+    }
+    return this;
+}
+
 PopupMenu* PopupMenu::Kbd(Str v) {
     if (items.len > 0) {
         items[items.len - 1].kbd = v;
@@ -313,17 +332,26 @@ El* PopupMenu::IntoEl() {
             left->Child(TextEl(a, it.label)->Font(14)->Fg(fg));
         }
         row->Child(left);
+        // What the row shows on the right: the string a caller set, or —
+        // for a row that names an action — whatever the keymap has bound to
+        // it, which is `Kbd::binding_for_action_in`.
+        El* kbdEl = nullptr;
         if (it.kbd.s) {
+            kbdEl = Kbd::New(cx, it.kbd)->Appearance(false)->IntoEl();
+        } else if (it.action) {
+            component::Kbd* k = Kbd::ForAction(cx, it.action, actionContext);
+            kbdEl = k ? k->Appearance(false)->IntoEl() : nullptr;
+        }
+        if (kbdEl) {
             // PopupMenu clears Kbd's background and border while retaining
             // its compact padding and minimum width.
-            row->Child(
-                Div(a)
-                    ->PadX(4)
-                    ->PadY(2)
-                    ->MinW(20)
-                    ->ItemsCenter()
-                    ->JustifyCenter()
-                    ->Child(Kbd::New(cx, it.kbd)->Appearance(false)->IntoEl()));
+            row->Child(Div(a)
+                           ->PadX(4)
+                           ->PadY(2)
+                           ->MinW(20)
+                           ->ItemsCenter()
+                           ->JustifyCenter()
+                           ->Child(kbdEl));
         }
         if (it.isLink && externalLinkIcon) {
             row->Child(IconEl(a, IconName::ExternalLink, 12)->Fg(th.mutedFg));
@@ -346,6 +374,11 @@ El* PopupMenu::IntoEl() {
             } else {
                 BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
                           ListenerArg(click, i));
+                // `window.dispatch_action(action.boxed_clone(), cx)`, beside
+                // the click the menu itself needs to close on.
+                if (it.action) {
+                    row->OnClickAction(it.action, it.actionArg);
+                }
                 row->OnHover(ListenerArg(hover, i));
             }
         }

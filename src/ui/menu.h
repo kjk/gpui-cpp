@@ -21,9 +21,16 @@ struct MenuItem {
     MenuItemKind kind = MenuItemKind::Item;
     Str label = {};
     IconName icon = IconName::None;
-    // The keystroke shown on the right, which is Rust's Kbd of the item's
-    // action.
+    // The keystroke shown on the right. Rust derives it from the item's
+    // action rather than storing one — `Kbd::binding_for_action_in` — and so
+    // does a row that names an action; this is what a row that names none
+    // shows, and what an explicit `Kbd(..)` overrides it with.
     Str kbd = {};
+    // PopupMenuItem::action. Choosing the row dispatches it, which is how
+    // upstream wires a menu: the row carries no handler and the same
+    // `on_action` the keyboard reaches is what runs.
+    uint32_t action = 0;
+    intptr_t actionArg = 0;
     bool checked = false;
     bool disabled = false;
     bool isLink = false;
@@ -48,6 +55,10 @@ struct PopupMenu {
     bool externalLinkIcon = true;
     // check_side: which edge a checked row's tick sits on.
     Side checkSide = Side::Left;
+    // `menu.action_context(handle)`: the key context a row's action is looked
+    // up in, so a menu over a text field shows the field's own chords. Null
+    // asks only about the bindings that named no context.
+    const char* actionContext = nullptr;
 
     // The state behind one menu id. Rust's `window.use_keyed_state(id)`, so a
     // page gets a menu's selection and submenu without declaring a field; a
@@ -57,6 +68,12 @@ struct PopupMenu {
     PopupMenu* Menu(Str label, IconName icon = IconName::None);
     PopupMenu* MenuWithCheck(Str label, bool checked);
     PopupMenu* MenuWithKbd(Str label, Str kbd);
+    // `menu(label, action)`: choosing the row dispatches the action, and the
+    // shortcut shown beside it is whatever the keymap has bound to it — so
+    // the hint cannot drift from the binding and follows a rebinding.
+    PopupMenu* MenuWithAction(Str label, uint32_t action, intptr_t arg = 0);
+    // Applies to the last row added, for the builders that add one first.
+    PopupMenu* Action(uint32_t action, intptr_t arg = 0);
     PopupMenu* Link(Str label, Str href, IconName icon = IconName::None);
     PopupMenu* Separator();
     PopupMenu* Label(Str label);
@@ -72,6 +89,7 @@ struct PopupMenu {
     PopupMenu* MaxH(float v);
     PopupMenu* Scrollable(bool v = true);
     PopupMenu* CheckSide(Side s);
+    PopupMenu* ActionContext(const char* ctx);
     PopupMenu* ExternalLinkIcon(bool v);
     El* IntoEl();
 };
