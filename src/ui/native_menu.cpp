@@ -81,8 +81,7 @@ int NativeMenuSelectable(const NativeMenu* m, const NativeMenuItem** out,
         return 0;
     }
     int n = 0;
-    for (int i = 0; i < m->items.len; i++) {
-        const NativeMenuItem& it = m->items[i];
+    for (const NativeMenuItem& it : m->items) {
         if (it.kind == NativeMenuItemKind::Separator) {
             continue;
         }
@@ -115,9 +114,9 @@ static PlatMenuItem* ToPlat(Arena* a, const NativeMenu* m, int* nextId) {
     auto* out = (PlatMenuItem*)a
                     ->Push((uint64_t)m->items.len * sizeof(PlatMenuItem),
                            alignof(PlatMenuItem), true);
-    for (int i = 0; i < m->items.len; i++) {
-        const NativeMenuItem& it = m->items[i];
-        PlatMenuItem& p = out[i];
+    int i = -1;
+    for (const NativeMenuItem& it : m->items) {
+        PlatMenuItem& p = out[++i];
         p.label = StrDup(a, it.label).s;
         p.disabled = it.disabled;
         p.checked = it.checked;
@@ -170,8 +169,7 @@ bool NativeMenu::Show(float x, float y) {
 
 PopupMenu* NativeMenu::IntoPopupMenu(Str id) const {
     PopupMenu* menu = PopupMenu::New(cx, id);
-    for (int i = 0; i < items.len; i++) {
-        const NativeMenuItem& it = items[i];
+    for (const NativeMenuItem& it : items) {
         if (it.kind == NativeMenuItemKind::Separator) {
             menu->Separator();
             continue;

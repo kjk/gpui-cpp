@@ -427,18 +427,9 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
 template <typename T>
 struct ArenaVecSegment {
     ArenaVecSegment<T>* next;
-    // The segment an index last landed in, for the walk `operator[]` would
-    // otherwise start from the beginning every time. Only the first
-    // segment's copy is used — it lives in the segment rather than in the
-    // `ArenaVec` so the handle that a node or a builder embeds by value stays
-    // three words. That size is worth guarding: an `EditMap::Entry` is two
-    // ints and one of these, and the edit map sorts and walks thousands of
-    // them per document. Padding the old flat handle out to what a handle
-    // with the cache in it would cost, changing nothing else, made the
-    // markdown table benchmark 10% slower on its own.
-    ArenaVecSegment<T>* cache;
     // Index of this segment's first element in the vec: the sum of the
-    // lengths before it.
+    // lengths before it. What `operator[]` walks on, and all a truncated
+    // segment needs to be handed its elements back.
     int base;
     int len;
     // Only the last segment ever takes an append, so a capacity per segment
@@ -482,29 +473,63 @@ struct ArenaVec {
     Segment* last = nullptr;
     int len = 0;
 
+    // A walk over the segments, not the elements: one compare for a vec that
+    // never left its first, one more per segment after that. Reading the
+    // elements in order this way is what `Iter` is for — `v[i]` in a loop
+    // starts the walk over every time.
     T& operator[](int idx) const {
-        // Most vecs never leave their first segment. That case is one compare
-        // of two fields in the same cache line, and never writes.
         Segment* seg = first;
+        // Most vecs never leave their first segment, and `first == last`
+        // says so from two fields of the handle itself.
         if (seg == last) {
             return seg->Els()[idx];
         }
-        Segment* cached = seg->cache;
-        if (cached && idx >= cached->base) {
-            seg = cached;
-        }
-        // Walking i, i+1, i+2 stays in one segment and costs the compare a
-        // flat array's bounds check would; crossing into the next one is a
-        // pointer chase. Walking backwards, or jumping back, restarts from
-        // the first segment — that is a walk over segments, not elements.
         while (idx >= seg->base + seg->len) {
             seg = seg->next;
         }
-        if (seg != cached) {
-            first->cache = seg;
-        }
         return seg->Els()[idx - seg->base];
     }
+
+    // Reading the elements in order. The whole state is the segment and the
+    // index inside it, so stepping is `++idx` and a compare, and only the
+    // step that leaves a segment touches a pointer:
+    //
+    //     for (const Event& e : entry.add) { ... }
+    //
+    // A `Truncate` can leave empty segments linked after the last one, so
+    // both ends normalize past anything empty and `end()` is a null segment.
+    struct Iter {
+        Segment* seg;
+        int idx;
+
+        void Normalize() {
+            while (seg && idx >= seg->len) {
+                seg = seg->next;
+                idx = 0;
+            }
+        }
+        T& operator*() const { return seg->Els()[idx]; }
+        T* operator->() const { return &seg->Els()[idx]; }
+        Iter& operator++() {
+            idx++;
+            if (idx >= seg->len) {
+                seg = seg->next;
+                idx = 0;
+                Normalize();
+            }
+            return *this;
+        }
+        bool operator!=(const Iter& o) const {
+            return seg != o.seg || idx != o.idx;
+        }
+    };
+
+    Iter begin() const {
+        Iter it = {first, 0};
+        it.Normalize();
+        return it;
+    }
+    Iter end() const { return Iter{nullptr, 0}; }
 
     bool Append(Arena* a, const T& el) {
         Segment* seg = last;
@@ -571,9 +596,6 @@ struct ArenaVec {
             }
         }
         len = newLen;
-        if (first) {
-            first->cache = nullptr;
-        }
     }
 
     void Pop() { Truncate(len - 1); }
@@ -593,10 +615,8 @@ struct ArenaVec {
             return nullptr;
         }
         int at = 0;
-        for (Segment* s = first; s && at < len; s = s->next) {
-            for (int i = 0; i < s->len; i++) {
-                out[at++] = s->Els()[i];
-            }
+        for (const T& el : *this) {
+            out[at++] = el;
         }
         return out;
     }
@@ -636,7 +656,6 @@ struct ArenaVec {
         }
         Segment* seg = (Segment*)mem;
         seg->next = nullptr;
-        seg->cache = nullptr;
         seg->base = len;
         seg->len = 0;
         seg->cap = cap;

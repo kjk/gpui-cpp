@@ -58,8 +58,8 @@ static Str NodeOwnValue(const Node* node) {
 static int32_t NodeToStringLen(const Node* node) {
     if (NodeHasChildren(node->kind)) {
         int32_t len = 0;
-        for (int32_t i = 0; i < node->children.len; i++) {
-            len += NodeToStringLen(node->children[i]);
+        for (const Node* child : node->children) {
+            len += NodeToStringLen(child);
         }
         return len;
     }
@@ -68,8 +68,8 @@ static int32_t NodeToStringLen(const Node* node) {
 
 static int32_t NodeToStringFill(const Node* node, char* out, int32_t at) {
     if (NodeHasChildren(node->kind)) {
-        for (int32_t i = 0; i < node->children.len; i++) {
-            at = NodeToStringFill(node->children[i], out, at);
+        for (const Node* child : node->children) {
+            at = NodeToStringFill(child, out, at);
         }
         return at;
     }

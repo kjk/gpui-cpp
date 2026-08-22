@@ -135,8 +135,8 @@ El* Root::IntoEl() {
     // The dialogs draw over the sheet, in the order they were opened; the one
     // overlay there is belongs to the last of them that asked for one, which
     // is what keeps a stack of dialogs from tinting the page twice.
-    for (int i = 0; i < dialogs.len; i++) {
-        e->Child(dialogs[i]->Deferred());
+    for (El* dialog : dialogs) {
+        e->Child(dialog->Deferred());
     }
 
     if (!bordered) {

@@ -331,8 +331,8 @@ static void AddImpl(EditMap& map, int32_t at, int32_t remove, const Event* add,
             ArenaVec<Event> merged = {};
             merged.Reserve(map.a, addLen + e.add.len);
             merged.AppendMany(map.a, add, addLen);
-            for (int32_t i = 0; i < e.add.len; i++) {
-                merged.Append(map.a, e.add[i]);
+            for (const Event& ev : e.add) {
+                merged.Append(map.a, ev);
             }
             e.add = merged;
         } else {
@@ -428,8 +428,8 @@ void EditMapConsume(EditMap& map, Vec<Event>& events) {
         for (int32_t j = index; j < e.at; j++) {
             out.Append(events[j]);
         }
-        for (int32_t j = 0; j < e.add.len; j++) {
-            out.Append(e.add[j]);
+        for (const Event& ev : e.add) {
+            out.Append(ev);
         }
         index = e.at + e.remove;
     }

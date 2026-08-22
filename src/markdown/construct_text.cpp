@@ -540,8 +540,12 @@ static bool StackEq(const ArenaVec<int32_t>& a, const ArenaVec<int32_t>& b) {
     if (a.len != b.len) {
         return false;
     }
-    for (int32_t i = 0; i < a.len; i++) {
-        if (a[i] != b[i]) {
+    // Two walks in step, which is what the pair of cursors is for: `a[i]`
+    // and `b[i]` would each start over from their own first segment.
+    ArenaVec<int32_t>::Iter ia = a.begin();
+    ArenaVec<int32_t>::Iter ib = b.begin();
+    for (; ia != a.end(); ++ia, ++ib) {
+        if (*ia != *ib) {
             return false;
         }
     }
@@ -580,8 +584,8 @@ static void GetSequences(Tokenizer* t, Vec<Sequence>& sequences) {
                 Sequence sequence;
                 sequence.index = index;
                 // `stack.clone()`.
-                for (int32_t i = 0; i < stack.len; i++) {
-                    sequence.stack.Append(a, stack[i]);
+                for (int32_t eventIndex : stack) {
+                    sequence.stack.Append(a, eventIndex);
                 }
                 sequence.startPoint = enter.point;
                 sequence.endPoint = exit.point;

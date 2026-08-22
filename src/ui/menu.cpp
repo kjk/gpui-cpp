@@ -171,9 +171,9 @@ El* PopupMenu::IntoEl() {
     // has_left_icon: the gutter exists only if some row needs it, so a menu
     // of plain labels is not indented for nothing.
     bool leftGutter = false;
-    for (int i = 0; i < items.len; i++) {
-        if (items[i].icon != IconName::None ||
-            (SideIsLeft(checkSide) && items[i].checked)) {
+    for (const MenuItem& it : items) {
+        if (it.icon != IconName::None ||
+            (SideIsLeft(checkSide) && it.checked)) {
             leftGutter = true;
         }
     }
@@ -183,8 +183,7 @@ El* PopupMenu::IntoEl() {
     // 250px minimum, so their own content fits within that floor.
     float menuW = minW;
     if (cx->win) {
-        for (int i = 0; i < items.len; i++) {
-            const MenuItem& it = items[i];
+        for (const MenuItem& it : items) {
             if (!it.label.s || it.kind == MenuItemKind::Separator) {
                 continue;
             }
@@ -249,13 +248,12 @@ El* PopupMenu::IntoEl() {
     // The rows, as the keyboard sees them. Rust's menu owns its items; here
     // they are the caller's, so what an action needs is copied across.
     PopupMenuBeginRows(s);
-    for (int i = 0; i < items.len; i++) {
+    for (const MenuItem& it : items) {
         PopupMenuRow row;
-        row.clickable = items[i].kind == MenuItemKind::Item && !items[i]
-                                                                    .disabled;
-        row.submenu = items[i].submenu != nullptr;
-        row.link = items[i].isLink;
-        row.href = items[i].href;
+        row.clickable = it.kind == MenuItemKind::Item && !it.disabled;
+        row.submenu = it.submenu != nullptr;
+        row.link = it.isLink;
+        row.href = it.href;
         PopupMenuAddRow(s, row);
     }
     El* rows = Div(a)->FlexCol()->W(kFill)->Pad(4)->Gap(2);
@@ -270,8 +268,9 @@ El* PopupMenu::IntoEl() {
     Listener hover = ListenTo(state, &PopupMenuState::OnItemHover, 0);
     Listener submenuClick = ListenTo(state, &PopupMenuState::OnSubmenuClick, 0);
     Listener submenuHover = ListenTo(state, &PopupMenuState::OnSubmenuHover, 0);
-    for (int i = 0; i < items.len; i++) {
-        const MenuItem& it = items[i];
+    int i = -1;
+    for (const MenuItem& it : items) {
+        i++;
         if (it.kind == MenuItemKind::Separator) {
             if (i + 1 == items.len) {
                 continue;
