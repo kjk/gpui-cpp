@@ -10,7 +10,7 @@
 namespace markdown {
 
 // The characters after `<![` that open a CDATA section.
-extern const Str kHtmlCdataPrefix = Str("CDATA[", 6);
+extern const Str kHtmlCdataPrefix = StrL("CDATA[");
 
 // The tag names that open an HTML (flow) block of kind 6.
 const char kHtmlBlockNames[] =

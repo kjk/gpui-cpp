@@ -416,7 +416,7 @@ static void OnExitAutolinkEmail(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = StrCat(c->a, link->url, Str("mailto:", 7));
+    link->url = StrCat(c->a, link->url, StrL("mailto:"));
     link->url = StrCat(c->a, link->url, value);
 }
 
@@ -507,9 +507,9 @@ static void OnExitGfmAutolinkLiteral(CompileContext* c) {
     Name name = (*c->events)[c->index].name;
     Node* link = TailMut(c);
     if (name == Name::GfmAutolinkLiteralEmail) {
-        link->url = StrCat(c->a, link->url, Str("mailto:", 7));
+        link->url = StrCat(c->a, link->url, StrL("mailto:"));
     } else if (name == Name::GfmAutolinkLiteralWww) {
-        link->url = StrCat(c->a, link->url, Str("http://", 7));
+        link->url = StrCat(c->a, link->url, StrL("http://"));
     }
     link->url = StrCat(c->a, link->url, value);
     OnExit(c);
