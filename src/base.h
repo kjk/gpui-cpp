@@ -326,6 +326,49 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more);
 // as the arena's contents do.
 Str ArenaStrGet(Arena* a, ArenaStr s);
 
+// ─── a pointer that costs four bytes ──────────────────────────────────────
+//
+// The same trade as ArenaStr, for a pointer to anything else the arena
+// holds. A tree whose nodes point at each other spends eight bytes a link on
+// an address the arena can work out from four, and a vec of those links is
+// half the size for it.
+//
+// The offset is into the same position space `PopTo` and ArenaStr use, so it
+// survives the arena chaining onto a new block. Zero is null: a block's
+// header sits at its own offset zero, so no allocation ever lands there.
+constexpr uint32_t kArenaPtrNone = 0;
+
+// Where `p` sits in `a`'s position space. A walk of the chain by address —
+// short, and the newest block is where a just-allocated object is. Answers
+// kArenaPtrNone for a pointer that is not in this arena, which is better
+// than an offset into somebody else's bytes.
+uint32_t ArenaOffsetOf(Arena* a, const void* p);
+
+// And back. Null for kArenaPtrNone, or for an offset past what the arena
+// holds.
+void* ArenaAtOffset(Arena* a, uint32_t off);
+
+// The typed wrapper. Four bytes, trivially copyable, and `T` is there to
+// keep a node offset from being read back as an event offset.
+template <typename T>
+struct ArenaPtr {
+    uint32_t off = kArenaPtrNone;
+
+    bool IsSet() const { return off != kArenaPtrNone; }
+    bool operator==(const ArenaPtr<T>& o) const { return off == o.off; }
+    bool operator!=(const ArenaPtr<T>& o) const { return off != o.off; }
+};
+
+template <typename T>
+ArenaPtr<T> ArenaPtrOf(Arena* a, const T* p) {
+    return ArenaPtr<T>{ArenaOffsetOf(a, p)};
+}
+
+template <typename T>
+T* ArenaPtrGet(Arena* a, ArenaPtr<T> p) {
+    return (T*)ArenaAtOffset(a, p.off);
+}
+
 // The per-frame scratch arena that fmt() / AllocStrTemp() carve out of.
 Arena* GetTempArena();
 void ResetTempArena();

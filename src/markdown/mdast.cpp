@@ -55,12 +55,13 @@ static ArenaStr NodeOwnValue(const Node* node) {
     }
 }
 
-// The length is in the word itself, so the first pass reads no arena at all.
-static int32_t NodeToStringLen(const Node* node) {
+// The lengths are in the words themselves, so the first pass reads no string
+// bytes — only the arena lookups the child offsets need.
+static int32_t NodeToStringLen(Arena* a, const Node* node) {
     if (NodeHasChildren(node->kind)) {
         int32_t len = 0;
-        for (const Node* child : node->children) {
-            len += NodeToStringLen(child);
+        for (const Node* child : NodeKids(a, node)) {
+            len += NodeToStringLen(a, child);
         }
         return len;
     }
@@ -70,7 +71,7 @@ static int32_t NodeToStringLen(const Node* node) {
 static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
                                 int32_t at) {
     if (NodeHasChildren(node->kind)) {
-        for (const Node* child : node->children) {
+        for (const Node* child : NodeKids(a, node)) {
             at = NodeToStringFill(a, child, out, at);
         }
         return at;
@@ -86,7 +87,7 @@ static int32_t NodeToStringFill(Arena* a, const Node* node, char* out,
 Str NodeToString(Arena* a, const Node* node) {
     // Two passes rather than a builder: the tree is already there, and this
     // way the result is one allocation of exactly the right size.
-    int32_t len = NodeToStringLen(node);
+    int32_t len = NodeToStringLen(a, node);
     char* out = (char*)Alloc(a, len + 1);
     if (!out) {
         return {};

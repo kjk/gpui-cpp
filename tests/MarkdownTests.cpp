@@ -31,10 +31,10 @@ static Node* Parse(Arena* a, const char* source) {
 
 // The n-th child, or null.
 static Node* Child(Node* n, int32_t ix) {
-    if (!n || ix >= n->children.len) {
+    if (!n) {
         return nullptr;
     }
-    return n->children[ix];
+    return NodeChild(gParsedInto, n, (int)ix);
 }
 
 static bool Is(Str s, const char* want) {

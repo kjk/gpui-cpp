@@ -176,7 +176,7 @@ static void MdInlineHtml(MdBuild* b, Str tag) {
 static void MdInlineNode(MdBuild* b, const md::Node* n);
 
 static void MdInlineChildren(MdBuild* b, const md::Node* n) {
-    for (const md::Node* child : n->children) {
+    for (const md::Node* child : md::NodeKids(b->a, n)) {
         MdInlineNode(b, child);
     }
 }
@@ -275,7 +275,7 @@ static void MdInline(MdBuild* b, const md::Node* n) {
 static void MdBlockNode(MdBuild* b, const md::Node* n);
 
 static void MdBlockChildren(MdBuild* b, const md::Node* n) {
-    for (const md::Node* child : n->children) {
+    for (const md::Node* child : md::NodeKids(b->a, n)) {
         MdBlockNode(b, child);
     }
 }
@@ -293,7 +293,7 @@ static void MdTable(MdBuild* b, const md::Node* n) {
     MdNode* table = Push(b, MdKind::Table);
     (void)table;
     int32_t rowIndex = 0;
-    for (const md::Node* row : n->children) {
+    for (const md::Node* row : md::NodeKids(b->a, n)) {
         int32_t at = rowIndex++;
         if (row->kind != md::NodeKind::TableRow) {
             continue;
@@ -302,7 +302,7 @@ static void MdTable(MdBuild* b, const md::Node* n) {
         // mdast has no thead: the first row is the head.
         r->head = at == 0;
         int32_t cellIndex = 0;
-        for (const md::Node* cell : row->children) {
+        for (const md::Node* cell : md::NodeKids(b->a, row)) {
             if (cell->kind != md::NodeKind::TableCell) {
                 continue;
             }
@@ -405,7 +405,7 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             AddText(b, V(b, n->identifier));
             AddText(b, StrL("]: "));
             b->marks = saved;
-            for (const md::Node* c : n->children) {
+            for (const md::Node* c : md::NodeKids(b->a, n)) {
                 // Its children are blocks; their inline content joins the one
                 // paragraph, which is what Rust's parse_paragraph does.
                 if (md::NodeHasChildren(c->kind)) {
@@ -434,7 +434,7 @@ static void MdCollectDefs(MdBuild* b, const md::Node* n) {
         b->defs.Append(b->a, def);
         return;
     }
-    for (const md::Node* child : n->children) {
+    for (const md::Node* child : md::NodeKids(b->a, n)) {
         MdCollectDefs(b, child);
     }
 }
