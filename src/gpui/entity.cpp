@@ -3,6 +3,7 @@
 #include "gpui/gpui.h"
 #include "gpui/platform.h"
 #include "gpui/keymap.h"
+#include "sys/executor.h"
 
 namespace gpui {
 
@@ -268,6 +269,53 @@ void WindowOnMouseExit(Window* win, Listener l) {
     if (win) {
         win->onMouseExit = l;
     }
+}
+
+// What WindowPost hands the main-thread queue. One allocation per post,
+// freed by the run below whether the listener got to fire or not.
+struct PostedTask {
+    App* app = nullptr;
+    Window* win = nullptr;
+    Listener l = {};
+    const void* ev = nullptr;
+};
+
+// The window is looked up by pointer rather than trusted: a post made from a
+// worker can outlive the window it was made against, and there is no
+// generation on a Window the way there is on an entity.
+static bool WindowIsLive(App* app, Window* win) {
+    if (!app || !win) {
+        return false;
+    }
+    for (int i = 0; i < app->windows.len; i++) {
+        if (app->windows[i] == win) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void RunPostedTask(PostedTask* t) {
+    if (WindowIsLive(t->app, t->win)) {
+        // ListenerCall drops it again if the entity itself is gone.
+        ListenerCall(t->app, t->win, t->l, t->ev);
+    }
+    Free(nullptr, t);
+}
+
+void WindowPost(Window* win, Listener l, const void* ev) {
+    if (!win || !win->app || !l.IsValid()) {
+        return;
+    }
+    auto* t = AllocArray<PostedTask>(1);
+    if (!t) {
+        return;
+    }
+    t->app = win->app;
+    t->win = win;
+    t->l = l;
+    t->ev = ev;
+    ExecPost(MkFunc0(RunPostedTask, t));
 }
 
 static int WindowArmTimer(Window* win, int ms, Listener l, bool repeat) {

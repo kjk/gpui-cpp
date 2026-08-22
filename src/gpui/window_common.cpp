@@ -7,6 +7,7 @@
 #include "gpui/image.h"
 #include "gpui/paint.h"
 #include "sys/http.h"
+#include "sys/executor.h"
 #include "base/focus_trap.h"
 #include "base/text_selection.h"
 
@@ -1561,10 +1562,7 @@ void WindowTimerTick(Window* win) {
     }
     win->timers.len = keep;
 
-    // A picture still on its way is a reason to come back: image.h answered
-    // nothing for it this frame and will answer the bitmap once the worker
-    // lands. WindowTimerMs below sets the pace.
-    if (win->anim || win->animFrame || repaint || HttpFetchPending() > 0) {
+    if (win->anim || win->animFrame || repaint) {
         AppInvalidate(win);
     }
     PlatSetTimer(win, WindowTimerMs(win));
@@ -1593,15 +1591,11 @@ int WindowTimerMs(Window* win) {
     if (win->anim || win->opts.anim || win->animFrame) {
         soonest = now + 0.016;
     }
-    // A fetch in flight wants the window back, but not at frame rate: it
-    // takes as long as the network does and 20 Hz is soon enough to look
-    // immediate when it lands.
-    if (HttpFetchPending() > 0) {
-        double due = now + 0.05;
-        if (soonest < 0 || due < soonest) {
-            soonest = due;
-        }
-    }
+    // A fetch in flight used to be a reason to come back at 20 Hz and ask the
+    // table whether it had landed yet. It reports itself now: the executor
+    // posts AppFetchLanded when the worker finishes and that invalidates the
+    // window, so an idle window with a picture on the way sleeps like any
+    // other.
     for (int i = 0; i < win->timers.len; i++) {
         double due = win->timers[i].dueAt;
         if (due > 0 && (soonest < 0 || due < soonest)) {
@@ -1652,6 +1646,18 @@ void WindowClosed(Window* win) {
     win->running = false;
 }
 
+// A picture arrived. image.h answered nothing for it while it was on its way,
+// so every window draws once more and asks the table again. Runs on the main
+// thread: sys/http.cpp hands this to the executor as a fetch's completion.
+static void AppFetchLanded(App* app) {
+    if (!app) {
+        return;
+    }
+    for (int i = 0; i < app->windows.len; i++) {
+        AppInvalidate(app->windows[i]);
+    }
+}
+
 App* AppNew() {
     App* app = new App();
     // Somewhere to read icons and images from, unless the caller has
@@ -1673,6 +1679,13 @@ App* AppNew() {
         delete app;
         return nullptr;
     }
+    // This thread is the one everything the UI owns is touched on, and the
+    // platform loop is what a worker nudges to get a task looked at. GPUI
+    // says the same thing by handing its foreground executor the platform
+    // dispatcher at startup.
+    ExecInit();
+    ExecSetWake(MkFunc0(PlatWake, app));
+    HttpSetOnFetchDone(MkFunc0(AppFetchLanded, app));
     return app;
 }
 
@@ -1683,6 +1696,11 @@ void AppFree(App* app) {
     if (!app) {
         return;
     }
+    // First, and before anything an outstanding task might touch is freed. It
+    // gives a job that is nearly done a moment to land and runs the
+    // completions that arrive; whatever is still running after that has its
+    // result dropped rather than delivered into a half-freed App.
+    ExecShutdown();
     EntityDropAll(app);
     for (int i = 0; i < app->windows.len; i++) {
         Window* w = app->windows[i];

@@ -2341,3 +2341,64 @@ cargo run -p system_monitor
   `fmt()` / `logf()` / `StrDup(a, fmt(..))`, and corrects the spelling of a
   positional: it is `%{0}`, not `%{$0}`, which the parser rejects. Every
   claim in it is now an assertion in the suite that passed.
+
+- 2026-08-23: The executor. GPUI runs everything that is not this frame
+  through two of them — a `ForegroundExecutor` on the main thread that may
+  touch entities, and a `BackgroundExecutor` thread pool that may not — and
+  hands back a `Task<T>` whose destructor is the cancel. There are no futures
+  here, so `src/sys/executor.h` is that pair written as callbacks: `ExecPost`
+  queues a `Func0` to run on the main thread and wakes the event loop,
+  `ExecDrain` runs what is queued, and `ExecSpawn(work, done)` puts `work` on
+  a pool thread and posts `done` back when it returns. The handle is an
+  integer, cancelled with `ExecCancel`, the way `WindowSetInterval` hands one
+  out — nothing in this tree is cancelled by leaving a scope. Rust's two rules
+  are kept as they are: a worker never touches an entity, a window or the
+  frame arena, and everything the UI owns is touched on the main thread.
+
+  The main-thread queue is modelled on SumatraPDF's `uitask::Post` — a lock, a
+  list, and a nudge — and the nudge is the part each platform owns, installed
+  with `ExecSetWake` so nothing portable names an OS call. Windows gets a
+  message-only window of its own rather than `PostThreadMessage`, because a
+  thread message is dropped by every modal loop the OS runs for us
+  (`TrackPopupMenu`, the resize loop) and a posted window message is not. X11
+  gets a self-pipe, polled beside the display's fd. macOS gets
+  `dispatch_async` on the main queue, which is the one thing there documented
+  to be safe from any thread; the block drains the queue itself and then posts
+  an `NSEventTypeApplicationDefined`, because servicing the dispatch queue
+  produces no event and `nextEventMatchingMask` would otherwise sleep on to
+  its deadline with the work already sitting there.
+
+  `WindowPost(win, listener, ev)` is the entity-bound half — `cx.spawn` plus
+  `this.update(cx, ..).ok()` — and drops the call if the window closed or the
+  entity went away before the queue was drained, which is the lifetime a
+  `Task` in a view field gets in Rust.
+
+  Timers stay where they were. GPUI has no timer list because it spawns a task
+  per timer that sleeps; `WindowSetInterval` / `WindowSetTimeout` already are
+  that, cancelled with the entity, and folding them into an app-level executor
+  would have made them outlive the window they belong to.
+
+  The pool is elastic: no threads until there is work, one more whenever a job
+  arrives with nobody idle, up to `kExecMaxWorkers` (8), and they live until
+  `ExecShutdown`. Eight rather than the core count because a job here may
+  block on the network for fifteen seconds, and the fetcher's does.
+
+  `sys/http.cpp` was the only thread user in the tree and is now the pool's
+  first caller: `ThreadRunDetached` moved into base as `PlatThreadRun` (with
+  `PlatThreadId`, `PlatSleepMs` and a `CondVar` beside `Mutex`), and
+  `src/sys/http_posix.cpp`, which was nothing but those two calls, is gone. A
+  fetch now reports itself instead of being polled: `HttpSetOnFetchDone` is a
+  completion the window installs, so `WindowTimerMs` no longer wakes an idle
+  window at 20 Hz for as long as a picture is on its way. Verified end to end
+  on Windows — a failing fetch in `rich_text` came back through the pool, the
+  message-only window and the main-thread queue.
+
+  `base.h`'s `Func0` and `Func1<T>` grew the two things Sumatra's have and
+  ours did not: a no-argument function (`MkFunc0Void`, with the `kFuncNoArg`
+  sentinel) and the low-bit flag that lets a `Func0` stand in for a `Func1`,
+  which is what makes one queue take both. `tests/ExecutorTests.cpp` is 40-odd
+  checks — a post runs only when drained and in the order made, a post made
+  during a drain waits for the next pass, a spawned job really is on another
+  thread, every job of 32 runs, and a job that has not started is cancellable,
+  which is made deterministic by filling all eight workers with jobs that hold
+  until the test lets go.

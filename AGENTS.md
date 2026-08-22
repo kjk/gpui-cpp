@@ -59,10 +59,14 @@ These are the standing exclusions. Everything else in gpui-component is in
 scope, and a module being large or unglamorous is not a reason to skip it.
 
 - WASM
-- The full GPUI GPU scene graph or async executor. We do have `App`/`Window`/
-  `Entity`/`Ctx`, actions and a keymap, `EventEmitter` and window
-  subscriptions — see below — but not refcounted entities, observers, or
-  `Task`
+- The full GPUI GPU scene graph, and `async` anything. We do have
+  `App`/`Window`/`Entity`/`Ctx`, actions and a keymap, `EventEmitter`, window
+  subscriptions and an executor — see below — but not refcounted entities,
+  observers, futures, or a `Task<T>` that cancels by being dropped.
+  `src/sys/executor.h` is GPUI's foreground/background pair written as
+  callbacks: a queue the main thread drains and a pool of threads that fills
+  it, with integer handles where Rust has a handle whose destructor is the
+  cancel
 - STL containers (`std::string`, `std::vector`, `std::map`, iostreams, `std::function` as the default callback style)
 - Reusing `../gpui/` — that experiment uses STL heavily and is not the base for this port
 - A network beyond one GET. `src/sys/http.h` fetches the bytes at an http(s)
@@ -145,7 +149,8 @@ src/gpui/window_linux.cpp  X11 event loop
 src/gpui/window_mac.cpp    Cocoa event loop
         │
         ▼
-src/sys/    process/CPU/memory/disk/battery, per OS
+src/sys/    process/CPU/memory/disk/battery, per OS; the executor and the
+            fetch table, portable
         │
         ▼
 src/base.h  Str, Vec, Arena, Geom, Color helpers
@@ -263,6 +268,10 @@ The runtime mirrors GPUI's shape. Read this before touching `src/gpui`, adding a
 | `cx.notify()`                    | `Notify(cx)`                                                                        |
 | `Drop for T`                     | `~T()`, run when the entity is dropped                                              |
 | `window.use_keyed_state`         | `KeyedState<T>(cx, key)`                                                            |
+| `cx.spawn(...)` with no await    | `WindowPost(win, Listener)` — runs against its entity on the next pass             |
+| `cx.background_spawn(work)`      | `ExecSpawn(work, done)` — `sys/executor.h`; `done` is posted to the main thread     |
+| `Task<T>` dropped                | `ExecCancel(id)`, or the entity going stale, which drops a post the way it does a timer |
+| `Timer::after(d).await`          | `WindowSetTimeout(win, ms, Listener)`                                               |
 
 A view is a plain struct with state, a static `Render`, and static handlers:
 
@@ -299,7 +308,7 @@ Rules:
 3. **Elements carry their own listener.** `->OnClick(Listen(cx, &T::Handler))`. Dispatch resolves the entity and drops the event if the handle went stale, so a listener can outlive its view safely. There is no click-id switch anywhere; do not add one.
 4. **Bind the value instead of decoding an id.** What a Rust closure captures, `Listen` takes as an `intptr_t`: `Listen(cx, &T::OnTab, ix)`. A component that produces the value itself — which day, which row — fills it with `ListenerArg` and its caller writes `Listen(cx, &T::OnDay)`.
 5. `El::Click(id)` is identity only: hit-testing, hover, focus, Tab traps — GPUI's `ElementId`. It does not dispatch. `WindowOnUnhandledClick` fires for a click no element handled, which is the outside click that dismisses an overlay. A widget that wants the press itself rather than the click takes `El::OnMouseDown` / `OnMouseUp` / `OnDragMove` — `div().on_mouse_down(..)` and `on_drag_move` — where the element that took the press keeps the moves until the button comes back up, which is what GPUI's drag entity does for a drag.
-6. Window-level input is a subscription bound to a view, one per event type the way `window.on_mouse_event::<T>` is: `WindowOnKey`, `WindowOnMouseDown` / `Up` / `Move` / `Exit`, `WindowOnScrollWheel`, `WindowSetInterval` / `WindowSetTimeout` (GPUI spells the last two `cx.spawn` + `Timer::after`). The handler takes the matching GPUI event — `MouseDownEvent`, `ScrollWheelEvent` — and the platform window builds those into a `PlatformInput` for `WindowDispatchInput`, which is Rust's `Window::dispatch_event`. Any number of timers can be armed; each returns a handle for `WindowCancelTimer`, and one whose view goes stale is dropped the way Rust drops a `Task` with its entity.
+6. Window-level input is a subscription bound to a view, one per event type the way `window.on_mouse_event::<T>` is: `WindowOnKey`, `WindowOnMouseDown` / `Up` / `Move` / `Exit`, `WindowOnScrollWheel`, `WindowSetInterval` / `WindowSetTimeout` (GPUI spells the last two `cx.spawn` + `Timer::after`). The handler takes the matching GPUI event — `MouseDownEvent`, `ScrollWheelEvent` — and the platform window builds those into a `PlatformInput` for `WindowDispatchInput`, which is Rust's `Window::dispatch_event`. Any number of timers can be armed; each returns a handle for `WindowCancelTimer`, and one whose view goes stale is dropped the way Rust drops a `Task` with its entity. Work that is not on a clock but on another thread goes through `src/sys/executor.h`: `ExecSpawn` runs it on the pool and `WindowPost` brings the answer back to a listener on the main thread, which is where everything the UI owns is touched. A worker never reaches for an entity, a window or the frame arena.
 7. A blinking caret is state, not a function of the clock: `BlinkStart` / `Stop` / `Pause` / `Visible`, a port of `crates/base/src/input/base/blink_cursor.rs`. Sampling `TimeNow()` at paint time instead makes the caret invisible whenever nothing happens to repaint during the lit half. One cursor per field, as an entity — `InputState::blink` is Rust's `InputState::blink_cursor`. `InputFocus` / `InputBlur` start and stop it, the way Rust's `on_focus` / `on_blur` do, and the runtime does the same handoff for whichever `InputState` a view points `win->input` at, so only a custom text widget has to do it itself. `AppRequestAnim` is for real animation (the FPS HUD), never for a caret.
 8. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
 9. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
@@ -557,7 +566,8 @@ src/gpui/drawops.h/.cpp  the icon byte code and the machine that draws it
 src/gpui/svg.cpp       .svg -> that byte code, at load time
 src/gpui/asset_icons.cpp  assets/icons as that byte code, generated
 src/gpui/              layout, paint, assets, SVG, element tree
-src/sys/               system metrics, portable + one file per OS
+src/sys/               system metrics, the executor, the fetch table
+                       (portable + one file per OS where the OS differs)
 src/base/              crates/base unstyled primitives (Button, …)
 src/ui/                themed crates/ui façade (component::Button, Func0/Func1 callbacks)
 examples/              AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/

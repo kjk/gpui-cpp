@@ -9,6 +9,7 @@
 
 #include "gpui/platform.h"
 #include "gpui/paint.h"
+#include "sys/executor.h"
 
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
@@ -965,6 +966,42 @@ Str ClipboardGetText(Arena* a, Window* win) {
 
 // ─── app lifecycle ────────────────────────────────────────────────────────
 
+// ─── waking the loop ──────────────────────────────────────────────────────
+//
+// The main dispatch queue, which is the one thing here that is documented to
+// be safe to hand work to from any thread. The main run loop drains it in the
+// common modes, and nextEventMatchingMask below runs that run loop, so the
+// block lands even while the loop is asleep waiting for an event.
+//
+// It drains the queue itself rather than only waking: servicing the dispatch
+// queue does not produce an NSEvent, so nextEventMatchingMask would otherwise
+// go on sleeping until its deadline with the work already sitting there. The
+// event posted after it is what gets the loop around to drawing whatever the
+// tasks changed, and posting one is legal from the main thread, which is
+// where the block runs.
+static void WakeEventPost() {
+    NSEvent* ev = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                     location:NSZeroPoint
+                                modifierFlags:0
+                                    timestamp:0
+                                 windowNumber:0
+                                      context:nil
+                                      subtype:0
+                                        data1:0
+                                        data2:0];
+    if (ev) {
+        [NSApp postEvent:ev atStart:YES];
+    }
+}
+
+void PlatWake(App* app) {
+    (void)app;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      ExecDrain();
+      WakeEventPost();
+    });
+}
+
 bool PlatInit(App* app) {
     (void)app;
     @autoreleasepool {
@@ -1094,7 +1131,7 @@ int AppRun(App* app) {
                     }
                 }
             }
-            if (!anyDirty) {
+            if (!anyDirty && ExecQueued() == 0) {
                 NSDate* deadline =
                     waitS <= 0 ? [NSDate distantPast]
                                : [NSDate dateWithTimeIntervalSinceNow:waitS];
@@ -1106,6 +1143,9 @@ int AppRun(App* app) {
                     [NSApp sendEvent:ev];
                 }
             }
+            // PlatWake's block usually got here first; this is for a task
+            // posted from the main thread itself, which never wakes anything.
+            ExecDrain();
 
             now = TimeNow();
             for (int i = 0; i < app->windows.len; i++) {

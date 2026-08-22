@@ -6,6 +6,7 @@
    on all three. */
 
 #include "sys/http.h"
+#include "sys/executor.h"
 
 namespace gpui {
 
@@ -65,6 +66,13 @@ static Mutex gFetchLock;
 static int gFetchPending = 0;
 static int gFetchNext = 0;
 static bool gHttpEnabled = true;
+// Read on the main thread when a fetch is started and run on the main thread
+// when it lands, so it needs no lock of its own.
+static Func0 gOnFetchDone;
+
+void HttpSetOnFetchDone(Func0 f) {
+    gOnFetchDone = f;
+}
 
 void HttpSetEnabled(bool on) {
     gFetchLock.Lock();
@@ -106,9 +114,9 @@ static void SlotDrop(FetchSlot* s) {
     s->state = FetchState::None;
 }
 
-// Runs on the worker. The slot index is still ours: eviction skips Pending.
-static void FetchWorker(void* arg) {
-    FetchJob* job = (FetchJob*)arg;
+// Runs on a pool thread. The slot index is still ours: eviction skips
+// Pending.
+static void FetchWorker(FetchJob* job) {
     HttpRsp r;
     bool ok = HttpGet(job->url, &r);
     bool got = ok && r.status >= 200 && r.status < 300 && r.body.len > 0;
@@ -203,7 +211,18 @@ FetchState HttpFetch(Str url, const uint8_t** bytes, int* len) {
     gFetchPending++;
     gFetchLock.Unlock();
 
-    ThreadRunDetached(FetchWorker, job);
+    // The pool, not a thread of its own: a document pointing at four pictures
+    // asks for four of these at once, and kMaxConcurrent is what keeps that
+    // from being four more threads every time.
+    if (!ExecSpawn(MkFunc0(FetchWorker, job), gOnFetchDone)) {
+        gFetchLock.Lock();
+        gFetchPending--;
+        SlotDrop(s);
+        gFetchLock.Unlock();
+        StrFree(job->url);
+        Free(nullptr, job);
+        return FetchState::None;
+    }
     return FetchState::Pending;
 }
 
@@ -222,7 +241,7 @@ void HttpFetchClear() {
         if (HttpFetchPending() == 0) {
             break;
         }
-        ThreadSleepMs(10);
+        PlatSleepMs(10);
     }
     gFetchLock.Lock();
     for (int i = 0; i < kFetchSlots; i++) {

@@ -4,6 +4,7 @@
 
 #include "gpui/platform.h"
 #include "gpui/paint.h"
+#include "sys/executor.h"
 
 #include <dwmapi.h>
 #include <imm.h>
@@ -935,6 +936,63 @@ Str ClipboardGetText(Arena* a, Window* win) {
 
 // ─── app lifecycle ────────────────────────────────────────────────────────
 
+// ─── waking the loop ──────────────────────────────────────────────────────
+//
+// A message-only window of its own, the way SumatraPDF's uitask does it,
+// rather than PostThreadMessage to the main thread. A thread message is only
+// ever seen by the one GetMessage call that pulls it off the queue, and every
+// modal loop Windows runs for us — TrackPopupMenu, the resize loop, a drag —
+// throws it away. A posted window message survives all of those: their
+// DispatchMessage finds the window and calls the proc below.
+
+static HWND gWakeHwnd = nullptr;
+static UINT gWakeMsg = 0;
+static const wchar_t* kWakeClass = L"GpuiExecDispatch";
+
+static LRESULT CALLBACK WakeProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == gWakeMsg && gWakeMsg != 0) {
+        ExecDrain();
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void WakeInit() {
+    if (gWakeHwnd) {
+        return;
+    }
+    // A registered window message rather than WM_APP+n: nothing else can be
+    // using it, whatever else ends up on this queue.
+    gWakeMsg = RegisterWindowMessageW(L"GpuiExecDrain");
+    static bool registered = false;
+    if (!registered) {
+        WNDCLASSEXW wc = {sizeof(wc)};
+        wc.lpfnWndProc = WakeProc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.lpszClassName = kWakeClass;
+        RegisterClassExW(&wc);
+        registered = true;
+    }
+    gWakeHwnd = CreateWindowExW(0, kWakeClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
+                                nullptr, GetModuleHandleW(nullptr), nullptr);
+}
+
+static void WakeShutdown() {
+    if (!gWakeHwnd) {
+        return;
+    }
+    DestroyWindow(gWakeHwnd);
+    gWakeHwnd = nullptr;
+}
+
+void PlatWake(App* app) {
+    (void)app;
+    HWND hwnd = gWakeHwnd;
+    if (hwnd) {
+        PostMessageW(hwnd, gWakeMsg, 0, 0);
+    }
+}
+
 bool PlatInit(App* app) {
     (void)app;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -963,11 +1021,13 @@ bool PlatInit(App* app) {
         RegisterClassExW(&wc);
         registered = true;
     }
+    WakeInit();
     return true;
 }
 
 void PlatShutdown(App* app) {
     (void)app;
+    WakeShutdown();
     CoUninitialize();
 }
 

@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 namespace base {
@@ -171,6 +172,72 @@ int PlatListDir(const char* dir, DirEntry* out, int max) {
 int PlatCoreCount() {
     long n = sysconf(_SC_NPROCESSORS_ONLN);
     return n > 0 ? (int)n : 1;
+}
+// ─── threads ─────────────────────────────────────────────────────────────
+
+void CondVar::Wait(Mutex* m, int timeoutMs) {
+    if (timeoutMs < 0) {
+        pthread_cond_wait(&cv, &m->lock);
+        return;
+    }
+    // pthread_cond_timedwait takes an absolute deadline on the same clock the
+    // condvar was created with, which is CLOCK_REALTIME by default.
+    struct timespec ts = {};
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += timeoutMs / 1000;
+    ts.tv_nsec += (long)(timeoutMs % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) {
+        ts.tv_sec += 1;
+        ts.tv_nsec -= 1000000000L;
+    }
+    pthread_cond_timedwait(&cv, &m->lock, &ts);
+}
+
+static void* ThreadMain(void* arg) {
+    auto* call = (Func0*)arg;
+    call->Call();
+    free(call);
+    return nullptr;
+}
+
+bool PlatThreadRun(Func0 f) {
+    auto* call = (Func0*)calloc(1, sizeof(Func0));
+    if (!call) {
+        return false;
+    }
+    *call = f;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    // Detached: nothing joins a worker, and an unjoined joinable thread leaks
+    // its stack for as long as the process runs.
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    pthread_t th = {};
+    int err = pthread_create(&th, &attr, ThreadMain, call);
+    pthread_attr_destroy(&attr);
+    if (err != 0) {
+        free(call);
+        return false;
+    }
+    return true;
+}
+
+uint64_t PlatThreadId() {
+    // pthread_t is a pointer on macOS and an integer on Linux; both fit, and
+    // the value is only ever compared with another from the same host.
+    pthread_t self = pthread_self();
+    uint64_t id = 0;
+    memcpy(&id, &self, sizeof(self) < sizeof(id) ? sizeof(self) : sizeof(id));
+    return id;
+}
+
+void PlatSleepMs(int ms) {
+    if (ms <= 0) {
+        return;
+    }
+    struct timespec ts = {};
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+    nanosleep(&ts, nullptr);
 }
 
 } // namespace base

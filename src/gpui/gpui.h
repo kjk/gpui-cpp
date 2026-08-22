@@ -3401,6 +3401,20 @@ void WindowOnMouseUp(Window* win, Listener l);
 void WindowOnMouseMove(Window* win, Listener l);
 void WindowOnMouseExit(Window* win, Listener l);
 void WindowOnScrollWheel(Window* win, Listener l);
+// cx.spawn(async move |this, cx| ...) with nothing to await: run `l` against
+// its entity on the main thread, once this pass of the event loop is over.
+// Safe to call from a worker thread, which is the point — a background job
+// finishes with one of these rather than touching an entity itself.
+//
+// `ev` is what the listener receives, and must outlive the post; it is
+// usually the job struct the worker filled in, and freeing it is the last
+// thing the listener does. The post is dropped if the window has closed or
+// the entity has gone by the time it runs, which is what Rust's
+// `this.update(cx, ..).ok()` swallows.
+//
+// See sys/executor.h for the half of this that has no window: ExecPost.
+void WindowPost(Window* win, Listener l, const void* ev = nullptr);
+
 // Repeating timer; GPUI's system_monitor does the same with a spawned task
 // that sleeps and calls cx.notify(). Returns a handle, or 0. Any number may
 // be armed at once.

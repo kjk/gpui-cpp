@@ -183,5 +183,40 @@ bool PlatSelfUsage(uint64_t* cpu100ns, uint64_t* memBytes) {
     }
     return true;
 }
+// ─── threads ─────────────────────────────────────────────────────────────
+
+// CreateThread rather than _beginthreadex: nothing a worker here runs touches
+// the CRT state that _beginthreadex exists to set up, and the static CRT is
+// happy either way.
+static DWORD WINAPI ThreadMain(LPVOID arg) {
+    auto* call = (Func0*)arg;
+    call->Call();
+    free(call);
+    return 0;
+}
+
+bool PlatThreadRun(Func0 f) {
+    auto* call = (Func0*)calloc(1, sizeof(Func0));
+    if (!call) {
+        return false;
+    }
+    *call = f;
+    HANDLE h = CreateThread(nullptr, 0, ThreadMain, call, 0, nullptr);
+    if (!h) {
+        free(call);
+        return false;
+    }
+    // Nothing joins a worker, so the handle is dropped here rather than kept.
+    CloseHandle(h);
+    return true;
+}
+
+uint64_t PlatThreadId() {
+    return (uint64_t)GetCurrentThreadId();
+}
+
+void PlatSleepMs(int ms) {
+    Sleep((DWORD)(ms < 0 ? 0 : ms));
+}
 
 } // namespace base

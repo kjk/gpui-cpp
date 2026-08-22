@@ -106,6 +106,7 @@ int GpuiMain(int argc, char** argv) {
     TestHttp();
     TestArenaStr();
     TestFmt();
+    TestExecutor();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

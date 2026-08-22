@@ -69,9 +69,15 @@ enum class FetchState : int32_t {
 // changing from Pending to Done is what a repaint is for.
 FetchState HttpFetch(Str url, const uint8_t** bytes, int* len);
 
-// How many fetches are running. The window polls this to know whether it has
-// a reason to come back — see WindowTimerMs.
+// How many fetches are running.
 int HttpFetchPending();
+
+// What to call on the main thread once a fetch has landed, whether it
+// arrived or failed. The window installs a repaint here: a picture that was
+// not ready when the frame was drawn is a reason to draw another one, and
+// this is what says when. Without it a fetch still completes and the table
+// still answers Done — nothing would think to look.
+void HttpSetOnFetchDone(Func0 f);
 
 // Forget every fetched body, waiting for the workers to finish first.
 // AppFree calls it.
@@ -81,12 +87,5 @@ void HttpFetchClear();
 // a suite never touches the network.
 void HttpSetEnabled(bool on);
 bool HttpEnabled();
-
-// ─── the one thread primitive ─────────────────────────────────────────────
-
-// Runs `fn(arg)` on a thread of its own and forgets it. Nothing here joins a
-// thread — a fetch reports itself by filling in the table.
-void ThreadRunDetached(void (*fn)(void*), void* arg);
-void ThreadSleepMs(int ms);
 
 } // namespace gpui

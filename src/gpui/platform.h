@@ -111,6 +111,13 @@ bool PlatInit(App* app);
 void PlatShutdown(App* app);
 // Restart the window's repeating timer at `ms`; 0 stops it.
 void PlatSetTimer(Window* win, int ms);
+// Get the event loop to come back and drain the main-thread queue
+// (sys/executor.h). Called from any thread, including a worker, so each
+// platform picks the one wake its loop can take from outside: a posted
+// message on Windows, a byte down a pipe on X11, a block on the main dispatch
+// queue on macOS. AppNew installs it with ExecSetWake and nothing else calls
+// it.
+void PlatWake(App* app);
 // Ask the OS for a pointer shape. Only called when it changes.
 void PlatSetCursor(Window* win, CursorKind kind);
 // GPUI holds the pointer for the length of a press, so a drag that leaves the

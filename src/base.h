@@ -164,6 +164,11 @@ inline void ZeroStruct(T* s) {
 }
 
 struct Func0 {
+    // A function that takes nothing at all still has to have something in
+    // userData, and Func1 keeps a flag in that word's lowest bit, so the
+    // sentinel is even: ~1 rather than -1.
+    static constexpr uintptr_t kFuncNoArg = ~(uintptr_t)1;
+
     void* fn = nullptr;
     uintptr_t userData = 0;
 
@@ -172,6 +177,11 @@ struct Func0 {
     bool IsValid() const { return fn != nullptr; }
     void Call() const {
         if (!fn) {
+            return;
+        }
+        if (userData == kFuncNoArg) {
+            auto func = (void (*)())fn;
+            func();
             return;
         }
         auto func = (void (*)(uintptr_t))fn;
@@ -187,32 +197,87 @@ Func0 MkFunc0(void (*fn)(T*), T* d) {
     return res;
 }
 
+// A function with nothing to close over. Everything that takes a Func0 takes
+// one of these too, so a caller with no state does not have to invent a
+// pointer to pass.
+inline Func0 MkFunc0Void(void (*fn)()) {
+    auto res = Func0{};
+    res.fn = (void*)fn;
+    res.userData = Func0::kFuncNoArg;
+    return res;
+}
+
 template <typename T>
 struct Func1 {
-    void (*fn)(uintptr_t, T) = nullptr;
+    // Bit 0 of userData says the function does not look at the argument, so
+    // Call() drops it — that is how a Func0 stands in for a Func1. Everything
+    // stored here is at least 2-byte aligned and kFuncNoArg is even, so the
+    // bit is free and the struct stays two words.
+    static constexpr uintptr_t kDropsArgBit = 1;
+    static constexpr uintptr_t kFuncNoArg = Func0::kFuncNoArg;
+
+    // Untyped, like Func0's, because Call below reads it as three different
+    // signatures and gcc's -Wcast-function-type refuses a cast from one
+    // function type straight to another. Every one of them goes through the
+    // void* instead, which is the cast MkFunc0 has always made.
+    void* fn = nullptr;
     uintptr_t userData = 0;
 
     Func1() = default;
+    // A Func0 is a Func1 that ignores its argument. Implicit on purpose: a
+    // queue of Func1 is then also a queue of Func0.
+    Func1(const Func0& that) { // NOLINT
+        this->fn = that.fn;
+        this->SetData(that.userData, true);
+    }
 
+    void SetData(uintptr_t d, bool dropsArg) {
+        userData = d | (dropsArg ? kDropsArgBit : 0);
+    }
     bool IsValid() const { return fn != nullptr; }
     void Call(T arg) const {
         if (!fn) {
             return;
         }
-        fn(userData, arg);
+        uintptr_t d = userData & ~kDropsArgBit;
+        if (userData & kDropsArgBit) {
+            if (d == kFuncNoArg) {
+                auto func = (void (*)())fn;
+                func();
+            } else {
+                auto func = (void (*)(uintptr_t))fn;
+                func(d);
+            }
+            return;
+        }
+        if (d == kFuncNoArg) {
+            auto func = (void (*)(T))fn;
+            func(arg);
+            return;
+        }
+        auto func = (void (*)(uintptr_t, T))fn;
+        func(d, arg);
     }
 };
 
 template <typename T1, typename T2>
 Func1<T2> MkFunc1(void (*fn)(T1*, T2), T1* d) {
     auto res = Func1<T2>{};
-    using fptr = void (*)(uintptr_t, T2);
-    res.fn = (fptr)fn;
-    res.userData = (uintptr_t)d;
+    res.fn = (void*)fn;
+    res.SetData((uintptr_t)d, false);
     return res;
 }
 
-// A plain non-recursive lock. Only the arena uses it.
+// The argument and nothing else.
+template <typename T2>
+Func1<T2> MkFunc1Void(void (*fn)(T2)) {
+    auto res = Func1<T2>{};
+    res.fn = (void*)fn;
+    res.SetData(Func1<T2>::kFuncNoArg, false);
+    return res;
+}
+
+// A plain non-recursive lock.
 struct Mutex {
 #if GPUI_OS_WINDOWS
     SRWLOCK lock = SRWLOCK_INIT;
@@ -226,6 +291,45 @@ struct Mutex {
     Mutex() = default;
     ~Mutex() = default;
 };
+
+// The other half of a lock: sleep until someone says there is something to
+// do. A worker that spun on its queue instead would burn a core for as long
+// as the process ran, so the pool in sys/executor.h waits on one of these.
+//
+// Wait() must be called with `m` held, and re-takes it before returning. A
+// wake can arrive with nothing to show for it, which is why every Wait() in
+// this tree sits inside a loop over the condition it is waiting for.
+struct CondVar {
+#if GPUI_OS_WINDOWS
+    CONDITION_VARIABLE cv = CONDITION_VARIABLE_INIT;
+    void Wait(Mutex* m, int timeoutMs) {
+        DWORD t = timeoutMs < 0 ? INFINITE : (DWORD)timeoutMs;
+        SleepConditionVariableSRW(&cv, &m->lock, t, 0);
+    }
+    void WakeOne() { WakeConditionVariable(&cv); }
+    void WakeAll() { WakeAllConditionVariable(&cv); }
+#else
+    pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
+    void Wait(Mutex* m, int timeoutMs);
+    void WakeOne() { pthread_cond_signal(&cv); }
+    void WakeAll() { pthread_cond_broadcast(&cv); }
+#endif
+    CondVar() = default;
+    ~CondVar() = default;
+};
+
+// ─── threads ─────────────────────────────────────────────────────────────
+//
+// Everything this tree runs off the main thread runs through sys/executor.h;
+// these three are what that is built out of, and are not otherwise called.
+
+// Runs `f` on a thread of its own and forgets it. Nothing here joins a
+// thread: a worker reports itself by writing somewhere both sides can see.
+// False if the OS would not start one, and then `f` never runs.
+bool PlatThreadRun(Func0 f);
+// Identifies the calling thread. Only ever compared, never interpreted.
+uint64_t PlatThreadId();
+void PlatSleepMs(int ms);
 
 static const uint64_t kArenaHeaderSize = 256;
 

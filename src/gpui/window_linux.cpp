@@ -7,6 +7,7 @@
 
 #include "gpui/platform.h"
 #include "gpui/paint.h"
+#include "sys/executor.h"
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
@@ -16,6 +17,7 @@
 #include <cairo/cairo.h>
 #include <cairo/cairo-xlib.h>
 #include <locale.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <time.h>
 #include <unistd.h>
@@ -1155,8 +1157,65 @@ void PlatSetTimer(Window* win, int ms) {
 
 // ─── app lifecycle ────────────────────────────────────────────────────────
 
+// ─── waking the loop ──────────────────────────────────────────────────────
+//
+// A pipe, because poll() below is what the loop blocks in and a pipe is a
+// file descriptor it can watch alongside the X connection. The alternative —
+// XSendEvent to our own window — would need a second Display connection to be
+// safe from another thread, which is a heavier thing to own than two fds.
+
+static int gWakeFd[2] = {-1, -1};
+
+static void WakeInit() {
+    if (gWakeFd[0] >= 0) {
+        return;
+    }
+    if (pipe(gWakeFd) != 0) {
+        gWakeFd[0] = -1;
+        gWakeFd[1] = -1;
+        return;
+    }
+    // Non-blocking both ways: a writer must never stall on a full pipe, and
+    // the drain below reads until it would block.
+    fcntl(gWakeFd[0], F_SETFL, O_NONBLOCK);
+    fcntl(gWakeFd[1], F_SETFL, O_NONBLOCK);
+}
+
+static void WakeShutdown() {
+    for (int i = 0; i < 2; i++) {
+        if (gWakeFd[i] >= 0) {
+            close(gWakeFd[i]);
+            gWakeFd[i] = -1;
+        }
+    }
+}
+
+// Empty the pipe. Any number of bytes mean the same thing — look at the
+// queue — so what matters is that poll() does not keep firing on them.
+static void WakeConsume() {
+    if (gWakeFd[0] < 0) {
+        return;
+    }
+    char buf[64];
+    while (read(gWakeFd[0], buf, sizeof(buf)) > 0) {
+        // again
+    }
+}
+
+void PlatWake(App* app) {
+    (void)app;
+    int fd = gWakeFd[1];
+    if (fd < 0) {
+        return;
+    }
+    char b = 1;
+    ssize_t n = write(fd, &b, 1);
+    (void)n; // a full pipe already says what this one would have
+}
+
 bool PlatInit(App* app) {
     (void)app;
+    WakeInit();
     if (gDpy) {
         return true;
     }
@@ -1191,6 +1250,7 @@ bool PlatInit(App* app) {
 
 void PlatShutdown(App* app) {
     (void)app;
+    WakeShutdown();
     if (gClipboard.s) {
         StrFree(gClipboard);
         gClipboard = {};
@@ -1326,11 +1386,16 @@ int AppRun(App* app) {
                 }
             }
         }
-        if (!anyDirty && XPending(gDpy) == 0) {
+        if (!anyDirty && XPending(gDpy) == 0 && ExecQueued() == 0) {
             int timeoutMs = waitS <= 0 ? 0 : (int)(waitS * 1000.0);
-            struct pollfd pfd = {fd, POLLIN, 0};
-            poll(&pfd, 1, timeoutMs);
+            struct pollfd pfd[2] = {{fd, POLLIN, 0}, {gWakeFd[0], POLLIN, 0}};
+            poll(pfd, gWakeFd[0] >= 0 ? 2 : 1, timeoutMs);
         }
+        // Whatever woke us, the queue is drained on the way past: a worker
+        // that finished while we were asleep wrote the byte that ended the
+        // poll, and one that finished while we were drawing did not have to.
+        WakeConsume();
+        ExecDrain();
 
         now = TimeNow();
         for (int i = 0; i < app->windows.len; i++) {

@@ -1,4 +1,4 @@
-/* WinHTTP: the GET, and the two threading calls the fetch table needs.
+/* WinHTTP: the GET the fetch table makes off the main thread.
 
    WinHTTP rather than WinINet because this runs off the UI thread and wants
    no per-user cache and no dial-up prompt, and rather than sockets because
@@ -9,41 +9,6 @@
 #include <winhttp.h>
 
 namespace gpui {
-
-// What CreateThread wants, wrapping what ThreadRunDetached was given.
-struct ThreadStart {
-    void (*fn)(void*) = nullptr;
-    void* arg = nullptr;
-};
-
-static DWORD WINAPI ThreadEntry(void* p) {
-    ThreadStart* t = (ThreadStart*)p;
-    void (*fn)(void*) = t->fn;
-    void* arg = t->arg;
-    Free(nullptr, t);
-    fn(arg);
-    return 0;
-}
-
-void ThreadRunDetached(void (*fn)(void*), void* arg) {
-    ThreadStart* t = AllocArray<ThreadStart>(1);
-    if (!t) {
-        return;
-    }
-    t->fn = fn;
-    t->arg = arg;
-    HANDLE h = CreateThread(nullptr, 0, ThreadEntry, t, 0, nullptr);
-    if (!h) {
-        Free(nullptr, t);
-        return;
-    }
-    // Nothing joins it: filling in the fetch table is how a worker reports.
-    CloseHandle(h);
-}
-
-void ThreadSleepMs(int ms) {
-    Sleep((DWORD)(ms < 0 ? 0 : ms));
-}
 
 // One WinHTTP handle, closed however the function below leaves. There is no
 // exception here to unwind; this is only so that the several early returns do
