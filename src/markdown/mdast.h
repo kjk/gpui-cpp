@@ -11,8 +11,9 @@
      - `Option<String>` is a `Str` whose `s` is null when the field is
        `None`. `Some("")` keeps a non-null pointer, which `StrOwn` in util.h
        guarantees.
-     - Children are an `ArenaVec<Node*>` from the arena the caller passed to
-       `ToMdast`; nothing is freed one node at a time. */
+     - Children are an `ArenaVec<ArenaNode>` — four-byte offsets into the
+       arena the caller passed to `ToMdast`; nothing is freed one node at a
+       time. */
 
 #ifndef GPUI_MARKDOWN_MDAST_H_
 #define GPUI_MARKDOWN_MDAST_H_
@@ -22,11 +23,22 @@
 namespace markdown {
 
 using base::Arena;
+using base::ArenaPtr;
+using base::ArenaPtrGet;
+using base::ArenaPtrOf;
 using base::ArenaStr;
 using base::ArenaStrGet;
 using base::ArenaVec;
 using base::kArenaStrNone;
 using base::Str;
+
+struct Node;
+
+// A link from a node to one of its children. Four bytes rather than eight:
+// a tree of a few thousand nodes is a few thousand of these plus the
+// ArenaVec segments holding them, and every one of them points into the same
+// arena the node itself is in.
+using ArenaNode = ArenaPtr<Node>;
 
 // unist::Point.
 struct UnistPoint {
@@ -118,8 +130,8 @@ enum NodeFlag : uint8_t {
 struct Node {
     // Root, Paragraph, Heading, Blockquote, List, ListItem, Emphasis, Strong,
     // Link, LinkReference, FootnoteDefinition, Table, TableRow, TableCell,
-    // Delete.
-    ArenaVec<Node*> children = {};
+    // Delete. `NodeKids(a, n)` walks them, `NodeChild(a, n, i)` indexes.
+    ArenaVec<ArenaNode> children = {};
 
     // Table.
     ArenaVec<AlignKind> align = {};
@@ -178,6 +190,50 @@ static_assert(sizeof(Node) == 3 * 24 + 8 * 8 + 4 + 4,
               "Node has picked up padding; order the fields largest first");
 
 Node* NodeNew(Arena* a, NodeKind kind);
+
+// Appending a child, which is where the offset is taken.
+inline void NodeAddChild(Arena* a, Node* parent, Node* child) {
+    parent->children.Append(a, ArenaPtrOf(a, child));
+}
+
+// The `i`th child, or null if there is no such child.
+inline Node* NodeChild(Arena* a, const Node* n, int i) {
+    if (i < 0 || i >= n->children.len) {
+        return nullptr;
+    }
+    return ArenaPtrGet(a, n->children[i]);
+}
+
+// The children as something a range-for reads:
+//
+//     for (Node* child : NodeKids(a, n)) { ... }
+//
+// The offsets are resolved one at a time as the walk reaches them, so this
+// is the ArenaVec walk with a lookup on the dereference and nothing else.
+struct NodeKidsRange {
+    Arena* a;
+    ArenaVec<ArenaNode>::Iter it;
+    ArenaVec<ArenaNode>::Iter last;
+
+    struct Iter {
+        Arena* a;
+        ArenaVec<ArenaNode>::Iter it;
+
+        Node* operator*() const { return ArenaPtrGet(a, *it); }
+        Iter& operator++() {
+            ++it;
+            return *this;
+        }
+        bool operator!=(const Iter& o) const { return it != o.it; }
+    };
+
+    Iter begin() const { return Iter{a, it}; }
+    Iter end() const { return Iter{a, last}; }
+};
+
+inline NodeKidsRange NodeKids(Arena* a, const Node* n) {
+    return NodeKidsRange{a, n->children.begin(), n->children.end()};
+}
 
 // One of a node's eight strings, read out of the arena it was parsed into.
 // The Str points into that arena and lives exactly as long as it does.

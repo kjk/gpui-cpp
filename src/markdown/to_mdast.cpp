@@ -177,7 +177,7 @@ static void TailPush(CompileContext* c, Node* child) {
         child->Set(NodeHasPosition, true);
     }
     Node* node = TailMut(c);
-    node->children.Append(c->a, child);
+    NodeAddChild(c->a, node, child);
     TreeFrame& frame = TreeTail(c);
     frame.stack.Append(c->a, child);
     frame.eventStack.Append(c->a, c->index);
@@ -209,9 +209,7 @@ static void OnEnterBuffer(CompileContext* c) {
 
 static void OnEnterData(CompileContext* c) {
     Node* parent = TailMut(c);
-    Node* last = parent->children.len > 0
-                     ? parent->children[parent->children.len - 1]
-                     : nullptr;
+    Node* last = NodeChild(c->a, parent, parent->children.len - 1);
     if (last && last->kind == NodeKind::Text) {
         TailPushAgain(c, last);
     } else {
@@ -567,7 +565,7 @@ static void OnExitLabelText(CompileContext* c) {
     Node* node = TailMut(c);
     if (node->kind == NodeKind::Link) {
         node->children = fragment->children;
-        fragment->children = ArenaVec<Node*>{};
+        fragment->children = ArenaVec<ArenaNode>{};
     } else if (node->kind == NodeKind::Image) {
         node->alt = Keep(c, label);
     }
@@ -581,7 +579,7 @@ static void OnExitLineEnding(CompileContext* c) {
     if (c->hardBreakAfter) {
         UnistPoint end = ToUnist((*c->events)[c->index].point);
         Node* node = TailMut(c);
-        Node* tail = node->children[node->children.len - 1];
+        Node* tail = NodeChild(c->a, node, node->children.len - 1);
         tail->position.end = end;
         c->hardBreakAfter = false;
         return;
@@ -611,7 +609,7 @@ static void OnExitMedia(CompileContext* c) {
         return;
     }
     Node* parent = TailMut(c);
-    Node* node = parent->children[parent->children.len - 1];
+    Node* node = NodeChild(c->a, parent, parent->children.len - 1);
     if (node->kind == NodeKind::FootnoteReference) {
         node->identifier = Keep(c, reference.identifier);
         node->label = Keep(c, reference.label);
@@ -634,12 +632,14 @@ static void OnExitMedia(CompileContext* c) {
 
 static void OnExitListItem(CompileContext* c) {
     Node* item = TailMut(c);
-    if (item->Has(NodeHasChecked) && item->children.len > 0 &&
-        item->children[0]->kind == NodeKind::Paragraph) {
-        Node* paragraph = item->children[0];
-        if (paragraph->children.len > 0 &&
-            paragraph->children[0]->kind == NodeKind::Text) {
-            Node* text = paragraph->children[0];
+    Node* first = NodeChild(c->a, item, 0);
+    if (item->Has(NodeHasChecked) && first &&
+        first->kind == NodeKind::Paragraph) {
+        Node* paragraph = first;
+        Node* firstInParagraph = NodeChild(c->a, paragraph, 0);
+        if (firstInParagraph &&
+            firstInParagraph->kind == NodeKind::Text) {
+            Node* text = firstInParagraph;
             UnistPoint point = text->position.start;
             Str value = Get(c, text->value);
             int32_t start = 0;
@@ -661,8 +661,9 @@ static void OnExitListItem(CompileContext* c) {
             if (start == value.len) {
                 // Remove the empty text: the paragraph was only a
                 // checkbox. Two cursors one apart, shifting the rest down.
-                ArenaVec<Node*>::Iter dst = paragraph->children.begin();
-                ArenaVec<Node*>::Iter src = dst;
+                ArenaVec<ArenaNode>::Iter dst =
+                    paragraph->children.begin();
+                ArenaVec<ArenaNode>::Iter src = dst;
                 ++src;
                 for (; src != paragraph->children.end(); ++dst, ++src) {
                     *dst = *src;

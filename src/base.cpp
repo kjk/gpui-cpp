@@ -405,6 +405,32 @@ ArenaStr ArenaStrAppend(Arena* a, ArenaStr s, Str more) {
     return ((uint64_t)(len + (uint32_t)more.len) << 32) | (uint32_t)at;
 }
 
+uint32_t ArenaOffsetOf(Arena* a, const void* p) {
+    if (!a || !p) {
+        return kArenaPtrNone;
+    }
+    const char* at = (const char*)p;
+    for (Arena* node = a->current; node; node = node->prev) {
+        const char* lo = (const char*)node;
+        if (at < lo || at >= lo + node->pos) {
+            continue;
+        }
+        return (uint32_t)(node->basePos + (uint64_t)(at - lo));
+    }
+    return kArenaPtrNone;
+}
+
+void* ArenaAtOffset(Arena* a, uint32_t off) {
+    if (off == kArenaPtrNone) {
+        return nullptr;
+    }
+    Arena* node = ArenaBlockAt(a, off);
+    if (!node) {
+        return nullptr;
+    }
+    return (char*)node + ((uint64_t)off - node->basePos);
+}
+
 Str ArenaStrGet(Arena* a, ArenaStr s) {
     if (!ArenaStrIsSet(s)) {
         return {};

@@ -1872,3 +1872,43 @@ cargo run -p system_monitor
   at 144 bytes is 434 KB of the 1151, and the rest is the event list and the
   ArenaVec segments the children sit in. Since the three entries above it
   started, prose is 1646 -> 1151 KB and the entity shape is 660 -> 151.
+
+- 2026-08-22: `ArenaPtr<T>`, and a node's children are four bytes each. The
+  same trade as `ArenaStr` one level down: an offset into the arena's
+  position space instead of an address, in four bytes instead of eight,
+  `ArenaOffsetOf`/`ArenaAtOffset` doing the walk and the template wrapper
+  keeping a node offset from being read back as an event offset. Zero is
+  null, which costs nothing because a block's header sits at its own offset
+  zero and no allocation ever lands there.
+
+  `Node::children` is `ArenaVec<ArenaNode>` now. The Node itself is the same
+  144 bytes — an ArenaVec handle is two pointers and a length whatever it
+  holds — so all of the saving is in the segments the children sit in, which
+  is exactly the half of a link that an address spends on information the
+  arena already has.
+
+  The walk is `NodeKids(a, n)`, a range whose iterator resolves one offset on
+  the dereference and is otherwise the ArenaVec iterator, so the twelve
+  `for (const Node* child : n->children)` loops read the way they did. Where
+  the arena was not already in hand it was one parameter: `NodeToStringLen`
+  now takes it, and the tests hang it off the same `gParsedInto` the
+  ArenaStr change introduced.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose         1150.9 KB  17.93x     1091.9 KB  17.01x     -5.1%
+    nested         654.0 KB  10.21x      611.6 KB   9.55x     -6.5%
+    gfm tables    2023.6 KB  31.57x     1866.9 KB  29.13x     -7.7%
+    entities       151.0 KB   2.35x      144.9 KB   2.26x     -4.0%
+
+  Three runs either side, medians: prose 8.64/8.71/8.86 -> 8.66/9.02/8.46 ms,
+  nested 9.66/9.76/9.84 -> 9.52/10.46/9.65, tables 13.66/13.46/14.20 ->
+  13.25/13.69/13.67, entities 6.03/5.96/5.96 -> 5.94/5.97/5.92. `tokenize`,
+  which builds no nodes, sat at 7.81/7.96/8.04 -> 7.75/7.88/7.82 through all
+  of it. The extra lookup per child dereference does not show: the block walk
+  is one comparison against `current` for a tree that never outgrew its first
+  block, and the segments being half the size buys back whatever it costs.
+
+  The shapes rank by children-per-node, not by node count — tables saved
+  157 KB, prose 59 KB, entities 6 KB.

@@ -2,7 +2,10 @@
 
    A string packed into one 64-bit word: the length in the upper half, the
    offset into the arena's position space in the lower. Half what a `Str`
-   costs, which is what an mdast Node holding eight of them is for. */
+   costs, which is what an mdast Node holding eight of them is for.
+
+   `ArenaPtr<T>` is the same trade for a pointer: four bytes of offset into
+   the same position space. */
 
 #include "Test.h"
 
@@ -141,8 +144,74 @@ static void AppendingToAnOlderStringCopies() {
     ArenaDelete(a);
 }
 
+// ─── ArenaPtr ────────────────────────────────────────────────────────────
+
+struct PtrThing {
+    int32_t a;
+    int32_t b;
+};
+
+static void APointerGoesThereAndBack() {
+    Arena* arena = ArenaNew();
+    PtrThing* one = ArenaNew<PtrThing>(arena);
+    one->a = 11;
+    one->b = 22;
+    PtrThing* two = ArenaNew<PtrThing>(arena);
+    two->a = 33;
+
+    ArenaPtr<PtrThing> p = ArenaPtrOf(arena, one);
+    ArenaPtr<PtrThing> q = ArenaPtrOf(arena, two);
+    utassert(p.IsSet() && q.IsSet());
+    utassert(p != q);
+    static_assert(sizeof(ArenaPtr<PtrThing>) == 4, "an ArenaPtr is an offset");
+
+    utassert(ArenaPtrGet(arena, p) == one);
+    utassert(ArenaPtrGet(arena, q) == two);
+    utassert(ArenaPtrGet(arena, p)->a == 11);
+    utassert(ArenaPtrGet(arena, p)->b == 22);
+
+    // A default one is null, and reading it back is null rather than a
+    // pointer at the arena's own header.
+    ArenaPtr<PtrThing> none = {};
+    utassert(!none.IsSet());
+    utassert(none.off == kArenaPtrNone);
+    utassert(ArenaPtrGet(arena, none) == nullptr);
+
+    // Something that is not in this arena has no offset to name.
+    PtrThing onTheStack = {};
+    utassert(!ArenaPtrOf(arena, &onTheStack).IsSet());
+    ArenaDelete(arena);
+}
+
+// The offset is into the chain's position space, not into one block, so it
+// keeps meaning the same object once the arena has outgrown its first block.
+static void APointerSurvivesTheArenaChainingOn() {
+    Arena* arena = ArenaNew();
+    PtrThing* early = ArenaNew<PtrThing>(arena);
+    early->a = 7;
+    ArenaPtr<PtrThing> p = ArenaPtrOf(arena, early);
+
+    // Past any first block: the chain adds one, and `early` stays where it
+    // is because an arena never moves what it has handed out.
+    for (int i = 0; i < 200000; i++) {
+        (void)ArenaNew<PtrThing>(arena);
+    }
+    PtrThing* late = ArenaNew<PtrThing>(arena);
+    late->a = 9;
+    ArenaPtr<PtrThing> q = ArenaPtrOf(arena, late);
+
+    utassert(ArenaPtrGet(arena, p) == early);
+    utassert(ArenaPtrGet(arena, p)->a == 7);
+    utassert(ArenaPtrGet(arena, q) == late);
+    utassert(ArenaPtrGet(arena, q)->a == 9);
+    utassert(p.off < q.off);
+    ArenaDelete(arena);
+}
+
 void TestArenaStr() {
     TestSuite("arena_str");
+    APointerGoesThereAndBack();
+    APointerSurvivesTheArenaChainingOn();
     AppendingToTheNewestCostsOnlyTheBytes();
     AppendingToAnOlderStringCopies();
     WhatGoesInComesOut();
