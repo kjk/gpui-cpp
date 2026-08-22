@@ -159,22 +159,29 @@ static component::PopupMenu* PopupStoryMenu(MenuStory* self, Ctx* cx) {
     component::PopupMenu* menu =
         component::PopupMenu::New(cx, StrL("popup-menu-main"))
             ->MinW(250)
+            // Those actions live in the field's key context, which is where
+            // the shortcut beside each row is looked up.
+            ->ActionContext("Input")
             ->Link(StrL("About"),
                    StrL("https://github.com/longbridge/gpui-component"))
             ->CheckSide(MenuCheckSide(self))
             ->Separator()
             ->Menu(StrL("Handle Click"))
             ->Separator()
-            ->MenuWithKbd(StrL("Copy"), Chord(cx, "c"))
-            ->MenuWithKbd(StrL("Cut"), Chord(cx, "x"))
-            ->MenuWithKbd(StrL("Paste"), Chord(cx, "v"))
+            // The three rows name the actions rather than a keystroke:
+            // the shortcut shown is whatever the keymap has bound to each,
+            // and choosing one dispatches it to the focused field the way
+            // the chord would.
+            ->MenuWithAction(StrL("Copy"), input::Copy())
+            ->MenuWithAction(StrL("Cut"), input::Cut())
+            ->MenuWithAction(StrL("Paste"), input::Paste())
             ->Separator()
             ->MenuWithCheck(
                 StoryFmt(cx, "Check Side %s", CheckSideName(self->checkSide)),
                 checked)
             ->Kbd(Chord(cx, "t", true, true, false))
             ->Separator()
-            ->MenuWithKbd(StrL("Search"), Chord(cx, "f", true))
+            ->MenuWithAction(StrL("Search"), input::Search())
             ->Icon(IconName::Search)
             ->Separator();
 

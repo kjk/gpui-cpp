@@ -114,8 +114,42 @@ static void ABufferTooSmallStillEndsTheString() {
     utassert(StrSame(Str(buf, n), expected));
 }
 
+// Kbd::binding_for_action_in: the shortcut a row shows is looked up in the
+// keymap rather than typed by the caller, so it cannot drift from what is
+// actually bound. The input's chords are the ones a menu shows most.
+static void AShortcutComesFromTheBinding() {
+    InputInitKeys();
+    Keystroke k;
+    // The field's actions live in its own key context, and asking without one
+    // finds nothing — which is the same rule the matcher applies.
+    utassert(!KeystrokeForAction(input::Copy(), nullptr, &k));
+    utassert(KeystrokeForAction(input::Copy(), "Input", &k));
+    utassert(StrSame(k.key, StrL("c")));
+#if GPUI_OS_MAC
+    utassert(k.platform && !k.ctrl);
+#else
+    utassert(k.ctrl && !k.platform);
+#endif
+
+    // And it spells out the way this platform spells it.
+    char buf[32];
+    int n = KbdFormat(k, buf, 32);
+    utassert(n > 0);
+#if GPUI_OS_MAC
+    utassert(StrSame(Str(buf, n), StrL("\u2318C")));
+#else
+    utassert(StrSame(Str(buf, n), StrL("Ctrl+C")));
+#endif
+
+    // An action nothing binds has no shortcut to show, which is a row with
+    // nothing on its right rather than a blank box.
+    utassert(!KeystrokeForAction(ActionOf(StrL("t::NoSuchThing")), "Input",
+                                 &k));
+}
+
 void TestKbd() {
     TestSuite("kbd");
+    AShortcutComesFromTheBinding();
     TheModifiersComeFirstInPlatformOrder();
     ANamedKeyKeepsItsName();
     AnythingElseIsCapitalised();
