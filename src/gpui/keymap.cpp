@@ -593,6 +593,27 @@ void KeymapClearPending() {
     gNPending = 0;
 }
 
+Str KeyName(int vk) {
+    for (size_t i = 0; i < sizeof(kNamedKeys) / sizeof(kNamedKeys[0]); i++) {
+        if (kNamedKeys[i].vk == vk) {
+            return Str(kNamedKeys[i].name);
+        }
+    }
+    // A letter or a digit is its own lowercase name, which is how a binding
+    // spells it. The buffer is static because a name outlives the call and
+    // there is only ever one being looked at.
+    static char one[2] = {};
+    if ((vk >= 'A' && vk <= 'Z')) {
+        one[0] = (char)(vk - 'A' + 'a');
+        return Str(one, 1);
+    }
+    if (vk >= '0' && vk <= '9') {
+        one[0] = (char)vk;
+        return Str(one, 1);
+    }
+    return {};
+}
+
 bool KeymapPending() {
     return gNPending > 0;
 }
@@ -692,6 +713,52 @@ static uint32_t MatchStack(const CtxLevel* levels, int n, bool* pending,
         }
     }
     return MatchIn(nullptr, 0, pending, arg);
+}
+
+// Whether `b` is in play at this level and names `action`, and if so what its
+// first chord is.
+static bool BindingNames(const BoundKey& b, uint32_t action,
+                         const CtxLevel* levels, int n, KeyChord* out) {
+    if (b.action != action || b.nStrokes <= 0 ||
+        !BindingApplies(b, levels, n)) {
+        return false;
+    }
+    *out = b.strokes[0];
+    return true;
+}
+
+bool KeymapBindingForAction(uint32_t action, const uint32_t* contexts,
+                            int nContexts, KeyChord* out) {
+    if (!action || !out) {
+        return false;
+    }
+    if (nContexts > kMaxContextDepth) {
+        nContexts = kMaxContextDepth;
+    }
+    CtxLevel levels[kMaxContextDepth];
+    for (int i = 0; i < nContexts && contexts; i++) {
+        levels[i] = ResolveContext(contexts[i]);
+    }
+    if (!contexts) {
+        nContexts = 0;
+    }
+    // The scoped passes first, innermost out, then the bindings that named no
+    // context — the order KeymapMatch resolves a chord in, so the answer is
+    // the binding that chord would actually have fired.
+    for (int lvl = 0; lvl < nContexts; lvl++) {
+        for (int i = gNBindings - 1; i >= 0; i--) {
+            if (BindingNames(gBindings[i], action, levels + lvl,
+                             nContexts - lvl, out)) {
+                return true;
+            }
+        }
+    }
+    for (int i = gNBindings - 1; i >= 0; i--) {
+        if (BindingNames(gBindings[i], action, nullptr, 0, out)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,

@@ -183,5 +183,37 @@ El* Kbd::IntoEl() {
     return e;
 }
 
+bool KeystrokeForAction(uint32_t action, const char* context, Keystroke* out) {
+    if (!out) {
+        return false;
+    }
+    KeyChord c = {};
+    uint32_t ctx = context ? KeyContextOf(Str(context)) : 0;
+    if (!KeymapBindingForAction(action, context ? &ctx : nullptr,
+                                context ? 1 : 0, &c)) {
+        return false;
+    }
+    Str key = KeyName(c.vk);
+    if (!key.s) {
+        return false;
+    }
+    Keystroke k;
+    k.ctrl = c.ctrl;
+    k.alt = c.alt;
+    k.shift = c.shift;
+    k.platform = c.platform;
+    k.key = key;
+    *out = k;
+    return true;
+}
+
+Kbd* Kbd::ForAction(Ctx* cx, uint32_t action, const char* context) {
+    Keystroke k;
+    if (!KeystrokeForAction(action, context, &k)) {
+        return nullptr;
+    }
+    return Kbd::New(cx, k);
+}
+
 } // namespace component
 } // namespace gpui

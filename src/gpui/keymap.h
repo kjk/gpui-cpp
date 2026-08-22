@@ -140,6 +140,25 @@ struct KeyMatch {
 KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
                      int nContexts);
 
+// window.highest_precedence_binding_for_action, and the `_in_context`
+// variant when a context stack is given: the chord a caller would press to
+// reach `action`, which is what a menu row and a tooltip show beside a label.
+//
+// The search is the matcher's, run backwards: the last binding for an action
+// wins, a scoped binding beats an unscoped one, and an inner context beats an
+// outer. A binding written as a sequence answers with its first chord, the
+// way Rust's `keystrokes().first()` does. False when nothing is bound.
+//
+// `contexts` may be null, which asks only about the bindings that named no
+// context — Rust's `binding_for_action` with `None`.
+bool KeymapBindingForAction(uint32_t action, const uint32_t* contexts,
+                            int nContexts, KeyChord* out);
+
+// The name a key goes by in a binding spec — "c", "enter", "pagedown" — which
+// is the inverse of what KeyChordParse reads. Empty for a key with no name,
+// which is a key no binding could have named either.
+Str KeyName(int vk);
+
 // Whether a sequence is half-finished. The window asks before it offers a
 // keystroke to the focused field: GPUI matches the keystroke before the text
 // input is given it, which is what lets a sequence finish inside one.

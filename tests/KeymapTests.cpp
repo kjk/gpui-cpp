@@ -556,11 +556,66 @@ static void AFieldsChordsResolveInItsOwnContext() {
     KeymapClear();
 }
 
+// The other direction: the chord a caller would press to reach an action,
+// which is what a menu row and a tooltip show beside a label. Rust asks
+// `window.highest_precedence_binding_for_action`; the answer has to be the
+// binding that chord would actually fire, so the search runs in the matcher's
+// own order.
+static void TheChordAnActionIsReachedBy() {
+    KeymapClear();
+    uint32_t save = ActionOf(StrL("t::Save"));
+    uint32_t quit = ActionOf(StrL("t::Quit"));
+    uint32_t none = ActionOf(StrL("t::Unbound"));
+    KeyBinding b[] = {
+        {"ctrl-s", save, nullptr},
+        {"ctrl-q", quit, nullptr},
+        // Scoped, and later — both reasons this one wins inside Editor.
+        {"ctrl-shift-s", save, "Editor"},
+        // A sequence answers with its first chord, the way keystrokes().first
+        // does.
+        {"ctrl-k ctrl-w", quit, "Editor"},
+    };
+    KeymapBind(b, 4);
+    uint32_t editor = KeyContextOf(StrL("Editor"));
+
+    KeyChord c = {};
+    // With no context, only the unscoped bindings are in play.
+    utassert(KeymapBindingForAction(save, nullptr, 0, &c));
+    utassert(c.vk == 'S' && c.ctrl && !c.shift);
+
+    // Inside Editor the scoped one wins.
+    utassert(KeymapBindingForAction(save, &editor, 1, &c));
+    utassert(c.vk == 'S' && c.ctrl && c.shift);
+
+    utassert(KeymapBindingForAction(quit, &editor, 1, &c));
+    utassert(c.vk == 'K' && c.ctrl);
+
+    utassert(!KeymapBindingForAction(none, &editor, 1, &c));
+    utassert(!KeymapBindingForAction(0, &editor, 1, &c));
+
+    // The name a key goes by, which is what spells the chord back out.
+    utassert(StrSame(KeyName('S'), StrL("s")));
+    utassert(StrSame(KeyName(KeyPageDown), StrL("pagedown")));
+    utassert(StrSame(KeyName('7'), StrL("7")));
+
+    // Round trip: every name KeyChordParse reads, KeyName spells again.
+    const char* specs[] = {"enter", "escape", "tab", "space", "backspace",
+                           "delete", "left", "up", "right", "down",
+                           "home", "end", "pageup", "pagedown"};
+    for (const char* spec : specs) {
+        KeyChord parsed = {};
+        utassert(KeyChordParse(Str(spec), &parsed));
+        utassert(StrSame(KeyName(parsed.vk), Str(spec)));
+    }
+    KeymapClear();
+}
+
 void TestKeymap() {
     TestSuite("keymap");
     ABindingCarriesTheActionsPayload();
     AnActionCanBeDispatchedWithoutAKeystroke();
     AFieldsChordsResolveInItsOwnContext();
+    TheChordAnActionIsReachedBy();
     AChordIsReadTheWayRustSpellsIt();
     TheInnermostContextWins();
     TheLastBindingForAChordWins();
