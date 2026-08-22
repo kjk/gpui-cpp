@@ -2020,3 +2020,32 @@ cargo run -p system_monitor
   it. That was three fields to keep in step — offset, line, column — and is
   one now; the line the checkbox may have left behind falls out of the count
   on its own.
+
+- 2026-08-22: A node's end is a 16-bit length. `srcEnd` was a second offset;
+  it is `srcLen` now, saturating at 65535 — a node spanning more than that
+  reports the cap, and nothing marks that it was cut. Everything reading a
+  span here is a diagnostic, and no construct whose extent is acted on comes
+  near 64 KB, so the cap costs the Root of a large document its end and
+  nothing else. `NodeSrcEnd(n)` is one past the last byte; `NodeSetSrcEnd(n,
+  end)` writes the length; `NodeMoveSrcStart(n, to)` moves the start forward
+  and brings the length down by as much, which is the one thing an end offset
+  did for free — the GFM task list, stripping the checkbox off the front of a
+  paragraph, is the only caller.
+
+  **`sizeof(Node)` is 96 before and after.** Two 24-byte members, eight
+  4-byte strings and two 4-byte numbers is 88; the 2-byte length and the
+  three single bytes make 93, and `alignof(Node)` is 8 because an ArenaVec
+  holds pointers, so it rounds to 96 either way. The two bytes went into the
+  tail padding, which is three bytes now where it was one. The arena figures
+  are identical to the byte: prose 828.0 KB (12.90x), nested 462.2 KB
+  (7.21x), gfm tables 1379.6 KB (21.53x), entities 120.0 KB (1.87x).
+
+  Three runs either side, medians: prose 8.66/8.99/8.61 -> 8.81/8.77/9.08 ms,
+  nested 9.50/9.88/9.76 -> 9.67/9.73/9.66, tables 12.99/13.19/12.85 ->
+  13.00/13.05/13.52, entities 5.87/6.05/6.02 -> 6.04/6.05/6.14, with
+  `tokenize` at 7.73/7.99/7.68 -> 8.00/7.94/7.84.
+
+  What it buys, then, is not bytes today: it is a 2-byte field and three
+  bytes of padding where there was one 4-byte field and one, so the next
+  small field on a Node is free — and the field after that. What it costs is
+  the exact end of anything longer than 64 KB.

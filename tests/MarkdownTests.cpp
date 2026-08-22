@@ -230,10 +230,25 @@ static void TestMarkdownPositions(Arena* a) {
     Node* root = Parse(a, "one\n\n# two\n");
     Node* heading = Child(root, 1);
     utassert(heading->kind == NodeKind::Heading);
-    UnistPosition h = GetUnistPosition(StrL("one\n\n# two\n"), heading->srcStart,
-                                       heading->srcEnd);
+    UnistPosition h = GetUnistPosition(StrL("one\n\n# two\n"),
+                                       heading->srcStart, NodeSrcEnd(heading));
     utassert(h.start.line == 3 && h.start.column == 1);
     utassert(h.end.line == 3 && h.end.column == 6);
+
+    // A span longer than sixteen bits hold saturates rather than wraps: the
+    // length says 65535 and means "at least". A document this size is the
+    // ordinary way to reach it — no node whose extent anything acts on is
+    // anywhere near.
+    int32_t big = 70000;
+    char* wide = (char*)base::Alloc(a, big + 1);
+    for (int32_t i = 0; i < big; i++) {
+        wide[i] = (i % 64) == 63 ? ' ' : 'a';
+    }
+    wide[big] = 0;
+    Node* wideRoot = Parse(a, wide);
+    utassert(wideRoot->srcStart == 0);
+    utassert(wideRoot->srcLen == kNodeSrcLenMax);
+    utassert(NodeSrcEnd(wideRoot) == kNodeSrcLenMax);
 }
 
 // ─── the tree ─────────────────────────────────────────────────────────────
@@ -251,7 +266,8 @@ static void TestMarkdownFlow(Arena* a) {
     // A node keeps the two byte offsets, and the line and the column are
     // counted back out of the source for whoever wants them.
     utassert(heading->srcStart == 0);
-    utassert(heading->srcEnd == 13);
+    utassert(heading->srcLen == 13);
+    utassert(NodeSrcEnd(heading) == 13);
 
     root = Parse(a, "Setext\n===\n");
     utassert(Child(root, 0)->kind == NodeKind::Heading);

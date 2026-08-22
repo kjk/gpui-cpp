@@ -167,7 +167,7 @@ static Node* Resume(CompileContext* c) {
 static void TailPush(CompileContext* c, Node* child) {
     if (!child->Has(NodeHasPosition)) {
         child->srcStart = OffsetOf((*c->events)[c->index]);
-        child->srcEnd = child->srcStart;
+        child->srcLen = 0;
         child->Set(NodeHasPosition, true);
     }
     Node* node = TailMut(c);
@@ -189,7 +189,7 @@ static void TailPushAgain(CompileContext* c, Node* child) {
 static void TailPop(CompileContext* c) {
     uint32_t end = OffsetOf((*c->events)[c->index]);
     Node* node = TailMut(c);
-    node->srcEnd = end;
+    NodeSetSrcEnd(node, end);
     TreeFrame& frame = TreeTail(c);
     frame.stack.Pop();
     frame.eventStack.Pop();
@@ -574,7 +574,7 @@ static void OnExitLineEnding(CompileContext* c) {
         uint32_t end = OffsetOf((*c->events)[c->index]);
         Node* node = TailMut(c);
         Node* tail = NodeChild(c->a, node, node->children.len - 1);
-        tail->srcEnd = end;
+        NodeSetSrcEnd(tail, end);
         c->hardBreakAfter = false;
         return;
     }
@@ -666,9 +666,9 @@ static void OnExitListItem(CompileContext* c) {
             } else {
                 text->value =
                     Keep(c, Str(value.s + start, value.len - start));
-                text->srcStart = point;
+                NodeMoveSrcStart(text, point);
             }
-            paragraph->srcStart = point;
+            NodeMoveSrcStart(paragraph, point);
         }
     }
     OnExit(c);
@@ -864,7 +864,7 @@ Node* ToMdastCompile(const Vec<Event>& events, ParseState* parseState) {
     frame.tree->Set(NodeHasPosition, true);
     if (events.len > 0) {
         frame.tree->srcStart = OffsetOf(events[0]);
-        frame.tree->srcEnd = OffsetOf(events[events.len - 1]);
+        NodeSetSrcEnd(frame.tree, OffsetOf(events[events.len - 1]));
     }
     context.trees.Append(frame);
 
