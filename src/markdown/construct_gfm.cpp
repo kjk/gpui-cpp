@@ -1129,7 +1129,8 @@ void GfmAutolinkLiteralResolve(Tokenizer* t) {
                 }
 
                 if (replace.len > 0) {
-                    EditMapAdd(t->map, index - 1, 2, replace.els, replace.len);
+                    EditMapAdd(t->map, index - 1, 2, replace.Flatten(a),
+                               replace.len);
                 }
             }
             if (event.name == Name::Link) {

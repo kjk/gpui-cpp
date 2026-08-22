@@ -96,6 +96,7 @@ int GpuiMain(int argc, char** argv) {
     TestListSettings();
     TestStateStyle();
     TestClick();
+    TestArenaVec();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

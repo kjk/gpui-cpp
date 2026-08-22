@@ -1042,3 +1042,27 @@ cargo run -p system_monitor
   | prose, 64 KB                                      | 9.06 ms  | 8.68 ms  | -4%  |
 
   The 1 MB rows are the merge sort, not the index: the map is one entry per resolver edit for those shapes, and the sort was what grew. Verified with `bun cmd/test.ts` and `-dbg` (6880 checks each).
+
+- 2026-08-22: `ArenaVec` is a list of segments, not one block that reallocates. An arena hands back only the allocation on top of it, so the old flat grow — `VecRealloc` into the arena, double the capacity, copy — abandoned every block it outgrew: an n-element build cost about 2n element copies and left about 2n elements' worth of arena behind it. Elements now live in `ArenaVecSegment`s of 4, 16, 64, then doubling, linked oldest to newest, with `first`/`last`/`len` in the handle; nothing is ever copied or abandoned, and a `T*` or a `T&` taken from the vec stays good across an append, which the flat version could not promise. Parsing 64 KB of markdown takes 1589 KB of scratch arena where it took 3257 KB, in 6727 allocations where it took 7713.
+
+  Two things the design has to answer for. Segments are not contiguous, so `.els` is gone — the three callers that hand the elements to something taking a `const T*` (two `EditMapAdd`s, the Sankey generator) call `Flatten`, which returns the segment's own array when there is only one, which is nearly always. And indexing has to walk, so the first segment carries a `cache` pointer to the segment an index last landed in: walking i, i+1, i+2 stays inside one segment and costs the compare a flat array's bounds check would. `.len -= 1` is `Pop()`, which hands the room back to an earlier segment and keeps the emptied ones linked, so a pop and a push at a segment boundary allocate nothing.
+
+  What the benchmark decided, twice. The progression started at 16/64/256 and the cache lived in the handle, and that lost to the flat version by 8-10% on the shapes with the most vecs. Both halves of that were the handle's size, not the walking: an `EditMap::Entry` is two ints and one `ArenaVec`, and a table adds one entry per cell, which the map then sorts and walks. Padding the *old* flat handle from 16 to 32 bytes and changing nothing else reproduced the whole regression — 14.65 ms to 16.30 ms on `gfm tables`. So the handle went back to three words with the cache moved into the segment header, and the first segment to 4 elements, which is what most of these vecs ever hold. Both are marked in `src/base.h` as benchmark numbers to be revisited the same way.
+
+  | `bun cmd/bench.ts markdown -n=15`, median of 3 interleaved runs | before | after |     |
+  | --------------------------------------------------------------- | -------- | -------- | ---- |
+  | parse prose, 64 KB                                              | 8.79 ms  | 8.63 ms  | -2%  |
+  | parse gfm tables, 64 KB                                         | 14.11 ms | 13.67 ms | -3%  |
+  | parse character references, 64 KB                               | 6.30 ms  | 6.01 ms  | -5%  |
+  | parse nested quotes and lists, 64 KB                            | 9.78 ms  | 9.81 ms  | ~0   |
+  | tokenize, 64 KB                                                 | 7.82 ms  | 7.72 ms  | -1%  |
+  | to_mdast, 64 KB                                                 | 0.378 ms | 0.414 ms | +10% |
+  | parse prose, 1 MB                                               | 141.5 ms | 134.8 ms | -5%  |
+  | parse gfm tables, 1 MB                                          | 254.8 ms | 241.1 ms | -5%  |
+  | scratch arena, 64 KB prose                                      | 3257 KB  | 1589 KB  | -51% |
+
+  `to_mdast` is the one row that went the other way: it is `DelveMut` walking `node->children[stack[i]]` per event, two indexed reads that were a load and an index each, and an mdast `Node` is 8 bytes bigger for the wider handle. It is 4% of a parse and the parse it is part of got faster.
+
+  Taffy is the control — it uses `Vec`, not `ArenaVec`, and none of its rows moved: counterbalanced old/new/new/old runs of `bun cmd/bench.ts flexbox` land within 2% in both directions with no consistent sign.
+
+  `tests/ArenaVecTests.cpp` is new, because everything the tree already had only ever filled vecs small enough to sit in one segment: the boundary, both directions of iteration, `Pop`/`Truncate` handing an earlier segment back its room without spending arena, `Reserve`, `AppendMany`, `Flatten` both ways, and a copy of the handle reading the same elements. Verified with `bun cmd/test.ts` and `-dbg` (9316 checks each) and `bun cmd/build.ts -rel -all` / `-dbg -all`.

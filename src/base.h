@@ -277,6 +277,12 @@ T* ArenaNew(Arena* arena, Args&&... args) {
 #define GPUI_NOINLINE __attribute__((noinline))
 #endif
 
+// One arena block for an ArenaVec segment: `hdrSize` bytes of header
+// followed by `count` elements. Out of line so the template does not
+// carry the overflow checks into every instantiation.
+void* ArenaVecAlloc(struct Arena* a, int count, int elSize, int align,
+                    int hdrSize = 0);
+
 GPUI_NOINLINE bool VecRealloc(struct Arena* a, void** els, int len, int* cap,
                               int newCap, int elSize);
 
@@ -403,24 +409,233 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
 // thrown away with it, never destructed. This has no destructor and never
 // frees — the arena is what owns the memory — so a builder can take as many
 // items as the caller has instead of declaring a cap for them.
+//
+// It is a list of segments rather than one block that reallocates. An arena
+// hands back only the allocation on top of it, so a `Vec`-style grow of
+// anything that is not the newest thing in the arena copies the elements and
+// abandons the old block: the elements are copied over and over and the
+// abandoned blocks are never reused. Segments never move, so a build is one
+// store per element and the only waste is the tail of the last segment.
+// Parsing 64 KB of markdown took 3257 KB of scratch arena the old way and
+// takes 1589 KB this way, in fewer allocations.
+//
+// Two things follow from segments never moving. A `T*` or a `T&` taken from
+// the vec stays good across an append, which the flat version could not
+// promise. And the elements are not contiguous, so there is no `els` to hand
+// to something that wants an array — `Flatten` is that, and it costs nothing
+// for a vec that never left its first segment, which is most of them.
+template <typename T>
+struct ArenaVecSegment {
+    ArenaVecSegment<T>* next;
+    T* els;
+    // The segment an index last landed in, for the walk `operator[]` would
+    // otherwise start from the beginning every time. Only the first
+    // segment's copy is used — it lives in the segment rather than in the
+    // `ArenaVec` so the handle that a node or a builder embeds by value stays
+    // three words. That size is worth guarding: an `EditMap::Entry` is two
+    // ints and one of these, and the edit map sorts and walks thousands of
+    // them per document. Padding the old flat handle out to what a handle
+    // with the cache in it would cost, changing nothing else, made the
+    // markdown table benchmark 10% slower on its own.
+    ArenaVecSegment<T>* cache;
+    // Index of `els[0]` in the vec: the sum of the lengths before this one.
+    int base;
+    int len;
+    // Only the last segment ever takes an append, so a capacity per segment
+    // looks redundant — but `Truncate` makes an earlier segment the active
+    // one again and has to know how much room it has.
+    int cap;
+};
+
+// The first three segment sizes, then doubling. The progression started at
+// 16/64/256 and these are what the markdown benchmark asked for: most of
+// these vecs are an edit map entry holding two events, or a node holding
+// three children, and a first segment they never fill is arena spent for
+// nothing. `bun cmd/bench.ts markdown` is the test — 16/64/256 costs 2.4x
+// the scratch arena and about 10% on `gfm tables`. Revisit them the same
+// way, against a benchmark and not against taste.
+constexpr int kArenaVecCap0 = 4;
+constexpr int kArenaVecCap1 = 16;
+constexpr int kArenaVecCap2 = 64;
+
 template <typename T>
 struct ArenaVec {
-    T* els = nullptr;
-    int len = 0;
-    int cap = 0;
+    using Segment = ArenaVecSegment<T>;
 
-    T& operator[](int idx) const { return els[idx]; }
+    // The segments holding the elements, oldest first. `last` is the one an
+    // append goes into, so appending does not walk; segments past it are ones
+    // a `Truncate` let go of, kept linked and empty so a pop and a push at a
+    // segment boundary do not allocate a segment per pass.
+    Segment* first = nullptr;
+    Segment* last = nullptr;
+    int len = 0;
+
+    T& operator[](int idx) const {
+        // Most vecs never leave their first segment. That case is one compare
+        // of two fields in the same cache line, and never writes.
+        Segment* seg = first;
+        if (seg == last) {
+            return seg->els[idx];
+        }
+        Segment* cached = seg->cache;
+        if (cached && idx >= cached->base) {
+            seg = cached;
+        }
+        // Walking i, i+1, i+2 stays in one segment and costs the compare a
+        // flat array's bounds check would; crossing into the next one is a
+        // pointer chase. Walking backwards, or jumping back, restarts from
+        // the first segment — that is a walk over segments, not elements.
+        while (idx >= seg->base + seg->len) {
+            seg = seg->next;
+        }
+        if (seg != cached) {
+            first->cache = seg;
+        }
+        return seg->els[idx - seg->base];
+    }
 
     bool Append(Arena* a, const T& el) {
-        if (len >= cap) {
-            int newCap = cap > 0 ? cap * 2 : 8;
-            if (!VecRealloc(a, (void**)&els, len, &cap, newCap,
-                            (int)sizeof(T))) {
+        Segment* seg = last;
+        if (!seg || seg->len >= seg->cap) {
+            seg = NextSegment(a, 1);
+            if (!seg) {
                 return false;
             }
         }
-        els[len++] = el;
+        seg->els[seg->len++] = el;
+        len++;
         return true;
+    }
+
+    bool AppendMany(Arena* a, const T* src, int n) {
+        while (n > 0) {
+            Segment* seg = last;
+            if (!seg || seg->len >= seg->cap) {
+                seg = NextSegment(a, n);
+                if (!seg) {
+                    return false;
+                }
+            }
+            int room = seg->cap - seg->len;
+            int take = n < room ? n : room;
+            for (int i = 0; i < take; i++) {
+                seg->els[seg->len + i] = src[i];
+            }
+            seg->len += take;
+            len += take;
+            src += take;
+            n -= take;
+        }
+        return true;
+    }
+
+    // Room for `n` more appends without allocating. A caller who knows the
+    // count skips the 4/16/64 climb, which is all the segment sizes cost.
+    bool Reserve(Arena* a, int n) {
+        if (last && last->cap - last->len >= n) {
+            return true;
+        }
+        return NextSegment(a, n) != nullptr;
+    }
+
+    // Drop everything from `newLen` on. The segments that held it stay linked
+    // and empty, for the next appends to fill again.
+    void Truncate(int newLen) {
+        if (newLen < 0) {
+            newLen = 0;
+        }
+        if (newLen >= len) {
+            return;
+        }
+        Segment* seg = first;
+        while (seg && seg->base + seg->len <= newLen) {
+            seg = seg->next;
+        }
+        if (seg) {
+            seg->len = newLen - seg->base;
+            last = seg;
+            for (Segment* s = seg->next; s; s = s->next) {
+                s->len = 0;
+            }
+        }
+        len = newLen;
+        if (first) {
+            first->cache = nullptr;
+        }
+    }
+
+    void Pop() { Truncate(len - 1); }
+
+    // The elements as one array, for a callee that takes a `const T*`. Free
+    // for a vec that never grew past its first segment; a copy into `a`
+    // otherwise.
+    T* Flatten(Arena* a) const {
+        if (len == 0) {
+            return nullptr;
+        }
+        if (first == last) {
+            return first->els;
+        }
+        T* out = (T*)ArenaVecAlloc(a, len, (int)sizeof(T), (int)alignof(T));
+        if (!out) {
+            return nullptr;
+        }
+        int at = 0;
+        for (Segment* s = first; s && at < len; s = s->next) {
+            for (int i = 0; i < s->len; i++) {
+                out[at++] = s->els[i];
+            }
+        }
+        return out;
+    }
+
+    static int NextCap(int prevCap) {
+        if (prevCap < kArenaVecCap0) {
+            return kArenaVecCap0;
+        }
+        if (prevCap < kArenaVecCap1) {
+            return kArenaVecCap1;
+        }
+        if (prevCap < kArenaVecCap2) {
+            return kArenaVecCap2;
+        }
+        return prevCap * 2;
+    }
+
+    // The segment the next append goes into, with room for at least `want`.
+    // Off the hot path: once per segment, not once per element.
+    GPUI_NOINLINE Segment* NextSegment(Arena* a, int want) {
+        Segment* reuse = last ? last->next : nullptr;
+        if (reuse && reuse->cap >= want) {
+            reuse->len = 0;
+            reuse->base = len;
+            last = reuse;
+            return reuse;
+        }
+        int cap = NextCap(last ? last->cap : 0);
+        if (cap < want) {
+            cap = want;
+        }
+        int align = (int)alignof(T) > 8 ? (int)alignof(T) : 8;
+        int hdr = ((int)sizeof(Segment) + align - 1) & ~(align - 1);
+        void* mem = ArenaVecAlloc(a, cap, (int)sizeof(T), align, hdr);
+        if (!mem) {
+            return nullptr;
+        }
+        Segment* seg = (Segment*)mem;
+        seg->next = nullptr;
+        seg->els = (T*)((char*)mem + hdr);
+        seg->cache = nullptr;
+        seg->base = len;
+        seg->len = 0;
+        seg->cap = cap;
+        if (last) {
+            last->next = seg;
+        } else {
+            first = seg;
+        }
+        last = seg;
+        return seg;
     }
 };
 

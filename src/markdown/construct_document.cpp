@@ -335,7 +335,8 @@ static void DocumentResolve(Tokenizer* t) {
                          exitIndex++) {
                         exits[exitIndex].point = point;
                     }
-                    EditMapAdd(child->map, injectIndex, 0, exits.els,
+                    EditMapAdd(child->map, injectIndex, 0,
+                               exits.Flatten(t->parseState->scratch),
                                exits.len);
                 }
             }
