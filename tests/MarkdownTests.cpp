@@ -200,7 +200,7 @@ static void TestMarkdownNormalizeIdentifier(Arena* a) {
     utassert(Is(NormalizeIdentifier(a, StrL("Foo\t\tBar")), "FOOBAR"));
 }
 
-static void TestMarkdownPositions(Arena* a) {
+static void TestMarkdownPositions() {
     TestSuite("markdown positions");
     // A node keeps offsets; the lines and the columns are counted out of the
     // source, by the rules the tokenizer counted them by on the way past.
@@ -231,29 +231,11 @@ static void TestMarkdownPositions(Arena* a) {
     utassert(all.start.offset == 0 && all.end.offset == md.len);
     utassert(GetUnistPosition(md, 0, 999).end.offset == md.len);
 
-    // And what a parse actually puts there, on a source with a line in it.
-    Node* root = Parse(a, "one\n\n# two\n");
-    Node* heading = Child(root, 1);
-    utassert(heading->kind == NodeKind::Heading);
-    UnistPosition h = GetUnistPosition(StrL("one\n\n# two\n"),
-                                       heading->srcStart, NodeSrcEnd(heading));
-    utassert(h.start.line == 3 && h.start.column == 1);
-    utassert(h.end.line == 3 && h.end.column == 6);
-
-    // A span longer than sixteen bits hold saturates rather than wraps: the
-    // length says 65535 and means "at least". A document this size is the
-    // ordinary way to reach it — no node whose extent anything acts on is
-    // anywhere near.
-    int32_t big = 70000;
-    char* wide = (char*)base::Alloc(a, big + 1);
-    for (int32_t i = 0; i < big; i++) {
-        wide[i] = (i % 64) == 63 ? ' ' : 'a';
-    }
-    wide[big] = 0;
-    Node* wideRoot = Parse(a, wide);
-    utassert(wideRoot->srcStart == 0);
-    utassert(wideRoot->srcLen == kNodeSrcLenMax);
-    utassert(NodeSrcEnd(wideRoot) == kNodeSrcLenMax);
+    // The offset a heading starts at, counted the way the tokenizer would
+    // have: no node keeps one any more, so this is the source and a number,
+    // which is all the function ever wanted.
+    utassert(GetUnistPosition(StrL("one\n\n# two\n"), 5, 10).start.line == 3);
+    utassert(GetUnistPosition(StrL("one\n\n# two\n"), 5, 10).end.column == 6);
 }
 
 // ─── the tree ─────────────────────────────────────────────────────────────
@@ -265,18 +247,13 @@ static void TestMarkdownFlow(Arena* a) {
     utassert(NodeChildCount(gParsedInto, root) == 1);
     Node* heading = Child(root, 0);
     utassert(heading->kind == NodeKind::Heading);
-    utassert(heading->perKind == 1);
+    utassert(NodePerKind(gParsedInto, heading) == 1);
     utassert(TextIs(a, heading, "Hi Earth!"));
     utassert(Child(heading, 1)->kind == NodeKind::Emphasis);
-    // A node keeps the two byte offsets, and the line and the column are
-    // counted back out of the source for whoever wants them.
-    utassert(heading->srcStart == 0);
-    utassert(heading->srcLen == 13);
-    utassert(NodeSrcEnd(heading) == 13);
 
     root = Parse(a, "Setext\n===\n");
     utassert(Child(root, 0)->kind == NodeKind::Heading);
-    utassert(Child(root, 0)->perKind == 1);
+    utassert(NodePerKind(gParsedInto, Child(root, 0)) == 1);
 
     root = Parse(a, "a\n\n> b\n>\n> c\n");
     utassert(NodeChildCount(gParsedInto, root) == 2);
@@ -314,7 +291,7 @@ static void TestMarkdownLists(Arena* a) {
     list = Child(root, 0);
     utassert(list->Has(NodeOrdered));
     utassert(list->Has(NodeHasStart));
-    utassert(list->perKind == 3);
+    utassert(NodePerKind(gParsedInto, list) == 3);
 
     // A blank line between items makes the list loose.
     root = Parse(a, "- one\n\n- two\n");
@@ -406,13 +383,13 @@ static void TestMarkdownTable(Arena* a) {
     Node* table = Child(root, 0);
     utassert(table->kind == NodeKind::Table);
     Arena* into = gParsedInto;
-    utassert(ArenaAlignCount(into, table->perKind) == 4);
-    utassert(ArenaAlignAt(into, table->perKind, 0) == AlignKind::None);
-    utassert(ArenaAlignAt(into, table->perKind, 1) == AlignKind::Left);
-    utassert(ArenaAlignAt(into, table->perKind, 2) == AlignKind::Center);
-    utassert(ArenaAlignAt(into, table->perKind, 3) == AlignKind::Right);
+    utassert(ArenaAlignCount(into, NodePerKind(into, table)) == 4);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 0) == AlignKind::None);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 1) == AlignKind::Left);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 2) == AlignKind::Center);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 3) == AlignKind::Right);
     // Past the end, and a table with no alignments at all.
-    utassert(ArenaAlignAt(into, table->perKind, 4) == AlignKind::None);
+    utassert(ArenaAlignAt(into, NodePerKind(into, table), 4) == AlignKind::None);
     utassert(ArenaAlignCount(into, kArenaAlignNone) == 0);
     utassert(NodeChildCount(gParsedInto, table) == 2);
     Node* head = Child(table, 0);
@@ -449,7 +426,7 @@ static void TestMarkdownTable(Arena* a) {
     Node* wideRoot = Parse(a, src);
     Node* wideTable = Child(wideRoot, 0);
     utassert(wideTable->kind == NodeKind::Table);
-    utassert(ArenaAlignCount(gParsedInto, wideTable->perKind) == wide);
+    utassert(ArenaAlignCount(gParsedInto, NodePerKind(gParsedInto, wideTable)) == wide);
     for (int32_t i = 0; i < wide; i++) {
         AlignKind want = AlignKind::None;
         if (i % 4 == 1) {
@@ -459,7 +436,7 @@ static void TestMarkdownTable(Arena* a) {
         } else if (i % 4 == 3) {
             want = AlignKind::Right;
         }
-        utassert(ArenaAlignAt(gParsedInto, wideTable->perKind, i) == want);
+        utassert(ArenaAlignAt(gParsedInto, NodePerKind(gParsedInto, wideTable), i) == want);
     }
 }
 
@@ -542,6 +519,6 @@ void TestMarkdown() {
     TestMarkdownTable(a);
     TestMarkdownHtmlAndFootnotes(a);
     TestMarkdownDocument(a);
-    TestMarkdownPositions(a);
+    TestMarkdownPositions();
     ArenaDelete(a);
 }

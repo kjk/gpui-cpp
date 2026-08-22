@@ -311,8 +311,9 @@ static void MdTable(MdBuild* b, const md::Node* n) {
             }
             int32_t column = cellIndex++;
             MdNode* c = Push(b, MdKind::Cell);
-            if (column < md::ArenaAlignCount(b->a, n->perKind)) {
-                switch (md::ArenaAlignAt(b->a, n->perKind, column)) {
+            md::ArenaAlign align = md::NodePerKind(b->a, n);
+            if (column < md::ArenaAlignCount(b->a, align)) {
+                switch (md::ArenaAlignAt(b->a, align, column)) {
                     case md::AlignKind::Left:
                         c->align = MdAlignLeft;
                         break;
@@ -344,7 +345,8 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             break;
         case md::NodeKind::Heading: {
             MdNode* h = Push(b, MdKind::Heading);
-            h->level = n->perKind == 0 ? 1 : (uint8_t)n->perKind;
+            uint32_t depth = md::NodePerKind(b->a, n);
+            h->level = depth == 0 ? 1 : (uint8_t)depth;
             MdInline(b, n);
             Pop(b);
             break;
@@ -357,7 +359,8 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
         case md::NodeKind::List: {
             MdNode* l = Push(b, MdKind::List);
             l->ordered = n->Has(md::NodeOrdered);
-            l->start = n->Has(md::NodeHasStart) ? (int)n->perKind : 1;
+            l->start =
+                n->Has(md::NodeHasStart) ? (int)md::NodePerKind(b->a, n) : 1;
             MdBlockChildren(b, n);
             Pop(b);
             break;

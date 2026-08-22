@@ -10,7 +10,15 @@ namespace markdown {
 using base::Alloc;
 
 Node* NodeNew(Arena* a, NodeKind kind) {
-    Node* node = base::ArenaNew<Node>(a);
+    // Pushed at the node's own alignment and not at the eight `Alloc` uses.
+    // A Node is 16 bytes and needs 4, so the two are the same number here —
+    // but they were not at 24, where 4-aligned would have saved nothing and
+    // 8-aligned handed out 24 for a 20-byte struct.
+    void* mem = a->Push(sizeof(Node), alignof(Node), false);
+    if (!mem) {
+        return nullptr;
+    }
+    Node* node = new (mem) Node();
     node->kind = kind;
     return node;
 }
@@ -287,6 +295,29 @@ void NodeGrowStr(Arena* a, Node* n, NodeStrKind k, Str more) {
     }
     RecSetNext(dst, n->firstStr);
     n->firstStr = (ArenaStr)at;
+}
+
+// The word `kind` decides, in a record of the list above: varint-encoded,
+// because a heading's level and a list's start are one byte of it and a
+// table's alignments are an arena offset that is usually three. Zero is
+// what a node with no record answers, which is what the field read as
+// before it was ever written.
+
+uint32_t NodePerKind(Arena* a, const Node* n) {
+    char* rec = FindRec(a, n, NodeStrKind::PerKind, nullptr);
+    if (!rec) {
+        return 0;
+    }
+    uint32_t word = 0;
+    Str bytes = RecStr(rec);
+    base::VarintGet(bytes.s, &word);
+    return word;
+}
+
+void NodeSetPerKind(Arena* a, Node* n, uint32_t word) {
+    char buf[8];
+    int len = base::VarintPut(buf, word);
+    NodeSetStr(a, n, NodeStrKind::PerKind, Str(buf, len));
 }
 
 // ─── a Table's alignments ────────────────────────────────────────────────

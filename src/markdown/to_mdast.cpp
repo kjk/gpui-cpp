@@ -96,13 +96,6 @@ static Str TrimEol(Str value, bool atStart, bool atEnd) {
 
 // ─── the tree stack ──────────────────────────────────────────────────────
 
-// Where an event is in the source. A node keeps the offset and nothing
-// else; `GetUnistPosition` counts the line and the column back out of the
-// source when something wants to name the place.
-static uint32_t OffsetOf(const Event& event) {
-    return (uint32_t)event.point.index;
-}
-
 static TreeFrame& TreeTail(CompileContext* c) {
     return c->trees[c->trees.len - 1];
 }
@@ -158,11 +151,6 @@ static Node* Resume(CompileContext* c) {
 }
 
 static void TailPush(CompileContext* c, Node* child) {
-    if (!child->Has(NodeHasPosition)) {
-        child->srcStart = OffsetOf((*c->events)[c->index]);
-        child->srcLen = 0;
-        child->Set(NodeHasPosition, true);
-    }
     Node* node = TailMut(c);
     NodeAddChild(c->a, node, child);
     TreeFrame& frame = TreeTail(c);
@@ -180,9 +168,6 @@ static void TailPushAgain(CompileContext* c, Node* child) {
 }
 
 static void TailPop(CompileContext* c) {
-    uint32_t end = OffsetOf((*c->events)[c->index]);
-    Node* node = TailMut(c);
-    NodeSetSrcEnd(node, end);
     TreeFrame& frame = TreeTail(c);
     frame.stack.Pop();
     frame.eventStack.Pop();
@@ -321,7 +306,8 @@ static void Enter(CompileContext* c) {
             break;
         case Name::GfmTable: {
             Node* node = NodeNew(c->a, NodeKind::Table);
-            node->perKind = GfmTableAlign(*c->events, c->index, c->a);
+            NodeSetPerKind(c->a, node,
+                           GfmTableAlign(*c->events, c->index, c->a));
             TailPush(c, node);
             c->gfmTableInside = true;
             break;
@@ -528,15 +514,15 @@ static void OnExitGfmTaskListItemValue(CompileContext* c) {
 
 static void OnExitHeadingAtxSequence(CompileContext* c) {
     Node* node = TailMut(c);
-    if (node->perKind == 0) {
-        node->perKind = (uint32_t)ExitSlice(c).Len();
+    if (NodePerKind(c->a, node) == 0) {
+        NodeSetPerKind(c->a, node, (uint32_t)ExitSlice(c).Len());
     }
 }
 
 static void OnExitHeadingSetextUnderlineSequence(CompileContext* c) {
     Position position = PositionFromExitEvent(*c->events, c->index);
     uint8_t head = (uint8_t)c->bytes.s[position.start.index];
-    TailMut(c)->perKind = head == '-' ? 2 : 1;
+    NodeSetPerKind(c->a, TailMut(c), head == '-' ? 2 : 1);
 }
 
 static void OnExitLabelText(CompileContext* c) {
@@ -565,10 +551,6 @@ static void OnExitLineEnding(CompileContext* c) {
         return;
     }
     if (c->hardBreakAfter) {
-        uint32_t end = OffsetOf((*c->events)[c->index]);
-        Node* node = TailMut(c);
-        Node* tail = NodeLastChild(c->a, node);
-        NodeSetSrcEnd(tail, end);
         c->hardBreakAfter = false;
         return;
     }
@@ -628,21 +610,14 @@ static void OnExitListItem(CompileContext* c) {
         if (firstInParagraph &&
             firstInParagraph->kind == NodeKind::Text) {
             Node* text = firstInParagraph;
-            // The offsets shift by the bytes dropped off the front; the
-            // line the checkbox left behind is one of them, which a
-            // position counted out of the source picks up on its own.
-            uint32_t point = text->srcStart;
             Str value = Get(c, text, NodeStrKind::Value);
             int32_t start = 0;
             if (value.len > 0 && (value.s[0] == '\t' || value.s[0] == ' ')) {
-                point += 1;
                 start += 1;
             } else if (value.len > 0 &&
                        (value.s[0] == '\r' || value.s[0] == '\n')) {
-                point += 1;
                 start += 1;
                 if (value.len > 1 && value.s[0] == '\r' && value.s[1] == '\n') {
-                    point += 1;
                     start += 1;
                 }
             }
@@ -657,10 +632,9 @@ static void OnExitListItem(CompileContext* c) {
                     last->sibling = text->sibling;
                 }
             } else {
-                Keep(c, text, NodeStrKind::Value, Str(value.s + start, value.len - start));
-                NodeMoveSrcStart(text, point);
+                Keep(c, text, NodeStrKind::Value,
+                     Str(value.s + start, value.len - start));
             }
-            NodeMoveSrcStart(paragraph, point);
         }
     }
     OnExit(c);
@@ -674,7 +648,7 @@ static void OnExitListItemValue(CompileContext* c) {
     }
     Node* node = TailPenultimateMut(c);
     if (!node->Has(NodeHasStart)) {
-        node->perKind = start;
+        NodeSetPerKind(c->a, node, start);
         node->Set(NodeHasStart, true);
     }
 }
@@ -893,11 +867,6 @@ Node* ToMdastCompile(const Vec<Event>& events, ParseState* parseState) {
 
     TreeFrame frame;
     frame.tree = NodeNew(context.a, NodeKind::Root);
-    frame.tree->Set(NodeHasPosition, true);
-    if (events.len > 0) {
-        frame.tree->srcStart = OffsetOf(events[0]);
-        NodeSetSrcEnd(frame.tree, OffsetOf(events[events.len - 1]));
-    }
     context.trees.Append(frame);
 
     int32_t index = 0;
