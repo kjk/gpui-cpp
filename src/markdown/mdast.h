@@ -150,17 +150,24 @@ struct Node {
     // Table.
     ArenaVec<AlignKind> align = {};
 
-    // Where the node came from: the two byte offsets into the source the
-    // parse was given, the second one past the end. `NodeHasPosition` says
-    // whether they mean anything.
+    // Where the node came from: the byte offset into the source the parse
+    // was given, and how many bytes it runs for. `NodeHasPosition` says
+    // whether they mean anything, `NodeSrcEnd` is one past the last byte,
+    // and `NodeSetSrcEnd` is how the length is written.
     //
     // Rust keeps a line, a column and an offset at each end, which is
     // twenty-four bytes on every node in the tree for something only a
     // diagnostic ever reads. The offsets are what the parse actually works
-    // in; `GetUnistPosition(md, srcStart, srcEnd)` counts the rest back out
-    // of the source at the point something wants to print it.
+    // in; `GetUnistPosition(md, start, end)` counts the rest back out of the
+    // source at the point something wants to print it.
+    //
+    // The length is sixteen bits and saturates: a node spanning more than
+    // 65535 bytes — a document, or a code block the size of one — reports
+    // 65535 and nothing says it was cut. Everything that reads a length here
+    // is a diagnostic, and the constructs whose extent is acted on are all
+    // far shorter than that.
     uint32_t srcStart = 0;
-    uint32_t srcEnd = 0;
+    uint16_t srcLen = 0;
 
     // The eight strings a node may carry. They are ArenaStr rather than Str
     // because a Node is allocated by the thousand and holds all eight
@@ -208,13 +215,38 @@ struct Node {
 };
 
 // The packing is the point, so it is checked rather than hoped for: two
-// 24-byte members, eight 4-byte strings, three 4-byte numbers and three
-// single bytes, rounded up to the 8 the ArenaVecs align to. The arithmetic
-// reads 4 for that last group because the fourth byte is padding — one more
-// single-byte field would cost nothing, and a field put anywhere else costs
-// eight a node, which would otherwise go unnoticed.
-static_assert(sizeof(Node) == 2 * 24 + (8 + 3) * 4 + 4,
+// 24-byte members, eight 4-byte strings, two 4-byte numbers, the 2-byte
+// length and three single bytes, rounded up to the 8 the ArenaVecs align
+// to. Three bytes of that last 8 are padding — three more single-byte
+// fields, or one more 2-byte one, would cost nothing, where a field put
+// anywhere else costs eight a node and would otherwise go unnoticed.
+static_assert(sizeof(Node) == 2 * 24 + (8 + 2) * 4 + 8,
               "Node has picked up padding; order the fields largest first");
+
+// The longest span a node can name. A node that runs further reports this,
+// which is a length that means "at least".
+constexpr uint16_t kNodeSrcLenMax = 0xffff;
+
+// One past the last byte the node covers.
+inline uint32_t NodeSrcEnd(const Node* n) {
+    return n->srcStart + n->srcLen;
+}
+
+// Where the node stops, written as the length it is kept as.
+inline void NodeSetSrcEnd(Node* n, uint32_t end) {
+    uint32_t len = end > n->srcStart ? end - n->srcStart : 0;
+    n->srcLen = len > kNodeSrcLenMax ? kNodeSrcLenMax : (uint16_t)len;
+}
+
+// The start moves forward and the end stays put, which is what dropping
+// bytes off the front of a node does. A length holds the distance to the
+// end, so it has to come down by what the start went up by — the one thing
+// an end offset did for free.
+inline void NodeMoveSrcStart(Node* n, uint32_t to) {
+    uint32_t by = to > n->srcStart ? to - n->srcStart : 0;
+    n->srcLen = by >= n->srcLen ? 0 : (uint16_t)(n->srcLen - by);
+    n->srcStart = to;
+}
 
 Node* NodeNew(Arena* a, NodeKind kind);
 
