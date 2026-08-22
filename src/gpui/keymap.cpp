@@ -156,13 +156,20 @@ bool KeyChordParse(Str spec, KeyChord* out) {
             break;
         }
         Str part = Str(spec.s + i, dash - i);
-        if (NameEq(part, "ctrl") || NameEq(part, "cmd") ||
-            NameEq(part, "secondary") || NameEq(part, "super") ||
-            NameEq(part, "win")) {
-            // The platform's shortcut key and Control are one modifier here:
-            // macOS folds Command onto ctrl on the way in, so a keymap that
-            // named them apart could never match the second one.
+        if (NameEq(part, "ctrl")) {
             c.ctrl = true;
+        } else if (NameEq(part, "cmd") || NameEq(part, "super") ||
+                   NameEq(part, "win")) {
+            c.platform = true;
+        } else if (NameEq(part, "secondary")) {
+            // The shortcut modifier: Command on macOS, Control elsewhere.
+            // One `secondary-c` binding is Cmd-C on a Mac and Ctrl-C on the
+            // other two, which is what Rust's `secondary-` means.
+#if GPUI_OS_MAC
+            c.platform = true;
+#else
+            c.ctrl = true;
+#endif
         } else if (NameEq(part, "alt") || NameEq(part, "option")) {
             c.alt = true;
         } else if (NameEq(part, "shift")) {
@@ -182,7 +189,7 @@ bool KeyChordParse(Str spec, KeyChord* out) {
 
 bool KeyChordEq(const KeyChord& a, const KeyChord& b) {
     return a.vk == b.vk && a.shift == b.shift && a.ctrl == b.ctrl &&
-           a.alt == b.alt;
+           a.alt == b.alt && a.platform == b.platform;
 }
 
 int KeyChordsParse(Str spec, KeyChord* out, int maxChords) {

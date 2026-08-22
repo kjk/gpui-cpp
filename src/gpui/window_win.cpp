@@ -206,6 +206,13 @@ static bool ShiftDown() {
 static bool CtrlDown() {
     return (GetKeyState(VK_CONTROL) & 0x8000) != 0;
 }
+// The platform modifier here, which is what `cmd-` names on this platform.
+// Nothing in the tree binds it; a chord that does can now say so.
+static bool WinDown() {
+    return (GetKeyState(VK_LWIN) & 0x8000) != 0 ||
+           (GetKeyState(VK_RWIN) & 0x8000) != 0;
+}
+
 static bool AltDown() {
     return (GetKeyState(VK_MENU) & 0x8000) != 0;
 }
@@ -303,10 +310,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_KEYDOWN:
-            WindowKeyDown(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown());
+            WindowKeyDown(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown(),
+                          WinDown());
             return 0;
         case WM_KEYUP:
-            WindowKeyUp(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown());
+            WindowKeyUp(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown(),
+                        WinDown());
             return 0;
         case WM_CHAR:
             WindowChar(win, (uint32_t)wParam, CtrlDown(), AltDown());

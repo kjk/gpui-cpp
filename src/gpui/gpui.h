@@ -758,6 +758,8 @@ struct KeyEvent {
     bool shift = false;
     bool ctrl = false;
     bool alt = false;
+    // Command on macOS, the Windows/Super key elsewhere.
+    bool platform = false;
     // cx.propagate(): an `El::OnKeyDown` handler that leaves this true passes
     // the keystroke on outwards, the way an action handler does. Unused by
     // the window-level `WindowOnKey`, which is the last thing to see a key.
@@ -2594,8 +2596,11 @@ enum class InputAction : uint8_t {
     Replace
 };
 
+// `platform` is Command on macOS and the Windows key elsewhere;
+// `KeySecondary(ctrl, platform)` is the shortcut modifier the copy, paste and
+// undo chords are written with.
 InputAction InputActionForKey(const InputState* s, int vk, bool shift,
-                              bool ctrl, bool alt);
+                              bool ctrl, bool alt, bool platform = false);
 // True when the input consumed it, so the window does not also treat Enter as
 // a click on the focused element. `shift` is Enter's modifier, which decides
 // whether a submit-on-enter textarea inserts a newline.
@@ -3578,7 +3583,19 @@ bool WindowRestoreFocus(Window* win, int id);
 // it is then offered to. Answers true when one of them kept it — Rust's
 // `dispatch_action` plus the `cx.propagate()` that decides how far it goes.
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
-                             bool alt);
+                             bool alt, bool platform = false);
+// Whether the shortcut modifier is down — `secondary-` in a binding spec:
+// Command on macOS, Control everywhere else. The two are separate modifiers
+// now, so the code that means "the copy chord" has to say which.
+constexpr bool KeySecondary(bool ctrl, bool platform) {
+#if GPUI_OS_MAC
+    (void)ctrl;
+    return platform;
+#else
+    (void)platform;
+    return ctrl;
+#endif
+}
 // The same, for an action already in hand rather than one a keystroke
 // resolved to. `arg` is what the action carries.
 bool WindowDispatchAction(Window* win, uint32_t action, intptr_t arg = 0);

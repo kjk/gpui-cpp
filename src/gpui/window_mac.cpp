@@ -582,10 +582,10 @@ void WindowMacKeyUp(Window* win, NSEvent* event) {
     if (!key) {
         return;
     }
-    WindowKeyUp(
-        win, key, (mods & NSEventModifierFlagShift) != 0,
-        (mods & (NSEventModifierFlagControl | NSEventModifierFlagCommand)) != 0,
-        (mods & NSEventModifierFlagOption) != 0);
+    WindowKeyUp(win, key, (mods & NSEventModifierFlagShift) != 0,
+                (mods & NSEventModifierFlagControl) != 0,
+                (mods & NSEventModifierFlagOption) != 0,
+                (mods & NSEventModifierFlagCommand) != 0);
 }
 
 // True when the caller should hand the event to the input method for its
@@ -597,17 +597,20 @@ bool WindowMacKeyDown(Window* win, NSEvent* event) {
     }
     NSEventModifierFlags mods = [event modifierFlags];
     bool shift = (mods & NSEventModifierFlagShift) != 0;
-    // Command is the Mac's shortcut modifier, so it and Control both land on
-    // `ctrl` — that is what a Ctrl-C handler means on either platform.
-    bool ctrl =
-        (mods & (NSEventModifierFlagControl | NSEventModifierFlagCommand)) != 0;
+    // Command and Control are two modifiers, not one. state.rs binds
+    // ctrl-backspace and cmd-backspace to different actions in the same
+    // context and ctrl-cmd-space to a third, so folding them here would lose
+    // one of each pair. `secondary-` in a binding is the one that means
+    // Command on this platform.
+    bool ctrl = (mods & NSEventModifierFlagControl) != 0;
+    bool platform = (mods & NSEventModifierFlagCommand) != 0;
     bool alt = (mods & NSEventModifierFlagOption) != 0;
 
     NSString* bare = [event charactersIgnoringModifiers];
     unichar first = [bare length] > 0 ? [bare characterAtIndex:0] : 0;
     int key = KeyFor(first);
     if (key) {
-        WindowKeyDown(win, key, shift, ctrl, alt);
+        WindowKeyDown(win, key, shift, ctrl, alt, platform);
     }
     // Backspace arrives as a key only; the bound InputState edits on the
     // control code the Windows window delivers through WM_CHAR.
@@ -615,7 +618,11 @@ bool WindowMacKeyDown(Window* win, NSEvent* event) {
         WindowChar(win, 8, ctrl, alt);
         return false;
     }
-    if (ctrl || alt || key == KeyReturn || key == KeyTab || key == KeyEscape) {
+    // `platform` belongs in this list as much as ctrl does: Cmd-C is a chord,
+    // not a "c" to type. It used to be covered because Command landed on
+    // ctrl; now it has to say so.
+    if (ctrl || alt || platform || key == KeyReturn || key == KeyTab ||
+        key == KeyEscape) {
         return false;
     }
     // A focused field's text is the input method's to deliver, through
