@@ -23,15 +23,16 @@ struct AlertDialogTitle {
 struct AlertDialogDescription {
     static El* New(Ctx* cx);
 };
-// Both parts dispatch an action rather than carrying a handler of their own:
-// Rust's Cancel and Action wrappers call window.dispatch_action, so the
-// dialog's own Cancel and Confirm handlers are what run. Passing the same
-// listener the keyboard path uses is how that reads here.
+// Both parts dispatch an action rather than carrying a handler of their
+// own, which is what Rust's Cancel and Action wrappers do: their click calls
+// `window.dispatch_action`, so the dialog's own Cancel and Confirm handlers
+// are what run and the caller declares them once rather than passing the same
+// listener to the button and to the keyboard.
 struct AlertDialogCancel {
-    static El* New(Ctx* cx, Listener onCancel = {});
+    static El* New(Ctx* cx);
 };
 struct AlertDialogAction {
-    static El* New(Ctx* cx, Listener onConfirm = {});
+    static El* New(Ctx* cx);
 };
 struct AlertDialogTrigger {
     static El* New(Ctx* cx, Listener onOpen = {});

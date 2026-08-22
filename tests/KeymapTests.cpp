@@ -258,6 +258,7 @@ static void AnActionIsItsName() {
 
 static int gCalls = 0;
 static uint32_t gSeen[8];
+static intptr_t gLastArg = 0;
 
 // A listener needs a live view to call into, the way GPUI's does; the test
 // makes one so the dispatch is exercised end to end rather than stopping at
@@ -266,6 +267,7 @@ struct Recorder {
     static El* Render(Recorder*, Ctx* cx) { return Div(cx->a); }
 
     static void Stop(Recorder*, Ctx*, const ActionEvent* ev) {
+        gLastArg = ev->arg;
         gSeen[gCalls++ & 7] = ev->action;
     }
     static void Pass(Recorder*, Ctx*, const ActionEvent* ev) {
@@ -437,9 +439,47 @@ static void ABindingCarriesTheActionsPayload() {
     KeymapClear();
 }
 
+// window.dispatch_action: an action with no keystroke behind it, which is
+// how a dialog's Cancel button runs what its escape key runs. It starts from
+// the focus and walks out, exactly as a chord's would.
+static void AnActionCanBeDispatchedWithoutAKeystroke() {
+    KeymapClear();
+    uint32_t act = ActionOf(StrL("t::Go3"));
+
+    Arena* a = ArenaNew();
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Entity<Recorder> rec = EntityNew<Recorder>(&app);
+    El* leaf =
+        Div(a)->FocusId(5)->OnAction(act, ListenTo(rec, &Recorder::Stop));
+    El* root = Div(a)->Child(leaf);
+    FocusCollect(win, root);
+    win->focusId = 5;
+
+    gCalls = 0;
+    gLastArg = 0;
+    // No binding for this action at all — a keystroke could not have reached
+    // it, and the dispatch does not care.
+    utassert(WindowDispatchAction(win, act, 42));
+    utassert(gCalls == 1);
+    utassert(gSeen[0] == act);
+    utassert(gLastArg == 42);
+
+    // An action nothing handles answers false, so the caller can tell.
+    utassert(!WindowDispatchAction(win, ActionOf(StrL("t::Nobody"))));
+    // And a zero action is not dispatched at all.
+    utassert(!WindowDispatchAction(win, 0));
+
+    delete win;
+    ArenaDelete(a);
+    KeymapClear();
+}
+
 void TestKeymap() {
     TestSuite("keymap");
     ABindingCarriesTheActionsPayload();
+    AnActionCanBeDispatchedWithoutAKeystroke();
     AChordIsReadTheWayRustSpellsIt();
     TheInnermostContextWins();
     TheLastBindingForAChordWins();
