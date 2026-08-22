@@ -528,6 +528,7 @@ cmd/bench.ts           build bench/ and run it (-small, -large, -n=<count>)
 bench/                 taffy's layout benchmarks, ported, and markdown parse
                        benchmarks of our own (`bun cmd/bench.ts markdown`)
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
+cmd/svg-to-bytecode.ts convert assets/icons into src/gpui/asset_icons.cpp
 src/taffy/             the taffy layout crate, ported (see its readme.md)
 src/markdown/          the markdown crate, ported (see its readme.md)
 src/base.h/.cpp        vendored SumatraPDF subset
@@ -540,13 +541,16 @@ src/gpui/platform.h    the seam between window_common.cpp and the OS window
 src/gpui/window_common.cpp   frame drawing, input dispatch, App lifecycle
 src/gpui/window_win.cpp / window_linux.cpp  the two OS windows
 src/gpui/entity.cpp    entity store, listeners, window subscriptions
+src/gpui/drawops.h/.cpp  the icon byte code and the machine that draws it
+src/gpui/svg.cpp       .svg -> that byte code, at load time
+src/gpui/asset_icons.cpp  assets/icons as that byte code, generated
 src/gpui/              layout, paint, assets, SVG, element tree
 src/sys/               system metrics, portable + one file per OS
 src/base/              crates/base unstyled primitives (Button, …)
 src/ui/                themed crates/ui façade (component::Button, Func0/Func1 callbacks)
 examples/              AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/
 assets/app_assets/     Lucide SVGs for the app_assets example
-assets/icons/          Lucide SVGs for sidebar
+assets/icons/          Lucide SVGs; the source cmd/svg-to-bytecode.ts compiles in
 assets/markdown_table/ report.md for the markdown_table example
 ```
 

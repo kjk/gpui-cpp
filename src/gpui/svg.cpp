@@ -1,14 +1,19 @@
 #include "gpui/svg.h"
+#include "gpui/asset_icons.h"
 #include "gpui/assets.h"
+#include "gpui/drawops.h"
 #include "gpui/paint.h"
 
 #include <math.h>
 
 namespace gpui {
 
-static const int kMaxOps = 128;
-static const int kMaxShapes = 32;
-static const int kMaxCache = 24;
+// Reading an `.svg` and drawing one are two different jobs now. This file does
+// the first: a Lucide-style file - viewBox, path/rect/polyline/line/circle/
+// polygon - becomes the byte stream `drawops.h` describes, and
+// `ExecuteDrawOps` is what paints it. `assets/icons` never comes through here
+// at runtime: `cmd/svg-to-bytecode.ts` ran this same conversion ahead of time
+// and its output is `asset_icons.cpp`, so the two have to keep agreeing.
 
 enum SvgCmd : uint8_t {
     kMove = 0,
@@ -24,8 +29,8 @@ struct SvgOp {
     float x2 = 0, y2 = 0;
 };
 
-// One drawn element of the file — a <path>, a <rect>, a <circle> — and the
-// run of ops it contributed. A Lucide icon says nothing about colour and every
+// One drawn element of the file - a <path>, a <rect>, a <circle> - and the run
+// of ops it contributed. A Lucide icon says nothing about colour and every
 // shape takes the caller's; a picture with colours of its own names them per
 // shape, which is what a two-tone logo is.
 struct SvgShape {
@@ -35,34 +40,23 @@ struct SvgShape {
     Rgba fill = {};
 };
 
+// The file, read but not yet encoded. It lives for the length of one
+// conversion; the bytes it turns into are what is kept.
 struct SvgIcon {
     float vbX = 0, vbY = 0, vbW = 24, vbH = 24;
     float strokeW = 2;
-    // fill="currentColor" on the root: the solid variants (star-fill, …) are
+    // fill="currentColor" on the root: the solid variants (star-fill, ...) are
     // filled and stroked, everything else is stroke only.
     bool filled = false;
     // Whether any shape named a colour. False is every Lucide icon, and the
     // whole file is then one path in the caller's colour, as it always was.
     bool hasOwnColors = false;
-    int nOps = 0;
-    SvgOp ops[kMaxOps];
-    int nShapes = 0;
-    SvgShape shapes[kMaxShapes];
+    Vec<SvgOp> ops;
+    Vec<SvgShape> shapes;
 };
-
-struct SvgCache {
-    char path[128];
-    SvgIcon icon;
-    bool ok = false;
-};
-
-static SvgCache gCache[kMaxCache];
-static int gCacheN = 0;
 
 static void AddOp(SvgIcon* ic, SvgOp op) {
-    if (ic->nOps < kMaxOps) {
-        ic->ops[ic->nOps++] = op;
-    }
+    ic->ops.Append(op);
 }
 
 static void AddMove(SvgIcon* ic, float x, float y) {
@@ -508,7 +502,12 @@ static bool IsIdentChar(char c) {
            (c >= '0' && c <= '9') || c == '-' || c == '_';
 }
 
-static bool GetAttr(Str tag, const char* name, char* out, int outN) {
+// `name="value"` inside one tag's text, as a slice of the tag. Matched only
+// on a name boundary, so "fill" does not match "fill-rule". A slice rather
+// than a copy because a `d` attribute has no bound worth guessing at — a
+// window-chrome icon traced by a design tool runs past two thousand
+// characters, and a fixed buffer silently drew half of it.
+static bool GetAttrStr(Str tag, const char* name, Str* out) {
     int nlen = (int)strlen(name);
     const char* p = tag.s;
     const char* end = tag.s + tag.len;
@@ -520,16 +519,30 @@ static bool GetAttr(Str tag, const char* name, char* out, int outN) {
             if (*p == '"' || *p == '\'') {
                 q = *p++;
             }
-            int i = 0;
-            while (p < end && *p != q && *p != '>' && i < outN - 1) {
-                out[i++] = *p++;
+            const char* vs = p;
+            while (p < end && *p != q && *p != '>') {
+                p++;
             }
-            out[i] = 0;
-            return i > 0;
+            *out = Str(vs, (int)(p - vs));
+            return out->len > 0;
         }
         p++;
     }
     return false;
+}
+
+// The same, copied and null-terminated, for the short ones an `atof` or a
+// colour parse wants as a C string.
+static bool GetAttr(Str tag, const char* name, char* out, int outN) {
+    Str v;
+    if (!GetAttrStr(tag, name, &v)) {
+        out[0] = 0;
+        return false;
+    }
+    int n = v.len < outN - 1 ? v.len : outN - 1;
+    memcpy(out, v.s, (size_t)n);
+    out[n] = 0;
+    return n > 0;
 }
 
 static float AttrF(Str tag, const char* name, float def) {
@@ -573,27 +586,34 @@ static bool ParseSvgColor(Str s, Rgba* out) {
     return true;
 }
 
-// One drawn element is done: what it added, and the colour it named.
+// One drawn element is done: what it added, and the colour it named. Every
+// element gets one, `<line>` and `<polyline>` included — a shape that is not
+// on the list is a shape the per-colour encoding would drop.
 static void EndShape(SvgIcon* ic, int start, Str tag) {
-    if (ic->nOps <= start || ic->nShapes >= kMaxShapes) {
+    if (ic->ops.len <= start) {
         return;
     }
-    SvgShape& sh = ic->shapes[ic->nShapes++];
+    SvgShape sh;
     sh.start = start;
-    sh.count = ic->nOps - start;
+    sh.count = ic->ops.len - start;
     char fill[64];
     if (GetAttr(tag, "fill", fill, 64) && ParseSvgColor(Str(fill), &sh.fill)) {
         sh.hasFill = true;
         ic->hasOwnColors = true;
     }
+    ic->shapes.Append(sh);
 }
 
 static void ParseSvg(Str xml, SvgIcon* ic) {
-    *ic = SvgIcon{};
+    ic->ops.Reset();
+    ic->shapes.Reset();
+    ic->vbX = 0;
+    ic->vbY = 0;
     ic->vbW = 24;
     ic->vbH = 24;
     ic->strokeW = 2;
     ic->filled = false;
+    ic->hasOwnColors = false;
     if (!xml.s || xml.len <= 0) {
         return;
     }
@@ -658,16 +678,16 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             continue;
         }
         if (StartsWithI(tagStart, end, "path")) {
-            char d[2048];
-            int start = ic->nOps;
-            if (GetAttr(tag, "d", d, 2048)) {
-                ParsePathD(ic, Str(d));
+            Str d;
+            int start = ic->ops.len;
+            if (GetAttrStr(tag, "d", &d)) {
+                ParsePathD(ic, d);
             }
             EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "rect")) {
-            int start = ic->nOps;
+            int start = ic->ops.len;
             float x = AttrF(tag, "x", 0);
             float y = AttrF(tag, "y", 0);
             float w = AttrF(tag, "width", 0);
@@ -678,32 +698,36 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             continue;
         }
         if (StartsWithI(tagStart, end, "polyline")) {
-            char pts[1024];
-            if (GetAttr(tag, "points", pts, 1024)) {
-                ParsePolyline(ic, Str(pts), false);
+            Str pts;
+            int start = ic->ops.len;
+            if (GetAttrStr(tag, "points", &pts)) {
+                ParsePolyline(ic, pts, false);
             }
+            EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "polygon")) {
-            char pts[1024];
-            int start = ic->nOps;
-            if (GetAttr(tag, "points", pts, 1024)) {
-                ParsePolyline(ic, Str(pts), true);
+            Str pts;
+            int start = ic->ops.len;
+            if (GetAttrStr(tag, "points", &pts)) {
+                ParsePolyline(ic, pts, true);
             }
             EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "line")) {
+            int start = ic->ops.len;
             float x1 = AttrF(tag, "x1", 0);
             float y1 = AttrF(tag, "y1", 0);
             float x2 = AttrF(tag, "x2", 0);
             float y2 = AttrF(tag, "y2", 0);
             AddMove(ic, x1, y1);
             AddLine(ic, x2, y2);
+            EndShape(ic, start, tag);
             continue;
         }
         if (StartsWithI(tagStart, end, "circle")) {
-            int start = ic->nOps;
+            int start = ic->ops.len;
             float cx = AttrF(tag, "cx", 0);
             float cy = AttrF(tag, "cy", 0);
             float r = AttrF(tag, "r", 0);
@@ -714,41 +738,212 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     }
 }
 
-static const SvgIcon* GetIcon(Str assetPath) {
-    if (!assetPath.s || assetPath.len <= 0) {
-        return nullptr;
-    }
-    for (int i = 0; i < gCacheN; i++) {
-        if (gCache[i].ok &&
-            StrCmpNI(gCache[i].path, assetPath.s, assetPath.len) == 0 &&
-            gCache[i].path[assetPath.len] == 0) {
-            return &gCache[i].icon;
+// ─── the file, as bytecode ────────────────────────────────
+
+static void EmitOps(DrawOpsBuilder* b, const SvgIcon* ic, int from, int to) {
+    for (int i = from; i < to; i++) {
+        const SvgOp& o = ic->ops[i];
+        if (o.cmd == kMove) {
+            b->MoveTo(o.x, o.y);
+        } else if (o.cmd == kLine) {
+            b->LineTo(o.x, o.y);
+        } else if (o.cmd == kCubic) {
+            b->CubicTo(o.x1, o.y1, o.x2, o.y2, o.x, o.y);
+        } else if (o.cmd == kClose) {
+            b->ClosePath();
         }
     }
-    TempStr xml = AssetsLoadTextTemp(assetPath);
-    if (!xml.s) {
+}
+
+// The rule `cmd/svg-to-bytecode.ts` implements too. A plain Lucide icon is one
+// path in the caller's colour - filled first if the root said
+// fill="currentColor", then stroked. A file whose shapes name their own
+// colours is a picture, not an icon: each shape is painted on its own, so it
+// keeps the colour it asked for and the ones that named none still take the
+// caller's.
+static void EncodeIcon(const SvgIcon* ic, DrawOpsBuilder* b) {
+    b->ViewBox(ic->vbX, ic->vbY, ic->vbW, ic->vbH);
+    b->StrokeWidth(ic->strokeW > 0 ? ic->strokeW : 2.f);
+    if (!ic->hasOwnColors) {
+        EmitOps(b, ic, 0, ic->ops.len);
+        b->Op(ic->filled ? kOpFillStrokePath : kOpStrokePath);
+        b->End();
+        return;
+    }
+    for (int i = 0; i < ic->shapes.len; i++) {
+        const SvgShape& sh = ic->shapes[i];
+        if (sh.hasFill) {
+            b->Color(sh.fill);
+        }
+        EmitOps(b, ic, sh.start, sh.start + sh.count);
+        if (sh.hasFill) {
+            b->Op(kOpFillPath);
+            b->ColorReset();
+        } else if (ic->filled) {
+            b->Op(kOpFillPath);
+        } else {
+            b->Op(kOpStrokePath);
+        }
+    }
+    b->End();
+}
+
+bool SvgToDrawOps(Str xml, DrawOpsBuilder* out) {
+    if (!out) {
+        return false;
+    }
+    SvgIcon ic;
+    ParseSvg(xml, &ic);
+    if (ic.ops.len <= 0) {
+        return false;
+    }
+    EncodeIcon(&ic, out);
+    return true;
+}
+
+// ─── what an asset path draws ──────────────────────────────
+
+// The generated table, looked up. `kAssetIcons` is sorted by name, so this is
+// a binary search over 70-odd entries rather than a walk.
+const uint8_t* AssetIconFind(Str name, int* lenOut) {
+    *lenOut = 0;
+    if (!name.s || name.len <= 0) {
         return nullptr;
     }
+    int lo = 0;
+    int hi = kAssetIconsCount - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        const AssetIcon& e = kAssetIcons[mid];
+        int cmp = StrCmpNI(e.name, name.s, name.len);
+        if (cmp == 0 && e.name[name.len] != 0) {
+            cmp = 1; // a longer name sorts after the prefix asked for
+        }
+        if (cmp == 0) {
+            *lenOut = e.len;
+            return kAssetIconsData + e.offset;
+        }
+        if (cmp < 0) {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return nullptr;
+}
+
+const uint8_t* AssetIconForPath(Str assetPath, int* lenOut) {
+    *lenOut = 0;
+    const char* kDir = "icons/";
+    const int kDirLen = 6;
+    const int kExtLen = 4; // ".svg"
+    if (assetPath.len <= kDirLen + kExtLen) {
+        return nullptr;
+    }
+    if (StrCmpNI(assetPath.s, kDir, kDirLen) != 0) {
+        return nullptr;
+    }
+    Str base(assetPath.s + kDirLen, assetPath.len - kDirLen - kExtLen);
+    if (StrCmpNI(base.s + base.len, ".svg", kExtLen) != 0) {
+        return nullptr;
+    }
+    return AssetIconFind(base, lenOut);
+}
+
+// What an asset path resolved to, looked up once and then remembered. An
+// application's own `.svg` is read and converted here; a path that no root
+// supplies falls through to the compiled table, and that answer is cached
+// too — otherwise every icon would stat the filesystem once a frame.
+//
+// Big enough to hold the whole icon set and then some. It wraps rather than
+// grows, and a wrap frees whatever the slot was holding.
+static const int kMaxCache = 128;
+
+struct OpsCache {
+    char path[128] = {};
+    const uint8_t* data = nullptr;
+    int len = 0;
+    // False when `data` points into kAssetIconsData, which is not ours to
+    // free.
+    bool owned = false;
+};
+
+static OpsCache gCache[kMaxCache];
+static int gCacheN = 0;
+
+// The slot `assetPath` will live in, emptied and named. The caller has
+// already bounded the path, so this always has one to give.
+static OpsCache* CacheSlotFor(Str assetPath) {
     if (gCacheN >= kMaxCache) {
         gCacheN = 0; // simple wrap
     }
-    SvgCache* e = &gCache[gCacheN++];
-    int n = assetPath.len < 127 ? assetPath.len : 127;
-    memcpy(e->path, assetPath.s, (size_t)n);
-    e->path[n] = 0;
-    ParseSvg(xml, &e->icon);
-    e->ok = e->icon.nOps > 0;
-    return e->ok ? &e->icon : nullptr;
+    OpsCache* e = &gCache[gCacheN++];
+    if (e->owned) {
+        Free(nullptr, (void*)e->data);
+    }
+    e->data = nullptr;
+    e->len = 0;
+    e->owned = false;
+    memcpy(e->path, assetPath.s, (size_t)assetPath.len);
+    e->path[assetPath.len] = 0;
+    return e;
+}
+
+const uint8_t* SvgDrawOpsFor(Str assetPath, int* lenOut) {
+    *lenOut = 0;
+    if (!assetPath.s || assetPath.len <= 0 || assetPath.len > 127) {
+        return nullptr;
+    }
+    for (int i = 0; i < gCacheN; i++) {
+        if (gCache[i].data &&
+            StrCmpNI(gCache[i].path, assetPath.s, assetPath.len) == 0 &&
+            gCache[i].path[assetPath.len] == 0) {
+            *lenOut = gCache[i].len;
+            return gCache[i].data;
+        }
+    }
+    // The asset roots first: an application that ships "icons/inbox.svg" of
+    // its own means that one, the way Rust's AssetSource does. Only when no
+    // root has the file does the compiled-in table answer — which is every
+    // lucide icon in a binary shipped without its assets folder beside it.
+    TempStr xml = AssetsLoadTextTemp(assetPath);
+    if (xml.s) {
+        DrawOpsBuilder b;
+        if (SvgToDrawOps(xml, &b)) {
+            uint8_t* buf = AllocArray<uint8_t>(b.data.len);
+            if (!buf) {
+                return nullptr;
+            }
+            memcpy(buf, b.data.els, (size_t)b.data.len);
+            OpsCache* e = CacheSlotFor(assetPath);
+            e->data = buf;
+            e->len = b.data.len;
+            e->owned = true;
+            *lenOut = e->len;
+            return e->data;
+        }
+    }
+    int len = 0;
+    const uint8_t* built = AssetIconForPath(assetPath, &len);
+    if (!built) {
+        return nullptr;
+    }
+    // Remembered as well, so a name the table answers is not a directory
+    // walk every time it is drawn.
+    OpsCache* e = CacheSlotFor(assetPath);
+    e->data = built;
+    e->len = len;
+    *lenOut = len;
+    return built;
 }
 
 bool SvgViewBox(Str assetPath, Size* out) {
-    const SvgIcon* ic = GetIcon(assetPath);
-    if (!ic || !out) {
+    int len = 0;
+    const uint8_t* ops = SvgDrawOpsFor(assetPath, &len);
+    if (!ops || !out) {
         return false;
     }
-    out->w = ic->vbW > 0 ? ic->vbW : 24.f;
-    out->h = ic->vbH > 0 ? ic->vbH : 24.f;
-    return true;
+    return DrawOpsViewBox(ops, len, out);
 }
 
 bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
@@ -756,97 +951,19 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
     if (!ctx || !ctx->rt || size <= 0) {
         return false;
     }
-    const SvgIcon* ic = GetIcon(assetPath);
-    if (!ic) {
+    int len = 0;
+    const uint8_t* ops = SvgDrawOpsFor(assetPath, &len);
+    if (!ops) {
         return false;
     }
-
-    // The viewBox -> element box transform, applied while the path is built.
-    // A canvas transform would otherwise have to be part of the backend API
-    // for the sake of this one caller.
-    float sx = size / (ic->vbW > 0 ? ic->vbW : 24.f);
-    float sy = size / (ic->vbH > 0 ? ic->vbH : 24.f);
-    // Transformation::rotate, folded into the same walk: the icon turns about
-    // the middle of the box it was given, clockwise in this y-down space.
-    float ang = turns * 6.28318530718f;
-    float ca = turns != 0 ? cosf(ang) : 1.f;
-    float sa = turns != 0 ? sinf(ang) : 0.f;
-    float mx = x + size * 0.5f;
-    float my = y + size * 0.5f;
-    auto TX = [&](float u, float v) {
-        float px = x + (u - ic->vbX) * sx;
-        if (turns == 0) {
-            return px;
-        }
-        float py = y + (v - ic->vbY) * sy;
-        return mx + (px - mx) * ca - (py - my) * sa;
-    };
-    auto TY = [&](float u, float v) {
-        float py = y + (v - ic->vbY) * sy;
-        if (turns == 0) {
-            return py;
-        }
-        float px = x + (u - ic->vbX) * sx;
-        return my + (px - mx) * sa + (py - my) * ca;
-    };
-
-    auto Build = [&](int from, int to) -> Path* {
-        Path* p = PathNew(ctx, true);
-        if (!p) {
-            return nullptr;
-        }
-        for (int i = from; i < to; i++) {
-            const SvgOp& o = ic->ops[i];
-            if (o.cmd == kMove) {
-                PathMoveTo(p, TX(o.x, o.y), TY(o.x, o.y));
-            } else if (o.cmd == kLine) {
-                PathLineTo(p, TX(o.x, o.y), TY(o.x, o.y));
-            } else if (o.cmd == kCubic) {
-                PathCubicTo(p, TX(o.x1, o.y1), TY(o.x1, o.y1), TX(o.x2, o.y2),
-                            TY(o.x2, o.y2), TX(o.x, o.y), TY(o.x, o.y));
-            } else if (o.cmd == kClose) {
-                PathClose(p);
-            }
-        }
-        return p;
-    };
-
-    // The authored stroke width is in viewBox units and scales with the icon.
-    float strokeScale = (sx + sy) * 0.5f;
-    float stroke = (ic->strokeW > 0 ? ic->strokeW : 2.f) * strokeScale;
-
-    // A file whose shapes name their own colours is a picture, not an icon:
-    // each one is filled with what it said, and the caller's colour is only
-    // for the shapes that said nothing.
-    if (ic->hasOwnColors) {
-        for (int s = 0; s < ic->nShapes; s++) {
-            const SvgShape& sh = ic->shapes[s];
-            Path* p = Build(sh.start, sh.start + sh.count);
-            if (!p) {
-                continue;
-            }
-            if (sh.hasFill) {
-                PathFill(ctx, p, sh.fill);
-            } else if (ic->filled) {
-                PathFill(ctx, p, color);
-            } else {
-                PathStroke(ctx, p, stroke, color, true);
-            }
-            PathFree(p);
-        }
-        return true;
-    }
-
-    Path* path = Build(0, ic->nOps);
-    if (!path) {
-        return false;
-    }
-    if (ic->filled) {
-        PathFill(ctx, path, color);
-    }
-    PathStroke(ctx, path, stroke, color, true);
-    PathFree(path);
-    return true;
+    DrawOpsTarget t;
+    t.x = x;
+    t.y = y;
+    t.w = size;
+    t.h = size;
+    t.color = color;
+    t.turns = turns;
+    return ExecuteDrawOps(ctx, ops, len, t);
 }
 
 Str IconNamePath(IconName name) {

@@ -1086,3 +1086,52 @@ cargo run -p system_monitor
   | scratch arena, 64 KB prose                                       | 1538 KB  | 1488 KB  | -3%   |
 
   A wash on time — every row but `to_mdast` is inside this machine's noise — 50 KB of arena, and one less piece of mutable state in a container that is copied by value all over the parser. Verified with `bun cmd/test.ts` and `-dbg` (9628 checks each, the iterator's own cases added to `tests/ArenaVecTests.cpp`), and with nine screenshots — the story pages for tabs, resizable, chart, settings, menu and native-menu, plus `markdown_table`, `rich_text` and `dialog_overlay` — captured against a build of the commit before it and pixel-identical.
+
+- 2026-08-22: icons are byte code, not code and not files. `src/gpui/drawops.h`
+  defines a small stream format — a `u16` opcode and its `f32` arguments,
+  coordinates in the drawing's own viewBox — and `ExecuteDrawOps` is the whole
+  machine: it maps the viewBox onto the box it is given, applies the rotation
+  `Transformation::rotate` asks for, and builds one path per Fill/Stroke op.
+  Two things feed it. `cmd/svg-to-bytecode.ts` converts `assets/icons` at build
+  time into `src/gpui/asset_icons.cpp` — 73 icons, 21,800 bytes, one array with
+  an offset and a length per icon and a binary search over the names — so
+  nothing under `icons/` is read or parsed while the app runs. `SvgToDrawOps`
+  in `src/gpui/svg.cpp` converts any other `.svg` the first time it is asked
+  for, and the result is cached as the same bytes.
+
+  What went away: the 640-line `DrawIcon` in `gpui.cpp`, a hand-drawn
+  approximation of each lucide icon in `CanvasLine` calls, which existed only
+  as the fallback for an app with no assets folder. There is no such app now —
+  the icons are in the binary — and the fallbacks were the worse drawing of the
+  two (`Moon` was a plain disc, `Github` a filled silhouette, and the stroke
+  was a flat 1.6 px at every size instead of the authored 2 viewBox units).
+
+  Two fixes fell out of making the reader and the generator agree.
+  `GetAttr` copied an attribute into a 2 KB buffer, so `window-maximize.svg`
+  and `window-restore.svg` — traced by a design tool, 2.4 KB of `d` — had been
+  drawing about five sixths of their path; attribute values are read as a slice
+  of the tag now. And a shape drawn by `<line>` or `<polyline>` was dropped
+  entirely from a file whose other shapes named their own colours, because only
+  the tags that called `EndShape` were on the per-colour list. Neither is in the
+  icon set, which is why neither showed.
+
+  `tests/DrawOpsTests.cpp` is not a port: it is the check that keeps the
+  TypeScript generator and the C++ reader saying the same thing. Every icon in
+  the generated table is reconverted from its file and compared op for op,
+  floats to a thousandth of a viewBox unit — the generator works in doubles and
+  rounds once, the reader is float throughout, and an arc lands a couple of ulps
+  apart. That test is what found both bugs above.
+
+  Verified with `bun cmd/build.ts -rel -all` and `-dbg -all`, `bun cmd/test.ts`
+  (9930 checks), and screenshots of `sidebar`, `showcase`, `app_assets`,
+  `story`, `markdown_table` and `rich_text` against a build of the commit
+  before, pixel-identical in every one.
+
+  Which of the two answers an asset path is the asset roots' call, not the
+  table's: `SvgDrawOpsFor` asks the roots first and only falls through to the
+  compiled bytes when no root has the file, which is what Rust's `AssetSource`
+  means and what keeps `examples/app_assets` demonstrating something — its own
+  `assets/app_assets/icons/{bot,inbox}.svg` still win. Either answer is cached
+  under the path, so a name the table serves is not a directory walk every
+  frame, and the cache is 128 slots — the icon set and then some — rather than
+  the 24 the old one had.
