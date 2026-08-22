@@ -133,7 +133,8 @@ El* Tiles::IntoEl() {
         // reordered as tiles come to the front, and the panels are not.
         int p = item.panel;
         if (p >= 0 && p < panels.len && panels[p].title.s) {
-            bar->Child(TextEl(a, panels[p].title)->Font(13)->Fg(th.foreground));
+            // Tiles names no text size; a panel title reads at the base.
+            bar->Child(TextEl(a, panels[p].title)->Fg(th.foreground));
         }
         bar->OnMouseDown(
             ListenTo(state, &TilesState::OnMoveDown, (intptr_t)ix));

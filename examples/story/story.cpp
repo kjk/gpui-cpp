@@ -650,7 +650,8 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
                       ->Radius(6)
                       ->OnClick(Listen(cx, &OpenStory, i))
                       ->FocusId(ClickStory + i);
-        El* label = StoryTxt(cx, Str(m->title), 13, th.sidebarFg);
+        // SidebarMenuItem is text_sm.
+        El* label = StoryTxt(cx, Str(m->title), 14, th.sidebarFg);
         if (on) {
             label->Semibold();
             row->Bg(th.tokens.secondary);

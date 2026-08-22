@@ -314,7 +314,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                 ->JustifyCenter()
                 ->Radius(th.radius)
                 ->OnClick(Listen(cx, &SetTab, i))
-                ->Child(StoryTxt(cx, Str(kFillNames[i]), 13, th.foreground));
+                ->Child(StoryTxt(cx, Str(kFillNames[i]), 14, th.foreground));
         if (i == self->tab) {
             t->Bg(th.tokens.background);
         }

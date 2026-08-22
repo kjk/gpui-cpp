@@ -43,7 +43,7 @@ static El* PlainCard(Ctx* cx, Str body) {
         ->Border(1, th.border)
         ->Bg(th.tokens.background)
         ->Radius(th.radius)
-        ->Child(StoryTxt(cx, body, 13, th.foreground));
+        ->Child(StoryTxt(cx, body, 14, th.foreground));
 }
 
 El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
@@ -56,7 +56,7 @@ El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
         "Shows supporting information without changing the current view.");
     StorySectionBody(def)->W(520);
     bool defOpen = Showing(cx, StrL("hc-default-card"));
-    El* defTrig = Trig(StoryTxt(cx, StrL("Hover over me"), 13, th.primary),
+    El* defTrig = Trig(StoryTxt(cx, StrL("Hover over me"), 14, th.primary),
                        StrL("hc-default"));
     StorySectionAdd(def,
                     component::HoverCard::New(cx, StrL("hc-default-card"))

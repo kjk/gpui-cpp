@@ -1254,3 +1254,42 @@ cargo run -p system_monitor
   moved two pages: `spinner`, which animates, and `form`, by four pixels.
   The inspector is the one thing not screenshot-compared: upstream has no way
   in that the harness can drive either.
+
+- 2026-08-22: the font sizes, where a Rust node names one. GPUI's text scale
+  is Tailwind's — `text_xs` 12, `text_sm` 14, nothing 16, `text_lg` 18,
+  `text_2xl` 24 — and an element that names none inherits, which for a story
+  page is the 16 px base. This tree has to write a number, and where the Rust
+  said nothing the port had often written 13, which is not on the scale at
+  all. Every one of those with a Rust node behind it is now what that node
+  resolves to:
+
+  - `src/ui`: the dock's tab label (`Tab`'s own size, 14), its
+    "not registered" panel and its drag preview (both inherit), the dialog
+    description (`text_sm`), a table cell (`Table` is `text_sm`), a tiles
+    panel title (inherits), and the inspector's two notices (`DivInspector`
+    is `text_sm`).
+  - the stories: hover-card's trigger and card body (`text_sm`), the tabs
+    story's filling-space labels (a tab's size), the gallery's sidebar menu
+    label (`SidebarMenuItem` is `text_sm`), the slider story's channel
+    captions and the alert-dialog story's body (all inherit), the toggle
+    story's chip labels (`Toggle` names no size at Medium) and its
+    Ghost/Outline headings (`text_sm().font_medium()`, not 13 semibold), and
+    the progress story's two card titles (`font_medium`, so 16) beside their
+    `text_sm` status lines.
+
+  What is left at 13 is on the four pages with no upstream counterpart — the
+  dock and tiles stories, and one line of the tooltip story — where there is
+  no Rust node to resolve against and inventing one would be guessing.
+
+  This was a pass over the sizes that are off the scale, not a node-by-node
+  audit of every string in the gallery. A count of Rust text classes against
+  ours per page is too noisy to drive more than triage: our port puts text
+  inside components where Rust writes it inline, and vice versa, so the two
+  distributions differ on 37 pages for reasons that are almost all structure
+  rather than size.
+
+  `-rel -all` / `-dbg -all` and `bun cmd/test.ts` in both (9948 checks). The
+  62-page sweep moved 62 pages, because the sidebar menu label is on all of
+  them; the three that moved by more than a fraction of a percent —
+  hover-card, progress and toggle — were compared against the Rust gallery
+  and each lines up with it now.

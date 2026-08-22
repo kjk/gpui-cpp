@@ -285,7 +285,7 @@ static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
         return Div(a)->W(kFill)->Child(
             TextEl(a, StrL("This element has no id, so its style cannot be "
                            "edited."))
-                ->Font(13)
+                ->Font(14)
                 ->Fg(th.mutedFg));
     }
     Entity<InspectorEditor> ed = KeyedEntity<InspectorEditor>(
@@ -395,7 +395,7 @@ El* Inspector::IntoEl() {
     El* body = Div(a)->FlexCol()->Flex1()->W(kFill)->Pad(12)->Gap(12);
     if (!st->hasPick) {
         body->Child(TextEl(a, StrL("Pick an element to inspect it."))
-                        ->Font(13)
+                        ->Font(14)
                         ->Fg(th.mutedFg));
         panel->Child(body);
         return panel;
