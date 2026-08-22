@@ -29,7 +29,14 @@ struct Reference {
 // filled, and the events that opened them.
 struct TreeFrame {
     Node* tree = nullptr;
-    ArenaVec<int32_t> stack = {};
+    // The open nodes, root-most first. markdown-rs keeps child *indexes* here
+    // and walks down from the tree on every event, because Rust cannot hold a
+    // `&mut Node` into a tree it is still building. There is no such rule
+    // here, so the stack holds the nodes themselves: an arena allocation does
+    // not move, so the pointer stays good for as long as the tree does, and
+    // the innermost node is one read off the end of this rather than a walk
+    // that indexes `children` once per level.
+    ArenaVec<Node*> stack = {};
     ArenaVec<int32_t> eventStack = {};
 };
 
@@ -122,29 +129,22 @@ static UnistPosition PositionFromEvent(const Event& event) {
     return position;
 }
 
-static Node* DelveMut(Node* node, const ArenaVec<int32_t>& stack,
-                      int32_t stackLen) {
-    // The stack is read in order, so it walks; `children` is indexed by what
-    // the stack says, which is not in order and cannot.
-    ArenaVec<int32_t>::Iter it = stack.begin();
-    for (int32_t i = 0; i < stackLen; i++, ++it) {
-        node = node->children[*it];
-    }
-    return node;
-}
-
 static TreeFrame& TreeTail(CompileContext* c) {
     return c->trees[c->trees.len - 1];
 }
 
+// `delve_mut(tree, stack)` in markdown-rs, which walks the whole depth. The
+// stack ends at the node it would have arrived at, so both of these are one
+// read. An empty stack is the tree itself, which is what a zero-length walk
+// came to.
 static Node* TailMut(CompileContext* c) {
     TreeFrame& frame = TreeTail(c);
-    return DelveMut(frame.tree, frame.stack, frame.stack.len);
+    return frame.stack.len > 0 ? frame.stack[frame.stack.len - 1] : frame.tree;
 }
 
 static Node* TailPenultimateMut(CompileContext* c) {
     TreeFrame& frame = TreeTail(c);
-    return DelveMut(frame.tree, frame.stack, frame.stack.len - 1);
+    return frame.stack.len > 1 ? frame.stack[frame.stack.len - 2] : frame.tree;
 }
 
 static void Buffer(CompileContext* c) {
@@ -163,26 +163,27 @@ static void TailPush(CompileContext* c, Node* child) {
         child->position = PositionFromEvent((*c->events)[c->index]);
         child->hasPosition = true;
     }
-    TreeFrame& frame = TreeTail(c);
-    Node* node = DelveMut(frame.tree, frame.stack, frame.stack.len);
-    int32_t index = node->children.len;
+    Node* node = TailMut(c);
     node->children.Append(c->a, child);
-    frame.stack.Append(c->a, index);
+    TreeFrame& frame = TreeTail(c);
+    frame.stack.Append(c->a, child);
     frame.eventStack.Append(c->a, c->index);
 }
 
-static void TailPushAgain(CompileContext* c) {
+// `tail_push` for a node that is already the tail's last child — the text run
+// that carries on after a character reference. The caller has the child in
+// hand, so nothing has to go looking for it.
+static void TailPushAgain(CompileContext* c, Node* child) {
     TreeFrame& frame = TreeTail(c);
-    Node* node = DelveMut(frame.tree, frame.stack, frame.stack.len);
-    frame.stack.Append(c->a, node->children.len - 1);
+    frame.stack.Append(c->a, child);
     frame.eventStack.Append(c->a, c->index);
 }
 
 static void TailPop(CompileContext* c) {
     UnistPoint end = ToUnist((*c->events)[c->index].point);
-    TreeFrame& frame = TreeTail(c);
-    Node* node = DelveMut(frame.tree, frame.stack, frame.stack.len);
+    Node* node = TailMut(c);
     node->position.end = end;
+    TreeFrame& frame = TreeTail(c);
     frame.stack.Pop();
     frame.eventStack.Pop();
 }
@@ -195,9 +196,11 @@ static void OnEnterBuffer(CompileContext* c) {
 
 static void OnEnterData(CompileContext* c) {
     Node* parent = TailMut(c);
-    if (parent->children.len > 0 &&
-        parent->children[parent->children.len - 1]->kind == NodeKind::Text) {
-        TailPushAgain(c);
+    Node* last = parent->children.len > 0
+                     ? parent->children[parent->children.len - 1]
+                     : nullptr;
+    if (last && last->kind == NodeKind::Text) {
+        TailPushAgain(c, last);
     } else {
         TailPush(c, NodeNew(c->a, NodeKind::Text));
     }
