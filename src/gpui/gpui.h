@@ -1273,6 +1273,13 @@ struct ActionSlot {
 // name, so this is the name and the one thing a handler answers back.
 struct ActionEvent {
     uint32_t action = 0;
+    // What the action carries. Rust puts fields on the action type —
+    // `Confirm { secondary }`, `SelectScrollbarMode(mode)`,
+    // `MenuClick(name)` — and matches the whole value; an action here is the
+    // hash of its name, and this is the rest of it. A number, a bool or an
+    // enum is itself; anything larger is a pointer to something that outlives
+    // the dispatch, which for a binding means a literal.
+    intptr_t arg = 0;
     // cx.propagate(): the handler looked and did not want it, so the search
     // carries on outwards. Not setting it is Rust's default, which stops.
     bool propagate = false;
@@ -3560,6 +3567,9 @@ bool WindowRestoreFocus(Window* win, int id);
 // `dispatch_action` plus the `cx.propagate()` that decides how far it goes.
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
                              bool alt);
+// The same, for an action already in hand rather than one a keystroke
+// resolved to. `arg` is what the action carries.
+bool WindowDispatchAction(Window* win, uint32_t action, intptr_t arg = 0);
 // The `El::OnKeyDown` handlers over the focused element, innermost first.
 // Answers true when one of them stopped propagating.
 bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev);

@@ -17,7 +17,6 @@ namespace action {
     }
 
 GPUI_ACTION(Confirm, "ui::Confirm")
-GPUI_ACTION(ConfirmSecondary, "ui::ConfirmSecondary")
 GPUI_ACTION(Cancel, "ui::Cancel")
 GPUI_ACTION(SelectUp, "ui::SelectUp")
 GPUI_ACTION(SelectDown, "ui::SelectDown")

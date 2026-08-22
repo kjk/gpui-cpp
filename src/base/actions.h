@@ -8,9 +8,10 @@
    name spelled two ways is two actions and nothing would say so.
 
    `Confirm` carries a `secondary` flag in Rust — one action type with two
-   payloads, which is how a combobox tells enter from ctrl-enter. A binding
-   here resolves to an id and nothing else, so the two payloads are two
-   names. */
+   payloads, which is how a combobox tells enter from ctrl-enter. It is one
+   action here too: the flag rides on the binding as `KeyBinding::arg` and
+   reaches the handler as `ActionEvent::arg`, which is what
+   `kConfirmSecondary` names. */
 
 #include "gpui/gpui.h"
 
@@ -19,8 +20,9 @@ namespace gpui {
 namespace action {
 
 uint32_t Confirm();
-// ui::Confirm { secondary: true }, which is what the secondary chord binds.
-uint32_t ConfirmSecondary();
+// The payload `ui::Confirm { secondary: true }` carries. A binding writes it
+// as its `arg`; a handler reads `ev->arg == kConfirmSecondary`.
+constexpr intptr_t kConfirmSecondary = 1;
 uint32_t Cancel();
 uint32_t SelectUp();
 uint32_t SelectDown();

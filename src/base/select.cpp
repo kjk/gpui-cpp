@@ -19,8 +19,10 @@ void SelectInitKeys() {
         {"up", action::SelectUp(), ctx},
         {"down", action::SelectDown(), ctx},
         {"enter", action::Confirm(), ctx},
-        // Confirm { secondary: true }, which has no payload to carry here.
-        {"secondary-enter", action::ConfirmSecondary(), ctx},
+        // The same action carrying `secondary: true`, which a select
+        // treats no differently — the binding is there so the chord is not
+        // left to whatever encloses it.
+        {"secondary-enter", action::Confirm(), ctx, action::kConfirmSecondary},
         {"escape", action::Cancel(), ctx},
     };
     KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
@@ -38,7 +40,7 @@ SelectAction SelectActionOf(uint32_t id, bool open, bool disabled) {
         // options themselves take the arrow from there.
         return open ? SelectAction::None : SelectAction::Open;
     }
-    if (id == action::Confirm() || id == action::ConfirmSecondary()) {
+    if (id == action::Confirm()) {
         return open ? SelectAction::Confirm : SelectAction::Open;
     }
     if (id == action::Cancel()) {

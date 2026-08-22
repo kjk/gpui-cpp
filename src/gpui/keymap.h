@@ -87,6 +87,11 @@ struct KeyBinding {
     const char* stroke = nullptr;
     uint32_t action = 0;
     const char* context = nullptr;
+    // What the action carries, for the actions that carry something:
+    // `KeyBinding::new("secondary-enter", Confirm { secondary: true }, ..)`
+    // is `{"secondary-enter", action::Confirm(), ctx, 1}`. It reaches the
+    // handler as `ActionEvent::arg`.
+    intptr_t arg = 0;
 };
 
 // cx.bind_keys. The keymap is process-wide, the way the theme and the
@@ -108,6 +113,8 @@ uint32_t KeymapGeneration();
 // holding it and the keystroke belongs to nobody else.
 struct KeyMatch {
     uint32_t action = 0;
+    // The matched binding's payload; 0 for an action that carries nothing.
+    intptr_t arg = 0;
     bool pending = false;
 };
 
