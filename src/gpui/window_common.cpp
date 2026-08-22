@@ -1744,12 +1744,21 @@ bool WindowGeomRequested(int* x, int* y, int* w, int* h) {
     return true;
 }
 
+// -gpui-inspector: open the inspector on the first frame. The panel is
+// otherwise only reachable through ctrl-shift-i, which a screenshot harness
+// cannot send — it reads the real keyboard state.
+static bool gInspectorAsked = false;
+
 int GpuiTakeRuntimeArgs(int argc, char** argv) {
     const char* kGeom = "-gpui-window=";
     int keep = 0;
     for (int i = 0; i < argc; i++) {
         const char* a = argv[i];
         size_t kGeomLen = strlen(kGeom);
+        if (i > 0 && a && strcmp(a, "-gpui-inspector") == 0) {
+            gInspectorAsked = true;
+            continue;
+        }
         if (i > 0 && a && strncmp(a, kGeom, kGeomLen) == 0) {
             int g[4];
             if (ParseGeom(a + kGeomLen, g)) {
@@ -1784,6 +1793,9 @@ Window* WindowOpenView(App* app, Str title, int dipW, int dipH, EntityId root,
     Window* win = WindowOpen(app, title, dipW, dipH, opts);
     if (win) {
         win->root = root;
+        if (gInspectorAsked) {
+            WindowToggleInspector(win);
+        }
         AppInvalidate(win);
     }
     return win;

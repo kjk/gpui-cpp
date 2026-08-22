@@ -35,6 +35,9 @@ struct ShadcnScale {
 extern const ShadcnScale kShadcnScales[];
 extern const int kNumShadcnScales;
 extern const int kShadcnScaleNums[kNumShadcnColumns];
+// stone, which no ColorName can reach; the colour picker's palette grid is
+// the only thing that names it.
+extern const uint32_t kShadcnStone[kNumShadcnColumns];
 extern const uint32_t kShadcnBlack;
 extern const uint32_t kShadcnWhite;
 // default-theme.json verbatim: the theme set the registry starts with.

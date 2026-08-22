@@ -172,6 +172,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         StorySectionBody(sec)->W(kFill);
         component::Tabs* bar =
             component::Tabs::New(cx, StoryFmt(cx, "tabs-%d", (int)v))
+                ->WFill()
                 ->Variant(row.variant)
                 ->Size(self->toolbar.size)
                 ->Menu(self->menu);
@@ -287,7 +288,10 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     StorySectionAdd(dynamic, dynCol);
     page->Child(dynamic);
 
-    // Filling Space: two segmented tabs sharing the width.
+    // Filling Space: two segmented tabs. The section says they share the
+    // width and `Tab::new().flex_1()` asks them to, but TabBar wraps every
+    // tab of an indicator variant in a flex_shrink_0 div, so upstream renders
+    // them at their labels' width — which is what this draws.
     El* filling =
         StorySection(cx, "Filling Space",
                      "Segmented tabs can share the available width equally.");
@@ -304,7 +308,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         El* t =
             Div(a)
                 ->H(26)
-                ->Flex1()
+                ->Shrink0()
                 ->PadX(12)
                 ->ItemsCenter()
                 ->JustifyCenter()

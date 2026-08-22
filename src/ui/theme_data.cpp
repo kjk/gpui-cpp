@@ -75,6 +75,13 @@ const int kNumShadcnScales = 19;
 const int kShadcnScaleNums[kNumShadcnColumns] = {50,  100, 200, 300, 400, 500,
                                                  600, 700, 800, 900, 950};
 
+// `stone`, which no ColorName can reach — a theme file may not name it —
+// but the colour picker's palette grid is nine hues and stone is the first
+// of them (color_picker.rs, color_palettes()).
+const uint32_t kShadcnStone[kNumShadcnColumns] = {
+    0xfafaf9, 0xf5f5f4, 0xe7e5e4, 0xd6d3d1, 0xa8a29e, 0x78716c,
+    0x57534e, 0x44403c, 0x292524, 0x1c1917, 0x0c0a09};
+
 // `black` and `white`, which are not a scale and are named on their own.
 const uint32_t kShadcnBlack = 0x000000;
 const uint32_t kShadcnWhite = 0xffffff;

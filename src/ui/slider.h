@@ -22,7 +22,16 @@ struct Slider {
     bool disabled = false;
     // vertical(): the track runs bottom-to-top, and `width` is its length.
     Axis axis = Axis::Horizontal;
+    // The track's length along its axis. kFill is Rust's `w_full()` inside a
+    // `flex_1` root: the parts are then placed by `left(relative(..))` rather
+    // than by pixels, so the slider can share a row with anything.
     float width = 224;
+    // Styled::bg on the slider — `bar_color` in slider.rs. The rail takes it
+    // at 20%, the filled part whole and the thumb's ring at 50%. Unset is the
+    // theme's own pair. The colour picker passes a transparent one so only
+    // the gradient behind the slider shows.
+    Rgba bar = {};
+    bool hasBar = false;
     Listener onChange;
 
     static Slider* New(Ctx* cx, Str id, SliderState* state);
@@ -31,6 +40,9 @@ struct Slider {
     Slider* WithAxis(Axis v);
     Slider* Disabled(bool v = true);
     Slider* W(float px);
+    // w_full(): the track fills the box it is given.
+    Slider* WFill();
+    Slider* Bg(Rgba c);
     // cx.subscribe(&state, ..): the view hears SliderEvent::Change while the
     // slider moves and Release when the button comes back up.
     Slider* OnChange(Listener fn);

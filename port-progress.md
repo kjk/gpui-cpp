@@ -1186,3 +1186,71 @@ cargo run -p system_monitor
   `color_picker` (11), `inspector` (7) and `scroll/scrollable` (5) that this
   tree has no counterpart for, because those parts of those components are not
   ported yet. The count mismatch is missing feature, not different layout.
+
+- 2026-08-22: the three `flex_1()` counts the last entry left open, resolved
+  one at a time. They were not the same kind of gap.
+
+  **`scroll/scrollable.rs` (5) is not a gap at all.** All five are inside
+  `#[cfg(test)] mod tests` — GPUI test views built to pin auto-height and
+  max-height parents. There is nothing there to port, and the previous entry
+  was wrong to list it.
+
+  **`inspector.rs` (7): three ported, four blocked.** The JSON pane is a
+  `v_flex().flex_1().gap_y_3()` whose header is `h_flex().gap_x_2()` with the
+  label as the `flex_1` child and the Reset button after it, and whose body is
+  a `v_flex().flex_1()` holding an editor at `h(relative(1.))`. Ours had a
+  `JustifyBetween` header and a 180px editor; it fills the panel now, and
+  `Textarea::H` learned `kFill` so `h(relative(1.))` has a spelling. The
+  description list takes upstream's `.label_width(px(110.)).bordered(false)`
+  and the Reset button its `.small()`. The other four are the source-location
+  Link and the "Rust Styles" pane, and both are out for a reason rather than
+  for lack of time: GPUI stamps a caller location on every element and nothing
+  here records where an `El` was built, and the Rust pane is a code editor
+  with an LSP completion provider behind it — an LSP client is a standing
+  non-goal. Said so in the file, where the next reader will look.
+
+  **`color_picker.rs` (11): the whole popover was missing.** What this tree
+  had was five hard-coded swatches. It now has what upstream draws: a
+  segmented Palette/HSLA tab bar, a featured row of the theme's six base hues
+  and their light halves, the 9x11 palette grid, and an HSLA panel of four
+  sliders lying on their own gradient tracks with a `min_w_16` label and a
+  `w_10` readout either side. The hovered colour and its hex field sit under
+  a separator, as they do in Rust. `ColorPickerState` grew the four
+  `SliderState`s and the hex `InputState` that Rust keeps on it — the panel is
+  rebuilt every frame and the thumb being dragged has to outlive that — plus
+  `select_color` / `update_color` / `sync_pending_value` and the handlers the
+  widget binds. The state is a keyed entity (`ColorPickerStateFor`), which is
+  how this tree spells `Entity<ColorPickerState>`.
+
+  Four things had to exist first. The theme gained `base.<hue>.light` for all
+  six hues — the featured row is those twelve, and the resolver had been
+  dropping them with a comment saying nothing wanted them. `theme_data.cpp`
+  gained `kShadcnStone`, the one palette hue no `ColorName` can reach.
+  `component::Slider` gained `WFill()` — the parts are placed by
+  `left(relative(..))` instead of by pixels, which is what lets a slider be
+  the `flex_1` child of a row, as every Rust slider is — and `Bg()`, the
+  `bar_color` the picker sets to transparent so only the gradient shows.
+  And `component::Tabs` gained `W()` / `WFill()`, because `TabBar` has no
+  width of its own in Rust and every caller says `.w_full()` or `.w_64()`.
+
+  One upstream quirk reproduced rather than fixed: `Tab::flex_1()` does
+  nothing on a Segmented, Pill or Underline bar, because `TabBar` wraps each
+  of those in a `div().flex_shrink_0().on_prepaint(..)` to measure it and the
+  wrapper is what the bar lays out. That is why the picker's two tabs sit at
+  their labels' width in upstream and why the tabs story's "Filling Space"
+  does not fill — both now render the way upstream renders, and `tab.cpp`
+  says why.
+
+  `-gpui-inspector` opens the inspector on the first frame. The panel is
+  otherwise only reachable through ctrl-shift-i, which the screenshot harness
+  cannot send: it posts messages, and the chord is read from the real keyboard
+  state.
+
+  Verified against the Rust gallery beside ours — the picker's palette and
+  HSLA panels click-for-click, and the tabs story's "Filling Space" — plus
+  `-rel -all` / `-dbg -all` and `bun cmd/test.ts` in both (9948 checks; the
+  colour-picker suite gained upstream's hex-parsing, hex-formatting and
+  `default_value_reaches_the_hex_field_and_sliders` cases). The 62-page sweep
+  moved two pages: `spinner`, which animates, and `form`, by four pixels.
+  The inspector is the one thing not screenshot-compared: upstream has no way
+  in that the harness can drive either.

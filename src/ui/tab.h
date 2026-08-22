@@ -46,6 +46,10 @@ struct TabItem {
     Str label = {};
     IconName icon = IconName::None;
     bool disabled = false;
+    // Tab::flex_1(): the tab shares the bar with its siblings instead of
+    // taking the width of its own label. Two of them split a segmented bar
+    // evenly, which is what the colour picker's Palette/HSLA pair does.
+    bool flex1 = false;
 };
 
 struct Tabs {
@@ -61,6 +65,8 @@ struct Tabs {
     // TabBar::max_width: the width a label gives way at, ellipsizing inside
     // it. 0 is Rust's `None` — the label decides the width and never shrinks.
     float maxWidth = 0;
+    // The bar's own width. kAuto is Rust's default — the tabs decide.
+    float width = kAuto;
     El* prefix = nullptr;
     El* suffix = nullptr;
     // TabBar::menu: the overflow button after the strip. Its dropdown lists
@@ -73,6 +79,8 @@ struct Tabs {
     static Tabs* New(Ctx* cx, Str id);
     Tabs* Tab(Str label);
     Tabs* Tab(Str label, IconName icon, bool disabled = false);
+    // `Tab::new().flex_1()`, applied to the tab just added.
+    Tabs* Flex1();
     Tabs* Disabled(int ix, bool v = true);
     Tabs* Selected(int i);
     Tabs* OnChange(Listener fn);
@@ -83,6 +91,12 @@ struct Tabs {
     Tabs* Underline();
     Tabs* Size(UiSize v);
     Tabs* MaxWidth(float v);
+    // TabBar has no width of its own in Rust: it is as wide as its tabs
+    // unless the caller says `.w_full()` or `.w_64()`. A bar that fills is
+    // also what makes `Tab::flex_1()` mean anything, since there is no free
+    // space to share otherwise.
+    Tabs* W(float v);
+    Tabs* WFill();
     Tabs* Prefix(El* e);
     Tabs* Suffix(El* e);
     Tabs* Menu(bool v = true);

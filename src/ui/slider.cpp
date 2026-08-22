@@ -45,6 +45,16 @@ static float Clamp01f(float v) {
     return v > 1 ? 1 : v;
 }
 
+Slider* Slider::WFill() {
+    width = kFill;
+    return this;
+}
+Slider* Slider::Bg(Rgba c) {
+    bar = c;
+    hasBar = true;
+    return this;
+}
+
 El* Slider::IntoEl() {
     const Theme& th = cx->theme();
     // The percentages the state already worked out from the value; a
@@ -72,6 +82,13 @@ El* Slider::IntoEl() {
     Background fillBg = disabled ? BackgroundOpacity(th.tokens.primary, 0.5f)
                                  : th.tokens.primary;
     Rgba thumbBorder = disabled ? RgbaOpacity(th.primary, 0.5f) : th.primary;
+    // bar_color: the rail at 20%, the fill whole, the thumb's ring at 50%.
+    if (hasBar) {
+        railBg = RgbaOpacity(bar, 0.2f);
+        Rgba full = disabled ? RgbaOpacity(bar, 0.5f) : bar;
+        fillBg = full;
+        thumbBorder = RgbaOpacity(bar, 0.5f);
+    }
     SliderState* bind = disabled ? nullptr : state;
 
     if (axis == Axis::Vertical) {
@@ -119,42 +136,58 @@ El* Slider::IntoEl() {
     }
 
     int tid = HashClickId(id.s ? id : StrL("slider"));
-    El* track = SliderTrack::New(cx, bind, axis)->W(w)->H(kH)->Click(tid);
+    // w_full(): the parts are placed by `left(relative(..))` the way Rust's
+    // are, so the row the slider sits in decides how long it is. A pixel
+    // width keeps the arithmetic it always had.
+    bool fill = w == kFill;
+    El* track = SliderTrack::New(cx, bind, axis)->H(kH)->Click(tid);
+    if (fill) {
+        track->W(kFill);
+    } else {
+        track->W(w);
+    }
     if (!disabled) {
         track->FocusId(tid);
     }
-    track->Child(SliderIndicator::New(cx, bind)
-                     ->Absolute()
-                     ->Top(mid)
-                     ->Left(0)
-                     ->W(w)
-                     ->H(kBar)
-                     ->Radius(kBar * 0.5f)
-                     ->Bg(railBg));
+    El* rail =
+        SliderIndicator::New(cx, bind)->Absolute()->Top(mid)->Left(0)->H(kBar);
+    rail->Radius(kBar * 0.5f)->Bg(railBg);
+    if (fill) {
+        rail->Right(0);
+    } else {
+        rail->W(w);
+    }
+    track->Child(rail);
     // Reversed, the filled part is what is left beyond the thumb.
     float fillFrom = reverse ? hi : low;
     float fillTo = reverse ? 1.f : hi;
-    track->Child(Div(a)
-                     ->Absolute()
-                     ->Top(mid)
-                     ->Left(w * fillFrom)
-                     ->W(w * (fillTo - fillFrom))
-                     ->H(kBar)
-                     ->Radius(kBar * 0.5f)
-                     ->Bg(fillBg));
+    El* bar2 = Div(a)->Absolute()->Top(mid)->H(kBar);
+    bar2->Radius(kBar * 0.5f)->Bg(fillBg);
+    if (fill) {
+        bar2->Left(0)->LeftRel(fillFrom)->Right(0)->RightRel(1.f - fillTo);
+    } else {
+        bar2->Left(w * fillFrom)->W(w * (fillTo - fillFrom));
+    }
+    track->Child(bar2);
     for (int i = 0; i < (range ? 2 : 1); i++) {
         float at = (range && i == 0) ? low : hi;
-        track->Child(SliderThumb::New(cx)
-                         ->Absolute()
-                         ->Top((kH - kThumb) * 0.5f)
-                         ->Left(w * at - kThumb * 0.5f)
-                         ->W(kThumb)
-                         ->H(kThumb)
-                         ->Radius(kThumb * 0.5f)
-                         ->Bg(th.tokens.sliderThumb)
-                         ->Border(1, thumbBorder));
+        El* thumb = SliderThumb::New(cx)
+                        ->Absolute()
+                        ->Top((kH - kThumb) * 0.5f)
+                        ->W(kThumb)
+                        ->H(kThumb)
+                        ->Radius(kThumb * 0.5f)
+                        ->Bg(th.tokens.sliderThumb)
+                        ->Border(1, thumbBorder);
+        if (fill) {
+            thumb->Left(-kThumb * 0.5f)->LeftRel(at);
+        } else {
+            thumb->Left(w * at - kThumb * 0.5f);
+        }
+        track->Child(thumb);
     }
-    return gpui::Slider::New(cx)->W(w)->H(kH)->Child(track);
+    El* root = gpui::Slider::New(cx)->H(kH)->Child(track);
+    return fill ? root->W(kFill) : root->W(w);
 }
 
 } // namespace component

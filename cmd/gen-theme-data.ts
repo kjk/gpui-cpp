@@ -96,6 +96,24 @@ function main() {
   out.push("// The scale numbers the eleven columns above stand for.");
   out.push(`const int kShadcnScaleNums[kNumShadcnColumns] = {${SCALES.join(", ")}};`);
   out.push("");
+  out.push("// `stone`, which no ColorName can reach — a theme file may not name it —");
+  out.push("// but the colour picker's palette grid is nine hues and stone is the first");
+  out.push("// of them (color_picker.rs, color_palettes()).");
+  out.push("const uint32_t kShadcnStone[kNumShadcnColumns] = {");
+  {
+    const entries = colors.stone;
+    if (!Array.isArray(entries)) throw new Error("missing hue stone");
+    const byScale = new Map<number, string>();
+    for (const e of entries) byScale.set(e.scale, e.hex);
+    const hexes = SCALES.map((sc) => {
+      const hex = byScale.get(sc);
+      if (!hex) throw new Error(`stone has no scale ${sc}`);
+      return "0x" + hexToU32(hex).toString(16).padStart(6, "0");
+    });
+    out.push(`    ${hexes.slice(0, 6).join(", ")},`);
+    out.push(`    ${hexes.slice(6).join(", ")}};`);
+  }
+  out.push("");
   out.push("// `black` and `white`, which are not a scale and are named on their own.");
   out.push(`const uint32_t kShadcnBlack = 0x${hexToU32(colors.black.hex).toString(16).padStart(6, "0")};`);
   out.push(`const uint32_t kShadcnWhite = 0x${hexToU32(colors.white.hex).toString(16).padStart(6, "0")};`);

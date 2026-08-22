@@ -653,15 +653,30 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->background, &out->tokens.background,
              PickBg(c, "background", base.tokens.background));
 
-    // The base colours, which the semantic ones fall back to. Their `.light`
-    // halves are the background blended with 80% of the base, and nothing in
-    // this tree keeps them, so they stay local.
+    // The base colours, which the semantic ones fall back to, and their
+    // `.light` halves — the background blended with 80% of the base where the
+    // file does not name one. The colour picker shows all twelve.
     out->red = Pick(c, "base.red", base.red);
     out->green = Pick(c, "base.green", base.green);
     out->blue = Pick(c, "base.blue", base.blue);
     out->magenta = Pick(c, "base.magenta", base.magenta);
     out->yellow = Pick(c, "base.yellow", base.yellow);
     out->cyan = Pick(c, "base.cyan", base.cyan);
+    out->redLight = Pick(c, "base.red.light",
+                         Blend(out->background, RgbaOpacity(out->red, 0.8f)));
+    out->greenLight =
+        Pick(c, "base.green.light",
+             Blend(out->background, RgbaOpacity(out->green, 0.8f)));
+    out->blueLight = Pick(c, "base.blue.light",
+                          Blend(out->background, RgbaOpacity(out->blue, 0.8f)));
+    out->magentaLight =
+        Pick(c, "base.magenta.light",
+             Blend(out->background, RgbaOpacity(out->magenta, 0.8f)));
+    out->yellowLight =
+        Pick(c, "base.yellow.light",
+             Blend(out->background, RgbaOpacity(out->yellow, 0.8f)));
+    out->cyanLight = Pick(c, "base.cyan.light",
+                          Blend(out->background, RgbaOpacity(out->cyan, 0.8f)));
 
     out->border = Pick(c, "border", base.border);
     out->foreground = Pick(c, "foreground", base.foreground);

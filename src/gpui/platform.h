@@ -85,6 +85,8 @@ Window* WindowAlloc(App* app, WinOpts opts);
 // its platform reports.
 void WindowClampToDisplay(int* dipW, int* dipH, int screenW, int screenH);
 
+// -gpui-inspector opens the inspector panel on the first frame, so a
+// screenshot harness can reach a panel whose only other way in is a chord.
 // -gpui-window=X,Y,W,H asks for a window at an exact place and size, in the
 // coordinates the platform's own create call takes -- on Windows the outer
 // window rect, the one GetWindowRect reports. cmd/shot.ts passes it so a
