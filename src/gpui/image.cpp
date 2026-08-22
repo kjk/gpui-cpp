@@ -2,6 +2,8 @@
 
 #include "gpui/assets.h"
 #include "gpui/paint.h"
+#include "gpui/svg.h"
+#include "sys/http.h"
 
 namespace gpui {
 
@@ -184,16 +186,77 @@ Str ImageAssetFor(Arena* a, Str src) {
     return {};
 }
 
+// ─── what the bytes are ───────────────────────────────────────────────────
+
+// A picture the icon renderer draws rather than one the platform decodes.
+// The server's content-type would say so, but it is not always right and the
+// fetch table does not keep it; the first bytes of the file are, and an SVG
+// says so within its first line or two.
+static bool LooksLikeSvg(const uint8_t* b, int len) {
+    int n = len < 512 ? len : 512;
+    for (int i = 0; i + 4 <= n; i++) {
+        if (b[i] == '<' && b[i + 1] == 's' && b[i + 2] == 'v' &&
+            b[i + 3] == 'g') {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The bytes a src resolves to without going near a decoder: the data: URI,
+// the asset, or the fetched body. False while a fetch is still running, which
+// is the one answer the caller must not remember.
+enum class SrcBytes : int32_t {
+    No,
+    Yes,
+    Pending
+};
+
+static SrcBytes BytesForSrc(Str src, Vec<uint8_t>* owned,
+                            const uint8_t** borrowed, int* borrowedLen) {
+    *borrowed = nullptr;
+    *borrowedLen = 0;
+    if (DataUriBytes(src, owned)) {
+        return SrcBytes::Yes;
+    }
+    // A shipped asset first, network second — an application that bundled
+    // the picture means that one, and says so by shipping it.
+    Str asset = ImageAssetFor(GetTempArena(), src);
+    if (asset.s && AssetsLoad(asset, owned) && owned->len > 0) {
+        return SrcBytes::Yes;
+    }
+    owned->Reset();
+    if (!HttpUrlIsRemote(src)) {
+        return SrcBytes::No;
+    }
+    switch (HttpFetch(src, borrowed, borrowedLen)) {
+        case FetchState::Done:
+            return *borrowedLen > 0 ? SrcBytes::Yes : SrcBytes::No;
+        case FetchState::Pending:
+        case FetchState::None:
+            // None means the table had no room to start it; asking again next
+            // frame is the whole retry policy.
+            return SrcBytes::Pending;
+        case FetchState::Failed:
+            return SrcBytes::No;
+    }
+    return SrcBytes::No;
+}
+
 // ─── the cache ────────────────────────────────────────────────────────────
 //
 // A document shows the same badge or logo more than once and repaints many
 // times a second, so a decode has to happen once. The key is the src as
-// written; a failed decode is remembered too, or a document full of remote
-// images would retry every one of them every frame.
+// written; a failure is remembered too, or a document full of pictures that
+// will not decode would retry every one of them every frame. A fetch that has
+// not landed is the one thing not remembered — that answer is not final.
 
 struct ImageCacheSlot {
     Str src = {};
     Image* img = nullptr;
+    // A vector picture instead: the draw-op stream, ours to free.
+    uint8_t* ops = nullptr;
+    int opsLen = 0;
     bool tried = false;
 };
 
@@ -213,6 +276,11 @@ static void ImageSlotFree(ImageCacheSlot* s) {
         ImageFree(s->img);
         s->img = nullptr;
     }
+    if (s->ops) {
+        Free(nullptr, s->ops);
+        s->ops = nullptr;
+    }
+    s->opsLen = 0;
     if (s->src.s) {
         StrFree(s->src);
         s->src = {};
@@ -225,36 +293,96 @@ void ImageCacheClear() {
         ImageSlotFree(&gImageCache[i]);
     }
     gImageCacheNext = 0;
+    HttpFetchClear();
 }
 
-Image* ImageForSrc(PaintApp* pa, Str src) {
-    if (!pa || !src.s || src.len <= 0) {
-        return nullptr;
-    }
+static ImageCacheSlot* ImageSlotFind(Str src) {
     for (int i = 0; i < kImageCacheSlots; i++) {
         if (gImageCache[i].tried && SrcEq(gImageCache[i].src, src)) {
-            return gImageCache[i].img;
+            return &gImageCache[i];
         }
     }
-    if (!ImageSrcIsLocal(src)) {
+    return nullptr;
+}
+
+// Decodes `src` once and remembers the answer, whichever of the two it is.
+// Null while a fetch is still running: nothing is written down then.
+static ImageCacheSlot* ImageSlotFor(PaintApp* pa, Str src) {
+    if (!src.s || src.len <= 0) {
         return nullptr;
     }
-
-    Vec<uint8_t> bytes;
-    bool have = DataUriBytes(src, &bytes);
-    if (!have) {
-        have = AssetsLoad(src, &bytes);
+    ImageCacheSlot* hit = ImageSlotFind(src);
+    if (hit) {
+        return hit;
     }
-    Image* img =
-        have && bytes.len > 0 ? ImageDecode(pa, bytes.els, bytes.len) : nullptr;
+
+    Vec<uint8_t> owned;
+    const uint8_t* borrowed = nullptr;
+    int borrowedLen = 0;
+    SrcBytes got = BytesForSrc(src, &owned, &borrowed, &borrowedLen);
+    if (got == SrcBytes::Pending) {
+        return nullptr;
+    }
+    const uint8_t* bytes = owned.len > 0 ? owned.els : borrowed;
+    int len = owned.len > 0 ? owned.len : borrowedLen;
+
+    Image* img = nullptr;
+    uint8_t* ops = nullptr;
+    int opsLen = 0;
+    if (got == SrcBytes::Yes && bytes && len > 0) {
+        if (LooksLikeSvg(bytes, len)) {
+            DrawOpsBuilder b;
+            if (SvgToDrawOps(Str((char*)bytes, len), &b) && b.data.len > 0) {
+                ops = AllocArray<uint8_t>(b.data.len);
+                if (ops) {
+                    memcpy(ops, b.data.els, (size_t)b.data.len);
+                    opsLen = b.data.len;
+                }
+            }
+        } else if (pa) {
+            img = ImageDecode(pa, bytes, len);
+        }
+    }
 
     ImageCacheSlot* slot = &gImageCache[gImageCacheNext];
     gImageCacheNext = (gImageCacheNext + 1) % kImageCacheSlots;
     ImageSlotFree(slot);
     slot->src = StrDup(src);
     slot->img = img;
+    slot->ops = ops;
+    slot->opsLen = opsLen;
     slot->tried = true;
-    return img;
+    return slot;
+}
+
+Image* ImageForSrc(PaintApp* pa, Str src) {
+    if (!pa) {
+        return nullptr;
+    }
+    ImageCacheSlot* s = ImageSlotFor(pa, src);
+    return s ? s->img : nullptr;
+}
+
+const uint8_t* ImageVectorForSrc(Str src, int* lenOut) {
+    if (lenOut) {
+        *lenOut = 0;
+    }
+    // A local `.svg` already has a home: svg.cpp's own cache, which is where
+    // every icon in the tree comes from and which knows the compiled-in
+    // table. Only a src that is not an asset needs the slot above.
+    Str asset = ImageAssetFor(GetTempArena(), src);
+    if (asset.s && asset.len > 4 &&
+        StrEqI(Str(asset.s + asset.len - 4, 4), StrL(".svg"))) {
+        return SvgDrawOpsFor(asset, lenOut);
+    }
+    ImageCacheSlot* s = ImageSlotFor(nullptr, src);
+    if (!s || !s->ops) {
+        return nullptr;
+    }
+    if (lenOut) {
+        *lenOut = s->opsLen;
+    }
+    return s->ops;
 }
 
 } // namespace gpui

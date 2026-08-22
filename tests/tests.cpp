@@ -31,6 +31,11 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
+    // No test reaches the network. A suite that did would fail on a machine
+    // without one and be slow on a machine with one, so the client is off for
+    // the whole run and the fetch table starts nothing.
+    HttpSetEnabled(false);
+
     TestBackground();
     TestIndexPath();
     TestAutoScroll();
@@ -98,6 +103,7 @@ int GpuiMain(int argc, char** argv) {
     TestClick();
     TestArenaVec();
     TestDrawOps();
+    TestHttp();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

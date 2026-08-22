@@ -497,10 +497,38 @@ function startsWithI(s: string, at: number, lit: string): boolean {
   return s.slice(at, at + lit.length).toLowerCase() === lit;
 }
 
+// Shapes inside one of these are a definition, not a drawing: a clip path, a
+// gradient stop, a filter's input, the contents of <defs>. The mirror of
+// IsHiddenContainer in src/gpui/svg.cpp.
+const hiddenContainers = [
+  "defs",
+  "clippath",
+  "mask",
+  "filter",
+  "pattern",
+  "symbol",
+  "marker",
+  "lineargradient",
+  "radialgradient",
+];
+
+function isHiddenContainer(s: string, at: number): boolean {
+  for (const n of hiddenContainers) {
+    if (!startsWithI(s, at, n)) continue;
+    const after = at + n.length < s.length ? s[at + n.length]! : " ";
+    // "clipPath" must not match "clipPathUnits".
+    if (" >/\t\n\r".includes(after)) return true;
+  }
+  return false;
+}
+
 function parseSvg(xml: string): SvgIcon {
   const ic = newIcon();
   let p = 0;
   const end = xml.length;
+  // How deep inside a <defs> / <clipPath> / <mask> / ... we are. Nothing is
+  // drawn while this is above zero.
+  let hidden = 0;
   while (p < end) {
     if (xml[p] !== "<") {
       p++;
@@ -508,7 +536,9 @@ function parseSvg(xml: string): SvgIcon {
     }
     p++;
     if (p < end && xml[p] === "/") {
+      const name = p + 1;
       while (p < end && xml[p] !== ">") p++;
+      if (hidden > 0 && isHiddenContainer(xml, name)) hidden--;
       if (p < end) p++;
       continue;
     }
@@ -521,7 +551,14 @@ function parseSvg(xml: string): SvgIcon {
     while (p < end && xml[p] !== ">") p++;
     if (p >= end) break;
     const tag = xml.slice(tagStart, p);
+    const selfClosing = tag.endsWith("/");
     p++; // skip >
+
+    if (isHiddenContainer(xml, tagStart)) {
+      if (!selfClosing) hidden++;
+      continue;
+    }
+    if (hidden > 0) continue;
 
     if (startsWithI(xml, tagStart, "svg")) {
       const vb = getAttr(tag, "viewBox");
@@ -535,6 +572,15 @@ function parseSvg(xml: string): SvgIcon {
         ic.vbY = b;
         ic.vbW = c > 0 ? c : 24;
         ic.vbH = d > 0 ? d : 24;
+      } else {
+        // No viewBox: the coordinates are the viewport's, which width and
+        // height give. Every lucide icon has one and never reaches this.
+        const w = attrF(tag, "width", 0);
+        const h = attrF(tag, "height", 0);
+        if (w > 0 && h > 0) {
+          ic.vbW = w;
+          ic.vbH = h;
+        }
       }
       const sw = attrF(tag, "stroke-width", 0);
       if (sw > 0) ic.strokeW = sw;
