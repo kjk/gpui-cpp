@@ -328,7 +328,7 @@ static void Enter(CompileContext* c) {
             break;
         case Name::GfmTable: {
             Node* node = NodeNew(c->a, NodeKind::Table);
-            node->align = GfmTableAlign(*c->events, c->index, c->a);
+            node->perKind = GfmTableAlign(*c->events, c->index, c->a);
             TailPush(c, node);
             c->gfmTableInside = true;
             break;
@@ -535,15 +535,15 @@ static void OnExitGfmTaskListItemValue(CompileContext* c) {
 
 static void OnExitHeadingAtxSequence(CompileContext* c) {
     Node* node = TailMut(c);
-    if (node->startOrDepth == 0) {
-        node->startOrDepth = (uint32_t)ExitSlice(c).Len();
+    if (node->perKind == 0) {
+        node->perKind = (uint32_t)ExitSlice(c).Len();
     }
 }
 
 static void OnExitHeadingSetextUnderlineSequence(CompileContext* c) {
     Position position = PositionFromExitEvent(*c->events, c->index);
     uint8_t head = (uint8_t)c->bytes.s[position.start.index];
-    TailMut(c)->startOrDepth = head == '-' ? 2 : 1;
+    TailMut(c)->perKind = head == '-' ? 2 : 1;
 }
 
 static void OnExitLabelText(CompileContext* c) {
@@ -682,7 +682,7 @@ static void OnExitListItemValue(CompileContext* c) {
     }
     Node* node = TailPenultimateMut(c);
     if (!node->Has(NodeHasStart)) {
-        node->startOrDepth = start;
+        node->perKind = start;
         node->Set(NodeHasStart, true);
     }
 }

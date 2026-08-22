@@ -260,7 +260,7 @@ static void TestMarkdownFlow(Arena* a) {
     utassert(NodeChildCount(gParsedInto, root) == 1);
     Node* heading = Child(root, 0);
     utassert(heading->kind == NodeKind::Heading);
-    utassert(heading->startOrDepth == 1);
+    utassert(heading->perKind == 1);
     utassert(TextIs(a, heading, "Hi Earth!"));
     utassert(Child(heading, 1)->kind == NodeKind::Emphasis);
     // A node keeps the two byte offsets, and the line and the column are
@@ -271,7 +271,7 @@ static void TestMarkdownFlow(Arena* a) {
 
     root = Parse(a, "Setext\n===\n");
     utassert(Child(root, 0)->kind == NodeKind::Heading);
-    utassert(Child(root, 0)->startOrDepth == 1);
+    utassert(Child(root, 0)->perKind == 1);
 
     root = Parse(a, "a\n\n> b\n>\n> c\n");
     utassert(NodeChildCount(gParsedInto, root) == 2);
@@ -309,7 +309,7 @@ static void TestMarkdownLists(Arena* a) {
     list = Child(root, 0);
     utassert(list->Has(NodeOrdered));
     utassert(list->Has(NodeHasStart));
-    utassert(list->startOrDepth == 3);
+    utassert(list->perKind == 3);
 
     // A blank line between items makes the list loose.
     root = Parse(a, "- one\n\n- two\n");
@@ -401,13 +401,13 @@ static void TestMarkdownTable(Arena* a) {
     Node* table = Child(root, 0);
     utassert(table->kind == NodeKind::Table);
     Arena* into = gParsedInto;
-    utassert(ArenaAlignCount(into, table->align) == 4);
-    utassert(ArenaAlignAt(into, table->align, 0) == AlignKind::None);
-    utassert(ArenaAlignAt(into, table->align, 1) == AlignKind::Left);
-    utassert(ArenaAlignAt(into, table->align, 2) == AlignKind::Center);
-    utassert(ArenaAlignAt(into, table->align, 3) == AlignKind::Right);
+    utassert(ArenaAlignCount(into, table->perKind) == 4);
+    utassert(ArenaAlignAt(into, table->perKind, 0) == AlignKind::None);
+    utassert(ArenaAlignAt(into, table->perKind, 1) == AlignKind::Left);
+    utassert(ArenaAlignAt(into, table->perKind, 2) == AlignKind::Center);
+    utassert(ArenaAlignAt(into, table->perKind, 3) == AlignKind::Right);
     // Past the end, and a table with no alignments at all.
-    utassert(ArenaAlignAt(into, table->align, 4) == AlignKind::None);
+    utassert(ArenaAlignAt(into, table->perKind, 4) == AlignKind::None);
     utassert(ArenaAlignCount(into, kArenaAlignNone) == 0);
     utassert(NodeChildCount(gParsedInto, table) == 2);
     Node* head = Child(table, 0);
@@ -444,7 +444,7 @@ static void TestMarkdownTable(Arena* a) {
     Node* wideRoot = Parse(a, src);
     Node* wideTable = Child(wideRoot, 0);
     utassert(wideTable->kind == NodeKind::Table);
-    utassert(ArenaAlignCount(gParsedInto, wideTable->align) == wide);
+    utassert(ArenaAlignCount(gParsedInto, wideTable->perKind) == wide);
     for (int32_t i = 0; i < wide; i++) {
         AlignKind want = AlignKind::None;
         if (i % 4 == 1) {
@@ -454,7 +454,7 @@ static void TestMarkdownTable(Arena* a) {
         } else if (i % 4 == 3) {
             want = AlignKind::Right;
         }
-        utassert(ArenaAlignAt(gParsedInto, wideTable->align, i) == want);
+        utassert(ArenaAlignAt(gParsedInto, wideTable->perKind, i) == want);
     }
 }
 
