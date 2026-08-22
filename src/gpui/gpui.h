@@ -3584,6 +3584,15 @@ bool WindowRestoreFocus(Window* win, int id);
 // `dispatch_action` plus the `cx.propagate()` that decides how far it goes.
 bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
                              bool alt, bool platform = false);
+// The action half on its own: the chord resolved against the contexts over
+// the focused element, with no handler run. The matcher is stateful — a
+// sequence half-finished is held on it — so a keystroke may only be resolved
+// once, which is why the window does it here and hands the answer on rather
+// than asking twice. `pending` comes back true when the chord began a
+// sequence and belongs to nobody else.
+uint32_t WindowResolveKeyAction(Window* win, int vk, bool shift, bool ctrl,
+                                bool alt, bool platform, intptr_t* arg,
+                                bool* pending);
 // Whether the shortcut modifier is down — `secondary-` in a binding spec:
 // Command on macOS, Control everywhere else. The two are separate modifiers
 // now, so the code that means "the copy chord" has to say which.

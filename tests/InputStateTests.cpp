@@ -551,7 +551,16 @@ static void ActionForKey() {
              InputAction::MoveHome);
     utassert(InputActionForKey(&s, KeyHome, true, false, false) ==
              InputAction::SelectToStartOfLine);
+    // The document ends: cmd-up / cmd-down on macOS, ctrl-home / ctrl-end
+    // elsewhere. state.rs binds the first pair and this tree adds the second,
+    // which upstream leaves unbound off macOS.
+#if GPUI_OS_MAC
+    utassert(Sec(&s, KeyUp, false) == InputAction::MoveToStart);
+    utassert(Sec(&s, KeyDown, false) == InputAction::MoveToEnd);
+#else
     utassert(Sec(&s, KeyHome, false) == InputAction::MoveToStart);
+    utassert(Sec(&s, KeyEnd, false) == InputAction::MoveToEnd);
+#endif
     utassert(Word(&s, KeyBack, false) ==
              InputAction::DeleteToPreviousWordStart);
     utassert(InputActionForKey(&s, KeyDelete, false, false, false) ==
@@ -559,7 +568,12 @@ static void ActionForKey() {
     utassert(Sec(&s, KeyA, false) == InputAction::SelectAll);
     utassert(Sec(&s, KeyZ, false) == InputAction::Undo);
     utassert(Sec(&s, KeyZ, true) == InputAction::Redo);
+#if GPUI_OS_MAC
+    // cmd-shift-z, and cmd-y is not a chord at all.
+    utassert(Sec(&s, KeyY, false) == InputAction::None);
+#else
     utassert(Sec(&s, KeyY, false) == InputAction::Redo);
+#endif
     utassert(Sec(&s, KeyC, false) == InputAction::Copy);
     utassert(Sec(&s, KeyV, false) == InputAction::Paste);
     utassert(Sec(&s, KeyX, false) == InputAction::Cut);
@@ -568,14 +582,27 @@ static void ActionForKey() {
     // it: state.rs binds ctrl-backspace and cmd-backspace to different
     // actions in the same context, which only works if the two stay apart.
 #if GPUI_OS_MAC
+    // Control is not the shortcut key here; it carries the emacs bindings
+    // state.rs adds in its macOS half, which is why the two have to stay
+    // apart. ctrl-c is nothing at all.
     utassert(InputActionForKey(&s, KeyC, false, true, false) ==
              InputAction::None);
     utassert(InputActionForKey(&s, KeyA, false, true, false) ==
-             InputAction::None);
+             InputAction::MoveHome);
+    utassert(InputActionForKey(&s, KeyE, false, true, false) ==
+             InputAction::MoveEnd);
+    utassert(InputActionForKey(&s, KeyA, true, true, false) ==
+             InputAction::SelectToStartOfLine);
+    utassert(InputActionForKey(&s, KeyE, true, true, false) ==
+             InputAction::SelectToEndOfLine);
+    // ctrl-backspace and cmd-backspace are two chords with two actions —
+    // the pair that could not be told apart before.
     utassert(InputActionForKey(&s, KeyBack, false, true, false) ==
              InputAction::Backspace);
     utassert(InputActionForKey(&s, KeyBack, false, false, false, true) ==
-             InputAction::Backspace);
+             InputAction::DeleteToBeginningOfLine);
+    utassert(InputActionForKey(&s, KeyDelete, false, false, false, true) ==
+             InputAction::DeleteToEndOfLine);
 #endif
     // Without the modifier a letter is text, not an action.
     utassert(InputActionForKey(&s, KeyA, false, false, false) ==

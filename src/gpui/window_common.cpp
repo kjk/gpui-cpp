@@ -271,10 +271,37 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     bool held = KeymapPending();
     win->eatChar = false;
     bool eaten = false;
-    if (!held && win->input && win->input->focused) {
-        InputAction action =
-            InputActionForKey(win->input, key, shift, ctrl, alt, platform);
-        eaten = InputPerform(win->input, win->app, win, action, shift);
+
+    // The chord, resolved once. The matcher holds a half-finished sequence on
+    // itself, so asking it twice for one keystroke would append the chord
+    // twice; the answer is taken here and handed to whoever wants it.
+    intptr_t actionArg = 0;
+    bool actionPending = false;
+    uint32_t action = 0;
+    if (!held) {
+        action = WindowResolveKeyAction(win, key, shift, ctrl, alt, platform,
+                                        &actionArg, &actionPending);
+    }
+    if (actionPending) {
+        // Begun a sequence: nothing under the keymap sees this keystroke.
+        win->eatChar = true;
+        win->eatReturn = false;
+        AppInvalidate(win);
+        return;
+    }
+
+    // The focused field first, which is where its own key context puts it:
+    // the bindings that resolved above are the ones state.rs installs, and
+    // `Input` is the innermost context on the way out from the field.
+    if (!held && action && win->input && win->input->focused) {
+        InputAction act = InputActionOf(action, actionArg);
+        // `Enter { shift }` carries the modifier the caret needs.
+        bool sh =
+            act == InputAction::Enter ? InputEnterShift(actionArg) : shift;
+        eaten = InputPerform(win->input, win->app, win, act, sh);
+        if (eaten) {
+            action = 0; // taken; nothing further looks at it
+        }
     }
     // Copy, once the focused field has had its go: a field with a selection
     // of its own copied that, and this is the page's selection — Rust's
@@ -313,8 +340,7 @@ void WindowKeyDown(Window* win, int key, bool shift, bool ctrl, bool alt,
     // editing is Rust's innermost key context, so a binding further out
     // cannot take a keystroke away from it. An action that is handled ends
     // the keystroke here.
-    if (!eaten &&
-        WindowDispatchKeyAction(win, key, shift, ctrl, alt, platform)) {
+    if (!eaten && action && WindowDispatchAction(win, action, actionArg)) {
         // The character the keystroke also arrives as is the keymap's now:
         // the second chord of a sequence is an ordinary letter, and typing it
         // into the field underneath is what the binding was there to stop.
