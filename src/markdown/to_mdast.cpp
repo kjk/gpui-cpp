@@ -137,6 +137,26 @@ static TreeFrame& TreeTail(CompileContext* c) {
 // stack ends at the node it would have arrived at, so both of these are one
 // read. An empty stack is the tree itself, which is what a zero-length walk
 // came to.
+// A node's strings are ArenaStr — an offset and a length in one word rather
+// than a pointer and a length in two — so the compiler needs both directions.
+//
+// `Keep` is how one is stored. StrCat, NodeToString, IdentifierFrom and
+// CharacterReferenceDecode all allocate in the parse arena, so for those this
+// is a lookup and no second copy; a slice of the source bytes, which are not
+// the arena's, is copied in. Which of the two it is cannot be got wrong from
+// the call site — this asks the arena rather than the caller.
+static ArenaStr Keep(CompileContext* c, Str s) {
+    if (!s.s || s.len <= 0) {
+        return kArenaStrNone;
+    }
+    ArenaStr r = base::ArenaStrRef(c->a, s);
+    return base::ArenaStrIsSet(r) ? r : base::ArenaStrDup(c->a, s);
+}
+
+static Str Get(CompileContext* c, ArenaStr s) {
+    return NodeStr(c->a, s);
+}
+
 static Node* TailMut(CompileContext* c) {
     TreeFrame& frame = TreeTail(c);
     return frame.stack.len > 0 ? frame.stack[frame.stack.len - 1] : frame.tree;
@@ -401,7 +421,7 @@ static void OnExit(CompileContext* c) {
 static void OnExitData(CompileContext* c) {
     Str value = ExitSlice(c).bytes;
     Node* node = TailMut(c);
-    node->value = StrCat(c->a, node->value, value);
+    node->value = Keep(c, StrCat(c->a, Get(c, node->value), value));
     OnExit(c);
 }
 
@@ -409,22 +429,22 @@ static void OnExitAutolinkProtocol(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = StrCat(c->a, link->url, value);
+    link->url = Keep(c, StrCat(c->a, Get(c, link->url), value));
 }
 
 static void OnExitAutolinkEmail(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = StrCat(c->a, link->url, StrL("mailto:"));
-    link->url = StrCat(c->a, link->url, value);
+    link->url = Keep(c, StrCat(c->a, Get(c, link->url), StrL("mailto:")));
+    link->url = Keep(c, StrCat(c->a, Get(c, link->url), value));
 }
 
 static void OnExitCharacterReferenceValue(CompileContext* c) {
     Str value = CharacterReferenceDecode(c->a, ExitSlice(c).bytes,
                                          c->characterReferenceMarker);
     Node* node = TailMut(c);
-    node->value = StrCat(c->a, node->value, value);
+    node->value = Keep(c, StrCat(c->a, Get(c, node->value), value));
     c->characterReferenceMarker = 0;
 }
 
@@ -437,14 +457,14 @@ static void OnExitRawFlowFence(CompileContext* c) {
 
 static void OnExitRawFlow(CompileContext* c) {
     Str value = TrimEol(NodeToString(c->a, Resume(c)), true, true);
-    TailMut(c)->value = value;
+    TailMut(c)->value = Keep(c, value);
     OnExit(c);
     c->rawFlowFenceSeen = false;
 }
 
 static void OnExitCodeIndented(CompileContext* c) {
     Str value = TrimEol(NodeToString(c->a, Resume(c)), false, true);
-    TailMut(c)->value = value;
+    TailMut(c)->value = Keep(c, value);
     OnExit(c);
     c->rawFlowFenceSeen = false;
 }
@@ -489,7 +509,7 @@ static void OnExitRawText(CompileContext* c) {
         }
     }
 
-    TailMut(c)->value = value;
+    TailMut(c)->value = Keep(c, value);
     OnExit(c);
 }
 
@@ -497,8 +517,8 @@ static void OnExitDefinitionId(CompileContext* c) {
     Str label = NodeToString(c->a, Resume(c));
     Str identifier = IdentifierFrom(c->a, ExitSlice(c).bytes);
     Node* node = TailMut(c);
-    node->label = label;
-    node->identifier = identifier;
+    node->label = Keep(c, label);
+    node->identifier = Keep(c, identifier);
 }
 
 static void OnExitGfmAutolinkLiteral(CompileContext* c) {
@@ -507,11 +527,11 @@ static void OnExitGfmAutolinkLiteral(CompileContext* c) {
     Name name = (*c->events)[c->index].name;
     Node* link = TailMut(c);
     if (name == Name::GfmAutolinkLiteralEmail) {
-        link->url = StrCat(c->a, link->url, StrL("mailto:"));
+        link->url = Keep(c, StrCat(c->a, Get(c, link->url), StrL("mailto:")));
     } else if (name == Name::GfmAutolinkLiteralWww) {
-        link->url = StrCat(c->a, link->url, StrL("http://"));
+        link->url = Keep(c, StrCat(c->a, Get(c, link->url), StrL("http://")));
     }
-    link->url = StrCat(c->a, link->url, value);
+    link->url = Keep(c, StrCat(c->a, Get(c, link->url), value));
     OnExit(c);
 }
 
@@ -551,7 +571,7 @@ static void OnExitLabelText(CompileContext* c) {
         node->children = fragment->children;
         fragment->children = ArenaVec<Node*>{};
     } else if (node->kind == NodeKind::Image) {
-        node->alt = label;
+        node->alt = Keep(c, label);
     }
 }
 
@@ -581,7 +601,7 @@ static void OnExitLineEnding(CompileContext* c) {
 
 static void OnExitHtml(CompileContext* c) {
     Str value = NodeToString(c->a, Resume(c));
-    TailMut(c)->value = value;
+    TailMut(c)->value = Keep(c, value);
     OnExit(c);
 }
 
@@ -595,22 +615,22 @@ static void OnExitMedia(CompileContext* c) {
     Node* parent = TailMut(c);
     Node* node = parent->children[parent->children.len - 1];
     if (node->kind == NodeKind::FootnoteReference) {
-        node->identifier = reference.identifier;
-        node->label = reference.label;
+        node->identifier = Keep(c, reference.identifier);
+        node->label = Keep(c, reference.label);
     } else if (node->kind == NodeKind::Image) {
         node->kind = NodeKind::ImageReference;
         node->referenceKind = reference.kind;
-        node->identifier = reference.identifier;
-        node->label = reference.label;
-        node->url = {};
-        node->title = {};
+        node->identifier = Keep(c, reference.identifier);
+        node->label = Keep(c, reference.label);
+        node->url = kArenaStrNone;
+        node->title = kArenaStrNone;
     } else if (node->kind == NodeKind::Link) {
         node->kind = NodeKind::LinkReference;
         node->referenceKind = reference.kind;
-        node->identifier = reference.identifier;
-        node->label = reference.label;
-        node->url = {};
-        node->title = {};
+        node->identifier = Keep(c, reference.identifier);
+        node->label = Keep(c, reference.label);
+        node->url = kArenaStrNone;
+        node->title = kArenaStrNone;
     }
 }
 
@@ -623,7 +643,7 @@ static void OnExitListItem(CompileContext* c) {
             paragraph->children[0]->kind == NodeKind::Text) {
             Node* text = paragraph->children[0];
             UnistPoint point = text->position.start;
-            Str value = text->value;
+            Str value = Get(c, text->value);
             int32_t start = 0;
             if (value.len > 0 && (value.s[0] == '\t' || value.s[0] == ' ')) {
                 point.offset += 1;
@@ -651,7 +671,8 @@ static void OnExitListItem(CompileContext* c) {
                 }
                 paragraph->children.Pop();
             } else {
-                text->value = Str(value.s + start, value.len - start);
+                text->value =
+                    Keep(c, Str(value.s + start, value.len - start));
                 text->position.start = point;
             }
             paragraph->position.start = point;
@@ -735,11 +756,11 @@ static void Exit(CompileContext* c) {
             OnExitCharacterReferenceValue(c);
             break;
         case Name::CodeFencedFenceInfo:
-            TailMut(c)->lang = NodeToString(c->a, Resume(c));
+            TailMut(c)->lang = Keep(c, NodeToString(c->a, Resume(c)));
             break;
         case Name::CodeFencedFenceMeta:
         case Name::MathFlowFenceMeta:
-            TailMut(c)->meta = NodeToString(c->a, Resume(c));
+            TailMut(c)->meta = Keep(c, NodeToString(c->a, Resume(c)));
             break;
         case Name::CodeFencedFence:
         case Name::MathFlowFence:
@@ -757,18 +778,18 @@ static void Exit(CompileContext* c) {
             OnExitRawText(c);
             break;
         case Name::DefinitionDestinationString:
-            TailMut(c)->url = NodeToString(c->a, Resume(c));
+            TailMut(c)->url = Keep(c, NodeToString(c->a, Resume(c)));
             break;
         case Name::DefinitionLabelString:
         case Name::GfmFootnoteDefinitionLabelString:
             OnExitDefinitionId(c);
             break;
         case Name::DefinitionTitleString:
-            TailMut(c)->title = NodeToString(c->a, Resume(c));
+            TailMut(c)->title = Keep(c, NodeToString(c->a, Resume(c)));
             break;
         case Name::Frontmatter:
             TailMut(c)->value =
-                TrimEol(NodeToString(c->a, Resume(c)), true, true);
+                Keep(c, TrimEol(NodeToString(c->a, Resume(c)), true, true));
             OnExit(c);
             break;
         case Name::GfmAutolinkLiteralEmail:
@@ -829,10 +850,10 @@ static void Exit(CompileContext* c) {
             OnExitReferenceString(c);
             break;
         case Name::ResourceDestinationString:
-            TailMut(c)->url = NodeToString(c->a, Resume(c));
+            TailMut(c)->url = Keep(c, NodeToString(c->a, Resume(c)));
             break;
         case Name::ResourceTitleString:
-            TailMut(c)->title = NodeToString(c->a, Resume(c));
+            TailMut(c)->title = Keep(c, NodeToString(c->a, Resume(c)));
             break;
         default:
             break;
