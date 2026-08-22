@@ -1488,3 +1488,26 @@ cargo run -p system_monitor
   Not a gap, for the record: `Panel::menu_visible` / `toolbar_visible` are
   flags on a trait we express as fields, and the ⓘ/🔍 in every Rust pane are
   the example's own `title_suffix`, not a dock feature.
+
+- 2026-08-22: `text/window_selection.rs` is 2079 lines and **every one of them
+  is a test**: line 1 is `#[cfg(test)]`. The entry that put it on the "biggest
+  remaining Rust file" list was wrong — that number came from a raw `wc -l`
+  while the ranking beside it stripped test modules. There is nothing there to
+  port; `src/base/text_selection.{h,cpp}` already has what those tests drive.
+
+  What the file is good for is the list of behaviours upstream guarantees, so
+  it was read as one. Most of the fifty cases are about a *virtualized* text
+  view — a selection spanning blocks scrolled out of the painted set, and
+  exporting them anyway — which does not arise here: a `TextView` builds every
+  block and the story shell scrolls it. What did apply and was unpinned is the
+  multi-click: `points_for_multi_click` says two clicks take the word and
+  three the run, and that the unit asked for is not extended by a drag after
+  it. Both are in `WindowSelectionPress` and neither had a test; they do now,
+  along with the multi-click that lands on no run at all.
+
+  Still genuinely missing from `ui/text`, and not something these tests cover:
+  `TextView::selection_format(Source)` — copying a selection as its Markdown
+  source rather than as rendered text. Select-all could return the source
+  verbatim cheaply, but a partial selection has to be rebuilt from the parsed
+  nodes, and `MdNode` carries no source offsets to rebuild it from. Half of it
+  would be worse than none, so it is written down rather than started.
