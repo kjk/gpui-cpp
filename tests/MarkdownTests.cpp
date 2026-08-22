@@ -195,6 +195,47 @@ static void TestMarkdownNormalizeIdentifier(Arena* a) {
     utassert(Is(NormalizeIdentifier(a, StrL("Foo\t\tBar")), "FOOBAR"));
 }
 
+static void TestMarkdownPositions(Arena* a) {
+    TestSuite("markdown positions");
+    // A node keeps offsets; the lines and the columns are counted out of the
+    // source, by the rules the tokenizer counted them by on the way past.
+    Str md = StrL("ab\ncd\n\nef");
+    UnistPosition p = GetUnistPosition(md, 3, 8);
+    utassert(p.start.line == 2 && p.start.column == 1 && p.start.offset == 3);
+    utassert(p.end.line == 4 && p.end.column == 2 && p.end.offset == 8);
+
+    // A CR that an LF follows is not a character of its own, so the line
+    // ending counts once however it is written.
+    utassert(GetUnistPosition(StrL("a\r\nb"), 3, 3).start.line == 2);
+    utassert(GetUnistPosition(StrL("a\r\nb"), 3, 3).start.column == 1);
+    // A lone CR is a line ending all the same.
+    utassert(GetUnistPosition(StrL("a\rb"), 2, 2).start.line == 2);
+
+    // A tab runs to the next stop four columns apart: from column 1 to
+    // column 5, and a tab already on a stop is a full four wide.
+    utassert(GetUnistPosition(StrL("\tx"), 1, 1).start.column == 5);
+    utassert(GetUnistPosition(StrL("ab\tx"), 3, 3).start.column == 5);
+    utassert(GetUnistPosition(StrL("abcd\tx"), 5, 5).start.column == 9);
+
+    // A multi-byte character is as many columns as it is bytes, which is
+    // what the tokenizer does and not what a reader would say.
+    utassert(GetUnistPosition(StrL("\xc3\xa9x"), 2, 2).start.column == 3);
+
+    // The whole of the source, and an offset past its end that clamps.
+    UnistPosition all = GetUnistPosition(md, 0, (uint32_t)md.len);
+    utassert(all.start.offset == 0 && all.end.offset == md.len);
+    utassert(GetUnistPosition(md, 0, 999).end.offset == md.len);
+
+    // And what a parse actually puts there, on a source with a line in it.
+    Node* root = Parse(a, "one\n\n# two\n");
+    Node* heading = Child(root, 1);
+    utassert(heading->kind == NodeKind::Heading);
+    UnistPosition h = GetUnistPosition(StrL("one\n\n# two\n"), heading->srcStart,
+                                       heading->srcEnd);
+    utassert(h.start.line == 3 && h.start.column == 1);
+    utassert(h.end.line == 3 && h.end.column == 6);
+}
+
 // ─── the tree ─────────────────────────────────────────────────────────────
 
 static void TestMarkdownFlow(Arena* a) {
@@ -207,9 +248,10 @@ static void TestMarkdownFlow(Arena* a) {
     utassert(heading->startOrDepth == 1);
     utassert(TextIs(a, heading, "Hi Earth!"));
     utassert(Child(heading, 1)->kind == NodeKind::Emphasis);
-    // Positions are byte offsets into the source.
-    utassert(heading->position.start.offset == 0);
-    utassert(heading->position.end.offset == 13);
+    // A node keeps the two byte offsets, and the line and the column are
+    // counted back out of the source for whoever wants them.
+    utassert(heading->srcStart == 0);
+    utassert(heading->srcEnd == 13);
 
     root = Parse(a, "Setext\n===\n");
     utassert(Child(root, 0)->kind == NodeKind::Heading);
@@ -435,5 +477,6 @@ void TestMarkdown() {
     TestMarkdownTable(a);
     TestMarkdownHtmlAndFootnotes(a);
     TestMarkdownDocument(a);
+    TestMarkdownPositions(a);
     ArenaDelete(a);
 }
