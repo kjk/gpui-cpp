@@ -164,18 +164,29 @@ static void GeneratedTableMatchesReader() {
         return;
     }
     utassert(kAssetIconsCount > 0);
+    // The names run parallel to the table; a name without a row, or a row
+    // without a name, would put every icon after it on the wrong bytes.
+    utassert(SeqStrCount(kAssetIconNames) == kAssetIconsCount);
     int checked = 0;
+    Str prev = {};
     for (int i = 0; i < kAssetIconsCount; i++) {
         const AssetIcon& e = kAssetIcons[i];
-        // Sorted by name is what AssetIconFind binary-searches.
+        Str name = SeqStrByIndex(kAssetIconNames, i);
+        utassert(name.len > 0);
+        // Name order, which is what makes the generated file's diff readable.
         if (i > 0) {
-            utassert(strcmp(kAssetIcons[i - 1].name, e.name) < 0);
+            utassert(strcmp(prev.s, name.s) < 0);
         }
+        prev = name;
         utassert(e.offset >= 0 && e.len > 0 &&
                  e.offset + e.len <= kAssetIconsDataLen);
+        // And the run answers for itself: the name at i finds row i.
+        int found = 0;
+        utassert(AssetIconFind(name, &found) == kAssetIconsData + e.offset);
+        utassert(found == e.len);
 
         char path[128];
-        snprintf(path, sizeof(path), "icons/%s.svg", e.name);
+        snprintf(path, sizeof(path), "icons/%s.svg", name.s);
         TempStr xml = AssetsLoadTextTemp(Str(path));
         if (!xml.s) {
             continue;
@@ -183,7 +194,7 @@ static void GeneratedTableMatchesReader() {
         DrawOpsBuilder b;
         utassert(SvgToDrawOps(xml, &b));
         utassert(SameOps(kAssetIconsData + e.offset, e.len, b.data.els,
-                         b.data.len, e.name));
+                         b.data.len, name.s));
         checked++;
     }
     // The table came from that directory; if none of it could be read the

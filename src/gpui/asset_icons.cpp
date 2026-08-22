@@ -21886,81 +21886,159 @@ const uint8_t kAssetIconsData[] = {
 };
 const int kAssetIconsDataLen = 21800;
 
-// Sorted by name; AssetIconFind binary-searches it.
+// The names, as one SeqStrings run in the same order as the table
+// below: the table carries no pointer per icon and the linker no
+// relocation per pointer.
+const char kAssetIconNames[] =
+    "arrow-left\0"
+    "arrow-right\0"
+    "asterisk\0"
+    "battery\0"
+    "battery-charging\0"
+    "battery-full\0"
+    "battery-medium\0"
+    "bell\0"
+    "book-open\0"
+    "bot\0"
+    "building-2\0"
+    "calendar\0"
+    "case-sensitive\0"
+    "chart-pie\0"
+    "check\0"
+    "chevron-down\0"
+    "chevron-left\0"
+    "chevron-right\0"
+    "chevron-up\0"
+    "chevrons-up-down\0"
+    "circle-check\0"
+    "circle-user\0"
+    "circle-x\0"
+    "copy\0"
+    "cpu\0"
+    "ellipsis\0"
+    "external-link\0"
+    "eye\0"
+    "eye-off\0"
+    "file\0"
+    "folder\0"
+    "folder-open\0"
+    "frame\0"
+    "gallery-vertical-end\0"
+    "github\0"
+    "globe\0"
+    "hard-drive\0"
+    "heart\0"
+    "heart-off\0"
+    "inbox\0"
+    "info\0"
+    "layout-dashboard\0"
+    "loader\0"
+    "loader-circle\0"
+    "map\0"
+    "maximize\0"
+    "memory-stick\0"
+    "minimize\0"
+    "minus\0"
+    "moon\0"
+    "palette\0"
+    "panel-left\0"
+    "panel-left-close\0"
+    "panel-left-open\0"
+    "panel-right-close\0"
+    "panel-right-open\0"
+    "play\0"
+    "plus\0"
+    "replace\0"
+    "search\0"
+    "settings\0"
+    "settings-2\0"
+    "square-terminal\0"
+    "star\0"
+    "star-fill\0"
+    "sun\0"
+    "triangle-alert\0"
+    "user\0"
+    "window-close\0"
+    "window-maximize\0"
+    "window-minimize\0"
+    "window-restore\0"
+    "x\0";
+
+// Where each icon sits in kAssetIconsData, in name order.
 const AssetIcon kAssetIcons[] = {
-    {"arrow-left", 0, 78},
-    {"arrow-right", 78, 78},
-    {"asterisk", 156, 88},
-    {"battery", 244, 204},
-    {"battery-charging", 448, 272},
-    {"battery-full", 720, 264},
-    {"battery-medium", 984, 244},
-    {"bell", 1228, 214},
-    {"book-open", 1442, 318},
-    {"bot", 1760, 294},
-    {"building-2", 2054, 386},
-    {"calendar", 2440, 244},
-    {"case-sensitive", 2684, 306},
-    {"chart-pie", 2990, 242},
-    {"check", 3232, 58},
-    {"chevron-down", 3290, 58},
-    {"chevron-left", 3348, 58},
-    {"chevron-right", 3406, 58},
-    {"chevron-up", 3464, 58},
-    {"chevrons-up-down", 3522, 88},
-    {"circle-check", 3610, 214},
-    {"circle-user", 3824, 432},
-    {"circle-x", 4256, 224},
-    {"copy", 4480, 292},
-    {"cpu", 4772, 580},
-    {"ellipsis", 5352, 496},
-    {"external-link", 5848, 206},
-    {"eye", 6054, 350},
-    {"eye-off", 6404, 312},
-    {"file", 6716, 214},
-    {"folder", 6930, 246},
-    {"folder-open", 7176, 362},
-    {"frame", 7538, 108},
-    {"gallery-vertical-end", 7646, 224},
-    {"github", 7870, 688},
-    {"globe", 8558, 266},
-    {"hard-drive", 8824, 264},
-    {"heart", 9088, 206},
-    {"heart-off", 9294, 244},
-    {"inbox", 9538, 264},
-    {"info", 9802, 224},
-    {"layout-dashboard", 10026, 652},
-    {"loader", 10678, 188},
-    {"loader-circle", 10866, 142},
-    {"map", 11008, 410},
-    {"maximize", 11418, 128},
-    {"memory-stick", 11546, 384},
-    {"minimize", 11930, 128},
-    {"minus", 12058, 48},
-    {"moon", 12106, 170},
-    {"palette", 12276, 908},
-    {"panel-left", 13184, 204},
-    {"panel-left-close", 13388, 234},
-    {"panel-left-open", 13622, 234},
-    {"panel-right-close", 13856, 234},
-    {"panel-right-open", 14090, 234},
-    {"play", 14324, 60},
-    {"plus", 14384, 68},
-    {"replace", 14452, 414},
-    {"search", 14866, 204},
-    {"settings", 15070, 1060},
-    {"settings-2", 16130, 380},
-    {"square-terminal", 16510, 234},
-    {"star", 16744, 140},
-    {"star-fill", 16884, 140},
-    {"sun", 17024, 344},
-    {"triangle-alert", 17368, 264},
-    {"user", 17632, 276},
-    {"window-close", 17908, 732},
-    {"window-maximize", 18640, 1044},
-    {"window-minimize", 19684, 496},
-    {"window-restore", 20180, 1552},
-    {"x", 21732, 68},
+    {0, 78},       // arrow-left
+    {78, 78},      // arrow-right
+    {156, 88},     // asterisk
+    {244, 204},    // battery
+    {448, 272},    // battery-charging
+    {720, 264},    // battery-full
+    {984, 244},    // battery-medium
+    {1228, 214},   // bell
+    {1442, 318},   // book-open
+    {1760, 294},   // bot
+    {2054, 386},   // building-2
+    {2440, 244},   // calendar
+    {2684, 306},   // case-sensitive
+    {2990, 242},   // chart-pie
+    {3232, 58},    // check
+    {3290, 58},    // chevron-down
+    {3348, 58},    // chevron-left
+    {3406, 58},    // chevron-right
+    {3464, 58},    // chevron-up
+    {3522, 88},    // chevrons-up-down
+    {3610, 214},   // circle-check
+    {3824, 432},   // circle-user
+    {4256, 224},   // circle-x
+    {4480, 292},   // copy
+    {4772, 580},   // cpu
+    {5352, 496},   // ellipsis
+    {5848, 206},   // external-link
+    {6054, 350},   // eye
+    {6404, 312},   // eye-off
+    {6716, 214},   // file
+    {6930, 246},   // folder
+    {7176, 362},   // folder-open
+    {7538, 108},   // frame
+    {7646, 224},   // gallery-vertical-end
+    {7870, 688},   // github
+    {8558, 266},   // globe
+    {8824, 264},   // hard-drive
+    {9088, 206},   // heart
+    {9294, 244},   // heart-off
+    {9538, 264},   // inbox
+    {9802, 224},   // info
+    {10026, 652},  // layout-dashboard
+    {10678, 188},  // loader
+    {10866, 142},  // loader-circle
+    {11008, 410},  // map
+    {11418, 128},  // maximize
+    {11546, 384},  // memory-stick
+    {11930, 128},  // minimize
+    {12058, 48},   // minus
+    {12106, 170},  // moon
+    {12276, 908},  // palette
+    {13184, 204},  // panel-left
+    {13388, 234},  // panel-left-close
+    {13622, 234},  // panel-left-open
+    {13856, 234},  // panel-right-close
+    {14090, 234},  // panel-right-open
+    {14324, 60},   // play
+    {14384, 68},   // plus
+    {14452, 414},  // replace
+    {14866, 204},  // search
+    {15070, 1060}, // settings
+    {16130, 380},  // settings-2
+    {16510, 234},  // square-terminal
+    {16744, 140},  // star
+    {16884, 140},  // star-fill
+    {17024, 344},  // sun
+    {17368, 264},  // triangle-alert
+    {17632, 276},  // user
+    {17908, 732},  // window-close
+    {18640, 1044}, // window-maximize
+    {19684, 496},  // window-minimize
+    {20180, 1552}, // window-restore
+    {21732, 68},   // x
 };
 const int kAssetIconsCount = 73;
 

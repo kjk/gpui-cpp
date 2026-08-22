@@ -692,10 +692,20 @@ function emitCpp(entries: Entry[], data: number[], srcDir: string): string {
   out.push("};");
   out.push(`const int kAssetIconsDataLen = ${data.length};`);
   out.push("");
-  out.push("// Sorted by name; AssetIconFind binary-searches it.");
+  out.push("// The names, as one SeqStrings run in the same order as the table");
+  out.push("// below: the table carries no pointer per icon and the linker no");
+  out.push("// relocation per pointer.");
+  out.push("const char kAssetIconNames[] =");
+  for (let i = 0; i < entries.length; i++) {
+    const last = i === entries.length - 1;
+    // The literal's own terminator ends the run after the last name.
+    out.push('    "' + entries[i]!.name + '\\0"' + (last ? ";" : ""));
+  }
+  out.push("");
+  out.push("// Where each icon sits in kAssetIconsData, in name order.");
   out.push("const AssetIcon kAssetIcons[] = {");
   for (const e of entries) {
-    out.push(`    {"${e.name}", ${e.offset}, ${e.len}},`);
+    out.push(`    {${e.offset}, ${e.len}}, // ${e.name}`);
   }
   out.push("};");
   out.push(`const int kAssetIconsCount = ${entries.length};`);

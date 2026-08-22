@@ -785,6 +785,36 @@ Str StrDup(Str s);
 
 bool StrEqI(Str s1, Str s2);
 bool StrContainsI(Str s, Str sub);
+
+// ─── sequential strings ───────────────────────────────────────────────────
+//
+// A run of NUL-terminated strings laid end to end, the run itself ended by an
+// empty one:
+//
+//     "red green blue "
+//
+// which as a C literal already carries the final NUL. It is smaller than an
+// array of `const char*` — no pointer per string and no relocation per
+// pointer — and reading it is a linear scan, which the L1 cache is good at.
+// The trade is that reaching the nth string means walking the ones before it,
+// so this is for tables looked up rarely: a name to an index, an index back
+// to a name. Ported from SumatraPDF's `src/base/Str.h`.
+using SeqStrings = const char*;
+
+// The string at a byte offset into the run, or {} at its end.
+Str SeqStrAt(SeqStrings strs, int off);
+// Step `off` past the string it names, and `idx` with it when one is given.
+// False at the end of the run, and `off` is left at -1.
+bool SeqStrAdvance(SeqStrings strs, int& off, int* idxInOut = nullptr);
+// Which string in the run this is, or -1. `IS` ignores case.
+int SeqStrIndex(SeqStrings strs, Str toFind);
+int SeqStrIndexIS(SeqStrings strs, Str toFind);
+// The nth string, or {} past the end of the run.
+Str SeqStrByIndex(SeqStrings strs, int idx);
+// How many strings the run holds. Not one of Sumatra's — it is here because
+// a run that parallels a table has to be as long as the table, and something
+// has to be able to say so.
+int SeqStrCount(SeqStrings strs);
 // Lowercase A-Z in place. ASCII only, which is what the filters using it
 // compare.
 void StrLowerAscii(char* s);
