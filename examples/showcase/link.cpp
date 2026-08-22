@@ -5,7 +5,7 @@ using namespace gpui;
 
 static void OnLink(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     (void)app;
-    log("open /base/primitives/link");
+    log(StrL("open /base/primitives/link"));
     Notify(cx);
 }
 

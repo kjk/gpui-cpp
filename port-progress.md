@@ -1511,3 +1511,23 @@ cargo run -p system_monitor
   verbatim cheaply, but a partial selection has to be rebuilt from the parsed
   nodes, and `MdNode` carries no source offsets to rebuild it from. Half of it
   would be worse than none, so it is written down rather than started.
+
+- 2026-08-22: `StrL` for every string literal that becomes a `Str`. `Str` is a
+  pointer and a length, and `Str("http")` walks the literal at run time to
+  find a length the compiler already knows; `StrL("http")` is
+  `sizeof(lit) - 1`. Eleven sites had the constructor — most of them the
+  two-argument form with the length counted by hand (`Str("mailto:", 7)`),
+  which is the same bytes and one typo away from being wrong.
+
+  How the audit was done, since "grep for `Str("`" only finds the explicit
+  ones: `Str(const char*)` was made `explicit` for one build. That turns every
+  implicit conversion into a compiler error, and the whole tree — every
+  example, test and benchmark — produced exactly **one**: `log("open
+  /base/primitives/link")` in the link showcase. The other ten errors were
+  inside `base.cpp` itself and were `char*` and `char[256]` variables, where
+  the walk is real work and not avoidable.
+
+  The `explicit` was then reverted. `src/base.h` is a vendored subset of
+  SumatraPDF's `src/base`, whose `Str(const char*)` is implicit, and diverging
+  there costs more than the enforcement is worth — the audit is cheap to
+  repeat, and this entry says how.

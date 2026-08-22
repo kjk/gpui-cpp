@@ -744,8 +744,8 @@ State GfmAutolinkLiteralProtocolPrefixInside(Tokenizer* t) {
         Slice slice = SliceFromIndices(t->parseState->bytes,
                                        t->tokenizeState.start, t->point.index);
         t->tokenizeState.start = 0;
-        if (StrEqAsciiI(slice.bytes, Str("http", 4)) ||
-            StrEqAsciiI(slice.bytes, Str("https", 5))) {
+        if (StrEqAsciiI(slice.bytes, StrL("http")) ||
+            StrEqAsciiI(slice.bytes, StrL("https"))) {
             Consume(t);
             return StateNext(
                 StateName::GfmAutolinkLiteralProtocolSlashesInside);
@@ -996,11 +996,11 @@ static int32_t PeekProtocol(Str bytes, int32_t min, int32_t end, Name* name) {
             index -= 1;
         }
         Slice slice = SliceFromIndices(bytes, index, end - 1);
-        if (StrEqAsciiI(slice.bytes, Str("xmpp", 4))) {
+        if (StrEqAsciiI(slice.bytes, StrL("xmpp"))) {
             *name = Name::GfmAutolinkLiteralXmpp;
             return index;
         }
-        if (StrEqAsciiI(slice.bytes, Str("mailto", 6))) {
+        if (StrEqAsciiI(slice.bytes, StrL("mailto"))) {
             *name = Name::GfmAutolinkLiteralMailto;
             return index;
         }

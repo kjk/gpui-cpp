@@ -399,7 +399,7 @@ static void TestMarkdownDocument(Arena* a) {
     utassert(Child(root, 7)->kind == NodeKind::Paragraph);
 
     // The empty document is a root with nothing in it.
-    root = ToMdast(a, Str("", 0), ParseOptions::Gfm());
+    root = ToMdast(a, StrL(""), ParseOptions::Gfm());
     utassert(root->kind == NodeKind::Root);
     utassert(root->children.len == 0);
 }

@@ -75,8 +75,8 @@ void TestTextBoundary() {
     // word_range_at returns None.
     int a = 0;
     int b = 0;
-    utassert(!TextWordRangeAt(Str("abc"), 3, &a, &b));
-    utassert(!TextWordRangeAt(Str(""), 0, &a, &b));
+    utassert(!TextWordRangeAt(StrL("abc"), 3, &a, &b));
+    utassert(!TextWordRangeAt(StrL(""), 0, &a, &b));
 
     // text_boundary.rs, line_range_at: the logical line, not the visual row.
     CheckLine("first line\nsecond line\nthird", 15, 11, 22);
