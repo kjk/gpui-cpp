@@ -1329,3 +1329,35 @@ cargo run -p system_monitor
   Rust shot, where before every field was shrink-wrapped), notification (the
   buttons take the section's gap_4 rather than a row's gap_2, as upstream
   does) and tabs (five pixels of scrollbar). Nothing else moved at all.
+
+- 2026-08-22: `to_mdast` stopped storing indexes. `TreeFrame::stack` held the
+  child index at each open level and every `tail_mut` walked the tree from the
+  root, indexing `children` once per level — which is what the entry above
+  called "not in order and cannot walk", and why the `first == last` fast path
+  in `ArenaVec::operator[]` had to stay. markdown-rs keeps indexes because
+  Rust cannot hold a `&mut Node` into a tree it is still building; C++ has no
+  such rule, and an arena allocation does not move, so the stack holds the
+  nodes themselves. `DelveMut` is gone: the innermost open node is
+  `stack[stack.len - 1]`, one read of a vec four deep, instead of a walk that
+  indexed a `children` vec — often a long one — once per level.
+
+  `TailPushAgain` was the other `[]`: it re-entered the tail's last child by
+  index. Its one caller already has that child in hand (`OnEnterData` compares
+  its kind), so it takes it as an argument now and looks nothing up.
+
+  | `bun cmd/bench.ts -n=15 markdown`, counterbalanced new/old/old/new | before | after |     |
+  | ------------------------------------------------------------------- | -------- | -------- | ----- |
+  | to_mdast, 64 KB                                                     | 0.417 ms | 0.365 ms | -12%  |
+  | parse prose, 64 KB                                                  | 8.30 ms  | 8.32 ms  | ~0    |
+  | parse gfm tables, 64 KB                                             | 13.13 ms | 13.19 ms | ~0    |
+
+  The parse rows do not move because `to_mdast` is 4% of one. What this
+  recovers is the 1.8% the cursor change cost it, and then some.
+
+  The fast path stays. Dropping it now costs to_mdast 6% (0.365 -> 0.386) and
+  `parse prose` 5% (8.32 -> 8.74) — the tokenizer's own edit-map vecs index
+  too, and they are what it was really for.
+
+  Verified with `bun cmd/test.ts` and `-dbg` (9948 checks, the markdown suite
+  among them) and with `markdown_table` and `rich_text` screenshots against a
+  build of the commit before, pixel-identical.
