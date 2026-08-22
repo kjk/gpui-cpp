@@ -1040,10 +1040,26 @@ enum class BarAlign : uint8_t {
     Right
 };
 
+// One more band or line over the same axes. Rust's AreaChart takes a `y`
+// accessor per series — `.y(..).stroke(..).fill(..).name(..)`, as many times
+// as there are series — and they share one domain and one grid. This is that
+// list, past the first, which lives on the ChartSeries itself.
+struct ChartSeriesExtra {
+    const float* ys = nullptr;
+    Rgba stroke = {};
+    Rgba fillTop = {};
+    Rgba fillBot = {};
+    // The series' own name in the tooltip, the way `name(..)` sets it.
+    Str name = {};
+};
+
 struct ChartSeries {
     ChartKind kind = ChartKind::Area;
     const float* ys = nullptr;
     int n = 0;
+    // The series after the first. They share `n`, the domain and the axes.
+    const ChartSeriesExtra* more = nullptr;
+    int nMore = 0;
     int tickMargin = 15;
     // The x-axis labels, one per point; without them the index is drawn.
     const char* const* labels = nullptr;

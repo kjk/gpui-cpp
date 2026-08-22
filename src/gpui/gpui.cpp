@@ -2848,11 +2848,12 @@ static void ChartDomain(const ChartSeries& c, float* outMin, float* outMax) {
     bool seen = false;
     for (int i = 0; i < c.n; i++) {
         const float* series[4] = {c.ys, c.opens, c.highs, c.lows};
-        for (int k = 0; k < 4; k++) {
-            if (!series[k]) {
+        for (int k = 0; k < 4 + c.nMore; k++) {
+            const float* ys = k < 4 ? series[k] : c.more[k - 4].ys;
+            if (!ys) {
                 continue;
             }
-            float v = series[k][i];
+            float v = ys[i];
             if (!seen || v < lo) {
                 lo = v;
             }
@@ -3314,37 +3315,50 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         }
     } else {
         // Area and line are the same run of points; only the area fills what
-        // is under it.
-        if (c.kind == ChartKind::Area) {
-            Path* area = PathNew(ctx, true);
-            if (area) {
-                PathMoveTo(area, Xat(0), y + plotH);
-                PathLineTo(area, Xat(0), Yat(ys[0]));
-                ChartRun(area, c, Xat, Yat, ys, n);
-                PathLineTo(area, Xat(n - 1), y + plotH);
-                PathClose(area);
-                PathFillGradientV(ctx, area, y, y + plotH, c.fillTop,
-                                  c.fillBot);
-                PathFree(area);
+        // is under it. Every series is that run again over the same axes, in
+        // the order the caller named them, so a later one draws over an
+        // earlier one the way Rust's do.
+        auto Band = [&](const float* vs, Rgba stroke, Rgba fillTop,
+                        Rgba fillBot) {
+            if (!vs) {
+                return;
             }
-        }
-        if (n == 1) {
-            DrawLine(ctx, x, Yat(ys[0]), x + w, Yat(ys[0]), 2.f, c.stroke);
-        } else {
-            Path* line = PathNew(ctx, false);
-            if (line) {
-                PathMoveTo(line, Xat(0), Yat(ys[0]));
-                ChartRun(line, c, Xat, Yat, ys, n);
-                PathStroke(ctx, line, 2.f, c.stroke);
-                PathFree(line);
+            if (c.kind == ChartKind::Area) {
+                Path* area = PathNew(ctx, true);
+                if (area) {
+                    PathMoveTo(area, Xat(0), y + plotH);
+                    PathLineTo(area, Xat(0), Yat(vs[0]));
+                    ChartRun(area, c, Xat, Yat, vs, n);
+                    PathLineTo(area, Xat(n - 1), y + plotH);
+                    PathClose(area);
+                    PathFillGradientV(ctx, area, y, y + plotH, fillTop,
+                                      fillBot);
+                    PathFree(area);
+                }
             }
-        }
-        // dot(): a filled mark on every point.
-        if (c.dot) {
-            for (int i = 0; i < n; i++) {
-                FillRound(ctx, Xat(i) - 3.f, Yat(ys[i]) - 3.f, 6.f, 6.f, 3.f,
-                          c.stroke);
+            if (n == 1) {
+                DrawLine(ctx, x, Yat(vs[0]), x + w, Yat(vs[0]), 2.f, stroke);
+            } else {
+                Path* line = PathNew(ctx, false);
+                if (line) {
+                    PathMoveTo(line, Xat(0), Yat(vs[0]));
+                    ChartRun(line, c, Xat, Yat, vs, n);
+                    PathStroke(ctx, line, 2.f, stroke);
+                    PathFree(line);
+                }
             }
+            // dot(): a filled mark on every point.
+            if (c.dot) {
+                for (int i = 0; i < n; i++) {
+                    FillRound(ctx, Xat(i) - 3.f, Yat(vs[i]) - 3.f, 6.f, 6.f,
+                              3.f, stroke);
+                }
+            }
+        };
+        Band(ys, c.stroke, c.fillTop, c.fillBot);
+        for (int k = 0; k < c.nMore; k++) {
+            const ChartSeriesExtra& more = c.more[k];
+            Band(more.ys, more.stroke, more.fillTop, more.fillBot);
         }
     }
 
@@ -3381,9 +3395,17 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         CanvasLine(ctx, lineX, y, lineX, y + plotH, 1.f, th.border, kCrossDash);
         float dotY = Yat(ys[index]);
         FillRound(ctx, lineX - 3.f, dotY - 3.f, 6.f, 6.f, 3.f, c.stroke);
+        for (int k = 0; k < c.nMore; k++) {
+            const ChartSeriesExtra& more = c.more[k];
+            if (more.ys) {
+                FillRound(ctx, lineX - 3.f, Yat(more.ys[index]) - 3.f, 6.f, 6.f,
+                          3.f, more.stroke);
+            }
+        }
 
         // The box hugs the cursor and flips toward the middle past halfway,
-        // which is what keeps it inside the plot.
+        // which is what keeps it inside the plot. Every series names its own
+        // line, the way Rust's tooltip lists them.
         Str title = c.labels ? Str(c.labels[index]) : fmt("%d", index);
         Str value = c.name.s ? fmt("%s  %.1f", c.name, (double)ys[index])
                              : fmt("%.1f", (double)ys[index]);
@@ -3391,6 +3413,20 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         Size valueSz = MeasureText(ctx, value, 11, 200);
         float boxW = (titleSz.w > valueSz.w ? titleSz.w : valueSz.w) + 16.f;
         float boxH = titleSz.h + valueSz.h + 12.f;
+        // The extra lines, measured before the box is drawn so it holds them.
+        Str extra[4] = {};
+        int nExtra = c.nMore < 4 ? c.nMore : 4;
+        for (int k = 0; k < nExtra; k++) {
+            const ChartSeriesExtra& more = c.more[k];
+            extra[k] = more.name.s
+                           ? fmt("%s  %.1f", more.name, (double)more.ys[index])
+                           : fmt("%.1f", (double)more.ys[index]);
+            Size sz = MeasureText(ctx, extra[k], 11, 200);
+            if (sz.w + 16.f > boxW) {
+                boxW = sz.w + 16.f;
+            }
+            boxH += sz.h;
+        }
         Point at = component::PlotTooltipPlace(
             {ctx->mouseX - x, ctx->mouseY - y}, {w, plotH}, {boxW, boxH}, 8.f);
         FillRound(ctx, x + at.x, y + at.y, boxW, boxH, 6.f, th.background);
@@ -3400,6 +3436,12 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                    th.foreground, false);
         DrawTextAt(ctx, value, x + at.x + 8, y + at.y + 6 + titleSz.h, boxW,
                    valueSz.h, 11, th.mutedFg, false);
+        float lineY = y + at.y + 6 + titleSz.h + valueSz.h;
+        for (int k = 0; k < nExtra; k++) {
+            DrawTextAt(ctx, extra[k], x + at.x + 8, lineY, boxW, valueSz.h, 11,
+                       th.mutedFg, false);
+            lineY += valueSz.h;
+        }
     }
 
     // x labels every tickMargin

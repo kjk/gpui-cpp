@@ -70,24 +70,25 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
     Rgba color = th.chart3;
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
-    // Area Chart - Stacked: desktop over mobile, both from daily-devices.json.
-    El* areaBox = Div(a)->W(kFill)->H(kFill);
-    El* area1 = component::AreaChart::New(cx, kDailyDesktop, kDailyDeviceCount)
-                    ->Tooltip(StrL("Desktop"))
-                    ->Stroke(th.chart1)
-                    ->Fill(RgbaOpacity(th.chart1, 0.4f),
-                           RgbaOpacity(th.background, 0.3f))
-                    ->Labels(kDailyDate)
-                    ->TickMargin(8)
-                    ->IntoEl();
-    El* area2 = component::AreaChart::New(cx, kDailyMobile, kDailyDeviceCount)
-                    ->Stroke(th.chart2)
-                    ->Fill(RgbaOpacity(th.chart2, 0.4f),
-                           RgbaOpacity(th.background, 0.3f))
-                    ->Overlay()
-                    ->IntoEl();
-    areaBox->Child(area1->W(kFill)->H(kFill));
-    areaBox->Child(area2->Absolute()->Left(0)->Top(0)->W(kFill)->H(kFill));
+    // Area Chart - Stacked: one chart with two series, desktop and mobile,
+    // both from daily-devices.json — `.y(..).stroke(..).fill(..).name(..)`
+    // twice over one set of axes, which is what the Rust story writes.
+    El* areaBox =
+        component::AreaChart::New(cx, kDailyDesktop, kDailyDeviceCount)
+            ->Tooltip(StrL("Desktop"))
+            ->Stroke(th.chart1)
+            ->Fill(RgbaOpacity(th.chart1, 0.4f),
+                   RgbaOpacity(th.background, 0.3f))
+            ->Y(kDailyMobile)
+            ->Stroke(th.chart2)
+            ->Fill(RgbaOpacity(th.chart2, 0.4f),
+                   RgbaOpacity(th.background, 0.3f))
+            ->Tooltip(StrL("Mobile"))
+            ->Labels(kDailyDate)
+            ->TickMargin(8)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill);
     page->Child(ChartCard(cx, "Area Chart - Stacked", areaBox, false));
 
     // The four pies, all off monthly-devices.json.

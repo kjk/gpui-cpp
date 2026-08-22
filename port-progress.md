@@ -1427,3 +1427,33 @@ cargo run -p system_monitor
   be where the walk is, so an offset that landed inside a name — which would
   still read as a string, just the wrong one — fails. That is 6379 of the
   16547 checks.
+
+- 2026-08-22: two defects the compare harness had been showing all along.
+
+  **The data table lost its scrolling columns.** Rows 13-15 of the data-table
+  story rendered `ID / Market / Name / Symbol` and then nothing, and the
+  horizontal scrollbar cut across row 13 instead of sitting under the last
+  row. The two panes disagreed about their height: `headWrap` and `gsWrap`
+  are rows *inside* the scrolling pane, which is a column, and the flex_1
+  sweep had given them a flex basis of zero. A zero-basis item contributes
+  nothing to a column's intrinsic height, so the pane measured shorter than
+  its heads by exactly their height, and the body — which does not refuse to
+  shrink the way the fixed pane's does — gave that height back. Both are
+  `W(kFill)` now, which is what a row inside a column means by "fill". Mine,
+  from `d8c2f79`: the sweep was right about `flex_1` everywhere it came from
+  a Rust `flex_1`, and these three wrappers are this tree's own.
+
+  **The stacked area chart drew one series.** The story built two `AreaChart`
+  elements and absolutely overlaid the second, which is not what Rust does
+  and did not draw. Rust hands *one* chart two `y` accessors —
+  `.y(..).stroke(..).fill(..).name(..)`, once per series — and they share the
+  domain, the grid and the tooltip. `ChartSeries` carries a
+  `ChartSeriesExtra` list now, `DrawChart` draws the run once per series (so a
+  later one paints over an earlier one, as Rust's do), the domain spans all of
+  them, and the crosshair drops a dot on each with a line per series in the
+  tooltip box. `component::AreaChart::Y()` starts a series and the `Stroke`,
+  `Fill` and `Tooltip` after it belong to it, which is the Rust chain read
+  left to right. Four series is the cap; the day something wants a fifth the
+  array becomes an `ArenaVec`.
+
+  Of the 62 pages only those two moved.

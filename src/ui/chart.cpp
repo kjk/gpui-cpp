@@ -17,18 +17,27 @@ AreaChart* AreaChart::New(Ctx* cx, const float* ys, int n) {
     return c;
 }
 AreaChart* AreaChart::Stroke(Rgba c) {
-    stroke = c;
+    // Every setter after a `Y()` belongs to that series, which is what
+    // Rust's `.y(..).stroke(..).fill(..).name(..)` chain says.
+    if (nMore > 0) {
+        more[nMore - 1].stroke = c;
+    } else {
+        stroke = c;
+    }
     return this;
 }
 AreaChart* AreaChart::Fill(Rgba c) {
-    fill = c;
-    fillBottom = RgbaOpacity(c, 0.f);
-    return this;
+    return Fill(c, RgbaOpacity(c, 0.f));
 }
 
 AreaChart* AreaChart::Fill(Rgba top, Rgba bottom) {
-    fill = top;
-    fillBottom = bottom;
+    if (nMore > 0) {
+        more[nMore - 1].fillTop = top;
+        more[nMore - 1].fillBot = bottom;
+    } else {
+        fill = top;
+        fillBottom = bottom;
+    }
     return this;
 }
 
@@ -40,13 +49,31 @@ AreaChart* AreaChart::TickMargin(int t) {
     tickMargin = t;
     return this;
 }
+AreaChart* AreaChart::Y(const float* v) {
+    if (nMore < 4) {
+        more[nMore].ys = v;
+        // Until it is given one of its own, a series takes the last one's
+        // colours, so `.y(..)` alone still draws.
+        more[nMore].stroke = nMore > 0 ? more[nMore - 1].stroke : stroke;
+        more[nMore].fillTop = nMore > 0 ? more[nMore - 1].fillTop : fill;
+        more[nMore].fillBot = nMore > 0 ? more[nMore - 1].fillBot : fillBottom;
+        nMore++;
+    }
+    return this;
+}
 AreaChart* AreaChart::Overlay(bool v) {
     overlay = v;
     return this;
 }
 
 AreaChart* AreaChart::Tooltip(Str name) {
-    tooltipName = name;
+    // `name(..)` on a later series names that one in the tooltip; on the
+    // first it also turns the crosshair on, the way `id(..)` does.
+    if (nMore > 0) {
+        more[nMore - 1].name = name;
+    } else {
+        tooltipName = name;
+    }
     tooltip = true;
     return this;
 }
@@ -65,6 +92,10 @@ El* AreaChart::IntoEl() {
     e->chart.overlay = overlay;
     e->chart.tooltip = tooltip;
     e->chart.name = tooltipName;
+    // The builder is on the frame arena, so the element can point at its
+    // array rather than copying it.
+    e->chart.more = nMore > 0 ? more : nullptr;
+    e->chart.nMore = nMore;
     return e;
 }
 
