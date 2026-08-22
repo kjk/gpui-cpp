@@ -131,6 +131,44 @@ static void ADragAcrossTwoRunsCopiesBoth() {
     WindowSelectionFree(&win);
 }
 
+// points_for_multi_click: two clicks take the word under the pointer, three
+// the whole run. The gesture is over when the press returns — the unit was
+// asked for outright — so a drag after one does not extend it.
+static void TwoClicksTakeTheWordAndThreeTheLine() {
+    Window win;
+    AddRun(&win, 0, "hello brave world", 0);
+    AddRun(&win, 40, "second", 0);
+    char buf[64];
+
+    // Without a text backend a hit resolves to the start of its run, so the
+    // word this lands on is the first one.
+    WindowSelectionPress(&win, 25, 5, 2, false);
+    utassert(WindowSelectionHas(&win));
+    int n = WindowSelectionText(&win, buf, (int)sizeof(buf));
+    utassert(n == 5 && memcmp(buf, "hello", 5) == 0);
+    // The press ended the gesture, so a drag does not grow it.
+    WindowSelectionDrag(&win, 115, 45);
+    n = WindowSelectionText(&win, buf, (int)sizeof(buf));
+    utassert(n == 5 && memcmp(buf, "hello", 5) == 0);
+
+    WindowSelectionPress(&win, 25, 5, 3, false);
+    n = WindowSelectionText(&win, buf, (int)sizeof(buf));
+    utassert(n == 17 && memcmp(buf, "hello brave world", 17) == 0);
+    // And it stops at the run: the line is this run's, not the document's.
+    WindowSelectionFree(&win);
+}
+
+// A multi-click off any run leaves what was selected alone rather than
+// clearing it: `TextMultiClickRangeIn` answers false and the press falls
+// through to the single-click path, which is a press in the margin.
+static void AMultiClickOffTextTakesNothing() {
+    Window win;
+    AddRun(&win, 0, "hello", 0);
+    WindowSelectionPress(&win, 500, 500, 2, false);
+    utassert(!WindowSelectionHas(&win));
+    WindowSelectionFree(&win);
+}
+
 // TextSelectionScopeId: a gesture that began inside a trap stays there, so a
 // drag out of a dialog does not take the page behind it.
 static void ADragOutOfAScopeStaysInIt() {
@@ -201,4 +239,6 @@ void TestTextSelection() {
     ADragOutOfAScopeStaysInIt();
     AMarginOnlyDragPublishesNothing();
     ShiftClickExtendsFromTheAnchor();
+    TwoClicksTakeTheWordAndThreeTheLine();
+    AMultiClickOffTextTakesNothing();
 }
