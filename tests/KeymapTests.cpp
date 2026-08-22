@@ -397,8 +397,49 @@ static void AFocusableWithNothingOfItsOwnStaysOnItsOwnPath() {
     KeymapClear();
 }
 
+// An action carries what its binding said. Rust puts fields on the action
+// type — `Confirm { secondary: true }` — and matches the whole value; there
+// are no types here, so the same action id is bound twice with two payloads
+// and the matcher hands back the one that fired.
+static void ABindingCarriesTheActionsPayload() {
+    KeymapClear();
+    uint32_t confirm = ActionOf(StrL("ui::Confirm"));
+    uint32_t mode = ActionOf(StrL("story::SelectScrollbarMode"));
+    KeyBinding bindings[] = {
+        {"enter", confirm, "Pay"},
+        {"secondary-enter", confirm, "Pay", 1},
+        // Not a flag: an enum, which is the other shape upstream binds.
+        {"ctrl-1", mode, "Pay", 7},
+    };
+    KeymapBind(bindings, 3);
+    uint32_t ctx = KeyContextOf(StrL("Pay"));
+
+    KeyChord c = {};
+    utassert(KeyChordParse(StrL("enter"), &c));
+    KeyMatch m = KeymapMatch(c, &ctx, 1);
+    utassert(m.action == confirm);
+    utassert(m.arg == 0);
+
+    utassert(KeyChordParse(StrL("secondary-enter"), &c));
+    m = KeymapMatch(c, &ctx, 1);
+    utassert(m.action == confirm);
+    utassert(m.arg == 1);
+
+    utassert(KeyChordParse(StrL("ctrl-1"), &c));
+    m = KeymapMatch(c, &ctx, 1);
+    utassert(m.action == mode);
+    utassert(m.arg == 7);
+
+    // A chord that resolves to nothing carries nothing either.
+    utassert(KeyChordParse(StrL("ctrl-9"), &c));
+    m = KeymapMatch(c, &ctx, 1);
+    utassert(m.action == 0 && m.arg == 0);
+    KeymapClear();
+}
+
 void TestKeymap() {
     TestSuite("keymap");
+    ABindingCarriesTheActionsPayload();
     AChordIsReadTheWayRustSpellsIt();
     TheInnermostContextWins();
     TheLastBindingForAChordWins();

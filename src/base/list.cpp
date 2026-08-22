@@ -18,14 +18,16 @@ void ListInitKeys() {
     KeyBinding bindings[] = {
         {"escape", action::Cancel(), ctx},
         {"enter", action::Confirm(), ctx},
-        {"secondary-enter", action::ConfirmSecondary(), ctx},
+        // Rust binds the same action twice, the second carrying
+        // `secondary: true`; the payload is the binding's here.
+        {"secondary-enter", action::Confirm(), ctx, action::kConfirmSecondary},
         {"up", action::SelectUp(), ctx},
         {"down", action::SelectDown(), ctx},
     };
     KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
 }
 
-ListKeyAction ListActionOf(uint32_t id) {
+ListKeyAction ListActionOf(uint32_t id, intptr_t arg) {
     ListKeyAction out;
     if (id == action::SelectUp()) {
         out.action = ListAction::SelectPrev;
@@ -33,11 +35,7 @@ ListKeyAction ListActionOf(uint32_t id) {
         out.action = ListAction::SelectNext;
     } else if (id == action::Confirm()) {
         out.action = ListAction::Confirm;
-    } else if (id == action::ConfirmSecondary()) {
-        // The second binding of the same Rust action, carrying the flag its
-        // payload would have.
-        out.action = ListAction::Confirm;
-        out.secondary = true;
+        out.secondary = arg == action::kConfirmSecondary;
     } else if (id == action::Cancel()) {
         out.action = ListAction::Cancel;
     }
@@ -304,7 +302,7 @@ void ListOnAction(ListState* self, Ctx* cx, const ActionEvent* ev) {
     if (!self) {
         return;
     }
-    ListKeyAction act = ListActionOf(ev->action);
+    ListKeyAction act = ListActionOf(ev->action, ev->arg);
     if (act.action == ListAction::None) {
         const_cast<ActionEvent*>(ev)->propagate = true;
         return;
@@ -321,7 +319,6 @@ void ListBindKeys(Ctx* cx, El* root, Entity<ListState> state) {
     root->KeyContext(ListContext())
         ->OnAction(action::Cancel(), onAction)
         ->OnAction(action::Confirm(), onAction)
-        ->OnAction(action::ConfirmSecondary(), onAction)
         ->OnAction(action::SelectUp(), onAction)
         ->OnAction(action::SelectDown(), onAction);
 }

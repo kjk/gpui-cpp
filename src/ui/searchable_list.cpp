@@ -351,7 +351,6 @@ El* SearchableList::IntoEl() {
             ->KeyContext(ListContext())
             ->OnAction(action::Cancel(), onAction)
             ->OnAction(action::Confirm(), onAction)
-            ->OnAction(action::ConfirmSecondary(), onAction)
             ->OnAction(action::SelectUp(), onAction)
             ->OnAction(action::SelectDown(), onAction);
     }
@@ -417,7 +416,6 @@ void SelectBindKeys(Ctx* cx, El* root, Entity<SearchableListState> state) {
         ->OnAction(action::SelectUp(), onAction)
         ->OnAction(action::SelectDown(), onAction)
         ->OnAction(action::Confirm(), onAction)
-        ->OnAction(action::ConfirmSecondary(), onAction)
         ->OnAction(action::Cancel(), onAction);
 }
 
@@ -426,7 +424,7 @@ void SearchableListState::OnListAction(SearchableListState* self, Ctx* cx,
     if (!self) {
         return;
     }
-    ListKeyAction act = ListActionOf(ev->action);
+    ListKeyAction act = ListActionOf(ev->action, ev->arg);
     if (act.action == ListAction::None) {
         const_cast<ActionEvent*>(ev)->propagate = true;
         return;

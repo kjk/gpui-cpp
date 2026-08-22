@@ -566,6 +566,7 @@ struct BoundKey {
     KeyChord strokes[kMaxStrokes] = {};
     int nStrokes = 0;
     uint32_t action = 0;
+    intptr_t arg = 0;
     int pred = -1; // -1: anywhere
 };
 
@@ -625,6 +626,7 @@ void KeymapBind(const KeyBinding* bindings, int n) {
             }
         }
         b.action = bindings[i].action;
+        b.arg = bindings[i].arg;
         gBindings[gNBindings++] = b;
     }
 }
@@ -643,7 +645,8 @@ static bool BindingApplies(const BoundKey& b, const CtxLevel* levels, int n) {
 // last binding for a chord wins, so the search runs backwards. Answers the
 // action of a binding this chord completes, and notes on the way whether one
 // it only begins is left waiting.
-static uint32_t MatchIn(const CtxLevel* levels, int n, bool* pending) {
+static uint32_t MatchIn(const CtxLevel* levels, int n, bool* pending,
+                        intptr_t* arg) {
     for (int i = gNBindings - 1; i >= 0; i--) {
         const BoundKey& b = gBindings[i];
         if (!BindingApplies(b, levels, n) || b.nStrokes < gNPending) {
@@ -660,6 +663,7 @@ static uint32_t MatchIn(const CtxLevel* levels, int n, bool* pending) {
             continue;
         }
         if (b.nStrokes == gNPending) {
+            *arg = b.arg;
             return b.action;
         }
         // Begun but not finished. Noted rather than returned: a binding that
@@ -672,14 +676,15 @@ static uint32_t MatchIn(const CtxLevel* levels, int n, bool* pending) {
 
 // The whole stack, innermost level first and the unscoped bindings last.
 // `pending` comes back set when nothing completed but something was begun.
-static uint32_t MatchStack(const CtxLevel* levels, int n, bool* pending) {
+static uint32_t MatchStack(const CtxLevel* levels, int n, bool* pending,
+                           intptr_t* arg) {
     for (int lvl = 0; lvl < n; lvl++) {
-        uint32_t action = MatchIn(levels + lvl, n - lvl, pending);
+        uint32_t action = MatchIn(levels + lvl, n - lvl, pending, arg);
         if (action) {
             return action;
         }
     }
-    return MatchIn(nullptr, 0, pending);
+    return MatchIn(nullptr, 0, pending, arg);
 }
 
 KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
@@ -699,7 +704,7 @@ KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
 
     KeyMatch m;
     bool pending = false;
-    m.action = MatchStack(levels, nContexts, &pending);
+    m.action = MatchStack(levels, nContexts, &pending, &m.arg);
     if (!m.action && pending) {
         // Begun but not finished: the chord stays held, and the window keeps
         // the next keystroke for the keymap.

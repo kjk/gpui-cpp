@@ -4621,10 +4621,19 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
     if (!m.action) {
         return false;
     }
-    uint32_t action = m.action;
+    return WindowDispatchAction(win, m.action, m.arg);
+}
 
-    // The same chain again, this time for the handlers. A handler that
-    // propagates lets the search carry on outwards.
+// The handler half on its own: the chain over the focused element, then the
+// application's. Rust's `window.dispatch_action(Box::new(Cancel), cx)` — a
+// button that runs the same thing the escape key does, without a keystroke to
+// resolve first.
+bool WindowDispatchAction(Window* win, uint32_t action, intptr_t arg) {
+    if (!win || !action) {
+        return false;
+    }
+    int ix = DispatchAnchor(win);
+    // A handler that propagates lets the search carry on outwards.
     for (int i = ix - 1; i >= 0; i--) {
         if (win->dispatch[i].subtreeEnd <= ix ||
             win->dispatch[i].action != action ||
@@ -4633,6 +4642,7 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
         }
         ActionEvent ev;
         ev.action = action;
+        ev.arg = arg;
         ListenerCall(win->app, win, win->dispatch[i].fn, &ev);
         if (!ev.propagate) {
             return true;
@@ -4646,6 +4656,7 @@ bool WindowDispatchKeyAction(Window* win, int vk, bool shift, bool ctrl,
         }
         ActionEvent ev;
         ev.action = action;
+        ev.arg = arg;
         gAppActions[i].fn(win, &ev);
         if (!ev.propagate) {
             return true;

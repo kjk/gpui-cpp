@@ -54,7 +54,9 @@ Str ListContext();
 // The action, read as what the list does about it. Rust's Confirm carries a
 // field — `Confirm { secondary }`, bound twice — so the two bindings are two
 // names here and the flag comes back beside the answer.
-ListKeyAction ListActionOf(uint32_t id);
+// `arg` is the action's payload — `ActionEvent::arg`, which for Confirm is
+// `action::kConfirmSecondary` or 0.
+ListKeyAction ListActionOf(uint32_t id, intptr_t arg = 0);
 
 // RowEntry, from crates/ui/src/list/cache.rs: what one row of the flattened
 // list is. A section contributes a header, its items and a footer, and a

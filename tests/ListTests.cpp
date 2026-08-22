@@ -16,7 +16,8 @@ static ListKeyAction ForChord(const char* spec) {
     KeyChord c = {};
     utassert(KeyChordParse(Str(spec), &c));
     uint32_t ctx = KeyContextOf(ListContext());
-    return ListActionOf(KeymapMatch(c, &ctx, 1).action);
+    KeyMatch m = KeymapMatch(c, &ctx, 1);
+    return ListActionOf(m.action, m.arg);
 }
 
 static void TheKeyTable() {
@@ -27,9 +28,9 @@ static void TheKeyTable() {
     utassert(ForChord("space").action == ListAction::None);
     utassert(ForChord("tab").action == ListAction::None);
 
-    // `Confirm { secondary }` is bound twice: to enter and to secondary-enter.
-    // There is no payload on an action here, so the second binding is its own
-    // name and the flag comes back beside the answer.
+    // `Confirm { secondary }` is bound twice: to enter and to
+    // secondary-enter, and the two differ only in what the action carries.
+    // The flag is the binding's `arg`, which the matcher hands back.
     utassert(!ForChord("enter").secondary);
     ListKeyAction sec = ForChord("secondary-enter");
     utassert(sec.action == ListAction::Confirm && sec.secondary);
