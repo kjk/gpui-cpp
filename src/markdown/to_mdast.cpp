@@ -96,19 +96,11 @@ static Str TrimEol(Str value, bool atStart, bool atEnd) {
 
 // ─── the tree stack ──────────────────────────────────────────────────────
 
-static UnistPoint ToUnist(const Point& point) {
-    UnistPoint out;
-    out.line = point.line;
-    out.column = point.column;
-    out.offset = point.index;
-    return out;
-}
-
-static UnistPosition PositionFromEvent(const Event& event) {
-    UnistPosition position;
-    position.start = ToUnist(event.point);
-    position.end = position.start;
-    return position;
+// Where an event is in the source. A node keeps the offset and nothing
+// else; `GetUnistPosition` counts the line and the column back out of the
+// source when something wants to name the place.
+static uint32_t OffsetOf(const Event& event) {
+    return (uint32_t)event.point.index;
 }
 
 static TreeFrame& TreeTail(CompileContext* c) {
@@ -174,7 +166,8 @@ static Node* Resume(CompileContext* c) {
 
 static void TailPush(CompileContext* c, Node* child) {
     if (!child->Has(NodeHasPosition)) {
-        child->position = PositionFromEvent((*c->events)[c->index]);
+        child->srcStart = OffsetOf((*c->events)[c->index]);
+        child->srcEnd = child->srcStart;
         child->Set(NodeHasPosition, true);
     }
     Node* node = TailMut(c);
@@ -194,9 +187,9 @@ static void TailPushAgain(CompileContext* c, Node* child) {
 }
 
 static void TailPop(CompileContext* c) {
-    UnistPoint end = ToUnist((*c->events)[c->index].point);
+    uint32_t end = OffsetOf((*c->events)[c->index]);
     Node* node = TailMut(c);
-    node->position.end = end;
+    node->srcEnd = end;
     TreeFrame& frame = TreeTail(c);
     frame.stack.Pop();
     frame.eventStack.Pop();
@@ -578,10 +571,10 @@ static void OnExitLineEnding(CompileContext* c) {
         return;
     }
     if (c->hardBreakAfter) {
-        UnistPoint end = ToUnist((*c->events)[c->index].point);
+        uint32_t end = OffsetOf((*c->events)[c->index]);
         Node* node = TailMut(c);
         Node* tail = NodeChild(c->a, node, node->children.len - 1);
-        tail->position.end = end;
+        tail->srcEnd = end;
         c->hardBreakAfter = false;
         return;
     }
@@ -641,21 +634,21 @@ static void OnExitListItem(CompileContext* c) {
         if (firstInParagraph &&
             firstInParagraph->kind == NodeKind::Text) {
             Node* text = firstInParagraph;
-            UnistPoint point = text->position.start;
+            // The offsets shift by the bytes dropped off the front; the
+            // line the checkbox left behind is one of them, which a
+            // position counted out of the source picks up on its own.
+            uint32_t point = text->srcStart;
             Str value = Get(c, text->value);
             int32_t start = 0;
             if (value.len > 0 && (value.s[0] == '\t' || value.s[0] == ' ')) {
-                point.offset += 1;
-                point.column += 1;
+                point += 1;
                 start += 1;
             } else if (value.len > 0 &&
                        (value.s[0] == '\r' || value.s[0] == '\n')) {
-                point.line += 1;
-                point.column = 1;
-                point.offset += 1;
+                point += 1;
                 start += 1;
                 if (value.len > 1 && value.s[0] == '\r' && value.s[1] == '\n') {
-                    point.offset += 1;
+                    point += 1;
                     start += 1;
                 }
             }
@@ -673,9 +666,9 @@ static void OnExitListItem(CompileContext* c) {
             } else {
                 text->value =
                     Keep(c, Str(value.s + start, value.len - start));
-                text->position.start = point;
+                text->srcStart = point;
             }
-            paragraph->position.start = point;
+            paragraph->srcStart = point;
         }
     }
     OnExit(c);
@@ -870,8 +863,8 @@ Node* ToMdastCompile(const Vec<Event>& events, ParseState* parseState) {
     frame.tree = NodeNew(context.a, NodeKind::Root);
     frame.tree->Set(NodeHasPosition, true);
     if (events.len > 0) {
-        frame.tree->position.start = ToUnist(events[0].point);
-        frame.tree->position.end = ToUnist(events[events.len - 1].point);
+        frame.tree->srcStart = OffsetOf(events[0]);
+        frame.tree->srcEnd = OffsetOf(events[events.len - 1]);
     }
     context.trees.Append(frame);
 

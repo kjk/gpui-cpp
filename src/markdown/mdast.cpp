@@ -2,6 +2,7 @@
 
    Part of the C++ port of markdown-rs 1.0.0 (see src/markdown/readme.md). */
 
+#include "markdown/constant.h"
 #include "markdown/mdast.h"
 
 namespace markdown {
@@ -95,6 +96,59 @@ Str NodeToString(Arena* a, const Node* node) {
     int32_t at = NodeToStringFill(a, node, out, 0);
     out[at] = 0;
     return Str(out, at);
+}
+
+// Walking the source once, by the tokenizer's own rules — see the header for
+// which of them matter. The two offsets are visited in the one pass, so a
+// position costs a scan of the source up to its end and nothing per node.
+UnistPosition GetUnistPosition(Str md, uint32_t start, uint32_t end) {
+    UnistPosition out;
+    int32_t line = 1;
+    int32_t column = 1;
+    int32_t at = 0;
+    int32_t stop = (int32_t)end;
+    if (!md.s) {
+        return out;
+    }
+    if (stop > md.len) {
+        stop = md.len;
+    }
+    bool haveStart = false;
+    while (at <= stop) {
+        if (!haveStart && at == (int32_t)start) {
+            out.start = UnistPoint{line, column, at};
+            haveStart = true;
+        }
+        if (at == stop) {
+            break;
+        }
+        uint8_t byte = (uint8_t)md.s[at];
+        if (byte == '\r' && at + 1 < md.len && md.s[at + 1] == '\n') {
+            // Not a character: the LF behind it is the line ending.
+            at += 1;
+            continue;
+        }
+        if (byte == '\n' || byte == '\r') {
+            line += 1;
+            column = 1;
+            at += 1;
+            continue;
+        }
+        if (byte == '\t') {
+            int32_t remainder = column % kTabSize;
+            column += remainder == 0 ? 1 : 1 + kTabSize - remainder;
+            at += 1;
+            continue;
+        }
+        column += 1;
+        at += 1;
+    }
+    if (!haveStart) {
+        // Past the end of the source, which a well-formed offset is not.
+        out.start = UnistPoint{line, column, at};
+    }
+    out.end = UnistPoint{line, column, at};
+    return out;
 }
 
 } // namespace markdown

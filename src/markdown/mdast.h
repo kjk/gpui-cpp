@@ -47,11 +47,25 @@ struct UnistPoint {
     int32_t offset = 0;
 };
 
-// unist::Position.
+// unist::Position. A node does not store one — it stores the two byte
+// offsets, and `GetUnistPosition` counts the lines and columns back out of
+// the source for whatever asks.
 struct UnistPosition {
     UnistPoint start = {};
     UnistPoint end = {};
 };
+
+// The lines and columns the two offsets fall on, counted from the start of
+// `md` — which is what the tokenizer did on the way past, and by the same
+// rules: a CR that an LF follows is not a character, a tab runs to the next
+// stop four columns apart, and every other byte is a column of its own, so a
+// multi-byte character is as many columns as it is bytes.
+//
+// Two things this cannot recover, both of them positions the tokenizer could
+// name and no node ever starts at: a point part-way through a tab's
+// expansion comes back as the tab's own column, and `md` must be the same
+// bytes the parse was given or the answer is a fiction.
+UnistPosition GetUnistPosition(Str md, uint32_t start, uint32_t end);
 
 // mdast.rs ReferenceKind.
 enum class ReferenceKind : uint8_t {
@@ -123,10 +137,10 @@ enum NodeFlag : uint8_t {
     NodeHasChecked = 1 << 5,
 };
 
-// The fields are ordered largest first: three 24-byte members, then the
-// eight strings and the one number at four bytes each, then three single
-// bytes and one of tail padding. 112 bytes, where the order they were
-// written in with a Str per string cost 232.
+// The fields are ordered largest first: two 24-byte members, then the eight
+// strings and the three numbers at four bytes each, then three single bytes
+// and one of tail padding. 96 bytes, where the order they were written in
+// with a Str per string and a full unist Position cost 232.
 struct Node {
     // Root, Paragraph, Heading, Blockquote, List, ListItem, Emphasis, Strong,
     // Link, LinkReference, FootnoteDefinition, Table, TableRow, TableCell,
@@ -136,9 +150,17 @@ struct Node {
     // Table.
     ArenaVec<AlignKind> align = {};
 
-    // Where the node came from in the source. `NodeHasPosition` says whether
-    // it means anything.
-    UnistPosition position = {};
+    // Where the node came from: the two byte offsets into the source the
+    // parse was given, the second one past the end. `NodeHasPosition` says
+    // whether they mean anything.
+    //
+    // Rust keeps a line, a column and an offset at each end, which is
+    // twenty-four bytes on every node in the tree for something only a
+    // diagnostic ever reads. The offsets are what the parse actually works
+    // in; `GetUnistPosition(md, srcStart, srcEnd)` counts the rest back out
+    // of the source at the point something wants to print it.
+    uint32_t srcStart = 0;
+    uint32_t srcEnd = 0;
 
     // The eight strings a node may carry. They are ArenaStr rather than Str
     // because a Node is allocated by the thousand and holds all eight
@@ -185,14 +207,13 @@ struct Node {
     }
 };
 
-// The packing is the point, so it is checked rather than hoped for: three
-// 24-byte members, eight 4-byte strings, one 4-byte number and three single
-// bytes, rounded up to the 8 the ArenaVecs align to. The arithmetic below
-// still reads 4 for that last group because the byte fusing start and depth
-// freed went into the padding rather than off the struct — one more
+// The packing is the point, so it is checked rather than hoped for: two
+// 24-byte members, eight 4-byte strings, three 4-byte numbers and three
+// single bytes, rounded up to the 8 the ArenaVecs align to. The arithmetic
+// reads 4 for that last group because the fourth byte is padding — one more
 // single-byte field would cost nothing, and a field put anywhere else costs
 // eight a node, which would otherwise go unnoticed.
-static_assert(sizeof(Node) == 3 * 24 + 8 * 4 + 4 + 4,
+static_assert(sizeof(Node) == 2 * 24 + (8 + 3) * 4 + 4,
               "Node has picked up padding; order the fields largest first");
 
 Node* NodeNew(Arena* a, NodeKind kind);

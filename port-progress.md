@@ -1980,3 +1980,43 @@ cargo run -p system_monitor
   What it buys is the invariant written down instead of assumed, and one
   single-byte field's worth of room for free: the next flag or small enum
   fits in the padding, where before it would have cost eight bytes a node.
+
+- 2026-08-22: A node's position is two offsets, and the lines are counted
+  back out of the source. Rust's unist Position is a line, a column and an
+  offset at each end — twenty-four bytes on every node in the tree for
+  something nothing on any path here reads. The parse works in offsets; the
+  lines and columns were carried along for a diagnostic that never came.
+
+  So a Node keeps `srcStart` and `srcEnd`, eight bytes, and `GetUnistPosition
+  (md, srcStart, srcEnd)` counts the rest out of the source when something
+  asks. It counts by the tokenizer's own rules, which is the part that has to
+  be right: a CR an LF follows is not a character, a tab runs to the next
+  stop four columns apart, and every other byte is a column of its own — so a
+  multi-byte character is as many columns as it is bytes, which is what the
+  tokenizer says and not what a reader would. Two positions it cannot
+  recover, neither of which a node ever starts at: part-way through a tab's
+  expansion comes back as the tab's own column, and an `md` that is not the
+  bytes the parse saw is a fiction.
+
+  **96 bytes, down from 112.** Two 24-byte members, eight 4-byte strings,
+  three 4-byte numbers and three single bytes, with one of padding.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose          918.0 KB  14.30x     828.0 KB  12.90x     -9.8%
+    nested         512.3 KB   8.00x     462.2 KB   7.21x     -9.8%
+    gfm tables    1543.6 KB  24.09x    1379.6 KB  21.53x    -10.6%
+    entities       128.5 KB   2.00x     120.0 KB   1.87x     -6.6%
+
+  Three runs either side, medians: prose 8.70/8.51/8.82 -> 9.07/8.68/8.55 ms,
+  nested 9.76/9.65/10.14 -> 9.91/9.63/9.80, tables 13.19/14.04/13.20 ->
+  12.92/13.21/12.98, entities 6.01/6.09/5.98 -> 5.98/5.85/5.97, with
+  `tokenize` at 7.83/7.94/7.67 -> 7.76/7.86/7.69. Building a position is now
+  two stores where it was six, and reading one costs a scan nobody makes.
+
+  The one place that read a position back is the GFM task list, which strips
+  the checkbox off the front of a paragraph and shifts the text's start past
+  it. That was three fields to keep in step — offset, line, column — and is
+  one now; the line the checkbox may have left behind falls out of the count
+  on its own.
