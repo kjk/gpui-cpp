@@ -45,8 +45,8 @@ El* SeparatorStory::Render(SeparatorStory*, Ctx* cx) {
         cx, "In Context",
         "Horizontal and vertical rules can structure compact content.");
     StorySectionBody(ctx)->W(520);
-    El* box = Div(a)->FlexCol()->Gap(16)->W(kFill);
-    El* head = Div(a)->FlexCol()->Gap(8)->W(kFill);
+    El* box = Div(a)->FlexCol()->GapY(16)->W(kFill);
+    El* head = Div(a)->FlexCol()->GapY(8)->W(kFill);
     head->Child(StoryTxt(cx, StrL("Hello GPUI Component"), 16, th.foreground));
     head->Child(
         StoryTxt(cx,
@@ -58,7 +58,7 @@ El* SeparatorStory::Render(SeparatorStory*, Ctx* cx) {
             ->W(kFill));
     box->Child(head);
     box->Child(component::Separator::Horizontal(cx)->IntoEl());
-    El* links = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
+    El* links = Div(a)->FlexRow()->GapX(16)->ItemsCenter();
     links->Child(StoryTxt(cx, StrL("Docs"), 14, th.foreground));
     links->Child(component::Separator::Vertical(cx)->Dashed()->IntoEl());
     links->Child(StoryTxt(cx, StrL("GitHub"), 14, th.foreground));

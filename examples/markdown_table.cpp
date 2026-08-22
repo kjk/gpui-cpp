@@ -63,7 +63,7 @@ El* MdApp::Render(MdApp* app, Ctx* cx) {
                   ->TableColumnWidth(ModeColumnWidth(app->mode))
                   ->IntoEl();
     El* body = Div(frame)
-                   ->Grow()
+                   ->Flex1()
                    ->ClipY()
                    ->ScrollY(app->scroll)
                    ->Child(Div(frame)->FlexCol()->Pad(16)->Child(doc));

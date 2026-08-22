@@ -20,7 +20,8 @@ static void WhatComesOutReadsBackIn() {
     s.color = Rgba{0xfa, 0xfa, 0xfa, 0x80};
     s.borderColor = Rgba{0x26, 0x26, 0x26, 255};
     s.pad = Edges::New(10, 12, 4, 6); // left, right, top, bottom
-    s.gap = 8;
+    s.gapX = 8;
+    s.gapY = 8;
     s.radius = 6;
     s.border = 1;
     s.fontSize = 14;
@@ -42,7 +43,7 @@ static void WhatComesOutReadsBackIn() {
     utassert(back.borderColor.b == 0x26);
     utassertnear(back.pad.left, 10.f);
     utassertnear(back.pad.right, 12.f);
-    utassertnear(back.gap, 8.f);
+    utassertnear(back.gapX, 8.f);
     utassertnear(back.radius, 6.f);
     utassertnear(back.border, 1.f);
     utassertnear(back.fontSize, 14.f);
@@ -57,12 +58,14 @@ static void WhatComesOutReadsBackIn() {
 static void AnEditNamesOnlyWhatItChanged() {
     Arena* a = ArenaNew();
     Style s;
-    s.gap = 99;
+    s.gapX = 99;
+    s.gapY = 99;
     uint32_t fields = 0;
     Str err = {};
     utassert(StyleFromJson(a, StrL("{ \"gap\": 4 }"), &s, &fields, &err));
     utassert(fields == StyleFieldGap);
-    utassertnear(s.gap, 4.f);
+    utassertnear(s.gapX, 4.f);
+    utassertnear(s.gapY, 4.f);
     // The three-digit form, and the four edges as one number.
     Style t;
     utassert(StyleFromJson(a,
@@ -103,11 +106,12 @@ static void AnOverridePatchesOnlyWhatItNamed() {
     El* e = Div(a)->Gap(2)->Radius(3);
     e->clickId = 41;
     Style patch;
-    patch.gap = 10;
+    patch.gapX = 10;
+    patch.gapY = 10;
     StyleOverrideSet(41, StyleFieldGap, patch);
 
     StyleOverrideApply(e);
-    utassertnear(e->style.gap, 10.f);
+    utassertnear(e->style.gapX, 10.f);
     // What the JSON did not name is still the element's own.
     utassertnear(e->style.radius, 3.f);
 
@@ -115,13 +119,13 @@ static void AnOverridePatchesOnlyWhatItNamed() {
     El* other = Div(a)->Gap(2);
     other->clickId = 42;
     StyleOverrideApply(other);
-    utassertnear(other->style.gap, 2.f);
+    utassertnear(other->style.gapX, 2.f);
 
     StyleOverrideClear(41);
     El* again = Div(a)->Gap(2);
     again->clickId = 41;
     StyleOverrideApply(again);
-    utassertnear(again->style.gap, 2.f);
+    utassertnear(again->style.gapX, 2.f);
     StyleOverrideClearAll();
     ArenaDelete(a);
 }

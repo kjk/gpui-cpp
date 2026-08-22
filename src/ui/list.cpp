@@ -206,7 +206,7 @@ El* List::IntoEl() {
         El* searchRow =
             Div(a)->FlexRow()->W(kFill)->H(32)->PadX(8)->Gap(8)->ItemsCenter();
         searchRow->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
-        searchRow->Child(Div(a)->Grow()->Child(
+        searchRow->Child(Div(a)->Flex1()->Child(
             Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
                 ->Appearance(false)
                 ->OnFocus(onSearchFocus)

@@ -21,6 +21,7 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
 
     El* def =
         StorySection(cx, "Default", "Select a value directly from the rating.");
+    StorySectionBody(def)->W(512);
     El* defaultContent =
         Div(a)
             ->FlexCol()
@@ -45,6 +46,7 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
     page->Child(def);
 
     El* dis = StorySection(cx, "Disabled", nullptr);
+    StorySectionBody(dis)->W(480);
     StorySectionAdd(dis,
                     Div(a)
                         ->FlexRow()
@@ -63,6 +65,7 @@ El* RatingStory::Render(RatingStory* self, Ctx* cx) {
     page->Child(dis);
 
     El* col = StorySection(cx, "Color", nullptr);
+    StorySectionBody(col)->W(480);
     StorySectionAdd(col,
                     Div(a)
                         ->FlexRow()

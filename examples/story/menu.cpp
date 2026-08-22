@@ -466,6 +466,7 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
         cx, "Popup Menu",
         "Supports actions, links, checks, icons, custom rows, and nested "
         "menus.");
+    StorySectionBody(popupSection)->W(640);
     El* popupContent = SectionRow(cx, 640);
     popupContent
         ->Child(component::DropdownMenu::New(cx, StrL("popup-menu-1-dropdown"))
@@ -484,6 +485,7 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     El* contextSection = StorySection(
         cx, "Context Menu",
         "Different regions can provide their own right-click actions.");
+    StorySectionBody(contextSection)->W(640)->FlexCol()->Gap(16);
     El* contextContent = SectionColumn(cx, 640);
     contextContent->Child(ContextArea(
         cx, StrL("context-main"), StrL("Right click to open ContextMenu"),
@@ -502,6 +504,7 @@ El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     El* scrollSection = StorySection(
         cx, "Scrollable",
         "Long menus constrain their height while short menus stay compact.");
+    StorySectionBody(scrollSection)->W(640);
     El* scrollContent = SectionRow(cx, 640);
     const int counts[] = {100, 5};
     for (int i = 0; i < 2; i++) {

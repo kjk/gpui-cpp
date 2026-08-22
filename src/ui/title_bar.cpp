@@ -58,7 +58,7 @@ TitleBar* TitleBar::New(Ctx* cx) {
     // bar color, which this fills flat.
     Rgba mixed = RgbaMix(th.titleBar, th.background, 0.55f);
     t->content =
-        Div(a)->FlexRow()->H(kFill)->Grow()->ItemsCenter()->JustifyBetween();
+        Div(a)->FlexRow()->H(kFill)->Flex1()->ItemsCenter()->JustifyBetween();
     t->bar = Div(a)
                  ->FlexRow()
                  ->W(kFill)

@@ -92,7 +92,7 @@ static El* Bubble(Ctx* cx, int ix, const Theme& th) {
     El* row = Div(a)->FlexRow()->W(kFill);
     if (mine) {
         row->JustifyBetween();
-        row->Child(Div(a)->Grow());
+        row->Child(Div(a)->Flex1());
     }
     row->Child(inner);
     return row;
@@ -107,7 +107,7 @@ El* SelApp::Render(SelApp* app, Ctx* cx) {
     for (int i = 0; i < kNMsgs; i++) {
         col->Child(Bubble(cx, i, th));
     }
-    col->Child(Div(frame)->Grow());
+    col->Child(Div(frame)->Flex1());
     col->Child(ButtonEl(frame, 1, StrL("Clicking me must not start selection"))
                    ->OnClick(Listen(cx, &ClearSelection)));
     Str value = InputValue(&app->in);

@@ -140,8 +140,11 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     Rgba picked = RgbaHsla(self->hsl[0].value.End(), self->hsl[1].value.End(),
                            self->hsl[2].value.End(), self->hsl[3].value.End());
     Str hslText = ColorHex(cx, picked);
+    // section(..).w_128().items_center().justify_around(): the four channel
+    // columns are the section's own children, spaced by the justification
+    // rather than by a row of their own.
     El* picker = StorySection(cx, "Color Picker", nullptr);
-    StorySectionBody(picker)->W(512)->ItemsCenter();
+    StorySectionBody(picker)->W(512)->ItemsCenter()->JustifyAround();
     El* sub = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     sub->Child(StoryTxt(cx, hslText, 14, picked));
     sub->Child(component::Clipboard::New(cx, StrL("copy-hsl"))
@@ -152,22 +155,25 @@ El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     static const char* kChannels[4] = {"Hue", "Saturation", "Lightness",
                                        "Alpha"};
     static const char* kChannelIds[4] = {"hsl-h", "hsl-s", "hsl-l", "hsl-a"};
-    El* channels = Div(a)->FlexRow()->W(512)->Gap(24)->JustifyCenter();
     for (int i = 0; i < 4; i++) {
-        El* col = Div(a)->FlexCol()->H(128)->Gap(12)->ItemsCenter();
+        // v_flex().h_32().gap_3().items_center().justify_center(), holding the
+        // slider and one v_flex().items_center() of the two caption lines.
+        El* col =
+            Div(a)->FlexCol()->H(128)->Gap(12)->ItemsCenter()->JustifyCenter();
         col->Child(
             component::Slider::New(cx, Str(kChannelIds[i]), &self->hsl[i])
                 ->Vertical()
                 ->W(80)
                 ->OnChange(Listen(cx, &OnSliderChange))
                 ->IntoEl());
-        col->Child(StoryTxt(cx, Str(kChannels[i]), 13, th.foreground));
+        El* cap = Div(a)->FlexCol()->ItemsCenter();
+        cap->Child(StoryTxt(cx, Str(kChannels[i]), 13, th.foreground));
         // Hue reads in degrees, the other three in percent.
         float shown = self->hsl[i].value.End() * (i == 0 ? 360.f : 100.f);
-        col->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", shown), 13, th.mutedFg));
-        channels->Child(col);
+        cap->Child(StoryTxt(cx, StoryFmt(cx, "%.0f", shown), 13, th.mutedFg));
+        col->Child(cap);
+        StorySectionAdd(picker, col);
     }
-    StorySectionAdd(picker, channels);
     page->Child(picker);
 
     // Playback speed: a logarithmic scale, so the track is finer near 1x.

@@ -78,7 +78,7 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                       ->Child(TextEl(a, InputValue(&app->hexIn))
                                   ->Font(12)
                                   ->Fg(Rgb(0x17, 0x17, 0x17)))
-                      ->Child(Div(a)->Grow())
+                      ->Child(Div(a)->Flex1())
                       ->Child(TextEl(a, app->colorOpen ? StrL("⌃") : StrL("⌄"))
                                   ->Font(12)
                                   ->Fg(Rgb(0x17, 0x17, 0x17)));

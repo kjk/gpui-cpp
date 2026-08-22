@@ -46,7 +46,7 @@ static component::AccordionItem* SettingsItem(Ctx* cx, IconName icon,
     El* head = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     head->Child(
         Div(a)
-            ->Shrink0()
+            ->FlexNone()
             ->W(32)
             ->H(32)
             ->FlexRow()

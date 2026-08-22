@@ -85,7 +85,7 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
     split->Child(Div(a)->W(1)->H(kFill)->Bg(Rgb(0x17, 0x17, 0x17)));
     El* main =
         ResizablePanel::New(cx)
-            ->Grow()
+            ->Flex1()
             ->H(kFill)
             ->Pad(8)
             ->FlexCol()

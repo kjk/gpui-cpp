@@ -324,6 +324,13 @@ When a layout question comes up, the answer is in `src/taffy/`, and behind that
 in the Rust crate. Do not add a special case to `LayoutEl` for something CSS
 already has a rule for; make the style translation say the right thing instead.
 
+`gpui::Style` is meant to say everything gpui's `Styled` trait says, because a
+port that cannot write what the Rust wrote has to approximate it. The one that
+bit: `crates/ui` and `crates/story` never call `.flex_grow()`, so every grow in
+the Rust is `.flex_1()` — grow 1, **shrink 1, basis 0** — and `El::Grow()` left
+the basis at `auto`, which sizes an item by its content instead of by the line.
+`El::Flex1()` is the faithful one; `Grow(f)` is for a factor that is not 1.
+
 **The port is kept current.** When `cmd/versions.ts` moves to a gpui-component
 whose `Cargo.lock` resolves a different taffy, the port moves with it — bump
 `taffy.version` there and diff the crate. `src/taffy/readme.md` has the

@@ -81,7 +81,9 @@ Str StyleToJson(Arena* a, const Style& style) {
                     "\"bottom\": %g, \"left\": %g },\n",
                     (double)style.pad.top, (double)style.pad.right,
                     (double)style.pad.bottom, (double)style.pad.left));
-    JsonNum(sb, "gap", style.gap);
+    // One number, the way GPUI's `gap_N` writes it. A style whose two axes
+    // differ — `gap_x_2` on its own — reports the row gap here.
+    JsonNum(sb, "gap", style.gapX);
     JsonNum(sb, "radius", style.radius);
     JsonNum(sb, "border", style.border);
     JsonNum(sb, "font_size", style.fontSize);
@@ -191,7 +193,7 @@ bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
                    error) ||
         !ReadColor(root, "border_color", &style->borderColor,
                    StyleFieldBorderColor, fields, error) ||
-        !ReadNum(root, "gap", &style->gap, StyleFieldGap, fields, error) ||
+        !ReadNum(root, "gap", &style->gapX, StyleFieldGap, fields, error) ||
         !ReadNum(root, "radius", &style->radius, StyleFieldRadius, fields,
                  error) ||
         !ReadNum(root, "border", &style->border, StyleFieldBorder, fields,
@@ -207,6 +209,8 @@ bool StyleFromJson(Arena* a, Str text, Style* style, uint32_t* fields,
         return false;
     }
     style->bg = bg;
+    // The JSON says one gap; both axes take it, the way `gap_N` does.
+    style->gapY = style->gapX;
     const JsonValue* pad = JsonGet(root, "padding");
     if (pad && pad->kind == JsonKind::Number) {
         float v = (float)pad->num;
@@ -381,7 +385,7 @@ El* Inspector::IntoEl() {
                    ->IntoEl());
     panel->Child(bar);
 
-    El* body = Div(a)->FlexCol()->Grow()->W(kFill)->Pad(12)->Gap(12);
+    El* body = Div(a)->FlexCol()->Flex1()->W(kFill)->Pad(12)->Gap(12);
     if (!st->hasPick) {
         body->Child(TextEl(a, StrL("Pick an element to inspect it."))
                         ->Font(13)

@@ -146,11 +146,11 @@ El* StepperItem::IntoEl() {
         root->FlexCol();
     }
     if (!isLast) {
-        root->Grow();
+        root->Flex1();
     }
     root->ItemsStart();
     if (textCenter) {
-        root->Grow()->JustifyCenter();
+        root->Flex1()->JustifyCenter();
     }
     El* trig = StepperTrigger(a, th, this);
     if (!disabled) {

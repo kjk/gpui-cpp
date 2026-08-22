@@ -527,7 +527,7 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     if (!first) {
         line->BorderT(1, th.border);
     }
-    El* text = Div(a)->FlexCol()->Grow()->Gap(4);
+    El* text = Div(a)->FlexCol()->Flex1()->Gap(4);
     text->Child(TextEl(a, it.title)
                     ->Font(16)
                     ->Fg(it.disabled ? th.mutedFg : th.foreground));
@@ -613,11 +613,12 @@ El* Settings::IntoEl() {
         if (p.icon != IconName::None) {
             item->Child(IconEl(a, p.icon, 16)->Fg(th.foreground));
         }
-        item->Child(Div(a)->Grow()->ClipY()->Child(TextEl(a, p.title)
-                                                       ->Font(16)
-                                                       ->Fg(th.foreground)
-                                                       ->MaxW(sidebarWidth - 80)
-                                                       ->Truncate()));
+        item->Child(
+            Div(a)->Flex1()->ClipY()->Child(TextEl(a, p.title)
+                                                ->Font(16)
+                                                ->Fg(th.foreground)
+                                                ->MaxW(sidebarWidth - 80)
+                                                ->Truncate()));
         if (p.groups.len > 0) {
             item->Child(
                 IconEl(a,
@@ -660,7 +661,7 @@ El* Settings::IntoEl() {
     row->Child(side);
 
     // The page: its title, then a card per group.
-    El* pane = Div(a)->FlexCol()->Grow()->H(kFill)->ClipY();
+    El* pane = Div(a)->FlexCol()->Flex1()->H(kFill)->ClipY();
     if (selected >= 0 && selected < pages.len) {
         const SettingPage& p = pages[selected];
         // The body first: whether the page offers Reset All is whether

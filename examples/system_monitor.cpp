@@ -165,7 +165,7 @@ static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current,
             ->PadX(12)
             ->PadY(4)
             ->Child(TextEl(a, title)->Font(14)->Fg(th.foreground))
-            ->Child(Div(a)->Grow())
+            ->Child(Div(a)->Flex1())
             ->Child(TextEl(a, FormatPct(current, 1))->Font(14)->Fg(color));
 
     Rgba fillTop = RgbaOpacity(color, 0.4f);
@@ -174,7 +174,7 @@ static El* ChartCard(Arena* a, Str title, const float* ys, int n, float current,
 
     return Div(a)
         ->FlexCol()
-        ->Grow()
+        ->Flex1()
         ->MinH(160)
         ->Gap(8)
         ->Border(1, th.border)
@@ -188,7 +188,7 @@ static El* SystemTab(Arena* a, MonitorApp* app) {
     float mem = app->histN ? app->memHist[app->histN - 1] : 0;
     return Div(a)
         ->FlexCol()
-        ->Grow()
+        ->Flex1()
         ->Pad(12)
         ->Gap(16)
         ->Child(ChartCard(a, StrL("CPU Usage"), app->cpuHist, app->histN, cpu,
@@ -290,7 +290,7 @@ static El* ProcTableRow(Arena* a, const ProcessInfo* p, int ix) {
 
 static El* ProcessesTab(Ctx* cx, MonitorApp* app) {
     Arena* a = cx->a;
-    El* body = Div(a)->FlexCol()->Grow()->ClipY();
+    El* body = Div(a)->FlexCol()->Flex1()->ClipY();
     int n = app->sys.procs.len;
     // virtualize a bit: skip rows above scroll
     int first = (int)(app->tableScroll / 28.f);
@@ -380,7 +380,7 @@ El* MonitorApp::Render(MonitorApp* app, Ctx* cx) {
 
     const Theme& th = ThemeDark();
 
-    El* content = Div(frame)->FlexCol()->Grow()->ClipY();
+    El* content = Div(frame)->FlexCol()->Flex1()->ClipY();
     if (app->tab == 0) {
         content->Child(SystemTab(frame, app));
     } else {

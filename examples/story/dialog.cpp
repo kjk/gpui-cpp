@@ -345,7 +345,7 @@ static El* RenderFocusReturnCheck(DialogStory* self, Ctx* cx) {
     card->Child(header);
 
     El* controls = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
-    controls->Child(Div(a)->Grow()->Child(
+    controls->Child(Div(a)->Flex1()->Child(
         component::Input::New(cx, StrL("focus-input"), &self->focusInput)
             ->OnFocus(Listen(cx, &FocusInput))
             ->IntoEl()));
@@ -602,10 +602,10 @@ static El* RenderDialogWithContent(DialogStory* self, Ctx* cx) {
     El* footer = Div(a)->FlexRow()->W(kFill)->Gap(8)->JustifyCenter();
     footer->Child(DialogButton(cx, StrL("cancel"), StrL("Cancel"),
                                Listen(cx, &CloseDialog), false)
-                      ->Grow());
+                      ->Flex1());
     footer->Child(DialogButton(cx, StrL("done"), StrL("Done"),
                                Listen(cx, &CloseDialog), true)
-                      ->Grow());
+                      ->Flex1());
     content->Child(footer);
 
     AddDialog(section,

@@ -65,6 +65,7 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default",
                            "Six cells with masking and value updates.");
+    StorySectionBody(def)->FlexCol();
     StorySectionAdd(def, component::OtpInput::New(cx, StrL("otp"), self->otp)
                              ->WithSize(self->toolbar.size)
                              ->IntoEl());
@@ -72,6 +73,7 @@ El* OtpInputStory::Render(OtpInputStory* self, Ctx* cx) {
 
     El* group = StorySection(cx, "Grouping",
                              "Cells can be shown as one or several groups.");
+    StorySectionBody(group)->FlexCol()->Gap(16);
     El* groupCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
     groupCol
         ->Child(component::OtpInput::New(cx, StrL("otp-small"), self->oneGroup)

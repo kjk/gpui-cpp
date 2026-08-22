@@ -104,6 +104,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Default", "Application-managed step events.");
+    StorySectionBody(def)->W(512)->ItemsCenter();
     StorySectionAdd(def, component::NumberInput::New(cx, StrL("num1"),
                                                      &self->fields[NumDefault])
                              ->W(512)
@@ -115,6 +116,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     page->Child(def);
 
     El* dis = StorySection(cx, "Disabled", "Read-only disabled state.");
+    StorySectionBody(dis)->W(512)->ItemsCenter();
     StorySectionAdd(dis, component::NumberInput::New(cx, StrL("num-disabled"),
                                                      &self->fields[NumDisabled])
                              ->W(512)
@@ -124,6 +126,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     page->Child(dis);
 
     El* suf = StorySection(cx, "Suffix", "Small size with a suffix action.");
+    StorySectionBody(suf)->W(512)->ItemsCenter();
     StorySectionAdd(suf, component::NumberInput::New(cx, StrL("num2"),
                                                      &self->fields[NumSuffix])
                              ->W(512)
@@ -141,6 +144,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
 
     El* fmtSec = StorySection(cx, "Number format",
                               "Grouping, decimals, range, and step.");
+    StorySectionBody(fmtSec)->W(512)->ItemsCenter();
     StorySectionAdd(fmtSec, component::NumberInput::New(
                                 cx, StrL("num3"), &self->fields[NumFormat])
                                 ->W(512)
@@ -153,6 +157,7 @@ El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
 
     El* custom = StorySection(cx, "Custom style",
                               "Appearance-free input with dynamic steps.");
+    StorySectionBody(custom)->W(512)->ItemsCenter();
     StorySectionAdd(custom, component::NumberInput::New(
                                 cx, StrL("num4"), &self->fields[NumCustom])
                                 ->W(512)

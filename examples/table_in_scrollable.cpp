@@ -139,7 +139,7 @@ El* TableApp::Render(TableApp* app, Ctx* cx) {
     }
     table->Child(head);
 
-    El* body = Div(frame)->FlexCol()->Grow()->W(kFill)->ClipY()->ScrollY(
+    El* body = Div(frame)->FlexCol()->Flex1()->W(kFill)->ClipY()->ScrollY(
         app->tableScroll);
     for (int r = 0; r < kRows; r++) {
         El* row = Div(frame)->FlexRow()->H(kRowH)->Shrink0();

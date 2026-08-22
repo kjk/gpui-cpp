@@ -136,7 +136,7 @@ El* RichApp::Render(RichApp* self, Ctx* cx) {
     El* doc = tv->Selectable()->OnLink(Listen(cx, &OnLink))->IntoEl();
 
     El* body = Div(frame)
-                   ->Grow()
+                   ->Flex1()
                    ->ClipY()
                    ->ScrollY(self->scroll)
                    ->Child(Div(frame)->FlexCol()->Pad(16)->Child(doc));

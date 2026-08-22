@@ -662,6 +662,16 @@ El* El::FlexCol() {
     style.dir = FlexDir::Col;
     return this;
 }
+El* El::FlexRowReverse() {
+    style.display = Display::Flex;
+    style.dir = FlexDir::RowReverse;
+    return this;
+}
+El* El::FlexColReverse() {
+    style.display = Display::Flex;
+    style.dir = FlexDir::ColReverse;
+    return this;
+}
 El* El::FlexWrap() {
     style.display = Display::Flex;
     style.flexWrap = true;
@@ -673,6 +683,22 @@ El* El::Grow(float g) {
 }
 El* El::Shrink0() {
     style.flexShrink = 0;
+    return this;
+}
+El* El::Flex1() {
+    style.flexGrow = 1;
+    style.flexShrink = 1;
+    style.flexBasis = 0;
+    return this;
+}
+El* El::FlexNone() {
+    style.flexGrow = 0;
+    style.flexShrink = 0;
+    style.flexBasis = kAuto;
+    return this;
+}
+El* El::Basis(float v) {
+    style.flexBasis = v;
     return this;
 }
 El* El::W(float v) {
@@ -711,7 +737,18 @@ El* El::MaxH(float v) {
 }
 El* El::Gap(float v) {
     style.display = Display::Flex;
-    style.gap = v;
+    style.gapX = v;
+    style.gapY = v;
+    return this;
+}
+El* El::GapX(float v) {
+    style.display = Display::Flex;
+    style.gapX = v;
+    return this;
+}
+El* El::GapY(float v) {
+    style.display = Display::Flex;
+    style.gapY = v;
     return this;
 }
 El* El::Pad(float v) {
@@ -757,9 +794,19 @@ El* El::ItemsEnd() {
     style.align = Align::End;
     return this;
 }
+El* El::ItemsStretch() {
+    style.display = Display::Flex;
+    style.align = Align::Stretch;
+    return this;
+}
 El* El::JustifyBetween() {
     style.display = Display::Flex;
     style.justify = Justify::SpaceBetween;
+    return this;
+}
+El* El::JustifyAround() {
+    style.display = Display::Flex;
+    style.justify = Justify::SpaceAround;
     return this;
 }
 El* El::JustifyCenter() {
@@ -970,7 +1017,8 @@ void StyleApplyFields(Style* into, const Style& over, uint32_t fields) {
         into->pad = over.pad;
     }
     if (fields & StyleFieldGap) {
-        into->gap = over.gap;
+        into->gapX = over.gapX;
+        into->gapY = over.gapY;
     }
     if (fields & StyleFieldRadius) {
         into->radius = over.radius;
@@ -2175,6 +2223,19 @@ static taffy::OptAlignItems ToTaffyAlignItems(Align a) {
     }
 }
 
+static taffy::FlexDirection ToTaffyFlexDir(FlexDir d) {
+    switch (d) {
+        case FlexDir::Col:
+            return taffy::FlexDirection::Column;
+        case FlexDir::RowReverse:
+            return taffy::FlexDirection::RowReverse;
+        case FlexDir::ColReverse:
+            return taffy::FlexDirection::ColumnReverse;
+        default:
+            return taffy::FlexDirection::Row;
+    }
+}
+
 static taffy::OptJustifyContent ToTaffyJustify(Justify j) {
     using K = taffy::AlignContentKeyword;
     switch (j) {
@@ -2185,6 +2246,9 @@ static taffy::OptJustifyContent ToTaffyJustify(Justify j) {
         case Justify::SpaceBetween:
             return taffy::OptJustifyContent(
                 taffy::AlignContent{K::SpaceBetween});
+        case Justify::SpaceAround:
+            return taffy::OptJustifyContent(
+                taffy::AlignContent{K::SpaceAround});
         default:
             return taffy::OptJustifyContent(taffy::AlignContent{K::Start});
     }
@@ -2196,8 +2260,7 @@ static taffy::Style ToTaffyStyle(const El* e) {
     taffy::Style t;
     t.display = s.display == Display::Flex ? taffy::Display::Flex
                                            : taffy::Display::Block;
-    t.flexDirection = s.dir == FlexDir::Row ? taffy::FlexDirection::Row
-                                            : taffy::FlexDirection::Column;
+    t.flexDirection = ToTaffyFlexDir(s.dir);
     t.flexWrap = s.flexWrap ? taffy::FlexWrap::Wrap : taffy::FlexWrap::NoWrap;
     t.alignItems = ToTaffyAlignItems(s.align);
     t.justifyContent = ToTaffyJustify(s.justify);
@@ -2220,16 +2283,18 @@ static taffy::Style ToTaffyStyle(const El* e) {
 
     t.flexGrow = s.flexGrow;
     t.flexShrink = s.flexShrink;
-    // An auto flex-basis makes the main size the item's own size style, which
-    // is what the rest of this tree assumes a `W()` means.
-    t.flexBasis = taffy::Dimension::Auto();
+    // An auto basis makes the main size the item's own size style, which is
+    // what a plain `W()` means. `flex_1()` names zero instead, and taffy then
+    // splits the whole line by the grow factors rather than only the slack.
+    t.flexBasis = s.flexBasis == kAuto ? taffy::Dimension::Auto()
+                                       : taffy::Dimension::Length(s.flexBasis);
 
     t.padding = {taffy::LengthPercentage::Length(s.pad.left),
                  taffy::LengthPercentage::Length(s.pad.right),
                  taffy::LengthPercentage::Length(s.pad.top),
                  taffy::LengthPercentage::Length(s.pad.bottom)};
-    t.gap = {taffy::LengthPercentage::Length(s.gap),
-             taffy::LengthPercentage::Length(s.gap)};
+    t.gap = {taffy::LengthPercentage::Length(s.gapX),
+             taffy::LengthPercentage::Length(s.gapY)};
 
     if (s.absolute || s.fixed) {
         t.position = taffy::Position::Absolute;
@@ -3512,7 +3577,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         p.hasBg = e->style.hasBg;
         p.bg = e->style.bg.color;
         p.pad = e->style.pad.left;
-        p.gap = e->style.gap;
+        p.gap = e->style.gapX;
         p.radius = e->style.radius;
         p.border = e->style.border;
         p.row = e->style.dir == FlexDir::Row;

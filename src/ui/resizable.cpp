@@ -188,7 +188,7 @@ El* Resizable::IntoEl() {
         float boxH = horiz ? (s->bounds.h > 0 ? s->bounds.h : 0) : s->sizes[i];
         if (grows[i] && s->sizes[i] <= 0) {
             // The one frame before the container is known.
-            box->Grow();
+            box->Flex1();
             if (horiz) {
                 box->H(kFill)->MinW(mins[i]);
             } else {

@@ -109,7 +109,7 @@ El* WindowBorder::IntoEl() {
 
     // The frame itself: a one-pixel border on every side the window is not
     // tiled against, dimmed while the window is not the active one.
-    El* frame = Div(a)->FlexCol()->Grow()->MinH(0)->W(kFill)->ClipY();
+    El* frame = Div(a)->FlexCol()->Flex1()->MinH(0)->W(kFill)->ClipY();
     Rgba border = th.border;
     if (!WindowIsActive(cx)) {
         border = RgbaOpacity(border, 0.7f);

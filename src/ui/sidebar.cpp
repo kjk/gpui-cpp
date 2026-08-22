@@ -133,8 +133,8 @@ El* SidebarMenuItem::IntoEl(Str id) {
         row->Tip(label);
     } else {
         row->H(28);
-        El* mid = Div(a)->FlexRow()->Grow()->Gap(8)->JustifyBetween();
-        mid->Child(Div(a)->FlexRow()->Grow()->Child(
+        El* mid = Div(a)->FlexRow()->Flex1()->Gap(8)->JustifyBetween();
+        mid->Child(Div(a)->FlexRow()->Flex1()->Child(
             TextEl(a, label)->Font(14)->Fg(fg)));
         if (suffix) {
             mid->Child(suffix);
@@ -453,7 +453,7 @@ El* Sidebar::IntoEl() {
         box->Child(header);
         root->Child(box);
     }
-    El* content = Div(a)->FlexCol()->W(kFill)->Grow();
+    El* content = Div(a)->FlexCol()->W(kFill)->Flex1();
     El* inner = Div(a)->FlexCol()->W(kFill)->Gap(12);
     if (iconCollapsed) {
         inner->Pad(8);

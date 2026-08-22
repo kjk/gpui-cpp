@@ -118,6 +118,9 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     bool iconCollapsed =
         self->collapsed && collapsible == component::SidebarCollapsible::Icon;
 
+    // .when(side.is_right(), flex_row_reverse()): the sidebar is always the
+    // first child and the row runs the other way when it sits on the right,
+    // rather than the two being appended in a different order.
     El* frame = Div(a)
                     ->FlexRow()
                     ->W(kFill)
@@ -138,7 +141,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                      ->Child(IconEl(a, IconName::GalleryVerticalEnd, 16)
                                  ->Fg(th.successFg)));
     if (!iconCollapsed) {
-        El* company = Div(a)->FlexCol()->Grow();
+        El* company = Div(a)->FlexCol()->Flex1();
         company->Child(StoryTxt(cx, StrL("Company Name"), 14, th.foreground)
                            ->LineHeight(1.25f));
         company->Child(StoryTxt(cx, StrL("Enterprise"), 12, th.foreground)
@@ -218,7 +221,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     El* user = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
     user->Child(IconEl(a, IconName::CircleUser, 16));
     if (!iconCollapsed) {
-        user->Child(Div(a)->Grow()->Child(
+        user->Child(Div(a)->Flex1()->Child(
             StoryTxt(cx, StrL("Jason Lee"), 14, th.foreground)));
         user->Child(IconEl(a, IconName::ChevronsUpDown, 16));
     }
@@ -235,14 +238,21 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                       ->Child(component::SidebarGroup::New(cx, StrL("Projects"))
                                   ->Child(projects))
                       ->IntoEl();
-    if (!self->rightSide) {
-        frame->Child(sidebar);
+    if (self->rightSide) {
+        frame->FlexRowReverse();
     }
+    frame->Child(sidebar);
 
     // The content pane: breadcrumb, heading with the Options menu, metric
     // cards and the activity list.
-    El* content = Div(a)->FlexCol()->Grow()->H(kFill)->Pad(16)->Gap(16);
+    El* content = Div(a)->FlexCol()->Flex1()->H(kFill)->Pad(16)->Gap(16);
     El* crumbs = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
+    // .when(side.is_right() && collapsible != None, flex_row_reverse()
+    // .justify_between()): the toggle button leads the row on the side the
+    // sidebar is on.
+    if (self->rightSide && collapsible != component::SidebarCollapsible::None) {
+        crumbs->FlexRowReverse()->JustifyBetween();
+    }
     crumbs->Child(
         component::SidebarToggleButton::New(cx)
             ->WithSide(self->rightSide ? Side::Right : Side::Left)
@@ -299,7 +309,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     for (int i = 0; i < 3; i++) {
         El* card = Div(a)
                        ->FlexCol()
-                       ->Grow()
+                       ->Flex1()
                        ->Gap(8)
                        ->Pad(16)
                        ->Radius(th.radiusLg)
@@ -325,7 +335,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     El* activity = Div(a)
                        ->FlexCol()
                        ->W(kFill)
-                       ->Grow()
+                       ->Flex1()
                        ->Radius(th.radiusLg)
                        ->Border(1, th.border);
     El* actHead = Div(a)
@@ -357,7 +367,7 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
                 ->Radius(16)
                 ->Bg(th.tokens.muted)
                 ->Child(IconEl(a, kActivity[i].icon, 16)->Fg(th.foreground)));
-        El* col = Div(a)->FlexCol()->Grow()->Gap(2);
+        El* col = Div(a)->FlexCol()->Flex1()->Gap(2);
         col->Child(StoryTxt(cx, Str(kActivity[i].title), 14, th.foreground));
         col->Child(StoryTxt(cx, Str(kActivity[i].time), 12, th.mutedFg));
         row->Child(col);
@@ -365,10 +375,6 @@ El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     }
     content->Child(activity);
     frame->Child(content);
-    // A right-side sidebar comes after the content it sits beside.
-    if (self->rightSide) {
-        frame->Child(sidebar);
-    }
 
     El* page = Div(a)->FlexCol()->W(kFill);
     page->Child(frame);

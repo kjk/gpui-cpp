@@ -265,7 +265,7 @@ El* Calendar::IntoEl() {
         prev->HoverBg(th.secondaryHover);
         BindClick(prev, StrL("cal-prev"), onPrev);
     }
-    El* labels = Div(a)->FlexRow()->Grow()->ItemsCenter();
+    El* labels = Div(a)->FlexRow()->Flex1()->ItemsCenter();
     for (int i = 0; i < numberOfMonths; i++) {
         int shownYear = 0, shownMonth = 0;
         OffsetMonth(year, month, i, &shownYear, &shownMonth);
@@ -273,7 +273,7 @@ El* Calendar::IntoEl() {
             El* label = Div(a)
                             ->FlexRow()
                             ->H(cellSize)
-                            ->Grow()
+                            ->Flex1()
                             ->Gap(16)
                             ->ItemsCenter()
                             ->JustifyCenter();
@@ -314,7 +314,7 @@ El* Calendar::IntoEl() {
             El* label = Div(a)
                             ->FlexCol()
                             ->H(cellSize)
-                            ->Grow()
+                            ->Flex1()
                             ->ItemsCenter()
                             ->JustifyCenter();
             label->Child(TextEl(a, Str(months[shownMonth]))

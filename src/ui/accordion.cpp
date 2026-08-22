@@ -187,7 +187,7 @@ El* Accordion::IntoEl() {
                        ->FlexRow()
                        ->ItemsCenter()
                        ->Gap(AccordionTitleGap(size))
-                       ->Grow()
+                       ->Flex1()
                        ->MinW(0);
         if (item->icon != IconName::None) {
             left->Child(IconEl(a, item->icon, UiIconPx(size)));

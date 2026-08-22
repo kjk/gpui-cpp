@@ -90,6 +90,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     page->Child(place);
 
     El* scroll = StorySection(cx, "Scrollable Sheet", nullptr);
+    StorySectionBody(scroll)->W(480);
     StorySectionAdd(scroll,
                     component::Button::New(cx, StrL("show-scrollable-sheet"))
                         ->Label(StrL("Scrollable Sheet..."))
@@ -101,6 +102,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
     // w_128 with the section gap: the input fills the row and the button
     // wraps under it.
     El* focus = StorySection(cx, "Focus back test", nullptr);
+    StorySectionBody(focus)->W(512);
     El* focusRow =
         Div(a)->FlexRow()->FlexWrap()->W(512)->Gap(16)->JustifyCenter();
     focusRow->Child(

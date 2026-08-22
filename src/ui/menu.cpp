@@ -295,7 +295,7 @@ El* PopupMenu::IntoEl() {
             row->Bg(th.tokens.accent);
         }
         Rgba fg = it.disabled ? th.mutedFg : th.foreground;
-        El* left = Div(a)->FlexRow()->Grow()->Gap(4)->ItemsCenter();
+        El* left = Div(a)->FlexRow()->Flex1()->Gap(4)->ItemsCenter();
         if (leftGutter) {
             // The gutter is the icon's, or the check's, or empty — but it is
             // always the same width, so the labels line up.

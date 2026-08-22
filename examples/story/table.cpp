@@ -47,7 +47,7 @@ static El* Cell(Ctx* cx, float w, bool right) {
     if (w > 0) {
         c->W(w);
     } else {
-        c->Grow();
+        c->Flex1();
     }
     if (right) {
         c->JustifyEnd();
@@ -77,6 +77,7 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default", nullptr);
+    StorySectionBody(def)->W(kFill);
     El* table = Div(a)->FlexCol()->W(kFill);
     El* head = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
     // The Rust table shares the width across its columns, so the w(150) the
@@ -118,6 +119,7 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
     page->Child(def);
 
     El* bordered = StorySection(cx, "Bordered", nullptr);
+    StorySectionBody(bordered)->W(kFill);
     El* box = Div(a)->FlexCol()->W(kFill)->ClipY()->Radius(th.radius)->Border(
         1, th.border);
     El* bhead = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);

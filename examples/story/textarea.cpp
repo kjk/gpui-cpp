@@ -82,6 +82,7 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
 
     El* def = StorySection(cx, "Textarea", nullptr);
+    StorySectionBody(def)->W(560);
     El* defCol = Div(a)->FlexCol()->W(560)->Gap(8);
     defCol->Child(component::Textarea::New(cx, StrL("notes"), &self->notes)
                       ->H(320)
@@ -109,6 +110,7 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     page->Child(def);
 
     El* nowrap = StorySection(cx, "No Wrap", nullptr);
+    StorySectionBody(nowrap)->W(560);
     StorySectionAdd(
         nowrap, component::Textarea::New(cx, StrL("notes-nw"), &self->noWrap)
                     ->H(200)
@@ -119,6 +121,7 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
 
     // auto_grow(1, 5): five rows once the text is long enough to fill them.
     El* grow = StorySection(cx, "Auto Grow", nullptr);
+    StorySectionBody(grow)->W(560);
     StorySectionAdd(
         grow, component::Textarea::New(cx, StrL("notes-grow"), &self->autoGrow)
                   ->Rows(5)
@@ -127,6 +130,7 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     page->Child(grow);
 
     El* both = StorySection(cx, "Auto Grow with No Wrap", nullptr);
+    StorySectionBody(both)->W(560);
     StorySectionAdd(
         both, component::Textarea::New(cx, StrL("notes-both"), &self->both)
                   ->Rows(1)
@@ -136,6 +140,7 @@ El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     page->Child(both);
 
     El* chat = StorySection(cx, "Submit on Enter (Chat)", nullptr);
+    StorySectionBody(chat)->W(560);
     StorySectionAdd(chat,
                     component::Textarea::New(cx, StrL("chat"), &self->chat)
                         ->Rows(1)

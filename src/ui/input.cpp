@@ -164,8 +164,8 @@ El* Input::IntoEl() {
     bool hasValue = state && InputValue(state).len > 0;
     bool trailing = suffix || (cleanable && hasValue) || maskToggle;
     if (prefix || trailing) {
-        field
-            ->Child(Div(a)->Grow()->Child(gpui::Input::New(cx, state, editor)));
+        field->Child(
+            Div(a)->Flex1()->Child(gpui::Input::New(cx, state, editor)));
     } else {
         field->Child(gpui::Input::New(cx, state, editor));
     }
@@ -410,7 +410,7 @@ El* NumberInput::IntoEl() {
     if (suffix) {
         editor->Suffix(suffix);
     }
-    frame->Child(Div(a)->Grow()->H(kFill)->Child(editor->IntoEl()));
+    frame->Child(Div(a)->Flex1()->H(kFill)->Child(editor->IntoEl()));
     frame->Child(inc);
     return frame;
 }
@@ -770,7 +770,7 @@ El* SearchPanel::IntoEl() {
                       ->Selected(!ss->caseInsensitive)
                       ->OnClick(ListenTo(ent, &SearchPanelState::OnToggleCase))
                       ->IntoEl();
-    El* queryBox = Div(a)->FlexRow()->Grow()->Gap(4);
+    El* queryBox = Div(a)->FlexRow()->Flex1()->Gap(4);
     queryBox->Child(Input::New(cx, StrDup(a, fmt("%s-q", id)), &st->query)
                         ->WithSize(UiSize::Small)
                         ->FocusRing(false)

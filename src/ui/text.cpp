@@ -1029,7 +1029,7 @@ El* TextView::Table(MdNode* n) {
 
 El* TextView::Item(MdNode* n, Str marker, int depth) {
     const Theme& th = cx->theme();
-    El* content = Div(a)->FlexCol()->Grow()->MinW(0)->ClipX();
+    El* content = Div(a)->FlexCol()->Flex1()->MinW(0)->ClipX();
     // An item's blocks are below; runs sit on the item itself only when
     // something built the tree by hand, since mdast gives even a tight list
     // item a paragraph of its own.
