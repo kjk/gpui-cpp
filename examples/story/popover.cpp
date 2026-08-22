@@ -222,6 +222,7 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     El* anchor = StorySection(cx, "Anchor",
                               "Position content from each edge of the "
                               "trigger.");
+    StorySectionBody(anchor)->W(kFill)->MinH(360)->FlexCol();
     // A 360px band with a row of triggers pinned to each edge.
     El* band = Div(a)->FlexCol()->W(kFill)->H(360)->JustifyBetween();
     struct AnchorRow {

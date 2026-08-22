@@ -274,7 +274,7 @@ static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
                                ->Fg(th.mutedFg)
                                ->Truncate());
             }
-            row->Child(Div(a)->Grow());
+            row->Child(Div(a)->Flex1());
             row->Child(ComboCaret(cx));
             return row;
         }

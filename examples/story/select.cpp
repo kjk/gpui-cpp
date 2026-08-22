@@ -170,6 +170,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
 
     El* search = StorySection(cx, "Search and clear",
                               "Search options and clear the value.");
+    StorySectionBody(search)->W(280)->ItemsCenter();
     StorySectionAdd(search,
                     Sel(self, cx, SelCountry, "country", toggle, clear)
                         ->Cleanable()
@@ -179,6 +180,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
 
     El* width = StorySection(cx, "Menu width",
                              "Set trigger and menu widths independently.");
+    StorySectionBody(width)->W(280)->ItemsCenter();
     StorySectionAdd(width, Sel(self, cx, SelFruit, "fruit", toggle, clear)
                                ->Icon(IconName::Search)
                                ->MenuWidth(400)
@@ -186,6 +188,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     page->Child(width);
 
     El* dis = StorySection(cx, "Disabled", "Keep the selected value visible.");
+    StorySectionBody(dis)->W(280)->ItemsCenter();
     StorySectionAdd(dis, component::Select::New(cx, StrL("select-disabled"),
                                                 self->sel[SelDisabled])
                              ->W(280)
@@ -195,6 +198,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     page->Child(dis);
 
     El* prefix = StorySection(cx, "Title prefix", "Prefix the selected value.");
+    StorySectionBody(prefix)->W(280)->ItemsCenter();
     StorySectionAdd(prefix, Sel(self, cx, SelUi1, "ui1", toggle, clear)
                                 ->Placeholder(StrL("UI"))
                                 ->TitlePrefix(StrL("UI: "))
@@ -202,6 +206,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     page->Child(prefix);
 
     El* menuH = StorySection(cx, "Menu height", "Limit the popup height.");
+    StorySectionBody(menuH)->W(280)->ItemsCenter();
     StorySectionAdd(menuH, Sel(self, cx, SelMenuH, "menu-h", toggle, clear)
                                ->Placeholder(StrL("UI"))
                                ->TitlePrefix(StrL("UI: "))
@@ -218,6 +223,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     page->Child(multi);
 
     El* empty = StorySection(cx, "Empty", "Render a custom empty state.");
+    StorySectionBody(empty)->W(280)->ItemsCenter();
     StorySectionAdd(empty, component::Select::New(cx, StrL("select-empty"),
                                                   self->sel[SelEmpty])
                                ->W(280)
@@ -231,6 +237,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     El* custom =
         StorySection(cx, "Custom appearance",
                      "Compose an appearance-free select with another control.");
+    StorySectionBody(custom)->W(280)->ItemsCenter();
     // A country code, a divider, a phone field and the send button, all in
     // one bordered row.
     El* row = Div(a)
@@ -249,7 +256,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
             ->OnToggle(ListenerArg(toggle, SelAppearance))
             ->IntoEl()));
     row->Child(component::Separator::Vertical(cx)->IntoEl()->H(20));
-    row->Child(Div(a)->Grow()->Child(
+    row->Child(Div(a)->Flex1()->Child(
         component::Input::New(cx, StrL("phone"), &self->phone)
             ->Appearance(false)
             ->WithSize(self->toolbar.size)
@@ -264,6 +271,7 @@ El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     page->Child(custom);
 
     El* values = StorySection(cx, "Values", "Read selected values from state.");
+    StorySectionBody(values)->W(512);
     El* valueCol = Div(a)->FlexCol()->W(512)->Gap(12);
     const char* labels[] = {"Country", "fruit", "UI", "Language"};
     int slots[] = {SelCountry, SelFruit, SelUi1, SelLanguage};

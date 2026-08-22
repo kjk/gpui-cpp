@@ -144,7 +144,7 @@ El* Alert::IntoEl() {
     } else {
         row->ItemsStart()->Radius(radius);
     }
-    El* inner = Div(a)->FlexRow()->Grow()->Gap(gap)->ClipX();
+    El* inner = Div(a)->FlexRow()->Flex1()->Gap(gap)->ClipX();
     if (banner) {
         inner->ItemsCenter();
     }
@@ -157,7 +157,7 @@ El* Alert::IntoEl() {
     inner->Child(iconBox);
     // The title and the message stack with nothing between them: the div
     // Rust puts them in is a block, so its gap_3 never applies.
-    El* col = Div(a)->FlexCol()->Grow()->ClipX();
+    El* col = Div(a)->FlexCol()->Flex1()->ClipX();
     // A banner never shows its title.
     if (title.s && !banner) {
         col->Child(TextEl(a, title)->Semibold()->Truncate());

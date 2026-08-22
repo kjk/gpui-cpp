@@ -71,6 +71,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
 
     El* vars = StorySection(
         cx, "Variants", "Ghost and outline treatments for different surfaces.");
+    StorySectionBody(vars)->W(512)->FlexCol()->ItemsCenter()->Gap(16);
     El* varsCol = Div(a)->FlexCol()->Gap(16)->ItemsCenter();
     varsCol->Child(StoryTxt(cx, StrL("Ghost"), 13, th.foreground)->Semibold());
     El* ghost = Div(a)->FlexRow()->Gap(4)->ItemsCenter();
@@ -96,6 +97,7 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
 
     El* grp = StorySection(cx, "Group",
                            "Connected toggles keep related choices together.");
+    StorySectionBody(grp)->W(512)->FlexCol()->ItemsCenter();
     El* g = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
     g->Child(ToggleChip(cx, onToggle, 7, "Bold", IconName::None,
                         self->toggles[7], false));

@@ -342,7 +342,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                     "Actions live beside the trigger, in the header and in "
                     "every row.");
     El* keysHead = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
-    El* keysTrig = Div(a)->FlexRow()->Grow()->Gap(8)->ItemsCenter()->OnClick(
+    El* keysTrig = Div(a)->FlexRow()->Flex1()->Gap(8)->ItemsCenter()->OnClick(
         Listen(cx, &OnColl, CollApiKeys));
     keysTrig->Child(Chevron(cx, self->open[CollApiKeys]));
     keysTrig->Child(TextEl(a, StrL("API Keys"))->Font(14)->Medium());
@@ -374,7 +374,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                             ->Fg(th.green)));
         keyRow->Child(TextEl(a, Str(kKeys[i][0]))->Font(12)->W(80)->Shrink0());
         keyRow->Child(Div(a)
-                          ->Grow()
+                          ->Flex1()
                           ->ClipX()
                           ->PadX(8)
                           ->PadY(2)

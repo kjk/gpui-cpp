@@ -322,7 +322,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
             // The rows sit under a rail, indented from the group.
             El* items = Div(a)->FlexRow()->W(kFill)->PadL(12);
             items->Child(Div(a)->W(1)->H(kFill)->Bg(th.border));
-            El* itemCol = Div(a)->FlexCol()->Grow();
+            El* itemCol = Div(a)->FlexCol()->Flex1();
             items->Child(itemCol);
             for (int r = i; r < end; r++) {
                 El* row = Div(a)
@@ -352,7 +352,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     // checkerboard that shows through a translucent colour.
     El* right = Div(a)
                     ->FlexCol()
-                    ->Grow()
+                    ->Flex1()
                     ->H(640)
                     ->ClipY()
                     ->Radius(th.radiusLg)
@@ -389,7 +389,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                            ->Radius(th.radius)
                            ->Bg(rows[r].color)
                            ->Border(1, th.border));
-            El* text = Div(a)->FlexCol()->Gap(4)->Grow();
+            El* text = Div(a)->FlexCol()->Gap(4)->Flex1();
             text->Child(StoryTxt(cx, Str(rows[r].name), 14, th.foreground)
                             ->Medium());
             // A gradient's value is long; the cell is 220 wide either way.

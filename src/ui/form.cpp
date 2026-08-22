@@ -147,7 +147,7 @@ El* Form::IntoEl() {
             }
             head->Child(label);
         }
-        El* control = Div(a)->W(kFill)->Grow();
+        El* control = Div(a)->W(kFill)->Flex1();
         if (fld.control) {
             control->Child(fld.control);
         }
@@ -187,7 +187,7 @@ El* Form::IntoEl() {
             col->Child(row);
             inRow = 0;
         }
-        row->Child(Div(a)->Grow()->Child(f));
+        row->Child(Div(a)->Flex1()->Child(f));
         inRow++;
         if (inRow >= columns) {
             row = nullptr;
@@ -196,7 +196,7 @@ El* Form::IntoEl() {
     // Pad the last row so a lone field keeps its column width.
     if (row) {
         for (int i = inRow; i < columns; i++) {
-            row->Child(Div(a)->Grow());
+            row->Child(Div(a)->Flex1());
         }
     }
     return col;

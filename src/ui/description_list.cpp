@@ -119,7 +119,7 @@ El* DescriptionList::IntoEl() {
             if (bordered) {
                 label->Bg(th.descListLabel)->Border(1, th.border);
             }
-            El* value = Div(a)->Grow()->PadX(padX)->PadY(padY)->ClipY();
+            El* value = Div(a)->Flex1()->PadX(padX)->PadY(padY)->ClipY();
             if (it.value) {
                 value->Child(it.value);
             }

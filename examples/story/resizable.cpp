@@ -79,6 +79,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* nested = StorySection(cx, "Nested Panels",
                               "Combines horizontal and vertical splits with "
                               "constrained panel sizes.");
+    StorySectionBody(nested)->W(kFill);
     El* topRow =
         component::Resizable::New(cx, StrL("rz-nested-top"), self->nestedTop)
             ->H(264)
@@ -100,6 +101,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* grow = StorySection(cx, "Growing Panel",
                             "A flexible panel absorbs the space left by a "
                             "constrained neighbor.");
+    StorySectionBody(grow)->W(kFill);
     El* growRow = component::Resizable::New(cx, StrL("rz-grow"), self->grow)
                       ->Panel(PanelBox(cx, "Left 2"), 200)
                       ->Grow(PanelBox(cx, "Right (Grow)"))
@@ -110,6 +112,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* flex = StorySection(cx, "Flex Behavior",
                             "Compare fixed and growing panels while toggling "
                             "visibility.");
+    StorySectionBody(flex)->W(kFill);
     El* flexCol = Div(a)->FlexCol()->W(kFill)->Gap(8);
     El* flexBtns = StoryToolbarGroup(cx);
     flexBtns->Child(
@@ -145,6 +148,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* prog = StorySection(cx, "Programmatic Resize",
                             "Panel sizes can be changed by actions as well as "
                             "dragging.");
+    StorySectionBody(prog)->W(kFill);
     El* progCol = Div(a)->FlexCol()->W(kFill)->Gap(8);
     Listener setSize = Listen(cx, &SetPanelSize);
     struct SizeBtn {

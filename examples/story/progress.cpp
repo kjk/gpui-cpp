@@ -167,6 +167,7 @@ El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
 
     El* circ = StorySection(
         cx, "Circular", "Use a compact radial indicator for focused tasks.");
+    StorySectionBody(circ)->W(560)->ItemsCenter();
     El* circBox = Div(a)
                       ->FlexRow()
                       ->W(400)

@@ -678,7 +678,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
                   ->Bg(th.tokens.secondary)
                   ->OnClick(Listen(cx, &FocusSearch))
                   ->FocusId(ClickSearch);
-    box->Child(::Input::New(cx, &app->search)->Grow());
+    box->Child(::Input::New(cx, &app->search)->Flex1());
     if (InputValue(&app->search).len > 0) {
         box->Child(Div(a)
                        ->W(16)
@@ -746,7 +746,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
     side->Child(header);
     El* scroller = Div(a)
                        ->FlexCol()
-                       ->Grow()
+                       ->Flex1()
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->sideScrollY)
@@ -1215,18 +1215,18 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     if (cx->win->opts.clientTitleBar) {
         root->Child(StoryTitleBar(app, cx));
     }
-    El* body = Div(frame)->FlexRow()->Grow()->W(kFill)->MinH(0)->H(kFill);
+    El* body = Div(frame)->FlexRow()->Flex1()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));
     // The resizable handle reads as a 1px rule. Rust anchors it over the
     // boundary rather than in the flow, so the content starts where the
     // sidebar ends; a border here is painted inside the box without taking
     // space from it, which puts the rule in the same place.
-    El* main =
-        Div(frame)->FlexCol()->Grow()->H(kFill)->MinW(0)->BorderL(1, th.border);
+    El* main = Div(frame)->FlexCol()->Flex1()->H(kFill)->MinW(0)->BorderL(
+        1, th.border);
     main->Child(Header(app, cx));
     El* scroller = Div(frame)
                        ->FlexCol()
-                       ->Grow()
+                       ->Flex1()
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->scrollY)

@@ -844,7 +844,12 @@ enum class Display : uint8_t {
 
 enum class FlexDir : uint8_t {
     Row,
-    Col
+    Col,
+    // flex_row_reverse / flex_col_reverse: the same axis, laid out from the
+    // far end. A toolbar that pins its buttons to the right without asking
+    // for a justification is written this way.
+    RowReverse,
+    ColReverse
 };
 enum class Align : uint8_t {
     Start,
@@ -856,7 +861,8 @@ enum class Justify : uint8_t {
     Start,
     Center,
     End,
-    SpaceBetween
+    SpaceBetween,
+    SpaceAround
 };
 // gpui's Overflow, per axis: `overflow_hidden` clips and
 // `overflow_x_scroll` / `overflow_y_scroll` scroll.
@@ -1127,8 +1133,19 @@ struct Style {
     float aspect = 0;
     float flexGrow = 0;
     float flexShrink = 1;
+    // flex-basis, the main size a flex item starts from before grow and
+    // shrink are handed the leftover. kAuto is CSS's `auto` — start from the
+    // item's own width or height — and is what every element that never says
+    // otherwise gets. Zero is what `flex_1()` means, and it is a different
+    // instruction: siblings then split the line by their grow factors alone,
+    // rather than each keeping its content's width and splitting only what
+    // is left over.
+    float flexBasis = kAuto;
     Edges pad = {};
-    float gap = 0;
+    // gap, per axis. `Gap()` sets both, which is what `gap_N` does; a style
+    // that names only one — `gap_x_2` — leaves the other where it was.
+    float gapX = 0;
+    float gapY = 0;
     float border = 0;
     float borderT = 0;
     float borderB = 0;
@@ -1388,9 +1405,19 @@ struct El {
     El* Flex();
     El* FlexRow();
     El* FlexCol();
+    El* FlexRowReverse();
+    El* FlexColReverse();
     El* FlexWrap();
     El* Grow(float g = 1);
     El* Shrink0();
+    // flex_1(): grow 1, shrink 1, basis 0. The three together are what makes
+    // siblings share a line evenly whatever is inside them, and grow alone
+    // does not — with an auto basis each item keeps its content's width and
+    // only the slack is split.
+    El* Flex1();
+    // flex_none(): neither grows nor shrinks, and keeps its own size.
+    El* FlexNone();
+    El* Basis(float v);
     El* W(float v);
     El* WFrac(float f);
     // percentage(delta) turns clockwise, which is what a spinner is made of.
@@ -1407,6 +1434,8 @@ struct El {
     El* MaxW(float v);
     El* MaxH(float v);
     El* Gap(float v);
+    El* GapX(float v);
+    El* GapY(float v);
     El* Pad(float v);
     El* PadX(float v);
     El* PadY(float v);
@@ -1417,7 +1446,9 @@ struct El {
     El* ItemsCenter();
     El* ItemsStart();
     El* ItemsEnd();
+    El* ItemsStretch();
     El* JustifyBetween();
+    El* JustifyAround();
     El* JustifyCenter();
     El* JustifyEnd();
     El* JustifyStart();

@@ -16,7 +16,7 @@ struct Example {
 
         El* body =
             Div(a)
-                ->Grow()
+                ->Flex1()
                 ->W(kFill)
                 ->Bg(th.tokens.background)
                 ->Child(Div(a)->Absolute()->Top(0)->Left(24)->Child(btn))

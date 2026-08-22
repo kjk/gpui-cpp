@@ -72,7 +72,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     if (!iconCollapsed) {
         brand->Child(Div(frame)
                          ->FlexCol()
-                         ->Grow()
+                         ->Flex1()
                          ->Child(TextEl(frame, StrL("Acme Inc"))->Font(14))
                          ->Child(TextEl(frame, StrL("Enterprise"))
                                      ->Font(12)
@@ -130,7 +130,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
                         ->Child(menu))
             ->IntoEl());
 
-    El* main = Div(frame)->FlexCol()->Grow()->H(kFill)->Pad(16)->Gap(16);
+    El* main = Div(frame)->FlexCol()->Flex1()->H(kFill)->Pad(16)->Gap(16);
     El* top = Div(frame)->FlexRow()->ItemsCenter()->Gap(12);
     if (kModes[app->mode] != component::SidebarCollapsible::None) {
         top->Child(component::SidebarToggleButton::New(cx)
@@ -158,7 +158,7 @@ El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     }
     main->Child(modes);
     main->Child(Div(frame)
-                    ->Grow()
+                    ->Flex1()
                     ->Radius(th.radius)
                     ->Border(1, th.border)
                     ->Pad(20)

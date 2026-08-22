@@ -247,9 +247,9 @@ El* Dialog::Actions() {
         return row;
     }
     if (cancel) {
-        row->Child(footerStretch ? cancel->Grow() : cancel);
+        row->Child(footerStretch ? cancel->Flex1() : cancel);
     }
-    row->Child(footerStretch ? ok->Grow() : ok);
+    row->Child(footerStretch ? ok->Flex1() : ok);
     return row;
 }
 

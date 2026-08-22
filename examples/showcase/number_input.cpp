@@ -56,7 +56,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
     controls->Child(
         ScButton(cx, StrL("inc"))
             ->OnClick(Listen(cx, &StepNum, 1))
-            ->Grow()
+            ->Flex1()
             ->W(24)
             ->ItemsCenter()
             ->JustifyCenter()
@@ -66,7 +66,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
     controls->Child(
         ScButton(cx, StrL("dec"))
             ->OnClick(Listen(cx, &StepNum, -1))
-            ->Grow()
+            ->Flex1()
             ->W(24)
             ->ItemsCenter()
             ->JustifyCenter()
@@ -89,7 +89,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
                                       : Rgb(0x73, 0x73, 0x73))
                     ->Child(InputBase::New(cx, StrL("number-field"), 0)
                                 ->OnClick(Listen(cx, &FocusNum))
-                                ->Grow()
+                                ->Flex1()
                                 ->H(28)
                                 ->PadX(8)
                                 ->ItemsCenter()

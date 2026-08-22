@@ -1135,3 +1135,54 @@ cargo run -p system_monitor
   under the path, so a name the table serves is not a directory walk every
   frame, and the cache is 128 slots — the icon set and then some — rather than
   the 24 the old one had.
+
+- 2026-08-22: the stories build their layouts the way the Rust does. Four
+  things gpui's `Styled` has and `gpui::Style` did not, all of which
+  `src/taffy` already implements: **flex-basis** (`Flex1()`, `FlexNone()`,
+  `Basis()`), a **gap per axis** (`GapX()` / `GapY()`, `Gap()` still sets
+  both), **`FlexRowReverse()` / `FlexColReverse()`**, and
+  **`JustifyAround()`** (plus an explicit `ItemsStretch()`).
+  `ToTaffyStyle` had been hard-coding `flexBasis = Auto()`.
+
+  The one that mattered is flex-basis. `crates/ui` and `crates/story` never
+  write `.flex_grow()` — not once — so every grow in the Rust is `.flex_1()`,
+  which is grow 1 **and shrink 1 and basis 0**. All 107 `->Grow()` in this tree
+  came from one of those and had been leaving the basis at `auto`, so an item
+  kept its content's width and siblings split only the slack. Converting them
+  is not cosmetic:
+
+  - `theme-colors` split its two panes by their contents, so the left tree was
+    too narrow and the swatch pane fell into two columns; it is now one, as in
+    Rust.
+  - `settings` ran its right pane past the window edge and clipped every
+    control on it.
+  - the showcase's component grid had ragged columns; they are even now.
+  - `Tab::new().flex_1()` in the tabs story's "Filling Space" gave "About" and
+    "Profile" different widths.
+
+  Then the story pages themselves, read against `crates/story` one at a time.
+  `section()` in Rust is `h_flex().flex_wrap().justify_center().items_center()
+  .gap_4()` and a page styles *it* — `.w_128()`, `.items_stretch()`,
+  `.gap_x_2()`, `.v_flex()` — and hands it the widgets directly. Seventeen
+  pages had been wrapping the widgets in a row or column of their own and
+  styling that instead, which mostly landed in the same place and sometimes
+  did not. They now style the section and add the children to it: spinner
+  (`gap_x_2` on all five), switch (`items_stretch`, and the two loose switches
+  as the section's own children), tabs, table and resizable (`w_full`, which
+  is why the tab bars were not filling their pane), slider's colour picker
+  (`justify_around`), and the widths on input, menu, number-input, otp-input,
+  popover, progress, rating, select, sheet, textarea and toggle. Also
+  `flex_row_reverse()` for the sidebar story's right-hand side — it had been
+  appending the two panes in the other order — `gap_y_*` / `gap_x_*` in
+  separator, and `flex_none()` in accordion.
+
+  Verified against the Rust gallery running beside ours
+  (`bun cmd/compare-story.ts -nobuild -rel <page>`) over all 62 pages, plus
+  `-rel -all` / `-dbg -all` and `bun cmd/test.ts` in both (9931 checks). Of the
+  62 pages only 13 moved at all, and every one of those moved toward the Rust
+  shot.
+
+  What is left, and is a different job: `crates/ui` has `flex_1()` in
+  `color_picker` (11), `inspector` (7) and `scroll/scrollable` (5) that this
+  tree has no counterpart for, because those parts of those components are not
+  ported yet. The count mismatch is missing feature, not different layout.

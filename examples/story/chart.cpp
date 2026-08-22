@@ -20,7 +20,7 @@ static El* ChartCard(Ctx* cx, const char* title, El* chart, bool center) {
                    // card's min-content width, so two of these land per line;
                    // layout here shares the row out first and wraps on what
                    // is left, so more fit and the chart inside overflows.
-                   ->Grow()
+                   ->Flex1()
                    ->H(400)
                    ->Pad(16)
                    ->Radius(th.radiusLg)
@@ -41,7 +41,7 @@ static El* ChartCard(Ctx* cx, const char* title, El* chart, bool center) {
         card->Child(head);
         card->Child(sub);
     }
-    El* body = Div(a)->Grow()->W(kFill)->PadY(16)->FlexRow();
+    El* body = Div(a)->Flex1()->W(kFill)->PadY(16)->FlexRow();
     if (center) {
         body->ItemsCenter()->JustifyCenter();
     }

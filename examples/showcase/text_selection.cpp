@@ -108,7 +108,7 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
     }
 
     bool active = app->selA >= 0 && app->selA != app->selB;
-    El* preview = Div(a)->Grow()->ClipY();
+    El* preview = Div(a)->Flex1()->ClipY();
     if (active) {
         char picked[1024];
         CopySelected(app, picked, (int)sizeof(picked));
@@ -154,7 +154,7 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
         ->H(520)
         ->MaxH(520)
         ->Gap(12)
-        ->Child(Div(a)->Grow()->ClipY()->ScrollY(0)->FlexCol()->Child(doc))
+        ->Child(Div(a)->Flex1()->ClipY()->ScrollY(0)->FlexCol()->Child(doc))
         ->Child(footer);
 }
 

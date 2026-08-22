@@ -32,7 +32,7 @@ struct Example {
         El* body =
             Div(a)
                 ->FlexCol()
-                ->Grow()
+                ->Flex1()
                 ->Pad(20)
                 ->ItemsCenter()
                 ->JustifyCenter()

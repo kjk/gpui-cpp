@@ -134,7 +134,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     El* body =
         Div(frame)
             ->FlexCol()
-            ->Grow()
+            ->Flex1()
             ->Pad(32)
             ->Gap(8)
             ->Child(Div(frame)

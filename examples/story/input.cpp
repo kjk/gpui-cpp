@@ -177,6 +177,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default", "Text, email, and clearable inputs.");
+    StorySectionBody(def)->W(512);
     El* defCol = Div(a)->FlexCol()->W(512)->Gap(16);
     defCol->Child(Field(self, cx, InText, focus, clear)->Cleanable()->IntoEl());
     defCol->Child(Field(self, cx, InEmail, focus, clear)->IntoEl());
@@ -185,6 +186,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* states = StorySection(
         cx, "States", "Disabled, read-only and revealable password inputs.");
+    StorySectionBody(states)->W(512);
     El* stateCol = Div(a)->FlexCol()->W(512)->Gap(16);
     stateCol->Child(
         Field(self, cx, InDisabled, focus, clear)->Disabled(true)->IntoEl());
@@ -200,6 +202,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* ct =
         StorySection(cx, "Content type", "Content types adapt input behavior.");
+    StorySectionBody(ct)->W(512);
     El* ctCol = Div(a)->FlexCol()->W(512)->Gap(16);
     for (size_t i = 0; i < sizeof(kContentTypes) / sizeof(kContentTypes[0]);
          i++) {
@@ -214,7 +217,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                 ->MaskToggle()
                 ->OnToggleMask(ListenerArg(mask, row.slot));
         }
-        line->Child(Div(a)->Grow()->Child(in->IntoEl()));
+        line->Child(Div(a)->Flex1()->Child(in->IntoEl()));
         ctCol->Child(line);
     }
     StorySectionAdd(ct, ctCol);
@@ -222,21 +225,23 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* align =
         StorySection(cx, "Alignment", "Align text to the center or end.");
+    StorySectionBody(align)->W(512);
     El* alignRow =
         Div(a)->FlexRow()->FlexWrap()->W(512)->Gap(16)->ItemsCenter();
+    alignRow->Child(
+        Div(a)->Flex1()->Child(Field(self, cx, InCentered, focus, clear)
+                                   ->Align(component::InputAlign::Center)
+                                   ->IntoEl()));
     alignRow
-        ->Child(Div(a)->Grow()->Child(Field(self, cx, InCentered, focus, clear)
-                                          ->Align(component::InputAlign::Center)
-                                          ->IntoEl()));
-    alignRow
-        ->Child(Div(a)->Grow()->Child(Field(self, cx, InRight, focus, clear)
-                                          ->Align(component::InputAlign::Right)
-                                          ->IntoEl()));
+        ->Child(Div(a)->Flex1()->Child(Field(self, cx, InRight, focus, clear)
+                                           ->Align(component::InputAlign::Right)
+                                           ->IntoEl()));
     StorySectionAdd(align, alignRow);
     page->Child(align);
 
     El* affix = StorySection(cx, "Prefix and suffix",
                              "Add icons or actions inside the field.");
+    StorySectionBody(affix)->W(512);
     El* affixCol = Div(a)->FlexCol()->W(512)->Gap(16);
     affixCol->Child(Field(self, cx, InPrefix, focus, clear)
                         ->Prefix(Div(a)->PadL(10)->Child(
@@ -266,6 +271,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* composed = StorySection(cx, "Composed states",
                                 "Composed inputs support disabled state.");
+    StorySectionBody(composed)->W(512);
     El* composedCol = Div(a)->FlexCol()->W(512)->Gap(16);
     composedCol->Child(
         Field(self, cx, InComplete, focus, clear)
@@ -295,6 +301,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* currency = StorySection(cx, "Currency",
                                 "Format currency while retaining its value.");
+    StorySectionBody(currency)->W(512);
     El* currencyCol = Div(a)->FlexCol()->W(512)->Gap(16);
     currencyCol->Child(Field(self, cx, InCurrency, focus, clear)->IntoEl());
     currencyCol->Child(
@@ -307,6 +314,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* phone = StorySection(cx, "Phone mask",
                              "Expose formatted and raw phone values.");
+    StorySectionBody(phone)->W(512);
     El* phoneCol = Div(a)->FlexCol()->W(512)->Gap(16);
     phoneCol->Child(Field(self, cx, InPhone, focus, clear)->IntoEl());
     El* phoneVals = Div(a)->FlexCol();
@@ -326,6 +334,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* pattern = StorySection(cx, "Mask pattern",
                                "Combine letter and number placeholders.");
+    StorySectionBody(pattern)->W(512);
     El* patternCol = Div(a)->FlexCol()->W(512)->Gap(16);
     patternCol->Child(Field(self, cx, InMaskPattern, focus, clear)->IntoEl());
     El* patternVals = Div(a)->FlexCol();
@@ -344,6 +353,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* validation =
         StorySection(cx, "Validation", "Validate values while the user types.");
+    StorySectionBody(validation)->W(512);
     StorySectionAdd(validation, Field(self, cx, InValidate, focus, clear)
                                     ->IntoEl()
                                     ->W(512));
@@ -351,6 +361,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* esc = StorySection(cx, "Clear on Escape",
                            "Clear a value with its action or Escape.");
+    StorySectionBody(esc)->W(512);
     StorySectionAdd(
         esc,
         Field(self, cx, InEsc, focus, clear)->Cleanable()->IntoEl()->W(512));
@@ -358,6 +369,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* focusedSec = StorySection(cx, "Focused value",
                                   "Read the value of the focused input.");
+    StorySectionBody(focusedSec)->W(512);
     Str focusedValue =
         self->focusedField >= 0
             ? StoryFmt(cx, "Value: Some(\"%s\")",
@@ -370,6 +382,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* custom = StorySection(cx, "Custom appearance",
                               "Remove the default field appearance.");
+    StorySectionBody(custom)->W(512);
     // border_b_2, px_6 py_3, monospace, on the secondary background.
     El* customBox = Div(a)
                         ->W(512)
@@ -386,11 +399,13 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
 
     El* menu =
         StorySection(cx, "Context menu", "Add actions to the editing menu.");
+    StorySectionBody(menu)->W(512);
     StorySectionAdd(
         menu, Field(self, cx, InCustomMenu, focus, clear)->IntoEl()->W(512));
     page->Child(menu);
 
     El* color = StorySection(cx, "Text color", "Apply a semantic text color.");
+    StorySectionBody(color)->W(512);
     StorySectionAdd(color, Field(self, cx, InColor, focus, clear)
                                ->TextColor(th.info)
                                ->IntoEl()

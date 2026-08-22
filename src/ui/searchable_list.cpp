@@ -246,7 +246,7 @@ El* SearchableList::IntoEl() {
         El* row =
             Div(a)->FlexRow()->W(kFill)->H(32)->PadX(4)->Gap(8)->ItemsCenter();
         row->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
-        row->Child(Div(a)->Grow()->Child(
+        row->Child(Div(a)->Flex1()->Child(
             Input::New(cx, StrDup(a, fmt("%s-query", id)), query)
                 ->Appearance(false)
                 ->OnFocus(onQueryFocus)

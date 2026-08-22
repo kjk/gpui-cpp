@@ -15,7 +15,7 @@ El* SkeletonStory::Render(SkeletonStory*, Ctx* cx) {
     El* textRow = Div(a)->FlexRow()->Gap(12)->W(kFill)->ItemsCenter();
     textRow->Child(
         component::Skeleton::New(cx)->W(48)->H(48)->IntoEl()->Radius(24));
-    El* lines = Div(a)->FlexCol()->Gap(8)->Grow();
+    El* lines = Div(a)->FlexCol()->Gap(8)->Flex1();
     lines->Child(component::Skeleton::New(cx)->W(kFill)->H(16)->IntoEl());
     lines->Child(component::Skeleton::New(cx)->W(kFill)->H(16)->IntoEl()->WFrac(
         2.f / 3.f));

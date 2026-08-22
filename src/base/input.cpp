@@ -118,7 +118,7 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
                   ->FlexRow()
                   ->ItemsCenter()
                   ->H(kInputLineH)
-                  ->Grow()
+                  ->Flex1()
                   ->BindInput(state);
     if (style.align == 1) {
         row->W(kFill)->JustifyCenter();
@@ -440,7 +440,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             // under its first rather than under the line number.
             el->Wrap();
             if (lineNumbers) {
-                el->Grow();
+                el->Flex1();
             }
         }
         // The first row is the one the state measures against; every row below
@@ -535,7 +535,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 FoldChevron(a, state, style, row, caretRow, gutterHover));
         }
         if (guides) {
-            El* pane = Div(a)->Grow()->Child(guides)->Child(el);
+            El* pane = Div(a)->Flex1()->Child(guides)->Child(el);
             if (!wrap) {
                 pane->H(kFill);
             }

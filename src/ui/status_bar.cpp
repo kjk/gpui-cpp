@@ -43,7 +43,7 @@ El* StatusBar::IntoEl() {
     if (hasLeft) {
         bar->Child(TextEl(a, left)->Font(12)->Fg(th.mutedFg));
     }
-    El* mid = Div(a)->FlexRow()->Grow()->ItemsCenter();
+    El* mid = Div(a)->FlexRow()->Flex1()->ItemsCenter();
     if (hasLeft && hasRight) {
         mid->JustifyCenter();
     } else if (hasLeft) {

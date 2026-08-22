@@ -36,7 +36,7 @@ El* Table::IntoEl() {
         head->first->Child(
             TableHead::New(cx, Str(heads[i]))
                 ->Pad(8)
-                ->Grow()
+                ->Flex1()
                 ->Child(TextEl(a, Str(heads[i]))->Font(12)->Fg(th.mutedFg)));
     }
     t->Child(head);
@@ -48,7 +48,7 @@ El* Table::IntoEl() {
         for (int c = 0; c < nHeads; c++) {
             row->Child(TableCell::New(cx, StrDup(a, fmt("c%d", c)))
                            ->Pad(8)
-                           ->Grow()
+                           ->Flex1()
                            ->Child(TextEl(a, Str(rows[r][c]))
                                        ->Font(13)
                                        ->Fg(th.foreground)));
@@ -288,7 +288,7 @@ static El* LoadingRow(Ctx* cx, UiSize size, bool header) {
     row->Child(Div(a)
                    ->FlexRow()
                    ->Gap(12)
-                   ->Grow()
+                   ->Flex1()
                    ->ItemsCenter()
                    ->Child(bar(96))
                    ->Child(bar(192))
@@ -394,7 +394,7 @@ El* DataTable::BuildEl() {
     // shape that falls out of a tree with no such offset in it.
     El* main = Div(a)->FlexRow()->W(kFill)->ItemsStart();
     El* fixedPane = Div(a)->FlexCol()->Shrink0();
-    El* scrollPane = Div(a)->FlexCol()->Grow()->ClipX();
+    El* scrollPane = Div(a)->FlexCol()->Flex1()->ClipX();
     if (nFixed > 0) {
         main->Child(fixedPane);
     }
@@ -417,7 +417,7 @@ El* DataTable::BuildEl() {
 
     for (int g = 0; g < nGroupHeaders; g++) {
         El* gf = Div(a)->FlexRow()->Shrink0()->BorderB(1, th.border);
-        El* gsWrap = follow(Div(a)->FlexRow()->Grow()->BorderB(1, th.border));
+        El* gsWrap = follow(Div(a)->FlexRow()->Flex1()->BorderB(1, th.border));
         El* gs = Div(a)->FlexRow()->Shrink0();
         gsWrap->Child(gs);
         int col = 0;
@@ -449,7 +449,7 @@ El* DataTable::BuildEl() {
                         ->FlexRow()
                         ->Shrink0()
                         ->BorderB(1, th.border);
-    El* headWrap = follow(Div(a)->FlexRow()->Grow()->BorderB(1, th.border));
+    El* headWrap = follow(Div(a)->FlexRow()->Flex1()->BorderB(1, th.border));
     El* headScroll = TableHeader::New(cx, StrDup(a, fmt("%s-head", id)))
                          ->FlexRow()
                          ->Shrink0();
@@ -491,7 +491,7 @@ El* DataTable::BuildEl() {
         // the column's edge.
         El* content = Div(a)
                           ->FlexRow()
-                          ->Grow()
+                          ->Flex1()
                           ->PadX(8)
                           ->PadY(6)
                           ->ItemsCenter()

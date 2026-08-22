@@ -186,11 +186,11 @@ El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx) {
         for (int c = 0; c < 3; c++) {
             int i = row + c;
             if (i >= CompCount) {
-                r->Child(Div(a)->Grow());
+                r->Child(Div(a)->Flex1());
                 continue;
             }
             r->Child(Div(a)
-                         ->Grow()
+                         ->Flex1()
                          ->H(36)
                          ->PadX(12)
                          ->ItemsCenter()
@@ -263,7 +263,7 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
 
     El* content = RenderComp(app, cx, size);
     El* scroller = Div(frame)
-                       ->Grow()
+                       ->Flex1()
                        ->ClipY()
                        ->ScrollY(app->scrollY)
                        ->W(kFill)

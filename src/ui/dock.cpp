@@ -155,7 +155,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     El* strip = Div(a)
                     ->FlexRow()
                     ->ItemsCenter()
-                    ->Grow()
+                    ->Flex1()
                     ->H(kFill)
                     ->MinW(0)
                     ->ClipX()
@@ -230,7 +230,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     }
     // last_empty_space: the run of bar past the last tab, which takes a drop
     // as "put it at the end" and lights up while a panel is over it.
-    El* rest = Div(a)->Grow()->H(kFill)->MinW(64);
+    El* rest = Div(a)->Flex1()->H(kFill)->MinW(64);
     (void)0;
     if (!s->locked) {
         Str restId = StrDup(a, fmt("%s-tabrest-%d", id, node));
@@ -305,7 +305,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     box->Child(bar);
 
     if (!collapsed) {
-        El* body = Div(a)->FlexCol()->Grow()->W(kFill)->ClipY()->Bg(
+        El* body = Div(a)->FlexCol()->Flex1()->W(kFill)->ClipY()->Bg(
             th.tokens.background);
         if (n.panel.len > 0) {
             const DockPanelDef& def = s->panels[n.panel[n.activeIx]];
@@ -351,7 +351,7 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
         // The last child takes what is left, so rounding never leaves a gap
         // down the edge of the split.
         if (i == n.child.len - 1) {
-            wrap->Grow();
+            wrap->Flex1();
             if (horizontal) {
                 wrap->H(kFill);
             } else {
@@ -461,13 +461,13 @@ El* DockArea::IntoEl() {
     }
 
     int toolbarNode = FirstTabsNode(s, s->center);
-    El* row = Div(a)->FlexRow()->Grow()->W(kFill);
+    El* row = Div(a)->FlexRow()->Flex1()->W(kFill);
     if (s->left.node >= 0 && s->left.open) {
         El* dock = Div(a)->FlexRow()->W(s->left.size)->H(kFill);
         dock->Child(
             Div(a)
                 ->FlexCol()
-                ->Grow()
+                ->Flex1()
                 ->H(kFill)
                 ->BorderR(1, th.border)
                 ->Child(RenderNode(cx, id, state, s->left.node, toolbarNode)));
@@ -477,7 +477,7 @@ El* DockArea::IntoEl() {
                          Axis::Horizontal));
         row->Child(dock);
     }
-    row->Child(Div(a)->FlexCol()->Grow()->H(kFill)->Child(
+    row->Child(Div(a)->FlexCol()->Flex1()->H(kFill)->Child(
         RenderNode(cx, id, state, s->center, toolbarNode)));
     if (s->right.node >= 0 && s->right.open) {
         El* dock = Div(a)->FlexRow()->W(s->right.size)->H(kFill);
@@ -488,7 +488,7 @@ El* DockArea::IntoEl() {
         dock->Child(
             Div(a)
                 ->FlexCol()
-                ->Grow()
+                ->Flex1()
                 ->H(kFill)
                 ->BorderL(1, th.border)
                 ->Child(RenderNode(cx, id, state, s->right.node, toolbarNode)));
@@ -512,7 +512,7 @@ El* DockArea::IntoEl() {
                 DockPack(kDockSideBase + (int)DockPlacement::Bottom, 0),
                 Axis::Vertical));
         }
-        dock->Child(Div(a)->FlexCol()->Grow()->W(kFill)->Child(
+        dock->Child(Div(a)->FlexCol()->Flex1()->W(kFill)->Child(
             RenderNode(cx, id, state, s->bottom.node, toolbarNode)));
         box->Child(dock);
     }

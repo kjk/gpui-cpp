@@ -59,7 +59,7 @@ El* Separator::IntoEl() {
         // as wide as the separator and no wider.
         El* lineEl = Div(a)->H(1);
         if (label.s) {
-            lineEl->Grow()->MinW(0);
+            lineEl->Flex1()->MinW(0);
         } else {
             lineEl->W(kFill);
         }

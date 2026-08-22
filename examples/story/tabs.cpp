@@ -169,6 +169,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     for (size_t v = 0; v < sizeof(kVariants) / sizeof(kVariants[0]); v++) {
         const VariantRow& row = kVariants[v];
         El* sec = StorySection(cx, row.title, nullptr);
+        StorySectionBody(sec)->W(kFill);
         component::Tabs* bar =
             component::Tabs::New(cx, StoryFmt(cx, "tabs-%d", (int)v))
                 ->Variant(row.variant)
@@ -236,6 +237,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         StorySection(cx, "Dynamic Tabs",
                      "Tabs can be added, removed, and composed with prefix "
                      "and suffix content.");
+    StorySectionBody(dynamic)->W(kFill);
     El* actions = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
     actions->Child(component::Button::New(cx, StrL("add-tab"))
                        ->Label(StrL("Add Tab"))
@@ -289,6 +291,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
     El* filling =
         StorySection(cx, "Filling Space",
                      "Segmented tabs can share the available width equally.");
+    StorySectionBody(filling)->W(kFill);
     El* fillBar = Div(a)
                       ->FlexRow()
                       ->W(kFill)
@@ -301,7 +304,7 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         El* t =
             Div(a)
                 ->H(26)
-                ->Grow()
+                ->Flex1()
                 ->PadX(12)
                 ->ItemsCenter()
                 ->JustifyCenter()

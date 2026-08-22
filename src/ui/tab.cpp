@@ -442,7 +442,7 @@ El* Tabs::IntoEl() {
     // h_flex().id("tabs").flex_1().overflow_x_hidden(): the strip gives way
     // before the bar does, so a suffix and the overflow menu keep their place
     // when there are more tabs than fit.
-    El* strip = Div(a)->FlexRow()->ItemsCenter()->Grow()->H(kFill)->ClipX();
+    El* strip = Div(a)->FlexRow()->ItemsCenter()->Flex1()->H(kFill)->ClipX();
     if (gap > 0) {
         strip->Gap(gap);
     }
