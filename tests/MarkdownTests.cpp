@@ -42,14 +42,19 @@ static bool Is(Str s, const char* want) {
     return s.len == len && (len == 0 || memcmp(s.s, want, (size_t)len) == 0);
 }
 
-static bool Is(ArenaStr s, const char* want) {
-    return Is(base::ArenaStrGet(gParsedInto, s), want);
+// One of a node's strings, out of the arena the tree was parsed into.
+static Str S(const Node* n, NodeStrKind k) {
+    return NodeGetStr(gParsedInto, n, k);
 }
 
-// Whether the node carried this string at all, which is what a null `s` used
+static bool Is(const Node* n, NodeStrKind k, const char* want) {
+    return Is(S(n, k), want);
+}
+
+// Whether the node carries this string at all, which is what a null `s` used
 // to mean.
-static bool IsUnset(ArenaStr s) {
-    return !base::ArenaStrIsSet(s);
+static bool IsUnset(const Node* n, NodeStrKind k) {
+    return !NodeHasStr(gParsedInto, n, k);
 }
 
 // The text of a node and everything under it.
@@ -285,14 +290,14 @@ static void TestMarkdownFlow(Arena* a) {
     root = Parse(a, "```rust meta\nlet a = 1;\n```\n");
     Node* code = Child(root, 0);
     utassert(code->kind == NodeKind::Code);
-    utassert(Is(code->lang, "rust"));
-    utassert(Is(code->meta, "meta"));
-    utassert(Is(code->value, "let a = 1;"));
+    utassert(Is(code, NodeStrKind::Lang, "rust"));
+    utassert(Is(code, NodeStrKind::Meta, "meta"));
+    utassert(Is(code, NodeStrKind::Value, "let a = 1;"));
 
     root = Parse(a, "    indented\n");
     utassert(Child(root, 0)->kind == NodeKind::Code);
-    utassert(Is(Child(root, 0)->value, "indented"));
-    utassert(IsUnset(Child(root, 0)->lang));
+    utassert(Is(Child(root, 0), NodeStrKind::Value, "indented"));
+    utassert(IsUnset(Child(root, 0), NodeStrKind::Lang));
 }
 
 static void TestMarkdownLists(Arena* a) {
@@ -334,7 +339,7 @@ static void TestMarkdownText(Arena* a) {
     utassert(Child(p, 1)->kind == NodeKind::Strong);
     utassert(Child(p, 3)->kind == NodeKind::Emphasis);
     utassert(Child(p, 5)->kind == NodeKind::InlineCode);
-    utassert(Is(Child(p, 5)->value, "d"));
+    utassert(Is(Child(p, 5), NodeStrKind::Value, "d"));
     utassert(Child(p, 7)->kind == NodeKind::Delete);
 
     // A character reference decodes; an escape keeps the character.
@@ -356,26 +361,26 @@ static void TestMarkdownLinks(Arena* a) {
     Node* root = Parse(a, "[text](/url \"title\")\n");
     Node* link = Child(Child(root, 0), 0);
     utassert(link->kind == NodeKind::Link);
-    utassert(Is(link->url, "/url"));
-    utassert(Is(link->title, "title"));
+    utassert(Is(link, NodeStrKind::Url, "/url"));
+    utassert(Is(link, NodeStrKind::Title, "title"));
     utassert(TextIs(a, link, "text"));
 
     root = Parse(a, "![alt](/img.png)\n");
     Node* image = Child(Child(root, 0), 0);
     utassert(image->kind == NodeKind::Image);
-    utassert(Is(image->url, "/img.png"));
-    utassert(Is(image->alt, "alt"));
+    utassert(Is(image, NodeStrKind::Url, "/img.png"));
+    utassert(Is(image, NodeStrKind::Alt, "alt"));
 
     // A definition and the three kinds of reference to it.
     root = Parse(a, "[Foo]: /f\n\n[Foo]\n\n[bar][Foo]\n\n[Foo][]\n");
     Node* definition = Child(root, 0);
     utassert(definition->kind == NodeKind::Definition);
-    utassert(Is(definition->identifier, "foo"));
-    utassert(Is(definition->url, "/f"));
+    utassert(Is(definition, NodeStrKind::Identifier, "foo"));
+    utassert(Is(definition, NodeStrKind::Url, "/f"));
     Node* shortcut = Child(Child(root, 1), 0);
     utassert(shortcut->kind == NodeKind::LinkReference);
     utassert(shortcut->referenceKind == ReferenceKind::Shortcut);
-    utassert(Is(shortcut->identifier, "foo"));
+    utassert(Is(shortcut, NodeStrKind::Identifier, "foo"));
     utassert(Child(Child(root, 2), 0)->referenceKind == ReferenceKind::Full);
     utassert(Child(Child(root, 3), 0)->referenceKind ==
              ReferenceKind::Collapsed);
@@ -388,9 +393,9 @@ static void TestMarkdownLinks(Arena* a) {
     root = Parse(a, "<https://x.com/> and www.y.com and a@b.com\n");
     Node* p = Child(root, 0);
     utassert(Child(p, 0)->kind == NodeKind::Link);
-    utassert(Is(Child(p, 0)->url, "https://x.com/"));
-    utassert(Is(Child(p, 2)->url, "http://www.y.com"));
-    utassert(Is(Child(p, 4)->url, "mailto:a@b.com"));
+    utassert(Is(Child(p, 0), NodeStrKind::Url, "https://x.com/"));
+    utassert(Is(Child(p, 2), NodeStrKind::Url, "http://www.y.com"));
+    utassert(Is(Child(p, 4), NodeStrKind::Url, "mailto:a@b.com"));
 }
 
 static void TestMarkdownTable(Arena* a) {
@@ -462,21 +467,21 @@ static void TestMarkdownHtmlAndFootnotes(Arena* a) {
     TestSuite("markdown html");
     Node* root = Parse(a, "<div>\n  <b>x</b>\n</div>\n");
     utassert(Child(root, 0)->kind == NodeKind::Html);
-    utassert(Is(Child(root, 0)->value, "<div>\n  <b>x</b>\n</div>"));
+    utassert(Is(Child(root, 0), NodeStrKind::Value, "<div>\n  <b>x</b>\n</div>"));
 
     root = Parse(a, "a <b>c</b> d\n");
     Node* p = Child(root, 0);
     utassert(Child(p, 1)->kind == NodeKind::Html);
-    utassert(Is(Child(p, 1)->value, "<b>"));
+    utassert(Is(Child(p, 1), NodeStrKind::Value, "<b>"));
 
     TestSuite("markdown footnotes");
     root = Parse(a, "Call[^1].\n\n[^1]: The note.\n");
     Node* call = Child(Child(root, 0), 1);
     utassert(call->kind == NodeKind::FootnoteReference);
-    utassert(Is(call->identifier, "1"));
+    utassert(Is(call, NodeStrKind::Identifier, "1"));
     Node* definition = Child(root, 1);
     utassert(definition->kind == NodeKind::FootnoteDefinition);
-    utassert(Is(definition->identifier, "1"));
+    utassert(Is(definition, NodeStrKind::Identifier, "1"));
     utassert(TextIs(a, definition, "The note."));
 }
 

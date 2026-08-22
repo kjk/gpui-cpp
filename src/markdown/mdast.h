@@ -140,6 +140,28 @@ enum class NodeKind : uint8_t {
     Paragraph,
 };
 
+// Which of the eight strings a record in a node's string list is. What used
+// to be the name of a field is a byte in the arena now.
+enum class NodeStrKind : uint8_t {
+    // Text, Html, Code, Math, InlineCode, InlineMath, Yaml, Toml.
+    Value,
+    // Link, Image, Definition.
+    Url,
+    // Link, Image, Definition. Optional.
+    Title,
+    // Image, ImageReference.
+    Alt,
+    // Definition, LinkReference, ImageReference, FootnoteDefinition,
+    // FootnoteReference.
+    Identifier,
+    // The same five. Optional.
+    Label,
+    // Code: the fence's info word. Math: the rest of the fence. Both
+    // optional.
+    Lang,
+    Meta,
+};
+
 // mdast.rs's `Option<bool>` and the flags beside it, packed into one byte.
 // Six bools laid out one per byte cost eight of them once the struct is
 // padded; a Node is allocated by the thousand, so they are a mask instead.
@@ -160,12 +182,11 @@ enum NodeFlag : uint8_t {
     NodeHasChecked = 1 << 5,
 };
 
-// Everything in here is four bytes or fewer now, so the order is the eight
-// strings and the four offsets, then the length and three single bytes with
-// three of padding behind them. 56 bytes, where the order they were written
-// in with a Str per string, a child vector, an alignment vector and a full
-// unist Position cost 256 — and where holding one pointer would put the
-// whole struct back on an eight-byte alignment.
+// Five offsets, the length and three single bytes with three of padding
+// behind them: 28 bytes, where the order they were written in with a Str per
+// string, a child vector, an alignment vector and a full unist Position cost
+// 256 — and where holding one pointer would put the whole struct back on an
+// eight-byte alignment.
 struct Node {
     // The children, as a ring rather than a vector. `lastKid` is the last of
     // them and every child points at the one after it, the last one back at
@@ -206,31 +227,22 @@ struct Node {
     uint32_t srcStart = 0;
     uint16_t srcLen = 0;
 
-    // The eight strings a node may carry. They are ArenaStr rather than Str
-    // because a Node is allocated by the thousand and holds all eight
-    // whichever kind it is: sixteen bytes each of pointer and length would be
-    // two thirds of the struct, spent on lengths and on pointing into the
-    // arena the node is already in. Four bytes each of offset, with the
-    // length varint-encoded beside the characters. `NodeStr(a, ..)` reads one
-    // back.
+    // The strings a node carries, as a list in the arena rather than eight
+    // fields. `firstStr` is the newest of them; each record names the next:
     //
-    // Text, Html, Code, Math, InlineCode, InlineMath, Yaml, Toml.
-    ArenaStr value = kArenaStrNone;
-    // Link, Image, Definition.
-    ArenaStr url = kArenaStrNone;
-    // Link, Image, Definition. Optional.
-    ArenaStr title = kArenaStrNone;
-    // Image, ImageReference.
-    ArenaStr alt = kArenaStrNone;
-    // Definition, LinkReference, ImageReference, FootnoteDefinition,
-    // FootnoteReference.
-    ArenaStr identifier = kArenaStrNone;
-    // The same five. Optional.
-    ArenaStr label = kArenaStrNone;
-    // Code: the fence's info word and the rest of the fence. Math: the rest.
-    // Both optional.
-    ArenaStr lang = kArenaStrNone;
-    ArenaStr meta = kArenaStrNone;
+    //     [u32 next][u8 kind][varint len][len bytes][NUL]
+    //
+    // Eight offsets was 32 of a 56-byte node, and seven of them were unset
+    // on almost every node in a tree — a Text node carries a value and
+    // nothing else, and most nodes carry nothing at all. This is four bytes
+    // in the node and seven around the bytes of each string that is
+    // actually there.
+    //
+    // `NodeGetStr(a, n, kind)` reads one back, `NodeSetStr` stores one,
+    // `NodeGrowStr` appends to one, `NodeClearStr` takes one away. The list
+    // is at most eight long and is almost always one or none, so the walk
+    // that finds a kind is a walk in name only.
+    ArenaStr firstStr = kArenaStrNone;
 
     // The one word whose meaning `kind` decides. Three fields that can
     // never be live together, so they are one:
@@ -259,13 +271,13 @@ struct Node {
     }
 };
 
-// The packing is the point, so it is checked rather than hoped for: eight
-// 4-byte strings, four 4-byte offsets, the 2-byte length and three single
-// bytes, rounded up to the 4 everything in here now aligns to. Three bytes
-// of that last 8 are padding — three more single-byte fields, or one more
-// 2-byte one, would cost nothing, where a field of eight bytes would cost
-// eight more than itself and would otherwise go unnoticed.
-static_assert(sizeof(Node) == (8 + 4) * 4 + 8,
+// The packing is the point, so it is checked rather than hoped for: five
+// 4-byte offsets, the 2-byte length and three single bytes, rounded up to
+// the 4 everything in here now aligns to. Three bytes of that last 8 are
+// padding — three more single-byte fields, or one more 2-byte one, would
+// cost nothing, where a field of eight bytes would cost eight more than
+// itself and would otherwise go unnoticed.
+static_assert(sizeof(Node) == 5 * 4 + 8,
               "Node has picked up padding; order the fields largest first");
 
 // The longest span a node can name. A node that runs further reports this,
@@ -292,6 +304,29 @@ inline void NodeMoveSrcStart(Node* n, uint32_t to) {
     n->srcLen = by >= n->srcLen ? 0 : (uint16_t)(n->srcLen - by);
     n->srcStart = to;
 }
+
+// Reading a string back: the Str points into the arena the node is in and
+// lives exactly as long as it does. A kind the node does not carry answers
+// an empty Str, which is what an unset field used to be.
+Str NodeGetStr(Arena* a, const Node* n, NodeStrKind k);
+// The length without touching the bytes, which is what the two-pass
+// NodeToString wants.
+int32_t NodeGetStrLen(Arena* a, const Node* n, NodeStrKind k);
+// Whether the node carries this kind at all — an empty string that was
+// stored is not carried, because storing an empty one takes it away.
+bool NodeHasStr(Arena* a, const Node* n, NodeStrKind k);
+
+// Storing one, replacing whatever this kind held. An empty or null `s`
+// clears it instead, which is what the compiler's `Keep` did by answering
+// none.
+void NodeSetStr(Arena* a, Node* n, NodeStrKind k, Str s);
+// Taking one away. The record stays in the arena — nothing here frees —
+// but the node no longer names it.
+void NodeClearStr(Arena* a, Node* n, NodeStrKind k);
+// Appending to one, in place when the record is the newest thing in the
+// arena, which is what a text node's value being built one Data event at a
+// time relies on.
+void NodeGrowStr(Arena* a, Node* n, NodeStrKind k, Str more);
 
 Node* NodeNew(Arena* a, NodeKind kind);
 

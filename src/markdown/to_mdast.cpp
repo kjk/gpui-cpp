@@ -111,25 +111,18 @@ static TreeFrame& TreeTail(CompileContext* c) {
 // stack ends at the node it would have arrived at, so both of these are one
 // read. An empty stack is the tree itself, which is what a zero-length walk
 // came to.
-// A node's strings are ArenaStr — four bytes of offset, with the length
-// varint-encoded beside the characters — so the compiler needs both
-// directions.
-//
-// `Keep` is how one is stored. It copies, always: the length prefix has to
-// sit immediately ahead of the characters, so a string that is already in
-// the arena but was not written as an ArenaStr cannot be pointed at, only
-// copied. What NodeToString and IdentifierFrom build ahead of it is a
-// working copy either way, and it stays in the arena either way, so this
-// costs the one copy and nothing that was not already spent.
-static ArenaStr Keep(CompileContext* c, Str s) {
-    if (!s.s || s.len <= 0) {
-        return kArenaStrNone;
-    }
-    return base::ArenaStrDup(c->a, s);
+// A node's strings live in a list in the arena, one record each, so storing
+// one is the node's own call and not an assignment. `Keep` copies, always:
+// the record's header has to sit immediately ahead of the characters, so a
+// string already in the arena cannot be pointed at, only copied. What
+// NodeToString and IdentifierFrom build ahead of it is a working copy either
+// way, so this costs the one copy and nothing that was not already spent.
+static void Keep(CompileContext* c, Node* n, NodeStrKind k, Str s) {
+    NodeSetStr(c->a, n, k, s);
 }
 
-static Str Get(CompileContext* c, ArenaStr s) {
-    return NodeStr(c->a, s);
+static Str Get(CompileContext* c, const Node* n, NodeStrKind k) {
+    return NodeGetStr(c->a, n, k);
 }
 
 // A string built a piece at a time. A text node's value arrives one Data
@@ -137,10 +130,10 @@ static Str Get(CompileContext* c, ArenaStr s) {
 // concatenating copied the whole of what was there on every one of them —
 // so a paragraph of N events left N-1 dead copies in the arena and cost
 // O(total^2 / piece) bytes to build. Nothing else allocates between two of
-// those events, so the value is still the newest thing in the arena and
+// those events, so the record is still the newest thing in the arena and
 // grows in place.
-static ArenaStr Grow(CompileContext* c, ArenaStr s, Str more) {
-    return base::ArenaStrAppend(c->a, s, more);
+static void Grow(CompileContext* c, Node* n, NodeStrKind k, Str more) {
+    NodeGrowStr(c->a, n, k, more);
 }
 
 static Node* TailMut(CompileContext* c) {
@@ -407,7 +400,7 @@ static void OnExit(CompileContext* c) {
 static void OnExitData(CompileContext* c) {
     Str value = ExitSlice(c).bytes;
     Node* node = TailMut(c);
-    node->value = Grow(c, node->value, value);
+    Grow(c, node, NodeStrKind::Value, value);
     OnExit(c);
 }
 
@@ -415,15 +408,15 @@ static void OnExitAutolinkProtocol(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = Grow(c, link->url, value);
+    Grow(c, link, NodeStrKind::Url, value);
 }
 
 static void OnExitAutolinkEmail(CompileContext* c) {
     OnExitData(c);
     Str value = ExitSlice(c).bytes;
     Node* link = TailMut(c);
-    link->url = Grow(c, link->url, StrL("mailto:"));
-    link->url = Grow(c, link->url, value);
+    Grow(c, link, NodeStrKind::Url, StrL("mailto:"));
+    Grow(c, link, NodeStrKind::Url, value);
 }
 
 static void OnExitCharacterReferenceValue(CompileContext* c) {
@@ -434,7 +427,7 @@ static void OnExitCharacterReferenceValue(CompileContext* c) {
     Str value = CharacterReferenceDecodeInto(buf, ExitSlice(c).bytes,
                                              c->characterReferenceMarker);
     Node* node = TailMut(c);
-    node->value = Grow(c, node->value, value);
+    Grow(c, node, NodeStrKind::Value, value);
     c->characterReferenceMarker = 0;
 }
 
@@ -447,14 +440,14 @@ static void OnExitRawFlowFence(CompileContext* c) {
 
 static void OnExitRawFlow(CompileContext* c) {
     Str value = TrimEol(NodeToString(c->a, Resume(c)), true, true);
-    TailMut(c)->value = Keep(c, value);
+    Keep(c, TailMut(c), NodeStrKind::Value, value);
     OnExit(c);
     c->rawFlowFenceSeen = false;
 }
 
 static void OnExitCodeIndented(CompileContext* c) {
     Str value = TrimEol(NodeToString(c->a, Resume(c)), false, true);
-    TailMut(c)->value = Keep(c, value);
+    Keep(c, TailMut(c), NodeStrKind::Value, value);
     OnExit(c);
     c->rawFlowFenceSeen = false;
 }
@@ -499,7 +492,7 @@ static void OnExitRawText(CompileContext* c) {
         }
     }
 
-    TailMut(c)->value = Keep(c, value);
+    Keep(c, TailMut(c), NodeStrKind::Value, value);
     OnExit(c);
 }
 
@@ -507,8 +500,8 @@ static void OnExitDefinitionId(CompileContext* c) {
     Str label = NodeToString(c->a, Resume(c));
     Str identifier = IdentifierFrom(c->a, ExitSlice(c).bytes);
     Node* node = TailMut(c);
-    node->label = Keep(c, label);
-    node->identifier = Keep(c, identifier);
+    Keep(c, node, NodeStrKind::Label, label);
+    Keep(c, node, NodeStrKind::Identifier, identifier);
 }
 
 static void OnExitGfmAutolinkLiteral(CompileContext* c) {
@@ -517,11 +510,11 @@ static void OnExitGfmAutolinkLiteral(CompileContext* c) {
     Name name = (*c->events)[c->index].name;
     Node* link = TailMut(c);
     if (name == Name::GfmAutolinkLiteralEmail) {
-        link->url = Grow(c, link->url, StrL("mailto:"));
+        Grow(c, link, NodeStrKind::Url, StrL("mailto:"));
     } else if (name == Name::GfmAutolinkLiteralWww) {
-        link->url = Grow(c, link->url, StrL("http://"));
+        Grow(c, link, NodeStrKind::Url, StrL("http://"));
     }
-    link->url = Grow(c, link->url, value);
+    Grow(c, link, NodeStrKind::Url, value);
     OnExit(c);
 }
 
@@ -562,7 +555,7 @@ static void OnExitLabelText(CompileContext* c) {
         node->lastKid = fragment->lastKid;
         fragment->lastKid = ArenaNode{};
     } else if (node->kind == NodeKind::Image) {
-        node->alt = Keep(c, label);
+        Keep(c, node, NodeStrKind::Alt, label);
     }
 }
 
@@ -592,7 +585,7 @@ static void OnExitLineEnding(CompileContext* c) {
 
 static void OnExitHtml(CompileContext* c) {
     Str value = NodeToString(c->a, Resume(c));
-    TailMut(c)->value = Keep(c, value);
+    Keep(c, TailMut(c), NodeStrKind::Value, value);
     OnExit(c);
 }
 
@@ -606,22 +599,22 @@ static void OnExitMedia(CompileContext* c) {
     Node* parent = TailMut(c);
     Node* node = NodeLastChild(c->a, parent);
     if (node->kind == NodeKind::FootnoteReference) {
-        node->identifier = Keep(c, reference.identifier);
-        node->label = Keep(c, reference.label);
+        Keep(c, node, NodeStrKind::Identifier, reference.identifier);
+        Keep(c, node, NodeStrKind::Label, reference.label);
     } else if (node->kind == NodeKind::Image) {
         node->kind = NodeKind::ImageReference;
         node->referenceKind = reference.kind;
-        node->identifier = Keep(c, reference.identifier);
-        node->label = Keep(c, reference.label);
-        node->url = kArenaStrNone;
-        node->title = kArenaStrNone;
+        Keep(c, node, NodeStrKind::Identifier, reference.identifier);
+        Keep(c, node, NodeStrKind::Label, reference.label);
+        NodeClearStr(c->a, node, NodeStrKind::Url);
+        NodeClearStr(c->a, node, NodeStrKind::Title);
     } else if (node->kind == NodeKind::Link) {
         node->kind = NodeKind::LinkReference;
         node->referenceKind = reference.kind;
-        node->identifier = Keep(c, reference.identifier);
-        node->label = Keep(c, reference.label);
-        node->url = kArenaStrNone;
-        node->title = kArenaStrNone;
+        Keep(c, node, NodeStrKind::Identifier, reference.identifier);
+        Keep(c, node, NodeStrKind::Label, reference.label);
+        NodeClearStr(c->a, node, NodeStrKind::Url);
+        NodeClearStr(c->a, node, NodeStrKind::Title);
     }
 }
 
@@ -639,7 +632,7 @@ static void OnExitListItem(CompileContext* c) {
             // line the checkbox left behind is one of them, which a
             // position counted out of the source picks up on its own.
             uint32_t point = text->srcStart;
-            Str value = Get(c, text->value);
+            Str value = Get(c, text, NodeStrKind::Value);
             int32_t start = 0;
             if (value.len > 0 && (value.s[0] == '\t' || value.s[0] == ' ')) {
                 point += 1;
@@ -664,8 +657,7 @@ static void OnExitListItem(CompileContext* c) {
                     last->sibling = text->sibling;
                 }
             } else {
-                text->value =
-                    Keep(c, Str(value.s + start, value.len - start));
+                Keep(c, text, NodeStrKind::Value, Str(value.s + start, value.len - start));
                 NodeMoveSrcStart(text, point);
             }
             NodeMoveSrcStart(paragraph, point);
@@ -749,11 +741,23 @@ static void Exit(CompileContext* c) {
             OnExitCharacterReferenceValue(c);
             break;
         case Name::CodeFencedFenceInfo:
-            TailMut(c)->lang = Keep(c, NodeToString(c->a, Resume(c)));
+            {
+                // Resume pops the stack TailMut reads, and which of two
+                // arguments is evaluated first is the compiler's to
+                // choose — so the pop is its own statement.
+                Str s = NodeToString(c->a, Resume(c));
+                Keep(c, TailMut(c), NodeStrKind::Lang, s);
+            }
             break;
         case Name::CodeFencedFenceMeta:
         case Name::MathFlowFenceMeta:
-            TailMut(c)->meta = Keep(c, NodeToString(c->a, Resume(c)));
+            {
+                // Resume pops the stack TailMut reads, and which of two
+                // arguments is evaluated first is the compiler's to
+                // choose — so the pop is its own statement.
+                Str s = NodeToString(c->a, Resume(c));
+                Keep(c, TailMut(c), NodeStrKind::Meta, s);
+            }
             break;
         case Name::CodeFencedFence:
         case Name::MathFlowFence:
@@ -771,20 +775,36 @@ static void Exit(CompileContext* c) {
             OnExitRawText(c);
             break;
         case Name::DefinitionDestinationString:
-            TailMut(c)->url = Keep(c, NodeToString(c->a, Resume(c)));
+            {
+                // Resume pops the stack TailMut reads, and which of two
+                // arguments is evaluated first is the compiler's to
+                // choose — so the pop is its own statement.
+                Str s = NodeToString(c->a, Resume(c));
+                Keep(c, TailMut(c), NodeStrKind::Url, s);
+            }
             break;
         case Name::DefinitionLabelString:
         case Name::GfmFootnoteDefinitionLabelString:
             OnExitDefinitionId(c);
             break;
         case Name::DefinitionTitleString:
-            TailMut(c)->title = Keep(c, NodeToString(c->a, Resume(c)));
+            {
+                // Resume pops the stack TailMut reads, and which of two
+                // arguments is evaluated first is the compiler's to
+                // choose — so the pop is its own statement.
+                Str s = NodeToString(c->a, Resume(c));
+                Keep(c, TailMut(c), NodeStrKind::Title, s);
+            }
             break;
-        case Name::Frontmatter:
-            TailMut(c)->value =
-                Keep(c, TrimEol(NodeToString(c->a, Resume(c)), true, true));
+        case Name::Frontmatter: {
+            // Resume pops the stack TailMut reads, and which of two
+            // arguments is evaluated first is the compiler's to choose —
+            // so the pop is its own statement.
+            Str s = TrimEol(NodeToString(c->a, Resume(c)), true, true);
+            Keep(c, TailMut(c), NodeStrKind::Value, s);
             OnExit(c);
             break;
+        }
         case Name::GfmAutolinkLiteralEmail:
         case Name::GfmAutolinkLiteralMailto:
         case Name::GfmAutolinkLiteralProtocol:
@@ -843,10 +863,22 @@ static void Exit(CompileContext* c) {
             OnExitReferenceString(c);
             break;
         case Name::ResourceDestinationString:
-            TailMut(c)->url = Keep(c, NodeToString(c->a, Resume(c)));
+            {
+                // Resume pops the stack TailMut reads, and which of two
+                // arguments is evaluated first is the compiler's to
+                // choose — so the pop is its own statement.
+                Str s = NodeToString(c->a, Resume(c));
+                Keep(c, TailMut(c), NodeStrKind::Url, s);
+            }
             break;
         case Name::ResourceTitleString:
-            TailMut(c)->title = Keep(c, NodeToString(c->a, Resume(c)));
+            {
+                // Resume pops the stack TailMut reads, and which of two
+                // arguments is evaluated first is the compiler's to
+                // choose — so the pop is its own statement.
+                Str s = NodeToString(c->a, Resume(c));
+                Keep(c, TailMut(c), NodeStrKind::Title, s);
+            }
             break;
         default:
             break;
