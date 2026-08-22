@@ -99,3 +99,4 @@ void TestListSettings();
 void TestStateStyle();
 void TestClick();
 void TestArenaVec();
+void TestDrawOps();

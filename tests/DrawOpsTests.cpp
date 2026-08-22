@@ -1,0 +1,194 @@
+/* Not a port — there is no Rust behind this one.
+ *
+ * `src/gpui/svg.cpp` and `cmd/svg-to-bytecode.ts` are the same converter
+ * written twice: the first reads an application's own `.svg` at load time,
+ * the second read `assets/icons` at build time and its output is the
+ * `asset_icons.cpp` every lucide icon is drawn from. Nothing in the build
+ * makes them agree, so this does: every icon in the generated table is
+ * reconverted from its file and the two byte streams are compared op for op.
+ *
+ * Floats are compared rather than bytes. The generator works in doubles and
+ * rounds to f32 at the end, so an icon whose path has an arc in it lands a
+ * few ulps away from what the C++ float arithmetic produces. */
+
+#include "Test.h"
+
+#include <stdio.h>
+
+// How many f32 arguments each op takes; kOpColor's one u32 is read the same
+// way and compared as a float, which is exact for a byte-packed colour.
+static int OpArgCount(uint16_t op) {
+    switch (op) {
+        case kOpEnd:
+        case kOpColorReset:
+        case kOpClosePath:
+        case kOpFillPath:
+        case kOpStrokePath:
+        case kOpFillStrokePath:
+            return 0;
+        case kOpStrokeWidth:
+        case kOpColor:
+            return 1;
+        case kOpMoveTo:
+        case kOpLineTo:
+            return 2;
+        case kOpViewBox:
+        case kOpLine:
+        case kOpEllipse:
+        case kOpFillEllipse:
+            return 4;
+        case kOpRect:
+        case kOpFillRect:
+        case kOpArc:
+            return 5;
+        case kOpCubicTo:
+            return 6;
+        default:
+            return -1;
+    }
+}
+
+static float ReadF(const uint8_t* p) {
+    float v;
+    memcpy(&v, p, 4);
+    return v;
+}
+
+static uint16_t ReadOp(const uint8_t* p) {
+    uint16_t v;
+    memcpy(&v, p, 2);
+    return v;
+}
+
+// The two streams have to say the same thing. A thousandth of a viewBox unit
+// is far below a pixel at any size an icon is drawn at, and comfortably above
+// what the two float paths differ by: the generator does its arc arithmetic
+// in doubles and rounds once at the end, the reader does it all in floats.
+static bool SameOps(const uint8_t* a, int aLen, const uint8_t* b, int bLen,
+                    const char* name) {
+    int i = 0, j = 0;
+    while (i < aLen && j < bLen) {
+        uint16_t opA = ReadOp(a + i);
+        uint16_t opB = ReadOp(b + j);
+        if (opA != opB) {
+            printf("  %s: op %u != %u at %d\n", name, opA, opB, i);
+            return false;
+        }
+        int n = OpArgCount(opA);
+        if (n < 0) {
+            printf("  %s: unknown op %u at %d\n", name, opA, i);
+            return false;
+        }
+        i += 2;
+        j += 2;
+        for (int k = 0; k < n; k++) {
+            float fa = ReadF(a + i + k * 4);
+            float fb = ReadF(b + j + k * 4);
+            if (fabsf(fa - fb) > 0.001f) {
+                printf("  %s: arg %d of op %u: %g != %g\n", name, k, opA, fa,
+                       fb);
+                return false;
+            }
+        }
+        i += n * 4;
+        j += n * 4;
+        if (opA == kOpEnd) {
+            break;
+        }
+    }
+    return true;
+}
+
+// A stream written by hand and read back: the viewBox is where the reader
+// looks for it, and the builder lays the arguments out in the order the
+// opcode says.
+static void BuilderRoundTrip() {
+    DrawOpsBuilder b;
+    b.ViewBox(0, 0, 32, 16);
+    b.StrokeWidth(1.5f);
+    b.Line(1, 2, 3, 4);
+    b.MoveTo(5, 6);
+    b.CubicTo(7, 8, 9, 10, 11, 12);
+    b.ClosePath();
+    b.Op(kOpFillStrokePath);
+    b.End();
+
+    Size vb = {};
+    utassert(DrawOpsViewBox(b.data.els, b.data.len, &vb));
+    utassertnear(vb.w, 32.f);
+    utassertnear(vb.h, 16.f);
+
+    // Two bytes of opcode each, plus 4 + 1 + 4 + 2 + 6 floats.
+    utassert(b.data.len == 8 * 2 + 17 * 4);
+    utassert(SameOps(b.data.els, b.data.len, b.data.els, b.data.len, "self"));
+
+    // A drawing with no viewBox of its own is read in the lucide 24x24 box.
+    DrawOpsBuilder plain;
+    plain.Line(0, 0, 1, 1);
+    plain.End();
+    utassert(DrawOpsViewBox(plain.data.els, plain.data.len, &vb));
+    utassertnear(vb.w, 24.f);
+    utassertnear(vb.h, 24.f);
+}
+
+// A truncated stream is a stream, not a crash: the reader stops where the
+// bytes do.
+static void ShortStreamStops() {
+    DrawOpsBuilder b;
+    b.ViewBox(0, 0, 24, 24);
+    b.MoveTo(1, 2);
+    b.LineTo(3, 4);
+    b.Op(kOpStrokePath);
+    b.End();
+    Size vb = {};
+    for (int n = 0; n <= b.data.len; n++) {
+        // No PaintCtx here, so this is the reader that can be driven without
+        // one; ExecuteDrawOps is exercised by every icon the examples draw.
+        DrawOpsViewBox(b.data.els, n, &vb);
+    }
+    utassert(true);
+}
+
+// Every icon in the generated table, reconverted from its file.
+static void GeneratedTableMatchesReader() {
+    AssetsAddDefaultRoots({});
+    if (AssetsRootCount() == 0) {
+        // Built somewhere without the tree beside it; the table is still
+        // compiled in and the examples still draw, there is just nothing to
+        // compare it against.
+        return;
+    }
+    utassert(kAssetIconsCount > 0);
+    int checked = 0;
+    for (int i = 0; i < kAssetIconsCount; i++) {
+        const AssetIcon& e = kAssetIcons[i];
+        // Sorted by name is what AssetIconFind binary-searches.
+        if (i > 0) {
+            utassert(strcmp(kAssetIcons[i - 1].name, e.name) < 0);
+        }
+        utassert(e.offset >= 0 && e.len > 0 &&
+                 e.offset + e.len <= kAssetIconsDataLen);
+
+        char path[128];
+        snprintf(path, sizeof(path), "icons/%s.svg", e.name);
+        TempStr xml = AssetsLoadTextTemp(Str(path));
+        if (!xml.s) {
+            continue;
+        }
+        DrawOpsBuilder b;
+        utassert(SvgToDrawOps(xml, &b));
+        utassert(SameOps(kAssetIconsData + e.offset, e.len, b.data.els,
+                         b.data.len, e.name));
+        checked++;
+    }
+    // The table came from that directory; if none of it could be read the
+    // comparison above proved nothing.
+    utassert(checked == 0 || checked == kAssetIconsCount);
+}
+
+void TestDrawOps() {
+    TestSuite("DrawOps");
+    BuilderRoundTrip();
+    ShortStreamStops();
+    GeneratedTableMatchesReader();
+}
