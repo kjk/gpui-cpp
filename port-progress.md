@@ -2150,3 +2150,31 @@ cargo run -p system_monitor
 
   Since the Str-per-node baseline: prose 1646 -> 519 KB, nested 1068 -> 256,
   tables 2926 -> 710, entities 660 -> 89, and a Node 144 -> 60 bytes.
+
+- 2026-08-22: A List's start, a Heading's depth and a Table's alignments are
+  one word. `startOrDepth` already held two of the three; the alignment
+  offset is the third, and a node is one of those kinds or none of them, so
+  no two are ever live together. The field is `perKind` now, and the rule it
+  is under is written where it lives: `kind` says which of the three a given
+  node means, the compiler cannot check it, and every reader looks at `kind`
+  first.
+
+  **56 bytes, down from 60.** Eight 4-byte strings, four 4-byte offsets, the
+  2-byte length and three single bytes, with three of padding.
+
+  At 64 KB of source:
+
+    shape         before                after                arena
+    prose          519.3 KB   8.09x     483.9 KB   7.54x     -6.8%
+    nested         256.3 KB   4.00x     233.7 KB   3.65x     -8.8%
+    gfm tables     710.3 KB  11.08x     646.1 KB  10.08x     -9.0%
+    entities        89.2 KB   1.39x      86.1 KB   1.34x     -3.5%
+
+  Fastest of three runs either side: prose 8.39 -> 8.37 ms, nested 9.41 ->
+  9.52, tables 12.47 -> 12.66, entities 5.78 -> 5.92, `tokenize` 7.54 ->
+  7.65, `to_mdast` 0.303 -> 0.307. The control moved as much as the shapes
+  did, which is the machine and not the change: the same word is read the
+  same number of times, under one name.
+
+  Since the Str-per-node baseline: prose 1646 -> 484 KB, nested 1068 -> 234,
+  tables 2926 -> 646, entities 660 -> 86, and a Node 144 -> 56 bytes.

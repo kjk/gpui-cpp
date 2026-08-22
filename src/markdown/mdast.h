@@ -161,16 +161,12 @@ enum NodeFlag : uint8_t {
 };
 
 // Everything in here is four bytes or fewer now, so the order is the eight
-// strings and the five offsets, then the length and three single bytes with
-// three of padding behind them. 60 bytes, where the order they were written
+// strings and the four offsets, then the length and three single bytes with
+// three of padding behind them. 56 bytes, where the order they were written
 // in with a Str per string, a child vector, an alignment vector and a full
 // unist Position cost 256 — and where holding one pointer would put the
 // whole struct back on an eight-byte alignment.
 struct Node {
-    // Table: the column alignments, or `kArenaAlignNone`.
-    // `ArenaAlignAt(a, n->align, col)` reads one.
-    ArenaAlign align = kArenaAlignNone;
-
     // The children, as a ring rather than a vector. `lastKid` is the last of
     // them and every child points at the one after it, the last one back at
     // the first — so the first child is `lastKid->sibling`, appending is
@@ -236,12 +232,20 @@ struct Node {
     ArenaStr lang = kArenaStrNone;
     ArenaStr meta = kArenaStrNone;
 
-    // Two fields that cannot both be live, so they are one. A List's
-    // `start` is the number its first item counts from, and `NodeHasStart`
-    // says whether it has one; a Heading's is its level, 1..=6. No node is
-    // both kinds, which is what makes the fusing safe rather than clever —
-    // `kind` says which of the two a given node means.
-    uint32_t startOrDepth = 0;
+    // The one word whose meaning `kind` decides. Three fields that can
+    // never be live together, so they are one:
+    //
+    //   - List: the number its first item counts from, `NodeHasStart`
+    //     saying whether it has one.
+    //   - Heading: its level, 1..=6.
+    //   - Table: the column alignments as an `ArenaAlign`, or
+    //     `kArenaAlignNone`. `ArenaAlignAt(a, n->perKind, col)` reads one.
+    //
+    // A node is one of those kinds or none of them, which is what makes the
+    // fusing safe rather than clever. Anything else added here has to be as
+    // exclusive: the compiler cannot check it, so `kind` has to be looked at
+    // before this is read, and every reader below does.
+    uint32_t perKind = 0;
 
     NodeKind kind = NodeKind::Root;
     // LinkReference, ImageReference.
@@ -256,12 +260,12 @@ struct Node {
 };
 
 // The packing is the point, so it is checked rather than hoped for: eight
-// 4-byte strings, five 4-byte offsets, the 2-byte length and three single
+// 4-byte strings, four 4-byte offsets, the 2-byte length and three single
 // bytes, rounded up to the 4 everything in here now aligns to. Three bytes
 // of that last 8 are padding — three more single-byte fields, or one more
 // 2-byte one, would cost nothing, where a field of eight bytes would cost
 // eight more than itself and would otherwise go unnoticed.
-static_assert(sizeof(Node) == (8 + 5) * 4 + 8,
+static_assert(sizeof(Node) == (8 + 4) * 4 + 8,
               "Node has picked up padding; order the fields largest first");
 
 // The longest span a node can name. A node that runs further reports this,
