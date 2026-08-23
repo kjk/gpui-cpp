@@ -3556,7 +3556,14 @@ static void DrawChart(PaintCtx* ctx, El* e) {
     if (c.overlay) {
         return;
     }
-    for (int i = 0; i < n; i += step) {
+    // build_point_x_labels keeps the point whose one-based index divides by
+    // the margin, so a margin of eight names the eighth point and not the
+    // first. The name is centred on its tick, except at the two ends, where
+    // it is pulled inside the plot rather than hung over the edge.
+    for (int i = 0; i < n; i++) {
+        if (step > 1 && ((i + 1) % step) != 0) {
+            continue;
+        }
         float lx = Xat(i) - 16;
         float ly = y + plotH + 2;
         float lw = 60;
@@ -3588,13 +3595,20 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                 }
             }
         }
-        if (c.labels) {
-            DrawTextAt(ctx, Str(c.labels[i]), lx, ly, lw, 16, 10, th.mutedFg,
-                       centered);
-        } else {
-            DrawTextAt(ctx, fmt("%ds", i), lx, ly, lw, 16, 10, th.mutedFg,
-                       centered);
+        Str label = c.labels ? Str(c.labels[i]) : Str(fmt("%ds", i));
+        if (!centered && c.kind != ChartKind::Bar &&
+            c.kind != ChartKind::Candlestick) {
+            // TextAlign::Left at the first point, Right at the last, Center
+            // in between — measured, so the box the name is put in is the
+            // width the name actually takes.
+            Size ls = MeasureText(ctx, label, 10, 0, false, 0, 0);
+            float tick = Xat(i);
+            lx = i == 0         ? tick
+                 : (i == n - 1) ? tick - ls.w
+                                : tick - ls.w * 0.5f;
+            lw = ls.w;
         }
+        DrawTextAt(ctx, label, lx, ly, lw, 16, 10, th.mutedFg, centered);
     }
 }
 
