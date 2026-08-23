@@ -116,6 +116,10 @@ El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
             Div(a)
                 ->H(kItemHeight)
                 ->W(kFill)
+                // A row of a uniform_list keeps its height: the frame holds
+                // far more than it can show, and a flex child that shrinks
+                // would give every row back a seventh of it.
+                ->Shrink0()
                 ->PadT(4)
                 // .items_center() in the Rust story: the row is 50px tall and
                 // the chip inside keeps its own height rather than stretching
