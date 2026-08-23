@@ -1352,16 +1352,27 @@ static El* Footer(StoryApp* app, Ctx* cx) {
                                  12, th.mutedFg))
                 ->Child(Div(a)->W(1)->H(12)->Bg(th.border))
                 ->Child(StoryTxt(cx, Str(m->title), 12, th.mutedFg)))
-        ->Child(Div(a)
-                    ->FlexRow()
-                    ->Gap(12)
-                    ->ItemsCenter()
-                    // The theme in force, which is whatever the registry
-                    // last installed for this mode rather than always one of
-                    // the two defaults.
-                    ->Child(StoryTxt(cx, ThemeRegistryActive(ThemeGet()), 12,
-                                     th.mutedFg))
-                    ->Child(StoryTxt(cx, StrL("v0.5.1"), 12, th.mutedFg)));
+        ->Child(
+            Div(a)
+                ->FlexRow()
+                ->Gap(12)
+                ->ItemsCenter()
+                // The theme in force, which is whatever the registry
+                // last installed for this mode rather than always one of
+                // the two defaults.
+                ->Child(StoryTxt(cx, ThemeRegistryActive(ThemeGet()), 12,
+                                 th.mutedFg))
+                ->Child(StoryTxt(cx, StrL("v0.5.1"), 12, th.mutedFg))
+                // gallery.rs puts the repository link last in the bar's
+                // right group, as a ghost icon button.
+                ->Child(component::Button::New(cx, StrL("assistant"))
+                            ->Ghost()
+                            ->WithSize(UiSize::XSmall)
+                            ->Icon(IconName::Github)
+                            ->Tooltip(StrL("GPUI Component GitHub repository"))
+                            ->OnClick(Listen(cx, &OnGithub))
+                            ->IntoEl()
+                            ->Cursor(CursorKind::Pointer)));
 }
 
 El* StoryApp::Render(StoryApp* app, Ctx* cx) {

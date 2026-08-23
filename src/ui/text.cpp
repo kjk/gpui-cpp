@@ -730,8 +730,7 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
     if (marks & MdHighlight) {
         c = kMarkFg;
     }
-    float px = (marks & MdCode) ? font - 1 : font;
-    El* t = TextEl(a, w)->Font(px)->Fg(c);
+    El* t = TextEl(a, w)->Font(font)->Fg(c);
     ApplyWeight(t, (marks & MdBold) ? (weight > 2 ? weight : 2) : weight);
     if (marks & MdItalic) {
         t->Italic();
@@ -745,8 +744,10 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
     if (marks & MdHighlight) {
         t->Bg(kMarkBg);
     } else if (marks & MdCode) {
-        // TextViewStyle::inline_code_highlight falls back to theme.accent.
-        t->Mono()->Bg(th.tokens.accent);
+        // TextViewStyle::inline_code_highlight falls back to theme.accent,
+        // and says nothing else: an inline code span is the paragraph's own
+        // font at the paragraph's own size, with a background behind it.
+        t->Bg(th.tokens.accent);
     }
     if (selectable) {
         t->Selectable();
