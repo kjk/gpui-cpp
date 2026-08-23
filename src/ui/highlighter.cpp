@@ -222,7 +222,9 @@ El* Highlighter::IntoEl() {
     style.mutedForeground = th.mutedFg;
     style.caret = th.caret;
     style.selection = RgbaOpacity(th.selection, 0.4f);
-    style.fontSize = 12;
+    // theme.mono_font_size, which is 13 rather than the 12 this drew at: a
+    // narrower row is a row that does not soft-wrap where Rust's does.
+    style.fontSize = 13;
     // .font_family(theme.mono_font_family).text_size(theme.mono_font_size)
     style.mono = true;
     if (activeLine) {
