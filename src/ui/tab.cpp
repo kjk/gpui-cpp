@@ -265,6 +265,7 @@ struct TabStyle {
     Rgba bg = kTabNone;
     Rgba innerBg = kTabNone;
     Rgba borderColor = kTabNone;
+    float borderT = 0;
     float borderL = 0;
     float borderR = 0;
     float borderB = 0;
@@ -280,7 +281,8 @@ static TabStyle TabNormal(TabVariant v, const Theme& th) {
             break;
         case TabVariant::Outline:
             s.fg = th.tabFg;
-            s.borderL = s.borderR = s.borderB = 1;
+            // Edges::all(px(1.)): an outline tab is ringed, not underlined.
+            s.borderT = s.borderL = s.borderR = s.borderB = 1;
             s.borderColor = th.border;
             break;
         case TabVariant::Pill:
@@ -509,14 +511,21 @@ El* Tabs::IntoEl() {
         }
         // The first folder tab drops its left border, so the strip does not
         // open with a line down its edge.
-        if (st.borderL > 0 && !(i == 0 && variant == TabVariant::Tab)) {
-            tab->BorderL(st.borderL, st.borderColor);
-        }
-        if (st.borderR > 0) {
-            tab->BorderR(st.borderR, st.borderColor);
-        }
-        if (st.borderB > 0) {
-            tab->BorderB(st.borderB, st.borderColor);
+        if (st.borderT > 0 && st.borderL > 0 && st.borderR > 0 &&
+            st.borderB > 0) {
+            // Edges::all: a ring rather than four rules, so the radius the
+            // tab asked for is what the stroke follows.
+            tab->Border(st.borderT, st.borderColor);
+        } else {
+            if (st.borderL > 0 && !(i == 0 && variant == TabVariant::Tab)) {
+                tab->BorderL(st.borderL, st.borderColor);
+            }
+            if (st.borderR > 0) {
+                tab->BorderR(st.borderR, st.borderColor);
+            }
+            if (st.borderB > 0) {
+                tab->BorderB(st.borderB, st.borderColor);
+            }
         }
         if (!item.disabled) {
             TabStyle hov = TabHovered(variant, on, th);

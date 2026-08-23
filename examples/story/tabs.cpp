@@ -22,9 +22,9 @@ struct TabsStory {
     int openMenu = 0;
     // The Dynamic Tabs section keeps its own bar: ids that keep counting up
     // as tabs come and go, and which of them is selected.
-    int dynamicIds[12] = {1, 2, 3};
+    int dynamicIds[12] = {0, 1, 2};
     int dynamicCount = 3;
-    int dynamicNext = 4;
+    int dynamicNext = 3;
     int dynamicTab = 0;
     StoryToolbarState toolbar;
 
@@ -65,7 +65,9 @@ static void AddDynamicTab(TabsStory* self, Ctx* cx, const ClickEvent*) {
     Notify(cx);
 }
 static void RemoveDynamicTab(TabsStory* self, Ctx* cx, const ClickEvent*) {
-    if (self->dynamicCount > 0) {
+    // remove_last_dynamic_tab keeps the last tab: a bar with none of them is
+    // not a state the story goes to.
+    if (self->dynamicCount > 1) {
         self->dynamicCount--;
     }
     if (self->dynamicTab >= self->dynamicCount) {
@@ -271,9 +273,12 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
         if (i == self->dynamicTab) {
             t->Bg(th.tokens.background);
         }
-        t->Child(IconEl(a, IconName::BookOpen, 12)->Fg(th.mutedFg));
-        t->Child(StoryTxt(cx, StoryFmt(cx, "Tab %d", self->dynamicIds[i]), 13,
-                          th.foreground));
+        t->Child(IconEl(a, IconName::BookOpen, 16)->Fg(th.mutedFg));
+        // inner_paddings: the label sits in its own box inside the tab, which
+        // is what holds the prefix and the suffix off it.
+        t->Child(Div(a)->PadX(12)->Child(
+            StoryTxt(cx, StoryFmt(cx, "Tab %d", self->dynamicIds[i]), 14,
+                     th.foreground)));
         t->Child(component::Button::New(cx, StoryFmt(cx, "dynamic-tab-close-%d",
                                                      self->dynamicIds[i]))
                      ->Ghost()
