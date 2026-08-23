@@ -20,11 +20,13 @@ struct SliderStory {
         SliderStateNew(0, 1, SliderSingle(0.5f), 0.01f),
     };
     // 0.25x .. 4x on a logarithmic scale, so the midpoint of the track is 1x.
-    SliderState speed = SliderStateNew(0.25f, 4.f, SliderSingle(1.f), 0.01f,
+    SliderState speed = SliderStateNew(0.25f, 4.f, SliderSingle(1.f), 0.05f,
                                        SliderScale::Logarithmic);
-    SliderState volume = SliderStateNew(0, 100, SliderSingle(75));
-    SliderState price = SliderStateNew(0, 100, SliderRange(12, 45));
-    SliderState storage = SliderStateNew(0, 10, SliderSingle(5));
+    // -255..255 by fifteens, seeded at 75: the value under the label is a
+    // long way from the middle of the track, which is the point of it.
+    SliderState volume = SliderStateNew(-255, 255, SliderSingle(75), 15);
+    SliderState price = SliderStateNew(0, 100, SliderRange(12, 45), 1);
+    SliderState storage = SliderStateNew(0, 10, SliderSingle(5), 1);
 
     static El* Render(SliderStory* self, Ctx* cx);
 };
