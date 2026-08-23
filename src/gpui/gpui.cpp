@@ -348,7 +348,10 @@ const Theme& ThemeDefaultDark() {
         t.overlay = Rgba8(0, 0, 0, 0x33);
         t.groupBox = Rgb(0x0a, 0x0a, 0x0a);
         t.groupBoxFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.descListLabel = Rgb(0x17, 0x17, 0x17);
+        // description_list.label.background: the window background with the
+        // border at 20% over it, which is what schema.rs falls back to. The
+        // key default-theme.json spells is not the one the schema reads.
+        t.descListLabel = Rgb(0x10, 0x10, 0x10);
         // description_list.label.foreground falls back to muted_foreground,
         // not to the foreground: a label reads as a caption beside its value.
         t.descListLabelFg = Rgb(0xa3, 0xa3, 0xa3);

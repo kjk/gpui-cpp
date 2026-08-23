@@ -547,11 +547,18 @@ static Rgba MixOklab(Rgba a, Rgba b, float factor) {
 // The keys default-theme.json spells differently from the serde names the
 // schema declares, so serde drops the value and upstream paints the fallback
 // instead: five chart blues collapse to one lightened ramp, the drag border
-// goes from blue to the primary at 65%, and a description list's label loses
-// its own colour. Every one of them is plainly what the theme's author meant,
-// and a third-party file copying default-theme.json's spelling — which is the
-// only spelling anyone reading that file would copy — would lose them the same
-// way. So the second name is read too, after the schema's own.
+// goes from blue to the primary at 65%. Every one of them is plainly what the
+// theme's author meant, and a third-party file copying default-theme.json's
+// spelling — which is the only spelling anyone reading that file would copy —
+// would lose them the same way. So the second name is read too, after the
+// schema's own.
+//
+// `description_list_label.background` and `.foreground` were on this list and
+// are not any more. They are the two where reading the file's spelling makes
+// a *visible* difference from the app this tree is a port of: a label painted
+// in the foreground rather than in muted_foreground, which is what the Rust
+// gallery shows on every row of its DescriptionList page. Matching the
+// reference wins over honouring a key it ignores.
 static const char* const kKeyAliases[][2] = {
     {"chart.1", "chart_1"},
     {"chart.2", "chart_2"},
@@ -560,8 +567,6 @@ static const char* const kKeyAliases[][2] = {
     {"chart.5", "chart_5"},
     {"drag.border", "drag_border"},
     {"progress.bar.background", "progress_bar.background"},
-    {"description_list.label.background", "description_list_label.background"},
-    {"description_list.label.foreground", "description_list_label.foreground"},
 };
 
 // The string a token's key names, under the schema's spelling or the one
