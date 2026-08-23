@@ -568,31 +568,38 @@ bool TableVisibleColsChanged(TableState* s, int first, int end) {
 
 void TableVisibleCols(const TableState* s, int* first, int* end) {
     int nFixed = s->fixedCols, nCols = s->colCount;
-    // The pinned columns are always on screen, so the window the offset moves
-    // over starts after them. A pane that has not been laid out yet has no
-    // width, and answers an empty range rather than every column.
+    // The pinned columns never move, so the sideways virtual list is built
+    // over the ones after them and counts from zero — state.rs hands it
+    // `col_groups.iter().skip(left_columns_count)`, and the range it reports
+    // back is an index into that shorter run, not into the table's columns.
+    int nScroll = nCols - nFixed;
+    // A pane that has not been laid out yet has no width, and answers an
+    // empty range rather than every column.
     float w = s->bodyBounds.w;
-    if (w <= 0 || nCols <= 0) {
+    if (w <= 0 || nScroll <= 0) {
         *first = 0;
         *end = 0;
         return;
     }
     float lo = s->scrollX, hi = s->scrollX + w;
     float x = 0;
-    int lead = -1, last = -1;
-    for (int d = nFixed; d < nCols; d++) {
-        int c = TableColAt(s, d);
+    int lead = -1, last = nScroll;
+    for (int i = 0; i < nScroll; i++) {
+        int c = TableColAt(s, nFixed + i);
         float cw = c < s->colWidth.len ? s->colWidth[c] : 0;
-        if (x + cw > lo && x < hi) {
-            if (lead < 0) {
-                lead = d;
-            }
-            last = d;
-        }
         x += cw;
+        if (lead < 0 && x > lo) {
+            lead = i;
+        }
+        if (x > hi) {
+            // virtual_list.rs stops at the first item past the right edge and
+            // then takes one more, so the column sliding in is already built.
+            last = i + 2;
+            break;
+        }
     }
     *first = lead < 0 ? 0 : lead;
-    *end = lead < 0 ? 0 : last + 1;
+    *end = last < nScroll ? last : nScroll;
 }
 
 bool TableShouldLoadMore(const TableState* s, int visibleEnd) {

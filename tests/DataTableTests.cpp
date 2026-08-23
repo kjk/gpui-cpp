@@ -213,7 +213,8 @@ static void TheDelegateHearsAboutTheRangeOnlyWhenItMoves() {
 }
 
 // Which columns overlap the scrolling pane. The pinned ones are never in it —
-// they do not move under the offset, so the window starts after them.
+// they do not move under the offset, so the run is counted from the first one
+// that does, and the range runs one past the edge the way virtual_list does.
 static void TheVisibleColumnsAreTheOnesUnderTheOffset() {
     TableState s;
     s.colCount = 6;
@@ -229,22 +230,23 @@ static void TheVisibleColumnsAreTheOnesUnderTheOffset() {
     TableVisibleCols(&s, &first, &end);
     utassert(first == 0 && end == 0);
 
+    // Two and a half columns fit; the one after the edge is built too.
     s.bodyBounds.w = 250;
     TableVisibleCols(&s, &first, &end);
-    utassert(first == 0 && end == 3);
+    utassert(first == 0 && end == 4);
 
     // Slid over by one and a half columns: the second is still half on
-    // screen, so it is still visible.
+    // screen, so it is still the first one visible.
     s.scrollX = 150;
     TableVisibleCols(&s, &first, &end);
-    utassert(first == 1 && end == 4);
+    utassert(first == 1 && end == 6);
 
-    // Two pinned columns: the offset moves the rest, and the window over them
-    // starts at display position 2.
+    // Two pinned columns: the offset moves the rest, and the range counts
+    // over those four rather than over all six.
     s.scrollX = 0;
     s.fixedCols = 2;
     TableVisibleCols(&s, &first, &end);
-    utassert(first == 2 && end == 5);
+    utassert(first == 0 && end == 4);
 }
 
 // scroll_to_col, which is what set_selected_col and set_selected_cell go

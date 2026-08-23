@@ -226,13 +226,7 @@ static int FixedColCount(const DataTable* t, const TableState* s) {
 static El* GroupBand(Ctx* cx, Str label, float w, bool last) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* e = Div(a)
-                ->FlexRow()
-                ->W(w)
-                ->Shrink0()
-                ->PadY(6)
-                ->JustifyCenter()
-                ->ItemsCenter();
+    El* e = Div(a)->FlexRow()->W(w)->Shrink0()->JustifyCenter()->ItemsCenter();
     if (!last) {
         e->BorderR(1, th.border);
     }
@@ -417,12 +411,17 @@ El* DataTable::BuildEl() {
     };
 
     for (int g = 0; g < nGroupHeaders; g++) {
-        El* gf = Div(a)->FlexRow()->Shrink0()->BorderB(1, th.border);
+        // Every head row is one table row tall — state.rs renders the group
+        // bands and the leaf heads through the same `h(table_row_height())`,
+        // which is what makes the head block a whole number of rows.
+        El* gf =
+            Div(a)->FlexRow()->Shrink0()->H(rowHeight)->BorderB(1, th.border);
         // The band fills the pane's width; it must not be a flex item along
         // the pane's own axis, which is down. A basis of zero there would
         // leave the band out of the pane's intrinsic height and the body
         // would give that height back by shrinking.
-        El* gsWrap = follow(Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border));
+        El* gsWrap = follow(
+            Div(a)->FlexRow()->W(kFill)->H(rowHeight)->BorderB(1, th.border));
         El* gs = Div(a)->FlexRow()->Shrink0();
         gsWrap->Child(gs);
         int col = 0;
@@ -453,8 +452,10 @@ El* DataTable::BuildEl() {
     El* headFixed = TableHeader::New(cx, StrDup(a, fmt("%s-head-f", id)))
                         ->FlexRow()
                         ->Shrink0()
+                        ->H(rowHeight)
                         ->BorderB(1, th.border);
-    El* headWrap = follow(Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border));
+    El* headWrap = follow(
+        Div(a)->FlexRow()->W(kFill)->H(rowHeight)->BorderB(1, th.border));
     El* headScroll = TableHeader::New(cx, StrDup(a, fmt("%s-head", id)))
                          ->FlexRow()
                          ->Shrink0();

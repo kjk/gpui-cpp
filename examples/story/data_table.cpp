@@ -75,7 +75,6 @@ static const int kNSizes = 5;
 // The Options dropdown, in Rust's own order.
 enum {
     DtOptLoop = 0,
-    DtOptFixedColumn,
     DtOptColResize,
     DtOptColOrder,
     DtOptSortable,
@@ -83,6 +82,7 @@ enum {
     DtOptRowSelect,
     DtOptCellSelect,
     DtOptRowHeader,
+    DtOptFixedColumn,
     DtOptStriped,
     DtOptLoading,
     DtOptLazyLoad,
@@ -91,10 +91,10 @@ enum {
     DtOptCount
 };
 static const char* const kDtOptions[DtOptCount] = {
-    "Loop Selection", "Fixed Column",      "Column Resize",  "Column Order",
-    "Sortable",       "Column Selectable", "Row Selectable", "Cell Selectable",
-    "Row Header",     "Striped Rows",      "Loading",        "Lazy Load",
-    "Refresh Data",   "Group Headers"};
+    "Loop Selection",    "Column Resize",  "Column Order",    "Sortable",
+    "Column Selectable", "Row Selectable", "Cell Selectable", "Row Header",
+    "Fixed Column",      "Striped Rows",   "Loading",         "Lazy Load",
+    "Refresh Data",      "Group Headers"};
 static const char* const kGoToRows[] = {"Top", "Bottom", "Cell 5:3",
                                         "Cell 10:7"};
 static const int kNGoTo = 4;
@@ -106,8 +106,10 @@ struct DataTableStory {
     int extra = 0;    // no extra columns
     int size = 2;     // Medium
     int openMenu = 0;
-    bool options[DtOptCount] = {false, true,  true,  true,  true,  true,  true,
-                                false, false, false, false, false, false, true};
+    // TableState's own defaults: everything but cell selection and the four
+    // switches under the separator.
+    bool options[DtOptCount] = {true, true, true,  true,  true,  true,  false,
+                                true, true, false, false, false, false, true};
     StoryToolbarState toolbar;
     // TableState is an entity in Rust too, which is what the row and head
     // closures capture.
@@ -717,7 +719,11 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         component::DataTable::New(cx, StrL("data-table"), self->table)
             ->Columns(cols, nColumns)
             ->Rows(kRowCounts[self->rowCount], self, DtCellFor)
-            ->H(520)
+            // The story's table is `v_flex().min_h_0().flex_1()`, so the body
+            // takes what the pane has left over the toolbar, the gap and the
+            // status line under it. Virtualization needs that as a number
+            // before the tree is laid out, so it comes off the window.
+            ->H(WindowSize(cx->win).dipH - 368)
             ->RowHeight(kSizeRowH[self->size])
             ->Stripe(self->options[DtOptStriped])
             ->ContextMenu(DtContextMenu)
@@ -779,12 +785,16 @@ El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
         right->Child(TextEl(a, StoryFmt(cx, "· cell %d:%d", st->selectedCellRow,
                                         st->selectedCellCol)));
     }
-    if (st && !st->hasMore) {
+    // eof, which set_stocks writes as `stocks.len() <= 50`: the dataset is
+    // small enough that there is nothing left to page in. It is not the
+    // lazy-load switch, which only says whether the table may ask for more.
+    if (kRowCounts[self->rowCount] <= 50) {
         right->Child(TextEl(a, StrL("· complete")));
     }
     status->Child(right);
-    page->Child(box);
-    page->Child(status);
+    // The table and the line under it share one `v_flex().min_h_0().flex_1()`
+    // with no gap of its own; the page's gap_4 is between the toolbar and it.
+    page->Child(Div(a)->FlexCol()->W(kFill)->Child(box)->Child(status));
     if (self->message.s) {
         page->Child(StoryTxt(cx, self->message, 14, th.mutedFg));
     }
