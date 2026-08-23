@@ -439,12 +439,16 @@ El* Button::IntoEl() {
         e->Child(IconEl(a, iconRight, iconPx)->Fg(fg));
     }
     if (dropdown) {
-        // Rust splits the caret into its own segment; the seam is the button
-        // border between them.
-        if (bd.a) {
-            e->Child(Div(a)->W(1)->H(kFill)->Bg(bd));
-        }
-        e->Child(IconEl(a, IconName::ChevronDown, 12)->Fg(fg));
+        // dropdown_caret adds the caret and nothing else: a DropdownButton's
+        // seam is the border between its two buttons, not a rule inside one.
+        // Caret::new(size): xs and sm keep their own icon size, everything
+        // else — Large included — takes the medium one, at three quarters of
+        // the button's own ink.
+        float caretPx = size == UiSize::XSmall  ? 12.f
+                        : size == UiSize::Small ? 14.f
+                                                : 16.f;
+        e->Child(IconEl(a, IconName::ChevronDown, caretPx)
+                     ->Fg(RgbaOpacity(fg, 0.75f)));
     }
     return e;
 }
