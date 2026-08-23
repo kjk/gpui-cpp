@@ -2161,21 +2161,6 @@ static void MoveEl(El* c, float cx, float cy) {
     TranslateSubtree(c, dx, dy);
 }
 
-// text_color cascades in GPUI, but here a Text or an Icon resolves its own
-// color when it paints. So a hovered element stamps its hover color onto the
-// descendants that set none — a child with a color of its own keeps it, and
-// so does its subtree.
-static void StampFg(El* e, Rgba c) {
-    for (El* ch = e->first; ch; ch = ch->next) {
-        if (ch->style.hasColor) {
-            continue;
-        }
-        ch->style.color = c;
-        ch->style.hasColor = true;
-        StampFg(ch, c);
-    }
-}
-
 // gpui img(..): the box an image takes. Its own pixels are the natural size,
 // at one DIP per pixel; a width or a height given by the document wins and the
 // other side follows the aspect ratio, which is what html.rs reads out of the
@@ -2527,8 +2512,15 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     if (e->style.hasHoverFg && e->clickId && ctx &&
         e->clickId == ctx->hoverId) {
         fg = e->style.hoverFg;
-        StampFg(e, fg);
     }
+    // `text_color` cascades in GPUI, and this is where. A Text or an Icon
+    // resolves its colour when it paints, and what it used to resolve to
+    // when it named none was `theme.foreground` — so a container that set a
+    // colour coloured its icons and nothing else. An Alert's title is the
+    // plainest case: `h_flex().text_color(variant.fg(cx))` around it, and the
+    // port drew it black inside a blue box.
+    e->style.color = fg;
+    e->style.hasColor = true;
     // font_family inherits. Pushing the flag one level down here cascades it
     // through the subtree, since every child is prepared the same way.
     if (e->style.fontMono) {
