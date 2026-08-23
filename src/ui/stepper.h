@@ -44,6 +44,7 @@ struct Stepper {
     Axis layout = Axis::Horizontal;
     bool disabled = false;
     bool textCenter = false;
+    bool itemsCenter = false;
     UiSize size = UiSize::Medium;
     // A stepper fills the width it is given (w_full on the story's).
     float width = kFill;
@@ -55,6 +56,9 @@ struct Stepper {
     Stepper* Layout(Axis v);
     Stepper* Vertical();
     Stepper* TextCenter(bool v);
+    // `.items_center()` on the stepper itself: each step's row is centred on
+    // the cross axis rather than pinned to its start.
+    Stepper* ItemsCenter(bool v = true);
     Stepper* Disabled(bool v);
     Stepper* WithSize(UiSize s);
     Stepper* W(float px);

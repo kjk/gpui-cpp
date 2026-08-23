@@ -192,6 +192,10 @@ Stepper* Stepper::Vertical() {
     layout = Axis::Vertical;
     return this;
 }
+Stepper* Stepper::ItemsCenter(bool v) {
+    itemsCenter = v;
+    return this;
+}
 Stepper* Stepper::TextCenter(bool v) {
     textCenter = v;
     return this;
@@ -219,6 +223,9 @@ El* Stepper::IntoEl() {
         root->FlexRow();
     } else {
         root->FlexCol();
+    }
+    if (itemsCenter) {
+        root->ItemsCenter();
     }
     for (int i = 0; i < n; i++) {
         StepperItem* it = items[i];

@@ -57,7 +57,10 @@ static El* StepText(Ctx* cx, Str title, const char* desc, bool center) {
     }
     col->Child(StoryTxt(cx, title, 14, th.foreground));
     if (desc) {
-        col->Child(StoryTxt(cx, Str(desc), 14, th.mutedFg));
+        // `v_flex().child("Step 1").child("Description for step 1.")`: the
+        // description is a plain child and takes the stepper's own colour,
+        // not muted_foreground.
+        col->Child(StoryTxt(cx, Str(desc), 14, th.foreground));
     }
     return col;
 }
@@ -119,6 +122,8 @@ El* StepperStory::Render(StepperStory* self, Ctx* cx) {
                                    ->WithSize(self->toolbar.size)
                                    ->Disabled(self->disabled)
                                    ->SelectedIndex(self->step[2])
+                                   // .items_center() on the vertical stepper.
+                                   ->ItemsCenter()
                                    ->OnClick(Listen(cx, &SetStep2));
     for (int i = 0; i < 4; i++) {
         // pb_8 on all but the last: the room the connector runs down.
