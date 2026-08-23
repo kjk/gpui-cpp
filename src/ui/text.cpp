@@ -1033,8 +1033,7 @@ El* TextView::Table(MdNode* n) {
             if (align == MdAlignDefault && ix < nCols) {
                 align = colAlign[ix];
             }
-            cell->Child(
-                Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
+            cell->Child(Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
             row->Child(cell);
         }
         table->Child(row);

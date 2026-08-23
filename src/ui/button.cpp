@@ -22,6 +22,12 @@ Button* Button::Icon(IconName n) {
     icon = n;
     return this;
 }
+
+Button* Button::IconColor(Rgba c) {
+    hasIconColor = true;
+    iconColor = c;
+    return this;
+}
 Button* Button::IconRight(IconName n) {
     iconRight = n;
     return this;
@@ -267,14 +273,36 @@ El* Button::IntoEl() {
     } else if (size == UiSize::Large) {
         padX = compact ? 8.f : 12.f;
     }
+    // button.rs: `label.is_none() && children.is_empty()` is an Icon Button —
+    // a square of the size's own side and no padding at all, rather than the
+    // h/px pair a labelled button takes. `.icon()` is not a child in Rust, so
+    // an icon alone still lands here; `extra` is what a `.child()` is here.
+    bool iconOnly = !label.s && !extra;
+    if (iconOnly) {
+        h = size == UiSize::XSmall ? 20.f : size == UiSize::Small ? 24.f : 32.f;
+        padX = 0;
+    }
     if (variant == ButtonVariant::Text || variant == ButtonVariant::Link) {
         padX = 0;
         h = 0;
+        iconOnly = false;
     }
     // Size::Size(px): a square of that size, with no room for a label.
     if (sizePx > 0) {
         h = sizePx;
         padX = 0;
+    }
+    // button.rs: gap_1 at the two small sizes, gap_2 above them.
+    float gap = (size == UiSize::XSmall || size == UiSize::Small) ? 4.f : 8.f;
+    // `icon_size`: the button's own size, and three quarters of it when the
+    // caller gave a pixel size. Icon::with_size then resolves it —
+    // size_3 / size_3p5 / size_4 / size_6.
+    float iconPx = size == UiSize::XSmall  ? 12.f
+                   : size == UiSize::Small ? 14.f
+                   : size == UiSize::Large ? 24.f
+                                           : 16.f;
+    if (sizePx > 0) {
+        iconPx = sizePx * 0.75f;
     }
     // The unstyled Button takes `disabled` here, and a click id of its own is
     // not one: passing one made every enabled button non-focusable and gave
@@ -288,11 +316,13 @@ El* Button::IntoEl() {
                 ->PadX(padX)
                 ->ItemsCenter()
                 ->JustifyCenter()
-                ->Gap(6)
+                ->Gap(gap)
                 ->Radius(resolved.Has(StateFieldRadius) ? resolved.style.radius
                                                         : th.radius);
     if (sizePx > 0) {
         e->W(sizePx);
+    } else if (iconOnly) {
+        e->W(h);
     }
     if (bd.a) {
         if (joined) {
@@ -343,9 +373,10 @@ El* Button::IntoEl() {
     if (extra) {
         e->Child(extra);
     } else if (loading) {
-        e->Child(IconEl(a, loadingIcon, 14)->Fg(fg));
+        e->Child(IconEl(a, loadingIcon, iconPx)->Fg(fg));
     } else if (icon != IconName::None) {
-        e->Child(IconEl(a, icon, 14)->Fg(fg));
+        El* ic = IconEl(a, icon, iconPx)->Fg(hasIconColor ? iconColor : fg);
+        e->Child(ic);
     }
     if (label.s) {
         // button_text_size: text_xs, text_sm, then text_base — a step larger
@@ -361,7 +392,7 @@ El* Button::IntoEl() {
         e->Child(text);
     }
     if (iconRight != IconName::None) {
-        e->Child(IconEl(a, iconRight, 14)->Fg(fg));
+        e->Child(IconEl(a, iconRight, iconPx)->Fg(fg));
     }
     if (dropdown) {
         // Rust splits the caret into its own segment; the seam is the button

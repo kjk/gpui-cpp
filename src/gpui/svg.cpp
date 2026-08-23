@@ -920,9 +920,9 @@ static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
     }
     if (GetAttr(tag, "text-anchor", buf, 64)) {
         Str v(buf);
-        cur.anchor = StrEqI(v, StrL("middle"))  ? kTextAnchorMiddle
-                     : StrEqI(v, StrL("end"))   ? kTextAnchorEnd
-                                                : kTextAnchorStart;
+        cur.anchor = StrEqI(v, StrL("middle")) ? kTextAnchorMiddle
+                     : StrEqI(v, StrL("end"))  ? kTextAnchorEnd
+                                               : kTextAnchorStart;
     }
     if (GetAttr(tag, "fill", buf, 64)) {
         Rgba c;
@@ -973,8 +973,8 @@ static void AddTextRun(SvgIcon* ic, const SvgCtx& cur, const char* p,
     while (a < b && (*a == ' ' || *a == '\t' || *a == '\n' || *a == '\r')) {
         a++;
     }
-    while (b > a && (b[-1] == ' ' || b[-1] == '\t' || b[-1] == '\n' ||
-                     b[-1] == '\r')) {
+    while (b > a &&
+           (b[-1] == ' ' || b[-1] == '\t' || b[-1] == '\n' || b[-1] == '\r')) {
         b--;
     }
     if (b <= a || cur.fontSize <= 0 || cur.filtered) {

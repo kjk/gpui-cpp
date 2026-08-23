@@ -25,6 +25,11 @@ struct Button {
     Str id = {};
     Str label = {};
     IconName icon = IconName::None;
+    // ButtonIcon carries an `Icon`, and an Icon may name its own colour:
+    // `.icon(Icon::new(x).text_color(c))`. Its size is not the caller's —
+    // `with_size(icon_size)` overwrites that with the button's own.
+    bool hasIconColor = false;
+    Rgba iconColor = {};
     // An icon after the label rather than before it, which is what a row
     // laid out `flex_row_reverse` comes to — Pagination's Next button.
     IconName iconRight = IconName::None;
@@ -60,6 +65,7 @@ struct Button {
     static Button* New(Ctx* cx, Str id);
     Button* Label(Str s);
     Button* Icon(IconName n);
+    Button* IconColor(Rgba c);
     Button* IconRight(IconName n);
     Button* Primary();
     Button* Secondary();

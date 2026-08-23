@@ -39,19 +39,24 @@ El* IconStory::Render(IconStory*, Ctx* cx) {
     El* btns = IconSection(cx, "Icon Buttons",
                            "Icons can be used as compact button content.");
     El* btnRow = Div(a)->FlexRow()->Gap(16)->ItemsCenter();
-    // neutral_500, a red heart-off and a green heart — each a size_6 icon.
-    btnRow->Child(
-        component::Button::New(cx, StrL("like1"))
-            ->Ghost()
-            ->Extra(IconEl(a, IconName::Heart, 24)->Fg(Rgb(0x73, 0x73, 0x73)))
-            ->IntoEl());
+    // neutral_500, a red heart-off and a green heart. Each is the button's
+    // own ButtonIcon rather than a child, which is what makes the button an
+    // icon button — a 32px square. The `.size_6()` the Rust story writes on
+    // each Icon does not survive: `.icon()` re-sizes it to the button's own.
+    btnRow->Child(component::Button::New(cx, StrL("like1"))
+                      ->Ghost()
+                      ->Icon(IconName::Heart)
+                      ->IconColor(Rgb(0x73, 0x73, 0x73))
+                      ->IntoEl());
     btnRow->Child(component::Button::New(cx, StrL("like2"))
                       ->Ghost()
-                      ->Extra(IconEl(a, IconName::HeartOff, 24)->Fg(th.red))
+                      ->Icon(IconName::HeartOff)
+                      ->IconColor(th.red)
                       ->IntoEl());
     btnRow->Child(component::Button::New(cx, StrL("like3"))
                       ->Ghost()
-                      ->Extra(IconEl(a, IconName::Heart, 24)->Fg(th.green))
+                      ->Icon(IconName::Heart)
+                      ->IconColor(th.green)
                       ->IntoEl());
     StorySectionAdd(btns, btnRow);
     page->Child(btns);
