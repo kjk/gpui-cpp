@@ -42,10 +42,19 @@ El* Separator::IntoEl() {
     Rgba c = hasColor ? color : th.border;
     El* root = Div(a)->ItemsCenter()->JustifyCenter()->Shrink0();
     if (vertical) {
-        root->H(kFill)->W(label.s ? 24.f : 1.f);
+        // The rule is an absolute child, so it runs the whole height whether
+        // or not there is a label; the label is drawn over it on the theme's
+        // own background, which is what masks the middle of it.
+        root->H(kFill);
+        if (!label.s) {
+            root->W(1);
+        }
+        El* lineEl = Div(a)->W(1)->H(kFill);
+        if (label.s) {
+            lineEl->Absolute();
+        }
         // A dashed rule is the border alone; filling the box as well would
         // paint the gaps back in.
-        El* lineEl = Div(a)->W(1)->H(kFill);
         if (line == SeparatorStyle::Dashed) {
             // PathBuilder::stroke(1).dash_array([4, 2]) in separator.rs.
             lineEl->Dashed()->DashArray(4, 2)->Border(1, c);
