@@ -522,6 +522,68 @@ void* ArenaVecAlloc(struct Arena* a, int count, int elSize, int align,
 GPUI_NOINLINE bool VecRealloc(struct Arena* a, void** els, int len, int* cap,
                               int newCap, int elSize);
 
+// ─── growth instrumentation (debug builds only) ──────────────────────────
+//
+// The question these answer: what should `Vec`'s doubling and `ArenaVec`'s
+// 4/16/64 segment climb actually be, generically and at the sites that grow
+// the most. So every vec carries a serial number and the source location it
+// was declared at, and a run writes three kinds of line to `GPUI_VEC_LOG`:
+//
+//     B <id> <V|A> <elSize> <func> <file>:<line>   a vec came into being
+//     G <id> <len> <oldCap> <needed> <newCap>      a Vec reallocated
+//     S <id> <len> <want> <lastSegCap> <newSegCap> <totalCap> <reused>
+//                                                  a segment was taken
+//     D <id> <len> <cap>                           a Vec was destroyed
+//     E <id> <len> <totalCap> <segCount>           an ArenaVec was destroyed
+//
+// `needed` and `want` are what the caller asked for, not what the policy
+// handed out, which is what makes the log enough to replay a run against a
+// different policy without rebuilding.
+//
+// Only `B` prints the location; the others carry the id and the analysis
+// joins on it. That is deliberate — an `ArenaVec` that lives in arena memory
+// may never have run a constructor, so its `dbgFile` is whatever was in that
+// memory, and dereferencing it would be a crash. An id of 0 says exactly
+// that, and `NextSegment` hands such a vec a real id lazily.
+//
+// A member vec's location is the closing brace of the struct that holds it —
+// the implicitly-defined constructor is what runs the default arguments — so
+// several members of one struct land on one line. `func` is that struct's
+// name, and the element size tells the rest apart.
+//
+// The location comes from `__builtin_FILE()` / `__builtin_LINE()` as default
+// arguments, which all three compilers evaluate at the *call* site — the
+// declaration of the vec, or of the constructor of the struct that holds one.
+// (As a default member initializer MSVC evaluates them here in base.h
+// instead, which names nothing.) The whole thing, fields included, is gone
+// in a release build.
+#if defined(DEBUG)
+int VecDbgBirth(const char* file, int line, const char* func, char kind,
+                int elSize);
+void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap);
+void VecDbgSegment(int id, int len, int want, int lastSegCap, int newSegCap,
+                   int totalCap, bool reused);
+void VecDbgDeath(int id, int len, int cap);
+void VecDbgArenaDeath(int id, int len, int totalCap, int segCount);
+
+// The trailing parameters, and the initializer that records them. Macros
+// rather than an `#if` around each constructor, because a signature split
+// across `#if` / `#else` with one body below it is not something
+// clang-format can count braces through — it de-indents the rest of the
+// struct. In a release build all three expand to nothing and the
+// constructors read as they always did.
+#define GPUI_VEC_DBG_ARGS0                                            \
+    const char *dbgF = __builtin_FILE(), int dbgL = __builtin_LINE(), \
+               const char *dbgFn = __builtin_FUNCTION()
+#define GPUI_VEC_DBG_ARGS , GPUI_VEC_DBG_ARGS0
+#define GPUI_VEC_DBG_INIT(kind) \
+    : dbgId(VecDbgBirth(dbgF, dbgL, dbgFn, kind, (int)sizeof(T)))
+#else
+#define GPUI_VEC_DBG_ARGS0
+#define GPUI_VEC_DBG_ARGS
+#define GPUI_VEC_DBG_INIT(kind)
+#endif
+
 template <typename T>
 struct Vec;
 
@@ -539,6 +601,9 @@ struct Vec {
     int len = 0;
     int cap = 0;
     T* els = nullptr;
+#if defined(DEBUG)
+    int dbgId = 0;
+#endif
 
     void FreeEls() {
         if (els) {
@@ -560,9 +625,12 @@ struct Vec {
         }
     }
 
-    explicit Vec() = default;
+    explicit Vec(GPUI_VEC_DBG_ARGS0) GPUI_VEC_DBG_INIT('V') {}
 
-    Vec(const Vec& other) {
+    // Still a copy constructor in a debug build: every parameter after the
+    // first has a default, and those three are how the copy gets the
+    // caller's location rather than this line in base.h.
+    Vec(const Vec& other GPUI_VEC_DBG_ARGS) GPUI_VEC_DBG_INIT('V') {
         VecReserve(*this, other.len);
         len = other.len;
         if (other.len > 0 && other.els && els) {
@@ -585,7 +653,12 @@ struct Vec {
         return *this;
     }
 
-    ~Vec() { FreeEls(); }
+    ~Vec() {
+#if defined(DEBUG)
+        VecDbgDeath(dbgId, len, cap);
+#endif
+        FreeEls();
+    }
 
     T& operator[](int idx) const { return els[idx]; }
 
@@ -603,18 +676,47 @@ struct Vec {
     T* AppendBlanks(int count) { return VecInsertSpace(*this, len, count); }
 };
 
+// Doubling, but never from a first capacity of one. `max(cap * 2, wanted)`
+// out of an empty vec hands back 1, so a vec that ends up holding four
+// elements reallocates and memcpys three times on the way there — and
+// `bun cmd/vec-log.ts` says that is where most of this tree's growth events
+// are. Six in ten vecs never allocate at all, so what the first allocation
+// costs the ones that do is the only thing being traded here.
+//
+// The floor is in bytes rather than in elements, which is Rust's
+// `RawVec::MIN_NON_ZERO_CAP`: four 192-byte flex items is a sensible first
+// block and four 4 KB ones is not. Replayed on its own against the taffy and
+// markdown logs, the floor takes flexbox layout from 17.9 MB of memcpy to
+// 3.4 MB and markdown from 268k growth events to 174k. A floor of 8, or a
+// growth factor of 1.5, was worse on one axis or the other in every run.
+inline int VecNextCap(int cap, int wanted, int elSize) {
+    if (cap == 0) {
+        int floorCap = elSize == 1 ? 8 : elSize <= 1024 ? 4 : 1;
+        return std::max(floorCap, wanted);
+    }
+    return std::max(cap * 2, wanted);
+}
+
 template <typename T>
 bool VecReserve(Arena* arena, T& v, int wantedSize) {
     if (wantedSize <= v.cap) {
         return true;
     }
-    int newCap = std::max(v.cap * 2, wantedSize);
+    int newCap = VecNextCap(v.cap, wantedSize, (int)sizeof(*v.els));
     return VecRealloc(arena, (void**)&v.els, v.len, &v.cap, newCap,
                       (int)sizeof(*v.els));
 }
 
 template <typename T>
 inline T* VecReserve(Vec<T>& v, int capNeeded) {
+#if defined(DEBUG)
+    // The same test the generic one makes, one line ahead of it, so the
+    // growth is recorded with the capacity it is about to leave behind.
+    if (capNeeded > v.cap) {
+        VecDbgGrow(v.dbgId, v.len, v.cap, capNeeded,
+                   VecNextCap(v.cap, capNeeded, (int)sizeof(T)));
+    }
+#endif
     if (!VecReserve(nullptr, v, capNeeded)) {
         return nullptr;
     }
@@ -686,16 +788,37 @@ struct ArenaVecSegment {
     T* Els() const { return (T*)((char*)(void*)this + HeaderSize()); }
 };
 
-// The first three segment sizes, then doubling. The progression started at
-// 16/64/256 and these are what the markdown benchmark asked for: most of
-// these vecs are an edit map entry holding two events, or a node holding
-// three children, and a first segment they never fill is arena spent for
-// nothing. `bun cmd/bench.ts markdown` is the test — 16/64/256 costs 2.4x
-// the scratch arena and about 10% on `gfm tables`. Revisit them the same
-// way, against a benchmark and not against taste.
+// The first three segment sizes, then doubling: 4, 16 and 64 elements, but
+// never more than 64, 256 and 1024 bytes of them. The progression started at
+// 16/64/256 elements and then at 4/16/64, and this is the third pass — most
+// of these vecs are an edit map entry holding one or two events, or a node
+// holding three children, and a first segment they never fill is arena spent
+// for nothing. 42% of them stay empty and take no segment at all; 97% hold
+// seven elements or fewer.
+//
+// The byte caps are there because one element count cannot be right for a
+// 32-byte `Event` and a 4-byte index at the same time. They bind only on the
+// wide elements — anything 16 bytes or narrower gets 4/16/64 exactly as
+// before, so nothing that was already the right size moves. `bun
+// cmd/vec-log.ts bench markdown` replays the parse against both: the caps
+// take it from 21.2 MB of arena to 17.1 MB, and an `Event` list starts at
+// two rather than four, which is the length most of them stop at.
+//
+// Sizing the *whole* progression in bytes (64B/256B/1KB, ignoring the
+// counts) reaches the same total, but by making the narrow vecs bigger as
+// well as the wide ones smaller — which grew the mdast output arena on the
+// prose benchmark by 23%, since `to_mdast`'s two per-tree stacks live in it.
+// Caps only, therefore: this can spend less memory than the counts did and
+// never more.
+//
+// Revisit them the same way, against `bun cmd/bench.ts markdown` and the
+// replay, not against taste.
 constexpr int kArenaVecCap0 = 4;
 constexpr int kArenaVecCap1 = 16;
 constexpr int kArenaVecCap2 = 64;
+constexpr int kArenaVecBytes0 = 64;
+constexpr int kArenaVecBytes1 = 256;
+constexpr int kArenaVecBytes2 = 1024;
 
 template <typename T>
 struct ArenaVec {
@@ -708,6 +831,25 @@ struct ArenaVec {
     Segment* first = nullptr;
     Segment* last = nullptr;
     int len = 0;
+#if defined(DEBUG)
+    // Zero for a vec that never ran a constructor — one that lives in a
+    // `Vec<ArenaVec<T>>` slot, which `VecRealloc` only ever zeroed.
+    // `NextSegment` gives one of those an id the first time it allocates.
+    int dbgId = 0;
+    // Kept rather than walked: the segments are arena memory, and a vec's
+    // destructor can run after the arena it grew in is gone.
+    int dbgTotalCap = 0;
+    int dbgSegs = 0;
+
+    // The defaulted parameters are the declaration site; see the
+    // instrumentation comment above `struct Vec`. Both of these live inside
+    // the `#if`, unlike `Vec`'s, because in a release build this type has no
+    // constructor of its own at all — it is an aggregate, and every one of
+    // the `ArenaVec<T> v = {}` declarations in the tree wants it to stay one.
+    ArenaVec(GPUI_VEC_DBG_ARGS0) GPUI_VEC_DBG_INIT('A') {}
+
+    ~ArenaVec() { VecDbgArenaDeath(dbgId, len, dbgTotalCap, dbgSegs); }
+#endif
 
     // A walk over the segments, not the elements: one compare for a vec that
     // never left its first, one more per segment after that. Reading the
@@ -857,15 +999,25 @@ struct ArenaVec {
         return out;
     }
 
+    // `count` elements, or as many as fit in `bytes`, whichever is fewer —
+    // and at least one, so a T wider than the whole budget still gets a
+    // segment it can hold something in. Constant-folded per instantiation,
+    // since sizeof(T) is a constant.
+    static constexpr int CapFor(int count, int bytes) {
+        return bytes / (int)sizeof(T) < count
+                   ? (bytes / (int)sizeof(T) > 0 ? bytes / (int)sizeof(T) : 1)
+                   : count;
+    }
+
     static int NextCap(int prevCap) {
-        if (prevCap < kArenaVecCap0) {
-            return kArenaVecCap0;
+        if (prevCap < CapFor(kArenaVecCap0, kArenaVecBytes0)) {
+            return CapFor(kArenaVecCap0, kArenaVecBytes0);
         }
-        if (prevCap < kArenaVecCap1) {
-            return kArenaVecCap1;
+        if (prevCap < CapFor(kArenaVecCap1, kArenaVecBytes1)) {
+            return CapFor(kArenaVecCap1, kArenaVecBytes1);
         }
-        if (prevCap < kArenaVecCap2) {
-            return kArenaVecCap2;
+        if (prevCap < CapFor(kArenaVecCap2, kArenaVecBytes2)) {
+            return CapFor(kArenaVecCap2, kArenaVecBytes2);
         }
         return prevCap * 2;
     }
@@ -873,11 +1025,23 @@ struct ArenaVec {
     // The segment the next append goes into, with room for at least `want`.
     // Off the hot path: once per segment, not once per element.
     GPUI_NOINLINE Segment* NextSegment(Arena* a, int want) {
+#if defined(DEBUG)
+        if (dbgId == 0) {
+            dbgId = VecDbgBirth("<no-constructor>", 0, "", 'A', (int)sizeof(T));
+        }
+#endif
+#if defined(DEBUG)
+        int dbgPrevCap = last ? last->cap : 0;
+#endif
         Segment* reuse = last ? last->next : nullptr;
         if (reuse && reuse->cap >= want) {
             reuse->len = 0;
             reuse->base = len;
             last = reuse;
+#if defined(DEBUG)
+            VecDbgSegment(dbgId, len, want, dbgPrevCap, reuse->cap, dbgTotalCap,
+                          true);
+#endif
             return reuse;
         }
         int cap = NextCap(last ? last->cap : 0);
@@ -901,6 +1065,11 @@ struct ArenaVec {
             first = seg;
         }
         last = seg;
+#if defined(DEBUG)
+        dbgTotalCap += cap;
+        dbgSegs++;
+        VecDbgSegment(dbgId, len, want, dbgPrevCap, cap, dbgTotalCap, false);
+#endif
         return seg;
     }
 };

@@ -2402,3 +2402,68 @@ cargo run -p system_monitor
   thread, every job of 32 runs, and a job that has not started is cancellable,
   which is made deterministic by filling all eight workers with jobs that hold
   until the test lets go.
+
+- 2026-08-23: How `Vec` and `ArenaVec` grow. Both had a policy nobody had
+  measured — `max(cap * 2, wanted)` from zero, which hands back **1**, and
+  three segment sizes in elements, 4/16/64. `cmd/vec-log.ts` is the
+  measurement: a debug-only instrument in `src/base.h` / `src/base.cpp`
+  (`#if defined(DEBUG)`, and silent unless `GPUI_VEC_LOG` names a file) gives
+  every vec a serial number and the source location it was declared at, and
+  logs its births, growths and death. The analysis half replays a run against
+  other policies without rebuilding, which works because the log records what
+  each caller *asked for* (`needed`, `want`) and not only what the policy
+  handed out.
+
+  The location comes from `__builtin_FILE()` / `__builtin_LINE()` /
+  `__builtin_FUNCTION()` as **default arguments**. As default member
+  initializers MSVC evaluates them where they are written, so every vec in the
+  tree would have said `base.h`; as default arguments all three compilers
+  evaluate them at the call site. A member vec lands on the closing brace of
+  the struct that holds it — the implicit constructor is what runs them — so
+  the report keys on file:line plus the owning type plus the element size.
+  The constructors take those parameters through `GPUI_VEC_DBG_ARGS` /
+  `GPUI_VEC_DBG_INIT` macros rather than an `#if` around each signature:
+  clang-format cannot count braces through a signature split across `#if` /
+  `#else` with one body under it, and de-indents the rest of the struct.
+
+  What the logs said, over the test suite, both benchmark suites and a
+  showcase frame: six vecs in ten never allocate at all, and of the ones that
+  do, the great majority stop at one to three elements. So what the *first*
+  allocation costs is the only thing being traded, and starting it at 1 was
+  paying three reallocs and three memcpys to reach four elements.
+
+  `Vec` now starts at Rust `RawVec`'s byte-aware floor — 8 elements for a
+  1-byte element, 4 up to 1 KB, 1 above (`VecNextCap`) — and doubles as
+  before. A floor of 8, and a growth factor of 1.5, were both worse on one
+  axis or the other in every run.
+
+  `ArenaVec` keeps 4/16/64 elements but caps them at 64/256/1024 **bytes**,
+  which binds only on the wide elements the counts were over-serving. Sizing
+  the whole progression in bytes reached the same total arena but by making
+  the narrow vecs bigger as well as the wide ones smaller, and that grew the
+  mdast *output* arena on the prose benchmark by 23% — `to_mdast`'s two
+  per-tree stacks live in it. Caps only, therefore: it can spend less than the
+  counts did and never more.
+
+  Four sites reserve instead of growing, three of them because the count was
+  already in hand: `GenerateAnonymousFlexItems` (the child count — the hottest
+  vec in the tree, 72,007 of them per flexbox benchmark, 192 bytes an
+  element), `Parse`'s top-level tokenizer events (about one event per two
+  bytes of source, and it is the one tokenizer whose span is the whole
+  document), `EditMapConsume`'s jumps (one per entry), and the two icon
+  builders, `DrawOpsBuilder::ViewBox` and `ParseSvg`, off the measured
+  percentiles.
+
+  Measured, not replayed: flexbox growth events 280,715 → 179,166 and bytes
+  memcpy'd 17.9 MB → 0.79 MB; markdown 268,498 → 170,423 events, 43.9 MB →
+  37.7 MB copied, and 21.2 MB → 17.1 MB of arena. In release, `grid/deep`
+  16384 leaves 120.8 → 104.3 ms, `grid/superdeep` 1000 levels −14%, tree
+  creation −5 to −15%, `flexbox/wide` −7%, markdown parse −4 to −12%; nothing
+  regressed outside run-to-run noise, the mdast output arena is byte-identical
+  and a `showcase` shot is pixel-identical to the build before.
+
+  Two `ArenaVecTests` cases wrote the first segment size out as 4; they ask
+  `ArenaVec<int>::CapFor` for it now, since it is a count capped by a byte
+  budget. What is left on the table is `ArenaVecSegment`'s 24-byte header,
+  which is 27% overhead on a two-element segment of 32-byte events —
+  shrinking it would beat any further capacity tuning.

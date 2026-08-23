@@ -6,6 +6,7 @@
 #include <cctype>
 #include <climits>
 #include <cstdarg>
+#include <stdio.h>
 #include <locale.h>
 #include <stdlib.h>
 #include <time.h>
@@ -664,6 +665,85 @@ GPUI_NOINLINE bool VecRealloc(Arena* a, void** els, int len, int* cap,
     *cap = newCap;
     return true;
 }
+
+#if defined(DEBUG)
+// ─── growth instrumentation ──────────────────────────────────────────────
+//
+// The line formats are documented above the declarations in base.h. The log
+// is opt-in: without `GPUI_VEC_LOG` in the environment every hook is a load
+// and a branch, so a debug build that is not being measured behaves as it
+// did. `cmd/vec-log.ts` sets the variable and reads the file back.
+//
+// The counter is a plain int. Two threads appending to two vecs at the same
+// moment could hand out the same id; the workloads this was written for —
+// the test suite and the markdown benchmark — parse on one thread, and a
+// lock here would change what is being measured.
+static FILE* gVecDbgFile = nullptr;
+static bool gVecDbgOpened = false;
+static int gVecDbgNextId = 1;
+
+static void VecDbgClose() {
+    if (gVecDbgFile) {
+        fclose(gVecDbgFile);
+        gVecDbgFile = nullptr;
+    }
+}
+
+static FILE* VecDbgOut() {
+    if (!gVecDbgOpened) {
+        gVecDbgOpened = true;
+        const char* path = getenv("GPUI_VEC_LOG");
+        if (path && *path) {
+            gVecDbgFile = fopen(path, "wb");
+            if (gVecDbgFile) {
+                atexit(VecDbgClose);
+            }
+        }
+    }
+    return gVecDbgFile;
+}
+
+int VecDbgBirth(const char* file, int line, const char* func, char kind,
+                int elSize) {
+    int id = gVecDbgNextId++;
+    FILE* f = VecDbgOut();
+    if (f) {
+        fprintf(f, "B %d %c %d %s %s:%d\n", id, kind, elSize,
+                (func && *func) ? func : "-", file ? file : "<null>", line);
+    }
+    return id;
+}
+
+void VecDbgGrow(int id, int len, int oldCap, int needed, int newCap) {
+    FILE* f = VecDbgOut();
+    if (f) {
+        fprintf(f, "G %d %d %d %d %d\n", id, len, oldCap, needed, newCap);
+    }
+}
+
+void VecDbgSegment(int id, int len, int want, int lastSegCap, int newSegCap,
+                   int totalCap, bool reused) {
+    FILE* f = VecDbgOut();
+    if (f) {
+        fprintf(f, "S %d %d %d %d %d %d %d\n", id, len, want, lastSegCap,
+                newSegCap, totalCap, reused ? 1 : 0);
+    }
+}
+
+void VecDbgDeath(int id, int len, int cap) {
+    FILE* f = VecDbgOut();
+    if (f) {
+        fprintf(f, "D %d %d %d\n", id, len, cap);
+    }
+}
+
+void VecDbgArenaDeath(int id, int len, int totalCap, int segCount) {
+    FILE* f = VecDbgOut();
+    if (f) {
+        fprintf(f, "E %d %d %d %d\n", id, len, totalCap, segCount);
+    }
+}
+#endif
 
 static bool StrIsNull(const Str& s) {
     return !s.s;

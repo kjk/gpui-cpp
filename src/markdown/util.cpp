@@ -406,7 +406,9 @@ void EditMapConsume(EditMap& map, Vec<Event>& events) {
         return;
     }
 
+    // One jump per entry, and the entry count is already known.
     Vec<Jump> jumps;
+    VecReserve(jumps, map.map.len);
     int32_t addAcc = 0;
     int32_t removeAcc = 0;
     for (int32_t index = 0; index < map.map.len; index++) {

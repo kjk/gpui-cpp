@@ -548,6 +548,12 @@ tests/                 utassert ports of the pure-logic Rust tests
 cmd/bench.ts           build bench/ and run it (-small, -large, -n=<count>)
 bench/                 taffy's layout benchmarks, ported, and markdown parse
                        benchmarks of our own (`bun cmd/bench.ts markdown`)
+cmd/vec-log.ts         run a target with the debug Vec/ArenaVec instrument on
+                       and analyze the log: where the growth is, and what the
+                       same run would have cost under another growth policy.
+                       The instrument is in src/base.h behind #if DEBUG and
+                       writes nothing unless this sets GPUI_VEC_LOG. Answer a
+                       "should this capacity be bigger?" question with it
 cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 cmd/svg-to-bytecode.ts convert assets/icons into src/gpui/asset_icons.cpp
 src/taffy/             the taffy layout crate, ported (see its readme.md)

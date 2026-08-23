@@ -201,6 +201,14 @@ Vec<Event> Parse(ParseState* parseState) {
     start.vs = 0;
 
     Tokenizer* tokenizer = TokenizerNew(start, parseState);
+    // A document's event list ends up at about one event per two bytes of
+    // source across every shape `bun cmd/bench.ts markdown` parses, and this
+    // is the one tokenizer whose span is the whole document — a subtokenizer
+    // covers a fraction of it and must not reserve for the lot. Without this
+    // a 64 KB document walks 4, 8, 16 … 32768 and memcpys about 2 MB getting
+    // there. A floor and not a cap: a document with more events than that
+    // still grows the ordinary way.
+    VecReserve(tokenizer->events, parseState->bytes.len / 2);
     State state = Push(tokenizer, 0, 0, parseState->bytes.len, 0,
                        StateNext(StateName::DocumentStart));
     Subresult result = Flush(tokenizer, state, true);

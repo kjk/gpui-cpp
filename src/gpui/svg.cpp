@@ -810,6 +810,10 @@ static bool IsHiddenContainer(const char* name, const char* end) {
 static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->ops.Reset();
     ic->shapes.Reset();
+    // Nine Lucide icons in ten come out under 32 ops and 16 shapes
+    // (`bun cmd/vec-log.ts tests`), so both lists are one allocation.
+    VecReserve(ic->ops, 32);
+    VecReserve(ic->shapes, 16);
     ic->vbX = 0;
     ic->vbY = 0;
     ic->vbW = 24;

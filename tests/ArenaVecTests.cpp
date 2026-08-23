@@ -170,11 +170,12 @@ static void PopAndTruncateGiveTheRoomBack() {
     utassert(v.len == kMany - 1);
     utassert(v[v.len - 1] == kMany - 2);
 
-    v.Truncate(10);
-    utassert(v.len == 10);
-    utassert(v[9] == 9);
-    // Past the end of the first segment, so an earlier segment is the active
-    // one again and the ones after it are empty.
+    // One element past the end of the first segment, so an earlier segment is
+    // the active one again and the ones after it are empty.
+    const int past = ArenaVec<int>::CapFor(kArenaVecCap0, kArenaVecBytes0) + 1;
+    v.Truncate(past);
+    utassert(v.len == past);
+    utassert(v[past - 1] == past - 1);
     utassert(v.first != v.last);
 
     // Truncating to nothing keeps the segments, and refilling reuses them:
@@ -200,8 +201,11 @@ static void PopAndTruncateGiveTheRoomBack() {
 static void PopAtASegmentBoundaryDoesNotAllocate() {
     Arena* a = ArenaNew();
     ArenaVec<int> v = {};
-    // kArenaVecCap0 is 4, so this sits exactly on the boundary.
-    for (int i = 0; i < 4; i++) {
+    // Fill the first segment exactly — asked for rather than written out,
+    // since the first step is a count capped by a byte budget — so the next
+    // append is the one that takes a second segment.
+    const int cap0 = ArenaVec<int>::CapFor(kArenaVecCap0, kArenaVecBytes0);
+    for (int i = 0; i < cap0; i++) {
         v.Append(a, i);
     }
     v.Append(a, 4);
@@ -212,8 +216,8 @@ static void PopAtASegmentBoundaryDoesNotAllocate() {
         v.Append(a, 4);
     }
     utassert(a->pos == before);
-    utassert(v.len == 5);
-    utassert(v[4] == 4);
+    utassert(v.len == cap0 + 1);
+    utassert(v[cap0] == 4);
     ArenaDelete(a);
 }
 

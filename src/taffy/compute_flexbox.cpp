@@ -204,6 +204,16 @@ void GenerateAnonymousFlexItems(TaffyTree* tree, NodeId node,
                                 Vec<FlexItem>* flexItems) {
     CalcResolver calc = tree->calc;
     int n = tree->ChildCount(node);
+    // The child count is the upper bound on how many items come out of this
+    // loop — absolute and display:none children are the only ones dropped —
+    // so the whole list is one allocation. This is the hottest vec in the
+    // tree: without it a flex container with four children reallocates and
+    // memcpys a 192-byte `FlexItem` three times on the way to holding them,
+    // once per container per layout pass. `bun cmd/vec-log.ts bench flexbox`
+    // measured 17.0 MB of memcpy here, and none after.
+    if (n > 0) {
+        VecReserve(*flexItems, n);
+    }
     for (int index = 0; index < n; index++) {
         NodeId child = tree->GetChildId(node, index);
         const Style& cs = tree->GetStyle(child);

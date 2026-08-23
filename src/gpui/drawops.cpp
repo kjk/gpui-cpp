@@ -420,6 +420,12 @@ void DrawOpsBuilder::U32(uint32_t v) {
 }
 
 void DrawOpsBuilder::ViewBox(float x, float y, float w, float h) {
+    // The view box is always the first thing written, so this is where the
+    // buffer's size is decided. Half of `assets/icons` encodes to under 224
+    // bytes and nine in ten to under 496 (`bun cmd/vec-log.ts tests`), so a
+    // whole icon fits in one allocation instead of the seven doublings from
+    // eight bytes it took to reach that.
+    VecReserve(data, 512);
     Op(kOpViewBox);
     F2(x, y);
     F2(w, h);
