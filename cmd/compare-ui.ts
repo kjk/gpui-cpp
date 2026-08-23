@@ -64,7 +64,6 @@ import {
   setProcessDpiAware,
   showWindow,
   bringToTopAndRedraw,
-  nudgeWindow,
   SW_RESTORE,
   sleep,
   waitForForeground,
@@ -398,8 +397,7 @@ async function drive(hwnd: number, tag: "rust" | "cpp"): Promise<void> {
       break;
     }
     bringToTopAndRedraw(hwnd);
-    nudgeWindow(hwnd);
-    await sleep(250);
+    await sleep(300);
   }
   let n = 0;
   // PrintWindow reads what DWM is holding for the window, and for a window
@@ -411,14 +409,13 @@ async function drive(hwnd: number, tag: "rust" | "cpp"): Promise<void> {
     const p = join(outDir, `${slug}-${String(n).padStart(2, "0")}-${name}-${tag}.png`);
     for (let attempt = 0; ; attempt++) {
       captureWindowToPng(hwnd, p);
-      if (attempt >= 5 || statSync(p).size > 20000) {
+      if (attempt >= 6 || statSync(p).size > 20000) {
         break;
       }
       showWindow(hwnd, SW_RESTORE);
       setForegroundWindow(hwnd);
       bringToTopAndRedraw(hwnd);
-      nudgeWindow(hwnd);
-      await sleep(300);
+      await sleep(400);
     }
     console.log(`  ${p}`);
   };

@@ -11,11 +11,14 @@
 //
 // Screenshots: out/compare-story/<slug>-rust.png and <slug>-cpp.png
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
+  bringToTopAndRedraw,
   captureWindowToPng,
+  getWindowRect,
   getWorkArea,
+  moveWindow,
   killAndWait,
   placeOnWorkAreaHalf,
   setCursorPos,
@@ -162,9 +165,56 @@ function run(cmd: string[], cwd: string): number {
 
 // Same placement as `bun cmd/run.ts -compare`: rust on the left half, ours on
 // the right, both 80% of the work area tall. Keeps the two shots comparable.
-function placePair(rustHwnd: number, cppHwnd: number) {
-  placeOnWorkAreaHalf(rustHwnd, "left");
-  placeOnWorkAreaHalf(cppHwnd, "right");
+//
+// Asked for twice, and checked: an app that sizes its own window while the
+// move is in flight ends up where it put itself, and a pair of shots taken at
+// two different window sizes is not a comparison at all — every row of the
+// page is somewhere else and the diff is 100%.
+async function placePair(rustHwnd: number, cppHwnd: number) {
+  for (const [hwnd, side] of [
+    [rustHwnd, "left"],
+    [cppHwnd, "right"],
+  ] as const) {
+    const want = workAreaHalfRect(side);
+    for (let i = 0; i < 5; i++) {
+      placeOnWorkAreaHalf(hwnd, side);
+      const got = getWindowRect(hwnd);
+      if (
+        got.left === want.x &&
+        got.top === want.y &&
+        got.right - got.left === want.w &&
+        got.bottom - got.top === want.h
+      ) {
+        break;
+      }
+      await sleep(120);
+    }
+    // The rect being right is not the same as the app having laid out at it:
+    // a window moved while its first frame was still being built keeps the
+    // size it opened with, and photographs as the left 960 pixels of a wider
+    // page. One more resize, a pixel short and then back, with time either
+    // side for the frame it asks for.
+    await sleep(200);
+    moveWindow(hwnd, want.x, want.y, want.w, want.h - 1);
+    await sleep(200);
+    moveWindow(hwnd, want.x, want.y, want.w, want.h);
+    await sleep(200);
+  }
+}
+
+// PrintWindow reads what DWM is holding, and for a window that has not
+// painted — or one behind another — that is sometimes a blank surface. A
+// blank PNG compresses to almost nothing, so the file size gives it away.
+async function captureSettled(hwnd: number, path: string) {
+  for (let attempt = 0; ; attempt++) {
+    captureWindowToPng(hwnd, path);
+    if (attempt >= 4 || statSync(path).size > 20000) {
+      return;
+    }
+    setForegroundWindow(hwnd);
+    bringToTopAndRedraw(hwnd);
+    await sleep(300);
+  }
 }
 
 const { debug, nobuild, pages } = parseArgs(Bun.argv.slice(2));
@@ -237,21 +287,22 @@ for (const slug of pages) {
   }
 }
 
-let pending: Promise<Pair> | null = pages.length ? launch(pages[0]!) : null;
+// One pair at a time. Starting the next pair while this one is being
+// photographed used to be free — an occluded window was said to photograph
+// the same as a visible one — and it is not: the pair coming up steals the
+// front, and a window moved while another is being created comes back at the
+// size it opened with. Both show up as a shot that is nothing like the page.
 for (let i = 0; i < pages.length; i++) {
   const slug = pages[i]!;
   console.log(`
 === ${slug} ===`);
-  const pair = await pending!;
-  const nextSlug = pages[i + 1];
-  pending = nextSlug ? launch(nextSlug) : null;
+  const pair = await launch(slug);
   const { rustHwnd, cppHwnd } = pair;
   if (!rustHwnd || !cppHwnd) {
     await close(pair);
-    await close(pending ? await pending.catch(() => null) : null);
     die(`window did not appear (rust=${!!rustHwnd} cpp=${!!cppHwnd})`);
   }
-  placePair(rustHwnd, cppHwnd);
+  await placePair(rustHwnd, cppHwnd);
   const wa = getWorkArea();
   setCursorPos(wa.left + 4, wa.top + 4);
   setForegroundWindow(rustHwnd);
@@ -259,8 +310,8 @@ for (let i = 0; i < pages.length; i++) {
   await sleep(500);
   const rustPng = join(outDir, `${slug}-rust.png`);
   const cppPng = join(outDir, `${slug}-cpp.png`);
-  captureWindowToPng(rustHwnd, rustPng);
-  captureWindowToPng(cppHwnd, cppPng);
+  await captureSettled(rustHwnd, rustPng);
+  await captureSettled(cppHwnd, cppPng);
   console.log(`  ${rustPng}`);
   console.log(`  ${cppPng}`);
   await close(pair);

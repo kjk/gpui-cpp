@@ -118,7 +118,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"list", "List", "A list displays a series of items."},
     {"menu", "Menu", "Popup menu and context menu"},
     {"native-menu", "NativeMenu",
-     "A menu rendered by the operating system. Unlike PopupMenu, "
+     "A menu rendered by the operating system. Unlike `PopupMenu`, "
      "it is drawn by the OS and can extend beyond the window "
      "bounds — useful for small windows."},
     {"notification", "Notification",
@@ -808,7 +808,10 @@ static El* Header(StoryApp* app, Ctx* cx) {
         ->Shrink0()
         ->BorderB(1, th.border)
         ->Child(StoryTxt(cx, Str(m->title), 24, th.foreground)->Semibold())
-        ->Child(StoryTxt(cx, Str(m->description), 16, th.mutedFg)->Wrap());
+        // gallery.rs writes the description into a plain `div()` with no
+        // width of its own, so a long one runs off the end of the pane
+        // rather than wrapping under the title.
+        ->Child(StoryTxt(cx, Str(m->description), 16, th.mutedFg));
 }
 
 // AppTitleBar in crates/story, on top of component::TitleBar: the menu and
