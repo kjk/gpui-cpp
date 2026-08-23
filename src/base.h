@@ -599,15 +599,35 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count);
 template <typename T>
 struct Vec {
     int len = 0;
+    // Negative means the elements sit in storage this vec does not own —
+    // `VecUseInline` put them in an array on the caller's stack — and the
+    // capacity is `-cap`. `Cap()` is the one to read; the sign is only for
+    // the two places that have to tell owned from borrowed, growing and
+    // freeing. It rides in the sign rather than in a field of its own
+    // because a `Vec` is 16 bytes and is a member of a great many structs.
+    //
+    // A vec that borrows leaves the borrowed block alone forever: the first
+    // append past it allocates and copies, and nothing frees the array. The
+    // idioms elsewhere in the tree that take a vec's storage over by hand —
+    // `events.els = t->events.els; events.cap = t->events.cap;` — are the one
+    // thing this is not safe with, and none of them are handed one.
     int cap = 0;
     T* els = nullptr;
 #if defined(DEBUG)
     int dbgId = 0;
 #endif
 
+    int Cap() const { return cap < 0 ? -cap : cap; }
+
     void FreeEls() {
         if (els) {
-            Free(nullptr, (void*)els);
+            if (cap > 0) {
+                Free(nullptr, (void*)els);
+            } else {
+                // Borrowed: let go of it without freeing it, and stop
+                // claiming a capacity that no longer has anything behind it.
+                cap = 0;
+            }
             els = nullptr;
         }
     }
@@ -620,8 +640,8 @@ struct Vec {
 
     void Clear() {
         len = 0;
-        if (els && cap > 0) {
-            memset((void*)els, 0, (size_t)cap * sizeof(T));
+        if (els && Cap() > 0) {
+            memset((void*)els, 0, (size_t)Cap() * sizeof(T));
         }
     }
 
@@ -648,14 +668,14 @@ struct Vec {
         len = other.len;
         if (other.len > 0) {
             memcpy((void*)els, (const void*)other.els, sizeof(T) * (size_t)len);
-            memset((void*)(els + len), 0, sizeof(T) * (size_t)(cap - len));
+            memset((void*)(els + len), 0, sizeof(T) * (size_t)(Cap() - len));
         }
         return *this;
     }
 
     ~Vec() {
 #if defined(DEBUG)
-        VecDbgDeath(dbgId, len, cap);
+        VecDbgDeath(dbgId, len, Cap());
 #endif
         FreeEls();
     }
@@ -699,12 +719,56 @@ inline int VecNextCap(int cap, int wanted, int elSize) {
 
 template <typename T>
 bool VecReserve(Arena* arena, T& v, int wantedSize) {
-    if (wantedSize <= v.cap) {
+    // `v` is a `Vec<T>` or one of the two vec-shaped structs (`StrBuilder`,
+    // the executor's queue), so the borrowed-storage sign is spelled out here
+    // rather than read off a `Cap()` those do not have. A positive cap in
+    // those is the only case they ever reach.
+    int elSize = (int)sizeof(*v.els);
+    int curCap = v.cap < 0 ? -v.cap : v.cap;
+    if (wantedSize <= curCap) {
         return true;
     }
-    int newCap = VecNextCap(v.cap, wantedSize, (int)sizeof(*v.els));
-    return VecRealloc(arena, (void**)&v.els, v.len, &v.cap, newCap,
-                      (int)sizeof(*v.els));
+    int newCap = VecNextCap(curCap, wantedSize, elSize);
+    if (v.cap < 0) {
+        // Leaving borrowed storage: there is nothing to realloc, so take a
+        // block of our own and copy what is live into it. The array we were
+        // lent is the caller's to outlive us.
+        auto* borrowed = v.els;
+        v.els = nullptr;
+        v.cap = 0;
+        if (!VecRealloc(arena, (void**)&v.els, 0, &v.cap, newCap, elSize)) {
+            v.els = borrowed;
+            v.cap = -curCap;
+            return false;
+        }
+        if (v.len > 0) {
+            memcpy((void*)v.els, (const void*)borrowed,
+                   (size_t)v.len * (size_t)elSize);
+        }
+        return true;
+    }
+    return VecRealloc(arena, (void**)&v.els, v.len, &v.cap, newCap, elSize);
+}
+
+// Lend `v` an array to start in, instead of its first allocation. The vec
+// must be empty and must not have storage yet — this is for the line right
+// after it is declared:
+//
+//     FlexLine lineBuf[4];
+//     Vec<FlexLine> flexLines;
+//     VecUseInline(flexLines, lineBuf);
+//
+// It appends into `buf` until `buf` is full, and the append past that
+// allocates and copies the way a first allocation would, leaving `buf`
+// alone. Nothing frees `buf`, so it must outlive the vec — a local array in
+// the same scope, which is the only shape this is for. The vec must not
+// then have its storage taken over by hand (`other.els = v.els; other.cap =
+// v.cap;`), since the sign is what says the block is not the heap's.
+template <typename T, int N>
+inline void VecUseInline(Vec<T>& v, T (&buf)[N]) {
+    v.els = buf;
+    v.cap = -N;
+    v.len = 0;
 }
 
 template <typename T>
@@ -712,9 +776,9 @@ inline T* VecReserve(Vec<T>& v, int capNeeded) {
 #if defined(DEBUG)
     // The same test the generic one makes, one line ahead of it, so the
     // growth is recorded with the capacity it is about to leave behind.
-    if (capNeeded > v.cap) {
-        VecDbgGrow(v.dbgId, v.len, v.cap, capNeeded,
-                   VecNextCap(v.cap, capNeeded, (int)sizeof(T)));
+    if (capNeeded > v.Cap()) {
+        VecDbgGrow(v.dbgId, v.len, v.Cap(), capNeeded,
+                   VecNextCap(v.Cap(), capNeeded, (int)sizeof(T)));
     }
 #endif
     if (!VecReserve(nullptr, v, capNeeded)) {

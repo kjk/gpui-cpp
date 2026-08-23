@@ -98,6 +98,7 @@ void TestEventEmitter();
 void TestListSettings();
 void TestStateStyle();
 void TestClick();
+void TestVec();
 void TestArenaVec();
 void TestDrawOps();
 void TestHttp();

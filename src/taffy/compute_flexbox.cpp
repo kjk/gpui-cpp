@@ -1841,7 +1841,24 @@ LayoutOutput ComputePreliminary(TaffyTree* tree, NodeId node,
                                                knownDimensions, parentSize);
 
     Vec<FlexItem> flexItems;
+    // A container that does not wrap has exactly one flex line, and nothing
+    // in this tree wraps into more: `bun cmd/vec-log.ts` over the taffy
+    // suite, the story gallery, the showcase and the benchmarks finds no
+    // container anywhere that takes a second one. So what this list costs is
+    // one 24-byte allocation and free per container per layout pass, and
+    // nothing else. Two lines of stack instead, and the third allocates.
+    //
+    // Two rather than more: the buffer sits on a frame that recurses once per
+    // node, and a grid item is laid out through here too, so the frame's size
+    // is not free. At four lines `grid/wide 100x100` was a repeatable 2%
+    // slower; at two it is level, and the deep flexbox trees — where the
+    // allocation was 3-5% of the run — keep all of it. Two is also the
+    // largest that is never *worse* than allocating: an empty vec takes a
+    // first block of four (`VecNextCap`), so a three- or four-line container
+    // still allocates exactly once from here.
+    FlexLine lineBuf[2];
     Vec<FlexLine> flexLines;
+    VecUseInline(flexLines, lineBuf);
 
     // 9.1. Initial Setup
     // 1. Generate anonymous flex items.

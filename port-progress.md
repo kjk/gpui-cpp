@@ -2467,3 +2467,49 @@ cargo run -p system_monitor
   budget. What is left on the table is `ArenaVecSegment`'s 24-byte header,
   which is 27% overhead on a two-element segment of 32-byte events —
   shrinking it would beat any further capacity tuning.
+
+- 2026-08-23: An inline buffer for taffy's flex line list, and borrowed
+  storage in `Vec` to hold it. The previous entry left this on the table: a
+  reserve cannot remove an allocation, only move it, and `ComputePreliminary`
+  was still taking one 24-byte block and freeing it per container per layout
+  pass. `VecUseInline(v, buf)` lends a vec an array on the caller's stack to
+  start in, so a vec that never outgrows it costs nothing at all.
+
+  The capacity rides in the sign of `cap` — negative means the elements are in
+  storage the vec does not own, and the size is `-cap`. A field of its own
+  would have been clearer and cost eight bytes on every `Vec` in the tree,
+  which is a great many; `StrBuilder` pays that eight for the same feature,
+  and it is the only other thing here with it. Only two places have to tell
+  owned from borrowed: growing, where the block cannot be realloc'd so the
+  live prefix is copied out into a fresh one and the array is left alone, and
+  freeing, which must not. `Cap()` is what everything else reads. The one
+  thing it is not safe with is the idiom that takes a vec's storage over by
+  hand — `events.els = t->events.els; events.cap = t->events.cap;` — and none
+  of the ten places that do that are handed a borrowed vec.
+
+  Two lines of buffer, which is a number that was measured rather than
+  picked. No container anywhere in this tree — the taffy suite, the story
+  gallery, the showcase, the benchmarks — ever takes a second flex line, so
+  even one would do; but the buffer sits on a frame that recurses once per
+  node and a grid item is laid out through here too, so the frame's size is
+  not free. At four lines `grid/wide 100x100` was a repeatable 2% slower over
+  three runs each way. At two it is level with the build before it, the deep
+  flexbox trees are 3-5% faster (`deep tree (auto size)` 8.92 -> 8.48 ms,
+  `(random size)` 3.80 -> 3.61 ms), and two is the largest that is never
+  *worse* than allocating: an empty vec takes a first block of four, so a
+  three- or four-line container still allocates exactly once.
+
+  `tests/VecTests.cpp` is new and is where the mechanism is pinned: the vec
+  stays in the buffer, the append and the reserve past it carry the elements
+  out, `Reset` and the destructor let go without freeing a stack address,
+  a copy owns its own elements, and `Clear` zeroes the right number of bytes.
+  The last one drives the real caller — a wrapping row twelve items wide,
+  which makes six lines — because nothing else in the tree would ever push
+  that list off the stack. The suite passes under ASan, which is the check
+  that matters for this one.
+
+  Grid and markdown numbers moved in both directions across these runs
+  without either being touched; the noise floor on this machine is around 2%
+  for the small benchmarks and more for `grid/superdeep`, which read +13.8%
+  once and was level on three focused repeats. Anything at that scale needs
+  repeating before it means something.
