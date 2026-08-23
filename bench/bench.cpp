@@ -33,13 +33,18 @@ static bool Contains(const char* haystack, const char* needle) {
 
 void BenchMem(const char* group, const char* name, int64_t param,
               uint64_t bytes) {
+    BenchMemAs(group, name, "mem", param, bytes);
+}
+
+void BenchMemAs(const char* group, const char* name, const char* what,
+                int64_t param, uint64_t bytes) {
     if (!BenchWanted(group, name)) {
         return;
     }
     double kb = (double)bytes / 1024.0;
     double ratio = param > 0 ? (double)bytes / (double)param : 0.0;
-    printf("  %-34s %14s   mem %8.1f KB   %5.2fx source\n", name, "", kb,
-           ratio);
+    printf("  %-34s %14s   %-7s %8.1f KB   %5.2fx source\n", name, "", what,
+           kb, ratio);
 }
 
 bool BenchWanted(const char* group, const char* name) {

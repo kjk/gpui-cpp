@@ -56,6 +56,11 @@ void BenchCase(const char* group, const char* name, const char* unit,
 // says how much arena a byte of document turns into.
 void BenchMem(const char* group, const char* name, int64_t param,
               uint64_t bytes);
+// The same line under another label, for a case with more than one number
+// worth reporting: the markdown parse reports the tree it produced and the
+// scratch it produced it with, and the second is where every ArenaVec lives.
+void BenchMemAs(const char* group, const char* name, const char* what,
+                int64_t param, uint64_t bytes);
 
 // True if a case with this group and name would run. A benchmark whose setup
 // is expensive to even reach can ask first.

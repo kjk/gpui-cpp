@@ -248,10 +248,11 @@ const vecPolicies: Policy[] = [
   },
 ];
 
-// sizeof(ArenaVecSegment<T>) on a 64-bit host: a next pointer and three ints,
-// padded to 24, then rounded up to alignof(T) — 24 for everything this tree
-// puts in one.
-const kSegHeader = 24;
+// sizeof(ArenaVecSegment<T>) on a 64-bit host: an ArenaPtr to the next segment
+// and three ints, which is 16, then rounded up to alignof(T) — 16 for
+// everything this tree puts in one, since nothing it holds is aligned wider
+// than 8. It was 24 while `next` was a pointer.
+const kSegHeader = 16;
 
 // The shipped rule: `count` elements, or as many as fit in `bytes`, whichever
 // is fewer. Shared with the per-site recommendation below.

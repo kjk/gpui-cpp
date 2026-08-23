@@ -300,6 +300,26 @@ static void RunShapeSized(const char* name, BuildFn build, int32_t largeBytes) {
         MdRun(&c);
         BenchMem(group, name, doc.len, ArenaUsed(c.out));
 
+        // And what building it cost, which is the arena `ToMdast` makes and
+        // throws away: every ArenaVec the tokenizer and the resolvers fill
+        // lives there, so it is the number a change to ArenaVec moves. Parsed
+        // the long way round because ToMdast owns its scratch and this needs
+        // to see it.
+        {
+            Arena* scratch = ArenaNew();
+            markdown::ParseState st;
+            st.a = c.out;
+            st.scratch = scratch;
+            st.options = &c.options;
+            st.bytes = c.source;
+            c.out->Reset();
+            Vec<markdown::Event> events = markdown::Parse(&st);
+            markdown::Node* tree = markdown::ToMdastCompile(events, &st);
+            BenchKeep(tree);
+            BenchMemAs(group, name, "scratch", doc.len, ArenaUsed(scratch));
+            ArenaDelete(scratch);
+        }
+
         ArenaDelete(out);
         ArenaDelete(src);
     }

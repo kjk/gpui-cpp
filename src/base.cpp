@@ -498,17 +498,6 @@ uint32_t ArenaOffsetOf(Arena* a, const void* p) {
     return kArenaPtrNone;
 }
 
-void* ArenaAtOffset(Arena* a, uint32_t off) {
-    if (off == kArenaPtrNone) {
-        return nullptr;
-    }
-    Arena* node = ArenaBlockAt(a, off);
-    if (!node) {
-        return nullptr;
-    }
-    return (char*)node + ((uint64_t)off - node->basePos);
-}
-
 void* Arena::Alloc(int size) {
     if (size <= 0) {
         return nullptr;

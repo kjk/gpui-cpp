@@ -493,7 +493,30 @@ uint32_t ArenaOffsetOf(Arena* a, const void* p);
 
 // And back. Null for kArenaPtrNone, or for an offset past what the arena
 // holds.
-void* ArenaAtOffset(Arena* a, uint32_t off);
+//
+// Inline, and not because it is short: ArenaVec follows one of these per
+// append and per segment step, so a call here would be a call on the hot
+// path of every parse. The chain is walked from the newest block back, and
+// an arena that never outgrew its first reserve — which is most of them —
+// leaves the loop on its first test with `basePos` zero, so the whole thing
+// is two loads and an add.
+inline void* ArenaAtOffset(Arena* a, uint32_t off) {
+    if (off == kArenaPtrNone || !a) {
+        return nullptr;
+    }
+    Arena* node = a->current;
+    // The newest block, which is where all but a handful of offsets land and
+    // the only block at all for an arena that never outgrew its reserve. Split
+    // out so the common case is a compare and an add and the walk is a branch
+    // the predictor never takes.
+    if (node && node->basePos <= (uint64_t)off) {
+        return (char*)node + ((uint64_t)off - node->basePos);
+    }
+    while (node && node->basePos > (uint64_t)off) {
+        node = node->prev;
+    }
+    return node ? (char*)node + ((uint64_t)off - node->basePos) : nullptr;
+}
 
 // The typed wrapper. Four bytes, trivially copyable, and `T` is there to
 // keep a node offset from being read back as an event offset.
@@ -850,12 +873,29 @@ T* VecInsertSpace(Vec<T>& v, int idx, int count) {
 // promise. And the elements are not contiguous, so there is no one array to
 // hand to something that wants one — `Flatten` is that, and it costs nothing
 // for a vec that never left its first segment, which is most of them.
+//
+// A segment's header is sixteen bytes rather than twenty-four, because the
+// link to the next one is an ArenaPtr rather than a pointer — an offset into
+// the arena's position space, four bytes instead of eight. An offset needs
+// the arena to be read back, so the vec keeps one: that is what lets
+// `operator[]`, `begin` and `end` stay the no-argument calls they were while
+// the links inside them cost half. Parsing 64 KB of markdown takes 3.9% less
+// scratch arena for it, and the same time. See the note at the end.
 template <typename T>
 struct ArenaVecSegment {
-    ArenaVecSegment<T>* next;
+    // The segment after this one. An ArenaPtr and not an
+    // `ArenaVecSegment<T>*`: four bytes rather than eight, which is a
+    // quarter of a header that half a million of them are allocated with in
+    // one markdown parse.
+    //
+    // An offset into the arena's position space, and deliberately not a
+    // delta from this segment's own address, which would be cheaper to
+    // follow: two blocks of one arena are two separate reservations, and
+    // address-space layout can put them further apart than an int32 reaches.
+    ArenaPtr<ArenaVecSegment<T>> next;
     // Index of this segment's first element in the vec: the sum of the
-    // lengths before it. What `operator[]` walks on, and all a truncated
-    // segment needs to be handed its elements back.
+    // lengths before it. What `At` walks on, and all a truncated segment
+    // needs to be handed its elements back.
     int base;
     int len;
     // Only the last segment ever takes an append, so a capacity per segment
@@ -901,6 +941,41 @@ struct ArenaVecSegment {
 //
 // Revisit them the same way, against `bun cmd/bench.ts markdown` and the
 // replay, not against taste.
+// What the four-byte link bought, measured with `bun cmd/bench.ts markdown`,
+// release, best of four runs of twenty samples. Every byte of it is a segment
+// header that went from twenty-four to sixteen, times the segments a parse
+// allocates:
+//
+//                      scratch arena              tree          parse (min)
+//   prose            1280.9 -> 1230.4 KB   272.0 -> 259.6 KB   7.99 -> 7.92 ms
+//   nested quotes     979.8 ->  925.0 KB   110.2 -> 110.2      8.88 -> 8.85
+//   gfm tables       4010.1 -> 3830.5 KB   250.5 -> 250.5     11.96 -> 11.87
+//   character refs    886.9 ->  878.4 KB    65.6 ->  65.6      5.92 -> 5.88
+//
+// The arena numbers are exact and the times are level — a shade faster, which
+// is what a smaller header does to a cache and is not worth claiming as a
+// speed-up. The one case that moved is `markdown/phases`' to_mdast, 0.298 ->
+// 0.311 ms: it reads the top of a stack once an event and now translates an
+// offset to do it. Layout does not move at all — taffy has no ArenaVec in it
+// — and the story gallery's frame is the same to three decimal places, build,
+// layout and paint alike.
+//
+// What is *not* here, and could be, is the handle. It is twenty-four bytes —
+// an arena, two offsets and a length — and twelve of them go if the arena
+// comes from the caller at every call instead of living here. That is what an
+// edit map entry and a compile frame would each stop carrying, and neither of
+// them is in an arena, so neither shows up in the table above at all.
+//
+// It was written that way first and taken back out. The saving is real and
+// invisible: it does not move any number this tree measures, because the
+// structures that hold a handle are on the heap. What it costs is visible in
+// every file — an `Arena*` in the signature of everything that so much as
+// reads a vec, `v.At(a, i)` and `v.In(a)` and `v.Pop(a)` at about a hundred
+// call sites — and the arena each of those readers had to be handed is the
+// one the vec itself already knew. If it ever comes back, it should come back
+// for a structure that holds a handle *in* an arena, where the twelve bytes
+// would show up in a benchmark.
+
 constexpr int kArenaVecCap0 = 4;
 constexpr int kArenaVecCap1 = 16;
 constexpr int kArenaVecCap2 = 64;
@@ -916,8 +991,29 @@ struct ArenaVec {
     // append goes into, so appending does not walk; segments past it are ones
     // a `Truncate` let go of, kept linked and empty so a pop and a push at a
     // segment boundary do not allocate a segment per pass.
-    Segment* first = nullptr;
-    Segment* last = nullptr;
+    //
+    // ArenaPtrs, four bytes each, beside the arena they are offsets into.
+    // The arena is here rather than at every call because an offset is
+    // meaningless without one, and threading it through `operator[]`, `begin`
+    // and `end` put it in the signature of everything that so much as reads a
+    // vec. It is filled in where a segment is made and nowhere else — every
+    // mutator was handed it already — so a vec still declares as
+    // `ArenaVec<T> v = {}` and still reads as `v[i]`. There and not on every
+    // append, because an append that has room writes one element and should
+    // not also write the handle: doing it per append cost 1% of the parse.
+    //
+    // Null until the first segment, which is what a vec with no segment
+    // wants: ArenaPtrGet answers null for a null arena, so the first append
+    // finds no segment and goes and asks for one.
+    //
+    // Eight bytes and two fours and a four is twenty-four, which is what the
+    // handle always was. What the ArenaPtrs buy here is that carrying the
+    // arena costs nothing: two real pointers beside it would have made this
+    // thirty-two. The saving that shows up in an arena is the segment header
+    // above, which is sixteen bytes rather than twenty-four.
+    Arena* a = nullptr;
+    ArenaPtr<Segment> first = {};
+    ArenaPtr<Segment> last = {};
     int len = 0;
 #if defined(DEBUG)
     // Zero for a vec that never ran a constructor — one that lives in a
@@ -944,14 +1040,15 @@ struct ArenaVec {
     // elements in order this way is what `Iter` is for — `v[i]` in a loop
     // starts the walk over every time.
     T& operator[](int idx) const {
-        Segment* seg = first;
         // Most vecs never leave their first segment, and `first == last`
-        // says so from two fields of the handle itself.
-        if (seg == last) {
+        // says so from two offsets of the handle itself, without going to
+        // the arena for either.
+        Segment* seg = ArenaPtrGet(a, first);
+        if (first == last) {
             return seg->Els()[idx];
         }
         while (idx >= seg->base + seg->len) {
-            seg = seg->next;
+            seg = ArenaPtrGet(a, seg->next);
         }
         return seg->Els()[idx - seg->base];
     }
@@ -965,12 +1062,18 @@ struct ArenaVec {
     // A `Truncate` can leave empty segments linked after the last one, so
     // both ends normalize past anything empty and `end()` is a null segment.
     struct Iter {
+        // The vec's own, handed over by `begin`: an offset cannot be followed
+        // without it, and the iterator follows one per segment step.
+        Arena* a;
+        // Resolved once per segment and then stepped through, so reading an
+        // element is the same add it always was and the arena is consulted
+        // only where the old version followed a `next` pointer.
         Segment* seg;
         int idx;
 
         void Normalize() {
             while (seg && idx >= seg->len) {
-                seg = seg->next;
+                seg = ArenaPtrGet(a, seg->next);
                 idx = 0;
             }
         }
@@ -979,7 +1082,7 @@ struct ArenaVec {
         Iter& operator++() {
             idx++;
             if (idx >= seg->len) {
-                seg = seg->next;
+                seg = ArenaPtrGet(a, seg->next);
                 idx = 0;
                 Normalize();
             }
@@ -991,16 +1094,16 @@ struct ArenaVec {
     };
 
     Iter begin() const {
-        Iter it = {first, 0};
+        Iter it = {a, ArenaPtrGet(a, first), 0};
         it.Normalize();
         return it;
     }
-    Iter end() const { return Iter{nullptr, 0}; }
+    Iter end() const { return Iter{a, nullptr, 0}; }
 
-    bool Append(Arena* a, const T& el) {
-        Segment* seg = last;
+    bool Append(Arena* arena, const T& el) {
+        Segment* seg = ArenaPtrGet(a, last);
         if (!seg || seg->len >= seg->cap) {
-            seg = NextSegment(a, 1);
+            seg = NextSegment(arena, 1);
             if (!seg) {
                 return false;
             }
@@ -1010,11 +1113,11 @@ struct ArenaVec {
         return true;
     }
 
-    bool AppendMany(Arena* a, const T* src, int n) {
+    bool AppendMany(Arena* arena, const T* src, int n) {
         while (n > 0) {
-            Segment* seg = last;
+            Segment* seg = ArenaPtrGet(a, last);
             if (!seg || seg->len >= seg->cap) {
-                seg = NextSegment(a, n);
+                seg = NextSegment(arena, n);
                 if (!seg) {
                     return false;
                 }
@@ -1034,11 +1137,12 @@ struct ArenaVec {
 
     // Room for `n` more appends without allocating. A caller who knows the
     // count skips the 4/16/64 climb, which is all the segment sizes cost.
-    bool Reserve(Arena* a, int n) {
-        if (last && last->cap - last->len >= n) {
+    bool Reserve(Arena* arena, int n) {
+        Segment* seg = ArenaPtrGet(a, last);
+        if (seg && seg->cap - seg->len >= n) {
             return true;
         }
-        return NextSegment(a, n) != nullptr;
+        return NextSegment(arena, n) != nullptr;
     }
 
     // Drop everything from `newLen` on. The segments that held it stay linked
@@ -1050,14 +1154,17 @@ struct ArenaVec {
         if (newLen >= len) {
             return;
         }
-        Segment* seg = first;
+        ArenaPtr<Segment> at = first;
+        Segment* seg = ArenaPtrGet(a, at);
         while (seg && seg->base + seg->len <= newLen) {
-            seg = seg->next;
+            at = seg->next;
+            seg = ArenaPtrGet(a, at);
         }
         if (seg) {
             seg->len = newLen - seg->base;
-            last = seg;
-            for (Segment* s = seg->next; s; s = s->next) {
+            last = at;
+            for (Segment* s = ArenaPtrGet(a, seg->next); s;
+                 s = ArenaPtrGet(a, s->next)) {
                 s->len = 0;
             }
         }
@@ -1069,14 +1176,14 @@ struct ArenaVec {
     // The elements as one array, for a callee that takes a `const T*`. Free
     // for a vec that never grew past its first segment; a copy into `a`
     // otherwise.
-    T* Flatten(Arena* a) const {
+    T* Flatten(Arena* into) const {
         if (len == 0) {
             return nullptr;
         }
         if (first == last) {
-            return first->Els();
+            return ArenaPtrGet(a, first)->Els();
         }
-        T* out = (T*)ArenaVecAlloc(a, len, (int)sizeof(T), (int)alignof(T));
+        T* out = (T*)ArenaVecAlloc(into, len, (int)sizeof(T), (int)alignof(T));
         if (!out) {
             return nullptr;
         }
@@ -1112,27 +1219,31 @@ struct ArenaVec {
 
     // The segment the next append goes into, with room for at least `want`.
     // Off the hot path: once per segment, not once per element.
-    GPUI_NOINLINE Segment* NextSegment(Arena* a, int want) {
+    GPUI_NOINLINE Segment* NextSegment(Arena* arena, int want) {
+        a = arena;
 #if defined(DEBUG)
         if (dbgId == 0) {
             dbgId = VecDbgBirth("<no-constructor>", 0, "", 'A', (int)sizeof(T));
         }
 #endif
+        Segment* lastSeg = ArenaPtrGet(a, last);
 #if defined(DEBUG)
-        int dbgPrevCap = last ? last->cap : 0;
+        int dbgPrevCap = lastSeg ? lastSeg->cap : 0;
 #endif
-        Segment* reuse = last ? last->next : nullptr;
+        ArenaPtr<Segment> reuseAt =
+            lastSeg ? lastSeg->next : ArenaPtr<Segment>{};
+        Segment* reuse = ArenaPtrGet(a, reuseAt);
         if (reuse && reuse->cap >= want) {
             reuse->len = 0;
             reuse->base = len;
-            last = reuse;
+            last = reuseAt;
 #if defined(DEBUG)
             VecDbgSegment(dbgId, len, want, dbgPrevCap, reuse->cap, dbgTotalCap,
                           true);
 #endif
             return reuse;
         }
-        int cap = NextCap(last ? last->cap : 0);
+        int cap = NextCap(lastSeg ? lastSeg->cap : 0);
         if (cap < want) {
             cap = want;
         }
@@ -1143,16 +1254,17 @@ struct ArenaVec {
             return nullptr;
         }
         Segment* seg = (Segment*)mem;
-        seg->next = nullptr;
+        seg->next = {};
         seg->base = len;
         seg->len = 0;
         seg->cap = cap;
-        if (last) {
-            last->next = seg;
+        ArenaPtr<Segment> at = ArenaPtrOf(a, seg);
+        if (lastSeg) {
+            lastSeg->next = at;
         } else {
-            first = seg;
+            first = at;
         }
-        last = seg;
+        last = at;
 #if defined(DEBUG)
         dbgTotalCap += cap;
         dbgSegs++;

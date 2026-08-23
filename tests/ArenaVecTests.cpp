@@ -14,7 +14,7 @@ static const int kMany = 300;
 static void AnEmptyVecHasNothing() {
     ArenaVec<int> v = {};
     utassert(v.len == 0);
-    utassert(v.first == nullptr && v.last == nullptr);
+    utassert(!v.first.IsSet() && !v.last.IsSet());
     utassert(v.Flatten(nullptr) == nullptr);
     utassert(!(v.begin() != v.end()));
 }
@@ -68,7 +68,7 @@ static void TheIteratorSkipsTheSegmentsATruncateEmptied() {
     // behind it — the walk has to end at the last element and not at the
     // last segment.
     v.Truncate(3);
-    utassert(v.last->next != nullptr);
+    utassert(ArenaPtrGet(a, v.last)->next.IsSet());
     int seen = 0;
     for (int el : v) {
         utassert(el == seen);

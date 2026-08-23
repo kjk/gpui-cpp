@@ -2704,3 +2704,114 @@ ClearType, and glyph x is snapped where DirectWrite positions at a third of a
 pixel. That is the trade the `paintgpu.h` note already named, and 0.13 ms does
 not buy it. Where it *is* worth reaching for is a page that is mostly paths and
 mostly moving: `fps_monitor` is 0.35 ms against Direct2D's 0.91.
+
+## ArenaVec's two links are four bytes each
+
+`ArenaVecSegment::next`, and `ArenaVec::first` / `last`, are `ArenaPtr` rather
+than pointers — an offset into the arena's position space. The handle is 12
+bytes where it was 24 and a segment's header is 16 where it was 24. An offset
+and deliberately not a delta from the object's own address, which would have
+been cheaper to follow and would have needed no arena: two blocks of one arena
+are two separate reservations, and address-space layout can put them further
+apart than an int32 reaches.
+
+What it costs is the arena at every dereference, so `operator[]`, `begin` and
+`end` became `At(a, i)` and `In(a)` — `for (const Event& e : entry.add.In(a))`
+— and `Truncate` and `Pop` take one too. That is about a hundred call sites
+across `src/markdown` and `src/ui`; every structure that holds one already
+carried an `Arena* a`, except `SettingGroup`, whose two matchers took the arena
+as a parameter instead of the struct growing an eight-byte field to save
+twelve. `ArenaAtOffset` moved into the header and grew a fast path for the
+newest block, which is where all but a handful of offsets land — without it the
+parse was 2% slower rather than level.
+
+`bun cmd/bench.ts markdown`, release, best of three runs of twenty samples:
+
+                    scratch arena          tree             parse (min)
+  prose            1280.9 -> 1230.4 KB   272.0 -> 259.6 KB   7.98 -> 8.06 ms
+  nested quotes     979.8 ->  925.0 KB   110.2 -> 110.2     8.90 -> 8.90
+  gfm tables       4010.1 -> 3830.5 KB   250.5 -> 250.5    11.86 -> 11.60
+  character refs    886.9 ->  878.4 KB    65.6 ->  65.6     5.86 -> 5.95
+
+So 4% off the scratch arena and 4.6% off the tree, and the times are inside the
+noise of the machine — which is the trade: the memory is the point and the
+extra load per dereference does not show. `markdown/phases` puts what movement
+there is in `to_mdast`, 0.298 -> 0.308 ms, which is `TailMut` translating an
+offset on every event. **Layout does not move at all**, in either sense: the
+taffy benchmarks are unchanged case for case, since taffy has no `ArenaVec` in
+it, and the story gallery's frame is the same to three decimals — build 0.195,
+layout 2.29, paint 0.21 — before and after.
+
+The saving in the arena is the segment header and nothing else. A handle that
+lives in a `Vec<Entry>` or a `Vec<TreeFrame>` shrinks the heap rather than the
+arena, and there is no benchmark number for that: an edit map entry went from
+32 bytes to 20 and a compile frame from 56 to 32.
+
+`cmd/vec-log.ts`'s replay models the header, so its `kSegHeader` went to 16
+with it; the ground truth is `ArenaUsed`, which `bun cmd/bench.ts markdown` now
+prints beside the tree size as a `scratch` row — the scratch arena is where
+every ArenaVec lives and it was the one number the markdown benchmark could not
+see before.
+
+Verified by 17,148 test checks and by seventeen story pages screenshotted under
+both builds — menu, popup-menu, native-menu, tabs, resizable, tiles, setting,
+the three charts, modal, text, sidebar, dropdown, list, table, accordion —
+every one pixel-identical.
+
+What is left on the table: the handle could be eight bytes rather than twelve.
+`last` is there so an append does not walk, but the whole markdown run averages
+1.02 segments to a vec, so what it saves is one compare. Dropping it needs
+another way to find the empty segments `Truncate` leaves linked past the end.
+
+### And the arena moved inside, so the API is the old one again
+
+`ArenaVec` carries the `Arena*` its offsets are into. `operator[]`, `begin`,
+`end`, `Truncate(n)` and `Pop()` are back to what they were, the ~100 call
+sites across `src/markdown` and `src/ui` went back with them, and
+`SettingGroupMatches` / `SettingPageMatches` lost the parameter they had
+grown. Every mutator was being handed the arena already, so nothing else
+changed shape: a vec still declares as `ArenaVec<T> v = {}`.
+
+The handle is 24 bytes again — an arena, two offsets and a length — which is
+what it was before any of this. What the ArenaPtrs buy at that size is that
+carrying the arena is free: two real pointers beside it would have made the
+handle 32.
+
+**The memory result is unchanged**, to the byte, because all of it was the
+segment header:
+
+                    scratch arena              tree          parse (min)
+  prose            1280.9 -> 1230.4 KB   272.0 -> 259.6 KB   7.99 -> 7.92 ms
+  nested quotes     979.8 ->  925.0 KB   110.2 -> 110.2      8.88 -> 8.85
+  gfm tables       4010.1 -> 3830.5 KB   250.5 -> 250.5     11.96 -> 11.87
+  character refs    886.9 ->  878.4 KB    65.6 ->  65.6      5.92 -> 5.88
+
+Best of four runs of twenty samples. The parse is now level with the original
+or a shade under it, where the arena-in-the-signature version was a shade over
+— not a speed-up worth claiming, but it does settle that putting the arena in
+the handle costs nothing to read through. `to_mdast` is the one case that
+moved, 0.298 -> 0.311 ms: `TailMut` reads the top of a stack once per event
+and now translates an offset to do it. Layout is unchanged, both the taffy
+benchmarks and the story gallery's frame.
+
+One thing had to be got right and the compiler caught it: recording the arena
+on **every append** cost 1% of the parse — an append that has room writes one
+element and should not also write the handle — so it is recorded in
+`NextSegment` and nowhere else, which is once per segment. That leaves `a`
+null until the first segment exists, which is exactly what a vec with no
+segment wants: `ArenaPtrGet` answers null for a null arena, so the first
+append finds no segment and goes and asks for one. `Append`, `AppendMany` and
+`Reserve` therefore have to pass their *own* parameter to `NextSegment` rather
+than the member, and MSVC's unreferenced-parameter warning is what found the
+version that did not.
+
+What the revision gives up, and it is worth being plain about: the 12-byte
+handle would have taken an edit map entry from 32 bytes to 20 and a compile
+frame from 56 to 32. Both live on the heap, so neither shows up in any number
+this tree measures — which is the argument for taking the simpler API and the
+reason the saving was not worth a hundred call sites. If it comes back it
+should come back for a structure that holds a handle *in* an arena.
+
+Verified again by 17,148 test checks and by the same seventeen story pages
+screenshotted against the build from before any of this: all seventeen
+identical.
