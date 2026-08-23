@@ -3,8 +3,10 @@
    carrying its own content mask and its layer, rather than issued to a
    backend as the tree walks.
 
-   This is off unless GPUI_SCENE is set, and it is a prototype — see the note
-   at the end of this header for what it is worth and what it is short of.
+   It is on, at the `skip` level, and GPUI_SCENE is how to turn it down or
+   off. It earns that on the scenes this tree draws — see the note at the end
+   of this header for the numbers, and for the one scene it costs rather than
+   pays on.
 
    What a scene is for, given that `paintgpu_win.cpp` already puts a frame in
    one instance buffer: the instance buffer is built *while* the tree paints,
@@ -27,12 +29,21 @@
 
    The levels, from GPUI_SCENE, each one including the ones before it:
 
+     off      the element tree draws straight to the backend, as it used to
      replay   collect and replay; measures what the scene itself costs
      cache    + path geometry kept across frames, keyed by its hash
-     skip     + a frame identical to the last one is not drawn at all
+     skip     + a frame identical to the last one is not drawn at all  (default)
      damage   + a frame that differs in part is drawn in part
 
-   `GPUI_SCENE=1` means `replay`. Anything unrecognized leaves it off. */
+   `GPUI_SCENE=1` means `replay`, `0` means `off`, and an unset variable — or
+   one set to something that is not a level — means `skip`. `off` is what a
+   bisect wants, and what to reach for if a frame ever comes out stale: this
+   is the only thing in the tree that can decide not to draw.
+
+   Only paint_win.cpp dispatches into the recorder. The other three backends
+   draw the way they always did, so the default differs by platform until
+   they get the same line at the top of each entry point. Nothing here is
+   Windows: the divergence is in the dispatch, not in the scene. */
 
 #include "gpui/paint.h"
 
@@ -84,8 +95,13 @@ void SuspendEnd(bool prev);
 // PaintTargetEnd not to present. Cleared by the next FrameBegin.
 bool SkipPresent();
 
-// Drop everything held across frames: the path cache and the previous
-// frame's primitives. A lost device, a resize, a target freed.
+// Forget the previous frame, so the next one is drawn whole and presented
+// whatever it looks like. What the surface holds and what this thinks it
+// holds have parted company: a swap chain resized, its buffers discarded.
+// The path cache is geometry and survives.
+void Invalidate();
+// The above, and drop the path cache with it. A lost device, a target freed
+// -- anything that takes the objects the cache holds down with it.
 void Reset();
 
 // ─── what the recorder is handed ─────────────────────────────────────────
@@ -182,8 +198,8 @@ const SceneStats& Stats();
 //
 //   fps_monitor, 2443 primitives, all of      off   replay  cache  damage
 //   them different every frame
-//     Direct2D                               0.80    0.98   0.97    1.07
-//     the GPU backend                        0.35    0.34   0.34    0.42
+//     Direct2D                               0.82    0.91   0.91    1.00
+//     the GPU backend                        0.37    0.25   0.25    0.33
 //
 // Four things those say, in the order they matter:
 //
@@ -213,11 +229,18 @@ const SceneStats& Stats();
 //    when nothing asked it to.
 //
 // And the counterweight, which is `fps_monitor`: when every primitive changes
-// every frame, collecting and hashing them is 20% on top of the D2D paint and
-// free on the GPU one, the caches never hit, and the damage rectangle comes
-// out at 96% of the view. Nothing here is a win on a scene that is genuinely
-// animating; it is a win on a scene that is mostly still, which is what a UI
-// is.
+// every frame, collecting and hashing them is 11% on top of the D2D paint, the
+// caches never hit, and the damage rectangle comes out at 96% of the view.
+// That 11% was 20% until the primitive hash went from a byte-at-a-time FNV
+// over the struct to ten words, which is worth knowing because it says where
+// the cost of a scene that cannot be reused actually sits: not in collecting
+// it, in reading it back. On a scene that is genuinely animating this is a
+// loss, and it is on by default because a UI is mostly still.
+//
+// The one fidelity cost of having it on: 0.03% of the story's pixels, 45 of
+// them far enough off to count as a real difference, all on the curve edges of
+// icons — a cached path is filled from a geometry realization, which is
+// tessellated once at one tolerance, and FillGeometry is not.
 //
 // What it is short of, and what each would take:
 //

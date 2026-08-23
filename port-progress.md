@@ -2666,3 +2666,41 @@ The standing non-goal in `AGENTS.md` — "Zed's scene graph as a whole" — is
 left as it is on purpose. This is a prototype behind a flag, and what it
 measured is an argument for a *cull* pass and a path cache, which want neither
 a scene nor a graph, rather than for the scene graph itself.
+
+### And then it became the default
+
+`GPUI_SCENE` defaults to `skip`, and `GPUI_SCENE=off` is how to get the old
+behaviour back — the first thing to try if a frame ever comes out stale, since
+the scene is the only thing in the tree that can decide not to draw. Whole
+frames, 600 each, off against on:
+
+    story             D2D  3.98 -> 2.68    GPU backend  3.06 -> 2.55
+    showcase          D2D  0.31 -> 0.12    GPU backend  0.48 -> 0.12
+    system_monitor    D2D  0.57 -> 0.12    GPU backend  0.24 -> 0.10
+    fps_monitor       D2D  0.82 -> 0.91    GPU backend  0.26 -> 0.35
+
+Three things had to be true first. **A resize invalidates the scene**:
+`ResizeBuffers` hands out surfaces with nothing in them, so what the scene
+remembers about the surface is no longer on it — `scene::Invalidate()` is that,
+separate from `Reset()`, which also drops the path cache and is for a device
+going away. **The primitive hash reads ten words rather than a hundred-odd
+bytes**, which halved what the scene costs on a frame that cannot reuse
+anything: `fps_monitor` went from +20% to +11%. And the **stale-text worry in
+the first commit was overstated** — a shaped run is identified by its address,
+but its own size is hashed beside its position and colour, so a false match
+needs text that shapes to the same size in the same place in the same colour.
+
+Verified by pixel against `GPUI_SCENE=off` on eight examples, four repeats:
+seven identical, and the story gallery differs on 497 pixels — 0.03%, 45 of
+them by more than a hair, all on the curve edges of icons, because a cached
+path is filled from a geometry realization and an uncached one is not.
+
+**The GPU backend stays behind `GPUI_PAINT=gpu`**, which is the other half of
+"make the fastest the default" and the half not taken. With the scene on it is
+0.13 ms a frame ahead of Direct2D on the story gallery — 5% of a frame that
+spends 2.3 ms in layout — and it differs from Direct2D on 2.74% of that page's
+pixels, every one of them text: the atlas is grayscale where DirectWrite draws
+ClearType, and glyph x is snapped where DirectWrite positions at a third of a
+pixel. That is the trade the `paintgpu.h` note already named, and 0.13 ms does
+not buy it. Where it *is* worth reaching for is a page that is mostly paths and
+mostly moving: `fps_monitor` is 0.35 ms against Direct2D's 0.91.

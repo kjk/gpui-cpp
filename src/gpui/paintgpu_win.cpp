@@ -1038,6 +1038,9 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         FreeSurfaces(t);
         t->pxW = pxW;
         t->pxH = pxH;
+        // New surfaces with nothing in them: the multisampled one a partial
+        // redraw would have built on is gone with the rest.
+        scene::Invalidate();
         if (FAILED(t->swap->ResizeBuffers(0, (UINT)pxW, (UINT)pxH,
                                           DXGI_FORMAT_UNKNOWN, 0)) ||
             !BindBack(g, t) || !MakeRenderSurfaces(g, t)) {

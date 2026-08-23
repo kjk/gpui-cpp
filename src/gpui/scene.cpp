@@ -11,6 +11,7 @@
 #include "gpui/scene.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 namespace gpui {
 
@@ -24,9 +25,17 @@ int SceneLevelOn() {
     if (env) {
         StrCopyZ(buf, (int)sizeof(buf), env);
     }
-    lvl = kSceneOff;
-    if (StrCmpI(buf, "1") == 0 || StrCmpI(buf, "replay") == 0 ||
-        StrCmpI(buf, "on") == 0) {
+    // `skip` unless told otherwise. Every level below it is a step on the
+    // way to it and none of them is what a build wants; `damage` is above it
+    // and is the one part of this that is not measured.
+    lvl = kSceneSkip;
+    if (!buf[0]) {
+        return lvl;
+    }
+    if (StrCmpI(buf, "0") == 0 || StrCmpI(buf, "off") == 0) {
+        lvl = kSceneOff;
+    } else if (StrCmpI(buf, "1") == 0 || StrCmpI(buf, "replay") == 0 ||
+               StrCmpI(buf, "on") == 0) {
         lvl = kSceneReplay;
     } else if (StrCmpI(buf, "cache") == 0) {
         lvl = kSceneCache;
@@ -34,10 +43,12 @@ int SceneLevelOn() {
         lvl = kSceneSkip;
     } else if (StrCmpI(buf, "damage") == 0) {
         lvl = kSceneDamage;
+    } else {
+        logf("paint: GPUI_SCENE=%s is not a level; leaving it at skip",
+             Str(buf));
+        return lvl;
     }
-    if (lvl != kSceneOff) {
-        logf("paint: scene layer on (GPUI_SCENE=%s)", Str(buf));
-    }
+    logf("paint: scene layer at %s (GPUI_SCENE)", Str(buf));
     return lvl;
 }
 
@@ -180,23 +191,50 @@ static const uint64_t kHashSeed = 0xcbf29ce484222325ull;
 // Everything about a primitive that decides what appears on screen. `seq` and
 // `bbox` are left out: the first is where it sat in the list, which the
 // position in the list already says, and the second is derived.
+// Two floats as one word, so the hash below runs eight bytes at a time.
+static inline uint64_t Pair(float a, float b) {
+    uint32_t x = 0, y = 0;
+    memcpy(&x, &a, 4);
+    memcpy(&y, &b, 4);
+    return ((uint64_t)y << 32) | x;
+}
+
+// Everything about a primitive that decides what appears on screen. `seq` and
+// `bbox` are left out: the first is where it sat in the list, which the
+// position in the list already says, and the second is derived.
+//
+// Ten words rather than the hundred-odd bytes they occupy, because this runs
+// over every primitive of every frame, and a byte-at-a-time FNV over a whole
+// scene is a measurable share of what the scene costs — most of it on a frame
+// where nothing can be cached, which is the one case where all of this is a
+// loss rather than a win.
 static uint64_t HashPrim(const Prim& p) {
-    uint64_t h = kHashSeed;
-    uint8_t k[4] = {p.kind, p.layer, p.flags, 0};
-    h = HashBytes(h, k, 4);
-    float f[12] = {p.g0, p.g1, p.g2,     p.g3,     p.e0,     p.e1,
-                   p.e2, p.e3, p.mask.x, p.mask.y, p.mask.w, p.mask.h};
-    h = HashBytes(h, f, (int)sizeof(f));
-    h = HashBytes(h, &p.color, (int)sizeof(p.color));
-    h = HashBytes(h, &p.color2, (int)sizeof(p.color2));
+    uint64_t w[10];
+    w[0] =
+        (uint64_t)p.kind | ((uint64_t)p.layer << 8) | ((uint64_t)p.flags << 16);
+    w[1] = Pair(p.g0, p.g1);
+    w[2] = Pair(p.g2, p.g3);
+    w[3] = Pair(p.e0, p.e1);
+    w[4] = Pair(p.e2, p.e3);
+    w[5] = Pair(p.mask.x, p.mask.y);
+    w[6] = Pair(p.mask.w, p.mask.h);
+    uint32_t c0 = 0, c1 = 0;
+    memcpy(&c0, &p.color, 4);
+    memcpy(&c1, &p.color2, 4);
+    w[7] = ((uint64_t)c1 << 32) | c0;
     // A cached shaped run keeps its address across frames, so the pointer is
     // the run's identity. A run that was dropped and whose address was reused
-    // by another would compare equal; the x, y and colour hashed beside it
-    // make that unlikely rather than impossible, and it is the one place this
-    // is a heuristic. See scene.h.
-    h = HashBytes(h, &p.ref, (int)sizeof(p.ref));
-    if (p.path >= 0 && p.path < gPaths.len) {
-        h = HashBytes(h, &gPaths[p.path].hash, 8);
+    // by another would compare equal — but the run's own size is in g2/g3
+    // above and its position and colour beside them, so the collision needs
+    // text that shapes to the same size, in the same place, in the same
+    // colour. See scene.h.
+    w[8] = (uint64_t)(uintptr_t)p.ref;
+    w[9] = (p.path >= 0 && p.path < gPaths.len) ? gPaths[p.path].hash : 0;
+    uint64_t h = kHashSeed;
+    for (int i = 0; i < 10; i++) {
+        h ^= w[i];
+        h *= 0x100000001b3ull;
+        h ^= h >> 29;
     }
     return h;
 }
@@ -697,6 +735,15 @@ static void CacheSweep() {
     }
 }
 
+void Invalidate() {
+    gPrev.Clear();
+    gHavePrev = false;
+    gPrevFrameHash = 0;
+    for (int i = 0; i < kBufferDepth; i++) {
+        gDamageRing[i] = Bounds{};
+    }
+}
+
 void Reset() {
     // The run's summary, on the way out. GPUI_FRAME_BENCH prints the same
     // counters for a benchmark, but a benchmark draws one frame over and
@@ -713,12 +760,7 @@ void Reset() {
             gCacheLive);
     }
     CacheClear();
-    gPrev.Clear();
-    gHavePrev = false;
-    gPrevFrameHash = 0;
-    for (int i = 0; i < kBufferDepth; i++) {
-        gDamageRing[i] = Bounds{};
-    }
+    Invalidate();
 }
 
 // Build a backend path out of the recorded verbs. The caller is drawing, so

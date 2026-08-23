@@ -32,6 +32,7 @@ bun cmd/build.ts -wasm system_monitor
 bun cmd/run-wasm.ts showcase
 
 GPUI_PAINT=gpu out/rel/story.exe            # the second Windows backend
+GPUI_SCENE=off out/rel/story.exe            # draw straight, without the scene
 GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
 ```
 
@@ -63,13 +64,22 @@ this tree, and `src/markdown/` parses every `TextView`. See
 These are the standing exclusions. Everything else in gpui-component is in
 scope, and a module being large or unglamorous is not a reason to skip it.
 
-- Zed's scene graph as a whole, and `async` anything. `src/gpui/paintgpu.h`
-  is the renderer half of it — one instance buffer a frame, SDF rounded rects
-  and borders, a glyph atlas, stencil-and-cover paths, which is what Blade and
-  `directx_renderer.rs` do — but it is a second Windows backend behind
-  `paint.h` rather than a scene graph: there are no layers, no batching across
-  windows, no offscreen mask cache. It is off unless `GPUI_PAINT=gpu`, and the
-  header says what it is worth and what it is short of. We do have
+- Zed's scene graph as a whole, and `async` anything. Two halves of it are
+  here and neither is the whole. `src/gpui/paintgpu.h` is the renderer half —
+  one instance buffer a frame, SDF rounded rects and borders, a glyph atlas,
+  stencil-and-cover paths, which is what Blade and `directx_renderer.rs` do —
+  and it is off unless `GPUI_PAINT=gpu`. `src/gpui/scene.h` is the collection
+  half, and it *is* on: a frame's drawing gathered as a flat array of
+  primitives, each carrying its own content mask and its layer, hashed against
+  the last frame's. What that bought was not batching, which the GPU backend
+  already did, but culling — three quarters of the story gallery's primitives
+  are masked down to nothing before they are drawn — a path-geometry cache,
+  and not drawing a frame that is identical to the one before it. What it is
+  still not: no stacking context per element, so layers are a field rather
+  than a tree; no offscreen mask cache; no batching across windows; and only
+  `paint_win.cpp` dispatches into it, so the other three backends draw the way
+  they always did. Both headers say what they are worth and what they are
+  short of, and `GPUI_SCENE=off` is how to take the scene back out. We do have
   `App`/`Window`/`Entity`/`Ctx`, actions and a keymap, `EventEmitter`, window
   subscriptions and an executor — see below — but not refcounted entities,
   observers, futures, or a `Task<T>` that cancels by being dropped.
@@ -211,6 +221,21 @@ the drawing differ, and `paint_win.cpp` hands over in one line per entry
 point. Read `src/gpui/paintgpu.h` before touching either: it has the measured
 numbers, the reason it is not the default, and the two gaps that would have to
 close first (subpixel glyph positioning, dashes on a rounded rect).
+
+### The scene
+
+`src/gpui/scene.h` sits between the element tree and `paint.h` on Windows: the
+tree's drawing is collected as a flat array of primitives rather than issued to
+a backend as it walks, and the array is then replayed through the same
+`paint.h` entry points — so both Windows backends draw it and neither can tell.
+It is on at the `skip` level; `GPUI_SCENE=off|replay|cache|skip|damage` turns it
+down, and `off` is the first thing to try if a frame ever comes out stale, since
+this is the only thing in the tree that can decide not to draw. On the story
+gallery it takes the paint phase from 1.41 ms to 0.24 on Direct2D and from 0.59
+to 0.11 on the GPU backend. It costs 11% on a scene where every primitive
+changes every frame, and 0.03% of the story's pixels, on curve edges, because a
+cached path is filled from a geometry realization. Read the header before
+touching it.
 
 `GPUI_FRAME_BENCH=<n>` draws n frames back to back and prints what each cost,
 split into building the element tree, laying it out and painting it. It is how

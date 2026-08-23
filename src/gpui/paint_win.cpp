@@ -334,6 +334,9 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
         }
         t->pxW = pxW;
         t->pxH = pxH;
+        // ResizeBuffers hands out new surfaces with nothing in them, so the
+        // frame the scene remembers is not what is on this one.
+        scene::Invalidate();
     }
     ctx->rt->rt->BeginDraw();
     ctx->rt->rt->SetTransform(D2D1::Matrix3x2F::Identity());
