@@ -54,7 +54,9 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
 
     // Default: the email options, with the primary action under them.
     El* def = StorySection(cx, "Default", nullptr);
-    El* mail = Div(a)->FlexCol()->W(kFill)->Gap(8);
+    // Rust adds the three checkboxes and the button straight to the
+    // GroupBox, so what separates them is its content pane's `gap_4`.
+    El* mail = Div(a)->FlexCol()->W(kFill)->Gap(16);
     static const char* kMail[3] = {"All activity", "Product updates",
                                    "Account activity"};
     static const char* kMailIds[3] = {"all", "news-letter", "account-activity"};
@@ -78,7 +80,7 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
 
     // Filled: two switch rows and a Save.
     El* filled = StorySection(cx, "Filled", nullptr);
-    El* activity = Div(a)->FlexCol()->W(kFill)->Gap(8);
+    El* activity = Div(a)->FlexCol()->W(kFill)->Gap(16);
     activity
         ->Child(SwitchRow(cx, StrL("Make profile private and hide activity"),
                           StrL("profile-private"), self->profilePrivate,
