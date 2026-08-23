@@ -173,11 +173,14 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
 Size TextLayoutSize(TextLayout* tl);
 void TextLayoutAddRef(TextLayout* tl);
 void TextLayoutRelease(TextLayout* tl);
-// `clip` confines the glyphs to the layout box — text_overflow: clip. That
-// box is the wrap width the layout was built with, which for a truncating
-// element is its own width.
+// `clip` cuts the run at `clipW` — GPUI's `truncate()`, which is
+// `text_overflow: Ellipsis`, so what the backend draws is the run trimmed with
+// an ellipsis rather than cut through a glyph. A non-wrapping run is shaped
+// unconstrained (see TextMeasLayout), so the width has to come with the draw:
+// the layout does not know the box it is going into. `clipW` of 0 leaves it
+// to the caller's own clip.
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip);
+                    bool clip, float clipW = 0);
 // The UTF-8 offset into `s` nearest the layout-relative point.
 int TextLayoutHitPoint(TextLayout* tl, Str s, float relX, float relY);
 // The rectangles covering UTF-8 range [u8a, u8b), one per line. Returns how

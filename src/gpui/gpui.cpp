@@ -2910,13 +2910,17 @@ static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
     }
     (void)w;
     (void)h;
-    float keyW = wrap ? (measMaxW >= 0 ? measMaxW : (w > 0 ? w : 0)) : 0;
+    // A wrapping run is shaped to the width it wraps at; a truncating one is
+    // shaped to the width it is cut at, which is what gives the backend
+    // something to put the ellipsis against. Everything else is unconstrained.
+    float keyW = wrap ? (measMaxW >= 0 ? measMaxW : (w > 0 ? w : 0))
+                      : (truncate && w > 0 ? w : 0);
     TextLayout* layout = TextMeasLayout(ctx, s, fontSize, keyW, wrap,
                                         (uint8_t)weight, lineH, nullptr);
     if (!layout) {
         return;
     }
-    TextLayoutDraw(ctx, layout, x, y, c, truncate);
+    TextLayoutDraw(ctx, layout, x, y, c, truncate, truncate ? keyW : 0.f);
     TextLayoutRelease(layout);
 }
 
@@ -3996,8 +4000,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         if (e->nSpans > 0 && e->text.s) {
             PaintTextSpans(ctx, e, font, c);
         } else if (e->laidLayout) {
-            TextLayoutDraw(ctx, e->laidLayout, e->x, e->y, c,
-                           e->style.truncate);
+            TextLayoutDraw(ctx, e->laidLayout, e->x, e->y, c, e->style.truncate,
+                           e->laidMaxW);
         } else {
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
                        e->style.truncate, e->style.wrap, e->laidMaxW,

@@ -864,7 +864,12 @@ void TextLayoutRelease(TextLayout* tl) {
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip) {
+                    bool clip, float clipW) {
+    // No ellipsis here yet: Core Text truncates through
+    // CTLineCreateTruncatedLine, which means re-typesetting the line rather
+    // than setting a mode on the layout, so a truncated run is cut at the box
+    // edge on macOS where Windows and Linux end it in one.
+    (void)clipW;
     CGContextRef cg = Cg(ctx);
     if (!cg || !tl) {
         return;

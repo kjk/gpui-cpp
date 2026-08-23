@@ -140,7 +140,7 @@ void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
 
 void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius);
 void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                 bool clip);
+                 bool clip, float clipW);
 
 // ─── what a frame cost ───────────────────────────────────────────────────
 

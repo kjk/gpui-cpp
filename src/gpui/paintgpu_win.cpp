@@ -1949,7 +1949,8 @@ struct GlyphSink : public IDWriteTextRenderer {
 };
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip) {
+                    bool clip, float clipW) {
+    (void)clipW;
     if (!T(ctx) || !tl) {
         return;
     }

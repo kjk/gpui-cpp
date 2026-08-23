@@ -603,7 +603,7 @@ void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
 }
 
 void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                 bool clip) {
+                 bool clip, float clipW) {
     Size sz = TextLayoutSize(tl);
     Prim* p = Emit(ctx, kPText, Bounds{x, y, sz.w, sz.h});
     p->g0 = x;
@@ -612,6 +612,7 @@ void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     p->g3 = sz.h;
     p->ref = tl;
     p->color = PaintFade(ctx, c);
+    p->e0 = clipW;
     if (clip) {
         p->flags |= kFClip;
     }
@@ -1114,7 +1115,7 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
                 break;
             case kPText:
                 TextLayoutDraw(ctx, (TextLayout*)p.ref, p.g0, p.g1, p.color,
-                               (p.flags & kFClip) != 0);
+                               (p.flags & kFClip) != 0, p.e0);
                 break;
             case kPPathFill:
             case kPPathGradient:

@@ -750,10 +750,20 @@ static float BoxPad(TextLayout* tl) {
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip) {
+                    bool clip, float clipW) {
     cairo_t* cr = Cr(ctx);
     if (!cr || !tl || !tl->layout) {
         return;
+    }
+    // GPUI's `truncate()` is `text_overflow: Ellipsis`. Pango does the whole
+    // of it — a width to cut at and an ellipsize mode — and both are set here
+    // rather than when the run was shaped, because a non-wrapping run is
+    // shaped unconstrained and does not know the box it lands in.
+    bool ellipsized = false;
+    if (clip && clipW > 0) {
+        pango_layout_set_width(tl->layout, (int)(clipW * PANGO_SCALE));
+        pango_layout_set_ellipsize(tl->layout, PANGO_ELLIPSIZE_END);
+        ellipsized = true;
     }
     if (clip) {
         int pw = 0, ph = 0;
@@ -769,6 +779,12 @@ void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
     pango_cairo_show_layout(cr, tl->layout);
     if (clip) {
         cairo_restore(cr);
+    }
+    // The layout is cached and may be drawn again somewhere that does not
+    // truncate, so it goes back the way it was found.
+    if (ellipsized) {
+        pango_layout_set_ellipsize(tl->layout, PANGO_ELLIPSIZE_NONE);
+        pango_layout_set_width(tl->layout, -1);
     }
 }
 

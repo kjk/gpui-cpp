@@ -103,7 +103,7 @@ void PathRealize(PaintCtx* ctx, Path* p);
 
 void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius);
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip);
+                    bool clip, float clipW);
 
 // What the last frame cost, for the benchmark harness: how many instances the
 // frame put in the buffer, how many draw calls it took, and how many glyphs

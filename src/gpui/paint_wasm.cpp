@@ -1206,7 +1206,10 @@ void TextLayoutRelease(TextLayout* tl) {
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip) {
+                    bool clip, float clipW) {
+    // No ellipsis here yet: Canvas2D has no trimming, so it would have to be
+    // measured and appended by hand. A truncated run is cut at the box edge.
+    (void)clipW;
     if (!ctx || !ctx->rt || !tl || !tl->js) {
         return;
     }

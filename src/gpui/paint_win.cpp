@@ -1410,18 +1410,36 @@ void TextLayoutRelease(TextLayout* tl) {
 }
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
-                    bool clip) {
+                    bool clip, float clipW) {
     if (scene::Recording()) {
-        scene::RecTextDraw(ctx, tl, x, y, c, clip);
+        scene::RecTextDraw(ctx, tl, x, y, c, clip, clipW);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::TextLayoutDraw(ctx, tl, x, y, c, clip);
+        gpuw::TextLayoutDraw(ctx, tl, x, y, c, clip, clipW);
         return;
     }
     ID2D1SolidColorBrush* b = Brush(ctx, c);
     if (!tl || !b) {
         return;
+    }
+    // GPUI's `truncate()` is `text_overflow: Ellipsis`, so a run that does not
+    // fit ends in one rather than being cut through a glyph. DirectWrite draws
+    // it from a trimming sign against the layout's own max width — and a
+    // non-wrapping run was shaped unconstrained, so both are set here, on the
+    // way in. The layout is drawn once per call and the width is set every
+    // time, so a run shared between a truncating cell and an untruncated one
+    // is right in both.
+    if (clip && clipW > 0) {
+        Dw(tl)->SetMaxWidth(clipW);
+        DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+        IDWriteInlineObject* sign = nullptr;
+        if (SUCCEEDED(ctx->pa->dwrite
+                          ->CreateEllipsisTrimmingSign(Dw(tl), &sign)) &&
+            sign) {
+            Dw(tl)->SetTrimming(&trim, sign);
+            sign->Release();
+        }
     }
     D2D1_DRAW_TEXT_OPTIONS opt =
         clip ? D2D1_DRAW_TEXT_OPTIONS_CLIP : D2D1_DRAW_TEXT_OPTIONS_NONE;
