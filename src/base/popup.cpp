@@ -23,6 +23,36 @@ Point PopupResolvedCorner(PopupAnchor anchor, Bounds b) {
     }
 }
 
+El* PopupPlaceContent(El* content, PopupAnchor anchor, float gap) {
+    if (!content) {
+        return content;
+    }
+    switch (anchor) {
+        case PopupAnchor::BottomLeft:
+        case PopupAnchor::BottomCenter:
+        case PopupAnchor::BottomRight:
+            content->AnchorAbove(gap);
+            break;
+        default:
+            content->AnchorBelow(gap);
+            break;
+    }
+    switch (anchor) {
+        case PopupAnchor::TopRight:
+        case PopupAnchor::BottomRight:
+            content->Right(0);
+            break;
+        case PopupAnchor::TopCenter:
+        case PopupAnchor::BottomCenter:
+            content->AnchorCenterX();
+            break;
+        default:
+            content->Left(0);
+            break;
+    }
+    return content->Fixed();
+}
+
 Popup* Popup::New(Ctx* cx, Str id, El* trigger, PopupAnchor anchor) {
     Arena* a = cx->a;
     Popup* p = ArenaNew<Popup>(a);
@@ -53,31 +83,8 @@ Popup* Popup::Content(El* content) {
     // showcase page and jump the trigger; overlaying covers it so a second
     // click cannot dismiss.
     if (!content->style.absolute) {
-        content->AnchorBelow(4);
-        // The corner the anchor names, expressed as the edge the content is
-        // pinned to: the two right-hand anchors line its right edge up with
-        // the trigger's, the centre ones centre it, and the rest hang left.
-        switch (anchor) {
-            case PopupAnchor::TopRight:
-            case PopupAnchor::BottomRight:
-                content->Right(0);
-                break;
-            case PopupAnchor::TopCenter:
-            case PopupAnchor::BottomCenter:
-                content->AnchorCenterX();
-                break;
-            default:
-                content->Left(0);
-                break;
-        }
+        PopupPlaceContent(content, anchor, 4);
     }
-    // Rust puts popover content in a deferred layer, so it draws over
-    // whatever follows the trigger in the tree rather than under it.
-    // Fixed, not merely deferred: the popup is laid out against the window
-    // the way Rust's Positioner is, so its content shapes against the
-    // viewport rather than against the trigger's width, and PlaceAnchored
-    // then puts it under the trigger and clamps it inside the window.
-    content->Fixed();
     root->Child(content);
     return this;
 }

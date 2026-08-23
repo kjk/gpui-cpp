@@ -284,6 +284,17 @@ static void MouseMove(Window* win, float x, float y) {
     WindowDispatchInput(win, &in);
 }
 
+// GPUI_HOVER_HOLD: see WM_MOUSELEAVE. Read once, since getenv is not free and
+// this is on the message path.
+static bool HoverHoldForTests() {
+    static int hold = -1;
+    if (hold < 0) {
+        const char* env = getenv("GPUI_HOVER_HOLD");
+        hold = (env && env[0] && env[0] != '0') ? 1 : 0;
+    }
+    return hold != 0;
+}
+
 static void MouseExited(Window* win) {
     MouseButton pressed = MouseButton::Left;
     bool any = PressedButton(&pressed);
@@ -487,7 +498,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             return 0;
         }
         case WM_MOUSELEAVE:
-            MouseExited(win);
+            // GPUI_HOVER_HOLD=1 ignores it, the way GPUI_TODAY pins the date:
+            // a session that will not let SetCursorPos move the pointer —
+            // locked, or a CI agent — answers every synthetic WM_MOUSEMOVE
+            // with a leave, so no hover state ever lasts long enough to be
+            // photographed. Nothing but a screenshot tool sets it.
+            if (!HoverHoldForTests()) {
+                MouseExited(win);
+            }
             return 0;
         case WM_NCMOUSEMOVE: {
             // The title bar's own cells answer WM_NCHITTEST as HTMINBUTTON,

@@ -1,20 +1,16 @@
 /* Themed hover card — crates/ui/src/hover_card.rs */
 
 #include "ui/sizing.h"
+#include "base/popup.h"
 
 namespace gpui {
 
 namespace component {
 
 // HoverCard::anchor: which corner of the trigger the card hangs off.
-enum class HoverCardAnchor : uint8_t {
-    BottomLeft,
-    BottomCenter,
-    BottomRight,
-    TopLeft,
-    TopCenter,
-    TopRight
-};
+// HoverCard::anchor is `gpui::Anchor`, the same one the Popover takes, so it
+// is the same enum here rather than a second one with the corners reordered.
+using HoverCardAnchor = PopupAnchor;
 
 // Whether the card of this id is showing. The delayed open and close live in
 // gpui_base::HoverCardState, keyed off the id the way Rust keys it off
@@ -33,7 +29,8 @@ struct HoverCard {
     bool open = false;
     int openDelayMs = 600;
     int closeDelayMs = 300;
-    HoverCardAnchor anchor = HoverCardAnchor::BottomLeft;
+    // hover_card.rs: `anchor: Anchor::TopCenter`.
+    HoverCardAnchor anchor = HoverCardAnchor::TopCenter;
 
     static HoverCard* New(Ctx* cx);
     static HoverCard* New(Ctx* cx, Str id);

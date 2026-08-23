@@ -4161,17 +4161,28 @@ void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
         return;
     }
     const Theme& th = ThemeNow();
-    Size sz = MeasureText(ctx, tip->text, 12, 280);
+    // tooltip.rs: the popover surface with the theme border round it, not a
+    // dark plate — `bg(tokens.popover).text_color(popover_foreground)
+    // .border_1().border_color(border).rounded(6).py_0p5().px_2().text_sm()`.
+    // The port painted it in `foreground` on `background`, which reads as an
+    // inverted chip in either theme.
+    const float kPadX = 8.f, kPadY = 2.f, kBorder = 1.f;
+    Size sz = MeasureText(ctx, tip->text, 14, 280);
     // TooltipPositioner: the shared positioner's side placement, with no
-    // preferred side (which prefers above), centered on the trigger, no
-    // gap, and the window margin.
-    Positioned at = PositionSide(tip->triggerBounds, {sz.w + 16, sz.h + 10},
-                                 {ctx->viewW, ctx->viewH}, kPopupMargin,
-                                 nullptr, PopupAlign::Center, 0);
+    // preferred side (which prefers above), centered on the trigger, the
+    // window margin, and `m_3` of clearance from the trigger itself.
+    Positioned at = PositionSide(
+        tip->triggerBounds,
+        {sz.w + kPadX * 2 + kBorder * 2, sz.h + kPadY * 2 + kBorder * 2},
+        {ctx->viewW, ctx->viewH}, kPopupMargin, nullptr, PopupAlign::Center,
+        10.f);
     FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
-              th.foreground);
-    DrawTextAt(ctx, tip->text, at.bounds.x + 8, at.bounds.y + 5, sz.w + 4, sz.h,
-               12, th.background, false);
+              th.background);
+    DrawRoundStroke(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
+                    kBorder, th.border);
+    DrawTextAt(ctx, tip->text, at.bounds.x + kPadX + kBorder,
+               at.bounds.y + kPadY + kBorder, sz.w + 4, sz.h, 14, th.foreground,
+               false);
 }
 
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {

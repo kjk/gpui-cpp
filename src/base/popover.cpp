@@ -114,35 +114,11 @@ Popover* Popover::Content(El* content) {
         // not cut by an ancestor's overflow. The port had it absolute at a
         // hard-coded `top: 28`, in flow, and so clipped by the section it
         // was in and mispositioned under any trigger that was not 28 tall.
-        // Where it hangs, which is what `Positioner::corner` works out: the
-        // Top anchors put it under the trigger and the Bottom ones over it,
-        // and the horizontal half of the name is the edge they line up on.
-        switch (anchor) {
-            case PopupAnchor::BottomLeft:
-            case PopupAnchor::BottomCenter:
-            case PopupAnchor::BottomRight:
-                content->AnchorAbove(4);
-                break;
-            default:
-                content->AnchorBelow(4);
-                break;
-        }
-        switch (anchor) {
-            case PopupAnchor::TopRight:
-            case PopupAnchor::BottomRight:
-                content->Right(0);
-                break;
-            case PopupAnchor::TopCenter:
-            case PopupAnchor::BottomCenter:
-                content->AnchorCenterX();
-                break;
-            default:
-                content->Left(0);
-                break;
-        }
+        // Where it hangs, which is what `Positioner::corner` works out.
+        PopupPlaceContent(content, anchor, 4);
         // track_focus, not focus_ring_style: the surface takes focus and
         // does not draw a ring around itself for it.
-        content->FocusId(focusId)->FocusRing(false)->Fixed();
+        content->FocusId(focusId)->FocusRing(false);
         root->Child(content);
     }
     return this;

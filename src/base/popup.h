@@ -24,6 +24,15 @@ enum class PopupAnchor : uint8_t {
 // starts where the trigger ends rather than where it began.
 Point PopupResolvedCorner(PopupAnchor anchor, Bounds triggerBounds);
 
+// Where a popup's content hangs off its trigger, as the insets PlaceAnchored
+// reads: the Top anchors put it under the trigger and the Bottom ones over
+// it, and the second half of the name is the edge the two line up on. Every
+// anchored surface — the Popup, the Popover, the HoverCard — goes through
+// this so the six corners cannot drift apart between them. `Fixed` is what
+// makes the content lay out against the window the way Rust's Positioner
+// does, rather than inside the trigger.
+El* PopupPlaceContent(El* content, PopupAnchor anchor, float gap);
+
 struct Popup {
     El* root = nullptr;
     // Where the content hangs. Rust defaults to TopLeft, and so does this.

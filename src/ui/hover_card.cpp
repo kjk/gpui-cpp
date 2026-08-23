@@ -61,30 +61,10 @@ El* HoverCard::IntoEl() {
     bool isOpen = controlled ? open : HoverCardIsOpen(cx, st);
     El* card = isOpen ? content : nullptr;
     if (card) {
-        // The base card hangs bottom-left; the other five corners place
-        // themselves. Deferred, so it draws over what follows it.
-        const float kGap = 4.f;
-        switch (anchor) {
-            case HoverCardAnchor::BottomCenter:
-                card->AnchorBelow(kGap)->AnchorCenterX();
-                break;
-            case HoverCardAnchor::BottomRight:
-                card->AnchorBelow(kGap)->Right(0);
-                break;
-            case HoverCardAnchor::TopLeft:
-                card->AnchorAbove(kGap)->Left(0);
-                break;
-            case HoverCardAnchor::TopCenter:
-                card->AnchorAbove(kGap)->AnchorCenterX();
-                break;
-            case HoverCardAnchor::TopRight:
-                card->AnchorAbove(kGap)->Right(0);
-                break;
-            default:
-                card->AnchorBelow(kGap)->Left(0);
-                break;
-        }
-        card->Deferred();
+        // The six corners are the popup's own, so the placement is too: Top*
+        // under the trigger, Bottom* over it, and fixed so the card shapes
+        // against the window and is clamped into it.
+        PopupPlaceContent(card, anchor, 4);
     }
     return gpui::HoverCard::New(cx, cardId, st)
         ->Trigger(trigger)

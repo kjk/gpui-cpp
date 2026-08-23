@@ -8,6 +8,16 @@
 //   bun cmd/compare-ui.ts menu click:120,200 shot:open
 //   bun cmd/compare-ui.ts -nobuild select click:200,180 shot:open key:40 key:13 shot:picked
 //
+// A caveat on `hover:`. A hover state needs the real pointer inside the
+// window, and a session that refuses SetCursorPos — locked, or a CI agent —
+// will not put it there: every synthetic WM_MOUSEMOVE is answered with a
+// WM_MOUSELEAVE. The app is launched with GPUI_HOVER_HOLD=1, which makes it
+// ignore the leave, and the steps below keep re-sending the move; even so,
+// what PrintWindow reads back for a GPU-composited window can be the frame
+// before the hover on such a session. Hover comparisons are reliable on an
+// interactive desktop and only there. Clicks, keys and the wheel are not
+// affected — they change state rather than a transient.
+//
 // Steps, applied left to right, to each app in turn (so a hover step can own
 // the one real cursor the desktop has):
 //
@@ -65,6 +75,7 @@ const WM_MOUSEMOVE = 0x0200;
 const WM_LBUTTONDOWN = 0x0201;
 const WM_LBUTTONUP = 0x0202;
 const WM_MOUSEWHEEL = 0x020a;
+const WM_PAINT = 0x000f;
 
 const VK_CONTROL = 0x11;
 const VK_SHIFT = 0x10;
@@ -143,18 +154,48 @@ function parseStep(raw: string): Step {
   }
 }
 
+// Where a `hover:` step left the pointer. SetCursorPos is refused on a
+// locked or non-interactive desktop, so the real pointer may be nowhere near
+// the window and Windows answers our synthetic move with a WM_MOUSELEAVE that
+// takes the hover straight back off. Re-sending the move while we wait, and
+// again just before the shutter, is what keeps a hover state up long enough
+// to be photographed. The Rust app happens not to need it; ours does, and a
+// tool that only works on one of the two is no use for comparing them.
+let lastHover: { x: number; y: number } | null = null;
+
+async function holdHover(hwnd: number, ms: number): Promise<void> {
+  if (!lastHover) {
+    await sleep(ms);
+    return;
+  }
+  // A tight cadence, not a lazy one: each synthetic move re-arms
+  // TrackMouseEvent, Windows answers it with a WM_MOUSELEAVE because the real
+  // pointer is elsewhere, and the window repaints without the hover. Moving
+  // again every few milliseconds keeps the hovered frame the one on screen
+  // most of the time, which is what the shutter needs.
+  const step = 8;
+  for (let left = ms; left > 0; left -= step) {
+    sendMessage(hwnd, WM_MOUSEMOVE, 0, packCoords(lastHover.x, lastHover.y));
+    await sleep(Math.min(step, left));
+  }
+}
+
 async function applyStep(hwnd: number, s: Step, shot: (name: string) => void): Promise<void> {
   switch (s.kind) {
     case "click":
+      lastHover = null;
       await (s.right ? rightClickClient(hwnd, s.x, s.y, 250) : clickClient(hwnd, s.x, s.y, 250));
       return;
     case "move":
       sendMessage(hwnd, WM_MOUSEMOVE, 0, packCoords(s.x, s.y));
       await sleep(150);
       return;
-    case "hover":
-      await hoverClient(hwnd, s.x, s.y, 300);
+    case "hover": {
+      lastHover = { x: s.x, y: s.y };
+      await hoverClient(hwnd, s.x, s.y, 0);
+      await holdHover(hwnd, 300);
       return;
+    }
     case "drag": {
       sendMessage(hwnd, WM_LBUTTONDOWN, 1, packCoords(s.x1, s.y1));
       await sleep(60);
@@ -206,9 +247,18 @@ async function applyStep(hwnd: number, s: Step, shot: (name: string) => void): P
       await sleep(120);
       return;
     case "wait":
-      await sleep(s.ms);
+      await holdHover(hwnd, s.ms);
       return;
     case "shot":
+      if (lastHover) {
+        // Move, paint, and shoot with nothing in between: a sent message is
+        // delivered ahead of a posted one, so the frame the paint draws still
+        // has the hover on it, where a sleep here would let the leave through
+        // first.
+        sendMessage(hwnd, WM_MOUSEMOVE, 0, packCoords(lastHover.x, lastHover.y));
+        sendMessage(hwnd, WM_PAINT, 0, 0);
+        await sleep(200);
+      }
       shot(s.name);
       return;
   }
@@ -278,6 +328,11 @@ const cppProc = Bun.spawn([cppExe, `-gpui-window=${half.x},${half.y},${half.w},$
   cwd: join(root, "out", debug ? "dbg" : "rel"),
   stdout: "ignore",
   stderr: "ignore",
+  // See the note on `half`: on a session that refuses SetCursorPos the real
+  // pointer cannot be put inside the window, so every synthetic move is
+  // answered with a WM_MOUSELEAVE and no hover survives. This tells the app
+  // to ignore the leave.
+  env: { ...process.env, GPUI_HOVER_HOLD: "1" },
 });
 const rustHwnd = await waitForPidWindow(rustProc.pid ?? 0, 30000);
 const cppHwnd = await waitForPidWindow(cppProc.pid ?? 0, 15000);
@@ -285,6 +340,8 @@ if (!rustHwnd || !cppHwnd) {
   await Promise.all([killAndWait(rustProc), killAndWait(cppProc)]);
   die(`window did not appear (rust=${!!rustHwnd} cpp=${!!cppHwnd})`);
 }
+// Halves, not one on top of the other: a fully occluded window composited by
+// the GPU photographs black, whatever DWM is holding for it.
 placeOnWorkAreaHalf(rustHwnd, "left");
 placeOnWorkAreaHalf(cppHwnd, "right");
 await sleep(600);
@@ -293,6 +350,7 @@ await sleep(600);
 // an app that only repaints when it is active would otherwise be photographed
 // mid-nap.
 async function drive(hwnd: number, tag: "rust" | "cpp"): Promise<void> {
+  lastHover = null;
   setForegroundWindow(hwnd);
   await waitForForeground(hwnd, 3000);
   await sleep(400);
@@ -313,6 +371,5 @@ console.log(`
 const wa = getWorkArea();
 setCursorPos(wa.left + 4, wa.top + 4);
 await drive(rustHwnd, "rust");
-setCursorPos(wa.left + 4, wa.top + 4);
 await drive(cppHwnd, "cpp");
 await Promise.all([killAndWait(rustProc), killAndWait(cppProc)]);
