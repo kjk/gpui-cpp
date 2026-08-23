@@ -3247,11 +3247,20 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         ChartDomain(c, &lo, &hi);
         float cx = x + w * 0.5f;
         float cy = y + h * 0.5f;
-        float radius = (w < h ? w : h) * 0.5f - 16.f;
-        // outer_radius(..): a chart whose labels need more room pulls the
-        // ring in rather than letting them run off the card.
-        if (c.radarRadius > 0 && c.radarRadius < radius) {
+        // resolve_outer_radius: two fifths of the box's height, and the
+        // caller's own radius where it gave one.
+        float radius = h * 0.4f;
+        if (c.radarRadius > 0) {
             radius = c.radarRadius;
+        }
+        // "The domain includes zero so non-negative data starts at the
+        // center" — radar_chart.rs chains a zero into the scale's domain, so
+        // the smallest value is a short spoke rather than a point on the hub.
+        if (lo > 0) {
+            lo = 0;
+        }
+        if (hi < 0) {
+            hi = 0;
         }
         if (radius < 8) {
             return;
@@ -3320,12 +3329,26 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             }
         }
         if (c.labels && !c.overlay) {
+            // label_anchor: the label ring is DEFAULT_LABEL_GAP past the
+            // outer one, and a label takes its alignment from the side it is
+            // on — left of the anchor going left, right of it going right,
+            // and centred at twelve and six o'clock.
+            const float kLabelGap = 10.f;
             for (int i = 0; i < n; i++) {
                 float a = -1.5707963f + 6.2831853f * (float)i / (float)n;
-                float px = cx + (radius + 12.f) * cosf(a);
-                float py = cy + (radius + 12.f) * sinf(a);
-                DrawTextAt(ctx, Str(c.labels[i]), px - 24, py - 6, 48, 14, 10,
-                           th.mutedFg, false);
+                float dx = cosf(a);
+                float px = cx + (radius + kLabelGap) * dx;
+                float py = cy + (radius + kLabelGap) * sinf(a);
+                Str label = Str(c.labels[i]);
+                float tw = MeasureText(ctx, label, 10, 0).w;
+                float tx = px;
+                if (dx < -1e-3f) {
+                    tx = px - tw;
+                } else if (dx <= 1e-3f) {
+                    tx = px - tw * 0.5f;
+                }
+                DrawTextAt(ctx, label, tx, py - 5.f, tw, 14, 10, th.mutedFg,
+                           false);
             }
         }
         return;
