@@ -93,7 +93,9 @@ void VirtualListStory::OnScroll(VirtualListStory* self, Ctx* cx,
 // of numbered cells after it.
 static int gVlColumns = 7;
 
-static El* VlRow(Arena* a, int ix) {
+static El* VlRow(Ctx* cx, int ix) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->Gap(4)->ItemsCenter()->H(kRowH);
     for (int c = 0; c < gVlColumns && c < 7; c++) {
         Str label =
@@ -104,7 +106,8 @@ static El* VlRow(Arena* a, int ix) {
                        ->H(kCellH)
                        ->ItemsCenter()
                        ->JustifyCenter()
-                       ->Bg(RgbaHex(0xf1f5f9ff))
+                       // `.bg(cx.theme().secondary)`, not a hard-coded slate.
+                       ->Bg(th.tokens.secondary)
                        ->Child(TextEl(a, label)->Font(14)));
     }
     return row;
@@ -163,12 +166,6 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
-    // The rows the last layout built, which is the range the list reports.
-    page->Child(StoryTxt(
-        cx,
-        StoryFmt(cx, "Visible: %d..%d", self->visible.first, self->visible.end),
-        16, th.foreground));
-
     gVlColumns = kVlColumns[self->dataset];
     int rows = kVlRows[self->dataset];
     float viewH = win.dipH - 280;
@@ -181,6 +178,13 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
                    ->Row(VlRow)
                    ->IntoEl();
     self->visible = VirtualListHandleRange(&self->handle, nullptr, rows, kRowH);
+    // The range the list reports, read after it was built rather than before:
+    // a page rendered once — which is what a screenshot catches — would
+    // otherwise show the 0..0 it started at.
+    page->Child(StoryTxt(
+        cx,
+        StoryFmt(cx, "Visible: %d..%d", self->visible.first, self->visible.end),
+        16, th.foreground));
     page->Child(Div(a)
                     ->FlexCol()
                     ->W(kFill)

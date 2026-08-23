@@ -41,7 +41,7 @@ VirtualList* VirtualList::Scroll(int sid, Listener l) {
     onScroll = l;
     return this;
 }
-VirtualList* VirtualList::Row(El* (*fn)(Arena*, int)) {
+VirtualList* VirtualList::Row(El* (*fn)(Ctx*, int)) {
     row = fn;
     return this;
 }
@@ -71,7 +71,7 @@ El* VirtualList::IntoEl() {
     }
     for (int ix = first; ix < range.end; ix++) {
         if (row) {
-            list->Child(row(a, ix));
+            list->Child(row(cx, ix));
         } else {
             float h = sizes ? sizes[ix] : rowH;
             list->Child(Div(a)->H(h)->PadX(8)->ItemsCenter()->Child(

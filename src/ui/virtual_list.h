@@ -22,7 +22,7 @@ struct VirtualList {
     // handle rather than from `scrollY`.
     VirtualListScrollHandle* handle = nullptr;
     Listener onRenderRow; // not used; rows built here
-    El* (*row)(Arena* a, int ix) = nullptr;
+    El* (*row)(Ctx* cx, int ix) = nullptr;
     // The scroll id and the listener a scrolled list needs to hear the wheel.
     int scrollId = 0;
     Listener onScroll = {};
@@ -35,7 +35,9 @@ struct VirtualList {
     VirtualList* Sizes(const float* v);
     VirtualList* Handle(VirtualListScrollHandle* h);
     VirtualList* Scroll(int id, Listener onScroll);
-    VirtualList* Row(El* (*fn)(Arena*, int));
+    // The row builder. Rust's is a closure that captured `cx`, so this takes
+    // one: a row that reads the theme has no other way to.
+    VirtualList* Row(El* (*fn)(Ctx*, int));
     El* IntoEl();
 };
 
