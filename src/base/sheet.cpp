@@ -47,9 +47,13 @@ Sheet* Sheet::Trap(Str name) {
 
 Sheet* Sheet::Surface(El* surface) {
     if (surface) {
+        // focus_handle(self.focus_handle): the surface itself is where the
+        // focus goes when the sheet opens — not a tab stop, so Tab still
+        // visits the controls in it rather than the box around them, and no
+        // ring lands on whichever one happens to be first.
         int id = FocusTrapId(trap);
-        surface->TrapId(id);
-        FocusTrapArm(cx->win, id);
+        surface->TrapId(id)->FocusId(id)->TabStop(false)->FocusRing(false);
+        FocusTrapArm(cx->win, id, id);
         root->Child(surface);
     }
     return this;

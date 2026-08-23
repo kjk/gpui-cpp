@@ -24,6 +24,13 @@ struct Sheet {
     SheetPlacement placement = SheetPlacement::Right;
     bool overlay = true;
     El* body = nullptr;
+    // footer(): a row under the body, ruled off from it.
+    El* footer = nullptr;
+    // overflow_y_scrollbar() on the body: the offset is the caller's, the way
+    // any scrolling box's is here.
+    float scrollY = 0;
+    int scrollId = 0;
+    Listener onScroll;
     Listener onClose;
 
     static Sheet* New(Ctx* cx);
@@ -33,6 +40,8 @@ struct Sheet {
     Sheet* Overlay(bool v);
     Sheet* Open(bool v);
     Sheet* Body(El* e);
+    Sheet* Footer(El* e);
+    Sheet* Scroll(int id, float y, Listener fn);
     Sheet* OnClose(Listener fn);
     El* IntoEl(WinSize size);
 };

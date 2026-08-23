@@ -1,5 +1,60 @@
 #include "Story.h"
 
+// The list the sheet holds, which is sheet_story.rs's own.
+static const char* const kSheetFoods[] = {
+    "Baguette (France)",
+    "Baklava (Turkey)",
+    "Beef Wellington (UK)",
+    "Biryani (India)",
+    "Borscht (Ukraine)",
+    "Bratwurst (Germany)",
+    "Bulgogi (Korea)",
+    "Burrito (USA)",
+    "Ceviche (Peru)",
+    "Chicken Tikka Masala (India)",
+    "Churrasco (Brazil)",
+    "Couscous (North Africa)",
+    "Croissant (France)",
+    "Dim Sum (China)",
+    "Empanada (Argentina)",
+    "Fajitas (Mexico)",
+    "Falafel (Middle East)",
+    "Feijoada (Brazil)",
+    "Fish and Chips (UK)",
+    "Fondue (Switzerland)",
+    "Goulash (Hungary)",
+    "Haggis (Scotland)",
+    "Kebab (Middle East)",
+    "Kimchi (Korea)",
+    "Lasagna (Italy)",
+    "Maple Syrup Pancakes (Canada)",
+    "Moussaka (Greece)",
+    "Pad Thai (Thailand)",
+    "Paella (Spain)",
+    "Pancakes (USA)",
+    "Pasta Carbonara (Italy)",
+    "Pavlova (Australia)",
+    "Peking Duck (China)",
+    "Pho (Vietnam)",
+    "Pierogi (Poland)",
+    "Pizza (Italy)",
+    "Poutine (Canada)",
+    "Pretzel (Germany)",
+    "Ramen (Japan)",
+    "Rendang (Indonesia)",
+    "Sashimi (Japan)",
+    "Satay (Indonesia)",
+    "Shepherd's Pie (Ireland)",
+    "Sushi (Japan)",
+    "Tacos (Mexico)",
+    "Tandoori Chicken (India)",
+    "Tortilla (Spain)",
+    "Tzatziki (Greece)",
+    "Wiener Schnitzel (Austria)",
+};
+static const int kSheetFoodCount =
+    (int)(sizeof(kSheetFoods) / sizeof(kSheetFoods[0]));
+
 enum {
     SheetLeft = 0,
     SheetTop,
@@ -19,11 +74,38 @@ struct SheetStory {
     bool overlay = true;
     bool overlayClosable = true;
     InputState focusInput;
+    // The three fields the sheet itself holds: a name, a birthday and the
+    // query over the food list.
+    InputState nameInput;
+    InputState foodSearch;
+    LocalDate birthday = {};
+    bool birthdayOpen = false;
+    Entity<ListState> foods = {};
+    int confirmedFood = -1;
+    float sheetScrollY = 0;
     StoryToolbarState toolbar;
     bool seeded = false;
 
     static El* Render(SheetStory* self, Ctx* cx);
 };
+
+// The rows the food list builds: the name, and a ghost heart after it.
+static component::ListItem* SheetFoodRow(Ctx* cx, void* data, int, int row,
+                                         int entry) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    SheetStory* self = (SheetStory*)data;
+    El* line =
+        Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter()->JustifyBetween();
+    line->Child(StoryTxt(cx, Str(kSheetFoods[row]), 16, th.foreground));
+    line->Child(component::Button::New(cx, StrL("like"))
+                    ->Ghost()
+                    ->Size(18)
+                    ->Icon(IconName::Heart)
+                    ->IntoEl());
+    return component::ListItem::New(cx, line)
+        ->Confirmed(self->confirmedFood == entry);
+}
 
 static void SheetToolbarAct(SheetStory* self, Ctx* cx, const ClickEvent*,
                             intptr_t act) {
@@ -44,11 +126,46 @@ static void OpenSheet(SheetStory* self, Ctx* cx, const ClickEvent*,
 }
 static void CloseSheet(SheetStory* self, Ctx* cx, const ClickEvent*) {
     self->open = SheetNone;
+    self->sheetScrollY = 0;
     Notify(cx);
 }
+static void OnSheetScroll(SheetStory* self, Ctx* cx, const ScrollEvent* ev) {
+    self->sheetScrollY = ev->offsetY;
+    Notify(cx);
+}
+static void SheetBlurAll(SheetStory* self) {
+    self->focusInput.focused = false;
+    self->nameInput.focused = false;
+    self->foodSearch.focused = false;
+}
 static void FocusSheetInput(SheetStory* self, Ctx* cx, const ClickEvent*) {
+    SheetBlurAll(self);
     self->focusInput.focused = true;
     Notify(cx);
+}
+static void FocusSheetName(SheetStory* self, Ctx* cx, const ClickEvent*) {
+    SheetBlurAll(self);
+    self->nameInput.focused = true;
+    Notify(cx);
+}
+static void FocusSheetSearch(SheetStory* self, Ctx* cx, const ClickEvent*) {
+    SheetBlurAll(self);
+    self->foodSearch.focused = true;
+    Notify(cx);
+}
+static void ToggleSheetBirthday(SheetStory* self, Ctx* cx, const ClickEvent*) {
+    self->birthdayOpen = !self->birthdayOpen;
+    Notify(cx);
+}
+static void PickSheetBirthday(SheetStory* self, Ctx* cx, const ClickEvent*,
+                              intptr_t day) {
+    self->birthday.day = (int)day;
+    self->birthdayOpen = false;
+    Notify(cx);
+}
+// push_notification("Hello this is message from Sheet.")
+static void SheetNotify(SheetStory*, Ctx* cx, const ClickEvent*) {
+    StoryPushNotification(cx, StrL("Hello this is message from Sheet."));
 }
 
 El* SheetStory::Render(SheetStory* self, Ctx* cx) {
@@ -59,9 +176,16 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
         self->seeded = true;
         InputSetPlaceholder(&self->focusInput,
                             StrL("For test focus back on dialog close."));
+        InputSetPlaceholder(&self->nameInput, StrL("Your Name"));
+        InputSetPlaceholder(&self->foodSearch, StrL("Search..."));
+        self->foods = EntityNewState<ListState>(cx->app);
     }
     if (self->focusInput.focused) {
         cx->win->input = &self->focusInput;
+    } else if (self->nameInput.focused) {
+        cx->win->input = &self->nameInput;
+    } else if (self->foodSearch.focused) {
+        cx->win->input = &self->foodSearch;
     }
     Listener open = Listen(cx, &OpenSheet);
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
@@ -124,30 +248,88 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
             : self->open == SheetTop    ? component::SheetPlacement::Top
             : self->open == SheetBottom ? component::SheetPlacement::Bottom
                                         : component::SheetPlacement::Right;
-        El* body = Div(a)->FlexCol()->Gap(8)->W(kFill);
+        El* body = Div(a)->FlexCol()->Gap(12)->W(kFill)->H(kFill);
+        El* footer = nullptr;
         if (self->open == SheetScrollable) {
-            // "This is a scrollable sheet." repeated past the sheet height.
-            for (int i = 0; i < 20; i++) {
+            // One block of text repeated a hundred and fifty times, so the
+            // lines sit on their own leading and nothing else.
+            body->Gap(0);
+            for (int i = 0; i < 150; i++) {
                 body->Child(StoryTxt(cx, StrL("This is a scrollable sheet."),
-                                     14, th.foreground));
+                                     16, th.foreground));
             }
         } else {
-            body->Child(StoryTxt(cx,
-                                 StrL("This is a sheet, you can put any "
-                                      "content here."),
-                                 14, th.foreground)
-                            ->Wrap());
+            body->Child(
+                component::Input::New(cx, StrL("sheet-name"), &self->nameInput)
+                    ->OnFocus(Listen(cx, &FocusSheetName))
+                    ->IntoEl());
+            body->Child(component::DatePicker::New(cx)
+                            ->Year(self->birthday.year)
+                            ->Month(self->birthday.month)
+                            ->Day(self->birthday.day)
+                            ->Placeholder(StrL("Date of Birth"))
+                            ->W(kFill)
+                            ->Open(self->birthdayOpen)
+                            ->OnToggle(Listen(cx, &ToggleSheetBirthday))
+                            ->OnDay(Listen(cx, &PickSheetBirthday))
+                            ->IntoEl());
+            body->Child(component::Button::New(cx, StrL("send-notification"))
+                            ->Label(StrL("Test Notification"))
+                            ->OnClick(Listen(cx, &SheetNotify))
+                            ->IntoEl());
+            body->Child(
+                component::Button::New(cx, StrL("confirm-dialog-from-sheet"))
+                    ->Label(StrL("Open Confirm Dialog"))
+                    ->IntoEl());
+            // List::new(&list).border_1().rounded(radius), searchable.
+            int counts[1] = {kSheetFoodCount};
+            component::List* list =
+                component::List::New(cx, StrL("sheet-foods"), self->foods)
+                    ->Items(self, &SheetFoodRow)
+                    ->Searchable(&self->foodSearch,
+                                 Listen(cx, &FocusSheetSearch))
+                    // The list virtualizes against a height it is told, so
+                    // it is what the sheet has left over its four controls
+                    // and the footer under them.
+                    ->H(size.dipH - 272);
+            list->Sections(counts, 1);
+            body->Child(list->IntoEl()
+                            ->Flex1()
+                            ->MinH(0)
+                            ->Border(1, th.border)
+                            ->Radius(th.radius));
+            footer = Div(a)->FlexRow()->Gap(24)->ItemsCenter();
+            footer->Child(component::Button::New(cx, StrL("confirm"))
+                              ->Primary()
+                              ->Label(StrL("Confirm"))
+                              ->OnClick(Listen(cx, &CloseSheet))
+                              ->IntoEl());
+            footer->Child(component::Button::New(cx, StrL("cancel"))
+                              ->Label(StrL("Cancel"))
+                              ->OnClick(Listen(cx, &CloseSheet))
+                              ->IntoEl());
         }
-        page->Child(component::Sheet::New(cx)
-                        ->Open(true)
-                        ->Title(self->open == SheetScrollable
-                                    ? StrL("Scrollable Sheet")
-                                    : StrL("Sheet Title"))
-                        ->Placement(placement)
-                        ->Overlay(self->overlay)
-                        ->Body(body)
-                        ->OnClose(Listen(cx, &CloseSheet))
-                        ->IntoEl(size));
+        component::Sheet* sheet =
+            component::Sheet::New(cx)
+                ->Open(true)
+                ->Title(self->open == SheetScrollable ? StrL("Scrollable Sheet")
+                                                      : StrL("Sheet Title"))
+                ->Placement(placement)
+                // open_sheet_at: 400 along a side, 540 top or bottom. The
+                // scrollable one asks for nothing and keeps the default.
+                ->Size(self->open == SheetScrollable ? 350.f
+                       : (placement == component::SheetPlacement::Left ||
+                          placement == component::SheetPlacement::Right)
+                           ? 400.f
+                           : 540.f)
+                ->Overlay(self->overlay)
+                ->Body(body)
+                ->Scroll(7, self->sheetScrollY, Listen(cx, &OnSheetScroll))
+                ->OnClose(Listen(cx, &CloseSheet));
+        if (footer) {
+            sheet->Footer(footer);
+        }
+        page->Child(sheet->IntoEl(size));
     }
     return page;
 }
