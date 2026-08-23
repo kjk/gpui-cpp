@@ -293,6 +293,10 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                         IconEl(a, IconName::Search, 16)->Fg(th.mutedFg)))
                     ->OnFocus(Listen(cx, &FocusFilter))
                     ->IntoEl());
+    // The categories stack with nothing between them — the `gap_2` above is
+    // between the query field and the list, not between two rows of it.
+    El* cats = Div(a)->FlexCol()->W(kFill);
+    left->Child(cats);
     Listener toggleGroup = Listen(cx, &ToggleColorGroup);
     int groupIx = 0;
     for (int i = 0; i < nRows;) {
@@ -317,7 +321,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                 ->Fg(th.mutedFg));
         head->Click(HashClickId(StoryFmt(cx, "theme-group-%d", groupIx)))
             ->OnClick(ListenerArg(toggleGroup, groupIx));
-        left->Child(head);
+        cats->Child(head);
         if (open) {
             // The rows sit under a rail, indented from the group.
             El* items = Div(a)->FlexRow()->W(kFill)->PadL(12);
@@ -341,7 +345,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                                ->Border(1, th.border));
                 itemCol->Child(row);
             }
-            left->Child(items);
+            cats->Child(items);
         }
         i = end;
         groupIx++;
