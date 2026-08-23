@@ -2,7 +2,7 @@
 
 static const char* kVlDatasets[] = {"Standard", "Wide", "Stress", "Short"};
 // How many rows each dataset has, and how many columns a row shows.
-static const int kVlRows[] = {500, 500, 50000, 20};
+static const int kVlRows[] = {5000, 100, 500000, 5};
 static const int kVlColumns[] = {30, 100, 100, 10};
 static const char* kVlAxes[] = {"Both", "Vertical", "Horizontal"};
 
@@ -38,6 +38,11 @@ static const VlScrollBtn kVlScrollBtns[] = {
 
 struct VirtualListStory {
     int dataset = 0;
+    // change_test_cases has not run yet, so the list starts on the state the
+    // story was built with — five thousand rows of a hundred columns — even
+    // though the toolbar already reads Standard.
+    int rows = 5000;
+    int columns = 100;
     int axis = 0;
     int openMenu = 0;
     // The handle the page holds: Rust's VirtualListScrollHandle, which is
@@ -46,6 +51,9 @@ struct VirtualListStory {
     VirtualListScrollHandle handle = {};
     // The rows the last layout built, which is what the page reports.
     VirtualRange visible = {};
+    // The sideways offset, which the list keeps for itself: the handle is
+    // the vertical one only.
+    float scrollX = 0;
 
     static El* Render(VirtualListStory* self, Ctx* cx);
     static void OnScroll(VirtualListStory* self, Ctx* cx,
@@ -63,6 +71,8 @@ static void VlMenuAct(VirtualListStory* self, Ctx* cx, const ClickEvent*,
         self->axis = (int)(act - VlActAxis);
     } else if (act >= VlActDataset) {
         self->dataset = (int)(act - VlActDataset);
+        self->rows = kVlRows[self->dataset];
+        self->columns = kVlColumns[self->dataset];
     }
     // Anything below either base — ToolbarCloseAll — names no row and only
     // wants the menu shut.
@@ -86,6 +96,7 @@ static void VlScrollTo(VirtualListStory* self, Ctx* cx, const ClickEvent*,
 void VirtualListStory::OnScroll(VirtualListStory* self, Ctx* cx,
                                 const ScrollEvent* ev) {
     self->handle.offset = ev->offsetY;
+    self->scrollX = ev->offsetX;
     Notify(cx);
 }
 
@@ -97,13 +108,16 @@ static El* VlRow(Ctx* cx, int ix) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->Gap(4)->ItemsCenter()->H(kRowH);
-    for (int c = 0; c < gVlColumns && c < 7; c++) {
+    for (int c = 0; c < gVlColumns; c++) {
         Str label =
             c == 0 ? StrDup(a, fmt("row: %d", ix)) : StrDup(a, fmt("%d", c));
         row->Child(Div(a)
                        ->FlexRow()
                        ->W(kCellW)
                        ->H(kCellH)
+                       // A cell is its own width: the row scrolls sideways
+                       // rather than squeezing every column to fit.
+                       ->Shrink0()
                        ->ItemsCenter()
                        ->JustifyCenter()
                        // `.bg(cx.theme().secondary)`, not a hard-coded slate.
@@ -166,14 +180,15 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     toolbarRow->Child(group);
     page->Child(toolbarRow);
 
-    gVlColumns = kVlColumns[self->dataset];
-    int rows = kVlRows[self->dataset];
-    float viewH = win.dipH - 280;
+    gVlColumns = self->columns;
+    int rows = self->rows;
+    float viewH = win.dipH - 309;
     El* list = component::VirtualList::New(cx, rows)
                    ->Id(StrL("virtual-list-story"))
                    ->RowH(kRowH)
                    ->ViewH(viewH)
                    ->Handle(&self->handle)
+                   ->ScrollX(self->scrollX)
                    ->Scroll(1, Listen(cx, &VirtualListStory::OnScroll))
                    ->Row(VlRow)
                    ->IntoEl();

@@ -14,6 +14,8 @@ struct VirtualList {
     float rowH = 32;
     float viewH = 192;
     float scrollY = 0;
+    // The sideways offset, for a list whose rows are wider than the viewport.
+    float scrollX = 0;
     // The item sizes, for a list whose rows are not all one height. Null is
     // the uniform list, which is `rowH` per row.
     const float* sizes = nullptr;
@@ -32,6 +34,7 @@ struct VirtualList {
     VirtualList* RowH(float v);
     VirtualList* ViewH(float v);
     VirtualList* ScrollY(float v);
+    VirtualList* ScrollX(float v);
     VirtualList* Sizes(const float* v);
     VirtualList* Handle(VirtualListScrollHandle* h);
     VirtualList* Scroll(int id, Listener onScroll);

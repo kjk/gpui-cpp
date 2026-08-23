@@ -28,6 +28,10 @@ VirtualList* VirtualList::ScrollY(float v) {
     scrollY = v;
     return this;
 }
+VirtualList* VirtualList::ScrollX(float v) {
+    scrollX = v;
+    return this;
+}
 VirtualList* VirtualList::Sizes(const float* v) {
     sizes = v;
     return this;
@@ -88,6 +92,9 @@ El* VirtualList::IntoEl() {
         list->Child(Div(a)->H(content - built));
     }
     El* e = gpui::VirtualList::New(cx, id)->H(viewH)->ClipY()->ScrollY(offset);
+    // Both axes: a row wider than the viewport slides under it rather than
+    // being cut, which is what the story's Axis: Both asks for.
+    e->ClipX()->ScrollX(scrollX);
     if (scrollId) {
         e->ScrollId(scrollId)->OnScroll(onScroll);
     }
