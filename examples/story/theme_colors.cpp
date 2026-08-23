@@ -44,6 +44,10 @@ struct ThemeColorsStory {
     bool showInherited = false;
     bool expandAll = false;
     bool optionsOpen = false;
+    // The right panel is a scrolling list in Rust — `list(list_state)` with a
+    // vertical scrollbar beside it — so the categories past the first screen
+    // are reachable rather than clipped away.
+    float rightScrollY = 0;
     InputState filter;
     bool seeded = false;
 
@@ -97,6 +101,12 @@ static void SetTheme(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
         return;
     }
     ThemeSet(cx->app, cfg->mode);
+    Notify(cx);
+}
+
+static void OnRightScroll(ThemeColorsStory* self, Ctx* cx,
+                          const ScrollEvent* ev) {
+    self->rightScrollY = ev->offsetY;
     Notify(cx);
 }
 
@@ -186,19 +196,28 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         {"Global", "Foreground", th.foreground},
         {"Global", "Overlay", th.tokens.overlay},
         {"Global", "Ring", th.ring},
+        {"Primary", "Active Background", th.primaryActive},
         {"Primary", "Background", th.tokens.primary},
         {"Primary", "Foreground", th.primaryFg},
+        {"Primary", "Hover Background", th.primaryHover},
         {"Secondary", "Active Background", th.secondaryActive},
         {"Secondary", "Background", th.tokens.secondary},
         {"Secondary", "Foreground", th.secondaryFg},
         {"Secondary", "Hover Background", th.secondaryHover},
         {"Accent", "Background", th.tokens.accent},
+        {"Accent", "Foreground", th.accentFg},
         {"Base", "Blue", th.blue},
+        {"Base", "Blue Light", th.blueLight},
         {"Base", "Cyan", th.cyan},
+        {"Base", "Cyan Light", th.cyanLight},
         {"Base", "Green", th.green},
+        {"Base", "Green Light", th.greenLight},
         {"Base", "Magenta", th.magenta},
+        {"Base", "Magenta Light", th.magentaLight},
         {"Base", "Red", th.red},
+        {"Base", "Red Light", th.redLight},
         {"Base", "Yellow", th.yellow},
+        {"Base", "Yellow Light", th.yellowLight},
         {"Chart", "Bearish", th.chartBearish},
         {"Chart", "Bullish", th.chartBullish},
         {"Chart", "Color 1", th.chart1},
@@ -354,17 +373,26 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
 
     // Right: every group with its swatch, name and hex, over the
     // checkerboard that shows through a translucent colour.
+    // size_full(): the panel takes what the page has left rather than a
+    // height of its own, which is what puts the last category as far down as
+    // the window goes.
+    float rightH = WindowSize(cx->win).dipH - 296;
     El* right = Div(a)
                     ->FlexCol()
                     ->Flex1()
-                    ->H(640)
+                    ->H(rightH)
                     ->ClipY()
                     ->Radius(th.radiusLg)
                     ->Border(1, th.border)
                     ->Bg(CheckerBase());
     right->customPaint = PaintCheckerboard;
     El* inner = Div(a)->FlexCol()->W(kFill)->PadX(16);
-    right->Child(inner);
+    right->Child(component::Scrollable::New(cx, StrL("theme-colors-right"))
+                     ->H(rightH - 2)
+                     ->ScrollY(self->rightScrollY)
+                     ->OnScroll(Listen(cx, &OnRightScroll))
+                     ->Child(inner)
+                     ->IntoEl());
     for (int i = 0; i < nRows;) {
         const char* name = rows[i].group;
         int end = i;

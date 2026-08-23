@@ -238,8 +238,15 @@ struct Theme {
     Rgba secondary;
     Rgba muted;
     Rgba accent;
+    // accent.foreground, and the primary pair a theme file can name beside
+    // its background (theme/schema.rs). Both are resolved with the same
+    // fallbacks Rust gives them: a hover is the background blended with the
+    // colour, an active one is the colour darkened.
+    Rgba accentFg;
     Rgba primary;
     Rgba primaryFg;
+    Rgba primaryHover;
+    Rgba primaryActive;
     Rgba sidebar;
     Rgba sidebarFg;
     Rgba sidebarPrimary;

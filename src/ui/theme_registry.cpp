@@ -699,13 +699,11 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->primary, &out->tokens.primary,
              PickBg(c, "primary.background", base.tokens.primary));
     out->primaryFg = Pick(c, "primary.foreground", out->foreground);
-    Rgba primaryHover =
+    out->primaryHover =
         Pick(c, "primary.hover.background",
              Blend(out->background, RgbaOpacity(out->primary, hoverOpacity)));
-    Rgba primaryActive = Pick(c, "primary.active.background",
+    out->primaryActive = Pick(c, "primary.active.background",
                               Darken(out->primary, activeDarken));
-    (void)primaryHover;
-    (void)primaryActive;
 
     SetToken(&out->secondary, &out->tokens.secondary,
              PickBg(c, "secondary.background", base.tokens.secondary));
@@ -728,7 +726,8 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
 
     SetToken(&out->accent, &out->tokens.accent,
              PickBg(c, "accent.background", out->tokens.secondary));
-    Rgba accentFg = Pick(c, "accent.foreground", out->foreground);
+    out->accentFg = Pick(c, "accent.foreground", out->foreground);
+    Rgba accentFg = out->accentFg;
     out->groupBox =
         Pick(c, "group_box.background",
              Blend(out->background,
