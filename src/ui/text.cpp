@@ -9,6 +9,12 @@ namespace gpui {
 
 namespace component {
 
+// What Word and Inline take to mean "name no colour at all", so the run
+// inherits the one the container above the view pushed. A transparent text
+// colour would draw nothing, so nothing else can want it.
+static const Rgba kInheritFg = Rgba{0, 0, 0, 0};
+
+
 // ─── parse ────────────────────────────────────────────────────────────────
 //
 // src/markdown is the `markdown` crate, ported: it hands back an mdast, the
@@ -730,7 +736,10 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
     if (marks & MdHighlight) {
         c = kMarkFg;
     }
-    El* t = TextEl(a, w)->Font(font)->Fg(c);
+    El* t = TextEl(a, w)->Font(font);
+    if (c.a) {
+        t->Fg(c);
+    }
     ApplyWeight(t, (marks & MdBold) ? (weight > 2 ? weight : 2) : weight);
     if (marks & MdItalic) {
         t->Italic();
@@ -800,7 +809,10 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
     // single TextEl lets the text engine break the line on its own metrics,
     // which is both better looking and cheaper than a row of word elements.
     if (IsPlainRun(n->runFirst)) {
-        El* t = TextEl(a, n->runFirst->text)->Font(font)->Fg(color)->Wrap();
+        El* t = TextEl(a, n->runFirst->text)->Font(font)->Wrap();
+        if (color.a) {
+            t->Fg(color);
+        }
         ApplyWeight(t, weight);
         if (selectable) {
             t->Selectable();
@@ -1043,7 +1055,11 @@ El* TextView::Table(MdNode* n) {
 }
 
 Rgba TextView::BlockFg() const {
-    return blockFgSet ? blockFg : cx->theme().foreground;
+    // Unset is not `theme.foreground`: node.rs names no colour on a paragraph
+    // or a heading, so the run takes whatever the container above the view
+    // pushed — an alert's variant colour, a blockquote's grey. A transparent
+    // colour is what says "inherit" to Word and Inline below.
+    return blockFgSet ? blockFg : kInheritFg;
 }
 
 El* TextView::Item(MdNode* n, Str marker, int depth) {
