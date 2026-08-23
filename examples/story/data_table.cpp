@@ -324,29 +324,6 @@ static component::PopupMenu* DtContextMenu(Ctx* cx, void* data, int row,
 // The base columns' count, which is where the "Column N" extras start.
 static const int kBaseColumns = 45;
 
-// How a column past the sixth reads. Rust hangs a formatter off each field;
-// the fields are generated here, so the kind is the whole difference.
-enum class DtCell : uint8_t {
-    Compact, // compact(): 1.2M rather than 1234567
-    Fixed2,  // {:.2}
-    Int,     // {:.0}
-    Rate,    // {:.2}% off a 0..1 rate, in the plain colour
-    Percent, // render_percent: tinted over the cell
-    Change   // render_change: signed, in the trend colour
-};
-
-static const DtCell kCellKinds[kBaseColumns - 7] = {
-    DtCell::Compact, DtCell::Compact, DtCell::Compact, DtCell::Compact,
-    DtCell::Int,     DtCell::Int,     DtCell::Percent, DtCell::Fixed2,
-    DtCell::Compact, DtCell::Fixed2,  DtCell::Compact, DtCell::Fixed2,
-    DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Rate,
-    DtCell::Rate,    DtCell::Rate,    DtCell::Fixed2,  DtCell::Fixed2,
-    DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Fixed2,  DtCell::Fixed2,
-    DtCell::Compact, DtCell::Percent, DtCell::Change,  DtCell::Compact,
-    DtCell::Percent, DtCell::Change,  DtCell::Compact, DtCell::Compact,
-    DtCell::Compact, DtCell::Int,     DtCell::Int,     DtCell::Int,
-    DtCell::Int,     DtCell::Int};
-
 // The Rust delegate fakes every field per row; a hash of the cell does the
 // same job here, and gives the same cell the same value every frame.
 static float DtNoise(int row, int col) {
@@ -357,18 +334,179 @@ static float DtNoise(int row, int col) {
     return (float)(h % 100000u) / 100000.f;
 }
 
-// compact(): the shortest reading of a large number.
+// `(lo..hi).fake()`, off the same hash: the k-th draw of a row.
+static float DtRand(int row, int k, float lo, float hi) {
+    return lo + DtNoise(row, k) * (hi - lo);
+}
+
+// One row's quote. random_stocks_exact's own note is what this is for: the
+// fields of a row hang together the way a real quote does — the turnover is
+// that volume at that price, the market cap is the price over the shares
+// outstanding, and the bid, ask, open, high and low stay inside a day's range
+// of it. A table of unrelated numbers reads as noise, and reads wrong besides:
+// a market cap drawn on its own lands in the millions where a real one is in
+// the billions, and a TTM lands there too where Rust's is between 5 and 80.
+struct DtQuote {
+    float volume, turnover, marketCap, ttm;
+    float rank5m, rank60d, yearChangePercent;
+    float bid, bidVolume, ask, askVolume;
+    float open, high, low;
+    float turnoverRate, riseRate, amplitude, pe, pb, volumeRatio, bidAskRatio;
+    float preClose, postClose;
+    float preMarketCap, preMarketPercent, preMarketChange;
+    float postMarketCap, postMarketPercent, postMarketChange;
+    float floatCap, shares, sharesFloat;
+    float rank5d, rank10d, rank30d, rank120d, rank250d;
+};
+
+static DtQuote DtQuoteFor(int row, float price) {
+    DtQuote q = {};
+    float shares = DtRand(row, 3, 1e6f, 3e9f);
+    q.volume = DtRand(row, 1, 1e4f, 5e7f);
+    q.turnover = q.volume * price;
+    q.marketCap = price * shares;
+    q.ttm = DtRand(row, 4, 5.f, 80.f);
+    q.rank5m = DtRand(row, 5, 0.f, 1000.f);
+    q.rank60d = DtRand(row, 6, 0.f, 1000.f);
+    q.yearChangePercent = DtRand(row, 7, -1.f, 1.f);
+    q.bid = price * (1.f - DtRand(row, 8, 0.f, 0.01f));
+    q.bidVolume = DtRand(row, 9, 100.f, 5e4f);
+    q.ask = price * (1.f + DtRand(row, 10, 0.f, 0.01f));
+    q.askVolume = DtRand(row, 11, 100.f, 5e4f);
+    q.open = price * (1.f + DtRand(row, 12, -0.05f, 0.05f));
+    q.high = price * (1.f + DtRand(row, 13, 0.f, 0.08f));
+    q.low = price * (1.f - DtRand(row, 14, 0.f, 0.08f));
+    q.turnoverRate = DtRand(row, 15, 0.f, 0.2f);
+    q.riseRate = DtRand(row, 16, 0.f, 1.f);
+    q.amplitude = DtRand(row, 17, 0.f, 0.15f);
+    q.pe = DtRand(row, 18, 5.f, 60.f);
+    q.pb = DtRand(row, 19, 0.5f, 12.f);
+    q.volumeRatio = DtRand(row, 20, 0.f, 3.f);
+    q.bidAskRatio = DtRand(row, 21, 0.f, 3.f);
+    q.preClose = price * (1.f + DtRand(row, 22, -0.03f, 0.03f));
+    q.postClose = price * (1.f + DtRand(row, 23, -0.03f, 0.03f));
+    q.preMarketCap = q.marketCap;
+    q.preMarketPercent = DtRand(row, 24, -0.05f, 0.05f);
+    q.preMarketChange = price * DtRand(row, 25, -0.05f, 0.05f);
+    q.postMarketCap = q.marketCap;
+    q.postMarketPercent = DtRand(row, 26, -0.05f, 0.05f);
+    q.postMarketChange = price * DtRand(row, 27, -0.05f, 0.05f);
+    q.floatCap = q.marketCap * DtRand(row, 28, 0.3f, 1.f);
+    q.shares = shares;
+    q.sharesFloat = shares * DtRand(row, 29, 0.3f, 1.f);
+    q.rank5d = DtRand(row, 30, 0.f, 1000.f);
+    q.rank10d = DtRand(row, 31, 0.f, 1000.f);
+    q.rank30d = DtRand(row, 32, 0.f, 1000.f);
+    q.rank120d = DtRand(row, 33, 0.f, 1000.f);
+    q.rank250d = DtRand(row, 34, 0.f, 1000.f);
+    return q;
+}
+
+// How a cell reads, which is which of the delegate's three renderers it goes
+// through: a plain number, a signed change in the trend colour, or a
+// percentage tinted over the whole cell.
+enum class DtCell : uint8_t {
+    Number,
+    Change,
+    Percent
+};
+
+struct DtCellVal {
+    Str text = {};
+    DtCell kind = DtCell::Number;
+    // What render_change and render_percent colour by; unused for a number.
+    float signal = 0;
+};
+
+// compact(): the shortest reading of a large number. The scale is chosen off
+// the magnitude, so a change of -1.24B reads as one too.
 static Str DtCompact(Ctx* cx, float v) {
-    if (v >= 1e9f) {
+    float m = v < 0 ? -v : v;
+    if (m >= 1e12f) {
+        return StoryFmt(cx, "%.2fT", (double)(v / 1e12f));
+    }
+    if (m >= 1e9f) {
         return StoryFmt(cx, "%.2fB", (double)(v / 1e9f));
     }
-    if (v >= 1e6f) {
+    if (m >= 1e6f) {
         return StoryFmt(cx, "%.2fM", (double)(v / 1e6f));
     }
-    if (v >= 1e3f) {
+    if (m >= 1e3f) {
         return StoryFmt(cx, "%.2fK", (double)(v / 1e3f));
     }
     return StoryFmt(cx, "%.2f", (double)v);
+}
+
+// The delegate's match arm for one of the 38 columns past Chg%: which field
+// of the row's quote it reads, and which renderer it goes through. Both the
+// cell and the CSV go through here, the way Rust's render_td and cell_text
+// read the same struct.
+static DtCellVal DtValueFor(Ctx* cx, const Stock& s, int row, int col) {
+    float price = (float)atof(s.price);
+    DtQuote q = DtQuoteFor(row, price);
+    DtCellVal v;
+    auto num = [&](Str t) {
+        v.text = t;
+        v.kind = DtCell::Number;
+    };
+    auto pct = [&](float val) {
+        v.text = StoryFmt(cx, "%+.2f%%", (double)(val * 100.f));
+        v.kind = DtCell::Percent;
+        v.signal = val;
+    };
+    auto chg = [&](float val) {
+        v.text = StoryFmt(cx, "%+.2f", (double)val);
+        v.kind = DtCell::Change;
+        v.signal = val;
+    };
+    auto fixed2 = [&](float val) { num(StoryFmt(cx, "%.2f", (double)val)); };
+    auto rank = [&](float val) { num(StoryFmt(cx, "%.0f", (double)val)); };
+    auto rate = [&](float val) {
+        num(StoryFmt(cx, "%.2f%%", (double)(val * 100.f)));
+    };
+    switch (col) {
+        case 7: num(DtCompact(cx, q.volume)); break;
+        case 8: num(DtCompact(cx, q.turnover)); break;
+        case 9: num(DtCompact(cx, q.marketCap)); break;
+        case 10: num(DtCompact(cx, q.ttm)); break;
+        case 11: rank(q.rank5m); break;
+        case 12: rank(q.rank60d); break;
+        case 13: pct(q.yearChangePercent); break;
+        case 14: fixed2(q.bid); break;
+        case 15: num(DtCompact(cx, q.bidVolume)); break;
+        case 16: fixed2(q.ask); break;
+        case 17: num(DtCompact(cx, q.askVolume)); break;
+        case 18: fixed2(q.open); break;
+        // prev_close is a change away from the price, which is the one field
+        // that reads off the row's own Chg rather than off a draw.
+        case 19: fixed2(price - (float)atof(s.chg)); break;
+        case 20: fixed2(q.high); break;
+        case 21: fixed2(q.low); break;
+        case 22: rate(q.turnoverRate); break;
+        case 23: rate(q.riseRate); break;
+        case 24: rate(q.amplitude); break;
+        case 25: fixed2(q.pe); break;
+        case 26: fixed2(q.pb); break;
+        case 27: fixed2(q.volumeRatio); break;
+        case 28: fixed2(q.bidAskRatio); break;
+        case 29: fixed2(q.preClose); break;
+        case 30: fixed2(q.postClose); break;
+        case 31: num(DtCompact(cx, q.preMarketCap)); break;
+        case 32: pct(q.preMarketPercent); break;
+        case 33: chg(q.preMarketChange); break;
+        case 34: num(DtCompact(cx, q.postMarketCap)); break;
+        case 35: pct(q.postMarketPercent); break;
+        case 36: chg(q.postMarketChange); break;
+        case 37: num(DtCompact(cx, q.floatCap)); break;
+        case 38: num(DtCompact(cx, q.shares)); break;
+        case 39: num(DtCompact(cx, q.sharesFloat)); break;
+        case 40: rank(q.rank5d); break;
+        case 41: rank(q.rank10d); break;
+        case 42: rank(q.rank30d); break;
+        case 43: rank(q.rank120d); break;
+        default: rank(q.rank250d); break;
+    }
+    return v;
 }
 
 // render_td: the delegate's cell, which the table places and styles.
@@ -385,7 +523,11 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
             return StoryTxt(cx, StoryFmt(cx, "%d", row), 16, th.mutedFg)
                 ->LineHeight(1.f);
         case 1:
-            return StoryTxt(cx, Str(s.market), 16, th.blue)->LineHeight(1.f);
+            // render_td's market arm: US in blue and every other exchange
+            // in magenta.
+            return StoryTxt(cx, Str(s.market), 16,
+                            strcmp(s.market, "US") == 0 ? th.blue : th.magenta)
+                ->LineHeight(1.f);
         case 2:
             // The table clips the cell to its column, so a long name is cut
             // where the column ends however wide it has been dragged.
@@ -397,6 +539,7 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
                 ->LineHeight(1.f);
         case 4:
             return StoryTxt(cx, Str(s.price), 16, th.foreground)
+                ->Semibold()
                 ->LineHeight(1.f);
         case 5:
             return StoryTxt(cx, Str(s.chg), 16, trend)->LineHeight(1.f);
@@ -419,43 +562,30 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
         // reads the same.
         return StoryTxt(cx, StrL("--"), 16, th.mutedFg)->LineHeight(1.f);
     }
-    float n = DtNoise(row, col);
-    switch (kCellKinds[col - 7]) {
-        case DtCell::Compact:
-            return StoryTxt(cx, DtCompact(cx, n * 1e9f), 16, th.foreground)
-                ->LineHeight(1.f);
-        case DtCell::Int:
-            return StoryTxt(cx, StoryFmt(cx, "%.0f", (double)(n * 1000.f)), 16,
-                            th.foreground)
-                ->LineHeight(1.f);
-        case DtCell::Rate:
-            return StoryTxt(cx, StoryFmt(cx, "%.2f%%", (double)(n * 100.f)), 16,
-                            th.foreground)
-                ->LineHeight(1.f);
-        case DtCell::Change: {
-            float v = (n - 0.5f) * 200.f;
-            return StoryTxt(cx, StoryFmt(cx, "%+.2f", (double)v), 16,
-                            v >= 0 ? th.green : th.red)
-                ->LineHeight(1.f);
-        }
-        case DtCell::Percent: {
-            float v = (n - 0.5f) * 20.f;
-            Rgba c = v >= 0 ? th.green : th.red;
-            return Div(cx->a)
-                ->FlexRow()
-                ->W(kFill)
-                ->H(kFill)
-                ->ItemsCenter()
-                ->JustifyEnd()
-                ->Bg(RgbaOpacity(c, 0.05f))
-                ->Child(StoryTxt(cx, StoryFmt(cx, "%+.2f%%", (double)v), 16, c)
-                            ->LineHeight(1.f));
-        }
-        default:
-            return StoryTxt(cx, StoryFmt(cx, "%.2f", (double)(n * 1000.f)), 16,
-                            th.foreground)
-                ->LineHeight(1.f);
+    DtCellVal v = DtValueFor(cx, s, row, col);
+    if (v.kind == DtCell::Number) {
+        return StoryTxt(cx, v.text, 16, th.foreground)->LineHeight(1.f);
     }
+    // change_colors: a rise is green, a fall red, and an unchanged value
+    // keeps the cell's own colour.
+    bool flat = v.signal == 0;
+    Rgba c = v.signal > 0 ? th.green : th.red;
+    Rgba light = v.signal > 0 ? th.greenLight : th.redLight;
+    if (v.kind == DtCell::Change) {
+        return StoryTxt(cx, v.text, 16, flat ? th.foreground : c)
+            ->LineHeight(1.f);
+    }
+    El* cell = Div(cx->a)
+                   ->FlexRow()
+                   ->W(kFill)
+                   ->H(kFill)
+                   ->ItemsCenter()
+                   ->JustifyEnd();
+    if (!flat) {
+        cell->Bg(RgbaOpacity(light, 0.05f));
+    }
+    return cell->Child(
+        StoryTxt(cx, v.text, 16, flat ? th.foreground : c)->LineHeight(1.f));
 }
 
 // visible_rows_changed / visible_columns_changed. Rust's note that these
@@ -503,21 +633,7 @@ static Str DtCellText(Ctx* cx, void* data, int row, int col) {
     if (col >= kBaseColumns) {
         return StrL("--");
     }
-    float n = DtNoise(row, col);
-    switch (kCellKinds[col - 7]) {
-        case DtCell::Compact:
-            return DtCompact(cx, n * 1e9f);
-        case DtCell::Int:
-            return StoryFmt(cx, "%.0f", (double)(n * 1000.f));
-        case DtCell::Rate:
-            return StoryFmt(cx, "%.2f%%", (double)(n * 100.f));
-        case DtCell::Change:
-            return StoryFmt(cx, "%+.2f", (double)((n - 0.5f) * 200.f));
-        case DtCell::Percent:
-            return StoryFmt(cx, "%+.2f%%", (double)((n - 0.5f) * 20.f));
-        default:
-            return StoryFmt(cx, "%.2f", (double)(n * 1000.f));
-    }
+    return DtValueFor(cx, s, row, col).text;
 }
 
 El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
