@@ -184,6 +184,8 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                 ->Child(TextEl(a, Str(kOrderDetails[i][1]))->Fg(th.mutedFg)));
     }
     StorySectionAdd(basic, component::Collapsible::New(cx)
+                               ->W(kFill)
+                               ->Gap(8)
                                ->Open(self->open[CollOrder])
                                ->Trigger(Div(a)
                                              ->FlexCol()
@@ -218,6 +220,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     StorySectionAdd(row, component::GroupBox::New(cx, Str{})
                              ->Outline()
                              ->Child(component::Collapsible::New(cx)
+                                         ->W(kFill)
                                          ->Open(self->open[CollFaq])
                                          ->Trigger(faqTrig)
                                          ->Content(faqBody)
@@ -264,6 +267,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
             ->Outline()
             ->Title(usageHead)
             ->Child(component::Collapsible::New(cx)
+                        ->W(kFill)
                         ->Open(self->open[CollUsage])
                         ->Trigger(usagePanel)
                         ->Content(usageItems)
@@ -299,11 +303,10 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                       ->Icon(self->open[CollSettings] ? IconName::ChevronDown
                                                       : IconName::ChevronRight)
                       ->Label(StrL("Notification settings"))
+                      ->JustifyStart()
                       ->OnClick(Listen(cx, &OnColl, CollSettings))
                       ->IntoEl()
                       ->W(kFill);
-    // Rust says .justify_start() here and the button centres its content
-    // anyway, so this one does too.
     El* setBody =
         Div(a)->FlexCol()->W(kFill)->Border(1, th.border)->Radius(th.radiusLg);
     struct NoteRow {
@@ -330,6 +333,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
         setBody->Child(line);
     }
     StorySectionAdd(settings, component::Collapsible::New(cx)
+                                  ->W(kFill)
                                   ->Open(self->open[CollSettings])
                                   ->Trigger(setTrig)
                                   ->Content(setBody)
@@ -392,6 +396,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     StorySectionAdd(rowActions, component::GroupBox::New(cx, Str{})
                                     ->Outline()
                                     ->Child(component::Collapsible::New(cx)
+                                                ->W(kFill)
                                                 ->Open(self->open[CollApiKeys])
                                                 ->Trigger(keysHead)
                                                 ->Content(keysBody)
@@ -405,6 +410,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     El* tree = Div(a)->FlexCol()->W(kFill);
     tree->Child(
         component::Collapsible::New(cx)
+            ->W(kFill)
             ->Open(self->open[CollComponentsDir])
             ->Trigger(
                 FolderRow(self, cx, CollComponentsDir, StrL("components")))
@@ -414,6 +420,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
                     ->W(kFill)
                     ->PadL(12)
                     ->Child(component::Collapsible::New(cx)
+                                ->W(kFill)
                                 ->Open(self->open[CollUiDir])
                                 ->Trigger(
                                     FolderRow(self, cx, CollUiDir, StrL("ui")))
@@ -471,6 +478,7 @@ El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     StorySectionAdd(profile, component::GroupBox::New(cx, Str{})
                                  ->Outline()
                                  ->Child(component::Collapsible::New(cx)
+                                             ->W(kFill)
                                              ->Open(self->open[CollProfile])
                                              ->Trigger(profTrig)
                                              ->Content(profBody)

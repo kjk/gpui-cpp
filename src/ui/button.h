@@ -39,6 +39,7 @@ struct Button {
     bool disabled = false;
     bool loading = false;
     bool compact = false;
+    bool justifyStart = false;
     bool selected = false;
     bool dropdown = false;
     bool focusRing = true;
@@ -78,6 +79,9 @@ struct Button {
     Button* Text();
     Button* Outline();
     Button* Compact();
+    // `.justify_start()`: a full-width button whose content sits at its
+    // leading edge rather than in the middle.
+    Button* JustifyStart(bool v = true);
     Button* Selected(bool v);
     Button* SelectedStyle(const StateStyle& s);
     Button* DisabledStyle(const StateStyle& s);

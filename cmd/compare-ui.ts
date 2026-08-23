@@ -386,6 +386,21 @@ async function drive(hwnd: number, tag: "rust" | "cpp"): Promise<void> {
   bringToTopAndRedraw(hwnd);
   await waitForForeground(hwnd, 3000);
   await sleep(500);
+  // Wait until the window has actually drawn something. A window that has
+  // been shown but has not painted — or one DWM is still holding a blank
+  // surface for — photographs as an empty rectangle, and every shot in the
+  // run after it is wrong in the same way. A blank PNG compresses to almost
+  // nothing, so the size of a throwaway capture is the test.
+  const probe = join(outDir, `.probe-${tag}.png`);
+  for (let i = 0; i < 12; i++) {
+    captureWindowToPng(hwnd, probe);
+    if (statSync(probe).size > 20000) {
+      break;
+    }
+    bringToTopAndRedraw(hwnd);
+    nudgeWindow(hwnd);
+    await sleep(250);
+  }
   let n = 0;
   // PrintWindow reads what DWM is holding for the window, and for a window
   // that is behind another the answer is sometimes an all-black surface. A

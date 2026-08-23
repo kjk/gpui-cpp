@@ -72,6 +72,10 @@ Button* Button::Outline() {
     outline = true;
     return this;
 }
+Button* Button::JustifyStart(bool v) {
+    justifyStart = v;
+    return this;
+}
 Button* Button::Compact() {
     compact = true;
     return this;
@@ -356,6 +360,9 @@ El* Button::IntoEl() {
                 ->Gap(gap)
                 ->Radius(resolved.Has(StateFieldRadius) ? resolved.style.radius
                                                         : th.radius);
+    if (justifyStart) {
+        e->JustifyStart();
+    }
     if (sizePx > 0) {
         e->W(sizePx);
     } else if (iconOnly) {
