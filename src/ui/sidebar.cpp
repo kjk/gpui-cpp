@@ -454,15 +454,27 @@ El* Sidebar::IntoEl() {
         root->Child(box);
     }
     El* content = Div(a)->FlexCol()->W(kFill)->Flex1();
-    El* inner = Div(a)->FlexCol()->W(kFill)->Gap(12);
+    El* inner = Div(a)->FlexCol()->W(kFill);
     if (iconCollapsed) {
         inner->Pad(8);
     } else {
-        inner->PadX(12)->PadY(12);
+        inner->PadX(12);
     }
     for (int i = 0; i < n; i++) {
         groups[i]->collapsed = iconCollapsed;
-        inner->Child(groups[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
+        // The groups are rows of a `list(..)` in Rust, which has no gap of
+        // its own: `pt_3` on the first and `pb_3` on the last are the whole
+        // of the spacing around them, and two groups touch. `inner`'s
+        // `gap_y_3` never applies, since the list is its only child.
+        El* box = Div(a)->FlexCol()->W(kFill)->Child(
+            groups[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
+        if (i == 0) {
+            box->PadT(12);
+        }
+        if (i + 1 == n) {
+            box->PadB(12);
+        }
+        inner->Child(box);
     }
     content->Child(inner);
     root->Child(content);
