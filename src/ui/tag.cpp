@@ -59,32 +59,41 @@ Tag* Tag::Custom(Rgba bg, Rgba fg, Rgba border) {
 
 El* Tag::IntoEl() {
     const Theme& th = cx->theme();
+    // TagVariant::fg takes `outline`: an outlined tag draws in the variant's
+    // own colour rather than the colour that reads over it — except the
+    // secondary one, whose border is too pale to write with.
     Rgba bg = th.secondary, fg = th.secondaryFg, bd = th.border;
+    Rgba ofg = th.mutedFg;
     switch (variant) {
         case TagVariant::Primary:
             bg = th.primary;
             fg = th.primaryFg;
             bd = th.primary;
+            ofg = th.primary;
             break;
         case TagVariant::Danger:
             bg = th.danger;
             fg = th.dangerFg;
             bd = th.danger;
+            ofg = th.danger;
             break;
         case TagVariant::Success:
             bg = th.success;
             fg = th.successFg;
             bd = th.success;
+            ofg = th.success;
             break;
         case TagVariant::Warning:
             bg = th.warning;
             fg = th.warningFg;
             bd = th.warning;
+            ofg = th.warning;
             break;
         case TagVariant::Info:
             bg = th.info;
             fg = th.infoFg;
             bd = th.info;
+            ofg = th.info;
             break;
         default:
             break;
@@ -93,20 +102,23 @@ El* Tag::IntoEl() {
         bg = customBg;
         fg = customFg;
         bd = customBorder;
+        // Color(..) answers the same foreground either way.
+        ofg = customFg;
     }
     if (outline) {
-        fg = bd;
-        bg = th.background;
+        fg = ofg;
+        bg = Rgba{0, 0, 0, 0};
     }
-    float r = radius >= 0 ? radius : th.radius * 0.5f;
+    bool tiny = size == UiSize::XSmall || size == UiSize::Small;
+    float r = radius >= 0 ? radius : (tiny ? th.radius * 0.5f : th.radius);
     return Div(a)
-        ->PadX(size == UiSize::Small ? 6.f : 8.f)
-        ->PadY(2)
+        ->PadX(tiny ? 6.f : 10.f)
+        ->PadY(tiny ? 2.f : 4.f)
         ->Radius(r)
         ->Bg(bg)
         ->Border(1, bd)
         ->ItemsCenter()
-        ->Child(TextEl(a, text)->Font(UiFontPx(size) - 2)->Fg(fg));
+        ->Child(TextEl(a, text)->Font(12)->Fg(fg)->LineHeight(1.f));
 }
 
 } // namespace component
