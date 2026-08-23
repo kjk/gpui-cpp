@@ -348,6 +348,7 @@ El* SearchableList::IntoEl() {
         Listener onAction = ListenTo(state, &SearchableListState::OnListAction);
         box->FocusId(HashClickId(id))
             ->FocusRing(false)
+            ->FocusOnPress()
             ->KeyContext(ListContext())
             ->OnAction(action::Cancel(), onAction)
             ->OnAction(action::Confirm(), onAction)

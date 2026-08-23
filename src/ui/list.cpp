@@ -305,7 +305,8 @@ El* List::IntoEl() {
     // list.rs declares the "List" context on the element it tracks focus
     // on; the root is focusable here for the same reason — clicking a row
     // focuses the row, which is inside it, and Tab reaches the list itself.
-    root->FocusId(HashClickId(id))->FocusRing(false);
+    // list.rs `self.focus_handle(cx).focus(window, cx)` on a row press.
+    root->FocusId(HashClickId(id))->FocusRing(false)->FocusOnPress();
     ListBindKeys(cx, root, state);
     return root;
 }

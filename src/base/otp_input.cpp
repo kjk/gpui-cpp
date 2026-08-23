@@ -70,7 +70,11 @@ El* OtpInput::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     El* e = Div(a);
     if (id.s) {
-        e->Id(id)->Click(HashClickId(id))->FocusId(HashClickId(id));
+        // otp_input.rs focuses its handle from the row's own click.
+        e->Id(id)
+            ->Click(HashClickId(id))
+            ->FocusId(HashClickId(id))
+            ->FocusOnPress();
     }
     return e;
 }

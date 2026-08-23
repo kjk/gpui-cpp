@@ -239,7 +239,44 @@ El* Button::IntoEl() {
         hover = th.secondaryHover;
     }
     if (disabled) {
-        fg = th.mutedFg;
+        // ButtonVariant::disabled. The foreground is muted at half — which is
+        // the whole of what the port had — and the background and border go
+        // with it: the variant's own fill at 0.15 (Secondary's at 1.5, which
+        // is Rust's number and saturates), Default on the input surface at
+        // half, and Ghost, Link and Text disabled to nothing at all.
+        // Outlined, both are the normal outline pair at half.
+        fg = RgbaOpacity(th.mutedFg, 0.5f);
+        if (outline) {
+            bg = BackgroundOpacity(bg, 0.5f);
+            bd = RgbaOpacity(bd, 0.5f);
+        } else if (hasCustom) {
+            bg = RgbaOpacity(custom, 0.15f);
+            bd = RgbaOpacity(custom, 0.15f);
+        } else if (hasAccent) {
+            bg = BackgroundOpacity(accent, 0.15f);
+            bd = RgbaOpacity(accent.color, 0.15f);
+        } else {
+            switch (variant) {
+                case ButtonVariant::Ghost:
+                case ButtonVariant::Link:
+                case ButtonVariant::Text:
+                    bg = Rgba8(0, 0, 0, 0);
+                    bd = Rgba8(0, 0, 0, 0);
+                    break;
+                case ButtonVariant::Primary:
+                    bg = BackgroundOpacity(th.tokens.primary, 0.15f);
+                    bd = RgbaOpacity(th.primary, 0.15f);
+                    break;
+                case ButtonVariant::Secondary:
+                    bg = BackgroundOpacity(th.tokens.secondary, 1.f);
+                    bd = th.secondary;
+                    break;
+                default:
+                    bg = BackgroundOpacity(th.inputBg, 0.5f);
+                    bd = RgbaOpacity(th.inputBorder, 0.5f);
+                    break;
+            }
+        }
     }
     // state_style.rs resolve_style: whatever the caller asked for goes on last
     // and only for the fields it named — the value state, then disabled.

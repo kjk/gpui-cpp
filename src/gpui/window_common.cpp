@@ -362,6 +362,18 @@ static bool FocusIdIsFocusable(Window* win, int id) {
     return false;
 }
 
+// And whether it asked to take focus from a press. GPUI's `track_focus` gives
+// an element a handle and a place in the Tab order and nothing else; the
+// widgets that focus on a click say so themselves.
+static bool FocusIdTakesPress(Window* win, int id) {
+    for (int i = 0; i < win->focusEls.len; i++) {
+        if (win->focusEls[i].id == id) {
+            return win->focusEls[i].focusOnPress;
+        }
+    }
+    return false;
+}
+
 // rebuilt every frame, so an id is the only handle that survives one.
 
 static const HitRect* HitRectById(Window* win, int id) {
@@ -1130,11 +1142,13 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // element the press was.
     win->dragOffX = hit ? x - hit->bounds.x : 0;
     win->dragOffY = hit ? y - hit->bounds.y : 0;
-    // A press takes focus only where there is a focus handle to take. Rust
-    // gives a disabled widget its element id all the same — `div().id(id)` is
-    // what makes it hit-testable and hoverable — and hangs `track_focus` off
-    // `when(!disabled)`, so pressing one leaves focus where it was.
-    if (id && FocusIdIsFocusable(win, id)) {
+    // A press takes focus only where the element asked for it. Rust gives a
+    // disabled widget its element id all the same — `div().id(id)` is what
+    // makes it hit-testable and hoverable — and hangs `track_focus` off
+    // `when(!disabled)`, so pressing one leaves focus where it was; and
+    // `track_focus` on an enabled one still does not focus it, which is why
+    // only the widgets that call `focus()` themselves are `FocusOnPress`.
+    if (id && FocusIdIsFocusable(win, id) && FocusIdTakesPress(win, id)) {
         WindowSetFocusId(win, id);
     }
     // on_mouse_down, ahead of the click: an element that wants the press

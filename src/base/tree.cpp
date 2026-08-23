@@ -288,7 +288,9 @@ El* TreeItemEl::New(Ctx* cx, Str id, Listener onClick) {
             ->TabStop(false)
             // The selected row is drawn by the tree itself; a ring around the
             // last one pressed is not something Rust's tree shows.
-            ->FocusRing(false);
+            ->FocusRing(false)
+            // tree.rs `focus()` on a row press.
+            ->FocusOnPress();
     }
     if (onClick.IsValid()) {
         e->OnClick(onClick);

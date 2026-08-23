@@ -1428,6 +1428,11 @@ El* El::HoverFg(Rgba c) {
     return this;
 }
 
+El* El::FocusOnPress(bool v) {
+    style.focusOnPress = v;
+    return this;
+}
+
 El* El::Group() {
     style.group = true;
     return this;
@@ -4580,6 +4585,7 @@ static void CollectFocus(El* e, Window* win, int trap) {
         fr.trapId = trap;
         fr.tabIndex = e->style.tabIndex;
         fr.tabStop = e->style.tabStop;
+        fr.focusOnPress = e->style.focusOnPress;
         // A marker of its own, so the element has a position inside its own
         // subtree whether or not it declared a context or a handler. Without
         // one, an element that declares neither would share an index with the

@@ -1269,6 +1269,14 @@ struct Style {
     // reaches through the thing they belong to rather than one at a time.
     int tabIndex = 0;
     bool tabStop = true;
+    // Whether a press on this element moves focus to it. GPUI's `track_focus`
+    // does not: every widget in gpui-component that takes focus from a click
+    // calls `focus_handle.focus(window, cx)` itself — the input, the otp
+    // field, the tree, the list, the select and the colour picker do, and the
+    // button, the checkbox, the radio, the switch and the link do not. A
+    // press used to focus anything with a handle here, which is why a clicked
+    // button kept a focus ring the Rust one never shows.
+    bool focusOnPress = false;
     // div().key_context(".."): the context a keystroke is resolved against
     // while focus is anywhere in this subtree, which a binding's predicate
     // reads — "Editor", or "Editor mode=full". Hashed, since that is all an
@@ -1590,6 +1598,8 @@ struct El {
     El* HoverFg(Rgba c);
     // div().group("") and .group_hover(..): the group, and a descendant that
     // only paints while the pointer is inside it.
+    // The press-focus opt-in above.
+    El* FocusOnPress(bool v = true);
     El* Group();
     El* GroupHoverVisible();
     El* FocusId(int v);
@@ -1893,6 +1903,7 @@ struct FocusRect {
     int trapId = 0;
     int tabIndex = 0;
     bool tabStop = true;
+    bool focusOnPress = false;
     // Where this element sits in the frame's dispatch list. Rust walks the
     // real tree to find what is above a focused handle; the tree here is gone
     // by the time a key arrives, so the walk is recorded while it is still
