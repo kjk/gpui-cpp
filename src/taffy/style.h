@@ -54,7 +54,11 @@ struct CompactLength {
     static constexpr uint64_t kCalcTagMask = 0x07;
 
     uint64_t Tag() const { return bits & kTagMask; }
-    float Value() const;
+    // Inline, and so is FromVal: style.cpp's resolve helpers call this once
+    // per dimension per node per layout pass, and it is one bit-cast.
+    float Value() const {
+        return __builtin_bit_cast(float, (uint32_t)(bits >> 32));
+    }
     const void* CalcValue() const { return (const void*)(uintptr_t)bits; }
 
     bool IsCalc() const { return (bits & kCalcTagMask) == 0; }
@@ -98,7 +102,10 @@ struct CompactLength {
         return t == kPercentTag || t == kFitContentPercentTag || IsCalc();
     }
 
-    static CompactLength FromVal(float v, uint64_t tag);
+    static CompactLength FromVal(float v, uint64_t tag) {
+        return CompactLength{((uint64_t)__builtin_bit_cast(uint32_t, v) << 32) |
+                             tag};
+    }
     static CompactLength FromTag(uint64_t tag) { return CompactLength{tag}; }
     static CompactLength FromPtr(const void* p) {
         return CompactLength{(uint64_t)(uintptr_t)p};

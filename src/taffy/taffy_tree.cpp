@@ -528,16 +528,20 @@ LayoutOutput TaffyTree::ComputeBlockChildLayout(NodeId node, LayoutInput inputs,
     }
 
     // Rust wraps the rest in `compute_cached_layout`, which has this one
-    // caller; the cache check is inline here instead of behind a closure.
-    LayoutOutput cached;
-    if (CacheGet(node, inputs, &cached)) {
-        return cached;
-    }
-
+    // caller; the cache check is inline here instead of behind a closure. The
+    // node and the cache key are looked up once and used by both ends of it:
+    // going through TaffyTree::CacheGet / CacheStore resolved the slot twice
+    // and built the key twice, and this is the hottest function in a layout.
     NodeData* d = Get(node);
     if (!d) {
         return LayoutOutput::Hidden();
     }
+    CacheKey key = CacheKey::From(inputs);
+    LayoutOutput cached;
+    if (d->cache.GetWithKey(key, inputs.runMode, &cached)) {
+        return cached;
+    }
+
     Display displayMode = d->style.display;
     bool hasChildren = d->children.len > 0;
 
@@ -562,7 +566,7 @@ LayoutOutput TaffyTree::ComputeBlockChildLayout(NodeId node, LayoutInput inputs,
         }
     }
 
-    CacheStore(node, inputs, out);
+    d->cache.StoreWithKey(key, inputs, out);
     return out;
 }
 

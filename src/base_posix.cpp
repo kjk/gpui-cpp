@@ -53,6 +53,14 @@ bool PlatDirExists(const char* path) {
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+bool PlatFileExists(const char* path) {
+    if (!path || !path[0]) {
+        return false;
+    }
+    struct stat st = {};
+    return stat(path, &st) == 0 && !S_ISDIR(st.st_mode);
+}
+
 void PlatGetCwd(char* out, int cap) {
     if (!out || cap <= 0) {
         return;

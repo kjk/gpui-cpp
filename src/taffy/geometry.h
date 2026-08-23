@@ -110,21 +110,29 @@ constexpr bool OptfNe(Optf a, Optf b) {
 // Rust's `f32::max` / `f32::min` return the non-NaN operand when one side is
 // NaN; `std::max` does not, and taffy leans on that.
 
+//
+// The NaN test is the bit pattern rather than `std::isnan`: MSVC compiles
+// that one to a call into the CRT's `_fdclass`, and these two run several
+// times per node per layout pass.
+inline bool F32IsNan(float v) {
+    return (__builtin_bit_cast(uint32_t, v) & 0x7fffffffu) > 0x7f800000u;
+}
+
 inline float F32Max(float a, float b) {
-    if (std::isnan(a)) {
+    if (F32IsNan(a)) {
         return b;
     }
-    if (std::isnan(b)) {
+    if (F32IsNan(b)) {
         return a;
     }
     return a > b ? a : b;
 }
 
 inline float F32Min(float a, float b) {
-    if (std::isnan(a)) {
+    if (F32IsNan(a)) {
         return b;
     }
-    if (std::isnan(b)) {
+    if (F32IsNan(b)) {
         return a;
     }
     return a < b ? a : b;

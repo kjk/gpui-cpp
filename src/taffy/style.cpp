@@ -7,21 +7,6 @@
 
 namespace taffy {
 
-// ─── CompactLength ───────────────────────────────────────────────────────
-
-float CompactLength::Value() const {
-    uint32_t word = (uint32_t)(bits >> 32);
-    float out = 0.0f;
-    memcpy(&out, &word, sizeof(out));
-    return out;
-}
-
-CompactLength CompactLength::FromVal(float v, uint64_t tag) {
-    uint32_t word = 0;
-    memcpy(&word, &v, sizeof(word));
-    return CompactLength{((uint64_t)word << 32) | tag};
-}
-
 // ─── resolve — taffy/src/util/resolve.rs ─────────────────────────────────
 //
 // Rust's `MaybeResolve` returns None when it cannot resolve; `ResolveOrZero`

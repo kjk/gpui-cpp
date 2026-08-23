@@ -244,8 +244,27 @@ TempStr AssetsLoadTextTemp(Str relPath) {
     return s;
 }
 
+// Whether a root has the file, asked without reading it. This used to be
+// AssetsLoad into a throwaway buffer, which meant an fopen and a full read
+// per candidate path; the image layout asks it several times per picture per
+// measure pass, so it was the single biggest thing in the story's layout.
 bool AssetsExists(Str relPath) {
-    Vec<uint8_t> buf;
-    return AssetsLoad(relPath, &buf);
+    if (!relPath.s || relPath.len <= 0) {
+        return false;
+    }
+    char rel[kMaxPath];
+    int n = relPath.len < kMaxPath - 1 ? relPath.len : kMaxPath - 1;
+    memcpy(rel, relPath.s, (size_t)n);
+    rel[n] = 0;
+    ToNativeSep(rel);
+
+    for (int i = 0; i < gRootN; i++) {
+        char full[kMaxPath];
+        JoinPath(full, kMaxPath, gRoots[i], rel);
+        if (PlatFileExists(full)) {
+            return true;
+        }
+    }
+    return false;
 }
 } // namespace gpui

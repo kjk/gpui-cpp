@@ -141,16 +141,70 @@ bool ImageSrcIsLocal(Str src) {
     return true;
 }
 
+static bool SrcEq(Str a, Str b) {
+    return a.len == b.len &&
+           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
+}
+
 // The asset a src names. A local path is itself; a remote URL is its last path
 // segment, looked for in the asset roots and then under the two folders a
 // story's own pictures live in. What Rust gets from its asset system fetching
 // the URL, an application here gets by shipping the file.
+//
+// The answer is a walk of the asset roots, and image layout asks it for the
+// same handful of srcs on every measure pass of every frame — a picture that
+// is a vector has no decoded bitmap to hit the cache below, so this was the
+// walk itself, every time. The roots do not change while the app is up, so
+// each src is resolved once and the answer kept, the empty one included:
+// that is the common answer for a remote URL nothing shipped, and it is the
+// one that costs the most to reach.
+struct AssetResolveSlot {
+    Str src = {};
+    Str asset = {};
+};
+constexpr int kAssetResolveSlots = 64;
+static AssetResolveSlot gAssetResolve[kAssetResolveSlots];
+static int gAssetResolveN = 0;
+
+static void AssetResolveClear() {
+    for (int i = 0; i < gAssetResolveN; i++) {
+        if (gAssetResolve[i].src.s) {
+            StrFree(gAssetResolve[i].src);
+        }
+        if (gAssetResolve[i].asset.s) {
+            StrFree(gAssetResolve[i].asset);
+        }
+        gAssetResolve[i] = {};
+    }
+    gAssetResolveN = 0;
+}
+
+static Str ImageAssetResolve(Arena* a, Str src);
+
 Str ImageAssetFor(Arena* a, Str src) {
     if (!src.s || src.len <= 0 || StartsWithNoCase(src, "data:")) {
         return {};
     }
+    for (int i = 0; i < gAssetResolveN; i++) {
+        if (SrcEq(gAssetResolve[i].src, src)) {
+            Str v = gAssetResolve[i].asset;
+            return v.s ? StrDup(a, v) : Str{};
+        }
+    }
+    Str got = ImageAssetResolve(a, src);
+    // Past the last slot the walk simply happens again; a page with more than
+    // sixty-four distinct pictures is not what this is sized for.
+    if (gAssetResolveN < kAssetResolveSlots) {
+        AssetResolveSlot* sl = &gAssetResolve[gAssetResolveN++];
+        sl->src = StrDup(src);
+        sl->asset = got.s ? StrDup(got) : Str{};
+    }
+    return got;
+}
+
+static Str ImageAssetResolve(Arena* a, Str src) {
     if (ImageSrcIsLocal(src)) {
-        return AssetsExists(src) ? src : Str{};
+        return AssetsExists(src) ? StrDup(a, src) : Str{};
     }
     int slash = -1;
     for (int i = src.len - 1; i >= 0; i--) {
@@ -266,11 +320,6 @@ constexpr int kImageCacheSlots = 32;
 static ImageCacheSlot gImageCache[kImageCacheSlots];
 static int gImageCacheNext = 0;
 
-static bool SrcEq(Str a, Str b) {
-    return a.len == b.len &&
-           (a.len == 0 || memcmp(a.s, b.s, (size_t)a.len) == 0);
-}
-
 static void ImageSlotFree(ImageCacheSlot* s) {
     if (s->img) {
         ImageFree(s->img);
@@ -293,6 +342,7 @@ void ImageCacheClear() {
         ImageSlotFree(&gImageCache[i]);
     }
     gImageCacheNext = 0;
+    AssetResolveClear();
     HttpFetchClear();
 }
 

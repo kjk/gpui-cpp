@@ -2546,3 +2546,52 @@ cargo run -p system_monitor
   Two things measuring it turned up. The showcase was *slower* than D2D (0.41 ms against 0.20) while batching the entire scene into a **single draw call** — so the cost was never the drawing. It was the per-frame full-surface D24S8 stencil clear; the cover pass already leaves the buffer at zero, so the clear only has to happen once when the surface is made, and that took it to 0.09 ms. And pixel-diffing against D2D found a real bug: underlines and strikethroughs came out half-brightness, because a 0.8 px rule at true analytic coverage is fainter than DirectWrite's, which snaps thin rules to the pixel grid. Snapping them fixed it.
 
   What is left, and why this is not the default: no subpixel glyph positioning — the atlas holds one rasterization per glyph and x is snapped, where DirectWrite positions at a third of a pixel — dashes are expanded on the CPU for lines and ignored on rounded rects, and the shaders are compiled with `D3DCompile` at startup rather than built to bytecode by fxc. Against D2D, 2.7% of the story's pixels differ and 1.2% of the chart page's, all of it text antialiasing and that positioning; no geometry moves. `AGENTS.md`'s exclusion of "the full GPUI GPU scene graph" is narrowed rather than dropped — this is the renderer, not a scene graph: no layers, no batching across windows, no offscreen mask cache.
+
+- 2026-08-23: the story's layout pass, 5.8 ms when the GPU renderer landed and
+  4.3 ms on this machine at that commit, is 2.3 ms. Profiled with `winperf`
+  (`record -i 2000 -write-agent`, 1500 frames under `GPUI_FRAME_BENCH`), which
+  is the first time the frame has been looked at with a sampling profiler
+  rather than the three phase timers.
+
+  **The first thing it found was not layout at all: it was the filesystem.**
+  `FLTMGR.SYS` and `Ntfs.sys` held 18% of every sample, all of it under
+  `LayoutMeasure` → `ImageNaturalSize`. `AssetsExists` answered "is this file
+  there" by *reading the whole file* through `AssetsLoad` into a throwaway
+  buffer, and `ImageAssetFor` asked it up to three times (the bare name, then
+  `story/` and `images/`) across up to twelve roots. `ImageVectorForSrc` calls
+  `ImageAssetFor` before it can even reach the decode cache, so a page with a
+  vector picture on it walked and opened those paths on every measure pass of
+  every frame. Two fixes: `AssetsExists` is `PlatFileExists` — a new base
+  entry point, `GetFileAttributesA` on Windows and `stat` elsewhere, next to
+  `PlatDirExists` — and `ImageAssetFor` keeps what each src resolved to, the
+  empty answer included, since the roots do not change while the app is up.
+  That alone took layout from 4.30 ms to 2.57 ms, and the paint phase from
+  1.91 to 1.41, because paint resolves the same srcs.
+
+  What was left was taffy, and three things came out of it. `F32Min` / `F32Max`
+  tested for NaN with `std::isnan`, which MSVC compiles to a **call** into the
+  CRT's `_fdclass` — 0.9% of all samples in a function that is one bit test;
+  `F32IsNan` is that bit test. `CompactLength::Value` and `FromVal` were out of
+  line in `style.cpp` and are one bit-cast each. And
+  `ComputeBlockChildLayout`, the hottest function in a layout, resolved the
+  node three times and built the cache key twice — once in `CacheGet` and
+  again in `CacheStore`; it now looks up `NodeData` and `CacheKey` once and
+  calls `Cache::GetWithKey` / `StoreWithKey`, with the `LayoutInput` overloads
+  kept for the public tree API. Together: layout 2.57 → 2.31 ms, and on
+  taffy's own benchmarks, where no asset ever loads, 6-14% off every flexbox
+  case (`deep tree (random size)` 14-level 9.83 → 8.44 ms).
+
+  Three things were measured and thrown away, which is worth writing down so
+  the next session does not try them again. **`/GL` + `/LTCG`** is level or
+  fractionally worse and costs build time. An **inline buffer for
+  `ComputePreliminary`'s `Vec<FlexItem>`**, the trick that paid for `FlexLine`,
+  moves nothing at four items or at twelve — the allocation was never the cost
+  there. And **moving the `resolve.rs` helpers into `style.h`** so they inline
+  across translation units bought under 1%, which is not worth 120 lines in a
+  header; `RectLpa::ResolveOrZero` stays out of line at 2% self.
+
+  The frame is now build 0.20 ms, layout 2.31 ms, paint 1.40 ms. What the
+  profile says is next, and none of it is one change: `ComputeLeafLayout`
+  (5.4% self), `DetermineFlexBaseSize` (2.9%), `GenerateAnonymousFlexItems`
+  (2.4%). The tree is rebuilt from nothing every frame, which is what GPUI
+  does too, so the only structural win left is carrying layout across frames.

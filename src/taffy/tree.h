@@ -265,6 +265,13 @@ struct Cache {
 
     bool Get(const LayoutInput& input, LayoutOutput* out) const;
     void Store(const LayoutInput& input, const LayoutOutput& output);
+    // The same two with the key already in hand. Every real lookup is a get
+    // followed by a store with the same input, and building the key is a
+    // dozen bit operations over four floats — enough, at one per node per
+    // pass, to be worth doing once.
+    bool GetWithKey(CacheKey key, RunMode runMode, LayoutOutput* out) const;
+    void StoreWithKey(CacheKey key, const LayoutInput& input,
+                      const LayoutOutput& output);
     // True if it cleared something, false if it was already empty. Rust
     // returns a `ClearState` enum for the same answer.
     bool Clear();

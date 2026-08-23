@@ -121,34 +121,43 @@ static int ComputeCacheSlot(SizeFOpt knownDimensions,
 }
 
 bool Cache::Get(const LayoutInput& input, LayoutOutput* out) const {
-    CacheKey key = CacheKey::From(input);
-    switch (input.runMode) {
+    return GetWithKey(CacheKey::From(input), input.runMode, out);
+}
+
+void Cache::Store(const LayoutInput& input, const LayoutOutput& output) {
+    StoreWithKey(CacheKey::From(input), input, output);
+}
+
+bool Cache::GetWithKey(CacheKey key, RunMode runMode, LayoutOutput* out) const {
+    switch (runMode) {
         case RunMode::PerformLayout:
             if (finalLayoutEntry.present && finalLayoutEntry.key == key) {
                 *out = finalLayoutEntry.content;
                 return true;
             }
             return false;
-        case RunMode::ComputeSize:
+        case RunMode::ComputeSize: {
+            uint64_t xAxis = key.XAxisParentSize();
             for (int i = 0; i < kCacheSize; i++) {
                 const CacheEntry<SizeF>& e = measureEntries[i];
                 if (!e.present) {
                     continue;
                 }
                 if (e.key.kdAvailableSpace == key.kdAvailableSpace &&
-                    e.key.XAxisParentSize() == key.XAxisParentSize()) {
+                    e.key.XAxisParentSize() == xAxis) {
                     *out = LayoutOutput::FromOuterSize(e.content);
                     return true;
                 }
             }
             return false;
+        }
         default:
             return false;
     }
 }
 
-void Cache::Store(const LayoutInput& input, const LayoutOutput& output) {
-    CacheKey key = CacheKey::From(input);
+void Cache::StoreWithKey(CacheKey key, const LayoutInput& input,
+                         const LayoutOutput& output) {
     switch (input.runMode) {
         case RunMode::PerformLayout:
             isEmpty = false;

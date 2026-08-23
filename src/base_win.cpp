@@ -105,6 +105,15 @@ bool PlatDirExists(const char* path) {
            (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
+bool PlatFileExists(const char* path) {
+    if (!path || !path[0]) {
+        return false;
+    }
+    DWORD attr = GetFileAttributesA(path);
+    return attr != INVALID_FILE_ATTRIBUTES &&
+           (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
 void PlatGetCwd(char* out, int cap) {
     if (!out || cap <= 0) {
         return;

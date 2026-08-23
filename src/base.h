@@ -152,6 +152,9 @@ void StrCopyZ(char* dst, int cap, const char* src);
 
 // The filesystem bits the asset loader needs; reading a file is plain stdio.
 bool PlatDirExists(const char* path);
+// Whether a file is there, without reading it: the question the asset
+// lookup asks, and it asks it many times a frame.
+bool PlatFileExists(const char* path);
 void PlatGetCwd(char* out, int cap);
 // The directory the running binary sits in.
 void PlatGetExeDir(char* out, int cap);
