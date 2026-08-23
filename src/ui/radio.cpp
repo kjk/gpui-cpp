@@ -143,7 +143,12 @@ RadioGroup* RadioGroup::OnClick(Listener fn) {
 }
 
 El* RadioGroup::IntoEl() {
-    El* base = gpui::RadioGroup::New(cx, id)->Gap(12);
+    // radio.rs puts the flex line inside the BaseRadioGroup rather than on
+    // it: the caller's own style — a width, a justification — lands on the
+    // group, and the radios stay packed at their gap_3 inside it.
+    El* group = gpui::RadioGroup::New(cx, id);
+    El* base = Div(cx->a)->Gap(12);
+    group->Child(base);
     if (horizontal) {
         base->FlexRow()->W(kFill)->FlexWrap();
     } else {
@@ -157,7 +162,7 @@ El* RadioGroup::IntoEl() {
         }
         base->Child(r->IntoEl());
     }
-    return base;
+    return group;
 }
 
 } // namespace component
