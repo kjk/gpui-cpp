@@ -1,6 +1,6 @@
 # gpui2 — C++ port of gpui-component
 
-This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows, Linux and macOS**. The goal is to port **as much of the Rust as this tree can hold**: every module of `crates/base` and `crates/ui`, the story gallery, the showcase and the examples. Assume a thing is in scope until a hard rule below says otherwise; the answer to "should we port X?" is yes unless X needs a dependency or a runtime we have ruled out.
+This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows, Linux, macOS and the browser** (wasm, through emscripten). The goal is to port **as much of the Rust as this tree can hold**: every module of `crates/base` and `crates/ui`, the story gallery, the showcase and the examples. Assume a thing is in scope until a hard rule below says otherwise; the answer to "should we port X?" is yes unless X needs a dependency or a runtime we have ruled out.
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
@@ -28,6 +28,8 @@ bun cmd/build.ts -rel hello_world
 bun cmd/build.ts -rel showcase
 bun cmd/build.ts -dbg -all
 bun cmd/build.ts -rel -asan system_monitor
+bun cmd/build.ts -wasm system_monitor
+bun cmd/run-wasm.ts showcase
 ```
 
 Rust references (in `.work/gpui-component`):
@@ -58,7 +60,6 @@ this tree, and `src/markdown/` parses every `TextView`. See
 These are the standing exclusions. Everything else in gpui-component is in
 scope, and a module being large or unglamorous is not a reason to skip it.
 
-- WASM
 - The full GPUI GPU scene graph, and `async` anything. We do have
   `App`/`Window`/`Entity`/`Ctx`, actions and a keymap, `EventEmitter`, window
   subscriptions and an executor — see below — but not refcounted entities,
@@ -158,21 +159,74 @@ src/base.h  Str, Vec, Arena, Geom, Color helpers
 
 ## Portability
 
-`src/base.h` defines `GPUI_OS_WINDOWS`, `GPUI_OS_LINUX` and `GPUI_OS_MAC` from
-the compiler's own predefines; exactly one is 1. They exist for one-expression differences
-(the path separator, `SRWLOCK` vs `pthread_mutex_t`). Everything bigger is a
-portable signature plus one implementation per platform:
+`src/base.h` defines `GPUI_OS_WINDOWS`, `GPUI_OS_LINUX`, `GPUI_OS_MAC` and
+`GPUI_OS_WASM` from the compiler's own predefines; exactly one is 1. They exist
+for one-expression differences (the path separator, `SRWLOCK` vs
+`pthread_mutex_t`). Everything bigger is a portable signature plus one
+implementation per platform:
 
-| Seam                                       | Shared header          | Windows                   | Linux                       | macOS                     |
-| ------------------------------------------ | ---------------------- | ------------------------- | --------------------------- | ------------------------- |
-| virtual memory, paths, strings, self usage | `src/base.h` (`Plat*`) | `src/base_win.cpp`        | `src/base_linux.cpp`        | `src/base_mac.cpp`        |
-| 2D drawing and shaped text                 | `src/gpui/paint.h`     | `src/gpui/paint_win.cpp`  | `src/gpui/paint_linux.cpp`  | `src/gpui/paint_mac.cpp`  |
-| the OS window and its event loop           | `src/gpui/platform.h`  | `src/gpui/window_win.cpp` | `src/gpui/window_linux.cpp` | `src/gpui/window_mac.cpp` |
-| system metrics                             | `src/sys/sysinfo.h`    | `src/sys/sysinfo_win.cpp` | `src/sys/sysinfo_linux.cpp` | `src/sys/sysinfo_mac.cpp` |
+| Seam                                       | Shared header          | Windows                   | Linux                       | macOS                     | wasm                       |
+| ------------------------------------------ | ---------------------- | ------------------------- | --------------------------- | ------------------------- | -------------------------- |
+| virtual memory, paths, strings, self usage | `src/base.h` (`Plat*`) | `src/base_win.cpp`        | `src/base_linux.cpp`        | `src/base_mac.cpp`        | `src/base_wasm.cpp`        |
+| 2D drawing and shaped text                 | `src/gpui/paint.h`     | `src/gpui/paint_win.cpp`  | `src/gpui/paint_linux.cpp`  | `src/gpui/paint_mac.cpp`  | `src/gpui/paint_wasm.cpp`  |
+| the OS window and its event loop           | `src/gpui/platform.h`  | `src/gpui/window_win.cpp` | `src/gpui/window_linux.cpp` | `src/gpui/window_mac.cpp` | `src/gpui/window_wasm.cpp` |
+| system metrics                             | `src/sys/sysinfo.h`    | `src/sys/sysinfo_win.cpp` | `src/sys/sysinfo_linux.cpp` | `src/sys/sysinfo_mac.cpp` | `src/sys/sysinfo_wasm.cpp` |
+| one HTTP GET                               | `src/sys/http.h`       | `src/sys/http_win.cpp`    | `src/sys/http_linux.cpp`    | `src/sys/http_mac.cpp`    | `src/sys/http_wasm.cpp`    |
+
+`_posix.cpp` is the fourth suffix: Linux, macOS **and** wasm compile it, since
+emscripten's libc answers for strings, directories, threads and the clock the
+way the other two do. What it cannot answer is mmap with a reserve/commit
+split, so that half is `_mem_posix.cpp` and only the two hosted targets take
+it — `src/base_wasm.cpp` writes its own against a linear heap that grows.
 
 `src/gpui/window_common.cpp` holds everything a window does that is not the OS
 window — frame drawing, input dispatch, the app lifecycle — and all platform
 files call into it.
+
+### The browser
+
+`bun cmd/build.ts -wasm <example>` builds a page instead of a binary, and
+`bun cmd/run-wasm.ts <example>` builds it, serves it and opens it — a wasm
+module has to come off a server, so there is no double-clicking the html.
+Emscripten is found through `$EMCC`, `$EMSDK`, `PATH` or a sibling `.emsdk`
+checkout; nothing else is needed, because the browser half draws through
+Canvas2D and takes no library at all. `web/shell.html` is the page: it puts a
+canvas called `gpui-canvas` at the top left of the viewport and does nothing
+else, which is what lets `window_wasm.cpp` read a `clientX` as a window
+coordinate. Assets are preloaded into MEMFS at `/assets`, so
+`gpui/assets.cpp` walks them with the same `fopen` it uses everywhere.
+
+The whole platform layer is `EM_JS`, and its state lives on one
+`globalThis.__gpui` object handed back to C++ as integer ids. Note for anyone
+adding to it: an `EM_JS` body is stringified by the preprocessor, so it can
+hold no empty `''`, no regex literal, and no backslash outside a string
+literal. Use `""`, and build a `RegExp` from a string if you ever need one.
+
+Where a page is not a desktop, and why:
+
+- **One window.** A tab has one canvas; a second `WindowOpen` answers null.
+- **`AppRun` does not return.** `emscripten_set_main_loop` unwinds the stack
+  and hands the tab back to the browser, which is the only way a C main loop
+  and an event loop share a thread. Nothing after `AppRun` runs.
+- **No threads.** `PlatThreadRun` fails, so `ExecSpawn` queues the job on the
+  main thread's own queue rather than dropping it — `ExecHasThreads()` is how
+  anything that cares can tell. Rule 1 still holds: the job is written as if
+  it were elsewhere.
+- **No `HttpGet`.** Everything a page can fetch with is asynchronous and
+  `HttpGet` blocks, so a remote image renders as its alt text, exactly as a
+  Linux build without libcurl does. `src/sys/http_wasm.cpp` says what a real
+  one would need.
+- **`ImageDecode` answers before the picture is decoded**, for the same
+  reason. The `Image` comes back sized zero and fills itself in, and the load
+  repaints. SVG never goes through it — `src/gpui/svg.h` turns SVG into draw
+  ops, which is most of what this tree draws.
+- **The clipboard is a mirror** kept by the DOM `paste` event, and the paste
+  chord is driven by that event rather than by its keydown.
+- **`sysinfo` reports the tab**, not the machine: the wasm heap as memory,
+  `navigator.hardwareConcurrency`, the Battery Status API. No process table,
+  no host CPU, no disk.
+- **An arena reserves 4 MB, not 64.** wasm has no reserve/commit split, so a
+  reservation is spent memory; `PlatArenaReserveSize()` is the seam.
 
 An example never names an OS API. It implements `int GpuiMain(int argc,
 char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the

@@ -154,9 +154,12 @@ static void ACellIsOneNumber() {
     utassert(TableCellCol(TableCellPack(0, 0)) == 0);
     utassert(TableCellRow(TableCellPack(4999, 44)) == 4999);
     utassert(TableCellCol(TableCellPack(4999, 44)) == 44);
-    // A million rows and four thousand columns still come back whole.
-    utassert(TableCellRow(TableCellPack(1000000, 4095)) == 1000000);
-    utassert(TableCellCol(TableCellPack(1000000, 4095)) == 4095);
+    // A million rows and four thousand columns still come back whole — on a
+    // 64-bit target. The word is an intptr_t, so a 32-bit one has twenty bits
+    // left over the column and tops out at half a million rows.
+    const int bigRow = sizeof(intptr_t) >= 8 ? 1000000 : 500000;
+    utassert(TableCellRow(TableCellPack(bigRow, 4095)) == bigRow);
+    utassert(TableCellCol(TableCellPack(bigRow, 4095)) == 4095);
 }
 
 // The two right-click marks are exclusive, and a selection made any other

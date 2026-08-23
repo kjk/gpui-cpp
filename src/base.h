@@ -25,24 +25,38 @@
 // #if in shared code: these are for the handful of places where a single
 // expression differs.
 
-#if defined(_WIN32)
+// __EMSCRIPTEN__ is tested first: an emscripten build is a POSIX-shaped libc
+// on top of a browser, and the checks below would happily claim it.
+#if defined(__EMSCRIPTEN__)
+#define GPUI_OS_WINDOWS 0
+#define GPUI_OS_LINUX 0
+#define GPUI_OS_MAC 0
+#define GPUI_OS_WASM 1
+#elif defined(_WIN32)
 #define GPUI_OS_WINDOWS 1
 #define GPUI_OS_LINUX 0
 #define GPUI_OS_MAC 0
+#define GPUI_OS_WASM 0
 #elif defined(__APPLE__)
 #define GPUI_OS_WINDOWS 0
 #define GPUI_OS_LINUX 0
 #define GPUI_OS_MAC 1
+#define GPUI_OS_WASM 0
 #elif defined(__linux__)
 #define GPUI_OS_WINDOWS 0
 #define GPUI_OS_LINUX 1
 #define GPUI_OS_MAC 0
+#define GPUI_OS_WASM 0
 #else
-#error "unsupported platform: gpui builds on Windows, Linux and macOS"
+#error "unsupported platform: gpui builds on Windows, Linux, macOS and wasm"
 #endif
 
 // Everything that is not Windows is a POSIX host here, which is what the
-// _posix.cpp half of the platform layer is written against.
+// _posix.cpp half of the platform layer is written against. Emscripten is
+// one of them: its libc has the strings, the directories and the clock this
+// tree asks POSIX for. What it does not have is virtual memory with a
+// reserve/commit split, so the mmap half lives in _mem_posix.cpp and wasm
+// answers for itself.
 #define GPUI_OS_POSIX (!GPUI_OS_WINDOWS)
 
 #if GPUI_OS_WINDOWS
@@ -115,6 +129,13 @@ WCHAR* ToCWstrTemp(Str s);
 
 uint64_t PlatPageSize();
 uint64_t PlatLargePageSize();
+// How much address space an arena reserves when nothing says otherwise. A
+// host with real virtual memory reserves far more than it will ever touch,
+// because untouched reservations are free there; wasm has no reserve/commit
+// split at all — a reservation is an allocation — so it answers with what
+// it is willing to spend. An arena that outgrows its reserve chains another
+// block, so this is a first guess and never a limit.
+uint64_t PlatArenaReserveSize();
 // Reserve address space without backing it. Returns null on failure.
 void* PlatMemReserve(uint64_t size);
 bool PlatMemCommit(void* base, uint64_t size, bool largePages);

@@ -129,8 +129,15 @@ static void ASpawnRunsElsewhereAndReportsBack() {
     utassert(ExecWaitIdle(5000));
     utassert(gRan == 1);
     // Rule 1: a worker never touches what the UI owns. This is the only place
-    // that says out loud that it really was another thread.
-    utassert(gWorkerThread != 0 && gWorkerThread != PlatThreadId());
+    // that says out loud that it really was another thread — where there is
+    // one. A wasm page has none, and the job runs on the main thread's queue
+    // instead; rule 1 still holds, because the job is written as if it were
+    // elsewhere.
+    if (ExecHasThreads()) {
+        utassert(gWorkerThread != 0 && gWorkerThread != PlatThreadId());
+    } else {
+        utassert(gWorkerThread == PlatThreadId());
+    }
     // Rule 2: the completion came back here. ExecWaitIdle drains as it waits,
     // and a `done` that had not run would have left the queue behind.
     utassert(gDone == 1);
@@ -146,8 +153,8 @@ static void EveryJobRuns() {
     utassert(ExecWaitIdle(5000));
     utassert(gRan == 32);
     utassert(gDone == 32);
-    // The pool grows to meet the work and no further.
-    utassert(ExecWorkerCount() > 0);
+    // The pool grows to meet the work and no further, where there is a pool.
+    utassert(!ExecHasThreads() || ExecWorkerCount() > 0);
     utassert(ExecWorkerCount() <= kExecMaxWorkers);
 }
 

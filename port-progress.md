@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**system_monitor**, **app_assets**, the twelve simple examples, the **gpui-base showcase**, and the **crates/ui story gallery** all build on **Windows, Linux and macOS**. The macOS `system_monitor`, `hello_world`, and `story` examples have also been run and visually smoke-tested.
+**system_monitor**, **app_assets**, the twelve simple examples, the **gpui-base showcase**, and the **crates/ui story gallery** all build on **Windows, Linux, macOS and wasm**. The macOS `system_monitor`, `hello_world`, and `story` examples have also been run and visually smoke-tested.
 
 ```
 bun cmd/build.ts all
@@ -2513,3 +2513,18 @@ cargo run -p system_monitor
   for the small benchmarks and more for `grid/superdeep`, which read +13.8%
   once and was level on three focused repeats. Anything at that scale needs
   repeating before it means something.
+
+- 2026-08-23: **The browser is a fourth target.** `bun cmd/build.ts -wasm <example>` compiles the same amalgamated `gpui.cpp` with emscripten and `bun cmd/run-wasm.ts <example>` serves and opens it. WASM had been a standing non-goal in `AGENTS.md`; that line is gone, because the seams rule 7 already asks for turned out to be the whole job — the four new platform files are `src/base_wasm.cpp`, `src/gpui/paint_wasm.cpp` (Canvas2D), `src/gpui/window_wasm.cpp` (the canvas, the DOM events, an animation-frame loop) and `src/sys/sysinfo_wasm.cpp` / `http_wasm.cpp`, and *not one `#if` was added to a shared file*. Every existing `#if GPUI_OS_MAC` in `src/base/input_keys.cpp`, `src/ui/kbd.cpp` and `src/ui/title_bar.h` reads correctly for a target where `GPUI_OS_MAC` is 0.
+
+  Four seams had to be widened, each a portable function rather than a guard:
+
+  - `PlatArenaReserveSize()`. An arena reserved 64 MB of address space because on a hosted platform untouched address space is free. wasm has no reserve/commit split at all — emscripten's `mmap` hands out real pages for `PROT_NONE` and warns `unsupported syscall` on every `mprotect` — so six arenas would have cost the tab 400 MB before the first frame. wasm answers 4 MB and chains a second block when it has to; `base_win.cpp` and `base_mem_posix.cpp` still say 64.
+  - `base_posix.cpp` split. Emscripten's libc answers for strings, directories, threads and the clock the way Linux does, so wasm compiles that file too; the mmap half moved to `base_mem_posix.cpp`, which only the two hosted targets take. `cmd/build-dist.ts` learned the suffix — and to test it *before* `_posix.cpp`, which it also ends with.
+  - `ExecHasThreads()`. `pthread_create` links under emscripten and returns `EAGAIN`, so `PlatThreadRun` fails honestly. `ExecSpawn` used to drop the job on the floor when no thread could be started; now it queues it on the main thread's own queue, so the work still happens and `done` still lands where it always does. That fixes a latent bug on every platform — a host that refused a thread lost the job silently — and `ExecHasThreads()` is what `tests/ExecutorTests.cpp` asks before insisting the work ran somewhere else.
+  - `TableCellPack` is `intptr_t`, so a 32-bit target has twenty bits over the column: half a million rows, not four billion. Written down in `data_table.h`, and `tests/DataTableTests.cpp` and `tests/ArenaStrTests.cpp` stopped assuming a 64-bit word.
+
+  The full suite runs under node: **16635 checks, all passing**, which is taffy, markdown and the whole base layer verified on a second word size for the first time. All seventeen examples build; `hello_world`, `showcase`, `system_monitor`, `story`, `input`, `app_assets` and `rich_text` were driven in headless Chrome over CDP — clicking, typing, scrolling, opening the drawn fallback menu — and match the Windows build. One real bug came out of that: `TextLayoutNew` was reporting a run's width with its trailing space trimmed, which ran every inline markdown run into the next one ("UIcomponentsforbuilding"); a line only loses its trailing space when a *wrap* put it there, not when the text ends with one.
+
+  What a tab cannot do, and is documented rather than faked: one window (one canvas); `AppRun` never returns, because `emscripten_set_main_loop` unwinds the stack; `HttpGet` answers false, since everything a page can fetch with is asynchronous and `HttpGet` blocks — a remote image shows its alt text exactly as a Linux build without libcurl does; `ImageDecode` answers before the browser has decoded, so the `Image` is sized zero for a frame and the load repaints (SVG never goes through it, which is most of what this tree draws); the clipboard is a mirror kept by the DOM `paste` event, with the paste chord driven by that event rather than by its keydown; and `sysinfo` reports the tab — heap, `hardwareConcurrency`, the Battery API — not the machine.
+
+  Trap for the next session: an `EM_JS` body is stringified by the preprocessor, so it may hold no empty `''` (an empty char constant), no regex literal and no backslash outside a string literal. Write `""`, and build a `RegExp` out of a string if you ever need one.

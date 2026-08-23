@@ -183,6 +183,46 @@ static void WorkerMain() {
     gPoolLock.Unlock();
 }
 
+// Latched the first time PlatThreadRun refuses, and what ExecHasThreads
+// reads. Guarded by gPoolLock, like everything else about the pool.
+static bool gNoThreads = false;
+
+// The fallback for a target with no thread to run a job on: wasm, where the
+// page is one thread and PlatThreadRun always fails. GPUI has no background
+// executor there either. Rather than drop the job, ExecSpawn hands it to the
+// main thread's own queue, so it runs late instead of never and `done` still
+// lands where it lands everywhere else — on the main thread, after the work.
+// Rule 1 is not weakened by this: the job is written as if it were elsewhere,
+// and this only changes where "elsewhere" turned out to be.
+//
+// It also covers the ordinary failure that used to drop a job on the floor: a
+// host that would not give out a thread at all.
+static void RunOnMainThread(void* arg) {
+    TaskId id = (TaskId)(intptr_t)arg;
+    Job job;
+    bool found = false;
+    gPoolLock.Lock();
+    for (int i = 0; i < gJobs.len; i++) {
+        if (gJobs[i].id != id) {
+            continue;
+        }
+        job = gJobs[i];
+        for (int j = i + 1; j < gJobs.len; j++) {
+            gJobs[j - 1] = gJobs[j];
+        }
+        gJobs.len--;
+        found = true;
+        break;
+    }
+    gPoolLock.Unlock();
+    if (!found) {
+        // ExecCancel got here first.
+        return;
+    }
+    job.work.Call();
+    job.done.Call();
+}
+
 TaskId ExecSpawn(Func0 work, Func0 done) {
     if (!work.IsValid() && !done.IsValid()) {
         return 0;
@@ -216,23 +256,16 @@ TaskId ExecSpawn(Func0 work, Func0 done) {
             gWorkers--;
             bool alone = gWorkers == 0;
             if (alone) {
-                // No thread will ever pick this up, so it is not pending: say
-                // so, rather than leaving the caller waiting on a job that
-                // cannot run.
-                for (int i = 0; i < gJobs.len; i++) {
-                    if (gJobs[i].id != id) {
-                        continue;
-                    }
-                    for (int j = i + 1; j < gJobs.len; j++) {
-                        gJobs[j - 1] = gJobs[j];
-                    }
-                    gJobs.len--;
-                    break;
-                }
+                gNoThreads = true;
             }
             gPoolLock.Unlock();
             if (alone) {
-                return 0;
+                // Nothing will ever pick this up off the job list, so it goes
+                // to the one queue that is definitely drained. It stays in
+                // `gJobs` while it waits, which is what keeps ExecCancel
+                // working and what ExecPending counts.
+                ExecPost(MkFunc1Void(RunOnMainThread), (void*)(intptr_t)id);
+                return id;
             }
         }
     }
@@ -266,6 +299,13 @@ int ExecPending() {
     int n = gJobs.len + gRunning;
     gPoolLock.Unlock();
     return n;
+}
+
+bool ExecHasThreads() {
+    gPoolLock.Lock();
+    bool no = gNoThreads;
+    gPoolLock.Unlock();
+    return !no;
 }
 
 int ExecWorkerCount() {

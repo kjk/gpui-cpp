@@ -45,7 +45,16 @@ struct ArenaParams {
     const char* name = nullptr;
 };
 
-static uint64_t gArenaDefaultReserveSize = 64ull * 1024ull * 1024ull;
+// The platform's answer, read once. It is a function rather than a constant
+// because what a reservation costs is not the same everywhere: see
+// PlatArenaReserveSize in base.h.
+static uint64_t ArenaDefaultReserveSize() {
+    static uint64_t sz = 0;
+    if (sz == 0) {
+        sz = PlatArenaReserveSize();
+    }
+    return sz;
+}
 static uint64_t gArenaDefaultCommitSize = 64ull * 1024ull;
 static ArenaFlags gArenaDefaultFlags = 0;
 
@@ -166,7 +175,7 @@ static void* ArenaPushLocked(Arena* arena, uint64_t size, uint64_t align,
 static ArenaParams ArenaDefaultParams() {
     ArenaParams params = {};
     params.flags = gArenaDefaultFlags;
-    params.reserveSize = gArenaDefaultReserveSize;
+    params.reserveSize = ArenaDefaultReserveSize();
     params.commitSize = gArenaDefaultCommitSize;
     return params;
 }
@@ -178,7 +187,7 @@ Arena* ArenaNew() {
 static Arena* ArenaAlloc(const ArenaParams& srcParams) {
     ArenaParams params = srcParams;
     if (params.reserveSize == 0) {
-        params.reserveSize = gArenaDefaultReserveSize;
+        params.reserveSize = ArenaDefaultReserveSize();
     }
     if (params.commitSize == 0) {
         params.commitSize = gArenaDefaultCommitSize;

@@ -1,5 +1,8 @@
 .work/
 out/
+# An emsdk installed inside the checkout rather than beside it; either place
+# is found by cmd/emsdk.ts.
+.emsdk/
 *.bmp
 *.log
 build/

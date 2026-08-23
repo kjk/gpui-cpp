@@ -87,8 +87,10 @@ int ExecQueued();
 // the same heap job struct — `work` fills it in, `done` reads it and frees
 // it, and nothing needs a lock because the two never run at once.
 //
-// Returns the handle to cancel it with, or 0 if no thread could be started —
-// and then neither half runs.
+// Returns the handle to cancel it with, or 0 if the job could not be taken at
+// all — the pool is shutting down, or there was no room to record it — and
+// then neither half runs. A platform with no threads to give is not one of
+// those: see ExecHasThreads.
 TaskId ExecSpawn(Func0 work, Func0 done = Func0{});
 
 // Dropping a `Task` in Rust cancels it. A job that has not started yet is
@@ -111,6 +113,16 @@ bool ExecWaitIdle(int timeoutMs);
 // kExecMaxWorkers as jobs arrive faster than they finish; a thread it starts
 // lives until shutdown.
 int ExecWorkerCount();
+
+// Whether a spawned job runs somewhere other than the main thread. True on
+// every hosted platform. False on a wasm page, which has no thread to give
+// out: ExecSpawn then queues the job on the main thread's own queue, so the
+// work still happens and `done` still lands where it always does, just later
+// and on this thread.
+//
+// Answers true until a spawn has proved otherwise, since that is the moment
+// the platform is asked. Anything that needs to know has spawned by then.
+bool ExecHasThreads();
 
 // Enough that a page of images decodes at once on any machine this runs on,
 // few enough that a job which blocks on the network — which the fetcher's

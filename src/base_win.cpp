@@ -54,6 +54,12 @@ void PlatMemRelease(void* base, uint64_t size) {
     VirtualFree(base, 0, MEM_RELEASE);
 }
 
+// 64 MB. MEM_RESERVE costs address space and nothing else, so an arena
+// reserves far more than it will ever commit.
+uint64_t PlatArenaReserveSize() {
+    return 64ull * 1024ull * 1024ull;
+}
+
 int StrCmpI(const char* a, const char* b) {
     return _stricmp(a ? a : "", b ? b : "");
 }

@@ -2,7 +2,8 @@
 // Both are the same on every platform.
 //
 // A source file belongs to a platform by suffix: _win.cpp, _linux.cpp,
-// _mac.cpp, and _posix.cpp for the Linux and macOS halves both. Each of those
+// _mac.cpp, _wasm.cpp, _mem_posix.cpp for the Linux and macOS halves both,
+// and _posix.cpp for those two and wasm. Each of those
 // goes into gpui.cpp inside its own `#if GPUI_OS_*`, so <windows.h>, <X11/*>
 // and <Cocoa/*> still never reach the same translation unit — the preprocessor
 // drops the two halves that are not this platform's before anything parses
@@ -56,9 +57,9 @@ export function amalgamIsWork(): boolean {
   return amalgamDir() === ".work";
 }
 
-export type Platform = "win" | "linux" | "mac";
+export type Platform = "win" | "linux" | "mac" | "wasm";
 
-export const allPlatforms: Platform[] = ["win", "linux", "mac"];
+export const allPlatforms: Platform[] = ["win", "linux", "mac", "wasm"];
 
 export type BuildDistOpts = {
   /**
@@ -83,7 +84,7 @@ export type BuildDistResult = {
 };
 
 // Which platform halves a source file belongs to. Empty means it is portable
-// and goes in gpui.cpp; _posix.cpp belongs to two.
+// and goes in gpui.cpp; the two _posix suffixes belong to more than one.
 function filePlatforms(rel: string): Platform[] {
   if (/_win\.cpp$/.test(rel)) {
     return ["win"];
@@ -94,8 +95,17 @@ function filePlatforms(rel: string): Platform[] {
   if (/_mac\.cpp$/.test(rel)) {
     return ["mac"];
   }
-  if (/_posix\.cpp$/.test(rel)) {
+  if (/_wasm\.cpp$/.test(rel)) {
+    return ["wasm"];
+  }
+  // Tested before _posix.cpp, which it also ends with: _mem_posix.cpp is the
+  // mmap half of the platform layer, and wasm has no reserve/commit split to
+  // put behind it. Everything else POSIX-shaped it does have.
+  if (/_mem_posix\.cpp$/.test(rel)) {
     return ["linux", "mac"];
+  }
+  if (/_posix\.cpp$/.test(rel)) {
+    return ["linux", "mac", "wasm"];
   }
   return [];
 }
@@ -104,9 +114,10 @@ const osMacro: Record<Platform, string> = {
   win: "GPUI_OS_WINDOWS",
   linux: "GPUI_OS_LINUX",
   mac: "GPUI_OS_MAC",
+  wasm: "GPUI_OS_WASM",
 };
 
-// src/base.h defines all three, exactly one of them 1, so a plain #if is all a
+// src/base.h defines all four, exactly one of them 1, so a plain #if is all a
 // platform chunk needs to be there for its own platform and nowhere else.
 function guardFor(plats: Platform[]): string {
   return `#if ${plats.map((p) => osMacro[p]).join(" || ")}`;
@@ -701,13 +712,15 @@ here is written by hand, so issues and pull requests belong in the source repo.
 Drop both files into your tree, \`#include "gpui.h"\` where you need the API,
 and compile \`gpui.cpp\` as one more source file. It is C++20, and the platform
 halves are already inside it behind \`GPUI_OS_*\` guards, so the same pair
-builds on all three:
+builds on all four:
 
 - **Windows** — \`cl /std:c++20 /EHsc /utf-8 /DUNICODE /D_UNICODE\`, static CRT;
   links against the Win32, Direct2D and DirectWrite import libraries.
 - **Linux** — \`g++ -std=c++20\` with \`pkg-config --cflags --libs x11 cairo pangocairo\`.
 - **macOS** — \`clang++ -std=c++20 -x objective-c++\` with the Cocoa, CoreText and
   IOKit frameworks. The file is Objective-C++ because the mac half is.
+- **wasm** — \`emcc -std=c++20\` with \`-sALLOW_MEMORY_GROWTH\`; the browser half
+  draws through Canvas2D and needs no library at all.
 
 No other dependencies, no build system, no STL containers.`;
 

@@ -1,8 +1,9 @@
 name: build
 
-# Compiles every example on all three platforms and runs the test suite.
-# `bun cmd/build.ts -rel -all` succeeding is most of the check; `bun
-# cmd/test.ts` is the rest.
+# Compiles every example on all three platforms plus wasm, and runs the test
+# suite on each. `bun cmd/build.ts -rel -all` succeeding is most of the check;
+# `bun cmd/test.ts` is the rest. The wasm job runs the same suite under node,
+# which is the only place this tree is checked on a 32-bit word.
 
 on:
   push:
@@ -32,6 +33,10 @@ jobs:
             os: ubuntu-latest
           - name: macos
             os: macos-latest
+          # A target rather than a host: emscripten runs anywhere, so this
+          # builds on the cheapest runner.
+          - name: wasm
+            os: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -61,11 +66,25 @@ jobs:
           bun cmd/test.ts -rel
 
       - name: Build (Linux / macOS)
-        if: matrix.name != 'windows'
+        if: matrix.name == 'linux' || matrix.name == 'macos'
         run: bun cmd/build.ts -rel -all
 
       # macOS runners have no login session, so only the tests can run there;
       # they draw nothing and need no window.
       - name: Test (Linux / macOS)
-        if: matrix.name != 'windows'
+        if: matrix.name == 'linux' || matrix.name == 'macos'
         run: bun cmd/test.ts -rel
+
+      - uses: mymindstorm/setup-emsdk@v14
+        if: matrix.name == 'wasm'
+        with:
+          version: latest
+
+      - name: Build (wasm)
+        if: matrix.name == 'wasm'
+        run: bun cmd/build.ts -wasm -rel -all
+
+      # Under node, not a browser: the suite draws nothing and needs no canvas.
+      - name: Test (wasm)
+        if: matrix.name == 'wasm'
+        run: bun cmd/run-wasm.ts -rel tests

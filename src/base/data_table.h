@@ -262,6 +262,9 @@ int TableDragGapAt(const Bounds* colBounds, int n, float x, int dragCol);
 void TableEnsureCols(TableState* s, int n);
 
 // A row and a column as one number, which is what a cell's listener carries.
+// Twelve bits of column and the rest of the word for the row: every row a
+// 64-bit target can index, and half a million on a 32-bit one, which is more
+// than a wasm page has the memory to hold anyway.
 inline intptr_t TableCellPack(int row, int col) {
     return ((intptr_t)row << 12) | (intptr_t)(col & 0xfff);
 }

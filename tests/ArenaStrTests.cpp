@@ -120,9 +120,11 @@ static void TheWordIsAnOffsetAndNothingElse() {
     // with the characters, not in the holder.
     utassert(s > 0);
     utassert(ArenaStrGet(a, s).s == (char*)ArenaAtOffset(a, s) + 1);
-    // The size is the whole point, so it is checked at compile time.
+    // The size is the whole point, so it is checked at compile time. Four
+    // bytes on every target, against a Str's pointer-plus-length: sixteen on
+    // the 64-bit hosts, eight on wasm32, and smaller than either.
     static_assert(sizeof(ArenaStr) == 4, "ArenaStr is an offset");
-    static_assert(sizeof(Str) >= 4 * sizeof(ArenaStr), "and a Str is four");
+    static_assert(sizeof(ArenaStr) < sizeof(Str), "and smaller than a Str");
     ArenaDelete(a);
 }
 
