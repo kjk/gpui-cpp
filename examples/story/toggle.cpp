@@ -18,8 +18,13 @@ static void OnToggle(ToggleStory* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// `seg` is where this chip sits in a segmented group: -1 for a chip on its
+// own, 0 for the first, 1 for a middle one and 2 for the last. A segmented
+// group is a row of outline toggles that drop their left edge after the
+// first, so the border between two of them is one line rather than two, and
+// only the ends are rounded (button/toggle.rs ToggleGroup::render).
 static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
-                      IconName icon, bool on, bool outline) {
+                      IconName icon, bool on, bool outline, int seg = -1) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     // The toggle takes the press itself; the page still needs to know which
@@ -31,10 +36,18 @@ static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
                 ->PadX(label ? 10.f : 8.f)
                 ->ItemsCenter()
                 ->JustifyCenter()
-                ->Radius(th.radius)
                 ->Gap(6);
+    // A chip in a group takes its rounding from the group's own clip, the
+    // way a joined Button does.
+    t->Radius(seg < 0 ? th.radius : 0.f);
     if (outline) {
-        t->Border(1, th.border);
+        if (seg <= 0) {
+            t->Border(1, th.border);
+        } else {
+            t->BorderT(1, th.border)
+                ->BorderR(1, th.border)
+                ->BorderB(1, th.border);
+        }
     }
     if (on) {
         t->Bg(th.tokens.accent);
@@ -99,13 +112,16 @@ El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     El* grp = StorySection(cx, "Group",
                            "Connected toggles keep related choices together.");
     StorySectionBody(grp)->W(512)->FlexCol()->ItemsCenter();
-    El* g = Div(a)->FlexRow()->Border(1, th.border)->Radius(th.radius);
+    // `.segmented().outline()`: the group has no box of its own — each
+    // toggle carries the edges it needs.
+    El* g =
+        Div(a)->FlexRow()->ItemsCenter()->Radius(th.radius)->ClipX()->ClipY();
     g->Child(ToggleChip(cx, onToggle, 7, "Bold", IconName::None,
-                        self->toggles[7], false));
+                        self->toggles[7], true, 0));
     g->Child(ToggleChip(cx, onToggle, 8, "Italic", IconName::None,
-                        self->toggles[8], false));
+                        self->toggles[8], true, 1));
     g->Child(ToggleChip(cx, onToggle, 9, "Code", IconName::None,
-                        self->toggles[9], false));
+                        self->toggles[9], true, 2));
     StorySectionAdd(grp, g);
     page->Child(grp);
     return page;
