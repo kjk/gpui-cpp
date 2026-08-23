@@ -176,6 +176,8 @@ const libs = [
   "d2d1.lib",
   "d3d11.lib",
   "dxgi.lib",
+  // src/gpui/paintgpu_win.cpp compiles its HLSL at startup with D3DCompile.
+  "d3dcompiler.lib",
   "dwrite.lib",
   "dwmapi.lib",
   "psapi.lib",

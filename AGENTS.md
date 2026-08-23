@@ -30,6 +30,9 @@ bun cmd/build.ts -dbg -all
 bun cmd/build.ts -rel -asan system_monitor
 bun cmd/build.ts -wasm system_monitor
 bun cmd/run-wasm.ts showcase
+
+GPUI_PAINT=gpu out/rel/story.exe            # the second Windows backend
+GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
 ```
 
 Rust references (in `.work/gpui-component`):
@@ -60,7 +63,13 @@ this tree, and `src/markdown/` parses every `TextView`. See
 These are the standing exclusions. Everything else in gpui-component is in
 scope, and a module being large or unglamorous is not a reason to skip it.
 
-- The full GPUI GPU scene graph, and `async` anything. We do have
+- Zed's scene graph as a whole, and `async` anything. `src/gpui/paintgpu.h`
+  is the renderer half of it — one instance buffer a frame, SDF rounded rects
+  and borders, a glyph atlas, stencil-and-cover paths, which is what Blade and
+  `directx_renderer.rs` do — but it is a second Windows backend behind
+  `paint.h` rather than a scene graph: there are no layers, no batching across
+  windows, no offscreen mask cache. It is off unless `GPUI_PAINT=gpu`, and the
+  header says what it is worth and what it is short of. We do have
   `App`/`Window`/`Entity`/`Ctx`, actions and a keymap, `EventEmitter`, window
   subscriptions and an executor — see below — but not refcounted entities,
   observers, futures, or a `Task<T>` that cancels by being dropped.
@@ -182,6 +191,31 @@ it — `src/base_wasm.cpp` writes its own against a linear heap that grows.
 `src/gpui/window_common.cpp` holds everything a window does that is not the OS
 window — frame drawing, input dispatch, the app lifecycle — and all platform
 files call into it.
+
+### Two Windows backends
+
+`paint.h` has two implementations on Windows. `paint_win.cpp` is the default
+and is Direct2D on a D3D11 device over a flip-model swap chain — already on
+the GPU, and what every build and every screenshot uses.
+`paintgpu_win.cpp` is GPUI's own shape of renderer, reached with
+`GPUI_PAINT=gpu` in the environment: a frame is one instance buffer of rounded
+rects, borders, glyphs, images and gradients, the shape and the content mask
+are evaluated in the pixel shader, and path fills go through stencil-and-cover
+rather than a tessellator. `GPUI_PAINT_MSAA` sets its sample count.
+
+The two share everything device-independent rather than writing it twice: the
+DirectWrite factory and its formats, the `IDWriteTextLayout` a `TextLayout*`
+is on Windows — so shaping, measurement, hit-testing and range rects are the
+same code on both — the WIC decode, and the D3D11 device. Only the target and
+the drawing differ, and `paint_win.cpp` hands over in one line per entry
+point. Read `src/gpui/paintgpu.h` before touching either: it has the measured
+numbers, the reason it is not the default, and the two gaps that would have to
+close first (subpixel glyph positioning, dashes on a rounded rect).
+
+`GPUI_FRAME_BENCH=<n>` draws n frames back to back and prints what each cost,
+split into building the element tree, laying it out and painting it. It is how
+the two were compared and is the right tool for any question about frame time;
+without the variable it is inert.
 
 ### The browser
 

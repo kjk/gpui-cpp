@@ -1,6 +1,9 @@
 /* Direct2D + DirectWrite backend for Paint.h. */
 
 #include "gpui/paint.h"
+// The GPU backend beside this one. PaintGpuOn() is false unless
+// GPUI_PAINT=gpu, and then every entry point below hands straight over to it.
+#include "gpui/paintgpu.h"
 
 #include <d2d1.h>
 #include <d2d1_1.h>
@@ -127,6 +130,10 @@ void PaintAppFree(PaintApp* pa) {
 }
 
 void PaintTargetFree(PaintCtx* ctx) {
+    if (PaintGpuOn()) {
+        gpuw::PaintTargetFree(ctx);
+        return;
+    }
     if (!ctx || !ctx->rt) {
         return;
     }
@@ -226,6 +233,9 @@ static bool BindBackBuffer(PaintTarget* t) {
 }
 
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
+    if (PaintGpuOn()) {
+        return gpuw::PaintTargetBegin(ctx, native, pxW, pxH);
+    }
     if (!ctx || !ctx->pa) {
         return false;
     }
@@ -330,6 +340,9 @@ struct OffscreenTarget {
 static OffscreenTarget gOffscreen;
 
 bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    if (PaintGpuOn()) {
+        return gpuw::PaintTargetBeginOffscreen(ctx, pxW, pxH);
+    }
     if (!ctx || !ctx->pa || pxW <= 0 || pxH <= 0) {
         return false;
     }
@@ -400,6 +413,9 @@ bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
 }
 
 bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
+    if (PaintGpuOn()) {
+        return gpuw::PaintTargetEndOffscreen(ctx, outBgra);
+    }
     if (!ctx || !ctx->rt || !gOffscreen.bmp) {
         return false;
     }
@@ -421,6 +437,9 @@ bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
 }
 
 bool PaintTargetEnd(PaintCtx* ctx) {
+    if (PaintGpuOn()) {
+        return gpuw::PaintTargetEnd(ctx);
+    }
     if (!ctx || !ctx->rt) {
         return false;
     }
@@ -441,6 +460,31 @@ bool PaintTargetEnd(PaintCtx* ctx) {
         }
     }
     return true;
+}
+
+// ─── borrowed by the GPU backend ─────────────────────────────────────────
+//
+// paintgpu_win.cpp shares this file's device, its DirectWrite factory and the
+// pixels WIC decoded, so that only the drawing is written twice. They come
+// back as void* because paintgpu.h lands in the amalgamated gpui.h on every
+// platform and must name no D3D or DirectWrite type.
+
+void* PaintSharedD3dDevice(PaintApp* pa) {
+    if (!pa || !EnsureDevice(pa)) {
+        return nullptr;
+    }
+    return pa->d3d;
+}
+
+void* PaintSharedDxgiFactory(PaintApp* pa) {
+    if (!pa || !EnsureDevice(pa)) {
+        return nullptr;
+    }
+    return pa->dxgiFactory;
+}
+
+void* PaintSharedDwrite(PaintApp* pa) {
+    return pa ? pa->dwrite : nullptr;
 }
 
 // ─── canvas ───────────────────────────────────────────────────────────────
@@ -482,12 +526,20 @@ static ID2D1StrokeStyle* DashStyle(PaintCtx* ctx, const float* dash,
 }
 
 void CanvasClear(PaintCtx* ctx, Rgba c) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasClear(ctx, c);
+        return;
+    }
     if (ctx && ctx->rt) {
         ctx->rt->rt->Clear(ToD2D(c));
     }
 }
 
 void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasFillRect(ctx, x, y, w, h, c);
+        return;
+    }
     if (w <= 0 || h <= 0 || c.a == 0) {
         return;
     }
@@ -499,6 +551,10 @@ void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
 
 void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
                      Rgba c) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasFillRound(ctx, x, y, w, h, r, c);
+        return;
+    }
     if (w <= 0 || h <= 0 || c.a == 0) {
         return;
     }
@@ -515,6 +571,10 @@ void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
 
 void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
                        float r, float stroke, Rgba c, const float* dash) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasStrokeRound(ctx, x, y, w, h, r, stroke, c, dash);
+        return;
+    }
     if (stroke <= 0 || w <= 0 || h <= 0) {
         return;
     }
@@ -536,6 +596,10 @@ void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
 
 void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
                 float stroke, Rgba c, const float* dash) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasLine(ctx, x1, y1, x2, y2, stroke, c, dash);
+        return;
+    }
     ID2D1SolidColorBrush* b = Brush(ctx, c);
     if (!b) {
         return;
@@ -548,6 +612,10 @@ void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
 
 void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
                    float stroke, Rgba c) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasEllipse(ctx, cx, cy, rx, ry, stroke, c);
+        return;
+    }
     ID2D1SolidColorBrush* b = Brush(ctx, c);
     if (!b) {
         return;
@@ -561,6 +629,10 @@ void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
 }
 
 void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasPushClip(ctx, x, y, w, h);
+        return;
+    }
     if (ctx && ctx->rt) {
         ctx->rt->rt->PushAxisAlignedClip(D2D1::RectF(x, y, x + w, y + h),
                                          D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
@@ -568,6 +640,10 @@ void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
 }
 
 void CanvasPopClip(PaintCtx* ctx) {
+    if (PaintGpuOn()) {
+        gpuw::CanvasPopClip(ctx);
+        return;
+    }
     if (ctx && ctx->rt) {
         ctx->rt->rt->PopAxisAlignedClip();
     }
@@ -584,6 +660,9 @@ struct Path {
 };
 
 Path* PathNew(PaintCtx* ctx, bool winding) {
+    if (PaintGpuOn()) {
+        return gpuw::PathNew(ctx, winding);
+    }
     if (!ctx || !ctx->pa) {
         return nullptr;
     }
@@ -603,6 +682,10 @@ Path* PathNew(PaintCtx* ctx, bool winding) {
 }
 
 void PathFree(Path* p) {
+    if (PaintGpuOn()) {
+        gpuw::PathFree(p);
+        return;
+    }
     if (!p) {
         return;
     }
@@ -620,6 +703,10 @@ void PathFree(Path* p) {
 }
 
 void PathMoveTo(Path* p, float x, float y) {
+    if (PaintGpuOn()) {
+        gpuw::PathMoveTo(p, x, y);
+        return;
+    }
     if (!p || !p->sink) {
         return;
     }
@@ -635,6 +722,10 @@ void PathMoveTo(Path* p, float x, float y) {
 }
 
 void PathLineTo(Path* p, float x, float y) {
+    if (PaintGpuOn()) {
+        gpuw::PathLineTo(p, x, y);
+        return;
+    }
     if (!p || !p->sink) {
         return;
     }
@@ -647,6 +738,10 @@ void PathLineTo(Path* p, float x, float y) {
 
 void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
                  float y) {
+    if (PaintGpuOn()) {
+        gpuw::PathCubicTo(p, x1, y1, x2, y2, x, y);
+        return;
+    }
     if (!p || !p->sink) {
         return;
     }
@@ -663,6 +758,10 @@ void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
 
 void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
                bool clockwise) {
+    if (PaintGpuOn()) {
+        gpuw::PathArcTo(p, cx, cy, r, a0, a1, clockwise);
+        return;
+    }
     if (!p || !p->sink) {
         return;
     }
@@ -691,6 +790,10 @@ void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
 }
 
 void PathClose(Path* p) {
+    if (PaintGpuOn()) {
+        gpuw::PathClose(p);
+        return;
+    }
     if (!p || !p->sink || !p->fig) {
         return;
     }
@@ -715,6 +818,10 @@ static ID2D1PathGeometry* PathSeal(Path* p) {
 }
 
 void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+    if (PaintGpuOn()) {
+        gpuw::PathFill(ctx, p, c);
+        return;
+    }
     ID2D1PathGeometry* g = PathSeal(p);
     ID2D1SolidColorBrush* b = Brush(ctx, c);
     if (g && b) {
@@ -729,6 +836,10 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
                       float y1, Rgba from, Rgba to) {
+    if (PaintGpuOn()) {
+        gpuw::PathFillGradient(ctx, p, x0, y0, x1, y1, from, to);
+        return;
+    }
     ID2D1PathGeometry* g = PathSeal(p);
     if (!g || !ctx || !ctx->rt) {
         return;
@@ -760,6 +871,10 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
 }
 
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+    if (PaintGpuOn()) {
+        gpuw::PathStroke(ctx, p, stroke, c, roundCaps);
+        return;
+    }
     ID2D1PathGeometry* g = PathSeal(p);
     ID2D1SolidColorBrush* b = Brush(ctx, c);
     if (!g || !b) {
@@ -931,6 +1046,24 @@ void ImageFree(Image* img) {
     delete img;
 }
 
+// The GPU backend makes its own texture out of the same pixels rather than a
+// second D2D bitmap.
+bool PaintImagePixels(const Image* img, const uint8_t** bgra, int* w, int* h) {
+    if (!img || !img->bgra || img->w <= 0 || img->h <= 0) {
+        return false;
+    }
+    if (bgra) {
+        *bgra = img->bgra;
+    }
+    if (w) {
+        *w = img->w;
+    }
+    if (h) {
+        *h = img->h;
+    }
+    return true;
+}
+
 Size ImageSizePx(const Image* img) {
     if (!img) {
         return {};
@@ -939,6 +1072,10 @@ Size ImageSizePx(const Image* img) {
 }
 
 void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+    if (PaintGpuOn()) {
+        gpuw::ImageDraw(ctx, img, b);
+        return;
+    }
     if (!ctx || !ctx->rt || !ctx->rt->rt || !img || !img->bgra || b.w <= 0 ||
         b.h <= 0) {
         return;
@@ -1065,6 +1202,10 @@ void TextLayoutRelease(TextLayout* tl) {
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip) {
+    if (PaintGpuOn()) {
+        gpuw::TextLayoutDraw(ctx, tl, x, y, c, clip);
+        return;
+    }
     ID2D1SolidColorBrush* b = Brush(ctx, c);
     if (!tl || !b) {
         return;

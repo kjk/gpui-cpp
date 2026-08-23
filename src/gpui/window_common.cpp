@@ -6,6 +6,8 @@
 #include "gpui/keymap.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
+// For the GPU backend's per-frame counters, which FrameBenchTick reports.
+#include "gpui/paintgpu.h"
 #include "sys/http.h"
 #include "sys/executor.h"
 #include "base/focus_trap.h"
@@ -36,6 +38,105 @@ int WindowCollectFrames(Window* win, uint64_t* cursor, FrameTiming* out,
 }
 
 // ─── frame ────────────────────────────────────────────────────────────────
+
+// GPUI_FRAME_BENCH=<n> draws n frames back to back, prints what each one
+// cost, and quits. It is here rather than in a backend because what it times
+// is Window::draw — building the element tree, laying it out, painting it —
+// which is the number a frame budget is actually spent against, and because
+// the split below is what says which of the three a change moved. Inert
+// unless the variable is set.
+static double gFrameBuildSecs = 0;
+static double gFrameLayoutSecs = 0;
+static double gFramePaintSecs = 0;
+
+static void FrameBenchTick(Window* win, float secs) {
+    static int want = -1;
+    static int seen = 0;
+    static int warm = 0;
+    static Vec<float> samples;
+    static Vec<float> build;
+    static Vec<float> layout;
+    static Vec<float> paint;
+    if (want < 0) {
+        char buf[16] = {};
+#if GPUI_OS_WINDOWS
+        DWORD n = GetEnvironmentVariableA("GPUI_FRAME_BENCH", buf, sizeof(buf));
+        want = (n > 0 && n < sizeof(buf)) ? atoi(buf) : 0;
+#else
+        const char* e = getenv("GPUI_FRAME_BENCH");
+        if (e) {
+            StrCopyZ(buf, (int)sizeof(buf), e);
+        }
+        want = buf[0] ? atoi(buf) : 0;
+#endif
+        if (want > 0) {
+            // Back to back, so the measurement is of drawing and not of how
+            // often something asked for a frame.
+            win->anim = true;
+        }
+    }
+    if (want <= 0) {
+        return;
+    }
+    // Ask for the next frame by hand. `win->anim` alone is not enough: it is
+    // only read when something arms the platform timer, and a page that is
+    // not animating has nothing that would.
+    AppInvalidate(win);
+    PlatSetTimer(win, 1);
+    // The first thirty are thrown away: the swap chain, the shaders, the
+    // glyph atlas and the shaped-text cache all fill up in them, and none of
+    // that is what a steady frame costs.
+    if (warm < 30) {
+        warm++;
+        return;
+    }
+    samples.Append(secs * 1000.f);
+    build.Append((float)(gFrameBuildSecs * 1000.0));
+    layout.Append((float)(gFrameLayoutSecs * 1000.0));
+    paint.Append((float)(gFramePaintSecs * 1000.0));
+    if (++seen < want) {
+        return;
+    }
+    int n = samples.len;
+    for (int i = 1; i < n; i++) {
+        float v = samples[i];
+        int j = i - 1;
+        while (j >= 0 && samples[j] > v) {
+            samples[j + 1] = samples[j];
+            j--;
+        }
+        samples[j + 1] = v;
+    }
+    double sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += samples[i];
+    }
+    logf(
+        "frame-bench n=%d mean=%.3fms median=%.3fms p95=%.3fms min=%.3fms "
+        "max=%.3fms",
+        n, sum / n, samples[n / 2], samples[(int)(n * 0.95f)], samples[0],
+        samples[n - 1]);
+    double sb = 0, sl = 0, sp = 0;
+    for (int i = 0; i < n; i++) {
+        sb += build[i];
+        sl += layout[i];
+        sp += paint[i];
+    }
+    logf("frame-bench phases build=%.3fms layout=%.3fms paint=%.3fms", sb / n,
+         sl / n, sp / n);
+#if GPUI_OS_WINDOWS
+    if (PaintGpuOn()) {
+        const gpuw::FrameStats& st = gpuw::LastFrameStats();
+        logf(
+            "frame-bench gpu instances=%d draws=%d pathTris=%d "
+            "glyphsRasterized=%d",
+            st.instances, st.draws, st.pathTriangles, st.glyphsRasterized);
+    }
+#endif
+    want = 0;
+    PlatSetTimer(win, 0);
+    AppQuit(win);
+}
 
 void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
                      float dipH) {
@@ -138,18 +239,27 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // every registered run.
     WindowSelectionApply(win);
 
+    // The three phases, timed apart, for GPUI_FRAME_BENCH.
+    double tBuild0 = TimeNow();
     El* root = EntityRender(win->app, win, win->frameArena, win->root);
+    gFrameBuildSecs = TimeNow() - tBuild0;
 
     const Theme& th = ThemeNow();
     CanvasClear(&win->paint, th.background);
+    gFrameLayoutSecs = 0;
+    gFramePaintSecs = 0;
     if (root) {
+        double tLay0 = TimeNow();
         LayoutEl(&win->paint, root, 0, 0, dipW, dipH, ThemeFontSize(),
                  th.foreground);
         FocusCollect(win, root);
         // A dialog that has just opened takes focus into itself, which is what
         // Rust gets from tracking focus on the trap container.
         FocusTrapApplyPending(win);
+        gFrameLayoutSecs = TimeNow() - tLay0;
+        double tPaint0 = TimeNow();
         PaintEl(&win->paint, root);
+        gFramePaintSecs = TimeNow() - tPaint0;
     }
     // A Scrolling scrollbar part-way through its fade wants the next frame.
     // One ask for the whole tree, after it has painted, the way Rust's
@@ -178,7 +288,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         }
     }
 
+    double tEnd0 = TimeNow();
     PaintTargetEnd(&win->paint);
+    // The present goes with the painting: on the GPU path it is where the
+    // multisampled surface is resolved, which is part of what drawing cost.
+    gFramePaintSecs += TimeNow() - tEnd0;
     TextMeasEndFrame(&win->paint);
 
     // The pick a press asked for is settled against the frame it aimed at.
@@ -211,6 +325,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     timing.drawSecs = (float)(TimeNow() - drawStart);
     win->frameTrace[win->frameSeq % (uint64_t)kFrameTraceCap] = timing;
     win->frameSeq++;
+    FrameBenchTick(win, timing.drawSecs);
 }
 
 // The hit rect an element id painted, from the last frame. The tree is
