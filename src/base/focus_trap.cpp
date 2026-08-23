@@ -66,18 +66,22 @@ void FocusTrapApplyPending(Window* win) {
     if (FocusTrapActive(win) == trap) {
         return;
     }
-    if (FocusTrapEnter(win, trap) || !host) {
-        return;
-    }
-    // Nothing in it takes tab — a dialog that is all text. Rust tracks focus
-    // on the trap's own container, so focus goes there rather than staying
-    // outside, which is what leaves such a dialog able to hear escape.
-    for (int i = 0; i < win->focusEls.len; i++) {
-        if (win->focusEls[i].id == host) {
-            WindowSetFocusId(win, host);
-            return;
+    // The trap's own container first, which is where Rust puts it:
+    // `track_focus(&self.focus).focus_trap(.., &self.focus)` on the dialog
+    // root, and nothing focuses a control inside it. Focusing the first
+    // control instead put a focus ring on a dialog's Cancel button the
+    // moment it opened, which the Rust window never shows.
+    if (host) {
+        for (int i = 0; i < win->focusEls.len; i++) {
+            if (win->focusEls[i].id == host) {
+                WindowSetFocusId(win, host);
+                return;
+            }
         }
     }
+    // No container of its own: the first thing in it that takes Tab, so the
+    // trap still has focus to keep.
+    FocusTrapEnter(win, trap);
 }
 
 } // namespace gpui

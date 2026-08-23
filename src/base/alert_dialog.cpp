@@ -26,10 +26,12 @@ El* AlertDialogDescription::New(Ctx* cx) {
 El* AlertDialogCancel::New(Ctx* cx) {
     Arena* a = cx->a;
     Str id = StrL("alert-dialog-cancel");
+    // `div().id(..).on_click(..)` and nothing else: Rust's close parts carry
+    // no focus handle, so the dialog's own is what a keystroke reaches and
+    // neither button shows a focus ring when the dialog opens.
     return Div(a)
         ->Id(id)
         ->Click(HashClickId(id))
-        ->FocusId(HashClickId(id))
         ->OnClickAction(action::Cancel());
 }
 El* AlertDialogAction::New(Ctx* cx) {
@@ -39,7 +41,6 @@ El* AlertDialogAction::New(Ctx* cx) {
     return Div(a)
         ->Id(id)
         ->Click(HashClickId(id))
-        ->FocusId(HashClickId(id))
         ->OnClickAction(action::Confirm());
 }
 // The trigger takes the press, not the click, as its Rust counterpart does.
