@@ -13,6 +13,7 @@ struct PieSlice {
     Rgba color = {};
     // outer_radius_fn lets a slice pull in from the rim.
     float outerInset = 0;
+    Str label = {};
 };
 
 struct PieChart {
@@ -23,12 +24,23 @@ struct PieChart {
     float outerRadius = 100;
     float innerRadius = 0;
     float padAngle = 0;
+    // label(): a name outside the ring, on a leader line from the slice's own
+    // edge. Set on the chart rather than the slice because a slice with no
+    // name is simply left unlabelled.
+    bool hasLabels = false;
+    // DEFAULT_LABEL_GAP: how far past the outer radius the names sit.
+    float labelGap = 15;
+    bool hasLabelColor = false;
+    Rgba labelColor = {};
 
     static PieChart* New(Ctx* cx);
     PieChart* Slice(float value, Rgba color, float outerInset = 0);
+    PieChart* Label(Str text);
     PieChart* OuterRadius(float r);
     PieChart* InnerRadius(float r);
     PieChart* PadAngle(float radians);
+    PieChart* LabelGap(float gap);
+    PieChart* LabelColor(Rgba c);
     El* IntoEl();
 };
 

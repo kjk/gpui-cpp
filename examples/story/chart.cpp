@@ -108,7 +108,7 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
         // outer_radius_fn(|d| 100. - d.index * 4.).
         donut->Slice(kMonthlyDesktop[i], c, (float)i * 4.f);
         padded->Slice(kMonthlyDesktop[i], c);
-        labelled->Slice(kMonthlyDesktop[i], c);
+        labelled->Slice(kMonthlyDesktop[i], c)->Label(Str(kMonthlyMonth[i]));
     }
     pieRow->Child(ChartCard(cx, "Pie Chart", pie->IntoEl(), true));
     pieRow->Child(ChartCard(cx, "Pie Chart - Donut", donut->IntoEl(), true));

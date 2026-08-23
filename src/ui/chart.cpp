@@ -382,6 +382,24 @@ PieChart* PieChart::Slice(float value, Rgba color, float outerInset) {
     }
     return this;
 }
+// label(): names the slice that was added last, so a caller adds a slice and
+// then says what it is called.
+PieChart* PieChart::Label(Str text) {
+    if (n > 0) {
+        slices[n - 1].label = text;
+        hasLabels = true;
+    }
+    return this;
+}
+PieChart* PieChart::LabelGap(float gap) {
+    labelGap = gap;
+    return this;
+}
+PieChart* PieChart::LabelColor(Rgba c) {
+    labelColor = c;
+    hasLabelColor = true;
+    return this;
+}
 PieChart* PieChart::OuterRadius(float r) {
     outerRadius = r;
     return this;
@@ -393,6 +411,120 @@ PieChart* PieChart::InnerRadius(float r) {
 PieChart* PieChart::PadAngle(float radians) {
     padAngle = radians;
     return this;
+}
+
+// plot/label.rs: the names outside a pie are ten-point text on a two-pixel
+// leading, which is what decides how far apart two of them have to be.
+static const float kPieTextSize = 10.f;
+static const float kPieTextHeight = 12.f;
+
+// One name's place, before the overlap pass moves it.
+struct PieLabelLayout {
+    float arcX = 0; // the anchor on the ring edge, from the centre
+    float arcY = 0;
+    float labelX = 0; // the centroid at the label radius, from the centre
+    float y = 0;      // where the name wants to be, and then where it goes
+    Str text = {};
+};
+
+// spread_labels: sort by where each name wants to be, push crowded ones down,
+// then anchor the last one and pull the overflow back up. One neighbour at a
+// time would not settle a run of them.
+static void PieSpreadLabels(PieLabelLayout* items, int n, float top,
+                            float bottom) {
+    if (n <= 0) {
+        return;
+    }
+    for (int i = 1; i < n; i++) {
+        PieLabelLayout key = items[i];
+        int j = i - 1;
+        while (j >= 0 && items[j].y > key.y) {
+            items[j + 1] = items[j];
+            j--;
+        }
+        items[j + 1] = key;
+    }
+    for (int i = 1; i < n; i++) {
+        float minY = items[i - 1].y + kPieTextHeight;
+        if (items[i].y < minY) {
+            items[i].y = minY;
+        }
+    }
+    if (items[n - 1].y > bottom) {
+        items[n - 1].y = bottom;
+    }
+    for (int i = n - 2; i >= 0; i--) {
+        float maxY = items[i + 1].y - kPieTextHeight;
+        if (items[i].y > maxY) {
+            items[i].y = maxY;
+        }
+    }
+    if (items[0].y < top) {
+        items[0].y = top;
+    }
+}
+
+static void PaintPieLabels(PaintCtx* ctx, PieChart* p, float cx, float cy,
+                           float total) {
+    if (!p->hasLabels || total <= 0) {
+        return;
+    }
+    const Theme& th = ThemeNow();
+    Rgba color = p->hasLabelColor ? p->labelColor : th.foreground;
+    float labelR = p->outerRadius + p->labelGap;
+    PieLabelLayout right[12] = {};
+    PieLabelLayout left[12] = {};
+    int nRight = 0, nLeft = 0;
+    float angle = -kPi * 0.5f;
+    for (int i = 0; i < p->n; i++) {
+        const PieSlice& s = p->slices[i];
+        float sweep = 2.f * kPi * (s.value / total);
+        float a0 = angle, a1 = angle + sweep;
+        angle = a1;
+        // A slice thinner than half a degree has no room for a name.
+        if (!s.label.s || a1 - a0 < kPi / 360.f) {
+            continue;
+        }
+        float mid = (a0 + a1) * 0.5f;
+        float edgeR = p->outerRadius - s.outerInset;
+        PieLabelLayout item;
+        item.arcX = cosf(mid) * ((p->innerRadius + edgeR) * 0.5f);
+        item.arcY = sinf(mid) * ((p->innerRadius + edgeR) * 0.5f);
+        item.labelX = cosf(mid) * labelR;
+        item.y = sinf(mid) * labelR;
+        item.text = s.label;
+        // The centroid the leader line starts from is the ring's own middle,
+        // so the line comes out of the slice rather than off its rim.
+        item.arcX = cosf(mid) * edgeR;
+        item.arcY = sinf(mid) * edgeR;
+        if (item.labelX > 0) {
+            right[nRight++] = item;
+        } else {
+            left[nLeft++] = item;
+        }
+    }
+    float top = -cy + kPieTextHeight * 0.5f;
+    float bottom = cy - kPieTextHeight * 0.5f;
+    PieSpreadLabels(right, nRight, top, bottom);
+    PieSpreadLabels(left, nLeft, top, bottom);
+    for (int side = 0; side < 2; side++) {
+        float sign = side == 0 ? 1.f : -1.f;
+        PieLabelLayout* items = side == 0 ? right : left;
+        int count = side == 0 ? nRight : nLeft;
+        for (int i = 0; i < count; i++) {
+            const PieLabelLayout& it = items[i];
+            CanvasLine(ctx, it.arcX + cx, it.arcY + cy, it.labelX + cx,
+                       it.y + cy, 1.f, th.border);
+            CanvasLine(ctx, it.labelX + cx, it.y + cy, sign * labelR + cx,
+                       it.y + cy, 1.f, th.border);
+            Size ts = MeasureText(ctx, it.text, kPieTextSize, 0, false, 0, 0);
+            float tx = sign > 0 ? sign * (labelR + 4.f) + cx
+                                : sign * (labelR + 4.f) + cx - ts.w;
+            DrawTextBaseline(ctx, it.text, tx,
+                             it.y + cy + kPieTextSize * 0.5f - 1.f,
+                             kPieTextSize, color, 0);
+        }
+    }
 }
 
 static void PaintPie(PaintCtx* ctx, El* e, void* user) {
@@ -435,6 +567,7 @@ static void PaintPie(PaintCtx* ctx, El* e, void* user) {
         }
         angle += 2.f * kPi * (s.value / total);
     }
+    PaintPieLabels(ctx, p, cx, cy, total);
 }
 
 El* PieChart::IntoEl() {
