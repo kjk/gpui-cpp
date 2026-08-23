@@ -273,9 +273,11 @@ El* ColorPicker::IntoEl() {
                   ->Radius(th.radiusLg)
                   ->Border(1, th.border)
                   ->Bg(th.tokens.background);
+        // `TabBar::new("mode").segmented()` names no size, so it is the
+        // default one; the port asked for Small, which is a shorter strip
+        // with a smaller label than Rust draws.
         pop->Child(Tabs::New(cx, StrDup(a, fmt("%s-mode", id)))
                        ->Segmented()
-                       ->Size(UiSize::Small)
                        ->Tab(StrL("Palette"))
                        ->Flex1()
                        ->Tab(StrL("HSLA"))
