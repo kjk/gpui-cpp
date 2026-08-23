@@ -40,6 +40,7 @@
    built to bytecode by fxc. */
 
 #include "gpui/paintgpu.h"
+#include "gpui/scene.h"
 
 #if GPUI_OS_WINDOWS
 
@@ -1061,6 +1062,12 @@ bool PaintTargetEnd(PaintCtx* ctx) {
     }
     gLastStats = gB.stats;
     gB.target = nullptr;
+    // A frame the scene found identical to the last one is not presented.
+    // The multisampled surface it would have resolved still holds the frame
+    // before it, which is what is already on screen.
+    if (scene::SkipPresent()) {
+        return true;
+    }
     // Sync interval 0, the way the D2D path presents, so the comparison is
     // between the drawing and nothing else.
     HRESULT hr = t->swap->Present(0, 0);
@@ -1518,6 +1525,14 @@ static void PathFillWith(PaintCtx* ctx, Path* path, const Inst& proto) {
     FlushTris(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, false,
               p->winding ? gGpu.dsNonZero : gGpu.dsEvenOdd);
     PathCover(ctx, p, proto);
+}
+
+// Nothing to do: a GpuPath is already the flattened contours the stencil
+// pass draws, and it was built once. What the D2D backend gains here the GPU
+// one gets by construction.
+void PathRealize(PaintCtx* ctx, Path* p) {
+    (void)ctx;
+    (void)p;
 }
 
 void PathFill(PaintCtx* ctx, Path* p, Rgba c) {

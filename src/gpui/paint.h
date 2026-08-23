@@ -122,6 +122,12 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
                        Rgba bot);
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
                 bool roundCaps = false);
+// Say that `p` is about to be drawn more than once, so a backend that can
+// pay a tessellation forward does it now: D2D builds a geometry realization,
+// which is the one thing that makes a path cheap to fill twice. A backend
+// with nothing to cache leaves this empty, and nothing has to call it — it is
+// what src/gpui/scene.cpp calls when it puts a path in its cache.
+void PathRealize(PaintCtx* ctx, Path* p);
 
 // ─── images ───────────────────────────────────────────────────────────────
 //
@@ -156,6 +162,10 @@ struct TextLayout;
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
                           bool wrap, uint8_t weight, float lineH,
                           Size* outSize);
+// What TextLayoutNew reported as `outSize`, asked for again: the size the
+// shaped run occupies, which is what a caller holding only the layout needs
+// to know what area drawing it covers.
+Size TextLayoutSize(TextLayout* tl);
 void TextLayoutAddRef(TextLayout* tl);
 void TextLayoutRelease(TextLayout* tl);
 // `clip` confines the glyphs to the layout box — text_overflow: clip. That

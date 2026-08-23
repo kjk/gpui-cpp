@@ -1828,6 +1828,13 @@ struct PaintCtx {
     // pick prefers on: an overlay layer painted last is not the element under
     // the pointer just because it went down after everything else.
     int paintDepth = 0;
+    // Which stacking layer the tree is painting in: 0 for the tree itself,
+    // 1 for the deferred and fixed elements it painted over, and up from
+    // there for the window's own furniture. GPUI's primitives carry the
+    // order of the stacking context they were built in and the scene sorts
+    // on it; here the two paint walks already run in that order, and the
+    // field is what lets src/gpui/scene.cpp record it rather than infer it.
+    int paintLayer = 0;
     // How good a candidate the pick so far was: 2 for an element with an id,
     // 1 for one that draws something, so an unnamed label inside a button
     // does not stand in front of the button.

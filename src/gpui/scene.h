@@ -1,0 +1,253 @@
+/* A scene between the element tree and Paint.h, the shape GPUI's own scene
+   is: a frame's drawing collected as a flat list of primitives, each one
+   carrying its own content mask and its layer, rather than issued to a
+   backend as the tree walks.
+
+   This is off unless GPUI_SCENE is set, and it is a prototype — see the note
+   at the end of this header for what it is worth and what it is short of.
+
+   What a scene is for, given that `paintgpu_win.cpp` already puts a frame in
+   one instance buffer: the instance buffer is built *while* the tree paints,
+   so nothing can be known about the frame as a whole. Collect first and three
+   things become possible, and all three are the reason this exists:
+
+   - **Either backend can consume it.** The primitives name no GPU type. The
+     replay walks them and calls the same Paint.h entry points the tree would
+     have called, so Direct2D draws a scene as readily as the GPU backend
+     does. That was the open question this answers.
+   - **A frame can be compared with the last one.** Every primitive hashes to
+     64 bits and a frame hashes to the same; two frames that hash alike differ
+     nowhere, and a frame that differs in ten primitives out of six thousand
+     names the rectangle those ten cover. The swap chain is FLIP_SEQUENTIAL
+     with three buffers precisely so a partial redraw comes out whole.
+   - **Path geometry outlives the frame that built it.** A path is recorded as
+     verbs and points, not as a backend object, so it hashes; and a hash is
+     what lets the tessellation — the single most expensive thing the D2D
+     backend does per frame — be built once and drawn many times.
+
+   The levels, from GPUI_SCENE, each one including the ones before it:
+
+     replay   collect and replay; measures what the scene itself costs
+     cache    + path geometry kept across frames, keyed by its hash
+     skip     + a frame identical to the last one is not drawn at all
+     damage   + a frame that differs in part is drawn in part
+
+   `GPUI_SCENE=1` means `replay`. Anything unrecognized leaves it off. */
+
+#include "gpui/paint.h"
+
+namespace gpui {
+
+// The levels above, in order, so a comparison against one of them reads as
+// "at least this much".
+enum SceneLevel : int {
+    kSceneOff = 0,
+    kSceneReplay = 1,
+    kSceneCache = 2,
+    kSceneSkip = 3,
+    kSceneDamage = 4
+};
+
+// Read once, from GPUI_SCENE. Nothing re-reads it, and the level cannot
+// change while a frame is open.
+int SceneLevelOn();
+inline bool SceneOn() {
+    return SceneLevelOn() > kSceneOff;
+}
+
+namespace scene {
+
+// True while the recorder is swallowing Paint.h calls rather than letting
+// them reach a backend. False during the replay, which is what lets the
+// replay use the ordinary entry points.
+bool Recording();
+
+// Open the frame's recording. The real target is already begun, because the
+// replay at the end of the frame draws into it.
+void FrameBegin(PaintCtx* ctx);
+// Close the recording, order the primitives, hash them and compare the frame
+// with the last one. Returns false when the frame is identical and the caller
+// may skip both the replay and the present; `damage` comes back as the
+// rectangle worth redrawing, which is the whole view unless the level is
+// `damage` and the difference was small.
+bool FrameEnd(PaintCtx* ctx, Bounds* damage);
+// Draw the collected frame through the ordinary Paint.h entry points.
+// `damage` null redraws all of it.
+void Replay(PaintCtx* ctx, const Bounds* damage);
+// An offscreen target opened inside a frame — a menu icon being rasterized —
+// draws for its own sake and not for the window's, so the recorder steps
+// aside for it. SuspendBegin hands back what to give SuspendEnd.
+bool SuspendBegin();
+void SuspendEnd(bool prev);
+
+// True when FrameEnd said the frame was unchanged, which is what tells
+// PaintTargetEnd not to present. Cleared by the next FrameBegin.
+bool SkipPresent();
+
+// Drop everything held across frames: the path cache and the previous
+// frame's primitives. A lost device, a resize, a target freed.
+void Reset();
+
+// ─── what the recorder is handed ─────────────────────────────────────────
+//
+// One for one with Paint.h, minus the entry points a scene has no business
+// intercepting: the target lifecycle, the offscreen target, shaping,
+// measurement and image decoding all go straight through.
+
+void RecClear(PaintCtx* ctx, Rgba c);
+void RecFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c);
+void RecFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
+                  Rgba c);
+void RecStrokeRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
+                    float stroke, Rgba c, const float* dash);
+void RecLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
+             float stroke, Rgba c, const float* dash);
+void RecEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
+                float stroke, Rgba c);
+void RecPushClip(PaintCtx* ctx, float x, float y, float w, float h);
+void RecPopClip(PaintCtx* ctx);
+
+Path* RecPathNew(bool winding);
+void RecPathFree(Path* p);
+void RecPathMoveTo(Path* p, float x, float y);
+void RecPathLineTo(Path* p, float x, float y);
+void RecPathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
+                    float y);
+void RecPathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
+                  bool clockwise);
+void RecPathClose(Path* p);
+void RecPathFill(PaintCtx* ctx, Path* p, Rgba c);
+void RecPathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
+                         float y1, Rgba from, Rgba to);
+void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
+                   bool roundCaps);
+
+void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b);
+void RecTextDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
+                 bool clip);
+
+// ─── what a frame cost ───────────────────────────────────────────────────
+
+struct SceneStats {
+    // This frame.
+    int prims = 0;
+    int layers = 0;
+    // How many times the replay had to change the clip, which is the number
+    // of PushAxisAlignedClip calls a D2D replay makes. The tree issued far
+    // more push/pop pairs than this: a mask that comes back to a rectangle
+    // already in force costs nothing.
+    int maskChanges = 0;
+    // Primitives the replay never issued because their content mask had
+    // already reduced them to nothing. A tree walk cannot know this: it calls
+    // the backend and the backend clips. This is the single largest thing the
+    // scene does for the D2D path.
+    int culled = 0;
+    // How many times the tree pushed a clip, against `maskChanges` above,
+    // which is how many the replay had to.
+    int clipPushes = 0;
+    int pathPrims = 0;
+    int pathVerbs = 0;
+    // Paths the replay found already built, and paths it had to build.
+    int pathCacheHits = 0;
+    int pathCacheMisses = 0;
+    int pathCacheLive = 0;
+    // Across the run, so a bench line can report a rate.
+    int frames = 0;
+    int framesUnchanged = 0;
+    int framesPartial = 0;
+    // Mean fraction of the view the damage rectangle covered, over the
+    // frames that were neither unchanged nor whole.
+    float damageFracSum = 0;
+    // The primitives that differed from the previous frame, this frame.
+    int primsChanged = 0;
+};
+const SceneStats& Stats();
+
+} // namespace scene
+
+// ─── what it is worth ────────────────────────────────────────────────────
+//
+// GPUI_FRAME_BENCH, release, 600 frames after 30 warm-up, one machine. The
+// paint phase only — build and layout are the same code at every level. Each
+// number is the median of three runs; the D2D ones repeat to within 3%, the
+// GPU ones to within a factor of three on the lightest scene, because the
+// present dominates there and the clock does what it likes.
+//
+//   story, 1071 primitives, 19 paths          off   replay  cache   skip
+//     Direct2D                               1.46    0.86   0.76    0.25
+//     the GPU backend                        0.59    0.44   0.41    0.16
+//
+//   showcase, 121 primitives, no paths
+//     Direct2D                               0.21    0.21   0.21    0.02
+//
+//   fps_monitor, 2443 primitives, all of      off   replay  cache  damage
+//   them different every frame
+//     Direct2D                               0.80    0.98   0.97    1.07
+//     the GPU backend                        0.35    0.34   0.34    0.42
+//
+// Four things those say, in the order they matter:
+//
+// 1. **Collecting is not what pays; culling is.** `replay` alone takes 41% off
+//    the D2D paint of the story gallery, and it is not the ordering and not
+//    the batching. 799 of the story's 1071 primitives have a content mask that
+//    has already reduced them to nothing — rows scrolled out of a list, text
+//    under a collapsed section — and a tree walk hands every one of them to
+//    the backend to be clipped. The scene knows the mask before it draws and
+//    issues none of them. On the GPU backend the same cull takes the frame
+//    from 6219 instances in 243 draws to 1613 in 39.
+// 2. **Reordering buys nothing**, which was the thing worth finding out. The
+//    quad path was already one batch; sorting by layer moves almost nothing,
+//    because the two paint walks were already in layer order; and the replay
+//    changes the clip 26 times where the tree pushed 17, so even the mask
+//    coalescing is a wash. A scene is not how you make this renderer batch.
+// 3. **The path cache is where Direct2D gains what a GPU backend gets for
+//    free.** 99% of path lookups hit across the story and the system monitor,
+//    and filling a geometry realization instead of a geometry takes another
+//    12% off the D2D paint. It costs a little fidelity: 0.03% of the story's
+//    pixels differ from the un-realized fill, all of them on curve edges.
+// 4. **Skipping is worth more than everything else together and means less.**
+//    A benchmark redraws one frame 600 times, so 97% of them are identical and
+//    the paint phase falls to a tenth. A real window is idle most of the time
+//    too — but do not read 0.25 as the story's frame cost, read it as what an
+//    idle window costs, which was already zero in a build that does not redraw
+//    when nothing asked it to.
+//
+// And the counterweight, which is `fps_monitor`: when every primitive changes
+// every frame, collecting and hashing them is 20% on top of the D2D paint and
+// free on the GPU one, the caches never hit, and the damage rectangle comes
+// out at 96% of the view. Nothing here is a win on a scene that is genuinely
+// animating; it is a win on a scene that is mostly still, which is what a UI
+// is.
+//
+// What it is short of, and what each would take:
+//
+// - **Damage is measured but barely exercised.** The diff is a multiset
+//   comparison of primitive hashes, so a frame that gains or loses a
+//   primitive still names a rectangle rather than giving up — but the two
+//   things that would show it working, a hover and a chart tick, both need
+//   input or a timer that GPUI_FRAME_BENCH's own 1 ms timer displaces. What
+//   is measured is the mechanism, not the payoff.
+// - **Layers are a field, not a tree.** `El::deferred` and `El::fixed` still
+//   paint in a second walk, and the scene records the layer that walk is in.
+//   GPUI has a stacking context per element with a z-index; giving the scene
+//   one would mean the walk stops being two passes.
+// - **No offscreen mask cache.** Blade renders a path to an antialiased mask
+//   and caches it; the cache here is of geometry, one level below that, so
+//   the GPU backend still stencils and covers every frame and the D2D one
+//   still fills a realization. A mask cache keyed by the same hash is the
+//   next thing worth measuring.
+// - **The path cache is keyed on absolute coordinates.** An icon that has not
+//   moved hits; the same icon one pixel down the page misses. Hashing the
+//   geometry relative to its own origin and carrying the offset separately
+//   would fix it, and needs a Paint.h that can draw a path translated.
+// - **A shaped run is identified by its address.** A cached TextLayout keeps
+//   one across frames, so this holds; a run that was dropped and whose
+//   address was reused by another would compare equal. The x, y and colour
+//   hashed beside it make that unlikely rather than impossible.
+// - **Only Windows records.** scene.cpp names no OS and no GPU type, but the
+//   dispatch into it is the one line at the top of each entry point that
+//   paint_win.cpp has, and the other three backends do not have it yet.
+// - **One window.** Nothing here is per-window state that a second window
+//   would get its own of.
+
+} // namespace gpui

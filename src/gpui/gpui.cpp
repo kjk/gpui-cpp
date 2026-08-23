@@ -3595,7 +3595,12 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
 
 void PaintEl(PaintCtx* ctx, El* e) {
     PaintElNode(ctx, e, true);
+    // The overlays are the tree's second stacking layer, and saying so is
+    // what lets a scene keep them apart from the tree without knowing that
+    // there were two walks. See PaintCtx::paintLayer.
+    ctx->paintLayer = 1;
     PaintOverlays(ctx, e);
+    ctx->paintLayer = 0;
 }
 
 static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay);

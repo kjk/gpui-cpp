@@ -1045,6 +1045,13 @@ static int JsPath(Path* p) {
     return p->js;
 }
 
+// Nothing to cache: this backend hands the path to Canvas2D, which owns
+// whatever it wants to keep about it.
+void PathRealize(PaintCtx* ctx, Path* p) {
+    (void)ctx;
+    (void)p;
+}
+
 void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     int id = JsPath(p);
     if (!id || !ctx || !ctx->rt) {
@@ -1129,6 +1136,9 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
 struct TextLayout {
     int js = 0;
     int refs = 1;
+    // What TextLayoutNew reported, kept so TextLayoutSize can answer without
+    // measuring again.
+    Size size = {};
 };
 
 TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
@@ -1152,7 +1162,12 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     }
     auto* tl = new TextLayout();
     tl->js = id;
+    tl->size = Size{size[0], size[1]};
     return tl;
+}
+
+Size TextLayoutSize(TextLayout* tl) {
+    return tl ? tl->size : Size{0, 0};
 }
 
 void TextLayoutAddRef(TextLayout* tl) {

@@ -8,6 +8,7 @@
 #include "gpui/paint.h"
 // For the GPU backend's per-frame counters, which FrameBenchTick reports.
 #include "gpui/paintgpu.h"
+#include "gpui/scene.h"
 #include "sys/http.h"
 #include "sys/executor.h"
 #include "base/focus_trap.h"
@@ -133,6 +134,23 @@ static void FrameBenchTick(Window* win, float secs) {
             st.instances, st.draws, st.pathTriangles, st.glyphsRasterized);
     }
 #endif
+    if (SceneOn()) {
+        const scene::SceneStats& sc = scene::Stats();
+        logf(
+            "frame-bench scene prims=%d culled=%d layers=%d clipPushes=%d "
+            "maskChanges=%d paths=%d verbs=%d changed=%d",
+            sc.prims, sc.culled, sc.layers, sc.clipPushes, sc.maskChanges,
+            sc.pathPrims, sc.pathVerbs, sc.primsChanged);
+        int lookups = sc.pathCacheHits + sc.pathCacheMisses;
+        logf(
+            "frame-bench scene cache hits=%d misses=%d live=%d hitRate=%.1f%% "
+            "unchanged=%d/%d partial=%d meanDamage=%.1f%%",
+            sc.pathCacheHits, sc.pathCacheMisses, sc.pathCacheLive,
+            lookups ? 100.0 * sc.pathCacheHits / lookups : 0.0,
+            sc.framesUnchanged, sc.frames, sc.framesPartial,
+            sc.framesPartial ? 100.0 * sc.damageFracSum / sc.framesPartial
+                             : 0.0);
+    }
     want = 0;
     PlatSetTimer(win, 0);
     AppQuit(win);
@@ -270,10 +288,12 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // Rust renders TooltipOverlay deferred with priority 2, so the tip is over
     // everything the frame drew. It is the overlay's, not the trigger's: by
     // the time the show countdown lands, the frame that asked for it is gone.
+    win->paint.paintLayer = 2;
     TooltipPaint(&win->paint, TooltipShowing(win));
 
     // The element the pointer is over while picking, and the one already
     // picked: GPUI paints the same two highlights over everything.
+    win->paint.paintLayer = 3;
     if (win->inspector.on) {
         const Theme& ith = ThemeNow();
         if ((win->inspector.picking || win->inspector.pending) &&
@@ -287,6 +307,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
             DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1, ith.blue);
         }
     }
+
+    win->paint.paintLayer = 0;
 
     double tEnd0 = TimeNow();
     PaintTargetEnd(&win->paint);

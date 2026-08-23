@@ -451,6 +451,13 @@ static bool Replay(cairo_t* cr, Path* p) {
     return true;
 }
 
+// Nothing to cache: this backend hands the path to cairo, which owns
+// whatever it wants to keep about it.
+void PathRealize(PaintCtx* ctx, Path* p) {
+    (void)ctx;
+    (void)p;
+}
+
 void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     cairo_t* cr = Cr(ctx);
     if (!Replay(cr, p)) {
@@ -599,6 +606,9 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
 
 struct TextLayout {
     PangoLayout* layout = nullptr;
+    // What TextLayoutNew reported, kept so TextLayoutSize can answer without
+    // measuring again.
+    Size size = {};
     int refs = 1;
     // GPUI's line box (fontSize * phi) and what Pango would use on its own.
     float box = 0;
@@ -690,11 +700,16 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
                                  (int)((tl->box - tl->natural) * PANGO_SCALE));
         pango_layout_get_pixel_size(l, &pw, &ph);
     }
+    tl->size = Size{(float)pw, tl->box * (float)tl->lines};
     if (outSize) {
-        outSize->w = (float)pw;
-        outSize->h = tl->box * (float)tl->lines;
+        outSize->w = tl->size.w;
+        outSize->h = tl->size.h;
     }
     return tl;
+}
+
+Size TextLayoutSize(TextLayout* tl) {
+    return tl ? tl->size : Size{0, 0};
 }
 
 void TextLayoutAddRef(TextLayout* tl) {

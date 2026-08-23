@@ -375,6 +375,13 @@ void PathClose(Path* p) {
     p->fig = false;
 }
 
+// Nothing to cache: this backend hands the path to Core Graphics, which owns
+// whatever it wants to keep about it.
+void PathRealize(PaintCtx* ctx, Path* p) {
+    (void)ctx;
+    (void)p;
+}
+
 void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !p || CGPathIsEmpty(p->path)) {
@@ -595,6 +602,9 @@ struct MacLine {
 
 struct TextLayout {
     int refs = 1;
+    // What TextLayoutNew reported, kept so TextLayoutSize can answer without
+    // measuring again.
+    Size size = {};
     CFAttributedStringRef attr = nullptr;
     MacLine* lines = nullptr;
     int nLines = 0;
@@ -806,11 +816,16 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
         tl->strikeOff = (float)ascent * 0.31f;
     }
 
+    tl->size = Size{width, tl->box * (float)nLines};
     if (outSize) {
-        outSize->w = width;
-        outSize->h = tl->box * (float)nLines;
+        outSize->w = tl->size.w;
+        outSize->h = tl->size.h;
     }
     return tl;
+}
+
+Size TextLayoutSize(TextLayout* tl) {
+    return tl ? tl->size : Size{0, 0};
 }
 
 void TextLayoutAddRef(TextLayout* tl) {

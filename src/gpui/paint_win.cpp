@@ -4,9 +4,14 @@
 // The GPU backend beside this one. PaintGpuOn() is false unless
 // GPUI_PAINT=gpu, and then every entry point below hands straight over to it.
 #include "gpui/paintgpu.h"
+#include "gpui/scene.h"
 
 #include <d2d1.h>
 #include <d2d1_1.h>
+// ID2D1DeviceContext1 and ID2D1GeometryRealization, which is what makes a
+// path cheap to fill twice. Windows 8.1 and up; PathRealize falls back when
+// the QueryInterface fails.
+#include <d2d1_2.h>
 #include <d3d11.h>
 #include <dwrite.h>
 #include <dxgi1_2.h>
@@ -130,6 +135,11 @@ void PaintAppFree(PaintApp* pa) {
 }
 
 void PaintTargetFree(PaintCtx* ctx) {
+    // Before anything is released: the scene's path cache holds geometry
+    // realizations, which belong to the device context about to go.
+    if (SceneOn()) {
+        scene::Reset();
+    }
     if (PaintGpuOn()) {
         gpuw::PaintTargetFree(ctx);
         return;
@@ -234,7 +244,11 @@ static bool BindBackBuffer(PaintTarget* t) {
 
 bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     if (PaintGpuOn()) {
-        return gpuw::PaintTargetBegin(ctx, native, pxW, pxH);
+        bool ok = gpuw::PaintTargetBegin(ctx, native, pxW, pxH);
+        if (ok && SceneOn()) {
+            scene::FrameBegin(ctx);
+        }
+        return ok;
     }
     if (!ctx || !ctx->pa) {
         return false;
@@ -323,6 +337,11 @@ bool PaintTargetBegin(PaintCtx* ctx, void* native, int pxW, int pxH) {
     }
     ctx->rt->rt->BeginDraw();
     ctx->rt->rt->SetTransform(D2D1::Matrix3x2F::Identity());
+    // The target is open before the recording starts, because the replay at
+    // the end of the frame draws into it.
+    if (SceneOn()) {
+        scene::FrameBegin(ctx);
+    }
     return true;
 }
 
@@ -339,7 +358,13 @@ struct OffscreenTarget {
 };
 static OffscreenTarget gOffscreen;
 
+// An offscreen target is not the window's frame, so the recorder steps aside
+// for however long one is open. Saved here because the two entry points are
+// what bracket it.
+static bool gOffscreenWasRecording = false;
+
 bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
+    gOffscreenWasRecording = scene::SuspendBegin();
     if (PaintGpuOn()) {
         return gpuw::PaintTargetBeginOffscreen(ctx, pxW, pxH);
     }
@@ -413,6 +438,7 @@ bool PaintTargetBeginOffscreen(PaintCtx* ctx, int pxW, int pxH) {
 }
 
 bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
+    scene::SuspendEnd(gOffscreenWasRecording);
     if (PaintGpuOn()) {
         return gpuw::PaintTargetEndOffscreen(ctx, outBgra);
     }
@@ -436,7 +462,22 @@ bool PaintTargetEndOffscreen(PaintCtx* ctx, uint8_t* outBgra) {
     return ok;
 }
 
+// Close the recording and draw what it collected. Both backends end a frame
+// through here, so the scene is replayed once for the two of them.
+static bool SceneFinish(PaintCtx* ctx) {
+    if (!SceneOn() || !scene::Recording()) {
+        return true;
+    }
+    Bounds damage = {};
+    bool draw = scene::FrameEnd(ctx, &damage);
+    if (draw) {
+        scene::Replay(ctx, &damage);
+    }
+    return draw;
+}
+
 bool PaintTargetEnd(PaintCtx* ctx) {
+    SceneFinish(ctx);
     if (PaintGpuOn()) {
         return gpuw::PaintTargetEnd(ctx);
     }
@@ -448,7 +489,10 @@ bool PaintTargetEnd(PaintCtx* ctx) {
         PaintTargetFree(ctx);
         return false;
     }
-    if (SUCCEEDED(hr) && ctx->rt->swap) {
+    // A frame the scene found identical to the last one is not presented:
+    // what is on screen is already it, and presenting would rotate the
+    // buffers under the damage rectangles.
+    if (SUCCEEDED(hr) && ctx->rt->swap && !scene::SkipPresent()) {
         // Sync interval 0, the way GPUI's renderer presents. On a flip-model
         // chain that hands the frame straight to DWM, which composites it at
         // the next vblank anyway, so nothing tears — but the draw is not held
@@ -526,6 +570,10 @@ static ID2D1StrokeStyle* DashStyle(PaintCtx* ctx, const float* dash,
 }
 
 void CanvasClear(PaintCtx* ctx, Rgba c) {
+    if (scene::Recording()) {
+        scene::RecClear(ctx, c);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasClear(ctx, c);
         return;
@@ -536,6 +584,10 @@ void CanvasClear(PaintCtx* ctx, Rgba c) {
 }
 
 void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
+    if (scene::Recording()) {
+        scene::RecFillRect(ctx, x, y, w, h, c);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasFillRect(ctx, x, y, w, h, c);
         return;
@@ -551,6 +603,10 @@ void CanvasFillRect(PaintCtx* ctx, float x, float y, float w, float h, Rgba c) {
 
 void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
                      Rgba c) {
+    if (scene::Recording()) {
+        scene::RecFillRound(ctx, x, y, w, h, r, c);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasFillRound(ctx, x, y, w, h, r, c);
         return;
@@ -571,6 +627,10 @@ void CanvasFillRound(PaintCtx* ctx, float x, float y, float w, float h, float r,
 
 void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
                        float r, float stroke, Rgba c, const float* dash) {
+    if (scene::Recording()) {
+        scene::RecStrokeRound(ctx, x, y, w, h, r, stroke, c, dash);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasStrokeRound(ctx, x, y, w, h, r, stroke, c, dash);
         return;
@@ -596,6 +656,10 @@ void CanvasStrokeRound(PaintCtx* ctx, float x, float y, float w, float h,
 
 void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
                 float stroke, Rgba c, const float* dash) {
+    if (scene::Recording()) {
+        scene::RecLine(ctx, x1, y1, x2, y2, stroke, c, dash);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasLine(ctx, x1, y1, x2, y2, stroke, c, dash);
         return;
@@ -612,6 +676,10 @@ void CanvasLine(PaintCtx* ctx, float x1, float y1, float x2, float y2,
 
 void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
                    float stroke, Rgba c) {
+    if (scene::Recording()) {
+        scene::RecEllipse(ctx, cx, cy, rx, ry, stroke, c);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasEllipse(ctx, cx, cy, rx, ry, stroke, c);
         return;
@@ -629,6 +697,10 @@ void CanvasEllipse(PaintCtx* ctx, float cx, float cy, float rx, float ry,
 }
 
 void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
+    if (scene::Recording()) {
+        scene::RecPushClip(ctx, x, y, w, h);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasPushClip(ctx, x, y, w, h);
         return;
@@ -640,6 +712,10 @@ void CanvasPushClip(PaintCtx* ctx, float x, float y, float w, float h) {
 }
 
 void CanvasPopClip(PaintCtx* ctx) {
+    if (scene::Recording()) {
+        scene::RecPopClip(ctx);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::CanvasPopClip(ctx);
         return;
@@ -657,9 +733,22 @@ struct Path {
     bool fig = false; // a figure is open
     bool sealed = false;
     float mx = 0, my = 0; // where the open figure started
+    // A tessellation D2D built once, from PathRealize. FillGeometry
+    // tessellates on every call; DrawGeometryRealization does not, which is
+    // the whole reason src/gpui/scene.cpp keeps paths across frames.
+    ID2D1GeometryRealization* fillReal = nullptr;
+    ID2D1GeometryRealization* strokeReal = nullptr;
+    // What width `strokeReal` was built for. A stroke of another width is a
+    // different tessellation, and there is one slot, so the realization is
+    // rebuilt rather than kept per width — the paths this tree strokes keep
+    // one width each.
+    float strokeRealW = 0;
 };
 
 Path* PathNew(PaintCtx* ctx, bool winding) {
+    if (scene::Recording()) {
+        return scene::RecPathNew(winding);
+    }
     if (PaintGpuOn()) {
         return gpuw::PathNew(ctx, winding);
     }
@@ -682,6 +771,10 @@ Path* PathNew(PaintCtx* ctx, bool winding) {
 }
 
 void PathFree(Path* p) {
+    if (scene::Recording()) {
+        scene::RecPathFree(p);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathFree(p);
         return;
@@ -698,11 +791,17 @@ void PathFree(Path* p) {
         }
         p->sink->Release();
     }
+    Rel(&p->fillReal);
+    Rel(&p->strokeReal);
     Rel(&p->geom);
     delete p;
 }
 
 void PathMoveTo(Path* p, float x, float y) {
+    if (scene::Recording()) {
+        scene::RecPathMoveTo(p, x, y);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathMoveTo(p, x, y);
         return;
@@ -722,6 +821,10 @@ void PathMoveTo(Path* p, float x, float y) {
 }
 
 void PathLineTo(Path* p, float x, float y) {
+    if (scene::Recording()) {
+        scene::RecPathLineTo(p, x, y);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathLineTo(p, x, y);
         return;
@@ -738,6 +841,10 @@ void PathLineTo(Path* p, float x, float y) {
 
 void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
                  float y) {
+    if (scene::Recording()) {
+        scene::RecPathCubicTo(p, x1, y1, x2, y2, x, y);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathCubicTo(p, x1, y1, x2, y2, x, y);
         return;
@@ -758,6 +865,10 @@ void PathCubicTo(Path* p, float x1, float y1, float x2, float y2, float x,
 
 void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
                bool clockwise) {
+    if (scene::Recording()) {
+        scene::RecPathArcTo(p, cx, cy, r, a0, a1, clockwise);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathArcTo(p, cx, cy, r, a0, a1, clockwise);
         return;
@@ -790,6 +901,10 @@ void PathArcTo(Path* p, float cx, float cy, float r, float a0, float a1,
 }
 
 void PathClose(Path* p) {
+    if (scene::Recording()) {
+        scene::RecPathClose(p);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathClose(p);
         return;
@@ -817,16 +932,60 @@ static ID2D1PathGeometry* PathSeal(Path* p) {
     return p->geom;
 }
 
+// The device context as its 1.1 self, which is what knows about geometry
+// realizations. Null on a machine whose D2D predates them, and everything
+// below falls back to filling the geometry directly.
+static ID2D1DeviceContext1* Dc1(PaintCtx* ctx) {
+    if (!ctx || !ctx->rt || !ctx->rt->dc) {
+        return nullptr;
+    }
+    static ID2D1DeviceContext1* cached = nullptr;
+    static ID2D1DeviceContext* forDc = nullptr;
+    if (forDc != ctx->rt->dc) {
+        Rel(&cached);
+        forDc = ctx->rt->dc;
+        forDc->QueryInterface(__uuidof(ID2D1DeviceContext1), (void**)&cached);
+    }
+    return cached;
+}
+
+void PathRealize(PaintCtx* ctx, Path* p) {
+    if (scene::Recording() || PaintGpuOn()) {
+        return;
+    }
+    ID2D1DeviceContext1* dc = Dc1(ctx);
+    ID2D1PathGeometry* g = PathSeal(p);
+    if (!dc || !g || p->fillReal) {
+        return;
+    }
+    // Identity transform and one DIP to one pixel, which is what this backend
+    // draws at; a realization is tessellated for a scale and this is it.
+    dc->CreateFilledGeometryRealization(g, D2D1_DEFAULT_FLATTENING_TOLERANCE,
+                                        &p->fillReal);
+}
+
 void PathFill(PaintCtx* ctx, Path* p, Rgba c) {
+    if (scene::Recording()) {
+        scene::RecPathFill(ctx, p, c);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathFill(ctx, p, c);
         return;
     }
     ID2D1PathGeometry* g = PathSeal(p);
     ID2D1SolidColorBrush* b = Brush(ctx, c);
-    if (g && b) {
-        ctx->rt->rt->FillGeometry(g, b, nullptr);
+    if (!g || !b) {
+        return;
     }
+    if (p->fillReal) {
+        ID2D1DeviceContext1* dc = Dc1(ctx);
+        if (dc) {
+            dc->DrawGeometryRealization(p->fillReal, b);
+            return;
+        }
+    }
+    ctx->rt->rt->FillGeometry(g, b, nullptr);
 }
 
 void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
@@ -836,6 +995,10 @@ void PathFillGradientV(PaintCtx* ctx, Path* p, float y0, float y1, Rgba top,
 
 void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
                       float y1, Rgba from, Rgba to) {
+    if (scene::Recording()) {
+        scene::RecPathFillGradient(ctx, p, x0, y0, x1, y1, from, to);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathFillGradient(ctx, p, x0, y0, x1, y1, from, to);
         return;
@@ -871,6 +1034,10 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
 }
 
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps) {
+    if (scene::Recording()) {
+        scene::RecPathStroke(ctx, p, stroke, c, roundCaps);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::PathStroke(ctx, p, stroke, c, roundCaps);
         return;
@@ -1072,6 +1239,10 @@ Size ImageSizePx(const Image* img) {
 }
 
 void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+    if (scene::Recording()) {
+        scene::RecImageDraw(ctx, img, b);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::ImageDraw(ctx, img, b);
         return;
@@ -1188,6 +1359,17 @@ TextLayout* TextLayoutNew(PaintCtx* ctx, Str s, float fontSize, float maxW,
     return (TextLayout*)layout;
 }
 
+Size TextLayoutSize(TextLayout* tl) {
+    if (!tl) {
+        return Size{0, 0};
+    }
+    DWRITE_TEXT_METRICS m = {};
+    if (FAILED(Dw(tl)->GetMetrics(&m))) {
+        return Size{0, 0};
+    }
+    return Size{m.widthIncludingTrailingWhitespace, m.height};
+}
+
 void TextLayoutAddRef(TextLayout* tl) {
     if (tl) {
         Dw(tl)->AddRef();
@@ -1202,6 +1384,10 @@ void TextLayoutRelease(TextLayout* tl) {
 
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip) {
+    if (scene::Recording()) {
+        scene::RecTextDraw(ctx, tl, x, y, c, clip);
+        return;
+    }
     if (PaintGpuOn()) {
         gpuw::TextLayoutDraw(ctx, tl, x, y, c, clip);
         return;

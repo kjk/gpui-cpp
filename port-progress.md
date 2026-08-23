@@ -2595,3 +2595,74 @@ cargo run -p system_monitor
   (5.4% self), `DetermineFlexBaseSize` (2.9%), `GenerateAnonymousFlexItems`
   (2.4%). The tree is rebuilt from nothing every frame, which is what GPUI
   does too, so the only structural win left is carrying layout across frames.
+
+
+## A GPUI scene graph, prototyped behind `GPUI_SCENE`, and what it turned out
+## to be worth
+
+`src/gpui/scene.h` / `scene.cpp` is a scene between the element tree and
+`paint.h`: a frame's drawing collected as a flat array of primitives, each one
+carrying its own content mask and its layer, instead of being issued to a
+backend as the tree walks. It is off unless `GPUI_SCENE` is set, and the levels
+stack — `replay` collects and draws, `cache` keeps path geometry across frames,
+`skip` does not draw a frame identical to the last, `damage` draws a partly
+changed frame in part.
+
+It answers the question it was written for. **Yes, Direct2D can consume a
+scene**, and it takes no second implementation: the replay walks the primitives
+and calls the same `paint.h` entry points the tree would have called, so the
+D2D backend and the GPU backend draw the same scene through the same code and
+neither can tell. `scene.cpp` names no OS type and no GPU type. What it needed
+from `paint.h` was two entry points — `TextLayoutSize`, so a text primitive
+knows what area it covers, and `PathRealize`, which is where D2D builds a
+geometry realization — plus the `paintLayer` field on `PaintCtx`.
+
+The numbers are in `scene.h`; four things they say, and the third is the one
+worth carrying forward:
+
+- **What pays is culling, not collecting.** `replay` alone takes 41% off the
+  story gallery's D2D paint (1.46 → 0.86 ms), and none of that is ordering or
+  batching. 799 of the story's 1071 primitives have a content mask that has
+  already reduced them to nothing, and a tree walk hands every one of them to
+  the backend to be clipped anyway. On the GPU backend the same cull goes from
+  6219 instances in 243 draws to 1613 in 39.
+- **Reordering buys nothing.** The quad path was already one batch, the two
+  paint walks were already in layer order, and the replay changes the clip 26
+  times where the tree pushed 17. A scene is not how this renderer starts
+  batching, because it already did.
+- **The path cache is how D2D gets what the GPU backend has by construction.**
+  99% of path lookups hit; filling a geometry realization instead of a geometry
+  takes another 12% off (0.86 → 0.76 ms). It costs 0.03% of the story's pixels,
+  all on curve edges, because a realization is tessellated once at one
+  tolerance.
+- **Skipping is worth the most and means the least.** A benchmark redraws one
+  frame 600 times, so 97% of them are identical and the paint phase falls to a
+  tenth. Read 0.25 ms as what an idle window costs, not as what the story costs
+  — an idle window was already not redrawing.
+
+And the counterweight, which is why none of this is on by default:
+`fps_monitor`, where 2443 primitives all change every frame, pays **20% on top**
+of the D2D paint to collect and hash a scene nothing can cache or skip, and the
+damage rectangle comes out at 96% of the view. This is a win on a scene that is
+mostly still and a loss on one that is not.
+
+Two things are implemented but not measured, and both for the same reason.
+`damage` compares the two frames as multisets of primitive hashes — the first
+version compared them position for position and gave up whenever the counts
+differed, which is every frame that matters, since a hover *adds* a background
+fill — but the two cases that would show it working, a hover and the system
+monitor's 500 ms tick, need input or a timer that `GPUI_FRAME_BENCH`'s own 1 ms
+timer displaces, and this session's desktop would not bring a window to the
+foreground. What is measured is the mechanism, not the payoff.
+
+Not done, in `scene.h`'s own words: layers are a field rather than a stacking
+context per element, there is no offscreen mask cache (the cache is of
+geometry, one level below what Blade caches), the path cache is keyed on
+absolute coordinates so an icon that moves misses, a shaped run is identified
+by its address, and only `paint_win.cpp` dispatches into the recorder — the
+other three backends need the same one line per entry point.
+
+The standing non-goal in `AGENTS.md` — "Zed's scene graph as a whole" — is
+left as it is on purpose. This is a prototype behind a flag, and what it
+measured is an argument for a *cull* pass and a path cache, which want neither
+a scene nor a graph, rather than for the scene graph itself.
