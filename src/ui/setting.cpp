@@ -591,6 +591,7 @@ El* Settings::IntoEl() {
                    ->H(kFill)
                    ->Pad(8)
                    ->Gap(4)
+                   ->ClipX()
                    ->BorderR(1, th.border);
     if (search) {
         side->Child(Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
@@ -718,8 +719,9 @@ El* Settings::IntoEl() {
         El* titleRow =
             Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
         El* titleCell = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
-        titleCell->Child(
-            TextEl(a, p.title)->Font(20)->Semibold()->Fg(th.foreground));
+        // page.rs puts the title in the header with no styling of its own,
+        // so it is the page's own text and not a heading.
+        titleCell->Child(TextEl(a, p.title)->Font(16)->Fg(th.foreground));
         if (p.titleSuffix) {
             titleCell->Child(p.titleSuffix);
         }
