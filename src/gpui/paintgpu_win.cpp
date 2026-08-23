@@ -1652,7 +1652,7 @@ static ID3D11ShaderResourceView* ImageSrv(const Image* img) {
     return srv;
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     if (!T(ctx) || !img || b.w <= 0 || b.h <= 0) {
         return;
     }
@@ -1674,6 +1674,10 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
     float op = ctx->opacity < 0 ? 0 : (ctx->opacity > 1 ? 1 : ctx->opacity);
     i.color[3] = op;
     i.misc[2] = (float)kQuadImage;
+    // The shader rounds a quad's corners off `misc[0]`, which is what an
+    // avatar's picture needs.
+    float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+    i.misc[0] = radius > half ? half : (radius > 0 ? radius : 0.f);
     i.uv[2] = 1.f;
     i.uv[3] = 1.f;
     memcpy(i.clip, gB.clip, sizeof(i.clip));

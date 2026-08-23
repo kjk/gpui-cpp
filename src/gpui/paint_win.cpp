@@ -1241,13 +1241,13 @@ Size ImageSizePx(const Image* img) {
     return {(float)img->w, (float)img->h};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     if (scene::Recording()) {
-        scene::RecImageDraw(ctx, img, b);
+        scene::RecImageDraw(ctx, img, b, radius);
         return;
     }
     if (PaintGpuOn()) {
-        gpuw::ImageDraw(ctx, img, b);
+        gpuw::ImageDraw(ctx, img, b, radius);
         return;
     }
     if (!ctx || !ctx->rt || !ctx->rt->rt || !img || !img->bgra || b.w <= 0 ||
@@ -1270,8 +1270,32 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
         img->bmpRt = rt;
     }
     D2D1_RECT_F dst = D2D1::RectF(b.x, b.y, b.x + b.w, b.y + b.h);
-    rt->DrawBitmap(img->bmp, dst, ctx->opacity < 0 ? 0.f : ctx->opacity,
-                   D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    float op = ctx->opacity < 0 ? 0.f : ctx->opacity;
+    if (radius > 0) {
+        // A bitmap brush scaled onto the box, filling a rounded rect: the
+        // corners come out antialiased and nothing has to be clipped.
+        D2D1_BITMAP_BRUSH_PROPERTIES bp = D2D1::BitmapBrushProperties(
+            D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
+            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        D2D1_BRUSH_PROPERTIES brp = D2D1::BrushProperties(
+            op,
+            D2D1::Matrix3x2F::Scale(img->w > 0 ? b.w / (float)img->w : 1.f,
+                                    img->h > 0 ? b.h / (float)img->h : 1.f) *
+                D2D1::Matrix3x2F::Translation(b.x, b.y));
+        ID2D1BitmapBrush* brush = nullptr;
+        if (SUCCEEDED(rt->CreateBitmapBrush(img->bmp, bp, brp, &brush)) &&
+            brush) {
+            float r = radius;
+            float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+            if (r > half) {
+                r = half;
+            }
+            rt->FillRoundedRectangle(D2D1::RoundedRect(dst, r, r), brush);
+            Rel(&brush);
+            return;
+        }
+    }
+    rt->DrawBitmap(img->bmp, dst, op, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
 // gpui text_system: padding_top = (line_height - ascent - descent) / 2.

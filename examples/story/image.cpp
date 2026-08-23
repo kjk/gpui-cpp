@@ -12,8 +12,10 @@ El* ImageStory::Render(ImageStory*, Ctx* cx) {
     El* remote = StorySection(cx, "Remote SVG",
                               "Loads and renders an SVG from a remote URL.");
     StorySectionBody(remote)->W(480);
-    // The frame is the same; the image inside it is not fetched in this port,
-    // as in the Rust window when the URL is unreachable.
+    // `img("https://.../sdk.svg").h_24()` inside the frame. gpui/image.h
+    // fetches it with sys/http.h and svg.cpp turns it into draw ops, so this
+    // is the same picture the Rust window shows — and the same empty frame
+    // when the URL is unreachable.
     El* frame = Div(a)
                     ->FlexRow()
                     ->W(kFill)
@@ -22,6 +24,9 @@ El* ImageStory::Render(ImageStory*, Ctx* cx) {
                     ->JustifyCenter()
                     ->Radius(th.radiusLg)
                     ->Border(1, th.border);
+    frame->Child(ImageEl(a, StrL("https://pub.lbkrs.com/files/202503/"
+                                 "vEnnmgUM6bo362ya/sdk.svg"))
+                     ->H(96));
     StorySectionAdd(remote, frame);
     page->Child(remote);
     return page;

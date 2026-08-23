@@ -148,7 +148,12 @@ void ImageFree(Image* img);
 Size ImageSizePx(const Image* img);
 // Draw it scaled into `b`. The caller has already picked the box, so this is
 // a straight stretch — object_fit is decided above.
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b);
+// `radius` rounds the corners the picture is drawn into, which is what an
+// avatar is: `AvatarImage::new(src).size_full().rounded_full()`. Zero draws
+// the plain rectangle. It is a parameter rather than a clip because a clip
+// here is axis-aligned only, and the four backends all have a cheap way to
+// fill a rounded rect with a picture.
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius = 0);
 
 // ─── shaped text ──────────────────────────────────────────────────────────
 //

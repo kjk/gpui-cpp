@@ -4017,7 +4017,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         const uint8_t* ops =
             img ? nullptr : ImageVectorForSrc(e->imgSrc, &opsLen);
         if (img) {
-            ImageDraw(ctx, img, e->Bounds());
+            ImageDraw(ctx, img, e->Bounds(), e->style.radius);
         } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
                               e->style.hasColor ? e->style.color
                                                 : ThemeNow().foreground,

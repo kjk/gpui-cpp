@@ -29,11 +29,16 @@ struct Avatar {
     Rgba borderC = {};
     bool hasBorderC = false;
     IconName placeholder = IconName::User;
+    // Avatar::src: the picture, which replaces the fallback entirely when it
+    // is given — Rust does not fall back when a load fails either, since
+    // `img()` simply draws nothing until the bytes land.
+    Str src = {};
 
     static Avatar* New(Ctx* cx);
     // Avatar::name: the whole name, of which the fallback shows the initials
     // and off which its color is picked.
     Avatar* Name(Str s);
+    Avatar* Src(Str url);
     Avatar* Initials(Str s);
     Avatar* Bg(Background c);
     Avatar* Size(float v);

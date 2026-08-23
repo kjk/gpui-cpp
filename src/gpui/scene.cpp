@@ -592,12 +592,13 @@ void RecPathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c,
     }
 }
 
-void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+void RecImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     Prim* p = Emit(ctx, kPImage, b);
     p->g0 = b.x;
     p->g1 = b.y;
     p->g2 = b.w;
     p->g3 = b.h;
+    p->e0 = radius;
     p->ref = img;
 }
 
@@ -1108,7 +1109,8 @@ void Replay(PaintCtx* ctx, const Bounds* damage) {
                 CanvasEllipse(ctx, p.g0, p.g1, p.g2, p.g3, p.e1, p.color);
                 break;
             case kPImage:
-                ImageDraw(ctx, (Image*)p.ref, Bounds{p.g0, p.g1, p.g2, p.g3});
+                ImageDraw(ctx, (Image*)p.ref, Bounds{p.g0, p.g1, p.g2, p.g3},
+                          p.e0);
                 break;
             case kPText:
                 TextLayoutDraw(ctx, (TextLayout*)p.ref, p.g0, p.g1, p.color,

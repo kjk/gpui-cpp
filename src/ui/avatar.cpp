@@ -130,6 +130,11 @@ static Rgba AvatarHue(const Theme& th, Str initials) {
     return RgbaWithHue(th.blue, deg / 360.f);
 }
 
+Avatar* Avatar::Src(Str url) {
+    src = url;
+    return this;
+}
+
 El* Avatar::IntoEl() {
     const Theme& th = cx->theme();
     float r = radius >= 0 ? radius : size * 0.5f;
@@ -161,12 +166,19 @@ El* Avatar::IntoEl() {
                  ->Child(inner);
     // The base is opaque (bg tokens.secondary) and the fallback tint sits on
     // top, so overlapping group avatars do not show through each other.
-    El* el = gpui::Avatar::New(cx)
-                 ->Size(size)
-                 ->Fallback(fb)
-                 ->IntoEl()
-                 ->Radius(r)
-                 ->Bg(th.tokens.secondary);
+    gpui::Avatar* base = gpui::Avatar::New(cx)->Size(size)->Fallback(fb);
+    if (src.s && src.len > 0) {
+        // AvatarImage::new(src).size_full().rounded_full(): the picture takes
+        // the whole of the base and the fallback is not drawn at all.
+        base->Image(
+            AvatarImage::New(cx)
+                ->W(innerSize)
+                ->H(innerSize)
+                ->Radius(r - inset)
+                ->Child(ImageEl(a, src)->W(innerSize)->H(innerSize)->Radius(
+                    r - inset)));
+    }
+    El* el = base->IntoEl()->Radius(r)->Bg(th.tokens.secondary);
     Rgba bd = hasBorderC ? borderC : th.border;
     if (borderW > 0) {
         el->Pad(inset)->Border(borderW, bd);

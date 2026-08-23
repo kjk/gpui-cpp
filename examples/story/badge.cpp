@@ -1,16 +1,18 @@
 #include "Story.h"
 
-// badge_story.rs hangs every badge off a github avatar URL. There is no
-// socket here, so each is a name and the avatar falls back to its initials.
+// badge_story.rs hangs every badge off a github avatar URL, and so does
+// this: gpui/image.h fetches it with sys/http.h.
 struct BadgeStory {
     StoryToolbarState toolbar;
 
     static El* Render(BadgeStory* self, Ctx* cx);
 };
 
-static El* Face(Ctx* cx, UiSize size, const char* name) {
+// The three the Rust story names, by the user id in the URL.
+static El* Face(Ctx* cx, UiSize size, const char* user) {
     return component::Avatar::New(cx)
-        ->Name(Str(name))
+        ->Src(StoryFmt(cx, "https://avatars.githubusercontent.com/u/%s?v=4",
+                       user))
         ->WithSize(size)
         ->IntoEl();
 }
@@ -48,12 +50,12 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
     StorySectionAdd(counts, component::Badge::New(cx)
                                 ->WithSize(size)
                                 ->Count(3)
-                                ->Child(Face(cx, size, "Jason Lee"))
+                                ->Child(Face(cx, size, "5518"))
                                 ->IntoEl());
     StorySectionAdd(counts, component::Badge::New(cx)
                                 ->WithSize(size)
                                 ->Count(103)
-                                ->Child(Face(cx, size, "huacnlee"))
+                                ->Child(Face(cx, size, "28998859"))
                                 ->IntoEl());
     page->Child(counts);
 
@@ -62,13 +64,13 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                             ->WithSize(size)
                             ->Icon(IconName::Check)
                             ->Color(th.cyan)
-                            ->Child(Face(cx, size, "Jason Lee"))
+                            ->Child(Face(cx, size, "5518"))
                             ->IntoEl());
     StorySectionAdd(ic, component::Badge::New(cx)
                             ->WithSize(size)
                             ->Icon(IconName::Star)
                             ->Color(th.yellow)
-                            ->Child(Face(cx, size, "Tim Wang"))
+                            ->Child(Face(cx, size, "20092316"))
                             ->IntoEl());
     page->Child(ic);
 
@@ -77,7 +79,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                               ->WithSize(size)
                               ->Dot()
                               ->Count(1)
-                              ->Child(Face(cx, size, "Jason Lee"))
+                              ->Child(Face(cx, size, "5518"))
                               ->IntoEl());
     page->Child(dots);
 
@@ -86,14 +88,14 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                                ->WithSize(size)
                                ->Count(3)
                                ->Color(th.blue)
-                               ->Child(Face(cx, size, "Jason Lee"))
+                               ->Child(Face(cx, size, "5518"))
                                ->IntoEl());
     StorySectionAdd(color, component::Badge::New(cx)
                                ->WithSize(size)
                                ->Dot()
                                ->Color(th.green)
                                ->Count(1)
-                               ->Child(Face(cx, size, "Jason Lee"))
+                               ->Child(Face(cx, size, "5518"))
                                ->IntoEl());
     page->Child(color);
 
@@ -107,7 +109,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                                           ->WithSize(size)
                                           ->Icon(IconName::Check)
                                           ->Color(th.cyan)
-                                          ->Child(Face(cx, size, "Jason Lee"))
+                                          ->Child(Face(cx, size, "5518"))
                                           ->IntoEl())
                               ->IntoEl());
     StorySectionAdd(nest,
@@ -119,7 +121,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                                     ->WithSize(size)
                                     ->Icon(IconName::Star)
                                     ->Color(th.yellow)
-                                    ->Child(Face(cx, UiSize::Large, "Tim Wang"))
+                                    ->Child(Face(cx, UiSize::Large, "20092316"))
                                     ->IntoEl())
                         ->IntoEl());
     StorySectionAdd(nest, component::Badge::New(cx)
@@ -130,7 +132,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                                           ->WithSize(size)
                                           ->Icon(IconName::Asterisk)
                                           ->Color(th.green)
-                                          ->Child(Face(cx, size, "Alice Brown"))
+                                          ->Child(Face(cx, size, "5518"))
                                           ->IntoEl())
                               ->IntoEl());
     StorySectionAdd(nest,
@@ -141,7 +143,7 @@ El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
                                     ->WithSize(size)
                                     ->Icon(IconName::Sun)
                                     ->Color(th.red)
-                                    ->Child(Face(cx, UiSize::Small, "Chen Dan"))
+                                    ->Child(Face(cx, UiSize::Small, "5518"))
                                     ->IntoEl())
                         ->IntoEl());
     page->Child(nest);

@@ -101,7 +101,7 @@ void PathFillGradient(PaintCtx* ctx, Path* p, float x0, float y0, float x1,
 void PathStroke(PaintCtx* ctx, Path* p, float stroke, Rgba c, bool roundCaps);
 void PathRealize(PaintCtx* ctx, Path* p);
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b);
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius);
 void TextLayoutDraw(PaintCtx* ctx, TextLayout* tl, float x, float y, Rgba c,
                     bool clip);
 

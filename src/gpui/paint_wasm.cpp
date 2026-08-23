@@ -504,7 +504,7 @@ EM_JS(int, GpJsImageH, (int id), {
 });
 
 EM_JS(void, GpJsImageDraw,
-      (int id, float x, float y, float w, float h, float alpha), {
+      (int id, float x, float y, float w, float h, float alpha, float r), {
     const G = globalThis.__gpui;
     const c = G.cur, e = G.images[id];
     if (!c || !e || e.w <= 0 || e.h <= 0) {
@@ -512,7 +512,21 @@ EM_JS(void, GpJsImageDraw,
     }
     const prev = c.globalAlpha;
     c.globalAlpha = alpha;
+    if (r > 0) {
+        c.save();
+        c.beginPath();
+        c.moveTo(x + r, y);
+        c.arcTo(x + w, y, x + w, y + h, r);
+        c.arcTo(x + w, y + h, x, y + h, r);
+        c.arcTo(x, y + h, x, y, r);
+        c.arcTo(x, y, x + w, y, r);
+        c.closePath();
+        c.clip();
+    }
     c.drawImage(e.img, x, y, w, h);
+    if (r > 0) {
+        c.restore();
+    }
     c.globalAlpha = prev;
 });
 
@@ -1123,12 +1137,14 @@ Size ImageSizePx(const Image* img) {
     return {(float)GpJsImageW(img->js), (float)GpJsImageH(img->js)};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     if (!ctx || !ctx->rt || !img || !img->js || b.w <= 0 || b.h <= 0) {
         return;
     }
     float a = ctx->opacity < 0 ? 0 : (ctx->opacity > 1 ? 1 : ctx->opacity);
-    GpJsImageDraw(img->js, b.x, b.y, b.w, b.h, a);
+    float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+    float r = radius > half ? half : (radius > 0 ? radius : 0.f);
+    GpJsImageDraw(img->js, b.x, b.y, b.w, b.h, a, r);
 }
 
 // ─── shaped text ──────────────────────────────────────────────────────────

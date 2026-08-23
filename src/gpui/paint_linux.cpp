@@ -582,13 +582,26 @@ Size ImageSizePx(const Image* img) {
     return {(float)img->w, (float)img->h};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     cairo_t* cr = Cr(ctx);
     if (!cr || !img || !img->surface || img->w <= 0 || img->h <= 0 ||
         b.w <= 0 || b.h <= 0) {
         return;
     }
     cairo_save(cr);
+    if (radius > 0) {
+        // The rounded box is in the caller's coordinates, so it goes on
+        // before the scale that maps the picture onto it.
+        float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+        double r = radius > half ? half : radius;
+        cairo_new_path(cr);
+        cairo_arc(cr, b.x + b.w - r, b.y + r, r, -kPi / 2, 0);
+        cairo_arc(cr, b.x + b.w - r, b.y + b.h - r, r, 0, kPi / 2);
+        cairo_arc(cr, b.x + r, b.y + b.h - r, r, kPi / 2, kPi);
+        cairo_arc(cr, b.x + r, b.y + r, r, kPi, kPi * 1.5);
+        cairo_close_path(cr);
+        cairo_clip(cr);
+    }
     cairo_translate(cr, b.x, b.y);
     cairo_scale(cr, b.w / (double)img->w, b.h / (double)img->h);
     cairo_set_source_surface(cr, img->surface, 0, 0);

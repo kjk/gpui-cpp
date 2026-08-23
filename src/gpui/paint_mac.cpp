@@ -574,7 +574,7 @@ Size ImageSizePx(const Image* img) {
     return {(float)img->w, (float)img->h};
 }
 
-void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
+void ImageDraw(PaintCtx* ctx, Image* img, Bounds b, float radius) {
     CGContextRef cg = Cg(ctx);
     if (!cg || !img || !img->image || b.w <= 0 || b.h <= 0) {
         return;
@@ -582,6 +582,16 @@ void ImageDraw(PaintCtx* ctx, Image* img, Bounds b) {
     CGContextSaveGState(cg);
     if (ctx->opacity < 1.f) {
         CGContextSetAlpha(cg, ctx->opacity < 0 ? 0 : ctx->opacity);
+    }
+    if (radius > 0) {
+        // Clipped in the caller's coordinates, before the flip below.
+        float half = (b.w < b.h ? b.w : b.h) * 0.5f;
+        CGFloat r = radius > half ? half : radius;
+        CGPathRef path = CGPathCreateWithRoundedRect(
+            CGRectMake(b.x, b.y, b.w, b.h), r, r, nullptr);
+        CGContextAddPath(cg, path);
+        CGContextClip(cg);
+        CGPathRelease(path);
     }
     // The context is y-down for everything else here, and CGContextDrawImage
     // is the one call that reads y-up, so the box is flipped about itself.
