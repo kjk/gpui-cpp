@@ -43,7 +43,8 @@ static El* StatusTag(Ctx* cx, const char* status) {
 
 static El* Cell(Ctx* cx, float w, bool right) {
     Arena* a = cx->a;
-    El* c = Div(a)->FlexRow()->PadX(8)->PadY(8)->ItemsCenter();
+    // Size::table_cell_padding, which is px_2/py_1 at the medium size.
+    El* c = Div(a)->FlexRow()->PadX(8)->PadY(4)->ItemsCenter();
     if (w > 0) {
         c->W(w);
     } else {
@@ -55,17 +56,17 @@ static El* Cell(Ctx* cx, float w, bool right) {
     return c;
 }
 
-// Table text sits in a tight line box, so a row is py_2 plus the text.
+// A Table is `.text_sm()` throughout, and a line of it is the usual box, so
+// a row comes to the padding plus one line of fourteen-point text.
 static El* HeadCell(Ctx* cx, const char* text, float w, bool right) {
     El* c = Cell(cx, w, right);
-    c->Child(StoryTxt(cx, Str(text), 14, cx->theme().mutedFg)->LineHeight(1.f));
+    c->Child(StoryTxt(cx, Str(text), 14, cx->theme().tableHeadFg));
     return c;
 }
 
 static El* TextCell(Ctx* cx, const char* text, float w, bool right) {
     El* c = Cell(cx, w, right);
-    c->Child(StoryTxt(cx, Str(text), 16, cx->theme().foreground)
-                 ->LineHeight(1.f));
+    c->Child(StoryTxt(cx, Str(text), 14, cx->theme().foreground));
     return c;
 }
 
@@ -96,11 +97,9 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
         row->Child(statusCell);
         El* methodCell = Cell(cx, 0, false);
         El* methodCol = Div(a)->FlexCol();
-        methodCol->Child(StoryTxt(cx, Str(inv.method), 16, th.foreground)
-                             ->LineHeight(1.4f));
+        methodCol->Child(StoryTxt(cx, Str(inv.method), 14, th.foreground));
         if (inv.method2) {
-            methodCol->Child(StoryTxt(cx, Str(inv.method2), 16, th.foreground)
-                                 ->LineHeight(1.4f));
+            methodCol->Child(StoryTxt(cx, Str(inv.method2), 14, th.foreground));
         }
         methodCell->Child(methodCol);
         row->Child(methodCell);
@@ -114,7 +113,7 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
     foot->Child(TextCell(cx, "$2,250.00", 240, true));
     table->Child(foot);
     table->Child(Div(a)->W(kFill)->PadY(16)->FlexRow()->JustifyCenter()->Child(
-        StoryTxt(cx, StrL("A list of your recent invoices."), 16, th.mutedFg)));
+        StoryTxt(cx, StrL("A list of your recent invoices."), 14, th.mutedFg)));
     StorySectionAdd(def, table);
     page->Child(def);
 
@@ -137,11 +136,9 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
         row->Child(TextCell(cx, inv.id, 100, false));
         El* methodCell = Cell(cx, 0, false);
         El* methodCol = Div(a)->FlexCol();
-        methodCol->Child(StoryTxt(cx, Str(inv.method), 16, th.foreground)
-                             ->LineHeight(1.4f));
+        methodCol->Child(StoryTxt(cx, Str(inv.method), 14, th.foreground));
         if (inv.method2) {
-            methodCol->Child(StoryTxt(cx, Str(inv.method2), 16, th.foreground)
-                                 ->LineHeight(1.4f));
+            methodCol->Child(StoryTxt(cx, Str(inv.method2), 14, th.foreground));
         }
         methodCell->Child(methodCol);
         row->Child(methodCell);
