@@ -278,43 +278,77 @@ El* NotificationList::IntoEl() {
 }
 
 El* Notification::IntoEl() {
-    AlertVariant v = AlertVariant::Info;
-    if (kind == NotificationKind::Success) {
-        v = AlertVariant::Success;
+    const Theme& th = cx->theme();
+    // Notification's own box, not an Alert: border_1 in theme.border on the
+    // popover surface, radius_lg, shadow_md, py_3p5 px_4 gap_3. Nothing here
+    // is tinted by the kind — only the icon is.
+    El* card = Div(a)
+                   ->FlexRow()
+                   ->Group()
+                   ->W(kFill)
+                   ->Gap(12)
+                   ->PadY(14)
+                   ->PadX(16)
+                   ->Border(1, th.border)
+                   ->Bg(th.tokens.background)
+                   // shadow_md: there is no box shadow in paint.h, so the
+                   // border is what separates the card from the page.
+                   ->Radius(th.radiusLg);
+    IconName iconName = IconName::None;
+    Rgba iconFg = th.foreground;
+    if (kind == NotificationKind::Info) {
+        iconName = IconName::Info;
+        iconFg = th.info;
+    } else if (kind == NotificationKind::Success) {
+        iconName = IconName::CircleCheck;
+        iconFg = th.success;
     } else if (kind == NotificationKind::Warning) {
-        v = AlertVariant::Warning;
+        iconName = IconName::TriangleAlert;
+        iconFg = th.warning;
     } else if (kind == NotificationKind::Error) {
-        v = AlertVariant::Error;
+        iconName = IconName::CircleX;
+        iconFg = th.danger;
     }
-    Alert* al = Alert::New(cx, StrL("notification"), message)
-                    ->Title(title)
-                    ->OnClose(onClose);
-    al->variant = v;
-    // Alert's content slot stands in for the message, so an action has to
-    // carry the message along with it: content() replaces the text, action()
-    // only adds a button under it.
-    if (content || action) {
-        El* extra = Div(a)->FlexCol()->W(kFill)->Gap(8);
-        if (content) {
-            extra->Child(content);
-        } else if (message.s && message.len > 0) {
-            extra->Child(TextEl(a, message)
-                             ->Font(14)
-                             ->Fg(cx->theme().foreground)
-                             ->Wrap()
-                             ->W(kFill));
-        }
-        if (action) {
-            extra->Child(Div(a)->FlexRow()->Child(action));
-        }
-        al->Content(extra);
+    bool hasIcon = iconName != IconName::None;
+    if (hasIcon) {
+        // div().absolute().top(px(18.)).left_4(): out of the row, so the
+        // body's own pl_6 is what keeps the text clear of it.
+        card->Child(Div(a)->Absolute()->Top(18)->Left(16)->Child(
+            IconEl(a, iconName, 16)->Fg(iconFg)));
     }
-    El* card = al->IntoEl();
-    // The body answers on_click; the x inside the card has its own listener,
-    // and being painted later it wins the hit test.
-    if (onClick.IsValid()) {
-        BindClick(card, StrL("notification-body"), onClick);
+    El* body = Div(a)->FlexCol()->Flex1()->ClipX()->ClipY()->Gap(4);
+    if (hasIcon) {
+        body->PadL(24);
     }
+    if (title.s && title.len > 0) {
+        body->Child(TextEl(a, title)
+                        ->Font(14)
+                        ->Semibold()
+                        ->Fg(th.foreground)
+                        ->Wrap()
+                        ->W(kFill));
+    }
+    if (message.s && message.len > 0) {
+        body->Child(
+            TextEl(a, message)->Font(14)->Fg(th.foreground)->Wrap()->W(kFill));
+    }
+    if (content) {
+        body->Child(content);
+    }
+    card->Child(body);
+    if (action) {
+        card->Child(action);
+    }
+    // The x sits in the corner and is invisible until the pointer is on the
+    // card — group_hover, which is why the card is the group.
+    card->Child(
+        Div(a)->Absolute()->Top(4)->Right(4)->GroupHoverVisible()->Child(
+            component::Button::New(cx, StrL("close"))
+                ->Ghost()
+                ->WithSize(UiSize::XSmall)
+                ->Icon(IconName::X)
+                ->OnClick(onClose)
+                ->IntoEl()));
     if (anchor == NotificationAnchor::None) {
         return card;
     }

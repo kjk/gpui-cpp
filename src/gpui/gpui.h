@@ -184,6 +184,9 @@ struct Theme {
     // the same surface at opposite ends of the window, and most themes only
     // name one of them.
     Rgba statusBar;
+    // status_bar.border, which falls back to the title bar's the way the
+    // surface above falls back to the title bar's own.
+    Rgba statusBarBorder;
     Rgba tabBar;
     Rgba tabActiveBg;
     Rgba tabActiveFg;
@@ -1238,6 +1241,16 @@ struct Style {
     // element paints with, for the descendants that set no color of their own.
     Rgba hoverFg = {};
     bool hasHoverFg = false;
+    // div().group(""): this element is the group a descendant's
+    // `group_hover` is resolved against, and the pointer being anywhere in
+    // its box is what counts as hovered — not the pointer being on this
+    // element rather than on something drawn over it.
+    bool group = false;
+    // .invisible().group_hover("", |this| this.visible()): the element keeps
+    // its box in layout and is simply not drawn while the group around it is
+    // not hovered, which is how a card's close button takes its corner
+    // whether or not it is showing.
+    bool groupHoverVisible = false;
     int focusId = 0;
     // FocusHandle::tab_index / tab_stop. The index groups the traversal: Tab
     // visits every element of the lowest index in the order they were painted,
@@ -1567,6 +1580,10 @@ struct El {
     El* RightRel(float frac);
     El* HoverBg(Background c);
     El* HoverFg(Rgba c);
+    // div().group("") and .group_hover(..): the group, and a descendant that
+    // only paints while the pointer is inside it.
+    El* Group();
+    El* GroupHoverVisible();
     El* FocusId(int v);
     El* KeyContext(Str name);
     // on_action::<A>(..). The listener is called with an ActionEvent; setting
@@ -1804,6 +1821,9 @@ struct PaintCtx {
     float viewW = 0;
     float viewH = 0;
     int hoverId = 0;
+    // Whether the pointer is inside the nearest enclosing `Group()` box,
+    // pushed down as the tree paints the way element opacity is.
+    bool groupHovered = false;
     int focusId = 0;
     // window.focus_generation: bumped every time the focus moves, so a
     // keystroke can tell that it stayed put without holding onto the element.

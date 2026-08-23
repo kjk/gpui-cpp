@@ -805,6 +805,7 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->titleBar, &out->tokens.titleBar,
              PickBg(c, "title_bar.background", out->tokens.background));
     out->titleBarBorder = Pick(c, "title_bar.border", out->border);
+    out->statusBarBorder = Pick(c, "status_bar.border", out->titleBarBorder);
     SetToken(&out->overlay, &out->tokens.overlay,
              PickBg(c, "overlay", base.tokens.overlay));
 

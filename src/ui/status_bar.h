@@ -6,21 +6,26 @@ namespace gpui {
 
 namespace component {
 
+// Three regions, each holding any number of elements: `left` and `right` pin
+// to their ends and the center takes what is left. Where the center lands
+// follows which ends are pinned — centered with both, end-aligned with only a
+// left, start-aligned otherwise, which is what makes a bar with only children
+// read like a plain container.
 struct StatusBar {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    Str left = {};
-    Str center = {};
-    Str right = {};
-    bool hasLeft = false;
-    bool hasCenter = false;
-    bool hasRight = false;
+    ArenaVec<El*> left;
+    ArenaVec<El*> center;
+    ArenaVec<El*> right;
 
     static StatusBar* New(Ctx* cx);
+    StatusBar* Left(El* e);
     StatusBar* Left(Str s);
     // The center region is the bar's child; where it lands depends on which
     // sides are filled.
+    StatusBar* Center(El* e);
     StatusBar* Center(Str s);
+    StatusBar* Right(El* e);
     StatusBar* Right(Str s);
     El* IntoEl();
 };

@@ -11,50 +11,75 @@ StatusBar* StatusBar::New(Ctx* cx) {
     s->cx = cx;
     return s;
 }
+
+// A plain string is `impl IntoElement` in Rust and the commonest item on a
+// bar; it takes the bar's own text style, so it is a bare TextEl here.
+static El* BarText(Ctx* cx, Str s) {
+    return TextEl(cx->a, s)->Font(12)->Fg(cx->theme().mutedFg);
+}
+
+StatusBar* StatusBar::Left(El* e) {
+    left.Append(a, e);
+    return this;
+}
 StatusBar* StatusBar::Left(Str s) {
-    left = s;
-    hasLeft = true;
+    return Left(BarText(cx, s));
+}
+StatusBar* StatusBar::Center(El* e) {
+    center.Append(a, e);
     return this;
 }
 StatusBar* StatusBar::Center(Str s) {
-    center = s;
-    hasCenter = true;
+    return Center(BarText(cx, s));
+}
+StatusBar* StatusBar::Right(El* e) {
+    right.Append(a, e);
     return this;
 }
 StatusBar* StatusBar::Right(Str s) {
-    right = s;
-    hasRight = true;
-    return this;
+    return Right(BarText(cx, s));
 }
 
 El* StatusBar::IntoEl() {
     const Theme& th = cx->theme();
+    // `region()`: h_flex().overflow_hidden().items_center().gap_2().
+    auto region = [&]() {
+        return Div(a)->FlexRow()->ClipX()->ClipY()->ItemsCenter()->Gap(8);
+    };
+    bool hasLeft = left.len > 0;
+    bool hasRight = right.len > 0;
     El* bar = Div(a)
                   ->FlexRow()
                   ->W(kFill)
-                  ->H(28)
-                  ->PadX(12)
                   ->ItemsCenter()
+                  ->Gap(8)
+                  ->PadY(4)
+                  ->PadX(8)
                   ->Bg(th.tokens.statusBar)
-                  ->BorderT(1, th.border);
-    // Left and right hold their edges; the center takes what is left, so it
-    // sits at the start with only a right side, at the end with only a left
-    // one, and centered when both are there.
+                  ->BorderT(1, th.statusBarBorder);
     if (hasLeft) {
-        bar->Child(TextEl(a, left)->Font(12)->Fg(th.mutedFg));
+        El* r = region();
+        for (int i = 0; i < left.len; i++) {
+            r->Child(left[i]);
+        }
+        bar->Child(r);
     }
-    El* mid = Div(a)->FlexRow()->Flex1()->ItemsCenter();
+    El* mid = region()->Flex1();
     if (hasLeft && hasRight) {
         mid->JustifyCenter();
     } else if (hasLeft) {
         mid->JustifyEnd();
     }
-    if (hasCenter) {
-        mid->Child(TextEl(a, center)->Font(12)->Fg(th.mutedFg));
+    for (int i = 0; i < center.len; i++) {
+        mid->Child(center[i]);
     }
     bar->Child(mid);
     if (hasRight) {
-        bar->Child(TextEl(a, right)->Font(12)->Fg(th.mutedFg));
+        El* r = region();
+        for (int i = 0; i < right.len; i++) {
+            r->Child(right[i]);
+        }
+        bar->Child(r);
     }
     return bar;
 }

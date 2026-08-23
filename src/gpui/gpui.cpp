@@ -280,6 +280,7 @@ const Theme& ThemeDefaultDark() {
         t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
         t.titleBar = Rgb(0x17, 0x17, 0x17);
         t.titleBarBorder = Rgb(0x26, 0x26, 0x26);
+        t.statusBarBorder = Rgb(0x26, 0x26, 0x26);
         t.tabBar = Rgb(0x17, 0x17, 0x17);
         t.tabActiveBg = Rgb(0x0a, 0x0a, 0x0a);
         t.tabActiveFg = Rgb(0xfa, 0xfa, 0xfa);
@@ -377,6 +378,7 @@ const Theme& ThemeDefaultLight() {
         t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
         t.titleBar = Rgb(0xf8, 0xf8, 0xf8);
         t.titleBarBorder = Rgb(0xe5, 0xe5, 0xe5);
+        t.statusBarBorder = Rgb(0xe5, 0xe5, 0xe5);
         t.tabBar = Rgb(0xf5, 0xf5, 0xf5);
         t.tabActiveBg = Rgb(0xff, 0xff, 0xff);
         t.tabActiveFg = Rgb(0x17, 0x17, 0x17);
@@ -1422,6 +1424,16 @@ El* El::HoverBg(Background c) {
 El* El::HoverFg(Rgba c) {
     style.hoverFg = c;
     style.hasHoverFg = true;
+    return this;
+}
+
+El* El::Group() {
+    style.group = true;
+    return this;
+}
+
+El* El::GroupHoverVisible() {
+    style.groupHoverVisible = true;
     return this;
 }
 El* El::FocusId(int v) {
@@ -3642,14 +3654,24 @@ static void PaintElNode(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (!e || !ctx) {
         return;
     }
+    // `group("")`: what a descendant's group_hover asks about is the pointer
+    // being in this box, which is not the same question as `hoverId` — the
+    // close button drawn over a card takes the hover away from the card, and
+    // Rust's group hitbox does not care.
+    bool prevGroup = ctx->groupHovered;
+    if (e->style.group) {
+        ctx->groupHovered = e->w > 0 && e->h > 0 &&
+                            e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
+    }
     if (e->style.opacity >= 1.f) {
         PaintElNodeInner(ctx, e, skipOverlay);
-        return;
+    } else {
+        float prev = ctx->opacity;
+        ctx->opacity = prev * e->style.opacity;
+        PaintElNodeInner(ctx, e, skipOverlay);
+        ctx->opacity = prev;
     }
-    float prev = ctx->opacity;
-    ctx->opacity = prev * e->style.opacity;
-    PaintElNodeInner(ctx, e, skipOverlay);
-    ctx->opacity = prev;
+    ctx->groupHovered = prevGroup;
 }
 
 static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
@@ -3657,6 +3679,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         return;
     }
     if (skipOverlay && IsOverlay(e)) {
+        return;
+    }
+    // `.invisible()` until the group is hovered. The box was laid out either
+    // way; this only stops it being drawn.
+    if (e->style.groupHoverVisible && !ctx->groupHovered) {
         return;
     }
     // SliderIndicator::on_prepaint. Layout is over by the time an element

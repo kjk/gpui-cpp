@@ -7,6 +7,10 @@ namespace gpui {
 namespace component {
 
 enum class NotificationKind : uint8_t {
+    // Notification::type_ is an Option, and None is the default: no icon at
+    // all, and the message where an icon would have pushed it across. A
+    // plain `push_notification("...")` is one of these.
+    None,
     Info,
     Success,
     Warning,
@@ -43,7 +47,7 @@ const int kNotificationTickMs = 50;
 // element in `content`.
 struct NotificationItem {
     int id = 0;
-    NotificationKind kind = NotificationKind::Info;
+    NotificationKind kind = NotificationKind::None;
     Str title = {};
     Str message = {};
     El* content = nullptr;
@@ -99,7 +103,7 @@ int NotificationIndexOf(const NotificationListState* s, int id);
 struct Notification {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    NotificationKind kind = NotificationKind::Info;
+    NotificationKind kind = NotificationKind::None;
     Str title = {};
     Str message = {};
     // action(): an inline button under the message.

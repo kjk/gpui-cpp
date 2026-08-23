@@ -269,6 +269,11 @@ El* StorySection(Ctx* cx, const char* title, const char* desc) {
                    ->W(kFill)
                    ->Border(1, th.border)
                    ->Radius(th.radiusLg)
+                   // content_style's overflow_x_hidden: a section that names
+                   // a width wider than the pane — the status bar page's
+                   // .w(px(760.)) — is cut at the pane's edges rather than
+                   // running out over the sidebar and the scrollbar.
+                   ->ClipX()
                    ->ItemsCenter()
                    ->JustifyCenter();
     // section(): h_flex().w_full().flex_wrap().justify_center().items_center()
@@ -835,7 +840,7 @@ Entity<component::NotificationListState> StoryNotifications(Ctx* cx) {
 }
 
 void StoryPushNotification(Ctx* cx, Str message) {
-    WindowPushNotification(cx, component::NotificationKind::Info, message);
+    WindowPushNotification(cx, component::NotificationKind::None, message);
 }
 
 static int StoryNotificationCount(Ctx* cx) {
