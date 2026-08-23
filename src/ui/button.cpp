@@ -367,6 +367,11 @@ El* Button::IntoEl() {
         e->W(sizePx);
     } else if (iconOnly) {
         e->W(h);
+    } else if (compact && h > 0) {
+        // button.rs: compact is `min_w_5` / `min_w_6` / `min_w_8` beside the
+        // tighter px, so a labelled compact button is never narrower than it
+        // is tall — which is what keeps a pagination page number square.
+        e->MinW(h);
     }
     if (bd.a) {
         if (joined) {

@@ -1,9 +1,19 @@
 #include "ui/pagination.h"
 #include "ui/button.h"
+#include "ui/menu.h"
 
 namespace gpui {
 
 namespace component {
+
+void PaginationMenuState::OnItem(PaginationMenuState* self, Ctx* cx,
+                                 const ClickEvent* ev, intptr_t ix) {
+    if (!self->onChange.IsValid()) {
+        return;
+    }
+    ListenerCall(cx->app, cx->win,
+                 ListenerFill(self->onChange, self->firstPage + (int)ix), ev);
+}
 
 Pagination* Pagination::New(Ctx* cx, int page, int total) {
     Arena* a = cx->a;
@@ -88,14 +98,43 @@ El* Pagination::IntoEl() {
         int n = PaginationItems(&st, items, 32);
         for (int i = 0; i < n; i++) {
             if (items[i].page == 0) {
-                row->Child(
-                    Button::New(cx, StrDup(a, fmt("%s-ellipsis-%d", base, i)))
-                        ->Ghost()
-                        ->Compact()
-                        ->WithSize(size)
-                        ->Disabled(disabled)
-                        ->Icon(IconName::Ellipsis)
-                        ->IntoEl());
+                // The ellipsis is a dropdown over the pages it hid, so a jump
+                // into the middle of a long run does not need the arrows.
+                Str menuId = StrDup(a, fmt("%s-ellipsis-%d", base, i));
+                El* trigger = Button::New(cx, menuId)
+                                  ->Ghost()
+                                  ->Compact()
+                                  ->WithSize(size)
+                                  ->Disabled(disabled)
+                                  ->Icon(IconName::Ellipsis)
+                                  ->IntoEl();
+                if (disabled || !onChange.IsValid()) {
+                    row->Child(trigger);
+                    continue;
+                }
+                PopupMenu* menu = PopupMenu::New(cx, menuId)
+                                      ->MinW(55)
+                                      ->MaxH(240)
+                                      ->Scrollable();
+                for (int p = items[i].from; p <= items[i].to; p++) {
+                    menu->MenuWithCheck(StrDup(a, fmt("%d", p)), p == page);
+                }
+                Entity<PaginationMenuState> ment =
+                    KeyedEntity<PaginationMenuState>(
+                        cx, KeyedKey(HashClickId(menuId),
+                                     HashClickId(StrL("pagination-menu"))));
+                if (PaginationMenuState* ms = ment.Get(cx)) {
+                    ms->firstPage = items[i].from;
+                    ms->onChange = onChange;
+                }
+                if (PopupMenuState* ps = menu->state.Get(cx)) {
+                    ps->onConfirm =
+                        ListenTo(ment, &PaginationMenuState::OnItem);
+                }
+                row->Child(DropdownMenu::New(cx, menuId)
+                               ->Trigger(trigger)
+                               ->Menu(menu)
+                               ->IntoEl());
                 continue;
             }
             bool selected = items[i].page == page;

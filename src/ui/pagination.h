@@ -6,6 +6,18 @@ namespace gpui {
 
 namespace component {
 
+// What an ellipsis opens onto is the pages it stands for, and a menu reports
+// the row that was taken rather than the page. The row index is only a page
+// once the range's first page is beside it, which is what this keyed state
+// carries between the frame that built the menu and the click that runs.
+struct PaginationMenuState {
+    int firstPage = 1;
+    Listener onChange = {};
+
+    static void OnItem(PaginationMenuState* self, Ctx* cx, const ClickEvent* ev,
+                       intptr_t ix);
+};
+
 struct Pagination {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
