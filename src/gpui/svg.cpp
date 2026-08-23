@@ -698,9 +698,6 @@ static SvgMatrix MatMul(const SvgMatrix& m, const SvgMatrix& n) {
     return r;
 }
 
-// What a shape outside any <g> is drawn through.
-static const SvgMatrix kIdentity;
-
 static void MatApply(const SvgMatrix& m, float* x, float* y) {
     float px = *x;
     float py = *y;
