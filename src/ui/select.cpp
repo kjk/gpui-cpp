@@ -113,7 +113,8 @@ Str SelectTriggerTitle(const SearchableListState* s, Str placeholder,
     if (ix < 0 || ix >= s->nItems) {
         return none;
     }
-    Str title = s->items[ix].title;
+    Str title =
+        s->items[ix].display.s ? s->items[ix].display : s->items[ix].title;
     if (titlePrefix.s) {
         return StrDup(a, fmt("%s%s", titlePrefix, title));
     }

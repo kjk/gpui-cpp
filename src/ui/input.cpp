@@ -145,7 +145,11 @@ El* Input::IntoEl() {
                     ->PadX(padX)
                     ->PadY(padY)
                     ->Gap(kInputGap)
-                    ->ItemsCenter();
+                    ->ItemsCenter()
+                    // The editor paints its own line into the field's box;
+                    // a value wider than the field scrolls under it rather
+                    // than spilling out past whatever is next to it.
+                    ->ClipX();
     // input.rs gates the whole focus appearance on `appearance`: a field with
     // none of its own is one somebody else has framed — a NumberInput's
     // editor, sitting inside a frame that shows the focus for it — and a ring

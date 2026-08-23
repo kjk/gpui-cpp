@@ -31,6 +31,10 @@ struct SearchableItem {
     // returns a whole element for the row; the only thing any of them add is
     // this badge, so the item carries the text instead.
     Str badge = {};
+    // SelectItem::display_title: what the trigger shows for this row when it
+    // is not the row's own title. The select page's countries list the name
+    // in the menu and the name with its code in the trigger.
+    Str display = {};
 };
 
 // Single replaces the selection, Multi toggles the row that was clicked.

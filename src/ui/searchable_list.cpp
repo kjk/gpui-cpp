@@ -278,15 +278,19 @@ El* SearchableList::IntoEl() {
         // render_section_header: a heading whenever the section changes, and
         // only for the sections the query left something in.
         if (sections && it.section != lastSection && it.section < nSections) {
-            rows->Child(Div(a)->W(kFill)->PadX(8)->PadT(8)->PadB(4)->Child(
-                TextEl(a, sections[it.section])->Font(12)->Fg(th.mutedFg)));
+            // render_section_header: py_0p5, px_2, text_sm and muted. The
+            // list scrolls rather than squeezing, so neither a heading nor a
+            // row is a flex item that can give height back.
+            rows->Child(Div(a)->W(kFill)->Shrink0()->PadX(8)->PadY(2)->Child(
+                TextEl(a, sections[it.section])->Font(14)->Fg(th.mutedFg)));
             lastSection = it.section;
         }
         bool checked = SearchableListIsChecked(s, items, nItems, ix);
         El* row = Div(a)
                       ->FlexRow()
                       ->W(kFill)
-                      ->H(30)
+                      ->Shrink0()
+                      ->PadY(4)
                       ->PadX(8)
                       ->Gap(8)
                       ->ItemsCenter()
