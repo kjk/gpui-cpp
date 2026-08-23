@@ -383,6 +383,13 @@ Settings* Settings::PageResettable(bool v) {
     return this;
 }
 
+Settings* Settings::PageTitleSuffix(El* e) {
+    if (pages.len > 0) {
+        pages[pages.len - 1].titleSuffix = e;
+    }
+    return this;
+}
+
 Settings* Settings::FieldWidth(float v) {
     SettingItem* it = LastItem(this);
     if (it) {
@@ -518,15 +525,18 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
                       bool first, bool pageResettable, bool* anyDirty) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* line = Div(a)->W(kFill)->PadX(16)->PadY(12)->Gap(16);
+    // item.rs: `div().w_full()` with `gap_3`, `justify_between().items_start()`
+    // when it is horizontal — and no padding and no rule of its own. The
+    // padding is the GroupBox's `p_4` and the space between two items is its
+    // `gap_4`; the port gave every item a box of its own and drew a line
+    // between them, which is a table where Rust has a stack.
+    El* line = Div(a)->W(kFill)->Gap(12);
     if (it.layout == Axis::Horizontal) {
-        line->FlexRow()->ItemsCenter()->JustifyBetween();
+        line->FlexRow()->ItemsStart()->JustifyBetween();
     } else {
         line->FlexCol();
     }
-    if (!first) {
-        line->BorderT(1, th.border);
-    }
+    (void)first;
     El* text = Div(a)->FlexCol()->Flex1()->Gap(4);
     text->Child(TextEl(a, it.title)
                     ->Font(16)
@@ -676,11 +686,13 @@ El* Settings::IntoEl() {
             }
             if (grp.title.s) {
                 body->Child(
-                    TextEl(a, grp.title)->Font(14)->Fg(th.mutedFg)->PadY(4));
+                    TextEl(a, grp.title)->Font(16)->Fg(th.mutedFg)->PadY(4));
             }
-            El* card = Div(a)->FlexCol()->W(kFill)->Radius(th.radiusLg);
+            // GroupBox's content pane: `p_4` and `gap_4`, `rounded(radius)`,
+            // bordered only for the Outline variant.
+            El* card = Div(a)->FlexCol()->W(kFill)->Gap(16)->Radius(th.radius);
             if (bordered) {
-                card->Border(1, th.border);
+                card->Pad(16)->Border(1, th.border);
             }
             int shown = 0;
             int itemIx = -1;
@@ -698,13 +710,20 @@ El* Settings::IntoEl() {
             body->Child(card);
         }
 
-        El* head =
-            Div(a)->FlexCol()->W(kFill)->PadX(16)->PadY(12)->Gap(4)->BorderB(
-                1, th.border);
+        // page.rs: the header is `v_flex().p_4().gap_3().border_b_1()`, and
+        // the title sits in an `h_flex().gap_1()` with whatever `title_suffix`
+        // the caller gave beside it.
+        El* head = Div(a)->FlexCol()->W(kFill)->Pad(16)->Gap(12)->BorderB(
+            1, th.border);
         El* titleRow =
             Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
-        titleRow->Child(
+        El* titleCell = Div(a)->FlexRow()->ItemsCenter()->Gap(4);
+        titleCell->Child(
             TextEl(a, p.title)->Font(20)->Semibold()->Fg(th.foreground));
+        if (p.titleSuffix) {
+            titleCell->Child(p.titleSuffix);
+        }
+        titleRow->Child(titleCell);
         // reset_all: the page's own button, there once anything on it has
         // left its default.
         if (anyDirty) {

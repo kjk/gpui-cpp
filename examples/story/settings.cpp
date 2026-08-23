@@ -48,6 +48,11 @@ static void FocusSettingsSearch(SettingsStory* self, Ctx* cx,
     Notify(cx);
 }
 
+// cx.open_url("https://longbridge.github.io/gpui-component/").
+static void OpenDocs(SettingsStory*, Ctx*, const ClickEvent*) {
+    OpenUrl(StrL("https://longbridge.github.io/gpui-component/"));
+}
+
 El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     if (!self->seeded) {
@@ -82,7 +87,14 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     // SettingPage::resettable: the story's own switch, which turns the reset
     // buttons on this page off.
     s->Page(StrL("General"), IconName::Settings2)
-        ->PageResettable(self->resettable);
+        ->PageResettable(self->resettable)
+        // title_suffix: a ghost Info button that opens the docs.
+        ->PageTitleSuffix(component::Button::New(cx, StrL("help"))
+                              ->Icon(IconName::Info)
+                              ->Ghost()
+                              ->WithSize(UiSize::XSmall)
+                              ->OnClick(Listen(cx, &OpenDocs))
+                              ->IntoEl());
     s->Group(StrL("Appearance"));
     s->Item(StrL("Dark Mode"), StrL("Switch between light and dark themes."));
     s->SwitchField(&self->darkMode);

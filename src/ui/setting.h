@@ -92,6 +92,9 @@ struct SettingPage {
     Str description = {};
     IconName icon = IconName::None;
     ArenaVec<SettingGroup> groups;
+    // SettingPage::title_suffix: whatever the caller puts beside the title.
+    // The story's is a ghost Info button that opens the docs.
+    El* titleSuffix = nullptr;
     // SettingPage::resettable, default true: whether this page offers the
     // reset buttons at all — the per-item one, and the Reset All in its
     // header once anything on it has been changed.
@@ -188,6 +191,8 @@ struct Settings {
     Settings* FieldWidth(float v);
     // SettingPage::resettable, on the page last added.
     Settings* PageResettable(bool v);
+    // SettingPage::title_suffix, on the page just declared.
+    Settings* PageTitleSuffix(El* e);
     // The item last added: its keywords, whether it is disabled, and what a
     // reset does.
     Settings* Keywords(Str a1, Str a2 = {}, Str a3 = {});
