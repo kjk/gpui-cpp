@@ -261,7 +261,8 @@ El* List::IntoEl() {
                    ->ScrollId(HashClickId(id))
                    ->OnScroll(ListenTo(state, &ListState::OnScroll));
     if (range.first > 0) {
-        body->Child(Div(a)->W(kFill)->H((float)range.first * s->rowH));
+        body->Child(
+            Div(a)->W(kFill)->Shrink0()->H((float)range.first * s->rowH));
     }
     Listener click = ListenTo(state, &ListState::OnRowClick, 0);
     Listener down = ListenTo(state, &ListState::OnRowMouseDown, 0);
@@ -289,15 +290,20 @@ El* List::IntoEl() {
             }
         }
         // Every row is the same height, which is what uniform_list asks for
-        // and what lets the two spacers stand in for the rest.
-        El* slot = Div(a)->FlexCol()->W(kFill)->H(s->rowH);
+        // and what lets the two spacers stand in for the rest. Shrink0
+        // because the rows are taller than the box they scroll in: a flex
+        // column shrinks what overflows it, and a row squeezed to fit is a
+        // row the visible range -- worked out against rowH -- no longer
+        // measures, which left a band of empty list under the last one.
+        El* slot = Div(a)->FlexCol()->W(kFill)->Shrink0()->H(s->rowH);
         if (el) {
             slot->Child(el);
         }
         body->Child(slot);
     }
     if (range.end < total) {
-        body->Child(Div(a)->W(kFill)->H((float)(total - range.end) * s->rowH));
+        body->Child(Div(a)->W(kFill)->Shrink0()->H((float)(total - range.end) *
+                                                   s->rowH));
     }
     root->Child(body);
 

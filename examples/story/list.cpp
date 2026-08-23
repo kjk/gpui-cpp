@@ -228,7 +228,10 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     // can show are ever built, which is what the delegate is for.
     if (st) {
         st->loading = self->loading;
-        st->rowH = 44;
+        // Rust measures the item it built and scrolls on that; the rows here
+        // are uniform, so the story names the height its own row comes out
+        // at -- py_1 and a border around a text_sm line, which is 36.
+        st->rowH = 36;
     }
     component::List* list =
         component::List::New(cx, StrL("list-story"), self->list)
