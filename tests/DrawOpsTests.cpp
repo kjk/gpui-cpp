@@ -339,6 +339,113 @@ static void AShapeKeepsTheColourItIsStrokedWith() {
     utassert(!FirstColor(plain.data.els, plain.data.len, &unused));
 }
 
+// The badges at the top of the story's README are their labels and nothing
+// else: three plates of colour and a word on each. Nothing under
+// assets/icons has a <text>, so a run of glyphs had no way through the
+// converter at all and a badge came out as an empty plate.
+static bool FirstText(const uint8_t* p, int len, float* x, float* y,
+                      float* size, float* textLen, uint32_t* flags,
+                      char* out, int outN) {
+    const uint8_t* end = p + len;
+    while (p + 2 <= end) {
+        uint16_t op;
+        memcpy(&op, p, 2);
+        p += 2;
+        if (op == kOpEnd) {
+            return false;
+        }
+        if (op == kOpText) {
+            if (p + 18 > end) {
+                return false;
+            }
+            memcpy(x, p, 4);
+            memcpy(y, p + 4, 4);
+            memcpy(size, p + 8, 4);
+            memcpy(textLen, p + 12, 4);
+            memcpy(flags, p + 16, 4);
+            uint16_t n;
+            memcpy(&n, p + 20, 2);
+            int copy = n < outN - 1 ? n : outN - 1;
+            memcpy(out, p + 22, (size_t)copy);
+            out[copy] = 0;
+            return true;
+        }
+        if (op >= sizeof(kOpArgs)) {
+            return false;
+        }
+        p += kOpArgs[op] * 4;
+    }
+    return false;
+}
+
+static void ATextRunIsReadAndPlaced() {
+    // shields.io's shape: the presentation is on the groups around the
+    // element that holds the word, and scale(.1) is what turns a font-size of
+    // 110 into eleven pixels.
+    DrawOpsBuilder b;
+    utassert(SvgToDrawOps(
+        StrL("<svg width=\"102\" height=\"20\">"
+             "<g fill=\"#fff\" text-anchor=\"middle\" font-size=\"110\">"
+             "<g transform=\"scale(.1)\">"
+             "<text x=\"295\" y=\"140\" textLength=\"470\">crates.io</text>"
+             "</g></g></svg>"),
+        &b));
+    float x = 0, y = 0, size = 0, tlen = 0;
+    uint32_t flags = 0;
+    char text[64] = {};
+    utassert(FirstText(b.data.els, b.data.len, &x, &y, &size, &tlen, &flags,
+                       text, 64));
+    utassert(strcmp(text, "crates.io") == 0);
+    utassertnear(x, 29.5f);
+    utassertnear(y, 14.f);
+    utassertnear(size, 11.f);
+    utassertnear(tlen, 47.f);
+    utassert((flags & kTextAnchorMask) == kTextAnchorMiddle);
+
+    // The word may sit in a <tspan> and the colour on the <text> around it,
+    // which is the GitHub Actions badge.
+    DrawOpsBuilder nested;
+    utassert(SvgToDrawOps(StrL("<svg width=\"90\" height=\"20\">"
+                               "<g font-size=\"11\">"
+                               "<text fill=\"#FFFFFF\">"
+                               "<tspan x=\"22\" y=\"14\">CI</tspan>"
+                               "</text></g></svg>"),
+                          &nested));
+    utassert(FirstText(nested.data.els, nested.data.len, &x, &y, &size, &tlen,
+                       &flags, text, 64));
+    utassert(strcmp(text, "CI") == 0);
+    utassertnear(x, 22.f);
+    utassertnear(y, 14.f);
+    utassertnear(size, 11.f);
+    // The <text> named a colour, so the run carries it rather than the
+    // caller's.
+    uint32_t c = 0;
+    utassert(FirstColor(nested.data.els, nested.data.len, &c));
+
+    // A run under a filter is a drop shadow this cannot blur: drawing it
+    // sharp would print the word twice.
+    DrawOpsBuilder shadow;
+    utassert(!SvgToDrawOps(
+        StrL("<svg width=\"90\" height=\"20\">"
+             "<g font-size=\"11\">"
+             "<text x=\"1\" y=\"2\" filter=\"url(#blur)\">CI</text>"
+             "</g></svg>"),
+        &shadow));
+
+    // A <text> that only wraps another element contributes no run of its own.
+    DrawOpsBuilder wrapper;
+    utassert(SvgToDrawOps(StrL("<svg width=\"90\" height=\"20\">"
+                               "<g font-size=\"11\"><text x=\"1\" y=\"2\">\n  "
+                               "<tspan x=\"5\" y=\"6\">CI</tspan>\n"
+                               "</text></g></svg>"),
+                          &wrapper));
+    utassert(FirstText(wrapper.data.els, wrapper.data.len, &x, &y, &size,
+                       &tlen, &flags, text, 64));
+    utassert(strcmp(text, "CI") == 0);
+    utassertnear(x, 5.f);
+    utassertnear(y, 6.f);
+}
+
 // Every icon in the generated table, reconverted from its file.
 static void GeneratedTableMatchesReader() {
     AssetsAddDefaultRoots({});
@@ -394,5 +501,6 @@ void TestDrawOps() {
     AGroupTransformMovesWhatIsInsideIt();
     AnEllipseIsDrawnAndIsNotAStadium();
     AShapeKeepsTheColourItIsStrokedWith();
+    ATextRunIsReadAndPlaced();
     GeneratedTableMatchesReader();
 }

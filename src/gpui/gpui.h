@@ -2827,6 +2827,14 @@ int DipToPx(PaintCtx* ctx, float dip);
 
 Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW,
                  bool wrap = false, int weight = 0, float lineH = 0);
+// One run drawn from its baseline rather than from the top of its line box,
+// which is the point an SVG <text> names. Its one caller is drawops.cpp, and
+// it lives here rather than there because the run has to go through the
+// frame's measurement cache: the cache is what holds the shaped run after the
+// walk that drew it returns, and the scene replays a text primitive by the
+// pointer it recorded.
+void DrawTextBaseline(PaintCtx* ctx, Str s, float x, float baselineY,
+                      float fontSize, Rgba color, int weight = 0);
 void TextMeasBeginFrame(PaintCtx* ctx);
 void TextMeasEndFrame(PaintCtx* ctx);
 void TextMeasClear(PaintCtx* ctx);

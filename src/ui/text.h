@@ -169,6 +169,13 @@ struct TextView {
     El* IntoEl();
 
   private:
+    // node.rs names no text colour on a paragraph, a heading or a table cell:
+    // each takes whatever the container above it pushed, which is how a
+    // blockquote greys everything inside it in one line. This is that
+    // inherited colour, unset meaning the theme's plain foreground.
+    Rgba blockFg = {};
+    bool blockFgSet = false;
+    Rgba BlockFg() const;
     // node.rs render_block. `depth` is the list nesting level, `inList` and
     // `isLast` decide whether the block carries a paragraph gap below it.
     El* Block(MdNode* n, int depth, bool inList, bool isLast);

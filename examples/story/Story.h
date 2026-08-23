@@ -177,6 +177,10 @@ struct StoryAccordionOptions {
 enum StoryToolbarAction {
     ToolbarOpenSize = 1,
     ToolbarOpenOpts,
+    // The press that lands outside a dropdown's own trigger: PopupMenu's
+    // on_mouse_down_out, which is what makes a menu go away when you click
+    // past it rather than through it.
+    ToolbarCloseAll,
     ToolbarSizeXs,
     ToolbarSizeSm,
     ToolbarSizeMd,

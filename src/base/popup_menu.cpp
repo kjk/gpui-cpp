@@ -271,6 +271,27 @@ void PopupMenuState::OnTriggerClick(PopupMenuState* self, Ctx* cx,
     }
 }
 
+// PopupMenu::handle_dismiss, with the two cases Rust refuses to close on: a
+// press inside the menu this one came out of, and a press while a submenu of
+// this one is up -- that one is the submenu's to answer, and closing first
+// would take the row's own click with it.
+void PopupMenuState::OnPressOutside(PopupMenuState* self, Ctx* cx,
+                                    const MouseUpEvent* ev) {
+    if (!self->open || self->openSubmenu >= 0) {
+        return;
+    }
+    if (PopupMenuState* p = self->parent.Get(cx)) {
+        if (p->open && p->bounds.Contains({ev->x, ev->y})) {
+            return;
+        }
+    }
+    if (self->triggerId && cx->win &&
+        HitTest(&cx->win->paint, ev->x, ev->y) == self->triggerId) {
+        return;
+    }
+    PopupMenuDismissAll(self, cx);
+}
+
 void PopupMenuState::OnContextDown(PopupMenuState* self, Ctx* cx,
                                    const MouseDownEvent* ev) {
     // on_mouse_down(MouseButton::Right): the menu opens where the pointer is,

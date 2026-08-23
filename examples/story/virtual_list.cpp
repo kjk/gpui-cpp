@@ -61,9 +61,11 @@ static void VlMenuAct(VirtualListStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t act) {
     if (act >= VlActAxis) {
         self->axis = (int)(act - VlActAxis);
-    } else {
+    } else if (act >= VlActDataset) {
         self->dataset = (int)(act - VlActDataset);
     }
+    // Anything below either base — ToolbarCloseAll — names no row and only
+    // wants the menu shut.
     self->openMenu = 0;
     Notify(cx);
 }

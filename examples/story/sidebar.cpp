@@ -91,8 +91,12 @@ static void SidebarOptionAct(SidebarStory* self, Ctx* cx, const ClickEvent*,
         case SidebarOptClickToOpen:
             self->clickToOpen = !self->clickToOpen;
             break;
-        default:
+        case SidebarOptDynamic:
             self->dynamicChildren = !self->dynamicChildren;
+            break;
+        default:
+            // ToolbarCloseAll, and anything else that only wants the menu
+            // shut, lands here and changes nothing else.
             break;
     }
     self->optionsOpen = false;

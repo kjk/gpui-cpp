@@ -85,6 +85,14 @@ struct PopupMenuState {
     // A submenu dismisses through its parents after an item is confirmed,
     // just as Rust's dismiss_all walks parent_menu.
     Entity<PopupMenuState> parent = {};
+    // The trigger's click id, for the dropdown that has one. A press on the
+    // trigger toggles the menu itself, so the outside-press dismissal below
+    // has to leave that one alone or the toggle would only ever reopen what
+    // the dismissal had just closed.
+    int triggerId = 0;
+    // Where the menu was drawn, which handle_dismiss reads off the parent: a
+    // press inside the menu a submenu came out of belongs to that menu.
+    Bounds bounds = {};
     // What a confirmed item reports: the item's index, bound with
     // ListenerFill the way a component hands its caller the value it made.
     Listener onConfirm = {};
@@ -112,6 +120,12 @@ struct PopupMenuState {
     // (DropdownMenu and ContextMenu).
     static void OnTriggerClick(PopupMenuState* self, Ctx* cx,
                                const ClickEvent* ev);
+    // on_mouse_down_out: the press that lands past the menu closes it. Here
+    // it is the release rather than the press, because that is the outside
+    // event this tree reports, and it runs before the click the same release
+    // makes -- so a row still gets to run after the menu it was in has gone.
+    static void OnPressOutside(PopupMenuState* self, Ctx* cx,
+                               const MouseUpEvent* ev);
     static void OnContextDown(PopupMenuState* self, Ctx* cx,
                               const MouseDownEvent* ev);
 

@@ -2815,3 +2815,114 @@ should come back for a structure that holds a handle *in* an arena.
 Verified again by 17,148 test checks and by the same seventeen story pages
 screenshotted against the build from before any of this: all seventeen
 identical.
+
+
+## Six things the story gallery got wrong, and what each of them was
+
+Six reports off the running app, and none of the six turned out to be about
+the page it was noticed on: five were the shared layer underneath, and the
+sixth was a whole element the SVG reader had never had.
+
+**The app menu did nothing.** `StoryTitleMenuItem(cx, "GPUI Component")` was a
+div with a hover background and a click id, and nothing behind it — the other
+three title-bar menus were `DropdownMenu`s and this one had never been given
+its rows. It is `app_menus.rs`'s first menu now: About, the Appearance pair
+(Light / Dark), the Theme submenu the registry fills, and Quit. Rust's also has
+`Open...`, which wants a file dialog this tree does not have, and `Language`,
+which wants rust_i18n; both are named here rather than quietly dropped.
+
+**The submenu was there all along and eight pixels of it were showing.** The
+first thing the new menu needed was a submenu, and it did not draw — nor did
+the two in the `menu` story, which had been that way since the menu was ported.
+`PopupMenu`'s box had `ClipY()` on it, the submenu hangs off its row at
+`Left(menuW - 8)`, and a clip is a clip on both axes: what got through was the
+eight pixels of overlap, which reads as a shadow. Rust clips the *item list*
+and only when the menu scrolls, so that is where the clip went.
+
+**An open menu did not go away.** Neither the title bar's `PopupMenu`s nor the
+story toolbar's own dropdowns closed on a press outside them, and the toolbar's
+did not close on a row either. Two fixes, because they are two mechanisms:
+`PopupMenuState::OnPressOutside` is `on_mouse_down_out` — the release rather
+than the press, since that is the outside event this tree reports, and it runs
+before the click the same release makes, so a row still runs after the menu it
+was in has gone. It carries Rust's two refusals: a press inside the parent
+menu, and a press while a submenu of this one is up. The trigger is the third,
+and is this tree's own: the trigger toggles the menu itself, so dismissing on
+it as well would close what the toggle then reopens. The toolbar's dropdowns
+own their open flag on the page, so they get the same behaviour from the Popup
+root — which is the trigger's box, so a press on the trigger is inside it.
+
+**The sidebar's search box was in the wrong font.** `gpui::Input` and
+`component::Input` are the unstyled editor and the themed field around it, and
+the gallery had been holding the first: it draws at `InputEditorStyle`'s own
+12px default rather than at `input_text_size`, which for a medium field is 14.
+`Input::new(&search).appearance(false).cleanable(true)` is what gallery.rs
+holds, and now so does this — the X in the pill is the field's own clear button
+rather than a hand-rolled one. Measured: the placeholder's ink is 51px wide,
+which is Rust's to the pixel; it was 44.
+
+**Weight did not inherit, and colour inside a blockquote did.** Two halves of
+the same mistake. `PrepareEl` cascaded the font *family* to children and not
+the weight, so `font_medium()` on an accordion's trigger row styled nothing —
+GPUI inherits both, and an accordion title, a collapsible's `$18.08 / $20` row
+and every other `->Medium()` on a box rather than on a string had been drawing
+at normal. Going the other way, `TextView` painted every paragraph and heading
+in `theme.foreground` explicitly, which no `node.rs` render does: they inherit,
+which is how a blockquote greys everything inside it with one `text_color`.
+`TextView::BlockFg()` is that inherited colour.
+
+**A link inside selectable text showed the I-beam.** `DispatchMouseMove` asked
+`TextHitOffsetAt` first and the element's own cursor second, so a `TextView`
+that is `Selectable()` claimed every pixel of itself. An element that named a
+shape wins now, and anything that named none leaves the text to answer — which
+is the order GPUI's cursor stack resolves in anyway, the innermost push last.
+
+### The badges at the top of the introduction, and `<text>`
+
+The three build-status badges came out as empty plates: shields.io and GitHub
+both write a badge as coloured rectangles with the label *set in the file*, and
+`svg.cpp` had no `<text>` at all. So it has one now, and `drawops.h` has
+`kOpText` to carry it — `x y size textLength`, a flags word for `text-anchor`
+and `font-weight`, and the UTF-8 inline. Three things came with it:
+
+- **Containers pass presentation down.** The `<g>` stack was a stack of
+  matrices; it is a stack of `SvgCtx` now — matrix, font size, anchor, weight,
+  fill — because a badge names all of those on the groups and none of them on
+  the element holding the word. `<text>` and `<tspan>` push one too: GitHub
+  writes `<text fill=..><tspan x=.. y=..>CI</tspan></text>`, and shields.io
+  writes the word directly inside a `<text>` under `<g transform="scale(.1)">`,
+  which is what turns a font-size of 110 into eleven pixels.
+- **`filter=` means skip.** A shields.io badge draws its label three times, two
+  of them blurred drop shadows. There is no blur here, so a filtered run is
+  dropped rather than printed sharp on top of the real one.
+- **`url(#id)` resolves to a gradient's first stop.** Not for text — for the
+  plates under it, which are `fill="url(#workflow-fill)"` on the GitHub badge
+  and were drawing in the caller's colour, i.e. as an outline on white. One
+  colour per shape is what the byte stream can hold, and the first stop is the
+  same reduction `try_parse_theme_color` makes of a `linear-gradient(..)` in a
+  theme file. `stop-opacity` had to come with it: the sheen shields.io lays
+  over the whole badge is `#bbb` at a tenth, and reading the colour without the
+  opacity washes the plate out to grey.
+
+What it is not: there is no horizontal scale in `paint.h`, so `textLength`
+cannot stretch a run to a width the way SVG asks. A run too wide for the width
+it was drawn to fit is set smaller until it fits and a narrower one is left
+where its anchor puts it — a badge is authored against Verdana and this is not
+Verdana, so the two were never going to agree to the pixel. Nothing under
+`assets/icons` has a `<text>`, so `asset_icons.cpp` never holds a `kOpText` and
+`cmd/svg-to-bytecode.ts` has nothing new to write.
+
+One thing the scene caught: a text primitive is recorded by the `TextLayout*`
+it was drawn with and replayed after the walk, so shaping a run and releasing
+it on the spot handed the replay a freed layout — the glyphs appeared under
+`GPUI_SCENE=off` and nowhere else. `DrawTextBaseline` goes through the frame's
+measurement cache like every other run, and the cache is what holds it.
+
+Verified by 17,169 test checks — four of them new, over `<text>`, `<tspan>`,
+the filtered shadow and a `<text>` that only wraps another element — and by
+every one of the 63 story pages screenshotted against the build from before any
+of this. Three pages differ beyond the search box, and all three are the fixes:
+the accordion's titles, the collapsible's usage row (`font_medium` on the row
+in `collapsible_story.rs`, and now medium here too), and the introduction. The
+spinner is the fourth and is not one of them — its spinners are mid-turn in
+each shot, which is what an animation looks like to a screenshot.

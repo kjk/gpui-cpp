@@ -42,6 +42,27 @@ struct SvgShape {
     // filled with, and the two are not the same question.
     bool hasStroke = false;
     Rgba stroke = {};
+    // A <text> or <tspan> run rather than a path. It contributes no ops, so
+    // `count` is zero and this is everything it draws. The string is a slice
+    // of the file, which outlives the one conversion this struct exists for.
+    bool isText = false;
+    Str text = {};
+    float tx = 0, ty = 0;
+    float fontSize = 0;
+    float textLength = 0;
+    uint32_t textFlags = 0;
+};
+
+// A gradient the file declared, as the one colour this reader keeps of it:
+// its first stop. There is no gradient fill in `drawops.h` -- a shape is one
+// colour -- and the first stop is the same reduction `try_parse_theme_color`
+// makes of a `linear-gradient(..)` in a theme file. A GitHub Actions badge
+// paints both of its plates this way and would otherwise have no colour at
+// all.
+struct SvgGradient {
+    Str id = {};
+    Rgba color = {};
+    bool hasColor = false;
 };
 
 // The file, read but not yet encoded. It lives for the length of one
@@ -55,8 +76,13 @@ struct SvgIcon {
     // Whether any shape named a colour. False is every Lucide icon, and the
     // whole file is then one path in the caller's colour, as it always was.
     bool hasOwnColors = false;
+    // Whether any shape is a run of text. A file with one is a picture rather
+    // than an icon whatever else it says, since the single-path encoding has
+    // nowhere to put a string.
+    bool hasText = false;
     Vec<SvgOp> ops;
     Vec<SvgShape> shapes;
+    Vec<SvgGradient> gradients;
 };
 
 static void AddOp(SvgIcon* ic, SvgOp op) {
@@ -608,6 +634,39 @@ static bool ParseSvgColor(Str s, Rgba* out) {
     return true;
 }
 
+// `fill` / `stroke` / `stop-color`, which may be a colour or a reference to
+// something the file declared. Only a gradient is followed, and only as far
+// as its first stop; url() to anything else -- a pattern, a filter output --
+// is no colour, and the shape falls back to the caller's the way a shape that
+// named nothing does.
+static bool ParseSvgPaint(const SvgIcon* ic, Str v, Rgba* out) {
+    if (ParseSvgColor(v, out)) {
+        return true;
+    }
+    if (!ic || v.len < 6 || StrCmpNI(v.s, "url(", 4) != 0) {
+        return false;
+    }
+    const char* p = v.s + 4;
+    const char* end = v.s + v.len;
+    if (p < end && *p == '#') {
+        p++;
+    }
+    const char* idStart = p;
+    while (p < end && *p != ')') {
+        p++;
+    }
+    Str id(idStart, (int)(p - idStart));
+    for (int i = 0; i < ic->gradients.len; i++) {
+        const SvgGradient& g = ic->gradients[i];
+        if (g.hasColor && g.id.len == id.len && id.len > 0 &&
+            memcmp(g.id.s, id.s, (size_t)id.len) == 0) {
+            *out = g.color;
+            return true;
+        }
+    }
+    return false;
+}
+
 // ─── transform= ───────────────────────────────────────────────────────────
 //
 // The 2x3 affine SVG writes as `matrix(a b c d e f)`: x' = a*x + c*y + e and
@@ -756,13 +815,14 @@ static void EndShape(SvgIcon* ic, int start, Str tag, const SvgMatrix& m) {
     sh.start = start;
     sh.count = ic->ops.len - start;
     char fill[64];
-    if (GetAttr(tag, "fill", fill, 64) && ParseSvgColor(Str(fill), &sh.fill)) {
+    if (GetAttr(tag, "fill", fill, 64) &&
+        ParseSvgPaint(ic, Str(fill), &sh.fill)) {
         sh.hasFill = true;
         ic->hasOwnColors = true;
     }
     char stroke[64];
     if (GetAttr(tag, "stroke", stroke, 64) &&
-        ParseSvgColor(Str(stroke), &sh.stroke)) {
+        ParseSvgPaint(ic, Str(stroke), &sh.stroke)) {
         sh.hasStroke = true;
         ic->hasOwnColors = true;
     }
@@ -807,6 +867,145 @@ static bool IsHiddenContainer(const char* name, const char* end) {
     return false;
 }
 
+// The name of a tag, matched whole: "text" must not also match "textPath".
+static bool IsTagNamed(const char* name, const char* end, const char* lit) {
+    int len = (int)strlen(lit);
+    if (end - name < len || StrCmpNI(name, lit, len) != 0) {
+        return false;
+    }
+    char after = name + len < end ? name[len] : ' ';
+    return after == ' ' || after == '>' || after == '/' || after == '\t' ||
+           after == '\n' || after == '\r';
+}
+
+// What a container hands down to what is inside it: the transform, and the
+// presentation a <text> inherits. Fill is here for the sake of text and text
+// only -- a shape still reads its own, for the reason IsGroupTag's note
+// gives -- and `hidden` is the one thing a group can say that stops a run
+// being drawn at all.
+struct SvgCtx {
+    SvgMatrix m;
+    float fontSize = 0; // 0: nothing named one, so nothing is drawn
+    float x = 0, y = 0;
+    float textLength = 0;
+    uint32_t anchor = kTextAnchorStart;
+    bool bold = false;
+    bool hasFill = false;
+    Rgba fill = {};
+    // filter="url(#blur)": a shields.io badge draws its label three times,
+    // twice as a blurred drop shadow underneath. There is no blur here, so
+    // the shadows would come out as two hard copies of the word offset by a
+    // pixel. The filtered ones are dropped and the plain one is the label.
+    bool filtered = false;
+};
+
+// The tag's own attributes over what the container around it said. Every one
+// of them inherits in SVG, so an absent attribute leaves the outer value in
+// place.
+static SvgCtx RefineCtx(const SvgIcon* ic, const SvgCtx& outer, Str tag) {
+    SvgCtx cur = outer;
+    Str tr;
+    if (GetAttrStr(tag, "transform", &tr)) {
+        cur.m = MatMul(cur.m, ParseTransform(tr));
+    }
+    char buf[64];
+    if (GetAttr(tag, "font-size", buf, 64)) {
+        float v = (float)atof(buf);
+        if (v > 0) {
+            cur.fontSize = v;
+        }
+    }
+    if (GetAttr(tag, "font-weight", buf, 64)) {
+        cur.bold = StrEqI(Str(buf), StrL("bold")) || atoi(buf) >= 600;
+    }
+    if (GetAttr(tag, "text-anchor", buf, 64)) {
+        Str v(buf);
+        cur.anchor = StrEqI(v, StrL("middle"))  ? kTextAnchorMiddle
+                     : StrEqI(v, StrL("end"))   ? kTextAnchorEnd
+                                                : kTextAnchorStart;
+    }
+    if (GetAttr(tag, "fill", buf, 64)) {
+        Rgba c;
+        if (ParseSvgPaint(ic, Str(buf), &c)) {
+            cur.hasFill = true;
+            cur.fill = c;
+        }
+    }
+    if (GetAttr(tag, "fill-opacity", buf, 64)) {
+        float o = (float)atof(buf);
+        if (o < 0) {
+            o = 0;
+        }
+        if (o > 1) {
+            o = 1;
+        }
+        cur.fill.a = (uint8_t)(o * 255.f + 0.5f);
+        cur.hasFill = cur.hasFill || o < 1.f;
+    }
+    if (GetAttrStr(tag, "filter", &tr)) {
+        cur.filtered = true;
+    }
+    // x/y do not inherit the way the rest do -- a tspan without them
+    // continues where the last run left off -- but every file this reads
+    // names both on whichever element carries the words.
+    if (GetAttr(tag, "x", buf, 64)) {
+        cur.x = (float)atof(buf);
+    }
+    if (GetAttr(tag, "y", buf, 64)) {
+        cur.y = (float)atof(buf);
+    }
+    if (GetAttr(tag, "textLength", buf, 64)) {
+        cur.textLength = (float)atof(buf);
+    }
+    return cur;
+}
+
+// The characters between this tag and the next one, as one run. Whitespace
+// either side is dropped, so a <text> that only wraps a <tspan> adds nothing.
+static void AddTextRun(SvgIcon* ic, const SvgCtx& cur, const char* p,
+                       const char* end) {
+    const char* q = p;
+    while (q < end && *q != '<') {
+        q++;
+    }
+    const char* a = p;
+    const char* b = q;
+    while (a < b && (*a == ' ' || *a == '\t' || *a == '\n' || *a == '\r')) {
+        a++;
+    }
+    while (b > a && (b[-1] == ' ' || b[-1] == '\t' || b[-1] == '\n' ||
+                     b[-1] == '\r')) {
+        b--;
+    }
+    if (b <= a || cur.fontSize <= 0 || cur.filtered) {
+        return;
+    }
+    // The transform the containers add up to, applied to the anchor point and
+    // to the size: `scale(.1)` on a shields.io badge is what turns font-size
+    // 110 into eleven pixels.
+    SvgShape sh;
+    sh.isText = true;
+    sh.text = Str(a, (int)(b - a));
+    sh.tx = cur.x;
+    sh.ty = cur.y;
+    MatApply(cur.m, &sh.tx, &sh.ty);
+    float det = cur.m.a * cur.m.d - cur.m.b * cur.m.c;
+    float scale = sqrtf(det < 0 ? -det : det);
+    if (scale <= 0) {
+        scale = 1;
+    }
+    sh.fontSize = cur.fontSize * scale;
+    sh.textLength = cur.textLength * scale;
+    sh.textFlags = cur.anchor | (cur.bold ? (uint32_t)kTextBold : 0u);
+    sh.hasFill = cur.hasFill;
+    sh.fill = cur.fill;
+    ic->shapes.Append(sh);
+    ic->hasText = true;
+    // A string cannot be drawn by the single-path encoding, so the file goes
+    // down the per-shape route whether or not anything named a colour.
+    ic->hasOwnColors = true;
+}
+
 static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->ops.Reset();
     ic->shapes.Reset();
@@ -821,6 +1020,8 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     ic->strokeW = 2;
     ic->filled = false;
     ic->hasOwnColors = false;
+    ic->hasText = false;
+    ic->gradients.Reset();
     if (!xml.s || xml.len <= 0) {
         return;
     }
@@ -829,12 +1030,16 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
     // How deep inside a <defs> / <clipPath> / <mask> / ... we are. Nothing is
     // drawn while this is above zero.
     int hidden = 0;
-    // The <g> transforms in force, innermost last. Deeper than this and the
-    // file is doing something no picture does, so the extra groups draw
+    // What the containers in force say, innermost last. Deeper than this and
+    // the file is doing something no picture does, so the extra groups draw
     // untransformed rather than not at all.
     constexpr int kMaxGroupDepth = 16;
-    SvgMatrix gstack[kMaxGroupDepth];
+    SvgCtx gstack[kMaxGroupDepth];
     int gdepth = 0;
+    const SvgCtx kRootCtx;
+    // The gradient being read, while inside one. Its <stop> children are the
+    // only thing a hidden container contributes to the drawing.
+    int gradIx = -1;
     while (p < end) {
         if (*p != '<') {
             p++;
@@ -848,7 +1053,13 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             }
             if (hidden > 0 && IsHiddenContainer(name, p)) {
                 hidden--;
-            } else if (hidden == 0 && gdepth > 0 && IsGroupTag(name, p)) {
+                if (IsTagNamed(name, p, "linearGradient") ||
+                    IsTagNamed(name, p, "radialGradient")) {
+                    gradIx = -1;
+                }
+            } else if (hidden == 0 && gdepth > 0 &&
+                       (IsGroupTag(name, p) || IsTagNamed(name, p, "text") ||
+                        IsTagNamed(name, p, "tspan"))) {
                 gdepth--;
             }
             if (p < end) {
@@ -878,11 +1089,50 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
 
         if (IsHiddenContainer(tagStart, tagStart + tag.len)) {
             if (!selfClosing) {
+                // Wherever it is declared, including inside the <defs> that
+                // is the usual place for it.
+                if (IsTagNamed(tagStart, tagStart + tag.len,
+                               "linearGradient") ||
+                    IsTagNamed(tagStart, tagStart + tag.len,
+                               "radialGradient")) {
+                    SvgGradient g;
+                    if (GetAttrStr(tag, "id", &g.id)) {
+                        ic->gradients.Append(g);
+                        gradIx = ic->gradients.len - 1;
+                    }
+                }
                 hidden++;
             }
             continue;
         }
         if (hidden > 0) {
+            // <stop stop-color=..>: the first one is the colour the gradient
+            // reduces to, and the rest of what is in here still draws nothing.
+            if (gradIx >= 0 && gradIx < ic->gradients.len &&
+                !ic->gradients[gradIx].hasColor &&
+                IsTagNamed(tagStart, tagStart + tag.len, "stop")) {
+                char sc[64];
+                Rgba c;
+                if (GetAttr(tag, "stop-color", sc, 64) &&
+                    ParseSvgColor(Str(sc), &c)) {
+                    // stop-opacity is what makes a shields.io badge's sheen a
+                    // sheen: the gradient laid over the whole plate is #bbb at
+                    // a tenth, and reading the colour without the opacity
+                    // washes the plate out to grey.
+                    if (GetAttr(tag, "stop-opacity", sc, 64)) {
+                        float o = (float)atof(sc);
+                        if (o < 0) {
+                            o = 0;
+                        }
+                        if (o > 1) {
+                            o = 1;
+                        }
+                        c.a = (uint8_t)(o * 255.f + 0.5f);
+                    }
+                    ic->gradients[gradIx].color = c;
+                    ic->gradients[gradIx].hasColor = true;
+                }
+            }
             continue;
         }
 
@@ -892,15 +1142,31 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
         // its path in <g fill="#000000">, and honouring that would make the
         // file a picture with a colour of its own and pin the title bar's
         // buttons black instead of letting the theme colour them.
+        const SvgCtx& outer = gdepth > 0 && gdepth <= kMaxGroupDepth
+                                  ? gstack[gdepth - 1]
+                                  : kRootCtx;
         if (IsGroupTag(tagStart, tagStart + tag.len)) {
             if (!selfClosing) {
-                SvgMatrix cur = gdepth > 0 && gdepth <= kMaxGroupDepth
-                                    ? gstack[gdepth - 1]
-                                    : kIdentity;
-                Str tr;
-                if (GetAttrStr(tag, "transform", &tr)) {
-                    cur = MatMul(cur, ParseTransform(tr));
+                SvgCtx cur = RefineCtx(ic, outer, tag);
+                if (gdepth < kMaxGroupDepth) {
+                    gstack[gdepth] = cur;
                 }
+                gdepth++;
+            }
+            continue;
+        }
+        // <text> and <tspan> are containers as well: the presentation the
+        // outer one names is what the inner one draws with, which is how a
+        // GitHub badge writes `<text fill=..><tspan x=.. y=..>CI</tspan>`.
+        // The characters that follow the tag, up to the next one, are the run
+        // -- an element that holds only another element contributes nothing
+        // itself, and the tspan inside it does the drawing.
+        bool isText = IsTagNamed(tagStart, tagStart + tag.len, "text");
+        bool isTspan = IsTagNamed(tagStart, tagStart + tag.len, "tspan");
+        if (isText || isTspan) {
+            SvgCtx cur = RefineCtx(ic, outer, tag);
+            AddTextRun(ic, cur, p, end);
+            if (!selfClosing) {
                 if (gdepth < kMaxGroupDepth) {
                     gstack[gdepth] = cur;
                 }
@@ -909,9 +1175,7 @@ static void ParseSvg(Str xml, SvgIcon* ic) {
             continue;
         }
         // What the groups around this shape add up to.
-        const SvgMatrix& gm = gdepth > 0 && gdepth <= kMaxGroupDepth
-                                  ? gstack[gdepth - 1]
-                                  : kIdentity;
+        const SvgMatrix& gm = outer.m;
 
         if (StartsWithI(tagStart, end, "svg")) {
             char vb[64];
@@ -1052,6 +1316,17 @@ static void EncodeIcon(const SvgIcon* ic, DrawOpsBuilder* b) {
     }
     for (int i = 0; i < ic->shapes.len; i++) {
         const SvgShape& sh = ic->shapes[i];
+        if (sh.isText) {
+            if (sh.hasFill) {
+                b->Color(sh.fill);
+            }
+            b->Text(sh.tx, sh.ty, sh.fontSize, sh.textLength, sh.textFlags,
+                    sh.text);
+            if (sh.hasFill) {
+                b->ColorReset();
+            }
+            continue;
+        }
         if (sh.hasFill) {
             b->Color(sh.fill);
             EmitOps(b, ic, sh.start, sh.start + sh.count);
@@ -1084,7 +1359,7 @@ bool SvgToDrawOps(Str xml, DrawOpsBuilder* out) {
     }
     SvgIcon ic;
     ParseSvg(xml, &ic);
-    if (ic.ops.len <= 0) {
+    if (ic.ops.len <= 0 && !ic.hasText) {
         return false;
     }
     EncodeIcon(&ic, out);

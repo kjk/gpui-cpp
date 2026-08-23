@@ -2513,6 +2513,21 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
             c->style.fontMono = true;
         }
     }
+    // font_weight inherits the same way — GPUI's `font_medium()` on a row is
+    // what makes the string inside it medium, and an accordion's title is one
+    // of those. A child that names a weight of its own keeps it; a child that
+    // names none takes the one above.
+    if (e->style.fontBold || e->style.fontSemibold || e->style.fontMedium) {
+        for (El* c = e->first; c; c = c->next) {
+            if (c->style.fontBold || c->style.fontSemibold ||
+                c->style.fontMedium) {
+                continue;
+            }
+            c->style.fontBold = e->style.fontBold;
+            c->style.fontSemibold = e->style.fontSemibold;
+            c->style.fontMedium = e->style.fontMedium;
+        }
+    }
     e->laidFont = font;
     if (e->kind == ElKind::Image) {
         ResolveImageStyle(ctx, e);
@@ -2856,6 +2871,21 @@ static void DrawTextAt(PaintCtx* ctx, Str s, float x, float y, float w, float h,
         return;
     }
     TextLayoutDraw(ctx, layout, x, y, c, truncate);
+    TextLayoutRelease(layout);
+}
+
+void DrawTextBaseline(PaintCtx* ctx, Str s, float x, float baselineY,
+                      float fontSize, Rgba color, int weight) {
+    if (!s.s || s.len <= 0 || !ctx || !ctx->pa) {
+        return;
+    }
+    TextLayout* layout =
+        TextMeasLayout(ctx, s, fontSize, 0, false, (uint8_t)weight, 0, nullptr);
+    if (!layout) {
+        return;
+    }
+    TextLayoutDraw(ctx, layout, x, baselineY - TextLayoutBaseline(layout),
+                   color, false);
     TextLayoutRelease(layout);
 }
 

@@ -232,14 +232,17 @@ El* PopupMenu::IntoEl() {
     float radius = size == UiSize::Small ? th.radius * 0.5f : th.radius;
 
     // The menu is placed out of flow, so it has no parent width to fill: its
-    // own is the width Rust's min_w asks for.
+    // own is the width Rust's min_w asks for. It does not clip: a submenu
+    // hangs off the row it belongs to and reaches past the right edge, and a
+    // box that clipped would cut it down to the eight pixels the two overlap
+    // by. Rust clips the item list instead, and only when the menu scrolls,
+    // which is where the clip is below.
     El* root = Div(a)
                    ->FlexCol()
                    ->W(menuW)
                    ->Bg(th.tokens.background)
                    ->Border(1, th.border)
-                   ->Radius(th.radius)
-                   ->ClipY();
+                   ->Radius(th.radius);
     // .key_context(CONTEXT).track_focus(&self.focus_handle) and the six
     // on_action handlers behind it. The menu is its own focus trap and the
     // only focusable inside it, so arming the trap while it is the deepest
@@ -253,6 +256,10 @@ El* PopupMenu::IntoEl() {
         // The handle dismissal puts focus back from, named the same way every
         // frame so a state that outlives the frame can still find it.
         s->focusId = focusId;
+        // .on_mouse_down_out(Self::on_mouse_down_out), and the box it is
+        // measured against.
+        root->BoundsOut(&s->bounds)
+            ->OnMouseUpOut(ListenTo(state, &PopupMenuState::OnPressOutside));
     }
     if (s && s->openSubmenu < 0) {
         FocusTrapArm(cx->win, focusId);
@@ -277,7 +284,8 @@ El* PopupMenu::IntoEl() {
     }
     El* rows = Div(a)->FlexCol()->W(kFill)->Pad(4)->Gap(2);
     if (scrollable) {
-        rows->MaxH(maxH)
+        rows->ClipY()
+            ->MaxH(maxH)
             ->ScrollY(s ? s->scrollY : 0)
             ->ScrollId(HashClickId(id))
             ->OnScroll(ListenTo(state, &PopupMenuState::OnScroll));
@@ -439,6 +447,7 @@ El* DropdownMenu::IntoEl() {
         if (st) {
             BindClick(trigger, id,
                       ListenTo(menu->state, &PopupMenuState::OnTriggerClick));
+            st->triggerId = HashClickId(id);
         }
         wrap->Child(trigger);
     }

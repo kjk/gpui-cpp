@@ -1034,7 +1034,7 @@ El* TextView::Table(MdNode* n) {
                 align = colAlign[ix];
             }
             cell->Child(
-                Inline(c, baseFont, th.foreground, r->head ? 2 : 0, align));
+                Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
             row->Child(cell);
         }
         table->Child(row);
@@ -1042,14 +1042,17 @@ El* TextView::Table(MdNode* n) {
     return table;
 }
 
+Rgba TextView::BlockFg() const {
+    return blockFgSet ? blockFg : cx->theme().foreground;
+}
+
 El* TextView::Item(MdNode* n, Str marker, int depth) {
-    const Theme& th = cx->theme();
     El* content = Div(a)->FlexCol()->Flex1()->MinW(0)->ClipX();
     // An item's blocks are below; runs sit on the item itself only when
     // something built the tree by hand, since mdast gives even a tight list
     // item a paragraph of its own.
     if (n->runFirst) {
-        content->Child(Inline(n, baseFont, th.foreground, 0));
+        content->Child(Inline(n, baseFont, BlockFg(), 0));
     }
     Blocks(content, n, depth, true);
     return Div(a)
@@ -1081,12 +1084,12 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
     switch (n->kind) {
         case MdKind::Paragraph:
             return Div(a)->W(kFill)->PadB(mb)->Child(
-                Inline(n, baseFont, th.foreground, 0));
+                Inline(n, baseFont, BlockFg(), 0));
         case MdKind::Heading: {
             float font = headingFont * HeadingScale(n->level);
             // Headings use their own 0.3rem bottom padding, not the gap.
             return Div(a)->W(kFill)->PadB(5)->Child(
-                Inline(n, font, th.foreground, HeadingWeight(n->level)));
+                Inline(n, font, BlockFg(), HeadingWeight(n->level)));
         }
         case MdKind::Rule:
             return Div(a)->W(kFill)->PadB(mb)->Child(
@@ -1098,7 +1101,16 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
                             ->Fg(th.mutedFg)
                             ->BorderL(3, th.secondaryActive)
                             ->PadX(16);
+            // text_color(muted_foreground) on the quote, and nothing inside
+            // it naming a colour of its own: the paragraphs and headings it
+            // holds inherit the grey rather than painting themselves black.
+            Rgba savedFg = blockFg;
+            bool savedSet = blockFgSet;
+            blockFg = th.mutedFg;
+            blockFgSet = true;
             Blocks(inner, n, depth, false);
+            blockFg = savedFg;
+            blockFgSet = savedSet;
             return Div(a)->W(kFill)->PadB(mb)->Child(inner);
         }
         case MdKind::List: {
@@ -1123,7 +1135,7 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
             // Only reached for a stray list item; treat it as its contents.
             El* box = Div(a)->FlexCol()->W(kFill)->PadB(mb);
             if (n->runFirst) {
-                box->Child(Inline(n, baseFont, th.foreground, 0));
+                box->Child(Inline(n, baseFont, BlockFg(), 0));
             }
             return Blocks(box, n, depth, inList);
         }

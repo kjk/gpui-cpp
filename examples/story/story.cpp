@@ -434,6 +434,10 @@ void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
             st->optsOpen = !st->optsOpen;
             st->sizeMenuOpen = false;
             return;
+        case ToolbarCloseAll:
+            st->sizeMenuOpen = false;
+            st->optsOpen = false;
+            return;
         case ToolbarSizeXs:
             st->size = UiSize::XSmall;
             st->sizeMenuOpen = false;
@@ -456,6 +460,10 @@ void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
     if (!opts) {
         return;
     }
+    // Choosing a row runs it and the menu goes: PopupMenuConfirm calls
+    // dismiss_all, so a checkbox row closes the dropdown even though what it
+    // did was toggle rather than pick.
+    st->optsOpen = false;
     switch (act) {
         case ToolbarOptMultiple:
             opts->multiple = !opts->multiple;
@@ -472,6 +480,21 @@ void StoryToolbarApply(StoryToolbarState* st, StoryAccordionOptions* opts,
         default:
             return;
     }
+}
+
+// PopupMenu::on_mouse_down_out, which is what makes an open menu go away when
+// the press lands past it. The listener sits on the Popup's root rather than
+// on the menu it hangs, and the root is the trigger's own box: a press on the
+// trigger is inside it and toggles the way it always did, and everything else
+// -- the page behind, another dropdown's button, a row of the menu itself,
+// which is out of flow and so outside these bounds -- closes it. A row's own
+// handler still runs off the same release, and it closes the menu too, so the
+// two agree.
+static El* StoryToolbarDismissOnPressOut(El* el, bool open, Listener onAct) {
+    if (open) {
+        el->OnMouseUpOut(ListenerArg(onAct, ToolbarCloseAll));
+    }
+    return el;
 }
 
 // The size dropdown, which most pages carry.
@@ -493,10 +516,11 @@ static El* StorySizeMenu(Ctx* cx, StoryToolbarState* st, Listener onAct) {
         sizeMenu->Child(ToolbarCheckRow(cx, onAct, ToolbarSizeLg, "Large",
                                         st->size == UiSize::Large, true));
     }
-    return Popup::New(cx, StrL("story-size-menu"), sizeTrig)
-        ->AnchorRight()
-        ->Content(sizeMenu)
-        ->IntoEl();
+    El* el = Popup::New(cx, StrL("story-size-menu"), sizeTrig)
+                 ->AnchorRight()
+                 ->Content(sizeMenu)
+                 ->IntoEl();
+    return StoryToolbarDismissOnPressOut(el, st->sizeMenuOpen, onAct);
 }
 
 El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
@@ -534,10 +558,12 @@ El* StoryToolbarCore(Ctx* cx, StoryToolbarState* st,
                                     rows[i].checked && !rows[i].plain, gutter));
             }
         }
-        group->Child(Popup::New(cx, StrL("story-opts-menu"), optTrig)
-                         ->AnchorRight()
-                         ->Content(optMenu)
-                         ->IntoEl());
+        group->Child(StoryToolbarDismissOnPressOut(
+            Popup::New(cx, StrL("story-opts-menu"), optTrig)
+                ->AnchorRight()
+                ->Content(optMenu)
+                ->IntoEl(),
+            st->optsOpen, onAct));
     }
     return row;
 }
@@ -570,7 +596,9 @@ El* StoryToolbarDropdown(Ctx* cx, Str id, Str label, bool open, Listener onOpen,
                                         gutter));
         }
     }
-    return Popup::New(cx, id, trigger)->AnchorRight()->Content(menu)->IntoEl();
+    return StoryToolbarDismissOnPressOut(
+        Popup::New(cx, id, trigger)->AnchorRight()->Content(menu)->IntoEl(),
+        open, onAct);
 }
 
 El* StoryComingSoon(Ctx* cx, int story) {
@@ -664,32 +692,34 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
     return list;
 }
 
+// gallery.rs frames the field itself rather than styling it:
+//
+//     div().bg(sidebar_accent).rounded_full().px_1()
+//          .child(Input::new(&search).appearance(false).cleanable(true))
+//
+// so the pill is the sidebar's and everything inside it is the themed Input —
+// which is where the field's text size, its padding and its clear button come
+// from. The unstyled `gpui::Input` this used to hold is the editor underneath
+// that one, and it draws at the base's own 12px rather than at input_text_size.
 static El* SearchBox(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     El* box = Div(a)
                   ->H(36)
                   ->W(kFill)
-                  ->PadX(14)
+                  ->PadX(6)
                   ->FlexRow()
                   ->ItemsCenter()
-                  ->JustifyBetween()
-                  ->Gap(8)
                   ->Radius(18)
                   ->Bg(th.tokens.secondary)
-                  ->OnClick(Listen(cx, &FocusSearch))
                   ->FocusId(ClickSearch);
-    box->Child(::Input::New(cx, &app->search)->Flex1());
-    if (InputValue(&app->search).len > 0) {
-        box->Child(Div(a)
-                       ->W(16)
-                       ->H(16)
-                       ->ItemsCenter()
-                       ->JustifyCenter()
-                       ->Shrink0()
-                       ->OnClick(Listen(cx, &ClearSearch))
-                       ->Child(IconEl(a, IconName::X, 12)->Fg(th.mutedFg)));
-    }
+    box->Child(component::Input::New(cx, StrL("story-search"), &app->search)
+                   ->Appearance(false)
+                   ->Cleanable()
+                   ->OnFocus(Listen(cx, &FocusSearch))
+                   ->OnClear(Listen(cx, &ClearSearch))
+                   ->IntoEl()
+                   ->Flex1());
     return box;
 }
 
@@ -1155,6 +1185,89 @@ static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
     OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
 }
 
+// app_menus.rs's first menu, the one named for the application. Two of its
+// rows are not here: `Open...` wants a file dialog this tree does not have,
+// and `Language` wants rust_i18n. What is left is what the Rust menu does
+// with the same rows — the About dialog, the light/dark pair, the theme
+// table, and Quit.
+enum {
+    AppMenuAbout = 0,
+    AppMenuSep1,
+    AppMenuAppearance,
+    AppMenuTheme,
+    AppMenuSep2,
+    AppMenuQuit
+};
+
+static void OnAppMenuItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    if (ix == AppMenuAbout) {
+        WindowOpenDialog(cx, EntityNew<AboutDialog>(cx->app));
+    } else if (ix == AppMenuQuit) {
+        AppQuit(cx->win);
+    }
+}
+
+// SwitchThemeMode(ThemeMode::Light | ::Dark), checked against the mode in
+// force.
+static void OnAppModeItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    ThemeSet(cx->app, ix == 0 ? ThemeMode::Light : ThemeMode::Dark);
+    Notify(cx);
+}
+
+// SwitchTheme(name): the registry resolves the file into the palette for its
+// own mode, and switching to that mode is what puts it on screen.
+static void OnAppThemeItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
+    const ThemeConfig* cfg = ThemeRegistryAt((int)ix);
+    if (!cfg || !ThemeRegistryApply(cx->app, cfg)) {
+        return;
+    }
+    ThemeSet(cx->app, cfg->mode);
+    Notify(cx);
+}
+
+static El* AppMenu(Ctx* cx) {
+    // The same `themes/` directory the Theme Colors page reads, so the menu
+    // lists whatever that page lists whichever of the two is opened first.
+    ThemeRegistryLoadDir(StrL("themes"));
+
+    bool dark = ThemeGet() == ThemeMode::Dark;
+    component::PopupMenu* appearance =
+        component::PopupMenu::New(cx, StrL("story-app-appearance"))
+            ->MenuWithCheck(StrL("Light"), !dark)
+            ->MenuWithCheck(StrL("Dark"), dark);
+    if (PopupMenuState* st = appearance->state.Get(cx)) {
+        st->onConfirm = Listen(cx, &OnAppModeItem);
+    }
+
+    Str activeTheme = ThemeRegistryActive(ThemeGet());
+    component::PopupMenu* themes =
+        component::PopupMenu::New(cx, StrL("story-app-theme"))->Scrollable();
+    for (int i = 0; i < ThemeRegistryCount(); i++) {
+        const ThemeConfig* cfg = ThemeRegistryAt(i);
+        themes->MenuWithCheck(cfg->name, StrSame(cfg->name, activeTheme));
+    }
+    if (PopupMenuState* st = themes->state.Get(cx)) {
+        st->onConfirm = Listen(cx, &OnAppThemeItem);
+    }
+
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("story-app-menu"))
+            ->MinW(220)
+            ->Menu(StrL("About GPUI Component"))
+            ->Separator()
+            ->Submenu(StrL("Appearance"), appearance)
+            ->Submenu(StrL("Theme"), themes)
+            ->Separator()
+            ->Menu(StrL("Quit"));
+    if (PopupMenuState* st = menu->state.Get(cx)) {
+        st->onConfirm = Listen(cx, &OnAppMenuItem);
+    }
+    return component::DropdownMenu::New(cx, StrL("story-app"))
+        ->Trigger(StoryTitleMenuItem(cx, "GPUI Component", true))
+        ->Menu(menu)
+        ->IntoEl();
+}
+
 // The three tools at the right of the title bar. They are ghost buttons, and
 // button.rs gives a ghost button the arrow — the hand is for the variants that
 // look like a link. Over a title bar there is nothing else to say an icon is a
@@ -1166,7 +1279,7 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
                     ->FlexRow()
                     ->H(kFill)
                     ->ItemsCenter()
-                    ->Child(StoryTitleMenuItem(cx, "GPUI Component", true))
+                    ->Child(AppMenu(cx))
                     ->Child(EditMenu(cx))
                     ->Child(WindowMenu(cx))
                     ->Child(HelpMenu(cx));

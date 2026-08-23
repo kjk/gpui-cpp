@@ -861,10 +861,14 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     if (!under || !win->mouseDown) {
         under = HitTestRect(&win->paint, x, y);
     }
-    if (TextHitOffsetAt(&win->paint, x, y, false) >= 0) {
-        want = CursorKind::IBeam;
-    } else if (under) {
+    // An element that named a shape of its own wins over the I-beam: a link
+    // inside a selectable TextView asks for the hand, and in GPUI the
+    // cursor_pointer the link pushes is the innermost one and so the one that
+    // takes. Anything that named nothing leaves the selectable text to say.
+    if (under && under->cursor != CursorKind::Arrow) {
         want = under->cursor;
+    } else if (TextHitOffsetAt(&win->paint, x, y, false) >= 0) {
+        want = CursorKind::IBeam;
     }
     if (want != win->cursor) {
         win->cursor = want;

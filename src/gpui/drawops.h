@@ -53,6 +53,28 @@ enum DrawOp : uint16_t {
     // Both, in that order: a solid lucide variant (star-fill) is filled and
     // then stroked, so its outline is as heavy as the hollow one beside it.
     kOpFillStrokePath = 17,
+
+    // ─── text ───
+    //
+    //     kOpText  <x> <y>  <size> <textLength>  <u32 flags>  <u16 len> <utf8>
+    //
+    // `x`/`y` is the anchor point SVG names, on the baseline; `size` is the
+    // font size in viewBox units, so it scales with the box the way a stroke
+    // width does. `textLength` is SVG's, or 0 for a run that named none.
+    // Nothing under `assets/icons` has a <text>, so `asset_icons.cpp` never
+    // holds one of these and `cmd/svg-to-bytecode.ts` has nothing to write.
+    kOpText = 18,
+};
+
+// kOpText's flags word: which end of the run the anchor point is, and whether
+// it is bold. `text-anchor` and `font-weight`, the two of that element's
+// presentation attributes a run of glyphs here can answer for.
+enum DrawOpTextFlag : uint32_t {
+    kTextAnchorMask = 3,
+    kTextAnchorStart = 0,
+    kTextAnchorMiddle = 1,
+    kTextAnchorEnd = 2,
+    kTextBold = 4,
 };
 
 // Where a drawing goes and what colour it takes. `turns` rotates it clockwise
@@ -102,6 +124,11 @@ struct DrawOpsBuilder {
     void LineTo(float x, float y);
     void CubicTo(float x1, float y1, float x2, float y2, float x, float y);
     void ClosePath();
+    // `s` is copied into the stream, so the caller's bytes need not outlive
+    // the builder. A run longer than 65535 bytes is truncated to a character
+    // boundary rather than refused; nothing draws a novel.
+    void Text(float x, float y, float size, float textLength, uint32_t flags,
+              Str s);
     void End();
 };
 

@@ -64,7 +64,7 @@ static void ThemeOptionAct(ThemeColorsStory* self, Ctx* cx, const ClickEvent*,
                            intptr_t act) {
     if (act == ThemeActInherited) {
         self->showInherited = !self->showInherited;
-    } else {
+    } else if (act == ThemeActExpandAll) {
         self->expandAll = !self->expandAll;
     }
     self->optionsOpen = false;

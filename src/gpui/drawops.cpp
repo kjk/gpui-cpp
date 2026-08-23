@@ -50,6 +50,18 @@ struct OpReader {
         p += 4;
         return v;
     }
+
+    // A run of raw bytes, in place: kOpText's string is read where it lies
+    // rather than copied, since it is drawn before the walk moves on.
+    const uint8_t* Bytes(int n) {
+        if (n < 0 || !Has(n)) {
+            bad = true;
+            return nullptr;
+        }
+        const uint8_t* v = p;
+        p += n;
+        return v;
+    }
 };
 
 // Little-endian on all three targets we build for, and the generator writes
@@ -141,6 +153,45 @@ struct DrawOpsExec {
         if (path) {
             PathClose(path);
         }
+    }
+
+    // kOpText. The font size is in viewBox units and scales with the box the
+    // way a stroke width does; the glyphs themselves are left upright even in
+    // a turned drawing, because nothing that names a rotation also names text.
+    void Text(Str s, float u, float v, float size, float targetW,
+              uint32_t flags) {
+        float px = size * (sx + sy) * 0.5f;
+        if (!s.s || s.len <= 0 || px < 1.f) {
+            return;
+        }
+        int weight = (flags & kTextBold) ? kFontWeightBold : kFontWeightNormal;
+        Size sz = MeasureText(ctx, s, px, 0, false, weight, 0);
+        // textLength asks for the run to be set to exactly that width. There
+        // is no horizontal scale in paint.h, so what happens instead is that
+        // a run too wide for the width it was drawn to fit is set smaller
+        // until it fits, and a narrower one is left where its anchor puts it.
+        // A badge is authored against Verdana and this is not Verdana, so the
+        // two were never going to agree to the pixel; fitting the plate is
+        // what keeps the label inside the plate it belongs to.
+        if (targetW > 0 && sz.w > 0) {
+            float want = targetW * sx;
+            if (want > 0 && sz.w > want) {
+                px *= want / sz.w;
+                if (px < 1.f) {
+                    return;
+                }
+                sz = MeasureText(ctx, s, px, 0, false, weight, 0);
+            }
+        }
+        float ax = TX(u, v);
+        float ay = TY(u, v);
+        uint32_t anchor = flags & kTextAnchorMask;
+        if (anchor == kTextAnchorMiddle) {
+            ax -= sz.w * 0.5f;
+        } else if (anchor == kTextAnchorEnd) {
+            ax -= sz.w;
+        }
+        DrawTextBaseline(ctx, s, ax, ay, px, color, weight);
     }
 
     // Paint what has been built and start the next figure. Round caps and
@@ -349,6 +400,20 @@ bool ExecuteDrawOps(PaintCtx* ctx, const void* data, int dataLen,
                 e.EndPath(false, true);
                 drew = true;
                 break;
+            case kOpText: {
+                float x = r.F(), y = r.F();
+                float size = r.F(), textLen = r.F();
+                uint32_t flags = r.U32();
+                int n = (int)r.U16();
+                const uint8_t* bytes = r.Bytes(n);
+                if (r.bad || !bytes) {
+                    break;
+                }
+                e.EndPath(false, true);
+                e.Text(Str((const char*)bytes, n), x, y, size, textLen, flags);
+                drew = true;
+                break;
+            }
             case kOpFillStrokePath:
                 e.EndPath(true, true);
                 drew = true;
@@ -477,6 +542,31 @@ void DrawOpsBuilder::CubicTo(float x1, float y1, float x2, float y2, float x,
 
 void DrawOpsBuilder::ClosePath() {
     Op(kOpClosePath);
+}
+
+void DrawOpsBuilder::Text(float x, float y, float size, float textLength,
+                          uint32_t flags, Str s) {
+    int n = s.len;
+    if (!s.s || n <= 0) {
+        return;
+    }
+    if (n > 0xffff) {
+        n = 0xffff;
+        // Back to a character boundary: a continuation byte is 10xxxxxx.
+        while (n > 0 && ((uint8_t)s.s[n] & 0xc0) == 0x80) {
+            n--;
+        }
+    }
+    Op(kOpText);
+    F2(x, y);
+    F2(size, textLength);
+    U32(flags);
+    uint16_t len = (uint16_t)n;
+    uint8_t* p = data.AppendBlanks(2 + n);
+    if (p) {
+        memcpy(p, &len, 2);
+        memcpy(p + 2, s.s, (size_t)n);
+    }
 }
 
 void DrawOpsBuilder::End() {
