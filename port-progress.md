@@ -2926,3 +2926,88 @@ the accordion's titles, the collapsible's usage row (`font_medium` on the row
 in `collapsible_story.rs`, and now medium here too), and the introduction. The
 spinner is the fourth and is not one of them — its spinners are mid-turn in
 each shot, which is what an animation looks like to a screenshot.
+
+
+## Seven more the gallery got wrong, and three of them were the layer under it
+
+The sweep picked up where the last one left off: every one of the 62 story
+pages shot beside the Rust original again, ranked by how much of the frame
+differs, and worked down the list. Four of the seven were the page; three were
+`src/ui/` or `src/gpui/` and showed up on the page that happened to name them.
+
+**A compact button had the padding and not the width.** `button.rs` spells
+compact as the tighter `px` *and* `min_w_5` / `min_w_6` / `min_w_8`, so a
+labelled compact button is never narrower than it is tall. Ours had only half
+of it, which left every pagination page number six pixels light and the whole
+row twenty short. The same page's ellipsis was an icon button with nothing
+behind it, where `pagination.rs` hangs a dropdown of the pages that window hid
+off it — the only way into the middle of a long run without walking the arrows.
+The menu reports the row that was taken rather than the page it stands for, so
+a keyed `PaginationMenuState` carries the range's first page across.
+
+**A DataTable row was 38 unrelated numbers.** Every column past Chg% came out
+of a hash of the cell scaled by its kind, so Volume, Turnover, Market Cap and
+TTM all read in the same millions. `random_stocks_exact` says in its own
+comment why that is wrong: the fields of a row hang together the way a real
+quote does. So they do here now — turnover is that volume at that price, the
+market cap is the price over shares drawn from 1e6..3e9, which is what puts it
+in the billions and trillions, TTM is 5..80, the rankings 0..1000, and the bid,
+ask, open, high and low stay inside a day's range of the price. `compact()`
+grew the `T` it needed and reads a negative by its magnitude. Two smaller arms
+of the same `render_td`: a market that is not US writes in magenta, and the
+price is `font_semibold`.
+
+**Three quarters of the theme viewer was unreachable.** The right panel was a
+640-tall box with `ClipY` on it: Global through Base showed and the fifteen
+categories under them did not, with no way to scroll to them. Rust's is
+`size_full()` around a `list()` with a vertical scrollbar, so it is that here.
+Three tokens the registry had been resolving and throwing away are Theme fields
+now, which is what lets the page list them where Rust does —
+`primary.hover.background`, `primary.active.background` and
+`accent.foreground` — and Base grew the six `.light` hues beside the six it
+had. What still differs there: Rust hides a token the theme file did not name
+unless *Inherited Colors* is on, and nothing here records which key came from
+the file; and a hex reads a digit apart in places, because Rust shows the
+colour after a round trip through HSLA `f32` where this keeps the eight bits
+the file spelled.
+
+**A radar plotted from its own smallest value.** Three things
+`radar_chart.rs` settles that the painter had been doing its own way: the outer
+ring is `bounds.height * 0.4` rather than half the smaller side less sixteen,
+which on a wide card drew a web big enough to run under its own labels; the
+scale chains a zero into its domain — "so non-negative data starts at the
+center" — where ours ran from the smallest value, pinning that month to the hub
+and stretching every other spoke; and a label is anchored ten past the ring and
+aligned by the side it is on rather than centred in a fixed 48-wide box.
+
+**A paragraph that names no colour is not a paragraph coloured `foreground`.**
+The last pass gave `TextView` an inherited block colour and left its default at
+the theme's foreground, which is not the same thing. Inside a red Alert the
+body still painted itself black while the bullet beside it — a plain string
+child, so a real inherit — came out red. `BlockFg`'s unset value is a sentinel
+now that `Word` and `Inline` read as "set no colour at all", and the run takes
+what the container above the view pushed.
+
+**The code editor drew a point small.** `theme.mono_font_size` is 13 and the
+highlighter drew at 12. A row that is narrower is a row whose long `use` line
+fits where Rust's soft-wraps, so every line under it sat a row too high.
+
+**A list row shrank, and two sections fell off the end.** The rows are laid in
+a flex column with the viewport's height on it, and a column shrinks what
+overflows it: every 44-tall slot came out at 34, so the fifteen rows the
+visible range had worked out against `rowH` covered five sixths of the box and
+the last two sections could not be reached at all — a band of empty list under
+the last row and no scrollbar. The slots and the two spacers are `Shrink0` now,
+the way `DataTable`'s rows already were. With the rows at the height they
+claim, the story's own 44 was too tall: Rust measures the item it built, and
+that item is 36.
+
+Verified by 17,169 test checks and by all 62 pages shot again afterwards: the
+pages this touched moved and nothing else did — `button`, which exercises every
+compact variant, is pixel-identical to the run before the `min_w`.
+
+What this sweep found and did not fix, both named where they are: a no-wrap
+`Textarea` has no horizontal scrollbar (Rust builds one from `!soft_wrap`,
+where the offset here lives inside the input engine rather than on the box, so
+the element machinery never learns the content is wider than the view), and the
+`table` story's Amount column is laid out a little wider than Rust's.
