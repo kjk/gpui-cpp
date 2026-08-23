@@ -69,6 +69,18 @@ export function bringToTopAndRedraw(hwnd: number): void {
   user32.symbols.SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
   user32.symbols.RedrawWindow(hwnd, null, 0n, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 }
+
+// The heavier hammer for the same problem: move the window a pixel and back,
+// which is a resize as far as the app and DWM are concerned and so redraws
+// and recomposites everything. An invalidate alone does not always get a
+// GPU-composited window off a blank surface.
+export function nudgeWindow(hwnd: number): void {
+  const r = getWindowRect(hwnd);
+  const w = r.right - r.left;
+  const h = r.bottom - r.top;
+  moveWindow(hwnd, r.left, r.top, w, h - 1);
+  moveWindow(hwnd, r.left, r.top, w, h);
+}
 export const WM_CLOSE = 0x0010;
 export const WM_MOUSEMOVE = 0x0200;
 export const WM_LBUTTONDOWN = 0x0201;

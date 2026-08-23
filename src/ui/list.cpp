@@ -198,14 +198,19 @@ El* List::IntoEl() {
         s->self = state.id;
     }
 
-    El* root =
-        Div(a)->FlexCol()->W(kFill)->Pad(8)->Gap(4)->Radius(th.radius)->Border(
-            1, th.border);
+    // `v_flex().size_full().relative().overflow_hidden()`: no gap between the
+    // query row and the rows under it — the row's own bottom border is what
+    // separates them. The p_8, the border and the radius are the story's.
+    El* root = Div(a)->FlexCol()->W(kFill)->Pad(8)->Radius(th.radius)->Border(
+        1, th.border);
     if (search) {
-        // The search field is part of the list in Rust too, above the rows.
+        // list.rs: `div().px_2().border_b_1().child(Input::new(..)
+        // .prefix(Icon::new(Search)).cleanable(true).p_0().appearance(false))`
+        // — the magnifier is the field's own prefix, so the gap between it
+        // and the text is the input's, not a row's.
         El* searchRow =
-            Div(a)->FlexRow()->W(kFill)->H(32)->PadX(8)->Gap(8)->ItemsCenter();
-        searchRow->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
+            Div(a)->FlexRow()->W(kFill)->H(32)->ItemsCenter()->BorderB(
+                1, th.border);
         // InputState::new(..).placeholder(t!("List.search_placeholder")),
         // which is "Search..." in the locale this tree ships. Rust sets it on
         // the state when the list makes it, so a caller that gave a field of
@@ -217,6 +222,7 @@ El* List::IntoEl() {
             Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
                 ->Appearance(false)
                 ->Cleanable(true)
+                ->Prefix(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg))
                 ->OnFocus(onSearchFocus)
                 ->IntoEl()));
         root->Child(searchRow);
