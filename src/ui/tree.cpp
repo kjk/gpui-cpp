@@ -58,8 +58,12 @@ El* Tree::IntoEl() {
                       ->FlexRow()
                       ->W(kFill)
                       ->H(s->rowH)
+                      // ListItem is px_3, and the story's row adds
+                      // `pl(px(16.) * entry.depth() + px(12.))` on top of it,
+                      // which is the whole of the indent: there is no
+                      // spacer child and no chevron column.
                       ->PadR(12)
-                      ->PadL(12)
+                      ->PadL(12 + (float)it->depth * 16)
                       ->Gap(8)
                       ->ItemsCenter()
                       ->Radius(th.radius);
@@ -72,28 +76,20 @@ El* Tree::IntoEl() {
         } else if (i == s->rightClicked) {
             row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
         }
-        // Every entry indents by its depth, so a child lines up under the
-        // chevron of the folder it is in.
-        if (it->depth > 0) {
-            row->Child(Div(a)->W((float)it->depth * 16));
-        }
-        // The chevron box is there for a leaf too, so the labels line up.
-        El* chevron = Div(a)->W(12)->H(12)->ItemsCenter()->JustifyCenter();
-        if (it->folder) {
-            chevron->Child(IconEl(a,
-                                  it->expanded ? IconName::ChevronDown
-                                               : IconName::ChevronRight,
-                                  12)
-                               ->Fg(th.mutedFg));
-        }
-        row->Child(chevron);
+        // tree_story.rs's row is an icon and a label and nothing else: File
+        // for a leaf, FolderOpen for an open folder and Folder for a shut
+        // one. The chevron column the port drew is not there — what a folder
+        // is doing is the icon's job.
         if (icons) {
-            row->Child(
-                IconEl(a, it->folder ? IconName::Folder : IconName::File, 16)
-                    ->Fg(it->disabled ? th.mutedFg : th.foreground));
+            IconName ic = !it->folder    ? IconName::File
+                          : it->expanded ? IconName::FolderOpen
+                                         : IconName::Folder;
+            row->Child(IconEl(a, ic, 16)
+                           ->Fg(it->disabled ? th.mutedFg : th.foreground));
         }
+        // ListItem is text_base, not text_sm.
         row->Child(TextEl(a, it->label)
-                       ->Font(14)
+                       ->Font(16)
                        ->Fg(it->disabled ? th.mutedFg : th.foreground));
         list->Child(row);
     }

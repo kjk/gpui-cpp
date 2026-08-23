@@ -114,15 +114,9 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
         self->tree = EntityNewState<TreeState>(cx->app);
         TreeState* s = self->tree.Get(cx);
         if (s) {
+            // Two levels are read in so a folder opens without a pause;
+            // nothing starts open, which is where Rust's tree starts.
             LoadDir(s, ".", -1, 2);
-            // The first folder starts open, so the page shows a tree rather
-            // than a list of roots.
-            for (int i = 0; i < s->items.len; i++) {
-                if (s->items[i].folder) {
-                    s->items[i].expanded = true;
-                    break;
-                }
-            }
             TreeRebuild(s);
             // cx.subscribe(&tree, ..) rather than the state's own listener:
             // the same handler, hung off the entity, so anything else on the
@@ -153,8 +147,10 @@ El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     El* col = Div(a)->FlexCol()->W(kFill)->Gap(16);
     El* box = Div(a)->FlexCol()->W(kFill)->Pad(4)->Radius(th.radius)->Border(
         1, th.border);
+    // `.p_1().border_1().rounded(radius).h(px(540.))` is on the tree itself
+    // in Rust, so the 540 takes the padding and the border with it.
     box->Child(
-        component::Tree::New(cx, StrL("tree"), self->tree)->H(500)->IntoEl());
+        component::Tree::New(cx, StrL("tree"), self->tree)->H(530)->IntoEl());
     col->Child(box);
 
     El* status = Div(a)->FlexRow()->W(kFill)->Gap(12)->JustifyBetween();

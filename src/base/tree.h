@@ -79,7 +79,8 @@ struct TreeState {
     int rightClicked = -1;
     // uniform_list: every row is the same height, so the offset of a row is
     // an index times this.
-    float rowH = 32;
+    // A row is a ListItem: py_1 over text_base, which is 34.
+    float rowH = 34;
     float scrollY = 0;
     // The last height the list was laid out at, which is what scroll_to_item
     // measures against.
