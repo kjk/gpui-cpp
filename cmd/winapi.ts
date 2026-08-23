@@ -30,6 +30,11 @@ const user32 = dlopen("user32.dll", {
   SetProcessDpiAwarenessContext: { args: [FFIType.i64], returns: FFIType.bool },
   SetCursorPos: { args: [FFIType.i32, FFIType.i32], returns: FFIType.bool },
   ClientToScreen: { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.bool },
+  SetWindowPos: {
+    args: [FFIType.ptr, FFIType.i64, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.i32, FFIType.u32],
+    returns: FFIType.bool,
+  },
+  RedrawWindow: { args: [FFIType.ptr, FFIType.ptr, FFIType.u64, FFIType.u32], returns: FFIType.bool },
 });
 
 const gdi32 = dlopen("gdi32.dll", {
@@ -48,6 +53,22 @@ const gdiplus = dlopen("gdiplus.dll", {
 });
 
 export const SW_RESTORE = 9;
+const HWND_TOP = 0;
+const SWP_NOMOVE = 0x0002;
+const SWP_NOSIZE = 0x0001;
+const SWP_NOACTIVATE = 0x0010;
+const RDW_INVALIDATE = 0x0001;
+const RDW_UPDATENOW = 0x0100;
+const RDW_ALLCHILDREN = 0x0080;
+
+// Put the window in front without activating it, and make it repaint now.
+// SetForegroundWindow is refused on a session nothing is holding, but the
+// z-order and the update region are not: a window behind another photographs
+// as whatever DWM last held for it, which is sometimes blank.
+export function bringToTopAndRedraw(hwnd: number): void {
+  user32.symbols.SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  user32.symbols.RedrawWindow(hwnd, null, 0n, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+}
 export const WM_CLOSE = 0x0010;
 export const WM_MOUSEMOVE = 0x0200;
 export const WM_LBUTTONDOWN = 0x0201;

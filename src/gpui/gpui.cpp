@@ -349,7 +349,9 @@ const Theme& ThemeDefaultDark() {
         t.groupBox = Rgb(0x0a, 0x0a, 0x0a);
         t.groupBoxFg = Rgb(0xfa, 0xfa, 0xfa);
         t.descListLabel = Rgb(0x17, 0x17, 0x17);
-        t.descListLabelFg = Rgb(0xf5, 0xf5, 0xf5);
+        // description_list.label.foreground falls back to muted_foreground,
+        // not to the foreground: a label reads as a caption beside its value.
+        t.descListLabelFg = Rgb(0xa3, 0xa3, 0xa3);
         t.radius = 6;
         t.radiusLg = 8;
         // The three that only exist so a theme can spell them as gradients,
@@ -443,7 +445,7 @@ const Theme& ThemeDefaultLight() {
         t.groupBox = Rgb(0xf5, 0xf5, 0xf5);
         t.groupBoxFg = Rgb(0x17, 0x17, 0x17);
         t.descListLabel = Rgb(0xfa, 0xfa, 0xfa);
-        t.descListLabelFg = Rgb(0x17, 0x17, 0x17);
+        t.descListLabelFg = Rgb(0x73, 0x73, 0x73);
         t.radius = 6;
         t.radiusLg = 8;
         // The three that only exist so a theme can spell them as gradients,

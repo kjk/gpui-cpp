@@ -23,6 +23,10 @@
 //
 //   click:X,Y            left press + release at client X,Y
 //   rclick:X,Y           the same with the secondary button
+//   press:X,Y            the press alone; rpress: for the secondary button
+//   release:X,Y          the release alone; rrelease: likewise. A menu that
+//                        opens on the press and closes on the release wants
+//                        the two apart, with a shot: in between
 //   hover:X,Y            park the pointer there
 //   move:X,Y             a WM_MOUSEMOVE without moving the cursor
 //   drag:X1,Y1,X2,Y2     press, eight moves, release
@@ -41,7 +45,7 @@
 // the same number drives both apps, and a click that lands on a different
 // widget on one side is itself the finding.
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   captureWindowToPng,
@@ -58,6 +62,9 @@ import {
   setCursorPos,
   setForegroundWindow,
   setProcessDpiAware,
+  showWindow,
+  bringToTopAndRedraw,
+  SW_RESTORE,
   sleep,
   waitForForeground,
   waitForPidWindow,
@@ -74,6 +81,8 @@ const WM_CHAR = 0x0102;
 const WM_MOUSEMOVE = 0x0200;
 const WM_LBUTTONDOWN = 0x0201;
 const WM_LBUTTONUP = 0x0202;
+const WM_RBUTTONDOWN = 0x0204;
+const WM_RBUTTONUP = 0x0205;
 const WM_MOUSEWHEEL = 0x020a;
 const WM_PAINT = 0x000f;
 
@@ -83,6 +92,8 @@ const VK_MENU = 0x12;
 
 type Step =
   | { kind: "click"; x: number; y: number; right?: boolean }
+  | { kind: "press"; x: number; y: number; right?: boolean }
+  | { kind: "release"; x: number; y: number; right?: boolean }
   | { kind: "hover"; x: number; y: number }
   | { kind: "move"; x: number; y: number }
   | { kind: "drag"; x1: number; y1: number; x2: number; y2: number }
@@ -113,6 +124,16 @@ function parseStep(raw: string): Step {
     case "rclick": {
       const [x, y] = nums(arg);
       return { kind: "click", x: x ?? 0, y: y ?? 0, right: kind === "rclick" };
+    }
+    case "press":
+    case "rpress": {
+      const [x, y] = nums(arg);
+      return { kind: "press", x: x ?? 0, y: y ?? 0, right: kind === "rpress" };
+    }
+    case "release":
+    case "rrelease": {
+      const [x, y] = nums(arg);
+      return { kind: "release", x: x ?? 0, y: y ?? 0, right: kind === "rrelease" };
     }
     case "hover":
     case "move": {
@@ -180,11 +201,20 @@ async function holdHover(hwnd: number, ms: number): Promise<void> {
   }
 }
 
-async function applyStep(hwnd: number, s: Step, shot: (name: string) => void): Promise<void> {
+async function applyStep(hwnd: number, s: Step, shot: (name: string) => Promise<void>): Promise<void> {
   switch (s.kind) {
     case "click":
       lastHover = null;
       await (s.right ? rightClickClient(hwnd, s.x, s.y, 250) : clickClient(hwnd, s.x, s.y, 250));
+      return;
+    case "press":
+      lastHover = null;
+      sendMessage(hwnd, s.right ? WM_RBUTTONDOWN : WM_LBUTTONDOWN, s.right ? 2 : 1, packCoords(s.x, s.y));
+      await sleep(200);
+      return;
+    case "release":
+      sendMessage(hwnd, s.right ? WM_RBUTTONUP : WM_LBUTTONUP, 0, packCoords(s.x, s.y));
+      await sleep(200);
       return;
     case "move":
       sendMessage(hwnd, WM_MOUSEMOVE, 0, packCoords(s.x, s.y));
@@ -259,7 +289,7 @@ async function applyStep(hwnd: number, s: Step, shot: (name: string) => void): P
         sendMessage(hwnd, WM_PAINT, 0, 0);
         await sleep(200);
       }
-      shot(s.name);
+      await shot(s.name);
       return;
   }
 }
@@ -352,13 +382,27 @@ await sleep(600);
 async function drive(hwnd: number, tag: "rust" | "cpp"): Promise<void> {
   lastHover = null;
   setForegroundWindow(hwnd);
+  bringToTopAndRedraw(hwnd);
   await waitForForeground(hwnd, 3000);
-  await sleep(400);
+  await sleep(500);
   let n = 0;
-  const shot = (name: string) => {
+  // PrintWindow reads what DWM is holding for the window, and for a window
+  // that is behind another the answer is sometimes an all-black surface. A
+  // black PNG compresses to almost nothing, so the file size is the cheapest
+  // tell there is: bring the window forward and shoot again.
+  const shot = async (name: string) => {
     n++;
     const p = join(outDir, `${slug}-${String(n).padStart(2, "0")}-${name}-${tag}.png`);
-    captureWindowToPng(hwnd, p);
+    for (let attempt = 0; ; attempt++) {
+      captureWindowToPng(hwnd, p);
+      if (attempt >= 4 || statSync(p).size > 20000) {
+        break;
+      }
+      showWindow(hwnd, SW_RESTORE);
+      setForegroundWindow(hwnd);
+      bringToTopAndRedraw(hwnd);
+      await sleep(250);
+    }
     console.log(`  ${p}`);
   };
   for (const s of steps) {
