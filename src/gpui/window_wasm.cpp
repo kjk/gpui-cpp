@@ -479,11 +479,11 @@ static EM_BOOL OnWheel(int, const EmscriptenWheelEvent* e, void*) {
     }
     // A DOM wheel delta grows downwards and rightwards; GPUI's grows the way
     // the content moves, so both are negated. A line-mode delta gets the same
-    // 48 DIPs a notch that the Windows and X11 windows use; a pixel-mode one
+    // notch that the Windows and X11 windows use; a pixel-mode one
     // is already in the units this tree draws in.
     float scale = 1.f;
     if (e->deltaMode == DOM_DELTA_LINE) {
-        scale = 48.f;
+        scale = WheelNotchPixels();
     } else if (e->deltaMode == DOM_DELTA_PAGE) {
         scale = (float)win->plat->cssH;
     }

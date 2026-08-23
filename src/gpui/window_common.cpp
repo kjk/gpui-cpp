@@ -2050,4 +2050,13 @@ bool AppIsMaximized(Window* win) {
     return win && win->maximized;
 }
 
+// SPI_GETWHEELSCROLLLINES is three on a default Windows install and the other
+// two platforms scroll by the same three lines; nothing here reads the
+// setting, so the constant is named rather than spelled out four times.
+static const float kWheelScrollLines = 3.f;
+
+float WheelNotchPixels() {
+    return kWheelScrollLines * ThemeFontSize() * kLineHeight;
+}
+
 } // namespace gpui

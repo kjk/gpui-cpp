@@ -38,6 +38,10 @@ Popover* Popover::OnClose(Listener fn) {
     onClose = fn;
     return this;
 }
+Popover* Popover::Anchor(PopupAnchor v) {
+    anchor = v;
+    return this;
+}
 Popover* Popover::Button(MouseButton b) {
     button = b;
     return this;
@@ -68,6 +72,7 @@ El* Popover::IntoEl() {
     }
     bool isOpen = PopoverIsOpen(cx, st);
     El* root = gpui::Popover::New(cx, popId, st, button)
+                   ->Anchor(anchor)
                    ->Trigger(trigger)
                    ->Content(isOpen ? content : nullptr)
                    ->IntoEl();

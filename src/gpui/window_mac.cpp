@@ -265,11 +265,11 @@ static bool PressedButton(MouseButton* out) {
 
 - (void)scrollWheel:(NSEvent*)event {
     NSPoint p = [self gpuiPoint:event];
-    // A line of scroll is 48 DIPs, the step the other two windows use; a
-    // precise (trackpad) delta is already in points, which is GPUI's
+    // A line of scroll is WheelNotchPixels(), the step the other two windows
+    // use; a precise (trackpad) delta is already in points, which is GPUI's
     // ScrollDelta::Pixels.
     bool precise = [event hasPreciseScrollingDeltas];
-    float scale = precise ? 1.f : 48.f;
+    float scale = precise ? 1.f : WheelNotchPixels();
     float dx = (float)[event scrollingDeltaX] * scale;
     float dy = (float)[event scrollingDeltaY] * scale;
     gpui::TouchPhase phase = gpui::TouchPhase::Moved;

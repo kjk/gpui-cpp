@@ -100,9 +100,49 @@ Popover* Popover::Trigger(El* trigger) {
     return this;
 }
 
+Popover* Popover::Anchor(PopupAnchor v) {
+    anchor = v;
+    return this;
+}
+
 Popover* Popover::Content(El* content) {
     if (content) {
-        content->Absolute()->Top(28)->Left(0)->FocusId(focusId);
+        // What `Popup` does with it, because Rust's Popover *is* a Popup:
+        // `Popup::new(id, trigger).content(..)`. Four pixels under the
+        // trigger — the `top_1` on `render_popover_content` — and deferred,
+        // so it draws over whatever follows the trigger in the tree and is
+        // not cut by an ancestor's overflow. The port had it absolute at a
+        // hard-coded `top: 28`, in flow, and so clipped by the section it
+        // was in and mispositioned under any trigger that was not 28 tall.
+        // Where it hangs, which is what `Positioner::corner` works out: the
+        // Top anchors put it under the trigger and the Bottom ones over it,
+        // and the horizontal half of the name is the edge they line up on.
+        switch (anchor) {
+            case PopupAnchor::BottomLeft:
+            case PopupAnchor::BottomCenter:
+            case PopupAnchor::BottomRight:
+                content->AnchorAbove(4);
+                break;
+            default:
+                content->AnchorBelow(4);
+                break;
+        }
+        switch (anchor) {
+            case PopupAnchor::TopRight:
+            case PopupAnchor::BottomRight:
+                content->Right(0);
+                break;
+            case PopupAnchor::TopCenter:
+            case PopupAnchor::BottomCenter:
+                content->AnchorCenterX();
+                break;
+            default:
+                content->Left(0);
+                break;
+        }
+        // track_focus, not focus_ring_style: the surface takes focus and
+        // does not draw a ring around itself for it.
+        content->FocusId(focusId)->FocusRing(false)->Fixed();
         root->Child(content);
     }
     return this;

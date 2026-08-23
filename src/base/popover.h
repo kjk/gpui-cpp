@@ -1,6 +1,7 @@
 /* Unstyled popover — crates/base/src/popover.rs */
 
 #include "gpui/gpui.h"
+#include "base/popup.h"
 
 namespace gpui {
 
@@ -55,9 +56,14 @@ struct Popover {
     Entity<PopoverState> state = {};
     int focusId = 0;
     MouseButton button = MouseButton::Left;
+    // Popover::anchor, which is the corner of the trigger the content hangs
+    // off — Top* below it, Bottom* above it, and Left/Center/Right the edge
+    // the two line up on.
+    PopupAnchor anchor = PopupAnchor::TopLeft;
 
     static Popover* New(Ctx* cx, Str id, Entity<PopoverState> state = {},
                         MouseButton button = MouseButton::Left);
+    Popover* Anchor(PopupAnchor v);
     // Popover::tracked_focus_handle: what takes focus when it opens, instead
     // of the popover itself.
     Popover* TrackedFocus(int trackedId);

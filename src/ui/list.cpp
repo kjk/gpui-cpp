@@ -206,9 +206,17 @@ El* List::IntoEl() {
         El* searchRow =
             Div(a)->FlexRow()->W(kFill)->H(32)->PadX(8)->Gap(8)->ItemsCenter();
         searchRow->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
+        // InputState::new(..).placeholder(t!("List.search_placeholder")),
+        // which is "Search..." in the locale this tree ships. Rust sets it on
+        // the state when the list makes it, so a caller that gave a field of
+        // its own with a placeholder already on it keeps that one.
+        if (!search->placeholder.s) {
+            InputSetPlaceholder(search, StrL("Search..."));
+        }
         searchRow->Child(Div(a)->Flex1()->Child(
             Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
                 ->Appearance(false)
+                ->Cleanable(true)
                 ->OnFocus(onSearchFocus)
                 ->IntoEl()));
         root->Child(searchRow);

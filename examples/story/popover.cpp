@@ -21,10 +21,58 @@ enum {
 struct PopoverStory {
     int open = PopDefaultOpen;
     InputState formInput;
+    // The List section holds a real List, not a menu: ten rows behind a
+    // search field, which is what `List::new(&self.list)` over
+    // DropdownListDelegate renders.
+    Entity<ListState> list = {};
+    InputState listSearch;
+    // The async submenu: false while it says Loading..., true once the timer
+    // that stands in for Rust's spawned task has fired.
+    bool asyncLoaded = false;
+    bool asyncTimer = false;
     bool seeded = false;
 
     static El* Render(PopoverStory* self, Ctx* cx);
 };
+
+// render_item: `ListItem::new(ix).child(format!("Item {}", ix.row))`.
+static component::ListItem* PopListItem(Ctx* cx, void*, int, int row, int) {
+    return component::ListItem::New(
+        cx,
+        StoryTxt(cx, StoryFmt(cx, "Item %d", row), 14, cx->theme().foreground));
+}
+
+// Kbd::format, as menu.cpp spells it: the platform's own shortcut text.
+static Str PopChord(Ctx* cx, const char* key) {
+    component::Keystroke k;
+#if GPUI_OS_MAC
+    k.platform = true;
+#else
+    k.ctrl = true;
+#endif
+    k.key = Str(key);
+    return component::KbdFormatStr(cx, k);
+}
+
+static void AsyncLoaded(PopoverStory* self, Ctx* cx, const TickEvent*) {
+    self->asyncLoaded = true;
+    Notify(cx);
+}
+
+// The menu's rows are loaded a second after it is first opened, which is what
+// `cx.spawn_in(..).timer(Duration::from_secs(1))` does around `rebuild`.
+static void StartAsyncLoad(PopoverStory* self, Ctx* cx, const ClickEvent*) {
+    if (self->asyncTimer) {
+        return;
+    }
+    self->asyncTimer = true;
+    WindowSetTimeout(cx->win, 1000, Listen(cx, &AsyncLoaded));
+}
+
+static void FocusListSearch(PopoverStory* self, Ctx* cx, const ClickEvent*) {
+    self->listSearch.focused = true;
+    Notify(cx);
+}
 
 static void TogglePop(PopoverStory* self, Ctx* cx, const ClickEvent*,
                       intptr_t which) {
@@ -73,6 +121,12 @@ static El* PopTrigger(PopoverStory*, Ctx* cx, int which, const char* id,
 El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    if (!self->list.IsValid()) {
+        self->list = EntityNewState<ListState>(cx->app);
+    }
+    if (self->listSearch.focused) {
+        cx->win->input = &self->listSearch;
+    }
     if (!self->seeded) {
         self->seeded = true;
         InputSetValue(&self->formInput, StrL("Hello"));
@@ -81,7 +135,8 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
         cx->win->input = &self->formInput;
     }
     Listener toggle = Listen(cx, &TogglePop);
-    El* page = Div(a)->FlexCol()->Gap(8)->W(kFill);
+    // v_flex().size_full().gap_6()
+    El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def =
         StorySection(cx, "Default", "Display lightweight contextual content.");
@@ -98,9 +153,13 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                              ->Open(self->open == PopDefault)
                              ->OnClose(ListenerArg(toggle, PopDefault))
                              ->IntoEl());
+    // No .text_sm() on this one in Rust, so its text is the theme's own size.
     El* openCard = PopCard(cx, 600);
-    openCard->Child(
-        PopText(cx, "This popover is open by default when first rendered."));
+    openCard->Child(StoryTxt(cx,
+                             StrL("This popover is open by default when "
+                                  "first rendered."),
+                             16, th.foreground)
+                        ->Wrap());
     StorySectionAdd(def, component::Popover::New(cx)
                              ->Trigger(PopTrigger(self, cx, PopDefaultOpen,
                                                   "default-open-btn",
@@ -138,18 +197,31 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     El* list = StorySection(cx, "List",
                             "Place a scrollable selection list in the "
                             "popover.");
-    StorySectionAdd(
-        list, component::Popover::New(cx)
-                  ->Trigger(PopTrigger(self, cx, PopList, "pop-list",
-                                       "Popup List", toggle))
-                  ->Content(component::PopupMenu::New(cx, StrL("pop-list"))
-                                ->Menu(StrL("Jason Lee"))
-                                ->Menu(StrL("Ada Lovelace"))
-                                ->Menu(StrL("Alan Turing"))
-                                ->IntoEl())
-                  ->Open(self->open == PopList)
-                  ->OnClose(ListenerArg(toggle, PopList))
-                  ->IntoEl());
+    // p_0().text_sm().w_64().h(px(200.)): the surface is the list's own, so
+    // the card has no padding of its own.
+    El* listCard = Div(a)
+                       ->FlexCol()
+                       ->W(256)
+                       ->H(200)
+                       ->Radius(th.radiusLg)
+                       ->Border(1, th.border)
+                       ->Bg(th.tokens.background)
+                       ->ClipY();
+    component::List* popList =
+        component::List::New(cx, StrL("popover-list"), self->list)
+            ->H(198)
+            ->Count(10)
+            ->Items(self, &PopListItem)
+            ->Searchable(&self->listSearch, Listen(cx, &FocusListSearch));
+    listCard->Child(popList->IntoEl());
+    StorySectionAdd(list,
+                    component::Popover::New(cx)
+                        ->Trigger(PopTrigger(self, cx, PopList, "pop-list",
+                                             "Popup List", toggle))
+                        ->Content(listCard)
+                        ->Open(self->open == PopList)
+                        ->OnClose(ListenerArg(toggle, PopList))
+                        ->IntoEl());
     page->Child(list);
 
     El* right = StorySection(cx, "Right click",
@@ -204,19 +276,39 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                         ->IntoEl());
     page->Child(style);
 
+    // A Button with a dropdown_menu, not a Popover: Copy, a separator, and a
+    // submenu whose rows are built a second after the menu opens. Rust
+    // spawns a task that calls `PopupMenu::rebuild`; the timer here is
+    // `WindowSetTimeout`, started the first time the menu is rendered.
     El* async = StorySection(cx, "Async submenu",
                              "Rebuild submenu content after asynchronous "
                              "loading.");
-    StorySectionAdd(
-        async, component::Popover::New(cx)
-                   ->Trigger(PopTrigger(self, cx, PopAsync, "async-menu",
-                                        "Async Menu", toggle))
-                   ->Content(component::PopupMenu::New(cx, StrL("async-menu"))
-                                 ->Menu(StrL("Loading..."))
-                                 ->IntoEl())
-                   ->Open(self->open == PopAsync)
-                   ->OnClose(ListenerArg(toggle, PopAsync))
-                   ->IntoEl());
+    component::PopupMenu* sub =
+        component::PopupMenu::New(cx, StrL("async-submenu"));
+    if (self->asyncLoaded) {
+        for (int i = 1; i <= 3; i++) {
+            sub->Menu(StoryFmt(cx, "Loaded Item %d", i));
+        }
+    } else {
+        sub->Menu(StrL("Loading..."));
+    }
+    El* asyncContent = Div(a)->FlexCol()->Gap(8)->ItemsCenter();
+    asyncContent
+        ->Child(component::DropdownMenu::New(cx, StrL("async-menu-dropdown"))
+                    ->Trigger(component::Button::New(cx, StrL("async-menu"))
+                                  ->Outline()
+                                  ->Label(StrL("Async Menu"))
+                                  ->OnClick(Listen(cx, &StartAsyncLoad))
+                                  ->IntoEl())
+                    ->Menu(component::PopupMenu::New(cx, StrL("async-menu"))
+                               // popover_story::init binds cmd-c / ctrl-c to
+                               // Copy in the story's own context, which is
+                               // where the shortcut beside the row comes from.
+                               ->MenuWithKbd(StrL("Copy"), PopChord(cx, "c"))
+                               ->Separator()
+                               ->Submenu(StrL("Async Submenu"), sub))
+                    ->IntoEl());
+    StorySectionAdd(async, asyncContent);
     page->Child(async);
 
     El* anchor = StorySection(cx, "Anchor",
@@ -227,15 +319,22 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     // an h_flex().items_center().justify_between() of three triggers. Rust
     // pins them rather than spacing a column, so a popover that opens
     // upward has the room above it.
-    struct AnchorRow {
+    struct AnchorRowFull {
         int slots[3];
         const char* labels[3];
+        const char* said[3];
+        PopupAnchor anchors[3];
     };
-    AnchorRow rows[2] = {
+    AnchorRowFull rows[2] = {
         {{PopTopLeft, PopTopCenter, PopTopRight},
-         {"TopLeft", "TopCenter", "TopRight"}},
+         {"TopLeft", "TopCenter", "TopRight"},
+         {"top-left", "top-center", "top-right"},
+         {PopupAnchor::TopLeft, PopupAnchor::TopCenter, PopupAnchor::TopRight}},
         {{PopBottomLeft, PopBottomCenter, PopBottomRight},
-         {"BottomLeft", "BottomCenter", "BottomRight"}},
+         {"BottomLeft", "BottomCenter", "BottomRight"},
+         {"bottom-left", "bottom-center", "bottom-right"},
+         {PopupAnchor::BottomLeft, PopupAnchor::BottomCenter,
+          PopupAnchor::BottomRight}},
     };
     for (int r = 0; r < 2; r++) {
         El* band = Div(a)->Absolute()->Left(0)->W(kFill)->H(40);
@@ -251,12 +350,16 @@ El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
                       ->ItemsCenter()
                       ->JustifyBetween();
         for (int i = 0; i < 3; i++) {
-            El* card = PopCard(cx, 600);
-            card->Child(StoryTxt(cx,
-                                 StoryFmt(cx, "Anchored to the trigger's %s.",
-                                          rows[r].labels[i]),
-                                 14, th.foreground));
+            // Only the three named in the Rust story carry .max_w(600):
+            // the two on the left and the top-centre one.
+            bool wide = r == 0 && i < 2;
+            El* card = PopCard(cx, wide ? 600.f : 0.f);
+            card->Child(StoryTxt(
+                cx,
+                StoryFmt(cx, "Anchored to the trigger's %s.", rows[r].said[i]),
+                16, th.foreground));
             row->Child(component::Popover::New(cx)
+                           ->Anchor(rows[r].anchors[i])
                            ->Trigger(PopTrigger(self, cx, rows[r].slots[i],
                                                 rows[r].labels[i],
                                                 rows[r].labels[i], toggle))

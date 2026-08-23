@@ -536,9 +536,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 return 0;
             }
             break;
-        // Both wheels report in WHEEL_DELTA detents; one notch is 48 DIPs.
-        // GPUI would carry that as ScrollDelta::Lines and multiply later --
-        // see the note on ScrollWheelEvent. The horizontal wheel counts the
+        // Both wheels report in WHEEL_DELTA detents; a notch is
+        // WheelNotchPixels(), which is GPUI's three lines of the window's own
+        // text. The horizontal wheel counts the
         // other way round, so its sign is flipped to match: positive scrolls
         // the view left, as positive scrolls it up.
         case WM_MOUSEWHEEL:
@@ -548,7 +548,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             float x = PxToDip(&win->paint, pt.x);
             float y = PxToDip(&win->paint, pt.y);
             float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) /
-                          (float)WHEEL_DELTA * 48.f;
+                          (float)WHEEL_DELTA * WheelNotchPixels();
             bool horizontal = msg == WM_MOUSEHWHEEL;
             PlatformInput in = InputScrollWheel(x, y, horizontal ? -delta : 0.f,
                                                 horizontal ? 0.f : delta, false,

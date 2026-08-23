@@ -3,6 +3,7 @@
 #include "base/scrollbar.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
+#include "gpui/positioner.h"
 #include "gpui/svg.h"
 
 #include <math.h>
@@ -2628,15 +2629,15 @@ static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY) {
 // anchored under or over its trigger, one centred on it, and the
 // `relative(f)` half of a left/right inset. Each moves a subtree that taffy
 // has already sized and placed.
-static void PlaceAnchored(El* e) {
+static void PlaceAnchored(El* e, float viewW, float viewH) {
     for (El* c = e->first; c; c = c->next) {
-        PlaceAnchored(c);
-        if (c->style.fixed || !c->style.absolute) {
+        PlaceAnchored(c, viewW, viewH);
+        const Style& s = c->style;
+        bool anchored = s.anchorBelow || s.anchorAbove || s.anchorCenterX;
+        if (!anchored && (c->style.fixed || !c->style.absolute)) {
             continue;
         }
-        const Style& s = c->style;
-        if (!s.anchorBelow && !s.anchorAbove && !s.anchorCenterX &&
-            s.absLeftRel == 0 && s.absRightRel == 0) {
+        if (!anchored && s.absLeftRel == 0 && s.absRightRel == 0) {
             continue;
         }
         float innerW = e->w - e->style.pad.HorizontalAxisSum();
@@ -2645,6 +2646,18 @@ static void PlaceAnchored(El* e) {
         }
         float ax = c->x;
         float ay = c->y;
+        // A `fixed` popup was laid out against the window — which is the
+        // point, since that is the width its content had to shape against,
+        // the way Rust's Positioner sits in the deferred layer rather than
+        // inside the trigger. Where it goes is still the trigger's business,
+        // so the inset it named is read off the trigger's box here.
+        if (s.fixed && anchored) {
+            ax = e->x + (s.absLeft == kAuto ? 0.f : s.absLeft);
+            if (s.absRight != kAuto) {
+                ax = e->x + e->w - s.absRight - c->w;
+            }
+            ay = e->y;
+        }
         if (s.absLeftRel != 0) {
             float absL = (s.absLeft == kAuto ? 0.f : s.absLeft);
             ax = e->x + e->style.pad.left + absL + innerW * s.absLeftRel;
@@ -2662,6 +2675,25 @@ static void PlaceAnchored(El* e) {
         }
         if (s.anchorCenterX) {
             ax = e->x + (e->w - c->w) * 0.5f;
+        }
+        // positioner.rs `clamp`: whatever the corner worked out, the popup is
+        // then pulled back inside the viewport with WINDOW_MARGIN to spare.
+        // It never flips — that is the side strategy's job — so a popup with
+        // nowhere to go simply sits against the edge.
+        if (anchored && viewW > 0 && viewH > 0) {
+            float m = kPopupMargin;
+            if (ax + c->w > viewW - m) {
+                ax = viewW - m - c->w;
+            }
+            if (ax < m) {
+                ax = m;
+            }
+            if (ay + c->h > viewH - m) {
+                ay = viewH - m - c->h;
+            }
+            if (ay < m) {
+                ay = m;
+            }
         }
         MoveEl(c, ax, ay);
     }
@@ -2723,7 +2755,7 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     for (int i = 0; i < gLayoutFixed.len; i++) {
         WriteBackEl(ctx, gLayoutFixed[i], 0, 0);
     }
-    PlaceAnchored(e);
+    PlaceAnchored(e, ctx ? ctx->viewW : 0.f, ctx ? ctx->viewH : 0.f);
 }
 
 // ─── paint ────────────────────────────────────────────────────────────────

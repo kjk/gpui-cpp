@@ -73,7 +73,11 @@ Popup* Popup::Content(El* content) {
     }
     // Rust puts popover content in a deferred layer, so it draws over
     // whatever follows the trigger in the tree rather than under it.
-    content->Deferred();
+    // Fixed, not merely deferred: the popup is laid out against the window
+    // the way Rust's Positioner is, so its content shapes against the
+    // viewport rather than against the trigger's width, and PlaceAnchored
+    // then puts it under the trigger and clamps it inside the window.
+    content->Fixed();
     root->Child(content);
     return this;
 }

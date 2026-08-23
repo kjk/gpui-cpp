@@ -310,6 +310,14 @@ void ThemeSetRadius(float radius);
 // is measured against: a `Font(12)` is twelve at the default 16, and grows
 // with it, which is what Rust gets for free by spelling its sizes in rems.
 float ThemeFontSize();
+// One wheel notch, in DIPs. GPUI carries a notch as `ScrollDelta::Lines` —
+// SPI_GETWHEELSCROLLLINES lines, three by default — and turns it into pixels
+// with the line height of the text being scrolled, at the point the delta is
+// applied. There is no per-element text style where a wheel event is built,
+// so this is the window's own: the theme font size at `gpui::phi()`, which is
+// what TextStyle::line_height defaults to. Three lines of 16px text is 78
+// DIPs, and a fixed 48 was what this tree scrolled before.
+float WheelNotchPixels();
 void ThemeSetFontSize(float px);
 // The theme belongs to App, the way Rust keeps it as a Global; read it with
 // cx->theme(). ThemeNow() is the paint-time fallback for code below Ctx.

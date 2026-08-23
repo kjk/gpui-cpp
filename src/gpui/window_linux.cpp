@@ -989,11 +989,12 @@ static void HandleEvent(App* app, XEvent* ev) {
             unsigned b = ev->xbutton.button;
             Modifiers mods = ModsOf(ev->xbutton.state);
             // X11 sends the wheel as buttons 4 and 5, and the horizontal wheel
-            // as 6 and 7. One notch is 48 DIPs, the same step the Windows
-            // window uses; positive scrolls the view up and left.
+            // as 6 and 7. A notch is WheelNotchPixels(), the same step the
+            // Windows window uses; positive scrolls the view up and left.
             if (b >= Button4 && b <= 7) {
-                float dx = b == 6 ? 48.f : b == 7 ? -48.f : 0.f;
-                float dy = b == Button4 ? 48.f : b == Button5 ? -48.f : 0.f;
+                float notch = WheelNotchPixels();
+                float dx = b == 6 ? notch : b == 7 ? -notch : 0.f;
+                float dy = b == Button4 ? notch : b == Button5 ? -notch : 0.f;
                 PlatformInput in = InputScrollWheel(x, y, dx, dy, false, mods,
                                                     TouchPhase::Moved);
                 WindowDispatchInput(win, &in);
