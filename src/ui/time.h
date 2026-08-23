@@ -22,6 +22,9 @@ struct Calendar {
     int yearMax = 0; // exclusive
     int yearPageStart = 0;
     DateMatcher disabledMatcher = {};
+    // border_0().rounded_none().p_0(): what a DatePicker's popup asks for,
+    // since the popup is the frame and a second one inside it would show.
+    bool bare = false;
     Listener onDay;  // day of month
     Listener onDate; // DatePickerDateKey(LocalDate)
     Listener onPrev;
@@ -42,6 +45,7 @@ struct Calendar {
     Calendar* View(CalendarView value);
     Calendar* YearRange(int minYear, int maxYear, int pageStart);
     Calendar* DisabledMatcher(DateMatcher matcher);
+    Calendar* Bare();
     Calendar* OnDay(Listener fn);
     Calendar* OnDate(Listener fn);
     Calendar* OnPrev(Listener fn);

@@ -56,6 +56,10 @@ Calendar* Calendar::DisabledMatcher(DateMatcher matcher) {
     disabledMatcher = matcher;
     return this;
 }
+Calendar* Calendar::Bare() {
+    bare = true;
+    return this;
+}
 Calendar* Calendar::OnDay(Listener fn) {
     onDay = fn;
     return this;
@@ -205,7 +209,10 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                                                            : th.radius);
             Rgba fg = muted ? th.mutedFg : th.foreground;
             if (disabled) {
-                fg = RgbaOpacity(fg, 0.5f);
+                // calendar.rs fades the whole cell rather than the ink, so a
+                // day that is both picked and blocked shows its primary
+                // square at half strength.
+                cell->Opacity(0.5f);
             }
             if (active) {
                 cell->Bg(th.tokens.primary);
@@ -242,13 +249,11 @@ El* Calendar::IntoEl() {
     };
     float cellSize = CalendarCellSize(size);
     float width = CalendarWidth(size) * numberOfMonths;
-    El* root = gpui::Calendar::New(cx, StrL("calendar"))
-                   ->FlexCol()
-                   ->W(width)
-                   ->Pad(12)
-                   ->Gap(2)
-                   ->Border(1, th.border)
-                   ->Radius(th.radiusLg);
+    El* root =
+        gpui::Calendar::New(cx, StrL("calendar"))->FlexCol()->W(width)->Gap(2);
+    if (!bare) {
+        root->Pad(12)->Border(1, th.border)->Radius(th.radiusLg);
+    }
 
     El* nav = Div(a)->FlexRow()->W(kFill)->JustifyBetween()->ItemsCenter();
     bool canPrev = view == CalendarView::Day ||
@@ -625,6 +630,7 @@ El* DatePicker::IntoEl() {
                                  ->View(calendarView)
                                  ->YearRange(yearMin, yearMax, yearPageStart)
                                  ->DisabledMatcher(disabledMatcher)
+                                 ->Bare()
                                  ->OnDay(onDay)
                                  ->OnDate(onDate)
                                  ->OnPrev(onPrev)
