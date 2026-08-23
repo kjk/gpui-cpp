@@ -256,7 +256,6 @@ static El* RenderBasicDialog(DialogStory* self, Ctx* cx) {
     body->Child(
         component::Select::New(cx, StrL("dialog-select"), self->basicSelect)
             ->Items(gDialogOptions, 3)
-            ->Placeholder(StrL("Select an option"))
             ->W(kFill)
             ->OnToggle(Listen(cx, &ToggleBasicSelect))
             ->IntoEl());
@@ -418,10 +417,13 @@ static El* RenderCustomButtons(DialogStory* self, Ctx* cx) {
         th.foreground));
     surface->Child(body);
     El* footer = Div(a)->FlexRow()->W(kFill)->Gap(8)->JustifyEnd();
-    footer->Child(DialogButton(cx, StrL("cancel"), StrL("Later"),
-                               Listen(cx, &PressLater), false));
-    footer->Child(DialogButton(cx, StrL("ok"), StrL("Restart Now"),
-                               Listen(cx, &PressRestart), true));
+    // DialogClose and DialogAction wrap their button in a `size_full` box, so
+    // the two of them share the footer between them rather than sitting at
+    // its right edge.
+    footer->Child(Div(a)->W(kFill)->Child(DialogButton(
+        cx, StrL("cancel"), StrL("Later"), Listen(cx, &PressLater), false)));
+    footer->Child(Div(a)->W(kFill)->Child(DialogButton(
+        cx, StrL("ok"), StrL("Restart Now"), Listen(cx, &PressRestart), true)));
     surface->Child(footer);
 
     component::Dialog* dialog = NewOpenDialog(self, cx)
