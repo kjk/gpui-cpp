@@ -43,8 +43,8 @@ void BenchMemAs(const char* group, const char* name, const char* what,
     }
     double kb = (double)bytes / 1024.0;
     double ratio = param > 0 ? (double)bytes / (double)param : 0.0;
-    printf("  %-34s %14s   %-7s %8.1f KB   %5.2fx source\n", name, "", what,
-           kb, ratio);
+    printf("  %-34s %14s   %-7s %8.1f KB   %5.2fx source\n", name, "", what, kb,
+           ratio);
 }
 
 bool BenchWanted(const char* group, const char* name) {
@@ -164,6 +164,8 @@ int GpuiMain(int argc, char** argv) {
         printf(", filter \"%s\"", gBenchFilter);
     }
     printf("\n");
+
+    BenchRngCheck();
 
     double started = TimeNow();
     BenchTreeCreation();

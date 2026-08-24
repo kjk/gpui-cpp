@@ -74,26 +74,30 @@ void BenchKeep(const void* p);
 
 /* The random source.
 
-   Rust seeds a ChaCha8 stream with `STANDARD_RNG_SEED` so a given benchmark
-   always builds the same tree. Reproducing its numbers exactly would mean
-   porting ChaCha8 *and* `rand`'s uniform sampling, and the trees would still
-   only be comparable against a Rust run on the same machine. What matters
-   here is that a tree is the same from one run of this binary to the next, so
-   this is a PCG32 carrying the same seed. The shapes are Rust's shapes; the
-   values drawn to fill them are not the same values. */
+   Rust's benches seed `ChaCha8Rng` with `STANDARD_RNG_SEED` and draw styles
+   through `rand` 0.9's `random_range`. This is that generator and those
+   samplers, so a C++ tree is the same tree the Rust bench builds — not only
+   the same shape. `Seed` is `SeedableRng::seed_from_u64`; `Range` is the
+   one-shot f32 path (inclusive and exclusive share it); `RangeInt` is the
+   one-shot inclusive integer path (`1..=4`). */
 struct BenchRng {
-    uint64_t state = 0;
-    uint64_t inc = 0;
+    uint32_t key[8] = {};
+    uint64_t blockPos = 0;
+    uint32_t buf[64] = {};
+    int index = 64;
 
     void Seed(uint64_t seed);
     uint32_t NextU32();
-    // [0, 1)
+    // [0, 1), rand's `StandardUniform` for f32.
     float NextFloat();
-    // [lo, hi), Rust's `random_range(lo..hi)`.
+    // Rust's `random_range(lo..hi)` / `random_range(lo..=hi)` for f32.
     float Range(float lo, float hi);
-    // [lo, hi], Rust's `random_range(lo..=hi)`.
+    // Rust's `random_range(lo..=hi)` for i32 / usize when high fits in u32.
     int RangeInt(int lo, int hi);
 };
+
+// Aborts if this RNG does not match rand_chacha 0.9 + rand 0.9 on seed 12345.
+void BenchRngCheck();
 
 extern const uint64_t kStandardRngSeed;
 

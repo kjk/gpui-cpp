@@ -126,11 +126,9 @@ the leaves — is worth having, since measured leaves are where a real window
 spends its layout time, but with our own text measure substituted it would be
 a new benchmark rather than a port of that one.
 
-The random source is not Rust's. The benchmarks draw tree shapes from a
-ChaCha8 stream seeded 12345; this uses a PCG32 with the same seed, so a run is
-reproducible against itself but its trees are not the Rust's trees. Matching
-them would mean porting `rand`'s uniform sampling as well, and the numbers
-would still be a different machine's.
+The random source is Rust's: `ChaCha8Rng` seeded 12345 and `rand` 0.9's
+`random_range`, so a C++ tree is the same tree the Rust bench builds. `bench/`
+pins the first draws against that crate.
 
 ## Refreshing the port
 
