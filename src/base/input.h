@@ -49,6 +49,11 @@ struct InputEditorStyle {
     // did.
     Rgba matchBg = {0, 0, 0, 0};
     Rgba currentMatchBg = {0, 0, 0, 0};
+    // The editor's own surface, which an inline suggestion's second line and
+    // beyond is drawn on: it covers the row under it rather than pushing it
+    // down. Transparent means the rows show through, which is what a field
+    // that never suggests anything gets.
+    Rgba background = {0, 0, 0, 0};
     // The colour a symbol takes while the shortcut modifier is held over it
     // and the definition provider has somewhere to go. Rust reads `link_text`
     // out of the *highlight* theme; this tree's scanner palette has no such

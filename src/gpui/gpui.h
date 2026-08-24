@@ -2714,6 +2714,33 @@ struct CodeActionSession {
 // a provider answers out of its own store, not off the stack.
 using HoverFn = Str (*)(void* data, Str text, int offset);
 
+// CompletionProvider::inline_completion, without the task: the provider is
+// handed the document and the caret and answers the text to suggest after it,
+// or nothing. `textDocument/inlineCompletion` — the ghost text a suggestion
+// engine puts in front of the caret, which Tab accepts. What it answers is
+// allocated out of `a`, which lives until the suggestion is dropped.
+using InlineCompletionFn = Str (*)(void* data, Arena* a, Str text, int offset);
+
+// DEFAULT_INLINE_COMPLETION_DEBOUNCE: how long the typing has to stop before
+// the provider is asked.
+const float kInlineCompletionDebounceMs = 300.f;
+
+// The suggestion in front of the caret, while there is one.
+struct InlineCompletion {
+    // What the provider answered, and where the caret was when it did. A
+    // caret that has moved since drops it.
+    Str text = {};
+    int at = -1;
+    // When the provider may be asked, and whether it has been. Rust spawns a
+    // task with a timer; the frame is the clock here, the way every other
+    // delay in this tree is.
+    double dueAt = 0;
+    bool asked = true;
+    Arena* arena = nullptr;
+
+    ~InlineCompletion();
+};
+
 // ─── range semantic tokens (input/editor/lsp/semantic_tokens.rs) ─────────
 //
 // The highlighting a language server publishes, layered over the built-in
@@ -2943,6 +2970,11 @@ struct InputState {
     CodeActionSession codeActions;
     CodeActionFn codeActionProvider = nullptr;
     void* codeActionData = nullptr;
+    // The inline suggestion in front of the caret, and who is asked for one.
+    // A field with no provider never shows one.
+    InlineCompletionFn inlineCompletionProvider = nullptr;
+    void* inlineCompletionData = nullptr;
+    InlineCompletion inlineCompletion;
     // The semantic tokens a provider published, and who is asked. Rust
     // debounces the request 100 ms after an edit and diffs the answer; this
     // asks the frame after the edit, like the document colours beside it.
@@ -3190,6 +3222,18 @@ void InputShowCompletions(InputState* s, App* app, Window* win);
 void InputUpdateDocumentColors(InputState* s);
 
 // ─── code actions ─────────────────────────────────────────────────────────
+
+// schedule_inline_completion: the typing stopped, so the provider may be
+// asked once the debounce has run. Called by every edit, which is also what
+// drops the suggestion that was showing.
+void InputScheduleInlineCompletion(InputState* s);
+// The frame's half of that clock: ask the provider if the debounce is up and
+// nothing has moved. True when it wants another frame to keep waiting.
+bool InputUpdateInlineCompletion(InputState* s, bool menuOpen);
+// has_inline_completion / clear_inline_completion / accept_inline_completion.
+bool InputHasInlineCompletion(const InputState* s);
+void InputClearInlineCompletion(InputState* s);
+bool InputAcceptInlineCompletion(InputState* s, App* app, Window* win);
 
 // Lsp::update's semantic half: ask the provider again when the document has
 // changed under it. Nothing happens without a provider, which is every field

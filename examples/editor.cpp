@@ -377,6 +377,34 @@ static Str CaseMapped(Arena* a, Str src, int which) {
     return Str(out, n);
 }
 
+// ─── the inline completion provider ───────────────────────────────────────
+//
+// The ghost text in front of the caret. A real one asks a suggestion engine;
+// this one answers for two openings a C++ file has plenty of — `for (` and
+// `if (` — so the debounce, the drawing and Tab can all be seen working.
+static Str InlineCompletionAt(void*, Arena* a, Str text, int offset) {
+    if (offset <= 0 || offset > text.len) {
+        return Str{};
+    }
+    // What was typed up to the caret, back to the start of the line.
+    int lineStart = offset;
+    while (lineStart > 0 && text.s[lineStart - 1] != '\n') {
+        lineStart--;
+    }
+    Str line(text.s + lineStart, offset - lineStart);
+    auto endsWith = [](Str s, const char* suffix) {
+        int n = (int)strlen(suffix);
+        return s.len >= n && memcmp(s.s + s.len - n, suffix, (size_t)n) == 0;
+    };
+    if (endsWith(line, "for (")) {
+        return StrDup(a, StrL("int i = 0; i < n; i++) {\n}"));
+    }
+    if (endsWith(line, "if (")) {
+        return StrDup(a, StrL("!s) {\n    return;\n}"));
+    }
+    return Str{};
+}
+
 // ─── the range semantic tokens provider ───────────────────────────────────
 //
 // `MarkerHighlighter` from the Rust markdown example: every TODO / FIXME /
@@ -903,6 +931,8 @@ int GpuiMain(int argc, char** argv) {
     // And what a language server would say about the document beyond what the
     // scanner can see — here the five markers, each in its own colour, over
     // the highlighting rather than instead of it.
+    // And the ghost text in front of the caret, which Tab accepts.
+    self->editor.inlineCompletionProvider = &InlineCompletionAt;
     self->editor.semanticTokensProvider = &SemanticTokensFor;
     self->editor.semanticLegend = kMarkerLegend;
     self->editor.nSemanticLegend = kNMarkers;

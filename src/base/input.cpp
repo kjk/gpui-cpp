@@ -510,6 +510,11 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // What the document names in colour, asked for again when it changed.
     InputUpdateDocumentColors(state);
     InputUpdateSemanticTokens(state);
+    // The debounce in front of an inline suggestion. A frame is the clock, so
+    // one has to keep coming while it runs.
+    if (InputUpdateInlineCompletion(state, state->completion.open)) {
+        WindowRequestAnimationFrame(cx->win);
+    }
     state->hoverDiagnostic = -1;
     if ((state->diagnostics.len > 0 || state->hoverProvider ||
          state->definitionProvider) &&
@@ -838,6 +843,56 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     }
     if (padBottom > 0) {
         col->Child(Div(a)->W(kFill)->Shrink0()->H(padBottom));
+    }
+
+    // layout_inline_completion: the suggestion in front of the caret, in the
+    // muted foreground at half opacity. Rust shapes the first line to sit
+    // after the cursor and shifts the rows below down to make room for the
+    // rest; the rows here are a virtualized flex column whose heights the
+    // layout owns, so every line is drawn *over* what is under it — each on
+    // its own background, which is what Rust paints under its first line for
+    // the same reason.
+    if (state->focused && InputHasInlineCompletion(state) &&
+        state->contentBox.h > 0) {
+        Rgba ghostFg = RgbaOpacity(style.mutedForeground, 0.5f);
+        // Where the text column starts, for the lines after the first: the
+        // gutter and the fold strip are not part of it.
+        float textLeft = 0;
+        if (lineNumbers) {
+            textLeft = numW + 8.f + (folding ? foldW + 8.f : 0.f);
+        }
+        // Where the caret was last painted, in the column's own coordinates.
+        float gx = state->caretWinX - state->contentBox.x;
+        float gy = state->caretWinY - state->contentBox.y - kInputLineH;
+        Str rest = state->inlineCompletion.text;
+        for (int line = 0; rest.len > 0 || line == 0; line++) {
+            int nl = -1;
+            for (int i = 0; i < rest.len; i++) {
+                if (rest.s[i] == '\n') {
+                    nl = i;
+                    break;
+                }
+            }
+            Str one = nl >= 0 ? Str(rest.s, nl) : rest;
+            rest = nl >= 0 ? Str(rest.s + nl + 1, rest.len - nl - 1) : Str{};
+            if (one.len > 0) {
+                El* ghost = Div(a)
+                                ->Absolute()
+                                ->Left(line == 0 ? gx : textLeft)
+                                ->Top(gy + (float)line * kInputLineH)
+                                ->H(kInputLineH)
+                                ->Bg(style.background);
+                El* run = TextEl(a, one)->Font(font)->LineHeight(lineMult)->Fg(
+                    ghostFg);
+                if (style.mono) {
+                    run->Mono();
+                }
+                col->Child(ghost->Child(run));
+            }
+            if (nl < 0) {
+                break;
+            }
+        }
     }
     return col;
 }
@@ -1872,6 +1927,10 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     // again next frame — `Lsp::update`, which is the pair together.
     s->documentColorsDirty = true;
     s->semanticTokensDirty = true;
+    // on_text_typed: the suggestion in front of the caret was about the
+    // document as it was, and the provider is asked again once the typing
+    // stops.
+    InputScheduleInlineCompletion(s);
     Emit(s, app, win, InputEvent{InputEventKind::Change});
     Notify(app, win);
     return true;
@@ -2236,6 +2295,98 @@ void InputUpdateDocumentColors(InputState* s) {
 // caret, and let the same four keys walk it. Rust's providers answer tasks
 // and the answers are gathered as they land; a provider here answers into a
 // buffer, so the asking and the gathering are the one call.
+
+// ─── inline completion (lsp/completions.rs) ──────────────────────────────
+//
+// The ghost text in front of the caret: the provider is asked once the typing
+// has stopped for the debounce, what it says is drawn after the caret in a
+// muted colour, and Tab writes it into the document. Rust spawns a debounced
+// task and checks on the way out that the caret has not moved; the frame is
+// the clock here, and the same check is what the frame does.
+
+InlineCompletion::~InlineCompletion() {
+    if (arena) {
+        ArenaDelete(arena);
+    }
+}
+
+bool InputHasInlineCompletion(const InputState* s) {
+    return s && s->inlineCompletion.text.len > 0;
+}
+
+void InputClearInlineCompletion(InputState* s) {
+    if (!s) {
+        return;
+    }
+    s->inlineCompletion.text = Str{};
+    s->inlineCompletion.at = -1;
+    s->inlineCompletion.asked = true;
+    if (s->inlineCompletion.arena) {
+        ArenaDelete(s->inlineCompletion.arena);
+        s->inlineCompletion.arena = nullptr;
+    }
+}
+
+void InputScheduleInlineCompletion(InputState* s) {
+    if (!s) {
+        return;
+    }
+    // "Clear any existing inline completion on text change" — the suggestion
+    // was about the document as it was.
+    InputClearInlineCompletion(s);
+    if (!s->inlineCompletionProvider) {
+        return;
+    }
+    s->inlineCompletion
+        .dueAt = TimeNow() + (double)kInlineCompletionDebounceMs / 1000.0;
+    s->inlineCompletion.asked = false;
+    s->inlineCompletion.at = InputCursor(s);
+}
+
+bool InputUpdateInlineCompletion(InputState* s, bool menuOpen) {
+    if (!s || !s->inlineCompletionProvider || s->inlineCompletion.asked) {
+        return false;
+    }
+    // The caret moved while the debounce ran, or a menu opened over it: both
+    // are checks Rust makes on the far side of the timer.
+    if (menuOpen || InputCursor(s) != s->inlineCompletion.at) {
+        InputClearInlineCompletion(s);
+        return false;
+    }
+    if (TimeNow() < s->inlineCompletion.dueAt) {
+        // Still waiting, and the window has to come back for the frame that
+        // is not.
+        return true;
+    }
+    s->inlineCompletion.asked = true;
+    if (s->inlineCompletion.arena) {
+        ArenaDelete(s->inlineCompletion.arena);
+    }
+    s->inlineCompletion.arena = ArenaNew();
+    Str text = s->inlineCompletionProvider(
+        s->inlineCompletionData, s->inlineCompletion.arena, InputValue(s),
+        s->inlineCompletion.at);
+    s->inlineCompletion.text = text;
+    return false;
+}
+
+bool InputAcceptInlineCompletion(InputState* s, App* app, Window* win) {
+    if (!InputHasInlineCompletion(s)) {
+        return false;
+    }
+    // The text is in the suggestion's own arena, which the insert below is
+    // about to drop, so it is copied first.
+    Str text = s->inlineCompletion.text;
+    char stack[512];
+    Str keep = text;
+    if (text.len < (int)sizeof(stack)) {
+        memcpy(stack, text.s, (size_t)text.len);
+        keep = Str(stack, text.len);
+    }
+    InputClearInlineCompletion(s);
+    InputInsert(s, app, win, keep);
+    return true;
+}
 
 // ─── range semantic tokens (lsp/semantic_tokens.rs) ──────────────────────
 
@@ -3280,6 +3431,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return handled;
         }
         case InputAction::IndentInline:
+            // indent_inline tries the suggestion first: Tab is what accepts
+            // one, and only indents when there is none.
+            if (InputAcceptInlineCompletion(s, app, win)) {
+                return true;
+            }
             return DoIndent(s, app, win, false);
         case InputAction::Indent:
             return DoIndent(s, app, win, true);
@@ -3288,6 +3444,13 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return DoOutdent(s, app, win);
 
         case InputAction::Escape:
+            // "Clear inline completion on escape", and consume the key: the
+            // escape said no to the suggestion and nothing else.
+            if (InputHasInlineCompletion(s)) {
+                InputClearInlineCompletion(s);
+                Notify(app, win);
+                return true;
+            }
             if (s->cleanOnEscape) {
                 InputClean(s, app, win);
                 return true;

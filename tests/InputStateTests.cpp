@@ -272,6 +272,91 @@ static void DeleteToWordAndLineBoundaries() {
     utassert(ValueIs(s, "hello"));
 }
 
+// ─── inline completion (lsp/completions.rs) ──────────────────────────────
+
+static int gInlineCalls = 0;
+
+static Str TestInlineCompletion(void* data, Arena* a, Str text, int offset) {
+    (void)data;
+    (void)text;
+    (void)offset;
+    gInlineCalls++;
+    return StrDup(a, StrL(" world"));
+}
+
+// The provider is asked once the typing has stopped, and not before.
+static void TheSuggestionWaitsForTheDebounce() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.inlineCompletionProvider = &TestInlineCompletion;
+    gInlineCalls = 0;
+    Type(&s, "hello");
+
+    // The edit scheduled it; the debounce has not run, so nothing is asked
+    // and the frame is told to come back.
+    utassert(InputUpdateInlineCompletion(&s, false));
+    utassert(gInlineCalls == 0);
+    utassert(!InputHasInlineCompletion(&s));
+
+    // Once it is up, the provider answers and the suggestion shows.
+    s.inlineCompletion.dueAt = 0;
+    utassert(!InputUpdateInlineCompletion(&s, false));
+    utassert(gInlineCalls == 1);
+    utassert(InputHasInlineCompletion(&s));
+    // And it is asked once, not once a frame.
+    utassert(!InputUpdateInlineCompletion(&s, false));
+    utassert(gInlineCalls == 1);
+}
+
+// The two checks Rust makes on the far side of the timer.
+static void ASuggestionThatMissedItsMomentIsDropped() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.inlineCompletionProvider = &TestInlineCompletion;
+    gInlineCalls = 0;
+    Type(&s, "hello");
+    // The caret moved while the debounce ran.
+    InputSetSelectedRange(&s, nullptr, nullptr, 2, 2);
+    s.inlineCompletion.dueAt = 0;
+    utassert(!InputUpdateInlineCompletion(&s, false));
+    utassert(gInlineCalls == 0);
+    utassert(!InputHasInlineCompletion(&s));
+
+    // A completion menu open over the caret is the other one.
+    Type(&s, "!");
+    s.inlineCompletion.dueAt = 0;
+    utassert(!InputUpdateInlineCompletion(&s, true));
+    utassert(gInlineCalls == 0);
+}
+
+// Tab writes it in, escape says no to it, and an edit asks again.
+static void TabAcceptsAndEscapeDeclines() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.inlineCompletionProvider = &TestInlineCompletion;
+    Type(&s, "hello");
+    s.inlineCompletion.dueAt = 0;
+    InputUpdateInlineCompletion(&s, false);
+    utassert(InputHasInlineCompletion(&s));
+
+    // Escape consumes the key and drops the suggestion.
+    utassert(InputPerform(&s, nullptr, nullptr, InputAction::Escape, false));
+    utassert(!InputHasInlineCompletion(&s));
+    utassert(ValueIs(s, "hello"));
+
+    // With one showing, Tab writes it at the caret instead of indenting.
+    gInlineCalls = 0;
+    Type(&s, "!");
+    s.inlineCompletion.dueAt = 0;
+    InputUpdateInlineCompletion(&s, false);
+    utassert(InputHasInlineCompletion(&s));
+    utassert(InputAcceptInlineCompletion(&s, nullptr, nullptr));
+    utassert(ValueIs(s, "hello! world"));
+    utassert(!InputHasInlineCompletion(&s));
+    // Accepting is an edit, which schedules the next question.
+    utassert(!s.inlineCompletion.asked);
+}
+
 // ─── range semantic tokens (lsp/semantic_tokens.rs, its own tests) ────────
 
 static const Str kSemanticLegend[] = {StrL("keyword"), StrL("comment")};
@@ -1301,6 +1386,9 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    TheSuggestionWaitsForTheDebounce();
+    ASuggestionThatMissedItsMomentIsDropped();
+    TabAcceptsAndEscapeDeclines();
     TheDeltaEncodingIsUnpacked();
     ATokenOutsideTheLegendIsSkipped();
     OnlyTheVisibleTokensAreResolved();

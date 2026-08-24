@@ -665,6 +665,8 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
         InputToggleFold(s, win->app, win, foldLine);
         return;
     }
+    // "Clear inline completion on any mouse interaction."
+    InputClearInlineCompletion(s);
     if (!s->focused) {
         InputFocus(s, win->app, win);
     }

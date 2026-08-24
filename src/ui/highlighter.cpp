@@ -328,6 +328,8 @@ El* Highlighter::IntoEl() {
     // theme, which this tree's scanner palette has no entry for — the UI
     // theme's link colour is the same blue a Link is drawn in.
     style.linkText = th.blue;
+    // What a ghost line covers the row under it with.
+    style.background = th.background;
     style.diagnostics.error = th.red;
     style.diagnostics.warning = th.yellow;
     style.diagnostics.info = th.blue;
