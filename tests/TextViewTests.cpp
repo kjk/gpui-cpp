@@ -571,7 +571,8 @@ static void TestSourceTaskList() {
 }
 
 // node.rs selected_source: an inline image is emitted when the selection runs
-// into it, and copies as nothing in Plain — Paragraph::text lays the
+// into it — the run before it selected to its end, the run after it from its
+// beginning — and copies as nothing in Plain, since Paragraph::text lays the
 // children's text end to end and an image child has none.
 static void TestSourceImage() {
     char buf[512];
@@ -586,10 +587,58 @@ static void TestSourceImage() {
                    "see ![alt](a.png) now"));
     utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
                    "see  now"));
-    // A selection that stops before the picture does not reach it.
+    // Stopping at the end of the run before it still reaches it: the run
+    // after has nothing selected in it, which is the trailing case.
     int n = CopyTextHitsIn(&d.ctx, 0, 4, -1, buf, sizeof(buf),
                            SelectionFormat::Source);
-    utassert(SrcIs(Str(buf, n), "see "));
+    utassert(SrcIs(Str(buf, n), "see ![alt](a.png)"));
+    // Stopping short of that end does not.
+    n = CopyTextHitsIn(&d.ctx, 0, 2, -1, buf, sizeof(buf),
+                       SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), "se"));
+    // Nor does a selection that starts after the picture.
+    n = CopyTextHitsIn(&d.ctx, 6, 10, -1, buf, sizeof(buf),
+                       SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), " now"));
+}
+
+// The two ends of the same rule: a paragraph that begins or ends with an
+// image has no run on that side, and that counts as reaching it.
+static void TestSourceImageAtTheEnds() {
+    char buf[512];
+    SelBlock para = {};
+    SelSource plain = {{}, {}, &para};
+    SelSource img = {StrL("![alt](a.png)"), {}, &para};
+    // Leading: selecting the words after the picture takes the picture.
+    SrcDoc lead;
+    lead.Image(&img, false);
+    lead.Run(" now", &plain, true);
+    int n = CopyTextHitsIn(&lead.ctx, 1, 5, -1, buf, sizeof(buf),
+                           SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), "![alt](a.png) now"));
+    // Trailing: selecting the words before it does too.
+    SrcDoc tail;
+    tail.Run("see ", &plain, false);
+    tail.Image(&img, true);
+    n = CopyTextHitsIn(&tail.ctx, 0, 4, -1, buf, sizeof(buf),
+                       SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), "see ![alt](a.png)"));
+    // A picture with no words either side is the whole paragraph, and Rust
+    // emits nothing for such a paragraph: it is the document walk that takes
+    // it when what encloses it is selected. Here that is the selection having
+    // run past the place it sits in.
+    SelBlock next = {};
+    SelSource below = {{}, {}, &next};
+    SrcDoc lone;
+    lone.Image(&img, false);
+    lone.Run("after", &below, false);
+    utassert(SrcIs(SrcCopy(&lone, SelectionFormat::Source, buf,
+                          sizeof(buf)),
+                   "![alt](a.png)\nafter"));
+    // The paragraph below it on its own leaves it behind.
+    n = CopyTextHitsIn(&lone.ctx, 1, 6, -1, buf, sizeof(buf),
+                       SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), "after"));
 }
 
 // A run that names no source — everything outside a TextView — copies as its
@@ -638,6 +687,7 @@ void TestTextView() {
     TestSourceList();
     TestSourceTaskList();
     TestSourceImage();
+    TestSourceImageAtTheEnds();
     TestSourceIgnoresPlainRuns();
     TestMarkdownTaskList(a);
     ArenaDelete(a);

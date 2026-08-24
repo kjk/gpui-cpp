@@ -5204,6 +5204,51 @@ static void CopyPutLines(CopyOut* o, Str s, Str linePre) {
     CopyPut(o, Str(s.s + at, s.len - at));
 }
 
+// Whether the selection has run into the inline image registered at `i`.
+//
+// node.rs walks a paragraph as the runs *between* its images and emits an
+// image when the selection runs into it: the run before it was selected and
+// selected to its end (`selected.emitted && selected.at_end`), and the run
+// after it is selected from its beginning — `at_start` is what flushes the
+// images the walk has queued. A paragraph that begins or ends with an image
+// has no run on that side, and that counts as reaching it: a drag that stops
+// at the last word before a trailing picture still takes the picture, and so
+// does selecting the sentence after a leading one.
+//
+// The run before ends one byte before the image's own place in the document
+// order, and the run after starts one past it — the gap of one the
+// registration leaves between runs.
+static bool AtomReached(PaintCtx* ctx, int i, int a, int b) {
+    const TextHit& t = ctx->texts[i];
+    const SelBlock* blk = t.src ? t.src->block : nullptr;
+    const TextHit* prev = i > 0 ? &ctx->texts[i - 1] : nullptr;
+    const TextHit* next = i + 1 < ctx->texts.len ? &ctx->texts[i + 1] : nullptr;
+    // Only a run of the same block is a run of this paragraph.
+    if (prev && (!prev->src || prev->src->block != blk)) {
+        prev = nullptr;
+    }
+    if (next && (!next->src || next->src->block != blk)) {
+        next = nullptr;
+    }
+    int pos = t.docOff;
+    if (!prev && !next) {
+        // A paragraph that is nothing but the picture. Rust emits nothing for
+        // it — the paragraph's own `source` is empty — and it is the document
+        // walk that takes it when the blocks either side are selected. Here
+        // that is the selection having run past the place it sits in.
+        return a <= pos && b > pos;
+    }
+    if (!prev) {
+        // Nothing before it to reach it from, so what says the selection got
+        // there is the run after: selected, and from its beginning.
+        return a <= next->docOff && b > next->docOff;
+    }
+    // The run before it, selected and to its end. A selection that starts
+    // after the picture fails this, which is Rust dropping the queued image
+    // when the run it flushes against is not selected at_start.
+    return a < pos - 1 && b >= pos - 1;
+}
+
 int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
                    SelectionFormat fmt) {
     if (!out || cap <= 0) {
@@ -5243,13 +5288,12 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
         int gap = pos + plen;
         bool spansGap = i + 1 < ctx->texts.len && a <= gap && b > gap;
         // An inline image: no text to slice, so what says the selection has
-        // reached it is running past the place it sits in — node.rs emits an
-        // image when the run before it ends at its end and the run after it
-        // starts at its beginning. It carries its whole `![alt](url)` in the
-        // group's `pre`, which the block walk below emits; the piece of text
-        // after it is empty. Plain skips it: `Paragraph::text` lays the
-        // children's text end to end and an image child has none.
-        bool atom = t.atom && src && t.src && a <= pos && b > pos;
+        // reached it is the runs either side of it (AtomReached above). It
+        // carries its whole `![alt](url)` in the group's `pre`, which the
+        // block walk below emits; the piece of text after it is empty. Plain
+        // skips it: `Paragraph::text` lays the children's text end to end and
+        // an image child has none.
+        bool atom = t.atom && src && t.src && AtomReached(ctx, i, a, b);
         if ((lo >= hi || !t.text.s) && !atom) {
             sep = sep || spansGap;
             continue;

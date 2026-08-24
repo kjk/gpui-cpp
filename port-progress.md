@@ -4024,17 +4024,29 @@ its `SelSource::pre`. `Source` emits it when the selection has run past the
 place it sits in; `Plain` skips it, which is the empty string Rust's `text()`
 gets from an image child.
 
-The one difference worth naming: Rust decides "the selection reached the
-image" from the run before it ending at its end, and this decides it from the
-selection having run past the image's own offset — one place further on. A
-drag that stops exactly at the end of the word before a trailing picture does
-not take the picture with it here; a select-all does. Rust also writes the
-image's title after the url when it has one, and `MdRun` keeps the url and the
-alt, which is what the parse fold kept.
+`AtomReached` is that rule, and it is Rust's three clauses rather than the
+one it started as. The run before the image has to be selected *and* selected
+to its end, which is `selected.emitted && selected.at_end` — so a drag that
+stops at the last word before a trailing picture takes the picture, and one
+that stops a character short does not. A paragraph that begins with an image
+has no run on that side, and Rust counts that as reaching it, so selecting the
+sentence after a leading picture takes it: what says so there is the run
+*after*, selected and from its beginning (`at_start` is what flushes the
+images the walk has queued). And a paragraph that is nothing but a picture
+emits nothing of its own in Rust — its `source` is empty — so the enclosing
+document walk is what takes it, which here is the selection having run past
+the place it sits in.
+
+The one thing still left: Rust writes the image's title after the url when it
+has one, and `MdRun` keeps the url and the alt, which is what the parse fold
+kept.
 
 Checked with the unit tests — the fold reading `- [x] `, the copier over a
-hand-built task list and over a paragraph with a picture in the middle of it —
-and with the markdown example rendering a fixture of ticked, unticked, nested
-and numbered items beside an inline badge.
+hand-built task list, and a picture in the middle of a paragraph, at either
+end of one, and as a paragraph of its own — and with the markdown example
+rendering a fixture of ticked, unticked, nested and numbered items beside an
+inline badge. What is not driven end to end is the clipboard itself for these
+two, since there is no headless input path; the marker and affix strings are
+covered at the unit level only.
 
-17,536 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples.
+17,542 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples.
