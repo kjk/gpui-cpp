@@ -31,6 +31,7 @@ const simpleExamples = [
   "rich_text",
   "stream_markdown",
   "markdown",
+  "html",
 ];
 
 const knownTargets = [

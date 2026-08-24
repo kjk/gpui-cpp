@@ -40,6 +40,7 @@ const simpleExamples = [
   "rich_text",
   "stream_markdown",
   "markdown",
+  "html",
 ];
 
 const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;
