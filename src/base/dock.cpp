@@ -482,6 +482,123 @@ DockPlacement DockPlacementOfNode(const DockState* s, int node) {
     return DockPlacement::Center;
 }
 
+int DockVisibleCount(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return 0;
+    }
+    const DockNode& n = s->nodes[node];
+    int count = 0;
+    for (int i = 0; i < n.panel.len; i++) {
+        if (s->panels[n.panel[i]].visible) {
+            count++;
+        }
+    }
+    return count;
+}
+
+int DockActiveIx(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return -1;
+    }
+    const DockNode& n = s->nodes[node];
+    if (n.activeIx >= 0 && n.activeIx < n.panel.len &&
+        s->panels[n.panel[n.activeIx]].visible) {
+        return n.activeIx;
+    }
+    // `active_panel`: a hidden panel sitting at the active index is stood in
+    // for by the first visible one rather than showing nothing.
+    for (int i = 0; i < n.panel.len; i++) {
+        if (s->panels[n.panel[i]].visible) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool DockNodeLocked(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return true;
+    }
+    if (s->locked) {
+        return true;
+    }
+    // `self.zoomed`: the group holding the zoomed panel is the whole area,
+    // and nothing may be dragged out of it until it is zoomed back.
+    if (s->zoomPanel >= 0 && DockNodeOfPanel(s, s->zoomPanel) == node) {
+        return true;
+    }
+    // `self.stack_panel.is_none()`: a group with no split above it is the
+    // root of its tree and cannot be taken apart.
+    return s->nodes[node].parent < 0;
+}
+
+bool DockIsLastPanel(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return true;
+    }
+    // StackPanel::is_last_panel, walked up: a split holding more than one
+    // child means there is somewhere for this panel to go.
+    for (int at = s->nodes[node].parent, guard = 0;
+         at >= 0 && guard < s->nodes.len + 1; at = s->nodes[at].parent) {
+        guard++;
+        if (s->nodes[at].child.len > 1) {
+            return false;
+        }
+    }
+    return DockVisibleCount(s, node) <= 1;
+}
+
+bool DockNodeDraggable(const DockState* s, int node) {
+    return !DockNodeLocked(s, node) && !DockIsLastPanel(s, node);
+}
+
+bool DockNodeDroppable(const DockState* s, int node) {
+    return !DockNodeLocked(s, node);
+}
+
+int DockLeftTopTabs(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return -1;
+    }
+    if (!s->nodes[node].split) {
+        return node;
+    }
+    if (s->nodes[node].child.len == 0) {
+        return -1;
+    }
+    return DockLeftTopTabs(s, s->nodes[node].child[0]);
+}
+
+int DockRightTopTabs(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return -1;
+    }
+    const DockNode& n = s->nodes[node];
+    if (!n.split) {
+        return node;
+    }
+    if (n.child.len == 0) {
+        return -1;
+    }
+    // A split down the page keeps its first child — the top one — and a split
+    // across the page its last, which is the right-most.
+    int pick = AxisIsHorizontal(n.axis) ? n.child[n.child.len - 1] : n.child[0];
+    return DockRightTopTabs(s, pick);
+}
+
+void DockSetCollapsible(DockState* s, DockPlacement p, bool collapsible) {
+    DockSide* side = DockSideOf(s, p);
+    if (!side) {
+        return;
+    }
+    side->collapsible = collapsible;
+    // Dock::set_collapsible: a dock nobody can collapse is opened here and
+    // now, or a dock shut before the flag was cleared could never be reached.
+    if (!collapsible) {
+        side->open = true;
+    }
+}
+
 void DockToggleSide(DockState* s, Ctx* cx, DockPlacement p) {
     DockSide* side = DockSideOf(s, p);
     if (!side || !side->collapsible) {

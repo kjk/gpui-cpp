@@ -109,14 +109,28 @@ static void Seed(DockStory* self, Ctx* cx) {
         def.title = Str(kPanels[i].title);
         def.render = RenderPanel;
         def.titleSuffix = RenderPanelSuffix;
+        // Panel::zoomable is a PanelControl, and its default — Menu — puts
+        // Zoom In in the ⋯ menu and nowhere else. The editor asks for Both,
+        // which is what puts the maximise icon on its bar; the Rust example
+        // does the same for one of its panels.
+        if (i == 2) {
+            def.zoomable = DockPanelControl::Both;
+        }
         def.data = &kPanels[i];
         panel[i] = DockAddPanelDef(s, def);
     }
 
+    // Every Dock's item is a split holding the tab group, which is what the
+    // Rust example does (`DockItem::v_split(vec![DockItem::tabs(..)])`) and
+    // what gives the group a parent: a tab group that is the root of its own
+    // tree is locked — TabPanel::is_locked's `stack_panel.is_none()` — so its
+    // tabs neither drag out nor take a drop.
     int leftTabs = DockNewTabs(s);
     DockTabsAdd(s, leftTabs, panel[0]);
     DockTabsAdd(s, leftTabs, panel[1]);
-    s->left.node = leftTabs;
+    int leftSplit = DockNewSplit(s, Axis::Vertical);
+    DockSplitAdd(s, leftSplit, leftTabs, 0);
+    s->left.node = leftSplit;
     s->left.size = 180;
 
     int centerLeft = DockNewTabs(s);
@@ -132,12 +146,16 @@ static void Seed(DockStory* self, Ctx* cx) {
     int bottomTabs = DockNewTabs(s);
     DockTabsAdd(s, bottomTabs, panel[5]);
     DockTabsAdd(s, bottomTabs, panel[6]);
-    s->bottom.node = bottomTabs;
+    int bottomSplit = DockNewSplit(s, Axis::Vertical);
+    DockSplitAdd(s, bottomSplit, bottomTabs, 0);
+    s->bottom.node = bottomSplit;
     s->bottom.size = 140;
 
     int rightTabs = DockNewTabs(s);
     DockTabsAdd(s, rightTabs, panel[7]);
-    s->right.node = rightTabs;
+    int rightSplit = DockNewSplit(s, Axis::Vertical);
+    DockSplitAdd(s, rightSplit, rightTabs, 0);
+    s->right.node = rightSplit;
     s->right.size = 180;
 }
 

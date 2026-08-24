@@ -53,6 +53,32 @@ Bounds DockDropPlaceholder(Bounds b, DockDrop d);
 // number no node index can reach rather than the pool's own size.
 const int kDockSideBase = 1 << 20;
 
+// Panel::zoomable, which is an `Option<PanelControl>` in Rust and defaults to
+// `Some(Menu)`: where the zoom action shows up. A panel that cannot be zoomed
+// at all is `No`, and the maximise icon is on the bar only for Toolbar and
+// Both — every other panel offers Zoom In in the ⋯ menu and nowhere else.
+enum class DockPanelControl : uint8_t {
+    No,
+    Menu,
+    Toolbar,
+    Both
+};
+
+inline bool DockPanelControlToolbar(DockPanelControl c) {
+    return c == DockPanelControl::Toolbar || c == DockPanelControl::Both;
+}
+inline bool DockPanelControlMenu(DockPanelControl c) {
+    return c == DockPanelControl::Menu || c == DockPanelControl::Both;
+}
+
+// DockArea::panel_style. Auto is Rust's default: a group showing one panel is
+// a plain title row rather than a tab bar, and only a second tab turns the bar
+// on. TabBar is the opt-out that always shows tabs.
+enum class DockPanelStyle : uint8_t {
+    Auto,
+    TabBar
+};
+
 // One panel the host handed the dock. Rust's `Arc<dyn PanelView>` is a title,
 // a render and the two questions the tab bar asks it.
 struct DockPanelDef {
@@ -66,9 +92,16 @@ struct DockPanelDef {
     // the tabs and the group's zoom and menu buttons. A panel that wants a
     // search box or a status of its own has nowhere else to put it.
     El* (*titleSuffix)(Ctx* cx, void* data) = nullptr;
+    // Panel::tab_name(): the short label a tab shows when the title is too
+    // much for one. Empty falls back to the title, and the single-panel title
+    // row always shows the title.
+    Str tabName = {};
     void* data = nullptr;
     bool closable = true;
-    bool zoomable = true;
+    // Panel::visible(). A hidden panel has no tab, is not the active panel,
+    // and does not count towards the one that may not be closed or dragged.
+    bool visible = true;
+    DockPanelControl zoomable = DockPanelControl::Menu;
 };
 
 // DockItem. A node is either Tabs — a list of panels with one active — or
@@ -135,6 +168,15 @@ struct DockState {
     // DockArea::locked. A locked dock still resizes; it just does not move
     // panels around.
     bool locked = false;
+    // DockArea::panel_style, which every group in the area reads.
+    DockPanelStyle panelStyle = DockPanelStyle::Auto;
+    // DockArea::toggle_button_visible: whether the three dock toggles are
+    // drawn at all.
+    bool toggleButtonVisible = true;
+    // DockArea::version, kept so a layout that was loaded writes back the
+    // version it came with.
+    bool hasVersion = false;
+    int version = 0;
     // DockArea::bounds, written at paint.
     Bounds bounds = {};
     // Which node a drag is over and where it would land, so the placeholder
@@ -256,5 +298,30 @@ int DockPanelByName(const DockState* s, Str name);
 // Which Dock a node is in — the side whose tree it hangs under, or Center for
 // the area's own item. What a click on a collapsed dock's tab needs to know.
 DockPlacement DockPlacementOfNode(const DockState* s, int node);
+
+// Panel::visible: how many of a group's panels are shown, and the index of
+// the one that is active — a hidden panel sitting at `activeIx` falls back to
+// the first visible one, which is Rust's `active_panel`.
+int DockVisibleCount(const DockState* s, int node);
+int DockActiveIx(const DockState* s, int node);
+// TabPanel::is_locked: the area is locked, this group is the zoomed one, or
+// it is a root with no split above it.
+bool DockNodeLocked(const DockState* s, int node);
+// TabPanel::is_last_panel: this group shows one panel at most and no split
+// above it holds more than one child. The last panel of a dock is neither
+// draggable nor closable, so a dock can never be emptied by hand.
+bool DockIsLastPanel(const DockState* s, int node);
+// draggable() / droppable(): what the two guards above come to.
+bool DockNodeDraggable(const DockState* s, int node);
+bool DockNodeDroppable(const DockState* s, int node);
+// StackPanel::left_top_tab_panel / right_top_tab_panel: which group carries
+// each of the three dock toggle buttons. The right one follows the split's
+// axis — the last child across, the first one down — and the bottom toggle
+// belongs to the bottom Dock's own first group.
+int DockLeftTopTabs(const DockState* s, int node);
+int DockRightTopTabs(const DockState* s, int node);
+// Dock::set_collapsible: a dock that may not be collapsed is opened, so it
+// can never be left shut and unreachable.
+void DockSetCollapsible(DockState* s, DockPlacement p, bool collapsible);
 
 } // namespace gpui

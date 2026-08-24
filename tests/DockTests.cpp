@@ -273,8 +273,8 @@ static void ALayoutSurvivesDumpAndLoad() {
         state.nodes[state.nodes[state.center].children[0]];
     utassert(first.kind == PanelInfoKind::Tabs);
     utassert(first.activeIndex == 1);
-    utassert(StrEqI(state.nodes[first.children[0]].panelName,
-                    StrL("AlphaPanel")));
+    utassert(
+        StrEqI(state.nodes[first.children[0]].panelName, StrL("AlphaPanel")));
     utassert(state.left.present && !state.left.open);
     utassertnear(state.left.size, 210.f);
 
@@ -346,6 +346,77 @@ static void ALockedDockMovesNothing() {
     utassert(s.nodes[a].panel.len == 2);
 }
 
+// Panel::visible: a hidden panel has no tab, does not count towards the one
+// panel a group may not be emptied past, and is not the active panel even
+// when it sits at the active index.
+static void AHiddenPanelIsNotThere() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    utassert(DockVisibleCount(&s, a) == 2);
+    utassert(DockActiveIx(&s, a) == 0);
+    s.panels[s.nodes[a].panel[0]].visible = false;
+    utassert(DockVisibleCount(&s, a) == 1);
+    // `active_panel`: the first visible one stands in for the hidden one.
+    utassert(DockActiveIx(&s, a) == 1);
+}
+
+// TabPanel::is_locked / is_last_panel: the last visible panel of a dock is
+// neither draggable nor closable, and a group with no split above it is a
+// root that cannot be taken apart at all.
+static void TheLastPanelStays() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    // Two panels in `a`, and a split above it holding two children.
+    utassert(!DockIsLastPanel(&s, a));
+    utassert(DockNodeDraggable(&s, a));
+    // `b` holds one panel, but its split holds two children, so it is not
+    // the last panel — Rust walks the parent chain before it counts.
+    utassert(!DockIsLastPanel(&s, b));
+
+    // A lone group with nothing above it is both last and locked.
+    DockState solo;
+    DockPanelDef def;
+    def.title = StrL("only");
+    DockAddPanelDef(&solo, def);
+    int only = DockNewTabs(&solo);
+    DockTabsAdd(&solo, only, 0);
+    solo.center = only;
+    utassert(DockIsLastPanel(&solo, only));
+    utassert(DockNodeLocked(&solo, only));
+    utassert(!DockNodeDraggable(&solo, only));
+    utassert(!DockNodeDroppable(&solo, only));
+}
+
+// StackPanel::left_top_tab_panel / right_top_tab_panel: which group carries
+// each dock toggle. The right one follows the split's axis — the last child
+// across, the first one down.
+static void TheTogglesPickTheirGroup() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    utassert(DockLeftTopTabs(&s, s.center) == a);
+    utassert(DockRightTopTabs(&s, s.center) == b);
+    // Down the page instead: the top child answers for both.
+    s.nodes[s.center].axis = Axis::Vertical;
+    utassert(DockLeftTopTabs(&s, s.center) == a);
+    utassert(DockRightTopTabs(&s, s.center) == a);
+}
+
+// Dock::set_collapsible: a dock that may not be collapsed is opened by the
+// same call, so one shut beforehand cannot be left unreachable.
+static void ANonCollapsibleDockOpens() {
+    DockState s;
+    int a = 0, b = 0;
+    Seed(&s, &a, &b);
+    s.left.node = a;
+    s.left.open = false;
+    DockSetCollapsible(&s, DockPlacement::Left, false);
+    utassert(s.left.open);
+    utassert(!s.left.collapsible);
+}
+
 void TestDock() {
     TheFiveDropZones();
     ThePlaceholderCoversEachZone();
@@ -361,4 +432,8 @@ void TestDock() {
     ALayoutSurvivesDumpAndLoad();
     APanelNothingAnswersToBecomesInvalid();
     ALockedDockMovesNothing();
+    AHiddenPanelIsNotThere();
+    TheLastPanelStays();
+    TheTogglesPickTheirGroup();
+    ANonCollapsibleDockOpens();
 }

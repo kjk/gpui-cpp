@@ -344,6 +344,10 @@ static void DumpSide(const DockState* s, DockAreaState* out,
 
 void DockDump(const DockState* s, DockAreaState* out) {
     out->Clear();
+    // DockArea::version, written back as it came: a layout that named one
+    // keeps naming it, so whatever gates on it still can.
+    out->hasVersion = s->hasVersion;
+    out->version = s->version;
     out->center = DumpNode(s, out, s->center);
     DumpSide(s, out, s->left, DockPlacement::Left, &out->left);
     DumpSide(s, out, s->right, DockPlacement::Right, &out->right);
@@ -441,6 +445,8 @@ bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
     if (!s || !st || st->center < 0) {
         return false;
     }
+    s->hasVersion = st->hasVersion;
+    s->version = st->version;
     // The panels the host registered stay; the tree they were in does not.
     for (int i = 0; i < s->nodes.len; i++) {
         s->nodes[i] = DockNode{};

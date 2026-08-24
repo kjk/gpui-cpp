@@ -1608,8 +1608,14 @@ Str IconNamePath(IconName name) {
             return StrL("icons/panel-left-open.svg");
         case IconName::PanelLeftClose:
             return StrL("icons/panel-left-close.svg");
+        case IconName::PanelRight:
+            return StrL("icons/panel-right.svg");
         case IconName::PanelRightOpen:
             return StrL("icons/panel-right-open.svg");
+        case IconName::PanelBottom:
+            return StrL("icons/panel-bottom.svg");
+        case IconName::PanelBottomOpen:
+            return StrL("icons/panel-bottom-open.svg");
         case IconName::PanelRightClose:
             return StrL("icons/panel-right-close.svg");
         case IconName::Info:

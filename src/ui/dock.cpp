@@ -33,8 +33,7 @@ DockArea* DockArea::New(Ctx* cx, Str id, Entity<DockState> state) {
     return d;
 }
 
-static El* RenderNode(Ctx* cx, Str id, Entity<DockState> st, int node,
-                      int toolbarNode);
+static El* RenderNode(Ctx* cx, Str id, Entity<DockState> st, int node);
 
 // resize_handle: four pixels between two panels, or along the inner edge of a
 // Dock. `packed` is the node and the child it sits after, which is what the
@@ -76,37 +75,195 @@ static El* ToggleButton(Ctx* cx, Str bid, Entity<DockState> st, DockPlacement p,
     return e;
 }
 
-static El* RenderToolbar(Ctx* cx, Str id, Entity<DockState> st, bool trailing) {
+// render_dock_toggle_button: whether this group is the one carrying the
+// toggle for that side. Rust keeps the three answers on the DockArea and
+// refreshes them as the tree changes (`update_toggle_button_tab_panels`); the
+// tree is walked here instead, since a frame is where the question comes up
+// and the walk is a few nodes deep.
+static bool TogglesHere(DockState* s, int node, DockPlacement p) {
+    if (!s->toggleButtonVisible || s->zoomPanel >= 0) {
+        return false;
+    }
+    DockSide* side = DockSideOf(s, p);
+    if (!side || side->node < 0 || !side->collapsible) {
+        return false;
+    }
+    if (p == DockPlacement::Bottom) {
+        // The bottom toggle lives on the bottom Dock's own first group, which
+        // is what makes a collapsed bottom dock's strip usable.
+        return node == DockLeftTopTabs(s, s->bottom.node);
+    }
+    if (p == DockPlacement::Right) {
+        return node == DockRightTopTabs(s, s->center);
+    }
+    return node == DockLeftTopTabs(s, s->center);
+}
+
+// The leading pair — left and bottom — or the trailing one, right.
+static El* RenderToggles(Ctx* cx, Str id, Entity<DockState> st, int node,
+                         bool trailing) {
     Arena* a = cx->a;
     DockState* s = st.Get(cx);
-    El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(2)->PadX(4);
+    El* row = Div(a)->FlexRow()->ItemsCenter()->Shrink0()->Gap(4);
     if (trailing) {
-        if (s->right.node >= 0 && s->right.collapsible) {
+        if (TogglesHere(s, node, DockPlacement::Right)) {
             row->Child(ToggleButton(cx, StrDup(a, fmt("%s-toggle-right", id)),
                                     st, DockPlacement::Right,
-                                    s->right.open ? IconName::PanelRightClose
+                                    s->right.open ? IconName::PanelRight
                                                   : IconName::PanelRightOpen));
         }
         return row;
     }
-    if (s->left.node >= 0 && s->left.collapsible) {
+    if (TogglesHere(s, node, DockPlacement::Left)) {
         row->Child(ToggleButton(
             cx, StrDup(a, fmt("%s-toggle-left", id)), st, DockPlacement::Left,
-            s->left.open ? IconName::PanelLeftClose : IconName::PanelLeftOpen));
+            s->left.open ? IconName::PanelLeft : IconName::PanelLeftOpen));
     }
-    if (s->bottom.node >= 0 && s->bottom.collapsible) {
-        row->Child(ToggleButton(
-            cx, StrDup(a, fmt("%s-toggle-bottom", id)), st,
-            DockPlacement::Bottom,
-            s->bottom.open ? IconName::ChevronDown : IconName::ChevronUp));
+    if (TogglesHere(s, node, DockPlacement::Bottom)) {
+        row->Child(ToggleButton(cx, StrDup(a, fmt("%s-toggle-bottom", id)), st,
+                                DockPlacement::Bottom,
+                                s->bottom.open ? IconName::PanelBottom
+                                               : IconName::PanelBottomOpen));
     }
     return row;
 }
 
-// TabPanel::render. The tab bar, the active panel under it, and — while a tab
-// is being dragged over this group — the half of the box the drop would take.
-static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
-                      bool toolbar) {
+static bool HasLeadingToggles(DockState* s, int node) {
+    return TogglesHere(s, node, DockPlacement::Left) ||
+           TogglesHere(s, node, DockPlacement::Bottom);
+}
+
+// TabPanel::render_toolbar: the panel's zoom button — only where its
+// PanelControl says the toolbar is one of the places it shows — and the menu
+// beside it. A collapsed group draws neither.
+static El* RenderTools(Ctx* cx, Str id, Entity<DockState> st, int node,
+                       bool collapsed) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    DockState* s = st.Get(cx);
+    DockNode& n = s->nodes[node];
+    El* row = Div(a)->FlexRow()->ItemsCenter()->Shrink0()->Gap(4);
+    int activeIx = DockActiveIx(s, node);
+    if (collapsed || activeIx < 0) {
+        return row;
+    }
+    int panelIx = n.panel[activeIx];
+    const DockPanelDef& def = s->panels[panelIx];
+    bool zoomed = s->zoomPanel == panelIx;
+    // `zoomable_toolbar_visible`: a zoomed panel always shows the way back
+    // out, and Zoom In is on the bar only for Toolbar and Both.
+    if (zoomed || DockPanelControlToolbar(def.zoomable)) {
+        El* zoom =
+            Div(a)
+                ->Pad(4)
+                ->Radius(th.radius * 0.5f)
+                ->HoverBg(th.tokens.secondary)
+                ->Child(IconEl(a,
+                               zoomed ? IconName::Minimize : IconName::Maximize,
+                               14)
+                            ->Fg(th.mutedFg));
+        BindClick(zoom, StrDup(a, fmt("%s-zoom-%d", id, node)),
+                  ListenTo(st, &DockState::OnZoomClick, (intptr_t)panelIx));
+        zoom->TabStop(false);
+        row->Child(zoom);
+    }
+    // The menu button: the same two actions, where a narrow bar can still
+    // reach them.
+    Str menuId = StrDup(a, fmt("%s-menu-%d", id, node));
+    component::PopupMenu* menu = component::PopupMenu::New(cx, menuId);
+    menu->Menu(zoomed ? StrL("Zoom Out") : StrL("Zoom In"));
+    if (!DockPanelControlMenu(def.zoomable) && !zoomed) {
+        menu->Disabled(true);
+    }
+    // `closable`: the last panel of a dock has no Close, so a dock cannot be
+    // emptied by hand.
+    if (def.closable && !DockIsLastPanel(s, node) && !DockNodeLocked(s, node)) {
+        menu->Separator()->Menu(StrL("Close"));
+    }
+    if (PopupMenuState* ms = menu->state.Get(cx)) {
+        // The menu hands its listener the row that was taken, so the node
+        // travels the only other way it can: the group that has the menu open
+        // says so as it builds it.
+        ms->onConfirm = ListenTo(st, &DockState::OnMenuItem);
+        if (ms->open) {
+            s->menuNode = node;
+        }
+    }
+    row->Child(component::DropdownMenu::New(cx, menuId)
+                   ->Trigger(component::Button::New(cx, menuId)
+                                 ->Icon(IconName::Ellipsis)
+                                 ->Ghost()
+                                 ->Compact()
+                                 ->WithSize(UiSize::XSmall)
+                                 ->TabStop(false)
+                                 ->IntoEl())
+                   ->Menu(menu)
+                   ->AnchorRight()
+                   ->IntoEl());
+    return row;
+}
+
+// The single-panel branch of render_title_bar: with PanelStyle::Auto — the
+// default — a group showing one panel is a plain 30-DIP title row with no tab
+// chrome at all, and the title itself is what a drag picks up.
+static El* RenderTitleRow(Ctx* cx, Str id, Entity<DockState> st, int node,
+                          bool collapsed) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    DockState* s = st.Get(cx);
+    DockNode& n = s->nodes[node];
+    int activeIx = DockActiveIx(s, node);
+    if (activeIx < 0) {
+        return Div(a);
+    }
+    int panelIx = n.panel[activeIx];
+    const DockPanelDef& def = s->panels[panelIx];
+    bool leading = HasLeadingToggles(s, node);
+    bool trailing = TogglesHere(s, node, DockPlacement::Right);
+    El* row = Div(a)
+                  ->FlexRow()
+                  ->ItemsCenter()
+                  ->JustifyBetween()
+                  ->W(kFill)
+                  ->H(30)
+                  ->PadY(8)
+                  ->PadL(leading ? 8.f : 12.f)
+                  ->PadR(8);
+    if (leading) {
+        row->Child(RenderToggles(cx, id, st, node, false));
+    }
+    El* title =
+        Div(a)->Flex1()->MinW(64)->ClipX()->Child(TextEl(a, def.title)
+                                                      ->Font(14)
+                                                      ->Truncate()
+                                                      ->Fg(th.foreground)
+                                                      ->LineHeight(1.f));
+    if (DockNodeDraggable(s, node)) {
+        title->Id(StrDup(a, fmt("%s-title-%d", id, node)))
+            ->OnDrag(kDockPanelDrag, panelIx)
+            ->OnDragMove(ListenTo(st, &DockState::OnTabDragMove))
+            ->OnMouseUpOut(ListenTo(st, &DockState::OnTabDragEnd))
+            ->OnMouseUp(ListenTo(st, &DockState::OnTabDragEnd));
+    }
+    row->Child(title);
+    if (!collapsed && def.titleSuffix) {
+        if (El* suffix = def.titleSuffix(cx, def.data)) {
+            row->Child(suffix->Shrink0());
+        }
+    }
+    El* tools = Div(a)->FlexRow()->ItemsCenter()->Shrink0()->Gap(4);
+    tools->Child(RenderTools(cx, id, st, node, collapsed));
+    if (trailing) {
+        tools->Child(RenderToggles(cx, id, st, node, true));
+    }
+    row->Child(tools);
+    return row;
+}
+
+// TabPanel::render. The tab bar — or the plain title row a lone panel gets —
+// the active panel under it, and, while a tab is being dragged over this
+// group, the half of the box the drop would take.
+static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     DockState* s = st.Get(cx);
@@ -117,6 +274,9 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     // what opens the Dock again.
     DockSide* side = DockSideOf(s, DockPlacementOfNode(s, node));
     bool collapsed = side && !side->open;
+    bool droppable = DockNodeDroppable(s, node);
+    bool draggable = DockNodeDraggable(s, node);
+    int activeIx = DockActiveIx(s, node);
 
     El* box = Div(a)->FlexCol()->SizeFull();
     // The group is its own drop target, and its box is what decides which of
@@ -125,201 +285,170 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
     box->OnDrop(kDockPanelDrag,
                 ListenTo(st, &DockState::OnDropPanel, (intptr_t)node));
 
-    El* bar = Div(a)
-                  ->FlexRow()
-                  ->ItemsCenter()
-                  ->W(kFill)
-                  ->H(kDockTabBarH)
-                  ->Bg(th.tokens.tabBar)
-                  ->BorderB(1, th.border);
-    if (toolbar) {
-        bar->Child(RenderToolbar(cx, id, st, false));
-    }
-    // TabBar::track_scroll: a row of tabs wider than the bar scrolls sideways
-    // rather than being squeezed, and the wheel over it moves it. The tab
-    // just made active is brought into view from where last frame put it,
-    // which is scroll_to_item.
-    if (n.pendingScrollIx >= 0) {
-        if (n.activeTabBoundsIx == n.pendingScrollIx) {
-            n.tabScrollX = DockTabScrollTo(n.tabScrollX, n.tabStripBounds,
-                                           n.activeTabBounds);
-            n.pendingScrollIx = -1;
-        } else {
-            // Its box is measured by this frame; the scroll is worked out on
-            // the next one, which is why one is asked for.
-            WindowRequestAnimationFrame(cx->win);
-        }
-    }
-    Str scrollId = StrDup(a, fmt("%s-tabscroll-%d", id, node));
-    El* strip = Div(a)
-                    ->FlexRow()
-                    ->ItemsCenter()
-                    ->Flex1()
-                    ->H(kFill)
-                    ->MinW(0)
-                    ->ClipX()
-                    ->ScrollX(n.tabScrollX)
-                    ->HideScrollbar()
-                    ->ScrollId(HashClickId(scrollId))
-                    ->OnScroll(ListenTo(st, &DockState::OnTabBarScroll,
-                                        (intptr_t)node));
-    strip->BoundsOut(&n.tabStripBounds);
-    for (int i = 0; i < n.panel.len; i++) {
-        int panelIx = n.panel[i];
-        const DockPanelDef& def = s->panels[panelIx];
-        bool on = i == n.activeIx;
-        // A tab keeps its own width: a row too wide for the bar scrolls
-        // rather than squeezing its labels.
-        El* tab = Div(a)
+    // `visible_panels.len() == 1 && panel_style == PanelStyle::default()`.
+    if (DockVisibleCount(s, node) == 1 &&
+        s->panelStyle == DockPanelStyle::Auto) {
+        box->Child(RenderTitleRow(cx, id, st, node, collapsed));
+    } else {
+        El* bar = Div(a)
                       ->FlexRow()
                       ->ItemsCenter()
-                      ->Shrink0()
-                      ->Gap(4)
-                      ->PadX(10)
-                      ->H(kFill)
-                      ->Bg(on ? th.tabActiveBg : th.tabBar);
-        if (i > 0) {
-            tab->BorderL(1, th.border);
+                      ->W(kFill)
+                      ->H(kDockTabBarH)
+                      ->Bg(th.tokens.tabBar)
+                      ->BorderB(1, th.border);
+        if (HasLeadingToggles(s, node)) {
+            bar->Child(RenderToggles(cx, id, st, node, false)->PadX(8));
         }
-        BindClick(tab, StrDup(a, fmt("%s-tab-%d-%d", id, node, i)),
-                  ListenTo(st, &DockState::OnTabClick, DockPack(node, i)));
-        // on_drag(DragPanel::new(..)): the tab is what a press picks up, and
-        // the moves that follow say where it would land.
-        if (!s->locked) {
-            tab->OnDrag(kDockPanelDrag, panelIx);
-            tab->OnDragMove(ListenTo(st, &DockState::OnTabDragMove));
-            tab->OnMouseUpOut(ListenTo(st, &DockState::OnTabDragEnd));
-            tab->OnMouseUp(ListenTo(st, &DockState::OnTabDragEnd));
+        // TabBar::track_scroll: a row of tabs wider than the bar scrolls
+        // sideways rather than being squeezed, and the wheel over it moves it.
+        // The tab just made active is brought into view from where last frame
+        // put it, which is scroll_to_item.
+        if (n.pendingScrollIx >= 0) {
+            if (n.activeTabBoundsIx == n.pendingScrollIx) {
+                n.tabScrollX = DockTabScrollTo(n.tabScrollX, n.tabStripBounds,
+                                               n.activeTabBounds);
+                n.pendingScrollIx = -1;
+            } else {
+                // Its box is measured by this frame; the scroll is worked out
+                // on the next one, which is why one is asked for.
+                WindowRequestAnimationFrame(cx->win);
+            }
         }
-        // Every tab is a drop target of its own: a panel let go over one
-        // takes that place in the row, which is what makes a tab reorder.
-        // Rust marks the tab it would land before with a border down its left
-        // edge while the drag is over it.
-        if (!s->locked) {
-            Str dropId = StrDup(a, fmt("%s-tabdrop-%d-%d", id, node, i));
-            tab->Id(dropId)
-                ->OnDrop(kDockPanelDrag, ListenTo(st, &DockState::OnDropTab,
-                                                  DockPack(node, i)));
+        Str scrollId = StrDup(a, fmt("%s-tabscroll-%d", id, node));
+        El* strip = Div(a)
+                        ->FlexRow()
+                        ->ItemsCenter()
+                        ->Flex1()
+                        ->H(kFill)
+                        ->MinW(0)
+                        ->ClipX()
+                        ->ScrollX(n.tabScrollX)
+                        ->HideScrollbar()
+                        ->ScrollId(HashClickId(scrollId))
+                        ->OnScroll(ListenTo(st, &DockState::OnTabBarScroll,
+                                            (intptr_t)node));
+        strip->BoundsOut(&n.tabStripBounds);
+        for (int i = 0; i < n.panel.len; i++) {
+            int panelIx = n.panel[i];
+            const DockPanelDef& def = s->panels[panelIx];
+            // A hidden panel has no tab at all.
+            if (!def.visible) {
+                continue;
+            }
+            // "Always not show active tab style, if the panel is collapsed".
+            bool on = i == activeIx && !collapsed;
+            // A tab keeps its own width: a row too wide for the bar scrolls
+            // rather than squeezing its labels.
+            El* tab = Div(a)
+                          ->FlexRow()
+                          ->ItemsCenter()
+                          ->Shrink0()
+                          ->Gap(4)
+                          ->PadX(10)
+                          ->H(kFill)
+                          ->Bg(on ? th.tabActiveBg : th.tabBar);
+            if (i > 0) {
+                tab->BorderL(1, th.border);
+            }
+            BindClick(tab, StrDup(a, fmt("%s-tab-%d-%d", id, node, i)),
+                      ListenTo(st, &DockState::OnTabClick, DockPack(node, i)));
+            // `when(!droppable, ..)`, where that local is `self.collapsed`: a
+            // shut dock's tabs neither pick up nor take a drag, they only
+            // click to open it again.
+            if (!collapsed) {
+                // on_drag(DragPanel::new(..)): the tab is what a press picks
+                // up, and the moves that follow say where it would land.
+                if (draggable) {
+                    tab->OnDrag(kDockPanelDrag, panelIx);
+                    tab->OnDragMove(ListenTo(st, &DockState::OnTabDragMove));
+                    tab->OnMouseUpOut(ListenTo(st, &DockState::OnTabDragEnd));
+                    tab->OnMouseUp(ListenTo(st, &DockState::OnTabDragEnd));
+                }
+                // Every tab is a drop target of its own: a panel let go over
+                // one takes that place in the row, which is what makes a tab
+                // reorder. Rust marks the tab it would land before with a
+                // border down its left edge while the drag is over it.
+                if (droppable) {
+                    Str dropId =
+                        StrDup(a, fmt("%s-tabdrop-%d-%d", id, node, i));
+                    tab->Id(dropId)->OnDrop(
+                        kDockPanelDrag,
+                        ListenTo(st, &DockState::OnDropTab, DockPack(node, i)));
+                    const DragPayload* drag = WindowActiveDrag(cx);
+                    if (drag && StrSame(drag->kind, kDockPanelDrag) &&
+                        WindowDragOverId(cx) == HashClickId(dropId)) {
+                        tab->BorderL(2, th.primary);
+                    }
+                }
+            }
+            // Tab::new().label(..): a tab's label is the tab bar's own size,
+            // which is text_sm at Medium. `tab_name` is the short form a panel
+            // offers for the bar; the title is the fallback.
+            Str label = def.tabName.s ? def.tabName : def.title;
+            tab->Child(TextEl(a, label)
+                           ->Font(14)
+                           ->Fg(on ? th.tabActiveFg : th.tabFg)
+                           ->LineHeight(1.f));
+            if (def.closable && !DockIsLastPanel(s, node) &&
+                !DockNodeLocked(s, node)) {
+                El* x = Div(a)
+                            ->Pad(2)
+                            ->Radius(th.radius * 0.5f)
+                            ->HoverBg(th.tokens.secondary)
+                            ->Child(IconEl(a, IconName::X, 12)->Fg(th.mutedFg));
+                BindClick(
+                    x, StrDup(a, fmt("%s-close-%d-%d", id, node, i)),
+                    ListenTo(st, &DockState::OnCloseClick, DockPack(node, i)));
+                tab->Child(x);
+            }
+            if (on) {
+                tab->BoundsOut(&n.activeTabBounds);
+                n.activeTabBoundsIx = i;
+            }
+            strip->Child(tab);
+        }
+        // last_empty_space: the run of bar past the last tab, which takes a
+        // drop as "put it at the end" and lights up while a panel is over it.
+        El* rest = Div(a)->Flex1()->H(kFill)->MinW(64);
+        if (droppable && !collapsed) {
+            Str restId = StrDup(a, fmt("%s-tabrest-%d", id, node));
+            rest->Id(restId)
+                ->OnDrop(kDockPanelDrag, ListenTo(st, &DockState::OnDropTabBar,
+                                                  (intptr_t)node));
             const DragPayload* drag = WindowActiveDrag(cx);
             if (drag && StrSame(drag->kind, kDockPanelDrag) &&
-                WindowDragOverId(cx) == HashClickId(dropId)) {
-                tab->BorderL(2, th.primary);
+                WindowDragOverId(cx) == HashClickId(restId)) {
+                rest->Bg(BackgroundOpacity(th.tokens.primary, 0.2f));
             }
         }
-        // Tab::new().label(..): a tab's label is the tab bar's own size,
-        // which is text_sm at Medium.
-        tab->Child(TextEl(a, def.title)
-                       ->Font(14)
-                       ->Fg(on ? th.tabActiveFg : th.tabFg)
-                       ->LineHeight(1.f));
-        if (def.closable) {
-            El* x = Div(a)
-                        ->Pad(2)
-                        ->Radius(th.radius * 0.5f)
-                        ->HoverBg(th.tokens.secondary)
-                        ->Child(IconEl(a, IconName::X, 12)->Fg(th.mutedFg));
-            BindClick(
-                x, StrDup(a, fmt("%s-close-%d-%d", id, node, i)),
-                ListenTo(st, &DockState::OnCloseClick, DockPack(node, i)));
-            tab->Child(x);
-        }
-        if (on) {
-            tab->BoundsOut(&n.activeTabBounds);
-            n.activeTabBoundsIx = i;
-        }
-        strip->Child(tab);
-    }
-    // last_empty_space: the run of bar past the last tab, which takes a drop
-    // as "put it at the end" and lights up while a panel is over it.
-    El* rest = Div(a)->Flex1()->H(kFill)->MinW(64);
-    (void)0;
-    if (!s->locked) {
-        Str restId = StrDup(a, fmt("%s-tabrest-%d", id, node));
-        rest->Id(restId)
-            ->OnDrop(kDockPanelDrag,
-                     ListenTo(st, &DockState::OnDropTabBar, (intptr_t)node));
-        const DragPayload* drag = WindowActiveDrag(cx);
-        if (drag && StrSame(drag->kind, kDockPanelDrag) &&
-            WindowDragOverId(cx) == HashClickId(restId)) {
-            rest->Bg(BackgroundOpacity(th.tokens.primary, 0.2f));
-        }
-    }
-    strip->Child(rest);
-    bar->Child(strip);
-    // `.children(panel.title_suffix(..))`: the active panel's own bar
-    // content, after the tabs and before the group's own buttons.
-    if (!collapsed && n.panel.len > 0) {
-        const DockPanelDef& def = s->panels[n.panel[n.activeIx]];
-        if (def.titleSuffix) {
-            if (El* suffix = def.titleSuffix(cx, def.data)) {
-                bar->Child(suffix->Shrink0());
+        strip->Child(rest);
+        bar->Child(strip);
+        // `.when(!self.collapsed, |this| this.suffix(..))`: the active panel's
+        // own bar content, then the group's tools, then the right dock's
+        // toggle.
+        if (!collapsed) {
+            if (activeIx >= 0) {
+                const DockPanelDef& def = s->panels[n.panel[activeIx]];
+                if (def.titleSuffix) {
+                    if (El* suffix = def.titleSuffix(cx, def.data)) {
+                        bar->Child(suffix->Shrink0());
+                    }
+                }
+            }
+            bar->Child(RenderTools(cx, id, st, node, collapsed));
+            if (TogglesHere(s, node, DockPlacement::Right)) {
+                bar->Child(RenderToggles(cx, id, st, node, true)->PadX(8));
             }
         }
+        box->Child(bar);
     }
-    if (!collapsed && n.panel.len > 0 &&
-        s->panels[n.panel[n.activeIx]].zoomable) {
-        int panelIx = n.panel[n.activeIx];
-        El* zoom =
-            Div(a)
-                ->Pad(4)
-                ->Radius(th.radius * 0.5f)
-                ->HoverBg(th.tokens.secondary)
-                ->Child(IconEl(a,
-                               s->zoomPanel == panelIx ? IconName::Minimize
-                                                       : IconName::Maximize,
-                               14)
-                            ->Fg(th.mutedFg));
-        BindClick(zoom, StrDup(a, fmt("%s-zoom-%d", id, node)),
-                  ListenTo(st, &DockState::OnZoomClick, (intptr_t)panelIx));
-        zoom->TabStop(false);
-        bar->Child(zoom);
-    }
-    // TabPanel::render_toolbar's menu button: the same two actions the
-    // toolbar has, where a narrow tab bar can still reach them.
-    if (!collapsed && n.panel.len > 0) {
-        int panelIx = n.panel[n.activeIx];
-        const DockPanelDef& def = s->panels[panelIx];
-        bool zoomed = s->zoomPanel == panelIx;
-        Str menuId = StrDup(a, fmt("%s-menu-%d", id, node));
-        component::PopupMenu* menu = component::PopupMenu::New(cx, menuId);
-        menu->Menu(zoomed ? StrL("Zoom Out") : StrL("Zoom In"));
-        if (!def.zoomable) {
-            menu->Disabled(true);
-        }
-        if (def.closable) {
-            menu->Separator()->Menu(StrL("Close"));
-        }
-        if (PopupMenuState* ms = menu->state.Get(cx)) {
-            // The menu hands its listener the row that was taken, so the node
-            // travels the only other way it can: the group that has the menu
-            // open says so as it builds it.
-            ms->onConfirm = ListenTo(st, &DockState::OnMenuItem);
-            if (ms->open) {
-                s->menuNode = node;
-            }
-        }
-        bar->Child(component::DropdownMenu::New(cx, menuId)
-                       ->Trigger(component::Button::New(cx, menuId)
-                                     ->Icon(IconName::Ellipsis)
-                                     ->Ghost()
-                                     ->Compact()
-                                     ->WithSize(UiSize::XSmall)
-                                     ->TabStop(false)
-                                     ->IntoEl())
-                       ->Menu(menu)
-                       ->AnchorRight()
-                       ->IntoEl());
-    }
-    if (toolbar) {
-        bar->Child(RenderToolbar(cx, id, st, true));
-    }
-    box->Child(bar);
 
     if (!collapsed) {
         El* body = Div(a)->FlexCol()->Flex1()->W(kFill)->ClipY()->Bg(
             th.tokens.background);
-        if (n.panel.len > 0) {
-            const DockPanelDef& def = s->panels[n.panel[n.activeIx]];
+        if (activeIx >= 0) {
+            const DockPanelDef& def = s->panels[n.panel[activeIx]];
             if (def.render) {
                 body->Child(def.render(cx, def.data));
             }
@@ -344,8 +473,7 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node,
 
 // StackPanel: the children along the axis, each at the size the last drag
 // left it, with a handle between every pair.
-static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
-                       int toolbarNode) {
+static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node) {
     Arena* a = cx->a;
     DockState* s = st.Get(cx);
     DockNode& n = s->nodes[node];
@@ -373,7 +501,7 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
         } else {
             wrap->H(n.size[i])->W(kFill);
         }
-        wrap->Child(RenderNode(cx, id, st, n.child[i], toolbarNode));
+        wrap->Child(RenderNode(cx, id, st, n.child[i]));
         box->Child(wrap);
         if (i < n.child.len - 1) {
             box->Child(
@@ -384,16 +512,15 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node,
     return box;
 }
 
-static El* RenderNode(Ctx* cx, Str id, Entity<DockState> st, int node,
-                      int toolbarNode) {
+static El* RenderNode(Ctx* cx, Str id, Entity<DockState> st, int node) {
     DockState* s = st.Get(cx);
     if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
         return Div(cx->a)->SizeFull();
     }
     if (s->nodes[node].split) {
-        return RenderSplit(cx, id, st, node, toolbarNode);
+        return RenderSplit(cx, id, st, node);
     }
-    return RenderTabs(cx, id, st, node, node == toolbarNode);
+    return RenderTabs(cx, id, st, node);
 }
 
 // TabPanel::render_drag_panel: what follows the pointer while a tab is being
@@ -432,25 +559,6 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
         ->Deferred();
 }
 
-// Which tab group carries the toggle buttons: the first one in the centre
-// item, which is where Rust's `toggle_button_panels` ends up for a plain
-// left-to-right layout.
-static int FirstTabsNode(const DockState* s, int node) {
-    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
-        return -1;
-    }
-    if (!s->nodes[node].split) {
-        return node;
-    }
-    for (int i = 0; i < s->nodes[node].child.len; i++) {
-        int found = FirstTabsNode(s, s->nodes[node].child[i]);
-        if (found >= 0) {
-            return found;
-        }
-    }
-    return -1;
-}
-
 El* DockArea::IntoEl() {
     const Theme& th = cx->theme();
     DockState* s = state.Get(cx);
@@ -464,23 +572,21 @@ El* DockArea::IntoEl() {
     if (s->zoomPanel >= 0) {
         int node = DockNodeOfPanel(s, s->zoomPanel);
         if (node >= 0) {
-            box->Child(RenderTabs(cx, id, state, node, false));
+            box->Child(RenderTabs(cx, id, state, node));
             return box;
         }
         s->zoomPanel = -1;
     }
 
-    int toolbarNode = FirstTabsNode(s, s->center);
     El* row = Div(a)->FlexRow()->Flex1()->W(kFill);
     if (s->left.node >= 0 && s->left.open) {
         El* dock = Div(a)->FlexRow()->W(s->left.size)->H(kFill);
-        dock->Child(
-            Div(a)
-                ->FlexCol()
-                ->Flex1()
-                ->H(kFill)
-                ->BorderR(1, th.border)
-                ->Child(RenderNode(cx, id, state, s->left.node, toolbarNode)));
+        dock->Child(Div(a)
+                        ->FlexCol()
+                        ->Flex1()
+                        ->H(kFill)
+                        ->BorderR(1, th.border)
+                        ->Child(RenderNode(cx, id, state, s->left.node)));
         dock->Child(
             ResizeHandle(cx, StrDup(a, fmt("%s-dock-left", id)), state,
                          DockPack(kDockSideBase + (int)DockPlacement::Left, 0),
@@ -488,20 +594,19 @@ El* DockArea::IntoEl() {
         row->Child(dock);
     }
     row->Child(Div(a)->FlexCol()->Flex1()->H(kFill)->Child(
-        RenderNode(cx, id, state, s->center, toolbarNode)));
+        RenderNode(cx, id, state, s->center)));
     if (s->right.node >= 0 && s->right.open) {
         El* dock = Div(a)->FlexRow()->W(s->right.size)->H(kFill);
         dock->Child(
             ResizeHandle(cx, StrDup(a, fmt("%s-dock-right", id)), state,
                          DockPack(kDockSideBase + (int)DockPlacement::Right, 0),
                          Axis::Horizontal));
-        dock->Child(
-            Div(a)
-                ->FlexCol()
-                ->Flex1()
-                ->H(kFill)
-                ->BorderL(1, th.border)
-                ->Child(RenderNode(cx, id, state, s->right.node, toolbarNode)));
+        dock->Child(Div(a)
+                        ->FlexCol()
+                        ->Flex1()
+                        ->H(kFill)
+                        ->BorderL(1, th.border)
+                        ->Child(RenderNode(cx, id, state, s->right.node)));
         row->Child(dock);
     }
     box->Child(row);
@@ -523,7 +628,7 @@ El* DockArea::IntoEl() {
                 Axis::Vertical));
         }
         dock->Child(Div(a)->FlexCol()->Flex1()->W(kFill)->Child(
-            RenderNode(cx, id, state, s->bottom.node, toolbarNode)));
+            RenderNode(cx, id, state, s->bottom.node)));
         box->Child(dock);
     }
     return box;
