@@ -25,3 +25,4 @@ build/
 *.VC.db
 *.VC.opendb
 /target/state.json
+/docks.json
