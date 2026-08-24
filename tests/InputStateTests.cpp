@@ -272,6 +272,115 @@ static void DeleteToWordAndLineBoundaries() {
     utassert(ValueIs(s, "hello"));
 }
 
+static void TypeChars(InputState* s, const char* text) {
+    for (const char* p = text; *p; p++) {
+        InputTypeChar(s, nullptr, nullptr, (uint32_t)(uint8_t)*p);
+    }
+}
+
+static bool Menu(InputState* s, InputAction action) {
+    return InputCompletionAction(s, nullptr, nullptr, action);
+}
+
+static bool Menu2(InputState* s, InputAction action) {
+    return InputCodeActionAction(s, nullptr, nullptr, action);
+}
+
+// ─── apply_lsp_edits ─────────────────────────────────────────────────────
+
+// A list of edits is one undo step, and each one is resolved against the
+// document the ones before it left — which is why a server sends them
+// last-first.
+static void AnEditListIsOneStep() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("hello world"));
+    TextEditItem edits[2] = {};
+    edits[0].range = Selection{6, 11};
+    edits[0].newText = StrL("there");
+    edits[1].range = Selection{0, 5};
+    edits[1].newText = StrL("goodbye");
+    InputApplyEdits(&s, nullptr, nullptr, edits, 2);
+    utassert(ValueIs(s, "goodbye there"));
+    // Each edit is its own step, the way Rust's loop over
+    // `replace_text_in_range_silent` records them; the Atomic intent is what
+    // keeps them from coalescing with the typing around them.
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "hello there"));
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "hello world"));
+}
+
+// An action that is more than one edit: the pair is what the menu performs,
+// and the single-edit shorthand is what it falls back to.
+static int WrappingAction(void* data, Arena* a, Str text, Selection sel,
+                          CodeActionItem* out, int cap) {
+    (void)data;
+    (void)text;
+    if (sel.IsEmpty() || cap < 1) {
+        return 0;
+    }
+    auto* edits = (TextEditItem*)Alloc(a, (int)sizeof(TextEditItem) * 2);
+    edits[0].range = Selection{sel.end, sel.end};
+    edits[0].newText = StrL(")");
+    edits[1].range = Selection{sel.start, sel.start};
+    edits[1].newText = StrL("(");
+    out[0].title = StrL("Wrap in Parentheses");
+    out[0].edits = edits;
+    out[0].nEdits = 2;
+    return 1;
+}
+
+static void ACodeActionCanBeMoreThanOneEdit() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.codeActionProvider = &WrappingAction;
+    InputSetValue(&s, StrL("hello world"));
+    InputSetSelectedRange(&s, nullptr, nullptr, 6, 11);
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(s.codeActions.open && s.codeActions.items.len == 1);
+    utassert(Menu2(&s, InputAction::Enter));
+    utassert(ValueIs(s, "hello (world)"));
+    utassert(!s.codeActions.open);
+    // Two edits, two steps.
+    Act(&s, InputAction::Undo);
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "hello world"));
+}
+
+// additionalTextEdits: accepting the item writes at the caret *and* wherever
+// else the item said, as one step.
+static const TextEditItem kTestImport = {{0, 0}, StrL("import\n")};
+
+static int ImportingCompletions(void* data, Str text, int offset, Str query,
+                                CompletionItem* out, int cap) {
+    (void)data;
+    (void)text;
+    (void)offset;
+    (void)query;
+    if (cap <= 0) {
+        return 0;
+    }
+    out[0].label = StrL("unwrap");
+    out[0].additionalEdits = &kTestImport;
+    out[0].nAdditionalEdits = 1;
+    return 1;
+}
+
+static void AnAcceptedItemBringsItsImport() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &ImportingCompletions;
+    InputTypeChar(&s, nullptr, nullptr, 'u');
+    utassert(s.completion.open);
+    utassert(Menu(&s, InputAction::Enter));
+    utassert(ValueIs(s, "import\nunwrap"));
+    // The insert and the edit it brought are a step each.
+    Act(&s, InputAction::Undo);
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "u"));
+}
+
 // ─── the rest of the completion surface (lsp/completions.rs) ─────────────
 
 static int gCompleteCalls = 0;
@@ -1237,20 +1346,6 @@ static int Complete(void* data, Str, int, Str query, CompletionItem* out,
     return n;
 }
 
-static void TypeChars(InputState* s, const char* text) {
-    for (const char* p = text; *p; p++) {
-        InputTypeChar(s, nullptr, nullptr, (uint32_t)(uint8_t)*p);
-    }
-}
-
-static bool Menu(InputState* s, InputAction action) {
-    return InputCompletionAction(s, nullptr, nullptr, action);
-}
-
-static bool Menu2(InputState* s, InputAction action) {
-    return InputCodeActionAction(s, nullptr, nullptr, action);
-}
-
 static void TypingAWordOpensTheMenu() {
     int asked = 0;
     InputState s;
@@ -1476,6 +1571,9 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    AnEditListIsOneStep();
+    ACodeActionCanBeMoreThanOneEdit();
+    AnAcceptedItemBringsItsImport();
     TheProviderSaysWhenTheMenuOpens();
     DocumentationIsResolvedOnce();
     TheSuggestionWaitsForTheDebounce();

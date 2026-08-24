@@ -2261,8 +2261,26 @@ void InputAcceptCompletion(InputState* s, App* app, Window* win) {
     range.start = s->completion.triggerStart >= 0 ? s->completion.triggerStart
                                                   : InputCursor(s);
     range.end = InputCursor(s);
+    // `additionalTextEdits` go in with it — the import a name needs, at the
+    // top of the document, while the name goes in at the caret. Both the
+    // item's strings and its edits live in the menu's arena, so they are
+    // copied out before it is dismissed.
+    const int kMaxEdits = 32;
+    TextEditItem edits[kMaxEdits];
+    int n = 0;
+    edits[n].range = range;
+    edits[n].newText = StrDup(GetTempArena(), text);
+    n++;
+    for (int i = 0; i < item.nAdditionalEdits && n < kMaxEdits; i++, n++) {
+        edits[n] = item.additionalEdits[i];
+        edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
+    }
     InputDismissCompletion(s);
-    InputReplaceTextInRange(s, app, win, &range, text);
+    if (n == 1) {
+        InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
+        return;
+    }
+    InputApplyEdits(s, app, win, edits, n);
 }
 
 bool InputCompletionAction(InputState* s, App* app, Window* win,
@@ -2756,6 +2774,36 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
     Notify(app, win);
 }
 
+void InputApplyEdits(InputState* s, App* app, Window* win,
+                     const TextEditItem* edits, int n) {
+    if (!s || !edits || n <= 0) {
+        return;
+    }
+    // Each edit is its own undo step, which is what Rust's loop over
+    // `replace_text_in_range_silent` records: `silent` suppresses the
+    // completion trigger and says nothing about the history. The Atomic
+    // intent is what keeps them from coalescing with the typing around them.
+    for (int i = 0; i < n; i++) {
+        s->undo.hasPendingIntent = true;
+        s->undo.pendingIntent = EditIntent::Atomic;
+        Str text = InputValue(s);
+        Selection range = edits[i].range;
+        if (range.start < 0) {
+            range.start = 0;
+        }
+        if (range.end > text.len) {
+            range.end = text.len;
+        }
+        if (range.end < range.start) {
+            range.end = range.start;
+        }
+        // The replacement is copied out: it may point into the document this
+        // edit is about to rewrite.
+        Str newText = StrDup(GetTempArena(), edits[i].newText);
+        InputReplaceTextInRange(s, app, win, &range, newText);
+    }
+}
+
 void InputPerformCodeAction(InputState* s, App* app, Window* win) {
     if (!s || !s->codeActions.open) {
         return;
@@ -2767,23 +2815,23 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
     // The item is copied out: dismissing the menu is what frees the arena its
     // strings were written into.
     CodeActionItem item = s->codeActions.items[ix];
-    Str text = InputValue(s);
-    Selection range = item.range;
-    if (range.start < 0) {
-        range.start = 0;
+    // The edits are in the menu's arena, which dismissing it frees, so they
+    // are copied out first.
+    const int kMaxEdits = 32;
+    TextEditItem edits[kMaxEdits];
+    int n = 0;
+    if (item.nEdits > 0 && item.edits) {
+        for (; n < item.nEdits && n < kMaxEdits; n++) {
+            edits[n] = item.edits[n];
+            edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
+        }
+    } else {
+        edits[0].range = item.range;
+        edits[0].newText = StrDup(GetTempArena(), item.newText);
+        n = 1;
     }
-    if (range.end > text.len) {
-        range.end = text.len;
-    }
-    if (range.end < range.start) {
-        range.end = range.start;
-    }
-    // apply_lsp_edits: one edit, as one undo step.
-    s->undo.hasPendingIntent = true;
-    s->undo.pendingIntent = EditIntent::Atomic;
-    Str newText = StrDup(GetTempArena(), item.newText);
     InputDismissCodeActions(s);
-    InputReplaceTextInRange(s, app, win, &range, newText);
+    InputApplyEdits(s, app, win, edits, n);
     Notify(app, win);
 }
 

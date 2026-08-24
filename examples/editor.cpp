@@ -271,6 +271,15 @@ static CompletionItem gItems[kMaxItems];
 static int gNItems = 0;
 static Arena* gItemArena = nullptr;
 
+// CompletionProvider::resolve_completions — completionItem/resolve. The menu
+// asks about the item the selection is on; this looks its documentation up in
+// the same table the items came from.
+// `additionalTextEdits`: what else accepting an item writes. A name that
+// needs an import is the case the protocol has in mind, so `unwrap` brings
+// its own line in at the top of the document — the caret's insert and this
+// go in together, as one undo step.
+static const TextEditItem kUseImport = {{0, 0}, StrL("use std::result;\n")};
+
 static void LoadCompletionItems() {
     if (gNItems > 0) {
         return;
@@ -336,14 +345,17 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
         // thousand of them: the documentation is left for `resolve` to fill
         // in when one is looked at.
         out[n].documentation = Str{};
+        // One item brings an import with it, which is what
+        // `additionalTextEdits` is for.
+        if (item.label.len == 6 && memcmp(item.label.s, "unwrap", 6) == 0) {
+            out[n].additionalEdits = &kUseImport;
+            out[n].nAdditionalEdits = 1;
+        }
         n++;
     }
     return n;
 }
 
-// CompletionProvider::resolve_completions — completionItem/resolve. The menu
-// asks about the item the selection is on; this looks its documentation up in
-// the same table the items came from.
 static Str ResolveCompletion(void*, Arena* a, const CompletionItem* item) {
     (void)a;
     LoadCompletionItems();
@@ -603,6 +615,23 @@ static int CodeActionsFor(void*, Arena* a, Str text, Selection sel,
         out[n].range = sel;
         out[n].newText = CaseMapped(a, selected, i);
         n++;
+    }
+    // One action that is more than one edit, which is what a WorkspaceEdit
+    // carries and what a rename or an extract is made of: the two ends of the
+    // selection are written separately, last one first so the first does not
+    // move the second.
+    if (n < cap) {
+        auto* edits = (TextEditItem*)Alloc(a, (int)sizeof(TextEditItem) * 2);
+        if (edits) {
+            edits[0].range = Selection{sel.end, sel.end};
+            edits[0].newText = StrL(")");
+            edits[1].range = Selection{sel.start, sel.start};
+            edits[1].newText = StrL("(");
+            out[n].title = StrL("Wrap in Parentheses");
+            out[n].edits = edits;
+            out[n].nEdits = 2;
+            n++;
+        }
     }
     return n;
 }

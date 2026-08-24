@@ -2646,6 +2646,23 @@ struct Diagnostic {
 // lsp_types::CompletionItem, cut to what the menu shows and what accepting
 // one writes. Rust carries the whole LSP struct — the sort text, the edits,
 // the command that may follow — and the menu reads these five of it.
+// lsp_types::TextEdit: a range of the document and what replaces it. Rust's
+// range is a pair of positions; every seam in this tree speaks byte offsets,
+// so this is the same edit written the way the rest of the input engine
+// writes one.
+struct TextEditItem {
+    Selection range = {};
+    Str newText = {};
+};
+
+// apply_lsp_edits: a list of them, in order. Each edit's range is resolved
+// against the document *as the edits before it left it*, which is why a
+// server sends them last-first — and each is its own undo step, which is what
+// Rust's loop over `replace_text_in_range_silent` records (the `silent` there
+// suppresses the completion trigger and says nothing about the history).
+void InputApplyEdits(InputState* s, App* app, Window* win,
+                     const TextEditItem* edits, int n);
+
 struct CompletionItem {
     // What is shown, and what the query is matched against.
     Str label = {};
@@ -2659,6 +2676,11 @@ struct CompletionItem {
     // Whether `completionItem/resolve` has been asked about this item. An
     // item that came with documentation is never asked about.
     bool resolved = false;
+    // `additionalTextEdits`: what else accepting this item writes — the
+    // import a name needs, at the top of the document, while the name itself
+    // goes in at the caret. Applied with the insert, as one undo step.
+    const TextEditItem* additionalEdits = nullptr;
+    int nAdditionalEdits = 0;
 };
 
 // CompletionProvider::completions, without the task: the provider is handed
@@ -2690,6 +2712,13 @@ struct CodeActionItem {
     Str title = {};
     Selection range = {};
     Str newText = {};
+    // The whole edit list, for an action that is more than one. Rust carries
+    // a WorkspaceEdit — a map of documents to edit lists — and a field is one
+    // document, so an action is that document's list; the pair above is the
+    // shorthand that every action upstream writes fits in, and is what is
+    // used when this is empty.
+    const TextEditItem* edits = nullptr;
+    int nEdits = 0;
 };
 
 // CodeActionProvider::code_actions, without the task: the provider is handed
