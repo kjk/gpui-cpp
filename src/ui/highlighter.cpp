@@ -240,10 +240,12 @@ El* Highlighter::IntoEl() {
     }
     // EditorStyle::diagnostics — theme.danger, warning, info and the muted
     // foreground a hint is drawn in.
-    style.diagnostics.error = th.danger;
-    style.diagnostics.warning = th.warning;
-    style.diagnostics.info = th.info;
-    style.diagnostics.hint = th.mutedFg;
+    // highlighter/registry.rs's own defaults for the status colours a
+    // diagnostic is drawn in.
+    style.diagnostics.error = th.red;
+    style.diagnostics.warning = th.yellow;
+    style.diagnostics.info = th.blue;
+    style.diagnostics.hint = th.cyan;
     if (state) {
         // The set the caller published, kept on the state so the row builder
         // and a hover both read the same one.
@@ -310,17 +312,59 @@ El* Highlighter::IntoEl() {
                        ->ScrollY(state ? state->scrollY : 0)
                        ->Child(editor);
     }
+    // The diagnostic popover: what the pointer is over, in the severity's
+    // own colours — `px_1().py_0p5()` over a background the colour is blended
+    // a fifth into, with the message as markdown.
+    El* diagPopover = nullptr;
+    if (state && state->hoverDiagnostic >= 0 &&
+        state->hoverDiagnostic < state->diagnostics.len) {
+        const Diagnostic& dg = state->diagnostics[state->hoverDiagnostic];
+        Rgba fg = style.diagnostics.info;
+        if (dg.severity == DiagnosticSeverity::Error) {
+            fg = style.diagnostics.error;
+        } else if (dg.severity == DiagnosticSeverity::Warning) {
+            fg = style.diagnostics.warning;
+        } else if (dg.severity == DiagnosticSeverity::Hint) {
+            fg = style.diagnostics.hint;
+        }
+        // `bg.blend(colour.alpha(0.2))`: a fifth of the status colour over
+        // the window's own background. RgbaMix weights its first argument, so
+        // the background is the one that takes the four fifths.
+        Rgba bg = RgbaMix(th.background, fg, 0.8f);
+        El* body = TextView::New(cx, dg.message)->Font(12)->IntoEl();
+        diagPopover = Div(a)
+                          ->Fixed()
+                          ->Left(state->hoverDiagnosticX + 8)
+                          ->Top(state->hoverDiagnosticY + 18)
+                          ->MaxW(420)
+                          ->PadX(4)
+                          ->PadY(2)
+                          ->Radius(th.radius)
+                          ->Bg(bg)
+                          ->Fg(fg)
+                          ->Border(1, fg)
+                          ->Child(body);
+    }
     if (!searchable) {
+        if (diagPopover) {
+            return Div(a)->FlexCol()->W(kFill)->Child(scroller)->Child(
+                diagPopover);
+        }
         return scroller;
     }
     // The bar sits over the rows and takes its height off them, the way
     // Rust's overlay docks it at the top of the input.
-    return Div(a)
-        ->FlexCol()
-        ->W(kFill)
-        ->Child(SearchPanel::New(cx, StrDup(a, fmt("%s-search", id)), state)
-                    ->IntoEl())
-        ->Child(scroller);
+    El* box =
+        Div(a)
+            ->FlexCol()
+            ->W(kFill)
+            ->Child(SearchPanel::New(cx, StrDup(a, fmt("%s-search", id)), state)
+                        ->IntoEl())
+            ->Child(scroller);
+    if (diagPopover) {
+        box->Child(diagPopover);
+    }
+    return box;
 }
 
 } // namespace component

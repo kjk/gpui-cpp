@@ -448,6 +448,28 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         col->Child(Div(a)->W(kFill)->Shrink0()->H(padTop));
     }
 
+    // Which diagnostic the pointer is over, for the popover the component
+    // draws. Rust works it out in the element's own mouse handling; the
+    // pointer is the window's here, and this is the one place that has the
+    // boxes to answer against.
+    state->hoverDiagnostic = -1;
+    if (state->diagnostics.len > 0 && cx->win) {
+        float mx = cx->win->mouseX;
+        float my = cx->win->mouseY;
+        if (state->inputBounds.Contains({mx, my})) {
+            int at = InputIndexForPosition(state, &cx->win->paint, mx, my);
+            for (int d = 0; d < state->diagnostics.len; d++) {
+                const Diagnostic& dg = state->diagnostics[d];
+                if (at >= dg.range.start && at < dg.range.end) {
+                    state->hoverDiagnostic = d;
+                    state->hoverDiagnosticX = mx;
+                    state->hoverDiagnosticY = my;
+                    break;
+                }
+            }
+        }
+    }
+
     // The document's runs, sliced per row below, and the search matches
     // beside them.
     int spanAt = 0;

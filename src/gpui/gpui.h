@@ -2525,6 +2525,11 @@ struct InputState {
     // are tens of these on a screen, so this is the flat list the painter and
     // the hover both walk.
     Vec<Diagnostic> diagnostics;
+    // The one the pointer is over, and where it was — `state.diagnostic_
+    // popover()` in Rust, which the overlay turns into a popover. -1 is none.
+    int hoverDiagnostic = -1;
+    float hoverDiagnosticX = 0;
+    float hoverDiagnosticY = 0;
     // The box the rows were laid out in as a whole, which is the scrolled
     // height once soft wrap has had its say.
     Bounds contentBox = {};
