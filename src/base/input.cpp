@@ -15,13 +15,50 @@ El* InputBase::New(Ctx* cx, Str id, int clickId) {
     return UiRoot(a, id, clickId);
 }
 
-// The search matches that fall inside one row, rebased onto it, as washes.
-// The document's are in order, so a walk over the rows carries on where the
-// last one left off — `*at` is where that is.
+// The washes one row carries: the search matches that fall inside it, and the
+// colours a document colour provider found there — element.rs paints both as
+// a quad behind the glyphs, the match from `layout_search_matches` and the
+// colour from `layout_document_colors`. Both sets are in document order, so a
+// walk over the rows carries on where the last one left off — `*at` is where
+// that is for the matches, and the colours are walked from the front, there
+// being a handful of them on a screen.
 static El* RowMatchWashes(Arena* a, El* el, const InputEditorStyle& style,
-                          int start, int len, int* at) {
-    if (style.nMatches <= 0) {
+                          const InputState* state, int start, int len,
+                          int* at) {
+    int nColors = 0;
+    if (state) {
+        for (int i = 0; i < state->documentColors.len; i++) {
+            const DocumentColor& dc = state->documentColors[i];
+            if (dc.range.end > start && dc.range.start < start + len) {
+                nColors++;
+            }
+        }
+    }
+    if (style.nMatches <= 0 && nColors == 0) {
         return el;
+    }
+    if (style.nMatches <= 0) {
+        auto* w = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * nColors);
+        int n = 0;
+        for (int i = 0; i < state->documentColors.len && w; i++) {
+            const DocumentColor& dc = state->documentColors[i];
+            int lo = dc.range.start - start;
+            int hi = dc.range.end - start;
+            if (lo < 0) {
+                lo = 0;
+            }
+            if (hi > len) {
+                hi = len;
+            }
+            if (hi <= lo) {
+                continue;
+            }
+            w[n].lo = lo;
+            w[n].hi = hi;
+            w[n].bg = dc.color;
+            n++;
+        }
+        return n > 0 ? el->Washes(w, n) : el;
     }
     while (*at < style.nMatches && style.matches[*at].end <= start) {
         (*at)++;
@@ -34,9 +71,9 @@ static El* RowMatchWashes(Arena* a, El* el, const InputEditorStyle& style,
     if (count <= 0) {
         return el;
     }
-    auto* w = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * count);
+    auto* w = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * (count + nColors));
     int n = 0;
-    for (int k = 0; k < count; k++) {
+    for (int k = 0; k < count && w; k++) {
         int ix = first + k;
         int lo = style.matches[ix].start - start;
         int hi = style.matches[ix].end - start;
@@ -53,6 +90,24 @@ static El* RowMatchWashes(Arena* a, El* el, const InputEditorStyle& style,
         w[n].hi = hi;
         w[n].bg =
             ix == style.currentMatch ? style.currentMatchBg : style.matchBg;
+        n++;
+    }
+    for (int i = 0; i < nColors && w; i++) {
+        const DocumentColor& dc = state->documentColors[i];
+        int lo = dc.range.start - start;
+        int hi = dc.range.end - start;
+        if (lo < 0) {
+            lo = 0;
+        }
+        if (hi > len) {
+            hi = len;
+        }
+        if (hi <= lo) {
+            continue;
+        }
+        w[n].lo = lo;
+        w[n].hi = hi;
+        w[n].bg = dc.color;
         n++;
     }
     return n > 0 ? el->Washes(w, n) : el;
@@ -165,7 +220,7 @@ El* Input::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
     // A masked one is not searched: what it holds is not what it shows.
     if (!masked) {
         int matchAt = 0;
-        RowMatchWashes(a, el, style, 0, run.len, &matchAt);
+        RowMatchWashes(a, el, style, state, 0, run.len, &matchAt);
     }
     if (!sel.IsEmpty()) {
         el->SelRange(sel.start, sel.end, style.selection);
@@ -452,6 +507,8 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // draws. Rust works it out in the element's own mouse handling; the
     // pointer is the window's here, and this is the one place that has the
     // boxes to answer against.
+    // What the document names in colour, asked for again when it changed.
+    InputUpdateDocumentColors(state);
     state->hoverDiagnostic = -1;
     if ((state->diagnostics.len > 0 || state->hoverProvider) && cx->win) {
         float mx = cx->win->mouseX;
@@ -620,7 +677,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 }
             }
         }
-        RowMatchWashes(a, el, style, start, line.len, &matchAt);
+        RowMatchWashes(a, el, style, state, start, line.len, &matchAt);
         if (state->softWrap) {
             // flex_1: the run is bounded by what the gutter leaves, so it
             // breaks at the text column's edge and its second line starts
@@ -1697,6 +1754,9 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     if (InputIsMultiLine(s) && s->mode.kind == LayoutModeKind::AutoGrow) {
         LayoutModeSetRows(&s->mode, RopeLinesLen(InputValue(s)));
     }
+    // The colours the document names may have moved or changed, so the row
+    // builder asks again next frame.
+    s->documentColorsDirty = true;
     Emit(s, app, win, InputEvent{InputEventKind::Change});
     Notify(app, win);
     return true;
@@ -2020,6 +2080,38 @@ bool InputCompletionAction(InputState* s, App* app, Window* win,
         default:
             return false;
     }
+}
+
+// ─── document colours ─────────────────────────────────────────────────────
+//
+// document_colors.rs: the provider is asked what colours the document names
+// and the ranges it answers are painted behind the text. Rust asks on a timer
+// after each edit and keeps the answer only when it differs; there is nothing
+// to await here, so the frame after an edit asks and the answer replaces what
+// was there.
+
+void InputUpdateDocumentColors(InputState* s) {
+    if (!s || !s->documentColorProvider || !s->documentColorsDirty) {
+        return;
+    }
+    s->documentColorsDirty = false;
+    // MAX_DOCUMENT_COLORS is 10,000 in Rust, which is the cap on what one
+    // response may carry; a screen holds a handful, and a provider that
+    // answers more than this has its tail dropped rather than the whole
+    // answer thrown away.
+    const int kMax = 1024;
+    auto* buf =
+        (DocumentColor*)Alloc(nullptr, (int)sizeof(DocumentColor) * kMax);
+    if (!buf) {
+        return;
+    }
+    int n = s->documentColorProvider(s->documentColorData, InputValue(s), buf,
+                                     kMax);
+    s->documentColors.Clear();
+    for (int i = 0; i < n && i < kMax; i++) {
+        s->documentColors.Append(buf[i]);
+    }
+    Free(nullptr, buf);
 }
 
 // ─── code actions ─────────────────────────────────────────────────────────

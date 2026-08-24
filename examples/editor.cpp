@@ -19,8 +19,10 @@
    typed, with the selected item's documentation rendered as markdown beside
    the list, and the hover popover, which answers about the word the pointer
    rests on out of the same items, and the code action menu, which is
-   TextConvertor's five ways to rewrite a selection. What is still to come is
-   document colours. */
+   TextConvertor's five ways to rewrite a selection. The colours the document
+   names are the last of it: upstream hands the text to the `color-lsp` crate,
+   and this scans for the two spellings a source file has — a hex literal and
+   an `rgb(...)` call — and paints each behind the text that names it. */
 
 #include "gpui.h"
 
@@ -396,6 +398,140 @@ static int CodeActionsFor(void*, Arena* a, Str text, Selection sel,
     return n;
 }
 
+// ─── the document colour provider ─────────────────────────────────────────
+//
+// ExampleLspStore's, which hands the document to the `color-lsp` crate and
+// answers what it found. There is no such crate here, so this is the same
+// scan over the two spellings that turn up in the source a code editor is
+// pointed at: `#rgb` / `#rgba` / `#rrggbb` / `#rrggbbaa`, and `rgb(...)` /
+// `rgba(...)` with a number per channel. What comes back is painted behind
+// the text that names it, which is what element.rs does with a colour.
+
+static int HexDigit(char c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
+// A hex colour at `at`, or 0 if what stands there is not one.
+static int HexColorAt(Str text, int at, Rgba* out) {
+    int n = 0;
+    while (at + 1 + n < text.len && n < 9 &&
+           HexDigit(text.s[at + 1 + n]) >= 0) {
+        n++;
+    }
+    if (n != 3 && n != 4 && n != 6 && n != 8) {
+        return 0;
+    }
+    int v[8] = {};
+    for (int i = 0; i < n; i++) {
+        v[i] = HexDigit(text.s[at + 1 + i]);
+    }
+    uint8_t c[4] = {0, 0, 0, 255};
+    if (n <= 4) {
+        // The short spelling doubles each digit: #1af is #11aaff.
+        for (int i = 0; i < n; i++) {
+            c[i] = (uint8_t)(v[i] * 17);
+        }
+    } else {
+        for (int i = 0; i < n / 2; i++) {
+            c[i] = (uint8_t)(v[i * 2] * 16 + v[i * 2 + 1]);
+        }
+    }
+    *out = Rgba{c[0], c[1], c[2], c[3]};
+    return n + 1;
+}
+
+// `rgb(1, 2, 3)` or `rgba(1, 2, 3, 0.5)`, in as many spellings as a scan this
+// small can take: the numbers, in order, and whatever separates them.
+static int RgbColorAt(Str text, int at, Rgba* out) {
+    bool hasAlpha = at + 4 < text.len && text.s[at + 3] == 'a';
+    int i = at + (hasAlpha ? 4 : 3);
+    if (i >= text.len || text.s[i] != '(') {
+        return 0;
+    }
+    i++;
+    float ch[4] = {0, 0, 0, 1};
+    int got = 0;
+    while (i < text.len && got < 4) {
+        while (i < text.len && (text.s[i] == ' ' || text.s[i] == ',')) {
+            i++;
+        }
+        if (i >= text.len || text.s[i] == ')') {
+            break;
+        }
+        int digits = 0;
+        float value = 0;
+        while (i < text.len && text.s[i] >= '0' && text.s[i] <= '9') {
+            value = value * 10 + (float)(text.s[i] - '0');
+            i++;
+            digits++;
+        }
+        if (i < text.len && text.s[i] == '.') {
+            i++;
+            float scale = 0.1f;
+            while (i < text.len && text.s[i] >= '0' && text.s[i] <= '9') {
+                value += (float)(text.s[i] - '0') * scale;
+                scale *= 0.1f;
+                i++;
+                digits++;
+            }
+        }
+        if (digits == 0) {
+            return 0;
+        }
+        ch[got++] = value;
+    }
+    if (i >= text.len || text.s[i] != ')' || got < 3) {
+        return 0;
+    }
+    auto clamp = [](float v) {
+        return (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+    };
+    *out = Rgba{clamp(ch[0]), clamp(ch[1]), clamp(ch[2]),
+                clamp(ch[3] <= 1.f ? ch[3] * 255.f : ch[3])};
+    return i + 1 - at;
+}
+
+static bool WordCharAt(Str text, int at) {
+    if (at < 0 || at >= text.len) {
+        return false;
+    }
+    char c = text.s[at];
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_';
+}
+
+static int DocumentColorsIn(void*, Str text, DocumentColor* out, int cap) {
+    int n = 0;
+    for (int i = 0; i < text.len && n < cap; i++) {
+        Rgba color = {};
+        int len = 0;
+        if (text.s[i] == '#') {
+            len = HexColorAt(text, i, &color);
+        } else if ((text.s[i] == 'r' && i + 3 < text.len &&
+                    memcmp(text.s + i, "rgb", 3) == 0) &&
+                   !WordCharAt(text, i - 1)) {
+            len = RgbColorAt(text, i, &color);
+        }
+        if (len <= 0) {
+            continue;
+        }
+        out[n].range = Selection{i, i + len};
+        out[n].color = color;
+        n++;
+        i += len - 1;
+    }
+    return n;
+}
+
 // ─── the status bar's switches ────────────────────────────────────────────
 
 enum {
@@ -616,6 +752,8 @@ int GpuiMain(int argc, char** argv) {
     self->editor.hoverProvider = &HoverAt;
     // And the code actions, which ctrl-. offers over a selection.
     self->editor.codeActionProvider = &CodeActionsFor;
+    // And the colours the document names, painted where they are named.
+    self->editor.documentColorProvider = &DocumentColorsIn;
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;

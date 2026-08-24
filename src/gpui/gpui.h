@@ -2468,6 +2468,19 @@ struct CompletionItem {
 using CompletionFn = int (*)(void* data, Str text, int offset, Str query,
                              CompletionItem* out, int cap);
 
+// ColorInformation: a range of the document that names a colour, and the
+// colour it names — `#1e90ff`, `rgb(0 0 0)`, and what a provider makes of
+// them. The range is painted in that colour behind the text it covers.
+struct DocumentColor {
+    Selection range = {};
+    Rgba color = {};
+};
+
+// DocumentColorProvider::document_colors, without the task: the provider is
+// handed the document and writes what it found, in document order.
+using DocumentColorFn = int (*)(void* data, Str text, DocumentColor* out,
+                                int cap);
+
 // CodeAction, flattened: a title, and the one edit it makes — the range it
 // replaces and what it puts there. Rust carries a WorkspaceEdit, which is a
 // map of documents to edit lists; a field is one document and every action
@@ -2618,6 +2631,13 @@ struct InputState {
     Selection hoverRange = {};
     float hoverX = 0;
     float hoverY = 0;
+    // The colours a provider found in the document, and who is asked. Rust
+    // asks on a timer after every edit and diffs the answer; this asks the
+    // frame after the edit, which is the same answer a frame sooner.
+    DocumentColorFn documentColorProvider = nullptr;
+    void* documentColorData = nullptr;
+    Vec<DocumentColor> documentColors;
+    bool documentColorsDirty = true;
     // The code action menu, and who fills it — cmd-. / ctrl-. asks whatever
     // is selected. Rust asks every registered provider and puts the answers
     // in one list; there is one here, and an example that wants two answers
@@ -2839,6 +2859,13 @@ bool InputCompletionAction(InputState* s, App* app, Window* win,
 // ShowCompletions: ctrl-space asks whatever the caret is on, which is Rust's
 // second way in beside a trigger character.
 void InputShowCompletions(InputState* s, App* app, Window* win);
+
+// ─── document colours ─────────────────────────────────────────────────────
+
+// Ask the provider what colours the document names, if it has changed since
+// it was last asked. The row builder does this; a caller that publishes its
+// own set writes `documentColors` and leaves the provider null.
+void InputUpdateDocumentColors(InputState* s);
 
 // ─── code actions ─────────────────────────────────────────────────────────
 

@@ -1016,6 +1016,51 @@ static void TheCodeActionMenuRewritesWhatIsSelected() {
     utassert(!plain.codeActions.open);
 }
 
+// ─── document colours ─────────────────────────────────────────────────────
+
+// A provider that answers one colour over the first four characters, and
+// counts how often it was asked.
+static int OneColor(void* data, Str text, DocumentColor* out, int cap) {
+    if (data) {
+        (*(int*)data)++;
+    }
+    if (cap < 1 || text.len < 4) {
+        return 0;
+    }
+    out[0].range = Selection{0, 4};
+    out[0].color = Rgba{1, 2, 3, 255};
+    return 1;
+}
+
+static void DocumentColorsAreAskedForAgainAfterAnEdit() {
+    int asked = 0;
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.documentColorProvider = &OneColor;
+    s.documentColorData = &asked;
+
+    InputSetValue(&s, StrL("#f0a is a colour"));
+    InputUpdateDocumentColors(&s);
+    utassert(asked == 1);
+    utassert(s.documentColors.len == 1);
+    utassert(s.documentColors[0].range.start == 0);
+
+    // Asking again with nothing changed answers off what is already there.
+    InputUpdateDocumentColors(&s);
+    utassert(asked == 1);
+
+    // An edit makes them stale, and the next ask goes back to the provider.
+    Type(&s, "x");
+    InputUpdateDocumentColors(&s);
+    utassert(asked == 2);
+
+    // A field with no provider keeps an empty set and never asks.
+    InputState plain;
+    InputSetValue(&plain, StrL("#f0a"));
+    InputUpdateDocumentColors(&plain);
+    utassert(plain.documentColors.len == 0);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -1060,4 +1105,5 @@ void TestInputState() {
     TheMenuKeysMoveTheSelectionAndAccept();
     AnAcceptedItemWritesItsInsertText();
     TheCodeActionMenuRewritesWhatIsSelected();
+    DocumentColorsAreAskedForAgainAfterAnEdit();
 }
