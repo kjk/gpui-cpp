@@ -35,6 +35,10 @@ struct SyntaxLangDef {
     bool caseInsensitive;
     // Tags, attributes and text rather than statements.
     bool markup;
+    // Prose with marks in it rather than either: headings, fences, links and
+    // code spans. Upstream reads a tree-sitter markdown grammar with an
+    // injection per fence; this is the part of that a scanner can carry.
+    bool markdown;
 };
 
 // clang-format off
@@ -140,6 +144,9 @@ static const SyntaxLangDef kLangs[] = {
 
     {"yaml yml", "true false null yes no", "", "#", false, false, false, false,
      false, false, false, true, false, false},
+
+    {"markdown md mdown markdn", "", "", nullptr, false, false, false, false,
+     false, false, false, false, false, false, true},
 };
 // clang-format on
 
@@ -264,6 +271,8 @@ void SyntaxLexStart(SyntaxLexer* lx, SyntaxLang lang, Str src) {
     lx->text = {};
     lx->inTag = false;
     lx->tagName = false;
+    lx->inFence = false;
+    lx->linkDest = false;
 }
 
 static void SyntaxEmit(SyntaxLexer* lx, int start, SyntaxTok tok) {
@@ -321,6 +330,207 @@ static void SyntaxScanTripleQuote(SyntaxLexer* lx, char quote) {
         }
         lx->at++;
     }
+}
+
+// --- markdown ------------------------------------------------------------
+//
+// Line shapes first -- a fence, a heading, a quote, a list marker -- and then
+// the marks inside a line: a code span, a link's text and its destination, an
+// HTML tag. What is left is prose, and prose is Text.
+//
+// What a scanner cannot carry and upstream's grammar does: the emphasis marks
+// are not coloured, because a decoration here is a colour and a wash where
+// `**bold**` is a weight; and a fence's body is not scanned as the language
+// its info string names, which would want a scanner inside a scanner.
+
+static bool MdIsFenceLine(Str line) {
+    int at = 0;
+    while (at < line.len && (line.s[at] == ' ' || line.s[at] == '\t')) {
+        at++;
+    }
+    if (at + 3 > line.len) {
+        return false;
+    }
+    char c = line.s[at];
+    return (c == '`' || c == '~') && line.s[at + 1] == c && line.s[at + 2] == c;
+}
+
+// One past the end of the line `at` is on -- the newline included, so the
+// tokens partition the source.
+static int MdLineEnd(Str s, int at) {
+    while (at < s.len && s.s[at] != '\n') {
+        at++;
+    }
+    return at < s.len ? at + 1 : at;
+}
+
+// `- `, `* `, `+ `, `1. ` or `1) ` at the start of a line, with whatever
+// indent is in front of it. Answers where the marker ends.
+static bool MdIsListMarker(Str s, int at, int* out) {
+    int i = at;
+    while (i < s.len && (s.s[i] == ' ' || s.s[i] == '\t')) {
+        i++;
+    }
+    int marker = i;
+    if (i < s.len && (s.s[i] == '-' || s.s[i] == '*' || s.s[i] == '+')) {
+        i++;
+    } else {
+        int digits = 0;
+        while (i < s.len && s.s[i] >= '0' && s.s[i] <= '9') {
+            i++;
+            digits++;
+        }
+        if (digits == 0 || i >= s.len || (s.s[i] != '.' && s.s[i] != ')')) {
+            return false;
+        }
+        i++;
+    }
+    if (i == marker || i >= s.len || (s.s[i] != ' ' && s.s[i] != '\t')) {
+        return false;
+    }
+    *out = i;
+    return true;
+}
+
+static bool SyntaxNextMarkdown(SyntaxLexer* lx) {
+    Str s = lx->src;
+    int start = lx->at;
+    bool bol = lx->at == 0 || s.s[lx->at - 1] == '\n';
+    char c = s.s[lx->at];
+
+    // A fenced block is verbatim until the fence that closes it.
+    if (lx->inFence) {
+        int end = MdLineEnd(s, lx->at);
+        Str line = Str(s.s + lx->at, end - lx->at);
+        lx->at = end;
+        if (MdIsFenceLine(line)) {
+            lx->inFence = false;
+            SyntaxEmit(lx, start, SyntaxTok::Keyword);
+        } else {
+            SyntaxEmit(lx, start, SyntaxTok::Text);
+        }
+        return true;
+    }
+    // A destination reads as one only where a link's text just ended.
+    if (lx->linkDest && c == '(') {
+        lx->linkDest = false;
+        int depth = 0;
+        while (lx->at < s.len && s.s[lx->at] != '\n') {
+            char d = s.s[lx->at++];
+            if (d == '(') {
+                depth++;
+            } else if (d == ')') {
+                depth--;
+                if (depth == 0) {
+                    break;
+                }
+            }
+        }
+        SyntaxEmit(lx, start, SyntaxTok::Comment);
+        return true;
+    }
+    lx->linkDest = false;
+
+    if (bol) {
+        int end = MdLineEnd(s, lx->at);
+        Str line = Str(s.s + lx->at, end - lx->at);
+        if (MdIsFenceLine(line)) {
+            lx->inFence = true;
+            lx->at = end;
+            SyntaxEmit(lx, start, SyntaxTok::Keyword);
+            return true;
+        }
+        if (c == '#') {
+            // An ATX heading is the whole line, hashes and all.
+            lx->at = end;
+            SyntaxEmit(lx, start, SyntaxTok::Keyword);
+            return true;
+        }
+        if (c == '>') {
+            lx->at++;
+            SyntaxEmit(lx, start, SyntaxTok::Comment);
+            return true;
+        }
+        int afterMarker = 0;
+        if (MdIsListMarker(s, lx->at, &afterMarker)) {
+            lx->at = afterMarker;
+            SyntaxEmit(lx, start, SyntaxTok::Keyword);
+            return true;
+        }
+    }
+
+    if (c == '`') {
+        // A code span, to the run of backticks that closes it.
+        int ticks = 0;
+        while (lx->at < s.len && s.s[lx->at] == '`') {
+            lx->at++;
+            ticks++;
+        }
+        while (lx->at < s.len && s.s[lx->at] != '\n') {
+            if (s.s[lx->at] != '`') {
+                lx->at++;
+                continue;
+            }
+            int run = 0;
+            while (lx->at < s.len && s.s[lx->at] == '`') {
+                lx->at++;
+                run++;
+            }
+            if (run >= ticks) {
+                break;
+            }
+        }
+        SyntaxEmit(lx, start, SyntaxTok::String);
+        return true;
+    }
+    bool image = c == '!' && lx->at + 1 < s.len && s.s[lx->at + 1] == '[';
+    if (c == '[' || image) {
+        int i = lx->at + (image ? 2 : 1);
+        int depth = 1;
+        while (i < s.len && s.s[i] != '\n' && depth > 0) {
+            if (s.s[i] == '[') {
+                depth++;
+            } else if (s.s[i] == ']') {
+                depth--;
+            }
+            i++;
+        }
+        if (depth == 0) {
+            lx->at = i;
+            lx->linkDest = i < s.len && s.s[i] == '(';
+            SyntaxEmit(lx, start, SyntaxTok::Function);
+            return true;
+        }
+    }
+    if (c == '<') {
+        int i = lx->at + 1;
+        while (i < s.len && s.s[i] != '>' && s.s[i] != '\n') {
+            i++;
+        }
+        if (i < s.len && s.s[i] == '>') {
+            lx->at = i + 1;
+            SyntaxEmit(lx, start, SyntaxTok::Tag);
+            return true;
+        }
+    }
+    // A newline is a token of its own, so what follows it starts a line and
+    // the shapes above are reachable.
+    if (c == '\n') {
+        lx->at++;
+        SyntaxEmit(lx, start, SyntaxTok::Text);
+        return true;
+    }
+    // Prose, to the next byte that could start a mark.
+    lx->at++;
+    while (lx->at < s.len) {
+        char d = s.s[lx->at];
+        if (d == '\n' || d == '`' || d == '[' || d == '<' || d == '!') {
+            break;
+        }
+        lx->at++;
+    }
+    SyntaxEmit(lx, start, SyntaxTok::Text);
+    return true;
 }
 
 // <tag attr="value">, the one shape a scanner can follow without a parse.
@@ -400,6 +610,9 @@ bool SyntaxLexNext(SyntaxLexer* lx) {
     }
     if (d->markup) {
         return SyntaxNextMarkup(lx);
+    }
+    if (d->markdown) {
+        return SyntaxNextMarkdown(lx);
     }
 
     int start = lx->at;

@@ -1521,21 +1521,29 @@ int TextLayoutRangeRects(TextLayout* tl, Str s, int u8a, int u8b, Bounds* out,
         FLOAT x0 = 0, y0 = 0, x1 = 0, y1 = 0;
         DWRITE_HIT_TEST_METRICS a = {}, b = {};
         layout->HitTestTextPosition((UINT32)lo, FALSE, &x0, &y0, &a);
-        layout->HitTestTextPosition((UINT32)hi, FALSE, &x1, &y1, &b);
         float left = x0;
-        float right = x1;
+        float right;
+        if (hi >= visEnd && hi > lineStart) {
+            // The position *at* the end of a wrapped line hit-tests to the
+            // start of the next one — x of zero, y a line down — so the end
+            // of the run is the trailing edge of the last character on this
+            // line. Reading it as a leading hit put the right edge left of
+            // the left one, and the swap below then painted the whole line.
+            layout->HitTestTextPosition((UINT32)(hi - 1), TRUE, &x1, &y1, &b);
+            right = x1;
+        } else {
+            layout->HitTestTextPosition((UINT32)hi, FALSE, &x1, &y1, &b);
+            right = x1;
+        }
         if (right < left) {
             float tmp = left;
             left = right;
             right = tmp;
         }
-        // A selection that runs to the end of a wrapped line covers the rest
-        // of the line box, the way a text editor draws it.
-        if (hi == visEnd && lo < visEnd) {
+        // A selection that carries on past this line covers the rest of its
+        // line box, the way a text editor draws it.
+        if (wb > visEnd && lo < visEnd) {
             right = tm.layoutWidth;
-            if (x1 > 0 && x1 + 1.f < tm.layoutWidth) {
-                right = x1;
-            }
         }
         out[n].x = left;
         out[n].y = y0;

@@ -179,6 +179,59 @@ static void TestSyntaxUnknownLang() {
     utassert(!SyntaxLexNext(&lx));
 }
 
+// Markdown: the line shapes and the marks inside a line. Upstream reads a
+// tree-sitter grammar with an injection per fence; what a scanner can answer
+// is which of these a byte belongs to.
+static void TestSyntaxMarkdown() {
+    SyntaxLang md = SyntaxLangFor(StrL("markdown"));
+    utassert(md != SyntaxLangNone);
+    utassert(md == SyntaxLangFor(StrL("md")));
+
+    const char* src =
+        "# Heading **one**\n"
+        "\n"
+        "Prose with `a span` and [a link](https://example.com/x) in it.\n"
+        "\n"
+        "- a list item\n"
+        "2. an ordered one\n"
+        "> a quote\n"
+        "\n"
+        "An <img src=\"x.png\" /> tag.\n"
+        "\n"
+        "```rust\n"
+        "let x = [1];\n"
+        "```\n"
+        "\n"
+        "After the fence.\n";
+
+    utassert(TokAt(md, src, "# Heading") == SyntaxTok::Keyword);
+    // The emphasis inside a heading is the heading's own colour: the whole
+    // line is one token.
+    utassert(TokAt(md, src, "**one**") == SyntaxTok::Keyword);
+    utassert(TokAt(md, src, "Prose with") == SyntaxTok::Text);
+    utassert(TokAt(md, src, "`a span`") == SyntaxTok::String);
+    utassert(TokAt(md, src, "[a link]") == SyntaxTok::Function);
+    utassert(TokAt(md, src, "(https://example.com/x)") == SyntaxTok::Comment);
+    utassert(TokAt(md, src, "in it.") == SyntaxTok::Text);
+    utassert(TokAt(md, src, "- a list") == SyntaxTok::Keyword);
+    utassert(TokAt(md, src, "a list item") == SyntaxTok::Text);
+    utassert(TokAt(md, src, "2. an ordered") == SyntaxTok::Keyword);
+    utassert(TokAt(md, src, "> a quote") == SyntaxTok::Comment);
+    utassert(TokAt(md, src, "<img src=") == SyntaxTok::Tag);
+    utassert(TokAt(md, src, "tag.") == SyntaxTok::Text);
+    // The fence lines are marks; what they hold is verbatim, `[1]` included.
+    utassert(TokAt(md, src, "```rust") == SyntaxTok::Keyword);
+    utassert(TokAt(md, src, "let x = [1];") == SyntaxTok::Text);
+    utassert(TokAt(md, src, "After the fence.") == SyntaxTok::Text);
+    utassert(Partitions(md, src));
+
+    // A `(` that follows no link text is prose, and an unclosed `[` is too.
+    const char* plain = "Not a link (just parens) and [an unclosed one.\n";
+    utassert(TokAt(md, plain, "(just parens)") == SyntaxTok::Text);
+    utassert(TokAt(md, plain, "[an unclosed") == SyntaxTok::Text);
+    utassert(Partitions(md, plain));
+}
+
 static void TestSyntaxColors() {
     Rgba fg = Rgb(1, 2, 3);
     // theme/default-theme.json: keyword is #0433ff light, #c28b12 dark.
@@ -199,6 +252,7 @@ void TestSyntax() {
     TestSyntaxPython();
     TestSyntaxJson();
     TestSyntaxMarkup();
+    TestSyntaxMarkdown();
     TestSyntaxShellAndSql();
     TestSyntaxUnterminated();
     TestSyntaxUnknownLang();

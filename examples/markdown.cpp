@@ -101,6 +101,18 @@ static int FindMarkers(Ctx* cx, Str text, TextSpan* out, int cap) {
             at = lo + word.len;
         }
     }
+    // The decorations arrive in document order, which is what the merge with
+    // the language's own captures walks both lists in — and what a semantic
+    // tokens response is, since it is delta-encoded from the one before it.
+    for (int i = 1; i < n; i++) {
+        TextSpan sp = out[i];
+        int j = i - 1;
+        while (j >= 0 && out[j].lo > sp.lo) {
+            out[j + 1] = out[j];
+            j--;
+        }
+        out[j + 1] = sp;
+    }
     return n;
 }
 

@@ -64,6 +64,11 @@ struct SyntaxLexer {
     bool inTag = false;
     // Markup only: the next name is the tag's own, not an attribute.
     bool tagName = false;
+    // Markdown only: inside a fenced block, where nothing is a mark until the
+    // fence that closes it; and "the run just closed a link's [text]", so the
+    // (destination) after it reads as one.
+    bool inFence = false;
+    bool linkDest = false;
 };
 
 void SyntaxLexStart(SyntaxLexer* lx, SyntaxLang lang, Str src);

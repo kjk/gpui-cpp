@@ -80,15 +80,17 @@ static int HighlightSpans(Ctx* cx, Str text, SyntaxLang lang, TextSpan* out,
 // back to what the decorations leave it, and the decorations go in whole.
 // Both lists are in order, and so is the result.
 static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
-                            int nDecs, int cap) {
+                            int nDecs, int cap, TextSpan* tmp) {
     auto* out = spans + 0;
-    // Build into a scratch list, then copy back — the two runs interleave.
-    TextSpan tmp[512];
+    // Build into the caller's scratch, then copy back — the two runs
+    // interleave, and the scratch is as long as the result may be, so a
+    // document with more captures than a fixed one would hold does not lose
+    // the tail of its colours.
     int m = 0;
     int i = 0;
-    for (int d = 0; d < nDecs && m < 512; d++) {
+    for (int d = 0; d < nDecs && m < cap; d++) {
         const TextSpan& dec = decs[d];
-        for (; i < n && m < 512; i++) {
+        for (; i < n && m < cap; i++) {
             TextSpan sp = spans[i];
             if (sp.hi <= dec.lo) {
                 tmp[m++] = sp;
@@ -99,7 +101,7 @@ static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
             }
             // The part before the decoration survives; the part after it is
             // put back for the next decoration to look at.
-            if (sp.lo < dec.lo && m < 512) {
+            if (sp.lo < dec.lo && m < cap) {
                 TextSpan head = sp;
                 head.hi = dec.lo;
                 tmp[m++] = head;
@@ -109,15 +111,12 @@ static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
                 break;
             }
         }
-        if (m < 512) {
+        if (m < cap) {
             tmp[m++] = dec;
         }
     }
-    for (; i < n && m < 512; i++) {
+    for (; i < n && m < cap; i++) {
         tmp[m++] = spans[i];
-    }
-    if (m > cap) {
-        m = cap;
     }
     for (int k = 0; k < m; k++) {
         out[k] = tmp[k];
@@ -254,7 +253,11 @@ El* Highlighter::IntoEl() {
     auto* spans = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
     int n = HighlightSpans(cx, text, lang, spans, kMaxSpans);
     if (nDecorations > 0) {
-        n = MergeDecorations(spans, n, decorations, nDecorations, kMaxSpans);
+        auto* tmp = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
+        if (tmp) {
+            n = MergeDecorations(spans, n, decorations, nDecorations, kMaxSpans,
+                                 tmp);
+        }
     }
     style.spans = n > 0 ? spans : nullptr;
     style.nSpans = n;
