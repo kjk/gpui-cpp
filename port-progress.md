@@ -70,8 +70,8 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 - **`Notify` is coarse.** The frame tree is rebuilt every paint, so `Notify(cx)` invalidates the window instead of tracking which views observe an entity. The API matches GPUI, the invalidation does not.
 - **The keymap and its users.** `src/gpui/keymap.*` is `Keystroke::parse`, the binding table, key contexts with `key=value` pairs, `KeyBindingContextPredicate` (`"Editor && mode == full"`, `"Workspace > Editor"`, `!`, `||`, parentheses) and multi-stroke bindings (`"ctrl-k ctrl-o"`), and `WindowDispatchKeyAction` resolves a chord against the contexts stacked over the focused element and then walks the handlers out from it. Every component keyboard is on it: the popup menu, the dialog and alert, the select and combobox, the list, the tree, the data table, the date picker, the popover, the sheet and the colour picker each call their `init` and declare their context the way Rust's modules do, so no application wires a component's keys up by hand any more. What a component's state cannot hold — a dialog's handlers, a date picker's — waits in a keyed entity beside it, since the port's components are builders where Rust's are views. `InputState` is the one keyboard still translated rather than bound: the window offers it a chord before the keymap, which is what makes a focused field's editing the innermost context.
 - **A second window opens.** `App` has held a window list and ended its loop with the last one for a while; the story's Window menu is what finally opens one. `create_new_window_with_size` is `StoryOpenWindow` — a fresh `StoryApp` entity, `TitleBar::window_options()`, and the window's own unhandled-click and key subscriptions — and `GpuiMain` goes through it too, so the first window and the second are the same thing. Dialogs, sheets and notifications are still drawn inside the window that owns them, which is where Rust draws them too: they are `Root`'s layers, not windows of their own.
-- **Multi-click is on the event, and in the input.** `ClickEvent::clickCount` is GPUI's `click_count`; the selectable-text paths use it, and so does `InputState` — a double click takes the word and a triple the line, which is `input/base/selection.rs`. `component::DataTable` uses it for `TableEvent::DoubleClickedRow`; `DoubleClickedCell` waits on cell selection, which nothing turns on yet.
-- **The input engine is ported bar the language server.** `crates/base/src/input/base` is there, and so is the display map the arrows walk — soft wrap, display rows, wrapped-line movement — along with the IME marked range, `scroll_to`, the highlighted runs, the decorated ranges, the indent pair on tab and on `ctrl-]` / `ctrl-[`, and number stepping. The search session and code folding have since been ported too, so what is left out is the LSP features — completion, diagnostics, hover — which need a language server this tree does not run. `start_of_line` / `end_of_line` still take the logical line, so Home on a wrapped row goes to the start of the paragraph rather than of the row.
+- **Multi-click is on the event, and in the input.** `ClickEvent::clickCount` is GPUI's `click_count`; the selectable-text paths use it, and so does `InputState` — a double click takes the word and a triple the line, which is `input/base/selection.rs`. `component::DataTable` uses it for both `TableEvent::DoubleClickedRow` and `DoubleClickedCell`; cell selection is on the story's Options menu, and with it the row header column and the escalation a click on an already-selected cell makes without one.
+- **The input engine is ported bar the language server.** `crates/base/src/input/base` is there, and so is the display map the arrows walk — soft wrap, display rows, wrapped-line movement — along with the IME marked range, `scroll_to`, the highlighted runs, the decorated ranges, the indent pair on tab and on `ctrl-]` / `ctrl-[`, and number stepping. The search session and code folding have since been ported too, so what is left out is the LSP features — completion, diagnostics, hover — which need a language server this tree does not run. `start_of_line` / `end_of_line` take the wrapped row first and the logical line on a second press, which is what Rust gates on `soft_wrap && is_code_editor()`.
 - **Mouse capture is `PlatSetMouseCapture`.** The press is the window's for as long as the button is down: `SetCapture` on Windows, an active `XGrabPointer` on X11, and nothing on macOS, where Cocoa already routes `mouseDragged:` and `mouseUp:` to the window the press went to. Windows also answers `WM_CAPTURECHANGED` by ending the press where it was, since a capture handed to a title-bar drag never gives the button back.
 - **`EventEmitter` is `cx.emit` / `cx.subscribe`.** `EntityEmit` fans an event out to every live subscription and `Subscribe(cx, emitter, &Self::OnEvent)` makes one, handing back a `Subscription` that `EntityUnsubscribe` gives up; a subscription whose emitter or subscriber has gone stale is swept on the next emit, which is what Rust's guard does on drop. There is no trait to mark what an entity emits, so nothing checks that the subscriber's handler takes the type the emitter sends — that is the one thing Rust's `EventEmitter<E>` gets that this cannot. `ListState`, `TableState` and `TreeState` emit through it; their `onEvent` field stays as the shorthand for the single-subscriber case and hears the same event, and the other states (`InputState`, `SliderState`, `PopupMenuState`, `SearchableListState`, `ClipboardState`) still carry a listener each, `InputState` because it is not an entity at all.
 - **The dock is both halves.** `crates/ui/src/dock` is ported as a tree of tab groups and splits — `DockArea` with a Dock on the left, the right and the bottom, tabs dragged between groups or onto an edge to split one, resize handles everywhere, zoom and close — and `tiles.rs` is there too: the free canvas of overlapping panels, each moved by its drag bar and resized by its edges, both magnetic against a neighbour's edge or the grid. `dock/state.rs` round-trips a layout through the JSON reader in `src/base/json.h` rather than through serde, `TileMeta` and all.
@@ -3241,3 +3241,131 @@ magnitude short of what the process was holding.
   Allocations --time-limit ...` suspended this command-line app at the limit
   and never finalized the trace; `vmmap`/`heap`/`leaks` against a live PID are
   the reliable built-in command-line path on this Xcode. 17,269 checks pass.
+
+## Nine things the list said were left, and what four of them turned out to be
+
+The list at the top of this file had gone stale in places: three of the nine
+were already ported by later sessions and one had been half-ported. What each
+one actually came to, in the order they were asked for.
+
+**A no-wrap textarea scrolls sideways, and shows the bar.** Rust builds the
+editor's scrollbar from `!soft_wrap` — `Scrollbar::new` for a field that does
+not wrap, `Scrollbar::vertical` for one that does — and the port had only the
+vertical half, because the sideways offset lived inside the input engine:
+`InputState::scrollX` was clamped against a `contentW` nothing ever wrote, and
+no element carried it. The offset moves onto the box (`El::ScrollX`), and the
+paint pass writes the box's measured content width back onto the state, which
+is `scroll_size.width`. Grabbing the bar wanted one more seam: a drag reports
+through a Listener bound to an entity and an `InputState` is not one, so
+`ScrollRect` names the state the way `El::BindInput` does and the bar writes
+the offset straight onto it. The wheel does both axes now.
+
+**Home and End take the wrapped row.** Rust documents the pair as: with soft
+wrap on, the first press goes to the visual line's start and a second — with
+the caret already there — carries on to the logical line's. It reads the row
+off `display_map.line(row).wrapped_lines[..]`; the wrap here belongs to the
+shaped run, so the row is found the way the vertical walk already finds one,
+by measuring where the caret landed with `TextPointAt` and asking the run what
+sits at either end of that row. Gated on `soft_wrap && is_code_editor()`, as
+Rust gates it: a plain textarea keeps the logical line. Without a window to
+measure against — every field with no frame on screen, and every unit test —
+the answer stays the logical line, which is the case the test pins.
+
+**The table story's Amount column was 120 where Rust lands nearer 145**,
+because Rust does not size that column at all. `crates/ui/src/table/table.rs`
+— the stateless table beside DataTable — had never been ported, and the story
+drew its two tables out of raw divs with the widths guessed by hand. It is
+`component::Table` now: Table, TableHeader / TableBody / TableFooter,
+TableRow, TableHead / TableCell and TableCaption, each themed and padded by
+`Size::table_cell_padding`, so the page's Size toolbar sizes both tables where
+before it changed nothing on them. The rule that fixes the column: a cell with
+no width of its own is `flex_shrink_1()` plus `flex_basis(relative(col_span))`
+and `min_w(100 * col_span)`, so every unsized cell starts from the whole row
+and they shrink together. `El::BasisFrac` is `flex_basis(relative(f))`, which
+the style vocabulary was missing. Two theme tokens came with the footer —
+`table.foot.background` and `table.foot.foreground`. Against the Rust story
+every column edge now lands where it does upstream; the rows are a DIP
+shorter, which is line height and not this.
+
+**The dock, read against `crates/ui/src/dock` rather than against a line
+count.** The three gaps the older entry named — the drag preview, the tab
+bar's scroll, `InvalidPanel` — were all done in 2026-08-20; seven others were
+not. The big one is `PanelStyle::Auto`, the default: a group showing one panel
+is a plain 30-DIP title row with no tab chrome at all, and the port always
+drew a tab bar, so every single-panel dock read as tabbed. Then
+`Panel::visible` (a hidden panel has no tab, is not the active panel, and does
+not count towards the last one); the guards on closing and dragging
+(`is_last_panel` walking the parent chain, `is_locked` adding the zoomed group
+and a group that is the root of its own tree) — which is why each Dock's item
+in the story is now a split holding its tab group, exactly as the Rust example
+writes it; `PanelControl`, so Zoom In is in the ⋯ menu and the maximise icon
+only on a panel that asked for it; the three dock toggles belonging to
+particular groups (left and right off the centre's left-most and right-most
+top groups, bottom off the bottom Dock's own first group) with Rust's icons,
+three of which this tree did not have; a collapsed tab bar showing no active
+tab and taking no drag; `tab_name`; the layout version, read and then dropped
+on both sides of the round trip; and `set_collapsible(false)` opening the dock
+so one shut beforehand cannot be left unreachable.
+
+**The scrollbar's thumb was two DIPs thin.** Measured against the Rust story:
+its thumb is eight wide and ours was six. `scrollbar.rs` keeps two widths and
+the thin one is only where a fading `Scrolling` bar rests — every other mode
+draws the wide one, and any bar grows to it under the pointer or in a drag.
+The colour changes under the thumb itself:
+`scrollbar.thumb.hover.background`, a token the palette was missing. With it:
+the band a press counts in is Rust's WIDTH (16, not 14), the track behind the
+thumb is painted from `scrollbar.background`, and the thumb's radius is the
+theme's clamped to half the thumb rather than a constant 3.
+
+**Motion was the one that had already been done** — the accordion, the tab
+indicator, the dialog and sheet entrances, the skeleton, the spinner and the
+indeterminate progress all went through `src/base/motion` in the sessions
+after that line was written, and every `with_animation` in `crates/ui` has a
+counterpart here. What was left is the one the code admitted to in its own
+comment: the dock's drop placeholder, which snapped where Rust tweens it over
+150 ms. Four transitions do it, and a transition restarts itself when its
+target moves, so switching zones needs nothing; what a transition cannot work
+out is where the *first* one starts, which is what `MotionSeed` is for — a
+drag arriving at a group seeds it with the dragged tab's preview, and the
+placeholder flies out from under the pointer.
+
+**`theme_tokens.rs`**, written down as deliberately not ported because no
+component reads it. Two of those clauses were true and the third stopped being
+a reason: the token set is also a theme file format, and a theme written in it
+could not be read at all. `SemanticThemeTokens` is the set — colours by role,
+the radius ladder, the spacing scale, the six text roles, the three shadow
+elevations — with `ThemeSemanticTokens` projecting a palette into it and
+`ThemeApplySemanticTokens` writing the representable half back.
+`ThemeApplySemanticConfigStr` reads a `{"tokens": {...}}` document over the
+palette in force. `surface` needed somewhere to come from, and that turned up
+a token the palette was missing outright: **popover.background /
+popover.foreground**, which the menu, the notification card and the find bar
+had been painting as the window's own background.
+
+**`DoubleClickedCell`** has been reachable since cell selection landed; what
+was missing was `row_header`, a flag this tree carried and nothing read.
+`render_row_header_cell` is the narrow strip a cell-selecting table picks whole
+rows with, and without one a single click on the already-selected cell
+escalates to the row — never a double click, which is on its way to
+`DoubleClickedCell`. `TableEscalatesToRow` is that rule by itself, so a test
+can drive it.
+
+**`<text>` in SVG** was ported two sessions ago, badges and all; the line
+naming it as missing was older than the fix. The three badges at the top of
+the Introduction page read `CI passing`, `docs passing` and `crates.io v0.5.1`
+today.
+
+Found and not fixed, written down rather than started: `tooltip.rs` paints a
+popover with a border and a shadow where this tree's Tooltip is an inverted
+chip — `bg(foreground)` with `text_color(background)` — which is a design
+difference rather than a token one and moves every tooltip in the gallery. The
+dock has more of its API surface left than its behaviour: panel lifecycle
+callbacks (`set_active` / `on_added_to` / `on_removed` / `set_zoomed`), a
+panel's own toolbar buttons and menu rows, focus following the active tab,
+`DockEvent::DragDrop` for a host-owned drag, and `Panel::title_style` /
+`inner_padding`.
+
+17341 checks. The keyboard half of the Home/End change is pinned by tests
+rather than by screenshots for the reason the LSP entry gives: a posted
+`WM_KEYDOWN` does not reach a field on this machine, so `cmd/shot.ts -key`
+cannot drive a caret.
