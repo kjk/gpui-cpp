@@ -30,6 +30,10 @@ const cppGlobs = [
 
 const tsGlobs = ["cmd/*.ts"];
 
+// Generated files: the generator lays them out itself, and clang-format would
+// unpack the byte rows in the icon table into one byte a line.
+const generated = new Set(["src/gpui/asset_icons.cpp"]);
+
 async function globFiles(patterns: string[]): Promise<string[]> {
   const files: string[] = [];
   for (const pattern of patterns) {
@@ -158,7 +162,7 @@ if (paths.length > 0) {
   }
 } else {
   if (wantCpp) {
-    cppFiles = await globFiles(cppGlobs);
+    cppFiles = (await globFiles(cppGlobs)).filter((p) => !generated.has(p));
   }
   if (wantTs) {
     tsFiles = await globFiles(tsGlobs);
