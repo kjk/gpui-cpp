@@ -159,6 +159,58 @@ struct ThemeTokens {
     Background overlay = {};
     Background switchThumb = {};
     Background sliderThumb = {};
+    // The rest of `apply_background_color!`, in schema.rs's own order. They
+    // came in with the theme viewer, which lists every field of Rust's
+    // `ThemeColor` and needs a value for each.
+    Background button = {};
+    Background buttonHover = {};
+    Background buttonActive = {};
+    Background primaryHover = {};
+    Background primaryActive = {};
+    Background buttonPrimary = {};
+    Background buttonPrimaryHover = {};
+    Background buttonPrimaryActive = {};
+    Background secondaryHover = {};
+    Background secondaryActive = {};
+    Background buttonSecondary = {};
+    Background buttonSecondaryHover = {};
+    Background buttonSecondaryActive = {};
+    Background successHover = {};
+    Background successActive = {};
+    Background buttonSuccess = {};
+    Background buttonSuccessHover = {};
+    Background buttonSuccessActive = {};
+    Background infoHover = {};
+    Background infoActive = {};
+    Background buttonInfo = {};
+    Background buttonInfoHover = {};
+    Background buttonInfoActive = {};
+    Background warningHover = {};
+    Background warningActive = {};
+    Background buttonWarning = {};
+    Background buttonWarningHover = {};
+    Background buttonWarningActive = {};
+    Background dangerHover = {};
+    Background dangerActive = {};
+    Background buttonDanger = {};
+    Background buttonDangerHover = {};
+    Background buttonDangerActive = {};
+    Background accordion = {};
+    Background dropTarget = {};
+    Background list = {};
+    Background listEven = {};
+    Background listHead = {};
+    Background listHover = {};
+    Background sliderBar = {};
+    Background switchBg = {};
+    Background tab = {};
+    Background tabBarSegmented = {};
+    Background tableHover = {};
+    Background tiles = {};
+    Background scrollbarBg = {};
+    Background sidebar = {};
+    Background groupBox = {};
+    Background descListLabel = {};
 };
 
 struct Theme {
@@ -298,6 +350,85 @@ struct Theme {
     // description_list_label: the label cell of a DescriptionList.
     Rgba descListLabel;
     Rgba descListLabelFg;
+    // The rest of `ThemeColor`, which the theme viewer lists and a theme file
+    // can name. What paints with them is still, in most cases, the expression
+    // the component was written with — the token layer came first and the
+    // components follow it one at a time — so a file that names one of these
+    // changes the viewer and whatever has been moved over, and no more. Said
+    // where it matters in port-progress.md.
+    //
+    // button.*: the four families a Button has, each with its own foreground,
+    // hover and active. The plain one is the input border mixed toward
+    // transparent in dark and the window background in light.
+    Rgba button;
+    Rgba buttonFg;
+    Rgba buttonHover;
+    Rgba buttonActive;
+    Rgba buttonPrimary;
+    Rgba buttonPrimaryFg;
+    Rgba buttonPrimaryHover;
+    Rgba buttonPrimaryActive;
+    Rgba buttonSecondary;
+    Rgba buttonSecondaryFg;
+    Rgba buttonSecondaryHover;
+    Rgba buttonSecondaryActive;
+    Rgba buttonDanger;
+    Rgba buttonDangerFg;
+    Rgba buttonDangerHover;
+    Rgba buttonDangerActive;
+    Rgba buttonSuccess;
+    Rgba buttonSuccessFg;
+    Rgba buttonSuccessHover;
+    Rgba buttonSuccessActive;
+    Rgba buttonInfo;
+    Rgba buttonInfoFg;
+    Rgba buttonInfoHover;
+    Rgba buttonInfoActive;
+    Rgba buttonWarning;
+    Rgba buttonWarningFg;
+    Rgba buttonWarningHover;
+    Rgba buttonWarningActive;
+    // The hover and active halves of the four semantic surfaces, which the
+    // palette had only as a background and a foreground.
+    Rgba dangerHover;
+    Rgba dangerActive;
+    Rgba successHover;
+    Rgba successActive;
+    Rgba infoHover;
+    Rgba infoActive;
+    Rgba warningHover;
+    Rgba warningActive;
+    // accordion.background: the surface an accordion item paints, which falls
+    // back to the window's own.
+    Rgba accordion;
+    // drop_target.background: what a dock or a tile paints under a drag that
+    // would land there.
+    Rgba dropTarget;
+    // link / link.active / link.hover: the colour a piece of text that is a
+    // link takes. `TextView` draws a markdown link in `link`, which is what
+    // node.rs does.
+    Rgba link;
+    Rgba linkActive;
+    Rgba linkHover;
+    // list.background and the three rows beside it — the surface the table
+    // tokens fall back to.
+    Rgba list;
+    Rgba listEven;
+    Rgba listHead;
+    Rgba listHover;
+    Rgba tableHover;
+    // slider.background: the bar behind a slider's thumb.
+    Rgba sliderBar;
+    // switch.background: an unchecked switch's track.
+    Rgba switchBg;
+    // tab.background and tab_bar.segmented.background: a tab that is not the
+    // selected one, and the strip a segmented bar paints itself on.
+    Rgba tab;
+    Rgba tabBarSegmented;
+    // tiles.background: the canvas `Tiles` lays its panels on.
+    Rgba tiles;
+    // window.border: the rule around a window that draws its own frame.
+    Rgba windowBorder;
     // crates/ui/src/theme/mod.rs: radius 6, radius_lg 8 (Dialog, Notification).
     float radius;
     float radiusLg;
@@ -311,6 +442,46 @@ struct Theme {
 // in code, and for the tokens a resolved theme file left alone. A token that
 // already carries a gradient is kept.
 void ThemeTokensReset(Theme* t);
+
+// The tokens schema.rs derives rather than reads: every one whose fallback is
+// an expression over the tokens above it. A palette written in code fills
+// them by calling this once it has set the rest; `ThemeConfigResolve` calls
+// it too, and then lets the file's own words stand over the top. `dark` is
+// the mode, which two of the fallbacks read (`active_darken`, and the plain
+// button's surface).
+void ThemeFillDerived(Theme* t, bool dark);
+
+// ─── Colorize (crates/ui/src/theme/color.rs) ─────────────────────────────
+//
+// The colour maths every theme fallback is written in. They are here rather
+// than beside the registry because the palettes in code derive their own
+// tokens with them.
+
+// gpui::transparent_black(), which every `mix_oklab` toward nothing takes.
+Rgba RgbaTransparent();
+// Hsla::blend: `over` composited onto `base` by its own alpha. The result
+// keeps the base's alpha, which is why `background.blend(x)` is opaque
+// however faint `x` is.
+Rgba RgbaBlend(Rgba base, Rgba over);
+// Colorize::lighten / ::darken, which scale the HSL lightness rather than
+// mixing toward white or black.
+Rgba RgbaLighten(Rgba c, float amount);
+Rgba RgbaDarken(Rgba c, float amount);
+// Colorize::to_hex: `#RRGGBB`, and `#RRGGBBAA` when the colour is
+// translucent. Upstream holds every colour as an `Hsla` and turns it back into
+// bytes to print it, truncating each channel — so a colour that arrived as a
+// hex string prints one below itself wherever the conversion does not land on
+// a byte boundary, and that is the string a reader sees beside a swatch. A
+// byte here has not been through that conversion, so the round trip is made
+// here before the digits are written. A colour this tree mixed out of an HSL
+// of its own is already on the far side of it and should be printed as it
+// stands rather than through this.
+Str RgbaToHex(Arena* a, Rgba c, bool upper = true);
+
+// Colorize::mix_oklab, which is CSS `color-mix(in oklab, a factor%, b)`: the
+// alpha is interpolated first and the Oklab channels are premultiplied by it,
+// so mixing toward transparent fades without dragging the hue to black.
+Rgba RgbaMixOklab(Rgba a, Rgba b, float factor);
 
 // ─── semantic tokens (crates/base/src/theme_tokens.rs) ───────────────────
 //

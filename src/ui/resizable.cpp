@@ -29,20 +29,49 @@ void ResizableState::OnHandleDrag(ResizableState* self, Ctx* cx,
     if (ix < 0 || ix + 1 >= self->sizes.len) {
         return;
     }
+    // A hidden panel is not on the boundary being dragged and must not be
+    // given or taken space, so the arithmetic sees the panels that are drawn
+    // and nothing else. Rust leaves the hidden slot in its array and lets its
+    // number drift; the sizes are compacted here and written back instead.
+    const int kMaxPanels = 64;
+    float sizes[kMaxPanels] = {};
+    float mins[kMaxPanels] = {};
+    float maxs[kMaxPanels] = {};
+    int back[kMaxPanels] = {};
+    int n = 0;
+    int at = -1;
+    for (int i = 0; i < self->sizes.len && n < kMaxPanels; i++) {
+        if (i < self->shown.len && !self->shown[i]) {
+            continue;
+        }
+        sizes[n] = self->sizes[i];
+        mins[n] = self->mins[i];
+        maxs[n] = self->maxs[i];
+        back[n] = i;
+        if (i == ix) {
+            at = n;
+        }
+        n++;
+    }
+    if (at < 0 || at + 1 >= n) {
+        return;
+    }
     // Where the boundary now is, in the group's own coordinates: the size the
     // panels before it take up plus what the pointer has moved to.
     float before = 0;
-    for (int i = 0; i < ix; i++) {
-        before += self->sizes[i];
+    for (int i = 0; i < at; i++) {
+        before += sizes[i];
     }
     bool horiz = AxisIsHorizontal(self->axis);
-    float at =
+    float pt =
         horiz ? ev->event.x - self->bounds.x : ev->event.y - self->bounds.y;
-    float want = at - before;
+    float want = pt - before;
     float container = horiz ? self->bounds.w : self->bounds.h;
-    if (!ResizablePanelResize(self->sizes.els, self->mins.els, self->maxs.els,
-                              self->sizes.len, ix, want, container)) {
+    if (!ResizablePanelResize(sizes, mins, maxs, n, at, want, container)) {
         return;
+    }
+    for (int i = 0; i < n; i++) {
+        self->sizes[back[i]] = sizes[i];
     }
     Notify(cx);
 }
@@ -90,12 +119,26 @@ Resizable* Resizable::Panel(El* content, float size, float min, float max) {
     mins.Append(a, min);
     maxs.Append(a, max);
     grows.Append(a, false);
+    shown.Append(a, true);
     return this;
 }
 
 Resizable* Resizable::Grow(El* content, float min) {
     Panel(content, 0, min, 0);
-    grows[grows.len - 1] = true;
+    return Flex();
+}
+
+Resizable* Resizable::Flex() {
+    if (grows.len > 0) {
+        grows[grows.len - 1] = true;
+    }
+    return this;
+}
+
+Resizable* Resizable::Visible(bool v) {
+    if (shown.len > 0) {
+        shown[shown.len - 1] = v;
+    }
     return this;
 }
 
@@ -123,7 +166,10 @@ El* Resizable::IntoEl() {
         s->mins.Clear();
         s->maxs.Clear();
         for (int i = 0; i < panels.len; i++) {
-            s->sizes.Append(sizes[i]);
+            // A panel that flexes has no size of its own until the container
+            // is known: what it declared is its flex basis, and the share it
+            // takes is worked out below.
+            s->sizes.Append(grows[i] ? 0 : sizes[i]);
             s->mins.Append(mins[i]);
             // A declared 0 is Rust's `Pixels::MAX` — no ceiling — and the
             // arithmetic takes a number, not a flag.
@@ -136,41 +182,45 @@ El* Resizable::IntoEl() {
             s->maxs[i] = maxs[i] > 0 ? maxs[i] : 1e9f;
         }
     }
-    s->growIx = -1;
-    int growIx = -1;
-    for (bool grow : grows) {
-        growIx++;
-        if (grow) {
-            s->growIx = growIx;
-            break;
-        }
+    s->grows.Clear();
+    s->shown.Clear();
+    for (int i = 0; i < panels.len; i++) {
+        s->grows.Append(grows[i]);
+        s->shown.Append(shown[i]);
+    }
+    while (s->laid.len < panels.len) {
+        s->laid.Append(Bounds{});
     }
 
-    // adjust_to_container_size: every panel keeps the share it had. Only a
-    // group whose panels all have a size of their own is normalised — one
-    // with a growing panel gets the leftover from the layout instead, which
-    // is what `flex_grow` is for.
+    // The first frame is the layout's answer rather than this code's: a
+    // panel whose size the state does not know yet is declared the way Rust
+    // declares it — `size_full`, `flex_grow: 1`, the `size_range` as the min
+    // and the max, and the declared size as the flex basis — and taffy
+    // resolves the line. What it measured is written back here on the next
+    // frame and is the panel's size from then on, which is what
+    // `update_panel_size` does from Rust's own prepaint. Two things fall out
+    // of it that arithmetic here would have had to invent: a sized panel that
+    // flexes shrinks with its neighbours instead of holding its number, and a
+    // growing panel's `width: 100%` is what makes it the one that gives way.
     float container = horiz ? s->bounds.w : s->bounds.h;
-    if (container > 0 && s->lastContainer > 0 &&
+    bool resolved = true;
+    for (int i = 0; i < panels.len; i++) {
+        if (s->sizes[i] <= 0 && shown[i] && i < s->laid.len) {
+            float was = horiz ? s->laid[i].w : s->laid[i].h;
+            if (was > 0) {
+                s->sizes[i] = was;
+            }
+        }
+        resolved = resolved && (s->sizes[i] > 0 || !shown[i]);
+    }
+    // adjust_to_container_size: every panel keeps the share it had when the
+    // container changes size. A group that is still waiting for the layout to
+    // answer has nothing to keep the share of.
+    if (resolved && container > 0 && s->lastContainer > 0 &&
         container != s->lastContainer) {
         ResizableAdjustToContainer(s->sizes.els, s->sizes.len, container);
     }
-    // A growing panel has no size of its own until the container is known;
-    // once it is, it takes what the others leave and becomes an ordinary
-    // panel, which is what makes a drag either side of it arithmetic rather
-    // than a special case. Rust's state carries a size for every panel too.
-    if (s->growIx >= 0 && container > 0 && s->sizes[s->growIx] <= 0) {
-        float rest = 0;
-        for (int i = 0; i < s->sizes.len; i++) {
-            if (i != s->growIx) {
-                rest += s->sizes[i];
-            }
-        }
-        float want = container - rest;
-        s->sizes[s->growIx] =
-            want > s->mins[s->growIx] ? want : s->mins[s->growIx];
-    }
-    if (container > 0) {
+    if (resolved && container > 0) {
         s->lastContainer = container;
     }
     root->BoundsOut(&s->bounds);
@@ -179,6 +229,11 @@ El* Resizable::IntoEl() {
     Listener drag = ListenTo(state, &ResizableState::OnHandleDrag);
     Listener up = ListenTo(state, &ResizableState::OnHandleUp);
     for (int i = 0; i < panels.len; i++) {
+        // `visible(false)` draws nothing at all — Rust's panel renders a bare
+        // div, which takes no room and carries no handle.
+        if (!shown[i]) {
+            continue;
+        }
         // No clip: the handle straddles the boundary, four DIPs either side,
         // which is where Rust puts it and what a clip would cut off.
         El* box = Div(a)->FlexCol()->Shrink0();
@@ -186,13 +241,27 @@ El* Resizable::IntoEl() {
         // axis, and the group's box across it.
         float boxW = horiz ? s->sizes[i] : (s->bounds.w > 0 ? s->bounds.w : 0);
         float boxH = horiz ? (s->bounds.h > 0 ? s->bounds.h : 0) : s->sizes[i];
-        if (grows[i] && s->sizes[i] <= 0) {
-            // The one frame before the container is known.
-            box->Flex1();
-            if (horiz) {
-                box->H(kFill)->MinW(mins[i]);
+        if (s->sizes[i] <= 0) {
+            // Rust's own declaration, for the frames before the layout has
+            // answered: `flex().flex_grow_1().size_full()`, then `flex_none()`
+            // where the caller cancelled the growth, then the size range, then
+            // the declared size as the basis.
+            box->SizeFull();
+            if (grows[i]) {
+                box->Grow(1)->Shrink(1);
             } else {
-                box->W(kFill)->MinH(mins[i]);
+                box->FlexNone();
+            }
+            if (horiz) {
+                box->MinW(mins[i])->MaxW(maxs[i] > 0 ? maxs[i] : 1e9f);
+            } else {
+                box->MinH(mins[i])->MaxH(maxs[i] > 0 ? maxs[i] : 1e9f);
+            }
+            if (sizes[i] > 0) {
+                box->Basis(sizes[i]);
+            }
+            if (i < s->laid.len) {
+                box->BoundsOut(&s->laid[i]);
             }
         } else if (horiz) {
             box->W(s->sizes[i])->H(kFill);
@@ -204,8 +273,15 @@ El* Resizable::IntoEl() {
         }
         // The handle sits over the boundary rather than taking room from it:
         // a hairline with four DIPs of grab either side, absolutely placed on
-        // the panel's trailing edge. The last panel has no boundary after it.
-        if (i + 1 < panels.len) {
+        // the panel's trailing edge. The last panel has no boundary after it,
+        // and neither has the last one that is drawn — Rust draws the handle
+        // from the panel *after* the boundary, so hiding a panel takes the
+        // handle before it away.
+        bool hasNext = false;
+        for (int j = i + 1; j < panels.len; j++) {
+            hasNext = hasNext || shown[j];
+        }
+        if (hasNext) {
             bool active = s->dragging == i;
             El* line = Div(a)->Bg(active ? th.dragBorder : th.border);
             El* handle =

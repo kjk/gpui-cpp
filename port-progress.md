@@ -3464,3 +3464,125 @@ that brings a `use` line with it.
 `semantic_tokens.rs` tests among them. The keyboard half is pinned by tests
 rather than by screenshots, for the reason the last LSP entry gives: a posted
 `WM_KEYDOWN` does not reach a field on this machine.
+
+## Five things a list said were still wrong, and what two of them turned out
+## to be
+
+Five items came in as one list. Two were already done and are recorded here so
+the next reader does not go looking again; three were real.
+
+**Soft wrap and the sideways bar were both already here.** The editor has
+`softWrap` on `InputState`, the editor and large-text examples both carry the
+toggle button their Rust originals do, and `Textarea`'s no-wrap horizontal
+scrollbar was built two sessions ago — `El::ScrollX`, the measured content
+width written back onto the state, and a bar that drags through `ScrollRect`.
+Nothing to do.
+
+**A multi-word link is underlined once.** A styled paragraph is a row of word
+elements — that is what lets the row wrap where Rust wraps one `StyledText` —
+and each word carried its own trailing space and its own `text_decoration`. A
+shaper does not draw an underline under trailing whitespace, so `[link to the
+port](..)` came out underlined word by word with a gap at every space. Rust
+does not ask a shaper: `node.rs` hands the run an `UnderlineStyle { thickness:
+px(1.) }` and GPUI draws a quad under the whole run. `TextView::Word` puts the
+rule on as a `TextSpan` over the word's own bytes now, which is that quad —
+`PaintTextUnderline` measures the run *including* its trailing space, so the
+rules of two neighbouring words abut and read as one line. The colour goes on
+with it: a span with no alpha is not drawn at all, so a run that named no
+colour takes the theme's foreground, which is the colour the glyphs will take.
+The link colour is `theme.link` rather than `theme.primary`, which is what
+`node.rs` reads (the token falls back to primary, so nothing moved).
+`~~struck out~~` still breaks at the space for the same reason and is not
+fixed: a strikethrough has no span of its own to hang on, and the height a
+shaper puts it at is a font metric this tree does not read back, so inventing
+one would move every strikethrough in the tree to close a gap in one.
+
+**The resizable story's panels start where Rust's do.** Two halves. The
+declarations had drifted — the nested group's top row was a panel of 264 where
+Rust hands the inner group to the outer one as a plain child (a panel with no
+size of its own), the bottom panel had a 150 ceiling where `size_range` says
+`Pixels::MAX`, the growing panel had lost its `200..400`, and the programmatic
+group's centre was a fixed 300 where Rust grows it. Those are what
+`resizable_story.rs` says now, `.visible()` on the panel the Hide Left button
+toggles included.
+
+The other half is what a panel's *first* size is. Rust's panel is a flex item:
+`size_full`, `flex_grow: 1` unless the caller says `flex_none()`, the
+`size_range` as the min and the max, and the declared size as the flex basis —
+so a group of sized panels in a container narrower than their sum **shrinks**
+them, and a panel with no size of its own starts from `width: 100%` and is the
+one that gives way. `update_panel_size` then writes what the layout measured
+back into the state, and the state is what every later frame and every drag
+reads. The port had been doing arithmetic instead: the declared numbers, with
+the leftover handed to the one growing panel. It declares the flex item now
+and reads the measured size back on the next frame, which is the same two
+steps in the same order — `Resizable::Flex()` is the panel Rust did not call
+`flex_none()` on, `Visible(false)` is a slot that keeps its size and draws
+nothing, and the drag arithmetic compacts the hidden slots out before it runs
+rather than letting their numbers drift the way upstream's do. On the nested
+group at the compare window's width Rust lands on 121 / 408 / 148 and this
+lands on 120 / 389 / 170, where before it was 150 / 115 / 415: the left panel
+is at the minimum both sides agree on, and the remaining ~20 DIPs are a
+percentage basis resolving against something slightly wider on Rust's side,
+which is a taffy question rather than a resizable one.
+
+**The theme viewer lists `ThemeColor`, not a subset of it.** The page's table
+was 78 rows picked by hand out of the tokens this tree's `Theme` happened to
+carry. Rust's is every field of `ThemeColor` — 139 — serialized and split into
+a category and a name by `mapper.rs`. The palette is that field set now:
+`Theme` and `ThemeTokens` carry the four button families, the hover and active
+halves of danger / success / info / warning, accordion, the drop target, the
+link trio, the list surfaces, the slider and switch backgrounds, the tab and
+segmented tab-bar surfaces, table hover, tiles and the window border, and
+`ThemeFillDerived` in `gpui.cpp` is where every one of their fallbacks lives —
+the `fallback =` of the matching `apply_color!`, in schema.rs's order — so a
+palette written in code and a theme file that names nothing land on the same
+numbers. `ThemeConfigResolve` calls it and then lets the file's own words
+stand over the top, which is what the new keys are read as. The story's table
+is generated out of `theme_color.rs` and `mapper.rs` rather than typed.
+
+Two things on that page that had been ornaments work now. **Inherited Colors**
+filters: a row is shown only where the theme file names that token itself,
+which is Rust's `is_explicit`, and the menu item lifts the filter. Rust
+decides it by comparing `mapper.rs`'s canonical key against the key
+`ThemeConfigColors` serializes, and those two names only sometimes agree — a
+token like `accordion` (`accordion.background` in the file) or `drag_border`
+(`drag.border`) can never match and reads as inherited however the file is
+written. That wart is kept rather than improved on, because with it the page
+opens on the same list on both sides: Global, Primary, Secondary, Accent,
+Base, Chart, Danger, Info, Input, List, Muted, Sidebar. And the **search
+field** filters, on the category, the name, or the start of the hex with a
+leading `#` taken off it first.
+
+What this does *not* do is move the components onto the new tokens. A Button
+still paints the expressions it was written with rather than
+`theme.button_primary_hover`, and the same goes for the tab, the switch, the
+slider bar and the list and table hovers. The token layer is the half that had
+to come first — a theme file can name any of them now and the viewer shows
+what it named — and the components are a page at a time behind it.
+
+**A float becomes a byte by truncating.** `Colorize::to_hex` is
+`(rgb.r * 255.) as u32`, and every other place Rust turns one of its float
+colours into a byte truncates the same way. This tree holds bytes, so the
+quantisation happens at every step of a fallback chain rather than once at the
+end, and it was rounding: half the derived tokens came out one above the
+number Rust prints for the same colour. `RgbaOpacity`, `RgbaHsla`, the blend,
+the Oklab mix and the two alpha caps truncate now, `red-500/50` is 127 rather
+than 128, and the five hardcoded palette constants that drifted from the file
+by one — the two selections at their 30% cap, the two description-list labels
+and the dark input background — are the truncated numbers, which is what the
+`theme drift` check compares. The hex printers go through `RgbaToHex`, which
+is `to_hex` in full: upstream holds an `Hsla` and converts back to bytes to
+print it, so a colour that arrived as a hex prints one below itself wherever
+the conversion does not land on a byte boundary, and the round trip is made
+here for the same reason. It is not all the way there: the colour picker's
+`#6366f1` still prints as itself where Rust prints `#6366f0`, because this
+tree's HSL conversion is not bit-identical to GPUI's and the truncation falls
+on the other side of the boundary for that colour. The rule is right; the last
+bit of one channel is not, and closing it wants GPUI's own `Rgba`↔`Hsla`
+rather than a textbook one.
+
+17,455 checks pass. The pages this touched were shot against the Rust story
+side by side (`bun cmd/compare-story.ts resizable`, `theme-colors`,
+`color-picker`), and the theme viewer's default list, its inherited list and
+its hex readouts line up with upstream's.

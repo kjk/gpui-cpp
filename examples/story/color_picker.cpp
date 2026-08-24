@@ -83,7 +83,10 @@ El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
                    ->Bg(th.tokens.muted);
     foot->Child(StoryTxt(cx, StrL("Selected color"), 14, th.mutedFg));
     foot->Child(
-        StoryTxt(cx, StoryFmt(cx, "#%06X", shown & 0xffffff), 16, th.foreground)
+        // `color.to_hex()`, which is the Hsla round trip and not the digits
+        // the palette entry was written with.
+        StoryTxt(cx, RgbaToHex(cx->a, RgbaHex(shown & 0xffffffu)), 16,
+                 th.foreground)
             ->Mono()
             ->Medium());
     preview->Child(foot);

@@ -12,6 +12,20 @@
 
 namespace gpui {
 
+// The float→byte rule the whole palette is written to: truncate, which is
+// what `(rgb.r * 255.) as u32` does in `Colorize::to_hex` and everywhere else
+// Rust turns one of its float colours into a byte. Rust keeps a colour as
+// four floats and only quantises when it prints or paints; this tree keeps
+// bytes, so the quantisation happens at every step — rounding it up half the
+// time left the hex the theme viewer and the colour picker print one above
+// the number Rust prints for the same colour.
+static uint8_t ToByte(float v01) {
+    if (v01 <= 0) {
+        return 0;
+    }
+    return v01 >= 1.f ? 255 : (uint8_t)(v01 * 255.f);
+}
+
 Rgba RgbaOpacity(Rgba c, float a01) {
     if (a01 < 0) {
         a01 = 0;
@@ -19,7 +33,7 @@ Rgba RgbaOpacity(Rgba c, float a01) {
     if (a01 > 1) {
         a01 = 1;
     }
-    c.a = (uint8_t)(c.a * a01 + 0.5f);
+    c.a = (uint8_t)(c.a * a01);
     return c;
 }
 
@@ -73,10 +87,7 @@ Rgba RgbaHsla(float h, float s, float l, float a01) {
         b = x;
     }
     float m = l - c * 0.5f;
-    return Rgba{(uint8_t)(Clamp01(r + m) * 255.f + 0.5f),
-                (uint8_t)(Clamp01(g + m) * 255.f + 0.5f),
-                (uint8_t)(Clamp01(b + m) * 255.f + 0.5f),
-                (uint8_t)(Clamp01(a01) * 255.f + 0.5f)};
+    return Rgba{ToByte(r + m), ToByte(g + m), ToByte(b + m), ToByte(a01)};
 }
 
 void RgbaToHsla(Rgba c, float* h, float* s, float* l) {
@@ -142,7 +153,7 @@ Background BackgroundOpacity(Background b, float factor) {
 
 // Hsla::alpha(a.min(max)): a ceiling, not a scale.
 static Rgba CapAlpha(Rgba c, float max) {
-    uint8_t cap = (uint8_t)(max * 255.f + 0.5f);
+    uint8_t cap = ToByte(max);
     if (c.a > cap) {
         c.a = cap;
     }
@@ -271,6 +282,112 @@ void ThemeApplySemanticTokens(Theme* t, const SemanticThemeTokens& tokens) {
     // scale, the text roles, and the two font families.
 }
 
+// ─── Colorize — crates/ui/src/theme/color.rs ─────────────────────────────
+
+// gpui::transparent_black(), which every `mix_oklab` toward nothing takes.
+Rgba RgbaTransparent() {
+    return Rgba8(0, 0, 0, 0);
+}
+
+// gpui::Hsla::blend: `over` composited onto `base` by its own alpha. The
+// result keeps the base's alpha, which is why `background.blend(x)` is opaque
+// however faint `x` is.
+Rgba RgbaBlend(Rgba base, Rgba over) {
+    if (over.a >= 255) {
+        return over;
+    }
+    if (over.a == 0) {
+        return base;
+    }
+    float f = over.a / 255.f;
+    auto mix = [&](uint8_t b, uint8_t o) {
+        return (uint8_t)(b * (1.f - f) + o * f);
+    };
+    return Rgba8(mix(base.r, over.r), mix(base.g, over.g), mix(base.b, over.b),
+                 base.a);
+}
+
+// Colorize::lighten / ::darken, which scale the HSL lightness rather than
+// mixing toward white or black.
+static Rgba ScaleLightness(Rgba c, float factor) {
+    float h = 0, s = 0, l = 0;
+    RgbaToHsla(c, &h, &s, &l);
+    return RgbaHsla(h, s, Clamp01(l * factor), c.a / 255.f);
+}
+
+Rgba RgbaLighten(Rgba c, float amount) {
+    return ScaleLightness(c, 1.f + Clamp01(amount));
+}
+
+Rgba RgbaDarken(Rgba c, float amount) {
+    return ScaleLightness(c, 1.f - Clamp01(amount));
+}
+
+static float ToLinear(float c) {
+    return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+}
+
+static float FromLinear(float c) {
+    return c <= 0.0031308f ? c * 12.92f : 1.055f * powf(c, 1.f / 2.4f) - 0.055f;
+}
+
+static void RgbToOklab(Rgba c, float* L, float* A, float* B) {
+    float lr = ToLinear(c.r / 255.f);
+    float lg = ToLinear(c.g / 255.f);
+    float lb = ToLinear(c.b / 255.f);
+    float l = 0.4122214708f * lr + 0.5363325363f * lg + 0.0514459929f * lb;
+    float m = 0.2119034982f * lr + 0.6806995451f * lg + 0.1073969566f * lb;
+    float s = 0.0883024619f * lr + 0.2817188376f * lg + 0.6299787005f * lb;
+    float l_ = cbrtf(l), m_ = cbrtf(m), s_ = cbrtf(s);
+    *L = 0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_;
+    *A = 1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_;
+    *B = 0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_;
+}
+
+static Rgba OklabToRgb(float L, float A, float B, float alpha) {
+    float l_ = L + 0.3963377774f * A + 0.2158037573f * B;
+    float m_ = L - 0.1055613458f * A - 0.0638541728f * B;
+    float s_ = L - 0.0894841775f * A - 1.2914855480f * B;
+    float l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+    float lr = 4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
+    float lg = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
+    float lb = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
+    auto b8 = [](float v) { return ToByte(FromLinear(v)); };
+    return Rgba8(b8(lr), b8(lg), b8(lb), ToByte(alpha));
+}
+
+// Colorize::mix_oklab, which is CSS `color-mix(in oklab, a factor%, b)`: the
+// alpha is interpolated first and the Oklab channels are premultiplied by it,
+// so mixing toward transparent fades without dragging the hue to black.
+Rgba RgbaMixOklab(Rgba a, Rgba b, float factor) {
+    factor = Clamp01(factor);
+    float inv = 1.f - factor;
+    float aa = a.a / 255.f, ab = b.a / 255.f;
+    float alpha = aa * factor + ab * inv;
+    if (alpha <= 0) {
+        return RgbaTransparent();
+    }
+    float l1, a1, b1, l2, a2, b2;
+    RgbToOklab(a, &l1, &a1, &b1);
+    RgbToOklab(b, &l2, &a2, &b2);
+    float L = (l1 * aa * factor + l2 * ab * inv) / alpha;
+    float A = (a1 * aa * factor + a2 * ab * inv) / alpha;
+    float B = (b1 * aa * factor + b2 * ab * inv) / alpha;
+    return OklabToRgb(L, A, B, alpha);
+}
+
+Str RgbaToHex(Arena* a, Rgba c, bool upper) {
+    float h = 0, s = 0, l = 0;
+    RgbaToHsla(c, &h, &s, &l);
+    Rgba p = RgbaHsla(h, s, l, c.a / 255.f);
+    if (c.a < 255) {
+        return StrDup(a, upper ? fmt("#%02X%02X%02X%02X", p.r, p.g, p.b, p.a)
+                               : fmt("#%02x%02x%02x%02x", p.r, p.g, p.b, p.a));
+    }
+    return StrDup(a, upper ? fmt("#%02X%02X%02X", p.r, p.g, p.b)
+                           : fmt("#%02x%02x%02x", p.r, p.g, p.b));
+}
+
 void ThemeTokensReset(Theme* t) {
     if (!t) {
         return;
@@ -365,6 +482,264 @@ void ThemeTokensReset(Theme* t) {
     if (!t->tokens.sliderThumb.gradient) {
         t->tokens.sliderThumb = t->sliderThumb;
     }
+    if (!t->tokens.button.gradient) {
+        t->tokens.button = t->button;
+    }
+    if (!t->tokens.buttonHover.gradient) {
+        t->tokens.buttonHover = t->buttonHover;
+    }
+    if (!t->tokens.buttonActive.gradient) {
+        t->tokens.buttonActive = t->buttonActive;
+    }
+    if (!t->tokens.primaryHover.gradient) {
+        t->tokens.primaryHover = t->primaryHover;
+    }
+    if (!t->tokens.primaryActive.gradient) {
+        t->tokens.primaryActive = t->primaryActive;
+    }
+    if (!t->tokens.buttonPrimary.gradient) {
+        t->tokens.buttonPrimary = t->buttonPrimary;
+    }
+    if (!t->tokens.buttonPrimaryHover.gradient) {
+        t->tokens.buttonPrimaryHover = t->buttonPrimaryHover;
+    }
+    if (!t->tokens.buttonPrimaryActive.gradient) {
+        t->tokens.buttonPrimaryActive = t->buttonPrimaryActive;
+    }
+    if (!t->tokens.secondaryHover.gradient) {
+        t->tokens.secondaryHover = t->secondaryHover;
+    }
+    if (!t->tokens.secondaryActive.gradient) {
+        t->tokens.secondaryActive = t->secondaryActive;
+    }
+    if (!t->tokens.buttonSecondary.gradient) {
+        t->tokens.buttonSecondary = t->buttonSecondary;
+    }
+    if (!t->tokens.buttonSecondaryHover.gradient) {
+        t->tokens.buttonSecondaryHover = t->buttonSecondaryHover;
+    }
+    if (!t->tokens.buttonSecondaryActive.gradient) {
+        t->tokens.buttonSecondaryActive = t->buttonSecondaryActive;
+    }
+    if (!t->tokens.successHover.gradient) {
+        t->tokens.successHover = t->successHover;
+    }
+    if (!t->tokens.successActive.gradient) {
+        t->tokens.successActive = t->successActive;
+    }
+    if (!t->tokens.buttonSuccess.gradient) {
+        t->tokens.buttonSuccess = t->buttonSuccess;
+    }
+    if (!t->tokens.buttonSuccessHover.gradient) {
+        t->tokens.buttonSuccessHover = t->buttonSuccessHover;
+    }
+    if (!t->tokens.buttonSuccessActive.gradient) {
+        t->tokens.buttonSuccessActive = t->buttonSuccessActive;
+    }
+    if (!t->tokens.infoHover.gradient) {
+        t->tokens.infoHover = t->infoHover;
+    }
+    if (!t->tokens.infoActive.gradient) {
+        t->tokens.infoActive = t->infoActive;
+    }
+    if (!t->tokens.buttonInfo.gradient) {
+        t->tokens.buttonInfo = t->buttonInfo;
+    }
+    if (!t->tokens.buttonInfoHover.gradient) {
+        t->tokens.buttonInfoHover = t->buttonInfoHover;
+    }
+    if (!t->tokens.buttonInfoActive.gradient) {
+        t->tokens.buttonInfoActive = t->buttonInfoActive;
+    }
+    if (!t->tokens.warningHover.gradient) {
+        t->tokens.warningHover = t->warningHover;
+    }
+    if (!t->tokens.warningActive.gradient) {
+        t->tokens.warningActive = t->warningActive;
+    }
+    if (!t->tokens.buttonWarning.gradient) {
+        t->tokens.buttonWarning = t->buttonWarning;
+    }
+    if (!t->tokens.buttonWarningHover.gradient) {
+        t->tokens.buttonWarningHover = t->buttonWarningHover;
+    }
+    if (!t->tokens.buttonWarningActive.gradient) {
+        t->tokens.buttonWarningActive = t->buttonWarningActive;
+    }
+    if (!t->tokens.dangerHover.gradient) {
+        t->tokens.dangerHover = t->dangerHover;
+    }
+    if (!t->tokens.dangerActive.gradient) {
+        t->tokens.dangerActive = t->dangerActive;
+    }
+    if (!t->tokens.buttonDanger.gradient) {
+        t->tokens.buttonDanger = t->buttonDanger;
+    }
+    if (!t->tokens.buttonDangerHover.gradient) {
+        t->tokens.buttonDangerHover = t->buttonDangerHover;
+    }
+    if (!t->tokens.buttonDangerActive.gradient) {
+        t->tokens.buttonDangerActive = t->buttonDangerActive;
+    }
+    if (!t->tokens.accordion.gradient) {
+        t->tokens.accordion = t->accordion;
+    }
+    if (!t->tokens.dropTarget.gradient) {
+        t->tokens.dropTarget = t->dropTarget;
+    }
+    if (!t->tokens.list.gradient) {
+        t->tokens.list = t->list;
+    }
+    if (!t->tokens.listEven.gradient) {
+        t->tokens.listEven = t->listEven;
+    }
+    if (!t->tokens.listHead.gradient) {
+        t->tokens.listHead = t->listHead;
+    }
+    if (!t->tokens.listHover.gradient) {
+        t->tokens.listHover = t->listHover;
+    }
+    if (!t->tokens.sliderBar.gradient) {
+        t->tokens.sliderBar = t->sliderBar;
+    }
+    if (!t->tokens.switchBg.gradient) {
+        t->tokens.switchBg = t->switchBg;
+    }
+    if (!t->tokens.tab.gradient) {
+        t->tokens.tab = t->tab;
+    }
+    if (!t->tokens.tabBarSegmented.gradient) {
+        t->tokens.tabBarSegmented = t->tabBarSegmented;
+    }
+    if (!t->tokens.tableHover.gradient) {
+        t->tokens.tableHover = t->tableHover;
+    }
+    if (!t->tokens.tiles.gradient) {
+        t->tokens.tiles = t->tiles;
+    }
+    if (!t->tokens.scrollbarBg.gradient) {
+        t->tokens.scrollbarBg = t->scrollbarBg;
+    }
+    if (!t->tokens.sidebar.gradient) {
+        t->tokens.sidebar = t->sidebar;
+    }
+    if (!t->tokens.groupBox.gradient) {
+        t->tokens.groupBox = t->groupBox;
+    }
+    if (!t->tokens.descListLabel.gradient) {
+        t->tokens.descListLabel = t->descListLabel;
+    }
+}
+
+// ThemeFillDerived — the half of schema.rs's chain that is arithmetic rather
+// than a key. Every expression here is the `fallback =` of the
+// `apply_color!` / `apply_background_color!` with the same name, in the same
+// order, so a palette in code and a theme file that names nothing land on the
+// same numbers.
+void ThemeFillDerived(Theme* t, bool dark) {
+    if (!t) {
+        return;
+    }
+    // The two constants the button and hover fallbacks are written against.
+    const float activeDarken = dark ? 0.2f : 0.1f;
+    const float hoverOpacity = 0.9f;
+    const Rgba clear = RgbaTransparent();
+    auto set = [](Rgba* flat, Background* tok, Rgba c) {
+        *flat = c;
+        *tok = c;
+    };
+
+    // Button. The plain one sits on the input border mixed toward
+    // transparent in dark and on the window background in light.
+    set(&t->button, &t->tokens.button,
+        dark ? RgbaMixOklab(t->inputBorder, clear, 0.3f) : t->background);
+    t->buttonFg = t->foreground;
+    set(&t->buttonHover, &t->tokens.buttonHover,
+        RgbaMixOklab(t->inputBorder, clear, 0.5f));
+    set(&t->buttonActive, &t->tokens.buttonActive,
+        RgbaMixOklab(t->inputBorder, clear, 0.7f));
+
+    set(&t->buttonPrimary, &t->tokens.buttonPrimary, t->primary);
+    t->buttonPrimaryFg = t->primaryFg;
+    set(&t->buttonPrimaryHover, &t->tokens.buttonPrimaryHover, t->primaryHover);
+    set(&t->buttonPrimaryActive, &t->tokens.buttonPrimaryActive,
+        t->primaryActive);
+
+    set(&t->buttonSecondary, &t->tokens.buttonSecondary, t->secondary);
+    t->buttonSecondaryFg = t->secondaryFg;
+    set(&t->buttonSecondaryHover, &t->tokens.buttonSecondaryHover,
+        t->secondaryHover);
+    set(&t->buttonSecondaryActive, &t->tokens.buttonSecondaryActive,
+        t->secondaryActive);
+
+    // The four semantic surfaces: a hover blended over the window, an active
+    // one darkened, and a button family mixed toward transparent.
+    set(&t->successHover, &t->tokens.successHover,
+        RgbaBlend(t->background, RgbaOpacity(t->success, hoverOpacity)));
+    set(&t->successActive, &t->tokens.successActive,
+        RgbaDarken(t->success, activeDarken));
+    set(&t->buttonSuccess, &t->tokens.buttonSuccess,
+        RgbaMixOklab(t->success, clear, 0.2f));
+    t->buttonSuccessFg = t->success;
+    set(&t->buttonSuccessHover, &t->tokens.buttonSuccessHover,
+        RgbaMixOklab(t->success, clear, 0.3f));
+    set(&t->buttonSuccessActive, &t->tokens.buttonSuccessActive,
+        RgbaMixOklab(t->success, clear, 0.4f));
+
+    set(&t->infoHover, &t->tokens.infoHover,
+        RgbaBlend(t->background, RgbaOpacity(t->info, hoverOpacity)));
+    set(&t->infoActive, &t->tokens.infoActive,
+        RgbaDarken(t->info, activeDarken));
+    set(&t->buttonInfo, &t->tokens.buttonInfo,
+        RgbaMixOklab(t->info, clear, 0.2f));
+    t->buttonInfoFg = t->info;
+    set(&t->buttonInfoHover, &t->tokens.buttonInfoHover,
+        RgbaMixOklab(t->info, clear, 0.3f));
+    set(&t->buttonInfoActive, &t->tokens.buttonInfoActive,
+        RgbaMixOklab(t->info, clear, 0.4f));
+
+    set(&t->warningHover, &t->tokens.warningHover,
+        RgbaBlend(t->background, RgbaOpacity(t->warning, hoverOpacity)));
+    // The one that is not a plain darken: warning's active is blended over
+    // the window as well, which is what schema.rs writes.
+    set(&t->warningActive, &t->tokens.warningActive,
+        RgbaBlend(t->background, RgbaDarken(t->warning, activeDarken)));
+    set(&t->buttonWarning, &t->tokens.buttonWarning,
+        RgbaMixOklab(t->warning, clear, 0.2f));
+    t->buttonWarningFg = t->warning;
+    set(&t->buttonWarningHover, &t->tokens.buttonWarningHover,
+        RgbaMixOklab(t->warning, clear, 0.3f));
+    set(&t->buttonWarningActive, &t->tokens.buttonWarningActive,
+        RgbaMixOklab(t->warning, clear, 0.4f));
+
+    set(&t->dangerActive, &t->tokens.dangerActive,
+        RgbaDarken(t->danger, activeDarken));
+    set(&t->dangerHover, &t->tokens.dangerHover,
+        RgbaBlend(t->background, RgbaOpacity(t->danger, hoverOpacity)));
+    set(&t->buttonDanger, &t->tokens.buttonDanger,
+        RgbaMixOklab(t->danger, clear, 0.2f));
+    t->buttonDangerFg = t->danger;
+    set(&t->buttonDangerHover, &t->tokens.buttonDangerHover,
+        RgbaMixOklab(t->danger, clear, 0.3f));
+    set(&t->buttonDangerActive, &t->tokens.buttonDangerActive,
+        RgbaMixOklab(t->danger, clear, 0.4f));
+
+    set(&t->accordion, &t->tokens.accordion, t->background);
+    set(&t->dropTarget, &t->tokens.dropTarget, RgbaOpacity(t->primary, 0.2f));
+    t->link = t->primary;
+    t->linkActive = t->link;
+    t->linkHover = t->link;
+    set(&t->list, &t->tokens.list, t->background);
+    set(&t->listEven, &t->tokens.listEven, t->list);
+    set(&t->listHead, &t->tokens.listHead, t->list);
+    set(&t->listHover, &t->tokens.listHover, RgbaOpacity(t->accent, 0.6f));
+    set(&t->tableHover, &t->tokens.tableHover, t->listHover);
+    set(&t->sliderBar, &t->tokens.sliderBar, t->primary);
+    set(&t->switchBg, &t->tokens.switchBg, t->secondaryActive);
+    set(&t->tab, &t->tokens.tab, t->background);
+    set(&t->tabBarSegmented, &t->tokens.tabBarSegmented, t->secondary);
+    set(&t->tiles, &t->tokens.tiles, t->background);
+    t->windowBorder = t->border;
 }
 
 const Theme& ThemeDefaultDark() {
@@ -376,10 +751,10 @@ const Theme& ThemeDefaultDark() {
         t.border = Rgb(0x26, 0x26, 0x26);
         t.mutedFg = Rgb(0xa3, 0xa3, 0xa3);
         t.inputBorder = Rgb(0x2f, 0x2f, 0x2f);
-        t.inputBg = Rgba8(0x2f, 0x2f, 0x2f, 0x4d);
+        t.inputBg = Rgba8(0x2e, 0x2f, 0x2e, 0x4c);
         t.ring = Rgb(0x73, 0x73, 0x73);
         t.caret = Rgb(0xfa, 0xfa, 0xfa);
-        t.selection = Rgba8(0x1d, 0x4e, 0xd8, 0x4d);
+        t.selection = Rgba8(0x1d, 0x4e, 0xd8, 0x4c);
         t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
         t.titleBar = Rgb(0x17, 0x17, 0x17);
         t.titleBarBorder = Rgb(0x26, 0x26, 0x26);
@@ -464,7 +839,7 @@ const Theme& ThemeDefaultDark() {
         // description_list.label.background: the window background with the
         // border at 20% over it, which is what schema.rs falls back to. The
         // key default-theme.json spells is not the one the schema reads.
-        t.descListLabel = Rgb(0x10, 0x10, 0x10);
+        t.descListLabel = Rgb(0x0f, 0x0f, 0x0f);
         // description_list.label.foreground falls back to muted_foreground,
         // not to the foreground: a label reads as a caption beside its value.
         t.descListLabelFg = Rgb(0xa3, 0xa3, 0xa3);
@@ -475,6 +850,7 @@ const Theme& ThemeDefaultDark() {
         t.statusBar = t.titleBar;
         t.switchThumb = t.background;
         t.sliderThumb = t.background;
+        ThemeFillDerived(&t, true);
         ThemeTokensReset(&t);
         init = true;
     }
@@ -493,7 +869,7 @@ const Theme& ThemeDefaultLight() {
         t.inputBg = Rgb(0xff, 0xff, 0xff);
         t.ring = Rgb(0xa3, 0xa3, 0xa3);
         t.caret = Rgb(0x0a, 0x0a, 0x0a);
-        t.selection = Rgba8(0x55, 0xa0, 0xfc, 0x4d);
+        t.selection = Rgba8(0x55, 0xa0, 0xfc, 0x4c);
         t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
         t.titleBar = Rgb(0xf8, 0xf8, 0xf8);
         t.titleBarBorder = Rgb(0xe5, 0xe5, 0xe5);
@@ -569,7 +945,7 @@ const Theme& ThemeDefaultLight() {
         t.overlay = Rgba8(0, 0, 0, 0x0d);
         t.groupBox = Rgb(0xf5, 0xf5, 0xf5);
         t.groupBoxFg = Rgb(0x17, 0x17, 0x17);
-        t.descListLabel = Rgb(0xfa, 0xfa, 0xfa);
+        t.descListLabel = Rgb(0xf9, 0xf9, 0xf9);
         t.descListLabelFg = Rgb(0x73, 0x73, 0x73);
         t.radius = 6;
         t.radiusLg = 8;
@@ -578,6 +954,7 @@ const Theme& ThemeDefaultLight() {
         t.statusBar = t.titleBar;
         t.switchThumb = t.background;
         t.sliderThumb = t.background;
+        ThemeFillDerived(&t, false);
         ThemeTokensReset(&t);
         init = true;
     }

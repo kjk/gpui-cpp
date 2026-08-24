@@ -80,6 +80,12 @@ struct ThemeConfig {
     float radiusLg = -1;
 };
 
+// `is_explicit` in the theme viewer: whether the file names this token itself
+// rather than leaving it to the fallback chain. `key` is the one schema.rs
+// reads it from, and the aliases the resolver takes count — Rust's own set is
+// built from the config struct the file was read into, not from its text.
+bool ThemeConfigNames(const ThemeConfig* cfg, const char* key);
+
 // ThemeColor::apply_config: every token of `out` is read from the config,
 // falling back to `base` — Rust's `ThemeColor::light()` / `::dark()` — or to
 // whatever the chain says when the config has neither. `base` is the palette

@@ -34,8 +34,10 @@ static void AColourIsAHexOrAName() {
     utassert(Is(Parsed("neutral-200"), 0xe5e5e5));
     // And a scale no hue carries falls back to 500 rather than failing.
     utassert(Is(Parsed("neutral-123"), 0x737373));
-    // `/percent` is the alpha, out of a hundred.
-    utassert(Is(Parsed("red-500/50"), 0xef4444, 128));
+    // `/percent` is the alpha, out of a hundred. 50% is 127 rather than 128:
+    // Rust holds the alpha as 0.5 and truncates when it makes a byte of it,
+    // and so does this.
+    utassert(Is(Parsed("red-500/50"), 0xef4444, 127));
 
     Rgba c = {};
     utassert(!ThemeParseColor(StrL("nosuchcolour-500"), &c));

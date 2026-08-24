@@ -443,99 +443,23 @@ bool ThemeParseBackground(Str s, Background* out) {
 
 // ─── the colour maths the fallbacks are written in ───────────────────────
 
-// gpui::transparent_black(), which every `mix_oklab` toward nothing takes.
+// The colour maths lives in gpui.cpp now — a palette written in code derives
+// its own tokens with it — and these are the names schema.rs's fallbacks are
+// written in here.
 static Rgba Transparent() {
-    return Rgba8(0, 0, 0, 0);
+    return RgbaTransparent();
 }
-
-// gpui::Hsla::blend: `over` composited onto `base` by its own alpha. The
-// result keeps the base's alpha, which is why `background.blend(x)` is opaque
-// however faint `x` is.
 static Rgba Blend(Rgba base, Rgba over) {
-    if (over.a >= 255) {
-        return over;
-    }
-    if (over.a == 0) {
-        return base;
-    }
-    float f = over.a / 255.f;
-    auto mix = [&](uint8_t b, uint8_t o) {
-        return (uint8_t)(b * (1.f - f) + o * f + 0.5f);
-    };
-    return Rgba8(mix(base.r, over.r), mix(base.g, over.g), mix(base.b, over.b),
-                 base.a);
+    return RgbaBlend(base, over);
 }
-
-// Colorize::lighten / ::darken, which scale the HSL lightness rather than
-// mixing toward white or black.
-static Rgba ScaleLightness(Rgba c, float factor) {
-    float h = 0, s = 0, l = 0;
-    RgbaToHsla(c, &h, &s, &l);
-    return RgbaHsla(h, s, Clamp01f(l * factor), c.a / 255.f);
-}
-
 static Rgba Lighten(Rgba c, float amount) {
-    return ScaleLightness(c, 1.f + Clamp01f(amount));
+    return RgbaLighten(c, amount);
 }
-
 static Rgba Darken(Rgba c, float amount) {
-    return ScaleLightness(c, 1.f - Clamp01f(amount));
+    return RgbaDarken(c, amount);
 }
-
-static float ToLinear(float c) {
-    return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
-}
-
-static float FromLinear(float c) {
-    return c <= 0.0031308f ? c * 12.92f : 1.055f * powf(c, 1.f / 2.4f) - 0.055f;
-}
-
-static void RgbToOklab(Rgba c, float* L, float* A, float* B) {
-    float lr = ToLinear(c.r / 255.f);
-    float lg = ToLinear(c.g / 255.f);
-    float lb = ToLinear(c.b / 255.f);
-    float l = 0.4122214708f * lr + 0.5363325363f * lg + 0.0514459929f * lb;
-    float m = 0.2119034982f * lr + 0.6806995451f * lg + 0.1073969566f * lb;
-    float s = 0.0883024619f * lr + 0.2817188376f * lg + 0.6299787005f * lb;
-    float l_ = cbrtf(l), m_ = cbrtf(m), s_ = cbrtf(s);
-    *L = 0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_;
-    *A = 1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_;
-    *B = 0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_;
-}
-
-static Rgba OklabToRgb(float L, float A, float B, float alpha) {
-    float l_ = L + 0.3963377774f * A + 0.2158037573f * B;
-    float m_ = L - 0.1055613458f * A - 0.0638541728f * B;
-    float s_ = L - 0.0894841775f * A - 1.2914855480f * B;
-    float l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
-    float lr = 4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
-    float lg = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
-    float lb = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
-    auto b8 = [](float v) {
-        return (uint8_t)(Clamp01f(FromLinear(v)) * 255.f + 0.5f);
-    };
-    return Rgba8(b8(lr), b8(lg), b8(lb),
-                 (uint8_t)(Clamp01f(alpha) * 255.f + 0.5f));
-}
-
-// Colorize::mix_oklab, which is CSS `color-mix(in oklab, a factor%, b)`: the
-// alpha is interpolated first and the Oklab channels are premultiplied by it,
-// so mixing toward transparent fades without dragging the hue to black.
 static Rgba MixOklab(Rgba a, Rgba b, float factor) {
-    factor = Clamp01f(factor);
-    float inv = 1.f - factor;
-    float aa = a.a / 255.f, ab = b.a / 255.f;
-    float alpha = aa * factor + ab * inv;
-    if (alpha <= 0) {
-        return Transparent();
-    }
-    float l1, a1, b1, l2, a2, b2;
-    RgbToOklab(a, &l1, &a1, &b1);
-    RgbToOklab(b, &l2, &a2, &b2);
-    float L = (l1 * aa * factor + l2 * ab * inv) / alpha;
-    float A = (a1 * aa * factor + a2 * ab * inv) / alpha;
-    float B = (b1 * aa * factor + b2 * ab * inv) / alpha;
-    return OklabToRgb(L, A, B, alpha);
+    return RgbaMixOklab(a, b, factor);
 }
 
 // ─── apply_config — crates/ui/src/theme/schema.rs ────────────────────────
@@ -622,7 +546,8 @@ static void SetToken(Rgba* flat, Background* tok, Background b) {
 // The last step of apply_config: a highlight that is allowed to cover a row
 // of text can never be more opaque than this, however the file spells it.
 static Rgba ClampAlpha(Rgba c, float max) {
-    uint8_t cap = (uint8_t)(Clamp01f(max) * 255.f + 0.5f);
+    // Truncated, like every other float→byte in the palette.
+    uint8_t cap = (uint8_t)(Clamp01f(max) * 255.f);
     if (c.a <= cap) {
         return c;
     }
@@ -641,6 +566,13 @@ static void ClampToken(Rgba* flat, Background* tok, bool raw, float max) {
     b.color = ClampAlpha(tok->color, max);
     *tok = b;
     *flat = b.color;
+}
+
+bool ThemeConfigNames(const ThemeConfig* cfg, const char* key) {
+    // The aliases count: Rust's set is built from the config *struct* it
+    // deserialized the file into, so a key the file spells the old way is in
+    // it under the new name.
+    return cfg && cfg->colors && FindColor(cfg->colors, key) != nullptr;
 }
 
 void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
@@ -699,20 +631,24 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->primary, &out->tokens.primary,
              PickBg(c, "primary.background", base.tokens.primary));
     out->primaryFg = Pick(c, "primary.foreground", out->foreground);
-    out->primaryHover =
-        Pick(c, "primary.hover.background",
-             Blend(out->background, RgbaOpacity(out->primary, hoverOpacity)));
-    out->primaryActive = Pick(c, "primary.active.background",
-                              Darken(out->primary, activeDarken));
+    SetToken(&out->primaryHover, &out->tokens.primaryHover,
+             PickBg(c, "primary.hover.background",
+                    Blend(out->background,
+                          RgbaOpacity(out->primary, hoverOpacity))));
+    SetToken(&out->primaryActive, &out->tokens.primaryActive,
+             PickBg(c, "primary.active.background",
+                    Darken(out->primary, activeDarken)));
 
     SetToken(&out->secondary, &out->tokens.secondary,
              PickBg(c, "secondary.background", base.tokens.secondary));
     out->secondaryFg = Pick(c, "secondary.foreground", out->foreground);
-    out->secondaryHover =
-        Pick(c, "secondary.hover.background",
-             Blend(out->background, RgbaOpacity(out->secondary, hoverOpacity)));
-    out->secondaryActive = Pick(c, "secondary.active.background",
-                                Darken(out->secondary, activeDarken));
+    SetToken(&out->secondaryHover, &out->tokens.secondaryHover,
+             PickBg(c, "secondary.hover.background",
+                    Blend(out->background,
+                          RgbaOpacity(out->secondary, hoverOpacity))));
+    SetToken(&out->secondaryActive, &out->tokens.secondaryActive,
+             PickBg(c, "secondary.active.background",
+                    Darken(out->secondary, activeDarken)));
 
     SetToken(&out->success, &out->tokens.success,
              PickBg(c, "success.background", out->green));
@@ -728,10 +664,10 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
              PickBg(c, "accent.background", out->tokens.secondary));
     out->accentFg = Pick(c, "accent.foreground", out->foreground);
     Rgba accentFg = out->accentFg;
-    out->groupBox =
-        Pick(c, "group_box.background",
-             Blend(out->background,
-                   RgbaOpacity(out->secondary, dark ? 0.3f : 0.4f)));
+    SetToken(&out->groupBox, &out->tokens.groupBox,
+             PickBg(c, "group_box.background",
+                    Blend(out->background,
+                          RgbaOpacity(out->secondary, dark ? 0.3f : 0.4f))));
     out->groupBoxFg = Pick(c, "group_box.foreground", out->foreground);
     out->caret = Pick(c, "caret", out->primary);
 
@@ -746,22 +682,28 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->danger, &out->tokens.danger,
              PickBg(c, "danger.background", out->red));
     out->dangerFg = Pick(c, "danger.foreground", out->primaryFg);
-    out->descListLabel =
-        Pick(c, "description_list.label.background",
-             Blend(out->background, RgbaOpacity(out->border, 0.2f)));
+    SetToken(&out->descListLabel, &out->tokens.descListLabel,
+             PickBg(c, "description_list.label.background",
+                    Blend(out->background, RgbaOpacity(out->border, 0.2f))));
     out->descListLabelFg =
         Pick(c, "description_list.label.foreground", out->mutedFg);
     out->dragBorder = Pick(c, "drag.border", RgbaOpacity(out->primary, 0.65f));
 
-    Background list = PickBg(c, "list.background", out->tokens.background);
+    SetToken(&out->list, &out->tokens.list,
+             PickBg(c, "list.background", out->tokens.background));
     SetToken(&out->listActive, &out->tokens.listActive,
              PickBg(c, "list.active.background",
                     Blend(out->background, RgbaOpacity(out->primary, 0.1f))));
     out->listActiveBorder =
         Pick(c, "list.active.border",
              Blend(out->background, RgbaOpacity(out->primary, 0.6f)));
-    Background listEven = PickBg(c, "list.even.background", list);
-    Background listHead = PickBg(c, "list.head.background", list);
+    SetToken(&out->listEven, &out->tokens.listEven,
+             PickBg(c, "list.even.background", out->tokens.list));
+    SetToken(&out->listHead, &out->tokens.listHead,
+             PickBg(c, "list.head.background", out->tokens.list));
+    SetToken(
+        &out->listHover, &out->tokens.listHover,
+        PickBg(c, "list.hover.background", RgbaOpacity(out->accent, 0.6f)));
 
     SetToken(&out->popover, &out->tokens.popover,
              PickBg(c, "popover.background", out->tokens.background));
@@ -775,13 +717,14 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->scrollbarThumbHover, &out->tokens.scrollbarThumbHover,
              PickBg(c, "scrollbar.thumb.hover.background",
                     out->tokens.scrollbarThumb));
-    out->scrollbarBg = Pick(c, "scrollbar.background", out->background);
+    SetToken(&out->scrollbarBg, &out->tokens.scrollbarBg,
+             PickBg(c, "scrollbar.background", out->tokens.background));
     SetToken(&out->selection, &out->tokens.selection,
              PickBg(c, "selection.background", out->tokens.primary));
 
-    out->sidebar =
-        Pick(c, "sidebar.background",
-             Blend(out->background, RgbaOpacity(out->border, 0.15f)));
+    SetToken(&out->sidebar, &out->tokens.sidebar,
+             PickBg(c, "sidebar.background",
+                    Blend(out->background, RgbaOpacity(out->border, 0.15f))));
     SetToken(&out->sidebarAccent, &out->tokens.sidebarAccent,
              PickBg(c, "sidebar.accent.background", out->tokens.accent));
     out->sidebarAccentFg = Pick(c, "sidebar.accent.foreground", accentFg);
@@ -802,18 +745,18 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     out->tabFg = Pick(c, "tab.foreground", out->foreground);
 
     SetToken(&out->tableBg, &out->tokens.tableBg,
-             PickBg(c, "table.background", list));
+             PickBg(c, "table.background", out->tokens.list));
     SetToken(&out->tableActive, &out->tokens.tableActive,
              PickBg(c, "table.active.background", out->tokens.listActive));
     out->tableActiveBorder =
         Pick(c, "table.active.border", out->listActiveBorder);
     SetToken(&out->tableEven, &out->tokens.tableEven,
-             PickBg(c, "table.even.background", listEven));
+             PickBg(c, "table.even.background", out->tokens.listEven));
     SetToken(&out->tableHead, &out->tokens.tableHead,
-             PickBg(c, "table.head.background", listHead));
+             PickBg(c, "table.head.background", out->tokens.listHead));
     out->tableHeadFg = Pick(c, "table.head.foreground", out->mutedFg);
     SetToken(&out->tableFoot, &out->tokens.tableFoot,
-             PickBg(c, "table.foot.background", listHead));
+             PickBg(c, "table.foot.background", out->tokens.listHead));
     out->tableFootFg = Pick(c, "table.foot.foreground", out->mutedFg);
     out->tableRowBorder = Pick(c, "table.row.border", out->border);
 
@@ -833,6 +776,135 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
              PickBg(c, "switch.thumb.background", out->tokens.background));
     SetToken(&out->sliderThumb, &out->tokens.sliderThumb,
              PickBg(c, "slider.thumb.background", out->tokens.background));
+
+    // The rest of ThemeColor, each on the key schema.rs reads it from and the
+    // fallback it falls back to. `ThemeFillDerived` has already put every one
+    // of them on that fallback, so what is left here is the file's own word
+    // over the top — read in schema.rs's order, since a few of them fall back
+    // to one another.
+    ThemeFillDerived(out, dark);
+
+    SetToken(&out->button, &out->tokens.button,
+             PickBg(c, "button.background", out->tokens.button));
+    out->buttonFg = Pick(c, "button.foreground", out->foreground);
+    SetToken(&out->buttonHover, &out->tokens.buttonHover,
+             PickBg(c, "button.hover.background", out->tokens.buttonHover));
+    SetToken(&out->buttonActive, &out->tokens.buttonActive,
+             PickBg(c, "button.active.background", out->tokens.buttonActive));
+    SetToken(&out->buttonPrimary, &out->tokens.buttonPrimary,
+             PickBg(c, "button.primary.background", out->tokens.primary));
+    out->buttonPrimaryFg = Pick(c, "button.primary.foreground", out->primaryFg);
+    SetToken(
+        &out->buttonPrimaryHover, &out->tokens.buttonPrimaryHover,
+        PickBg(c, "button.primary.hover.background", out->tokens.primaryHover));
+    SetToken(&out->buttonPrimaryActive, &out->tokens.buttonPrimaryActive,
+             PickBg(c, "button.primary.active.background",
+                    out->tokens.primaryActive));
+    SetToken(&out->buttonSecondary, &out->tokens.buttonSecondary,
+             PickBg(c, "button.secondary.background", out->tokens.secondary));
+    out->buttonSecondaryFg =
+        Pick(c, "button.secondary.foreground", out->secondaryFg);
+    SetToken(&out->buttonSecondaryHover, &out->tokens.buttonSecondaryHover,
+             PickBg(c, "button.secondary.hover.background",
+                    out->tokens.secondaryHover));
+    SetToken(&out->buttonSecondaryActive, &out->tokens.buttonSecondaryActive,
+             PickBg(c, "button.secondary.active.background",
+                    out->tokens.secondaryActive));
+
+    SetToken(&out->successHover, &out->tokens.successHover,
+             PickBg(c, "success.hover.background",
+                    Blend(out->background,
+                          RgbaOpacity(out->success, hoverOpacity))));
+    SetToken(&out->successActive, &out->tokens.successActive,
+             PickBg(c, "success.active.background",
+                    Darken(out->success, activeDarken)));
+    SetToken(&out->buttonSuccess, &out->tokens.buttonSuccess,
+             PickBg(c, "button.success.background",
+                    MixOklab(out->success, clear, 0.2f)));
+    out->buttonSuccessFg = Pick(c, "button.success.foreground", out->success);
+    SetToken(&out->buttonSuccessHover, &out->tokens.buttonSuccessHover,
+             PickBg(c, "button.success.hover.background",
+                    MixOklab(out->success, clear, 0.3f)));
+    SetToken(&out->buttonSuccessActive, &out->tokens.buttonSuccessActive,
+             PickBg(c, "button.success.active.background",
+                    MixOklab(out->success, clear, 0.4f)));
+
+    SetToken(
+        &out->infoHover, &out->tokens.infoHover,
+        PickBg(c, "info.hover.background",
+               Blend(out->background, RgbaOpacity(out->info, hoverOpacity))));
+    SetToken(
+        &out->infoActive, &out->tokens.infoActive,
+        PickBg(c, "info.active.background", Darken(out->info, activeDarken)));
+    SetToken(
+        &out->buttonInfo, &out->tokens.buttonInfo,
+        PickBg(c, "button.info.background", MixOklab(out->info, clear, 0.2f)));
+    out->buttonInfoFg = Pick(c, "button.info.foreground", out->info);
+    SetToken(&out->buttonInfoHover, &out->tokens.buttonInfoHover,
+             PickBg(c, "button.info.hover.background",
+                    MixOklab(out->info, clear, 0.3f)));
+    SetToken(&out->buttonInfoActive, &out->tokens.buttonInfoActive,
+             PickBg(c, "button.info.active.background",
+                    MixOklab(out->info, clear, 0.4f)));
+
+    SetToken(&out->warningHover, &out->tokens.warningHover,
+             PickBg(c, "warning.hover.background",
+                    Blend(out->background,
+                          RgbaOpacity(out->warning, hoverOpacity))));
+    SetToken(
+        &out->warningActive, &out->tokens.warningActive,
+        PickBg(c, "warning.active.background",
+               Blend(out->background, Darken(out->warning, activeDarken))));
+    SetToken(&out->buttonWarning, &out->tokens.buttonWarning,
+             PickBg(c, "button.warning.background",
+                    MixOklab(out->warning, clear, 0.2f)));
+    out->buttonWarningFg = Pick(c, "button.warning.foreground", out->warning);
+    SetToken(&out->buttonWarningHover, &out->tokens.buttonWarningHover,
+             PickBg(c, "button.warning.hover.background",
+                    MixOklab(out->warning, clear, 0.3f)));
+    SetToken(&out->buttonWarningActive, &out->tokens.buttonWarningActive,
+             PickBg(c, "button.warning.active.background",
+                    MixOklab(out->warning, clear, 0.4f)));
+
+    SetToken(&out->dangerActive, &out->tokens.dangerActive,
+             PickBg(c, "danger.active.background",
+                    Darken(out->danger, activeDarken)));
+    SetToken(
+        &out->dangerHover, &out->tokens.dangerHover,
+        PickBg(c, "danger.hover.background",
+               Blend(out->background, RgbaOpacity(out->danger, hoverOpacity))));
+    SetToken(&out->buttonDanger, &out->tokens.buttonDanger,
+             PickBg(c, "button.danger.background",
+                    MixOklab(out->danger, clear, 0.2f)));
+    out->buttonDangerFg = Pick(c, "button.danger.foreground", out->danger);
+    SetToken(&out->buttonDangerHover, &out->tokens.buttonDangerHover,
+             PickBg(c, "button.danger.hover.background",
+                    MixOklab(out->danger, clear, 0.3f)));
+    SetToken(&out->buttonDangerActive, &out->tokens.buttonDangerActive,
+             PickBg(c, "button.danger.active.background",
+                    MixOklab(out->danger, clear, 0.4f)));
+
+    SetToken(&out->accordion, &out->tokens.accordion,
+             PickBg(c, "accordion.background", out->tokens.background));
+    SetToken(
+        &out->dropTarget, &out->tokens.dropTarget,
+        PickBg(c, "drop_target.background", RgbaOpacity(out->primary, 0.2f)));
+    out->link = Pick(c, "link", out->primary);
+    out->linkActive = Pick(c, "link.active", out->link);
+    out->linkHover = Pick(c, "link.hover", out->link);
+    SetToken(&out->tableHover, &out->tokens.tableHover,
+             PickBg(c, "table.hover.background", out->tokens.listHover));
+    SetToken(&out->sliderBar, &out->tokens.sliderBar,
+             PickBg(c, "slider.background", out->tokens.primary));
+    SetToken(&out->switchBg, &out->tokens.switchBg,
+             PickBg(c, "switch.background", out->tokens.secondaryActive));
+    SetToken(&out->tab, &out->tokens.tab,
+             PickBg(c, "tab.background", out->tokens.background));
+    SetToken(&out->tabBarSegmented, &out->tokens.tabBarSegmented,
+             PickBg(c, "tab_bar.segmented.background", out->tokens.secondary));
+    SetToken(&out->tiles, &out->tokens.tiles,
+             PickBg(c, "tiles.background", out->tokens.background));
+    out->windowBorder = Pick(c, "window.border", out->border);
 
     // The three that are painted over text, capped however the file spells
     // them: a row highlight at a fifth, a text selection at a third.

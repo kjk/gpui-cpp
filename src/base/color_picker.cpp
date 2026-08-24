@@ -33,11 +33,9 @@ bool ColorPickerShown(const ColorPickerState* s, uint32_t* out) {
 // `formats_alpha_only_when_translucent` pins. The packed value is 0xAARRGGBB
 // — `RgbaHex`'s convention — and the text is #RRGGBBAA.
 Str ColorPickerHexString(Arena* a, uint32_t color) {
-    uint32_t alpha = (color >> 24) & 0xffu;
-    if (color <= 0xffffffu || alpha == 0xffu) {
-        return StrDup(a, fmt("#%06X", color & 0xffffffu));
-    }
-    return StrDup(a, fmt("#%06X%02X", color & 0xffffffu, alpha));
+    // Through `RgbaToHex`, which is `Colorize::to_hex`: the digits are the
+    // ones Rust prints for the same colour, an Hsla round trip and all.
+    return RgbaToHex(a, RgbaHex(color));
 }
 
 // write_hex_input: the field always shows what the picker is showing, unless
@@ -50,12 +48,7 @@ static void WriteHexInput(ColorPickerState* s, uint32_t color, bool has) {
         InputSetValue(&s->hexInput, Str{});
         return;
     }
-    uint32_t alpha = (color >> 24) & 0xffu;
-    if (color <= 0xffffffu || alpha == 0xffu) {
-        InputSetValue(&s->hexInput, fmt("#%06X", color & 0xffffffu));
-    } else {
-        InputSetValue(&s->hexInput, fmt("#%06X%02X", color & 0xffffffu, alpha));
-    }
+    InputSetValue(&s->hexInput, ColorPickerHexString(GetTempArena(), color));
 }
 
 // HslaSliders::write: the four take the color's components straight, rather

@@ -35,8 +35,9 @@ static void TheLightPaletteIsDefaultLight() {
     utassert(Is(t.skeleton, 0xf5f5f5));
     // selection.background is a colour of its own, not `accent` faded — which
     // on a white field is a tint nobody can see. apply_config caps whatever a
-    // file writes there at 30%, since it is painted over a row of text.
-    utassert(IsA(t.selection, 0x55a0fc, 0x4d));
+    // file writes there at 30%, since it is painted over a row of text: 0x4c,
+    // because 0.3 truncates to 76 the way every float→byte here does.
+    utassert(IsA(t.selection, 0x55a0fc, 0x4c));
 }
 
 static void TheDarkPaletteIsDefaultDark() {
@@ -52,7 +53,7 @@ static void TheDarkPaletteIsDefaultDark() {
     utassert(Is(t.success, 0x4ade80) && Is(t.successFg, 0x16a34a));
     utassert(Is(t.warning, 0xfacc15) && Is(t.warningFg, 0xca8a04));
     utassert(Is(t.skeleton, 0x171717));
-    utassert(IsA(t.selection, 0x1d4ed8, 0x4d));
+    utassert(IsA(t.selection, 0x1d4ed8, 0x4c));
 }
 
 // theme_tokens.rs: the palette read as roles rather than as component names,

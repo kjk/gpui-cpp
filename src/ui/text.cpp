@@ -748,7 +748,9 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
     const Theme& th = cx->theme();
     Rgba c = color;
     if (marks & MdLink) {
-        c = th.primary;
+        // node.rs: `highlight.color = Some(cx.theme().link)`. The token falls
+        // back to `primary`, which is what this used to read.
+        c = th.link;
     }
     if (marks & MdHighlight) {
         c = kMarkFg;
@@ -762,7 +764,22 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
         t->Italic();
     }
     if (marks & (MdLink | MdUnderline)) {
-        t->Underline();
+        // Rust hands the run an `UnderlineStyle { thickness: px(1.) }`, which
+        // GPUI draws as a quad under the whole run — the spaces inside it as
+        // well. A shaper's own underline stops at the last glyph, so a word
+        // that carries a trailing space would leave a gap before the next
+        // one and a multi-word link would be underlined word by word. The
+        // rule goes on as a span instead, which is the same 1-DIP quad over
+        // the run's full advance.
+        TextSpan* sp = ArenaNew<TextSpan>(a);
+        sp->lo = 0;
+        sp->hi = w.len;
+        // The rule takes the colour the glyphs will: a run that named none
+        // draws in the theme's own foreground, and a span with no alpha is
+        // not drawn at all.
+        sp->color = c.a ? c : th.foreground;
+        sp->underline = true;
+        t->Underlines(sp, 1);
     }
     if (marks & MdDel) {
         t->Strikethrough();

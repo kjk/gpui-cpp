@@ -7,6 +7,17 @@
 struct ColorRow {
     const char* group;
     const char* name;
+    // The key that decides whether the row is shown before the Options menu
+    // asks for the inherited ones. Rust compares two names that are only
+    // sometimes the same: `mapper.rs`'s `canonical_key` against the set of
+    // keys `ThemeConfigColors` serializes, which is schema.rs's `rename`. A
+    // token whose mapper name and schema name differ — `accordion` against
+    // `accordion.background`, `drag_border` against `drag.border`, every
+    // `button.*` — can never match and reads as inherited however the file is
+    // written. That is upstream's wart, and it is kept rather than improved
+    // on, so the page opens on the same list on both sides; the rows where
+    // the two names agree carry the key here and the rest carry none.
+    const char* key;
     // A fill, not a colour: the tokens schema.rs lets a theme spell as a
     // gradient are shown as one, so the swatch says what the token paints
     // rather than what its first stop is.
@@ -144,11 +155,11 @@ static void PaintCheckerboard(PaintCtx* ctx, El* e, void*) {
     }
 }
 
+// hsla_to_hex, lower case: the same round trip `Colorize::to_hex` makes,
+// which is what puts a token whose file spells `#6366f1` on the page as
+// `#6366f0`.
 static Str HexOf(Ctx* cx, Rgba c) {
-    if (c.a == 255) {
-        return StoryFmt(cx, "#%02x%02x%02x", c.r, c.g, c.b);
-    }
-    return StoryFmt(cx, "#%02x%02x%02x%02x", c.r, c.g, c.b, c.a);
+    return RgbaToHex(cx->a, c, false);
 }
 
 // The value a theme file would have to write to get this fill back.
@@ -158,6 +169,43 @@ static Str ValueOf(Ctx* cx, const Background& b) {
     }
     return StoryFmt(cx, "linear-gradient(%gdeg, %s, %s)", (double)b.angle,
                     HexOf(cx, b.from.color), HexOf(cx, b.to.color));
+}
+
+// is_explicit: the active theme's file names this key itself, rather than
+// leaving it to the fallback chain. The config keeps its `colors` object as
+// the parsed document, which is the same thing Rust's `config_keys` set is
+// built from.
+static bool RowIsExplicit(const ThemeConfig* cfg, const char* key) {
+    return key[0] != 0 && ThemeConfigNames(cfg, key);
+}
+
+// The query filter: the category, the name, or the start of the hex — Rust
+// takes a leading `#` off the query first, and matches the rest against the
+// hex it prints.
+static bool StrHasI(Str hay, Str needle) {
+    if (needle.len <= 0) {
+        return true;
+    }
+    for (int i = 0; i + needle.len <= hay.len; i++) {
+        int j = 0;
+        while (j < needle.len) {
+            char a = hay.s[i + j], b = needle.s[j];
+            if (a >= 'A' && a <= 'Z') {
+                a = (char)(a - 'A' + 'a');
+            }
+            if (b >= 'A' && b <= 'Z') {
+                b = (char)(b - 'A' + 'a');
+            }
+            if (a != b) {
+                break;
+            }
+            j++;
+        }
+        if (j == needle.len) {
+            return true;
+        }
+    }
+    return false;
 }
 
 El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
@@ -187,91 +235,207 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
         cx->win->input = &self->filter;
     }
 
-    // The names and the categories mapper.rs splits a theme key into,
-    // for every token this port's Theme carries. Global, Primary and
-    // Secondary lead; the rest run alphabetically, as they do in Rust.
+    // Every field of Rust's `ThemeColor`, with the category and the name
+    // `mapper.rs` splits its key into and the key `schema.rs` reads it from.
+    // The list is generated from those two Rust files rather than picked by
+    // hand, so the table is upstream's field set and not a subset of it — 139
+    // rows, where this used to carry 78. The order is the story's own: Global,
+    // Primary, Secondary, Accent and Base lead, the rest run by category, and
+    // each category's rows by name.
     const ColorRow rows[] = {
-        {"Global", "Background", th.tokens.background},
-        {"Global", "Border", th.border},
-        {"Global", "Foreground", th.foreground},
-        {"Global", "Overlay", th.tokens.overlay},
-        {"Global", "Ring", th.ring},
-        {"Primary", "Active Background", th.primaryActive},
-        {"Primary", "Background", th.tokens.primary},
-        {"Primary", "Foreground", th.primaryFg},
-        {"Primary", "Hover Background", th.primaryHover},
-        {"Secondary", "Active Background", th.secondaryActive},
-        {"Secondary", "Background", th.tokens.secondary},
-        {"Secondary", "Foreground", th.secondaryFg},
-        {"Secondary", "Hover Background", th.secondaryHover},
-        {"Accent", "Background", th.tokens.accent},
-        {"Accent", "Foreground", th.accentFg},
-        {"Base", "Blue", th.blue},
-        {"Base", "Blue Light", th.blueLight},
-        {"Base", "Cyan", th.cyan},
-        {"Base", "Cyan Light", th.cyanLight},
-        {"Base", "Green", th.green},
-        {"Base", "Green Light", th.greenLight},
-        {"Base", "Magenta", th.magenta},
-        {"Base", "Magenta Light", th.magentaLight},
-        {"Base", "Red", th.red},
-        {"Base", "Red Light", th.redLight},
-        {"Base", "Yellow", th.yellow},
-        {"Base", "Yellow Light", th.yellowLight},
-        {"Chart", "Bearish", th.chartBearish},
-        {"Chart", "Bullish", th.chartBullish},
-        {"Chart", "Color 1", th.chart1},
-        {"Chart", "Color 2", th.chart2},
-        {"Chart", "Color 3", th.chart3},
-        {"Chart", "Color 4", th.chart4},
-        {"Chart", "Color 5", th.chart5},
-        {"Danger", "Background", th.tokens.danger},
-        {"Danger", "Foreground", th.dangerFg},
-        {"Description List", "Label Background", th.descListLabel},
-        {"Description List", "Label Foreground", th.descListLabelFg},
-        {"Group Box", "Background", th.groupBox},
-        {"Group Box", "Foreground", th.groupBoxFg},
-        {"Info", "Background", th.tokens.info},
-        {"Info", "Foreground", th.infoFg},
-        {"Input", "Background", th.inputBg},
-        {"Input", "Border", th.inputBorder},
-        {"Input", "Caret", th.caret},
-        {"List", "Active Background", th.tokens.listActive},
-        {"List", "Active Border", th.listActiveBorder},
-        {"Muted", "Background", th.tokens.muted},
-        {"Muted", "Foreground", th.mutedFg},
-        {"Progress", "Background", th.tokens.progress},
-        {"Scrollbar", "Thumb Background", th.tokens.scrollbarThumb},
-        {"Sidebar", "Accent Background", th.tokens.sidebarAccent},
-        {"Sidebar", "Accent Foreground", th.sidebarAccentFg},
-        {"Sidebar", "Background", th.sidebar},
-        {"Sidebar", "Border", th.sidebarBorder},
-        {"Sidebar", "Foreground", th.sidebarFg},
-        {"Sidebar", "Primary Background", th.tokens.sidebarPrimary},
-        {"Sidebar", "Primary Foreground", th.sidebarPrimaryFg},
-        {"Skeleton", "Background", th.tokens.skeleton},
-        {"Slider", "Thumb Background", th.tokens.sliderThumb},
-        {"Status Bar", "Background", th.tokens.statusBar},
-        {"Success", "Background", th.tokens.success},
-        {"Success", "Foreground", th.successFg},
-        {"Switch", "Thumb Background", th.tokens.switchThumb},
-        {"Tab", "Active Background", th.tokens.tabActiveBg},
-        {"Tab", "Active Foreground", th.tabActiveFg},
-        {"Tab", "Foreground", th.tabFg},
-        {"Tab Bar", "Background", th.tokens.tabBar},
-        {"Table", "Active Background", th.tokens.tableActive},
-        {"Table", "Active Border", th.tableActiveBorder},
-        {"Table", "Background", th.tokens.tableBg},
-        {"Table", "Even Background", th.tokens.tableEven},
-        {"Table", "Head Background", th.tokens.tableHead},
-        {"Table", "Head Foreground", th.tableHeadFg},
-        {"Table", "Row Border", th.tableRowBorder},
-        {"Title Bar", "Background", th.tokens.titleBar},
-        {"Title Bar", "Border", th.titleBarBorder},
-        {"Warning", "Background", th.tokens.warning},
-        {"Warning", "Foreground", th.warningFg},
+        {"Global", "Accordion", "", th.tokens.accordion},
+        {"Global", "Background", "background", th.tokens.background},
+        {"Global", "Border", "border", th.border},
+        {"Global", "Button", "", th.tokens.button},
+        {"Global", "Foreground", "foreground", th.foreground},
+        {"Global", "Link", "link", th.link},
+        {"Global", "Overlay", "overlay", th.tokens.overlay},
+        {"Global", "Popover", "", th.tokens.popover},
+        {"Global", "Ring", "ring", th.ring},
+        {"Global", "Scrollbar", "", th.tokens.scrollbarBg},
+        {"Global", "Tiles", "", th.tokens.tiles},
+        {"Primary", "Active Background", "primary.active.background",
+         th.tokens.primaryActive},
+        {"Primary", "Background", "primary.background", th.tokens.primary},
+        {"Primary", "Foreground", "primary.foreground", th.primaryFg},
+        {"Primary", "Hover Background", "primary.hover.background",
+         th.tokens.primaryHover},
+        {"Secondary", "Active Background", "secondary.active.background",
+         th.tokens.secondaryActive},
+        {"Secondary", "Background", "secondary.background",
+         th.tokens.secondary},
+        {"Secondary", "Foreground", "secondary.foreground", th.secondaryFg},
+        {"Secondary", "Hover Background", "secondary.hover.background",
+         th.tokens.secondaryHover},
+        {"Accent", "Background", "accent.background", th.tokens.accent},
+        {"Accent", "Foreground", "accent.foreground", th.accentFg},
+        {"Base", "Blue", "base.blue", th.blue},
+        {"Base", "Blue Light", "base.blue.light", th.blueLight},
+        {"Base", "Cyan", "base.cyan", th.cyan},
+        {"Base", "Cyan Light", "base.cyan.light", th.cyanLight},
+        {"Base", "Green", "base.green", th.green},
+        {"Base", "Green Light", "base.green.light", th.greenLight},
+        {"Base", "Magenta", "base.magenta", th.magenta},
+        {"Base", "Magenta Light", "base.magenta.light", th.magentaLight},
+        {"Base", "Red", "base.red", th.red},
+        {"Base", "Red Light", "base.red.light", th.redLight},
+        {"Base", "Yellow", "base.yellow", th.yellow},
+        {"Base", "Yellow Light", "base.yellow.light", th.yellowLight},
+        {"Button", "Active", "", th.tokens.buttonActive},
+        {"Button", "Danger", "", th.tokens.buttonDanger},
+        {"Button", "Danger Active", "", th.tokens.buttonDangerActive},
+        {"Button", "Danger Foreground", "", th.buttonDangerFg},
+        {"Button", "Danger Hover", "", th.tokens.buttonDangerHover},
+        {"Button", "Foreground", "", th.buttonFg},
+        {"Button", "Hover", "", th.tokens.buttonHover},
+        {"Button", "Info", "", th.tokens.buttonInfo},
+        {"Button", "Info Active", "", th.tokens.buttonInfoActive},
+        {"Button", "Info Foreground", "", th.buttonInfoFg},
+        {"Button", "Info Hover", "", th.tokens.buttonInfoHover},
+        {"Button", "Primary", "", th.tokens.buttonPrimary},
+        {"Button", "Primary Active", "", th.tokens.buttonPrimaryActive},
+        {"Button", "Primary Foreground", "", th.buttonPrimaryFg},
+        {"Button", "Primary Hover", "", th.tokens.buttonPrimaryHover},
+        {"Button", "Secondary", "", th.tokens.buttonSecondary},
+        {"Button", "Secondary Active", "", th.tokens.buttonSecondaryActive},
+        {"Button", "Secondary Foreground", "", th.buttonSecondaryFg},
+        {"Button", "Secondary Hover", "", th.tokens.buttonSecondaryHover},
+        {"Button", "Success", "", th.tokens.buttonSuccess},
+        {"Button", "Success Active", "", th.tokens.buttonSuccessActive},
+        {"Button", "Success Foreground", "", th.buttonSuccessFg},
+        {"Button", "Success Hover", "", th.tokens.buttonSuccessHover},
+        {"Button", "Warning", "", th.tokens.buttonWarning},
+        {"Button", "Warning Active", "", th.tokens.buttonWarningActive},
+        {"Button", "Warning Foreground", "", th.buttonWarningFg},
+        {"Button", "Warning Hover", "", th.tokens.buttonWarningHover},
+        {"Chart", "Bearish", "chart_bearish", th.chartBearish},
+        {"Chart", "Bullish", "chart_bullish", th.chartBullish},
+        {"Chart", "Color 1", "chart.1", th.chart1},
+        {"Chart", "Color 2", "chart.2", th.chart2},
+        {"Chart", "Color 3", "chart.3", th.chart3},
+        {"Chart", "Color 4", "chart.4", th.chart4},
+        {"Chart", "Color 5", "chart.5", th.chart5},
+        {"Danger", "Active", "danger.active.background",
+         th.tokens.dangerActive},
+        {"Danger", "Background", "danger.background", th.tokens.danger},
+        {"Danger", "Foreground", "danger.foreground", th.dangerFg},
+        {"Danger", "Hover", "danger.hover.background", th.tokens.dangerHover},
+        {"Description", "List Label", "", th.tokens.descListLabel},
+        {"Description", "List Label Foreground", "", th.descListLabelFg},
+        {"Drag", "Border", "", th.dragBorder},
+        {"Drop", "Target", "", th.tokens.dropTarget},
+        {"Group", "Box", "", th.tokens.groupBox},
+        {"Group", "Box Foreground", "", th.groupBoxFg},
+        {"Info", "Active", "info.active.background", th.tokens.infoActive},
+        {"Info", "Background", "info.background", th.tokens.info},
+        {"Info", "Foreground", "info.foreground", th.infoFg},
+        {"Info", "Hover", "info.hover.background", th.tokens.infoHover},
+        {"Input", "Border", "input.border", th.inputBorder},
+        {"Input", "Caret", "caret", th.caret},
+        {"Input", "Selection", "selection.background", th.tokens.selection},
+        {"Link", "Active", "", th.linkActive},
+        {"Link", "Hover", "", th.linkHover},
+        {"List", "Active Background", "list.active.background",
+         th.tokens.listActive},
+        {"List", "Active Border", "list.active.border", th.listActiveBorder},
+        {"List", "Background", "list.background", th.tokens.list},
+        {"List", "Even Background", "list.even.background", th.tokens.listEven},
+        {"List", "Head Background", "list.head.background", th.tokens.listHead},
+        {"List", "Hover Background", "list.hover.background",
+         th.tokens.listHover},
+        {"Muted", "Background", "muted.background", th.tokens.muted},
+        {"Muted", "Foreground", "muted.foreground", th.mutedFg},
+        {"Popover", "Foreground", "", th.popoverFg},
+        {"Progress", "Bar", "", th.tokens.progress},
+        {"Scrollbar", "Thumb", "", th.tokens.scrollbarThumb},
+        {"Scrollbar", "Thumb Hover", "", th.tokens.scrollbarThumbHover},
+        {"Sidebar", "Accent Background", "sidebar.accent.background",
+         th.tokens.sidebarAccent},
+        {"Sidebar", "Accent Foreground", "", th.sidebarAccentFg},
+        {"Sidebar", "Background", "sidebar.background", th.tokens.sidebar},
+        {"Sidebar", "Border", "sidebar.border", th.sidebarBorder},
+        {"Sidebar", "Foreground", "sidebar.foreground", th.sidebarFg},
+        {"Sidebar", "Primary Background", "sidebar.primary.background",
+         th.tokens.sidebarPrimary},
+        {"Sidebar", "Primary Foreground", "sidebar.primary.foreground",
+         th.sidebarPrimaryFg},
+        {"Skeleton", "Background", "skeleton.background", th.tokens.skeleton},
+        {"Slider", "Bar", "slider.background", th.tokens.sliderBar},
+        {"Slider", "Thumb", "slider.thumb.background", th.tokens.sliderThumb},
+        {"Status", "Bar", "", th.tokens.statusBar},
+        {"Status", "Bar Border", "", th.statusBarBorder},
+        {"Success", "Active", "success.active.background",
+         th.tokens.successActive},
+        {"Success", "Background", "success.background", th.tokens.success},
+        {"Success", "Foreground", "success.foreground", th.successFg},
+        {"Success", "Hover", "success.hover.background",
+         th.tokens.successHover},
+        {"Switch", "Background", "switch.background", th.tokens.switchBg},
+        {"Switch", "Thumb", "switch.thumb.background", th.tokens.switchThumb},
+        {"Tab", "Active Background", "tab.active.background",
+         th.tokens.tabActiveBg},
+        {"Tab", "Active Foreground", "tab.active.foreground", th.tabActiveFg},
+        {"Tab", "Background", "tab.background", th.tokens.tab},
+        {"Tab", "Foreground", "tab.foreground", th.tabFg},
+        {"Tab Bar", "Background", "tab_bar.background", th.tokens.tabBar},
+        {"Tab Bar", "Segmented Background", "tab_bar.segmented.background",
+         th.tokens.tabBarSegmented},
+        {"Table", "Active Background", "table.active.background",
+         th.tokens.tableActive},
+        {"Table", "Active Border", "table.active.border", th.tableActiveBorder},
+        {"Table", "Background", "table.background", th.tokens.tableBg},
+        {"Table", "Even Background", "table.even.background",
+         th.tokens.tableEven},
+        {"Table", "Foot", "", th.tokens.tableFoot},
+        {"Table", "Foot Foreground", "", th.tableFootFg},
+        {"Table", "Head Background", "table.head.background",
+         th.tokens.tableHead},
+        {"Table", "Head Foreground", "table.head.foreground", th.tableHeadFg},
+        {"Table", "Hover Background", "table.hover.background",
+         th.tokens.tableHover},
+        {"Table", "Row Border", "table.row.border", th.tableRowBorder},
+        {"Title", "Bar", "", th.tokens.titleBar},
+        {"Title", "Bar Border", "", th.titleBarBorder},
+        {"Warning", "Active", "warning.active.background",
+         th.tokens.warningActive},
+        {"Warning", "Background", "warning.background", th.tokens.warning},
+        {"Warning", "Foreground", "warning.foreground", th.warningFg},
+        {"Warning", "Hover", "warning.hover.background",
+         th.tokens.warningHover},
+        {"Window", "Border", "", th.windowBorder},
     };
-    const int nRows = (int)(sizeof(rows) / sizeof(rows[0]));
+    const int nAll = (int)(sizeof(rows) / sizeof(rows[0]));
+    // The two filters the page carries, in the order Rust applies them: the
+    // rows the theme file does not name are dropped unless the Options menu
+    // asks for them, and then the query has to match the category, the name
+    // or the start of the hex. What is left is a list of pointers, since a
+    // group is a run of rows with the same category and a filter can empty
+    // one out.
+    const ThemeConfig* active =
+        ThemeRegistryFind(ThemeRegistryActive(ThemeGet()));
+    Str query = InputValue(&self->filter);
+    while (query.len > 0 && query.s[0] == '#') {
+        query = Str(query.s + 1, query.len - 1);
+    }
+    const ColorRow** shown =
+        (const ColorRow**)Alloc(a, (int)sizeof(ColorRow*) * nAll);
+    int nRows = 0;
+    for (int i = 0; i < nAll; i++) {
+        if (!self->showInherited && !RowIsExplicit(active, rows[i].key)) {
+            continue;
+        }
+        if (query.len > 0) {
+            Str hex = HexOf(cx, rows[i].color.color);
+            bool hit = StrHasI(Str(rows[i].group), query) ||
+                       StrHasI(Str(rows[i].name), query) ||
+                       (hex.len > query.len + 1 &&
+                        StrHasI(Str(hex.s + 1, query.len), query));
+            if (!hit) {
+                continue;
+            }
+        }
+        shown[nRows++] = &rows[i];
+    }
 
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
@@ -319,9 +483,9 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Listener toggleGroup = Listen(cx, &ToggleColorGroup);
     int groupIx = 0;
     for (int i = 0; i < nRows;) {
-        const char* name = rows[i].group;
+        const char* name = shown[i]->group;
         int end = i;
-        while (end < nRows && strcmp(rows[end].group, name) == 0) {
+        while (end < nRows && strcmp(shown[end]->group, name) == 0) {
             end++;
         }
         bool open = self->expandAll || self->openGroup == groupIx;
@@ -355,12 +519,13 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                               ->PadX(12)
                               ->ItemsCenter()
                               ->JustifyBetween();
-                row->Child(StoryTxt(cx, Str(rows[r].name), 16, th.foreground));
+                row->Child(
+                    StoryTxt(cx, Str(shown[r]->name), 16, th.foreground));
                 row->Child(Div(a)
                                ->W(16)
                                ->H(16)
                                ->Radius(3)
-                               ->Bg(rows[r].color)
+                               ->Bg(shown[r]->color)
                                ->Border(1, th.border));
                 itemCol->Child(row);
             }
@@ -394,9 +559,9 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                      ->Child(inner)
                      ->IntoEl());
     for (int i = 0; i < nRows;) {
-        const char* name = rows[i].group;
+        const char* name = shown[i]->group;
         int end = i;
-        while (end < nRows && strcmp(rows[end].group, name) == 0) {
+        while (end < nRows && strcmp(shown[end]->group, name) == 0) {
             end++;
         }
         // v_flex().w_full().gap_3().pt_4()
@@ -419,14 +584,15 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                            ->H(64)
                            ->Shrink0()
                            ->Radius(th.radius)
-                           ->Bg(rows[r].color)
+                           ->Bg(shown[r]->color)
                            ->Border(1, th.border));
             El* text = Div(a)->FlexCol()->Gap(4)->Flex1();
-            text->Child(StoryTxt(cx, Str(rows[r].name), 14, th.foreground)
+            text->Child(StoryTxt(cx, Str(shown[r]->name), 14, th.foreground)
                             ->Medium());
             // A gradient's value is long; the cell is 220 wide either way.
-            text->Child(StoryTxt(cx, ValueOf(cx, rows[r].color), 14, th.mutedFg)
-                            ->Truncate());
+            text->Child(
+                StoryTxt(cx, ValueOf(cx, shown[r]->color), 14, th.mutedFg)
+                    ->Truncate());
             row->Child(text);
             wrap->Child(Div(a)->W(220)->ClipX()->Child(row));
         }
