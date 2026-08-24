@@ -768,6 +768,10 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     out->ring = Pick(c, "ring", out->blue);
     SetToken(&out->scrollbarThumb, &out->tokens.scrollbarThumb,
              PickBg(c, "scrollbar.thumb.background", out->tokens.accent));
+    SetToken(&out->scrollbarThumbHover, &out->tokens.scrollbarThumbHover,
+             PickBg(c, "scrollbar.thumb.hover.background",
+                    out->tokens.scrollbarThumb));
+    out->scrollbarBg = Pick(c, "scrollbar.background", out->background);
     SetToken(&out->selection, &out->tokens.selection,
              PickBg(c, "selection.background", out->tokens.primary));
 

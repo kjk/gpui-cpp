@@ -227,6 +227,9 @@ void ThemeTokensReset(Theme* t) {
     if (!t->tokens.scrollbarThumb.gradient) {
         t->tokens.scrollbarThumb = t->scrollbarThumb;
     }
+    if (!t->tokens.scrollbarThumbHover.gradient) {
+        t->tokens.scrollbarThumbHover = t->scrollbarThumbHover;
+    }
     if (!t->tokens.skeleton.gradient) {
         t->tokens.skeleton = t->skeleton;
     }
@@ -348,6 +351,8 @@ const Theme& ThemeDefaultDark() {
         t.sidebarAccentFg = Rgb(0xf5, 0xf5, 0xf5);
         t.sidebarBorder = Rgb(0x26, 0x26, 0x26);
         t.scrollbarThumb = Rgba8(0x52, 0x52, 0x52, 0xe6);
+        t.scrollbarThumbHover = Rgb(0x52, 0x52, 0x52);
+        t.scrollbarBg = Rgba8(0x17, 0x17, 0x17, 0x00);
         t.info = Rgb(0x22, 0xd3, 0xee);
         t.infoFg = Rgb(0x08, 0x91, 0xb2);
         t.success = Rgb(0x4a, 0xde, 0x80);
@@ -452,6 +457,8 @@ const Theme& ThemeDefaultLight() {
         t.sidebarAccentFg = Rgb(0x17, 0x17, 0x17);
         t.sidebarBorder = Rgb(0xe5, 0xe5, 0xe5);
         t.scrollbarThumb = Rgba8(0xa3, 0xa3, 0xa3, 0xe6);
+        t.scrollbarThumbHover = Rgb(0xa3, 0xa3, 0xa3);
+        t.scrollbarBg = Rgba8(0xfa, 0xfa, 0xfa, 0x00);
         t.info = Rgb(0x06, 0xb6, 0xd4);
         t.infoFg = Rgb(0xfa, 0xfa, 0xfa);
         t.success = Rgb(0x22, 0xc5, 0x5e);
@@ -955,6 +962,27 @@ El* El::ClipX() {
 // otherwise.
 static ScrollbarMode ElScrollMode(const El* e) {
     return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow();
+}
+
+// The thumb's colour: `thumb_hover` under the pointer or in a drag, `thumb`
+// otherwise, faded by however far through the Scrolling fade the bar is.
+static Background ScrollbarThumbBg(const Theme& th, bool hot, float alpha) {
+    Background c =
+        hot ? th.tokens.scrollbarThumbHover : th.tokens.scrollbarThumb;
+    return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
+}
+
+// The track behind it — `scrollbar.background`, which both default themes
+// leave transparent.
+static Background ScrollbarBarBg(const Theme& th, float alpha) {
+    Background c = Background(th.scrollbarBg);
+    return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
+}
+
+// clamp_thumb_radius: the theme's radius, never more than half the thumb.
+static float ThumbRadius(const Theme& th, float thumbW) {
+    float r = th.radius;
+    return r > thumbW * 0.5f ? thumbW * 0.5f : r;
 }
 
 // ScrollbarMode::Scrolling's clock. Rust keeps `last_scroll_offset` and
@@ -4289,22 +4317,40 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             barVisible = barAlpha > 0.f;
         }
     }
-    Background barColor =
-        barAlpha >= 1.f
-            ? ThemeNow().tokens.scrollbarThumb
-            : BackgroundOpacity(ThemeNow().tokens.scrollbarThumb, barAlpha);
+    // style_for_normal / style_for_hovered_bar / style_for_hovered_thumb /
+    // style_for_active. A bar rests at THUMB_WIDTH only in the fading
+    // `Scrolling` mode; every other mode draws the wide one, and any bar the
+    // pointer is over — or one a drag has hold of — grows to it too. The
+    // colour changes only under the thumb itself, or in a drag.
+    bool dragging = ctx->scrollDragId != 0 && ctx->scrollDragId == e->scrollId;
+    float restW = barMode == ScrollbarMode::Scrolling ? kScrollbarThumbW
+                                                      : kScrollbarThumbActiveW;
+    // The thumb's radius is `theme.radius`, clamped to half the thumb — a
+    // wider thumb rounds more, which is what `clamp_thumb_radius` says.
+    const Theme& barTheme = ThemeNow();
     if (barVisible && !e->noScrollbarY &&
         e->style.overflowY == Overflow::Scroll && e->contentH > e->h + 1.f &&
         e->h > 0) {
+        bool onBar = overBox && ctx->mouseX >= e->x + e->w - kScrollbarBandW;
+        bool hot = onBar || (dragging && !ctx->scrollDragHorizontal);
         // The same three numbers the press and drag arithmetic goes by, so
         // what is drawn and what is grabbed cannot drift apart.
         float thumbH = ScrollbarThumbSize(e->h, e->h, e->contentH);
-        float thumbW = kScrollbarThumbW;
+        float thumbW = hot ? kScrollbarThumbActiveW : restW;
         float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
         float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
                                                 e->contentH);
-        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, nullptr,
-                       barColor);
+        bool onThumb =
+            (dragging && !ctx->scrollDragHorizontal) ||
+            (onBar && ctx->mouseY >= thumbY && ctx->mouseY < thumbY + thumbH);
+        // The track, which every default theme leaves transparent — the band
+        // is Rust's WIDTH and reaches the whole length of the box.
+        FillBackground(ctx, e->x + e->w - kScrollbarBandW, e->y,
+                       kScrollbarBandW, e->h, 0, nullptr,
+                       ScrollbarBarBg(barTheme, barAlpha));
+        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH,
+                       ThumbRadius(barTheme, thumbW), nullptr,
+                       ScrollbarThumbBg(barTheme, onThumb, barAlpha));
     }
     if (barVisible && !e->noScrollbarX &&
         e->style.overflowX == Overflow::Scroll && e->contentW > e->w + 1.f &&
@@ -4312,13 +4358,22 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // The horizontal bar is the same arithmetic along the other axis,
         // which is how Rust writes it: one path, `is_vertical` picking the
         // pair of numbers it reads.
+        bool onBar = overBox && ctx->mouseY >= e->y + e->h - kScrollbarBandW;
+        bool hot = onBar || (dragging && ctx->scrollDragHorizontal);
         float thumbW = ScrollbarThumbSize(e->w, e->w, e->contentW);
-        float thumbH = kScrollbarThumbW;
+        float thumbH = hot ? kScrollbarThumbActiveW : restW;
         float thumbY = e->y + e->h - thumbH - kScrollbarThumbMargin;
         float thumbX = e->x + ScrollbarThumbPos(e->w, thumbW, e->scrollX, e->w,
                                                 e->contentW);
-        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, nullptr,
-                       barColor);
+        bool onThumb =
+            (dragging && ctx->scrollDragHorizontal) ||
+            (onBar && ctx->mouseX >= thumbX && ctx->mouseX < thumbX + thumbW);
+        FillBackground(ctx, e->x, e->y + e->h - kScrollbarBandW, e->w,
+                       kScrollbarBandW, 0, nullptr,
+                       ScrollbarBarBg(barTheme, barAlpha));
+        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH,
+                       ThumbRadius(barTheme, thumbH), nullptr,
+                       ScrollbarThumbBg(barTheme, onThumb, barAlpha));
     }
 
     if (focused && ThemeFocusRing()) {

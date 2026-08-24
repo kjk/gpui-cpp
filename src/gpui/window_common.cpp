@@ -190,6 +190,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.focusId = win->focusId;
     win->paint.mouseX = win->mouseX;
     win->paint.mouseY = win->mouseY;
+    win->paint.scrollDragId = win->mouseDown ? win->scrollDragId : 0;
+    win->paint.scrollDragHorizontal = win->scrollDragHorizontal;
     win->paint.picking = win->inspector.picking;
     win->paint.wantsAnimFrame = false;
     win->paint.pickHit = false;

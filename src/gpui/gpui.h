@@ -144,6 +144,7 @@ struct ThemeTokens {
     Background warning = {};
     Background progress = {};
     Background scrollbarThumb = {};
+    Background scrollbarThumbHover = {};
     Background skeleton = {};
     Background selection = {};
     Background listActive = {};
@@ -260,6 +261,14 @@ struct Theme {
     Rgba sidebarAccentFg;
     Rgba sidebarBorder;
     Rgba scrollbarThumb;
+    // scrollbar.thumb.hover.background: what the thumb takes while the
+    // pointer is on it or a drag has hold of it. Falls back to the thumb's
+    // own colour, as schema.rs does.
+    Rgba scrollbarThumbHover;
+    // scrollbar.background: the track behind the thumb. Transparent in both
+    // default themes, which is why nothing but a theme that names it shows
+    // one.
+    Rgba scrollbarBg;
     Rgba info;
     Rgba infoFg;
     Rgba success;
@@ -1776,12 +1785,16 @@ struct ScrollRect {
     InputState* input = nullptr;
 };
 
-// The scrollbar as it is drawn: a 6-DIP thumb inset from the right edge. The
-// band a press counts in is the pair together, so the target is wide enough to
-// aim at without reaching into the content.
+// The scrollbar as it is drawn. THUMB_WIDTH is the thin one a fading
+// `Scrolling` bar rests at; THUMB_ACTIVE_WIDTH is what every other mode draws,
+// and what any bar grows to under the pointer or in a drag. THUMB_INSET is the
+// margin either side, so the band a press counts in — Rust's WIDTH, 4*2+8 — is
+// the wide thumb plus both insets.
 const float kScrollbarThumbW = 6.f;
+const float kScrollbarThumbActiveW = 8.f;
 const float kScrollbarThumbMargin = 4.f;
-const float kScrollbarBandW = kScrollbarThumbW + kScrollbarThumbMargin * 2.f;
+const float kScrollbarBandW =
+    kScrollbarThumbActiveW + kScrollbarThumbMargin * 2.f;
 
 // What El::OnScroll hands its handler: the box that was scrolled and where it
 // should now be. Positive-down, as El::ScrollY takes it.
@@ -1924,6 +1937,13 @@ struct PaintCtx {
     // Where the pointer is, which is what a Hover-mode scrollbar consults.
     float mouseX = -1;
     float mouseY = -1;
+    // The scrolled box whose bar is being dragged, and which of its two. A
+    // dragged thumb wears the same appearance a hovered one does — Rust's
+    // `dragged_axis` — and the pointer may be nowhere near it by then, so the
+    // drag has to reach the paint pass rather than being inferred from where
+    // the pointer is.
+    int scrollDragId = 0;
+    bool scrollDragHorizontal = false;
     // Something painted this frame is part-way through a transition and wants
     // the window back: a Scrolling scrollbar fading out. The window asks for
     // an animation frame once, after the tree has painted, rather than each
