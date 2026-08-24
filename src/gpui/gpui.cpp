@@ -1836,6 +1836,11 @@ El* El::Selectable() {
     selectable = true;
     return this;
 }
+El* El::SelSrc(const SelSource* s, bool join) {
+    selSrc = s;
+    selJoin = join;
+    return this;
+}
 El* El::Wrap() {
     style.wrap = true;
     return this;
@@ -4546,6 +4551,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             th.maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
             th.wrap = e->style.wrap;
             th.docOff = docOff;
+            th.src = e->selSrc;
+            th.join = e->selJoin;
             // The trap this run sits in — a dialog, a sheet — which is the
             // TextSelectionScopeId a gesture inside it stays within.
             th.scope = e->style.trapId;
@@ -5079,7 +5086,52 @@ int CopyTextHits(PaintCtx* ctx, int a, int b, char* out, int cap) {
     return CopyTextHitsIn(ctx, a, b, -1, out, cap);
 }
 
-int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap) {
+// The copier's output cursor. Every piece goes through Put, so the cap is
+// checked in one place and a document longer than the buffer stops cleanly
+// rather than at a half-written affix.
+struct CopyOut {
+    char* buf = nullptr;
+    int cap = 0;
+    int n = 0;
+};
+
+static void CopyPut(CopyOut* o, Str s) {
+    if (s.len <= 0 || !s.s) {
+        return;
+    }
+    int take = s.len;
+    if (o->n + take > o->cap - 1) {
+        take = o->cap - 1 - o->n;
+    }
+    if (take <= 0) {
+        return;
+    }
+    memcpy(o->buf + o->n, s.s, (size_t)take);
+    o->n += take;
+}
+
+// The same, with every newline inside `s` followed by `linePre` — the `> ` a
+// blockquote puts on each of its lines, applied to a run that carries its own
+// line breaks (an unhighlighted code block is one such run).
+static void CopyPutLines(CopyOut* o, Str s, Str linePre) {
+    if (linePre.len <= 0) {
+        CopyPut(o, s);
+        return;
+    }
+    int at = 0;
+    for (int i = 0; i < s.len; i++) {
+        if (s.s[i] != '\n') {
+            continue;
+        }
+        CopyPut(o, Str(s.s + at, i + 1 - at));
+        CopyPut(o, linePre);
+        at = i + 1;
+    }
+    CopyPut(o, Str(s.s + at, s.len - at));
+}
+
+int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
+                   SelectionFormat fmt) {
     if (!out || cap <= 0) {
         return 0;
     }
@@ -5092,8 +5144,20 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap) {
         a = b;
         b = t;
     }
-    int n = 0;
-    for (int i = 0; i < ctx->texts.len && n < cap - 1; i++) {
+    bool src = fmt == SelectionFormat::Source;
+    CopyOut o = {out, cap, 0};
+    // The block the selection is inside right now, so entering and leaving
+    // one can emit its fences, and the mark group whose closing affix is
+    // still owed. Both null until the first run that names one.
+    const SelBlock* blk = nullptr;
+    const SelSource* grp = nullptr;
+    bool any = false;
+    // Whether the selection has run through the gap between two registered
+    // runs and so owes a separator. Reading the gap rather than "has anything
+    // been emitted yet" is what keeps a drag that ends exactly at the start of
+    // the next run reaching into it.
+    bool sep = false;
+    for (int i = 0; i < ctx->texts.len && o.n < cap - 1; i++) {
         const TextHit& t = ctx->texts[i];
         if (scope >= 0 && t.scope != scope) {
             continue;
@@ -5102,21 +5166,74 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap) {
         int plen = t.text.len;
         int lo = a > pos ? a : pos;
         int hi = b < pos + plen ? b : pos + plen;
-        if (lo < hi && t.text.s) {
-            int take = hi - lo;
-            if (n + take > cap - 1) {
-                take = cap - 1 - n;
-            }
-            memcpy(out + n, t.text.s + (lo - pos), (size_t)take);
-            n += take;
-        }
         int gap = pos + plen;
-        if (i + 1 < ctx->texts.len && a <= gap && b > gap && n < cap - 1) {
-            out[n++] = '\n';
+        bool spansGap = i + 1 < ctx->texts.len && a <= gap && b > gap;
+        if (lo >= hi || !t.text.s) {
+            sep = sep || spansGap;
+            continue;
         }
+        Str piece = Str(t.text.s + (lo - pos), hi - lo);
+        // Which run continues which line is the document's shape and holds in
+        // both formats — a paragraph is one `InlineState.text` in Rust
+        // however it is copied. Only the affixes are Markdown, and only
+        // Source emits them.
+        const SelSource* s = t.src;
+        const SelBlock* want = s ? s->block : nullptr;
+        // The same record still open, continued: one mark group split over
+        // several word elements, which closes once and not per word.
+        if (!(src && s && s == grp && t.join)) {
+            if (src && grp) {
+                CopyPut(&o, grp->post);
+                grp = nullptr;
+            }
+            if (want != blk) {
+                if (src && blk) {
+                    CopyPut(&o, blk->post);
+                }
+                if (sep) {
+                    // A block that continues the row before it — a table
+                    // cell — is a space in the rendered text, and in the
+                    // source is whatever its `pre` says.
+                    bool cont = want && want->join;
+                    CopyPut(&o,
+                            cont ? (src ? Str{} : Str(" ", 1)) : Str("\n", 1));
+                    sep = false;
+                }
+                if (src && want) {
+                    CopyPut(&o, want->pre);
+                }
+                blk = want;
+            } else if (!t.join && sep) {
+                // A new line inside the same block — or, with no block at
+                // all, the run-per-line the copier has always produced.
+                CopyPut(&o, Str("\n", 1));
+                if (src && blk) {
+                    CopyPut(&o, blk->linePre);
+                }
+                sep = false;
+            }
+            if (src && s) {
+                CopyPut(&o, s->pre);
+                grp = s;
+            }
+        }
+        CopyPutLines(&o, piece, (src && blk) ? blk->linePre : Str{});
+        any = true;
+        sep = spansGap;
     }
-    out[n] = 0;
-    return n;
+    if (src && grp) {
+        CopyPut(&o, grp->post);
+    }
+    if (src && blk) {
+        CopyPut(&o, blk->post);
+    }
+    // A selection that ran past the last run it took text from ends at the
+    // line break it reached into.
+    if (any && sep) {
+        CopyPut(&o, Str("\n", 1));
+    }
+    out[o.n] = 0;
+    return o.n;
 }
 
 // A trap is a property of the container, the way Rust hangs it off the one

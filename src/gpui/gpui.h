@@ -1517,6 +1517,55 @@ struct ActionEvent {
     bool propagate = false;
 };
 
+// text/state.rs SelectionFormat: what a copy of the window's selection says.
+// Plain is the rendered text, which is all a run knows by itself. Source
+// rebuilds the Markdown the run was rendered from, out of the affixes below.
+enum class SelectionFormat : uint8_t {
+    Plain = 0,
+    Source
+};
+
+// The block a selectable run belongs to, for SelectionFormat::Source. Rust
+// reconstructs a selection by walking the BlockNode tree it rendered from
+// (node.rs `text_by_kind`); the window's selection here knows only the flat
+// list of painted runs, so the tree's shape rides along on them. One record
+// is shared by every run of a block, and `!=` is what says the selection has
+// crossed into another one.
+struct SelBlock {
+    // Emitted when the selection first enters the block and when it leaves —
+    // a code fence, a heading's `## `, a table row's leading `| `. `pre`
+    // already carries `linePre`, so entering a block emits `pre` alone.
+    Str pre;
+    Str post;
+    // Prefixed to every further line the block contributes, and to every
+    // line break inside one of its runs: `> ` for a blockquote, the indent
+    // under a list marker.
+    Str linePre;
+    // Whether entering this block continues the previous block's line rather
+    // than starting a new one. Table cells in a row do.
+    bool join = false;
+};
+
+// What SelectionFormat::Source needs from one selectable run: the marks
+// around it, and the block it sits in.
+//
+// One record is shared by every adjacent run that carries the same marks, and
+// the copier closes the group only when the record changes. That is what
+// `reconstruct_markdown` does by walking mark *ranges* rather than words: a
+// bold phrase split into three word elements has to copy as `**one two
+// three**`, not as three wrapped words.
+struct SelSource {
+    // node.rs `wrap_with_mark`: the Markdown around the run's own text, in
+    // the order that function nests it — code innermost, link outermost. A
+    // partial selection still gets both halves, which is what Rust does with
+    // a slice of a marked range.
+    Str pre;
+    Str post;
+    // The block above. Null for a selectable run that is not Markdown, which
+    // is every run outside a TextView.
+    const SelBlock* block = nullptr;
+};
+
 struct El {
     ElKind kind = ElKind::Div;
     // The frame arena this was built on, so a builder that has to allocate —
@@ -1668,6 +1717,12 @@ struct El {
     int markLo = -1;
     int markHi = -1;
     bool selectable = false;
+    // What a copy of this run says, and whether it continues the run before
+    // it on the same line. The record is owned by whoever built the element —
+    // the frame arena, in practice — and is null on every run that is not
+    // Markdown.
+    const SelSource* selSrc = nullptr;
+    bool selJoin = false;
     // The caret this run draws, as a UTF-8 offset into it; -1 for none. Rust's
     // InputElement measures cursor_bounds in prepaint and paints a quad there,
     // which is what this is — putting the bar between two text runs instead
@@ -1834,6 +1889,9 @@ struct El {
     El* Strikethrough();
     El* Italic();
     El* Selectable();
+    // The Markdown this run came from, and whether it continues the run
+    // before it rather than starting a line of its own.
+    El* SelSrc(const SelSource* s, bool join);
     El* Wrap();
     El* Dashed();
     El* DashArray(float on, float off);
@@ -1993,6 +2051,14 @@ struct TextHit {
     float maxW = 0;
     bool wrap = false;
     int docOff = 0;
+    // El::SelSrc, for a copy in SelectionFormat::Source. Null otherwise, and
+    // then the run copies as its plain text in both formats.
+    const SelSource* src = nullptr;
+    // Whether this run continues the one before it on the same line. A
+    // paragraph is one `InlineState.text` in Rust; here it is a row of word
+    // elements, and this is what keeps a copy of it on one line — in both
+    // formats, since that is the document's shape and not its syntax.
+    bool join = false;
     // TextSelectionScopeId: the focus trap this run sits inside, 0 for the
     // page itself. A selection belongs to one scope, so a drag that started
     // in a dialog does not run on into the page behind it.
@@ -3775,8 +3841,10 @@ int TextHitOffsetAt(PaintCtx* ctx, float x, float y, bool nearest);
 int TextHitOffsetIn(PaintCtx* ctx, float x, float y, bool nearest, int scope,
                     int* outScope);
 int CopyTextHits(PaintCtx* ctx, int selA, int selB, char* out, int cap);
+// `fmt` is what each run contributes: its rendered text, or — where the run
+// carries a SelSource — the Markdown it was rendered from.
 int CopyTextHitsIn(PaintCtx* ctx, int selA, int selB, int scope, char* out,
-                   int cap);
+                   int cap, SelectionFormat fmt = SelectionFormat::Plain);
 // points_for_multi_click: the document range a press of `clickCount` selects
 // under (x, y) — 2 takes the word, 3 or more the whole run — in the same
 // offsets TextHitOffsetAt and CopyTextHits speak. False for a single click,

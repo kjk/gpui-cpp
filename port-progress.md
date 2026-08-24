@@ -3763,3 +3763,82 @@ its hex readouts line up with upstream's.
   `flex_1 / overflow_hidden / overflow_y_scrollbar` body wrapper.
 
   17,459 checks pass; `bun cmd/build.ts -all` builds all 24 examples.
+
+
+## Selection: Plain / Source, and the four items already standing
+
+Five things off a list, and four of them were already here: the three markdown
+plugins (ticker, user card, math — the last on its own fallback path, since
+KaTeX wants node), the `Table: Scroll / Wrap` toggle over `TextView::
+TableScroll`, and the `Open...` action, which has had the desktop's own dialog
+since `PromptForPath` landed. The fifth was real, and the reason recorded for
+it was wrong.
+
+**`Selection: Plain / Source` does not need source offsets.** The note in
+`examples/markdown.cpp` said it would have to map a selection in the rendered
+document back to the markdown that produced it, and that an `MdNode` carries
+no offsets. Upstream does not map anything: `node.rs` *reconstructs* the
+markdown from the `BlockNode` tree it rendered — `text_by_kind` with
+`BlockTextKind::SelectedSource`, `reconstruct_markdown` over the mark ranges,
+`list_selected_source`, `table_selected_source`. Nothing in that needs the
+source text at all, so it ports.
+
+What it ports onto is different, though, and that is the whole design. Rust's
+document does its own copying, so the walk happens at copy time with the tree
+in hand. Selection here is the *window's* — `base/text_selection.h`, a flat
+list of painted `TextHit`s in document order — and it has no tree. So the walk
+happens as the tree is built, and each run carries the piece of the
+reconstruction it is responsible for:
+
+- `SelSource` is `wrap_with_mark`'s two halves, in that function's nesting —
+  code innermost, then italic, bold, strikethrough, underline, highlight, link
+  outermost. One record is *shared* by every adjacent run with the same marks,
+  and the copier closes a group only when the record changes. That is what
+  `reconstruct_markdown` gets from walking mark ranges rather than words: a
+  bold phrase split into three word elements has to copy as `**one two three**`
+  and not as three separately wrapped words.
+- `SelBlock` is what opens and closes a block — a heading's `#`s, a fence and
+  its language, a table row's pipes and the alignment row behind the header —
+  plus the `linePre` every further line of it carries, which is how a
+  blockquote's `> ` reaches lines inside a run that holds its own breaks.
+  Block identity is also what tells the copier a line has ended, and
+  `SelBlock::join` is what says a table cell continues the row instead.
+- `TextHit::join` is per-run and holds in **both** formats. A paragraph is one
+  `InlineState.text` in Rust however it is copied; here it is a row of word
+  elements, and without this a copy of a styled paragraph came out one word
+  per line. That was wrong before this change and is the one behaviour it
+  fixes rather than adds.
+
+`TextView` accumulates the walk state — `srcLinePre`, the pending item marker,
+the open block and whether the next run starts a line — and `SrcOpen` /
+`SrcMark` / `SrcCell` / `SrcBreak` are where each block hands its runs their
+piece. `CopyTextHitsIn` takes a `SelectionFormat` and puts the pieces back
+together; `WindowSelection` carries the format, which `TextView::SelFormat`
+pushes onto the window as it renders, since the copy is the window's.
+
+The gap rule in the copier is worth naming, because it survived a rewrite: the
+separator between two runs comes from whether the selection ran through the
+*gap* between them, not from whether anything has been emitted yet. A drag
+that ends exactly at the start of the next run has reached into it, and
+`ADragAcrossTwoRunsCopiesBoth` is the test that says so.
+
+Verified end to end rather than only in the unit tests: a fixture with a
+heading, a paragraph mixing all five marks and a link, a two-line blockquote,
+a bulleted list with a nested item, an ordered list, a fenced `rust` block and
+an aligned table, selected whole and copied in both formats. Source comes back
+as the markdown that produced it, alignment row and all; Plain comes back as
+the rendered text, one block per line, with a row's cells joined by a space —
+which is what `text_by_kind(All)` does.
+
+Not carried over, and both because the fold drops them before the renderer
+sees them: a task list's `[x]` (`MdNode` has no `checked`, so the checkbox is
+not drawn either) and an inline image's `![alt](src)`, which is an `Image`
+element and so registers no run to hang an affix on.
+
+The one other thing this touched: the story gallery's app menu said `Open...`
+was left out because the tree had no file dialog. It has had one for a while.
+The row is there now, and the comment says what upstream's gallery handler
+actually is — empty, because a component gallery has nothing to open a file
+into. `on_action_open` in the markdown example is the one that does the work.
+
+17,472 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples.

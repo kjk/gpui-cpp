@@ -18,11 +18,14 @@
    collection` uses, and the colours are the same five syntax token types
    upstream maps the markers to.
 
+   Selection: Plain / Source is in the status bar beside them. Upstream does
+   not map a selection back to the source it was parsed from either — it
+   rebuilds the markdown out of the block tree it rendered (node.rs
+   `text_by_kind`) — and so does this, with each painted run carrying the
+   marks and the block fences around it (gpui::SelSource).
+
    What this does not have, and why:
 
-   - **Selection: Plain / Source** would have to map a selection in the
-     rendered document back to the markdown that produced it, and an MdNode
-     here carries no source offsets.
    - **KaTeX**: upstream's math plugin renders a formula by handing it to
      KaTeX in node and reading the SVG back. The plugin is here and takes the
      example's own fallback path instead — the formula set italic with the
@@ -57,6 +60,9 @@ struct MarkdownApp {
     // Which of the two table layouts the preview uses. Rust defaults to the
     // scrolling one and the status bar's button says which is on.
     bool tableWrap = false;
+    // What a copy of a selection in the preview says: the text as rendered,
+    // or the markdown it was rendered from. Rust defaults to Plain.
+    SelectionFormat selFormat = SelectionFormat::Plain;
     // The last link the preview reported, shown in the status bar — Rust
     // prints it and opens the URL; opening a browser mid-demo is not what a
     // screenshot wants, so this says the handler ran instead.
@@ -858,6 +864,15 @@ static void OnKey(MarkdownApp* self, Ctx* cx, const KeyEvent* ev) {
     }
 }
 
+// The status bar's `selection-format` button: whether copying the preview
+// gives back the rendered text or the markdown behind it.
+static void OnToggleSelFormat(MarkdownApp* self, Ctx* cx, const ClickEvent*) {
+    self->selFormat = self->selFormat == SelectionFormat::Plain
+                          ? SelectionFormat::Source
+                          : SelectionFormat::Plain;
+    Notify(cx);
+}
+
 // The status bar's `table-wrap` button: which layout the preview's tables
 // take, the measured one that scrolls or the one that wraps to fit.
 static void OnToggleTableWrap(MarkdownApp* self, Ctx* cx, const ClickEvent*) {
@@ -942,6 +957,7 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     tv->Plugin(StrL("math"), &MathParse, &MathRender);
     El* preview = tv->TableScroll(!self->tableWrap)
                       ->Selectable()
+                      ->SelFormat(self->selFormat)
                       ->OnLink(Listen(cx, &OnLink))
                       ->CodeBlockActions(&CodeActions, self)
                       ->IntoEl();
@@ -971,6 +987,14 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
                    ->WithSize(UiSize::XSmall)
                    ->Label(StrL("Open..."))
                    ->OnClick(Listen(cx, &OnOpenClick))
+                   ->IntoEl());
+    bar->Right(component::Button::New(cx, StrL("selection-format"))
+                   ->Ghost()
+                   ->WithSize(UiSize::XSmall)
+                   ->Label(self->selFormat == SelectionFormat::Source
+                               ? StrL("Selection: Source")
+                               : StrL("Selection: Plain"))
+                   ->OnClick(Listen(cx, &OnToggleSelFormat))
                    ->IntoEl());
     bar->Right(component::Button::New(cx, StrL("table-wrap"))
                    ->Ghost()

@@ -342,6 +342,196 @@ static void TestImageSrc() {
     utassert(!ImageSrcIsLocal(StrL("")));
 }
 
+// ─── SelectionFormat::Source ──────────────────────────────────────────────
+//
+// Ports of node.rs's own reconstruct tests — reconstruct_markdown_wraps_
+// marked_runs, reconstruct_markdown_emits_unmarked_text_verbatim, and the
+// selected_source cases for headings, blockquotes, code blocks and tables.
+// Rust rebuilds the markdown by walking the BlockNode tree; here the walk
+// happens as the tree is built and each painted run carries its piece of it,
+// so what these drive is the other end: CopyTextHitsIn putting the pieces
+// back together over a frame's registered runs.
+
+// A frame's text registrations, built by hand the way a paint pass builds
+// them.
+struct SrcDoc {
+    PaintCtx ctx;
+
+    void Run(const char* text, const SelSource* src, bool join) {
+        TextHit h;
+        h.bounds = {0, 0, 100, 20};
+        h.text = Str((char*)text);
+        h.font = 14;
+        h.maxW = 100;
+        h.docOff = ctx.textDocLen;
+        h.src = src;
+        h.join = join;
+        ctx.texts.Append(h);
+        // The gap of one between runs, which is what the copier's document
+        // order leaves room for.
+        ctx.textDocLen += h.text.len + 1;
+    }
+};
+
+// The whole document, copied in `fmt`.
+static Str SrcCopy(SrcDoc* d, SelectionFormat fmt, char* buf, int cap) {
+    // One short of the gap after the last run, so nothing reaches past it.
+    int n = CopyTextHitsIn(&d->ctx, 0, d->ctx.textDocLen - 1, -1, buf, cap,
+                           fmt);
+    return Str(buf, n);
+}
+
+static bool SrcIs(Str got, const char* want) {
+    Str w = Str((char*)want);
+    return got.len == w.len && memcmp(got.s, w.s, (size_t)w.len) == 0;
+}
+
+// A mark group split over several word elements wraps once, not per word —
+// which is what reconstruct_markdown gets from walking mark ranges rather
+// than words.
+static void TestSourceMarks() {
+    char buf[512];
+    SelBlock para = {};
+    SelSource bold = {StrL("**"), StrL("**"), &para};
+    SelSource plain = {{}, {}, &para};
+    SrcDoc d;
+    d.Run("one ", &bold, false);
+    d.Run("two ", &bold, true);
+    d.Run("three", &plain, true);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "**one two **three"));
+    // The same runs in Plain are the text as rendered, on one line: a
+    // paragraph is one InlineState.text in Rust however it is copied.
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+                   "one two three"));
+}
+
+// reconstruct_markdown: a partial selection inside a marked run still wraps
+// the slice.
+static void TestSourcePartialMark() {
+    char buf[512];
+    SelBlock para = {};
+    SelSource bold = {StrL("**"), StrL("**"), &para};
+    SrcDoc d;
+    d.Run("bold", &bold, false);
+    int n = CopyTextHitsIn(&d.ctx, 1, 3, -1, buf, sizeof(buf),
+                           SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), "**ol**"));
+}
+
+// reconstruct_markdown_emits_unmarked_text_verbatim, and a link's tail.
+static void TestSourceCodeAndLink() {
+    char buf[512];
+    SelBlock para = {};
+    SelSource plain = {{}, {}, &para};
+    SelSource code = {StrL("`"), StrL("`"), &para};
+    SelSource link = {StrL("["), StrL("](https://x.dev)"), &para};
+    SrcDoc d;
+    d.Run("a ", &plain, false);
+    d.Run("b", &code, true);
+    d.Run(" c ", &plain, true);
+    d.Run("home", &link, true);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "a `b` c [home](https://x.dev)"));
+}
+
+// A selected heading round-trips with its marker, and the paragraph under it
+// starts a line of its own.
+static void TestSourceHeading() {
+    char buf[512];
+    SelBlock head = {StrL("## "), {}, {}, false};
+    SelBlock para = {};
+    SelSource h = {{}, {}, &head};
+    SelSource p = {{}, {}, &para};
+    SrcDoc d;
+    d.Run("Title", &h, false);
+    d.Run("body", &p, false);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "## Title\nbody"));
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+                   "Title\nbody"));
+}
+
+// Every line of a blockquote carries its prefix, including the ones inside a
+// run that holds its own line breaks.
+static void TestSourceBlockquote() {
+    char buf[512];
+    SelBlock q1 = {StrL("> "), {}, StrL("> "), false};
+    SelBlock q2 = {StrL("> "), {}, StrL("> "), false};
+    SelSource a = {{}, {}, &q1};
+    SelSource b = {{}, {}, &q2};
+    SrcDoc d;
+    d.Run("first", &a, false);
+    d.Run("second\nthird", &b, false);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "> first\n> second\n> third"));
+}
+
+// code_block.selected_source: the code comes back fenced, with the block's
+// language on the opening fence.
+static void TestSourceCodeBlock() {
+    char buf[512];
+    SelBlock fence = {StrL("```rust\n"), StrL("\n```"), {}, false};
+    SelSource tok = {{}, {}, &fence};
+    SrcDoc d;
+    d.Run("let x", &tok, false);
+    d.Run(" = 1;", &tok, true);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "```rust\nlet x = 1;\n```"));
+}
+
+// table_selected_source: the row is piped and the alignment row follows the
+// header. In Plain the cells of a row are joined with a space.
+static void TestSourceTable() {
+    char buf[512];
+    SelBlock h0 = {StrL("| "), StrL(" "), {}, false};
+    SelBlock h1 = {StrL("| "), StrL(" |\n| :-- | :-: |"), {}, true};
+    SelBlock b0 = {StrL("| "), StrL(" "), {}, false};
+    SelBlock b1 = {StrL("| "), StrL(" |"), {}, true};
+    SelSource s0 = {{}, {}, &h0};
+    SelSource s1 = {{}, {}, &h1};
+    SelSource s2 = {{}, {}, &b0};
+    SelSource s3 = {{}, {}, &b1};
+    SrcDoc d;
+    d.Run("Name", &s0, false);
+    d.Run("Qty", &s1, false);
+    d.Run("Nut", &s2, false);
+    d.Run("3", &s3, false);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "| Name | Qty |\n| :-- | :-: |\n| Nut | 3 |"));
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+                   "Name Qty\nNut 3"));
+}
+
+// A list item's marker is the markdown one, not the bullet glyph it draws
+// with, and the lines under it are indented by the marker's width.
+static void TestSourceList() {
+    char buf[512];
+    SelBlock item = {StrL("- "), {}, StrL("  "), false};
+    SelBlock nested = {StrL("  - "), {}, StrL("    "), false};
+    SelSource a = {{}, {}, &item};
+    SelSource b = {{}, {}, &nested};
+    SrcDoc d;
+    d.Run("first", &a, false);
+    d.Run("under", &b, false);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "- first\n  - under"));
+}
+
+// A run that names no source — everything outside a TextView — copies as its
+// own text in both formats, one run per line, which is what the copier did
+// before there was a second format at all.
+static void TestSourceIgnoresPlainRuns() {
+    char buf[512];
+    SrcDoc d;
+    d.Run("hello", nullptr, false);
+    d.Run("world", nullptr, false);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "hello\nworld"));
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+                   "hello\nworld"));
+}
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
@@ -364,5 +554,14 @@ void TestTextView() {
     TestHtmlBreak(a);
     TestHtmlImage(a);
     TestImageSrc();
+    TestSourceMarks();
+    TestSourcePartialMark();
+    TestSourceCodeAndLink();
+    TestSourceHeading();
+    TestSourceBlockquote();
+    TestSourceCodeBlock();
+    TestSourceTable();
+    TestSourceList();
+    TestSourceIgnoresPlainRuns();
     ArenaDelete(a);
 }

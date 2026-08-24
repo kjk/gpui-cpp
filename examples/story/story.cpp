@@ -1193,23 +1193,31 @@ static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
     OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
 }
 
-// app_menus.rs's first menu, the one named for the application. Two of its
-// rows are not here: `Open...` wants a file dialog this tree does not have,
-// and `Language` wants rust_i18n. What is left is what the Rust menu does
-// with the same rows — the About dialog, the light/dark pair, the theme
-// table, and Quit.
+// app_menus.rs's first menu, the one named for the application. One of its
+// rows is not here: `Language` wants rust_i18n. The rest is what the Rust
+// menu does with the same rows — the About dialog, `Open...`, the light/dark
+// pair, the theme table, and Quit.
 enum {
     AppMenuAbout = 0,
     AppMenuSep1,
+    AppMenuOpen,
+    AppMenuSep2,
     AppMenuAppearance,
     AppMenuTheme,
-    AppMenuSep2,
+    AppMenuSep3,
     AppMenuQuit
 };
 
 static void OnAppMenuItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
     if (ix == AppMenuAbout) {
         WindowOpenDialog(cx, EntityNew<AboutDialog>(cx->app));
+    } else if (ix == AppMenuOpen) {
+        // `cx.on_action(|_action: &Open, _cx| {})` in the gallery: the row is
+        // there and the handler is empty, because a component gallery has
+        // nothing to open a file into. What a real one does with the same
+        // action is `on_action_open` in the markdown example — this tree has
+        // the dialog for it (PromptForPath), and it is that example that
+        // wants it, not this menu.
     } else if (ix == AppMenuQuit) {
         AppQuit(cx->win);
     }
@@ -1262,6 +1270,8 @@ static El* AppMenu(Ctx* cx) {
         component::PopupMenu::New(cx, StrL("story-app-menu"))
             ->MinW(220)
             ->Menu(StrL("About GPUI Component"))
+            ->Separator()
+            ->Menu(StrL("Open..."))
             ->Separator()
             ->Submenu(StrL("Appearance"), appearance)
             ->Submenu(StrL("Theme"), themes)

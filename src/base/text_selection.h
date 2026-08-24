@@ -58,6 +58,10 @@ struct WindowSelection {
     // TextSelectionScopeId: the trap the gesture began in. Extending stays
     // inside it, and so does what gets painted and copied.
     int scope = 0;
+    // What a copy says. Rust hangs `selection_format` off the TextView's own
+    // state and the document does the copying; the copy here is the window's,
+    // so the format is too, and `TextView::SelFormat` sets it as it renders.
+    SelectionFormat format = SelectionFormat::Plain;
 };
 
 // The window's selection, made on first use.
@@ -77,8 +81,13 @@ void WindowSelectionRelease(Window* win);
 bool WindowSelectionHas(const Window* win);
 // TextSelection::clear.
 void WindowSelectionClear(Window* win);
-// TextSelection::selected_text, written into `out`. Answers its length.
+// TextSelection::selected_text, written into `out`. Answers its length. The
+// format is the window's unless one is named, which is what the tests do.
 int WindowSelectionText(Window* win, char* out, int cap);
+int WindowSelectionTextAs(Window* win, char* out, int cap, SelectionFormat fmt);
+// TextView::selection_format, on the window that does the copying.
+void WindowSelectionSetFormat(Window* win, SelectionFormat fmt);
+SelectionFormat WindowSelectionFormat(Window* win);
 // The window's copy: the selection to the clipboard. False when there is
 // nothing selected, which is what lets a Ctrl+C fall through to whatever
 // else wants it.

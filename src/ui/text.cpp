@@ -1,5 +1,6 @@
 #include "ui/text.h"
 
+#include "base/text_selection.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
 #include "markdown/markdown.h"
@@ -679,6 +680,221 @@ static Str OrderedMarker(Arena* a, int n, int depth) {
     return StrDup(a, Str(buf));
 }
 
+// âââ SelectionFormat::Source âââ
+//
+// node.rs reconstructs the Markdown of a selection by walking the BlockNode
+// tree it rendered from. The window's selection here knows only the flat list
+// of painted runs, so the walk happens as the tree is built: each block hands
+// its runs a gpui::SelBlock naming what opens and closes it, and each run a
+// gpui::SelSource naming the marks around it. gpui.cpp's CopyTextHitsIn puts
+// the pieces back together in document order.
+
+// Several short pieces as one arena string. The affixes are three or four
+// parts and none of them wants a builder.
+static Str SrcCat(Arena* a, Str p0, Str p1 = {}, Str p2 = {}, Str p3 = {},
+                  Str p4 = {}) {
+    Str parts[5] = {p0, p1, p2, p3, p4};
+    int len = 0;
+    for (const Str& p : parts) {
+        len += p.len > 0 ? p.len : 0;
+    }
+    if (len <= 0) {
+        return Str{};
+    }
+    char* buf = (char*)Alloc(a, len + 1);
+    if (!buf) {
+        return Str{};
+    }
+    int at = 0;
+    for (const Str& p : parts) {
+        if (p.len <= 0 || !p.s) {
+            continue;
+        }
+        memcpy(buf + at, p.s, (size_t)p.len);
+        at += p.len;
+    }
+    buf[at] = 0;
+    return Str(buf, at);
+}
+
+// As many spaces as `s` is bytes wide, which is the indent Rust's
+// list_selected_source puts under a marker so an item's later lines line up
+// with its text.
+static Str SrcIndent(Arena* a, Str s) {
+    if (s.len <= 0) {
+        return Str{};
+    }
+    char* buf = (char*)Alloc(a, s.len + 1);
+    if (!buf) {
+        return Str{};
+    }
+    memset(buf, ' ', (size_t)s.len);
+    buf[s.len] = 0;
+    return Str(buf, s.len);
+}
+
+// node.rs wrap_with_mark, split into the two halves a run is emitted between.
+// The nesting is that function's: code innermost, then italic, bold,
+// strikethrough, underline, highlight, and the link outermost.
+static Str SrcMarkPre(Arena* a, uint8_t marks) {
+    char buf[24];
+    int n = 0;
+    auto put = [&](const char* t) {
+        for (const char* p = t; *p && n < (int)sizeof(buf); p++) {
+            buf[n++] = *p;
+        }
+    };
+    if (marks & MdLink) {
+        put("[");
+    }
+    if (marks & MdHighlight) {
+        put("==");
+    }
+    if (marks & MdUnderline) {
+        put("<u>");
+    }
+    if (marks & MdDel) {
+        put("~~");
+    }
+    if (marks & MdBold) {
+        put("**");
+    }
+    if (marks & MdItalic) {
+        put("*");
+    }
+    if (marks & MdCode) {
+        put("`");
+    }
+    return n > 0 ? StrDup(a, Str(buf, n)) : Str{};
+}
+
+static Str SrcMarkPost(Arena* a, uint8_t marks, Str href) {
+    char buf[24];
+    int n = 0;
+    auto put = [&](const char* t) {
+        for (const char* p = t; *p && n < (int)sizeof(buf); p++) {
+            buf[n++] = *p;
+        }
+    };
+    if (marks & MdCode) {
+        put("`");
+    }
+    if (marks & MdItalic) {
+        put("*");
+    }
+    if (marks & MdBold) {
+        put("**");
+    }
+    if (marks & MdDel) {
+        put("~~");
+    }
+    if (marks & MdUnderline) {
+        put("</u>");
+    }
+    if (marks & MdHighlight) {
+        put("==");
+    }
+    Str tail = n > 0 ? StrDup(a, Str(buf, n)) : Str{};
+    if (marks & MdLink) {
+        // Rust writes the title too when the link carries one; MdRun keeps
+        // only the url, which is what the parse fold kept.
+        return SrcCat(a, tail, StrL("]("), href, StrL(")"));
+    }
+    return tail;
+}
+
+const SelBlock* TextView::SrcOpen(Str marker, Str post, bool join) {
+    if (!selectable) {
+        return nullptr;
+    }
+    SelBlock* b = ArenaNew<SelBlock>(a);
+    if (!b) {
+        return nullptr;
+    }
+    // The marker a list item left for its first block is spent here; every
+    // later block of the item takes the plain line prefix instead. A block
+    // that continues the previous one's line opens no line and so takes
+    // neither.
+    Str head = {};
+    if (!join) {
+        head = srcMarker.len > 0 ? srcMarker : srcLinePre;
+        srcMarker = Str{};
+    }
+    b->pre = SrcCat(a, head, marker);
+    b->post = post;
+    b->linePre = srcLinePre;
+    b->join = join;
+    srcBlock = b;
+    srcLineStart = true;
+    srcRunLast = nullptr;
+    return b;
+}
+
+void TextView::SrcCell(MdNode* row, MdNode* c, int nCols,
+                       const uint8_t* colAlign) {
+    if (!selectable) {
+        return;
+    }
+    // table_selected_source pipes each row — `| a | b |` — and puts the
+    // alignment row after the header, so the first cell of a row opens the
+    // line, every other cell continues it, and the last cell closes it.
+    bool first = c == row->first;
+    bool last = c->next == nullptr;
+    Str post = last ? StrL(" |") : StrL(" ");
+    if (last && row->head) {
+        // The delimiter row carries the column alignments and has to follow
+        // the header row. Rust's ColumnAlign has no default arm: a column
+        // that named no alignment is Left, which is `:--`.
+        Str line = SrcCat(a, StrL(" |"), StrL("\n"), srcLinePre, StrL("|"));
+        int cells = 0;
+        for (MdNode* q = row->first; q; q = q->next) {
+            cells++;
+        }
+        for (int i = 0; i < cells; i++) {
+            uint8_t al = i < nCols ? colAlign[i] : (uint8_t)MdAlignDefault;
+            Str d = al == MdAlignCenter  ? StrL(" :-: |")
+                    : al == MdAlignRight ? StrL(" --: |")
+                                         : StrL(" :-- |");
+            line = SrcCat(a, line, d);
+        }
+        post = line;
+    }
+    SrcOpen(StrL("| "), post, !first);
+}
+
+El* TextView::SrcMark(El* t, uint8_t marks, Str href) {
+    if (!selectable || !t) {
+        return t;
+    }
+    // One record per mark group: an adjacent run with the same marks and the
+    // same href reuses it, and the copier closes a group only when the record
+    // changes — so a bold phrase split into word elements copies as
+    // `**one two three**` rather than as three wrapped words, which is what
+    // reconstruct_markdown gets from walking mark ranges instead of words.
+    bool same = srcRunLast && srcRunLast->block == srcBlock &&
+                srcRunMarks == marks && srcRunHref.len == href.len &&
+                (href.len == 0 || srcRunHref.s == href.s);
+    if (!same) {
+        SelSource* s = ArenaNew<SelSource>(a);
+        if (!s) {
+            return t;
+        }
+        s->pre = SrcMarkPre(a, marks);
+        s->post = SrcMarkPost(a, marks, href);
+        s->block = srcBlock;
+        srcRunLast = s;
+        srcRunMarks = marks;
+        srcRunHref = href;
+    }
+    t->SelSrc(srcRunLast, !srcLineStart);
+    srcLineStart = false;
+    return t;
+}
+
+void TextView::SrcBreak() {
+    srcLineStart = true;
+}
+
 // `<mark>`: html.rs takes yellow(200) — a fixed Tailwind step, not a theme
 // color — and leaves the ink alone, which works because the foreground it
 // runs against there is dark. Ours is near-white in the dark theme, so the
@@ -795,6 +1011,7 @@ El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
     if (selectable) {
         t->Selectable();
     }
+    SrcMark(t, marks, href);
     if ((marks & MdLink) && href.len > 0) {
         // handle_link_click: the handler if one was given, the desktop's
         // browser otherwise. The href is NUL-terminated in the arena the
@@ -850,6 +1067,7 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
         ApplyWeight(t, weight);
         if (selectable) {
             t->Selectable();
+            SrcMark(t, 0);
         }
         if (align == MdAlignCenter || align == MdAlignRight) {
             // The text shrink-wraps so the box around it can push it over.
@@ -895,6 +1113,7 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
             char c = r->text.s[i];
             if (c == '\n') {
                 flush();
+                SrcBreak();
                 col->Child(row);
                 row = AlignRow(Div(a)->FlexRow()->FlexWrap()->W(kFill), align);
                 continue;
@@ -922,6 +1141,12 @@ static int RunsLen(MdNode* n) {
 
 El* TextView::CodeBlock(MdNode* n) {
     const Theme& th = cx->theme();
+    // code_block.selected_source wraps the selected code in a fence carrying
+    // the block's language, so it round-trips as Markdown rather than pasting
+    // as bare text. The opening fence ends its own line, so the prefix the
+    // block sits under has to start the first code line again.
+    SrcOpen(SrcCat(a, StrL("```"), n->lang, StrL("\n"), srcLinePre),
+            SrcCat(a, StrL("\n"), srcLinePre, StrL("```")));
     El* box = Div(a)->FlexCol()->W(kFill)->Pad(12)->Radius(th.radius)->Bg(
         th.tokens.muted);
     // The runs are verbatim text with embedded newlines. They go into one
@@ -954,6 +1179,7 @@ El* TextView::CodeBlock(MdNode* n) {
             TextEl(a, Str(buf, at))->Font(codeFont)->Fg(th.foreground)->Mono();
         if (selectable) {
             t->Selectable();
+            SrcMark(t, 0);
         }
         box->Child(t);
     }
@@ -1000,6 +1226,7 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
                     ->Mono();
         if (selectable) {
             t->Selectable();
+            SrcMark(t, 0);
         }
         row->Child(t);
         len = 0;
@@ -1013,6 +1240,7 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
             char ch = lx.text.s[i];
             if (ch == '\n') {
                 flush();
+                SrcBreak();
                 col->Child(row);
                 row = Div(a)->FlexRow()->H(lineH);
                 continue;
@@ -1154,6 +1382,7 @@ El* TextView::ScrollTable(MdNode* n) {
             if (align == MdAlignDefault) {
                 align = colAlign[col];
             }
+            SrcCell(r, c, nCols, colAlign);
             cell->Child(Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
             row->Child(cell);
         }
@@ -1248,6 +1477,7 @@ El* TextView::Table(MdNode* n) {
             if (align == MdAlignDefault && ix < nCols) {
                 align = colAlign[ix];
             }
+            SrcCell(r, c, nCols, colAlign);
             cell->Child(Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
             row->Child(cell);
         }
@@ -1266,13 +1496,25 @@ Rgba TextView::BlockFg() const {
 
 El* TextView::Item(MdNode* n, Str marker, int depth) {
     El* content = Div(a)->FlexCol()->Flex1()->MinW(0)->ClipX();
+    // list_selected_source: the item's first line carries the Markdown
+    // marker, and every line under it is indented by the marker's width so
+    // continuations and nested lists line up with the item's text.
+    Str savedPre = srcLinePre;
+    Str md = srcItemMarker;
+    srcItemMarker = Str{};
+    srcMarker = SrcCat(a, srcMarker.len > 0 ? srcMarker : srcLinePre, md);
+    srcLinePre = SrcCat(a, srcLinePre, SrcIndent(a, md));
     // An item's blocks are below; runs sit on the item itself only when
     // something built the tree by hand, since mdast gives even a tight list
     // item a paragraph of its own.
     if (n->runFirst) {
+        SrcOpen({}, {});
         content->Child(Inline(n, baseFont, BlockFg(), 0));
     }
     Blocks(content, n, depth, true);
+    // An item with nothing selectable in it never spent its marker.
+    srcMarker = Str{};
+    srcLinePre = savedPre;
     return Div(a)
         ->FlexRow()
         ->W(kFill)
@@ -1355,10 +1597,19 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
     float mb = (inList || isLast) ? 0.f : paragraphGap;
     switch (n->kind) {
         case MdKind::Paragraph:
+            SrcOpen({}, {});
             return Div(a)->W(kFill)->PadB(mb)->Child(
                 Inline(n, baseFont, BlockFg(), 0));
         case MdKind::Heading: {
             float font = headingFont * HeadingScale(n->level);
+            // node.rs prefixes the heading marker in source mode so a
+            // selected heading round-trips as `## Title`.
+            char hashes[8] = {};
+            int nh = n->level > 0 && n->level < 8 ? n->level : 1;
+            for (int i = 0; i < nh; i++) {
+                hashes[i] = '#';
+            }
+            SrcOpen(SrcCat(a, Str(hashes, nh), StrL(" ")), {});
             // Headings use their own 0.3rem bottom padding, not the gap.
             return Div(a)->W(kFill)->PadB(5)->Child(
                 Inline(n, font, BlockFg(), HeadingWeight(n->level)));
@@ -1380,7 +1631,12 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
             bool savedSet = blockFgSet;
             blockFg = th.mutedFg;
             blockFgSet = true;
+            // node.rs prefixes every line of a selected blockquote with
+            // `> ` so it round-trips; nested quotes stack the prefix.
+            Str savedPre = srcLinePre;
+            srcLinePre = SrcCat(a, srcLinePre, StrL("> "));
             Blocks(inner, n, depth, false);
+            srcLinePre = savedPre;
             blockFg = savedFg;
             blockFgSet = savedSet;
             return Div(a)->W(kFill)->PadB(mb)->Child(inner);
@@ -1394,6 +1650,10 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
                 }
                 Str marker =
                     n->ordered ? OrderedMarker(a, ix, depth) : Bullet(depth);
+                // list_selected_source restores the Markdown marker rather
+                // than the bullet glyph the item is drawn with.
+                srcItemMarker =
+                    n->ordered ? OrderedMarker(a, ix, 0) : StrL("- ");
                 list->Child(Item(c, marker, depth + 1));
                 ix++;
             }
@@ -1408,6 +1668,7 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
             // Only reached for a stray list item; treat it as its contents.
             El* box = Div(a)->FlexCol()->W(kFill)->PadB(mb);
             if (n->runFirst) {
+                SrcOpen({}, {});
                 box->Child(Inline(n, baseFont, BlockFg(), 0));
             }
             return Blocks(box, n, depth, inList);
@@ -1434,6 +1695,13 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
 
 El* TextView::IntoEl() {
     MdNode* doc = MdParseCached(cx, a, source, html);
+    // Rust keeps selection_format on the view's own state and reconstructs
+    // the source when the copy asks for it. The copy is the window's here,
+    // so the view says what format it wants and the runs it builds below
+    // carry the Markdown that format needs.
+    if (selectable) {
+        WindowSelectionSetFormat(cx->win, selFormat);
+    }
     return Blocks(Div(a)->FlexCol()->W(kFill), doc, 0, false);
 }
 
@@ -1490,6 +1758,11 @@ TextView* TextView::HeadingFont(float px) {
 
 TextView* TextView::Selectable(bool on) {
     selectable = on;
+    return this;
+}
+
+TextView* TextView::SelFormat(gpui::SelectionFormat fmt) {
+    selFormat = fmt;
     return this;
 }
 

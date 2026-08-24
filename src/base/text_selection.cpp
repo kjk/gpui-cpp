@@ -148,7 +148,8 @@ void WindowSelectionRelease(Window* win) {
     }
 }
 
-int WindowSelectionText(Window* win, char* out, int cap) {
+int WindowSelectionTextAs(Window* win, char* out, int cap,
+                          SelectionFormat fmt) {
     if (!WindowSelectionHas(win)) {
         if (out && cap > 0) {
             out[0] = 0;
@@ -156,8 +157,23 @@ int WindowSelectionText(Window* win, char* out, int cap) {
         return 0;
     }
     WindowSelection* s = win->sel;
-    return CopyTextHitsIn(&win->paint, s->anchor, s->cursor, s->scope, out,
-                          cap);
+    return CopyTextHitsIn(&win->paint, s->anchor, s->cursor, s->scope, out, cap,
+                          fmt);
+}
+
+int WindowSelectionText(Window* win, char* out, int cap) {
+    return WindowSelectionTextAs(win, out, cap, WindowSelectionFormat(win));
+}
+
+void WindowSelectionSetFormat(Window* win, SelectionFormat fmt) {
+    if (WindowSelection* s = WindowSelectionOf(win)) {
+        s->format = fmt;
+    }
+}
+
+SelectionFormat WindowSelectionFormat(Window* win) {
+    WindowSelection* s = win ? win->sel : nullptr;
+    return s ? s->format : SelectionFormat::Plain;
 }
 
 bool WindowSelectionCopy(Window* win) {

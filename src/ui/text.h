@@ -205,6 +205,11 @@ struct TextView {
     // How many scrolling tables have been built this frame, which is what
     // names each one's scroll offset.
     int tableIx = 0;
+    // TextView::selection_format. Rust keeps it on the view's own state and
+    // the document reconstructs the source when the copy asks for it; the
+    // selection here is the window's, so the view pushes the format onto it
+    // and every run carries the Markdown around it (gpui::SelSource).
+    gpui::SelectionFormat selFormat = gpui::SelectionFormat::Plain;
 
     // text_view.rs TextView::markdown / TextView::html.
     static TextView* New(Ctx* cx, Str source);
@@ -212,6 +217,10 @@ struct TextView {
     TextView* Font(float px);
     TextView* HeadingFont(float px);
     TextView* Selectable(bool on = true);
+    // `.selection_format(..)`: whether a copy of the selection is the text as
+    // rendered or the Markdown it was rendered from. Only meaningful on a
+    // Selectable() view.
+    TextView* SelFormat(gpui::SelectionFormat fmt);
     TextView* TableColumnWidth(float px);
     TextView* TableScroll(bool on = true);
     TextView* ParagraphGap(float px);
@@ -240,6 +249,47 @@ struct TextView {
     Rgba blockFg = {};
     bool blockFgSet = false;
     Rgba BlockFg() const;
+
+    // ─── SelectionFormat::Source ──────────────────────────────────────────
+    //
+    // node.rs rebuilds a selection's Markdown by walking the BlockNode tree
+    // (`text_by_kind`, `list_selected_source`, `table_selected_source`); the
+    // window's selection here knows only the flat list of painted runs, so
+    // the walk happens as the tree is built and each run is handed the piece
+    // of that reconstruction it is responsible for. These four fields are the
+    // walk's state.
+    //
+    // The line prefix the block being built sits under — one `> ` per
+    // enclosing blockquote, and the indent under each enclosing list marker.
+    Str srcLinePre = {};
+    // What the next block's first line carries in front of that prefix: a
+    // list item's `- ` or `1. `, spent by the first block of the item.
+    Str srcMarker = {};
+    // The Markdown marker the list being built hands its next item, which is
+    // not the bullet glyph the item is drawn with.
+    Str srcItemMarker = {};
+    // The block runs are being built for, shared by every run in it, and
+    // whether the next run starts a line rather than continuing one.
+    const SelBlock* srcBlock = nullptr;
+    bool srcLineStart = true;
+    // The mark group open right now, so an adjacent run that carries the same
+    // marks shares its record and the copier wraps the phrase once.
+    const SelSource* srcRunLast = nullptr;
+    uint8_t srcRunMarks = 0;
+    Str srcRunHref = {};
+    // Open a block: `marker` goes in front of its first line, `post` closes
+    // it, and `join` says it continues the previous block's line (a table
+    // cell). Answers null when the view is not selectable, since nothing
+    // then paints a run that could be copied.
+    const SelBlock* SrcOpen(Str marker, Str post, bool join = false);
+    // One table cell: `| ` in front, ` |` or a separator after, and the
+    // alignment row behind the last cell of the header.
+    void SrcCell(MdNode* row, MdNode* c, int nCols, const uint8_t* colAlign);
+    // Hand `t` the Markdown around it — wrap_with_mark's affixes — and
+    // whether it continues the run before it. Answers `t`.
+    El* SrcMark(El* t, uint8_t marks, Str href = {});
+    // The next run starts a line of its own: a hard break, a new code line.
+    void SrcBreak();
     // The text a plugin's parser sees, and the block a plugin claimed.
     Str BlockText(MdNode* n);
     El* PluginBlock(MdNode* n);
