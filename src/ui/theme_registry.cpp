@@ -854,6 +854,12 @@ static Arena* gArena = nullptr;
 static Vec<ThemeConfig> gThemes;
 static bool gInited = false;
 static Str gActive[2] = {};
+// The directories LoadDir has already read, so reading one twice is free.
+// Callers treat LoadDir as "make sure these themes are in the registry" and
+// one of them — the story's app menu — says it on every frame; without this
+// each of those calls re-read and re-parsed every file in the directory into
+// gArena, which nothing ever hands back.
+static Vec<Str> gLoadedDirs;
 
 static ThemeMode ParseMode(Str s) {
     return StrEqI(s, StrL("dark")) ? ThemeMode::Dark : ThemeMode::Light;
@@ -902,12 +908,18 @@ int ThemeRegistryLoadStr(Str json) {
     if (!gArena || !json.s || json.len <= 0) {
         return 0;
     }
+    // What a theme keeps — its name, its colors object — points into the
+    // document, so an accepted theme pins the parse. A document that adds
+    // nothing pins nothing, and the arena goes back to where it was.
+    uint64_t mark = ArenaUsed(gArena);
     JsonValue* doc = JsonParse(gArena, json);
     if (!doc) {
+        gArena->PopTo(mark);
         return 0;
     }
     const JsonValue* themes = JsonGet(doc, "themes");
     if (!themes || themes->kind != JsonKind::Array) {
+        gArena->PopTo(mark);
         return 0;
     }
     Str setAuthor = JsonString(JsonGet(doc, "author"));
@@ -932,6 +944,9 @@ int ThemeRegistryLoadStr(Str json) {
         cfg.radiusLg = JsonFloatOr(t, "radius.lg", -1);
         InsertSorted(cfg);
         added++;
+    }
+    if (added == 0) {
+        gArena->PopTo(mark);
     }
     return added;
 }
@@ -966,6 +981,15 @@ int ThemeRegistryLoadDir(Str dir) {
         }
         StrCopyZ(path, kMaxPath, resolved);
     }
+    // Already read once. A theme is never dropped, so a second pass over the
+    // same directory can only find what is in the registry already.
+    Str dirKey = Str(path);
+    for (int i = 0; i < gLoadedDirs.len; i++) {
+        if (SameName(gLoadedDirs[i], dirKey)) {
+            return 0;
+        }
+    }
+    gLoadedDirs.Append(StrDup(gArena, dirKey));
     // Rust reads the whole directory; a hundred entries is more themes than
     // anyone ships and the listing is a fixed buffer either way.
     const int kMaxEntries = 128;
@@ -1070,6 +1094,7 @@ void ThemeRegistryReset(App* app) {
 
 void ThemeRegistryFree() {
     gThemes.Reset();
+    gLoadedDirs.Reset();
     if (gArena) {
         ArenaDelete(gArena);
         gArena = nullptr;

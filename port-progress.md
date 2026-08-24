@@ -3110,3 +3110,30 @@ painted is not there to grab either, so the pair rides into `ScrollRect` as
 `barX`/`barY` and `ScrollbarAt` skips the band of a bar the box does not show
 — otherwise the bottom eight pixels of a Vertical list would still answer a
 press with a drag of a thumb nobody can see.
+
+**The theme registry read the whole `themes/` directory every frame.** The
+story's title-bar `AppMenu` calls `ThemeRegistryLoadDir("themes")` as it
+builds, so the twenty-odd theme files were re-read and re-parsed once per
+frame into `gArena` — the arena a theme's name and colour object point into,
+which nothing ever hands back. `ThemeRegistryLoadStr` dropped every one of
+those parses on the floor (the name is in the registry already, so the config
+is skipped) and the arena chained another 64 MB block every second frame:
+`GPUI_FRAME_BENCH=3000 story.exe` peaked at 57 GB, and building a frame cost
+5.1 ms of file I/O and JSON.
+
+Two fixes, both in `src/ui/theme_registry.cpp`. `LoadDir` remembers the
+directories it has already read — callers mean "make sure these themes are
+loaded", and a theme is never dropped, so a second pass can only find what is
+there — and `LoadStr` marks the arena before it parses and pops back to the
+mark when the document added nothing, since a document no config points into
+pins nothing. Story now sits at 96 MB flat over 3000 frames and a frame costs
+2.75 ms, build 0.27 ms.
+
+How it was found: the arena is the only allocator big enough to lose that
+much, so the search was for the arena that grows and never resets — a counter
+on `PlatMemCommit`/`PlatMemReserve` said the growth was arena regions rather
+than the heap, and `_ReturnAddress()` captured in `ArenaNew` and symbolized
+with `dbghelp` at the point a chain block is added named `ThemeRegistryInit`.
+`GPUI_VEC_LOG` (`cmd/vec-log.ts`) was the first stop and ruled the heap out:
+births with no matching death came to 2.3 MB over 120 frames, three orders of
+magnitude short of what the process was holding.
