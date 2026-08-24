@@ -125,6 +125,12 @@ struct MdNode {
     bool head = false;
 };
 
+// text_view.rs CodeBlockActionsFn: what the caller hangs in the corner of a
+// fenced block. Upstream's markdown example puts a Clipboard there and a Run
+// button on the languages it knows. `code` is the block's text and `lang` its
+// info string, both good for the length of the call.
+using CodeBlockActionsFn = El* (*)(Ctx * cx, void* data, Str code, Str lang);
+
 struct TextView {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -146,6 +152,8 @@ struct TextView {
     bool html = false;
     // text_view.rs link_click_handler.
     Listener onLink;
+    CodeBlockActionsFn codeActions = nullptr;
+    void* codeActionsData = nullptr;
     // node.rs min_w_16: the floor a table column shrinks to. Above the floor
     // a column's width is a fraction of the table, proportional to the length
     // of its content, the way render_wrap_table distributes the space.
@@ -166,6 +174,9 @@ struct TextView {
     // a link opens in the desktop's browser, which is what Rust's
     // handle_link_click falls back to (cx.open_url).
     TextView* OnLink(Listener fn);
+    // code_block_actions(..): the row is absolutely placed at the block's
+    // top right, over a muted plate, exactly where node.rs puts it.
+    TextView* CodeBlockActions(CodeBlockActionsFn fn, void* data = nullptr);
     El* IntoEl();
 
   private:

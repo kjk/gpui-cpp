@@ -14,7 +14,6 @@ namespace component {
 // colour would draw nothing, so nothing else can want it.
 static const Rgba kInheritFg = Rgba{0, 0, 0, 0};
 
-
 // ─── parse ────────────────────────────────────────────────────────────────
 //
 // src/markdown is the `markdown` crate, ported: it hands back an mdast, the
@@ -908,13 +907,28 @@ El* TextView::CodeBlock(MdNode* n) {
     SyntaxLang lang = SyntaxLangFor(n->lang);
     if (lang != SyntaxLangNone) {
         box->Child(CodeLines(Str(buf, at), lang));
-        return box;
+    } else {
+        El* t =
+            TextEl(a, Str(buf, at))->Font(codeFont)->Fg(th.foreground)->Mono();
+        if (selectable) {
+            t->Selectable();
+        }
+        box->Child(t);
     }
-    El* t = TextEl(a, Str(buf, at))->Font(codeFont)->Fg(th.foreground)->Mono();
-    if (selectable) {
-        t->Selectable();
+    if (codeActions) {
+        // `div().id("actions").absolute().top_2().right_2().bg(muted)
+        // .rounded(radius)`, over the block it belongs to.
+        El* actions = codeActions(cx, codeActionsData, Str(buf, at), n->lang);
+        if (actions) {
+            box->Child(Div(a)
+                           ->Absolute()
+                           ->Top(8)
+                           ->Right(8)
+                           ->Radius(th.radius)
+                           ->Bg(th.tokens.muted)
+                           ->Child(actions));
+        }
     }
-    box->Child(t);
     return box;
 }
 
@@ -1195,6 +1209,12 @@ TextView* TextView::NewHtml(Ctx* cx, Str source) {
     TextView* t = TextView::New(cx, source);
     t->html = true;
     return t;
+}
+
+TextView* TextView::CodeBlockActions(CodeBlockActionsFn fn, void* data) {
+    codeActions = fn;
+    codeActionsData = data;
+    return this;
 }
 
 TextView* TextView::OnLink(Listener fn) {

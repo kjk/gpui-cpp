@@ -43,12 +43,16 @@ struct InputEditorStyle {
     // Which of them is the one the panel is on, painted in its own colour so
     // it stands out from the rest. -1 for none.
     int currentMatch = -1;
-    Rgba matchBg = {};
-    Rgba currentMatchBg = {};
+    // Spelled out rather than left at `{}`: an Rgba defaults to opaque, so a
+    // style that names none of these would paint an opaque black wash over
+    // the caret's row -- which is what an editor built without `.active_line`
+    // did.
+    Rgba matchBg = {0, 0, 0, 0};
+    Rgba currentMatchBg = {0, 0, 0, 0};
     // Editor's active-line wash and its indent guides. Alpha 0 and 0 are off,
     // which is what a plain textarea wants.
-    Rgba activeLine = {};
-    Rgba indentGuide = {};
+    Rgba activeLine = {0, 0, 0, 0};
+    Rgba indentGuide = {0, 0, 0, 0};
     // How many columns an indent guide stands every, which is the language's
     // tab size.
     int indentWidth = 4;
