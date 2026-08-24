@@ -1,10 +1,9 @@
 /* Ported from crates/ui/src/title_bar.rs, mod tests.
  *
- * The rest of crates/ui/src/theme/color.rs does not port: Rust's Hsla carries
- * hue, mixes along the shorter hue arc, and lightens and darkens in HSL, while
- * ours is 8-bit RGBA with no HSL round trip. RgbaMix is the plain channel
- * blend that default_title_bar_background asks for, and this is the assertion
- * upstream makes about it. */
+ * `default_title_bar_background` mixes the two colours' channels by hand
+ * rather than through `Colorize::mix`, so what it asks for is RgbaMix — the
+ * plain channel blend, not the HSL arc RgbaMixHsl walks (ColorTests has that
+ * one). This is the assertion upstream makes about it. */
 
 #include "Test.h"
 

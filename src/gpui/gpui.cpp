@@ -60,71 +60,108 @@ static float Clamp01(float v) {
     return v > 1 ? 1 : v;
 }
 
-Rgba RgbaHsla(float h, float s, float l, float a01) {
-    h = h - floorf(h); // hue wraps, everything else clamps
-    s = Clamp01(s);
-    l = Clamp01(l);
-    float c = (1.f - fabsf(2.f * l - 1.f)) * s;
-    float hp = h * 6.f;
-    float x = c * (1.f - fabsf(fmodf(hp, 2.f) - 1.f));
-    float r = 0, g = 0, b = 0;
-    if (hp < 1.f) {
-        r = c;
-        g = x;
-    } else if (hp < 2.f) {
-        r = x;
-        g = c;
-    } else if (hp < 3.f) {
-        g = c;
-        b = x;
-    } else if (hp < 4.f) {
-        g = x;
-        b = c;
-    } else if (hp < 5.f) {
-        r = x;
-        b = c;
-    } else {
-        r = c;
-        b = x;
-    }
-    float m = l - c * 0.5f;
-    return Rgba{ToByte(r + m), ToByte(g + m), ToByte(b + m), ToByte(a01)};
+// gpui::hsla().
+Hsla HslaNew(float h, float s, float l, float a) {
+    return Hsla{Clamp01(h), Clamp01(s), Clamp01(l), Clamp01(a)};
 }
 
-void RgbaToHsla(Rgba c, float* h, float* s, float* l) {
+// `impl From<Hsla> for Rgba`, channel for channel. The branch is Rust's match
+// on `(h * 6.).floor()`, including the arm that catches a hue of exactly 1
+// and one that came out negative, and the clamp is Rust's — on the way out,
+// not on the way in.
+Rgba HslaToRgba(Hsla c) {
+    float h = c.h, s = c.s, l = c.l;
+    float k = (1.f - fabsf(2.f * l - 1.f)) * s;
+    float x = k * (1.f - fabsf(fmodf(h * 6.f, 2.f) - 1.f));
+    float m = l - k * 0.5f;
+    float km = k + m;
+    float xm = x + m;
+    float r = 0, g = 0, b = 0;
+    switch ((int)floorf(h * 6.f)) {
+        case 0:
+        case 6:
+            r = km, g = xm, b = m;
+            break;
+        case 1:
+            r = xm, g = km, b = m;
+            break;
+        case 2:
+            r = m, g = km, b = xm;
+            break;
+        case 3:
+            r = m, g = xm, b = km;
+            break;
+        case 4:
+            r = xm, g = m, b = km;
+            break;
+        default:
+            r = km, g = m, b = xm;
+            break;
+    }
+    return Rgba{ToByte(Clamp01(r)), ToByte(Clamp01(g)), ToByte(Clamp01(b)),
+                ToByte(c.a)};
+}
+
+// `impl From<Rgba> for Hsla`.
+Hsla HslaFromRgba(Rgba c) {
     float r = c.r / 255.f, g = c.g / 255.f, b = c.b / 255.f;
     float mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
     float mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
-    float d = mx - mn;
-    float hh = 0;
-    if (d > 0) {
+    float delta = mx - mn;
+    float l = (mx + mn) * 0.5f;
+    float s = 0;
+    if (l != 0.f && l != 1.f) {
+        s = l < 0.5f ? delta / (2.f * l) : delta / (2.f - 2.f * l);
+    }
+    float h = 0;
+    if (delta != 0.f) {
         if (mx == r) {
-            hh = fmodf((g - b) / d, 6.f);
+            // rem_euclid, which is not fmod: a negative remainder comes back
+            // on the positive side of the circle.
+            h = fmodf((g - b) / delta, 6.f);
+            if (h < 0) {
+                h += 6.f;
+            }
+            h /= 6.f;
         } else if (mx == g) {
-            hh = (b - r) / d + 2.f;
+            h = ((b - r) / delta + 2.f) / 6.f;
         } else {
-            hh = (r - g) / d + 4.f;
-        }
-        hh /= 6.f;
-        if (hh < 0) {
-            hh += 1.f;
+            h = ((r - g) / delta + 4.f) / 6.f;
         }
     }
-    float ll = (mx + mn) * 0.5f;
-    float ss = 0;
-    if (d > 0) {
-        float den = 1.f - fabsf(2.f * ll - 1.f);
-        ss = den > 0 ? d / den : 0;
+    return Hsla{h, s, l, c.a / 255.f};
+}
+
+Rgba RgbaHsla(float h, float s, float l, float a01) {
+    return HslaToRgba(HslaNew(h, s, l, a01));
+}
+
+// Colorize::mix, which is bevy's HSL mix: the hue takes the shorter arc, the
+// other three interpolate straight, and `factor` weights the receiver.
+Rgba RgbaMixHsl(Rgba a, Rgba b, float factor) {
+    factor = Clamp01(factor);
+    float inv = 1.f - factor;
+    Hsla x = HslaFromRgba(a);
+    Hsla y = HslaFromRgba(b);
+    // lerp_hue, in Rust's degrees: the difference brought into -180..180 so
+    // the walk is the short way round, and the result back onto 0..360.
+    float d = fmodf(y.h * 360.f - x.h * 360.f + 180.f, 360.f);
+    if (d < 0) {
+        d += 360.f;
     }
-    *h = hh;
-    *s = ss;
-    *l = ll;
+    d -= 180.f;
+    float h = fmodf(x.h * 360.f + d * factor, 360.f);
+    if (h < 0) {
+        h += 360.f;
+    }
+    return HslaToRgba(Hsla{h / 360.f, x.s * factor + y.s * inv,
+                           x.l * factor + y.l * inv, x.a * factor + y.a * inv});
 }
 
 Rgba RgbaWithHue(Rgba c, float h01) {
-    float h = 0, s = 0, l = 0;
-    RgbaToHsla(c, &h, &s, &l);
-    return RgbaHsla(Clamp01(h01), s, l, c.a / 255.f);
+    Hsla hsl = HslaFromRgba(c);
+    hsl.h = Clamp01(h01);
+    return HslaToRgba(hsl);
 }
 
 // ─── background ───────────────────────────────────────────────────────────
@@ -218,9 +255,9 @@ Rgba RgbaBlend(Rgba base, Rgba over) {
 // Colorize::lighten / ::darken, which scale the HSL lightness rather than
 // mixing toward white or black.
 static Rgba ScaleLightness(Rgba c, float factor) {
-    float h = 0, s = 0, l = 0;
-    RgbaToHsla(c, &h, &s, &l);
-    return RgbaHsla(h, s, Clamp01(l * factor), c.a / 255.f);
+    Hsla hsl = HslaFromRgba(c);
+    hsl.l = Clamp01(hsl.l * factor);
+    return HslaToRgba(hsl);
 }
 
 Rgba RgbaLighten(Rgba c, float amount) {
@@ -299,9 +336,10 @@ Rgba RgbaMixOklab(Rgba a, Rgba b, float factor) {
 }
 
 Str RgbaToHex(Arena* a, Rgba c, bool upper) {
-    float h = 0, s = 0, l = 0;
-    RgbaToHsla(c, &h, &s, &l);
-    Rgba p = RgbaHsla(h, s, l, c.a / 255.f);
+    // Colorize::to_hex is written on an Hsla, so the digits are the ones its
+    // conversion to Rgba produces — the round trip is the point, not an
+    // accident.
+    Rgba p = HslaToRgba(HslaFromRgba(c));
     if (c.a < 255) {
         return StrDup(a, upper ? fmt("#%02X%02X%02X%02X", p.r, p.g, p.b, p.a)
                                : fmt("#%02x%02x%02x%02x", p.r, p.g, p.b, p.a));
@@ -4133,8 +4171,11 @@ static void DrawChart(PaintCtx* ctx, El* e) {
             lineX = Xat(index);
         }
         // CrossLine: a dashed hairline down the plot, and a dot on the value.
+        // `border.mix(foreground, 0.8)` — the border walked a fifth of the way
+        // to the ink, in HSL, which is what makes it read on both themes.
         const float kCrossDash[2] = {4.f, 3.f};
-        CanvasLine(ctx, lineX, y, lineX, y + plotH, 1.f, th.border, kCrossDash);
+        CanvasLine(ctx, lineX, y, lineX, y + plotH, 1.f,
+                   RgbaMixHsl(th.border, th.foreground, 0.8f), kCrossDash);
         float dotY = Yat(ys[index]);
         FillRound(ctx, lineX - 3.f, dotY - 3.f, 6.f, 6.f, 3.f, c.stroke);
         for (int k = 0; k < c.nMore; k++) {

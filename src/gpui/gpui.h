@@ -40,15 +40,49 @@ inline Rgba RgbaHex(uint32_t hex) {
                 (uint8_t)(hex & 0xff), 255};
 }
 Rgba RgbaOpacity(Rgba c, float a01);
+// A plain per-channel blend, weighted toward `a`. Not Colorize::mix — that is
+// RgbaMixHsl below. This is the arithmetic `default_title_bar_background`
+// writes out by hand on the two colours' channels.
 Rgba RgbaMix(Rgba a, Rgba b, float t);
-// gpui::hsla. h/s/l/a are 0..1 and are clamped, so a lightness computed from
-// scene coordinates cannot wrap around into a different hue.
+
+// gpui::Hsla — color.rs. Four floats 0..1, which is how GPUI carries a colour
+// from the theme all the way to the GPU. This tree carries `Rgba` bytes
+// instead, so an Hsla here is the *working* form: the shape a colour is put
+// into for the operations Rust does in HSL — lightness, hue, `Colorize::mix`,
+// the animation Lerp — and converted straight back out of.
+//
+// The cost of the difference is quantisation. Rust does a chain of these on
+// floats and rounds once at the end; every step here goes back through eight
+// bits a channel, so a long chain can drift a byte from what Rust computes.
+// That is the same trade the rest of the palette makes (see ToByte in
+// gpui.cpp), not a new one.
+struct Hsla {
+    float h = 0;
+    float s = 0;
+    float l = 0;
+    float a = 0;
+};
+
+// gpui::hsla(): the four clamped into 0..1. Rust clamps here and nowhere
+// else, so a hue computed past 1 is pinned rather than wrapped.
+Hsla HslaNew(float h, float s, float l, float a);
+// `impl From<Rgba> for Hsla`. A colour with no lightness left, or all of it,
+// reports no saturation — Rust's `l == 0. || l == 1.` arm.
+Hsla HslaFromRgba(Rgba c);
+// `impl From<Hsla> for Rgba`. Nothing on the way in is clamped; the three
+// channels are clamped on the way out, which is what lets a saturation or a
+// lightness that ran past 1 land on a colour rather than on nonsense.
+Rgba HslaToRgba(Hsla c);
+// The two together, for a caller that has four numbers and wants a colour:
+// `hsla(h, s, l, a).to_rgb()`.
 Rgba RgbaHsla(float h, float s, float l, float a01);
-// The other direction. h/s/l come back 0..1, the way gpui::Hsla holds them.
-void RgbaToHsla(Rgba c, float* h, float* s, float* l);
 // Colorize::hue: the same color turned to a new hue, keeping its saturation,
 // lightness and alpha.
 Rgba RgbaWithHue(Rgba c, float h01);
+// Colorize::mix: the two colours interpolated in HSL, weighted toward `a`,
+// with the hue taking the shorter way round the circle — so red mixed with
+// blue is magenta and not the grey the same mix in RGB gives.
+Rgba RgbaMixHsl(Rgba a, Rgba b, float factor);
 
 // ─── background ───────────────────────────────────────────────────────────
 //

@@ -77,9 +77,18 @@ static void TheLerpsAreTheThreeRustImplements() {
     Point p = Lerp(Point{0, 100}, Point{50, 0}, 0.5f);
     utassertnear(p.x, 25.f);
     utassertnear(p.y, 50.f);
+    // The colour walks in HSL, the way `impl Lerp for Hsla` does: all four
+    // channels straight, so halfway from black to a saturated orange is half
+    // of each of that orange's — hue included, since black's is nothing.
+    // ColorTests has the rest of the rule.
+    Hsla to = HslaFromRgba(Rgb(255, 100, 50));
     Rgba c = Lerp(Rgb(0, 0, 0), Rgb(255, 100, 50), 0.5f);
-    utassert(c.r == 128 && c.g == 50 && c.b == 25 && c.a == 255);
-    // The far end is reached exactly, which a truncating channel would miss.
+    Hsla mid = HslaFromRgba(c);
+    utassertnear(mid.h, to.h * 0.5f);
+    utassertnear(mid.l, to.l * 0.5f);
+    utassert(c.a == 255);
+    // The far end is the colour itself, which a round trip through HSL would
+    // miss by a byte.
     Rgba end = Lerp(Rgb(0, 0, 0), Rgb(255, 255, 255), 1.f);
     utassert(end.r == 255 && end.g == 255 && end.b == 255);
 }

@@ -4050,3 +4050,68 @@ two, since there is no headless input path; the marker and affix strings are
 covered at the unit level only.
 
 17,542 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples.
+
+
+## gpui::Hsla, and the four places that were doing without it
+
+The tree had the two conversions and no type: `RgbaHsla` took four floats and
+`RgbaToHsla` handed three back through out-params, and everything that wanted
+to work in HSL declared `float h, s, l` and passed their addresses. So the
+conversions were there and the *shape* was not, and the places that should
+have gone through HSL went through the bytes instead.
+
+**The pair now is `color.rs`'s, clause for clause.** `Hsla` is gpui's four
+floats; `HslaFromRgba` is `impl From<Rgba> for Hsla` — including the
+`l == 0. || l == 1.` arm that reports no saturation rather than dividing by
+nothing, and the `rem_euclid` on the red arm that brings a negative hue back
+round; `HslaToRgba` is `impl From<Hsla> for Rgba`, with the branch on
+`(h * 6.).floor()` (the `0 | 6` arm catches a hue of exactly 1) and the clamp
+where Rust puts it — on the three channels coming *out*, not on the h/s/l
+going in. The old entry point clamped its inputs and wrapped the hue instead;
+`gpui::hsla()` is the one place Rust clamps, and it clamps rather than wraps,
+so `HslaNew` is that and `RgbaHsla(h, s, l, a)` is now the two together.
+
+**What it is used for is the point.** Three things this tree does in bytes are
+things Rust does in HSL:
+
+- `Colorize::mix` — the hue takes the *shorter* arc round the circle and the
+  other three interpolate straight. `RgbaMixHsl` is that, `lerp_hue` and all,
+  and it is a different function from `RgbaMix`, which is the plain channel
+  blend `default_title_bar_background` writes out by hand. The plot's dashed
+  crossline wanted the first (`border.mix(foreground, 0.8)`, tooltip.rs) and
+  was painting the plain border.
+- `impl Lerp for Hsla` — the four channels straight, hue included. The colour
+  Lerp interpolated bytes, which is a different path through the middle for
+  any two colours that are not near grey; it walks in HSL now. The ends are
+  handed back as they came in rather than through the conversion, and that is
+  deliberate: eight bits a channel cannot promise a round trip lands on the
+  byte it started from, and a transition that settled a byte off its target
+  would stay there.
+- `Colorize::darken` — and this one was a real bug. The colour picker's three
+  borders (a swatch, the trigger's square, the hovered row) are `darken(0.1)`,
+  `darken(0.3)` and `darken(0.2)` upstream; here they were `RgbaMix(c, black,
+  0.1)` and friends, which is not a tenth darker but a *tenth of the colour* —
+  a border nine tenths of the way to black. One of them even had `darken(0.3)`
+  written in the comment above it. They call `RgbaDarken` now, which has been
+  the port of `Colorize::darken` all along.
+
+The quantisation is worth naming, since the type makes it easy to chain: Rust
+holds four floats from the theme file to the GPU and rounds once, at the end;
+every step here goes back through eight bits a channel. A colour that goes out
+through HSL and back comes back as itself or one byte under it — a grey always
+exactly, a saturated colour sometimes a step low, because the float that
+returns is a hair under the one that left and `ToByte` truncates. That is why
+`to_hex` looks like it drifts and does not: `Colorize::to_hex` is written on
+an Hsla, so the round trip is what it does.
+
+`tests/ColorTests.cpp` is new and holds color.rs's own cases — `test_mix`'s
+three hexes, `test_lighten` and `test_darken`'s factors, each sixth of the
+hue circle, the clamps either side, and the round trip's one-byte bound over
+the palette and all 256 greys. Where Rust asserts a float that a colour here
+was quantised into on the way in, the assertion is the operation against the
+byte's own value and the comment says so.
+
+17,901 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples. The
+colour picker's swatch and trigger borders were checked on the story page: a
+darker shade of the colour, where they were nearly black.
+

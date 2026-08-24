@@ -77,7 +77,7 @@ static El* Swatch(Ctx* cx, Entity<ColorPickerState> st, Str id, uint32_t hex) {
         ->H(20)
         ->Shrink0()
         ->Bg(c)
-        ->Border(1, RgbaMix(c, Rgb(0, 0, 0), 0.1f));
+        ->Border(1, RgbaDarken(c, 0.1f));
 }
 
 static El* PalettePanel(Ctx* cx, Entity<ColorPickerState> st,
@@ -252,9 +252,8 @@ El* ColorPicker::IntoEl() {
                            ->Bg(hasShown ? shown : th.tokens.background)
                            // darken(0.3) on the value, the input border when
                            // empty.
-                           ->Border(1, hasShown
-                                           ? RgbaMix(shown, Rgb(0, 0, 0), 0.3f)
-                                           : th.inputBorder));
+                           ->Border(1, hasShown ? RgbaDarken(shown, 0.3f)
+                                                : th.inputBorder));
     }
     if (label.s) {
         trigger->Child(TextEl(a, label)->Font(16)->Fg(th.foreground));
@@ -299,7 +298,7 @@ El* ColorPicker::IntoEl() {
                            ->Shrink0()
                            ->Radius(th.radius)
                            ->Bg(hovered)
-                           ->Border(1, RgbaMix(hovered, Rgb(0, 0, 0), 0.2f)));
+                           ->Border(1, RgbaDarken(hovered, 0.2f)));
             s->hexInput.onChange = ListenTo(st, &ColorPickerState::OnHexChange);
             row->Child(
                 Input::New(cx, StrDup(a, fmt("%s-hex", id)), &s->hexInput)

@@ -55,9 +55,9 @@ float Lerp(float a, float b, float t);
 Point Lerp(Point a, Point b, float t);
 // Rust interpolates the four HSLA channels, and says why: it is meant for
 // transitions between near-grayscale interface colors, where the hue is not
-// doing any work. A color here is four bytes rather than four floats, so this
-// interpolates those — the same path for the colors Rust means, and a
-// different one through the middle for two saturated colors far apart in hue.
+// doing any work. This walks the same four, converting either side of the
+// step through gpui::Hsla; the ends come back as they were given, since eight
+// bits a channel cannot promise a round trip lands on the byte it started on.
 Rgba Lerp(Rgba a, Rgba b, float t);
 
 } // namespace gpui

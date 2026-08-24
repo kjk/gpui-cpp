@@ -54,10 +54,8 @@ static void WriteHexInput(ColorPickerState* s, uint32_t color, bool has) {
 // HslaSliders::write: the four take the color's components straight, rather
 // than letting a hex round-trip round them.
 static void WriteSliders(ColorPickerState* s, uint32_t color) {
-    Rgba c = RgbaHex(color);
-    float h = 0, sat = 0, l = 0;
-    RgbaToHsla(c, &h, &sat, &l);
-    const float v[4] = {h, sat, l, (float)c.a / 255.f};
+    Hsla c = HslaFromRgba(RgbaHex(color));
+    const float v[4] = {c.h, c.s, c.l, c.a};
     for (int i = 0; i < 4; i++) {
         SliderSetValue(&s->sliders[i], SliderSingle(v[i]));
     }

@@ -83,16 +83,26 @@ Point Lerp(Point a, Point b, float t) {
     return {Lerp(a.x, b.x, t), Lerp(a.y, b.y, t)};
 }
 
-// A channel is a byte, so the result is rounded rather than truncated: a
-// half-step that always rounded down would never reach the target.
-static uint8_t LerpByte(uint8_t a, uint8_t b, float t) {
-    float v = Lerp((float)a, (float)b, t);
-    return (uint8_t)ClampF(v + 0.5f, 0.f, 255.f);
-}
-
+// `impl Lerp for Hsla`: the four channels interpolated straight, hue
+// included. Rust's colour is an Hsla and stays one; ours is four bytes, so
+// this converts either side, walks in HSL and converts back — which is the
+// path Rust takes and not the one through RGB.
+//
+// The ends are handed back as they came in rather than through the round
+// trip. Rust's `a + (b - a) * t` returns the endpoint's own floats at 0 and
+// 1; eight bits a channel cannot promise that, and a transition that settled
+// a byte away from its target would stay there.
 Rgba Lerp(Rgba a, Rgba b, float t) {
-    return Rgba{LerpByte(a.r, b.r, t), LerpByte(a.g, b.g, t),
-                LerpByte(a.b, b.b, t), LerpByte(a.a, b.a, t)};
+    if (t <= 0.f) {
+        return a;
+    }
+    if (t >= 1.f) {
+        return b;
+    }
+    Hsla x = HslaFromRgba(a);
+    Hsla y = HslaFromRgba(b);
+    return HslaToRgba(Hsla{Lerp(x.h, y.h, t), Lerp(x.s, y.s, t),
+                           Lerp(x.l, y.l, t), Lerp(x.a, y.a, t)});
 }
 
 } // namespace gpui

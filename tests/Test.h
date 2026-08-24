@@ -91,6 +91,7 @@ void TestSankey();
 void TestJson();
 void TestInspector();
 void TestThemeColor();
+void TestColor();
 void TestDockState();
 void TestFocusTrap();
 void TestKeymap();

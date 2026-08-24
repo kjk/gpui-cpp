@@ -94,6 +94,7 @@ int GpuiMain(int argc, char** argv) {
     TestJson();
     TestInspector();
     TestThemeColor();
+    TestColor();
     TestDockState();
     TestFocusTrap();
     TestKeymap();
