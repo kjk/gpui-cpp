@@ -37,6 +37,7 @@ const simpleExamples = [
   "tiles",
   "brush",
   "editor",
+  "webview",
 ];
 
 const knownTargets = [
@@ -202,6 +203,9 @@ const libs = [
   "shell32.lib",
   // sys/http_win.cpp — the one thing here that talks to the network.
   "winhttp.lib",
+  // wry/wry_win.cpp reads the EdgeUpdate keys to find the WebView2 runtime,
+  // which is the job the SDK's WebView2Loader would otherwise do.
+  "advapi32.lib",
 ];
 
 function sourcesFor(name: string): string[] | null {

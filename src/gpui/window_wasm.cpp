@@ -592,6 +592,12 @@ int PlatDoubleClickMs() {
     return 500;
 }
 
+void* PlatWindowHandle(Window*) {
+    // A tab has no window handle; whatever would want one draws into the
+    // same canvas everything else does.
+    return nullptr;
+}
+
 void PlatInstallAccessibilityHitTest(Window* win) {
     (void)win;
 }

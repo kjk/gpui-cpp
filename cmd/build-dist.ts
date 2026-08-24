@@ -440,14 +440,14 @@ function collapseBlankRuns(text: string): string {
   return text.replace(/\n{3,}/g, "\n\n");
 }
 
-// src/taffy and src/markdown are ports of crates that have never heard of
-// gpui, and they are kept that way on purpose: each is written against
+// src/taffy, src/markdown and src/wry are ports of crates that have never
+// heard of gpui, and they are kept that way on purpose: each is written against
 // base.h and its own headers, so it can be read against the Rust without
 // this tree's vocabulary in the way, and lifted out of it without untangling
 // anything. The amalgam compiles the whole of src/ as one translation unit,
 // so nothing else would notice the day one of them reached for a gpui type.
 // This does.
-const isolatedDirs = ["src/taffy/", "src/markdown/"];
+const isolatedDirs = ["src/taffy/", "src/markdown/", "src/wry/"];
 
 function checkIsolation(files: string[]): void {
   const bad: string[] = [];

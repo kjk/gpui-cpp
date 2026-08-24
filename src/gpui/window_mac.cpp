@@ -766,6 +766,14 @@ static id GpuiAccessibilityHitTest(id self, SEL cmd, NSPoint point) {
     return [view accessibilityHitTest:point];
 }
 
+void* PlatWindowHandle(Window* win) {
+    // The content view, which is what a WKWebView would be added to.
+    if (!win || !win->plat) {
+        return nullptr;
+    }
+    return (__bridge void*)win->plat->view;
+}
+
 void PlatInstallAccessibilityHitTest(Window* win) {
     if (!win || !win->plat || !win->plat->window) {
         return;

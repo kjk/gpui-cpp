@@ -46,6 +46,7 @@ const simpleExamples = [
   "tiles",
   "brush",
   "editor",
+  "webview",
 ];
 
 const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;

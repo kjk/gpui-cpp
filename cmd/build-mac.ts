@@ -42,6 +42,7 @@ const simpleExamples = [
   "tiles",
   "brush",
   "editor",
+  "webview",
 ];
 
 const knownTargets = [

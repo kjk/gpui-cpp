@@ -4,7 +4,7 @@ This repository is a C++ port of [longbridge/gpui-component](https://github.com/
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
-**Upstream pins** — source of truth: [`cmd/versions.ts`](cmd/versions.ts) (`gpuiComponent`, `zedGpui`, and the two crates we port, `taffy` and `markdown`). How to ingest a later checkin: `port-upstream.md`.
+**Upstream pins** — source of truth: [`cmd/versions.ts`](cmd/versions.ts) (`gpuiComponent`, `zedGpui`, and the three crates we port: `taffy`, `markdown` and `wry`). How to ingest a later checkin: `port-upstream.md`.
 
 ## Goal
 
@@ -54,10 +54,11 @@ Matching means:
 
 It does **not** mean a line-for-line clone of Zed's GPUI renderer or Blade.
 Those are the layer *under* gpui-component, and we reimplement a subset of them
-rather than port them. **Two crates are the exception**, and both are full C++
-ports at the version gpui-component pins: `src/taffy/` lays out every box in
-this tree, and `src/markdown/` parses every `TextView`. See
-`src/taffy/readme.md` and `src/markdown/readme.md`.
+rather than port them. **Three crates are the exception**, and each is a full
+C++ port at the version gpui-component pins: `src/taffy/` lays out every box in
+this tree, `src/markdown/` parses every `TextView`, and `src/wry/` is the
+webview `crates/webview` puts in a window. See `src/taffy/readme.md`,
+`src/markdown/readme.md` and `src/wry/readme.md`.
 
 ## Non-goals
 
@@ -95,11 +96,16 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   of ours, and a bigger client wants a bigger reason than "it would be tidy".
   What it is for: `gpui/image.h`
 - Anything that needs a third-party C++ library, by hard rule 3: tree-sitter
-  and syntect (so `highlighter` stays the small hand-written lexer it is), a
-  webview, an LSP client, resvg, ropey, html5ever. Where Rust reaches for one
-  of these and the feature is still worth having, write the small version this
-  tree needs, or port the crate the way `src/taffy` and `src/markdown` are
-  ported; `port-upstream.md` lists which is which
+  and syntect (so `highlighter` stays the small hand-written lexer it is), an
+  LSP client, resvg, ropey, html5ever. Where Rust reaches for one of these and
+  the feature is still worth having, write the small version this tree needs,
+  or port the crate the way `src/taffy`, `src/markdown` and `src/wry` are
+  ported; `port-upstream.md` lists which is which. The webview is the worked
+  example of the second route: `src/wry/` is a port of the wry crate, and the
+  two things Rust gets from crates on Windows — the WebView2 COM bindings and
+  Microsoft's loader — are declared and written out in `wry_win.cpp` rather
+  than vendored. Only Windows has a backend; `src/wry/readme.md` says what the
+  other three would take
 
 A thing that is *not* ported for a reason other than these belongs in
 `port-progress.md` with the reason, so the next session does not have to
@@ -191,6 +197,7 @@ implementation per platform:
 | the OS window and its event loop           | `src/gpui/platform.h`  | `src/gpui/window_win.cpp` | `src/gpui/window_linux.cpp` | `src/gpui/window_mac.cpp` | `src/gpui/window_wasm.cpp` |
 | system metrics                             | `src/sys/sysinfo.h`    | `src/sys/sysinfo_win.cpp` | `src/sys/sysinfo_linux.cpp` | `src/sys/sysinfo_mac.cpp` | `src/sys/sysinfo_wasm.cpp` |
 | one HTTP GET                               | `src/sys/http.h`       | `src/sys/http_win.cpp`    | `src/sys/http_linux.cpp`    | `src/sys/http_mac.cpp`    | `src/sys/http_wasm.cpp`    |
+| a webview in the window                    | `src/wry/wry.h`        | `src/wry/wry_win.cpp`     | `src/wry/wry_linux.cpp`     | `src/wry/wry_mac.cpp`     | `src/wry/wry_wasm.cpp`     |
 
 `_posix.cpp` is the fourth suffix: Linux, macOS **and** wasm compile it, since
 emscripten's libc answers for strings, directories, threads and the clock the
@@ -671,6 +678,10 @@ cmd/crlf-to-lf.ts      normalize line endings (run it after any scripted edit)
 cmd/svg-to-bytecode.ts convert assets/icons into src/gpui/asset_icons.cpp
 src/taffy/             the taffy layout crate, ported (see its readme.md)
 src/markdown/          the markdown crate, ported (see its readme.md)
+src/wry/               the wry webview crate, ported (see its readme.md);
+                       WebView2 on Windows, a stub on the other three
+src/webview/           crates/webview (gpui-wry): the view that gives a
+                       wry webview a box in the element tree
 src/base.h/.cpp        vendored SumatraPDF subset
 src/base_win.cpp       Windows platform layer (memory, paths, strings)
 src/base_linux.cpp     the same, on POSIX

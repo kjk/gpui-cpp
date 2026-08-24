@@ -4115,3 +4115,135 @@ byte's own value and the comment says so.
 colour picker's swatch and trigger borders were checked on the story page: a
 darker shade of the colour, where they were nearly black.
 
+## The webview, and the two crates Windows needed that we could not have
+
+`crates/webview` — the `gpui-wry` crate — was the last of gpui-component's
+crates with nothing here at all, and the reason was a line in the non-goals
+list: "a webview" sat among the third-party C++ libraries hard rule 3 rules
+out. That reading was wrong by one level. A webview on Windows is WebView2,
+which ships with the OS's Edge; what wry needs from crates is not the browser
+but the *bindings* to it — `webview2-com`, which generates the COM interfaces
+from Microsoft's SDK, and `webview2-com-sys`, which links Microsoft's
+`WebView2LoaderStatic.lib`. Both of those are the kind of thing this tree
+writes out rather than vendors, the same call `src/sys/http.h` makes about an
+HTTP client. So the line is gone and there are two new directories:
+
+- **`src/wry/`** is a port of [wry](https://github.com/tauri-apps/wry) 0.53.3
+  — the `lb-wry` fork `crates/webview/Cargo.toml` pins — and is isolated the
+  way `src/taffy` and `src/markdown` are: `base.h`, its own header, no
+  `gpui::` name anywhere, and `cmd/build-dist.ts` fails the build if that
+  stops being true. The parent window arrives as a `void*`, which is Rust's
+  `raw_window_handle`.
+- **`src/webview/`** is the port of `crates/webview` itself: the view that
+  gives a wry webview a box in the element tree and keeps the OS control on
+  top of it.
+
+### The two halves that had to be written out
+
+**The ABI.** `wry_win.cpp` opens with a block of `ICoreWebView2*`
+declarations transcribed from the WebView2 SDK header — same vtable order,
+same IIDs, the MIDL comments dropped. It declares an ABI the way `<d2d1.h>`
+does, and nothing of the SDK is compiled in. It was generated mechanically
+rather than typed, which is the only way 44 interfaces come out right: an
+interface that only appears in a signature we never call is forward-declared,
+and the ones we implement — `ICoreWebView2EnvironmentOptions` and its 6 and 8,
+every event handler, every completion handler — are there in full, because an
+implementation has to answer for every slot. `ICoreWebView2` alone is 59
+methods before its 21 versioned successors add theirs, and each of those
+successors has to be declared to reach the one method on the last of them.
+
+**The loader.** `CreateEnvironmentWithOptions` is about a hundred lines doing
+what `WebView2Loader` does: read `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` or the
+EdgeUpdate registry keys (`SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-…}`
+— `pv` and `location`, per-machine through the WOW64 view and then per-user),
+`LoadLibrary` the runtime's `EBWebView\<arch>\EmbeddedBrowserWebView.dll`, and
+call the `CreateWebViewEnvironmentWithOptionsInternal` export it has always
+had. The argument list is not guessed: `WebView2LoaderStatic.lib` is on this
+machine, and `lib -extract` plus `dumpbin -disasm` of its `instance_shared.obj`
+shows `CreateWebViewEnvironmentWithClientDll` forwarding everything but the
+dll path, with its own mangled name spelling out the types —
+`(wchar_t const*, bool, WebView2RunTimeType, wchar_t const*, IUnknown*,
+ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler*)`.
+
+Two values the SDK's helper class supplies and the runtime will not do
+without, both found the same way — by getting `0x80070002` until they were
+right:
+
+- a **user data folder**. Null is not "pick one for me"; it is
+  ERROR_FILE_NOT_FOUND. The default is the exe's own path with `.WebView2`
+  after it, which is what the loader passes.
+- **`TargetCompatibleBrowserVersion`**, which is a *browser* version
+  (`149.0.4022.49`, the SDK's `CORE_WEBVIEW_TARGET_PRODUCT_VERSION`) and not
+  the SDK package's own version, which is the thing it looks like.
+
+### What is ported, and what is not
+
+The whole portable API of `lib.rs` and the WebView2 backend under it:
+attributes and their defaults, a webview built into a window or as a child of
+one, bounds / visibility / focus, `evaluate_script` with and without a
+callback, url and html loading (with headers), reload, zoom, background
+colour, theme, memory usage level, reparent, print, clear-all-browsing-data,
+devtools, `webview_version`, the IPC channel, initialization scripts, custom
+protocols with their `http://<scheme>.host` work-around and their
+asynchronous responder, the navigation / page-load / document-title /
+new-window handlers, the clipboard permission, incognito, the proxy switches,
+and the Windows builder extensions.
+
+Not ported, each with the reason in `src/wry/readme.md`: cookies (the API is
+the `cookie` crate throughout), downloads, drag and drop (behind wry's own
+feature flag), extension loading, the `NewWindowResponse::Create` arm (it
+would put a COM type in the portable header), the `_async` constructors, and
+Android and iOS.
+
+**Only Windows has a backend.** The other three files are stubs that answer
+"there is no webview here", and each says what a real one would take. macOS is
+the one worth writing next — WKWebView is in the system SDK, so it takes no
+ruled-out dependency — and it is not written because nothing here can build or
+run it. Linux is the hard one and not for the reason it looks: wry's backend
+is WebKitGTK and wants a GTK container, this tree's window is raw X11, and
+bridging them is a GtkPlug/XEmbed project plus a second soft dependency. The
+browser has no wry backend at all; an `<iframe>` over the canvas would answer
+three calls of the twenty-odd and none of the interesting ones.
+
+### The gpui side, and the one seam it needed
+
+`src/webview/` is `crates/webview` clause for clause, with two deviations.
+Rust builds the `wry::WebView` outside and hands it to `WebView::new`, because
+only the caller has the `Window`; `Ctx` is the window here, so `WebViewNew`
+takes the attributes and builds it. And `impl Render for WebView` is a view
+whose whole body is one element — gpui needs an entity to be a view before it
+can be a child — where an element here is a value, so `WebViewEl` hands one
+back and the owner puts it where it likes. The entity is still an entity: it
+is what the outside-click subscription binds to, and dropping it is what
+closes the webview.
+
+The seam is `PlatWindowHandle(Window*)` in `platform.h` — GPUI's
+`Window::window_handle()`, which Rust answers as a `RawWindowHandle`. The
+HWND on Windows, the X11 window id on Linux, the `NSView*` on macOS, null in
+the browser. Nothing else in the tree has ever needed to name the OS window,
+which is why it was not there.
+
+Rust's element sets the bounds in `prepaint`; the first place an element here
+knows its box is paint, so `El::customPaint` is where the OS control is moved,
+and only when the box actually changed. One thing to know about making a
+webview lazily from inside a Render: creation blocks by running the window's
+message loop, exactly as `build_as_child` does, so a WM_PAINT can re-enter the
+same Render before it returns. `examples/webview.cpp` sets its `started` flag
+before the call rather than after, and the header says why.
+
+### Checking it
+
+`examples/webview` is upstream's example of the same name: an address bar over
+the webview, Enter loads what is in it. The page renders, and it renders in
+the box layout gave it — `bun cmd/shot.ts -rel webview` and the same with
+`-half=right` are two window sizes with the control tracking the frame's
+border either way.
+
+`tests/WryTests.cpp` is the crate's own `checks_if_custom_protocol_uri` plus
+the round trip through the two `replace` helpers beside it. Those three
+functions moved out of `wry_win.cpp` into a portable `wry.cpp` to be testable
+on any platform, which is the seam-rather-than-harness rule.
+
+17,910 checks pass; `bun cmd/build.ts -rel -all` builds all 25 examples, and
+the Linux build compiles the stubs and runs (an empty box and one log line,
+which is what it promises).

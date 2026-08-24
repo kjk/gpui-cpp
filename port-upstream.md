@@ -1,6 +1,6 @@
 # Upstream pins
 
-**Source of truth for which checkin we are porting: [`cmd/versions.ts`](cmd/versions.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`). `bun cmd/build.ts`, `bun cmd/run.ts`, and `bun cmd/versions.ts` clone or reset `.work/gpui-component` to that SHA.
+**Source of truth for which checkin we are porting: [`cmd/versions.ts`](cmd/versions.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`, `wry.version`). `bun cmd/build.ts`, `bun cmd/run.ts`, and `bun cmd/versions.ts` clone or reset `.work/gpui-component` to that SHA.
 
 This file is the ingest playbook. Diff Rust from the SHA in `cmd/versions.ts`, not `HEAD`.
 
@@ -55,7 +55,7 @@ git diff <gpuiComponent.sha> origin/main -- <path>
 
 Local cargo checkout (after a rust build): `%USERPROFILE%\.cargo\git\checkouts\zed-*\<zedGpui.sha prefix>\`
 
-We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Blade, entity/observer, cosmic-text, font-kit. Taffy and `markdown` *are* ported — see below.
+We reimplement a Win32 + D2D + DWrite subset in `src/gpui/`. Not ported: Blade, entity/observer, cosmic-text, font-kit. Taffy, `markdown` and `wry` *are* ported — see below.
 
 ## taffy (a crate we port)
 
@@ -132,6 +132,45 @@ event streams and trees compared — and how to repeat it.
 
 MDX and `to_html` are not ported, for reasons the readme gives.
 
+## wry (a crate we port)
+
+`src/wry/` is a C++ port of [wry](https://github.com/tauri-apps/wry) at the
+version `crates/webview/Cargo.toml` asks for — currently `wry = { version =
+"0.53.3", package = "lb-wry" }`, longbridge's fork of the crate. It is the
+webview, not a reference: `src/webview/` is the port of `crates/webview`
+itself and drives this one exactly as `gpui-wry` drives the crate.
+
+**It moves when the gpui-component pin moves.** After bumping
+`gpuiComponent.sha`, check whether the resolved `lb-wry` changed:
+
+```
+grep -A3 'name = "lb-wry"' .work/gpui-component/Cargo.lock
+```
+
+If it did, set `wry.version` in `cmd/versions.ts` to the new one and diff the
+crate between the two versions. `lb-wry` is published from a fork, so the
+crate tarball is the thing to compare rather than a git tag:
+
+```
+curl -sL -o .work/lb-wry.crate https://static.crates.io/crates/lb-wry/lb-wry-NEW.crate
+tar xzf .work/lb-wry.crate -C .work            # unpacks lb-wry-NEW/
+diff -ru .work/wry/src .work/lb-wry-NEW/src
+```
+
+`src/wry/readme.md` has the file-for-file map, and — more to the point when
+reading a diff — the list of what is deliberately not ported (cookies,
+downloads, drag and drop, the `NewWindowResponse::Create` arm, Android and
+iOS) so a change to one of those needs no work here.
+
+**Only Windows has a backend.** `src/wry/wry_win.cpp` is
+`src/webview2/mod.rs`; the other three files are stubs that answer "there is
+no webview here", and each says what a real one would take. A wry release
+that only touches `wkwebview/` or `webkitgtk/` changes nothing in this tree.
+
+The WebView2 declaration block in `wry_win.cpp` is transcribed from the SDK
+header and is the one thing a wry bump never touches — it moves when the
+*SDK* does, and only to reach an interface we do not already declare.
+
 ## Not ported (do not pin / do not chase)
 
 `sysinfo`, `battery`, `smol`, `reqwest` (zed fork), ropey, tree-sitter, syntect, html5ever, resvg — C++ uses Win32 / our own code instead.
@@ -140,5 +179,10 @@ taffy's own transitive dependencies — `arrayvec`, `grid`, `slotmap`,
 `cssparser` — are not ported either; the C++ port uses `Vec`, a flat occupancy
 matrix, its own generational slots, and no CSS parser. `markdown`'s one
 dependency, `unicode-id`, belongs to MDX, which is not ported.
+
+wry's own dependencies are not ported either: `webview2-com` and
+`webview2-com-sys` (the SDK bindings and Microsoft's loader) are written out
+in `wry_win.cpp` instead, `http` and `cookie` are a pair of small structs and
+a feature we skipped, and `raw-window-handle` is one `void*`.
 
 `src/base.h` / `src/base.cpp` are SumatraPDF, not gpui-component.

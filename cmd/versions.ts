@@ -63,6 +63,21 @@ export const markdown = {
   dir: "src/markdown",
 } as const;
 
+/**
+ * The webview crate `crates/webview` (the `gpui-wry` crate) is built on:
+ * `wry = { version = "0.53.3", package = "lb-wry" }`, longbridge's fork. We
+ * port it: `src/wry/` is a C++ port of exactly this version, and
+ * `src/webview/` is the gpui-side view `crates/webview` is. See
+ * `src/wry/readme.md` for what is ported and what is not.
+ */
+export const wry = {
+  repo: "https://github.com/tauri-apps/wry",
+  crate: "lb-wry",
+  version: "0.53.3",
+  crateSha256: "d9cfe72bff8acf9af0d6d276569be5b9cb3f313f9882761ada5a50d3044214d4",
+  dir: "src/wry",
+} as const;
+
 export function rustTreeDir(repoRoot: string): string {
   return join(repoRoot, gpuiComponent.dir);
 }
@@ -162,6 +177,7 @@ if (import.meta.main) {
   console.log("zed gpui     ", zedGpui.sha, zedGpui.date, "(reference only)");
   console.log("crates ported", `taffy ${taffy.version} -> ${taffy.dir}`);
   console.log("             ", `markdown ${markdown.version} -> ${markdown.dir}`);
+  console.log("             ", `${wry.crate} ${wry.version} -> ${wry.dir}`);
   try {
     const dir = ensureRustTree(root);
     console.log("tree", dir, headSha(dir));

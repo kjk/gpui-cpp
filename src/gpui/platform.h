@@ -131,6 +131,13 @@ void PlatSetMouseCapture(Window* win, bool capture);
 // has no such setting, so Linux answers with the 400 ms every toolkit picks.
 int PlatDoubleClickMs();
 
+// GPUI's `Window::window_handle()`, which Rust answers as a
+// `raw_window_handle::RawWindowHandle`. One thing needs it: a webview is an
+// OS control parented into the window it sits in, so `src/webview` has to
+// name the window the way the OS does. The HWND on Windows, the X11 Window
+// as an integer on Linux, the NSView* on macOS, null in the browser.
+void* PlatWindowHandle(Window* win);
+
 // crates/base/src/macos_accessibility.rs. VoiceOver hit-tests the window, and
 // AppKit's NSWindow answers for itself rather than asking the view that drew
 // everything, so nothing inside is reachable. This adds an
