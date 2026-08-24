@@ -1034,6 +1034,8 @@ struct TextSpan {
     Rgba bg = {0, 0, 0, 0};
     // UnderlineStyle: a rule under the run in its own colour.
     bool underline = false;
+    // UnderlineStyle::wavy — the squiggle a diagnostic is marked with.
+    bool wavy = false;
 };
 
 // Which of crates/ui/src/chart's charts this series is. They share the axis,
@@ -1452,6 +1454,11 @@ struct El {
     // Only `lo`, `hi` and `bg` are read.
     const TextSpan* washes = nullptr;
     int nWashes = 0;
+    // Runs that are underlined and nothing else: a diagnostic's squiggle is a
+    // HighlightStyle with only `underline` set, so it marks the text without
+    // taking the colour the language gave it.
+    const TextSpan* underlines = nullptr;
+    int nUnderlines = 0;
     Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
     // The input method's provisional run, underlined the way Rust gives the
     // marked range its own UnderlineStyle. Same offsets, same -1 for none.
@@ -1577,6 +1584,7 @@ struct El {
     // The selection quad and the caret an input's text run paints over itself.
     El* SelRange(int lo, int hi, Rgba color);
     El* Washes(const TextSpan* runs, int n);
+    El* Underlines(const TextSpan* runs, int n);
     El* Spans(const TextSpan* runs, int n);
     // The marked range, which is drawn underlined in the text's own colour.
     El* MarkRange(int lo, int hi);
@@ -2408,6 +2416,35 @@ struct SearchSession {
 void SearchSessionSetQuery(SearchSession* s, Str query, bool insensitive);
 void SearchSessionSetReplacement(SearchSession* s, Str replacement);
 
+// input/editor/diagnostics.rs DiagnosticSeverity, in the order the colours
+// are read by.
+enum class DiagnosticSeverity : uint8_t {
+    Hint,
+    Error,
+    Warning,
+    Info
+};
+
+// One diagnostic over a range of the document. Rust keeps the LSP's own
+// struct — related information, tags and a serde_json payload with it — and
+// this keeps what an editor draws and says: where it is, how bad it is, what
+// it says, and where it came from.
+struct Diagnostic {
+    Selection range = {};
+    DiagnosticSeverity severity = DiagnosticSeverity::Info;
+    Str message = {};
+    Str source = {};
+    Str code = {};
+};
+
+// EditorStyle::diagnostics: the colour a severity underlines in.
+struct DiagnosticColors {
+    Rgba error = {};
+    Rgba warning = {};
+    Rgba info = {};
+    Rgba hint = {};
+};
+
 struct InputState {
     InputKind kind = InputKind::Input;
     LayoutMode mode = {};
@@ -2483,6 +2520,11 @@ struct InputState {
     // arithmetic is right and cheaper. Sized before the rows are built, so
     // the pointers the elements are handed stay put for the frame.
     Vec<Bounds> rowBoxes;
+    // DiagnosticSet: what a provider published over this document, in
+    // document order. Rust keeps a SumTree so a range query is a seek; there
+    // are tens of these on a screen, so this is the flat list the painter and
+    // the hover both walk.
+    Vec<Diagnostic> diagnostics;
     // The box the rows were laid out in as a whole, which is the scrolled
     // height once soft wrap has had its say.
     Bounds contentBox = {};
@@ -2912,7 +2954,7 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                     int u8b, Rgba color);
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
                         bool wrap, float x, float y, int u8a, int u8b,
-                        Rgba color);
+                        Rgba color, bool wavy = false);
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
               float availH, float inheritFont, Rgba inheritFg);
 void PaintEl(PaintCtx* ctx, El* e);

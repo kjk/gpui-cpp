@@ -521,6 +521,59 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 }
             }
         }
+        // element.rs composes the diagnostic styles over the rest: a wavy
+        // underline in the severity's colour, which is a run of its own
+        // rather than a recolouring of the glyphs.
+        if (state->diagnostics.len > 0) {
+            int nDiag = 0;
+            for (int d = 0; d < state->diagnostics.len; d++) {
+                const Diagnostic& dg = state->diagnostics[d];
+                if (dg.range.end <= start ||
+                    dg.range.start >= start + line.len) {
+                    continue;
+                }
+                nDiag++;
+            }
+            if (nDiag > 0) {
+                auto* runs = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * nDiag);
+                int n = 0;
+                for (int d = 0; d < state->diagnostics.len && runs; d++) {
+                    const Diagnostic& dg = state->diagnostics[d];
+                    int lo = dg.range.start - start;
+                    int hi = dg.range.end - start;
+                    if (lo < 0) {
+                        lo = 0;
+                    }
+                    if (hi > line.len) {
+                        hi = line.len;
+                    }
+                    if (hi <= lo) {
+                        continue;
+                    }
+                    Rgba c = style.diagnostics.info;
+                    if (dg.severity == DiagnosticSeverity::Error) {
+                        c = style.diagnostics.error;
+                    } else if (dg.severity == DiagnosticSeverity::Warning) {
+                        c = style.diagnostics.warning;
+                    } else if (dg.severity == DiagnosticSeverity::Hint) {
+                        c = style.diagnostics.hint;
+                    }
+                    if (c.a == 0) {
+                        continue;
+                    }
+                    runs[n].lo = lo;
+                    runs[n].hi = hi;
+                    runs[n].color = c;
+                    runs[n].bg = Rgba{0, 0, 0, 0};
+                    runs[n].underline = true;
+                    runs[n].wavy = true;
+                    n++;
+                }
+                if (n > 0) {
+                    el->Underlines(runs, n);
+                }
+            }
+        }
         RowMatchWashes(a, el, style, start, line.len, &matchAt);
         if (state->softWrap) {
             // flex_1: the run is bounded by what the gutter leaves, so it

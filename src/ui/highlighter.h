@@ -36,6 +36,8 @@ struct Highlighter {
     // LayoutMode::CodeEditor { folding }: a chevron in the gutter beside every
     // line that opens a foldable block, and a click on it collapses the block.
     bool folding = false;
+    const Diagnostic* diagnostics = nullptr;
+    int nDiagnostics = 0;
 
     static Highlighter* New(Ctx* cx, InputState* state);
     static Highlighter* New(Ctx* cx, Str id, InputState* state);
@@ -45,6 +47,11 @@ struct Highlighter {
     Highlighter* ActiveLine(bool v = true);
     Highlighter* IndentGuides(bool v = true);
     Highlighter* Searchable(bool v);
+    // EditorState::diagnostics_mut(): what a provider published over this
+    // document, drawn as a wavy underline per entry in the severity's colour.
+    // The array is the caller's and outlives the frame, the way the
+    // decorations do.
+    Highlighter* Diagnostics(const Diagnostic* items, int n);
     Highlighter* Folding(bool v = true);
     El* IntoEl();
 };

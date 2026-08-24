@@ -49,6 +49,10 @@ struct InputEditorStyle {
     // did.
     Rgba matchBg = {0, 0, 0, 0};
     Rgba currentMatchBg = {0, 0, 0, 0};
+    // EditorStyle::diagnostics: what each severity underlines in. All four
+    // transparent is an editor that draws none, which is every field that is
+    // not a code editor.
+    DiagnosticColors diagnostics = {};
     // Editor's active-line wash and its indent guides. Alpha 0 and 0 are off,
     // which is what a plain textarea wants.
     Rgba activeLine = {0, 0, 0, 0};

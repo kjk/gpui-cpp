@@ -41,6 +41,7 @@ const simpleExamples = [
   "dock",
   "tiles",
   "brush",
+  "editor",
 ];
 
 const knownTargets = [

@@ -124,6 +124,12 @@ static int MergeDecorations(TextSpan* spans, int n, const TextSpan* decs,
     return m;
 }
 
+Highlighter* Highlighter::Diagnostics(const Diagnostic* items, int n) {
+    diagnostics = items;
+    nDiagnostics = n;
+    return this;
+}
+
 Highlighter* Highlighter::Folding(bool v) {
     folding = v;
     return this;
@@ -231,6 +237,20 @@ El* Highlighter::IntoEl() {
     }
     if (indentGuides) {
         style.indentGuide = RgbaOpacity(th.border, 0.8f);
+    }
+    // EditorStyle::diagnostics — theme.danger, warning, info and the muted
+    // foreground a hint is drawn in.
+    style.diagnostics.error = th.danger;
+    style.diagnostics.warning = th.warning;
+    style.diagnostics.info = th.info;
+    style.diagnostics.hint = th.mutedFg;
+    if (state) {
+        // The set the caller published, kept on the state so the row builder
+        // and a hover both read the same one.
+        state->diagnostics.Clear();
+        for (int i = 0; i < nDiagnostics; i++) {
+            state->diagnostics.Append(diagnostics[i]);
+        }
     }
     if (state) {
         // This façade is Rust's code editor — the highlighter is bound to

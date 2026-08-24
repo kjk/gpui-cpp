@@ -74,8 +74,14 @@ static void SortDir(DirEntry* e, int n) {
 }
 
 static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
-    static DirEntry found[256];
-    int got = PlatListDir(path, found, 256);
+    // One listing per level, on the heap: a static array here would be the
+    // same array the level above is still walking.
+    const int kMaxEntries = 512;
+    DirEntry* found = AllocArray<DirEntry>(kMaxEntries);
+    if (!found) {
+        return;
+    }
+    int got = PlatListDir(path, found, kMaxEntries);
     SortDir(found, got);
     for (int i = 0; i < got; i++) {
         if (TreeSkip(found[i].name)) {
@@ -95,7 +101,7 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
         int ix = TreeAddItem(s, StrDup(Str(child)), StrDup(Str(found[i].name)),
                              parent);
         if (ix < 0) {
-            return;
+            break;
         }
         // A directory is a folder because it is one, not because its children
         // happen to have been read in yet.
@@ -104,6 +110,7 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
             LoadDir(s, child, ix, depth - 1);
         }
     }
+    Free(nullptr, found);
 }
 
 El* TreeStory::Render(TreeStory* self, Ctx* cx) {

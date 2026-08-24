@@ -1248,6 +1248,11 @@ El* El::Washes(const TextSpan* runs, int n) {
     nWashes = n;
     return this;
 }
+El* El::Underlines(const TextSpan* runs, int n) {
+    underlines = runs;
+    nUnderlines = n;
+    return this;
+}
 El* El::Spans(const TextSpan* runs, int n) {
     spans = runs;
     nSpans = n;
@@ -2037,9 +2042,31 @@ int TextIndexAt(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 // from, one device pixel tall at the bottom of each. Rust hands the run an
 // UnderlineStyle instead, which the shaper draws; the rects land in the same
 // place and cost no new text machinery.
+// The squiggle a wavy underline is: a run of half-period diagonals under the
+// glyphs, drawn as one path so the joins are the stroke's own.
+static void PaintWavyRun(PaintCtx* ctx, float x, float y, float w, Rgba color) {
+    const float kPeriod = 4.f;
+    const float kAmp = 1.5f;
+    if (w <= 0) {
+        return;
+    }
+    Path* p = PathNew(ctx, false);
+    if (!p) {
+        return;
+    }
+    PathMoveTo(p, x, y);
+    bool up = true;
+    for (float at = kPeriod * 0.5f; at < w; at += kPeriod * 0.5f) {
+        PathLineTo(p, x + at, y + (up ? -kAmp : kAmp));
+        up = !up;
+    }
+    PathStroke(ctx, p, 1.f, color);
+    PathFree(p);
+}
+
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
                         bool wrap, float x, float y, int u8a, int u8b,
-                        Rgba color) {
+                        Rgba color, bool wavy) {
     if (!ctx || !ctx->rt || color.a == 0 || u8a >= u8b) {
         return;
     }
@@ -2055,8 +2082,13 @@ void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
     // drop it out of the field altogether.
     float baseline = TextLayoutBaseline(layout);
     for (int i = 0; i < n; i++) {
-        CanvasFillRect(ctx, x + rects[i].x, y + rects[i].y + baseline + 1.f,
-                       rects[i].w, 1.f, color);
+        float ux = x + rects[i].x;
+        float uy = y + rects[i].y + baseline + 1.f;
+        if (wavy) {
+            PaintWavyRun(ctx, ux, uy + 1.f, rects[i].w, color);
+        } else {
+            CanvasFillRect(ctx, ux, uy, rects[i].w, 1.f, color);
+        }
     }
     TextLayoutRelease(layout);
 }
@@ -3218,7 +3250,7 @@ static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
             continue;
         }
         PaintTextUnderline(ctx, e->text, font, maxW, e->style.wrap, e->x, e->y,
-                           sp.lo, sp.hi, sp.color);
+                           sp.lo, sp.hi, sp.color, sp.wavy);
     }
     TextLayoutRelease(layout);
 }
@@ -4051,6 +4083,16 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
                        e->style.truncate, e->style.wrap, e->laidMaxW,
                        ElTextWeight(e), e->style.lineHeight);
+        }
+        // The rules a diagnostic asked for, over whatever drew the glyphs.
+        for (int i = 0; i < e->nUnderlines; i++) {
+            const TextSpan& u = e->underlines[i];
+            if (u.hi <= u.lo || u.color.a == 0) {
+                continue;
+            }
+            PaintTextUnderline(
+                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                e->style.wrap, e->x, e->y, u.lo, u.hi, u.color, u.wavy);
         }
         if (clipText) {
             CanvasPopClip(ctx);
