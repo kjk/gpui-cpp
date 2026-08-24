@@ -121,7 +121,9 @@ struct TableState {
     bool cellSelectable = false;
     // row_header: whether the table has a column of its own for picking rows.
     // Without one, clicking an already-selected cell takes the whole row.
-    bool rowHeader = false;
+    // Only drawn where the table is cell-selectable; on by default, as Rust's
+    // is.
+    bool rowHeader = true;
     // loop_selection: whether the ends of the table wrap.
     bool loopSelection = false;
     bool sortable = true;
@@ -334,6 +336,12 @@ void TableSetSelectedRow(TableState* s, Ctx* cx, int row);
 void TableSetSelectedCol(TableState* s, Ctx* cx, int col);
 void TableSetSelectedCell(TableState* s, Ctx* cx, int row, int col);
 void TableClearSelection(TableState* s, Ctx* cx);
+// The escalation `on_cell_click` opens with: with no row header column there
+// is nothing else to pick a whole row with, so a single click on the cell
+// that is already selected takes the row instead. A double click is passed
+// through to DoubleClickedCell and never escalates.
+bool TableEscalatesToRow(const TableState* s, int row, int col,
+                         bool doubleClick);
 
 // The action, applied.
 void TablePerform(TableState* s, Ctx* cx, TableAction act);

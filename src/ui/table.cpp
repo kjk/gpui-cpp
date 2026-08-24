@@ -531,6 +531,31 @@ El* DataTable::IntoEl() {
     return WrapContextMenu(cx, id, box, state.Get(cx), contextMenu, data);
 }
 
+// render_row_header_cell: `w_3`, a rule down its right edge and the head's
+// own surface. On a body row it takes a click and selects that row, which is
+// the whole reason it is there; the one in the head does nothing.
+static El* RowHeaderCell(Ctx* cx, Str id, Entity<TableState> state, int row,
+                         bool head) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* e = Div(a)
+                ->W(12)
+                ->H(kFill)
+                ->Shrink0()
+                ->BorderR(1, th.tableRowBorder)
+                ->Bg(th.tokens.tableHead);
+    TableState* s = state.Get(cx);
+    if (head || !s || !s->rowSelectable) {
+        return e;
+    }
+    if (s->selectedRow == row && s->mode == TableSelectionMode::Row) {
+        e->Bg(th.tokens.tableActive);
+    }
+    BindClick(e, StrDup(a, fmt("%s-rowhead-%d", id, row)),
+              ListenTo(state, &TableState::OnRowClick, (intptr_t)row));
+    return e;
+}
+
 El* DataTable::BuildEl() {
     const Theme& th = cx->theme();
     TableState* s = state.Get(cx);
@@ -576,7 +601,11 @@ El* DataTable::BuildEl() {
     El* main = Div(a)->FlexRow()->W(kFill)->ItemsStart();
     El* fixedPane = Div(a)->FlexCol()->Shrink0();
     El* scrollPane = Div(a)->FlexCol()->Flex1()->ClipX();
-    if (nFixed > 0) {
+    // render_row_header_cell: the narrow strip down the left a cell-selecting
+    // table picks whole rows with. It never scrolls sideways, so it belongs
+    // to the fixed pane — which is then there whether or not any column is.
+    bool rowHeaderOn = s && s->cellSelectable && s->rowHeader;
+    if (nFixed > 0 || rowHeaderOn) {
         main->Child(fixedPane);
     }
     main->Child(scrollPane);
@@ -650,6 +679,9 @@ El* DataTable::BuildEl() {
     // array, so it must not grow again while the heads are being built.
     if (s) {
         TableEnsureCols(s, nColumns);
+    }
+    if (rowHeaderOn) {
+        headFixed->Child(RowHeaderCell(cx, id, state, 0, true));
     }
     for (int d = 0; d < nColumns; d++) {
         // The columns are drawn in the order the table keeps, which is what a
@@ -824,6 +856,9 @@ El* DataTable::BuildEl() {
             } else if (s && s->rightClickedRow == r) {
                 row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
             }
+        }
+        if (rowHeaderOn) {
+            rowFixed->Child(RowHeaderCell(cx, id, state, r, false));
         }
         for (int d = 0; d < nColumns; d++) {
             int c = s ? TableColAt(s, d) : d;

@@ -209,6 +209,13 @@ void TableSetSelectedCell(TableState* s, Ctx* cx, int row, int col) {
     TableEmit(s, cx, TableEventKind::SelectCell, row, col, ColumnSort::Default);
 }
 
+bool TableEscalatesToRow(const TableState* s, int row, int col,
+                         bool doubleClick) {
+    bool reselect = s->mode == TableSelectionMode::Cell &&
+                    s->selectedCellRow == row && s->selectedCellCol == col;
+    return !s->rowHeader && s->rowSelectable && reselect && !doubleClick;
+}
+
 void TableClearSelection(TableState* s, Ctx* cx) {
     s->mode = TableSelectionMode::None;
     s->selectedRow = -1;
@@ -413,11 +420,16 @@ void TableState::OnCellClick(TableState* self, Ctx* cx, const ClickEvent* ev,
     }
     int row = TableCellRow(packed);
     int col = TableCellCol(packed);
+    bool isDouble = ev->clickCount == 2;
+    if (TableEscalatesToRow(self, row, col, isDouble)) {
+        TableSetSelectedRow(self, cx, row);
+        return;
+    }
     // A second click on the cell that is already selected: set_selected_cell
     // sees no change and says nothing, so the double click is emitted here
     // whether or not the selection moved.
     TableSetSelectedCell(self, cx, row, col);
-    if (ev->clickCount == 2) {
+    if (isDouble) {
         TableEmit(self, cx, TableEventKind::DoubleClickedCell, row, col,
                   ColumnSort::Default);
     }

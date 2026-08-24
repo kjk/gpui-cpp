@@ -314,11 +314,45 @@ static void ARefreshGivesTheColumnsBackToTheCaller() {
     utassert(TableColAt(&s, 3) == 3);
 }
 
+// on_cell_click's opening rule. A table with a row header column has
+// somewhere else to pick a row, so a second click on a selected cell is only
+// ever a cell click; a table without one escalates instead.
+static void ASecondClickOnACellTakesTheRowWhenThereIsNoRowHeader() {
+    TableState s;
+    s.rowCount = 8;
+    s.colCount = 3;
+    s.cellSelectable = true;
+    s.rowSelectable = true;
+    s.rowHeader = false;
+    s.mode = TableSelectionMode::Cell;
+    s.selectedCellRow = 3;
+    s.selectedCellCol = 1;
+
+    utassert(TableEscalatesToRow(&s, 3, 1, false));
+    // A double click is the cell's, whatever else is true.
+    utassert(!TableEscalatesToRow(&s, 3, 1, true));
+    // Another cell is a plain selection.
+    utassert(!TableEscalatesToRow(&s, 3, 2, false));
+    utassert(!TableEscalatesToRow(&s, 4, 1, false));
+    // With the header column there, nothing escalates.
+    s.rowHeader = true;
+    utassert(!TableEscalatesToRow(&s, 3, 1, false));
+    // And a table whose rows cannot be selected has nowhere to escalate to.
+    s.rowHeader = false;
+    s.rowSelectable = false;
+    utassert(!TableEscalatesToRow(&s, 3, 1, false));
+    // Nor does one whose selection is a row already.
+    s.rowSelectable = true;
+    s.mode = TableSelectionMode::Row;
+    utassert(!TableEscalatesToRow(&s, 3, 1, false));
+}
+
 void TestDataTable() {
     TheDelegateHearsAboutTheRangeOnlyWhenItMoves();
     TheVisibleColumnsAreTheOnesUnderTheOffset();
     ScrollingToAColumnBringsItIn();
     ARefreshGivesTheColumnsBackToTheCaller();
+    ASecondClickOnACellTakesTheRowWhenThereIsNoRowHeader();
     ARightClickMarksARowOrACellButNeverBoth();
     ACellIsOneNumber();
     AColumnKeepsItsWidthOnceItHasOne();
