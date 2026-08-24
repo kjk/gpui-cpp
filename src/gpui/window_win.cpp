@@ -690,6 +690,8 @@ void PlatSetCursor(Window* win, CursorKind kind) {
         name = IDC_SIZEWE;
     } else if (kind == CursorKind::RowResize) {
         name = IDC_SIZENS;
+    } else if (kind == CursorKind::Crosshair) {
+        name = IDC_CROSS;
     }
     win->plat->cursor = LoadCursorW(nullptr, name);
     SetCursor(win->plat->cursor);

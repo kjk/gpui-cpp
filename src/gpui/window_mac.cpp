@@ -739,6 +739,8 @@ void PlatSetCursor(Window* win, CursorKind kind) {
         [[NSCursor resizeLeftRightCursor] set];
     } else if (kind == CursorKind::RowResize) {
         [[NSCursor resizeUpDownCursor] set];
+    } else if (kind == CursorKind::Crosshair) {
+        [[NSCursor crosshairCursor] set];
     } else {
         [[NSCursor arrowCursor] set];
     }

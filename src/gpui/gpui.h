@@ -798,7 +798,9 @@ enum class CursorKind : uint8_t {
     ColResize,
     // cursor_row_resize: the handle between two panels stacked one over the
     // other.
-    RowResize
+    RowResize,
+    // cursor_crosshair: a canvas that is drawn on rather than clicked.
+    Crosshair
 };
 
 // Fired by a window timer; GPUI does this with cx.spawn + Timer::after.

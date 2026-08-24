@@ -35,6 +35,7 @@ const simpleExamples = [
   "large_text",
   "dock",
   "tiles",
+  "brush",
 ];
 
 const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;

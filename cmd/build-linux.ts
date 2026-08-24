@@ -36,6 +36,7 @@ const simpleExamples = [
   "large_text",
   "dock",
   "tiles",
+  "brush",
 ];
 
 const knownTargets = [

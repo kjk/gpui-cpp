@@ -109,7 +109,8 @@ EM_JS(void, GpJsSetTitle, (const char* s, int len), {
 });
 
 EM_JS(void, GpJsSetCursor, (int kind), {
-    const names = ["default", "text", "pointer", "col-resize", "row-resize"];
+    const names =
+        ["default", "text", "pointer", "col-resize", "row-resize", "crosshair"];
     const c = globalThis.__gpui.canvas;
     if (c) {
         c.style.cursor = names[kind] || "default";
