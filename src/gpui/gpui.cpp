@@ -4162,6 +4162,17 @@ static void ChartDomain(const ChartSeries& c, float* outMin, float* outMax) {
     *outMax = hi;
 }
 
+// A value-axis tick label: whole numbers plain, anything else to one place,
+// which is what a chart's own labels do upstream.
+static Str ChartValueLabel(float v) {
+    float rounded = v < 0 ? -(float)(int)(-v + 0.5f) : (float)(int)(v + 0.5f);
+    float d = v - rounded;
+    if ((d < 0 ? -d : d) < 0.05f) {
+        return fmt("%d", (int)rounded);
+    }
+    return fmt("%.1f", (double)v);
+}
+
 // StrokeStyle, as the run of segments after the opening move_to. Natural is
 // the Catmull-Rom the plot draws by default, turned into the cubic Beziers a
 // path can carry; StepAfter holds each value until the next point's x, and
@@ -4212,12 +4223,26 @@ static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
                     float hi, const Theme& th) {
     float t = hi > lo ? (c.ys[i] - lo) / (hi - lo) : 0.f;
     t = t < 0 ? 0 : (t > 1 ? 1 : t);
-    // Where the bar starts, which is the bottom unless a stack put it on top
-    // of the series below.
-    float t0 = 0;
+    // Where zero sits along the value axis. Bars grow from here rather than
+    // from the geometric baseline, so a negative value extends to the
+    // opposite side; with no negative data zero is the domain minimum and the
+    // two are the same place.
+    float zero = hi > lo ? (0.f - lo) / (hi - lo) : 0.f;
+    zero = zero < 0 ? 0 : (zero > 1 ? 1 : zero);
+    // Where the bar starts: zero, unless a stack put it on top of the series
+    // below.
+    float t0 = zero;
     if (c.bases) {
         t0 = hi > lo ? (c.bases[i] - lo) / (hi - lo) : 0.f;
         t0 = t0 < 0 ? 0 : (t0 > 1 ? 1 : t0);
+    }
+    // A bar that runs the other way is drawn from the smaller end, so the two
+    // swap rather than the length going negative.
+    bool below = t < t0;
+    if (below) {
+        float swap = t;
+        t = t0;
+        t0 = swap;
     }
     bool horizontal =
         c.barAlign == BarAlign::Left || c.barAlign == BarAlign::Right;
@@ -4403,6 +4428,22 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         return;
     }
     const ChartSeries& c = e->chart;
+    // VALUE_AXIS_GAP: what the value-axis tick labels take out of the band
+    // axis — left of vertical bars, and below horizontal ones, where they sit
+    // past the end of the band axis and so need none of it. Like the axis gap
+    // above it this is a fixed budget rather than a measured one, because the
+    // same scale is rebuilt while hit-testing, where no text can be shaped.
+    const float kValueAxisGap = 32.f;
+    bool valueAxis = c.kind == ChartKind::Bar && c.valueAxis;
+    bool valueAxisSide = valueAxis && c.barAlign != BarAlign::Left &&
+                         c.barAlign != BarAlign::Right;
+    if (valueAxisSide) {
+        x += kValueAxisGap;
+        w -= kValueAxisGap;
+        if (w < 8) {
+            return;
+        }
+    }
     int n = c.n;
     const float* ys = c.ys;
 
@@ -4539,11 +4580,39 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                            kGridDash);
             }
         } else {
-            for (int i = 0; i <= 3; i++) {
-                float gy = y + plotH * (i / 4.f);
+            // `value_tick_count` even intervals over the whole range, which
+            // is what the value-axis labels are placed on as well.
+            int ticks = c.valueTickCount > 0 ? c.valueTickCount : 4;
+            for (int i = 0; i < ticks; i++) {
+                float gy = y + plotH * ((float)i / (float)ticks);
                 CanvasLine(ctx, x, gy, x + w, gy, 1.f, th.border, kGridDash);
             }
             DrawLine(ctx, x, y + plotH, x + w, y + plotH, 1.f, th.border);
+        }
+        if (valueAxis) {
+            // One label per grid interval, and one at the top, reading the
+            // value the line stands for.
+            float lo = 0;
+            float hi = 0;
+            ChartDomain(c, &lo, &hi);
+            int ticks = c.valueTickCount > 0 ? c.valueTickCount : 4;
+            for (int i = 0; i <= ticks; i++) {
+                float f = (float)i / (float)ticks;
+                float v = hi - (hi - lo) * f;
+                Str label = ChartValueLabel(v);
+                float tw = MeasureText(ctx, label, 10, 0, false, 0, 0).w;
+                float ty = y + plotH * f - 6.f;
+                if (valueAxisSide) {
+                    DrawTextAt(ctx, label, x - 4.f - tw, ty, tw, 12, 10,
+                               th.mutedFg, false);
+                } else {
+                    // A row chart's value axis runs along the bottom, so its
+                    // labels go under the plot rather than beside it.
+                    float tx = x + w * f - tw * 0.5f;
+                    DrawTextAt(ctx, label, tx, y + plotH + 2.f, tw, 12, 10,
+                               th.mutedFg, false);
+                }
+            }
         }
     }
 

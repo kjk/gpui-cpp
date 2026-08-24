@@ -140,6 +140,10 @@ struct BarChart {
     // A series drawn over the grid another one already put down.
     bool overlay = false;
     bool labelValues = false;
+    // value_axis / value_tick_count: the labels down the value axis, and how
+    // many intervals they are placed on.
+    bool valueAxis = false;
+    int valueTickCount = 4;
     // fill(|d, ..|): one colour per bar. The array is the caller's and has to
     // outlive the frame.
     const Rgba* fills = nullptr;
@@ -156,6 +160,12 @@ struct BarChart {
     BarChart* Fill(Rgba c);
     BarChart* Labels(const char* const* l);
     BarChart* TickMargin(int n);
+    // Show or hide the value-axis tick labels. Enabling this reserves 32 DIPs
+    // along the band axis (left of vertical bars, below horizontal ones) for
+    // them. Default false.
+    BarChart* ValueAxis(bool on = true);
+    // How many even intervals the value axis is divided into. Default 4.
+    BarChart* ValueTickCount(int count);
     BarChart* Padding(float v);
     BarChart* Radius(float v);
     BarChart* Domain(float lo, float hi);

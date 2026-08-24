@@ -240,6 +240,8 @@ El* BarChart::IntoEl() {
     e->chart.bases = bases;
     e->chart.overlay = overlay;
     e->chart.barLabels = labelValues;
+    e->chart.valueAxis = valueAxis;
+    e->chart.valueTickCount = valueTickCount;
     e->chart.barFills = fills;
     e->chart.barGradient = gradient;
     e->chart.barGradientPerBar = gradientPerBar;
@@ -253,6 +255,16 @@ El* BarChart::IntoEl() {
     e->chart.tooltip = tooltip;
     e->chart.name = tooltipName;
     return e;
+}
+
+BarChart* BarChart::ValueAxis(bool on) {
+    valueAxis = on;
+    return this;
+}
+
+BarChart* BarChart::ValueTickCount(int count) {
+    valueTickCount = count > 1 ? count : 1;
+    return this;
 }
 
 CandlestickChart* CandlestickChart::New(Ctx* cx, const float* opens,

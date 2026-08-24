@@ -1402,6 +1402,13 @@ struct ChartSeries {
     const float* bases = nullptr;
     // BarChart::label: the value written at the bar's growing end.
     bool barLabels = false;
+    // BarChart::value_axis: tick labels down the value axis, which reserve
+    // kValueAxisGap along the band axis for themselves.
+    bool valueAxis = false;
+    // BarChart::value_tick_count: how many even intervals the value axis is
+    // divided into, which drives the grid spacing and the labels alike. A
+    // count, unlike tickMargin, which is a stride over the band categories.
+    int valueTickCount = 4;
     // BarChart::fill(|d, ..|): a colour per bar rather than one for the lot.
     const Rgba* barFills = nullptr;
     // BarChart::fill_gradient: the two stops a bar is filled between. Run

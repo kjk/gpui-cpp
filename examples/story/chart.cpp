@@ -221,6 +221,38 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
             ->W(kFill)
             ->H(kFill),
         false));
+    // Bar Chart - Negative values: the monthly figures recentred on their
+    // mean, so the bars have a mix of signs to draw around the zero line, and
+    // the value axis switched on beside them.
+    static float variations[kMonthlyDeviceCount];
+    static bool variationsReady = false;
+    if (!variationsReady) {
+        variationsReady = true;
+        float sum = 0;
+        for (int i = 0; i < kMonthlyDeviceCount; i++) {
+            sum += kMonthlyDesktop[i];
+        }
+        float mean = sum / (float)kMonthlyDeviceCount;
+        for (int i = 0; i < kMonthlyDeviceCount; i++) {
+            float v = kMonthlyDesktop[i] - mean;
+            variations[i] =
+                v < 0 ? -(float)(int)(-v + 0.5f) : (float)(int)(v + 0.5f);
+        }
+    }
+    barRow->Child(
+        ChartCard(cx, "Bar Chart - Negative values",
+                  component::BarChart::New(cx, variations, kMonthlyDeviceCount)
+                      ->Fill(th.chart1)
+                      ->Labels(kMonthlyMonth)
+                      ->Tooltip(StrL("Variation"))
+                      ->TickMargin(1)
+                      ->LabelValues()
+                      ->ValueAxis()
+                      ->IntoEl()
+                      ->W(kFill)
+                      ->H(kFill),
+                  false));
+
     // Bar Chart - Mixed: fill(|d, ..| d.color(color)), a tint per bar.
     static Rgba mixed[kMonthlyDeviceCount];
     for (int i = 0; i < kMonthlyDeviceCount; i++) {
