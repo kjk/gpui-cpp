@@ -28,8 +28,10 @@
    - **Table: Scroll / Wrap** — every table in this tree wraps, the way
      `render_wrap_table` does; the measured-width scrolling layout upstream
      defaults to is not ported.
-   - The **math plugin** is not registered yet; upstream renders a formula
-     through KaTeX in node, which this tree has neither of.
+   - **KaTeX**: upstream's math plugin renders a formula by handing it to
+     KaTeX in node and reading the SVG back. The plugin is here and takes the
+     example's own fallback path instead — the formula set italic with the
+     Greek names spelled out and the scripts folded into Unicode.
    - The source is drawn unhighlighted: `syntax.cpp` has a scanner for ten
      languages and markdown is not yet one of them. */
 
@@ -368,6 +370,441 @@ static El* UserCardRender(Ctx* cx, const component::MdPluginNode* node, void*) {
                     ->IntoEl());
 }
 
+// ─── the math plugin ──────────────────────────────────────────────────────
+//
+// Upstream renders a formula by handing it to KaTeX in node and reading the
+// SVG back; there is no node here and no SVG text engine to lay one out, so
+// this is the example's own fallback path — `render_math_text`, italic, with
+// the Greek names spelled out and the scripts folded into the Unicode
+// super- and subscripts. Its `Node::Math` arm is not reachable either: the
+// math extension is not one of the ones `src/markdown` parses, so a formula
+// arrives as the paragraph it was written in.
+
+struct MathSegment {
+    Str source = {};
+    bool math = false;
+};
+
+struct MathNode {
+    bool block = false;
+    MathSegment* segs = nullptr;
+    int nSegs = 0;
+};
+
+static bool MathIsSpace(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+// The name-to-glyph table prettify_math_source walks, in its own order.
+struct MathReplacement {
+    const char* from;
+    const char* to;
+};
+
+static const MathReplacement kMathNames[] = {
+    {"\\alpha", "α"}, {"\\beta", "β"}, {"\\gamma", "γ"}, {"\\delta", "δ"},
+    {"\\pi", "π"},    {"\\sum", "∑"},  {"\\sqrt", "√"},  {"\\times", "×"},
+    {"\\cdot", "⋅"},  {"\\leq", "≤"},  {"\\geq", "≥"},   {"\\neq", "≠"},
+    {"\\infty", "∞"}, {"\\left", ""},  {"\\right", ""},
+};
+
+// script_char: the digit, sign and letter forms, as UTF-8.
+static const char* MathScriptChar(char c, bool super) {
+    if (super) {
+        switch (c) {
+            case '0':
+                return "⁰";
+            case '1':
+                return "¹";
+            case '2':
+                return "²";
+            case '3':
+                return "³";
+            case '4':
+                return "⁴";
+            case '5':
+                return "⁵";
+            case '6':
+                return "⁶";
+            case '7':
+                return "⁷";
+            case '8':
+                return "⁸";
+            case '9':
+                return "⁹";
+            case '+':
+                return "⁺";
+            case '-':
+                return "⁻";
+            case '=':
+                return "⁼";
+            case '(':
+                return "⁽";
+            case ')':
+                return "⁾";
+            case 'i':
+                return "ⁱ";
+            case 'n':
+                return "ⁿ";
+            default:
+                return nullptr;
+        }
+    }
+    switch (c) {
+        case '0':
+            return "₀";
+        case '1':
+            return "₁";
+        case '2':
+            return "₂";
+        case '3':
+            return "₃";
+        case '4':
+            return "₄";
+        case '5':
+            return "₅";
+        case '6':
+            return "₆";
+        case '7':
+            return "₇";
+        case '8':
+            return "₈";
+        case '9':
+            return "₉";
+        case '+':
+            return "₊";
+        case '-':
+            return "₋";
+        case '=':
+            return "₌";
+        case '(':
+            return "₍";
+        case ')':
+            return "₎";
+        case 'a':
+            return "ₐ";
+        case 'e':
+            return "ₑ";
+        case 'h':
+            return "ₕ";
+        case 'i':
+            return "ᵢ";
+        case 'j':
+            return "ⱼ";
+        case 'k':
+            return "ₖ";
+        case 'l':
+            return "ₗ";
+        case 'm':
+            return "ₘ";
+        case 'n':
+            return "ₙ";
+        case 'o':
+            return "ₒ";
+        case 'p':
+            return "ₚ";
+        case 'r':
+            return "ᵣ";
+        case 's':
+            return "ₛ";
+        case 't':
+            return "ₜ";
+        case 'u':
+            return "ᵤ";
+        case 'v':
+            return "ᵥ";
+        case 'x':
+            return "ₓ";
+        default:
+            return nullptr;
+    }
+}
+
+// prettify_math_source: the whitespace collapsed, the names spelled out, and
+// `^{..}` / `_{..}` folded into the script forms where every character has
+// one. take_script's braces are read the same way.
+static Str MathPrettify(Ctx* cx, Str src) {
+    Arena* a = cx->a;
+    StrBuilder sb;
+    // split_whitespace().join(" ")
+    int at = 0;
+    bool first = true;
+    while (at < src.len) {
+        while (at < src.len && MathIsSpace(src.s[at])) {
+            at++;
+        }
+        int start = at;
+        while (at < src.len && !MathIsSpace(src.s[at])) {
+            at++;
+        }
+        if (at > start) {
+            if (!first) {
+                sb.AppendChar(' ');
+            }
+            sb.Append(Str(src.s + start, at - start));
+            first = false;
+        }
+    }
+    Str joined = sb.TakeStr();
+
+    StrBuilder named;
+    for (int i = 0; i < joined.len;) {
+        const MathReplacement* hit = nullptr;
+        for (const MathReplacement& r : kMathNames) {
+            Str from = Str(r.from);
+            if (i + from.len <= joined.len &&
+                memcmp(joined.s + i, from.s, (size_t)from.len) == 0) {
+                hit = &r;
+                break;
+            }
+        }
+        if (hit) {
+            named.Append(Str(hit->to));
+            i += (int)strlen(hit->from);
+            continue;
+        }
+        named.AppendChar(joined.s[i]);
+        i++;
+    }
+    Str replaced = named.TakeStr();
+    StrFree(joined);
+
+    StrBuilder out;
+    for (int i = 0; i < replaced.len;) {
+        char c = replaced.s[i];
+        if (c != '^' && c != '_') {
+            out.AppendChar(c);
+            i++;
+            continue;
+        }
+        bool super = c == '^';
+        // take_script: a braced run, or the one character after the mark.
+        int from = i + 1;
+        int to = from;
+        bool braced = from < replaced.len && replaced.s[from] == '{';
+        if (braced) {
+            int depth = 1;
+            from++;
+            to = from;
+            while (to < replaced.len && depth > 0) {
+                if (replaced.s[to] == '{') {
+                    depth++;
+                } else if (replaced.s[to] == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+                to++;
+            }
+        } else if (from < replaced.len) {
+            to = from + 1;
+        }
+        if (to <= from) {
+            out.AppendChar(c);
+            i++;
+            continue;
+        }
+        for (int k = from; k < to; k++) {
+            const char* sub = MathScriptChar(replaced.s[k], super);
+            if (sub) {
+                out.Append(Str(sub));
+            } else {
+                out.AppendChar(replaced.s[k]);
+            }
+        }
+        i = braced ? to + 1 : to;
+    }
+    Str result = out.TakeStr();
+    StrFree(replaced);
+    Str owned = StrDup(a, result);
+    StrFree(result);
+    return owned;
+}
+
+static Str MathTrim(Str s) {
+    int lo = 0;
+    int hi = s.len;
+    while (lo < hi && MathIsSpace(s.s[lo])) {
+        lo++;
+    }
+    while (hi > lo && MathIsSpace(s.s[hi - 1])) {
+        hi--;
+    }
+    return Str(s.s + lo, hi - lo);
+}
+
+// is_escaped: an odd run of backslashes in front of the byte.
+static bool MathEscaped(Str s, int at) {
+    int n = 0;
+    while (at - n - 1 >= 0 && s.s[at - n - 1] == '\\') {
+        n++;
+    }
+    return (n % 2) == 1;
+}
+
+// block_math_source: `$$ .. $$` with something between them.
+static bool MathBlockSource(Str text, Str* out) {
+    Str t = MathTrim(text);
+    if (t.len < 5 || memcmp(t.s, "$$", 2) != 0 ||
+        memcmp(t.s + t.len - 2, "$$", 2) != 0) {
+        return false;
+    }
+    Str body = MathTrim(Str(t.s + 2, t.len - 4));
+    if (body.len <= 0) {
+        return false;
+    }
+    *out = body;
+    return true;
+}
+
+// inline_math_segments: the `$..$` runs of a paragraph, with the text around
+// them, skipping what a code span holds. Answers false when none are math.
+static bool MathInlineSegments(Ctx* cx, Str src, MathSegment** out, int* nOut) {
+    Arena* a = cx->a;
+    const int kMaxSegs = 64;
+    auto* segs = (MathSegment*)Alloc(a, (int)sizeof(MathSegment) * kMaxSegs);
+    if (!segs) {
+        return false;
+    }
+    int n = 0;
+    int textStart = 0;
+    int ix = 0;
+    int codeTicks = 0;
+    bool anyMath = false;
+    while (ix < src.len && n + 2 < kMaxSegs) {
+        if (src.s[ix] == '`') {
+            int ticks = 0;
+            while (ix + ticks < src.len && src.s[ix + ticks] == '`') {
+                ticks++;
+            }
+            if (codeTicks == ticks) {
+                codeTicks = 0;
+            } else if (codeTicks == 0) {
+                codeTicks = ticks;
+            }
+            ix += ticks;
+            continue;
+        }
+        bool dollar = src.s[ix] == '$' && codeTicks == 0 &&
+                      !MathEscaped(src, ix) &&
+                      (ix + 1 >= src.len || src.s[ix + 1] != '$');
+        if (dollar) {
+            int end = ix + 1;
+            while (end < src.len) {
+                if (src.s[end] == '$' && !MathEscaped(src, end) &&
+                    (end + 1 >= src.len || src.s[end + 1] != '$')) {
+                    break;
+                }
+                end++;
+            }
+            if (end < src.len) {
+                Str math = MathTrim(Str(src.s + ix + 1, end - ix - 1));
+                if (math.len > 0) {
+                    if (textStart < ix) {
+                        segs[n].source = Str(src.s + textStart, ix - textStart);
+                        segs[n].math = false;
+                        n++;
+                    }
+                    segs[n].source = math;
+                    segs[n].math = true;
+                    n++;
+                    anyMath = true;
+                    ix = end + 1;
+                    textStart = ix;
+                    continue;
+                }
+            }
+        }
+        ix++;
+    }
+    if (!anyMath) {
+        return false;
+    }
+    if (textStart < src.len && n < kMaxSegs) {
+        segs[n].source = Str(src.s + textStart, src.len - textStart);
+        segs[n].math = false;
+        n++;
+    }
+    *out = segs;
+    *nOut = n;
+    return true;
+}
+
+static bool MathParse(Ctx* cx, component::MdNode* n, Str text, void*,
+                      component::MdPluginNode* out) {
+    if (n->kind != component::MdKind::Paragraph || text.len <= 0) {
+        return false;
+    }
+    Arena* a = cx->a;
+    auto* node = ArenaNew<MathNode>(a);
+    if (!node) {
+        return false;
+    }
+    Str body;
+    if (MathBlockSource(text, &body)) {
+        auto* seg = ArenaNew<MathSegment>(a);
+        seg->source = body;
+        seg->math = true;
+        node->block = true;
+        node->segs = seg;
+        node->nSegs = 1;
+        out->text = text;
+        out->markdown = text;
+        out->data = node;
+        return true;
+    }
+    MathSegment* segs = nullptr;
+    int nSegs = 0;
+    if (!MathInlineSegments(cx, text, &segs, &nSegs)) {
+        return false;
+    }
+    node->block = false;
+    node->segs = segs;
+    node->nSegs = nSegs;
+    out->text = text;
+    out->markdown = text;
+    out->data = node;
+    return true;
+}
+
+// render_math_text: the formula italic, a size up when it is a block of its
+// own, and the line height GPUI gives each case.
+static El* MathFormula(Ctx* cx, Str source, bool inlineMath, float fontSize) {
+    const Theme& th = cx->theme();
+    float size = inlineMath
+                     ? (fontSize > 10.f ? fontSize : 10.f)
+                     : (fontSize * 1.18f > 12.f ? fontSize * 1.18f : 12.f);
+    return TextEl(cx->a, MathPrettify(cx, source))
+        ->Font(size)
+        ->LineHeight(inlineMath ? 1.f : 1.2f)
+        ->Fg(th.foreground)
+        ->Italic()
+        ->Shrink0();
+}
+
+static El* MathRender(Ctx* cx, const component::MdPluginNode* node, void*) {
+    Arena* a = cx->a;
+    const auto* math = (const MathNode*)node->data;
+    const float kFontSize = 16.f;
+    if (math->block) {
+        // A formula of its own is centred, with py_1 around it.
+        return Div(a)->FlexRow()->W(kFill)->JustifyCenter()->PadY(4)->Child(
+            MathFormula(cx, math->segs[0].source, false, kFontSize));
+    }
+    El* row = Div(a)->FlexRow()->FlexWrap()->W(kFill)->ItemsCenter();
+    for (int i = 0; i < math->nSegs; i++) {
+        const MathSegment& seg = math->segs[i];
+        if (seg.math) {
+            row->Child(MathFormula(cx, seg.source, true, kFontSize));
+        } else {
+            row->Child(
+                TextEl(a, seg.source)->Font(kFontSize)->LineHeight(1.5f));
+        }
+    }
+    return row;
+}
+
 static void OnLink(MarkdownApp* self, Ctx* cx, const ClickEvent*,
                    intptr_t href) {
     StrCopyZ(self->lastLink, (int)sizeof(self->lastLink),
@@ -449,6 +886,7 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     // .plugin(TickerPlugin::new(..)).plugin(UserCardPlugin::new())
     tv->Plugin(StrL("ticker"), &TickerParse, &TickerRender);
     tv->Plugin(StrL("user-card"), &UserCardParse, &UserCardRender);
+    tv->Plugin(StrL("math"), &MathParse, &MathRender);
     El* preview = tv->Selectable()
                       ->OnLink(Listen(cx, &OnLink))
                       ->CodeBlockActions(&CodeActions, self)
