@@ -67,6 +67,7 @@ GPUI_INPUT_ACTION(SelectToStartOfLine, "input::SelectToStartOfLine")
 GPUI_INPUT_ACTION(SelectUp, "input::SelectUp")
 GPUI_INPUT_ACTION(Undo, "input::Undo")
 GPUI_INPUT_ACTION(Enter, "input::Enter")
+GPUI_INPUT_ACTION(ToggleCodeActions, "input::ToggleCodeActions")
 #undef GPUI_INPUT_ACTION
 
 } // namespace input
@@ -206,6 +207,12 @@ void InputInitKeys() {
         {"ctrl-y", input::Redo(), ctx},
 #endif
 #if GPUI_OS_MAC
+        {"cmd-.", input::ToggleCodeActions(), ctx},
+#endif
+#if !GPUI_OS_MAC
+        {"ctrl-.", input::ToggleCodeActions(), ctx},
+#endif
+#if GPUI_OS_MAC
         {"cmd-f", input::Search(), ctx},
 #endif
 #if !GPUI_OS_MAC
@@ -330,6 +337,9 @@ InputAction InputActionOf(uint32_t id, intptr_t arg) {
     }
     if (id == input::Replace()) {
         return InputAction::Replace;
+    }
+    if (id == input::ToggleCodeActions()) {
+        return InputAction::ToggleCodeActions;
     }
     if (id == input::Search()) {
         return InputAction::Search;

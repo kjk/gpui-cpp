@@ -849,6 +849,10 @@ static bool Menu(InputState* s, InputAction action) {
     return InputCompletionAction(s, nullptr, nullptr, action);
 }
 
+static bool Menu2(InputState* s, InputAction action) {
+    return InputCodeActionAction(s, nullptr, nullptr, action);
+}
+
 static void TypingAWordOpensTheMenu() {
     int asked = 0;
     InputState s;
@@ -935,6 +939,83 @@ static void AnAcceptedItemWritesItsInsertText() {
     utassert(!s.completion.open);
 }
 
+// ─── code actions ─────────────────────────────────────────────────────────
+
+// TextConvertor's two simplest, which is enough to say what the menu does
+// with what a provider offers.
+static int Actions(void* data, Arena* a, Str text, Selection sel,
+                   CodeActionItem* out, int cap) {
+    if (data) {
+        (*(int*)data)++;
+    }
+    if (sel.IsEmpty() || cap < 2) {
+        return 0;
+    }
+    char* up = (char*)Alloc(a, sel.end - sel.start);
+    for (int i = sel.start; i < sel.end; i++) {
+        char c = text.s[i];
+        up[i - sel.start] =
+            c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
+    }
+    out[0].title = StrL("Convert to Uppercase");
+    out[0].range = sel;
+    out[0].newText = Str(up, sel.end - sel.start);
+    out[1].title = StrL("Delete");
+    out[1].range = sel;
+    out[1].newText = Str{};
+    return 2;
+}
+
+static void TheCodeActionMenuRewritesWhatIsSelected() {
+    int asked = 0;
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.codeActionProvider = &Actions;
+    s.codeActionData = &asked;
+
+    InputSetValue(&s, StrL("hello world"));
+    InputSetSelectedRange(&s, nullptr, nullptr, 0, 5);
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(asked == 1);
+    utassert(s.codeActions.open && s.codeActions.items.len == 2);
+    utassert(s.codeActions.selected == 0);
+
+    // The chord again puts it away, which is what a toggle is.
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(!s.codeActions.open);
+
+    // Down walks it and enter performs the one it is on.
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(Menu2(&s, InputAction::MoveDown));
+    utassert(s.codeActions.selected == 1);
+    utassert(Menu2(&s, InputAction::MoveUp));
+    utassert(Menu2(&s, InputAction::Enter));
+    utassert(ValueIs(s, "HELLO world"));
+    utassert(!s.codeActions.open);
+    // One undo step, so the whole rewrite comes back at once.
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "hello world"));
+
+    // Escape closes it, and an empty selection is nothing to offer, so the
+    // menu does not come up at all.
+    InputSetSelectedRange(&s, nullptr, nullptr, 0, 5);
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(s.codeActions.open);
+    utassert(Menu2(&s, InputAction::Escape));
+    utassert(!s.codeActions.open);
+    InputSetSelectedRange(&s, nullptr, nullptr, 3, 3);
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(!s.codeActions.open);
+
+    // A field with no provider leaves the chord alone.
+    InputState plain;
+    InputSetValue(&plain, StrL("hello"));
+    InputSetSelectedRange(&plain, nullptr, nullptr, 0, 5);
+    utassert(!InputPerform(&plain, nullptr, nullptr,
+                           InputAction::ToggleCodeActions, false));
+    utassert(!plain.codeActions.open);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -978,4 +1059,5 @@ void TestInputState() {
     TypingAWordOpensTheMenu();
     TheMenuKeysMoveTheSelectionAndAccept();
     AnAcceptedItemWritesItsInsertText();
+    TheCodeActionMenuRewritesWhatIsSelected();
 }

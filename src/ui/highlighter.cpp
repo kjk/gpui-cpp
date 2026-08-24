@@ -387,6 +387,45 @@ El* Highlighter::IntoEl() {
         completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(menu);
     }
 
+    // The code action menu, in the same place under the caret: one column of
+    // titles, no pane beside it — CodeActionMenu, which is the completion
+    // menu's list over a list of actions.
+    if (!completionMenu && state && state->codeActions.open &&
+        state->codeActions.items.len > 0) {
+        float x = state->caretWinX > 0 ? state->caretWinX - 4.f
+                                       : state->inputBounds.x;
+        float y = state->caretWinY > 0
+                      ? state->caretWinY + 4.f
+                      : state->inputBounds.y + kInputLineH + 4.f;
+        El* list = Div(a)
+                       ->FlexCol()
+                       ->W(320)
+                       ->MaxH(480)
+                       ->ClipY()
+                       ->Pad(4)
+                       ->Radius(th.radius)
+                       ->Bg(th.tokens.background)
+                       ->Border(1, th.border);
+        for (int i = 0; i < state->codeActions.items.len; i++) {
+            bool selected = i == state->codeActions.selected;
+            El* row = Div(a)
+                          ->FlexRow()
+                          ->W(kFill)
+                          ->Gap(8)
+                          ->Pad(4)
+                          ->ItemsCenter()
+                          ->Radius(th.radius * 0.5f)
+                          ->Font(12);
+            if (selected) {
+                row->Bg(th.tokens.accent)->Fg(th.accentFg);
+            }
+            row->Child(TextEl(a, state->codeActions.items[i].title)
+                           ->LineHeight(1.f));
+            list->Child(row);
+        }
+        completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(list);
+    }
+
     // The diagnostic popover: what the pointer is over, in the severity's
     // own colours — `px_1().py_0p5()` over a background the colour is blended
     // a fifth into, with the message as markdown.

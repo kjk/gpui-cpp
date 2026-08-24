@@ -2468,6 +2468,35 @@ struct CompletionItem {
 using CompletionFn = int (*)(void* data, Str text, int offset, Str query,
                              CompletionItem* out, int cap);
 
+// CodeAction, flattened: a title, and the one edit it makes — the range it
+// replaces and what it puts there. Rust carries a WorkspaceEdit, which is a
+// map of documents to edit lists; a field is one document and every action
+// upstream writes makes one edit, so this is that edit.
+struct CodeActionItem {
+    Str title = {};
+    Selection range = {};
+    Str newText = {};
+};
+
+// CodeActionProvider::code_actions, without the task: the provider is handed
+// the document and what is selected, and writes the actions it offers there.
+// Strings it answers are allocated out of `a`, which lives as long as the
+// menu is up.
+using CodeActionFn = int (*)(void* data, Arena* a, Str text, Selection sel,
+                             CodeActionItem* out, int cap);
+
+// The code action menu while it is up — CodeActionMenu's own state.
+struct CodeActionSession {
+    bool open = false;
+    int selected = 0;
+    Vec<CodeActionItem> items;
+    // What the titles and the replacement texts were written into, thrown
+    // away and taken again each time the menu is asked for.
+    Arena* arena = nullptr;
+
+    ~CodeActionSession();
+};
+
 // HoverProvider::hover, without the task: the provider is handed the document
 // and the offset the pointer is over, and answers the markdown to show, or an
 // empty string for nothing to say. What it answers has to outlive the frame —
@@ -2589,6 +2618,13 @@ struct InputState {
     Selection hoverRange = {};
     float hoverX = 0;
     float hoverY = 0;
+    // The code action menu, and who fills it — cmd-. / ctrl-. asks whatever
+    // is selected. Rust asks every registered provider and puts the answers
+    // in one list; there is one here, and an example that wants two answers
+    // both from the one it registers.
+    CodeActionSession codeActions;
+    CodeActionFn codeActionProvider = nullptr;
+    void* codeActionData = nullptr;
     // The completion menu, and who fills it. A state with no provider never
     // opens one, which is every field that is not a code editor.
     CompletionSession completion;
@@ -2766,7 +2802,9 @@ enum class InputAction : uint8_t {
     // with its replace row already out. Rust binds both in the input's key
     // context and both do nothing on a field that is not searchable.
     Search,
-    Replace
+    Replace,
+    // cmd-. / ctrl-.: the code action menu over whatever is selected.
+    ToggleCodeActions
 };
 
 // `platform` is Command on macOS and the Windows key elsewhere;
@@ -2801,6 +2839,20 @@ bool InputCompletionAction(InputState* s, App* app, Window* win,
 // ShowCompletions: ctrl-space asks whatever the caret is on, which is Rust's
 // second way in beside a trigger character.
 void InputShowCompletions(InputState* s, App* app, Window* win);
+
+// ─── code actions ─────────────────────────────────────────────────────────
+
+// ToggleCodeActions: ask the provider about what is selected and open the
+// menu on what it offers. Nothing offered leaves the menu down.
+void InputToggleCodeActions(InputState* s, App* app, Window* win);
+void InputDismissCodeActions(InputState* s);
+// Perform the selected action: its range is replaced by its text, as one
+// undo step, and the menu goes away.
+void InputPerformCodeAction(InputState* s, App* app, Window* win);
+// The four keys the menu takes while it is up — `CodeActionMenu::
+// handle_action`, which is the completion menu's, over the other list.
+bool InputCodeActionAction(InputState* s, App* app, Window* win,
+                           InputAction action);
 
 // replace_text_in_range: the one path every edit goes through. A null range is
 // the current selection. Returns false when the edit was rejected — readonly,

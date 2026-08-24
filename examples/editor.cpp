@@ -18,7 +18,8 @@
    upstream's own `fixtures/completion_items.json`, filtered by the word being
    typed, with the selected item's documentation rendered as markdown beside
    the list, and the hover popover, which answers about the word the pointer
-   rests on out of the same items. What is still to come is code actions and
+   rests on out of the same items, and the code action menu, which is
+   TextConvertor's five ways to rewrite a selection. What is still to come is
    document colours. */
 
 #include "gpui.h"
@@ -333,6 +334,68 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
     return n;
 }
 
+// ─── the code action provider ─────────────────────────────────────────────
+//
+// TextConvertor's, which is the five ways it offers to rewrite whatever is
+// selected. Rust wraps each in a WorkspaceEdit against a document URI; a
+// field is the one document here, so an action is the range and the text.
+
+static Str CaseMapped(Arena* a, Str src, int which) {
+    char* out = (char*)Alloc(a, src.len * 2 + 1);
+    int n = 0;
+    bool startOfWord = true;
+    for (int i = 0; i < src.len; i++) {
+        char c = src.s[i];
+        bool upper = c >= 'A' && c <= 'Z';
+        bool lower = c >= 'a' && c <= 'z';
+        char up = lower ? (char)(c - 'a' + 'A') : c;
+        char down = upper ? (char)(c - 'A' + 'a') : c;
+        switch (which) {
+            case 0: // Convert to Uppercase
+                out[n++] = up;
+                break;
+            case 1: // Convert to Lowercase
+                out[n++] = down;
+                break;
+            case 2: // Titleize: every word's first letter
+                out[n++] = startOfWord ? up : c;
+                break;
+            case 3: // Capitalize: the first letter of the whole run
+                out[n++] = i == 0 ? up : c;
+                break;
+            default: // snake_case: an underscore in front of every capital
+                if (upper && i != 0) {
+                    out[n++] = '_';
+                }
+                out[n++] = down;
+                break;
+        }
+        startOfWord = c == ' ' || c == '\t' || c == '\n';
+    }
+    return Str(out, n);
+}
+
+static int CodeActionsFor(void*, Arena* a, Str text, Selection sel,
+                          CodeActionItem* out, int cap) {
+    if (sel.IsEmpty() || sel.end > text.len) {
+        return 0;
+    }
+    static const char* kTitles[] = {
+        "Convert to Uppercase", "Convert to Lowercase",  "Titleize",
+        "Capitalize",           "Convert to snake_case",
+    };
+    Str selected(text.s + sel.start, sel.end - sel.start);
+    int n = 0;
+    for (int i = 0; i < (int)(sizeof(kTitles) / sizeof(kTitles[0])) && n < cap;
+         i++) {
+        out[n].title = Str(kTitles[i]);
+        out[n].range = sel;
+        out[n].newText = CaseMapped(a, selected, i);
+        n++;
+    }
+    return n;
+}
+
 // ─── the status bar's switches ────────────────────────────────────────────
 
 enum {
@@ -551,6 +614,8 @@ int GpuiMain(int argc, char** argv) {
     // And the hover provider, which answers about the word the pointer rests
     // on out of the same items.
     self->editor.hoverProvider = &HoverAt;
+    // And the code actions, which ctrl-. offers over a selection.
+    self->editor.codeActionProvider = &CodeActionsFor;
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;

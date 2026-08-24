@@ -2022,6 +2022,121 @@ bool InputCompletionAction(InputState* s, App* app, Window* win,
     }
 }
 
+// ─── code actions ─────────────────────────────────────────────────────────
+//
+// code_actions.rs and CodeActionMenu, which between them are: ask every
+// provider about the selection, put what came back in a list under the
+// caret, and let the same four keys walk it. Rust's providers answer tasks
+// and the answers are gathered as they land; a provider here answers into a
+// buffer, so the asking and the gathering are the one call.
+
+CodeActionSession::~CodeActionSession() {
+    items.Reset();
+    if (arena) {
+        ArenaDelete(arena);
+    }
+}
+
+void InputDismissCodeActions(InputState* s) {
+    if (!s) {
+        return;
+    }
+    s->codeActions.open = false;
+    s->codeActions.items.Reset();
+    s->codeActions.selected = 0;
+}
+
+void InputToggleCodeActions(InputState* s, App* app, Window* win) {
+    if (!s || !s->codeActionProvider) {
+        return;
+    }
+    // A menu that is up goes down, which is what a toggle is.
+    if (s->codeActions.open) {
+        InputDismissCodeActions(s);
+        Notify(app, win);
+        return;
+    }
+    if (!s->codeActions.arena) {
+        s->codeActions.arena = ArenaNew();
+    } else {
+        // Last time's titles go with it: nothing is left pointing at them.
+        ArenaDelete(s->codeActions.arena);
+        s->codeActions.arena = ArenaNew();
+    }
+    const int kMax = 32;
+    CodeActionItem buf[kMax];
+    int n = s->codeActionProvider(s->codeActionData, s->codeActions.arena,
+                                  InputValue(s), s->selectedRange, buf, kMax);
+    s->codeActions.items.Reset();
+    for (int i = 0; i < n && i < kMax; i++) {
+        s->codeActions.items.Append(buf[i]);
+    }
+    s->codeActions.selected = 0;
+    s->codeActions.open = n > 0;
+    Notify(app, win);
+}
+
+void InputPerformCodeAction(InputState* s, App* app, Window* win) {
+    if (!s || !s->codeActions.open) {
+        return;
+    }
+    int ix = s->codeActions.selected;
+    if (ix < 0 || ix >= s->codeActions.items.len) {
+        return;
+    }
+    // The item is copied out: dismissing the menu is what frees the arena its
+    // strings were written into.
+    CodeActionItem item = s->codeActions.items[ix];
+    Str text = InputValue(s);
+    Selection range = item.range;
+    if (range.start < 0) {
+        range.start = 0;
+    }
+    if (range.end > text.len) {
+        range.end = text.len;
+    }
+    if (range.end < range.start) {
+        range.end = range.start;
+    }
+    // apply_lsp_edits: one edit, as one undo step.
+    s->undo.hasPendingIntent = true;
+    s->undo.pendingIntent = EditIntent::Atomic;
+    Str newText = StrDup(GetTempArena(), item.newText);
+    InputDismissCodeActions(s);
+    InputReplaceTextInRange(s, app, win, &range, newText);
+    Notify(app, win);
+}
+
+bool InputCodeActionAction(InputState* s, App* app, Window* win,
+                           InputAction action) {
+    if (!s || !s->codeActions.open) {
+        return false;
+    }
+    int n = s->codeActions.items.len;
+    switch (action) {
+        case InputAction::MoveUp:
+            s->codeActions.selected =
+                s->codeActions.selected > 0 ? s->codeActions.selected - 1 : 0;
+            AppInvalidate(win);
+            return true;
+        case InputAction::MoveDown:
+            s->codeActions.selected = s->codeActions.selected + 1 < n
+                                          ? s->codeActions.selected + 1
+                                          : n - 1;
+            AppInvalidate(win);
+            return true;
+        case InputAction::Enter:
+            InputPerformCodeAction(s, app, win);
+            return true;
+        case InputAction::Escape:
+            InputDismissCodeActions(s);
+            AppInvalidate(win);
+            return true;
+        default:
+            return false;
+    }
+}
+
 void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     char buf[4];
     int n = 0;
@@ -2042,6 +2157,12 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     }
     InputReplaceTextInRange(s, app, win, nullptr, Str(buf, n));
     PauseBlink(s, app, win);
+    // A menu of actions on what was selected has nothing to say about a
+    // document that has changed under it, so typing puts it away.
+    InputDismissCodeActions(s);
+    // A menu of actions on what was selected has nothing to say about a
+    // document that has changed under it, so typing puts it away.
+    InputDismissCodeActions(s);
     // is_completion_trigger: a word character carries a menu that is already
     // up and opens one that is not, and `.` opens one where the caret stands.
     // Anything else closes it.
@@ -2461,6 +2582,10 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
     if (InputCompletionAction(s, app, win, action)) {
         return true;
     }
+    // And the code action menu, the same four keys over the other list.
+    if (InputCodeActionAction(s, app, win, action)) {
+        return true;
+    }
     Str t = InputValue(s);
     switch (action) {
         case InputAction::None:
@@ -2704,6 +2829,14 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             InputReplaceTextInRange(s, app, win, nullptr, text);
             return true;
         }
+        case InputAction::ToggleCodeActions:
+            // on_action_toggle_code_actions. A field with no provider leaves
+            // the chord alone, the way Rust propagates it.
+            if (!s->codeActionProvider) {
+                return false;
+            }
+            InputToggleCodeActions(s, app, win);
+            return true;
         case InputAction::Search:
         case InputAction::Replace:
             // on_action_search / on_action_replace, both of which are the
