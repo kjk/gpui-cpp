@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "aff8f09ac2550bbc7da8df1d159b1e7db9d74b1f",
+  sha: "1c4e681315052fc38a881a3b5b6f9df12934ba3c",
   date: "2026-08-18",
-  subject: "chart: Add negative values and a value axis to `BarChart` (#2736)",
+  subject: "slider: Add a hover ring around the thumb (#2757)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

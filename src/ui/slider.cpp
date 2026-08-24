@@ -75,6 +75,11 @@ El* Slider::IntoEl() {
     const float kBar = 4.f; // h_1: the rail
     const float kThumb = 14.f;
     const float kH = 20.f;
+    // THUMB_RING_WIDTH / THUMB_RING_OPACITY / THUMB_RING_DURATION: a
+    // translucent ring grows outside the thumb while the pointer is over it.
+    const float kRingWidth = 3.f;
+    const float kRingOpacity = 0.5f;
+    const float kRingMs = 150.f;
     float w = width;
     float mid = (kH - kBar) * 0.5f;
 
@@ -90,6 +95,38 @@ El* Slider::IntoEl() {
         thumbBorder = RgbaOpacity(bar, 0.5f);
     }
     SliderState* bind = disabled ? nullptr : state;
+
+    // The ring shows while the pointer is over the thumb, and stays while the
+    // thumb is dragged: dragging moves the thumb under the pointer, so hover
+    // alone drops out for a frame on every move and the ring would flicker.
+    // A drag here is the window holding the slider's own state, which is what
+    // `ThumbInteraction::pressed` stands for upstream.
+    auto ThumbRing = [&](El* thumb, int thumbId, Rgba color) -> El* {
+        if (!thumb) {
+            return thumb;
+        }
+        bool active = cx->win &&
+                      (cx->win->hoverId == thumbId || (bind && bind->dragging));
+        float progress = MotionValue<float>(
+            cx,
+            MotionId(StrL("slider-thumb-ring"), StrDup(a, fmt("%d", thumbId))),
+            active ? 1.f : 0.f, MotionNew(kRingMs));
+        if (progress <= 0.f) {
+            return thumb;
+        }
+        float grown = kRingWidth * progress;
+        // Behind the thumb and centred on it, so the thumb's own edge stays
+        // where it is and the ring is what grows.
+        return thumb
+            ->Child(Div(a)
+                        ->Absolute()
+                        ->Left(-grown)
+                        ->Top(-grown)
+                        ->W(kThumb + grown * 2.f)
+                        ->H(kThumb + grown * 2.f)
+                        ->Radius((kThumb + grown * 2.f) * 0.5f)
+                        ->Bg(RgbaOpacity(color, kRingOpacity * progress)));
+    };
 
     if (axis == Axis::Vertical) {
         // The same three parts turned on their side, filling upward from the
@@ -122,15 +159,19 @@ El* Slider::IntoEl() {
                           ->Bg(fillBg));
         for (int i = 0; i < (range ? 2 : 1); i++) {
             float at = (range && i == 0) ? low : hi;
-            vtrack->Child(SliderThumb::New(cx)
-                              ->Absolute()
-                              ->Left((kH - kThumb) * 0.5f)
-                              ->Top(w * (1.f - at) - kThumb * 0.5f)
-                              ->W(kThumb)
-                              ->H(kThumb)
-                              ->Radius(kThumb * 0.5f)
-                              ->Bg(th.tokens.sliderThumb)
-                              ->Border(1, thumbBorder));
+            int thumbId = vid * 31 + (i + 1);
+            vtrack->Child(ThumbRing(SliderThumb::New(cx)
+                                        ->Absolute()
+                                        ->Left((kH - kThumb) * 0.5f)
+                                        ->Top(w * (1.f - at) - kThumb * 0.5f)
+                                        ->W(kThumb)
+                                        ->H(kThumb)
+                                        ->Radius(kThumb * 0.5f)
+                                        ->Bg(th.tokens.sliderThumb)
+                                        ->Border(1, thumbBorder)
+                                        ->Click(thumbId)
+                                        ->BindSlider(bind, axis),
+                                    thumbId, thumbBorder));
         }
         return gpui::Slider::New(cx)->W(kH)->H(w)->Child(vtrack);
     }
@@ -184,7 +225,12 @@ El* Slider::IntoEl() {
         } else {
             thumb->Left(w * at - kThumb * 0.5f);
         }
-        track->Child(thumb);
+        int thumbId = HashClickId(id.s ? id : StrL("slider")) * 31 + (i + 1);
+        // The click id is what makes the window report the thumb as hovered;
+        // the binding is what keeps a press on it starting the drag, since a
+        // hit rect of its own would otherwise shadow the track's.
+        thumb->Click(thumbId)->BindSlider(bind, axis);
+        track->Child(ThumbRing(thumb, thumbId, thumbBorder));
     }
     El* root = gpui::Slider::New(cx)->H(kH)->Child(track);
     return fill ? root->W(kFill) : root->W(w);
