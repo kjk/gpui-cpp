@@ -53,8 +53,16 @@ struct MotionLoopState {
     bool init = false;
 };
 
+// `with_animation`, which is not `motion::transition`: Rust gates
+// `reduce_motion` inside `motion::transition` alone (motion.rs, the one
+// `cx.reduce_motion()` in the crate), and every `with_animation` — the
+// dialog's slide-down and fade, the sheet's slide — plays whatever the
+// desktop's animation setting says. This had checked it, so on a machine
+// with animation effects off (SPI_GETCLIENTAREAANIMATION false, which is
+// not rare) a dialog appeared in place, fully opaque, with nothing having
+// moved. `MotionTransition` keeps the check, where Rust has it.
 float MotionAppear(Ctx* cx, uint32_t key, float durationMs, EaseFn ease) {
-    if (durationMs <= 0 || MotionReduced()) {
+    if (durationMs <= 0) {
         return 1.f;
     }
     auto* st =

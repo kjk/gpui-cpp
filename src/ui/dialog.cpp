@@ -192,6 +192,12 @@ El* Dialog::Header() {
     return head;
 }
 
+// An id with the layer index on it, which is what makes two open dialogs two
+// sets of controls rather than one shared set.
+Str Dialog::LayerId(Str base) const {
+    return StrDup(a, fmt("%s-%d", base, layerIx));
+}
+
 // DialogFooter: the action row, or whatever the caller put in its place.
 El* Dialog::Actions() {
     const Theme& th = cx->theme();
@@ -212,15 +218,20 @@ El* Dialog::Actions() {
         return row;
     }
 
+    // Every id here carries the layer: GPUI scopes an ElementId by its
+    // ancestors' and the panel is `.id(layer_ix)`, so two open dialogs give
+    // their buttons and their close x distinct identities. Flat hashes here
+    // do not, and two dialogs at once shared one hover state — pointing at
+    // the top one's close x lit up the one behind it too.
     El* cancel = nullptr;
     if (showCancel) {
-        cancel = Button::New(cx, StrL("dialog-cancel"))
+        cancel = Button::New(cx, LayerId(StrL("dialog-cancel")))
                      ->Label(cancelText.s ? cancelText : StrL("Cancel"))
                      ->Outline()
                      ->OnClick(onCancel.IsValid() ? onCancel : onClose)
                      ->IntoEl();
     }
-    Button* okBtn = Button::New(cx, StrL("dialog-ok"))
+    Button* okBtn = Button::New(cx, LayerId(StrL("dialog-ok")))
                         ->Label(okText.s ? okText : StrL("OK"))
                         ->OnClick(onOk);
     switch (okVariant) {
@@ -292,7 +303,7 @@ El* Dialog::IntoEl(WinSize size) {
                     ->Radius(th.radius)
                     ->HoverBg(th.secondaryHover)
                     ->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg));
-        BindClick(x, StrL("dialog-close-x"), onClose);
+        BindClick(x, LayerId(StrL("dialog-close-x")), onClose);
         panel->Child(x);
     }
     // Fixed, not absolute: Rust hangs the dialog off the window Root, so it
@@ -309,7 +320,8 @@ El* Dialog::IntoEl(WinSize size) {
         backdrop->Bg(th.tokens.overlay);
     }
     if (overlayClosable && onClose.IsValid()) {
-        backdrop->OnClick(onClose)->Click(HashClickId(StrL("dialog-backdrop")));
+        backdrop->OnClick(onClose)
+            ->Click(HashClickId(LayerId(StrL("dialog-backdrop"))));
     }
     // DialogProps::margin_top: a tenth of the viewport down from the top,
     // not centered in it.

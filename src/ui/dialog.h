@@ -106,6 +106,9 @@ struct Dialog {
     El* IntoEl(WinSize size);
 
   private:
+    // `base` with the layer index on it: two open dialogs must not share a
+    // hover or a click id, which a flat string would give them.
+    Str LayerId(Str base) const;
     El* Header();
     El* Actions();
 };

@@ -453,20 +453,30 @@ static El* RenderScrollableDialog(DialogStory* self, Ctx* cx) {
 
     TempStr markdown = AssetsLoadTextTemp(StrL("story/README.md"));
     Str source = markdown.s ? Str(markdown.s) : StrL("# README.md is missing");
-    El* surface = Div(a)->FlexCol()->W(kFill)->H(kFill)->Gap(16)->Pad(16);
+    // The 16px sides belong to each part, not to the surface: Rust hangs them
+    // off the title, the scroll box's *contents* and the footer separately
+    // (`pl(paddings.left).pr(paddings.right)` three times in dialog.rs), so
+    // the scroll box itself reaches the panel's edges and its bar sits there
+    // rather than 16px in from it.
+    El* surface = Div(a)->FlexCol()->W(kFill)->H(kFill)->Gap(16)->PadY(16);
     surface->Child(
-        DialogTitleText(cx, StrL("Dialog with scrollbar"), th.foreground));
+        DialogTitleText(cx, StrL("Dialog with scrollbar"), th.foreground)
+            ->PadX(16));
     surface->Child(component::Scrollable::New(cx, StrL("dialog-scroll"))
                        ->H(484)
                        ->ScrollY(self->dialogScrollY)
                        ->OnScroll(Listen(cx, &OnDialogScroll))
-                       ->Child(component::TextView::New(cx, source)->IntoEl())
+                       ->Child(Div(a)->FlexCol()->W(kFill)->PadX(16)->Child(
+                           component::TextView::New(cx, source)->IntoEl()))
                        ->IntoEl());
-    El* footer = Div(a)->FlexRow()->W(kFill)->Gap(8)->JustifyEnd();
-    footer->Child(DialogButton(cx, StrL("cancel"), StrL("Cancel"),
-                               Listen(cx, &CloseDialog), false));
-    footer->Child(DialogButton(cx, StrL("confirm"), StrL("Confirm"),
-                               Listen(cx, &CloseDialog), true));
+    // DialogClose and DialogAction wrap their button in a `size_full` box, so
+    // the two of them share the footer between them rather than sitting at
+    // its right edge — the same shape render_custom_buttons builds.
+    El* footer = Div(a)->FlexRow()->W(kFill)->Gap(8)->JustifyEnd()->PadX(16);
+    footer->Child(Div(a)->W(kFill)->Child(DialogButton(
+        cx, StrL("cancel"), StrL("Cancel"), Listen(cx, &CloseDialog), false)));
+    footer->Child(Div(a)->W(kFill)->Child(DialogButton(
+        cx, StrL("confirm"), StrL("Confirm"), Listen(cx, &CloseDialog), true)));
     surface->Child(footer);
 
     component::Dialog* dialog = NewOpenDialog(self, cx)
@@ -502,15 +512,26 @@ static El* RenderTableInDialog(DialogStory* self, Ctx* cx) {
     El* surface = Div(a)->FlexCol()->W(kFill)->H(kFill)->Gap(16)->Pad(16);
     surface
         ->Child(DialogTitleText(cx, StrL("Dialog with Table"), th.foreground));
-    El* body = Div(a)->FlexCol()->W(kFill)->Gap(12);
+    El* body = Div(a)->FlexCol()->W(kFill)->Gap(12)->Flex1();
     body->Child(StoryTxt(cx,
                          StrL("This is a dialog contains a table component."),
                          16, th.foreground));
-    body->Child(component::DataTable::New(cx, StrL("dialog-table"), self->table)
-                    ->Columns(kColumns, 5)
-                    ->Rows(200, self, DialogTableCell)
-                    ->H(430)
-                    ->IntoEl());
+    // Rust hands the table a bare `DataTable::new(&table)` inside a
+    // `size_full` column and the dialog's body gives it the rest of the
+    // panel. `DataTable::H` is the height of the *rows*, and it has to be a
+    // number rather than a fill: it is what decides how many rows are built,
+    // and a virtualized list cannot ask the layout what it got. So the story
+    // spells out what is above it, the way the panel does.
+    const float kTablePadY = 16.f + 16.f;  // the surface's own padding
+    const float kTableTitle = 16.f + 16.f; // the title, and the gap under it
+    const float kTableIntro = 20.f + 12.f; // the line of prose, and its gap
+    const float kTableHeadH = 28.f;        // the column heads
+    body->Child(
+        component::DataTable::New(cx, StrL("dialog-table"), self->table)
+            ->Columns(kColumns, 5)
+            ->Rows(200, self, DialogTableCell)
+            ->H(600.f - kTablePadY - kTableTitle - kTableIntro - kTableHeadH)
+            ->IntoEl());
     surface->Child(body);
 
     component::Dialog* dialog = NewOpenDialog(self, cx)

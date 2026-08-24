@@ -3707,3 +3707,59 @@ its hex readouts line up with upstream's.
     than part of this one.
 
   17,459 checks pass and `bun cmd/build.ts -all` builds all 24 examples.
+
+- 2026-08-24: **five reported dialog and textarea divergences, checked one at
+  a time against the Rust story running side by side.** Two of them were
+  already fixed; three were not, and one of those was a component bug rather
+  than a story one.
+
+  **The dialog's controls all shared one id.** `dialog-close-x`,
+  `dialog-backdrop`, `dialog-cancel` and `dialog-ok` were constant strings, so
+  every open dialog hashed to the same `clickId`. A hover is one number —
+  `e->style.hasHoverBg && e->clickId == ctx->hoverId` — so pointing at the top
+  dialog's close x lit the one behind it as well, and the two backdrops were
+  one click target. GPUI does not have this problem because an `ElementId` is
+  scoped by its ancestors' and the panel is `.id(layer_ix)`; `Dialog::LayerId`
+  is that, appending the layer to each. With it, the story's two-dialog
+  section closes only the top dialog when its backdrop is clicked.
+
+  **No dialog animated, on this machine.** `MotionAppear` — the port of
+  GPUI's `with_animation` — checked `MotionReduced()`, and
+  `SPI_GETCLIENTAREAANIMATION` is false on any desktop with animation effects
+  turned off, which is not rare. Rust has exactly one `cx.reduce_motion()` in
+  the crate and it is inside `motion::transition`; every `with_animation` —
+  the dialog's slide-down and fade, the sheet's slide — plays regardless. The
+  check is gone from `MotionAppear` and stays in `MotionTransition`, where
+  Rust has it. Caught by stretching `kDialogMotionMs` to 20 s and shooting
+  200 ms in: before, the panel was already in place and fully opaque; after,
+  it is high, faint and on its way down.
+
+  **The scrollable dialog's bar and its footer.** The story built the whole
+  surface with one `Pad(16)`, so the scroll box stopped 16px short of the
+  panel and its bar sat there too. Rust pads the title, the scroll box's
+  *contents* and the footer separately (`pl(paddings.left)` three times in
+  `dialog.rs`), so the box itself reaches the panel edge. The footer's two
+  buttons were compact and right-aligned where Rust wraps each in
+  `DialogClose` / `DialogAction`, which is a `size_full` box — the pair share
+  the row half and half, which is what `render_custom_buttons` already did
+  here and this section did not. Both edges now land where upstream's do.
+
+  **The table dialog showed 13 rows where Rust shows 15.** Rust hands the
+  dialog a bare `DataTable::new(&table)` and the body gives it the rest of the
+  panel; the story had `H(430)`, guessed. `DataTable::H` cannot be a fill —
+  it is what decides how many rows are *built*, and a virtualized list cannot
+  ask the layout what height it got — so the story spells out what is above it
+  and takes the remainder of the 600, which is 476. Rows 0..14, as upstream.
+
+  Already fixed, and verified rather than redone: a no-wrap `Textarea` gets
+  its horizontal bar from `!softWrap → box->ScrollX(state->scrollX)` in
+  `ui/input.cpp`, and the table story's Amount column comes from
+  `component::Table`'s `BasisFrac`.
+
+  Not touched, and worth a session of its own: every section of the dialog
+  story builds a `Surface()` by hand where Rust passes `.title()`, `.child()`
+  and `.footer()` and lets the component lay them out. That is why these three
+  drifted independently, and why `Dialog::IntoEl` has no equivalent of Rust's
+  `flex_1 / overflow_hidden / overflow_y_scrollbar` body wrapper.
+
+  17,459 checks pass; `bun cmd/build.ts -all` builds all 24 examples.
