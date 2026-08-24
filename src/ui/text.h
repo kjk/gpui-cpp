@@ -199,7 +199,7 @@ struct TextView {
     El* CodeLines(Str code, SyntaxLang lang);
     // An image run: node.rs putting an img() element in the middle of the
     // inline flow.
-    El* ImageRun(MdRun* r, float font, Rgba color);
+    El* ImageRun(MdRun* r, float font, Rgba color, bool inFlow);
     // One styled word of a flow, with its marks applied and — for a link —
     // the click that opens it.
     El* Word(Str w, float font, Rgba color, uint8_t marks, int weight,

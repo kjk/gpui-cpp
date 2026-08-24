@@ -686,10 +686,18 @@ static const Rgba kMarkFg = {0x0a, 0x0a, 0x0a, 0xff};
 // node.rs puts an img() element in the flow beside the words: its own size
 // unless the document gave one, never wider than the space it has, and — for
 // an image inside a link — the hand and the click the link's words get.
-El* TextView::ImageRun(MdRun* r, float font, Rgba color) {
+El* TextView::ImageRun(MdRun* r, float font, Rgba color, bool inFlow) {
     El* e = ImageEl(a, r->imgSrc, r->text)->Font(font)->Fg(color);
     float w = r->imgW;
     float h = r->imgH;
+    // inline_flow.rs image_size: a picture in a run of words that names
+    // neither dimension is three quarters of the line it sits on, and as wide
+    // as its own shape makes it — the badge beside a sentence is a glyph, not
+    // a plate. Only the height is named here; the layout takes the width from
+    // the picture's aspect, which is the one it knows and this does not.
+    if (inFlow && w <= 0 && h <= 0) {
+        h = font * kLineHeight * 0.75f;
+    }
     // A vector picture knows its own shape, so a document that gave only one
     // dimension gets the other rather than a run of text's line height. A
     // bitmap cannot answer that without being decoded, so this is the SVG
@@ -711,6 +719,12 @@ El* TextView::ImageRun(MdRun* r, float font, Rgba color) {
     }
     if (h > 0) {
         e->H(h);
+    }
+    if (w <= 0) {
+        // `img(..).object_fit(Contain).max_w(relative(1.))`: a picture of its
+        // own is as big as it is, up to the width of what holds it, and the
+        // height follows the aspect from there.
+        e->MaxW(kFill);
     }
     if ((r->marks & MdLink) && r->href.len > 0) {
         e->Cursor(CursorKind::Pointer);
@@ -827,6 +841,13 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
     // trailing space rather than the row carrying a gap: a gap would put a
     // space between an emphasis run and the punctuation after it ("**bold**:"
     // reads as "bold :") and would loosen wrapped-line leading.
+    // should_render_inline_flow: a paragraph that mixes words with a picture
+    // lays the picture out as part of the line. One that is a picture and
+    // nothing else is a block, and keeps the picture's own size.
+    bool inFlow = false;
+    for (MdRun* r = n->runFirst; r && !inFlow; r = r->next) {
+        inFlow = r->imgSrc.len <= 0 && r->text.len > 0;
+    }
     El* col = Div(a)->FlexCol()->W(kFill);
     El* row = AlignRow(Div(a)->FlexRow()->FlexWrap()->W(kFill), align);
     char word[512];
@@ -846,7 +867,7 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
         marks = r->marks;
         href = r->href;
         if (r->imgSrc.len > 0) {
-            row->Child(ImageRun(r, font, color));
+            row->Child(ImageRun(r, font, color, inFlow));
             continue;
         }
         for (int i = 0; i < r->text.len; i++) {

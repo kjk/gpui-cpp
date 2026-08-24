@@ -2332,10 +2332,12 @@ static taffy::Style ToTaffyStyle(const El* e) {
     // — and it is what a pane holding something wider than the window says so
     // the window's width still wins.
     t.minSize = {ToMinDim(s.minW), ToMinDim(s.minH)};
-    t.maxSize = {s.maxW < 1e9f ? taffy::Dimension::Length(s.maxW)
-                               : taffy::Dimension::Auto(),
-                 s.maxH < 1e9f ? taffy::Dimension::Length(s.maxH)
-                               : taffy::Dimension::Auto()};
+    // Through ToDim rather than straight to Length: kFill in a max is
+    // `max_w(relative(1.))` -- a hundred percent of what holds it, which is
+    // how node.rs keeps a picture inside its column -- and a length of -2 is
+    // a max of nothing at all, which collapses the box.
+    t.maxSize = {s.maxW < 1e9f ? ToDim(s.maxW, 0) : taffy::Dimension::Auto(),
+                 s.maxH < 1e9f ? ToDim(s.maxH, 0) : taffy::Dimension::Auto()};
 
     t.flexGrow = s.flexGrow;
     t.flexShrink = s.flexShrink;
