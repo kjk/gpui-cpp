@@ -574,16 +574,8 @@ DropdownButton* DropdownButton::Disabled(bool v) {
     disabled = v;
     return this;
 }
-DropdownButton* DropdownButton::Compact() {
-    compact = true;
-    return this;
-}
 DropdownButton* DropdownButton::Outline() {
     outline = true;
-    return this;
-}
-DropdownButton* DropdownButton::Loading(bool v) {
-    loading = v;
     return this;
 }
 DropdownButton* DropdownButton::WithVariant(ButtonVariant v) {
@@ -592,71 +584,88 @@ DropdownButton* DropdownButton::WithVariant(ButtonVariant v) {
     return this;
 }
 DropdownButton* DropdownButton::WithSize(UiSize s) {
+    hasSize = true;
     size = s;
     return this;
 }
-DropdownButton* DropdownButton::Tooltip(Str s) {
-    tooltip = s;
-    return this;
-}
 
-// The two buttons share the props and the seam between them. A ghost button
-// that is not selected keeps both ends rounded — there is no filled block for
-// a square corner to sit against — so the pair is not joined at all.
-static void DropdownApply(Button* b, const DropdownButton& d) {
-    b->Loading(d.loading)
-        ->Selected(d.selected)
-        ->Disabled(d.disabled || d.loading);
-    if (d.compact) {
-        b->Compact();
-    }
-    if (d.outline) {
-        b->Outline();
-    }
-    b->WithSize(d.size);
+// The props the two halves share. An outer variant or size applies to both;
+// when either is unset the inner button's own becomes the shared value, so a
+// caller can style the split from either level. Nothing here is invented for
+// the caret: `compact`, `loading` and the tooltip stay on the action button.
+static ButtonVariant DropdownVariant(const DropdownButton& d) {
     if (d.hasVariant) {
-        b->variant = d.variant;
+        return d.variant;
     }
+    return d.button ? d.button->variant : ButtonVariant::Default;
+}
+static UiSize DropdownSize(const DropdownButton& d) {
+    if (d.hasSize) {
+        return d.size;
+    }
+    return d.button ? d.button->size : UiSize::Medium;
 }
 
 El* DropdownButton::IntoEl() {
     const Theme& th = cx->theme();
-    if (!button) {
-        return Div(a);
-    }
-    bool rounded = variant == ButtonVariant::Ghost && !selected;
+    ButtonVariant v = DropdownVariant(*this);
+    UiSize sz = DropdownSize(*this);
+    // An inner selected state is the split's, rather than being cleared by the
+    // DropdownButton's own default.
+    bool isSelected = selected || (button && button->selected);
+    // A ghost split that is not selected keeps both ends rounded -- there is no
+    // filled block for a square corner to sit against -- so the pair is not
+    // joined at all.
+    bool attached = !(v == ButtonVariant::Ghost && !isSelected);
+
     El* row = Div(a)->Id(id)->FlexRow()->ItemsCenter();
-    if (!rounded) {
+    if (attached) {
         // Joined: the two ends are rounded by the wrapper and the seam is one
         // border, the way the Corners/Edges pair asks for.
         row->Radius(th.radius)->ClipX()->ClipY();
     }
-    DropdownApply(button, *this);
-    if (!rounded) {
-        button->joined = true;
-    }
-    row->Child(button->IntoEl());
 
-    Button* caret = Button::New(cx, StrDup(a, fmt("%s-popup", id)))
-                        ->DropdownCaret();
-    DropdownApply(caret, *this);
-    caret->Loading(false);
-    if (!rounded) {
-        caret->joined = true;
-        caret->edgeL = false;
+    if (button) {
+        button->Selected(isSelected)
+            ->Disabled(disabled || button->disabled)
+            ->WithSize(sz);
+        button->variant = v;
+        if (outline) {
+            button->Outline();
+        }
+        if (attached) {
+            button->joined = true;
+        }
+        row->Child(button->IntoEl());
     }
-    El* trigger = caret->IntoEl();
-    if (menu && !(disabled || loading)) {
-        row->Child(DropdownMenu::New(cx, StrDup(a, fmt("%s-menu", id)))
-                       ->Trigger(trigger)
-                       ->Menu(menu)
-                       ->AnchorRight(anchorRight)
-                       ->IntoEl());
-    } else {
-        row->Child(trigger);
-    }
-    if (tooltip.s) {
-        row->Tip(tooltip);
+
+    // The trigger renders on its own account rather than disappearing with the
+    // action button, and a loading action button leaves it available: loading
+    // is action-specific, `Disabled(true)` is what shuts both halves.
+    if (menu) {
+        Button* caret = Button::New(cx, StrDup(a, fmt("%s-popup", id)))
+                            ->DropdownCaret()
+                            ->Selected(isSelected)
+                            ->Disabled(disabled)
+                            ->WithSize(sz);
+        caret->variant = v;
+        if (outline) {
+            caret->Outline();
+        }
+        if (attached) {
+            caret->joined = true;
+            caret->edgeL = false;
+        }
+        El* trigger = caret->IntoEl();
+        if (disabled) {
+            row->Child(trigger);
+        } else {
+            row->Child(DropdownMenu::New(cx, StrDup(a, fmt("%s-menu", id)))
+                           ->Trigger(trigger)
+                           ->Menu(menu)
+                           ->AnchorRight(anchorRight)
+                           ->IntoEl());
+        }
     }
     return row;
 }

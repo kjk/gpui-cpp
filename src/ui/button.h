@@ -107,8 +107,10 @@ struct Button {
     El* IntoEl();
 };
 
-// crates/ui/src/button/dropdown_button.rs: a label button joined to a
-// caret-only button that opens a menu. Two buttons, not one with a caret.
+// crates/ui/src/button/dropdown_button.rs: a split button — an action button
+// joined to a caret-only button that opens a menu. Two buttons, not one with a
+// caret. The halves stay joined except for a ghost split that is not selected,
+// which reads better in a toolbar as two separate buttons.
 struct DropdownMenu;
 struct PopupMenu;
 
@@ -120,28 +122,27 @@ struct DropdownButton {
     PopupMenu* menu = nullptr;
     bool selected = false;
     bool disabled = false;
-    bool compact = false;
     bool outline = false;
-    bool loading = false;
+    // The props applied to both halves. Unset means the inner Button keeps
+    // whatever it was given, and its value is what the caret takes too.
+    // Action-specific props -- compact, loading, tooltip, the click handler --
+    // belong to the inner Button and are not mirrored onto the caret.
     bool hasVariant = false;
     ButtonVariant variant = ButtonVariant::Default;
+    bool hasSize = false;
     UiSize size = UiSize::Medium;
     // Anchor::TopRight by default; the story's first one asks for
     // BottomRight, which lines the same edge up.
     bool anchorRight = true;
-    Str tooltip = {};
 
     static DropdownButton* New(Ctx* cx, Str id);
     DropdownButton* Button_(component::Button* b);
     DropdownButton* Menu(PopupMenu* m);
     DropdownButton* Selected(bool v);
     DropdownButton* Disabled(bool v);
-    DropdownButton* Compact();
     DropdownButton* Outline();
-    DropdownButton* Loading(bool v);
     DropdownButton* WithVariant(ButtonVariant v);
     DropdownButton* WithSize(UiSize s);
-    DropdownButton* Tooltip(Str s);
     El* IntoEl();
 };
 

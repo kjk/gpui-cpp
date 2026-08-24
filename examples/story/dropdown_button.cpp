@@ -71,18 +71,20 @@ static component::PopupMenu* DropMenu(DropdownButtonStory* self, Ctx* cx,
 
 static component::DropdownButton* DropBtn(DropdownButtonStory* self, Ctx* cx,
                                           Str id, Str label) {
-    component::DropdownButton* d =
-        component::DropdownButton::New(cx, id)
-            ->Button_(component::Button::New(cx, StrL("btn"))->Label(label))
-            ->Menu(DropMenu(self, cx, StoryFmt(cx, "%s-menu", id)))
-            ->WithSize(self->toolbar.size)
-            ->Loading(self->loading)
-            ->Disabled(self->disabled)
-            ->Selected(self->selected);
+    // Loading and compact are the action button's own: a loading action stays
+    // inert while the menu is still there to open. Disabled is the split's.
+    component::Button* action = component::Button::New(cx, StrL("btn"))
+                                    ->Label(label)
+                                    ->Loading(self->loading);
     if (self->compact) {
-        d->Compact();
+        action->Compact();
     }
-    return d;
+    return component::DropdownButton::New(cx, id)
+        ->Button_(action)
+        ->Menu(DropMenu(self, cx, StoryFmt(cx, "%s-menu", id)))
+        ->WithSize(self->toolbar.size)
+        ->Disabled(self->disabled)
+        ->Selected(self->selected);
 }
 
 El* DropdownButtonStory::Render(DropdownButtonStory* self, Ctx* cx) {
