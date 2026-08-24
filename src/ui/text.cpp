@@ -371,11 +371,17 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
             Pop(b);
             break;
         }
-        case md::NodeKind::ListItem:
-            Push(b, MdKind::Item);
+        case md::NodeKind::ListItem: {
+            MdNode* item = Push(b, MdKind::Item);
+            // markdown.rs carries mdast's `checked` straight onto the
+            // BlockNode. to_mdast has already taken the `[x] ` off the front
+            // of the item's first paragraph, so nothing here has to.
+            item->hasCheck = n->Has(md::NodeHasChecked);
+            item->checked = n->Has(md::NodeChecked);
             MdBlockChildren(b, n);
             Pop(b);
             break;
+        }
         case md::NodeKind::ThematicBreak:
             Push(b, MdKind::Rule);
             Pop(b);
@@ -895,6 +901,29 @@ void TextView::SrcBreak() {
     srcLineStart = true;
 }
 
+// node.rs image_markdown: `![alt](url)`. Rust writes the title after the url
+// when the image carries one; MdRun keeps the url and the alt text, which is
+// what the parse fold kept.
+El* TextView::SrcImage(El* e, MdRun* r) {
+    if (!selectable || !e) {
+        return e;
+    }
+    SelSource* s = ArenaNew<SelSource>(a);
+    if (!s) {
+        return e;
+    }
+    s->pre = SrcCat(a, StrL("!["), r->text, StrL("]("), r->imgSrc, StrL(")"));
+    s->block = srcBlock;
+    // The image has no text of its own — the whole of it is the affix — and
+    // the copier knows that from the run being an image element.
+    e->Selectable()->SelSrc(s, !srcLineStart);
+    srcLineStart = false;
+    // Not a mark group anything can join: the words after the picture open
+    // one of their own.
+    srcRunLast = nullptr;
+    return e;
+}
+
 // `<mark>`: html.rs takes yellow(200) — a fixed Tailwind step, not a theme
 // color — and leaves the ink alone, which works because the foreground it
 // runs against there is dark. Ours is near-white in the dark theme, so the
@@ -1106,7 +1135,7 @@ El* TextView::Inline(MdNode* n, float font, Rgba color, int weight,
         marks = r->marks;
         href = r->href;
         if (r->imgSrc.len > 0) {
-            row->Child(ImageRun(r, font, color, inFlow));
+            row->Child(SrcImage(ImageRun(r, font, color, inFlow), r));
             continue;
         }
         for (int i = 0; i < r->text.len; i++) {
@@ -1494,16 +1523,44 @@ Rgba TextView::BlockFg() const {
     return blockFgSet ? blockFg : kInheritFg;
 }
 
+// render_list_item_row: a task list item draws a checkbox where the bullet or
+// the number would go — `rems(0.875)` square, the primary colour as its
+// border, filled with a tick when the item is ticked. The box sits `rems(0.4)`
+// below the top of the row so it lines up with the first line of the text,
+// and `mr_1p5` in front of it.
+static El* TaskBox(Arena* a, const Theme& th, float radius, bool on) {
+    El* box = Div(a)
+                  ->Flex()
+                  ->W(14)
+                  ->H(14)
+                  ->Shrink0()
+                  ->ItemsCenter()
+                  ->JustifyCenter()
+                  ->Radius(radius)
+                  ->Border(1, th.primary);
+    if (on) {
+        box->Bg(th.tokens.primary)
+            ->Child(IconEl(a, IconName::Check, 8)->Fg(th.primaryFg));
+    }
+    // There are no margins in this tree, so the two the row gives the box are
+    // padding on the cell that holds it.
+    return Div(a)->Shrink0()->PadT(6.4f)->PadR(6)->Child(box);
+}
+
 El* TextView::Item(MdNode* n, Str marker, int depth) {
     El* content = Div(a)->FlexCol()->Flex1()->MinW(0)->ClipX();
     // list_selected_source: the item's first line carries the Markdown
     // marker, and every line under it is indented by the marker's width so
-    // continuations and nested lists line up with the item's text.
+    // continuations and nested lists line up with the item's text. A task
+    // item's `[x] ` rides on the first line with the marker and is not part
+    // of that indent, which is Rust indenting by `marker.len()` alone.
     Str savedPre = srcLinePre;
     Str md = srcItemMarker;
+    Str pad = srcItemPad.len > 0 ? srcItemPad : md;
     srcItemMarker = Str{};
+    srcItemPad = Str{};
     srcMarker = SrcCat(a, srcMarker.len > 0 ? srcMarker : srcLinePre, md);
-    srcLinePre = SrcCat(a, srcLinePre, SrcIndent(a, md));
+    srcLinePre = SrcCat(a, srcLinePre, SrcIndent(a, pad));
     // An item's blocks are below; runs sit on the item itself only when
     // something built the tree by hand, since mdast gives even a tight list
     // item a paragraph of its own.
@@ -1511,18 +1568,25 @@ El* TextView::Item(MdNode* n, Str marker, int depth) {
         SrcOpen({}, {});
         content->Child(Inline(n, baseFont, BlockFg(), 0));
     }
+    // Everything under a task item is rendered with `todo: checked.is_some()`,
+    // which is what takes the bullets off a plain list nested inside one.
+    bool savedTodo = inTodo;
+    inTodo = n->hasCheck;
     Blocks(content, n, depth, true);
+    inTodo = savedTodo;
     // An item with nothing selectable in it never spent its marker.
     srcMarker = Str{};
     srcLinePre = savedPre;
-    return Div(a)
-        ->FlexRow()
-        ->W(kFill)
-        ->ItemsStart()
+    El* row = Div(a)->FlexRow()->W(kFill)->ItemsStart();
+    if (n->hasCheck) {
+        const Theme& th = cx->theme();
+        row->Child(TaskBox(a, th, th.radius * 0.5f, n->checked));
+    } else if (marker.len > 0) {
         // list_item_prefix is a plain string child: it takes the color the
         // list inherits, so a bullet inside a red alert is red.
-        ->Child(TextEl(a, marker)->Font(baseFont)->Shrink0())
-        ->Child(content);
+        row->Child(TextEl(a, marker)->Font(baseFont)->Shrink0());
+    }
+    return row->Child(content);
 }
 
 El* TextView::Blocks(El* into, MdNode* n, int depth, bool inList) {
@@ -1651,9 +1715,20 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
                 Str marker =
                     n->ordered ? OrderedMarker(a, ix, depth) : Bullet(depth);
                 // list_selected_source restores the Markdown marker rather
-                // than the bullet glyph the item is drawn with.
-                srcItemMarker =
-                    n->ordered ? OrderedMarker(a, ix, 0) : StrL("- ");
+                // than the bullet glyph the item is drawn with, and puts the
+                // task list's checkbox after it.
+                Str src = n->ordered ? OrderedMarker(a, ix, 0) : StrL("- ");
+                srcItemPad = src;
+                if (c->hasCheck) {
+                    // The checkbox stands where the prefix would: `when(!todo
+                    // && checked.is_none())` is what draws one at all.
+                    src = SrcCat(a, src,
+                                 c->checked ? StrL("[x] ") : StrL("[ ] "));
+                    marker = Str{};
+                } else if (inTodo) {
+                    marker = Str{};
+                }
+                srcItemMarker = src;
                 list->Child(Item(c, marker, depth + 1));
                 ix++;
             }

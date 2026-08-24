@@ -3968,10 +3968,11 @@ as the markdown that produced it, alignment row and all; Plain comes back as
 the rendered text, one block per line, with a row's cells joined by a space —
 which is what `text_by_kind(All)` does.
 
-Not carried over, and both because the fold drops them before the renderer
-sees them: a task list's `[x]` (`MdNode` has no `checked`, so the checkbox is
-not drawn either) and an inline image's `![alt](src)`, which is an `Image`
-element and so registers no run to hang an affix on.
+Not carried over at the time, and both because the fold dropped them before
+the renderer saw them: a task list's `[x]` (`MdNode` had no `checked`, so the
+checkbox was not drawn either) and an inline image's `![alt](src)`, which is
+an `Image` element and so registered no run to hang an affix on. Both are
+carried now — the section below.
 
 The one other thing this touched: the story gallery's app menu said `Open...`
 was left out because the tree had no file dialog. It has had one for a while.
@@ -3980,3 +3981,60 @@ actually is — empty, because a component gallery has nothing to open a file
 into. `on_action_open` in the markdown example is the one that does the work.
 
 17,472 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples.
+
+
+## The checkbox and the picture the fold used to drop
+
+The two things the selection work left behind, and neither of them was really
+about selection.
+
+**`MdNode` now has the task list's `Option<bool>`.** mdast has carried it all
+along — `NodeChecked` / `NodeHasChecked`, and `to_mdast` even takes the `[x] `
+off the front of the item's first paragraph — and the fold in `text.cpp` was
+simply not reading it. `MdNode::hasCheck` / `checked` is that pair, the way
+`markdown.rs` carries mdast's `checked` onto the `BlockNode`. What it costs is
+two bools on a node that was already padded.
+
+Drawn where `render_list_item_row` draws it: a 14-DIP box (`rems(0.875)`) with
+the primary colour as its border, filled with a `size_2` tick when the item is
+ticked, and standing *instead of* the bullet or the number — `when(!todo &&
+checked.is_none())` is what draws a prefix at all. The two margins Rust gives
+it are padding on the cell that holds it, since there are no margins in this
+tree. `options.todo` comes with it: everything under a task item is rendered
+with `todo: checked.is_some()`, which is what takes the bullets off a plain
+list nested inside a todo. That reads as an upstream quirk and it is one, but
+it is the shape the row draws in, and a nested list under a checkbox does look
+like part of it.
+
+In `SelectionFormat::Source` the checkbox goes where `list_selected_source`
+puts it: after the marker, on the first line only. The indent under the item
+is the marker's width and not the marker plus the box (`" ".repeat(marker.
+len())`), so `srcItemPad` is now what the item indents by and `srcItemMarker`
+is what its first line carries. An ordered task item still spends its number.
+
+**An inline image registers a run of its own.** This is the part that needed a
+seam rather than a field. `node.rs` gives an `ImageNode` no selection —
+`Paragraph::text` lays the children's text end to end and an image child has
+none — and `selected_source` emits its `![alt](url)` when the selection *runs
+into* it: the run before it ends at its end, the run after it starts at its
+beginning. The window's selection here is a flat list of painted runs, so the
+image takes a place in that list: `TextHit::atom`, a run with no text at all,
+holding one offset of document order and carrying the whole `![alt](url)` as
+its `SelSource::pre`. `Source` emits it when the selection has run past the
+place it sits in; `Plain` skips it, which is the empty string Rust's `text()`
+gets from an image child.
+
+The one difference worth naming: Rust decides "the selection reached the
+image" from the run before it ending at its end, and this decides it from the
+selection having run past the image's own offset — one place further on. A
+drag that stops exactly at the end of the word before a trailing picture does
+not take the picture with it here; a select-all does. Rust also writes the
+image's title after the url when it has one, and `MdRun` keeps the url and the
+alt, which is what the parse fold kept.
+
+Checked with the unit tests — the fold reading `- [x] `, the copier over a
+hand-built task list and over a paragraph with a picture in the middle of it —
+and with the markdown example rendering a fixture of ticked, unticked, nested
+and numbered items beside an inline badge.
+
+17,536 checks pass; `bun cmd/build.ts -rel -all` builds all 24 examples.

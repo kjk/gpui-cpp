@@ -101,6 +101,24 @@ static void TestMarkdownBlocks(Arena* a) {
     utassert(TextIs(a, Child(Child(list, 1), 0), "two"));
 }
 
+// GFM task list items: mdast reports the `[x]` as the item's `checked` and
+// takes the marker off the text, which is what markdown.rs carries onto the
+// BlockNode.
+static void TestMarkdownTaskList(Arena* a) {
+    MdNode* doc = MdParse(a, StrL("- [x] done\n- [ ] todo\n- plain\n"));
+    MdNode* list = Child(doc, 0);
+    utassert(list->kind == MdKind::List);
+    MdNode* done = Child(list, 0);
+    utassert(done->hasCheck && done->checked);
+    utassert(TextIs(a, Child(done, 0), "done"));
+    MdNode* todo = Child(list, 1);
+    utassert(todo->hasCheck && !todo->checked);
+    utassert(TextIs(a, Child(todo, 0), "todo"));
+    // An item with no checkbox carries neither half of the Option.
+    MdNode* plain = Child(list, 2);
+    utassert(!plain->hasCheck && !plain->checked);
+}
+
 // The delimiter row's colons, which node.rs render_wrap_table aligns each
 // column by. mdast reports them once per column, as `Table::align`.
 static void TestMarkdownTableAlign(Arena* a) {
@@ -371,6 +389,20 @@ struct SrcDoc {
         // order leaves room for.
         ctx.textDocLen += h.text.len + 1;
     }
+
+    // An inline image: a run with no text of its own, holding one place in
+    // the document order.
+    void Image(const SelSource* src, bool join) {
+        TextHit h;
+        h.bounds = {0, 0, 20, 20};
+        h.font = 14;
+        h.docOff = ctx.textDocLen;
+        h.src = src;
+        h.join = join;
+        h.atom = true;
+        ctx.texts.Append(h);
+        ctx.textDocLen += 1;
+    }
 };
 
 // The whole document, copied in `fmt`.
@@ -518,6 +550,48 @@ static void TestSourceList() {
                    "- first\n  - under"));
 }
 
+// A task list item: list_selected_source puts the checkbox after the marker
+// and indents the lines under it by the marker alone, so the `[x] ` stays on
+// the first line.
+static void TestSourceTaskList() {
+    char buf[512];
+    SelBlock done = {StrL("- [x] "), {}, StrL("  "), false};
+    SelBlock todo = {StrL("- [ ] "), {}, StrL("  "), false};
+    SelSource a = {{}, {}, &done};
+    SelSource b = {{}, {}, &todo};
+    SrcDoc d;
+    d.Run("shipped", &a, false);
+    d.Run("pending", &b, false);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "- [x] shipped\n- [ ] pending"));
+    // The rendered text is the item's words: the checkbox is drawn, not
+    // written.
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+                   "shipped\npending"));
+}
+
+// node.rs selected_source: an inline image is emitted when the selection runs
+// into it, and copies as nothing in Plain — Paragraph::text lays the
+// children's text end to end and an image child has none.
+static void TestSourceImage() {
+    char buf[512];
+    SelBlock para = {};
+    SelSource plain = {{}, {}, &para};
+    SelSource img = {StrL("![alt](a.png)"), {}, &para};
+    SrcDoc d;
+    d.Run("see ", &plain, false);
+    d.Image(&img, true);
+    d.Run(" now", &plain, true);
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Source, buf, sizeof(buf)),
+                   "see ![alt](a.png) now"));
+    utassert(SrcIs(SrcCopy(&d, SelectionFormat::Plain, buf, sizeof(buf)),
+                   "see  now"));
+    // A selection that stops before the picture does not reach it.
+    int n = CopyTextHitsIn(&d.ctx, 0, 4, -1, buf, sizeof(buf),
+                           SelectionFormat::Source);
+    utassert(SrcIs(Str(buf, n), "see "));
+}
+
 // A run that names no source — everything outside a TextView — copies as its
 // own text in both formats, one run per line, which is what the copier did
 // before there was a second format at all.
@@ -562,6 +636,9 @@ void TestTextView() {
     TestSourceCodeBlock();
     TestSourceTable();
     TestSourceList();
+    TestSourceTaskList();
+    TestSourceImage();
     TestSourceIgnoresPlainRuns();
+    TestMarkdownTaskList(a);
     ArenaDelete(a);
 }

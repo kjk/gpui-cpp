@@ -127,6 +127,12 @@ struct MdNode {
     bool ordered = false;
     // Row: this row is the table head.
     bool head = false;
+    // Item: the GFM task list checkbox — whether the item carries one at all,
+    // and whether it is ticked. BlockNode::ListItem's `Option<bool> checked`,
+    // as the pair mdast keeps it as. ui/html.cpp leaves both unset, which is
+    // what format/html.rs does.
+    bool hasCheck = false;
+    bool checked = false;
 };
 
 // text_view.rs MarkdownNode: one block a plugin claimed, with the payload its
@@ -268,6 +274,15 @@ struct TextView {
     // The Markdown marker the list being built hands its next item, which is
     // not the bullet glyph the item is drawn with.
     Str srcItemMarker = {};
+    // The part of that marker the item's later lines are indented by:
+    // list_selected_source indents by the marker alone, so a task item's
+    // `[x] ` sits on the first line and not under the ones below it.
+    Str srcItemPad = {};
+    // Whether the item being built sits inside a task list item.
+    // render_list_item_row draws no bullet or number for a row whose
+    // enclosing item was a checkbox (`options.todo`), which is how a plain
+    // list nested under a todo reads as part of it.
+    bool inTodo = false;
     // The block runs are being built for, shared by every run in it, and
     // whether the next run starts a line rather than continuing one.
     const SelBlock* srcBlock = nullptr;
@@ -290,6 +305,9 @@ struct TextView {
     El* SrcMark(El* t, uint8_t marks, Str href = {});
     // The next run starts a line of its own: a hard break, a new code line.
     void SrcBreak();
+    // Hand an inline image element its `![alt](url)` — node.rs
+    // image_markdown — as a run of its own with no text in it. Answers `e`.
+    El* SrcImage(El* e, MdRun* r);
     // The text a plugin's parser sees, and the block a plugin claimed.
     Str BlockText(MdNode* n);
     El* PluginBlock(MdNode* n);

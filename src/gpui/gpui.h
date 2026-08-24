@@ -2070,6 +2070,13 @@ struct TextHit {
     // elements, and this is what keeps a copy of it on one line — in both
     // formats, since that is the document's shape and not its syntax.
     bool join = false;
+    // A run with no text of its own that copies as its `src->pre` alone: an
+    // inline image, which node.rs gives no selection (`Paragraph::text`
+    // concatenates the children's text and an image child has none) but whose
+    // `![alt](url)` `selected_source` emits when the selection runs into it.
+    // It holds a place in the document order so the selection can reach it,
+    // and copies as nothing in Plain.
+    bool atom = false;
     // TextSelectionScopeId: the focus trap this run sits inside, 0 for the
     // page itself. A selection belongs to one scope, so a drag that started
     // in a dialog does not run on into the page behind it.

@@ -4589,6 +4589,22 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             ctx->inputs.Append(e->input);
         }
     }
+    // An inline image takes a place in the document order without taking any
+    // text: node.rs's ImageNode has no selection of its own, and
+    // `selected_source` emits its `![alt](url)` when the selection runs into
+    // it. The copier walks runs, so the image registers one — empty, and
+    // carrying the Markdown on the SelSource beside it.
+    if (e->kind == ElKind::Image && e->selectable && e->selSrc) {
+        TextHit th;
+        th.bounds = e->Bounds();
+        th.docOff = ctx->textDocLen;
+        th.src = e->selSrc;
+        th.join = e->selJoin;
+        th.atom = true;
+        th.scope = e->style.trapId;
+        ctx->texts.Append(th);
+        ctx->textDocLen += 1;
+    }
     if (e->kind == ElKind::Text) {
         float font = e->laidFont > 0
                          ? e->laidFont
@@ -5226,11 +5242,20 @@ int CopyTextHitsIn(PaintCtx* ctx, int a, int b, int scope, char* out, int cap,
         int hi = b < pos + plen ? b : pos + plen;
         int gap = pos + plen;
         bool spansGap = i + 1 < ctx->texts.len && a <= gap && b > gap;
-        if (lo >= hi || !t.text.s) {
+        // An inline image: no text to slice, so what says the selection has
+        // reached it is running past the place it sits in — node.rs emits an
+        // image when the run before it ends at its end and the run after it
+        // starts at its beginning. It carries its whole `![alt](url)` in the
+        // group's `pre`, which the block walk below emits; the piece of text
+        // after it is empty. Plain skips it: `Paragraph::text` lays the
+        // children's text end to end and an image child has none.
+        bool atom = t.atom && src && t.src && a <= pos && b > pos;
+        if ((lo >= hi || !t.text.s) && !atom) {
             sep = sep || spansGap;
             continue;
         }
-        Str piece = Str(t.text.s + (lo - pos), hi - lo);
+        Str piece =
+            (lo < hi && t.text.s) ? Str(t.text.s + (lo - pos), hi - lo) : Str{};
         // Which run continues which line is the document's shape and holds in
         // both formats — a paragraph is one `InlineState.text` in Rust
         // however it is copied. Only the affixes are Markdown, and only
