@@ -3210,3 +3210,34 @@ magnitude short of what the process was holding.
   print a full summary of the two seconds of everything else the machine had
   been doing. It now translates the path, and a workload that never starts is
   an error rather than a profile of the wrong thing.
+
+- 2026-08-24: **the macOS story now uses half the IOSurface memory.** Xcode
+  16.4's Time Profiler, `vmmap`, `heap` and `leaks` were run on an M3 Pro,
+  macOS 15.7.7, against release C++ and the pinned release Rust gallery. The
+  default AppKit colour space put the C++ window on an RGBA-float16 backing
+  store even though `paint.h` exposes only 8-bit sRGB colours. The profile
+  showed the consequence twice: `RGBAf16_mark_inner` in the paint samples,
+  and 93.1 MB of nonvolatile IOSurface pages. `WindowOpen` now names the
+  window's actual `[NSColorSpace sRGBColorSpace]`; AppKit chooses its 8-bit
+  SDR backing store and the nonvolatile IOSurface charge is 46.6 MB.
+
+  Total physical footprint fell from 278.8 MB to 186.0-201.6 MB. Two matched
+  Rust Spinner runs were 212.2-215.3 MB; C++ is 5-14% lower after the change.
+  `heap` reports 6.6-6.8 MB live malloc allocations for C++ versus 13.6 MB for
+  Rust. Raw RSS goes the other way (99-122 MB C++, 88-91 MB Rust), because it
+  counts shared mappings differently; physical footprint is macOS's charged
+  process-memory number and the IOSurface rows name where the change landed.
+  `leaks` found no C++ leak, and a 120-frame ASan run is clean.
+
+  There is no frame-time tradeoff. Three 3000-frame introduction runs average
+  1.993 ms (build 0.133, layout 0.849, paint 1.007), against 1.991 ms before,
+  inside run-to-run noise. On the naturally animated Spinner page, two
+  identical 12-second Time Profiler captures average 15.3% of one CPU core
+  for C++ and 33.5% for Rust after the first two seconds are discarded: C++
+  uses 54% less CPU, or Rust uses 2.19x as much. The heavy C++ introduction
+  profile is still split between Core Graphics text/shape drawing and Taffy;
+  no second change survived measurement. A fill/stroke-state cache measured
+  the same and was removed. One profiling trap: `xctrace record --template
+  Allocations --time-limit ...` suspended this command-line app at the limit
+  and never finalized the trace; `vmmap`/`heap`/`leaks` against a live PID are
+  the reliable built-in command-line path on this Xcode. 17,269 checks pass.

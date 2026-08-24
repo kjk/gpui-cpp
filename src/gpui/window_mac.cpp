@@ -1083,6 +1083,13 @@ Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts) {
         if (!window) {
             return nullptr;
         }
+        // Every colour the portable paint API accepts is an 8-bit sRGB
+        // value.  Leaving AppKit to infer the window space on an EDR display
+        // gives this otherwise-SDR view an RGBA-float16 backing store, which
+        // doubles its IOSurface memory and makes Core Graphics convert every
+        // fill and glyph through the float16 compositor.  Name the space the
+        // content is actually in so the window gets an 8-bit SDR surface.
+        [window setColorSpace:[NSColorSpace sRGBColorSpace]];
         if (opts.clientTitleBar) {
             [window setTitleVisibility:NSWindowTitleHidden];
             [window setTitlebarAppearsTransparent:YES];
