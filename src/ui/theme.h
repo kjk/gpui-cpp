@@ -19,6 +19,7 @@
    watches a folder. */
 
 #include "base/json.h"
+#include "base/theme_tokens.h"
 
 namespace gpui {
 

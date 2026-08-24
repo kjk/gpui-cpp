@@ -6,17 +6,9 @@
  * the viewport, and hand back where the popup goes. Nothing here paints.
  */
 
-#include "gpui/gpui.h"
+#include "base/geometry.h"
 
 namespace gpui {
-
-// The side of the trigger the popup is placed on.
-enum class Placement : uint8_t {
-    Top,
-    Bottom,
-    Left,
-    Right
-};
 
 // Where the popup sits along the side it was placed on.
 enum class PopupAlign : uint8_t {

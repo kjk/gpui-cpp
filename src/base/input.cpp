@@ -7,6 +7,7 @@
 
 #include "base/input.h"
 #include "base/element_ext.h"
+#include "base/text_boundary.h"
 
 namespace gpui {
 

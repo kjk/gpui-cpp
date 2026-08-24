@@ -3658,3 +3658,52 @@ its hex readouts line up with upstream's.
   is two calls across the four characters that test types.
 
   17,459 checks pass.
+
+- 2026-08-24: **three gpui-base modules out of `gpui.h` and into files of
+  their own.** The previous entry listed eight `crates/base` modules with no
+  file in `src/base`, folded into `src/gpui/gpui.h` and `gpui.cpp` instead.
+  Going through them one at a time, three of the eight were real blocks that
+  had been put in the runtime header because the type they read lives there,
+  and they are now where the Rust has them:
+
+  | new | Rust | what moved |
+  | --- | --- | --- |
+  | `src/base/geometry.h` | `crates/base/src/geometry.rs` | `Placement` (out of `positioner.h`), `Side`, `SideIsLeft`, `AxisIsHorizontal` |
+  | `src/base/theme_tokens.{h,cpp}` | `crates/base/src/theme_tokens.rs` | the whole `Semantic*` set, `kMonoFontSize`, `SemanticShadowElevations`, `ThemeSemanticTokens`, `ThemeApplySemanticTokens` |
+  | `src/base/text_boundary.{h,cpp}` | `crates/base/src/text_boundary.rs` | `CharKindOf`, `Utf8ClipLeft`, `TextWordRangeAt`, `TextLineRangeAt` |
+
+  None of it needed a new kind of edge. A `src/base` header includes
+  `gpui/gpui.h` the way all forty-odd of them already do, which is the same
+  direction `gpui_base` depends on `gpui` in Rust; `gpui.cpp` picks up
+  `base/text_boundary.h` for `TextMultiClickRangeIn`, its fourth
+  `gpui`→`base` include. `gpui.h` is 126 lines shorter and `gpui.cpp` 199.
+
+  What stayed, and why it is not drift:
+
+  - **`theme.rs`** is a three-field defaults holder — `SemanticThemeTokens`,
+    a scrollbar mode and style, a resizable handle colour — hung on `App` as
+    a Global. Its tokens now have their own file; `ScrollbarMode` is in
+    `gpui.h` because the runtime's own scroll areas carry one; nothing here
+    has a `ResizableTheme`. A `base/theme.h` holding the container would be a
+    struct invented for the file name, so there isn't one.
+  - **`styled.rs`** is `StyledExt`, a trait on `gpui::Styled`. Rust needs a
+    module to hang `h_flex` and `v_flex` on another crate's type; here they
+    are `El::Flex()` / `FlexRow()` / `FlexCol()`, methods on the class
+    itself, which is in `gpui.h` because `El` is. Only `FOCUS_RING_WIDTH` and
+    `FOCUS_RING_OPACITY` are free-standing, and `gpui.cpp`'s own painting is
+    what reads them.
+  - **`event.rs`** is two extension traits. `on_double_click` is
+    `ClickEvent::clickCount` here, a field on gpui's own event struct.
+    `lock_scroll_axis` works around `std::time::Instant` panicking on wasm32
+    inside Zed's `OngoingScroll`; this runtime has no such call and nothing
+    to switch off.
+  - **`measure.rs`** and **`global_state.rs`** are not folded into `gpui.h` —
+    they are not ported at all, which the previous entry got wrong.
+    `measure.rs` is a scoped timer that logs through `tracing` behind
+    `ZED_MEASUREMENTS`; `global_state.rs` is app-wide state with three
+    members — the app menu list, the set of open deferred popovers, and a
+    one-mouse-down text-selection suppression. The last two are behaviour
+    with call sites, not a file move, so they are a port of their own rather
+    than part of this one.
+
+  17,459 checks pass and `bun cmd/build.ts -all` builds all 24 examples.
