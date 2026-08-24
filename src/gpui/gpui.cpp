@@ -2905,6 +2905,22 @@ static taffy::Style ToTaffyStyle(const El* e) {
                  taffy::LengthPercentage::Length(s.pad.bottom)};
     t.gap = {taffy::LengthPercentage::Length(s.gapX),
              taffy::LengthPercentage::Length(s.gapY)};
+    // GPUI hands `Style::border_widths` straight to taffy, so a border takes
+    // room the way CSS says it does: the box keeps its size and the content
+    // inside it moves in by the width. This tree drew the border inside the
+    // box and reserved nothing, which made every bordered box its border
+    // narrower and shorter than upstream's.
+    //
+    // `border` is the all-round width and `borderT`/`B`/`L`/`R` are the
+    // per-edge ones, and the two are independent — paint draws the rounded
+    // rect for the first and a line per edge for the second, so an element
+    // carrying both draws both. An edge therefore reserves the larger of the
+    // two rather than their sum.
+    auto edge = [](float all, float one) {
+        return taffy::LengthPercentage::Length(one > all ? one : all);
+    };
+    t.border = {edge(s.border, s.borderL), edge(s.border, s.borderR),
+                edge(s.border, s.borderT), edge(s.border, s.borderB)};
 
     if (s.absolute || s.fixed) {
         t.position = taffy::Position::Absolute;

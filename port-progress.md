@@ -3138,6 +3138,64 @@ with `dbghelp` at the point a chain block is added named `ThemeRegistryInit`.
 births with no matching death came to 2.3 MB over 120 frames, three orders of
 magnitude short of what the process was holding.
 
+- 2026-08-24: **a border takes room.** `ToTaffyStyle` translated padding, gap,
+  flex and inset and never once set `t.border`, where GPUI hands
+  `Style::border_widths` straight to taffy — so a border here was painted
+  inside the box and reserved nothing, and every bordered box in the tree was
+  its border's width shorter and narrower than upstream's. One line of
+  translation, and the per-edge rule that goes with it: `border` is the
+  all-round width and `borderT`/`B`/`L`/`R` are the per-edge ones, the two are
+  independent, and paint draws both — so an edge reserves the *larger* of the
+  two rather than their sum. `tests/MinSizeTests.cpp` pins all three: a
+  content-sized box grows by its border, a box of a named size keeps it and
+  insets its content instead (a 16px checkbox stays 16 and its tick is drawn
+  in the 14 inside), and `Border(1) + BorderB(3)` is 4 tall, not 6.
+
+  Measured against the Rust story page by page, in a column of the content
+  pane that no text crosses, comparing the run of gaps between the horizontal
+  rules — which is every card's height and every gap between cards:
+
+  | | spans that match upstream exactly |
+  | --- | --- |
+  | before | 181 / 455 (40%) |
+  | after | 312 / 435 (72%) |
+
+  45 of the 62 pages improved, 16 did not move, and the one that scored worse
+  — `data-table` — has the same 32px row pitch in both and lost two spans to a
+  hovered row's edge crossing the sample column. The shapes this fixes are the
+  ones the arithmetic predicts: a story card is 49 tall where it was 47, and a
+  section repeats every 81 where it repeated every 79. Upstream's numbers.
+
+  Whole-image pixel diffs get *worse* on most pages and are the wrong
+  instrument here: what is left is a one-pixel offset in the page header — our
+  24px title line rounds a hair differently from Rust's — and a single pixel
+  of vertical shift relights every glyph on the page, which swamps a metric
+  that cannot tell a shifted layout from a wrong one. The rhythm above is what
+  says the geometry is right.
+
+  One thing had been leaning on the bug. The story's toolbar draws its border
+  once around the group; upstream has no container border at all
+  (`story_toolbar_group()` is a bare `h_flex`) and puts it on each
+  `Button::outline().small()`, whose explicit height already contains it. With
+  a border costing nothing the two agreed; with it costing two pixels our
+  toolbar row became two taller than every one of upstream's. The border is
+  now an absolute child filling the group — the same ring
+  `ListActiveOverlay` draws for a selected row — so it paints the joined pill
+  it always did and costs no layout. That matters for more than the story
+  shell: `resizable` and five other pages put full-size `Button::Outline()`
+  children in that group, which carry their own borders, so upstream's group
+  is bare for them too.
+
+  It also closes the list row the entry below this one left at 34.
+  `list_story.rs` refines its row with `.border_1()`, which this port could
+  not write because the border would have cost nothing; `ListItem` now takes
+  the `refine_style(&self.style)` upstream has, applied before the selection
+  the way list_item.rs applies it, so a selected row's own fill and ring still
+  win. The story's rows are 36 apart, which is upstream's number.
+
+  17,525 checks pass; `bun cmd/build.ts -rel -all` and `-dbg -all` build all
+  24 examples, and the taffy benchmarks are unmoved.
+
 - 2026-08-24: **five reported depth gaps, and the two of them that were still
   open.** Checked one at a time against the Rust at the pinned SHA.
 
@@ -3210,18 +3268,11 @@ magnitude short of what the process was holding.
   matches, and `state.rs` reads it the same way this tree does. Only the list
   measures upstream.
 
-  **One thing found on the way and deliberately not fixed: a border takes no
-  room.** `ToTaffyStyle` never sets `t.border`, where GPUI hands
-  `border_widths` straight to taffy, so every bordered box in this tree is its
-  border's width shorter and narrower than upstream's and the border is
-  painted inside the box instead of beside the content. It is why the list
-  row measures 34 where Rust's is 36 — `list_story.rs` refines the row with
-  `.border_1()` and those are two of its pixels — and the pinned 36 had been
-  hiding it for this one box while the rest of the tree stayed short. Setting
-  the field is one line and makes the list row exactly 36; it also moves 55 of
-  the 66 story pages, which is a session of its own with the Rust side open
-  page by page, not a side effect of a row-height change. Left as it is, said
-  out loud in `examples/story/list.cpp`, and the next thing to pick up here.
+  **One thing found on the way and left for its own pass: a border took no
+  room.** `ToTaffyStyle` never set `t.border`, where GPUI hands
+  `border_widths` straight to taffy, so every bordered box in this tree was
+  its border.s width shorter and narrower than upstream.s. It is why the list
+  row measured 34 where Rust.s is 36. The entry above this one is that pass.
 
   17,512 checks pass and `bun cmd/build.ts -rel -all` builds all 24 examples.
 

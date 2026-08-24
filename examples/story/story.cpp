@@ -337,6 +337,16 @@ static const char* StorySizeName(UiSize s) {
 // StoryToolbar::render joins its buttons into one segmented control: the
 // group draws the outline, and the buttons after the first sit on their
 // neighbour's border instead of drawing a second one.
+// story_toolbar_group: `h_flex().w_full().justify_end()`, and no border of
+// its own. Upstream's items are each a `Button::outline().small()` carrying
+// their own, sharing an edge with the neighbour, so the row is exactly one
+// item tall and the border lives inside it.
+//
+// This port paints the border once around the group instead, which draws the
+// same joined pill — but a border takes room now, so putting it on the box
+// would make the row two pixels taller than every one of upstream's. It goes
+// on as the `ListActiveOverlay` ring does: an absolute child filling the
+// group, drawing the stroke and costing no layout.
 static El* ToolbarGroup(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -344,8 +354,8 @@ static El* ToolbarGroup(Ctx* cx) {
         ->FlexRow()
         ->ItemsStart()
         ->Bg(th.tokens.background)
-        ->Border(1, th.border)
-        ->Radius(th.radius);
+        ->Radius(th.radius)
+        ->Child(ListActiveOverlay(a, th.border, th.radius));
 }
 
 static El* ToolbarSep(Ctx* cx) {

@@ -21,12 +21,18 @@ struct ListItem {
     bool secondarySelected = false;
     bool confirmed = false;
     bool disabled = false;
+    // `impl Styled for ListItem`, landed by `refine_style(&self.style)`. It
+    // goes on before the selection does, which is where list_item.rs puts it:
+    // a selected row's own fill and ring still win over what a caller
+    // chained on.
+    StateStyle style = {};
 
     static ListItem* New(Ctx* cx, El* child);
     ListItem* Selected(bool v);
     ListItem* SecondarySelected(bool v);
     ListItem* Confirmed(bool v);
     ListItem* Disabled(bool v);
+    ListItem* Style(const StateStyle& s);
     El* IntoEl(Str id, Listener onClick, Listener onMouseDown);
 };
 

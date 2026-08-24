@@ -31,6 +31,10 @@ ListItem* ListItem::Disabled(bool v) {
     disabled = v;
     return this;
 }
+ListItem* ListItem::Style(const StateStyle& s) {
+    style = s;
+    return this;
+}
 
 El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
     const Theme& th = cx->theme();
@@ -45,6 +49,13 @@ El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
                   ->Radius(th.radius);
     if (!disabled) {
         row->HoverBg(th.tokens.accent);
+    }
+    // refine_style(&self.style), here rather than through `ElRefine`: a
+    // refinement put on the element lands at layout time and would win over
+    // the selection below it, where list_item.rs applies the caller's style
+    // first and lets the selection refine it.
+    if (style.set) {
+        StyleApplyFields(&row->style, style.style, style.set);
     }
     if (selected || secondarySelected) {
         // list_item.rs: the selection takes the active highlight when the

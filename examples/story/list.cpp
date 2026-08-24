@@ -175,12 +175,15 @@ static component::ListItem* RenderQuote(Ctx* cx, void* data, int section,
     right->Child(Div(a)->FlexRow()->W(65)->JustifyEnd()->Child(
         StoryTxt(cx, Str(r.change), 12, r.up ? th.green : th.red)->PadX(4)));
     line->Child(right);
-    // list_story.rs also refines the row with `.px_2().py_1().border_1()
-    // .rounded(radius)`. The border is not written here because a border
-    // takes no room in this tree — `ToTaffyStyle` never sets `t.border` —
-    // so it would be two pixels the row does not get. That is why the row
-    // measures 34 where upstream's is 36; see port-progress.md.
+    // list_story.rs refines the row with `.px_2().py_1().border_1()
+    // .rounded(radius)` — the padding is `ListItem`'s own here, and the
+    // border is transparent until the selection colours it. It is two of the
+    // pixels the list measures the row at, which is what makes it the 36 of
+    // upstream's rather than 34.
+    StateStyle rowStyle;
+    rowStyle.Border(1, Rgba8(0, 0, 0, 0));
     return component::ListItem::New(cx, line)
+        ->Style(rowStyle)
         ->Confirmed(self->confirmedRow == entry);
 }
 

@@ -71,8 +71,70 @@ static void TheHeightAxisReadsTheSameWay() {
     ArenaDelete(a);
 }
 
+// A border takes room, the way GPUI hands `Style::border_widths` to taffy and
+// CSS's `box-sizing: border-box` says: the box keeps the size it was given
+// and the content inside it moves in by the width. The port fed taffy no
+// border at all, so every bordered box was its border narrower and shorter
+// than upstream's — a card 47 tall where Rust's was 49.
+static void ABorderTakesRoom() {
+    Arena* a = ArenaNew();
+    // Content-sized: the box grows by the border it carries.
+    El* plain = Div(a)->FlexCol()->Child(Div(a)->W(100)->H(40));
+    LayoutEl(nullptr, plain, 0, 0, 0, 0, 14, Rgba{});
+    utassertnear(plain->h, 40.f);
+    utassertnear(plain->w, 100.f);
+
+    El* bordered = Div(a)->FlexCol()->Border(1, Rgb(0, 0, 0));
+    bordered->Child(Div(a)->W(100)->H(40));
+    LayoutEl(nullptr, bordered, 0, 0, 0, 0, 14, Rgba{});
+    utassertnear(bordered->h, 42.f);
+    utassertnear(bordered->w, 102.f);
+    ArenaDelete(a);
+}
+
+// A box of a named size keeps it, and the content is what moves in — which is
+// why a 16px checkbox stays 16 and its tick is drawn in the 14 inside.
+static void AFixedBoxKeepsItsSizeAndInsetsItsContent() {
+    Arena* a = ArenaNew();
+    El* box = Div(a)->FlexCol()->W(16)->H(16)->Border(1, Rgb(0, 0, 0));
+    El* fill = Div(a)->W(kFill)->H(kFill);
+    box->Child(fill);
+    LayoutEl(nullptr, box, 0, 0, 0, 0, 14, Rgba{});
+    utassertnear(box->w, 16.f);
+    utassertnear(box->h, 16.f);
+    utassertnear(fill->w, 14.f);
+    utassertnear(fill->h, 14.f);
+    // And the content starts inside the stroke rather than under it.
+    utassertnear(fill->x - box->x, 1.f);
+    utassertnear(fill->y - box->y, 1.f);
+    ArenaDelete(a);
+}
+
+// The per-edge widths are their own, and an element carrying both the
+// all-round width and a heavier edge reserves the larger of the two rather
+// than their sum — paint draws both strokes over the same pixels.
+static void AnEdgeReservesTheLargerOfTheTwoWidths() {
+    Arena* a = ArenaNew();
+    El* onlyBottom = Div(a)->FlexCol()->BorderB(2, Rgb(0, 0, 0));
+    onlyBottom->Child(Div(a)->W(50)->H(10));
+    LayoutEl(nullptr, onlyBottom, 0, 0, 0, 0, 14, Rgba{});
+    utassertnear(onlyBottom->h, 12.f);
+    utassertnear(onlyBottom->w, 50.f);
+
+    El* both =
+        Div(a)->FlexCol()->Border(1, Rgb(0, 0, 0))->BorderB(3, Rgb(0, 0, 0));
+    both->Child(Div(a)->W(50)->H(10));
+    LayoutEl(nullptr, both, 0, 0, 0, 0, 14, Rgba{});
+    // 1 on top, 3 at the bottom -- not 1 + 3 at the bottom.
+    utassertnear(both->h, 14.f);
+    ArenaDelete(a);
+}
+
 void TestMinSize() {
     AnExplicitZeroMinimumLetsAPaneShrink();
     AnUnnamedMinimumIsTheContent();
     TheHeightAxisReadsTheSameWay();
+    ABorderTakesRoom();
+    AFixedBoxKeepsItsSizeAndInsetsItsContent();
+    AnEdgeReservesTheLargerOfTheTwoWidths();
 }
