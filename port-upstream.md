@@ -162,10 +162,11 @@ reading a diff — the list of what is deliberately not ported (cookies,
 downloads, drag and drop, the `NewWindowResponse::Create` arm, Android and
 iOS) so a change to one of those needs no work here.
 
-**Only Windows has a backend.** `src/wry/wry_win.cpp` is
-`src/webview2/mod.rs`; the other three files are stubs that answer "there is
-no webview here", and each says what a real one would take. A wry release
-that only touches `wkwebview/` or `webkitgtk/` changes nothing in this tree.
+**Two platforms have a backend.** `src/wry/wry_win.cpp` is
+`src/webview2/mod.rs` and `src/wry/wry_mac.cpp` is `src/wkwebview/`; the
+other two files are stubs that answer "there is no webview here", and each
+says what a real one would take. A wry release that only touches
+`webkitgtk/` changes nothing in this tree.
 
 The WebView2 declaration block in `wry_win.cpp` is transcribed from the SDK
 header and is the one thing a wry bump never touches — it moves when the

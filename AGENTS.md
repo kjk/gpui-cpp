@@ -104,8 +104,8 @@ scope, and a module being large or unglamorous is not a reason to skip it.
   example of the second route: `src/wry/` is a port of the wry crate, and the
   two things Rust gets from crates on Windows — the WebView2 COM bindings and
   Microsoft's loader — are declared and written out in `wry_win.cpp` rather
-  than vendored. Only Windows has a backend; `src/wry/readme.md` says what the
-  other three would take
+  than vendored. Windows and macOS have backends — WebView2 and WKWebView —
+  and `src/wry/readme.md` says what the other two would take
 
 A thing that is *not* ported for a reason other than these belongs in
 `port-progress.md` with the reason, so the next session does not have to
@@ -679,7 +679,8 @@ cmd/svg-to-bytecode.ts convert assets/icons into src/gpui/asset_icons.cpp
 src/taffy/             the taffy layout crate, ported (see its readme.md)
 src/markdown/          the markdown crate, ported (see its readme.md)
 src/wry/               the wry webview crate, ported (see its readme.md);
-                       WebView2 on Windows, a stub on the other three
+                       WebView2 on Windows, WKWebView on macOS, a stub on
+                       Linux and wasm
 src/webview/           crates/webview (gpui-wry): the view that gives a
                        wry webview a box in the element tree
 src/base.h/.cpp        vendored SumatraPDF subset

@@ -248,7 +248,8 @@ function findCompiler(): string {
 
 // Cocoa pulls in AppKit, Foundation and CoreGraphics; CoreText shapes the
 // glyphs and IOKit answers the battery question.
-const frameworks = ["Cocoa", "CoreText", "CoreGraphics", "IOKit"];
+// WebKit is src/wry/wry_mac.cpp — the webview.
+const frameworks = ["Cocoa", "CoreText", "CoreGraphics", "IOKit", "WebKit"];
 
 const cxx = findCompiler();
 

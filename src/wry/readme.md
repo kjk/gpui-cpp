@@ -20,7 +20,7 @@ the gpui-component, Zed GPUI, taffy and markdown pins, and moves the same way
 | `src/proxy.rs`                                       | `wry.h` (`ProxyConfig`)        |
 | `src/web_context.rs`                                 | `wry.h` (`dataDirectory`)      |
 | `src/error.rs`                                       | — (see below)                  |
-| `src/wkwebview/**`                                   | `wry_mac.cpp` — a stub         |
+| `src/wkwebview/mod.rs`, `class/**`, `navigation.rs`  | `wry_mac.cpp`                  |
 | `src/webkitgtk/**`                                   | `wry_linux.cpp` — a stub       |
 | —                                                    | `wry_wasm.cpp` — a stub        |
 | `src/android/**`, `src/wkwebview/ios/**`             | not ported                     |
@@ -66,9 +66,48 @@ halves are written out instead, and both are in `wry_win.cpp`:
   (`149.0.4022.49`, `CORE_WEBVIEW_TARGET_PRODUCT_VERSION` for the 1.0.4022.49
   package) and not the package's own.
 
+## The macOS backend
+
+`wry_mac.cpp` is `wkwebview/` and takes no dependency at all: WKWebView is in
+the system SDK, and `cmd/build-mac.ts` links one more framework for it. The
+amalgam is compiled `-x objective-c++ -fobjc-arc` on macOS, so an
+Objective-C pointer in one of the C++ structs there is a strong reference and
+Rust's `Retained<T>` fields need nothing said about them.
+
+Rust's delegates are `define_class!` invocations with an ivars struct. Here
+each is a real `@interface` at file scope — an Objective-C class cannot live
+inside a C++ namespace — holding the `wry::WebView*` those ivars would have
+held: the IPC message handler, the navigation delegate, the UI delegate (the
+open panel, the media-capture permission and `window.open`), the title
+observer, and one `WKURLSchemeHandler` class where Rust builds a class per
+scheme at runtime to have somewhere to put the index.
+
+Two things differ beyond that, and both are in the file's header comment:
+
+- **A webview that is not a child is a subview**, not the window's
+  `contentView`. Rust swaps in a `WryWebViewParent` so the page gets key
+  events; the content view here is the gpui view that draws everything else
+  and owns the window's input, so evicting it would take the application with
+  it.
+- **`reparent` is ours.** Rust has it on Windows only; on macOS it is
+  `removeFromSuperview` plus `addSubview`, which is what the one caller means
+  by it.
+
+`set_theme` and `set_memory_usage_level` answer false there, because both are
+`WebViewExtWindows` in Rust with no WKWebView counterpart, and
+`set_background_color` does too — it is the iOS half of the crate, and on
+macOS the only knob is the `transparent` attribute, which is set on the
+configuration before the webview exists.
+
+**It is compile-verified, not run-verified.** `bun cmd/mac-build.ts -rel
+webview` builds it on a Mac over ssh, which is what has been done; a Cocoa
+window needs a login session, so the example has to be run on the Mac itself
+(`bun cmd/run.ts -rel webview`) for anyone to see a page.
+
 ## What is ported
 
-The whole of the portable API in `lib.rs` and the WebView2 backend under it:
+The whole of the portable API in `lib.rs`, and under it the WebView2 and
+WKWebView backends:
 attributes and defaults, a webview built into a window or as a child of one,
 bounds / visibility / focus, `evaluate_script` with and without a callback,
 `load_url`, `load_url_with_headers`, `load_html`, `reload`, `url`, zoom,
@@ -80,6 +119,12 @@ navigation / page-load / document-title / new-window handlers, the clipboard
 permission, incognito, the proxy switches and the Windows-only builder
 extensions (browser arguments, accelerator keys, context menus, the https
 scheme, scrollbar style, extensions).
+
+The macOS backend has all of that except what the platform does not have: the
+custom protocol work-around is Windows' alone (WKWebView takes a scheme
+handler for the real scheme), the browser arguments and their neighbours are
+WebView2 settings, and the three calls named in the section above answer
+false.
 
 Not ported, each for a reason:
 

@@ -4247,3 +4247,77 @@ on any platform, which is the seam-rather-than-harness rule.
 17,910 checks pass; `bun cmd/build.ts -rel -all` builds all 25 examples, and
 the Linux build compiles the stubs and runs (an empty box and one log line,
 which is what it promises).
+
+## The second webview backend, and the one thing WKWebView will not do over ssh
+
+`wry_mac.cpp` was a stub an hour ago and is `wkwebview/` now. It is the
+backend that could always have been written — WKWebView is in the system SDK,
+so it takes no dependency hard rule 3 rules out, and the only build change is
+one more framework in `cmd/build-mac.ts` — and the reason it was not written
+was that nothing here could compile it. That turned out to be wrong too:
+`bun cmd/mac-build.ts` has been in this tree the whole time, and it compiles
+on a Mac over ssh.
+
+The shape of the port is the shape of the Rust, once one thing is accepted:
+an Objective-C class cannot live inside a C++ namespace. Rust's delegates are
+`define_class!` invocations with an ivars struct; here each is a real
+`@interface` at file scope holding the `wry::WebView*` those ivars would have
+held, and the file is laid out the way `window_mac.cpp` is — the namespace's
+types, then the classes, then the API. There are five: the IPC message
+handler (`WryWebViewDelegate`), the navigation delegate (the policy call, and
+`didCommit` / `didFinish` for the two page-load events), the UI delegate (the
+open panel, the media-capture grant and `window.open`), the title observer
+(KVO on `title`), and one `WKURLSchemeHandler` where Rust builds a class per
+scheme at runtime because ivars were the only place it had to put the index.
+
+ARC does the work `Retained<T>` does in the Rust: the amalgam is compiled
+`-x objective-c++ -fobjc-arc` on macOS, so the Objective-C pointers in the
+`WebView` struct are strong references and the struct's destructor releases
+them. The delegates are held there for the same reason Rust holds them — a
+`WKWebView`'s delegate properties are weak, and nothing else would.
+
+Three things in the crate's macOS half are not the Windows half, and each is
+worth knowing:
+
+- **`pending_scripts`.** An `eval` before the first navigation commits has no
+  page to run in, so it is held and replayed from `didCommitNavigation`.
+  Windows needs nothing like it because `ExecuteScript` is queued on the
+  browser thread.
+- **The custom protocol work-around is Windows' alone.** WKWebView takes a
+  scheme handler for the real scheme, so `wry://` is `wry://` there and the
+  `http://wry.host` tunnel does not exist. What macOS needs instead is the
+  task-validity check: a stopped `WKURLSchemeTask` is a dangling pointer, and
+  an asynchronous responder that answers late must not touch it. Rust keeps a
+  UUID per task; this keeps the live tasks in an `NSMutableSet` and
+  `stopURLSchemeTask` takes them out.
+- **Three calls answer false.** `set_theme` and `set_memory_usage_level` are
+  `WebViewExtWindows` with no counterpart, and `set_background_color` is the
+  iOS half of the crate — on macOS the only knob is the `transparent`
+  attribute, set on the configuration before the webview exists.
+
+One deliberate difference from the Rust, and it is not a small one: **a
+webview that is not a child is added as a subview**, where Rust replaces the
+window's `contentView` with a `WryWebViewParent`. Rust does that so the page
+gets key events; the content view here is the gpui view that draws everything
+else and owns the window's input, so evicting it would take the application
+with it. `reparent` is ours for a smaller reason — Rust has it on Windows
+only, and on macOS it is `removeFromSuperview` plus `addSubview`.
+
+Two compile errors were worth the trip. The first is a rule this tree has
+never had to think about: `/**` inside a block comment is `-Wcomment`, and
+`wry/src/wkwebview/**` was the first line of the file. The second is Cocoa
+memory-management convention leaking into the compiler — a property called
+`newWindows` "follows Cocoa naming convention for returning owned objects",
+so ARC refuses it; it is `openedWindows` now. Nothing in the port itself was
+wrong, which is the useful part of a first compile.
+
+**It is compile-verified, not run-verified**, and the difference is worth
+stating plainly. `bun cmd/mac-build.ts -rel -all` builds all 25 examples on
+the Mac. Running one over ssh does not work and cannot: the process starts,
+`pgrep` finds it, and no window appears, because a Cocoa application needs a
+login session and `launchctl asuser` needs root to join one. AGENTS.md has
+said so all along. Somebody at that Mac's keyboard running `bun cmd/run.ts
+-rel webview` is what would put a page on the screen.
+
+The Windows half is unchanged and still passes: 17,910 checks, all 25
+examples, and the Linux stub still compiles and runs.
