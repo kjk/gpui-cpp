@@ -31,9 +31,7 @@
    - **KaTeX**: upstream's math plugin renders a formula by handing it to
      KaTeX in node and reading the SVG back. The plugin is here and takes the
      example's own fallback path instead — the formula set italic with the
-     Greek names spelled out and the scripts folded into Unicode.
-   - The source is drawn unhighlighted: `syntax.cpp` has a scanner for ten
-     languages and markdown is not yet one of them. */
+     Greek names spelled out and the scripts folded into Unicode. */
 
 #include "gpui.h"
 
