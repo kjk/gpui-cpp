@@ -12,7 +12,11 @@ namespace component {
 static const float kDialogMotionMs = 250.f;
 
 static float DialogEase(float t) {
-    return CubicBezier(0.32f, 0.72f, 0.f, 1.f, t);
+    // x1 = 1/3, x2 = 2/3 make the bezier's time mapping the identity, which
+    // keeps the trajectory this dialog was tuned with before `cubic_bezier`
+    // solved for x; vaul's (0.32, 0.72, 0, 1) is far more front-loaded under
+    // the CSS-correct solver.
+    return CubicBezier(1.f / 3.f, 0.72f, 2.f / 3.f, 1.f, t);
 }
 
 Dialog* Dialog::New(Ctx* cx) {

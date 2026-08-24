@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "2c0931d23caf66c75cd0f271314dd72b9e728772",
+  sha: "5b3e18d14b3df4705c9076e9a9c100c84177bb8a",
   date: "2026-08-18",
-  subject: "popover: Match shadcn's popup surface and animate dropdowns open (#2753)",
+  subject: "animation: Align `cubic_bezier` with CSS `cubic-bezier` (#2756)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

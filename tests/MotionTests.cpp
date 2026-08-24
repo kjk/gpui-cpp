@@ -65,10 +65,60 @@ static void TheBezierRunsFromNothingToEverything() {
     utassertnear(CubicBezier(0.32f, 0.72f, 0.f, 1.f, 0.f), 0.f);
     utassertnear(CubicBezier(0.32f, 0.72f, 0.f, 1.f, 1.f), 1.f);
     // The dialog's curve, which is most of the way there at halfway.
-    float mid = CubicBezier(0.32f, 0.72f, 0.f, 1.f, 0.5f);
+    float mid = CubicBezier(1.f / 3, 0.72f, 2.f / 3, 1.f, 0.5f);
     utassert(mid > 0.5f && mid < 1.f);
     // A curve whose control points sit on the diagonal is the diagonal.
     utassertnear(CubicBezier(1.f / 3, 1.f / 3, 2.f / 3, 2.f / 3, 0.5f), 0.5f);
+}
+
+// It is CSS's cubic-bezier: `x(s) = t` is solved for the curve parameter
+// before y is sampled. These are animation.rs's own cases — the published
+// values of the CSS `ease` curve, and Chromium's own expectations for
+// (0.25, 0, 0.75, 1) out of cubic_bezier_unittest.cc.
+static bool BezierNear(float got, float want, float eps) {
+    float d = got - want;
+    return (d < 0 ? -d : d) < eps;
+}
+
+static void TheBezierMatchesWhatAnEngineSays() {
+    struct Sample {
+        float t;
+        float y;
+    };
+    const Sample ease[] = {{0.f, 0.f},   {0.2f, 0.295f}, {0.5f, 0.802f},
+                           {0.8f, 0.976f}, {1.f, 1.f}};
+    for (const Sample& s : ease) {
+        utassert(BezierNear(CubicBezier(0.25f, 0.1f, 0.25f, 1.f, s.t), s.y,
+                            1e-3f));
+    }
+
+    const Sample chromium[] = {
+        {0.05f, 0.01136f}, {0.1f, 0.03978f},  {0.15f, 0.07978f},
+        {0.2f, 0.12803f},  {0.25f, 0.18235f}, {0.3f, 0.24115f},
+        {0.35f, 0.30323f}, {0.4f, 0.36761f},  {0.45f, 0.43345f},
+        {0.5f, 0.5f},      {0.6f, 0.63238f},  {0.65f, 0.69676f},
+        {0.7f, 0.75884f},  {0.75f, 0.81764f}, {0.8f, 0.87196f},
+        {0.85f, 0.92021f}, {0.9f, 0.96021f},  {0.95f, 0.98863f},
+    };
+    for (const Sample& s : chromium) {
+        utassert(BezierNear(CubicBezier(0.25f, 0.f, 0.75f, 1.f, s.t), s.y,
+                            3e-4f));
+    }
+}
+
+// x1 = 1/3, x2 = 2/3 collapse the x solve to the identity, so the answer is
+// the plain y polynomial. The dialog leans on that to keep the trajectory it
+// was tuned with.
+static void ThirdsMapTimeIdentically() {
+    for (int step = 0; step <= 100; step++) {
+        float t = (float)step / 100.f;
+        float oneT = 1.f - t;
+        float want = 3.f * 0.72f * oneT * oneT * t + 3.f * oneT * t * t +
+                     t * t * t;
+        utassert(
+            BezierNear(CubicBezier(1.f / 3, 0.72f, 2.f / 3, 1.f, t), want,
+                       1e-4f));
+    }
 }
 
 static void TheLerpsAreTheThreeRustImplements() {
@@ -286,6 +336,8 @@ void TestMotion() {
     TheEasingsAreTheCurvesRustNames();
     TheLoopingEasingsAreGpuisOwn();
     TheBezierRunsFromNothingToEverything();
+    TheBezierMatchesWhatAnEngineSays();
+    ThirdsMapTimeIdentically();
     TheLerpsAreTheThreeRustImplements();
     ProgressWaitsOutTheDelayAndStopsAtTheEnd();
     AZeroDurationTargetChangeIsImmediate();

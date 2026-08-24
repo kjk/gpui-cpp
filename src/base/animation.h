@@ -13,9 +13,13 @@ namespace gpui {
 
 // cubic_bezier: Rust answers a closure over the four control points, so a
 // caller names the curve once and calls it with t. There are no closures here,
-// so the points travel with the sample. The maths is Rust's, including the
-// part that is not quite a CSS cubic-bezier: the parameter is read as the
-// curve's t rather than solved for from x, so the x pair shapes nothing.
+// so the points travel with the sample.
+//
+// This is CSS's `cubic-bezier`: `x(s) = t` is solved for the curve parameter
+// first — Newton, then bisection where the slope is no use — and `y(s)` is the
+// answer. Reading `t` as the parameter and taking `y` off it directly, which
+// is what this did before gpui-component 5b3e18d1, makes every curve run
+// slower than the same control points do in a browser.
 float CubicBezier(float x1, float y1, float x2, float y2, float t);
 
 // An easing curve. Rust takes `impl Fn(f32) -> f32`; the same thing here is a
