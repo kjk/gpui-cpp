@@ -17,8 +17,9 @@
    The completion menu is the store's other half that is here: the items are
    upstream's own `fixtures/completion_items.json`, filtered by the word being
    typed, with the selected item's documentation rendered as markdown beside
-   the list. What is still to come is hover, code actions and document
-   colours. */
+   the list, and the hover popover, which answers about the word the pointer
+   rests on out of the same items. What is still to come is code actions and
+   document colours. */
 
 #include "gpui.h"
 
@@ -293,6 +294,27 @@ static void LoadCompletionItems() {
     }
 }
 
+// HoverProvider: the word under the pointer, looked up in the same items —
+// its documentation, or the sentence Rust shows when the item has none.
+static Str HoverAt(void*, Str text, int offset) {
+    LoadCompletionItems();
+    int a = offset, b = offset;
+    if (!TextWordRangeAt(text, offset, &a, &b) || a >= b) {
+        return Str{};
+    }
+    Str word(text.s + a, b - a);
+    for (int i = 0; i < gNItems; i++) {
+        const CompletionItem& item = gItems[i];
+        if (item.label.len != word.len ||
+            memcmp(item.label.s, word.s, (size_t)word.len) != 0) {
+            continue;
+        }
+        return item.documentation.len > 0 ? item.documentation
+                                          : StrL("No documentation available.");
+    }
+    return Str{};
+}
+
 static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
                         int cap) {
     LoadCompletionItems();
@@ -526,6 +548,9 @@ int GpuiMain(int argc, char** argv) {
     // The completion provider, which is what makes the menu open as a word is
     // typed and on `.`.
     self->editor.completionProvider = &CompleteFrom;
+    // And the hover provider, which answers about the word the pointer rests
+    // on out of the same items.
+    self->editor.hoverProvider = &HoverAt;
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;

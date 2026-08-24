@@ -2468,6 +2468,12 @@ struct CompletionItem {
 using CompletionFn = int (*)(void* data, Str text, int offset, Str query,
                              CompletionItem* out, int cap);
 
+// HoverProvider::hover, without the task: the provider is handed the document
+// and the offset the pointer is over, and answers the markdown to show, or an
+// empty string for nothing to say. What it answers has to outlive the frame —
+// a provider answers out of its own store, not off the stack.
+using HoverFn = Str (*)(void* data, Str text, int offset);
+
 // The completion menu while it is up — CompletionMenu's own state.
 struct CompletionSession {
     bool open = false;
@@ -2574,6 +2580,15 @@ struct InputState {
     int hoverDiagnostic = -1;
     float hoverDiagnosticX = 0;
     float hoverDiagnosticY = 0;
+    // The symbol the pointer is resting on, and who is asked about it —
+    // `hover_popover` in Rust. The range is the word it was asked for, which
+    // is what keeps it from asking again while the pointer stays inside it.
+    HoverFn hoverProvider = nullptr;
+    void* hoverData = nullptr;
+    Str hoverText = {};
+    Selection hoverRange = {};
+    float hoverX = 0;
+    float hoverY = 0;
     // The completion menu, and who fills it. A state with no provider never
     // opens one, which is every field that is not a code editor.
     CompletionSession completion;

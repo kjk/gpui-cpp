@@ -453,11 +453,13 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // pointer is the window's here, and this is the one place that has the
     // boxes to answer against.
     state->hoverDiagnostic = -1;
-    if (state->diagnostics.len > 0 && cx->win) {
+    if ((state->diagnostics.len > 0 || state->hoverProvider) && cx->win) {
         float mx = cx->win->mouseX;
         float my = cx->win->mouseY;
-        if (state->inputBounds.Contains({mx, my})) {
-            int at = InputIndexForPosition(state, &cx->win->paint, mx, my);
+        bool inside = state->inputBounds.Contains({mx, my});
+        int at =
+            inside ? InputIndexForPosition(state, &cx->win->paint, mx, my) : -1;
+        if (inside) {
             for (int d = 0; d < state->diagnostics.len; d++) {
                 const Diagnostic& dg = state->diagnostics[d];
                 if (at >= dg.range.start && at < dg.range.end) {
@@ -467,6 +469,28 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                     break;
                 }
             }
+        }
+        // What the pointer is resting on, for the hover popover —
+        // handle_hover_popover. The provider is asked once per word: while
+        // the pointer stays inside the word it was asked about, what it said
+        // stands. A diagnostic under the pointer wins, and so does a drag.
+        if (!state->hoverProvider || !inside || state->selecting ||
+            state->hoverDiagnostic >= 0) {
+            state->hoverText = Str{};
+            state->hoverRange = Selection{};
+        } else if (at < state->hoverRange.start ||
+                   at >= state->hoverRange.end || state->hoverRange.IsEmpty()) {
+            Str doc = InputValue(state);
+            int a0 = at, b0 = at;
+            if (!TextWordRangeAt(doc, at, &a0, &b0)) {
+                a0 = b0 = at;
+            }
+            state->hoverRange = Selection{a0, b0};
+            state->hoverText =
+                a0 < b0 ? state->hoverProvider(state->hoverData, doc, at)
+                        : Str{};
+            state->hoverX = mx;
+            state->hoverY = my;
         }
     }
 

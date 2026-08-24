@@ -420,6 +420,29 @@ El* Highlighter::IntoEl() {
                           ->Border(1, fg)
                           ->Child(body);
     }
+    // The hover popover: what the provider said about the word the pointer is
+    // resting on, as markdown in a plain popover — HoverPopover, which is the
+    // diagnostic's neighbour without the severity colouring.
+    El* hoverPopover = nullptr;
+    if (state && state->hoverText.len > 0 && state->hoverDiagnostic < 0) {
+        hoverPopover = Div(a)
+                           ->Fixed()
+                           ->Left(state->hoverX + 8)
+                           ->Top(state->hoverY + 18)
+                           ->MinW(200)
+                           ->MaxW(500)
+                           ->PadX(8)
+                           ->PadY(4)
+                           ->Radius(th.radius)
+                           ->Bg(th.tokens.background)
+                           ->Border(1, th.border)
+                           ->Child(TextView::New(cx, state->hoverText)
+                                       ->Font(12)
+                                       ->IntoEl());
+    }
+    if (hoverPopover && !diagPopover) {
+        diagPopover = hoverPopover;
+    }
     if (completionMenu) {
         // The menu is over the rows either way, so it goes in beside them
         // rather than inside the scroller.
