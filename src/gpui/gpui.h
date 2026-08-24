@@ -2710,6 +2710,9 @@ using DocumentColorFn = int (*)(void* data, Str text, DocumentColor* out,
 // upstream writes makes one edit, so this is that edit.
 struct CodeActionItem {
     Str title = {};
+    // Which provider answered with it, so performing it goes back to that
+    // one — Rust's `provider_id`.
+    int provider = 0;
     Selection range = {};
     Str newText = {};
     // The whole edit list, for an action that is more than one. Rust carries
@@ -2720,6 +2723,12 @@ struct CodeActionItem {
     const TextEditItem* edits = nullptr;
     int nEdits = 0;
 };
+
+// CodeActionProvider::perform_code_action: the provider does the action
+// itself rather than leaving its edits to the editor. True when it did.
+struct CodeActionItem;
+using CodeActionPerformFn = bool (*)(void* data, InputState* s, App* app,
+                                     Window* win, const CodeActionItem* item);
 
 // CodeActionProvider::code_actions, without the task: the provider is handed
 // the document and what is selected, and writes the actions it offers there.
@@ -3039,6 +3048,13 @@ struct InputState {
     Selection hoverRange = {};
     float hoverX = 0;
     float hoverY = 0;
+    // The 150 ms Rust waits before asking, and only when nothing is showing:
+    // a popover already up moves from word to word with no delay at all,
+    // which is `should_delay = hover_popover.is_none()`. A frame is the clock
+    // here, so this is when the question may be asked and what it is about.
+    double hoverDueAt = 0;
+    Selection hoverPending = {};
+    bool hoverAsked = true;
     // The colours a provider found in the document, and who is asked. Rust
     // asks on a timer after every edit and diffs the answer; this asks the
     // frame after the edit, which is the same answer a frame sooner.
@@ -3051,6 +3067,21 @@ struct InputState {
     // in one list; there is one here, and an example that wants two answers
     // both from the one it registers.
     CodeActionSession codeActions;
+    // Rust holds a `Vec<Rc<dyn CodeActionProvider>>` and asks every one of
+    // them, putting the answers in one list; each item remembers which
+    // provider it came from so performing it goes back to that one. The same
+    // here, with a small fixed table — a field with more than four sources of
+    // code actions is not a case upstream has either.
+    static const int kMaxCodeActionProviders = 4;
+    CodeActionFn codeActionProviders[kMaxCodeActionProviders] = {};
+    void* codeActionDatas[kMaxCodeActionProviders] = {};
+    // perform_code_action: the provider does it, if it wants to. A provider
+    // that says nothing has its edits applied by the editor, which is what
+    // every action in this tree writes.
+    CodeActionPerformFn codeActionPerform[kMaxCodeActionProviders] = {};
+    int nCodeActionProviders = 0;
+    // The first slot, under the name the one-provider callers already use.
+    // Writing it is the same as registering one provider.
     CodeActionFn codeActionProvider = nullptr;
     void* codeActionData = nullptr;
     // The inline suggestion in front of the caret, and who is asked for one.
@@ -3373,6 +3404,19 @@ bool InputUpdateInlineCompletion(InputState* s, bool menuOpen);
 bool InputHasInlineCompletion(const InputState* s);
 void InputClearInlineCompletion(InputState* s);
 bool InputAcceptInlineCompletion(InputState* s, App* app, Window* win);
+
+// CodeActionProvider registration. The one-provider form is the field above;
+// this is what a second and a third go through.
+void InputAddCodeActionProvider(InputState* s, CodeActionFn fn, void* data,
+                                CodeActionPerformFn perform = nullptr);
+
+// Lsp::update: what the document changing under the LSP layer means — the
+// caches that are derived from it are asked for again. Rust calls it from
+// the edit path; the frame builder is where it is called here, since the
+// answers are wanted for the frame being built.
+void InputLspUpdate(InputState* s);
+// Lsp::reset: everything the layer had cached or was showing, dropped.
+void InputLspReset(InputState* s);
 
 // Lsp::update's semantic half: ask the provider again when the document has
 // changed under it. Nothing happens without a provider, which is every field

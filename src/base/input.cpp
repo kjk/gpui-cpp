@@ -508,8 +508,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // pointer is the window's here, and this is the one place that has the
     // boxes to answer against.
     // What the document names in colour, asked for again when it changed.
-    InputUpdateDocumentColors(state);
-    InputUpdateSemanticTokens(state);
+    InputLspUpdate(state);
     // The debounce in front of an inline suggestion. A frame is the clock, so
     // one has to keep coming while it runs.
     if (InputUpdateInlineCompletion(state, state->completion.open)) {
@@ -554,6 +553,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             state->hoverDiagnostic >= 0 || secondary) {
             state->hoverText = Str{};
             state->hoverRange = Selection{};
+            state->hoverAsked = true;
         } else if (at < state->hoverRange.start ||
                    at >= state->hoverRange.end || state->hoverRange.IsEmpty()) {
             Str doc = InputValue(state);
@@ -561,12 +561,34 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             if (!TextWordRangeAt(doc, at, &a0, &b0)) {
                 a0 = b0 = at;
             }
-            state->hoverRange = Selection{a0, b0};
-            state->hoverText =
-                a0 < b0 ? state->hoverProvider(state->hoverData, doc, at)
-                        : Str{};
-            state->hoverX = mx;
-            state->hoverY = my;
+            Selection word = {a0, b0};
+            // `should_delay = hover_popover.is_none()`: with nothing showing,
+            // the pointer has to rest on the word for 150 ms before the
+            // provider is asked; with a popover already up, moving from word
+            // to word answers at once. A frame is the clock, so a wait asks
+            // for the next one.
+            bool showing = state->hoverText.len > 0;
+            bool pending = !state->hoverAsked &&
+                           state->hoverPending.start == word.start &&
+                           state->hoverPending.end == word.end;
+            if (!showing && !pending) {
+                state->hoverPending = word;
+                state->hoverAsked = false;
+                state->hoverDueAt = TimeNow() + 0.150;
+                state->hoverText = Str{};
+                state->hoverRange = Selection{};
+                WindowRequestAnimationFrame(cx->win);
+            } else if (!showing && TimeNow() < state->hoverDueAt) {
+                WindowRequestAnimationFrame(cx->win);
+            } else {
+                state->hoverAsked = true;
+                state->hoverRange = word;
+                state->hoverText =
+                    a0 < b0 ? state->hoverProvider(state->hoverData, doc, at)
+                            : Str{};
+                state->hoverX = mx;
+                state->hoverY = my;
+            }
         }
     }
 
@@ -2675,6 +2697,23 @@ int SemanticTokensForRange(const SemanticSpan* toks, int n, Str text,
     return m;
 }
 
+void InputLspUpdate(InputState* s) {
+    InputUpdateDocumentColors(s);
+    InputUpdateSemanticTokens(s);
+}
+
+void InputLspReset(InputState* s) {
+    if (!s) {
+        return;
+    }
+    s->documentColors.Clear();
+    s->documentColorsDirty = true;
+    s->semanticTokens.Clear();
+    s->semanticTokensDirty = true;
+    InputClearInlineCompletion(s);
+    InputDismissLspOverlays(s);
+}
+
 void InputUpdateSemanticTokens(InputState* s) {
     if (!s || !s->semanticTokensProvider || !s->semanticTokensDirty) {
         return;
@@ -2876,8 +2915,47 @@ void InputDismissCodeActions(InputState* s) {
     s->codeActions.revision++;
 }
 
+void InputAddCodeActionProvider(InputState* s, CodeActionFn fn, void* data,
+                                CodeActionPerformFn perform) {
+    if (!s || !fn) {
+        return;
+    }
+    if (!s->codeActionProvider) {
+        // The first one is the field the one-provider callers already write.
+        s->codeActionProvider = fn;
+        s->codeActionData = data;
+    }
+    if (s->nCodeActionProviders >= InputState::kMaxCodeActionProviders) {
+        return;
+    }
+    int at = s->nCodeActionProviders++;
+    s->codeActionProviders[at] = fn;
+    s->codeActionDatas[at] = data;
+    s->codeActionPerform[at] = perform;
+}
+
+// Every provider, in the order they were registered, with the field the
+// one-provider callers write standing in for a first registration they never
+// made.
+static int CodeActionProviderCount(const InputState* s) {
+    if (s->nCodeActionProviders > 0) {
+        return s->nCodeActionProviders;
+    }
+    return s->codeActionProvider ? 1 : 0;
+}
+
+static CodeActionFn CodeActionProviderAt(const InputState* s, int i,
+                                         void** data) {
+    if (s->nCodeActionProviders > 0) {
+        *data = s->codeActionDatas[i];
+        return s->codeActionProviders[i];
+    }
+    *data = s->codeActionData;
+    return s->codeActionProvider;
+}
+
 void InputToggleCodeActions(InputState* s, App* app, Window* win) {
-    if (!s || !s->codeActionProvider) {
+    if (!s || CodeActionProviderCount(s) == 0) {
         return;
     }
     // A menu that is up goes down, which is what a toggle is.
@@ -2895,12 +2973,24 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
     }
     const int kMax = 32;
     CodeActionItem buf[kMax];
-    int n = s->codeActionProvider(s->codeActionData, s->codeActions.arena,
-                                  InputValue(s), s->selectedRange, buf, kMax);
     s->codeActions.items.Reset();
-    for (int i = 0; i < n && i < kMax; i++) {
-        s->codeActions.items.Append(buf[i]);
+    // Every provider is asked and the answers go in one list, each item
+    // remembering which one it came from.
+    int nProviders = CodeActionProviderCount(s);
+    for (int p = 0; p < nProviders; p++) {
+        void* data = nullptr;
+        CodeActionFn fn = CodeActionProviderAt(s, p, &data);
+        if (!fn) {
+            continue;
+        }
+        int n = fn(data, s->codeActions.arena, InputValue(s), s->selectedRange,
+                   buf, kMax);
+        for (int i = 0; i < n && i < kMax; i++) {
+            buf[i].provider = p;
+            s->codeActions.items.Append(buf[i]);
+        }
     }
+    int n = s->codeActions.items.len;
     s->codeActions.selected = 0;
     s->codeActions.open = n > 0;
     s->codeActions.revision++;
@@ -2963,7 +3053,19 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
         edits[0].newText = StrDup(GetTempArena(), item.newText);
         n = 1;
     }
+    // perform_code_action: the provider that answered with it does it, if it
+    // said it would. Its edits are what the editor applies otherwise.
+    CodeActionPerformFn perform = nullptr;
+    void* performData = nullptr;
+    if (item.provider >= 0 && item.provider < s->nCodeActionProviders) {
+        perform = s->codeActionPerform[item.provider];
+        performData = s->codeActionDatas[item.provider];
+    }
     InputDismissCodeActions(s);
+    if (perform && perform(performData, s, app, win, &item)) {
+        Notify(app, win);
+        return;
+    }
     s->silentReplace = true;
     InputApplyEdits(s, app, win, edits, n);
     s->silentReplace = false;

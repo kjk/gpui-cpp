@@ -286,6 +286,84 @@ static bool Menu2(InputState* s, InputAction action) {
     return InputCodeActionAction(s, nullptr, nullptr, action);
 }
 
+// ─── more than one code action provider ──────────────────────────────────
+
+static int OneAction(void* data, Arena* a, Str text, Selection sel,
+                     CodeActionItem* out, int cap) {
+    (void)a;
+    (void)text;
+    (void)sel;
+    if (cap <= 0) {
+        return 0;
+    }
+    out[0].title = data ? StrL("second") : StrL("first");
+    out[0].range = sel;
+    out[0].newText = data ? StrL("B") : StrL("A");
+    return 1;
+}
+
+static int gPerformed = -1;
+
+static bool PerformIt(void* data, InputState* s, App* app, Window* win,
+                      const CodeActionItem* item) {
+    (void)data;
+    (void)s;
+    (void)app;
+    (void)win;
+    (void)item;
+    gPerformed = item->provider;
+    return true;
+}
+
+// Rust asks every registered provider and puts the answers in one list, each
+// item remembering which one it came from — and performing it goes back to
+// that provider.
+static void EveryProviderIsAsked() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    int second = 1;
+    InputAddCodeActionProvider(&s, &OneAction, nullptr);
+    InputAddCodeActionProvider(&s, &OneAction, &second, &PerformIt);
+    InputSetValue(&s, StrL("hello"));
+    InputSetSelectedRange(&s, nullptr, nullptr, 0, 5);
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(s.codeActions.open && s.codeActions.items.len == 2);
+    utassert(Is(s.codeActions.items[0].title, "first"));
+    utassert(Is(s.codeActions.items[1].title, "second"));
+    utassert(s.codeActions.items[0].provider == 0);
+    utassert(s.codeActions.items[1].provider == 1);
+
+    // The one that answered performs it, if it said it would.
+    gPerformed = -1;
+    utassert(Menu2(&s, InputAction::MoveDown));
+    utassert(Menu2(&s, InputAction::Enter));
+    utassert(gPerformed == 1);
+    // It took the action, so the editor wrote nothing.
+    utassert(ValueIs(s, "hello"));
+
+    // The first provider named no perform, so its edits are the editor's to
+    // apply.
+    Act(&s, InputAction::ToggleCodeActions);
+    utassert(Menu2(&s, InputAction::Enter));
+    utassert(ValueIs(s, "A"));
+}
+
+// Lsp::reset drops everything the layer was holding.
+static void ResetDropsWhatTheLayerHeld() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    CompletionItem item = {};
+    item.label = StrL("unwrap");
+    InputPresentCompletionItems(&s, 0, StrL(""), &item, 1);
+    InputPresentHover(&s, Selection{0, 2}, StrL("about it"));
+    utassert(InputIsContextMenuOpen(&s));
+    InputLspReset(&s);
+    utassert(!InputIsContextMenuOpen(&s));
+    utassert(s.hoverText.len == 0);
+    utassert(s.semanticTokens.len == 0);
+    utassert(s.documentColorsDirty && s.semanticTokensDirty);
+}
+
 // ─── the overlay seam (lsp/overlay.rs) ───────────────────────────────────
 
 // A host presenting its own items, without a provider in sight.
@@ -1658,6 +1736,8 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    EveryProviderIsAsked();
+    ResetDropsWhatTheLayerHeld();
     AHostCanPresentItsOwnItems();
     AHostCanTakeTheKeys();
     AnInsertIsNotTyping();
