@@ -114,6 +114,10 @@ struct MdNode {
     MdRun* runLast = nullptr;
     // Code: the fence's info string, e.g. "cpp".
     Str lang = {};
+    // Html: the block's raw source, kept after MdExpandHtml has turned it
+    // into children — a plugin matches on the tag it names, which is what
+    // Rust's `Node::Html(raw)` arm reads.
+    Str raw = {};
     // List: the first ordered number.
     int start = 1;
     // Heading: 1..6.
@@ -123,6 +127,36 @@ struct MdNode {
     bool ordered = false;
     // Row: this row is the table head.
     bool head = false;
+};
+
+// text_view.rs MarkdownNode: one block a plugin claimed, with the payload its
+// parser made and the two strings a copy of it would carry.
+struct MdPluginNode {
+    // MarkdownNode::name — the plugin that owns it.
+    Str name = {};
+    // as_text / as_markdown: what the block reads as, and the markdown that
+    // would produce it again.
+    Str text = {};
+    Str markdown = {};
+    // The parser's own payload, on the frame arena the parse ran in.
+    void* data = nullptr;
+};
+
+// MarkdownPlugin::parse. `node` is the block, `text` its flattened text —
+// the raw source for an HTML block, which is what a tag plugin matches on.
+// True when the plugin claims the block.
+using MdPluginParseFn = bool (*)(Ctx* cx, MdNode* node, Str text, void* data,
+                                 MdPluginNode* out);
+// MarkdownPlugin::render, for a block its own parser claimed.
+using MdPluginRenderFn = El* (*)(Ctx * cx, const MdPluginNode* node,
+                                 void* data);
+
+// One registered extension: `markdown(..).plugin(TickerPlugin::new(..))`.
+struct MdPlugin {
+    Str name = {};
+    MdPluginParseFn parse = nullptr;
+    MdPluginRenderFn render = nullptr;
+    void* data = nullptr;
 };
 
 // text_view.rs CodeBlockActionsFn: what the caller hangs in the corner of a
@@ -154,6 +188,10 @@ struct TextView {
     Listener onLink;
     CodeBlockActionsFn codeActions = nullptr;
     void* codeActionsData = nullptr;
+    // As many as a view registers; upstream's own example has three.
+    static const int kMaxPlugins = 8;
+    MdPlugin plugins[kMaxPlugins] = {};
+    int nPlugins = 0;
     // node.rs min_w_16: the floor a table column shrinks to. Above the floor
     // a column's width is a fraction of the table, proportional to the length
     // of its content, the way render_wrap_table distributes the space.
@@ -177,6 +215,11 @@ struct TextView {
     // code_block_actions(..): the row is absolutely placed at the block's
     // top right, over a muted plate, exactly where node.rs puts it.
     TextView* CodeBlockActions(CodeBlockActionsFn fn, void* data = nullptr);
+    // `.plugin(..)`: a parser and a renderer for blocks this view knows how
+    // to draw and markdown does not. They are offered every block in the
+    // order they were added, and the first that claims one renders it.
+    TextView* Plugin(Str name, MdPluginParseFn parse, MdPluginRenderFn render,
+                     void* data = nullptr);
     El* IntoEl();
 
   private:
@@ -187,6 +230,9 @@ struct TextView {
     Rgba blockFg = {};
     bool blockFgSet = false;
     Rgba BlockFg() const;
+    // The text a plugin's parser sees, and the block a plugin claimed.
+    Str BlockText(MdNode* n);
+    El* PluginBlock(MdNode* n);
     // node.rs render_block. `depth` is the list nesting level, `inList` and
     // `isLast` decide whether the block carries a paragraph gap below it.
     El* Block(MdNode* n, int depth, bool inList, bool isLast);

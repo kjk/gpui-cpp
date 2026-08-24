@@ -395,13 +395,17 @@ static void MdBlockNode(MdBuild* b, const md::Node* n) {
         case md::NodeKind::Table:
             MdTable(b, n);
             break;
-        case md::NodeKind::Html:
+        case md::NodeKind::Html: {
             // The raw source of the block; MdExpandHtml below turns it into
-            // children.
+            // children, and the node keeps the source for a plugin that
+            // matches on the tag.
             Push(b, MdKind::Html);
-            AddText(b, V(b, n, md::NodeStrKind::Value));
+            Str raw = V(b, n, md::NodeStrKind::Value);
+            b->cur->raw = raw;
+            AddText(b, raw);
             Pop(b);
             break;
+        }
         case md::NodeKind::Break:
             Push(b, MdKind::Paragraph);
             AddText(b, StrL("\n"));
@@ -1126,8 +1130,62 @@ El* TextView::Blocks(El* into, MdNode* n, int depth, bool inList) {
     return into;
 }
 
+// The text a plugin's parser is given: an HTML block's raw source, and every
+// other block's runs laid end to end.
+Str TextView::BlockText(MdNode* n) {
+    if (n->kind == MdKind::Html && n->raw.len > 0) {
+        return n->raw;
+    }
+    int len = 0;
+    for (MdRun* r = n->runFirst; r; r = r->next) {
+        len += r->text.len;
+    }
+    if (len <= 0) {
+        return Str{};
+    }
+    if (!n->runFirst->next) {
+        return n->runFirst->text;
+    }
+    char* buf = (char*)Alloc(a, len + 1);
+    if (!buf) {
+        return Str{};
+    }
+    int at = 0;
+    for (MdRun* r = n->runFirst; r; r = r->next) {
+        memcpy(buf + at, r->text.s, (size_t)r->text.len);
+        at += r->text.len;
+    }
+    buf[at] = 0;
+    return Str(buf, at);
+}
+
+// Every registered plugin is offered the block, in the order they were added.
+El* TextView::PluginBlock(MdNode* n) {
+    if (nPlugins <= 0) {
+        return nullptr;
+    }
+    Str text = BlockText(n);
+    for (int i = 0; i < nPlugins; i++) {
+        MdPluginNode node;
+        node.name = plugins[i].name;
+        if (!plugins[i].parse(cx, n, text, plugins[i].data, &node)) {
+            continue;
+        }
+        if (El* el = plugins[i].render(cx, &node, plugins[i].data)) {
+            return el;
+        }
+    }
+    return nullptr;
+}
+
 El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
     const Theme& th = cx->theme();
+    // A plugin's block stands in for whatever markdown made of it, and takes
+    // the paragraph gap the block it replaced would have carried.
+    if (El* claimed = PluginBlock(n)) {
+        float pad = (inList || isLast) ? 0.f : paragraphGap;
+        return Div(a)->W(kFill)->PadB(pad)->Child(claimed);
+    }
     // node.rs render_block: every block but the last one in its container
     // carries the paragraph gap below it, and a block inside a list item
     // carries none.
@@ -1235,6 +1293,19 @@ TextView* TextView::NewHtml(Ctx* cx, Str source) {
 TextView* TextView::CodeBlockActions(CodeBlockActionsFn fn, void* data) {
     codeActions = fn;
     codeActionsData = data;
+    return this;
+}
+
+TextView* TextView::Plugin(Str name, MdPluginParseFn parse,
+                           MdPluginRenderFn render, void* data) {
+    if (nPlugins >= kMaxPlugins || !parse || !render) {
+        return this;
+    }
+    MdPlugin& p = plugins[nPlugins++];
+    p.name = name;
+    p.parse = parse;
+    p.render = render;
+    p.data = data;
     return this;
 }
 

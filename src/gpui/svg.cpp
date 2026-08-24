@@ -1522,6 +1522,10 @@ Str IconNamePath(IconName name) {
             return StrL("icons/arrow-left.svg");
         case IconName::ArrowRight:
             return StrL("icons/arrow-right.svg");
+        case IconName::ArrowUp:
+            return StrL("icons/arrow-up.svg");
+        case IconName::ArrowDown:
+            return StrL("icons/arrow-down.svg");
         case IconName::Asterisk:
             return StrL("icons/asterisk.svg");
         case IconName::Bell:

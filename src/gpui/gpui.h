@@ -994,6 +994,8 @@ enum class IconName : uint8_t {
     Heart,
     ArrowLeft,
     ArrowRight,
+    ArrowUp,
+    ArrowDown,
     Building2,
     Asterisk,
     Sun,

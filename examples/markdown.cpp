@@ -7,7 +7,9 @@
    editor with line numbers, a two-space tab and the find bar on ctrl-f, and
    the fenced blocks in the preview carry the actions the Rust example hangs
    on them: a Clipboard for the code, and a Run button on the two languages
-   it knows.
+   it knows. Two of its markdown plugins are registered too — a `$SYMBOL`
+   paragraph draws as a quote card, and a `<UserCard id=".." />` block as a
+   card with an avatar and a Follow button that remembers being pressed.
 
    Rust marks TODO / FIXME / XXX / HACK / NOTE in the source through an
    LSP-style `DocumentRangeSemanticTokensProvider`. There is no language
@@ -26,8 +28,8 @@
    - **Table: Scroll / Wrap** — every table in this tree wraps, the way
      `render_wrap_table` does; the measured-width scrolling layout upstream
      defaults to is not ported.
-   - The three **markdown plugins** (ticker, user card, math) want a plugin
-     seam on TextView; the math one wants KaTeX through node besides.
+   - The **math plugin** is not registered yet; upstream renders a formula
+     through KaTeX in node, which this tree has neither of.
    - The source is drawn unhighlighted: `syntax.cpp` has a scanner for ten
      languages and markdown is not yet one of them. */
 
@@ -116,6 +118,256 @@ static int FindMarkers(Ctx* cx, Str text, TextSpan* out, int cap) {
     return n;
 }
 
+// ─── the three plugins the Rust example registers ─────────────────────────
+
+// TickerQuote: what the story hands the plugin, since there is no market
+// behind it.
+struct TickerQuote {
+    const char* symbol;
+    const char* name;
+    float price;
+    float change;
+};
+
+static const TickerQuote kQuotes[] = {
+    {"AAPL.US", "Apple Inc.", 300.21f, 5.2f},
+    {"TSLA.US", "Tesla, Inc.", 412.05f, -2.13f},
+};
+
+static const TickerQuote* QuoteFor(Str symbol) {
+    for (const TickerQuote& q : kQuotes) {
+        Str name = Str(q.symbol);
+        if (name.len == symbol.len &&
+            memcmp(name.s, symbol.s, (size_t)name.len) == 0) {
+            return &q;
+        }
+    }
+    return nullptr;
+}
+
+// ticker_symbol: `$` then letters, digits and at least one dot.
+static bool TickerSymbol(Str text, Str* out) {
+    if (text.len < 2 || text.s[0] != '$') {
+        return false;
+    }
+    Str sym = Str(text.s + 1, text.len - 1);
+    bool dot = false;
+    for (int i = 0; i < sym.len; i++) {
+        char c = sym.s[i];
+        bool alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                     (c >= '0' && c <= '9');
+        if (c == '.') {
+            dot = true;
+        } else if (!alnum) {
+            return false;
+        }
+    }
+    if (!dot) {
+        return false;
+    }
+    *out = sym;
+    return true;
+}
+
+static bool TickerParse(Ctx* cx, component::MdNode* n, Str text, void*,
+                        component::MdPluginNode* out) {
+    (void)cx;
+    // A paragraph whose one child is text: `[Node::Text(text)]` in Rust.
+    if (n->kind != component::MdKind::Paragraph || !n->runFirst ||
+        n->runFirst->next) {
+        return false;
+    }
+    Str sym;
+    if (!TickerSymbol(text, &sym)) {
+        return false;
+    }
+    out->text = text;
+    out->markdown = text;
+    out->data = (void*)QuoteFor(sym);
+    if (!out->data) {
+        // An unknown symbol still draws, the way Rust's `_ =>` arm does.
+        static const TickerQuote unknown = {"", "Unknown", 0.f, 0.f};
+        out->data = (void*)&unknown;
+    }
+    return true;
+}
+
+static El* TickerRender(Ctx* cx, const component::MdPluginNode* node, void*) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    const auto* q = (const TickerQuote*)node->data;
+    bool up = q->change >= 0.f;
+    Rgba trend = up ? th.green : th.red;
+
+    El* head = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+    El* names = Div(a)->FlexCol()->Gap(4);
+    names->Child(TextEl(a, node->text)->Font(14)->LineHeight(1.f)->Semibold());
+    names->Child(
+        TextEl(a, Str(q->name))->Font(12)->LineHeight(1.f)->Fg(th.mutedFg));
+    head->Child(names);
+    El* chip = Div(a)
+                   ->FlexRow()
+                   ->ItemsCenter()
+                   ->Gap(2)
+                   ->PadX(4)
+                   ->PadY(2)
+                   ->Radius(th.radius)
+                   ->Bg(RgbaOpacity(trend, 0.12f))
+                   ->Fg(trend);
+    chip->Child(IconEl(a, up ? IconName::ArrowUp : IconName::ArrowDown, 12));
+    chip->Child(TextEl(a, StrDup(a, fmt("%+.1f%%", (double)q->change)))
+                    ->Font(12)
+                    ->LineHeight(1.f)
+                    ->Medium());
+    head->Child(chip);
+
+    El* last = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
+    last->Child(TextEl(a, StrDup(a, fmt("%.2f", (double)q->price)))
+                    ->Font(18)
+                    ->LineHeight(1.f)
+                    ->Semibold());
+    last->Child(
+        TextEl(a, StrL("Last"))->Font(12)->LineHeight(1.f)->Fg(th.mutedFg));
+
+    return Div(a)
+        ->FlexCol()
+        ->W(240)
+        ->Gap(6)
+        ->PadX(12)
+        ->PadY(8)
+        ->Radius(th.radius)
+        ->Border(1, th.border)
+        ->Bg(th.tokens.background)
+        ->Child(head)
+        ->Child(last);
+}
+
+// The two people the example knows, by the id its `<UserCard />` names.
+struct UserCardDef {
+    const char* id;
+    const char* name;
+    const char* avatar;
+};
+
+static const UserCardDef kUsers[] = {
+    {"huacnlee", "Jason Lee",
+     "https://avatars.githubusercontent.com/u/5518?v=4"},
+    {"madcodelife", "Floyd Wang",
+     "https://avatars.githubusercontent.com/u/28998859?v=4"},
+};
+
+// html_tag_name / html_attr: the two readings of a raw block the Rust example
+// makes, without a regex.
+static bool HtmlTagIs(Str raw, const char* name) {
+    int at = 0;
+    while (at < raw.len && (raw.s[at] == ' ' || raw.s[at] == '\n')) {
+        at++;
+    }
+    if (at >= raw.len || raw.s[at] != '<') {
+        return false;
+    }
+    at++;
+    Str want = Str(name);
+    if (at + want.len > raw.len ||
+        memcmp(raw.s + at, want.s, (size_t)want.len) != 0) {
+        return false;
+    }
+    char after = at + want.len < raw.len ? raw.s[at + want.len] : '\0';
+    return after == ' ' || after == '/' || after == '>' || after == '\n';
+}
+
+static bool HtmlAttr(Str raw, const char* name, Str* out) {
+    char pattern[64];
+    int n = 0;
+    for (const char* p = name; *p && n < 60; p++) {
+        pattern[n++] = *p;
+    }
+    pattern[n++] = '=';
+    pattern[n++] = '"';
+    for (int i = 0; i + n <= raw.len; i++) {
+        if (memcmp(raw.s + i, pattern, (size_t)n) != 0) {
+            continue;
+        }
+        int start = i + n;
+        for (int j = start; j < raw.len; j++) {
+            if (raw.s[j] == '"') {
+                *out = Str(raw.s + start, j - start);
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+static bool UserCardParse(Ctx* cx, component::MdNode* n, Str text, void*,
+                          component::MdPluginNode* out) {
+    (void)cx;
+    if (n->kind != component::MdKind::Html || !HtmlTagIs(text, "UserCard")) {
+        return false;
+    }
+    Str id;
+    if (!HtmlAttr(text, "id", &id)) {
+        return false;
+    }
+    out->text = id;
+    out->markdown = text;
+    const UserCardDef* found = nullptr;
+    for (const UserCardDef& u : kUsers) {
+        Str uid = Str(u.id);
+        if (uid.len == id.len && memcmp(uid.s, id.s, (size_t)uid.len) == 0) {
+            found = &u;
+        }
+    }
+    static const UserCardDef unknown = {"", "Unknown", ""};
+    out->data = (void*)(found ? found : &unknown);
+    return true;
+}
+
+// window.use_keyed_state("user-card-follow-{id}"): the button remembers
+// whether it was pressed, and nothing else does.
+struct FollowState {
+    bool following = false;
+    static void OnClick(FollowState* self, Ctx* cx, const ClickEvent*) {
+        self->following = !self->following;
+        Notify(cx);
+    }
+};
+
+static El* UserCardRender(Ctx* cx, const component::MdPluginNode* node, void*) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    const auto* u = (const UserCardDef*)node->data;
+    Str id = node->text;
+    Entity<FollowState> follow = KeyedEntity<FollowState>(
+        cx, KeyedKey(HashClickId(id), HashClickId(StrL("user-card-follow"))));
+    FollowState* st = follow.Get(cx);
+    bool following = st && st->following;
+
+    component::Avatar* av = component::Avatar::New(cx)->Name(Str(u->name));
+    if (u->avatar[0]) {
+        av->Src(Str(u->avatar));
+    }
+    return Div(a)
+        ->FlexRow()
+        ->W(300)
+        ->ItemsCenter()
+        ->Gap(12)
+        ->PadX(12)
+        ->PadY(8)
+        ->Radius(th.radius)
+        ->Border(1, th.border)
+        ->Child(av->Size(24)->IntoEl())
+        ->Child(
+            Div(a)->Flex1()->Child(TextEl(a, Str(u->name))->Font(14)->Medium()))
+        ->Child(component::Button::New(cx, StrDup(a, fmt("follow-%s", id)))
+                    ->Outline()
+                    ->WithSize(UiSize::Small)
+                    ->Label(following ? StrL("Following") : StrL("Follow"))
+                    ->OnClick(ListenTo(follow, &FollowState::OnClick))
+                    ->IntoEl());
+}
+
 static void OnLink(MarkdownApp* self, Ctx* cx, const ClickEvent*,
                    intptr_t href) {
     StrCopyZ(self->lastLink, (int)sizeof(self->lastLink),
@@ -194,6 +446,9 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     El* left = Div(a)->FlexCol()->SizeFull()->Child(ed->IntoEl());
 
     component::TextView* tv = component::TextView::New(cx, text);
+    // .plugin(TickerPlugin::new(..)).plugin(UserCardPlugin::new())
+    tv->Plugin(StrL("ticker"), &TickerParse, &TickerRender);
+    tv->Plugin(StrL("user-card"), &UserCardParse, &UserCardRender);
     El* preview = tv->Selectable()
                       ->OnLink(Listen(cx, &OnLink))
                       ->CodeBlockActions(&CodeActions, self)
