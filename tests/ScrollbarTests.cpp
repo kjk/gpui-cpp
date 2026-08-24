@@ -4,7 +4,11 @@
  * is the thumb's length and the two ways a pointer sets the offset — a track
  * press, which centres the thumb where it landed, and a drag, which keeps the
  * grab point. Offsets here run positive-down, the way El::ScrollY takes them;
- * Rust's run negative because it offsets the content rather than the view. */
+ * Rust's run negative because it offsets the content rather than the view.
+ *
+ * The second half is the visibility animation that arrived with gpui-component
+ * 2a1335d5: the animation lives beside the element tree here rather than in a
+ * keyed state, so a test drives it by scroll id and steps the clock itself. */
 
 #include "Test.h"
 
@@ -69,4 +73,132 @@ void TestScrollbar() {
     ATrackPressCentresTheThumbOnIt();
     ADragKeepsTheGrabPoint();
     NothingToScrollMeansNoOffset();
+}
+
+// The timing a styled layer projects, which is what these assert against.
+static const float kEnter = 0.3f;
+static const float kExit = 0.5f;
+
+static void VisibilityUsesDirectionSpecificCurvesAndDurations() {
+    const int id = 9001;
+    double start = 1000.0;
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::Fade, 0, 0, start);
+
+    ScrollbarVisibilitySet(id, true, ScrollbarEntrance::SlideAndFade, kEnter,
+                           kExit, start);
+    utassert(ScrollbarVisibilityAt(id, start).opacity == 0.f);
+    // ease-out must advance quickly
+    utassert(ScrollbarVisibilityAt(id, start + kEnter / 2).position > 0.5f);
+
+    ScrollbarVisibility entered = ScrollbarVisibilityAt(id, start + kEnter);
+    utassert(entered.opacity == 1.f);
+    utassert(entered.position == 1.f);
+
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::SlideAndFade, kEnter,
+                           kExit, start + kEnter);
+    // ease-in must remain visible early in the exit
+    float exiting =
+        ScrollbarVisibilityAt(id, start + kEnter + kExit / 2).opacity;
+    utassert(exiting > 0.5f);
+    utassert(ScrollbarVisibilityAt(id, start + kEnter + kExit).opacity == 0.f);
+}
+
+static void EntranceFadesLinearlyWhilePositionEasesOut() {
+    const int id = 9002;
+    double start = 2000.0;
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::Fade, 0, 0, start);
+    ScrollbarVisibilitySet(id, true, ScrollbarEntrance::SlideAndFade, kEnter,
+                           kExit, start);
+
+    ScrollbarVisibility halfway = ScrollbarVisibilityAt(id, start + kEnter / 2);
+    utassert(TestNear(halfway.opacity, 0.5f));
+    utassert(halfway.position > halfway.opacity);
+}
+
+// A fade entrance does not move: the position is already home, so only the
+// opacity travels.
+static void AFadeEntranceDoesNotSlide() {
+    const int id = 9003;
+    double start = 3000.0;
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::Fade, 0, 0, start);
+    ScrollbarVisibilitySet(id, true, ScrollbarEntrance::Fade, kEnter, kExit,
+                           start);
+
+    ScrollbarVisibility halfway = ScrollbarVisibilityAt(id, start + kEnter / 2);
+    utassert(halfway.position == 1.f);
+    utassert(halfway.opacity < 1.f);
+}
+
+static void SlideMovesTowardTheNearestEdge() {
+    utassert(ScrollbarSlideOffset(16.f, 0.f) == 16.f);
+    utassert(ScrollbarSlideOffset(16.f, 1.f) == 0.f);
+    utassert(TestNear(ScrollbarSlideOffset(16.f, 0.5f), 8.f));
+    // Out of range is clamped, the way `progress.clamp(0.0, 1.0)` is.
+    utassert(ScrollbarSlideOffset(16.f, 2.f) == 0.f);
+    utassert(ScrollbarSlideOffset(16.f, -1.f) == 16.f);
+}
+
+// An interruption picks up from where it had got to rather than restarting,
+// and the leg it runs is shortened by the distance left to cover.
+static void AReversalStartsFromTheCurrentProgress() {
+    const int id = 9004;
+    double start = 4000.0;
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::Fade, 0, 0, start);
+    ScrollbarVisibilitySet(id, true, ScrollbarEntrance::SlideAndFade, kEnter,
+                           kExit, start);
+
+    double at = start + 0.06;
+    ScrollbarVisibility before = ScrollbarVisibilityAt(id, at);
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::SlideAndFade, kEnter,
+                           kExit, at);
+    ScrollbarVisibility reversed = ScrollbarVisibilityAt(id, at);
+    utassert(TestNear(reversed.opacity, before.opacity));
+    utassert(TestNear(reversed.position, before.position));
+
+    ScrollbarVisibility after = ScrollbarVisibilityAt(id, at + 0.01);
+    utassert(after.opacity < before.opacity);
+    utassert(after.position < before.position);
+}
+
+// A motionless policy — reduced motion, or a theme that projects none —
+// adopts the target outright, even mid-flight.
+static void MotionlessSnaps() {
+    const int id = 9005;
+    double start = 5000.0;
+    ScrollbarVisibilitySet(id, false, ScrollbarEntrance::Fade, 0, 0, start);
+    ScrollbarVisibilitySet(id, true, ScrollbarEntrance::SlideAndFade, kEnter,
+                           kExit, start);
+    ScrollbarVisibilitySet(id, true, ScrollbarEntrance::Fade, 0, 0,
+                           start + 0.05);
+
+    ScrollbarVisibility now = ScrollbarVisibilityAt(id, start + 0.05);
+    utassert(now.opacity == 1.f);
+    utassert(now.position == 1.f);
+    utassert(!now.running);
+}
+
+// The mode decides the choreography: hover mode slides its thumb in, the
+// other two fade in place.
+static void HoverModeIsTheOneThatSlides() {
+    utassert(ScrollbarMotionFor(ScrollbarMode::Hover).thumbHoverEntrance ==
+             ScrollbarEntrance::SlideAndFade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Scrolling).thumbHoverEntrance ==
+             ScrollbarEntrance::Fade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Always).thumbHoverEntrance ==
+             ScrollbarEntrance::Fade);
+    // The entrance every mode shares, and the hold before the exit.
+    utassert(ScrollbarMotionFor(ScrollbarMode::Hover).entrance ==
+             ScrollbarEntrance::Fade);
+    utassert(ScrollbarMotionFor(ScrollbarMode::Hover).idle == 2.f);
+}
+
+void TestScrollbarMotion() {
+    TestSuite("scrollbar_motion");
+    VisibilityUsesDirectionSpecificCurvesAndDurations();
+    EntranceFadesLinearlyWhilePositionEasesOut();
+    AFadeEntranceDoesNotSlide();
+    SlideMovesTowardTheNearestEdge();
+    AReversalStartsFromTheCurrentProgress();
+    MotionlessSnaps();
+    HoverModeIsTheOneThatSlides();
 }

@@ -1137,8 +1137,57 @@ enum class ScrollbarMode : uint8_t {
 // FADE_OUT_DELAY / FADE_OUT_DURATION, in seconds. The curve between them is
 // Rust's `1 - (elapsed - delay)^10`: flat for most of the second, then a
 // drop off the end.
-const float kScrollbarFadeDelay = 2.f;
-const float kScrollbarFadeDuration = 3.f;
+// crates/base/src/scrollbar.rs `ScrollbarEntrance`: how a bar arrives. The
+// styled layer chooses the choreography; base only plays it.
+enum class ScrollbarEntrance : uint8_t {
+    // Fade in without moving.
+    Fade,
+    // Slide in from the nearest edge while fading.
+    SlideAndFade
+};
+
+// `ScrollbarMotion`, in seconds rather than Duration. Base installs no motion
+// of its own — every duration there defaults to zero and both visibility and
+// thumb width snap — and the timing below is what crates/ui projects onto it
+// in `theme/mod.rs`'s `scrollbar_motion`.
+struct ScrollbarMotion {
+    // How long visibility is held after the last scroll, drag, or hover.
+    float idle = 2.f;
+    // How long the bar takes to become fully visible.
+    float enter = 0.3f;
+    // How long it takes to fade away once the idle hold expires.
+    float exit = 0.5f;
+    // How long the thumb takes to reach a new width.
+    float expand = 0.3f;
+    ScrollbarEntrance entrance = ScrollbarEntrance::Fade;
+    ScrollbarEntrance thumbHoverEntrance = ScrollbarEntrance::Fade;
+};
+
+// The motion this design system projects for a mode. Scrolling and track
+// hover reveal a bar by fading it in place; in hover mode, pointing at the
+// thumb slides it in from the nearest edge as it fades. Reduced motion zeroes
+// every duration, which is how a policy with no motion arrives here.
+ScrollbarMotion ScrollbarMotionFor(ScrollbarMode mode);
+
+// What `VisibilityAnimation::sample` answers: how much of the bar is there,
+// how far along its slide it is, and whether it is still moving.
+struct ScrollbarVisibility {
+    float opacity = 0;
+    float position = 0;
+    bool running = false;
+};
+
+// The animation itself, keyed by scroll id the way the painted bars are.
+// These are the seam tests/ScrollbarTests.cpp drives the curves through —
+// `now` is the clock rather than TimeNow(), so a test can step it — and
+// nothing else needs them: a frame reaches the same state through paint.
+void ScrollbarVisibilitySet(int scrollId, bool visible,
+                            ScrollbarEntrance entrance, float enter, float exit,
+                            double now);
+ScrollbarVisibility ScrollbarVisibilityAt(int scrollId, double now);
+// `visibility_translation`: how far off its edge the bar is drawn at that
+// point in the slide. Zero once it has arrived.
+float ScrollbarSlideOffset(float trackWidth, float position);
 
 // The default Theme::scrollbar_mode. An element that names its own wins, the
 // way `Scrollbar::new().mode(..)` overrides the theme's.
@@ -2060,6 +2109,10 @@ struct ScrollRect {
     // per-axis pair: a bar that is not painted is not there to grab either.
     bool barX = true;
     bool barY = true;
+    // Whether the bar is on screen at all. A faded-out bar keeps its layout
+    // and its band, and takes no press: `tracks_thumb_hover` and the disabled
+    // hitbox in scrollbar.rs say the same thing.
+    bool barVisible = true;
     Listener onScroll;
     // The text field this box scrolls, when it is one. An InputState is not
     // an entity and so cannot be the target of a Listener; the element names

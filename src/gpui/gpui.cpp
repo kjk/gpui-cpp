@@ -1422,18 +1422,99 @@ static float ThumbRadius(const Theme& th, float thumbW) {
     return r > thumbW * 0.5f ? thumbW * 0.5f : r;
 }
 
-// ScrollbarMode::Scrolling's clock. Rust keeps `last_scroll_offset` and
-// `last_scroll_time` in the scrollbar element's own keyed state; the tree here
-// is rebuilt every frame, so the pair lives beside the tree and is found again
-// by `El::ScrollId`. One entry per scroll area that has ever moved — a
+// ─── the scrollbar's motion — crates/base/src/scrollbar.rs ───────────────
+//
+// A scrollbar appears and disappears rather than blinking: it fades in over
+// `enter` with its position eased, holds for `idle`, and slides and fades out
+// over `exit`. An interruption reverses from wherever it had got to, and the
+// leg is shortened by the distance left to cover so it keeps its speed. The
+// layout, the band and the press geometry never move — only what is painted.
+//
+// Rust keeps this in the scrollbar element's own keyed state; the tree here is
+// rebuilt every frame, so it lives beside the tree and is found again by
+// `El::ScrollId`. One entry per scroll area that has ever been drawn — a
 // gallery has a handful — and they are dropped with the app.
+
+// `ScalarTransition<T>`: a value on its way from `from` to `target`.
+struct ScalarTransition {
+    float from = 0;
+    float target = 0;
+    double startedAt = 0;
+    float duration = 0;
+};
+
+// The two easings scrollbar.rs imports from `animation`. They are written out
+// rather than reached for, because src/base sits above this file.
+static float ScrollEaseOutCubic(float t) {
+    float u = 1.f - t;
+    return 1.f - u * u * u;
+}
+
+static float ScrollEaseInCubic(float t) {
+    return t * t * t;
+}
+
+enum class ScrollCurve : uint8_t {
+    Linear,
+    InCubic,
+    OutCubic
+};
+
+static float TransitionSample(const ScalarTransition& tr, double now,
+                              ScrollCurve curve, bool* running) {
+    if (tr.from == tr.target || tr.duration <= 0) {
+        return tr.target;
+    }
+    float linear = (float)((now - tr.startedAt) / (double)tr.duration);
+    if (linear >= 1.f) {
+        return tr.target;
+    }
+    if (linear < 0) {
+        linear = 0;
+    }
+    float f = linear;
+    if (curve == ScrollCurve::InCubic) {
+        f = ScrollEaseInCubic(linear);
+    } else if (curve == ScrollCurve::OutCubic) {
+        f = ScrollEaseOutCubic(linear);
+    }
+    if (running) {
+        *running = true;
+    }
+    return tr.from + (tr.target - tr.from) * f;
+}
+
+static void TransitionStart(ScalarTransition* tr, float from, float target,
+                            float duration, double now) {
+    tr->from = from;
+    tr->target = target;
+    tr->startedAt = now;
+    tr->duration = duration;
+}
+
+static void TransitionSettle(ScalarTransition* tr, float target, double now) {
+    TransitionStart(tr, target, target, 0, now);
+}
+
 struct ScrollFade {
     int id = 0;
     float y = 0;
     float x = 0;
-    // TimeNow() when the offset last changed, or when the pointer last held
-    // the bar up.
+    // last_scroll_time: TimeNow() when the offset last changed, or when the
+    // pointer last held the bar up. Unset until something scrolls, which is
+    // what keeps a page from flashing every bar on it as it opens.
     double at = 0;
+    bool hasLast = false;
+    // VisibilityAnimation: what is drawn, and where it is drawn from.
+    ScalarTransition opacity;
+    ScalarTransition position;
+    ScrollbarEntrance entrance = ScrollbarEntrance::Fade;
+    // WidthAnimation, one per axis: the thumb growing to its hovered width
+    // and settling back.
+    ScalarTransition widthY;
+    ScalarTransition widthX;
+    bool widthYSet = false;
+    bool widthXSet = false;
 };
 
 static Vec<ScrollFade> gScrollFades;
@@ -1448,16 +1529,133 @@ static ScrollFade* ScrollFadeFor(int id, float y, float x) {
     f.id = id;
     f.y = y;
     f.x = x;
-    // A bar the frame has never seen starts out faded: opening a page does not
-    // flash every scrollbar on it, which is what Rust gets from having no
-    // last_scroll_time until something scrolls.
-    f.at = -(double)kScrollbarFadeDuration;
     gScrollFades.Append(f);
     return &gScrollFades[gScrollFades.len - 1];
 }
 
 void ScrollFadeClear() {
     gScrollFades.Reset();
+}
+
+ScrollbarMotion ScrollbarMotionFor(ScrollbarMode mode) {
+    ScrollbarMotion m;
+    // `with_thumb_hover_entrance`: hover mode slides, the other two fade.
+    m.thumbHoverEntrance = mode == ScrollbarMode::Hover
+                               ? ScrollbarEntrance::SlideAndFade
+                               : ScrollbarEntrance::Fade;
+    if (PlatReduceMotion()) {
+        // A motionless policy adopts its target outright, which is what a
+        // zero duration means to every transition below.
+        m.enter = 0;
+        m.exit = 0;
+        m.expand = 0;
+    }
+    return m;
+}
+
+// `VisibilityAnimation::sample`. Entering, the opacity is linear and the
+// position eases out; leaving, both ease in.
+static ScrollbarVisibility VisibilitySample(const ScrollFade* f, double now) {
+    ScrollbarVisibility out;
+    bool entering = f->opacity.target > f->opacity.from ||
+                    f->position.target > f->position.from;
+    out.opacity = TransitionSample(
+        f->opacity, now, entering ? ScrollCurve::Linear : ScrollCurve::InCubic,
+        &out.running);
+    out.position = TransitionSample(
+        f->position, now,
+        entering ? ScrollCurve::OutCubic : ScrollCurve::InCubic, &out.running);
+    return out;
+}
+
+// `VisibilityAnimation::set_visible`: reverse or start a leg toward `visible`.
+// The leg runs for `enter` or `exit` scaled by the distance still to cover, so
+// an interrupted transition keeps its speed instead of restarting.
+static void VisibilitySetVisible(ScrollFade* f, bool visible,
+                                 ScrollbarEntrance entrance, float enter,
+                                 float exit, double now) {
+    float target = visible ? 1.f : 0.f;
+    float full = visible ? enter : exit;
+    if (full <= 0) {
+        TransitionSettle(&f->opacity, target, now);
+        TransitionSettle(&f->position, target, now);
+        f->entrance = entrance;
+        return;
+    }
+    if (f->opacity.target == target && f->position.target == target &&
+        f->entrance == entrance) {
+        return;
+    }
+    ScrollbarVisibility s = VisibilitySample(f, now);
+    // A fade entrance starts where a fade ends: fully in place, so only the
+    // opacity moves.
+    float fromPosition =
+        (visible && entrance == ScrollbarEntrance::Fade) ? 1.f : s.position;
+    float d1 = target - s.opacity;
+    float d2 = target - fromPosition;
+    d1 = d1 < 0 ? -d1 : d1;
+    d2 = d2 < 0 ? -d2 : d2;
+    float distance = d1 > d2 ? d1 : d2;
+    float duration = full * distance;
+    TransitionStart(&f->opacity, s.opacity, target, duration, now);
+    TransitionStart(&f->position, fromPosition, target, duration, now);
+    f->entrance = entrance;
+}
+
+void ScrollbarVisibilitySet(int scrollId, bool visible,
+                            ScrollbarEntrance entrance, float enter, float exit,
+                            double now) {
+    ScrollFade* f = ScrollFadeFor(scrollId, 0, 0);
+    VisibilitySetVisible(f, visible, entrance, enter, exit, now);
+}
+
+ScrollbarVisibility ScrollbarVisibilityAt(int scrollId, double now) {
+    return VisibilitySample(ScrollFadeFor(scrollId, 0, 0), now);
+}
+
+float ScrollbarSlideOffset(float trackWidth, float position) {
+    float p = position < 0 ? 0 : (position > 1 ? 1 : position);
+    return trackWidth * (1.f - p);
+}
+
+// `WidthAnimation::set_target`, which eases out toward the width the state
+// asks for. The first frame settles rather than animating, so a bar does not
+// grow out of nothing the first time it is drawn.
+static float WidthTarget(ScalarTransition* tr, bool* initialized, float target,
+                         float duration, double now, bool* running) {
+    if (duration <= 0 || !*initialized) {
+        TransitionSettle(tr, target, now);
+        *initialized = true;
+    } else if (tr->target != target) {
+        float from = TransitionSample(*tr, now, ScrollCurve::OutCubic, nullptr);
+        TransitionStart(tr, from, target, duration, now);
+    }
+    return TransitionSample(*tr, now, ScrollCurve::OutCubic, running);
+}
+
+// `wants_visible`: an always-on bar, a drag, a hover in hover mode, or a
+// scroll inside the idle hold.
+static bool ScrollbarWantsVisible(ScrollbarMode mode, bool hovered,
+                                  bool dragging, const ScrollFade* f,
+                                  float idle, double now) {
+    if (mode == ScrollbarMode::Always || dragging) {
+        return true;
+    }
+    if (mode == ScrollbarMode::Hover && hovered) {
+        return true;
+    }
+    return f->hasLast && (now - f->at) < (double)idle;
+}
+
+// `hover_keeps_visible`: the pointer holds a bar up in hover mode, and in
+// scrolling mode only while it is already up.
+static bool ScrollbarHoverKeepsVisible(ScrollbarMode mode, bool hovered,
+                                       bool visible) {
+    if (!hovered) {
+        return false;
+    }
+    return mode == ScrollbarMode::Hover ||
+           (mode == ScrollbarMode::Scrolling && visible);
 }
 
 // ─── the inspector's live style overrides ────────────────────────────────
@@ -1580,32 +1778,6 @@ void StyleOverrideApply(El* e) {
 // How opaque a Scrolling bar is right now, and whether the window has to come
 // back for the rest of the fade. `held` is the pointer resting on the bar,
 // which Rust answers by stamping the time again.
-static float ScrollFadeOpacity(int id, float y, float x, bool held,
-                               bool* wantsFrame) {
-    ScrollFade* f = ScrollFadeFor(id, y, x);
-    double now = TimeNow();
-    if (f->y != y || f->x != x || held) {
-        f->y = y;
-        f->x = x;
-        f->at = now;
-    }
-    float elapsed = (float)(now - f->at);
-    if (elapsed < kScrollbarFadeDelay) {
-        *wantsFrame = true;
-        return 1.f;
-    }
-    if (elapsed >= kScrollbarFadeDuration) {
-        return 0.f;
-    }
-    *wantsFrame = true;
-    // 1 - t^10 over the last second, which is Rust's curve.
-    float t = elapsed - kScrollbarFadeDelay;
-    float t2 = t * t;
-    float t4 = t2 * t2;
-    float o = 1.f - t4 * t4 * t2;
-    return o < 0 ? 0 : o;
-}
-
 El* El::Rotate(float turns) {
     style.rotate = turns;
     return this;
@@ -5162,40 +5334,80 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         CanvasPopClip(ctx);
     }
 
-    // ScrollbarMode: Always paints the bar whenever there is something to
-    // scroll, Hover only while the pointer is over the box it belongs to, and
-    // Scrolling while the offset is moving plus the fade after it stops.
+    // `wants_visible` and the visibility animation under it: an always-on bar,
+    // a drag, a hover in hover mode, or a scroll inside the idle hold puts the
+    // bar up; anything else takes it away over `exit`. What moves is what is
+    // painted — the band, the press geometry and the layout stay where they
+    // are, which is what keeps a bar that is sliding out from swallowing a
+    // click meant for the page.
     ScrollbarMode barMode = ElScrollMode(e);
     bool overBox = e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
-    bool barVisible =
-        !e->noScrollbar && (barMode == ScrollbarMode::Always || overBox);
+    bool dragging = ctx->scrollDragId != 0 && ctx->scrollDragId == e->scrollId;
+    ScrollbarMotion barMotion = ScrollbarMotionFor(barMode);
+    bool barVisible = !e->noScrollbar;
     float barAlpha = 1.f;
-    if (!e->noScrollbar && barMode == ScrollbarMode::Scrolling) {
-        // No ScrollId is no clock: the area cannot be found again next frame,
-        // so it keeps the bar rather than blinking it every time the pointer
-        // moves. Rust's state is keyed the same way, off the element id.
-        if (e->scrollId == 0) {
-            barVisible = true;
-        } else {
-            // is_hovered_on_bar: the pointer resting inside the band the
-            // thumb runs down holds the bar up, which is Rust stamping the
-            // time again on every frame it is there.
-            bool held =
-                overBox && (ctx->mouseX >= e->x + e->w - kScrollbarBandW ||
-                            ctx->mouseY >= e->y + e->h - kScrollbarBandW);
-            barAlpha = ScrollFadeOpacity(e->scrollId, e->scrollY, e->scrollX,
-                                         held, &ctx->wantsAnimFrame);
-            barVisible = barAlpha > 0.f;
+    float barSlide = 0.f;
+    if (barVisible && e->scrollId == 0) {
+        // No ScrollId is no state: the area cannot be found again next frame,
+        // so it keeps the bar rather than animating it from nothing every
+        // time. Rust's state is keyed the same way, off the element id.
+        barVisible = barMode == ScrollbarMode::Always || overBox;
+    } else if (barVisible) {
+        // is_hovered_on_bar: the pointer resting inside the band the thumb
+        // runs down. It holds the bar up in hover mode, and in scrolling mode
+        // only while the bar is already up — `hover_keeps_visible`.
+        bool onBand =
+            overBox && (ctx->mouseX >= e->x + e->w - kScrollbarBandW ||
+                        ctx->mouseY >= e->y + e->h - kScrollbarBandW);
+        double now = TimeNow();
+        ScrollFade* f = ScrollFadeFor(e->scrollId, e->scrollY, e->scrollX);
+        bool wasVisible = f->opacity.target > 0.f;
+        if (f->y != e->scrollY || f->x != e->scrollX || dragging ||
+            ScrollbarHoverKeepsVisible(barMode, onBand, wasVisible)) {
+            f->y = e->scrollY;
+            f->x = e->scrollX;
+            f->at = now;
+            f->hasLast = true;
+        }
+        bool want = ScrollbarWantsVisible(barMode, overBox, dragging, f,
+                                          barMotion.idle, now);
+        // `entrance_for`: only a hover mode bar under the pointer's own thumb
+        // slides; everything else fades in place.
+        ScrollbarEntrance entrance = (barMode == ScrollbarMode::Hover && onBand)
+                                         ? barMotion.thumbHoverEntrance
+                                         : barMotion.entrance;
+        VisibilitySetVisible(f, want, entrance, barMotion.enter, barMotion.exit,
+                             now);
+        ScrollbarVisibility vis = VisibilitySample(f, now);
+        barAlpha = vis.opacity;
+        // `visibility_translation`: the bar sits `track_width` off its edge at
+        // the start of the slide and arrives as the progress reaches 1.
+        barSlide = ScrollbarSlideOffset(kScrollbarBandW, vis.position);
+        barVisible = barAlpha > 0.f;
+        if (vis.running) {
+            ctx->wantsAnimFrame = true;
+        }
+    }
+    // A bar nobody can see is a bar nobody can grab: the ScrollRect this frame
+    // recorded says so, and ScrollbarAt skips it.
+    if (e->scrollId != 0) {
+        for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
+            if (ctx->scrolls[i].id == e->scrollId) {
+                ctx->scrolls[i].barVisible = barVisible;
+                break;
+            }
         }
     }
     // style_for_normal / style_for_hovered_bar / style_for_hovered_thumb /
     // style_for_active. A bar rests at THUMB_WIDTH only in the fading
     // `Scrolling` mode; every other mode draws the wide one, and any bar the
-    // pointer is over — or one a drag has hold of — grows to it too. The
-    // colour changes only under the thumb itself, or in a drag.
-    bool dragging = ctx->scrollDragId != 0 && ctx->scrollDragId == e->scrollId;
+    // pointer is over — or one a drag has hold of — grows to it too, over
+    // `expand`. The colour changes only under the thumb itself, or in a drag.
     float restW = barMode == ScrollbarMode::Scrolling ? kScrollbarThumbW
                                                       : kScrollbarThumbActiveW;
+    ScrollFade* barState =
+        e->scrollId != 0 ? ScrollFadeFor(e->scrollId, e->scrollY, e->scrollX)
+                         : nullptr;
     // The thumb's radius is `theme.radius`, clamped to half the thumb — a
     // wider thumb rounds more, which is what `clamp_thumb_radius` says.
     const Theme& barTheme = ThemeNow();
@@ -5207,7 +5419,13 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // The same three numbers the press and drag arithmetic goes by, so
         // what is drawn and what is grabbed cannot drift apart.
         float thumbH = ScrollbarThumbSize(e->h, e->h, e->contentH);
-        float thumbW = hot ? kScrollbarThumbActiveW : restW;
+        float wantW = hot ? kScrollbarThumbActiveW : restW;
+        float thumbW = wantW;
+        if (barState) {
+            thumbW =
+                WidthTarget(&barState->widthY, &barState->widthYSet, wantW,
+                            barMotion.expand, TimeNow(), &ctx->wantsAnimFrame);
+        }
         float thumbX = e->x + e->w - thumbW - kScrollbarThumbMargin;
         float thumbY = e->y + ScrollbarThumbPos(e->h, thumbH, e->scrollY, e->h,
                                                 e->contentH);
@@ -5215,11 +5433,12 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             (dragging && !ctx->scrollDragHorizontal) ||
             (onBar && ctx->mouseY >= thumbY && ctx->mouseY < thumbY + thumbH);
         // The track, which every default theme leaves transparent — the band
-        // is Rust's WIDTH and reaches the whole length of the box.
-        FillBackground(ctx, e->x + e->w - kScrollbarBandW, e->y,
+        // is Rust's WIDTH and reaches the whole length of the box. A vertical
+        // bar slides in from the right, so the slide is along x.
+        FillBackground(ctx, e->x + e->w - kScrollbarBandW + barSlide, e->y,
                        kScrollbarBandW, e->h, 0, nullptr,
                        ScrollbarBarBg(barTheme, barAlpha));
-        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH,
+        FillBackground(ctx, thumbX + barSlide, thumbY, thumbW, thumbH,
                        ThumbRadius(barTheme, thumbW), nullptr,
                        ScrollbarThumbBg(barTheme, onThumb, barAlpha));
     }
@@ -5232,17 +5451,24 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         bool onBar = overBox && ctx->mouseY >= e->y + e->h - kScrollbarBandW;
         bool hot = onBar || (dragging && ctx->scrollDragHorizontal);
         float thumbW = ScrollbarThumbSize(e->w, e->w, e->contentW);
-        float thumbH = hot ? kScrollbarThumbActiveW : restW;
+        float wantH = hot ? kScrollbarThumbActiveW : restW;
+        float thumbH = wantH;
+        if (barState) {
+            thumbH =
+                WidthTarget(&barState->widthX, &barState->widthXSet, wantH,
+                            barMotion.expand, TimeNow(), &ctx->wantsAnimFrame);
+        }
         float thumbY = e->y + e->h - thumbH - kScrollbarThumbMargin;
         float thumbX = e->x + ScrollbarThumbPos(e->w, thumbW, e->scrollX, e->w,
                                                 e->contentW);
         bool onThumb =
             (dragging && ctx->scrollDragHorizontal) ||
             (onBar && ctx->mouseX >= thumbX && ctx->mouseX < thumbX + thumbW);
-        FillBackground(ctx, e->x, e->y + e->h - kScrollbarBandW, e->w,
-                       kScrollbarBandW, 0, nullptr,
+        // A horizontal bar slides up from the bottom, so its slide is along y.
+        FillBackground(ctx, e->x, e->y + e->h - kScrollbarBandW + barSlide,
+                       e->w, kScrollbarBandW, 0, nullptr,
                        ScrollbarBarBg(barTheme, barAlpha));
-        FillBackground(ctx, thumbX, thumbY, thumbW, thumbH,
+        FillBackground(ctx, thumbX, thumbY + barSlide, thumbW, thumbH,
                        ThumbRadius(barTheme, thumbH), nullptr,
                        ScrollbarThumbBg(barTheme, onThumb, barAlpha));
     }

@@ -95,6 +95,7 @@ void TestColor();
 void TestWryUri();
 void TestObservers();
 void TestStyleEq();
+void TestScrollbarMotion();
 void TestDockState();
 void TestFocusTrap();
 void TestKeymap();

@@ -744,6 +744,11 @@ static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
         if (!s.onScroll.IsValid() && !s.input) {
             continue;
         }
+        // A bar that has faded out keeps its band and its layout and takes no
+        // press: scrollbar.rs disables the hitbox while it is hidden.
+        if (!s.barVisible) {
+            continue;
+        }
         if (s.barY && ScrollsY(s) && y >= s.bounds.y &&
             y <= s.bounds.Bottom() && x >= s.bounds.Right() - kScrollbarBandW &&
             x <= s.bounds.Right()) {

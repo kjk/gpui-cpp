@@ -98,6 +98,7 @@ int GpuiMain(int argc, char** argv) {
     TestWryUri();
     TestObservers();
     TestStyleEq();
+    TestScrollbarMotion();
     TestDockState();
     TestFocusTrap();
     TestKeymap();

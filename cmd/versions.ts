@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "da4f93696dc2b2b4d91bcc42412b9053a3d24de8",
-  date: "2026-08-16",
-  subject: "docs: Fix EditorState::new() API usage in editor documentation (#2739)",
+  sha: "2a1335d50fa99c4a64a4ccb4f25ce2bb5cb87e4d",
+  date: "2026-08-17",
+  subject: "scrollbar: improve visibility animation (#2737)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
