@@ -38,7 +38,10 @@ struct SyntaxLangDef {
     // Prose with marks in it rather than either: headings, fences, links and
     // code spans. Upstream reads a tree-sitter markdown grammar with an
     // injection per fence; this is the part of that a scanner can carry.
-    bool markdown;
+    // Defaulted, so the fourteen entries that came before it stay as they
+    // were written rather than each growing a `false` — gcc's
+    // missing-field-initializers is what asks for one or the other.
+    bool markdown = false;
 };
 
 // clang-format off

@@ -3852,6 +3852,27 @@ Str ClipboardGetText(Arena* a, Window* win);
 // takes an `&str` and answers nothing, and so does this — a browser that
 // refuses to start is not something a caller can do anything about.
 void OpenUrl(Str url);
+
+// PathPromptOptions: what the desktop's own open dialog may be pointed at.
+struct PathPrompt {
+    // Whether a file, a directory, or either may be chosen. Both false is a
+    // dialog that can choose nothing, so it is read as `files`.
+    bool files = true;
+    bool directories = false;
+    // The dialog's title. Rust calls it `prompt`.
+    Str title = {};
+};
+
+// cx.prompt_for_paths, with one path and no task: what the user chose is
+// written to `out` as a NUL-terminated path, and false comes back when they
+// cancelled, when the platform has no dialog of its own (wasm), or when the
+// desktop has none to offer (a Linux session with neither zenity nor
+// kdialog). Rust answers a `Task<Result<Option<Vec<PathBuf>>>>` and can be
+// asked for several paths at once; every caller here wants one and wants it
+// where it asked, which is what the platform dialogs do anyway — they run
+// their own loop until the user is done.
+bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap);
+
 int AppRun(App* app);
 Window* WindowOpen(App* app, Str title, int dipW, int dipH, WinOpts opts);
 void AppSetTitle(Window* win, Str title);

@@ -930,6 +930,38 @@ void OpenUrl(Str url) {
     }
 }
 
+// cx.prompt_for_paths. NSOpenPanel, run modally: it takes over the loop until
+// the user is done, which is what the other two platforms' dialogs do too.
+bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+    (void)win;
+    if (!out || cap <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    NSOpenPanel* panel = [NSOpenPanel openPanel];
+    [panel setCanChooseFiles:opts.files ? YES : NO];
+    [panel setCanChooseDirectories:opts.directories ? YES : NO];
+    [panel setAllowsMultipleSelection:NO];
+    if (opts.title.len > 0) {
+        NSString* t = [[NSString alloc] initWithBytes:opts.title.s
+                                               length:(NSUInteger)opts.title.len
+                                             encoding:NSUTF8StringEncoding];
+        if (t) {
+            [panel setMessage:t];
+        }
+    }
+    if ([panel runModal] != NSModalResponseOK) {
+        return false;
+    }
+    NSURL* url = [[panel URLs] firstObject];
+    const char* path = url ? [[url path] UTF8String] : nullptr;
+    if (!path) {
+        return false;
+    }
+    StrCopyZ(out, cap, path);
+    return out[0] != 0;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     (void)win;
     if (!text.s || text.len <= 0) {

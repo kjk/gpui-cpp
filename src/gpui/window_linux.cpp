@@ -748,6 +748,79 @@ void OpenUrl(Str url) {
     }
 }
 
+// cx.prompt_for_paths. X11 has no file dialog of its own and this tree has no
+// toolkit to borrow one from, so it asks the desktop's: zenity on GTK
+// desktops, kdialog on KDE, whichever is on the PATH. A session with neither
+// answers nothing, which is what a caller has to be ready for anyway — the
+// user can always cancel.
+bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+    (void)win;
+    if (!out || cap <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    char title[256];
+    int tn = opts.title.len < (int)sizeof(title) - 1 ? opts.title.len
+                                                     : (int)sizeof(title) - 1;
+    if (tn > 0) {
+        memcpy(title, opts.title.s, (size_t)tn);
+    }
+    title[tn > 0 ? tn : 0] = 0;
+    bool dirs = opts.directories && !opts.files;
+    int fds[2] = {-1, -1};
+    if (pipe(fds) != 0) {
+        return false;
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        dup2(fds[1], STDOUT_FILENO);
+        close(fds[0]);
+        close(fds[1]);
+        // Two spellings of the same question. Whichever is there runs; the
+        // exec that fails falls through to the next.
+        if (dirs) {
+            execlp("zenity", "zenity", "--file-selection", "--directory",
+                   title[0] ? "--title" : (char*)nullptr,
+                   title[0] ? title : (char*)nullptr, (char*)nullptr);
+            execlp("kdialog", "kdialog", "--getexistingdirectory", ".",
+                   (char*)nullptr);
+        } else {
+            execlp("zenity", "zenity", "--file-selection",
+                   title[0] ? "--title" : (char*)nullptr,
+                   title[0] ? title : (char*)nullptr, (char*)nullptr);
+            execlp("kdialog", "kdialog", "--getopenfilename", ".",
+                   (char*)nullptr);
+        }
+        _exit(127);
+    }
+    close(fds[1]);
+    if (pid < 0) {
+        close(fds[0]);
+        return false;
+    }
+    int n = 0;
+    for (;;) {
+        ssize_t got = read(fds[0], out + n, (size_t)(cap - 1 - n));
+        if (got <= 0) {
+            break;
+        }
+        n += (int)got;
+        if (n >= cap - 1) {
+            break;
+        }
+    }
+    close(fds[0]);
+    int st = 0;
+    waitpid(pid, &st, 0);
+    // The helper prints the path and a newline, and nothing at all when the
+    // user cancelled.
+    while (n > 0 && (out[n - 1] == '\n' || out[n - 1] == '\r')) {
+        n--;
+    }
+    out[n] = 0;
+    return n > 0;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     if (!win || !win->plat || !text.s || text.len <= 0) {
         return;

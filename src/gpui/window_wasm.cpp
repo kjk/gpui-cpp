@@ -623,6 +623,18 @@ void OpenUrl(Str url) {
     }
 }
 
+// cx.prompt_for_paths. A page cannot open a file picker of its own and read
+// what it chose without a user gesture and a callback, and nothing here has
+// asked for one, so this says so rather than pretending.
+bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+    (void)win;
+    (void)opts;
+    if (out && cap > 0) {
+        out[0] = 0;
+    }
+    return false;
+}
+
 void ClipboardSetText(Window* win, Str text) {
     (void)win;
     if (text.s && text.len > 0) {

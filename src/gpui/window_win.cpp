@@ -10,6 +10,7 @@
 #include <imm.h>
 #include <ole2.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 
 namespace gpui {
 
@@ -900,6 +901,60 @@ void OpenUrl(Str url) {
     }
     ShellExecuteW(nullptr, L"open", ToCWstrTemp(url), nullptr, nullptr,
                   SW_SHOWNORMAL);
+}
+
+// cx.prompt_for_paths. The shell's own dialog, which is IFileOpenDialog on
+// everything this runs on; COM is already up (apartment threaded) because the
+// drag-and-drop registration needs it. The dialog runs its own loop, so this
+// blocks until the user is done, which is what the platform does either way.
+bool PromptForPath(Window* win, const PathPrompt& opts, char* out, int cap) {
+    if (!out || cap <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    IFileOpenDialog* dlg = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                  CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
+    if (FAILED(hr) || !dlg) {
+        return false;
+    }
+    DWORD flags = 0;
+    dlg->GetOptions(&flags);
+    // FOS_PICKFOLDERS is the whole difference between the two dialogs: with
+    // it the shell shows folders and answers one, without it files. A prompt
+    // that asks for both gets the file one, which is what a folder cannot be
+    // chosen from — Windows has no dialog that answers either.
+    if (opts.directories && !opts.files) {
+        flags |= FOS_PICKFOLDERS;
+    } else {
+        flags &= ~(DWORD)FOS_PICKFOLDERS;
+    }
+    dlg->SetOptions(flags | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+    if (opts.title.len > 0) {
+        dlg->SetTitle(ToCWstrTemp(opts.title));
+    }
+    HWND owner = win && win->plat ? win->plat->hwnd : nullptr;
+    hr = dlg->Show(owner);
+    bool got = false;
+    if (SUCCEEDED(hr)) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item)) && item) {
+            PWSTR wide = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &wide)) &&
+                wide) {
+                int n = WideCharToMultiByte(CP_UTF8, 0, wide, -1, out, cap,
+                                            nullptr, nullptr);
+                got = n > 0;
+                if (!got) {
+                    out[0] = 0;
+                }
+                CoTaskMemFree(wide);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return got;
 }
 
 void ClipboardSetText(Window* win, Str text) {

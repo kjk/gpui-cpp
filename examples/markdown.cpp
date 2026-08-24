@@ -20,8 +20,6 @@
 
    What this does not have, and why:
 
-   - The **Open** action wants a file dialog, which this tree does not have;
-     the document is the fixture that upstream's `include_str!` bakes in.
    - **Selection: Plain / Source** would have to map a selection in the
      rendered document back to the markdown that produced it, and an MdNode
      here carries no source offsets.
@@ -810,6 +808,56 @@ static void OnLink(MarkdownApp* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// The Open action, ctrl-o (cmd-o on macOS) and the status bar's button:
+// upstream hangs it off the app menu and the same chord, and it does what
+// `on_action_open` does — the desktop's own dialog, and what it answers is
+// read into the editor.
+static void OpenDocument(MarkdownApp* self, Ctx* cx) {
+    char path[1024] = {};
+    PathPrompt prompt;
+    prompt.title = StrL("Select a Markdown file");
+    if (!PromptForPath(cx->win, prompt, path, (int)sizeof(path))) {
+        return;
+    }
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    // A document this example will not read in one gulp is one the editor
+    // should not be asked to hold either.
+    const long kMax = 4 * 1024 * 1024;
+    if (size <= 0 || size > kMax) {
+        fclose(f);
+        return;
+    }
+    char* buf = (char*)Alloc(nullptr, (int)size + 1);
+    if (!buf) {
+        fclose(f);
+        return;
+    }
+    size_t got = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    buf[got] = 0;
+    InputSetValue(&self->source, Str(buf, (int)got));
+    Free(nullptr, buf);
+    self->previewScroll = 0;
+    Notify(cx);
+}
+
+static void OnOpenClick(MarkdownApp* self, Ctx* cx, const ClickEvent*) {
+    OpenDocument(self, cx);
+}
+
+static void OnKey(MarkdownApp* self, Ctx* cx, const KeyEvent* ev) {
+    // VK_O, which the key table spells with the letter's ASCII code.
+    if (ev->down && ev->vk == 'O' && (ev->ctrl || ev->platform)) {
+        OpenDocument(self, cx);
+    }
+}
+
 // The status bar's `table-wrap` button: which layout the preview's tables
 // take, the measured one that scrolls or the one that wraps to fit.
 static void OnToggleTableWrap(MarkdownApp* self, Ctx* cx, const ClickEvent*) {
@@ -918,6 +966,12 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     if (self->lastLink[0]) {
         bar->Left(Str(self->lastLink));
     }
+    bar->Right(component::Button::New(cx, StrL("open"))
+                   ->Ghost()
+                   ->WithSize(UiSize::XSmall)
+                   ->Label(StrL("Open..."))
+                   ->OnClick(Listen(cx, &OnOpenClick))
+                   ->IntoEl());
     bar->Right(component::Button::New(cx, StrL("table-wrap"))
                    ->Ghost()
                    ->WithSize(UiSize::XSmall)
@@ -957,7 +1011,8 @@ int GpuiMain(int argc, char** argv) {
     self->source.focused = true;
     Window* win =
         WindowOpenView(app, StrL("Markdown"), 1200, 900, view.id, WinOpts{});
-    (void)win;
+    // The Open chord, which upstream binds in the story app's own keymap.
+    WindowOnKey(win, ListenTo(view, &OnKey));
     int rc = AppRun(app);
     AppFree(app);
     return rc;
