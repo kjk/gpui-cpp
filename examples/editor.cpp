@@ -377,6 +377,64 @@ static Str CaseMapped(Arena* a, Str src, int which) {
     return Str(out, n);
 }
 
+// ─── the definition provider ──────────────────────────────────────────────
+//
+// `ExampleLspStore`'s own: `Duration` is defined in this document, and the
+// std type names have a page on doc.rust-lang.org. Rust answers a Task of
+// `LocationLink`s; the same two answers are written straight out here.
+struct DocLink {
+    const char* name;
+    const char* path;
+};
+
+static const DocLink kRustDocs[] = {
+    {"HashMap", "collections/hash_map/struct.HashMap"},
+    {"HashSet", "collections/hash_set/struct.HashSet"},
+    {"Arc", "sync/struct.Arc"},
+    {"RwLock", "sync/struct.RwLock"},
+    {"Duration", "time/struct.Duration"},
+};
+
+static int DefinitionsAt(void*, Arena* a, Str text, int offset,
+                         DefinitionLink* out, int cap) {
+    if (cap <= 0) {
+        return 0;
+    }
+    int wa = offset, wb = offset;
+    if (!TextWordRangeAt(text, offset, &wa, &wb) || wa >= wb) {
+        return 0;
+    }
+    Str word(text.s + wa, wb - wa);
+    // The one symbol this document defines: the first `Duration` in it, which
+    // is where the word is declared.
+    if (StrEqI(word, StrL("Duration"))) {
+        int at = -1;
+        for (int i = 0; i + word.len <= text.len; i++) {
+            if (memcmp(text.s + i, word.s, (size_t)word.len) == 0 && i != wa) {
+                at = i;
+                break;
+            }
+        }
+        if (at >= 0) {
+            out[0].origin = {wa, wb};
+            out[0].uri = Str{};
+            out[0].target = {at, at + word.len};
+            return 1;
+        }
+    }
+    for (const DocLink& d : kRustDocs) {
+        if (!StrEqI(word, Str(d.name))) {
+            continue;
+        }
+        out[0].origin = {wa, wb};
+        out[0].uri = StrDup(
+            a, fmt("https://doc.rust-lang.org/std/%s.html", Str(d.path)));
+        out[0].target = {};
+        return 1;
+    }
+    return 0;
+}
+
 static int CodeActionsFor(void*, Arena* a, Str text, Selection sel,
                           CodeActionItem* out, int cap) {
     if (sel.IsEmpty() || sel.end > text.len) {
@@ -754,6 +812,10 @@ int GpuiMain(int argc, char** argv) {
     self->editor.codeActionProvider = &CodeActionsFor;
     // And the colours the document names, painted where they are named.
     self->editor.documentColorProvider = &DocumentColorsIn;
+    // And where a symbol is defined: ctrl-hover underlines one it can reach,
+    // ctrl-click follows it. `Duration` is defined in this document; the
+    // other four std names open their page on doc.rust-lang.org.
+    self->editor.definitionProvider = &DefinitionsAt;
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;

@@ -242,6 +242,10 @@ El* Highlighter::IntoEl() {
     // foreground a hint is drawn in.
     // highlighter/registry.rs's own defaults for the status colours a
     // diagnostic is drawn in.
+    // hover_definition_style: Rust takes `link_text` out of the highlight
+    // theme, which this tree's scanner palette has no entry for — the UI
+    // theme's link colour is the same blue a Link is drawn in.
+    style.linkText = th.blue;
     style.diagnostics.error = th.red;
     style.diagnostics.warning = th.yellow;
     style.diagnostics.info = th.blue;

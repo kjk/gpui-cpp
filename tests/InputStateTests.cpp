@@ -272,6 +272,154 @@ static void DeleteToWordAndLineBoundaries() {
     utassert(ValueIs(s, "hello"));
 }
 
+// ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
+
+// A provider that answers for one word: `Duration` is defined at the top of
+// the document, and `Arc` is a page on the web.
+static int gDefCalls = 0;
+
+static int TestDefinitions(void* data, Arena* a, Str text, int offset,
+                           DefinitionLink* out, int cap) {
+    (void)data;
+    (void)a;
+    gDefCalls++;
+    if (cap <= 0) {
+        return 0;
+    }
+    int wa = offset, wb = offset;
+    if (!TextWordRangeAt(text, offset, &wa, &wb) || wa >= wb) {
+        return 0;
+    }
+    Str word(text.s + wa, wb - wa);
+    if (Is(word, "Duration")) {
+        out[0].origin = {wa, wb};
+        out[0].uri = Str{};
+        out[0].target = {0, 8};
+        return 1;
+    }
+    if (Is(word, "Arc")) {
+        out[0].origin = {wa, wb};
+        out[0].uri = StrL("https://doc.rust-lang.org/std/sync/struct.Arc.html");
+        out[0].target = {};
+        return 1;
+    }
+    return 0;
+}
+
+static bool gShown = false;
+static bool gShownExternal = false;
+
+static bool TestShowDocument(void* data, Str uri, bool external,
+                             Selection selection) {
+    (void)data;
+    (void)selection;
+    // A local target names no document at all, which is what an empty uri
+    // means — the host still gets first refusal on it.
+    gShown = true;
+    gShownExternal = external && uri.len > 0;
+    return true;
+}
+
+static void AHoveredSymbolIsAskedAboutOnce() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("Duration and Arc and other"));
+    s.definitionProvider = &TestDefinitions;
+    gDefCalls = 0;
+
+    // The word at 2 is `Duration`, which the provider defines.
+    InputHoverDefinition(&s, 2);
+    utassert(gDefCalls == 1);
+    utassert(s.hoverDef.locations.len == 1);
+    utassert(s.hoverDef.symbolRange.start == 0 && s.hoverDef.symbolRange
+                                                          .end == 8);
+
+    // `is_same`: while the pointer stays inside the symbol it was asked
+    // about, the provider is not asked again.
+    InputHoverDefinition(&s, 5);
+    utassert(gDefCalls == 1);
+
+    // A word with no definition clears what was found, and asks.
+    InputHoverDefinition(&s, 10);
+    utassert(gDefCalls == 2);
+    utassert(s.hoverDef.locations.len == 0);
+    // What it found is kept as the last answer, which is what the action
+    // goes by once the modifier has come up.
+    utassert(s.hoverDef.lastLocations.len == 1);
+    utassert(s.hoverDef.lastRange.start == 0 && s.hoverDef.lastRange.end == 8);
+}
+
+static void ASecondaryClickFollowsTheDefinition() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("Duration and more Duration here"));
+    s.definitionProvider = &TestDefinitions;
+    utassert(InputCanGoToDefinition(&s));
+
+    // The second `Duration`, at 18.
+    InputHoverDefinition(&s, 20);
+    utassert(s.hoverDef.locations.len == 1);
+
+    // A plain click is not one: the caret placement below it stands.
+    utassert(!InputClickDefinition(&s, nullptr, nullptr, 20, false));
+    // Nor is a secondary click outside the symbol.
+    utassert(!InputClickDefinition(&s, nullptr, nullptr, 2, true));
+    // Inside it, the click is taken and the selection is the target.
+    utassert(InputClickDefinition(&s, nullptr, nullptr, 20, true));
+    utassert(RangeIs(s, 0, 8));
+}
+
+static void TheActionGoesByTheLastThingAHoverFound() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("Duration and more Duration here"));
+    s.definitionProvider = &TestDefinitions;
+
+    InputHoverDefinition(&s, 20);
+    // The modifier comes up: the underline goes, the answer is remembered.
+    InputClearHoverDefinition(&s);
+    utassert(s.hoverDef.locations.len == 0);
+
+    // The caret is nowhere near the symbol, so the action has nothing to do.
+    InputSetSelectedRange(&s, nullptr, nullptr, 12, 12);
+    InputGoToDefinition(&s, nullptr, nullptr);
+    utassert(RangeIs(s, 12, 12));
+
+    // Inside it, it follows.
+    InputSetSelectedRange(&s, nullptr, nullptr, 20, 20);
+    InputGoToDefinition(&s, nullptr, nullptr);
+    utassert(RangeIs(s, 0, 8));
+}
+
+// window/showDocument: the host is asked first and can take it, which is the
+// only way an external uri is reachable without opening a browser.
+static void TheHostSeesTheDocumentFirst() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("Arc and Duration"));
+    s.definitionProvider = &TestDefinitions;
+    s.showDocument = &TestShowDocument;
+    gShown = false;
+    gShownExternal = false;
+
+    InputHoverDefinition(&s, 1);
+    utassert(s.hoverDef.locations.len == 1);
+    utassert(InputClickDefinition(&s, nullptr, nullptr, 1, true));
+    utassert(gShown);
+    // An http(s) target is a page rather than a document, and the host is
+    // told which it is.
+    utassert(gShownExternal);
+    // The host took it, so nothing moved in this document.
+    utassert(RangeIs(s, 0, 0));
+
+    // A local one is not external, and the host still gets first refusal.
+    gShown = false;
+    InputHoverDefinition(&s, 9);
+    utassert(InputClickDefinition(&s, nullptr, nullptr, 9, true));
+    utassert(gShown && !gShownExternal);
+    utassert(RangeIs(s, 0, 0));
+}
+
 // A single-line field's line is the whole document; a textarea's is not.
 static void LineBoundaries() {
     InputState one;
@@ -1090,6 +1238,10 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    AHoveredSymbolIsAskedAboutOnce();
+    ASecondaryClickFollowsTheDefinition();
+    TheActionGoesByTheLastThingAHoverFound();
+    TheHostSeesTheDocumentFirst();
     BoundariesStepCharacters();
     SelectionFollowsTheDragDirection();
     SelectWordAndLine();

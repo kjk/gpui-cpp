@@ -49,6 +49,11 @@ struct InputEditorStyle {
     // did.
     Rgba matchBg = {0, 0, 0, 0};
     Rgba currentMatchBg = {0, 0, 0, 0};
+    // The colour a symbol takes while the shortcut modifier is held over it
+    // and the definition provider has somewhere to go. Rust reads `link_text`
+    // out of the *highlight* theme; this tree's scanner palette has no such
+    // entry, so the themed layer passes the UI theme's link colour.
+    Rgba linkText = {0, 0, 0, 0};
     // EditorStyle::diagnostics: what each severity underlines in. All four
     // transparent is an editor that draws none, which is every field that is
     // not a code editor.

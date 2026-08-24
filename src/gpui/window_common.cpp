@@ -669,6 +669,12 @@ static void InputPress(Window* win, const MouseDownEvent& in) {
         InputFocus(s, win->app, win);
     }
     int offset = InputIndexForPosition(s, &win->paint, in.x, in.y);
+    // `M::on_click(..)`, which is go-to-definition and returns true when it
+    // took the press — so the same click does not also move the caret.
+    if (InputClickDefinition(s, win->app, win, offset,
+                             in.modifiers.Secondary())) {
+        return;
+    }
     if (in.clickCount >= 3) {
         InputSelectLine(s, win->app, win, offset);
     } else if (in.clickCount == 2) {
@@ -874,6 +880,22 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
     float y = in.y;
     win->mouseX = x;
     win->mouseY = y;
+    win->mouseModifiers = in.modifiers;
+    // The hand over a symbol a secondary-hover found a definition for, which
+    // is the hitbox `hover_definition_hitbox` inserts. The bounds are last
+    // frame's, measured where the symbol was painted.
+    for (int i = 0; i < win->paint.inputs.len; i++) {
+        InputState* f = win->paint.inputs[i];
+        if (f->hoverDef.locations.len > 0 && f->hoverDef.bounds
+                                                 .Contains({x, y})) {
+            if (win->cursor != CursorKind::Pointer) {
+                win->cursor = CursorKind::Pointer;
+                PlatSetCursor(win, CursorKind::Pointer);
+            }
+            AppInvalidate(win);
+            return;
+        }
+    }
     // An I-beam over anything selectable, the way every text view does it.
     // TextHitOffsetAt only answers for text that asked to be Selectable().
     // Anything else, the element under the pointer says what shape it wants —

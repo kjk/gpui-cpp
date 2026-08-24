@@ -510,12 +510,25 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // What the document names in colour, asked for again when it changed.
     InputUpdateDocumentColors(state);
     state->hoverDiagnostic = -1;
-    if ((state->diagnostics.len > 0 || state->hoverProvider) && cx->win) {
+    if ((state->diagnostics.len > 0 || state->hoverProvider ||
+         state->definitionProvider) &&
+        cx->win) {
         float mx = cx->win->mouseX;
         float my = cx->win->mouseY;
         bool inside = state->inputBounds.Contains({mx, my});
         int at =
             inside ? InputIndexForPosition(state, &cx->win->paint, mx, my) : -1;
+        // handle_mouse_move: with the shortcut modifier down the pointer is
+        // asking what a symbol is defined as; without it, it is asking what
+        // the symbol *is*, which is the hover popover below. The two are
+        // exclusive, and a pointer outside the field clears both.
+        bool secondary =
+            inside && !state->selecting && cx->win->mouseModifiers.Secondary();
+        if (secondary && state->definitionProvider) {
+            InputHoverDefinition(state, at);
+        } else {
+            InputClearHoverDefinition(state);
+        }
         if (inside) {
             for (int d = 0; d < state->diagnostics.len; d++) {
                 const Diagnostic& dg = state->diagnostics[d];
@@ -532,7 +545,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         // the pointer stays inside the word it was asked about, what it said
         // stands. A diagnostic under the pointer wins, and so does a drag.
         if (!state->hoverProvider || !inside || state->selecting ||
-            state->hoverDiagnostic >= 0) {
+            state->hoverDiagnostic >= 0 || secondary) {
             state->hoverText = Str{};
             state->hoverRange = Selection{};
         } else if (at < state->hoverRange.start ||
@@ -675,6 +688,37 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 if (n > 0) {
                     el->Underlines(runs, n);
                 }
+            }
+        }
+        // hover_definition_style: the symbol a secondary-hover found is
+        // underlined in the link colour, one hairline and not a wavy one.
+        // Rust pushes it as another highlight style over the row; here it is
+        // one more underline run, which is the same list the diagnostics use.
+        if (state->hoverDef.locations.len > 0 && style.linkText.a != 0) {
+            Selection sym = state->hoverDef.symbolRange;
+            int lo = sym.start - start;
+            int hi = sym.end - start;
+            if (lo < 0) {
+                lo = 0;
+            }
+            if (hi > line.len) {
+                hi = line.len;
+            }
+            if (hi > lo) {
+                auto* run = (TextSpan*)Alloc(a, (int)sizeof(TextSpan));
+                if (run) {
+                    run->lo = lo;
+                    run->hi = hi;
+                    run->color = style.linkText;
+                    run->bg = Rgba{0, 0, 0, 0};
+                    run->underline = true;
+                    run->wavy = false;
+                    el->Underlines(run, 1);
+                }
+                // Where it landed, for the hand cursor. The row's own box is
+                // reported after layout, so the x pair is measured against
+                // the run and the y comes off the row.
+                el->RangeOut(lo, hi, &state->hoverDef.bounds);
             }
         }
         RowMatchWashes(a, el, style, state, start, line.len, &matchAt);
@@ -2189,6 +2233,160 @@ void InputUpdateDocumentColors(InputState* s) {
 // caret, and let the same four keys walk it. Rust's providers answer tasks
 // and the answers are gathered as they land; a provider here answers into a
 // buffer, so the asking and the gathering are the one call.
+
+// ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
+
+HoverDefinition::~HoverDefinition() {
+    locations.Reset();
+    lastLocations.Reset();
+    if (arena) {
+        ArenaDelete(arena);
+    }
+}
+
+bool InputCanGoToDefinition(const InputState* s) {
+    return s && s->definitionProvider != nullptr;
+}
+
+void InputClearHoverDefinition(InputState* s) {
+    if (!s || s->hoverDef.locations.len == 0) {
+        return;
+    }
+    // What it found is kept as the last answer: the underline goes as soon as
+    // the modifier comes up, and the action still has to know where the
+    // symbol under the caret went.
+    s->hoverDef.lastRange = s->hoverDef.symbolRange;
+    s->hoverDef.lastLocations.Reset();
+    for (int i = 0; i < s->hoverDef.locations.len; i++) {
+        s->hoverDef.lastLocations.Append(s->hoverDef.locations[i]);
+    }
+    s->hoverDef.symbolRange = Selection{};
+    s->hoverDef.locations.Reset();
+    s->hoverDef.bounds = Bounds{};
+}
+
+void InputHoverDefinition(InputState* s, int offset) {
+    if (!s || !s->definitionProvider) {
+        return;
+    }
+    // `is_same`: while the pointer stays inside the symbol that was asked
+    // about, what the provider said stands.
+    if (s->hoverDef.locations.len > 0 &&
+        offset >= s->hoverDef.symbolRange.start &&
+        offset < s->hoverDef.symbolRange.end) {
+        return;
+    }
+    Str text = InputValue(s);
+    if (!s->hoverDef.arena) {
+        s->hoverDef.arena = ArenaNew();
+    } else {
+        // Last time's uris go with it: nothing is left pointing at them.
+        ArenaDelete(s->hoverDef.arena);
+        s->hoverDef.arena = ArenaNew();
+    }
+    const int kMax = 8;
+    DefinitionLink buf[kMax];
+    int n = s->definitionProvider(s->definitionData, s->hoverDef.arena, text,
+                                  offset, buf, kMax);
+    InputClearHoverDefinition(s);
+    if (n <= 0) {
+        return;
+    }
+    // The word under the pointer is what is underlined, unless the first
+    // location named a range of its own.
+    int a0 = offset, b0 = offset;
+    if (!TextWordRangeAt(text, offset, &a0, &b0)) {
+        a0 = b0 = offset;
+    }
+    Selection symbol = {a0, b0};
+    if (!buf[0].origin.IsEmpty()) {
+        symbol = buf[0].origin;
+    }
+    if (symbol.IsEmpty()) {
+        return;
+    }
+    s->hoverDef.symbolRange = symbol;
+    for (int i = 0; i < n && i < kMax; i++) {
+        s->hoverDef.locations.Append(buf[i]);
+    }
+}
+
+// `external`: the two schemes a definition can name that are a page rather
+// than a document.
+static bool StartsWithI(Str s, const char* prefix) {
+    int n = (int)strlen(prefix);
+    if (s.len < n) {
+        return false;
+    }
+    for (int i = 0; i < n; i++) {
+        char a = s.s[i];
+        char b = prefix[i];
+        if (a >= 'A' && a <= 'Z') {
+            a = (char)(a - 'A' + 'a');
+        }
+        if (a != b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool DefinitionIsExternal(Str uri) {
+    return StartsWithI(uri, "http://") || StartsWithI(uri, "https://");
+}
+
+void InputFollowDefinition(InputState* s, App* app, Window* win,
+                           const DefinitionLink& link) {
+    if (!s) {
+        return;
+    }
+    bool external = DefinitionIsExternal(link.uri);
+    // window/showDocument: the host is asked first, so a virtual or external
+    // uri can be opened the way the application wants — a docs pane of its
+    // own, rather than the browser.
+    if (s->showDocument &&
+        s->showDocument(s->showDocumentData, link.uri, external, link.target)) {
+        return;
+    }
+    if (external) {
+        OpenUrl(link.uri);
+        return;
+    }
+    // A uri that names another document is one this tree cannot open: there
+    // is one buffer per field, and nothing to open it into.
+    if (link.uri.len > 0) {
+        return;
+    }
+    InputMoveTo(s, app, win, link.target.start);
+    InputSelectTo(s, app, win, link.target.end);
+}
+
+bool InputClickDefinition(InputState* s, App* app, Window* win, int offset,
+                          bool secondary) {
+    if (!s || !secondary || s->hoverDef.locations.len == 0) {
+        return false;
+    }
+    if (offset < s->hoverDef.symbolRange.start ||
+        offset >= s->hoverDef.symbolRange.end) {
+        return false;
+    }
+    InputFollowDefinition(s, app, win, s->hoverDef.locations[0]);
+    return true;
+}
+
+void InputGoToDefinition(InputState* s, App* app, Window* win) {
+    if (!s) {
+        return;
+    }
+    // on_action_go_to_definition: the caret has to still be inside the symbol
+    // the last hover found, or the action has nothing to go on.
+    int at = InputCursor(s);
+    if (s->hoverDef.lastLocations.len == 0 ||
+        at < s->hoverDef.lastRange.start || at > s->hoverDef.lastRange.end) {
+        return;
+    }
+    InputFollowDefinition(s, app, win, s->hoverDef.lastLocations[0]);
+}
 
 CodeActionSession::~CodeActionSession() {
     items.Reset();

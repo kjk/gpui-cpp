@@ -1403,6 +1403,12 @@ El* El::CaretOut(float* outX, float* outY) {
     caretOutY = outY;
     return this;
 }
+El* El::RangeOut(int lo, int hi, gpui::Bounds* out) {
+    rangeOutLo = lo;
+    rangeOutHi = hi;
+    rangeOut = out;
+    return this;
+}
 El* El::Washes(const TextSpan* runs, int n) {
     washes = runs;
     nWashes = n;
@@ -4305,6 +4311,25 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c,
                        e->style.truncate, e->style.wrap, e->laidMaxW,
                        ElTextWeight(e), e->style.lineHeight);
+        }
+        // range_to_bounds: where a named run of this text landed, for a
+        // caller that hit-tests against it on a later frame.
+        if (e->rangeOut && e->rangeOutHi > e->rangeOutLo) {
+            *e->rangeOut = Bounds{};
+            TextLayout* tl = TextMeasLayout(
+                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                e->style.wrap, (uint8_t)ElTextWeight(e), e->style.lineHeight,
+                nullptr);
+            if (tl) {
+                Bounds r[8] = {};
+                int n = TextLayoutRangeRects(tl, e->text, e->rangeOutLo,
+                                             e->rangeOutHi, r, 8);
+                if (n > 0) {
+                    *e->rangeOut = {e->x + r[0].x, e->y + r[0].y, r[0].w,
+                                    r[0].h};
+                }
+                TextLayoutRelease(tl);
+            }
         }
         // The rules a diagnostic asked for, over whatever drew the glyphs.
         for (int i = 0; i < e->nUnderlines; i++) {

@@ -1603,6 +1603,13 @@ struct El {
     // taking the colour the language gave it.
     const TextSpan* underlines = nullptr;
     int nUnderlines = 0;
+    // RangeOut: where a run of this text landed, in window coordinates, for
+    // a caller that has to hit-test against it later. `range_to_bounds` in
+    // Rust, which the go-to-definition hitbox is inserted over. One box: a
+    // symbol is on one row, and the first rect is that row's.
+    int rangeOutLo = -1;
+    int rangeOutHi = -1;
+    gpui::Bounds* rangeOut = nullptr;
     float* caretOutX = nullptr;
     float* caretOutY = nullptr;
     Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
@@ -1760,6 +1767,8 @@ struct El {
     // BoundsOut reports a box: one frame stale, which is what every other
     // popover here is placed against.
     El* CaretOut(float* outX, float* outY);
+    // Report where the bytes [lo, hi) of this run were painted.
+    El* RangeOut(int lo, int hi, gpui::Bounds* out);
     El* Washes(const TextSpan* runs, int n);
     El* Underlines(const TextSpan* runs, int n);
     El* Spans(const TextSpan* runs, int n);
@@ -2705,6 +2714,52 @@ struct CodeActionSession {
 // a provider answers out of its own store, not off the stack.
 using HoverFn = Str (*)(void* data, Str text, int offset);
 
+// LocationLink, flattened. `uri` is the document the target is in: empty
+// means this one, and the target range is then an offset pair into the text
+// being edited. An `http`/`https` uri is a page rather than a document, and
+// goes to whatever the desktop opens links with.
+struct DefinitionLink {
+    // origin_selection_range: the symbol that was asked about. Empty lets the
+    // word under the offset stand for it, which is what Rust falls back to.
+    Selection origin = {};
+    Str uri = {};
+    // target_selection_range: what to select once we are there.
+    Selection target = {};
+};
+
+// DefinitionProvider::definitions, without the task: the provider is handed
+// the document and the offset, and writes the places that offset is defined
+// in. Strings it answers are allocated out of `a`, which lives until the next
+// question is asked.
+using DefinitionFn = int (*)(void* data, Arena* a, Str text, int offset,
+                             DefinitionLink* out, int cap);
+
+// ShowDocumentHandler: the host's chance to show a document itself, which is
+// the `window/showDocument` request. True means it did and the built-in
+// handling is skipped — an external uri going to the browser, anything else
+// jumping inside this document.
+using ShowDocumentFn = bool (*)(void* data, Str uri, bool external,
+                                Selection selection);
+
+// HoverDefinition: what a secondary-hover found under the pointer, and what
+// it found last. The last pair is what the GoToDefinition action goes by:
+// the hover clears as soon as the modifier comes up, and the action still has
+// to know what the symbol under the caret was.
+struct HoverDefinition {
+    Selection symbolRange = {};
+    Vec<DefinitionLink> locations;
+    Selection lastRange = {};
+    Vec<DefinitionLink> lastLocations;
+    // Where the symbol was last painted, in window coordinates — Rust inserts
+    // a hitbox over exactly this, to put the hand cursor on it.
+    Bounds bounds = {};
+    // What the uris were written into, taken again each time the provider is
+    // asked.
+    Arena* arena = nullptr;
+
+    ~HoverDefinition();
+};
+
 // The completion menu while it is up — CompletionMenu's own state.
 struct CompletionSession {
     bool open = false;
@@ -2834,6 +2889,14 @@ struct InputState {
     CodeActionSession codeActions;
     CodeActionFn codeActionProvider = nullptr;
     void* codeActionData = nullptr;
+    // Go to definition: who is asked, what the last question found, and the
+    // host's hook for showing a document itself. A state with no provider
+    // never underlines anything and never answers the action.
+    DefinitionFn definitionProvider = nullptr;
+    void* definitionData = nullptr;
+    ShowDocumentFn showDocument = nullptr;
+    void* showDocumentData = nullptr;
+    HoverDefinition hoverDef;
     // The completion menu, and who fills it. A state with no provider never
     // opens one, which is every field that is not a code editor.
     CompletionSession completion;
@@ -3061,6 +3124,29 @@ void InputShowCompletions(InputState* s, App* app, Window* win);
 void InputUpdateDocumentColors(InputState* s);
 
 // ─── code actions ─────────────────────────────────────────────────────────
+
+// handle_hover_definition: ask the definition provider about the offset the
+// pointer is over, unless the last answer already covers it. What it finds is
+// underlined in the editor and takes the hand cursor.
+void InputHoverDefinition(InputState* s, int offset);
+// The other half: the modifier came up, or the pointer left the field.
+void InputClearHoverDefinition(InputState* s);
+// handle_click_hover_definition: a secondary-click inside a symbol the hover
+// found goes to its first location. True when it did, which is what keeps the
+// same press from also moving the caret.
+bool InputClickDefinition(InputState* s, App* app, Window* win, int offset,
+                          bool secondary);
+// The GoToDefinition action, which goes by the last thing a hover found
+// rather than by what is under the pointer now — the pointer has moved on by
+// the time a menu row is picked.
+void InputGoToDefinition(InputState* s, App* app, Window* win);
+// `can_go_to_definition`: whether the field has a provider at all, which is
+// what greys the menu row out.
+bool InputCanGoToDefinition(const InputState* s);
+// go_to_definition: the host first, then the browser for an external uri, and
+// otherwise the selection moved to the target inside this document.
+void InputFollowDefinition(InputState* s, App* app, Window* win,
+                           const DefinitionLink& link);
 
 // ToggleCodeActions: ask the provider about what is selected and open the
 // menu on what it offers. Nothing offered leaves the menu down.
@@ -3473,6 +3559,11 @@ struct Window {
     int focusGen = 0;
     float mouseX = 0;
     float mouseY = 0;
+    // The modifiers the pointer last moved or pressed under. Rust reads them
+    // off the MouseMoveEvent inside its handler; a hover here is worked out
+    // by the frame builder, which has no event to read, so the window keeps
+    // the last ones. What wants them: a secondary-hover over a symbol.
+    Modifiers mouseModifiers = {};
     // What the pointer looks like right now; the OS is only told on a change.
     CursorKind cursor = CursorKind::Arrow;
     bool maximized = false;
