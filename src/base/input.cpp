@@ -2158,9 +2158,48 @@ Str InputCompletionQuery(const InputState* s, int* startOut) {
     return Str(t.s + start, at - start);
 }
 
+Str InputCompletionDocumentation(InputState* s) {
+    if (!s || !s->completion.open) {
+        return Str{};
+    }
+    int sel = s->completion.selected;
+    if (sel < 0 || sel >= s->completion.items.len) {
+        return Str{};
+    }
+    CompletionItem& item = s->completion.items[sel];
+    if (item.documentation.len > 0 || !s->completionResolve) {
+        return item.documentation;
+    }
+    // `resolve_completions`: asked once for the item being looked at, and the
+    // answer is written back into the item so the next frame does not ask
+    // again. Rust resolves a batch of indices and marks the list resolved;
+    // one item is what a menu ever shows documentation for.
+    if (item.resolved) {
+        return item.documentation;
+    }
+    item.resolved = true;
+    if (!s->completion.arena) {
+        s->completion.arena = ArenaNew();
+    }
+    item.documentation =
+        s->completionResolve(s->completionData, s->completion.arena, &item);
+    return item.documentation;
+}
+
+CompletionSession::~CompletionSession() {
+    items.Reset();
+    if (arena) {
+        ArenaDelete(arena);
+    }
+}
+
 void InputDismissCompletion(InputState* s) {
     if (!s) {
         return;
+    }
+    if (s->completion.arena) {
+        ArenaDelete(s->completion.arena);
+        s->completion.arena = nullptr;
     }
     s->completion.open = false;
     s->completion.triggerStart = -1;
@@ -2804,14 +2843,27 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     // A menu of actions on what was selected has nothing to say about a
     // document that has changed under it, so typing puts it away.
     InputDismissCodeActions(s);
-    // is_completion_trigger: a word character carries a menu that is already
-    // up and opens one that is not, and `.` opens one where the caret stands.
-    // Anything else closes it.
+    // is_completion_trigger. The provider decides where it has an opinion;
+    // the rule underneath is the one every provider in this tree has wanted:
+    // a word character carries a menu that is already up and opens one that
+    // is not, `.` opens one where the caret stands, and anything else closes
+    // it.
     if (s->completionProvider) {
-        char c = buf[0];
-        if (CompletionWordChar(c)) {
+        Str typed = Str(buf, (int)strlen(buf));
+        CompletionTrigger want;
+        if (s->completionTrigger) {
+            want = s->completionTrigger(s->completionData, InputValue(s),
+                                        InputCursor(s), typed);
+        } else if (CompletionWordChar(buf[0])) {
+            want = CompletionTrigger::Continue;
+        } else if (buf[0] == '.') {
+            want = CompletionTrigger::Open;
+        } else {
+            want = CompletionTrigger::Close;
+        }
+        if (want == CompletionTrigger::Continue) {
             InputRequestCompletion(s, app, win, false);
-        } else if (c == '.') {
+        } else if (want == CompletionTrigger::Open) {
             InputRequestCompletion(s, app, win, true);
         } else {
             InputDismissCompletion(s);

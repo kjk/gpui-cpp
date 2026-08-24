@@ -272,6 +272,96 @@ static void DeleteToWordAndLineBoundaries() {
     utassert(ValueIs(s, "hello"));
 }
 
+// ─── the rest of the completion surface (lsp/completions.rs) ─────────────
+
+static int gCompleteCalls = 0;
+static int gResolveCalls = 0;
+
+static int TestCompletions(void* data, Str text, int offset, Str query,
+                           CompletionItem* out, int cap) {
+    (void)data;
+    (void)text;
+    (void)offset;
+    (void)query;
+    gCompleteCalls++;
+    if (cap <= 0) {
+        return 0;
+    }
+    // The item goes out thin, the way a server sends a thousand of them.
+    out[0].label = StrL("break");
+    out[0].detail = StrL("keyword");
+    return 1;
+}
+
+static Str TestResolve(void* data, Arena* a, const CompletionItem* item) {
+    (void)data;
+    (void)item;
+    gResolveCalls++;
+    return StrDup(a, StrL("Exit a loop immediately."));
+}
+
+// A provider with an opinion: `:` opens the menu, which the built-in rule
+// would have closed it on.
+static CompletionTrigger TestTrigger(void* data, Str text, int offset,
+                                     Str typed) {
+    (void)data;
+    (void)text;
+    (void)offset;
+    if (typed.len > 0 && typed.s[0] == ':') {
+        return CompletionTrigger::Open;
+    }
+    if (typed.len > 0 && typed.s[0] == '#') {
+        return CompletionTrigger::Close;
+    }
+    return CompletionTrigger::Continue;
+}
+
+static void TheProviderSaysWhenTheMenuOpens() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &TestCompletions;
+    gCompleteCalls = 0;
+
+    // The trigger is the *typed character* path — a paste is not a trigger,
+    // which is what `InputTypeChar` being the one caller says.
+    InputTypeChar(&s, nullptr, nullptr, 'b');
+    utassert(s.completion.open);
+    // Without a trigger function, the built-in rule: a word character opens
+    // one, and a colon is not one of the two it knows.
+    InputTypeChar(&s, nullptr, nullptr, ':');
+    utassert(!s.completion.open);
+
+    // With one, the provider's answer is what counts.
+    s.completionTrigger = &TestTrigger;
+    InputTypeChar(&s, nullptr, nullptr, ':');
+    utassert(s.completion.open);
+    // And what it says to close on closes it, word character or not.
+    InputTypeChar(&s, nullptr, nullptr, '#');
+    utassert(!s.completion.open);
+}
+
+static void DocumentationIsResolvedOnce() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &TestCompletions;
+    gResolveCalls = 0;
+    InputTypeChar(&s, nullptr, nullptr, 'b');
+    utassert(s.completion.open);
+
+    // With no resolver, an item that came thin stays thin.
+    utassert(InputCompletionDocumentation(&s).len == 0);
+    utassert(gResolveCalls == 0);
+
+    s.completionResolve = &TestResolve;
+    Str doc = InputCompletionDocumentation(&s);
+    utassert(Is(doc, "Exit a loop immediately."));
+    utassert(gResolveCalls == 1);
+    // Asked once: the answer is written back into the item, and the frame
+    // after this one reads it rather than asking again.
+    utassert(Is(InputCompletionDocumentation(&s), "Exit a loop immediately."));
+    utassert(gResolveCalls == 1);
+}
+
 // ─── inline completion (lsp/completions.rs) ──────────────────────────────
 
 static int gInlineCalls = 0;
@@ -1386,6 +1476,8 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    TheProviderSaysWhenTheMenuOpens();
+    DocumentationIsResolvedOnce();
     TheSuggestionWaitsForTheDebounce();
     ASuggestionThatMissedItsMomentIsDropped();
     TabAcceptsAndEscapeDeclines();

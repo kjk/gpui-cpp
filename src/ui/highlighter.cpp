@@ -432,15 +432,31 @@ El* Highlighter::IntoEl() {
         float y = state->caretWinY > 0
                       ? state->caretWinY + 4.f
                       : state->inputBounds.y + kInputLineH + 4.f;
+        // CompletionMenuOptions::max_width, clamped to what is left of the
+        // window to the right of the menu — and if the list and the pane
+        // beside it would not both fit, the pane goes underneath instead.
+        float configuredMax = state->completionMenuMaxW;
+        float winW = cx->win ? WindowSize(cx->win).dipW : 0.f;
+        float maxW = configuredMax;
+        if (winW > 0 && winW - x < maxW) {
+            maxW = winW - x;
+        }
+        if (maxW < 120.f) {
+            maxW = 120.f;
+        }
+        const float kPopoverGap = 4.f;
+        bool vertical = winW > 0 && x + configuredMax + kPopoverGap +
+                                            configuredMax + kPopoverGap >
+                                        winW;
         El* list = Div(a)
                        ->FlexCol()
-                       ->MinW(160)
-                       ->MaxW(420)
+                       ->MinW(120)
+                       ->MaxW(maxW)
                        ->MaxH(240)
                        ->ClipY()
                        ->Pad(4)
                        ->Radius(th.radius)
-                       ->Bg(th.tokens.background)
+                       ->Bg(th.tokens.popover)
                        ->Border(1, th.border);
         for (int i = 0; i < state->completion.items.len; i++) {
             const CompletionItem& item = state->completion.items[i];
@@ -468,25 +484,38 @@ El* Highlighter::IntoEl() {
             }
             list->Child(row);
         }
-        El* menu = Div(a)->FlexRow()->Gap(4)->ItemsStart()->Child(list);
-        // The documentation of the item the selection is on, beside the list.
-        int sel = state->completion.selected;
-        if (sel >= 0 && sel < state->completion.items.len &&
-            state->completion.items[sel].documentation.len > 0) {
+        El* menu = Div(a)->Gap(kPopoverGap)->ItemsStart()->Child(list);
+        if (vertical) {
+            menu->FlexCol();
+        } else {
+            menu->FlexRow();
+        }
+        // The documentation of the item the selection is on, beside the list
+        // — or under it where there is no room for both. `resolve_completions`
+        // fills it in the first time the item is looked at.
+        Str doc = InputCompletionDocumentation(state);
+        if (doc.len > 0) {
+            // Stacked, only the first line of it: a pane as tall as the list
+            // beneath the list would cover the document.
+            if (vertical) {
+                for (int i = 0; i < doc.len; i++) {
+                    if (doc.s[i] == '\n') {
+                        doc = Str(doc.s, i);
+                        break;
+                    }
+                }
+            }
             menu->Child(
                 Div(a)
-                    ->W(420)
+                    ->W(configuredMax)
                     ->MaxH(240)
                     ->ClipY()
                     ->PadX(8)
                     ->PadY(4)
                     ->Radius(th.radius)
-                    ->Bg(th.tokens.background)
+                    ->Bg(th.tokens.popover)
                     ->Border(1, th.border)
-                    ->Child(TextView::New(cx, state->completion.items[sel]
-                                                  .documentation)
-                                ->Font(12)
-                                ->IntoEl()));
+                    ->Child(TextView::New(cx, doc)->Font(12)->IntoEl()));
         }
         completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(menu);
     }

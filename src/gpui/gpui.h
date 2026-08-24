@@ -2656,6 +2656,9 @@ struct CompletionItem {
     // Markdown, in the pane beside the list.
     Str documentation = {};
     bool deprecated = false;
+    // Whether `completionItem/resolve` has been asked about this item. An
+    // item that came with documentation is never asked about.
+    bool resolved = false;
 };
 
 // CompletionProvider::completions, without the task: the provider is handed
@@ -2713,6 +2716,35 @@ struct CodeActionSession {
 // empty string for nothing to say. What it answers has to outlive the frame —
 // a provider answers out of its own store, not off the stack.
 using HoverFn = Str (*)(void* data, Str text, int offset);
+
+// CompletionProvider::is_completion_trigger: whether what was just typed at
+// that offset should open, keep or close the menu. Rust asks the provider on
+// every keystroke; a provider that names none of this gets the rule below,
+// which is what every provider in this tree has wanted.
+enum class CompletionTrigger : uint8_t {
+    // A word character: carry a menu that is up, open one that is not.
+    Continue,
+    // `.` and the like: open one where the caret stands, whatever is behind
+    // it.
+    Open,
+    // Anything else, which puts the menu away.
+    Close
+};
+
+using CompletionTriggerFn = CompletionTrigger (*)(void* data, Str text,
+                                                  int offset, Str typed);
+
+// CompletionProvider::resolve_completions — `completionItem/resolve`. The
+// menu asks about the item the selection is on, once, when it arrived with
+// no documentation of its own: a server that sends a thousand items sends
+// them thin and fills one in when it is looked at. What it answers is
+// allocated out of `a`, which lives as long as the menu.
+using CompletionResolveFn = Str (*)(void* data, Arena* a,
+                                    const CompletionItem* item);
+
+// CompletionMenuOptions: how wide the popover may be. 320 is Rust's default,
+// "fine for most identifiers"; a host that surfaces longer labels widens it.
+const float kCompletionMenuMaxW = 320.f;
 
 // CompletionProvider::inline_completion, without the task: the provider is
 // handed the document and the caret and answers the text to suggest after it,
@@ -2850,8 +2882,10 @@ struct CompletionSession {
     int selected = 0;
     // What the provider answered, in its own order.
     Vec<CompletionItem> items;
+    // What `completionItem/resolve` wrote into, dropped with the menu.
+    Arena* arena = nullptr;
 
-    ~CompletionSession() { items.Reset(); }
+    ~CompletionSession();
 };
 
 // EditorStyle::diagnostics: the colour a severity underlines in.
@@ -3000,6 +3034,13 @@ struct InputState {
     CompletionSession completion;
     CompletionFn completionProvider = nullptr;
     void* completionData = nullptr;
+    // is_completion_trigger and completionItem/resolve, both optional: the
+    // built-in rule and no resolving are what a provider that names neither
+    // gets.
+    CompletionTriggerFn completionTrigger = nullptr;
+    CompletionResolveFn completionResolve = nullptr;
+    // CompletionMenuOptions::max_width, which the menu is drawn to.
+    float completionMenuMaxW = kCompletionMenuMaxW;
     // The box the rows were laid out in as a whole, which is the scrolled
     // height once soft wrap has had its say.
     Bounds contentBox = {};
@@ -3222,6 +3263,11 @@ void InputShowCompletions(InputState* s, App* app, Window* win);
 void InputUpdateDocumentColors(InputState* s);
 
 // ─── code actions ─────────────────────────────────────────────────────────
+
+// The documentation of the item the selection is on, resolved through the
+// provider the first time it is looked at. Empty when there is none, and
+// what the item already carried when it came with some.
+Str InputCompletionDocumentation(InputState* s);
 
 // schedule_inline_completion: the typing stopped, so the provider may be
 // asked once the debounce has run. Called by every edit, which is also what

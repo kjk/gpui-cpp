@@ -331,9 +331,48 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
             memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
             continue;
         }
-        out[n++] = item;
+        out[n] = item;
+        // The items go out *thin*, which is what a server does with a
+        // thousand of them: the documentation is left for `resolve` to fill
+        // in when one is looked at.
+        out[n].documentation = Str{};
+        n++;
     }
     return n;
+}
+
+// CompletionProvider::resolve_completions — completionItem/resolve. The menu
+// asks about the item the selection is on; this looks its documentation up in
+// the same table the items came from.
+static Str ResolveCompletion(void*, Arena* a, const CompletionItem* item) {
+    (void)a;
+    LoadCompletionItems();
+    for (int i = 0; i < gNItems; i++) {
+        if (gItems[i].label.len == item->label.len &&
+            memcmp(gItems[i].label.s, item->label.s, (size_t)item->label.len) ==
+                0) {
+            return gItems[i].documentation;
+        }
+    }
+    return Str{};
+}
+
+// CompletionProvider::is_completion_trigger. The rule underneath the provider
+// is a word character or `.`; a C++ document wants `:` as well, since a
+// member of a namespace is reached through one.
+static CompletionTrigger CompletionTriggerAt(void*, Str, int, Str typed) {
+    if (typed.len == 0) {
+        return CompletionTrigger::Close;
+    }
+    char c = typed.s[0];
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '_') {
+        return CompletionTrigger::Continue;
+    }
+    if (c == '.' || c == ':') {
+        return CompletionTrigger::Open;
+    }
+    return CompletionTrigger::Close;
 }
 
 // ─── the code action provider ─────────────────────────────────────────────
@@ -917,6 +956,11 @@ int GpuiMain(int argc, char** argv) {
     // The completion provider, which is what makes the menu open as a word is
     // typed and on `.`.
     self->editor.completionProvider = &CompleteFrom;
+    // The two halves of the completion surface beside it: when the menu
+    // opens, and where an item's documentation comes from once it is looked
+    // at.
+    self->editor.completionTrigger = &CompletionTriggerAt;
+    self->editor.completionResolve = &ResolveCompletion;
     // And the hover provider, which answers about the word the pointer rests
     // on out of the same items.
     self->editor.hoverProvider = &HoverAt;
