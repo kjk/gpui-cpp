@@ -206,6 +206,9 @@ const libs = [
   // wry/wry_win.cpp reads the EdgeUpdate keys to find the WebView2 runtime,
   // which is the job the SDK's WebView2Loader would otherwise do.
   "advapi32.lib",
+  // sys/gpu_win.cpp reads the GPU Engine performance counters, which is what
+  // Task Manager's GPU column shows.
+  "pdh.lib",
 ];
 
 function sourcesFor(name: string): string[] | null {

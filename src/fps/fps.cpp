@@ -1,4 +1,6 @@
 #include "fps/fps.h"
+
+#include "sys/gpu.h"
 #include "gpui/paint.h"
 
 namespace gpui {
@@ -175,6 +177,10 @@ bool ResourceProbeSample(ResourceProbe* probe, ResourceSample* out) {
     float cpu = (float)((double)delta / (elapsed * 1e7 * probe->cores) * 100.);
     out->cpuPercent = cpu > 100.f ? 100.f : cpu;
     out->memoryBytes = memBytes;
+    // The third reading, and for a renderer the half that usually explains a
+    // slow frame. -1 where the platform has no counter, which keeps the row
+    // out of the HUD rather than showing a zero.
+    out->gpuPercent = GpuUsagePercent();
     return true;
 }
 
@@ -484,8 +490,14 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
         ->PadY(6)
         ->Radius(4)
         ->Child(FpsHeadline(cx, self, r.fps, fpsColor, style))
+        // Graded against the budget, not against the frame rate. An idle
+        // window draws a handful of frames a second, so the headline goes red
+        // while every one of those frames was in fact drawn well inside the
+        // budget; this row is what says so.
         ->Child(FpsReading(cx, StrL("FRAME"), fmt("%.1f ms", r.frameMillis),
-                           style.foreground, style))
+                           FpsLevelColor(style, r.frameMillis / 1000.f,
+                                         self->frameBudget),
+                           style))
         ->Child(FpsReading(
             cx, StrL("DROP"), fmt("%.1f%%", r.droppedPercent),
             FpsLevelColor(style, r.droppedPercent > 0 ? 1.f : 0.f, 0.5f),
@@ -503,6 +515,12 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
                 ->Child(FpsPair(cx, StrL("CPU"),
                                 fmt("%.1f%%", self->resources.cpuPercent),
                                 style))
+                ->Child(self->resources.gpuPercent >= 0
+                            ? FpsPair(cx, StrL("GPU"),
+                                      fmt("%.1f%%",
+                                          self->resources.gpuPercent),
+                                      style)
+                            : nullptr)
                 ->Child(FpsPair(cx, StrL("MEM"),
                                 FpsFormatBytes(self->resources.memoryBytes),
                                 style)));

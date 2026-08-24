@@ -82,6 +82,10 @@ struct ResourceSample {
     // Normalized so 100 means every logical core is saturated.
     float cpuPercent = 0;
     uint64_t memoryBytes = 0;
+    // This process' share of the GPU, or -1 where the platform publishes no
+    // counter for it — Rust's `Option<f32>`, and the reason the row is left
+    // out on its own rather than showing a zero.
+    float gpuPercent = -1.f;
 };
 
 // Rust probes this on a background thread through sysinfo, because refreshing
