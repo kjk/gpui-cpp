@@ -71,7 +71,7 @@ out\rel\showcase.exe      # Linux: out/rel/showcase
 - **The keymap and its users.** `src/gpui/keymap.*` is `Keystroke::parse`, the binding table, key contexts with `key=value` pairs, `KeyBindingContextPredicate` (`"Editor && mode == full"`, `"Workspace > Editor"`, `!`, `||`, parentheses) and multi-stroke bindings (`"ctrl-k ctrl-o"`), and `WindowDispatchKeyAction` resolves a chord against the contexts stacked over the focused element and then walks the handlers out from it. Every component keyboard is on it: the popup menu, the dialog and alert, the select and combobox, the list, the tree, the data table, the date picker, the popover, the sheet and the colour picker each call their `init` and declare their context the way Rust's modules do, so no application wires a component's keys up by hand any more. What a component's state cannot hold — a dialog's handlers, a date picker's — waits in a keyed entity beside it, since the port's components are builders where Rust's are views. `InputState` is the one keyboard still translated rather than bound: the window offers it a chord before the keymap, which is what makes a focused field's editing the innermost context.
 - **A second window opens.** `App` has held a window list and ended its loop with the last one for a while; the story's Window menu is what finally opens one. `create_new_window_with_size` is `StoryOpenWindow` — a fresh `StoryApp` entity, `TitleBar::window_options()`, and the window's own unhandled-click and key subscriptions — and `GpuiMain` goes through it too, so the first window and the second are the same thing. Dialogs, sheets and notifications are still drawn inside the window that owns them, which is where Rust draws them too: they are `Root`'s layers, not windows of their own.
 - **Multi-click is on the event, and in the input.** `ClickEvent::clickCount` is GPUI's `click_count`; the selectable-text paths use it, and so does `InputState` — a double click takes the word and a triple the line, which is `input/base/selection.rs`. `component::DataTable` uses it for both `TableEvent::DoubleClickedRow` and `DoubleClickedCell`; cell selection is on the story's Options menu, and with it the row header column and the escalation a click on an already-selected cell makes without one.
-- **The input engine is ported bar the language server.** `crates/base/src/input/base` is there, and so is the display map the arrows walk — soft wrap, display rows, wrapped-line movement — along with the IME marked range, `scroll_to`, the highlighted runs, the decorated ranges, the indent pair on tab and on `ctrl-]` / `ctrl-[`, and number stepping. The search session and code folding have since been ported too, so what is left out is the LSP features — completion, diagnostics, hover — which need a language server this tree does not run. `start_of_line` / `end_of_line` take the wrapped row first and the logical line on a second press, which is what Rust gates on `soft_wrap && is_code_editor()`.
+- **The input engine is ported bar the language server.** `crates/base/src/input/base` is there, and so is the display map the arrows walk — soft wrap, display rows, wrapped-line movement — along with the IME marked range, `scroll_to`, the highlighted runs, the decorated ranges, the indent pair on tab and on `ctrl-]` / `ctrl-[`, and number stepping. The search session and code folding have since been ported too, and so has every seam in `input/editor/lsp` — completion with its trigger, its resolve and its ghost text, hover, code actions, document colours, range semantic tokens, go to definition and the overlay the host draws its own menus through. What no seam can supply is a language *server*: there is no JSON-RPC, no child process and no `lsp_types`, by the same hard rule that keeps tree-sitter out, so a provider here is a function pointer an application fills. `start_of_line` / `end_of_line` take the wrapped row first and the logical line on a second press, which is what Rust gates on `soft_wrap && is_code_editor()`.
 - **Mouse capture is `PlatSetMouseCapture`.** The press is the window's for as long as the button is down: `SetCapture` on Windows, an active `XGrabPointer` on X11, and nothing on macOS, where Cocoa already routes `mouseDragged:` and `mouseUp:` to the window the press went to. Windows also answers `WM_CAPTURECHANGED` by ending the press where it was, since a capture handed to a title-bar drag never gives the button back.
 - **`EventEmitter` is `cx.emit` / `cx.subscribe`.** `EntityEmit` fans an event out to every live subscription and `Subscribe(cx, emitter, &Self::OnEvent)` makes one, handing back a `Subscription` that `EntityUnsubscribe` gives up; a subscription whose emitter or subscriber has gone stale is swept on the next emit, which is what Rust's guard does on drop. There is no trait to mark what an entity emits, so nothing checks that the subscriber's handler takes the type the emitter sends — that is the one thing Rust's `EventEmitter<E>` gets that this cannot. `ListState`, `TableState` and `TreeState` emit through it; their `onEvent` field stays as the shorthand for the single-subscriber case and hears the same event, and the other states (`InputState`, `SliderState`, `PopupMenuState`, `SearchableListState`, `ClipboardState`) still carry a listener each, `InputState` because it is not an entity at all.
 - **The dock is both halves.** `crates/ui/src/dock` is ported as a tree of tab groups and splits — `DockArea` with a Dock on the left, the right and the bottom, tabs dragged between groups or onto an edge to split one, resize handles everywhere, zoom and close — and `tiles.rs` is there too: the free canvas of overlapping panels, each moved by its drag bar and resized by its edges, both magnetic against a neighbour's edge or the grid. `dock/state.rs` round-trips a layout through the JSON reader in `src/base/json.h` rather than through serde, `TileMeta` and all.
@@ -3369,3 +3369,98 @@ panel's own toolbar buttons and menu rows, focus following the active tab,
 rather than by screenshots for the reason the LSP entry gives: a posted
 `WM_KEYDOWN` does not reach a field on this machine, so `cmd/shot.ts -key`
 cannot drive a caret.
+
+## The editor half of a language server, all seven pieces
+
+`crates/base/src/input/editor/lsp` is eight files and 1714 lines. Five of its
+seven provider slots were here — completion, code actions, hover, document
+colours, and the diagnostics that live next door — as function pointers where
+Rust has traits answering `Task`s. What follows is the rest of it, and the
+standing constraint first: **there is still no transport.** No JSON-RPC, no
+child process over stdio, no `lsp_types`. An LSP client is one of the named
+exclusions in AGENTS.md, and it would want process spawning and real async,
+neither of which this tree has. Everything below is the *editor* side — what
+an application that has a language server by other means can plug into.
+
+**Go to definition** (`definitions.rs`). A `DefinitionFn` answers
+`DefinitionLink`s — a flattened `LocationLink`. With the shortcut modifier
+down, the pointer asks where the symbol under it is defined rather than what
+it is (`handle_mouse_move` picks one of the two and never both), the answer
+is underlined in the link colour, the symbol takes the hand cursor, and a
+secondary-click follows it and keeps the press so the caret does not also
+move. The `GoToDefinition` action goes by the *last* thing a hover found,
+since the underline is gone by the time a menu row is picked.
+`window/showDocument` is the host's first refusal; after it an `http(s)`
+target goes to the browser and anything else moves the selection inside this
+document. Two things came with it: `Window::mouseModifiers`, because a hover
+is worked out by the frame builder here and it has no event to read them off,
+and `El::RangeOut`, which reports where a named run of a text element was
+painted — Rust inserts a hitbox over exactly that.
+
+**Range semantic tokens** (`semantic_tokens.rs`). The provider answers tokens
+*delta-encoded as a server sends them*, which is the point: the decoding is
+the editor's. `SemanticTokensDecode` unpacks the deltas, skipping a type
+outside the legend; `SemanticTokensForRange` binary-searches the window
+touching the viewport out of a cache kept in document order. What is cached
+is the type *name*, resolved to a colour at paint, so a theme change recolours
+with nothing refetched. The names map onto this tree's scanner palette rather
+than a tree-sitter capture vocabulary, with `registry.rs`'s own dotted
+fallback. One deliberate difference: Rust composes the two layers with
+`combine_highlights`, which folds the overlapping styles out of a `HashSet` —
+so which wins where both speak is undefined there. Here the server's token
+wins over the scanner's capture, which is what the protocol means by layering
+semantic tokens over a lexer.
+
+**Inline completion** (ghost text). The provider is asked once the typing has
+stopped for 300 ms — a `dueAt` on the state and a frame asked for while it
+runs, with the same two checks Rust makes on the far side of its timer: the
+caret has not moved and no menu has opened. Tab accepts it before it indents,
+escape declines it and consumes the key, Enter and any press drop it. Rust
+makes room for a multi-line suggestion by shifting the rows below down; the
+rows here are a virtualized flex column whose heights the layout owns, so
+every line is drawn over what is under it, each on the editor's own surface.
+
+**The rest of the completion surface.** `is_completion_trigger` — the
+provider decides whether what was typed opens, carries or closes the menu,
+with the old hardcoded rule underneath it; `completionItem/resolve`, asked
+once about the item the selection is on when it arrived without
+documentation, the answer written back into the item; and
+`CompletionMenuOptions::max_width` — 320 rather than 420, clamped to what is
+left of the window, with Rust's fallback layout when the list and the pane
+beside it will not both fit (the documentation goes underneath, trimmed to
+its first line).
+
+**`apply_lsp_edits`.** `TextEditItem` is `lsp_types::TextEdit` in byte
+offsets, a code action carries an edit list where it has one, and a completion
+item carries `additionalTextEdits` — the import a name brings with it. Each
+edit is its own undo step, which is what Rust's loop over
+`replace_text_in_range_silent` records; written down rather than improved on.
+
+**The overlay seam** (`overlay.rs`). Rust keeps only the menus' *state* in the
+editor and hands the drawing to the host. This tree draws them itself and
+still does; beside that there is now `InputPresentCompletionItems` /
+`InputPresentCodeActions` / `InputPresentHover` / `InputPresentDiagnostic`, a
+**revision** on each menu for a host renderer to diff against, an
+`OverlayActionFn` asked before the editor's own menu handling — which
+`InputPerform` now goes through — and `InputInsertCompletion`, with
+`insert_text` going in *after* the query's range rather than over it. One real
+fix came out of it: `completion_inserting` / `silent_replace_text`, so an edit
+the editor makes on the reader's behalf is not treated as typing.
+
+**The three small ones.** The 150 ms before a hover is asked for, and only
+when nothing is showing (`should_delay = hover_popover.is_none()`); every
+registered code action provider asked with its answers concatenated, each item
+remembering which one it came from so a `perform` goes back to that provider;
+and `Lsp::update` / `Lsp::reset` as one call each.
+
+The editor example carries a provider for every one of them now — the Rust
+example's own definitions (`Duration` in the document, four std names on
+doc.rust-lang.org), `MarkerHighlighter` from the Rust markdown example for the
+semantic tokens, a loop body after `for (`, items sent thin with their
+documentation behind `resolve`, a two-edit "Wrap in Parentheses", and an item
+that brings a `use` line with it.
+
+17455 checks, of which nineteen are new — the four in Rust's own
+`semantic_tokens.rs` tests among them. The keyboard half is pinned by tests
+rather than by screenshots, for the reason the last LSP entry gives: a posted
+`WM_KEYDOWN` does not reach a field on this machine.
