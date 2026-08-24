@@ -2714,6 +2714,60 @@ struct CodeActionSession {
 // a provider answers out of its own store, not off the stack.
 using HoverFn = Str (*)(void* data, Str text, int offset);
 
+// ─── range semantic tokens (input/editor/lsp/semantic_tokens.rs) ─────────
+//
+// The highlighting a language server publishes, layered over the built-in
+// highlighter rather than replacing it. A token arrives delta-encoded — five
+// numbers, each position relative to the token before it — and names its type
+// by an index into a legend the provider declares. The *name* is what is
+// cached: the colour is resolved from it at paint, so a theme change recolours
+// with nothing refetched.
+
+// One token as the wire carries it.
+struct SemanticToken {
+    uint32_t deltaLine = 0;
+    uint32_t deltaStart = 0;
+    uint32_t length = 0;
+    uint32_t tokenType = 0;
+    uint32_t tokenModifiers = 0;
+};
+
+// One decoded token: where it is in line and column — a token never spans a
+// line — and the legend name of its type.
+struct SemanticSpan {
+    int line = 0;
+    int col = 0;
+    int len = 0;
+    Str name = {};
+};
+
+// A decoded token resolved against a document: the bytes it covers, and the
+// name a caller looks a colour up by.
+struct SemanticRange {
+    Selection range = {};
+    Str name = {};
+};
+
+// DocumentRangeSemanticTokensProvider::semantic_tokens, without the task: the
+// provider is handed the document and a byte range and writes the tokens in
+// it, delta-encoded as a server would send them. The legend beside it is
+// `DocumentRangeSemanticTokensProvider::legend`.
+using SemanticTokensFn = int (*)(void* data, Str text, Selection range,
+                                 SemanticToken* out, int cap);
+
+// decode_semantic_tokens: the delta encoding unpacked into absolute
+// positions, in document order. A token whose type is not in the legend is
+// skipped, which is what an out-of-range index means.
+int SemanticTokensDecode(const SemanticToken* toks, int n, const Str* names,
+                         int nNames, SemanticSpan* out, int cap);
+
+// semantic_tokens_for_range: the tokens touching `visible`, as byte ranges.
+// The cache is in document order, so the window is binary-searched rather
+// than scanned — a document of ten thousand tokens pays for the ones on
+// screen. A token resolving to an empty range is skipped.
+int SemanticTokensForRange(const SemanticSpan* toks, int n, Str text,
+                           Selection visible, SemanticRange* out, int cap);
+
 // LocationLink, flattened. `uri` is the document the target is in: empty
 // means this one, and the target range is then an offset pair into the text
 // being edited. An `http`/`https` uri is a page rather than a document, and
@@ -2889,6 +2943,18 @@ struct InputState {
     CodeActionSession codeActions;
     CodeActionFn codeActionProvider = nullptr;
     void* codeActionData = nullptr;
+    // The semantic tokens a provider published, and who is asked. Rust
+    // debounces the request 100 ms after an edit and diffs the answer; this
+    // asks the frame after the edit, like the document colours beside it.
+    SemanticTokensFn semanticTokensProvider = nullptr;
+    void* semanticTokensData = nullptr;
+    // The legend the provider's `token_type` indexes into. Rust asks the
+    // provider for it every time; a provider here declares it once beside
+    // the function.
+    const Str* semanticLegend = nullptr;
+    int nSemanticLegend = 0;
+    Vec<SemanticSpan> semanticTokens;
+    bool semanticTokensDirty = true;
     // Go to definition: who is asked, what the last question found, and the
     // host's hook for showing a document itself. A state with no provider
     // never underlines anything and never answers the action.
@@ -3124,6 +3190,11 @@ void InputShowCompletions(InputState* s, App* app, Window* win);
 void InputUpdateDocumentColors(InputState* s);
 
 // ─── code actions ─────────────────────────────────────────────────────────
+
+// Lsp::update's semantic half: ask the provider again when the document has
+// changed under it. Nothing happens without a provider, which is every field
+// that is not a code editor.
+void InputUpdateSemanticTokens(InputState* s);
 
 // handle_hover_definition: ask the definition provider about the offset the
 // pointer is over, unless the last answer already covers it. What it finds is

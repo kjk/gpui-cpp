@@ -377,6 +377,90 @@ static Str CaseMapped(Arena* a, Str src, int which) {
     return Str(out, n);
 }
 
+// ─── the range semantic tokens provider ───────────────────────────────────
+//
+// `MarkerHighlighter` from the Rust markdown example: every TODO / FIXME /
+// XXX / HACK / NOTE in the document gets a token type of its own, so each
+// renders in a different colour of the theme. The scan is synchronous and the
+// answer delta-encoded exactly as a language server sends it — which is the
+// point of the exercise, since the decoding is the editor's.
+struct Marker {
+    const char* word;
+    const char* type;
+};
+
+static const Marker kSemanticMarkers[] = {
+    {"TODO", "keyword"},  {"FIXME", "string"}, {"XXX", "number"},
+    {"HACK", "function"}, {"NOTE", "type"},
+};
+static const int kNMarkers =
+    (int)(sizeof(kSemanticMarkers) / sizeof(kSemanticMarkers[0]));
+
+// The legend the `tokenType` of each answer indexes into.
+static const Str kMarkerLegend[kNMarkers] = {
+    StrL("keyword"),  StrL("string"), StrL("number"),
+    StrL("function"), StrL("type"),
+};
+
+struct MarkerHit {
+    int line;
+    int col;
+    int len;
+    int type;
+};
+
+static int SemanticTokensFor(void*, Str text, Selection range,
+                             SemanticToken* out, int cap) {
+    if (cap <= 0 || !text.s) {
+        return 0;
+    }
+    const int kMaxHits = 512;
+    MarkerHit hits[kMaxHits];
+    int n = 0;
+    for (int t = 0; t < kNMarkers && n < kMaxHits; t++) {
+        Str word = Str(kSemanticMarkers[t].word);
+        for (int i = range.start; i + word.len <= range.end && n < kMaxHits;
+             i++) {
+            if (memcmp(text.s + i, word.s, (size_t)word.len) != 0) {
+                continue;
+            }
+            RopePoint p = RopeOffsetToPoint(text, i);
+            hits[n].line = p.row;
+            hits[n].col = p.column;
+            hits[n].len = word.len;
+            hits[n].type = t;
+            n++;
+            i += word.len - 1;
+        }
+    }
+    // Document order, which is what the delta encoding is relative to.
+    for (int i = 1; i < n; i++) {
+        MarkerHit v = hits[i];
+        int j = i - 1;
+        while (j >= 0 && (hits[j].line > v.line ||
+                          (hits[j].line == v.line && hits[j].col > v.col))) {
+            hits[j + 1] = hits[j];
+            j--;
+        }
+        hits[j + 1] = v;
+    }
+    int m = 0;
+    int prevLine = 0, prevCol = 0;
+    for (int i = 0; i < n && m < cap; i++) {
+        int deltaLine = hits[i].line - prevLine;
+        out[m].deltaLine = (uint32_t)deltaLine;
+        out[m].deltaStart =
+            (uint32_t)(deltaLine == 0 ? hits[i].col - prevCol : hits[i].col);
+        out[m].length = (uint32_t)hits[i].len;
+        out[m].tokenType = (uint32_t)hits[i].type;
+        out[m].tokenModifiers = 0;
+        prevLine = hits[i].line;
+        prevCol = hits[i].col;
+        m++;
+    }
+    return m;
+}
+
 // ─── the definition provider ──────────────────────────────────────────────
 //
 // `ExampleLspStore`'s own: `Duration` is defined in this document, and the
@@ -816,6 +900,12 @@ int GpuiMain(int argc, char** argv) {
     // ctrl-click follows it. `Duration` is defined in this document; the
     // other four std names open their page on doc.rust-lang.org.
     self->editor.definitionProvider = &DefinitionsAt;
+    // And what a language server would say about the document beyond what the
+    // scanner can see — here the five markers, each in its own colour, over
+    // the highlighting rather than instead of it.
+    self->editor.semanticTokensProvider = &SemanticTokensFor;
+    self->editor.semanticLegend = kMarkerLegend;
+    self->editor.nSemanticLegend = kNMarkers;
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;

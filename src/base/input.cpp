@@ -509,6 +509,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // boxes to answer against.
     // What the document names in colour, asked for again when it changed.
     InputUpdateDocumentColors(state);
+    InputUpdateSemanticTokens(state);
     state->hoverDiagnostic = -1;
     if ((state->diagnostics.len > 0 || state->hoverProvider ||
          state->definitionProvider) &&
@@ -1866,9 +1867,11 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     if (InputIsMultiLine(s) && s->mode.kind == LayoutModeKind::AutoGrow) {
         LayoutModeSetRows(&s->mode, RopeLinesLen(InputValue(s)));
     }
-    // The colours the document names may have moved or changed, so the row
-    // builder asks again next frame.
+    // The colours the document names may have moved or changed, and so may
+    // what a language server said about it, so the row builder asks both
+    // again next frame — `Lsp::update`, which is the pair together.
     s->documentColorsDirty = true;
+    s->semanticTokensDirty = true;
     Emit(s, app, win, InputEvent{InputEventKind::Change});
     Notify(app, win);
     return true;
@@ -2233,6 +2236,135 @@ void InputUpdateDocumentColors(InputState* s) {
 // caret, and let the same four keys walk it. Rust's providers answer tasks
 // and the answers are gathered as they land; a provider here answers into a
 // buffer, so the asking and the gathering are the one call.
+
+// ─── range semantic tokens (lsp/semantic_tokens.rs) ──────────────────────
+
+int SemanticTokensDecode(const SemanticToken* toks, int n, const Str* names,
+                         int nNames, SemanticSpan* out, int cap) {
+    if (!toks || !out || cap <= 0) {
+        return 0;
+    }
+    int m = 0;
+    uint32_t line = 0;
+    uint32_t character = 0;
+    for (int i = 0; i < n && m < cap; i++) {
+        const SemanticToken& t = toks[i];
+        // A new line resets the column; the same line carries on from the
+        // token before it.
+        if (t.deltaLine > 0) {
+            line += t.deltaLine;
+            character = t.deltaStart;
+        } else {
+            character += t.deltaStart;
+        }
+        if (!names || t.tokenType >= (uint32_t)nNames) {
+            continue;
+        }
+        out[m].line = (int)line;
+        out[m].col = (int)character;
+        out[m].len = (int)t.length;
+        out[m].name = names[t.tokenType];
+        m++;
+    }
+    // The wire order is already document order — a delta is never negative —
+    // so the sort Rust ends with has nothing to do here. It is written out
+    // rather than skipped silently: an insertion sort over a list that is
+    // already sorted is a walk.
+    for (int i = 1; i < m; i++) {
+        SemanticSpan v = out[i];
+        int j = i - 1;
+        while (j >= 0 && (out[j].line > v.line ||
+                          (out[j].line == v.line && out[j].col > v.col))) {
+            out[j + 1] = out[j];
+            j--;
+        }
+        out[j + 1] = v;
+    }
+    return m;
+}
+
+int SemanticTokensForRange(const SemanticSpan* toks, int n, Str text,
+                           Selection visible, SemanticRange* out, int cap) {
+    if (!toks || !out || cap <= 0 || n <= 0) {
+        return 0;
+    }
+    RopePoint first = RopeOffsetToPoint(text, visible.start);
+    RopePoint last = RopeOffsetToPoint(text, visible.end);
+    // The cache is sorted by start. A token can only touch the viewport if
+    // its start is before the end of it (the upper bound), and it is not on a
+    // line wholly above the first visible one (the lower bound — a token
+    // never spans a line, so an earlier line cannot reach in).
+    int lo = 0, hi = n;
+    {
+        int a = 0, b = n;
+        while (a < b) {
+            int mid = (a + b) / 2;
+            bool before =
+                toks[mid].line < last.row ||
+                (toks[mid].line == last.row && toks[mid].col < last.column);
+            if (before) {
+                a = mid + 1;
+            } else {
+                b = mid;
+            }
+        }
+        hi = a;
+        a = 0;
+        b = n;
+        while (a < b) {
+            int mid = (a + b) / 2;
+            if (toks[mid].line < first.row) {
+                a = mid + 1;
+            } else {
+                b = mid;
+            }
+        }
+        lo = a;
+    }
+    int m = 0;
+    for (int i = lo; i < hi && m < cap; i++) {
+        const SemanticSpan& t = toks[i];
+        int start = RopePointToOffset(text, RopePoint{t.line, t.col});
+        int end = RopePointToOffset(text, RopePoint{t.line, t.col + t.len});
+        if (start >= end || start >= visible.end || end <= visible.start) {
+            continue;
+        }
+        out[m].range = Selection{start, end};
+        out[m].name = t.name;
+        m++;
+    }
+    return m;
+}
+
+void InputUpdateSemanticTokens(InputState* s) {
+    if (!s || !s->semanticTokensProvider || !s->semanticTokensDirty) {
+        return;
+    }
+    s->semanticTokensDirty = false;
+    // Rust fetches the whole document and windows the answer at paint, so a
+    // scroll never refetches; the same here.
+    const int kMax = 4096;
+    auto* buf =
+        (SemanticToken*)Alloc(nullptr, (int)sizeof(SemanticToken) * kMax);
+    auto* decoded =
+        (SemanticSpan*)Alloc(nullptr, (int)sizeof(SemanticSpan) * kMax);
+    if (!buf || !decoded) {
+        Free(nullptr, buf);
+        Free(nullptr, decoded);
+        return;
+    }
+    Str text = InputValue(s);
+    int n = s->semanticTokensProvider(s->semanticTokensData, text,
+                                      Selection{0, text.len}, buf, kMax);
+    int m = SemanticTokensDecode(buf, n, s->semanticLegend, s->nSemanticLegend,
+                                 decoded, kMax);
+    s->semanticTokens.Clear();
+    for (int i = 0; i < m; i++) {
+        s->semanticTokens.Append(decoded[i]);
+    }
+    Free(nullptr, buf);
+    Free(nullptr, decoded);
+}
 
 // ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
 

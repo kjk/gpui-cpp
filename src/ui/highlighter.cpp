@@ -76,6 +76,88 @@ static int HighlightSpans(Ctx* cx, Str text, SyntaxLang lang, TextSpan* out,
     return n;
 }
 
+// HighlightTheme::style, for the names a semantic token carries. Rust looks
+// the name up in the theme, which holds every tree-sitter capture name;
+// this tree's palette is the handful of kinds `syntax.cpp` scans for, so a
+// name is mapped onto one of those. A dotted name falls back to its head —
+// `keyword.modifier` is a keyword — which is the rule registry.rs applies,
+// and a name nothing recognises has no style and is skipped.
+static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
+    static const struct {
+        const char* name;
+        SyntaxTok tok;
+    } kMap[] = {
+        {"keyword", SyntaxTok::Keyword},   {"type", SyntaxTok::Type},
+        {"class", SyntaxTok::Type},        {"struct", SyntaxTok::Type},
+        {"enum", SyntaxTok::Type},         {"interface", SyntaxTok::Type},
+        {"function", SyntaxTok::Function}, {"method", SyntaxTok::Function},
+        {"macro", SyntaxTok::Function},    {"property", SyntaxTok::Property},
+        {"variable", SyntaxTok::Property}, {"parameter", SyntaxTok::Property},
+        {"string", SyntaxTok::String},     {"number", SyntaxTok::Number},
+        {"boolean", SyntaxTok::Boolean},   {"comment", SyntaxTok::Comment},
+        {"tag", SyntaxTok::Tag},           {"attribute", SyntaxTok::Attribute},
+    };
+    const Theme& th = cx->theme();
+    ThemeMode mode = cx->themeMode();
+    Str head = name;
+    for (int pass = 0; pass < 2; pass++) {
+        for (const auto& row : kMap) {
+            if (StrEqI(head, Str(row.name))) {
+                *out = SyntaxTokColor(row.tok, mode, th.foreground);
+                return true;
+            }
+        }
+        // Try the head of a dotted name once, and then give up.
+        int dot = -1;
+        for (int i = 0; i < head.len; i++) {
+            if (head.s[i] == '.') {
+                dot = i;
+                break;
+            }
+        }
+        if (dot < 0) {
+            break;
+        }
+        head = Str(head.s, dot);
+    }
+    return false;
+}
+
+// The semantic tokens a provider published, over the document, as runs the
+// rows slice out of — the same shape the language's own captures come in.
+static int SemanticSpans(Ctx* cx, InputState* state, Str text, TextSpan* out,
+                         int cap) {
+    if (!state || state->semanticTokens.len == 0 || !text.s) {
+        return 0;
+    }
+    const int kWindow = 1024;
+    auto* window =
+        (SemanticRange*)Alloc(cx->a, (int)sizeof(SemanticRange) * kWindow);
+    if (!window) {
+        return 0;
+    }
+    // Rust windows to what is on screen; the rows here are built from spans
+    // over the whole document, so the whole document is the window.
+    int n = SemanticTokensForRange(state->semanticTokens.els,
+                                   state->semanticTokens.len, text,
+                                   Selection{0, text.len}, window, kWindow);
+    int m = 0;
+    for (int i = 0; i < n && m < cap; i++) {
+        Rgba c;
+        if (!SemanticTokColor(cx, window[i].name, &c)) {
+            continue;
+        }
+        out[m].lo = window[i].range.start;
+        out[m].hi = window[i].range.end;
+        out[m].color = c;
+        out[m].bg = Rgba8(0, 0, 0, 0);
+        out[m].underline = false;
+        out[m].wavy = false;
+        m++;
+    }
+    return m;
+}
+
 // The decorations win over the captures they overlap: every capture is cut
 // back to what the decorations leave it, and the decorations go in whole.
 // Both lists are in order, and so is the result.
@@ -278,6 +360,22 @@ El* Highlighter::IntoEl() {
     const int kMaxSpans = 4096;
     auto* spans = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
     int n = HighlightSpans(cx, text, lang, spans, kMaxSpans);
+    // The semantic tokens over the language's own captures. Rust composes
+    // the two with `combine_highlights`, which folds the overlapping styles
+    // out of a HashSet — so which of them wins where both speak is not
+    // defined there. It is here: what the server said wins, which is what
+    // the protocol means by layering semantic tokens over a lexer, and it is
+    // the half that can tell a type from a variable.
+    {
+        auto* sem = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
+        int nSem = sem ? SemanticSpans(cx, state, text, sem, kMaxSpans) : 0;
+        if (nSem > 0) {
+            auto* tmp = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
+            if (tmp) {
+                n = MergeDecorations(spans, n, sem, nSem, kMaxSpans, tmp);
+            }
+        }
+    }
     if (nDecorations > 0) {
         auto* tmp = (TextSpan*)Alloc(a, (int)sizeof(TextSpan) * kMaxSpans);
         if (tmp) {

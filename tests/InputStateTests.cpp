@@ -272,6 +272,69 @@ static void DeleteToWordAndLineBoundaries() {
     utassert(ValueIs(s, "hello"));
 }
 
+// ─── range semantic tokens (lsp/semantic_tokens.rs, its own tests) ────────
+
+static const Str kSemanticLegend[] = {StrL("keyword"), StrL("comment")};
+
+static void TheDeltaEncodingIsUnpacked() {
+    // Two tokens: "keyword" at (0, 0..4) and "comment" at (1, 2..7).
+    SemanticToken toks[2] = {};
+    toks[0] = {0, 0, 4, 0, 0};
+    toks[1] = {1, 2, 5, 1, 0};
+    SemanticSpan out[4] = {};
+    int n = SemanticTokensDecode(toks, 2, kSemanticLegend, 2, out, 4);
+    utassert(n == 2);
+    utassert(out[0].line == 0 && out[0].col == 0 && out[0].len == 4);
+    utassert(Is(out[0].name, "keyword"));
+    // The second token's line is relative to the first, and its column
+    // starts over because the line moved.
+    utassert(out[1].line == 1 && out[1].col == 2 && out[1].len == 5);
+    utassert(Is(out[1].name, "comment"));
+}
+
+static void ATokenOutsideTheLegendIsSkipped() {
+    SemanticToken tok = {0, 0, 3, 99, 0};
+    SemanticSpan out[4] = {};
+    utassert(SemanticTokensDecode(&tok, 1, kSemanticLegend, 2, out, 4) == 0);
+}
+
+static void OnlyTheVisibleTokensAreResolved() {
+    Str text = StrL("SELECT * FROM users\n-- a comment line\n");
+    SemanticSpan toks[2] = {};
+    toks[0] = {0, 0, 6, StrL("keyword")};
+    toks[1] = {1, 0, 17, StrL("comment")};
+    SemanticRange out[4] = {};
+    // A viewport over line 0 only (bytes 0..19).
+    int n = SemanticTokensForRange(toks, 2, text, Selection{0, 19}, out, 4);
+    utassert(n == 1);
+    utassert(out[0].range.start == 0 && out[0].range.end == 6);
+    utassert(Is(out[0].name, "keyword"));
+}
+
+static void TheWindowIsBinarySearched() {
+    // A hundred lines of "foo bar\n", one token over "foo" on each.
+    char buf[801];
+    for (int i = 0; i < 100; i++) {
+        memcpy(buf + i * 8, "foo bar\n", 8);
+    }
+    buf[800] = 0;
+    Str text(buf, 800);
+    SemanticSpan toks[100] = {};
+    for (int i = 0; i < 100; i++) {
+        toks[i] = {i, 0, 3, StrL("keyword")};
+    }
+    SemanticRange out[8] = {};
+    const int lineBytes = 8;
+    int start = 50 * lineBytes;
+    int n = SemanticTokensForRange(toks, 100, text, Selection{start, start + 3},
+                                   out, 8);
+    utassert(n == 1);
+    utassert(out[0].range.start == start && out[0].range.end == start + 3);
+    // An empty viewport before every token windows nothing in.
+    utassert(SemanticTokensForRange(toks, 100, text, Selection{0, 0}, out, 8) ==
+             0);
+}
+
 // ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
 
 // A provider that answers for one word: `Duration` is defined at the top of
@@ -1238,6 +1301,10 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    TheDeltaEncodingIsUnpacked();
+    ATokenOutsideTheLegendIsSkipped();
+    OnlyTheVisibleTokensAreResolved();
+    TheWindowIsBinarySearched();
     AHoveredSymbolIsAskedAboutOnce();
     ASecondaryClickFollowsTheDefinition();
     TheActionGoesByTheLastThingAHoverFound();
