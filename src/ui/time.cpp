@@ -137,13 +137,17 @@ static float CalendarCellSize(UiSize size) {
 }
 
 static float CalendarWidth(UiSize size) {
+    // crates/ui/src/time/calendar.rs. These came down with the eight-column
+    // fix: a month is seven cells wide now rather than however many the
+    // wrapping fitted, so the panel is sized to seven of them plus its
+    // padding instead of to what the wrap wanted.
     if (size == UiSize::Small) {
-        return 232;
+        return 220;
     }
     if (size == UiSize::Large) {
-        return 316;
+        return 304;
     }
-    return 288;
+    return 248;
 }
 
 static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
@@ -151,23 +155,16 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
     Ctx* cx = self->cx;
     const Theme& th = cx->theme();
     static const char* weekdays[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
-    // calendar.rs builds a month as one `h_flex().flex_wrap()` holding the
-    // seven weekday headers and then every day cell in sequence. Nothing
-    // says seven per row: the column count is whatever the container's width
-    // fits, and at the medium size — 288 wide, 12 of padding each side, 32
-    // cells, no gap — that is eight, so the month comes out shifted by one
-    // from the second row on. It is upstream's layout and upstream's look;
-    // building explicit seven-column rows here would be a different widget.
+    // calendar.rs used to build a month as one `h_flex().flex_wrap()` holding
+    // the seven weekday headers and every day cell after them, which put
+    // eight cells on a row wherever the width fitted eight and shifted the
+    // month by one from the second row on. It is a column of rows now — the
+    // weekday header, then one `h_flex` per week — so seven is seven whatever
+    // the panel is given.
     El* panel = Div(a)->FlexCol();
-    // `h_flex().flex_wrap()` with no width of its own: the row wraps at
-    // whatever the panel gives it. It used to be told a width worked out from
-    // the size and the month count, which is the same number while the panel
-    // gets the width it asked for — and the wrong one the moment the panel is
-    // squeezed into something narrower, since the row would keep wrapping at
-    // a width the panel no longer has.
-    El* body = Div(a)->FlexRow()->FlexWrap()->W(kFill);
+    El* header = Div(a)->FlexRow();
     for (int i = 0; i < 7; i++) {
-        body->Child(
+        header->Child(
             Div(a)
                 ->W(cellSize)
                 ->H(cellSize)
@@ -175,6 +172,7 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                 ->JustifyCenter()
                 ->Child(TextEl(a, Str(weekdays[i]))->Font(12)->Fg(th.mutedFg)));
     }
+    panel->Child(header);
     LocalDate today = DateToday();
     LocalDate selected = {
         self->selectedYear ? self->selectedYear : self->year,
@@ -184,7 +182,12 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
     int offset = CalendarGridOffset(Dow(year, month, 1));
     int cells = CalendarGridCells(offset, Dim(year, month));
     LocalDate first = DateAddDays({year, month, 1}, -offset);
+    El* week = nullptr;
     for (int i = 0; i < cells; i++) {
+        if (i % 7 == 0) {
+            week = Div(a)->FlexRow();
+            panel->Child(week);
+        }
         {
             LocalDate date = DateAddDays(first, i);
             bool outside = date.month != month;
@@ -233,10 +236,9 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                     cell->OnClick(ListenerArg(self->onDay, date.day));
                 }
             }
-            body->Child(cell);
+            week->Child(cell);
         }
     }
-    panel->Child(body);
     return panel;
 }
 
@@ -248,7 +250,11 @@ El* Calendar::IntoEl() {
         "October", "November", "December",
     };
     float cellSize = CalendarCellSize(size);
-    float width = CalendarWidth(size) * numberOfMonths;
+    // date_picker.rs sizes the calendar in its popup itself — 196 / 224 / 280
+    // a month — because that one is built `border_0().rounded_none().p_0()`
+    // and so has none of the padding the panel width above counts in. The
+    // three pairs differ by exactly the 12 either side.
+    float width = (CalendarWidth(size) - (bare ? 24.f : 0.f)) * numberOfMonths;
     El* root =
         gpui::Calendar::New(cx, StrL("calendar"))->FlexCol()->W(width)->Gap(2);
     if (!bare) {
@@ -352,7 +358,9 @@ El* Calendar::IntoEl() {
 
     El* body = Div(a)->FlexRow()->W(kFill);
     if (view == CalendarView::Day) {
-        body->FlexCol();
+        // `h_flex().justify_around()`: the months sit side by side with the
+        // space shared out around them.
+        body->JustifyAround();
         for (int i = 0; i < numberOfMonths; i++) {
             int shownYear = 0, shownMonth = 0;
             OffsetMonth(year, month, i, &shownYear, &shownMonth);
