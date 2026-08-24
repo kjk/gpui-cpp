@@ -1247,20 +1247,85 @@ int InputNextBoundary(const InputState* s, int offset) {
     return off;
 }
 
-int InputStartOfLine(const InputState* s) {
+// The visual row the caret is on, as a range of the logical line holding it.
+// Rust reads it straight off `display_map.line(row).wrapped_lines[wrap_point
+// .local_row]`; the wrap here belongs to the shaped run rather than to a map
+// beside it, so the row is found by measuring where the caret landed and
+// asking the run what sits at either end of the row it landed on. False when
+// there is nothing laid out to measure against, which is what leaves Home and
+// End on the logical line.
+static bool WrappedRowOfCaret(const InputState* s, Window* win, Str line,
+                              int rel, int* outLo, int* outHi) {
+    // `soft_wrap && is_code_editor()`: a plain textarea keeps the logical
+    // line even when it wraps, which is what Rust gates this on.
+    if (!win || !s->softWrap || s->kind != InputKind::Editor || line.len == 0) {
+        return false;
+    }
+    PaintCtx* ctx = &win->paint;
+    float maxW = s->lastBounds.w;
+    float font = s->lastFont;
+    float lineH = s->lastLineH > 0 ? s->lastLineH : kInputLineH;
+    if (maxW <= 0 || font <= 0 || lineH <= 0) {
+        return false;
+    }
+    float lineMult = lineH / font;
+    float cx = 0, cy = 0, ch = lineH;
+    if (!TextPointAt(ctx, line, font, maxW, true, rel, &cx, &cy, &ch,
+                     s->lastMono, lineMult)) {
+        return false;
+    }
+    // The middle of the row rather than its top edge, for the same reason the
+    // vertical walk aims there: a hit test exactly on the boundary between
+    // two rows could answer either.
+    float mid = cy + ch * 0.5f;
+    int lo =
+        TextIndexAt(ctx, line, font, maxW, true, 0, mid, s->lastMono, lineMult);
+    // Past the right edge of the box, which lands on the last character the
+    // row holds however far the run reaches.
+    int hi = TextIndexAt(ctx, line, font, maxW, true, maxW + font, mid,
+                         s->lastMono, lineMult);
+    if (lo > rel || hi < rel) {
+        return false;
+    }
+    *outLo = lo;
+    *outHi = hi;
+    return true;
+}
+
+int InputStartOfLine(const InputState* s, Window* win) {
     if (InputIsSingleLine(s)) {
         return 0;
     }
     Str t = InputValue(s);
-    return RopeLineStartOffset(t, RopeOffsetToPoint(t, InputCursor(s)).row);
+    int cursor = InputCursor(s);
+    int row = RopeOffsetToPoint(t, cursor).row;
+    int start = RopeLineStartOffset(t, row);
+    // The first press goes to the visual row's start; a second one, with the
+    // caret already there, carries on to the logical line's.
+    int lo = 0, hi = 0;
+    if (WrappedRowOfCaret(s, win, RopeSliceLine(t, row), cursor - start, &lo,
+                          &hi) &&
+        cursor != start + lo) {
+        return start + lo;
+    }
+    return start;
 }
 
-int InputEndOfLine(const InputState* s) {
+int InputEndOfLine(const InputState* s, Window* win) {
     Str t = InputValue(s);
     if (InputIsSingleLine(s)) {
         return t.len;
     }
-    return RopeLineEndOffset(t, RopeOffsetToPoint(t, InputCursor(s)).row);
+    int cursor = InputCursor(s);
+    int row = RopeOffsetToPoint(t, cursor).row;
+    int start = RopeLineStartOffset(t, row);
+    int lo = 0, hi = 0;
+    if (WrappedRowOfCaret(s, win, RopeSliceLine(t, row), cursor - start, &lo,
+                          &hi) &&
+        cursor != start + hi) {
+        return start + hi;
+    }
+    return RopeLineEndOffset(t, row);
 }
 
 // previous_start_of_word / next_end_of_word. Rust asks
@@ -2726,11 +2791,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return InputIsMultiLine(s);
         case InputAction::MoveHome:
             PauseBlink(s, app, win);
-            InputMoveTo(s, app, win, InputStartOfLine(s));
+            InputMoveTo(s, app, win, InputStartOfLine(s, win));
             return true;
         case InputAction::MoveEnd:
             PauseBlink(s, app, win);
-            InputMoveTo(s, app, win, InputEndOfLine(s));
+            InputMoveTo(s, app, win, InputEndOfLine(s, win));
             return true;
         case InputAction::MoveToStart:
             InputMoveTo(s, app, win, 0);
@@ -2773,11 +2838,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             return true;
         case InputAction::SelectToStartOfLine:
             UndoBreakCoalescing(&s->undo);
-            InputSelectTo(s, app, win, InputStartOfLine(s));
+            InputSelectTo(s, app, win, InputStartOfLine(s, win));
             return true;
         case InputAction::SelectToEndOfLine:
             UndoBreakCoalescing(&s->undo);
-            InputSelectTo(s, app, win, InputEndOfLine(s));
+            InputSelectTo(s, app, win, InputEndOfLine(s, win));
             return true;
         case InputAction::SelectToPreviousWordStart:
             UndoBreakCoalescing(&s->undo);
@@ -2825,7 +2890,7 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
                 PauseBlink(s, app, win);
                 return true;
             }
-            int offset = InputStartOfLine(s);
+            int offset = InputStartOfLine(s, win);
             if (offset == InputCursor(s) && offset > 0) {
                 offset--;
             }
@@ -2838,7 +2903,7 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
                 PauseBlink(s, app, win);
                 return true;
             }
-            int offset = InputEndOfLine(s);
+            int offset = InputEndOfLine(s, win);
             if (offset == InputCursor(s)) {
                 offset = offset + 1 > t.len ? t.len : offset + 1;
             }

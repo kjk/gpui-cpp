@@ -287,6 +287,18 @@ static void LineBoundaries() {
     utassert(InputStartOfLine(&many) == 4);
     utassert(InputEndOfLine(&many) == 7);
 
+    // A code editor answers its wrapped row's ends first, but the row is
+    // measured against the window that laid it out: with none, the answer is
+    // the logical line, which is what every field without a frame on screen
+    // gets.
+    InputState code;
+    code.kind = InputKind::Editor;
+    code.softWrap = true;
+    InputSetValue(&code, StrL("one\ntwo\nthree"));
+    InputSetSelectedRange(&code, nullptr, nullptr, 5, 5);
+    utassert(InputStartOfLine(&code) == 4);
+    utassert(InputEndOfLine(&code) == 7);
+
     // Down keeps the column, and coming back up returns to it even after
     // passing through a shorter line.
     InputSetSelectedRange(&many, nullptr, nullptr, 12, 12); // "three", col 4
@@ -954,8 +966,7 @@ static int Actions(void* data, Arena* a, Str text, Selection sel,
     char* up = (char*)Alloc(a, sel.end - sel.start);
     for (int i = sel.start; i < sel.end; i++) {
         char c = text.s[i];
-        up[i - sel.start] =
-            c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
+        up[i - sel.start] = c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
     }
     out[0].title = StrL("Convert to Uppercase");
     out[0].range = sel;

@@ -2781,8 +2781,12 @@ int InputPreviousBoundary(const InputState* s, int offset);
 int InputNextBoundary(const InputState* s, int offset);
 // start_of_line / end_of_line, and the two word boundaries movement.rs asks
 // for. A single-line field answers 0 and len for the first pair, as Rust does.
-int InputStartOfLine(const InputState* s);
-int InputEndOfLine(const InputState* s);
+// A code editor that soft-wraps answers the *visual* row's ends first and the
+// logical line's on a second press, which is what `soft_wrap &&
+// is_code_editor()` gates in Rust; the window is what the wrapped row is
+// measured against, and without one the answer is the logical line.
+int InputStartOfLine(const InputState* s, Window* win = nullptr);
+int InputEndOfLine(const InputState* s, Window* win = nullptr);
 int InputPreviousStartOfWord(const InputState* s);
 int InputNextEndOfWord(const InputState* s);
 
