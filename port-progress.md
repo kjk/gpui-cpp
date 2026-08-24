@@ -3011,3 +3011,89 @@ What this sweep found and did not fix, both named where they are: a no-wrap
 where the offset here lives inside the input engine rather than on the box, so
 the element machinery never learns the content is wider than the view), and the
 `table` story's Amount column is laid out a little wider than Rust's.
+
+## The four things a language server tells an editor, and the last two the
+## markdown example wanted
+
+The editor example arrived with the wavy underlines and the popover a
+diagnostic puts up, and a note saying its store's other four halves — the
+completion menu, hover, code actions and document colours — were still to
+come. They are here, and each one is the same shape: Rust's provider trait
+answers a `Task`, and there is nothing to await in this tree, so a provider
+here is a function pointer that answers where it stands.
+
+**The completion menu.** A word character or a `.` asks the field's provider
+and what it answers hangs under the caret: the labels on the left, each with
+its LSP `detail` beside it, and the selected item's documentation rendered as
+markdown in the pane next to the list. Up and down walk it, enter writes the
+item's insert text over the word it was completing, escape puts it away, and
+backspace asks again on what is left. Placing it wanted something the tree did
+not have: only the painter knows where inside a shaped run an offset falls, so
+the row that draws the caret now reports where it landed and the menu is put
+there, one frame stale, which is how every other popover here is placed.
+
+**Hover.** The pointer resting on a word asks what it is, once per word —
+while it stays inside the word it was asked about, what the provider said
+stands — and a diagnostic under the pointer wins, being the more specific of
+the two. Rust delays the request 150 ms because it is about to talk to a
+language server; the frame that notices the pointer moved is the one that
+shows the answer here.
+
+**Code actions.** Ctrl-. asks what can be done to the selection and offers the
+answers in a column under the caret. A `CodeAction` here is a title, a range
+and the text that replaces it: Rust carries a `WorkspaceEdit`, which is a map
+of documents to edit lists, and a field is one document that every action
+upstream writes makes one edit to. The provider writes its strings into an
+arena that lives as long as the menu is up. The example answers with
+`TextConvertor`'s five — upper, lower, titleize, capitalize, snake_case.
+
+**Document colours.** What the document names in colour is painted behind the
+text that names it, which is `layout_document_colors` — the same quad a search
+match is washed with, so the two go into one wash list per row. An edit marks
+the set stale and the next frame's row builder asks again, where Rust asks on
+a timer and keeps the answer only when it differs. The example scans for a hex
+literal in its four lengths and an `rgb()`/`rgba()` call, where upstream hands
+the text to the `color-lsp` crate.
+
+The keyboard half of all this is pinned by tests rather than by screenshots:
+the harness posts `WM_KEYDOWN` and `SendInput` is dropped on this machine, so
+a synthetic ctrl chord never reaches `GetKeyState` and a menu cannot be driven
+from a screenshot. The state machine — what the provider is asked, what the
+four keys do, what accepting writes, what an edit invalidates — is 17,261
+checks' worth of `InputStateTests`, and the rendering was checked by opening
+each menu from the example's own setup.
+
+**A table can be as wide as its content.** `render_scroll_table`, and the
+`Table: Scroll / Wrap` button the markdown example toggles it with. The
+columns are as wide as the widest text in them — measured, since a character
+count is a poor guess on a proportional font — and they grow to fill a frame
+wider than the content. A narrower frame squeezes them, their text wrapping,
+until each is down to a floor set by what it holds; below that the table keeps
+the floors and scrolls sideways, so nothing it holds is out of reach. Each
+table's offset is its own keyed state, named by which table in the view it is:
+the parse is rebuilt every frame, so a node's address is not a name that
+lasts, and its position in the document is.
+
+**The desktop's own open dialog.** `cx.prompt_for_paths`, which is what the
+markdown example's `Open` action wanted and what this tree had none of.
+Windows uses `IFileOpenDialog` — COM is already up for the drag-and-drop
+registration — macOS `NSOpenPanel` run modally, and X11, which has no dialog
+of its own and no toolkit here to borrow one from, asks the desktop's: zenity
+or kdialog, whichever is on the PATH. A page can do none of this without a
+gesture and a callback nothing has asked for, so wasm says so rather than
+pretending. One path, no task: the platform dialogs run their own loop until
+the user is done either way.
+
+What is left of the markdown example, and the last thing named in its header:
+`Selection: Plain / Source`, which copies the markdown behind a selection
+rather than the text of it. Upstream reconstructs each selected block's source
+from the node itself — no offsets involved — but the selection here is a range
+over the runs the window painted, and nothing maps a run back to the block
+that produced it. That map is the work, not the serializing.
+
+Two things the sweep turned up on the way: `clang-format` had been unpacking
+the generated icon table into one byte a line, twenty-two thousand of them for
+what the generator wrote in fourteen hundred, so the formatter now leaves
+generated files alone; and the language table's new `markdown` flag needed a
+default, since gcc counts a missing last initializer as an error where MSVC
+does not — the Linux build had been broken since the scanner learned markdown.
