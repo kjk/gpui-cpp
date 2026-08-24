@@ -805,6 +805,7 @@ const Theme& ThemeDefaultDark() {
         t.descListLabelFg = Rgb(0xa3, 0xa3, 0xa3);
         t.radius = 6;
         t.radiusLg = 8;
+        t.radiusFull = kRadiusFull;
         // The three that only exist so a theme can spell them as gradients,
         // on the fallbacks schema.rs gives them.
         t.statusBar = t.titleBar;
@@ -909,6 +910,7 @@ const Theme& ThemeDefaultLight() {
         t.descListLabelFg = Rgb(0x73, 0x73, 0x73);
         t.radius = 6;
         t.radiusLg = 8;
+        t.radiusFull = kRadiusFull;
         // The three that only exist so a theme can spell them as gradients,
         // on the fallbacks schema.rs gives them.
         t.statusBar = t.titleBar;
@@ -967,6 +969,10 @@ void ThemeSetRadius(float radius) {
         Theme* t = const_cast<Theme*>(both[i]);
         t->radius = radius;
         t->radiusLg = radius > 0 ? radius + 2 : 0;
+        // `radius_full` goes with it: a theme that squares its corners squares
+        // the avatars and the slider thumbs too, rather than leaving a scatter
+        // of permanently round elements behind.
+        t->radiusFull = radius > 0 ? kRadiusFull : 0;
     }
 }
 
@@ -3938,9 +3944,22 @@ void LayoutScratchFree() {
 
 // ─── paint ────────────────────────────────────────────────────────────────
 
+// No corner larger than half the shorter side, which is how Rust clamps a
+// radius and what CornersPath already did for the per-corner path. A backend
+// that takes one radius hands it to an API that clamps each axis on its own —
+// D2D's rounded rect does — so a 4-tall rail asked for `radius_full` would
+// come out a lens rather than a pill without this.
+static float ClampRadius(float r, float w, float h) {
+    float lim = (w < h ? w : h) * 0.5f;
+    if (lim < 0) {
+        lim = 0;
+    }
+    return r > lim ? lim : r;
+}
+
 static void FillRound(PaintCtx* ctx, float x, float y, float w, float h,
                       float r, Rgba c) {
-    CanvasFillRound(ctx, x, y, w, h, r, c);
+    CanvasFillRound(ctx, x, y, w, h, ClampRadius(r, w, h), c);
 }
 
 // The four corners of a box, as one path: a quarter turn at each corner that
@@ -3986,7 +4005,7 @@ static void FillCorners(PaintCtx* ctx, float x, float y, float w, float h,
         return;
     }
     if (c.IsUniform()) {
-        CanvasFillRound(ctx, x, y, w, h, c.tl, col);
+        CanvasFillRound(ctx, x, y, w, h, ClampRadius(c.tl, w, h), col);
         return;
     }
     Path* p = PathNew(ctx, true);
@@ -4039,7 +4058,8 @@ static void StrokeCorners(PaintCtx* ctx, float x, float y, float w, float h,
         return;
     }
     if (c.IsUniform()) {
-        CanvasStrokeRound(ctx, x, y, w, h, c.tl, stroke, col);
+        CanvasStrokeRound(ctx, x, y, w, h, ClampRadius(c.tl, w, h), stroke,
+                          col);
         return;
     }
     Path* p = PathNew(ctx, true);
@@ -4054,7 +4074,7 @@ static const float kFocusRingOpacity = 0.5f;
 
 static void DrawRoundStroke(PaintCtx* ctx, float x, float y, float w, float h,
                             float r, float stroke, Rgba c) {
-    CanvasStrokeRound(ctx, x, y, w, h, r, stroke, c);
+    CanvasStrokeRound(ctx, x, y, w, h, ClampRadius(r, w, h), stroke, c);
 }
 
 // Layout lands on fractions of a pixel, which spreads a hairline over two
@@ -5158,7 +5178,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                 CanvasLine(ctx, l, y0, l, y1, bw, bc, dash);
                 CanvasLine(ctx, r, y0, r, y1, bw, bc, dash);
             } else {
-                CanvasStrokeRound(ctx, e->x, e->y, e->w, e->h, e->style.radius,
+                CanvasStrokeRound(ctx, e->x, e->y, e->w, e->h,
+                                  ClampRadius(e->style.radius, e->w, e->h),
                                   e->style.border, e->style.borderColor, dash);
             }
         } else if (e->style.hasCorners) {

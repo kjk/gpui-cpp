@@ -82,7 +82,7 @@ El* Badge::IntoEl() {
             ->Bottom(0)
             ->W(box)
             ->H(box)
-            ->Radius(box * 0.5f)
+            ->Radius(th.radiusFull)
             ->Border(1, th.background)
             ->Child(IconEl(a, icon, box * 0.6f));
     } else {

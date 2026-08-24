@@ -466,6 +466,13 @@ struct Theme {
     // crates/ui/src/theme/mod.rs: radius 6, radius_lg 8 (Dialog, Notification).
     float radius;
     float radiusLg;
+    // `Theme::radius_full`: the radius that rounds a shape as far as its own
+    // size allows — a circle if it is square, a pill if it is not — and zero
+    // when the theme squares its corners. Anything past half the shorter side
+    // is clamped when it is painted, so this is simply "as round as it goes".
+    // Every avatar, badge dot, radio, slider thumb and progress bar takes it
+    // rather than half its own height, so one setting governs the lot.
+    float radiusFull;
     // The renderable half of the palette, for the tokens a theme file may
     // spell as a gradient. Every one of these carries the flat colour of the
     // same name, so reading a token instead of a field is never wrong.
@@ -1141,6 +1148,10 @@ enum class ScrollbarMode : uint8_t {
 // the active one waits between animation frames. 500 ms caps background
 // animation at 2 FPS, which is what the story app asks for upstream.
 const double kInactiveFrameInterval = 0.5;
+
+// RADIUS_FULL: past half the shorter side, so the paint clamps it to exactly
+// as round as the box goes.
+const float kRadiusFull = 9999.f;
 
 // The stacking layers a frame paints in, in the order it paints them. Rust
 // gives a deferred element a `with_priority` and lets GPUI's scene sort on

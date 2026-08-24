@@ -124,7 +124,7 @@ El* Slider::IntoEl() {
                         ->Top(-grown)
                         ->W(kThumb + grown * 2.f)
                         ->H(kThumb + grown * 2.f)
-                        ->Radius((kThumb + grown * 2.f) * 0.5f)
+                        ->Radius(th.radiusFull)
                         ->Bg(RgbaOpacity(color, kRingOpacity * progress)));
     };
 
@@ -145,7 +145,7 @@ El* Slider::IntoEl() {
                           ->Top(0)
                           ->W(kBar)
                           ->H(w)
-                          ->Radius(kBar * 0.5f)
+                          ->Radius(th.radiusFull)
                           ->Bg(railBg));
         float vFrom = reverse ? hi : low;
         float vTo = reverse ? 1.f : hi;
@@ -155,7 +155,7 @@ El* Slider::IntoEl() {
                           ->Top(w * (1.f - vTo))
                           ->W(kBar)
                           ->H(w * (vTo - vFrom))
-                          ->Radius(kBar * 0.5f)
+                          ->Radius(th.radiusFull)
                           ->Bg(fillBg));
         for (int i = 0; i < (range ? 2 : 1); i++) {
             float at = (range && i == 0) ? low : hi;
@@ -166,7 +166,7 @@ El* Slider::IntoEl() {
                                         ->Top(w * (1.f - at) - kThumb * 0.5f)
                                         ->W(kThumb)
                                         ->H(kThumb)
-                                        ->Radius(kThumb * 0.5f)
+                                        ->Radius(th.radiusFull)
                                         ->Bg(th.tokens.sliderThumb)
                                         ->Border(1, thumbBorder)
                                         ->Click(thumbId)
@@ -192,7 +192,7 @@ El* Slider::IntoEl() {
     }
     El* rail =
         SliderIndicator::New(cx, bind)->Absolute()->Top(mid)->Left(0)->H(kBar);
-    rail->Radius(kBar * 0.5f)->Bg(railBg);
+    rail->Radius(th.radiusFull)->Bg(railBg);
     if (fill) {
         rail->Right(0);
     } else {
@@ -203,7 +203,7 @@ El* Slider::IntoEl() {
     float fillFrom = reverse ? hi : low;
     float fillTo = reverse ? 1.f : hi;
     El* bar2 = Div(a)->Absolute()->Top(mid)->H(kBar);
-    bar2->Radius(kBar * 0.5f)->Bg(fillBg);
+    bar2->Radius(th.radiusFull)->Bg(fillBg);
     if (fill) {
         bar2->Left(0)->LeftRel(fillFrom)->Right(0)->RightRel(1.f - fillTo);
     } else {
@@ -217,7 +217,7 @@ El* Slider::IntoEl() {
                         ->Top((kH - kThumb) * 0.5f)
                         ->W(kThumb)
                         ->H(kThumb)
-                        ->Radius(kThumb * 0.5f)
+                        ->Radius(th.radiusFull)
                         ->Bg(th.tokens.sliderThumb)
                         ->Border(1, thumbBorder);
         if (fill) {

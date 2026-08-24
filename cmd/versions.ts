@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "1c4e681315052fc38a881a3b5b6f9df12934ba3c",
+  sha: "222cf9644fbfd9bdff970a0308f9ce216b2c0818",
   date: "2026-08-18",
-  subject: "slider: Add a hover ring around the thumb (#2757)",
+  subject: "theme: Follow the global radius setting everywhere (#2762)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

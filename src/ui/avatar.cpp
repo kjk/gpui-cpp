@@ -137,7 +137,10 @@ Avatar* Avatar::Src(Str url) {
 
 El* Avatar::IntoEl() {
     const Theme& th = cx->theme();
-    float r = radius >= 0 ? radius : size * 0.5f;
+    // `rounded_full_style`: as round as the box goes, unless the theme squares
+    // its corners — an avatar that stayed a circle in a square-cornered UI is
+    // exactly what Theme::radius_full was added for.
+    float r = radius >= 0 ? radius : (th.radiusFull > 0 ? size * 0.5f : 0.f);
     // GPUI's border sits inside the box, so the fallback fills what is left
     // of it; drawn edge to edge it would paint over the ring.
     float inset = borderW > 0 ? borderW : 0;

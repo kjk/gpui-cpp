@@ -59,7 +59,7 @@ El* Radio::IntoEl() {
     El* dot = Div(a)
                   ->W(box)
                   ->H(box)
-                  ->Radius(box * 0.5f)
+                  ->Radius(th.radiusFull)
                   ->Border(1, border)
                   ->Bg(fill)
                   ->ItemsCenter()
