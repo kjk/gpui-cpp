@@ -3137,3 +3137,72 @@ with `dbghelp` at the point a chain block is added named `ThemeRegistryInit`.
 `GPUI_VEC_LOG` (`cmd/vec-log.ts`) was the first stop and ruled the heap out:
 births with no matching death came to 2.3 MB over 120 frames, three orders of
 magnitude short of what the process was holding.
+
+- 2026-08-24: **a story frame is 2.29 ms, from 2.62.** Profiled with `winperf`
+  again (`record -i 2000 -write-agent`, 1500 frames under
+  `GPUI_FRAME_BENCH`). Layout is still the frame — 66% of the samples inside
+  `ComputeRootLayout` — and four things came out of the profile, all of them
+  work the frame was doing twice or work it was doing out of line.
+
+  **The measure callback asked the shaped-run cache the same question four
+  times a node.** Taffy asks a text leaf for its size several times a pass —
+  the min-content width, the max-content width, then the width the line
+  settled on — and each of those went the whole way into `MeasureText`, which
+  hashes the string, probes the table and `memcmp`s the run back. Font size,
+  weight, wrap and line height are settled by `PrepareEl` before layout
+  starts and the `El` is built afresh every frame, so the width is the entire
+  key: `El` now carries four (width → size) answers and `LayoutMeasure`
+  consults them first. Layout 1.99 → 1.85 ms.
+
+  **`MeasureText` took a reference on the shaped run and gave it back one
+  line later.** It only ever wanted the size, and an `IDWriteTextLayout`'s
+  AddRef/Release pair was 3% of the profile — `ComObject<DWriteTextLayout>::
+  AddRef` was the 14th hottest function in the process. On a cache hit the
+  slot already holds the width and the height, so it answers from there and
+  never touches the run.
+
+  **`Cache{}` per node per frame.** The tree is rebuilt from nothing every
+  frame, so `InsertNode` reset each recycled node's layout cache by assigning
+  a fresh one — a few hundred bytes of zeroes for ten entries whose contents
+  nothing may read while their `present` flag is false. The flag is now a
+  `presentMask` on the `Cache` rather than a `bool` per entry, so emptying a
+  cache is one store; `Clear()` leaves the contents alone. Dropping the bool
+  also took the padded entry from 32 bytes to 24, which matters again on the
+  lookup side, where a story's caches are far larger than L2 and every get
+  and store is a miss. `Cache::StoreWithKey` 2.9% → 0.8% self, `GetWithKey`
+  2.1% → 1.6%, `InsertNode` off the list.
+
+  **`inline` is not a request.** The component-wise `MaybeMax`/`MaybeAdd` and
+  their four siblings — two calls to the scalar overload and nothing else —
+  were compiled out of line at `/O2` and held 3.5% of the frame's samples
+  between them. `TAFFY_INLINE` (`__forceinline`, `always_inline` elsewhere)
+  is the request; they vanish from the profile.
+
+  Frame: build 0.25 ms, layout **1.85 ms** (was 2.20), paint 0.23 ms. Taffy's
+  own benchmarks, where no text is measured and no `El` exists, keep the last
+  two: flexbox 6-9% faster across every case, grid 8-20% (`wide 100x100`
+  20.4 → 17.5 ms, `deep 2x2 16384` 102 → 89 ms). All 62 story pages shoot
+  pixel-identical before and after except `skeleton` and `spinner`, which
+  differ run to run against themselves because they animate. 17261 checks
+  pass.
+
+  Measured and thrown away, so the next session does not retry it: an
+  **inline stack buffer for the `Vec<FlexItem>` and the `Vec<BlockItem>`**.
+  The profile blames 2.5% of the frame on `RtlFreeHeap` and
+  `RtlpLowFragHeapAllocFromContext` under `GenerateAnonymousFlexItems` and
+  `GenerateItemList` — one malloc and free per container per layout pass —
+  but twelve items of stack on each recursion level bought 1%, the same
+  answer the session before this one got at four and at twelve. The low
+  fragmentation heap is faster than the frame it costs.
+
+  What the profile says is next, and none of it is one change:
+  `ComputeLeafLayout` (8.3% self), `DetermineFlexBaseSize` (5.7%),
+  `GenerateAnonymousFlexItems` (4.3%, half of it the 192-byte `FlexItem`
+  built on the stack and then copied into the vector), `RectLpa::
+  ResolveOrZero` (3.2%, deliberately out of line). The structural win is
+  still carrying layout across frames rather than rebuilding the tree.
+
+  A trap for whoever runs `winperf` next: `record -- out/rel/story.exe`
+  fails with `CreateProcessW ... err 0x2` and then profiles the machine
+  rather than the app, because the elevated helper does not have this
+  directory as its own. Pass the full Windows path.

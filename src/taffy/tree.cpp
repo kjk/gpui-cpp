@@ -131,18 +131,19 @@ void Cache::Store(const LayoutInput& input, const LayoutOutput& output) {
 bool Cache::GetWithKey(CacheKey key, RunMode runMode, LayoutOutput* out) const {
     switch (runMode) {
         case RunMode::PerformLayout:
-            if (finalLayoutEntry.present && finalLayoutEntry.key == key) {
+            if ((presentMask & kFinalBit) && finalLayoutEntry.key == key) {
                 *out = finalLayoutEntry.content;
                 return true;
             }
             return false;
         case RunMode::ComputeSize: {
             uint64_t xAxis = key.XAxisParentSize();
-            for (int i = 0; i < kCacheSize; i++) {
-                const CacheEntry<SizeF>& e = measureEntries[i];
-                if (!e.present) {
+            uint16_t mask = (uint16_t)(presentMask >> 1);
+            for (int i = 0; mask != 0; i++, mask >>= 1) {
+                if ((mask & 1) == 0) {
                     continue;
                 }
+                const CacheEntry<SizeF>& e = measureEntries[i];
                 if (e.key.kdAvailableSpace == key.kdAvailableSpace &&
                     e.key.XAxisParentSize() == xAxis) {
                     *out = LayoutOutput::FromOuterSize(e.content);
@@ -161,13 +162,15 @@ void Cache::StoreWithKey(CacheKey key, const LayoutInput& input,
     switch (input.runMode) {
         case RunMode::PerformLayout:
             isEmpty = false;
-            finalLayoutEntry = {key, output, true};
+            presentMask |= kFinalBit;
+            finalLayoutEntry = {key, output};
             break;
         case RunMode::ComputeSize: {
             isEmpty = false;
             int slot =
                 ComputeCacheSlot(input.knownDimensions, input.availableSpace);
-            measureEntries[slot] = {key, output.size, true};
+            presentMask |= MeasureBit(slot);
+            measureEntries[slot] = {key, output.size};
             break;
         }
         default:
@@ -180,23 +183,14 @@ bool Cache::Clear() {
         return false;
     }
     isEmpty = true;
-    finalLayoutEntry = {};
-    for (int i = 0; i < kCacheSize; i++) {
-        measureEntries[i] = {};
-    }
+    // The contents are left as they are: an entry is only ever read while
+    // its bit is set, so dropping the bits is the whole clear.
+    presentMask = 0;
     return true;
 }
 
 bool Cache::IsEmpty() const {
-    if (finalLayoutEntry.present) {
-        return false;
-    }
-    for (int i = 0; i < kCacheSize; i++) {
-        if (measureEntries[i].present) {
-            return false;
-        }
-    }
-    return true;
+    return presentMask == 0;
 }
 
 } // namespace taffy

@@ -1973,9 +1973,33 @@ static TextLayout* TextMeasLayout(PaintCtx* ctx, Str s, float fontSize,
     return layout;
 }
 
+// The size alone, which is all the layout pass ever wants. Going through
+// TextMeasLayout for it took a reference on the shaped run and gave it back
+// one line later, and an IDWriteTextLayout's AddRef/Release pair is two
+// interlocked ops on a shared cache line — 3% of a story frame, because
+// taffy asks a text leaf for its size several times per pass and there are
+// hundreds of them. On a cache hit the slot already holds the answer.
 Size MeasureText(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                  int weight, float lineH) {
     Size size = {};
+    size.h = fontSize > 0 ? fontSize * (lineH > 0 ? lineH : kLineHeight) : 16.f;
+    if (!ctx || !ctx->pa || !s.s || s.len <= 0) {
+        return size;
+    }
+    // Same premise as TextMeasLayout: a run that does not wrap measures the
+    // same whatever width it was asked about, so the key drops maxW for one.
+    if (!wrap) {
+        maxW = 0;
+    }
+    TextMeasCache* c = &ctx->textCache;
+    TextMeasSlot* hit = TextMeasFind(c, s, fontSize, maxW, wrap,
+                                     (uint8_t)weight, lineH, nullptr);
+    if (hit && hit->layout) {
+        hit->lastUsed = c->frame;
+        size.w = hit->w;
+        size.h = hit->h;
+        return size;
+    }
     TextLayout* layout = TextMeasLayout(ctx, s, fontSize, maxW, wrap,
                                         (uint8_t)weight, lineH, &size);
     if (layout) {
@@ -2470,8 +2494,26 @@ static taffy::SizeF LayoutMeasure(taffy::SizeFOpt known, taffy::SizeAvail avail,
     switch (e->kind) {
         case ElKind::Text: {
             float measW = TextMeasureWidth(e, known, avail);
-            Size text = MeasureText(ctx, e->text, font, measW, e->style.wrap,
-                                    ElTextWeight(e), e->style.lineHeight);
+            Size text = {};
+            int slot = -1;
+            for (int i = 0; i < e->measCount; i++) {
+                if (e->measKeyW[i] == measW) {
+                    slot = i;
+                    break;
+                }
+            }
+            if (slot >= 0) {
+                text = e->measSize[slot];
+            } else {
+                text = MeasureText(ctx, e->text, font, measW, e->style.wrap,
+                                   ElTextWeight(e), e->style.lineHeight);
+                // Four widths, oldest out. A leaf asked about more than four
+                // in one pass simply measures again.
+                int at = e->measCount < 4 ? e->measCount++ : e->measNext;
+                e->measNext = (uint8_t)((e->measNext + 1) & 3);
+                e->measKeyW[at] = measW;
+                e->measSize[at] = text;
+            }
             return {taffy::UnwrapOr(known.w, text.w),
                     taffy::UnwrapOr(known.h, text.h)};
         }

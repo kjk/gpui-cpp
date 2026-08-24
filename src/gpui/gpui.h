@@ -1491,6 +1491,18 @@ struct El {
     // the cache, which cannot drop it before the frame ends; null when the
     // element has no text or the run could not be cached.
     TextLayout* laidLayout = nullptr;
+    // What the measure callback last answered for this text leaf, keyed on
+    // the width it was asked about. Taffy asks a leaf for its size several
+    // times a pass — the min-content width, the max-content width, then the
+    // width the line settled on — and each of those went all the way into the
+    // shaped-run cache, which hashes the whole string and then memcmps it.
+    // Font size, weight, wrap and line height are settled by PrepareEl before
+    // layout starts and the element is built afresh every frame, so the width
+    // is the whole key and nothing here outlives the text it measured.
+    float measKeyW[4] = {};
+    Size measSize[4] = {};
+    uint8_t measCount = 0;
+    uint8_t measNext = 0;
 
     // display: flex, leaving the direction at its row default — gpui's
     // `.flex()`, for a box that wants the flex model without saying which way

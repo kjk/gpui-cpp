@@ -91,7 +91,12 @@ static NodeId InsertNode(TaffyTree* tree, const Style& style) {
     d->finalLayout = Layout{};
     d->hasContext = false;
     d->context = nullptr;
-    d->cache = Cache{};
+    // The present bits, not `Cache{}`: an entry is only read while its bit
+    // is set, so dropping the bits empties the cache. Assigning a fresh one
+    // wrote a few hundred bytes of zeroes per node per frame for contents
+    // nothing may look at.
+    d->cache.presentMask = 0;
+    d->cache.isEmpty = true;
     d->generation = generation;
     d->alive = true;
     d->children.len = 0;

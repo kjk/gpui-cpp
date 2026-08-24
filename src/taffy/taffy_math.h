@@ -18,6 +18,17 @@
 
 #include "taffy/style.h"
 
+// `inline` says what linkage a definition has, not that the compiler should
+// paste it in; at /O2 MSVC left several of the one-line composites below out
+// of line. This is the request.
+#if defined(_MSC_VER)
+#define TAFFY_INLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define TAFFY_INLINE inline __attribute__((always_inline))
+#else
+#define TAFFY_INLINE inline
+#endif
+
 namespace taffy {
 
 // ─── Optf op Optf ────────────────────────────────────────────────────────
@@ -113,35 +124,35 @@ inline AvailableSpace MaybeClamp(AvailableSpace a, Optf lo, Optf hi) {
 
 // ─── the same, component-wise over a size ────────────────────────────────
 
-inline SizeFOpt MaybeMin(SizeFOpt a, SizeFOpt b) {
+TAFFY_INLINE SizeFOpt MaybeMin(SizeFOpt a, SizeFOpt b) {
     return {MaybeMin(a.w, b.w), MaybeMin(a.h, b.h)};
 }
 
-inline SizeFOpt MaybeMax(SizeFOpt a, SizeFOpt b) {
+TAFFY_INLINE SizeFOpt MaybeMax(SizeFOpt a, SizeFOpt b) {
     return {MaybeMax(a.w, b.w), MaybeMax(a.h, b.h)};
 }
 
-inline SizeFOpt MaybeAdd(SizeFOpt a, SizeFOpt b) {
+TAFFY_INLINE SizeFOpt MaybeAdd(SizeFOpt a, SizeFOpt b) {
     return {MaybeAdd(a.w, b.w), MaybeAdd(a.h, b.h)};
 }
 
-inline SizeFOpt MaybeSub(SizeFOpt a, SizeFOpt b) {
+TAFFY_INLINE SizeFOpt MaybeSub(SizeFOpt a, SizeFOpt b) {
     return {MaybeSub(a.w, b.w), MaybeSub(a.h, b.h)};
 }
 
-inline SizeFOpt MaybeClamp(SizeFOpt a, SizeFOpt lo, SizeFOpt hi) {
+TAFFY_INLINE SizeFOpt MaybeClamp(SizeFOpt a, SizeFOpt lo, SizeFOpt hi) {
     return {MaybeClamp(a.w, lo.w, hi.w), MaybeClamp(a.h, lo.h, hi.h)};
 }
 
-inline SizeAvail MaybeSub(SizeAvail a, SizeFOpt b) {
+TAFFY_INLINE SizeAvail MaybeSub(SizeAvail a, SizeFOpt b) {
     return {MaybeSub(a.width, b.w), MaybeSub(a.height, b.h)};
 }
 
-inline SizeAvail MaybeClamp(SizeAvail a, SizeFOpt lo, SizeFOpt hi) {
+TAFFY_INLINE SizeAvail MaybeClamp(SizeAvail a, SizeFOpt lo, SizeFOpt hi) {
     return {MaybeClamp(a.width, lo.w, hi.w), MaybeClamp(a.height, lo.h, hi.h)};
 }
 
-inline SizeAvail MaybeSet(SizeAvail a, SizeFOpt v) {
+TAFFY_INLINE SizeAvail MaybeSet(SizeAvail a, SizeFOpt v) {
     return a.MaybeSet(v);
 }
 

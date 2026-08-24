@@ -249,19 +249,34 @@ constexpr bool operator==(CacheKey a, CacheKey b) {
            a.parentSize == b.parentSize;
 }
 
+// Rust's entry is an `Option<CacheEntry>`; the discriminant lives in
+// `Cache::presentMask` here rather than as a bool per entry, so that
+// emptying a cache is one store instead of a ~360-byte memset. The tree is
+// rebuilt from nothing every frame, so every node's cache is reset every
+// frame, and that memset was most of `InsertNode`. Dropping the bool also
+// takes the padded entry from 32 bytes to 24, which matters again on the
+// lookup side: a story's caches are far larger than L2 and every get and
+// store is a miss.
 template <typename T>
 struct CacheEntry {
     CacheKey key;
     T content{};
-    bool present = false;
 };
 
 // Caches the result of sizing a flexbox or grid item.
 struct Cache {
     CacheEntry<LayoutOutput> finalLayoutEntry;
     CacheEntry<SizeF> measureEntries[kCacheSize];
+    // Bit 0 is finalLayoutEntry; bits 1..kCacheSize are measureEntries.
+    // An entry's content is only meaningful while its bit is set.
+    uint16_t presentMask = 0;
     // Tracks whether every entry is empty, so a clear can be skipped.
     bool isEmpty = true;
+
+    static constexpr uint16_t kFinalBit = 1;
+    static constexpr uint16_t MeasureBit(int i) {
+        return (uint16_t)(1u << (i + 1));
+    }
 
     bool Get(const LayoutInput& input, LayoutOutput* out) const;
     void Store(const LayoutInput& input, const LayoutOutput& output);
