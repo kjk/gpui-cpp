@@ -465,46 +465,122 @@ static DtCellVal DtValueFor(Ctx* cx, const Stock& s, int row, int col) {
         num(StoryFmt(cx, "%.2f%%", (double)(val * 100.f)));
     };
     switch (col) {
-        case 7: num(DtCompact(cx, q.volume)); break;
-        case 8: num(DtCompact(cx, q.turnover)); break;
-        case 9: num(DtCompact(cx, q.marketCap)); break;
-        case 10: num(DtCompact(cx, q.ttm)); break;
-        case 11: rank(q.rank5m); break;
-        case 12: rank(q.rank60d); break;
-        case 13: pct(q.yearChangePercent); break;
-        case 14: fixed2(q.bid); break;
-        case 15: num(DtCompact(cx, q.bidVolume)); break;
-        case 16: fixed2(q.ask); break;
-        case 17: num(DtCompact(cx, q.askVolume)); break;
-        case 18: fixed2(q.open); break;
+        case 7:
+            num(DtCompact(cx, q.volume));
+            break;
+        case 8:
+            num(DtCompact(cx, q.turnover));
+            break;
+        case 9:
+            num(DtCompact(cx, q.marketCap));
+            break;
+        case 10:
+            num(DtCompact(cx, q.ttm));
+            break;
+        case 11:
+            rank(q.rank5m);
+            break;
+        case 12:
+            rank(q.rank60d);
+            break;
+        case 13:
+            pct(q.yearChangePercent);
+            break;
+        case 14:
+            fixed2(q.bid);
+            break;
+        case 15:
+            num(DtCompact(cx, q.bidVolume));
+            break;
+        case 16:
+            fixed2(q.ask);
+            break;
+        case 17:
+            num(DtCompact(cx, q.askVolume));
+            break;
+        case 18:
+            fixed2(q.open);
+            break;
         // prev_close is a change away from the price, which is the one field
         // that reads off the row's own Chg rather than off a draw.
-        case 19: fixed2(price - (float)atof(s.chg)); break;
-        case 20: fixed2(q.high); break;
-        case 21: fixed2(q.low); break;
-        case 22: rate(q.turnoverRate); break;
-        case 23: rate(q.riseRate); break;
-        case 24: rate(q.amplitude); break;
-        case 25: fixed2(q.pe); break;
-        case 26: fixed2(q.pb); break;
-        case 27: fixed2(q.volumeRatio); break;
-        case 28: fixed2(q.bidAskRatio); break;
-        case 29: fixed2(q.preClose); break;
-        case 30: fixed2(q.postClose); break;
-        case 31: num(DtCompact(cx, q.preMarketCap)); break;
-        case 32: pct(q.preMarketPercent); break;
-        case 33: chg(q.preMarketChange); break;
-        case 34: num(DtCompact(cx, q.postMarketCap)); break;
-        case 35: pct(q.postMarketPercent); break;
-        case 36: chg(q.postMarketChange); break;
-        case 37: num(DtCompact(cx, q.floatCap)); break;
-        case 38: num(DtCompact(cx, q.shares)); break;
-        case 39: num(DtCompact(cx, q.sharesFloat)); break;
-        case 40: rank(q.rank5d); break;
-        case 41: rank(q.rank10d); break;
-        case 42: rank(q.rank30d); break;
-        case 43: rank(q.rank120d); break;
-        default: rank(q.rank250d); break;
+        case 19:
+            fixed2(price - (float)atof(s.chg));
+            break;
+        case 20:
+            fixed2(q.high);
+            break;
+        case 21:
+            fixed2(q.low);
+            break;
+        case 22:
+            rate(q.turnoverRate);
+            break;
+        case 23:
+            rate(q.riseRate);
+            break;
+        case 24:
+            rate(q.amplitude);
+            break;
+        case 25:
+            fixed2(q.pe);
+            break;
+        case 26:
+            fixed2(q.pb);
+            break;
+        case 27:
+            fixed2(q.volumeRatio);
+            break;
+        case 28:
+            fixed2(q.bidAskRatio);
+            break;
+        case 29:
+            fixed2(q.preClose);
+            break;
+        case 30:
+            fixed2(q.postClose);
+            break;
+        case 31:
+            num(DtCompact(cx, q.preMarketCap));
+            break;
+        case 32:
+            pct(q.preMarketPercent);
+            break;
+        case 33:
+            chg(q.preMarketChange);
+            break;
+        case 34:
+            num(DtCompact(cx, q.postMarketCap));
+            break;
+        case 35:
+            pct(q.postMarketPercent);
+            break;
+        case 36:
+            chg(q.postMarketChange);
+            break;
+        case 37:
+            num(DtCompact(cx, q.floatCap));
+            break;
+        case 38:
+            num(DtCompact(cx, q.shares));
+            break;
+        case 39:
+            num(DtCompact(cx, q.sharesFloat));
+            break;
+        case 40:
+            rank(q.rank5d);
+            break;
+        case 41:
+            rank(q.rank10d);
+            break;
+        case 42:
+            rank(q.rank30d);
+            break;
+        case 43:
+            rank(q.rank120d);
+            break;
+        default:
+            rank(q.rank250d);
+            break;
     }
     return v;
 }
@@ -575,17 +651,13 @@ static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
         return StoryTxt(cx, v.text, 16, flat ? th.foreground : c)
             ->LineHeight(1.f);
     }
-    El* cell = Div(cx->a)
-                   ->FlexRow()
-                   ->W(kFill)
-                   ->H(kFill)
-                   ->ItemsCenter()
-                   ->JustifyEnd();
+    El* cell =
+        Div(cx->a)->FlexRow()->W(kFill)->H(kFill)->ItemsCenter()->JustifyEnd();
     if (!flat) {
         cell->Bg(RgbaOpacity(light, 0.05f));
     }
-    return cell->Child(
-        StoryTxt(cx, v.text, 16, flat ? th.foreground : c)->LineHeight(1.f));
+    return cell->Child(StoryTxt(cx, v.text, 16, flat ? th.foreground : c)
+                           ->LineHeight(1.f));
 }
 
 // visible_rows_changed / visible_columns_changed. Rust's note that these
