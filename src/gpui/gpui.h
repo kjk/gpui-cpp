@@ -1459,6 +1459,8 @@ struct El {
     // taking the colour the language gave it.
     const TextSpan* underlines = nullptr;
     int nUnderlines = 0;
+    float* caretOutX = nullptr;
+    float* caretOutY = nullptr;
     Rgba selColor = Rgba8(0x6b, 0xb3, 0xf0, 90);
     // The input method's provisional run, underlined the way Rust gives the
     // marked range its own UnderlineStyle. Same offsets, same -1 for none.
@@ -1583,6 +1585,12 @@ struct El {
     El* BindInput(InputState* s);
     // The selection quad and the caret an input's text run paints over itself.
     El* SelRange(int lo, int hi, Rgba color);
+    // Where the caret this element draws ended up, in window coordinates —
+    // the seam a popover anchored to the caret needs, since only the painter
+    // knows where inside a shaped run an offset falls. Reported the way
+    // BoundsOut reports a box: one frame stale, which is what every other
+    // popover here is placed against.
+    El* CaretOut(float* outX, float* outY);
     El* Washes(const TextSpan* runs, int n);
     El* Underlines(const TextSpan* runs, int n);
     El* Spans(const TextSpan* runs, int n);
@@ -2437,6 +2445,42 @@ struct Diagnostic {
     Str code = {};
 };
 
+// lsp_types::CompletionItem, cut to what the menu shows and what accepting
+// one writes. Rust carries the whole LSP struct — the sort text, the edits,
+// the command that may follow — and the menu reads these five of it.
+struct CompletionItem {
+    // What is shown, and what the query is matched against.
+    Str label = {};
+    // Shown muted and italic beside the label; the LSP's `detail`.
+    Str detail = {};
+    // What replaces the query. Empty means the label itself.
+    Str insertText = {};
+    // Markdown, in the pane beside the list.
+    Str documentation = {};
+    bool deprecated = false;
+};
+
+// CompletionProvider::completions, without the task: the provider is handed
+// the document, where the caret is and the word being typed, and writes as
+// many items as it has room for. Rust answers a future; there is nothing to
+// await on here, so a provider that has to go somewhere slow does the going
+// itself and answers what it has.
+using CompletionFn = int (*)(void* data, Str text, int offset, Str query,
+                             CompletionItem* out, int cap);
+
+// The completion menu while it is up — CompletionMenu's own state.
+struct CompletionSession {
+    bool open = false;
+    // Where the word being completed began, and the caret it was asked at.
+    int triggerStart = -1;
+    int offset = 0;
+    int selected = 0;
+    // What the provider answered, in its own order.
+    Vec<CompletionItem> items;
+
+    ~CompletionSession() { items.Reset(); }
+};
+
 // EditorStyle::diagnostics: the colour a severity underlines in.
 struct DiagnosticColors {
     Rgba error = {};
@@ -2530,6 +2574,11 @@ struct InputState {
     int hoverDiagnostic = -1;
     float hoverDiagnosticX = 0;
     float hoverDiagnosticY = 0;
+    // The completion menu, and who fills it. A state with no provider never
+    // opens one, which is every field that is not a code editor.
+    CompletionSession completion;
+    CompletionFn completionProvider = nullptr;
+    void* completionData = nullptr;
     // The box the rows were laid out in as a whole, which is the scrolled
     // height once soft wrap has had its say.
     Bounds contentBox = {};
@@ -2542,6 +2591,11 @@ struct InputState {
     float scrollY = 0;
     float viewW = 0;
     float viewH = 0;
+    // Where the caret was last painted, in window coordinates. `cursor_
+    // layout()` in Rust, which is what a completion menu and a hover popover
+    // are placed under.
+    float caretWinX = 0;
+    float caretWinY = 0;
     // The caret's x inside the run, measured when it was last painted, and
     // the whole scrolled height. `last_layout` is what Rust reads them off.
     float caretX = 0;
@@ -2710,6 +2764,29 @@ InputAction InputActionForKey(const InputState* s, int vk, bool shift,
 // whether a submit-on-enter textarea inserts a newline.
 bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
                   bool shift);
+
+// ─── completion ───────────────────────────────────────────────────────────
+
+// The word being typed in front of the caret: where it starts, and what it
+// is. A caret that is not after a word answers an empty query starting where
+// it stands, which is what a trigger character like `.` completes on.
+Str InputCompletionQuery(const InputState* s, int* startOut);
+// Ask the provider and open the menu if it answered anything. Rust does this
+// from the editor's own `on_input` when the typed character is a trigger, and
+// from ctrl-space; `force` is the second, which asks whatever was typed.
+void InputRequestCompletion(InputState* s, App* app, Window* win, bool force);
+// Escape, a click elsewhere, or an edit that leaves nothing to complete.
+void InputDismissCompletion(InputState* s);
+// Accept the selected item: the query range is replaced by its insert text.
+void InputAcceptCompletion(InputState* s, App* app, Window* win);
+// The four keys the menu takes while it is up, answering whether it took the
+// chord — `CompletionMenu::handle_action`.
+bool InputCompletionAction(InputState* s, App* app, Window* win,
+                           InputAction action);
+// ShowCompletions: ctrl-space asks whatever the caret is on, which is Rust's
+// second way in beside a trigger character.
+void InputShowCompletions(InputState* s, App* app, Window* win);
+
 // replace_text_in_range: the one path every edit goes through. A null range is
 // the current selection. Returns false when the edit was rejected — readonly,
 // or a mask or validator that said no.

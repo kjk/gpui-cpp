@@ -14,8 +14,11 @@
    past a hundred columns, trailing whitespace — one severity each, drawn as
    the wavy underline `element.rs` draws a diagnostic with.
 
-   What is not ported yet, and is the rest of that store: completion, hover,
-   code actions and document colours. */
+   The completion menu is the store's other half that is here: the items are
+   upstream's own `fixtures/completion_items.json`, filtered by the word being
+   typed, with the selected item's documentation rendered as markdown beside
+   the list. What is still to come is hover, code actions and document
+   colours. */
 
 #include "gpui.h"
 
@@ -251,6 +254,63 @@ static void OnTreeEvent(EditorApp*, Ctx* cx, const TreeEvent*) {
     Notify(cx);
 }
 
+// ─── the completion provider ──────────────────────────────────────────────
+//
+// `ExampleLspStore`'s own: the items are upstream's
+// `fixtures/completion_items.json`, read once, and what the menu shows is the
+// ones whose label starts with the word being typed. Rust's provider answers
+// a Task and filters with a fuzzy matcher; there is nothing to await here and
+// no matcher, so it is a prefix and the answer is immediate.
+
+static const int kMaxItems = 256;
+static CompletionItem gItems[kMaxItems];
+static int gNItems = 0;
+static Arena* gItemArena = nullptr;
+
+static void LoadCompletionItems() {
+    if (gNItems > 0) {
+        return;
+    }
+    TempStr json = AssetsLoadTextTemp(StrL("completion_items.json"));
+    if (json.len <= 0) {
+        return;
+    }
+    gItemArena = ArenaNew();
+    JsonValue* root = JsonParse(gItemArena, json);
+    if (!root) {
+        return;
+    }
+    for (const JsonValue* v = root->first; v && gNItems < kMaxItems;
+         v = v->next) {
+        CompletionItem& item = gItems[gNItems];
+        item.label = JsonString(JsonGet(v, "label"));
+        item.detail = JsonString(JsonGet(v, "detail"));
+        item.documentation = JsonString(JsonGet(v, "documentation"));
+        if (item.label.len == 0) {
+            continue;
+        }
+        gNItems++;
+    }
+}
+
+static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
+                        int cap) {
+    LoadCompletionItems();
+    int n = 0;
+    for (int i = 0; i < gNItems && n < cap; i++) {
+        const CompletionItem& item = gItems[i];
+        if (query.len > item.label.len) {
+            continue;
+        }
+        if (query.len > 0 &&
+            memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
+            continue;
+        }
+        out[n++] = item;
+    }
+    return n;
+}
+
 // ─── the status bar's switches ────────────────────────────────────────────
 
 enum {
@@ -463,6 +523,9 @@ int GpuiMain(int argc, char** argv) {
     self->editor.mode.lineNumber = true;
     self->editor.mode.folding = true;
     InputSetPlaceholder(&self->editor, StrL("Open a file from the tree..."));
+    // The completion provider, which is what makes the menu open as a word is
+    // typed and on `.`.
+    self->editor.completionProvider = &CompleteFrom;
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;

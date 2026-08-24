@@ -628,6 +628,8 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             }
         } else if (caret && cursor >= start && cursor <= start + line.len) {
             el->Caret(cursor - start, style.caret);
+            // Where it lands is the anchor a completion menu hangs off.
+            el->CaretOut(&state->caretWinX, &state->caretWinY);
         }
         // indent_guides: a hairline every tab stop of the row's own leading
         // whitespace, drawn behind the text.
@@ -1875,6 +1877,127 @@ void InputSetMaskPattern(InputState* s, MaskPattern pattern) {
     }
 }
 
+// ─── completion ───────────────────────────────────────────────────────────
+
+static bool CompletionWordChar(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_' || (unsigned char)c >= 0x80;
+}
+
+Str InputCompletionQuery(const InputState* s, int* startOut) {
+    Str t = InputValue(s);
+    int at = InputCursor(s);
+    if (at > t.len) {
+        at = t.len;
+    }
+    int start = at;
+    while (start > 0 && CompletionWordChar(t.s[start - 1])) {
+        start--;
+    }
+    if (startOut) {
+        *startOut = start;
+    }
+    return Str(t.s + start, at - start);
+}
+
+void InputDismissCompletion(InputState* s) {
+    if (!s) {
+        return;
+    }
+    s->completion.open = false;
+    s->completion.triggerStart = -1;
+    s->completion.selected = 0;
+    s->completion.items.Clear();
+}
+
+void InputRequestCompletion(InputState* s, App* app, Window* win, bool force) {
+    (void)app;
+    if (!s || !s->completionProvider) {
+        return;
+    }
+    int start = 0;
+    Str query = InputCompletionQuery(s, &start);
+    if (!force && query.len == 0) {
+        InputDismissCompletion(s);
+        return;
+    }
+    // The items are the provider's own: it owns the strings, which outlive
+    // the menu the way a decoration's do.
+    const int kMaxItems = 128;
+    auto* items = AllocArray<CompletionItem>(kMaxItems);
+    if (!items) {
+        return;
+    }
+    int n = s->completionProvider(s->completionData, InputValue(s),
+                                  InputCursor(s), query, items, kMaxItems);
+    s->completion.items.Clear();
+    for (int i = 0; i < n; i++) {
+        s->completion.items.Append(items[i]);
+    }
+    Free(nullptr, items);
+    s->completion.open = n > 0;
+    s->completion.triggerStart = start;
+    s->completion.offset = InputCursor(s);
+    s->completion.selected = 0;
+    if (win) {
+        AppInvalidate(win);
+    }
+}
+
+void InputShowCompletions(InputState* s, App* app, Window* win) {
+    InputRequestCompletion(s, app, win, true);
+}
+
+void InputAcceptCompletion(InputState* s, App* app, Window* win) {
+    if (!s || !s->completion.open) {
+        return;
+    }
+    int ix = s->completion.selected;
+    if (ix < 0 || ix >= s->completion.items.len) {
+        return;
+    }
+    const CompletionItem& item = s->completion.items[ix];
+    Str text = item.insertText.len > 0 ? item.insertText : item.label;
+    // insert_completion: the query is what the item replaces, from where the
+    // word began to where the caret was when the menu came up.
+    Selection range;
+    range.start = s->completion.triggerStart >= 0 ? s->completion.triggerStart
+                                                  : InputCursor(s);
+    range.end = InputCursor(s);
+    InputDismissCompletion(s);
+    InputReplaceTextInRange(s, app, win, &range, text);
+}
+
+bool InputCompletionAction(InputState* s, App* app, Window* win,
+                           InputAction action) {
+    if (!s || !s->completion.open) {
+        return false;
+    }
+    int n = s->completion.items.len;
+    switch (action) {
+        case InputAction::MoveUp:
+            s->completion.selected =
+                s->completion.selected > 0 ? s->completion.selected - 1 : 0;
+            AppInvalidate(win);
+            return true;
+        case InputAction::MoveDown:
+            s->completion.selected = s->completion.selected + 1 < n
+                                         ? s->completion.selected + 1
+                                         : n - 1;
+            AppInvalidate(win);
+            return true;
+        case InputAction::Enter:
+            InputAcceptCompletion(s, app, win);
+            return true;
+        case InputAction::Escape:
+            InputDismissCompletion(s);
+            AppInvalidate(win);
+            return true;
+        default:
+            return false;
+    }
+}
+
 void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     char buf[4];
     int n = 0;
@@ -1895,6 +2018,19 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     }
     InputReplaceTextInRange(s, app, win, nullptr, Str(buf, n));
     PauseBlink(s, app, win);
+    // is_completion_trigger: a word character carries a menu that is already
+    // up and opens one that is not, and `.` opens one where the caret stands.
+    // Anything else closes it.
+    if (s->completionProvider) {
+        char c = buf[0];
+        if (CompletionWordChar(c)) {
+            InputRequestCompletion(s, app, win, false);
+        } else if (c == '.') {
+            InputRequestCompletion(s, app, win, true);
+        } else {
+            InputDismissCompletion(s);
+        }
+    }
 }
 
 // ─── movement ─────────────────────────────────────────────────────────────
@@ -2296,6 +2432,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
     if (!s) {
         return false;
     }
+    // CompletionMenu::handle_action: while the menu is up it takes the four
+    // keys that drive it before the field does.
+    if (InputCompletionAction(s, app, win, action)) {
+        return true;
+    }
     Str t = InputValue(s);
     switch (action) {
         case InputAction::None:
@@ -2414,6 +2555,11 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             s->undo.pendingIntent = intent;
             InputReplaceTextInRange(s, app, win, nullptr, Str{});
             PauseBlink(s, app, win);
+            // The word behind the caret is one shorter: a menu that is up
+            // asks again, and closes when nothing matches any more.
+            if (s->completion.open) {
+                InputRequestCompletion(s, app, win, false);
+            }
             return true;
         }
         case InputAction::Delete: {

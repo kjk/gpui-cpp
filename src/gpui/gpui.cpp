@@ -1243,6 +1243,11 @@ El* El::SelRange(int lo, int hi, Rgba color) {
     return this;
 }
 
+El* El::CaretOut(float* outX, float* outY) {
+    caretOutX = outX;
+    caretOutY = outY;
+    return this;
+}
 El* El::Washes(const TextSpan* runs, int n) {
     washes = runs;
     nWashes = n;
@@ -3746,6 +3751,12 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
     // scroll_to measures against on the next move.
     if (e->input) {
         e->input->caretX = x - e->x;
+    }
+    if (e->caretOutX) {
+        *e->caretOutX = x;
+    }
+    if (e->caretOutY) {
+        *e->caretOutY = y + h;
     }
     CanvasFillRect(ctx, x, y, e->caretW, h, e->caretColor);
 }

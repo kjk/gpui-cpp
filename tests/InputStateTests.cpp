@@ -803,6 +803,138 @@ static void ACommitReplacesWhatWasMarked() {
     utassert(MarkIs(s, -1, -1));
 }
 
+// ─── completion ───────────────────────────────────────────────────────────
+//
+// The menu an editor puts up while a word is being typed: what the provider
+// is asked, what the keys do to it, and what accepting one writes. Rust's own
+// are in `completion_menu.rs` behind a `VisualTestContext`; these drive the
+// state the same way a keystroke does.
+
+static const CompletionItem kItems[] = {
+    {StrL("const"), StrL("const NAME: Type"), {}, StrL("A constant."), false},
+    {StrL("continue"), {}, {}, {}, false},
+    {StrL("core"), {}, StrL("core::"), {}, false},
+    {StrL("fn"), {}, {}, {}, false},
+};
+
+// A provider that answers the labels starting with the query, and counts how
+// often it was asked — which is what says a keystroke opened the menu rather
+// than the test doing it by hand.
+static int Complete(void* data, Str, int, Str query, CompletionItem* out,
+                    int cap) {
+    if (data) {
+        (*(int*)data)++;
+    }
+    int n = 0;
+    for (const CompletionItem& item : kItems) {
+        if (n >= cap || query.len > item.label.len) {
+            continue;
+        }
+        if (query.len > 0 &&
+            memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
+            continue;
+        }
+        out[n++] = item;
+    }
+    return n;
+}
+
+static void TypeChars(InputState* s, const char* text) {
+    for (const char* p = text; *p; p++) {
+        InputTypeChar(s, nullptr, nullptr, (uint32_t)(uint8_t)*p);
+    }
+}
+
+static bool Menu(InputState* s, InputAction action) {
+    return InputCompletionAction(s, nullptr, nullptr, action);
+}
+
+static void TypingAWordOpensTheMenu() {
+    int asked = 0;
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &Complete;
+    s.completionData = &asked;
+
+    TypeChars(&s, "co");
+    utassert(asked == 2);
+    utassert(s.completion.open);
+    utassert(s.completion.items.len == 3); // const, continue, core
+    utassert(s.completion.triggerStart == 0);
+    utassert(s.completion.selected == 0);
+
+    int start = -1;
+    Str query = InputCompletionQuery(&s, &start);
+    utassert(start == 0 && Is(query, "co"));
+
+    // A word nothing answers to closes it rather than showing an empty menu.
+    TypeChars(&s, "zz");
+    utassert(!s.completion.open);
+
+    // And a field with no provider never opens one at all.
+    InputState plain;
+    TypeChars(&plain, "co");
+    utassert(!plain.completion.open);
+    utassert(ValueIs(plain, "co"));
+}
+
+static void TheMenuKeysMoveTheSelectionAndAccept() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &Complete;
+
+    TypeChars(&s, "co");
+    utassert(Menu(&s, InputAction::MoveDown));
+    utassert(s.completion.selected == 1);
+    // Down at the end stays there rather than wrapping.
+    utassert(Menu(&s, InputAction::MoveDown));
+    utassert(Menu(&s, InputAction::MoveDown));
+    utassert(s.completion.selected == 2);
+    utassert(Menu(&s, InputAction::MoveUp));
+    utassert(s.completion.selected == 1);
+
+    // Enter writes the item over the word it was completing.
+    utassert(Menu(&s, InputAction::Enter));
+    utassert(ValueIs(s, "continue"));
+    utassert(!s.completion.open);
+    utassert(InputCursor(&s) == 8);
+
+    // Escape closes it, and the keys go back to the editor once it is closed.
+    InputSetValue(&s, Str{});
+    TypeChars(&s, "f");
+    utassert(s.completion.open);
+    utassert(Menu(&s, InputAction::Escape));
+    utassert(!s.completion.open);
+    utassert(!Menu(&s, InputAction::Enter));
+    utassert(!Menu(&s, InputAction::MoveDown));
+}
+
+static void AnAcceptedItemWritesItsInsertText() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &Complete;
+
+    InputSetValue(&s, StrL("x = "));
+    InputSetSelectedRange(&s, nullptr, nullptr, 4, 4);
+    TypeChars(&s, "cor");
+    utassert(s.completion.open && s.completion.items.len == 1);
+    utassert(s.completion.triggerStart == 4);
+    utassert(Menu(&s, InputAction::Enter));
+    utassert(ValueIs(s, "x = core::"));
+
+    // While it is up, backspacing asks again on the shorter word, and back
+    // past the word closes it. An accepted menu is down and stays down.
+    InputSetValue(&s, Str{});
+    TypeChars(&s, "cor");
+    utassert(s.completion.items.len == 1);
+    InputPerform(&s, nullptr, nullptr, InputAction::Backspace, false);
+    utassert(ValueIs(s, "co"));
+    utassert(s.completion.open && s.completion.items.len == 3);
+    InputPerform(&s, nullptr, nullptr, InputAction::Backspace, false);
+    InputPerform(&s, nullptr, nullptr, InputAction::Backspace, false);
+    utassert(!s.completion.open);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -843,4 +975,7 @@ void TestInputState() {
     TheOffsetStaysInsideTheContent();
     ASidewaysCaretPullsTheRunAcross();
     TheNumberKeysStepTheField();
+    TypingAWordOpensTheMenu();
+    TheMenuKeysMoveTheSelectionAndAccept();
+    AnAcceptedItemWritesItsInsertText();
 }

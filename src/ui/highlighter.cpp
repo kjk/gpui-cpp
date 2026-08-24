@@ -312,6 +312,81 @@ El* Highlighter::IntoEl() {
                        ->ScrollY(state ? state->scrollY : 0)
                        ->Child(editor);
     }
+    // The completion menu, under the caret: the list on the left and the
+    // selected item's documentation beside it, which is what CompletionMenu
+    // defers into place.
+    El* completionMenu = nullptr;
+    if (state && state->completion.open && state->completion.items.len > 0) {
+        // `cursor_origin + (-4, line_height + 4)`, in window coordinates —
+        // the caret's own box is what the editor measured last frame.
+        float x = state->caretWinX > 0 ? state->caretWinX - 4.f
+                                       : state->inputBounds.x;
+        // The caret's row. Wrapped rows report their boxes and the menu is
+        // placed under the one the caret is on; without wrapping every row is
+        // a line high and the arithmetic is the same one the caret's own
+        // scrolling uses.
+        float y = state->caretWinY > 0
+                      ? state->caretWinY + 4.f
+                      : state->inputBounds.y + kInputLineH + 4.f;
+        El* list = Div(a)
+                       ->FlexCol()
+                       ->MinW(160)
+                       ->MaxW(420)
+                       ->MaxH(240)
+                       ->ClipY()
+                       ->Pad(4)
+                       ->Radius(th.radius)
+                       ->Bg(th.tokens.background)
+                       ->Border(1, th.border);
+        for (int i = 0; i < state->completion.items.len; i++) {
+            const CompletionItem& item = state->completion.items[i];
+            bool selected = i == state->completion.selected;
+            El* row = Div(a)
+                          ->FlexRow()
+                          ->Gap(8)
+                          ->Pad(4)
+                          ->ItemsCenter()
+                          ->Radius(th.radius * 0.5f)
+                          ->Font(12);
+            if (selected) {
+                row->Bg(th.tokens.accent)->Fg(th.accentFg);
+            }
+            El* label = TextEl(a, item.label)->LineHeight(1.f);
+            if (item.deprecated) {
+                label->Strikethrough();
+            }
+            row->Child(label);
+            if (item.detail.len > 0) {
+                row->Child(TextEl(a, item.detail)
+                               ->LineHeight(1.f)
+                               ->Italic()
+                               ->Fg(selected ? th.accentFg : th.mutedFg));
+            }
+            list->Child(row);
+        }
+        El* menu = Div(a)->FlexRow()->Gap(4)->ItemsStart()->Child(list);
+        // The documentation of the item the selection is on, beside the list.
+        int sel = state->completion.selected;
+        if (sel >= 0 && sel < state->completion.items.len &&
+            state->completion.items[sel].documentation.len > 0) {
+            menu->Child(
+                Div(a)
+                    ->W(420)
+                    ->MaxH(240)
+                    ->ClipY()
+                    ->PadX(8)
+                    ->PadY(4)
+                    ->Radius(th.radius)
+                    ->Bg(th.tokens.background)
+                    ->Border(1, th.border)
+                    ->Child(TextView::New(cx, state->completion.items[sel]
+                                                  .documentation)
+                                ->Font(12)
+                                ->IntoEl()));
+        }
+        completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(menu);
+    }
+
     // The diagnostic popover: what the pointer is over, in the severity's
     // own colours — `px_1().py_0p5()` over a background the colour is blended
     // a fifth into, with the message as markdown.
@@ -344,6 +419,24 @@ El* Highlighter::IntoEl() {
                           ->Fg(fg)
                           ->Border(1, fg)
                           ->Child(body);
+    }
+    if (completionMenu) {
+        // The menu is over the rows either way, so it goes in beside them
+        // rather than inside the scroller.
+        El* box =
+            Div(a)->FlexCol()->W(kFill)->Child(scroller)->Child(completionMenu);
+        if (diagPopover) {
+            box->Child(diagPopover);
+        }
+        if (!searchable) {
+            return box;
+        }
+        return Div(a)
+            ->FlexCol()
+            ->W(kFill)
+            ->Child(SearchPanel::New(cx, StrDup(a, fmt("%s-search", id)), state)
+                        ->IntoEl())
+            ->Child(box);
     }
     if (!searchable) {
         if (diagPopover) {
