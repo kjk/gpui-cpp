@@ -286,6 +286,77 @@ static bool Menu2(InputState* s, InputAction action) {
     return InputCodeActionAction(s, nullptr, nullptr, action);
 }
 
+// ─── the overlay seam (lsp/overlay.rs) ───────────────────────────────────
+
+// A host presenting its own items, without a provider in sight.
+static void AHostCanPresentItsOwnItems() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("un"));
+    InputSetSelectedRange(&s, nullptr, nullptr, 2, 2);
+
+    CompletionItem items[2] = {};
+    items[0].label = StrL("unwrap");
+    items[1].label = StrL("unsafe");
+    uint64_t was = s.completion.revision;
+    InputPresentCompletionItems(&s, 0, StrL("un"), items, 2);
+    utassert(s.completion.open && s.completion.items.len == 2);
+    utassert(InputIsContextMenuOpen(&s));
+    // The revision is what a host renderer diffs against, so it moves
+    // whenever the content does.
+    utassert(s.completion.revision != was);
+
+    // insert_completion writes the item the host picked over the range the
+    // query occupied.
+    InputInsertCompletion(&s, nullptr, nullptr, &items[1], Selection{0, 2});
+    utassert(ValueIs(s, "unsafe"));
+
+    // And an empty list closes the menu rather than showing nothing.
+    InputPresentCompletionItems(&s, 0, StrL(""), items, 0);
+    utassert(!s.completion.open);
+    utassert(!InputIsContextMenuOpen(&s));
+}
+
+static int gOverlayKeys = 0;
+static InputOverlayKind gOverlayKind = InputOverlayKind::CodeAction;
+
+static bool TakeEverything(void* data, InputOverlayKind kind,
+                           InputAction action) {
+    (void)data;
+    (void)action;
+    gOverlayKeys++;
+    gOverlayKind = kind;
+    return true;
+}
+
+// set_overlay_action_handler: the host's popover takes the keys before the
+// editor's own menu does.
+static void AHostCanTakeTheKeys() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    CompletionItem item = {};
+    item.label = StrL("unwrap");
+    InputPresentCompletionItems(&s, 0, StrL(""), &item, 1);
+    utassert(s.completion.open);
+
+    gOverlayKeys = 0;
+    s.overlayAction = &TakeEverything;
+    // Down would have moved the selection; the host took it instead.
+    utassert(InputPerform(&s, nullptr, nullptr, InputAction::MoveDown, false));
+    utassert(gOverlayKeys == 1);
+    utassert(gOverlayKind == InputOverlayKind::Completion);
+    utassert(s.completion.selected == 0);
+
+    // With no handler, the menu takes it as before.
+    s.overlayAction = nullptr;
+    utassert(InputPerform(&s, nullptr, nullptr, InputAction::MoveDown, false));
+    utassert(s.completion.selected == 0 || s.completion.items.len == 1);
+
+    // dismiss_lsp_overlays takes down whatever is up.
+    InputDismissLspOverlays(&s);
+    utassert(!InputIsContextMenuOpen(&s));
+}
+
 // ─── apply_lsp_edits ─────────────────────────────────────────────────────
 
 // A list of edits is one undo step, and each one is resolved against the
@@ -484,6 +555,22 @@ static Str TestInlineCompletion(void* data, Arena* a, Str text, int offset) {
 }
 
 // The provider is asked once the typing has stopped, and not before.
+// completion_inserting: the write the editor makes on the reader's behalf is
+// not typing, so it asks for no suggestion.
+static void AnInsertIsNotTyping() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.inlineCompletionProvider = &TestInlineCompletion;
+    CompletionItem item = {};
+    item.label = StrL("unwrap");
+    InputPresentCompletionItems(&s, 0, StrL(""), &item, 1);
+    InputClearInlineCompletion(&s);
+    InputInsertCompletion(&s, nullptr, nullptr, &item, Selection{0, 0});
+    utassert(ValueIs(s, "unwrap"));
+    // Nothing was scheduled by it — `asked` is still where clearing left it.
+    utassert(s.inlineCompletion.asked);
+}
+
 static void TheSuggestionWaitsForTheDebounce() {
     InputState s;
     s.kind = InputKind::Editor;
@@ -1571,6 +1658,9 @@ void TestInputState() {
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
+    AHostCanPresentItsOwnItems();
+    AHostCanTakeTheKeys();
+    AnInsertIsNotTyping();
     AnEditListIsOneStep();
     ACodeActionCanBeMoreThanOneEdit();
     AnAcceptedItemBringsItsImport();

@@ -1927,10 +1927,11 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     // again next frame — `Lsp::update`, which is the pair together.
     s->documentColorsDirty = true;
     s->semanticTokensDirty = true;
-    // on_text_typed: the suggestion in front of the caret was about the
-    // document as it was, and the provider is asked again once the typing
-    // stops.
-    InputScheduleInlineCompletion(s);
+    // on_text_typed, which a silent replace skips: an edit the editor made
+    // on the reader's behalf is not typing, so it asks for no suggestion.
+    if (!s->silentReplace) {
+        InputScheduleInlineCompletion(s);
+    }
     Emit(s, app, win, InputEvent{InputEventKind::Change});
     Notify(app, win);
     return true;
@@ -2205,6 +2206,7 @@ void InputDismissCompletion(InputState* s) {
     s->completion.triggerStart = -1;
     s->completion.selected = 0;
     s->completion.items.Clear();
+    s->completion.revision++;
 }
 
 void InputRequestCompletion(InputState* s, App* app, Window* win, bool force) {
@@ -2236,6 +2238,7 @@ void InputRequestCompletion(InputState* s, App* app, Window* win, bool force) {
     s->completion.triggerStart = start;
     s->completion.offset = InputCursor(s);
     s->completion.selected = 0;
+    s->completion.revision++;
     if (win) {
         AppInvalidate(win);
     }
@@ -2276,11 +2279,139 @@ void InputAcceptCompletion(InputState* s, App* app, Window* win) {
         edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
     }
     InputDismissCompletion(s);
+    s->silentReplace = true;
     if (n == 1) {
         InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
+    } else {
+        InputApplyEdits(s, app, win, edits, n);
+    }
+    s->silentReplace = false;
+}
+
+// ─── the overlay seam (lsp/overlay.rs) ───────────────────────────────────
+
+void InputPresentCompletionItems(InputState* s, int triggerStart, Str query,
+                                 const CompletionItem* items, int n) {
+    if (!s) {
         return;
     }
-    InputApplyEdits(s, app, win, edits, n);
+    (void)query;
+    s->completion.items.Clear();
+    for (int i = 0; i < n; i++) {
+        s->completion.items.Append(items[i]);
+    }
+    s->completion.triggerStart = triggerStart;
+    s->completion.offset = InputCursor(s);
+    s->completion.selected = 0;
+    s->completion.open = n > 0;
+    s->completion.revision++;
+}
+
+void InputPresentCodeActions(InputState* s, const CodeActionItem* items,
+                             int n) {
+    if (!s) {
+        return;
+    }
+    s->codeActions.items.Reset();
+    for (int i = 0; i < n; i++) {
+        s->codeActions.items.Append(items[i]);
+    }
+    s->codeActions.selected = 0;
+    s->codeActions.open = n > 0;
+    s->codeActions.revision++;
+}
+
+void InputPresentHover(InputState* s, Selection symbolRange, Str text) {
+    if (!s) {
+        return;
+    }
+    s->hoverRange = symbolRange;
+    s->hoverText = text;
+}
+
+void InputPresentDiagnostic(InputState* s, int index) {
+    if (!s) {
+        return;
+    }
+    s->hoverDiagnostic = index >= 0 && index < s->diagnostics.len ? index : -1;
+}
+
+void InputClearDiagnosticPopover(InputState* s) {
+    if (s) {
+        s->hoverDiagnostic = -1;
+    }
+}
+
+bool InputIsContextMenuOpen(const InputState* s) {
+    return s && (s->completion.open || s->codeActions.open);
+}
+
+bool InputRouteOverlayAction(InputState* s, App* app, Window* win,
+                             InputAction action) {
+    if (!s) {
+        return false;
+    }
+    // The host's own popover, if it drew one, is asked first: it is the thing
+    // on screen and the keys are its.
+    if (s->overlayAction && InputIsContextMenuOpen(s)) {
+        InputOverlayKind kind = s->completion.open
+                                    ? InputOverlayKind::Completion
+                                    : InputOverlayKind::CodeAction;
+        if (s->overlayAction(s->overlayActionData, kind, action)) {
+            AppInvalidate(win);
+            return true;
+        }
+    }
+    if (InputCompletionAction(s, app, win, action)) {
+        return true;
+    }
+    return InputCodeActionAction(s, app, win, action);
+}
+
+void InputDismissLspOverlays(InputState* s) {
+    if (!s) {
+        return;
+    }
+    InputDismissCompletion(s);
+    InputDismissCodeActions(s);
+    InputClearHoverDefinition(s);
+    s->hoverText = Str{};
+    s->hoverRange = Selection{};
+    s->hoverDiagnostic = -1;
+}
+
+void InputInsertCompletion(InputState* s, App* app, Window* win,
+                           const CompletionItem* item, Selection fallback) {
+    if (!s || !item) {
+        return;
+    }
+    Str text = item->insertText.len > 0 ? item->insertText : item->label;
+    Selection range = fallback;
+    // `insert_text` with no `text_edit`: the item goes in *after* the range
+    // the query occupied rather than over it, which is what Rust's
+    // `range.end..range.end` says.
+    if (item->insertText.len > 0) {
+        range.start = range.end;
+    }
+    const int kMaxEdits = 32;
+    TextEditItem edits[kMaxEdits];
+    int n = 0;
+    edits[n].range = range;
+    edits[n].newText = StrDup(GetTempArena(), text);
+    n++;
+    for (int i = 0; i < item->nAdditionalEdits && n < kMaxEdits; i++, n++) {
+        edits[n] = item->additionalEdits[i];
+        edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
+    }
+    // completion_inserting: the write is not typing, so it opens no menu and
+    // asks for no suggestion.
+    s->silentReplace = true;
+    if (n == 1) {
+        InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
+    } else {
+        InputApplyEdits(s, app, win, edits, n);
+    }
+    s->silentReplace = false;
 }
 
 bool InputCompletionAction(InputState* s, App* app, Window* win,
@@ -2742,6 +2873,7 @@ void InputDismissCodeActions(InputState* s) {
     s->codeActions.open = false;
     s->codeActions.items.Reset();
     s->codeActions.selected = 0;
+    s->codeActions.revision++;
 }
 
 void InputToggleCodeActions(InputState* s, App* app, Window* win) {
@@ -2771,6 +2903,7 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
     }
     s->codeActions.selected = 0;
     s->codeActions.open = n > 0;
+    s->codeActions.revision++;
     Notify(app, win);
 }
 
@@ -2831,7 +2964,9 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
         n = 1;
     }
     InputDismissCodeActions(s);
+    s->silentReplace = true;
     InputApplyEdits(s, app, win, edits, n);
+    s->silentReplace = false;
     Notify(app, win);
 }
 
@@ -3318,13 +3453,10 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
     if (!s) {
         return false;
     }
-    // CompletionMenu::handle_action: while the menu is up it takes the four
-    // keys that drive it before the field does.
-    if (InputCompletionAction(s, app, win, action)) {
-        return true;
-    }
-    // And the code action menu, the same four keys over the other list.
-    if (InputCodeActionAction(s, app, win, action)) {
+    // handle_action_for_context_menu: while a menu is up it takes the four
+    // keys that drive it before the field does — the host's own popover
+    // first, if it drew one, and then the editor's.
+    if (InputRouteOverlayAction(s, app, win, action)) {
         return true;
     }
     Str t = InputValue(s);

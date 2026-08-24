@@ -2733,6 +2733,8 @@ struct CodeActionSession {
     bool open = false;
     int selected = 0;
     Vec<CodeActionItem> items;
+    // Bumped whenever the content changes. See CompletionSession::revision.
+    uint64_t revision = 0;
     // What the titles and the replacement texts were written into, thrown
     // away and taken again each time the menu is asked for.
     Arena* arena = nullptr;
@@ -2911,6 +2913,10 @@ struct CompletionSession {
     int selected = 0;
     // What the provider answered, in its own order.
     Vec<CompletionItem> items;
+    // Bumped whenever the content changes. A renderer that mirrors this menu
+    // — a host drawing its own popover — compares revisions to decide whether
+    // to rebuild, so it never has to compare the item list itself.
+    uint64_t revision = 0;
     // What `completionItem/resolve` wrote into, dropped with the menu.
     Arena* arena = nullptr;
 
@@ -2924,6 +2930,20 @@ struct DiagnosticColors {
     Rgba info = {};
     Rgba hint = {};
 };
+// Declared here because the overlay hook below names it and the state that
+// holds the hook comes before the action table.
+enum class InputAction : uint8_t;
+
+enum class InputOverlayKind : uint8_t {
+    Completion,
+    CodeAction
+};
+
+// set_overlay_action_handler: asked before the editor's own menu handling,
+// with the menu that is open and the action that arrived. True means the host
+// took it.
+using OverlayActionFn = bool (*)(void* data, InputOverlayKind kind,
+                                 InputAction action);
 
 struct InputState {
     InputKind kind = InputKind::Input;
@@ -3063,6 +3083,14 @@ struct InputState {
     CompletionSession completion;
     CompletionFn completionProvider = nullptr;
     void* completionData = nullptr;
+    // set_overlay_action_handler: a host drawing its own popover takes the
+    // keys before the editor's own menu does.
+    OverlayActionFn overlayAction = nullptr;
+    void* overlayActionData = nullptr;
+    // completion_inserting / silent_replace_text: an edit the editor made on
+    // the reader's behalf — accepting an item, performing an action — is not
+    // typing, so it does not open a menu or ask for a suggestion.
+    bool silentReplace = false;
     // is_completion_trigger and completionItem/resolve, both optional: the
     // built-in rule and no resolving are what a provider that names neither
     // gets.
@@ -3292,6 +3320,42 @@ void InputShowCompletions(InputState* s, App* app, Window* win);
 void InputUpdateDocumentColors(InputState* s);
 
 // ─── code actions ─────────────────────────────────────────────────────────
+
+// ─── the overlay seam (input/editor/lsp/overlay.rs) ──────────────────────
+//
+// Rust keeps only the *state* of the two menus in the editor and hands the
+// drawing to whoever is hosting it: an application can present its own items,
+// draw its own popover, and take the keys the menu would have taken. This
+// tree draws both menus itself — `component::Highlighter` does, under the
+// caret — and everything below is the same seam beside it, so a host that
+// wants its own can have one.
+
+// present_completion_items: the host pushing a list in, rather than the
+// editor pulling one from a provider. The items are the caller's and outlive
+// the menu, the way a provider's do.
+void InputPresentCompletionItems(InputState* s, int triggerStart, Str query,
+                                 const CompletionItem* items, int n);
+// present_code_actions, the same for the other menu.
+void InputPresentCodeActions(InputState* s, const CodeActionItem* items, int n);
+// present_hover / present_diagnostic / clear_diagnostic_popover: the two
+// popovers, put up by the host rather than found by the editor.
+void InputPresentHover(InputState* s, Selection symbolRange, Str text);
+void InputPresentDiagnostic(InputState* s, int index);
+void InputClearDiagnosticPopover(InputState* s);
+// route_overlay_action: whichever menu is open takes the action. True when
+// one did.
+bool InputRouteOverlayAction(InputState* s, App* app, Window* win,
+                             InputAction action);
+// dismiss_completion_overlay / dismiss_code_action_overlay /
+// dismiss_lsp_overlays.
+void InputDismissLspOverlays(InputState* s);
+// is_context_menu_open: either menu.
+bool InputIsContextMenuOpen(const InputState* s);
+// insert_completion: write one item in over `fallback`, which is what the
+// menu's own accept does with the range the query occupied. A host that drew
+// its own popover calls this with the item the reader picked.
+void InputInsertCompletion(InputState* s, App* app, Window* win,
+                           const CompletionItem* item, Selection fallback);
 
 // The documentation of the item the selection is on, resolved through the
 // provider the first time it is looked at. Empty when there is none, and
