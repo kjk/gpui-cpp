@@ -16,6 +16,11 @@ const float kDockPanelMinSize = 100.f;
 // A closed bottom dock keeps its tab bar, so there is something left to click
 // to open it again (Dock::render).
 const float kDockCollapsedH = 29.f;
+// DragPanel's own box — `w_24` and a line of text between two paddings —
+// which is both what follows the pointer and where the drop placeholder flies
+// in from.
+const float kDockDragPreviewW = 96.f;
+const float kDockDragPreviewH = 30.f;
 
 // What a press on a tab picks up, and what a press on a resize handle does.
 // `ix` is the panel for the first and the handle for the second.
@@ -183,6 +188,12 @@ struct DockState {
     // can be drawn before the button comes up. -1 when no drag is in flight.
     int dropNode = -1;
     DockDrop dropAt = DockDrop::Center;
+    // Where the placeholder flies in from when a drag first reaches a group:
+    // the dragged tab's own preview, which is what Rust's `source` is for a
+    // panel drag. Pending until the frame that draws it has seeded the
+    // transition with it.
+    Bounds dropFrom = {};
+    bool dropFromPending = false;
     // Which group's ⋯ menu is open, so the row it reports lands on the right
     // panel. Rust's menu is built by the TabPanel itself and closes over it;
     // a menu here reports only which row was taken.

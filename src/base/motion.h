@@ -153,6 +153,25 @@ float MotionRepeat(Ctx* cx, uint32_t key, float periodMs,
 float MotionAppear(Ctx* cx, uint32_t key, float durationMs,
                    EaseFn ease = nullptr);
 
+// Where a transition starts from, for a value whose first frame is not where
+// it is going. `transition()` has no such call — Rust's animated placeholder
+// keeps its own `from` and an epoch beside it and restarts the run by hand —
+// and the same effect here is to write the state before the first ask: the
+// next MotionValue sees a target that differs from this one and runs the
+// curve from it.
+template <typename T>
+void MotionSeed(Ctx* cx, uint32_t key, T from) {
+    auto* st =
+        (MotionState<T>*)MotionSlot(cx, key, (int)sizeof(MotionState<T>));
+    if (!st) {
+        return;
+    }
+    st->init = true;
+    st->from = from;
+    st->target = from;
+    st->startedAt = MotionNow(cx);
+}
+
 // motion::transition: the value to draw now, on its way to `target`.
 template <typename T>
 T MotionValue(Ctx* cx, uint32_t key, T target, const Motion& m) {

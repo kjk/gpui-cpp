@@ -716,6 +716,15 @@ void DockState::OnTabDragMove(DockState* self, Ctx* cx,
     if (self->dropNode == found && self->dropAt == at) {
         return;
     }
+    // A drag arriving at a group brings the placeholder in from the dragged
+    // tab's preview; moving between the zones of one carries on from where
+    // the placeholder already is, which is what the transition does anyway.
+    if (self->dropNode != found && found >= 0 && cx->win) {
+        Point off = WindowDragOffset(cx);
+        self->dropFrom = {cx->win->mouseX - off.x, cx->win->mouseY - off.y,
+                          kDockDragPreviewW, kDockDragPreviewH};
+        self->dropFromPending = true;
+    }
     self->dropNode = found;
     self->dropAt = at;
     Notify(cx);

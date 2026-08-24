@@ -456,16 +456,38 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node) {
         box->Child(body);
     }
 
-    // The drop placeholder. Rust animates it from where it was to where it is
-    // now; here it simply is where it is.
+    // The drop placeholder, tweened. `sync_drop_placeholder` keeps a from, a
+    // to and an epoch and restarts a 150 ms ease_out_cubic run whenever the
+    // zone changes; the four numbers are transitions here, which restart
+    // themselves when their target moves. The one thing a transition cannot
+    // work out for itself is where the *first* one starts, so a drag reaching
+    // a group seeds them with the dragged tab's preview and the placeholder
+    // flies in from under the pointer.
     if (s->dropNode == node) {
         Bounds ph = DockDropPlaceholder(n.bounds, s->dropAt);
+        Motion motion = MotionNew(150.f);
+        motion.ease = EaseOutCubic;
+        uint32_t kx = MotionId(id, StrL("drop-x"));
+        uint32_t ky = MotionId(id, StrL("drop-y"));
+        uint32_t kw = MotionId(id, StrL("drop-w"));
+        uint32_t kh = MotionId(id, StrL("drop-h"));
+        if (s->dropFromPending) {
+            s->dropFromPending = false;
+            MotionSeed(cx, kx, s->dropFrom.x);
+            MotionSeed(cx, ky, s->dropFrom.y);
+            MotionSeed(cx, kw, s->dropFrom.w);
+            MotionSeed(cx, kh, s->dropFrom.h);
+        }
+        float x = MotionValue(cx, kx, ph.x, motion);
+        float y = MotionValue(cx, ky, ph.y, motion);
+        float w = MotionValue(cx, kw, ph.w, motion);
+        float h = MotionValue(cx, kh, ph.h, motion);
         box->Child(Div(a)
                        ->Absolute()
-                       ->Left(ph.x - n.bounds.x)
-                       ->Top(ph.y - n.bounds.y)
-                       ->W(ph.w)
-                       ->H(ph.h)
+                       ->Left(x - n.bounds.x)
+                       ->Top(y - n.bounds.y)
+                       ->W(w)
+                       ->H(h)
                        ->Bg(BackgroundOpacity(th.tokens.primary, 0.2f)));
     }
     return box;
@@ -545,7 +567,7 @@ static El* RenderDragPreview(Ctx* cx, DockState* s) {
         ->Fixed()
         ->Left(cx->win->mouseX - off.x)
         ->Top(cx->win->mouseY - off.y)
-        ->W(96)
+        ->W(kDockDragPreviewW)
         ->PadY(4)
         ->PadX(12)
         ->ClipX()
