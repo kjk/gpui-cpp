@@ -266,6 +266,13 @@ El* Textarea::IntoEl() {
     float h = (height > 0 || height == kFill)
                   ? height
                   : (float)shownRows * 20.f + 2 * 8 + 2;
+    // The rows are virtualized against this, and paint only learns it after
+    // the frame it measured — so the first frame of a long document would
+    // build every row of it. The builder knows the box it is about to make,
+    // so it says so here and paint refreshes it.
+    if (state && h > 0) {
+        state->viewH = h - 2 * 8;
+    }
     El* box = InputBase::New(cx, id, HashClickId(id))
                   ->BindInput(state)
                   ->W(kFill)

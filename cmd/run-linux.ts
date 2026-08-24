@@ -32,6 +32,7 @@ const simpleExamples = [
   "stream_markdown",
   "markdown",
   "html",
+  "large_text",
 ];
 
 const knownTargets = ["system_monitor", "app_assets", "showcase", "story", ...simpleExamples] as const;

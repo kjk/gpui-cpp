@@ -271,6 +271,11 @@ El* Highlighter::IntoEl() {
         style.matchBg = RgbaOpacity(th.warning, 0.35f);
         style.currentMatchBg = RgbaOpacity(th.warning, 0.75f);
     }
+    // The rows are virtualized against the box they scroll in, and paint only
+    // learns its height a frame later; the builder knows it now.
+    if (state && h > 0) {
+        state->viewH = h;
+    }
     El* editor = gpui::Editor::New(cx, state, style);
     El* scroller = editor;
     if (h > 0) {

@@ -372,11 +372,87 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     if (style.indentGuide.a != 0 && style.indentWidth > 0) {
         colW = font * 0.6f;
     }
+    // Only the rows the box can show are built. Rust lays out the display
+    // rows in the visible range and nothing else; without that, a document of
+    // ten thousand lines is ten thousand elements a frame, which is more than
+    // the frame arena holds and more than any of it is worth. The rows that
+    // are skipped are stood in for by a spacer at each end, the way the list
+    // and the table do it, so the scrolled height and the scrollbar are the
+    // ones the whole document has.
+    //
+    // Without soft wrap every row is `kInputLineH` and the range is
+    // arithmetic. With it a row is as tall as its own text, so the range
+    // comes off last frame's boxes — one frame stale, which is what the fold
+    // gutter's hitbox already is — and a row with no box yet is estimated at
+    // one line, which the next frame corrects.
+    int firstRow = 0;
+    int endRow = rows;
+    float padTop = 0;
+    float padBottom = 0;
+    if (state->viewH > 0 && rows > 1) {
+        // Two rows of slack at each end, so a scroll of a few pixels does not
+        // uncover an empty band before the next frame fills it.
+        const int kSlack = 2;
+        float top = state->scrollY;
+        float bottom = top + state->viewH;
+        if (!wrap || state->rowBoxes.len != rows) {
+            int first = (int)(top / kInputLineH) - kSlack;
+            int end = (int)(bottom / kInputLineH) + 1 + kSlack;
+            firstRow = first < 0 ? 0 : (first > rows ? rows : first);
+            endRow = end < firstRow ? firstRow : (end > rows ? rows : end);
+            padTop = (float)firstRow * kInputLineH;
+            padBottom = (float)(rows - endRow) * kInputLineH;
+        } else {
+            // The recorded boxes are in window coordinates; the content box
+            // is where the first of them starts, so the difference is the
+            // offset into the scrolled document.
+            float origin = state->contentBox.y;
+            float at = 0;
+            int first = -1;
+            int end = rows;
+            for (int i = 0; i < rows; i++) {
+                float h = state->rowBoxes[i].h;
+                if (h <= 0) {
+                    h = kInputLineH;
+                }
+                float y = state->rowBoxes[i].h > 0
+                              ? state->rowBoxes[i].y - origin
+                              : at;
+                if (first < 0 && y + h > top) {
+                    first = i;
+                    padTop = y;
+                }
+                if (y > bottom) {
+                    end = i;
+                    break;
+                }
+                at = y + h;
+            }
+            firstRow = first < 0 ? 0 : first;
+            endRow = end < firstRow ? firstRow : end;
+            firstRow = firstRow > kSlack ? firstRow - kSlack : 0;
+            endRow = endRow + kSlack > rows ? rows : endRow + kSlack;
+            padTop = 0;
+            for (int i = 0; i < firstRow; i++) {
+                float h = state->rowBoxes[i].h;
+                padTop += h > 0 ? h : kInputLineH;
+            }
+            padBottom = 0;
+            for (int i = endRow; i < rows; i++) {
+                float h = state->rowBoxes[i].h;
+                padBottom += h > 0 ? h : kInputLineH;
+            }
+        }
+    }
+    if (padTop > 0) {
+        col->Child(Div(a)->W(kFill)->Shrink0()->H(padTop));
+    }
+
     // The document's runs, sliced per row below, and the search matches
     // beside them.
     int spanAt = 0;
     int matchAt = 0;
-    for (int row = 0; row < rows; row++) {
+    for (int row = firstRow; row < endRow; row++) {
         // A line inside a closed fold is not built at all, which is what
         // makes the rows below it move up. Its box is zeroed rather than left
         // at last frame's, so the hit test and the vertical walk read it as
@@ -389,6 +465,18 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         }
         int start = RopeLineStartOffset(text, row);
         Str line = RopeSliceLine(text, row);
+        // The spans and matches are in document order and the walk carries on
+        // where the last row left off, so a range that does not start at the
+        // top has to skip what came before it.
+        if (row == firstRow) {
+            while (spanAt < style.nSpans && style.spans[spanAt].hi <= start) {
+                spanAt++;
+            }
+            while (matchAt < style.nMatches && style.matches[matchAt]
+                                                       .end <= start) {
+                matchAt++;
+            }
+        }
         El* el = TextEl(a, line)->Font(font)->LineHeight(lineMult)->Fg(
             style.foreground);
         if (style.mono) {
@@ -544,6 +632,9 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             band->Child(el);
         }
         col->Child(band);
+    }
+    if (padBottom > 0) {
+        col->Child(Div(a)->W(kFill)->Shrink0()->H(padBottom));
     }
     return col;
 }

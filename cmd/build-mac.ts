@@ -37,6 +37,7 @@ const simpleExamples = [
   "stream_markdown",
   "markdown",
   "html",
+  "large_text",
 ];
 
 const knownTargets = [
