@@ -5,6 +5,10 @@ static const char* kVlDatasets[] = {"Standard", "Wide", "Stress", "Short"};
 static const int kVlRows[] = {5000, 100, 500000, 5};
 static const int kVlColumns[] = {30, 100, 100, 10};
 static const char* kVlAxes[] = {"Both", "Vertical", "Horizontal"};
+// The bars each of those asks the list for, in the same order.
+static const component::ScrollAxis kVlAxisOf[] = {
+    component::ScrollAxis::Both, component::ScrollAxis::Vertical,
+    component::ScrollAxis::Horizontal};
 
 // ITEM_SIZE in the Rust story.
 static const float kCellW = 100;
@@ -189,6 +193,7 @@ El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
                    ->ViewH(viewH)
                    ->Handle(&self->handle)
                    ->ScrollX(self->scrollX)
+                   ->Axis(kVlAxisOf[self->axis])
                    ->Scroll(1, Listen(cx, &VirtualListStory::OnScroll))
                    ->Row(VlRow)
                    ->IntoEl();

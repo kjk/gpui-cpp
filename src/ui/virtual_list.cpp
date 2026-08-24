@@ -45,6 +45,10 @@ VirtualList* VirtualList::Scroll(int sid, Listener l) {
     onScroll = l;
     return this;
 }
+VirtualList* VirtualList::Axis(ScrollAxis v) {
+    axis = v;
+    return this;
+}
 VirtualList* VirtualList::Row(El* (*fn)(Ctx*, int)) {
     row = fn;
     return this;
@@ -95,6 +99,15 @@ El* VirtualList::IntoEl() {
     // Both axes: a row wider than the viewport slides under it rather than
     // being cut, which is what the story's Axis: Both asks for.
     e->ClipX()->ScrollX(scrollX);
+    // The axis names the bars, not the scrolling: a list set to Vertical
+    // still slides sideways under the wheel, it just does not draw the bar
+    // along the bottom. That is what Rust's `.scrollbar(&handle, axis)` does,
+    // since the bar layer is a sibling of the list rather than part of it.
+    if (axis == ScrollAxis::Vertical) {
+        e->HideScrollbarX();
+    } else if (axis == ScrollAxis::Horizontal) {
+        e->HideScrollbarY();
+    }
     if (scrollId) {
         e->ScrollId(scrollId)->OnScroll(onScroll);
     }

@@ -1436,6 +1436,12 @@ struct El {
     // Scrollbar beside it simply has none; the box paints its own bar here,
     // and this is how it says not to — a tab bar scrolls, and shows nothing.
     bool noScrollbar = false;
+    // The same, one axis at a time. Rust's `.scrollbar(&handle, axis)` adds a
+    // bar layer per axis the ScrollbarAxis names, so a box can scroll both
+    // ways and show a bar down one of them only; the box here paints its own
+    // pair, and this is how it says which of the two to leave off.
+    bool noScrollbarX = false;
+    bool noScrollbarY = false;
     int scrollId = 0;
     float contentW = 0;
     float contentH = 0;
@@ -1511,6 +1517,11 @@ struct El {
     El* Rotate(float turns);
     // Scroll without a bar: the box still takes the wheel and still clips.
     El* HideScrollbar();
+    // The bar down one axis only, for a box that scrolls both ways —
+    // ScrollbarAxis::Vertical hides the horizontal one and the other way
+    // round.
+    El* HideScrollbarX();
+    El* HideScrollbarY();
     // opacity(f): this element and everything under it, faded together.
     // Nested opacities multiply, as GPUI's do.
     El* Opacity(float f);
@@ -1725,6 +1736,10 @@ struct ScrollRect {
     float contentW = 0;
     float scrollX = 0;
     ScrollbarMode mode = ScrollbarMode::Always;
+    // Which of the two bars this box shows, from El::HideScrollbar and its
+    // per-axis pair: a bar that is not painted is not there to grab either.
+    bool barX = true;
+    bool barY = true;
     Listener onScroll;
 };
 

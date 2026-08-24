@@ -3097,3 +3097,16 @@ what the generator wrote in fourteen hundred, so the formatter now leaves
 generated files alone; and the language table's new `markdown` flag needed a
 default, since gcc counts a missing last initializer as an error where MSVC
 does not — the Linux build had been broken since the scanner learned markdown.
+
+**A bar down one axis only.** The VirtualList story's `Axis: Both / Vertical /
+Horizontal` button, which had been changing its own label and nothing else.
+Rust hangs the bars off the list with `.scrollbar(&self.scroll_handle,
+self.axis)`, one bar layer per axis named — so the axis says which bars are
+drawn, not what scrolls, and a list set to Vertical still slides sideways
+under the wheel. Here the box paints its own pair rather than wearing a
+sibling layer, so what it needed was the other half of `HideScrollbar`:
+`HideScrollbarX` and `HideScrollbarY`, one axis at a time. A bar that is not
+painted is not there to grab either, so the pair rides into `ScrollRect` as
+`barX`/`barY` and `ScrollbarAt` skips the band of a bar the box does not show
+— otherwise the bottom eight pixels of a Vertical list would still answer a
+press with a drag of a thumb nobody can see.

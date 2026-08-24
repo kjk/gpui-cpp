@@ -1,6 +1,7 @@
 /* Themed virtual list — crates/ui/src/virtual_list.rs */
 
 #include "ui/sizing.h"
+#include "ui/scroll.h"
 
 namespace gpui {
 
@@ -28,6 +29,11 @@ struct VirtualList {
     // The scroll id and the listener a scrolled list needs to hear the wheel.
     int scrollId = 0;
     Listener onScroll = {};
+    // ScrollbarAxis: which bars the list shows. Rust hangs the bars off the
+    // list with `.scrollbar(&handle, axis)`, which adds a bar layer per axis
+    // named — it does not decide what scrolls, so a list showing one bar
+    // still takes the wheel both ways.
+    ScrollAxis axis = ScrollAxis::Both;
 
     static VirtualList* New(Ctx* cx, int count);
     VirtualList* Id(Str v);
@@ -38,6 +44,7 @@ struct VirtualList {
     VirtualList* Sizes(const float* v);
     VirtualList* Handle(VirtualListScrollHandle* h);
     VirtualList* Scroll(int id, Listener onScroll);
+    VirtualList* Axis(ScrollAxis v);
     // The row builder. Rust's is a closure that captured `cx`, so this takes
     // one: a row that reads the theme has no other way to.
     VirtualList* Row(El* (*fn)(Ctx*, int));

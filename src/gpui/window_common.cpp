@@ -716,12 +716,13 @@ static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
         if (!s.onScroll.IsValid()) {
             continue;
         }
-        if (ScrollsY(s) && y >= s.bounds.y && y <= s.bounds.Bottom() &&
-            x >= s.bounds.Right() - kScrollbarBandW && x <= s.bounds.Right()) {
+        if (s.barY && ScrollsY(s) && y >= s.bounds.y &&
+            y <= s.bounds.Bottom() && x >= s.bounds.Right() - kScrollbarBandW &&
+            x <= s.bounds.Right()) {
             *horizontal = false;
             return &ctx->scrolls[i];
         }
-        if (ScrollsX(s) && x >= s.bounds.x && x <= s.bounds.Right() &&
+        if (s.barX && ScrollsX(s) && x >= s.bounds.x && x <= s.bounds.Right() &&
             y >= s.bounds.Bottom() - kScrollbarBandW &&
             y <= s.bounds.Bottom()) {
             *horizontal = true;

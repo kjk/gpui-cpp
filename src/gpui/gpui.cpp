@@ -1130,6 +1130,16 @@ El* El::HideScrollbar() {
     return this;
 }
 
+El* El::HideScrollbarX() {
+    noScrollbarX = true;
+    return this;
+}
+
+El* El::HideScrollbarY() {
+    noScrollbarY = true;
+    return this;
+}
+
 El* El::Opacity(float f) {
     style.opacity = f < 0 ? 0 : (f > 1 ? 1 : f);
     return this;
@@ -3902,6 +3912,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.contentW = e->contentW;
         sr.scrollX = e->scrollX;
         sr.mode = ElScrollMode(e);
+        sr.barX = !e->noScrollbar && !e->noScrollbarX;
+        sr.barY = !e->noScrollbar && !e->noScrollbarY;
         sr.onScroll = e->onScroll;
         ctx->scrolls.Append(sr);
     }
@@ -4210,8 +4222,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         barAlpha >= 1.f
             ? ThemeNow().tokens.scrollbarThumb
             : BackgroundOpacity(ThemeNow().tokens.scrollbarThumb, barAlpha);
-    if (barVisible && e->style.overflowY == Overflow::Scroll &&
-        e->contentH > e->h + 1.f && e->h > 0) {
+    if (barVisible && !e->noScrollbarY &&
+        e->style.overflowY == Overflow::Scroll && e->contentH > e->h + 1.f &&
+        e->h > 0) {
         // The same three numbers the press and drag arithmetic goes by, so
         // what is drawn and what is grabbed cannot drift apart.
         float thumbH = ScrollbarThumbSize(e->h, e->h, e->contentH);
@@ -4222,8 +4235,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         FillBackground(ctx, thumbX, thumbY, thumbW, thumbH, 3.f, nullptr,
                        barColor);
     }
-    if (barVisible && e->style.overflowX == Overflow::Scroll &&
-        e->contentW > e->w + 1.f && e->w > 0) {
+    if (barVisible && !e->noScrollbarX &&
+        e->style.overflowX == Overflow::Scroll && e->contentW > e->w + 1.f &&
+        e->w > 0) {
         // The horizontal bar is the same arithmetic along the other axis,
         // which is how Rust writes it: one path, `is_vertical` picking the
         // pair of numbers it reads.
