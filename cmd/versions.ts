@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "222cf9644fbfd9bdff970a0308f9ce216b2c0818",
+  sha: "9e3a29dcbdebc318632bf68203f26c33e9f0e902",
   date: "2026-08-18",
-  subject: "theme: Follow the global radius setting everywhere (#2762)",
+  subject: "calendar: Fix month picker layout (#2764)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

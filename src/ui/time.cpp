@@ -367,37 +367,55 @@ El* Calendar::IntoEl() {
             body->Child(CalendarMonth(this, shownYear, shownMonth, cellSize));
         }
     } else if (view == CalendarView::Month) {
-        body->FlexWrap();
-        float itemWidth = (width - 24) / 3.f;
+        // `picker_grid_layout`: three columns, 4 between them, and a cell that
+        // fills its column. Rust says `grid_cols(3)`; there is no grid in this
+        // tree's style, so the same shape is rows of three with the cells
+        // grown — a wrapping row of items sized as a share of a width they may
+        // not have is what the fix was about.
+        body->FlexCol()->Gap(8);
+        El* row = nullptr;
         for (int m = 1; m <= 12; m++) {
+            if ((m - 1) % 3 == 0) {
+                row = Div(a)->FlexRow()->W(kFill)->Gap(4);
+                body->Child(row);
+            }
             El* item =
                 CalendarItem::New(cx, StrDup(a, fmt("calendar-month-%d", m)))
-                    ->W(itemWidth)
+                    ->Flex1()
                     ->H(cellSize)
                     ->ItemsCenter()
                     ->JustifyCenter()
                     ->Radius(th.radius)
                     ->HoverBg(th.secondaryHover)
                     ->Child(
+                        // `uses_compact_text`: a month option and nothing
+                        // else, because "September" is what overflows.
                         TextEl(a, Str(months[m]))
-                            ->Font(14)
+                            ->Font(12)
                             ->Fg(m == month ? th.primaryFg : th.foreground));
             if (m == month) {
                 item->Bg(th.tokens.primary);
             }
             item->OnClick(ListenerArg(onMonth, m));
-            body->Child(item);
+            row->Child(item);
         }
     } else {
-        body->FlexWrap();
+        // Five columns for the years, on the same rule.
+        body->FlexCol()->Gap(8);
         int minYear = yearMin ? yearMin : year - 50;
         int maxYear = yearMax ? yearMax : year + 50;
         int firstYear = yearPageStart ? yearPageStart : minYear;
-        float itemWidth = (width - 24) / 5.f;
-        for (int y = firstYear; y < std::min(firstYear + 20, maxYear); y++) {
+        int last = std::min(firstYear + 20, maxYear);
+        El* row = nullptr;
+        int ix = 0;
+        for (int y = firstYear; y < last; y++, ix++) {
+            if (ix % 5 == 0) {
+                row = Div(a)->FlexRow()->W(kFill)->Gap(4);
+                body->Child(row);
+            }
             El* item =
                 CalendarItem::New(cx, StrDup(a, fmt("calendar-year-%d", y)))
-                    ->W(itemWidth)
+                    ->Flex1()
                     ->H(cellSize)
                     ->ItemsCenter()
                     ->JustifyCenter()
@@ -410,7 +428,7 @@ El* Calendar::IntoEl() {
                 item->Bg(th.tokens.primary);
             }
             item->OnClick(ListenerArg(onYear, y));
-            body->Child(item);
+            row->Child(item);
         }
     }
     root->Child(body);
