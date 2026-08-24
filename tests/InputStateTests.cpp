@@ -584,18 +584,25 @@ static void TheProviderSaysWhenTheMenuOpens() {
     // which is what `InputTypeChar` being the one caller says.
     InputTypeChar(&s, nullptr, nullptr, 'b');
     utassert(s.completion.open);
+    // The provider is asked once, to fill the menu that opened.
+    utassert(gCompleteCalls == 1);
     // Without a trigger function, the built-in rule: a word character opens
     // one, and a colon is not one of the two it knows.
     InputTypeChar(&s, nullptr, nullptr, ':');
     utassert(!s.completion.open);
+    // A keystroke that closes the menu does not query the provider: the
+    // decision is the trigger's, and it is made before anyone is asked.
+    utassert(gCompleteCalls == 1);
 
     // With one, the provider's answer is what counts.
     s.completionTrigger = &TestTrigger;
     InputTypeChar(&s, nullptr, nullptr, ':');
     utassert(s.completion.open);
+    utassert(gCompleteCalls == 2);
     // And what it says to close on closes it, word character or not.
     InputTypeChar(&s, nullptr, nullptr, '#');
     utassert(!s.completion.open);
+    utassert(gCompleteCalls == 2);
 }
 
 static void DocumentationIsResolvedOnce() {

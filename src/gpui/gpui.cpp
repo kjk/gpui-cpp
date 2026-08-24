@@ -367,6 +367,20 @@ Rgba RgbaMixOklab(Rgba a, Rgba b, float factor) {
     if (alpha <= 0) {
         return RgbaTransparent();
     }
+    // When one side is fully transparent it contributes nothing to the
+    // premultiplied sum, so the mix is the other side's colour exactly and
+    // only the alpha moves. Rust keeps its channels in f32 and never notices;
+    // an `Rgba` here is eight bits a channel, so the `* aa * factor / alpha`
+    // round trip through Oklab and back can land a channel on the far side of
+    // a rounding boundary — which is a byte of drift that depends on the
+    // platform's `cbrtf` and `powf`, not on the colour. Say what the maths
+    // says instead.
+    if (ab <= 0) {
+        return Rgba8(a.r, a.g, a.b, ToByte(alpha));
+    }
+    if (aa <= 0) {
+        return Rgba8(b.r, b.g, b.b, ToByte(alpha));
+    }
     float l1, a1, b1, l2, a2, b2;
     RgbToOklab(a, &l1, &a1, &b1);
     RgbToOklab(b, &l2, &a2, &b2);
@@ -751,7 +765,7 @@ const Theme& ThemeDefaultDark() {
         t.border = Rgb(0x26, 0x26, 0x26);
         t.mutedFg = Rgb(0xa3, 0xa3, 0xa3);
         t.inputBorder = Rgb(0x2f, 0x2f, 0x2f);
-        t.inputBg = Rgba8(0x2e, 0x2f, 0x2e, 0x4c);
+        t.inputBg = Rgba8(0x2f, 0x2f, 0x2f, 0x4c);
         t.ring = Rgb(0x73, 0x73, 0x73);
         t.caret = Rgb(0xfa, 0xfa, 0xfa);
         t.selection = Rgba8(0x1d, 0x4e, 0xd8, 0x4c);

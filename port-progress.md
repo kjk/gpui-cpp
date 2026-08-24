@@ -3626,3 +3626,35 @@ its hex readouts line up with upstream's.
   tree includes, and it wants its own session.
 
   17,455 checks pass and `bun cmd/build.ts -all` builds all 24 examples.
+
+- 2026-08-24: **two CI failures that the Windows and Linux jobs could not
+  see.** `bun cmd/test.ts` was green on both and red on macOS and wasm, for
+  two unrelated reasons.
+
+  macOS: `theme drift Default Dark.inputBg: file 2f2f2f4c, hardcoded
+  2e2f2e4c`. `Theme::input_background()` on a dark theme is
+  `mix_oklab(input.border, transparent, 0.3)`, and mixing toward transparent
+  is defined to keep the colour — the transparent side is premultiplied by an
+  alpha of zero, so it contributes nothing and the Oklab channels are the
+  other side's exactly. `RgbaMixOklab` was computing that identity the long
+  way, `l1 * aa * factor / alpha` and back through `cbrtf` and `powf`, which
+  is `l1` in real arithmetic and `l1` ± an ulp in f32. Rust keeps its channels
+  in f32 and never notices; an `Rgba` here is eight bits a channel, so the ulp
+  landed a channel on the far side of a rounding boundary — on a platform's
+  libm, not on the colour, which is why three jobs agreed on `2e2f2e` and the
+  fourth said `2f2f2e`. Both were wrong: #2f2f2f is what the mix means. The
+  two fully-transparent cases now return the other side's bytes and the
+  interpolated alpha, and the hardcoded `ThemeDefaultDark().inputBg` is
+  `2f2f2f4c`. Every other `mix_oklab(x, transparent, f)` in the resolver — the
+  input backgrounds, the alert and callout tints off `success`, `info` and
+  `warning` — is exact for the same reason now.
+
+  wasm: `tests/InputStateTests.cpp:535: variable 'gCompleteCalls' set but not
+  used`. Emscripten's clang has `-Wunused-but-set-global`, which MSVC, g++ and
+  Apple clang do not, and `-Werror` made it fatal. The counter was not dead
+  code that wanted deleting — it was an assertion nobody had written. It now
+  pins what it was counting: the completion provider is asked once per
+  keystroke that *opens* the menu and not at all for one that closes it, which
+  is two calls across the four characters that test types.
+
+  17,459 checks pass.
