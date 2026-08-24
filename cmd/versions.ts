@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "2a1335d50fa99c4a64a4ccb4f25ce2bb5cb87e4d",
+  sha: "c7f5877cf682634e0ad28532521bfe450f6619e1",
   date: "2026-08-17",
-  subject: "scrollbar: improve visibility animation (#2737)",
+  subject: "tooltip: Raise TooltipOverlay priority to float above dialog and popup layers (#2746)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

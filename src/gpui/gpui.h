@@ -1137,6 +1137,20 @@ enum class ScrollbarMode : uint8_t {
 // FADE_OUT_DELAY / FADE_OUT_DURATION, in seconds. The curve between them is
 // Rust's `1 - (elapsed - delay)^10`: flat for most of the second, then a
 // drop off the end.
+// The stacking layers a frame paints in, in the order it paints them. Rust
+// gives a deferred element a `with_priority` and lets GPUI's scene sort on
+// it — `POPUP_PRIORITY` is 100 and `TOOLTIP_PRIORITY` is 200, which is what
+// keeps a tip above a dialog or a popup — and the walks here already run in
+// that order, so what the numbers have to do is keep the same relation.
+const int kPaintLayerTree = 0;
+// The deferred and fixed elements the tree painted over: popups, dialogs,
+// menus. Rust's POPUP_PRIORITY.
+const int kPaintLayerPopup = 1;
+// TooltipOverlay, over everything the frame drew.
+const int kPaintLayerTooltip = 2;
+// The inspector's highlights, which GPUI paints over everything.
+const int kPaintLayerInspector = 3;
+
 // crates/base/src/scrollbar.rs `ScrollbarEntrance`: how a bar arrives. The
 // styled layer chooses the choreography; base only plays it.
 enum class ScrollbarEntrance : uint8_t {
@@ -2318,12 +2332,11 @@ struct PaintCtx {
     // pick prefers on: an overlay layer painted last is not the element under
     // the pointer just because it went down after everything else.
     int paintDepth = 0;
-    // Which stacking layer the tree is painting in: 0 for the tree itself,
-    // 1 for the deferred and fixed elements it painted over, and up from
-    // there for the window's own furniture. GPUI's primitives carry the
-    // order of the stacking context they were built in and the scene sorts
-    // on it; here the two paint walks already run in that order, and the
-    // field is what lets src/gpui/scene.cpp record it rather than infer it.
+    // Which stacking layer the tree is painting in — the `kPaintLayer*`
+    // constants below. GPUI's primitives carry the order of the stacking
+    // context they were built in and the scene sorts on it; here the paint
+    // walks already run in that order, and the field is what lets
+    // src/gpui/scene.cpp record it rather than infer it.
     int paintLayer = 0;
     // How good a candidate the pick so far was: 2 for an element with an id,
     // 1 for one that draws something, so an unnamed label inside a button

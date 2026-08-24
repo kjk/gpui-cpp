@@ -160,6 +160,21 @@ static void UsesLargerSideWhenNeitherVerticalSideFits() {
     utassertnear(p.bounds.x, 60.f);
 }
 
+// tooltip.rs `tooltip_priority_exceeds_popup_layer`: a tip floats above the
+// dialog and popup layers. Rust sorts deferred elements by priority; the
+// layers here are painted in order, so what has to hold is the same relation.
+static void ATooltipPaintsAboveThePopupLayer() {
+    // Read through a variable: the compiler can see the answer to a compare
+    // between two constants, and /W4 says so.
+    int tree = kPaintLayerTree;
+    int popup = kPaintLayerPopup;
+    int tooltip = kPaintLayerTooltip;
+    int inspector = kPaintLayerInspector;
+    utassert(tooltip > popup);
+    utassert(popup > tree);
+    utassert(inspector > tooltip);
+}
+
 void TestPositioner() {
     TestSuite("positioner");
     PrefersTheRequestedSideWhenItFits();
@@ -176,4 +191,5 @@ void TestPositioner() {
     PlacesTooltipToTheRight();
     RightPlacementClampsVerticalEdges();
     UsesLargerSideWhenNeitherVerticalSideFits();
+    ATooltipPaintsAboveThePopupLayer();
 }

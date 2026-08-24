@@ -305,15 +305,17 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     if (win->paint.wantsAnimFrame) {
         WindowRequestAnimationFrame(win);
     }
-    // Rust renders TooltipOverlay deferred with priority 2, so the tip is over
-    // everything the frame drew. It is the overlay's, not the trigger's: by
-    // the time the show countdown lands, the frame that asked for it is gone.
-    win->paint.paintLayer = 2;
+    // Rust renders TooltipOverlay deferred with TOOLTIP_PRIORITY, which is
+    // above the popup layer, so the tip is over everything the frame drew —
+    // a dialog and a popup included. It is the overlay's, not the trigger's:
+    // by the time the show countdown lands, the frame that asked for it is
+    // gone.
+    win->paint.paintLayer = kPaintLayerTooltip;
     TooltipPaint(&win->paint, TooltipShowing(win));
 
     // The element the pointer is over while picking, and the one already
     // picked: GPUI paints the same two highlights over everything.
-    win->paint.paintLayer = 3;
+    win->paint.paintLayer = kPaintLayerInspector;
     if (win->inspector.on) {
         const Theme& ith = ThemeNow();
         if ((win->inspector.picking || win->inspector.pending) &&
@@ -328,7 +330,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         }
     }
 
-    win->paint.paintLayer = 0;
+    win->paint.paintLayer = kPaintLayerTree;
 
     double tEnd0 = TimeNow();
     PaintTargetEnd(&win->paint);
