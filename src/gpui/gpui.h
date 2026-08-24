@@ -1753,6 +1753,11 @@ struct ScrollRect {
     bool barX = true;
     bool barY = true;
     Listener onScroll;
+    // The text field this box scrolls, when it is one. An InputState is not
+    // an entity and so cannot be the target of a Listener; the element names
+    // the state the way El::BindInput does, and the bar writes the offset
+    // straight onto it.
+    InputState* input = nullptr;
 };
 
 // The scrollbar as it is drawn: a 6-DIP thumb inset from the right edge. The

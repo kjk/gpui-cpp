@@ -285,7 +285,16 @@ El* Textarea::IntoEl() {
                   // scroll_handle: the rows slide under the box as the caret
                   // moves, and the wheel moves them too.
                   ->ScrollY(state ? state->scrollY : 0)
+                  // The bar drag finds the box again by this id in the frame
+                  // that is on screen, so it has to name itself.
+                  ->ScrollId(HashClickId(id))
                   ->Child(gpui::Textarea::New(cx, state, editor));
+    // `Scrollbar::new(..)` against `Scrollbar::vertical(..)`: a field that
+    // wraps has nothing to reach sideways, and one that does not is as wide
+    // as its longest row and scrolls to the end of it.
+    if (!softWrap) {
+        box->ScrollX(state ? state->scrollX : 0);
+    }
     if (onFocus.IsValid()) {
         box->OnClick(onFocus);
     }

@@ -1380,6 +1380,9 @@ void InputScrollToCaret(InputState* s, float caretX, float caretY,
             s->scrollX = caretX + kInputRightMargin - s->viewW;
         }
         float mostX = s->contentW - s->viewW;
+        if (mostX < 0) {
+            mostX = 0;
+        }
         if (s->scrollX > mostX) {
             s->scrollX = mostX;
         }

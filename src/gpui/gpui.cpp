@@ -3957,6 +3957,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.barX = !e->noScrollbar && !e->noScrollbarX;
         sr.barY = !e->noScrollbar && !e->noScrollbarY;
         sr.onScroll = e->onScroll;
+        sr.input = e->input;
         ctx->scrolls.Append(sr);
     }
 
@@ -4061,6 +4062,14 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             // The box the field scrolls inside, less what it pads by.
             e->input->viewW = e->w - e->style.pad.HorizontalAxisSum();
             e->input->viewH = e->h - e->style.pad.VerticalAxisSum();
+            // scroll_size.width: how wide the longest row came out, which is
+            // what a sideways scroll clamps against. Only a box that scrolls
+            // that way reports it — a field that clips instead never moves
+            // sideways, and a stale width would leave its caret arithmetic
+            // scrolling text that cannot move.
+            if (e->style.overflowX == Overflow::Scroll) {
+                e->input->contentW = e->contentW;
+            }
             ctx->inputs.Append(e->input);
         }
     }

@@ -713,7 +713,7 @@ static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
                                      bool* horizontal) {
     for (int i = ctx->scrolls.len - 1; i >= 0; i--) {
         const ScrollRect& s = ctx->scrolls[i];
-        if (!s.onScroll.IsValid()) {
+        if (!s.onScroll.IsValid() && !s.input) {
             continue;
         }
         if (s.barY && ScrollsY(s) && y >= s.bounds.y &&
@@ -734,6 +734,14 @@ static const ScrollRect* ScrollbarAt(PaintCtx* ctx, float x, float y,
 
 static void ScrollbarEmit(Window* win, const ScrollRect* s, float offsetX,
                           float offsetY) {
+    // A text field owns its own offset — Rust's editor scrollbar reaches the
+    // state's scroll handle the same way, rather than telling a view about it.
+    if (s->input) {
+        s->input->scrollX = ClampScroll(offsetX, s->contentW, s->bounds.w);
+        s->input->scrollY = ClampScroll(offsetY, s->contentH, s->bounds.h);
+        AppInvalidate(win);
+        return;
+    }
     ScrollEvent ev = {s->id, offsetY, offsetX};
     ListenerCall(win->app, win, s->onScroll, &ev);
     AppInvalidate(win);
@@ -781,7 +789,7 @@ static const ScrollRect* ScrollRectById(Window* win, int id) {
 
 static void ScrollbarDrag(Window* win, float x, float y) {
     const ScrollRect* s = ScrollRectById(win, win->scrollDragId);
-    if (!s || !s->onScroll.IsValid()) {
+    if (!s || (!s->onScroll.IsValid() && !s->input)) {
         return;
     }
     bool horizontal = win->scrollDragHorizontal;
@@ -1322,11 +1330,30 @@ static void DispatchScrollWheel(Window* win, const ScrollWheelEvent& in) {
     // A multi-line field takes the wheel before anything around it, the way
     // the editor's own scroll handle does in Rust.
     InputState* field = InputAtPosition(&win->paint, in.x, in.y);
-    if (field && InputIsMultiLine(field) && field->contentH > field->viewH) {
-        field->scrollY = ClampScroll(field->scrollY - in.deltaY,
-                                     field->contentH, field->viewH);
-        AppInvalidate(win);
-        return;
+    if (field && InputIsMultiLine(field)) {
+        bool canY = field->contentH > field->viewH;
+        // A field that does not wrap scrolls sideways too, and a wheel with
+        // no sideways delta over one that can only go that way is read as
+        // one, the way a scrolled box reads it.
+        bool canX = field->contentW > field->viewW;
+        float dx = in.deltaX;
+        float dy = in.deltaY;
+        if (canX && !canY && dx == 0) {
+            dx = dy;
+            dy = 0;
+        }
+        if (canY) {
+            field->scrollY =
+                ClampScroll(field->scrollY - dy, field->contentH, field->viewH);
+        }
+        if (canX) {
+            field->scrollX =
+                ClampScroll(field->scrollX - dx, field->contentW, field->viewW);
+        }
+        if (canX || canY) {
+            AppInvalidate(win);
+            return;
+        }
     }
     // The scrolled box under the pointer takes the wheel, which is what a
     // `div().overflow_scroll()` does in GPUI — the offset is the view's here,
