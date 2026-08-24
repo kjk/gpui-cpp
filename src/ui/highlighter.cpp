@@ -448,16 +448,10 @@ El* Highlighter::IntoEl() {
         bool vertical = winW > 0 && x + configuredMax + kPopoverGap +
                                             configuredMax + kPopoverGap >
                                         winW;
-        El* list = Div(a)
-                       ->FlexCol()
-                       ->MinW(120)
-                       ->MaxW(maxW)
-                       ->MaxH(240)
-                       ->ClipY()
-                       ->Pad(4)
-                       ->Radius(th.radius)
-                       ->Bg(th.tokens.popover)
-                       ->Border(1, th.border);
+        El* list = PopoverSurface(
+            cx,
+            Div(a)->FlexCol()->MinW(120)->MaxW(maxW)->MaxH(240)->ClipY()->Pad(
+                4));
         for (int i = 0; i < state->completion.items.len; i++) {
             const CompletionItem& item = state->completion.items[i];
             bool selected = i == state->completion.selected;
@@ -506,15 +500,12 @@ El* Highlighter::IntoEl() {
                 }
             }
             menu->Child(
-                Div(a)
-                    ->W(configuredMax)
-                    ->MaxH(240)
-                    ->ClipY()
-                    ->PadX(8)
-                    ->PadY(4)
-                    ->Radius(th.radius)
-                    ->Bg(th.tokens.popover)
-                    ->Border(1, th.border)
+                PopoverSurface(cx, Div(a)
+                                       ->W(configuredMax)
+                                       ->MaxH(240)
+                                       ->ClipY()
+                                       ->PadX(8)
+                                       ->PadY(4))
                     ->Child(TextView::New(cx, doc)->Font(12)->IntoEl()));
         }
         completionMenu = Div(a)->Fixed()->Left(x)->Top(y)->Child(menu);

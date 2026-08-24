@@ -237,15 +237,10 @@ El* PopupMenu::IntoEl() {
     // box that clipped would cut it down to the eight pixels the two overlap
     // by. Rust clips the item list instead, and only when the menu scrolls,
     // which is where the clip is below.
-    El* root = Div(a)
-                   ->FlexCol()
-                   ->W(menuW)
-                   // `.bg(cx.theme().tokens.popover)`: a menu floats over the
-                   // page, so it takes the popover surface rather than the
-                   // window's. Both default themes give them the same colour.
-                   ->Bg(th.tokens.popover)
-                   ->Border(1, th.border)
-                   ->Radius(th.radius);
+    // `popover_style`: a menu floats over the page, so it takes the one popup
+    // surface rather than the window's. Both default themes give them the
+    // same colour.
+    El* root = PopoverSurface(cx, Div(a)->FlexCol()->W(menuW));
     // .key_context(CONTEXT).track_focus(&self.focus_handle) and the six
     // on_action handlers behind it. The menu is its own focus trap and the
     // only focusable inside it, so arming the trap while it is the deepest
@@ -457,7 +452,11 @@ El* DropdownMenu::IntoEl() {
     if (menu && st && st->open) {
         // `dropdown_positioner`: side placement, so a menu with no room
         // under its trigger opens above it rather than being clamped.
-        El* el = menu->IntoEl()->AnchorBelow(gap)->AnchorFlip()->Deferred();
+        El* el = DropdownOpen(cx, menu->IntoEl(),
+                              HashClickId(StrDup(a, fmt("%s-open", id))))
+                     ->AnchorBelow(gap)
+                     ->AnchorFlip()
+                     ->Deferred();
         if (anchorRight) {
             el->Right(0);
         } else {

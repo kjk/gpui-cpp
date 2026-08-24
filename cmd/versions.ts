@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "b1e78a515716b232a7d731cc092bdc25f3bfd787",
+  sha: "2c0931d23caf66c75cd0f271314dd72b9e728772",
   date: "2026-08-18",
-  subject: "text: Add `table_actions` hook for Markdown tables (#2752)",
+  subject: "popover: Match shadcn's popup surface and animate dropdowns open (#2753)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

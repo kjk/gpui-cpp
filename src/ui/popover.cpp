@@ -5,6 +5,29 @@ namespace gpui {
 
 namespace component {
 
+El* PopoverSurface(Ctx* cx, El* e) {
+    if (!e) {
+        return e;
+    }
+    const Theme& th = cx->theme();
+    return e->Bg(th.tokens.popover)->Border(1, th.border)->Radius(th.radius);
+}
+
+El* DropdownOpen(Ctx* cx, El* surface, uint32_t key) {
+    if (!surface) {
+        return surface;
+    }
+    float t = MotionAppear(cx, key, kDropdownEnterMs, EaseOutCubic);
+    if (t >= 1.f) {
+        return surface;
+    }
+    // The fade and the slide are the same curve: `t` is already eased, so the
+    // surface decelerates into place rather than arriving at a constant rate.
+    surface->Opacity(t);
+    surface->Top(kDropdownEnterOffset * (1.f - t));
+    return surface;
+}
+
 Popover* Popover::New(Ctx* cx) {
     Arena* a = cx->a;
     Popover* p = ArenaNew<Popover>(a);

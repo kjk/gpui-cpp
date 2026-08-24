@@ -6,6 +6,39 @@ namespace gpui {
 
 namespace component {
 
+// styled.rs `popover_style`: the one surface every popup shares — Popover,
+// PopupMenu, Select, Combobox, DatePicker and the editor's hover and
+// completion popovers — so they cannot drift apart into three radii and two
+// shadows the way upstream's had.
+//
+// What is here and what is not: upstream draws **no border** on a popup. Its
+// edge is a 1px translucent ring spent as a shadow layer, so the shadow shows
+// through it and the edge reads as one grounded surface rather than an outline
+// with a detached shadow under it. An element here carries no box shadow at
+// all — only the window border draws one — so the surface keeps the 1px border
+// it has always had, and the ring, the two blurred layers and the σ-against-CSS
+// blur correction wait for the day paint.h grows shadows.
+El* PopoverSurface(Ctx* cx, El* e);
+
+// popover.rs: how long a dropdown takes to settle into place after it opens,
+// which is shadcn/ui's `animate-in` duration.
+const float kDropdownEnterMs = 150.f;
+// Where it starts, relative to where it comes to rest: negative is above, so
+// the surface slides *down* out of the trigger's edge —
+// `data-[side=bottom]:slide-in-from-top-2`, whose 2 is 0.5rem.
+const float kDropdownEnterOffset = -8.f;
+
+// `animate_dropdown_open`: the shared open motion for Select, Combobox,
+// DatePicker and the menus. Over 150 ms the surface fades up from nothing
+// while sliding the last 8 px out of the trigger's edge, on an ease-out curve
+// so it decelerates into place. `key` names the popup, so one that closes and
+// opens again plays it again.
+//
+// Upstream also scales the surface up from 95% (`zoom-in-95`); nothing here
+// scales an element, so that half is not ported, and its shadow ramp has no
+// shadow to ramp.
+El* DropdownOpen(Ctx* cx, El* surface, uint32_t key);
+
 struct Popover {
     Arena* a = nullptr;
     Ctx* cx = nullptr;

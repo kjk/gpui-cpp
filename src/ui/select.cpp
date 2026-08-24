@@ -275,7 +275,12 @@ El* Select::IntoEl() {
                 Div(a)->H(96)->W(kFill)->ItemsCenter()->JustifyCenter()->Child(
                     TextEl(a, empty)->Font(font)->Fg(th.mutedFg)));
         }
-        menu = list->IntoEl();
+        // `popover_style` on the panel itself, and the shared open motion
+        // over it: the dropdown fades up while sliding the last 8 px out of
+        // the trigger's edge.
+        menu = PopoverSurface(cx, list->IntoEl());
+        menu =
+            DropdownOpen(cx, menu, HashClickId(StrDup(a, fmt("%s-open", id))));
     } else if (s) {
         // A closed list still has to know its items and what the query left,
         // so the trigger can name the selection and the keys can move it.
