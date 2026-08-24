@@ -926,6 +926,27 @@ static El* CodeActions(Ctx* cx, void* data, Str code, Str lang) {
     return row;
 }
 
+// table_actions: what the shape of the table is, and the table itself on the
+// clipboard as GFM. The Rust example puts a CSV / TSV export behind an
+// Ellipsis dropdown beside these two; the pair here is the part that needs no
+// menu of its own.
+static El* TableActions(Ctx* cx, void* data,
+                        const component::TableData* table) {
+    (void)data;
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsCenter()->Gap(4);
+    row->Child(
+        TextEl(a, StrDup(a, fmt("%d × %d", table->rowCount, table->cols)))
+            ->Font(12)
+            ->Fg(th.mutedFg));
+    row->Child(component::Clipboard::New(cx, StrL("copy-table"))
+                   ->Value(StrDup(a, table->markdown))
+                   ->Tooltip(StrL("Copy as Markdown"))
+                   ->IntoEl());
+    return row;
+}
+
 El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -960,6 +981,7 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
                       ->SelFormat(self->selFormat)
                       ->OnLink(Listen(cx, &OnLink))
                       ->CodeBlockActions(&CodeActions, self)
+                      ->TableActions(&TableActions, self)
                       ->IntoEl();
     // `.p_5().scrollable(true)`: the document scrolls inside its own panel.
     El* right =

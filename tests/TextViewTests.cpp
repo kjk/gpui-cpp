@@ -655,11 +655,40 @@ static void TestSourceIgnoresPlainRuns() {
                    "hello\nworld"));
 }
 
+// `Table::to_markdown`, which gpui-component b1e78a51 fixed on its way to the
+// table_actions hook: it used to join cells straight out of the paragraph
+// writer -- which trails a blank line -- and emit no outer pipes, so a
+// single-column table did not round-trip as GFM.
+static void TestTableToMarkdown(Arena* a) {
+    MdNode* doc = MdParse(a, StrL("| a | b |\n| --- | ---: |\n| 1 | 2 |\n"));
+    MdNode* table = Child(doc, 0);
+    utassert(table && table->kind == MdKind::Table);
+    utassert(StrIs(MdTableToMarkdown(a, table),
+                   "| a | b |\n| --- | ---: |\n| 1 | 2 |\n"));
+
+    // One column, which is the shape that was not valid GFM before.
+    MdNode* one = Child(MdParse(a, StrL("| only |\n| --- |\n| x |\n")), 0);
+    utassert(one && one->kind == MdKind::Table);
+    Str md1 = MdTableToMarkdown(a, one);
+    utassert(StrIs(md1, "| only |\n| --- |\n| x |\n"));
+    // And it parses back to the table it came from.
+    MdNode* again = Child(MdParse(a, md1), 0);
+    utassert(again && again->kind == MdKind::Table);
+    utassert(Children(again) == Children(one));
+
+    // Alignment rides in the delimiter row, column by column.
+    MdNode* aligned =
+        Child(MdParse(a, StrL("| l | c | r |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n")), 0);
+    utassert(StrIs(MdTableToMarkdown(a, aligned),
+                   "| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n"));
+}
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
     TestMarkdownBlocks(a);
     TestMarkdownTableAlign(a);
+    TestTableToMarkdown(a);
     TestMarkdownInlineHtml(a);
     TestMarkdownHtmlBlock(a);
     TestMarkdownImage(a);

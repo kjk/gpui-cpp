@@ -171,6 +171,36 @@ struct MdPlugin {
 // info string, both good for the length of the call.
 using CodeBlockActionsFn = El* (*)(Ctx * cx, void* data, Str code, Str lang);
 
+// text/node.rs TableData: the snapshot a table hands to `table_actions`, so a
+// caller never needs the node types. The cells are the table's own text, row
+// by row — `header` is the first row and `rows` is everything under it — and
+// `markdown` is the table re-serialized as GFM, which is what a copy button
+// puts on the clipboard.
+struct TableData {
+    // Row-major, `cols` per row. The header row is `header[0..cols]`.
+    const Str* header = nullptr;
+    const Str* rows = nullptr;
+    int cols = 0;
+    int rowCount = 0;
+    Str markdown = {};
+
+    Str Cell(int row, int col) const {
+        if (row < 0 || col < 0 || col >= cols || row >= rowCount) {
+            return {};
+        }
+        return rows[row * cols + col];
+    }
+};
+
+// text_view.rs TableActionsFn: what the caller hangs under a Markdown table —
+// a copy or a download button, say. Answers null to add nothing.
+using TableActionsFn = El* (*)(Ctx * cx, void* data, const TableData* table);
+
+// `Table::to_markdown`: a table node written back out as GFM — outer pipes,
+// a delimiter row carrying each column's alignment, and cells escaped so a
+// pipe inside one does not end the row. What `TableData::markdown` holds.
+Str MdTableToMarkdown(Arena* a, MdNode* table);
+
 struct TextView {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -193,6 +223,8 @@ struct TextView {
     // text_view.rs link_click_handler.
     Listener onLink;
     CodeBlockActionsFn codeActions = nullptr;
+    TableActionsFn tableActions = nullptr;
+    void* tableActionsData = nullptr;
     void* codeActionsData = nullptr;
     // As many as a view registers; upstream's own example has three.
     static const int kMaxPlugins = 8;
@@ -240,6 +272,9 @@ struct TextView {
     // code_block_actions(..): the row is absolutely placed at the block's
     // top right, over a muted plate, exactly where node.rs puts it.
     TextView* CodeBlockActions(CodeBlockActionsFn fn, void* data = nullptr);
+    // Rendered below every Markdown table, both layouts, with a small gap so
+    // the buttons' hover backgrounds stay clear of the table border.
+    TextView* TableActions(TableActionsFn fn, void* data = nullptr);
     // `.plugin(..)`: a parser and a renderer for blocks this view knows how
     // to draw and markdown does not. They are offered every block in the
     // order they were added, and the first that claims one renders it.
@@ -319,6 +354,9 @@ struct TextView {
     El* Blocks(El* into, MdNode* n, int depth, bool inList);
     El* Item(MdNode* n, Str marker, int depth);
     El* Table(MdNode* n);
+    // The `table_actions` row, built from the table it goes under. Null when
+    // no hook is set.
+    El* TableActionsRow(MdNode* n, int nCols, const uint8_t* colAlign);
     El* CodeBlock(MdNode* n);
     // The highlighted form of a code block: ui/syntax.h scans the text and
     // this paints its tokens.

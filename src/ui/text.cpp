@@ -1168,6 +1168,156 @@ static int RunsLen(MdNode* n) {
     return len;
 }
 
+// The text of one cell, its runs joined. A cell that holds a pipe or a
+// backslash has to escape it, or the row it is written into stops parsing
+// where the pipe is — which is what `Table::to_markdown` does upstream.
+static Str TableCellText(Arena* a, MdNode* c) {
+    int len = 0;
+    for (MdRun* r = c->runFirst; r; r = r->next) {
+        for (int i = 0; i < r->text.len; i++) {
+            char ch = r->text.s[i];
+            len += (ch == '|' || ch == '\\') ? 2 : 1;
+        }
+    }
+    char* buf = (char*)Alloc(a, len + 1);
+    if (!buf) {
+        return {};
+    }
+    int at = 0;
+    for (MdRun* r = c->runFirst; r; r = r->next) {
+        for (int i = 0; i < r->text.len; i++) {
+            char ch = r->text.s[i];
+            if (ch == '|' || ch == '\\') {
+                buf[at++] = '\\';
+            }
+            // A newline inside a cell would end the row; GFM has no way to
+            // carry one, so it becomes a space the way a soft break does.
+            buf[at++] = (ch == '\n' || ch == '\r') ? ' ' : ch;
+        }
+    }
+    buf[at] = 0;
+    return Str(buf, at);
+}
+
+// `Table::to_markdown`: the table as GFM, outer pipes and all, with the
+// delimiter row carrying each column's alignment. BlockNode::to_markdown used
+// to join cells straight out of the paragraph writer — which trails a blank
+// line — and emit no outer pipes, so a single-column table did not round-trip;
+// this is the fixed shape.
+static Str TableToMarkdown(Arena* a, MdNode* n, const Str* cells, int cols,
+                           int rows, const uint8_t* align) {
+    (void)n;
+    StrBuilder out;
+    for (int r = 0; r < rows; r++) {
+        out.Append(StrL("|"));
+        for (int c = 0; c < cols; c++) {
+            out.Append(StrL(" "));
+            out.Append(cells[r * cols + c]);
+            out.Append(StrL(" |"));
+        }
+        out.Append(StrL("\n"));
+        if (r != 0) {
+            continue;
+        }
+        // The delimiter row, right under the header.
+        out.Append(StrL("|"));
+        for (int c = 0; c < cols; c++) {
+            switch (align[c]) {
+                case MdAlignLeft:
+                    out.Append(StrL(" :--- |"));
+                    break;
+                case MdAlignCenter:
+                    out.Append(StrL(" :---: |"));
+                    break;
+                case MdAlignRight:
+                    out.Append(StrL(" ---: |"));
+                    break;
+                default:
+                    out.Append(StrL(" --- |"));
+                    break;
+            }
+        }
+        out.Append(StrL("\n"));
+    }
+    return StrDup(a, out.TakeStr());
+}
+
+Str MdTableToMarkdown(Arena* a, MdNode* table) {
+    enum {
+        kMaxCols = 32,
+        kMaxCells = 32 * 256
+    };
+    if (!table) {
+        return {};
+    }
+    int rows = 0;
+    int cols = 0;
+    uint8_t align[kMaxCols] = {};
+    for (MdNode* r = table->first; r; r = r->next) {
+        rows++;
+        int ix = 0;
+        for (MdNode* c = r->first; c && ix < kMaxCols; c = c->next, ix++) {
+            if (align[ix] == MdAlignDefault) {
+                align[ix] = c->align;
+            }
+            if (ix + 1 > cols) {
+                cols = ix + 1;
+            }
+        }
+    }
+    if (rows <= 0 || cols <= 0 || rows * cols > kMaxCells) {
+        return {};
+    }
+    Str* cells = (Str*)Alloc(a, (int)sizeof(Str) * rows * cols);
+    if (!cells) {
+        return {};
+    }
+    int ri = 0;
+    for (MdNode* r = table->first; r; r = r->next, ri++) {
+        int ix = 0;
+        for (MdNode* c = r->first; c && ix < cols; c = c->next, ix++) {
+            cells[ri * cols + ix] = TableCellText(a, c);
+        }
+    }
+    return TableToMarkdown(a, table, cells, cols, rows, align);
+}
+
+// The actions row a caller hangs under a table, from the table it is under.
+El* TextView::TableActionsRow(MdNode* n, int nCols, const uint8_t* colAlign) {
+    if (!tableActions || nCols <= 0) {
+        return nullptr;
+    }
+    enum {
+        kMaxCells = 32 * 64
+    };
+    int rows = 0;
+    for (MdNode* r = n->first; r; r = r->next) {
+        rows++;
+    }
+    if (rows <= 0 || rows * nCols > kMaxCells) {
+        return nullptr;
+    }
+    Str* cells = (Str*)Alloc(a, (int)sizeof(Str) * rows * nCols);
+    if (!cells) {
+        return nullptr;
+    }
+    int ri = 0;
+    for (MdNode* r = n->first; r; r = r->next, ri++) {
+        int ix = 0;
+        for (MdNode* c = r->first; c && ix < nCols; c = c->next, ix++) {
+            cells[ri * nCols + ix] = TableCellText(a, c);
+        }
+    }
+    TableData data;
+    data.cols = nCols;
+    data.header = cells;
+    // Everything under the header row, which is what `rows` is upstream.
+    data.rows = rows > 1 ? cells + nCols : nullptr;
+    data.rowCount = rows > 1 ? rows - 1 : 0;
+    data.markdown = TableToMarkdown(a, n, cells, nCols, rows, colAlign);
+    return tableActions(cx, tableActionsData, &data);
+}
+
 El* TextView::CodeBlock(MdNode* n) {
     const Theme& th = cx->theme();
     // code_block.selected_source wraps the selected code in a fence carrying
@@ -1430,13 +1580,20 @@ El* TextView::ScrollTable(MdNode* n) {
     uint32_t key = KeyedKey(name, (uint32_t)HashClickId(StrL("md-table")));
     Entity<MdTableScroll> ent = KeyedEntity<MdTableScroll>(cx, key);
     MdTableScroll* st = ent.Get(cx->app);
-    return Div(a)
-        ->W(kFill)
-        ->ClipX()
-        ->ScrollX(st ? st->x : 0)
-        ->ScrollId((int)key)
-        ->OnScroll(ListenTo(ent, &OnMdTableScroll))
-        ->Child(track);
+    El* scroller = Div(a)
+                       ->W(kFill)
+                       ->ClipX()
+                       ->ScrollX(st ? st->x : 0)
+                       ->ScrollId((int)key)
+                       ->OnScroll(ListenTo(ent, &OnMdTableScroll))
+                       ->Child(track);
+    El* actions = TableActionsRow(n, nCols, colAlign);
+    if (!actions) {
+        return scroller;
+    }
+    // A small gap, so the buttons' hover backgrounds stay clear of the
+    // table's border. Where they sit along the row is the caller's business.
+    return Div(a)->FlexCol()->W(kFill)->Gap(4)->Child(scroller)->Child(actions);
 }
 
 // node.rs render_wrap_table proportions the columns by content length and
@@ -1512,7 +1669,11 @@ El* TextView::Table(MdNode* n) {
         }
         table->Child(row);
     }
-    return table;
+    El* actions = TableActionsRow(n, nCols, colAlign);
+    if (!actions) {
+        return table;
+    }
+    return Div(a)->FlexCol()->W(kFill)->Gap(4)->Child(table)->Child(actions);
 }
 
 Rgba TextView::BlockFg() const {
@@ -1795,6 +1956,12 @@ TextView* TextView::NewHtml(Ctx* cx, Str source) {
     TextView* t = TextView::New(cx, source);
     t->html = true;
     return t;
+}
+
+TextView* TextView::TableActions(TableActionsFn fn, void* data) {
+    tableActions = fn;
+    tableActionsData = data;
+    return this;
 }
 
 TextView* TextView::CodeBlockActions(CodeBlockActionsFn fn, void* data) {
