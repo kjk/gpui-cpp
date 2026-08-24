@@ -30,6 +30,7 @@ const simpleExamples = [
   "text_selection",
   "markdown_table",
   "rich_text",
+  "stream_markdown",
 ];
 
 const knownTargets = [
