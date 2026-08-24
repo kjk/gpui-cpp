@@ -151,6 +151,7 @@ struct ThemeTokens {
     Background tableActive = {};
     Background tableEven = {};
     Background tableHead = {};
+    Background tableFoot = {};
     Background sidebarAccent = {};
     Background sidebarPrimary = {};
     Background overlay = {};
@@ -194,6 +195,10 @@ struct Theme {
     Rgba tableBg;
     Rgba tableHead;
     Rgba tableHeadFg;
+    // table.foot.background / table.foot.foreground, which fall back to the
+    // list's head surface and to muted_foreground (theme/schema.rs).
+    Rgba tableFoot;
+    Rgba tableFootFg;
     Rgba tableRowBorder;
     Rgba tableEven;
     // list.active.background / list.active.border, and the table pair that
@@ -1193,6 +1198,9 @@ struct Style {
     // rather than each keeping its content's width and splitting only what
     // is left over.
     float flexBasis = kAuto;
+    // flex-basis as a fraction of the line, which is `relative(f)` in Rust.
+    // Zero is unset, and a basis in DIPs is the field above.
+    float flexBasisFrac = 0;
     Edges pad = {};
     // gap, per axis. `Gap()` sets both, which is what `gap_N` does; a style
     // that names only one — `gap_x_2` — leaves the other where it was.
@@ -1523,6 +1531,14 @@ struct El {
     // flex_none(): neither grows nor shrinks, and keeps its own size.
     El* FlexNone();
     El* Basis(float v);
+    // flex_basis(relative(f)): the main size a flex item starts from, as a
+    // fraction of the line rather than a length. Siblings that all start
+    // from the whole line and shrink together end up sharing it in the
+    // proportions of their fractions, which is how a table row's cells are
+    // sized.
+    El* BasisFrac(float f);
+    // flex_shrink(f). Shrink0() is the common case; this is the factor.
+    El* Shrink(float f);
     El* W(float v);
     El* WFrac(float f);
     // percentage(delta) turns clockwise, which is what a spinner is made of.

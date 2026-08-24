@@ -116,18 +116,134 @@ struct DataTable {
     float ColWidth(const TableState* s, int col) const;
 };
 
-// The plain table of strings, which is what the simple story page shows.
+// ─── the simple table (crates/ui/src/table/table.rs) ──────────────────────
+//
+// The stateless, composable table: the semantic parts from `crates/base`,
+// themed and sized. Unlike DataTable it has no state, no virtual scrolling
+// and no column management — a caller writes the rows out.
+//
+// Rust hands the Table's size down to every child as it renders
+// (`ChildElement::into_any(ix, size)`), which is also where a child learns
+// which index it is. A builder here is finished by its parent instead: the
+// parent stamps its size and index onto each child in `IntoEl()`, so the
+// caller names the size once, on the Table, and never numbers a row.
+//
+// One thing the port cannot copy: `text_color` on the header and the footer
+// is inherited by everything inside them in Rust. Colour is not inherited
+// here, so a caller paints its own text — the two colours are on the theme
+// (`tableHeadFg`, `tableFootFg`) for exactly that.
+
+enum class TableAlign : uint8_t {
+    Left,
+    Center,
+    Right
+};
+
+// A header cell or a data cell: `TableHead` and `TableCell` differ only in
+// the role they carry, which is the half of `crates/base/src/table.rs` this
+// tree has no accessibility layer for.
+struct TableCellEl {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    // Which of the two this is, which is what names it in the frame.
+    bool head = false;
+    int ix = 0;
+    int colSpan = 1;
+    TableAlign align = TableAlign::Left;
+    UiSize size = UiSize::Medium;
+    // The width the caller asked for. Unset — kAuto — is Rust's "no width in
+    // the style", which is what makes the cell share the row by its span.
+    float width = kAuto;
+    ArenaVec<El*> children;
+
+    TableCellEl* ColSpan(int n);
+    TableCellEl* TextCenter();
+    TableCellEl* TextRight();
+    TableCellEl* W(float v);
+    TableCellEl* WithSize(UiSize s);
+    TableCellEl* Child(El* e);
+    El* IntoEl();
+};
+
+struct TableHead {
+    static TableCellEl* New(Ctx* cx);
+};
+struct TableCell {
+    static TableCellEl* New(Ctx* cx);
+};
+
+struct TableRow {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    int ix = 0;
+    UiSize size = UiSize::Medium;
+    bool hasBg = false;
+    Background bg = {};
+    ArenaVec<TableCellEl*> cells;
+
+    static TableRow* New(Ctx* cx);
+    TableRow* Bg(Background c);
+    TableRow* Child(TableCellEl* c);
+    El* IntoEl();
+};
+
+// The three row groups. A header is a band of its own colour with a rule
+// under it, a footer the same at the other end, and a body is neither.
+enum class TableGroupKind : uint8_t {
+    Header,
+    Body,
+    Footer
+};
+
+struct TableGroup {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    TableGroupKind kind = TableGroupKind::Body;
+    int ix = 0;
+    UiSize size = UiSize::Medium;
+    ArenaVec<TableRow*> rows;
+
+    TableGroup* Child(TableRow* r);
+    El* IntoEl();
+};
+
+struct TableHeader {
+    static TableGroup* New(Ctx* cx);
+};
+struct TableBody {
+    static TableGroup* New(Ctx* cx);
+};
+struct TableFooter {
+    static TableGroup* New(Ctx* cx);
+};
+
+struct TableCaption {
+    Arena* a = nullptr;
+    Ctx* cx = nullptr;
+    UiSize size = UiSize::Medium;
+    ArenaVec<El*> children;
+
+    static TableCaption* New(Ctx* cx);
+    TableCaption* Child(El* e);
+    El* IntoEl();
+};
+
 struct Table {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    const char** heads = nullptr;
-    int nHeads = 0;
-    const char*** rows = nullptr;
-    int nRows = 0;
+    UiSize size = UiSize::Medium;
+    bool bordered = false;
+    ArenaVec<TableGroup*> groups;
+    TableCaption* caption = nullptr;
 
     static Table* New(Ctx* cx);
-    Table* Heads(const char** h, int n);
-    Table* Rows(const char*** r, int n);
+    Table* WithSize(UiSize s);
+    // `.border_1().border_color(..).rounded(..)`, which the story's second
+    // table asks for by hand. Kept as one flag rather than as a style
+    // refinement, since a frame is the only refinement anything makes.
+    Table* Bordered(bool v = true);
+    Table* Child(TableGroup* g);
+    Table* Child(TableCaption* c);
     El* IntoEl();
 };
 

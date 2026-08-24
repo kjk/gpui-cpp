@@ -6,6 +6,199 @@ namespace gpui {
 
 namespace component {
 
+// ─── the simple table (crates/ui/src/table/table.rs) ──────────────────────
+
+// MIN_CELL_WIDTH: a cell never narrows past this, whatever the row does.
+static const float kMinCellWidth = 100.f;
+
+static TableCellEl* NewCell(Ctx* cx, bool head) {
+    Arena* a = cx->a;
+    TableCellEl* c = ArenaNew<TableCellEl>(a);
+    c->a = a;
+    c->cx = cx;
+    c->head = head;
+    return c;
+}
+
+TableCellEl* TableHead::New(Ctx* cx) {
+    return NewCell(cx, true);
+}
+TableCellEl* TableCell::New(Ctx* cx) {
+    return NewCell(cx, false);
+}
+
+TableCellEl* TableCellEl::ColSpan(int n) {
+    colSpan = n > 1 ? n : 1;
+    return this;
+}
+TableCellEl* TableCellEl::TextCenter() {
+    align = TableAlign::Center;
+    return this;
+}
+TableCellEl* TableCellEl::TextRight() {
+    align = TableAlign::Right;
+    return this;
+}
+TableCellEl* TableCellEl::W(float v) {
+    width = v;
+    return this;
+}
+TableCellEl* TableCellEl::WithSize(UiSize s) {
+    size = s;
+    return this;
+}
+TableCellEl* TableCellEl::Child(El* e) {
+    children.Append(a, e);
+    return this;
+}
+
+El* TableCellEl::IntoEl() {
+    Edges p = UiTableCellPadding(size);
+    Str id = head ? StrDup(a, fmt("table-head-%d", ix))
+                  : StrDup(a, fmt("table-cell-%d", ix));
+    El* e = head ? gpui::TableHead::New(cx, id) : gpui::TableCell::New(cx, id);
+    e->FlexRow()->ItemsCenter();
+    // `.when(self.style.size.width.is_none(), ..)`: a cell the caller sized
+    // keeps that width and shrinks from it like any flex item; one that was
+    // not sized starts from the whole row and shares it with its siblings,
+    // a span counting for that many columns.
+    if (width == kAuto) {
+        e->Shrink(1)->BasisFrac((float)colSpan);
+    } else {
+        e->W(width);
+    }
+    e->MinW(kMinCellWidth * (float)colSpan);
+    e->PadX(p.left)->PadY(p.top);
+    if (align == TableAlign::Center) {
+        e->JustifyCenter();
+    } else if (align == TableAlign::Right) {
+        e->JustifyEnd();
+    }
+    for (El* c : children) {
+        e->Child(c);
+    }
+    return e;
+}
+
+TableRow* TableRow::New(Ctx* cx) {
+    Arena* a = cx->a;
+    TableRow* r = ArenaNew<TableRow>(a);
+    r->a = a;
+    r->cx = cx;
+    return r;
+}
+TableRow* TableRow::Bg(Background c) {
+    bg = c;
+    hasBg = true;
+    return this;
+}
+TableRow* TableRow::Child(TableCellEl* c) {
+    cells.Append(a, c);
+    return this;
+}
+
+El* TableRow::IntoEl() {
+    const Theme& th = cx->theme();
+    El* row = gpui::TableRow::New(cx, StrDup(a, fmt("table-row-%d", ix)))
+                  ->W(kFill)
+                  ->FlexRow();
+    if (hasBg) {
+        row->Bg(bg);
+    }
+    // `.when(self.ix > 0, |this| this.border_t_1())`: the rule goes between
+    // the rows of a group, never above its first one — the header carries
+    // its own rule underneath, and the footer one above.
+    if (ix > 0) {
+        row->BorderT(1, th.tableRowBorder);
+    }
+    for (int i = 0; i < cells.len; i++) {
+        cells[i]->ix = i;
+        cells[i]->size = size;
+        row->Child(cells[i]->IntoEl());
+    }
+    return row;
+}
+
+static TableGroup* NewGroup(Ctx* cx, TableGroupKind kind) {
+    Arena* a = cx->a;
+    TableGroup* g = ArenaNew<TableGroup>(a);
+    g->a = a;
+    g->cx = cx;
+    g->kind = kind;
+    return g;
+}
+
+TableGroup* TableHeader::New(Ctx* cx) {
+    return NewGroup(cx, TableGroupKind::Header);
+}
+TableGroup* TableBody::New(Ctx* cx) {
+    return NewGroup(cx, TableGroupKind::Body);
+}
+TableGroup* TableFooter::New(Ctx* cx) {
+    return NewGroup(cx, TableGroupKind::Footer);
+}
+
+TableGroup* TableGroup::Child(TableRow* r) {
+    rows.Append(a, r);
+    return this;
+}
+
+El* TableGroup::IntoEl() {
+    const Theme& th = cx->theme();
+    El* g = nullptr;
+    if (kind == TableGroupKind::Header) {
+        g = gpui::TableHeader::New(cx, StrDup(a, fmt("table-header-%d", ix)))
+                ->W(kFill)
+                ->FlexCol()
+                ->Bg(th.tokens.tableHead)
+                ->BorderB(1, th.tableRowBorder);
+    } else if (kind == TableGroupKind::Footer) {
+        // A footer is a plain div in Rust, not one of the semantic parts.
+        g = Div(a)
+                ->Id(StrDup(a, fmt("table-footer-%d", ix)))
+                ->W(kFill)
+                ->FlexCol()
+                ->Bg(th.tokens.tableFoot)
+                ->BorderT(1, th.tableRowBorder);
+    } else {
+        g = gpui::TableBody::New(cx, StrDup(a, fmt("table-body-%d", ix)))
+                ->W(kFill)
+                ->FlexCol();
+    }
+    for (int i = 0; i < rows.len; i++) {
+        rows[i]->ix = i;
+        rows[i]->size = size;
+        g->Child(rows[i]->IntoEl());
+    }
+    return g;
+}
+
+TableCaption* TableCaption::New(Ctx* cx) {
+    Arena* a = cx->a;
+    TableCaption* c = ArenaNew<TableCaption>(a);
+    c->a = a;
+    c->cx = cx;
+    return c;
+}
+TableCaption* TableCaption::Child(El* e) {
+    children.Append(a, e);
+    return this;
+}
+
+El* TableCaption::IntoEl() {
+    Edges p = UiTableCellPadding(size);
+    El* e = gpui::TableCaption::New(cx, StrL("table-caption"))
+                ->W(kFill)
+                ->FlexRow()
+                ->JustifyCenter()
+                ->PadX(p.left)
+                ->PadY(p.top);
+    for (El* c : children) {
+        e->Child(c);
+    }
+    return e;
+}
+
 Table* Table::New(Ctx* cx) {
     Arena* a = cx->a;
     Table* t = ArenaNew<Table>(a);
@@ -13,50 +206,43 @@ Table* Table::New(Ctx* cx) {
     t->cx = cx;
     return t;
 }
-Table* Table::Heads(const char** h, int n) {
-    heads = h;
-    nHeads = n;
+Table* Table::WithSize(UiSize s) {
+    size = s;
     return this;
 }
-Table* Table::Rows(const char*** r, int n) {
-    rows = r;
-    nRows = n;
+Table* Table::Bordered(bool v) {
+    bordered = v;
+    return this;
+}
+Table* Table::Child(TableGroup* g) {
+    groups.Append(a, g);
+    return this;
+}
+Table* Table::Child(TableCaption* c) {
+    caption = c;
     return this;
 }
 
 El* Table::IntoEl() {
     const Theme& th = cx->theme();
-    El* t =
-        gpui::Table::New(cx, StrL("table"))->FlexCol()->Border(1, th.border);
-    El* head = TableHeader::New(cx, StrL("th"))
-                   ->Child(TableRow::New(cx, StrL("hr"))
-                               ->FlexRow()
-                               ->Bg(th.tokens.muted));
-    for (int i = 0; i < nHeads; i++) {
-        head->first->Child(
-            TableHead::New(cx, Str(heads[i]))
-                ->Pad(8)
-                ->Flex1()
-                ->Child(TextEl(a, Str(heads[i]))->Font(12)->Fg(th.mutedFg)));
+    El* t = gpui::Table::New(cx, StrL("table"))
+                ->FlexCol()
+                ->W(kFill)
+                ->ClipY()
+                ->ClipX()
+                ->Bg(th.tokens.tableBg);
+    if (bordered) {
+        t->Border(1, th.border)->Radius(th.radius);
     }
-    t->Child(head);
-    El* body = TableBody::New(cx, StrL("tb"))->FlexCol();
-    for (int r = 0; r < nRows; r++) {
-        El* row = TableRow::New(cx, StrDup(a, fmt("r%d", r)))
-                      ->FlexRow()
-                      ->BorderT(1, th.border);
-        for (int c = 0; c < nHeads; c++) {
-            row->Child(TableCell::New(cx, StrDup(a, fmt("c%d", c)))
-                           ->Pad(8)
-                           ->Flex1()
-                           // Table is text_sm, and every cell reads at it.
-                           ->Child(TextEl(a, Str(rows[r][c]))
-                                       ->Font(14)
-                                       ->Fg(th.foreground)));
-        }
-        body->Child(row);
+    for (int i = 0; i < groups.len; i++) {
+        groups[i]->ix = i;
+        groups[i]->size = size;
+        t->Child(groups[i]->IntoEl());
     }
-    t->Child(body);
+    if (caption) {
+        caption->size = size;
+        t->Child(caption->IntoEl());
+    }
     return t;
 }
 
@@ -449,14 +635,14 @@ El* DataTable::BuildEl() {
 
     Listener headClick = ListenTo(state, &TableState::OnHeadClick, 0);
     Listener sortClick = ListenTo(state, &TableState::OnSortClick, 0);
-    El* headFixed = TableHeader::New(cx, StrDup(a, fmt("%s-head-f", id)))
+    El* headFixed = gpui::TableHeader::New(cx, StrDup(a, fmt("%s-head-f", id)))
                         ->FlexRow()
                         ->Shrink0()
                         ->H(rowHeight)
                         ->BorderB(1, th.border);
     El* headWrap = follow(
         Div(a)->FlexRow()->W(kFill)->H(rowHeight)->BorderB(1, th.border));
-    El* headScroll = TableHeader::New(cx, StrDup(a, fmt("%s-head", id)))
+    El* headScroll = gpui::TableHeader::New(cx, StrDup(a, fmt("%s-head", id)))
                          ->FlexRow()
                          ->Shrink0();
     headWrap->Child(headScroll);
@@ -470,7 +656,7 @@ El* DataTable::BuildEl() {
         // head drag rewrites.
         int c = s ? TableColAt(s, d) : d;
         const TableColumn& col = columns[c];
-        El* th_ = TableHead::New(cx, StrDup(a, fmt("%s-th-%d", id, c)))
+        El* th_ = gpui::TableHead::New(cx, StrDup(a, fmt("%s-th-%d", id, c)))
                       ->FlexRow()
                       ->Shrink0()
                       ->W(ColWidth(s, c));
@@ -555,11 +741,12 @@ El* DataTable::BuildEl() {
     Listener rowDown = ListenTo(state, &TableState::OnRowMouseDown, 0);
     Listener cellClick = ListenTo(state, &TableState::OnCellClick, 0);
     Listener cellDown = ListenTo(state, &TableState::OnCellMouseDown, 0);
-    El* bodyFixed = TableBody::New(cx, StrDup(a, fmt("%s-body-f", id)))
+    El* bodyFixed = gpui::TableBody::New(cx, StrDup(a, fmt("%s-body-f", id)))
                         ->FlexCol()
                         ->Shrink0();
-    El* bodyScroll =
-        TableBody::New(cx, StrDup(a, fmt("%s-body", id)))->FlexCol()->W(kFill);
+    El* bodyScroll = gpui::TableBody::New(cx, StrDup(a, fmt("%s-body", id)))
+                         ->FlexCol()
+                         ->W(kFill);
     // The rows are virtualized when the caller gave the body a height: only
     // the ones it can show are built, with a spacer at each end standing in
     // for the rest. Without one every row is built, which is what a short
@@ -603,14 +790,16 @@ El* DataTable::BuildEl() {
         }
     }
     for (int r = range.first; r < range.end; r++) {
-        El* rowFixed = TableRow::New(cx, StrDup(a, fmt("%s-rowf-%d", id, r)))
-                           ->FlexRow()
-                           ->Shrink0()
-                           ->BorderB(1, th.tableRowBorder);
-        El* rowScroll = TableRow::New(cx, StrDup(a, fmt("%s-row-%d", id, r)))
-                            ->FlexRow()
-                            ->Shrink0()
-                            ->BorderB(1, th.tableRowBorder);
+        El* rowFixed =
+            gpui::TableRow::New(cx, StrDup(a, fmt("%s-rowf-%d", id, r)))
+                ->FlexRow()
+                ->Shrink0()
+                ->BorderB(1, th.tableRowBorder);
+        El* rowScroll =
+            gpui::TableRow::New(cx, StrDup(a, fmt("%s-row-%d", id, r)))
+                ->FlexRow()
+                ->Shrink0()
+                ->BorderB(1, th.tableRowBorder);
         El* rows[2] = {rowFixed, rowScroll};
         for (El* row : rows) {
             if (s && h > 0) {
@@ -639,7 +828,7 @@ El* DataTable::BuildEl() {
         for (int d = 0; d < nColumns; d++) {
             int c = s ? TableColAt(s, d) : d;
             El* cellEl = cell ? cell(cx, data, r, c) : nullptr;
-            El* td = TableCell::New(cx, StrDup(a, fmt("c%d", c)))
+            El* td = gpui::TableCell::New(cx, StrDup(a, fmt("c%d", c)))
                          ->FlexRow()
                          ->Shrink0()
                          ->W(ColWidth(s, c))

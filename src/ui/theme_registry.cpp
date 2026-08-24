@@ -804,6 +804,9 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     SetToken(&out->tableHead, &out->tokens.tableHead,
              PickBg(c, "table.head.background", listHead));
     out->tableHeadFg = Pick(c, "table.head.foreground", out->mutedFg);
+    SetToken(&out->tableFoot, &out->tokens.tableFoot,
+             PickBg(c, "table.foot.background", listHead));
+    out->tableFootFg = Pick(c, "table.foot.foreground", out->mutedFg);
     out->tableRowBorder = Pick(c, "table.row.border", out->border);
 
     SetToken(&out->titleBar, &out->tokens.titleBar,

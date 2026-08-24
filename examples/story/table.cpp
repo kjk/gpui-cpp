@@ -41,112 +41,101 @@ static El* StatusTag(Ctx* cx, const char* status) {
     return tag->IntoEl();
 }
 
-static El* Cell(Ctx* cx, float w, bool right) {
-    Arena* a = cx->a;
-    // Size::table_cell_padding, which is px_2/py_1 at the medium size.
-    El* c = Div(a)->FlexRow()->PadX(8)->PadY(4)->ItemsCenter();
-    if (w > 0) {
-        c->W(w);
-    } else {
-        c->Flex1();
-    }
-    if (right) {
-        c->JustifyEnd();
-    }
-    return c;
+// A cell holding one line of text. A Table is `.text_sm()` throughout and
+// colour is not inherited here, so each run names its own.
+static component::TableCellEl* TextHead(Ctx* cx, const char* text) {
+    return component::TableHead::New(cx)
+        ->Child(StoryTxt(cx, Str(text), 14, cx->theme().tableHeadFg));
 }
 
-// A Table is `.text_sm()` throughout, and a line of it is the usual box, so
-// a row comes to the padding plus one line of fourteen-point text.
-static El* HeadCell(Ctx* cx, const char* text, float w, bool right) {
-    El* c = Cell(cx, w, right);
-    c->Child(StoryTxt(cx, Str(text), 14, cx->theme().tableHeadFg));
-    return c;
-}
-
-static El* TextCell(Ctx* cx, const char* text, float w, bool right) {
-    El* c = Cell(cx, w, right);
-    c->Child(StoryTxt(cx, Str(text), 14, cx->theme().foreground));
-    return c;
+static component::TableCellEl* TextCell(Ctx* cx, const char* text) {
+    return component::TableCell::New(cx)
+        ->Child(StoryTxt(cx, Str(text), 14, cx->theme().foreground));
 }
 
 El* TableStory::Render(TableStory* self, Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    UiSize size = self->toolbar.size;
     const int nInvoices = (int)(sizeof(kInvoices) / sizeof(kInvoices[0]));
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
     page->Child(StoryToolbar(cx, self));
 
     El* def = StorySection(cx, "Default", nullptr);
     StorySectionBody(def)->W(kFill);
-    El* table = Div(a)->FlexCol()->W(kFill);
-    El* head = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    // The Rust table shares the width across its columns, so the w(150) the
-    // story asks for lands nearer 100.
-    head->Child(HeadCell(cx, "Invoice", 100, false));
-    head->Child(HeadCell(cx, "Status", 0, false));
-    head->Child(HeadCell(cx, "Amount", 120, true));
-    head->Child(HeadCell(cx, "Date", 120, true));
-    table->Child(head);
+    component::Table* table = component::Table::New(cx)->WithSize(size);
+    table->Child(component::TableHeader::New(cx)
+                     ->Child(component::TableRow::New(cx)
+                                 ->Child(TextHead(cx, "Invoice")->W(150))
+                                 ->Child(TextHead(cx, "Status")->ColSpan(2))
+                                 ->Child(TextHead(cx, "Amount")->TextRight())
+                                 ->Child(TextHead(cx, "Date")->TextRight())));
+    component::TableGroup* body = component::TableBody::New(cx);
     for (int i = 0; i < nInvoices; i++) {
         const Invoice& inv = kInvoices[i];
-        El* row = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-        row->Child(TextCell(cx, inv.id, 100, false));
-        El* statusCell = Cell(cx, 144, false);
-        statusCell->Child(StatusTag(cx, inv.status));
-        row->Child(statusCell);
-        El* methodCell = Cell(cx, 0, false);
+        // The method cell is one string with a newline in it upstream, which
+        // is two runs in a column here.
+        component::TableCellEl* method = component::TableCell::New(cx);
         El* methodCol = Div(a)->FlexCol();
         methodCol->Child(StoryTxt(cx, Str(inv.method), 14, th.foreground));
         if (inv.method2) {
             methodCol->Child(StoryTxt(cx, Str(inv.method2), 14, th.foreground));
         }
-        methodCell->Child(methodCol);
-        row->Child(methodCell);
-        row->Child(TextCell(cx, inv.amount, 120, true));
-        row->Child(TextCell(cx, inv.date, 120, true));
-        table->Child(row);
+        method->Child(methodCol);
+        body->Child(component::TableRow::New(cx)
+                        ->Child(TextCell(cx, inv.id)->W(150))
+                        ->Child(component::TableCell::New(cx)
+                                    ->Child(StatusTag(cx, inv.status)))
+                        ->Child(method)
+                        ->Child(TextCell(cx, inv.amount)->TextRight())
+                        ->Child(TextCell(cx, inv.date)->TextRight()));
     }
-    // The footer spans the first three columns, then the total.
-    El* foot = Div(a)->FlexRow()->W(kFill)->Bg(th.tokens.muted);
-    foot->Child(TextCell(cx, "Total", 0, false));
-    foot->Child(TextCell(cx, "$2,250.00", 240, true));
-    table->Child(foot);
-    table->Child(Div(a)->W(kFill)->PadY(16)->FlexRow()->JustifyCenter()->Child(
+    table->Child(body);
+    table->Child(component::TableFooter::New(cx)->Child(
+        component::TableRow::New(cx)
+            ->Child(component::TableCell::New(cx)->ColSpan(3)->Child(
+                StoryTxt(cx, StrL("Total"), 14, th.tableFootFg)))
+            ->Child(
+                component::TableCell::New(cx)->ColSpan(2)->TextRight()->Child(
+                    StoryTxt(cx, StrL("$2,250.00"), 14, th.tableFootFg)))));
+    table->Child(component::TableCaption::New(cx)->Child(
         StoryTxt(cx, StrL("A list of your recent invoices."), 14, th.mutedFg)));
-    StorySectionAdd(def, table);
+    StorySectionAdd(def, table->IntoEl());
     page->Child(def);
 
     El* bordered = StorySection(cx, "Bordered", nullptr);
     StorySectionBody(bordered)->W(kFill);
-    El* box = Div(a)->FlexCol()->W(kFill)->ClipY()->Radius(th.radius)->Border(
-        1, th.border);
-    El* bhead = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-    bhead->Child(HeadCell(cx, "Invoice", 100, false));
-    bhead->Child(HeadCell(cx, "Method", 0, false));
-    bhead->Child(HeadCell(cx, "Amount", 120, true));
-    bhead->Child(HeadCell(cx, "Date", 120, true));
-    box->Child(bhead);
+    component::Table* box =
+        component::Table::New(cx)->WithSize(size)->Bordered();
+    box->Child(component::TableHeader::New(cx)
+                   ->Child(component::TableRow::New(cx)
+                               ->Child(TextHead(cx, "Invoice")->W(100))
+                               ->Child(TextHead(cx, "Method"))
+                               ->Child(TextHead(cx, "Amount")->TextRight())
+                               ->Child(TextHead(cx, "Date")->TextRight())));
+    component::TableGroup* bbody = component::TableBody::New(cx);
     for (int i = 0; i < 6; i++) {
         const Invoice& inv = kInvoices[i];
-        El* row = Div(a)->FlexRow()->W(kFill)->BorderB(1, th.border);
-        if (i % 2 != 0) {
-            row->Bg(th.tokens.tableEven);
-        }
-        row->Child(TextCell(cx, inv.id, 100, false));
-        El* methodCell = Cell(cx, 0, false);
+        component::TableCellEl* method = component::TableCell::New(cx);
         El* methodCol = Div(a)->FlexCol();
         methodCol->Child(StoryTxt(cx, Str(inv.method), 14, th.foreground));
         if (inv.method2) {
             methodCol->Child(StoryTxt(cx, Str(inv.method2), 14, th.foreground));
         }
-        methodCell->Child(methodCol);
-        row->Child(methodCell);
-        row->Child(TextCell(cx, inv.amount, 120, true));
-        row->Child(TextCell(cx, inv.date, 120, true));
-        box->Child(row);
+        method->Child(methodCol);
+        component::TableRow* row =
+            component::TableRow::New(cx)
+                ->Child(TextCell(cx, inv.id)->W(100))
+                ->Child(method)
+                ->Child(TextCell(cx, inv.amount)->TextRight())
+                ->Child(TextCell(cx, inv.date)->TextRight());
+        if (i % 2 != 0) {
+            row->Bg(th.tokens.tableEven);
+        }
+        bbody->Child(row);
     }
-    StorySectionAdd(bordered, box);
+    box->Child(bbody);
+    StorySectionAdd(bordered, box->IntoEl());
     page->Child(bordered);
     return page;
 }

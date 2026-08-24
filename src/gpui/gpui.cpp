@@ -248,6 +248,9 @@ void ThemeTokensReset(Theme* t) {
     if (!t->tokens.tableHead.gradient) {
         t->tokens.tableHead = t->tableHead;
     }
+    if (!t->tokens.tableFoot.gradient) {
+        t->tokens.tableFoot = t->tableFoot;
+    }
     if (!t->tokens.sidebarAccent.gradient) {
         t->tokens.sidebarAccent = t->sidebarAccent;
     }
@@ -289,6 +292,10 @@ const Theme& ThemeDefaultDark() {
         t.tableBg = Rgb(0x0a, 0x0a, 0x0a);
         t.tableHead = Rgba8(0x17, 0x17, 0x17, 0x66);
         t.tableHeadFg = Rgb(0x52, 0x52, 0x52);
+        // table.foot has no entry of its own, so it takes list.head's
+        // surface and muted_foreground, as schema.rs falls back.
+        t.tableFoot = Rgba8(0x17, 0x17, 0x17, 0x66);
+        t.tableFootFg = t.mutedFg;
         t.tableRowBorder = Rgba8(0x26, 0x26, 0x26, 0xb3);
         t.tableEven = Rgba8(0x17, 0x17, 0x17, 0x66);
         // default-theme.json dark: list.active.background #1e40af33,
@@ -395,6 +402,8 @@ const Theme& ThemeDefaultLight() {
         t.tableBg = Rgb(0xff, 0xff, 0xff);
         t.tableHead = Rgb(0xfa, 0xfa, 0xfa);
         t.tableHeadFg = Rgb(0x73, 0x73, 0x73);
+        t.tableFoot = Rgb(0xfa, 0xfa, 0xfa);
+        t.tableFootFg = t.mutedFg;
         t.tableRowBorder = Rgba8(0xe5, 0xe5, 0xe5, 0xb3);
         t.tableEven = Rgb(0xfa, 0xfa, 0xfa);
         // default-theme.json light: the same blue for the list and the table.
@@ -727,6 +736,14 @@ El* El::FlexNone() {
 }
 El* El::Basis(float v) {
     style.flexBasis = v;
+    return this;
+}
+El* El::BasisFrac(float f) {
+    style.flexBasisFrac = f;
+    return this;
+}
+El* El::Shrink(float f) {
+    style.flexShrink = f;
     return this;
 }
 El* El::W(float v) {
@@ -2415,8 +2432,11 @@ static taffy::Style ToTaffyStyle(const El* e) {
     // An auto basis makes the main size the item's own size style, which is
     // what a plain `W()` means. `flex_1()` names zero instead, and taffy then
     // splits the whole line by the grow factors rather than only the slack.
-    t.flexBasis = s.flexBasis == kAuto ? taffy::Dimension::Auto()
-                                       : taffy::Dimension::Length(s.flexBasis);
+    t.flexBasis =
+        s.flexBasisFrac > 0
+            ? taffy::Dimension::Percent(s.flexBasisFrac)
+            : (s.flexBasis == kAuto ? taffy::Dimension::Auto()
+                                    : taffy::Dimension::Length(s.flexBasis));
 
     t.padding = {taffy::LengthPercentage::Length(s.pad.left),
                  taffy::LengthPercentage::Length(s.pad.right),
