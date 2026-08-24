@@ -96,6 +96,8 @@ int GpuiMain(int argc, char** argv) {
     TestThemeColor();
     TestColor();
     TestWryUri();
+    TestObservers();
+    TestStyleEq();
     TestDockState();
     TestFocusTrap();
     TestKeymap();

@@ -323,4 +323,51 @@ Optf MinTrackSizingFunction::DefiniteValue(Optf parentSize,
     return None();
 }
 
+// `#[derive(PartialEq)]` on Style — see the comment beside the declaration in
+// style.h. Every field is here, in the order the struct declares them, so the
+// two read against each other.
+bool operator==(const Style& a, const Style& b) {
+    return a.display == b.display && a.itemIsTable == b.itemIsTable &&
+           a.itemIsReplaced == b.itemIsReplaced && a.boxSizing == b.boxSizing &&
+           a.direction == b.direction &&
+           // Overflow
+           a.overflow == b.overflow &&
+           SameFloatBits(a.scrollbarWidth, b.scrollbarWidth) &&
+           // Float
+           a.floatMode == b.floatMode && a.clear == b.clear &&
+           // Position
+           a.position == b.position && a.inset == b.inset &&
+           // Size
+           a.size == b.size && a.minSize == b.minSize &&
+           a.maxSize == b.maxSize && SameOptf(a.aspectRatio, b.aspectRatio) &&
+           // Spacing
+           a.margin == b.margin && a.padding == b.padding &&
+           a.border == b.border &&
+           // Alignment
+           a.alignItems == b.alignItems && a.alignSelf == b.alignSelf &&
+           a.justifyItems == b.justifyItems && a.justifySelf == b.justifySelf &&
+           a.alignContent == b.alignContent &&
+           a.justifyContent == b.justifyContent && a.gap == b.gap &&
+           // Block container
+           a.textAlign == b.textAlign &&
+           // Flexbox container
+           a.flexDirection == b.flexDirection && a.flexWrap == b.flexWrap &&
+           // Flexbox item
+           a.flexBasis == b.flexBasis &&
+           SameFloatBits(a.flexGrow, b.flexGrow) &&
+           SameFloatBits(a.flexShrink, b.flexShrink) &&
+           // Grid container
+           SameSlice(a.gridTemplateRows, b.gridTemplateRows) &&
+           SameSlice(a.gridTemplateColumns, b.gridTemplateColumns) &&
+           SameSlice(a.gridAutoRows, b.gridAutoRows) &&
+           SameSlice(a.gridAutoColumns, b.gridAutoColumns) &&
+           a.gridAutoFlow == b.gridAutoFlow &&
+           // Grid container, named
+           SameSlice(a.gridTemplateAreas, b.gridTemplateAreas) &&
+           SameSlice(a.gridTemplateColumnNames, b.gridTemplateColumnNames) &&
+           SameSlice(a.gridTemplateRowNames, b.gridTemplateRowNames) &&
+           // Grid child
+           a.gridRow == b.gridRow && a.gridColumn == b.gridColumn;
+}
+
 } // namespace taffy

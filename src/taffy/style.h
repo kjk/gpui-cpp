@@ -1352,6 +1352,125 @@ struct Style {
     bool IsCompressibleReplaced() const { return itemIsReplaced; }
 };
 
+// Rust derives `PartialEq` on `Style` and on everything it holds; this is
+// that derive, and the ones its fields needed. What asks: the layout cache in
+// `src/gpui` keeps taffy's tree between frames and has to know whether an
+// element's style is the one its node already carries — a style that compares
+// equal is one taffy is not told about, and a node it is not told about keeps
+// the cache it filled last frame.
+//
+// Every field of `Style` is compared. A field added to `Style` has to be
+// added here too, or a change to it will not reach layout.
+bool operator==(const Style& a, const Style& b);
+
+inline bool operator!=(const Style& a, const Style& b) {
+    return !(a == b);
+}
+
+// ─── the equality derives the fields needed ──────────────────────────────
+//
+// `Optf` is Rust's `Option<f32>` with a NaN standing for None, so it is
+// compared by its bits: `NaN == NaN` is false, and two Nones are equal.
+
+inline bool SameOptf(Optf a, Optf b) {
+    uint32_t ab = 0;
+    uint32_t bb = 0;
+    memcpy(&ab, &a, sizeof(ab));
+    memcpy(&bb, &b, sizeof(bb));
+    return ab == bb;
+}
+
+// A float compared by bits for the same reason, and because two styles that
+// differ only in a NaN are not styles taffy would lay out alike.
+inline bool SameFloatBits(float a, float b) {
+    uint32_t ab = 0;
+    uint32_t bb = 0;
+    memcpy(&ab, &a, sizeof(ab));
+    memcpy(&bb, &b, sizeof(bb));
+    return ab == bb;
+}
+
+inline bool SameStr(base::Str a, base::Str b) {
+    if (a.len != b.len) {
+        return false;
+    }
+    if (a.len == 0) {
+        return true;
+    }
+    return memcmp(a.s, b.s, (size_t)a.len) == 0;
+}
+
+inline bool operator==(MinTrackSizingFunction a, MinTrackSizingFunction b) {
+    return a.raw == b.raw;
+}
+
+inline bool operator==(MaxTrackSizingFunction a, MaxTrackSizingFunction b) {
+    return a.raw == b.raw;
+}
+
+inline bool operator==(TrackSizingFunction a, TrackSizingFunction b) {
+    return a.min == b.min && a.max == b.max;
+}
+
+inline bool operator==(const GridPlacement& a, const GridPlacement& b) {
+    return a.kind == b.kind && a.line == b.line && a.span == b.span &&
+           SameStr(a.name, b.name);
+}
+
+inline bool operator==(const LinePlacement& a, const LinePlacement& b) {
+    return a.start == b.start && a.end == b.end;
+}
+
+inline bool operator==(const GridTemplateArea& a, const GridTemplateArea& b) {
+    return SameStr(a.name, b.name) && a.rowStart == b.rowStart &&
+           a.rowEnd == b.rowEnd && a.columnStart == b.columnStart &&
+           a.columnEnd == b.columnEnd;
+}
+
+// A Vec in Rust, so its contents are what is compared and not where they sit.
+template <typename T>
+inline bool SameSlice(Slice<T> a, Slice<T> b) {
+    if (a.len != b.len) {
+        return false;
+    }
+    for (int i = 0; i < a.len; i++) {
+        if (!(a.els[i] == b.els[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool SameNames(Slice<base::Str> a, Slice<base::Str> b) {
+    if (a.len != b.len) {
+        return false;
+    }
+    for (int i = 0; i < a.len; i++) {
+        if (!SameStr(a.els[i], b.els[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool operator==(const LineNameSet& a, const LineNameSet& b) {
+    return SameNames(a.names, b.names);
+}
+
+inline bool operator==(const GridTemplateRepetition& a,
+                       const GridTemplateRepetition& b) {
+    return a.count == b.count && SameSlice(a.tracks, b.tracks) &&
+           SameSlice(a.lineNames, b.lineNames);
+}
+
+inline bool operator==(const GridTemplateComponent& a,
+                       const GridTemplateComponent& b) {
+    if (a.isRepeat != b.isRepeat) {
+        return false;
+    }
+    return a.isRepeat ? a.repeat == b.repeat : a.single == b.single;
+}
+
 } // namespace taffy
 
 #endif // GPUI_TAFFY_STYLE_H_

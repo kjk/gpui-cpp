@@ -97,6 +97,11 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
     cx.win = win;
     cx.a = a;
     cx.self = id;
+    // What the window has on it, for Notify to aim at. GPUI records the same
+    // set while it renders, as `Window::dirty_views`.
+    if (win) {
+        win->rendered.Append(id);
+    }
     return s.render(s.ptr, &cx);
 }
 
@@ -117,15 +122,70 @@ void NotifyApp(App* app) {
     }
 }
 
+// Every observer of `observed`, oldest first, over a copy of the handles:
+// a handler may observe or unobserve, and the list moving under the walk
+// would otherwise skip or repeat one. The same shape as EntityEmit's.
+static void RunObservers(App* app, Window* win, EntityId observed) {
+    if (!app || app->observers.len <= 0) {
+        return;
+    }
+    Subscription ids[64];
+    int nIds = 0;
+    for (int i = 0; i < app->observers.len && nIds < 64; i++) {
+        if (app->observers[i].emitter == observed) {
+            ids[nIds++].id = app->observers[i].id;
+        }
+    }
+    for (int k = 0; k < nIds; k++) {
+        for (int i = 0; i < app->observers.len; i++) {
+            if (app->observers[i].id != ids[k].id) {
+                continue;
+            }
+            Listener l = app->observers[i].handler;
+            ListenerCall(app, win, l, &observed);
+            break;
+        }
+    }
+}
+
+void NotifyEntity(App* app, EntityId id, Window* from) {
+    if (!app) {
+        return;
+    }
+    RunObservers(app, from, id);
+    // The windows that have this entity on them. GPUI marks a window dirty
+    // only when the entity that notified is one of the views it rendered.
+    bool any = false;
+    if (id.IsValid()) {
+        for (int i = 0; i < app->windows.len; i++) {
+            Window* w = app->windows[i];
+            for (int j = 0; j < w->rendered.len; j++) {
+                if (w->rendered[j] == id) {
+                    AppInvalidate(w);
+                    any = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (any) {
+        return;
+    }
+    // Nothing has rendered it: a state entity that is not a view, or a view
+    // whose first frame has not been built yet. Both still have to reach the
+    // screen, so this is where the old shotgun stays.
+    if (from) {
+        AppInvalidate(from);
+        return;
+    }
+    NotifyApp(app);
+}
+
 void Notify(Ctx* cx) {
     if (!cx) {
         return;
     }
-    if (cx->win) {
-        AppInvalidate(cx->win);
-        return;
-    }
-    NotifyApp(cx->app);
+    NotifyEntity(cx->app, cx->self, cx->win);
 }
 
 void ListenerCall(App* app, Window* win, const Listener& l, const void* ev) {
@@ -476,6 +536,57 @@ static void SubRemoveAt(App* app, int ix) {
         app->subs[k] = app->subs[k + 1];
     }
     app->subs.len--;
+}
+
+static void ObserverRemoveAt(App* app, int ix) {
+    for (int k = ix; k + 1 < app->observers.len; k++) {
+        app->observers[k] = app->observers[k + 1];
+    }
+    app->observers.len--;
+}
+
+Subscription EntityObserveRaw(App* app, EntityId observed, Listener handler) {
+    Subscription sub;
+    if (!app || !observed.IsValid() || !handler.IsValid()) {
+        return sub;
+    }
+    EntitySub s;
+    s.id = app->nextSubId++;
+    s.emitter = observed;
+    s.handler = handler;
+    app->observers.Append(s);
+    sub.id = s.id;
+    return sub;
+}
+
+void EntityUnobserve(App* app, Subscription sub) {
+    if (!app || !sub.IsValid()) {
+        return;
+    }
+    for (int i = 0; i < app->observers.len; i++) {
+        if (app->observers[i].id == sub.id) {
+            ObserverRemoveAt(app, i);
+            return;
+        }
+    }
+}
+
+// Stale ones swept first: an observer whose entity has gone is not one.
+int EntityObserverCount(App* app, EntityId observed) {
+    if (!app) {
+        return 0;
+    }
+    int n = 0;
+    for (int i = app->observers.len - 1; i >= 0; i--) {
+        if (!EntityGet(app, app->observers[i].handler.view)) {
+            ObserverRemoveAt(app, i);
+            continue;
+        }
+        if (app->observers[i].emitter == observed) {
+            n++;
+        }
+    }
+    return n;
 }
 
 Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler) {

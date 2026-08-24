@@ -2712,14 +2712,69 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 //     names no minimum gets CSS's content-based automatic minimum size and an
 //     element that says `MinW(0)` gets the zero it asked for.
 
-// The taffy tree is rebuilt every frame but kept between them, so its node
-// slots and per-node child arrays are recycled instead of reallocated.
-static taffy::TaffyTree gLayoutTree;
-static bool gLayoutTreeReady = false;
+// ─── the layout cache ────────────────────────────────────────────────────
+//
+// The taffy tree is kept between frames and reconciled against the element
+// tree rather than rebuilt from nothing, because taffy's own per-node cache
+// is the thing worth keeping: a node whose style and content are the ones it
+// had last frame answers `PerformChildLayout` out of that cache and its
+// subtree is not walked at all. Rebuilding the tree threw the cache away
+// every frame, which is why 66% of a story frame was inside
+// `ComputeRootLayout` with nothing on the page having changed.
+//
+// The element tree has no identity to key on — an `El` is built afresh out of
+// the frame arena every frame and `El::Click(id)` names only the handful of
+// boxes that hit-test — so the key is position: the nth child of the nth
+// child is the same node as last frame if the kinds still match. Where they
+// do not, that subtree is dropped and built again, which is what a page
+// switch does.
+//
+// What makes a node dirty, and nothing else does:
+//
+//   - its `taffy::Style` differs from the one the node carries (`operator==`
+//     on Style is the derive Rust has and this port had left out), or
+//   - it is a measured leaf whose measurement inputs differ — the text, the
+//     font, the weight, the line height, the wrap, an image's natural size.
+//     A hover that only recolours a box changes neither, so a hovered row
+//     costs no layout at all.
+//
+// `GPUI_LAYOUT_REUSE=off` turns it back into the old behaviour by resetting
+// the cache every frame, which is the first thing to try if a frame ever
+// comes out laid out stale.
+
+// What a node needs to know about its element, kept beside taffy rather than
+// in it: `SetNodeContext` marks a node dirty, so handing taffy this frame's
+// `El*` would undo the caching it is there to protect. The record is the
+// node's context, set once when the node is made, and its fields are updated
+// in place.
+struct LayoutNode {
+    El* el = nullptr;
+    // What the measure function last read off the element. Zero for a node
+    // that is not a measured leaf.
+    uint64_t measKey = 0;
+    uint8_t kind = 0;
+};
+
+struct LayoutCache {
+    taffy::TaffyTree tree;
+    bool ready = false;
+    taffy::NodeId root = {};
+    bool hasRoot = false;
+    // Every record ever made, and the ones ready to be handed out again.
+    Vec<LayoutNode*> pool;
+    Vec<LayoutNode*> spare;
+    // What the last reconcile did, for GPUI_FRAME_BENCH.
+    LayoutCacheStats stats;
+};
 
 // The fixed elements found while building this frame's tree, which are
 // re-parented onto the root.
 static Vec<El*> gLayoutFixed;
+
+// The tree a MeasureEl runs in. It is reset per call — a measure builds an
+// element tree of its own that has nothing to do with the last one — so it
+// keeps the node slots and the records and nothing else.
+static LayoutCache gMeasureCache;
 
 static bool RgbaEq(Rgba a, Rgba b) {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
@@ -3018,7 +3073,11 @@ static taffy::SizeF LayoutMeasure(taffy::SizeFOpt known, taffy::SizeAvail avail,
                                   void* userData) {
     (void)node;
     (void)nodeStyle;
-    El* e = (El*)nodeContext;
+    // The context is the cache's record for this node, not the element:
+    // telling taffy about a new El* would mark the node dirty, which is the
+    // one thing the cache is there to avoid.
+    LayoutNode* rec = (LayoutNode*)nodeContext;
+    El* e = rec ? rec->el : nullptr;
     LayoutMeasureCtx* mc = (LayoutMeasureCtx*)userData;
     if (!e) {
         return taffy::SizeF::Zero();
@@ -3185,33 +3244,237 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     }
 }
 
-static taffy::NodeId BuildNode(El* e) {
-    taffy::Style ts = ToTaffyStyle(e);
-    taffy::NodeId id;
-    if (ElIsMeasured(e)) {
-        id = gLayoutTree.NewLeafWithContext(ts, e);
-    } else {
-        id = gLayoutTree.NewLeaf(ts);
+// ─── reconciling the tree ────────────────────────────────────────────────
+
+static uint64_t FnvMix(uint64_t h, const void* p, size_t n) {
+    const uint8_t* b = (const uint8_t*)p;
+    for (size_t i = 0; i < n; i++) {
+        h ^= b[i];
+        h *= 1099511628211ull;
     }
+    return h;
+}
+
+// GPUI_LAYOUT_REUSE=off rebuilds the tree every frame, which is what layout
+// did before the cache. It is the first thing to try if a frame ever comes
+// out laid out stale, and what the two are measured against.
+static bool LayoutReuseOn() {
+    static int on = -1;
+    if (on >= 0) {
+        return on != 0;
+    }
+    char buf[16] = {};
+    const char* env = getenv("GPUI_LAYOUT_REUSE");
+    if (env) {
+        StrCopyZ(buf, (int)sizeof(buf), env);
+    }
+    on = 1;
+    if (buf[0] && (StrCmpI(buf, "0") == 0 || StrCmpI(buf, "off") == 0)) {
+        on = 0;
+        logf("layout: reuse off (GPUI_LAYOUT_REUSE), rebuilding every frame");
+    }
+    return on != 0;
+}
+
+static LayoutNode* LayoutNodeTake(LayoutCache* lc, El* e) {
+    LayoutNode* n = nullptr;
+    if (lc->spare.len > 0) {
+        n = lc->spare[lc->spare.len - 1];
+        lc->spare.len--;
+    } else {
+        n = new LayoutNode();
+        lc->pool.Append(n);
+    }
+    n->el = e;
+    n->measKey = 0;
+    n->kind = (uint8_t)e->kind;
+    return n;
+}
+
+static void LayoutNodeGiveBack(LayoutCache* lc, LayoutNode* n) {
+    if (!n) {
+        return;
+    }
+    n->el = nullptr;
+    lc->spare.Append(n);
+}
+
+// Everything a measured leaf's size depends on that its style does not say.
+// A text run is its bytes, the font it was prepared with, its weight, its
+// line height and whether it wraps; an image is its own pixels, which arrive
+// after the load and change the answer when they do.
+static uint64_t LayoutMeasureKey(PaintCtx* ctx, El* e) {
+    if (!ElIsMeasured(e)) {
+        return 0;
+    }
+    // FNV-1a over the bytes that decide the size.
+    uint64_t h = 1469598103934665603ull;
+    uint8_t kind = (uint8_t)e->kind;
+    h = FnvMix(h, &kind, 1);
+    if (e->kind == ElKind::Icon || e->kind == ElKind::Progress) {
+        // Both answer with a constant, so nothing about the element moves it.
+        return h;
+    }
+    if (e->text.len > 0 && e->text.s) {
+        h = FnvMix(h, e->text.s, (size_t)e->text.len);
+    }
+    h = FnvMix(h, &e->laidFont, sizeof(e->laidFont));
+    uint8_t weight = ElTextWeight(e);
+    h = FnvMix(h, &weight, 1);
+    h = FnvMix(h, &e->style.lineHeight, sizeof(e->style.lineHeight));
+    uint8_t flags =
+        (uint8_t)((e->style.wrap ? 1 : 0) | (e->style.truncate ? 2 : 0));
+    h = FnvMix(h, &flags, 1);
+    if (e->kind == ElKind::Image) {
+        Size px = ImageNaturalSize(ctx, e);
+        h = FnvMix(h, &px.w, sizeof(px.w));
+        h = FnvMix(h, &px.h, sizeof(px.h));
+    }
+    return h;
+}
+
+static void LayoutDropSubtree(LayoutCache* lc, taffy::NodeId id) {
+    // Backwards, so detaching a child never shifts the ones still to go.
+    for (int i = lc->tree.ChildCount(id) - 1; i >= 0; i--) {
+        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(id, i));
+    }
+    LayoutNodeGiveBack(lc, (LayoutNode*)lc->tree.GetNodeContext(id));
+    lc->tree.Remove(id);
+    lc->stats.dropped++;
+}
+
+// The root's own style is stretched to fill the space it was given — Rust's
+// `stretch_auto_size_to_fill` — and that has to happen before the comparison
+// below, or the root would differ from itself every frame.
+static void StretchRootStyle(taffy::Style* ts, float availW, float availH) {
+    if (ts->size.width.IsAuto() && availW > 0) {
+        ts->size.width = taffy::Dimension::Length(availW);
+    }
+    if (ts->size.height.IsAuto() && availH > 0) {
+        ts->size.height = taffy::Dimension::Length(availH);
+    }
+}
+
+struct LayoutSyncCtx {
+    LayoutCache* lc;
+    PaintCtx* ctx;
+    float availW;
+    float availH;
+};
+
+static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
+                                bool havePrev, bool isRoot);
+
+// A node and its subtree, made from nothing.
+static taffy::NodeId LayoutBuild(LayoutSyncCtx* sc, El* e, bool isRoot) {
+    LayoutCache* lc = sc->lc;
+    taffy::Style ts = ToTaffyStyle(e);
+    if (isRoot) {
+        StretchRootStyle(&ts, sc->availW, sc->availH);
+    }
+    LayoutNode* rec = LayoutNodeTake(lc, e);
+    taffy::NodeId id = lc->tree.NewLeafWithContext(ts, rec);
+    rec->measKey = LayoutMeasureKey(sc->ctx, e);
     e->layoutNode = id.raw;
+    lc->stats.made++;
+    lc->stats.nodes++;
 
     for (El* c = e->first; c; c = c->next) {
         if (c->style.fixed) {
             // Placed against the window, so it hangs off the root instead.
             gLayoutFixed.Append(c);
-            BuildNode(c);
             continue;
         }
-        gLayoutTree.AddChild(id, BuildNode(c));
+        lc->tree.AddChild(id, LayoutBuild(sc, c, false));
     }
     return id;
 }
 
+// `prev` is the node this element had last frame, if the tree still has one
+// in that position. Answers the node the element has now, which is `prev`
+// whenever it could be kept.
+static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
+                                bool havePrev, bool isRoot) {
+    LayoutCache* lc = sc->lc;
+    LayoutNode* rec =
+        havePrev ? (LayoutNode*)lc->tree.GetNodeContext(prev) : nullptr;
+    // A node made for one kind of element cannot stand in for another: a
+    // measured leaf and a box are not the same node even when their styles
+    // agree.
+    if (!rec || rec->kind != (uint8_t)e->kind) {
+        if (havePrev) {
+            LayoutDropSubtree(lc, prev);
+        }
+        return LayoutBuild(sc, e, isRoot);
+    }
+
+    lc->stats.nodes++;
+    rec->el = e;
+    e->layoutNode = prev.raw;
+
+    taffy::Style ts = ToTaffyStyle(e);
+    if (isRoot) {
+        StretchRootStyle(&ts, sc->availW, sc->availH);
+    }
+    if (!(ts == lc->tree.GetStyle(prev))) {
+        lc->tree.SetStyle(prev, ts);
+        lc->stats.restyled++;
+    }
+
+    uint64_t key = LayoutMeasureKey(sc->ctx, e);
+    if (key != rec->measKey) {
+        rec->measKey = key;
+        lc->tree.MarkDirty(prev);
+        lc->stats.remeasured++;
+    }
+
+    // The children, in order. A `fixed` child is not one of this node's — it
+    // hangs off the root — so it is collected and skipped here, and the index
+    // only counts the ones that stay.
+    int had = lc->tree.ChildCount(prev);
+    int i = 0;
+    for (El* c = e->first; c; c = c->next) {
+        if (c->style.fixed) {
+            gLayoutFixed.Append(c);
+            continue;
+        }
+        if (i < had) {
+            taffy::NodeId old = lc->tree.ChildAtIndex(prev, i);
+            taffy::NodeId now = LayoutSync(sc, c, old, true, false);
+            if (now != old) {
+                lc->tree.ReplaceChildAtIndex(prev, i, now);
+            }
+        } else {
+            lc->tree.AddChild(prev, LayoutBuild(sc, c, false));
+        }
+        i++;
+    }
+    // Whatever the element no longer has. Dropping a child detaches it, so
+    // the parent's list shortens as they go.
+    for (int j = lc->tree.ChildCount(prev) - 1; j >= i; j--) {
+        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
+    }
+    return prev;
+}
+
+// Everything in the cache goes back, so the next pass builds from nothing.
+static void LayoutCacheReset(LayoutCache* lc) {
+    lc->tree.Clear();
+    lc->spare.len = 0;
+    for (int i = 0; i < lc->pool.len; i++) {
+        lc->pool[i]->el = nullptr;
+        lc->spare.Append(lc->pool[i]);
+    }
+    lc->hasRoot = false;
+    lc->root = taffy::NodeId{};
+}
+
 // ─── writing the result back ─────────────────────────────────────────────
 
-static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY);
+static void WriteBackEl(LayoutCache* lc, PaintCtx* ctx, El* e, float originX,
+                        float originY);
 
-static void WriteBackChildren(PaintCtx* ctx, El* e) {
+static void WriteBackChildren(LayoutCache* lc, PaintCtx* ctx, El* e) {
     // A scrolled box slides its in-flow content; an out-of-flow child is
     // pinned to the box and does not move with it, which is what the old
     // engine's PlaceOutOfFlow did.
@@ -3222,16 +3485,16 @@ static void WriteBackChildren(PaintCtx* ctx, El* e) {
             continue;
         }
         if (c->style.absolute) {
-            WriteBackEl(ctx, c, e->x, e->y);
+            WriteBackEl(lc, ctx, c, e->x, e->y);
         } else {
-            WriteBackEl(ctx, c, inFlowX, inFlowY);
+            WriteBackEl(lc, ctx, c, inFlowX, inFlowY);
         }
     }
 }
 
-static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY) {
-    const taffy::Layout& l = gLayoutTree
-                                 .GetLayout(taffy::NodeId{e->layoutNode});
+static void WriteBackEl(LayoutCache* lc, PaintCtx* ctx, El* e, float originX,
+                        float originY) {
+    const taffy::Layout& l = lc->tree.GetLayout(taffy::NodeId{e->layoutNode});
     e->x = originX + l.location.x;
     e->y = originY + l.location.y;
     e->w = l.size.w;
@@ -3256,7 +3519,7 @@ static void WriteBackEl(PaintCtx* ctx, El* e, float originX, float originY) {
         }
     }
 
-    WriteBackChildren(ctx, e);
+    WriteBackChildren(lc, ctx, e);
 }
 
 // The positioning rules gpui-component has and CSS does not: an overlay
@@ -3335,46 +3598,62 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
 
 // The one layout pass, with the space it is run in left to the caller: the
 // frame runs it against the viewport, a measure runs it against MinContent.
-static void LayoutElIn(PaintCtx* ctx, El* e, float x, float y, float availW,
-                       float availH, bool minContent, float inheritFont,
-                       Rgba inheritFg) {
-    if (!e) {
+static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
+                       float availW, float availH, bool minContent,
+                       float inheritFont, Rgba inheritFg) {
+    if (!e || !lc) {
         return;
     }
-    if (!gLayoutTreeReady) {
-        gLayoutTree.Init(256);
+    if (!lc->ready) {
+        lc->tree.Init(256);
         // GPUI calls `taffy.disable_rounding()`; everything above paint here
         // is DIPs, and the backends snap to the pixel grid themselves.
-        gLayoutTree.DisableRounding();
-        gLayoutTreeReady = true;
+        lc->tree.DisableRounding();
+        lc->ready = true;
     }
-    gLayoutTree.Clear();
+    if (!LayoutReuseOn()) {
+        LayoutCacheReset(lc);
+    }
     gLayoutFixed.len = 0;
+    lc->stats = LayoutCacheStats{};
 
     PrepareEl(ctx, e, inheritFont, inheritFg);
 
-    taffy::NodeId root = BuildNode(e);
-    // A `fixed` element resolves its insets against the window, so it hangs
-    // off the root rather than off whatever built it.
-    for (int i = 0; i < gLayoutFixed.len; i++) {
-        gLayoutTree.AddChild(root, taffy::NodeId{gLayoutFixed[i]->layoutNode});
-    }
+    LayoutSyncCtx sc = {lc, ctx, availW, availH};
+    // Rust's `stretch_auto_size_to_fill` is applied to the root's style
+    // inside the sync, so that the style the node carries is the one the
+    // next frame compares against.
+    taffy::NodeId root = LayoutSync(&sc, e, lc->root, lc->hasRoot, true);
+    lc->root = root;
+    lc->hasRoot = true;
 
-    // Rust's `stretch_auto_size_to_fill`: a root with an auto dimension fills
-    // the space it was given, the way the root element of a page fills the
-    // viewport.
-    taffy::Style rootStyle = gLayoutTree.GetStyle(root);
-    bool changed = false;
-    if (rootStyle.size.width.IsAuto() && availW > 0) {
-        rootStyle.size.width = taffy::Dimension::Length(availW);
-        changed = true;
+    // A `fixed` element resolves its insets against the window, so it hangs
+    // off the root rather than off whatever built it. They come after the
+    // root's own children, in the order the walk found them, which is what
+    // makes the position they are matched by stable.
+    int own = 0;
+    for (El* c = e->first; c; c = c->next) {
+        if (!c->style.fixed) {
+            own++;
+        }
     }
-    if (rootStyle.size.height.IsAuto() && availH > 0) {
-        rootStyle.size.height = taffy::Dimension::Length(availH);
-        changed = true;
+    for (int i = 0; i < gLayoutFixed.len; i++) {
+        El* f = gLayoutFixed[i];
+        int at = own + i;
+        bool had = at < lc->tree.ChildCount(root);
+        taffy::NodeId old =
+            had ? lc->tree.ChildAtIndex(root, at) : taffy::NodeId{};
+        taffy::NodeId now = LayoutSync(&sc, f, old, had, false);
+        if (!had) {
+            lc->tree.AddChild(root, now);
+        } else if (now != old) {
+            lc->tree.ReplaceChildAtIndex(root, at, now);
+        }
     }
-    if (changed) {
-        gLayoutTree.SetStyle(root, rootStyle);
+    // A fixed element that has gone takes its node with it.
+    for (int j = lc->tree.ChildCount(root) - 1; j >= own + gLayoutFixed.len;
+         j--) {
+        LayoutDropSubtree(lc, lc->tree.ChildAtIndex(root, j));
     }
 
     taffy::SizeAvail space;
@@ -3389,28 +3668,74 @@ static void LayoutElIn(PaintCtx* ctx, El* e, float x, float y, float availW,
     }
 
     LayoutMeasureCtx mc = {ctx};
-    gLayoutTree.ComputeLayoutWithMeasure(root, space, LayoutMeasure, &mc);
+    lc->tree.ComputeLayoutWithMeasure(root, space, LayoutMeasure, &mc);
 
-    WriteBackEl(ctx, e, x, y);
+    WriteBackEl(lc, ctx, e, x, y);
     // The fixed elements are laid out as children of the root, so their boxes
     // come out in window coordinates already.
     for (int i = 0; i < gLayoutFixed.len; i++) {
-        WriteBackEl(ctx, gLayoutFixed[i], 0, 0);
+        WriteBackEl(lc, ctx, gLayoutFixed[i], 0, 0);
     }
     PlaceAnchored(e, ctx ? ctx->viewW : 0.f, ctx ? ctx->viewH : 0.f);
 }
 
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
-              float availH, float inheritFont, Rgba inheritFg) {
-    LayoutElIn(ctx, e, x, y, availW, availH, false, inheritFont, inheritFg);
+              float availH, float inheritFont, Rgba inheritFg,
+              LayoutCache* lc) {
+    if (!lc) {
+        LayoutCacheReset(&gMeasureCache);
+        lc = &gMeasureCache;
+    }
+    LayoutElIn(lc, ctx, e, x, y, availW, availH, false, inheritFont, inheritFg);
 }
 
 Size MeasureEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     if (!e) {
         return Size{0, 0};
     }
-    LayoutElIn(ctx, e, 0, 0, 0, 0, true, inheritFont, inheritFg);
+    // A measure builds an element tree of its own that has nothing to do with
+    // the last one, so its cache keeps the node slots and the records and
+    // starts over on the tree.
+    LayoutCacheReset(&gMeasureCache);
+    LayoutElIn(&gMeasureCache, ctx, e, 0, 0, 0, 0, true, inheritFont,
+               inheritFg);
     return Size{e->w, e->h};
+}
+
+LayoutCache* LayoutCacheNew() {
+    return new LayoutCache();
+}
+
+void LayoutCacheFree(LayoutCache* lc) {
+    if (!lc) {
+        return;
+    }
+    for (int i = 0; i < lc->pool.len; i++) {
+        delete lc->pool[i];
+    }
+    lc->pool.Reset();
+    lc->spare.Reset();
+    lc->tree.Free();
+    delete lc;
+}
+
+LayoutCacheStats LayoutCacheLastStats(const LayoutCache* lc) {
+    return lc ? lc->stats : LayoutCacheStats{};
+}
+
+// The scratch cache is a static, so the app's teardown is what gives its
+// records and its node slots back — the way ImageCacheClear and the rest of
+// AppFree's list do.
+void LayoutScratchFree() {
+    for (int i = 0; i < gMeasureCache.pool.len; i++) {
+        delete gMeasureCache.pool[i];
+    }
+    gMeasureCache.pool.Reset();
+    gMeasureCache.spare.Reset();
+    gMeasureCache.tree.Free();
+    gMeasureCache.ready = false;
+    gMeasureCache.hasRoot = false;
+    gMeasureCache.root = taffy::NodeId{};
 }
 
 // ─── paint ────────────────────────────────────────────────────────────────

@@ -3883,8 +3883,44 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
                         bool wrap, float x, float y, int u8a, int u8b,
                         Rgba color, bool wavy = false);
+// The taffy tree a window lays out in, kept between frames so taffy's own
+// per-node caches are. It is reconciled against the element tree rather than
+// rebuilt: an element whose style and content are the ones its node already
+// has is not laid out again, and a subtree of them is not walked at all.
+// See the block above `LayoutNode` in gpui.cpp, and GPUI_LAYOUT_REUSE=off to
+// take it back out.
+struct LayoutCache;
+
+LayoutCache* LayoutCacheNew();
+void LayoutCacheFree(LayoutCache* lc);
+
+// What the last frame's reconcile did, for GPUI_FRAME_BENCH.
+struct LayoutCacheStats {
+    // Nodes the element tree asked for.
+    int nodes = 0;
+    // Of those, the ones that had to be made — a page that has just changed
+    // makes them all, a page that has not makes none.
+    int made = 0;
+    int dropped = 0;
+    // Nodes told about a new style, and measured leaves told their content
+    // moved. Each of those is a node taffy has to lay out again, and its
+    // ancestors with it.
+    int restyled = 0;
+    int remeasured = 0;
+};
+
+LayoutCacheStats LayoutCacheLastStats(const LayoutCache* lc);
+// The scratch cache MeasureEl and a cache-less LayoutEl share, given back at
+// AppFree.
+void LayoutScratchFree();
+
+// `lc` is the window's cache, and the reason layout is cheap on a frame that
+// changed little. A caller without one — a test, a measurement — passes none
+// and gets a scratch cache that is reset per call, which is what every caller
+// got before there was a cache at all.
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
-              float availH, float inheritFont, Rgba inheritFg);
+              float availH, float inheritFont, Rgba inheritFg,
+              LayoutCache* lc = nullptr);
 // AnyElement::layout_as_root(size(MinContent, MinContent)): what one element
 // wants to be, laid out on its own and away from the tree it will go into.
 // A virtualized list measures a row this way and then places every row at
@@ -3892,8 +3928,9 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
 // would have come out as.
 //
 // It runs the same pass `LayoutEl` does and leaves the boxes on the element,
-// so the caller may either read the returned size or go on to use `e` — but
-// the next `LayoutEl` clears the tree, so nothing survives the frame.
+// so the caller may either read the returned size or go on to use `e`. It has
+// a layout cache of its own, reset per call, so a measure in the middle of a
+// frame does not disturb the window's.
 Size MeasureEl(PaintCtx* ctx, El* e, float inheritFont = 0,
                Rgba inheritFg = {});
 void PaintEl(PaintCtx* ctx, El* e);
@@ -4025,6 +4062,9 @@ struct App {
     Vec<int32_t> freeSlots;
     // cx.subscribe: every live subscription, in the order they were made.
     Vec<EntitySub> subs;
+    // cx.observe: the same for the untyped channel, where `emitter` is the
+    // entity being watched.
+    Vec<EntitySub> observers;
     int nextSubId = 1;
     int exitCode = 0;
 
@@ -4044,11 +4084,18 @@ struct Window {
     PlatWindow* plat = nullptr;
     PaintCtx paint = {};
     Arena* frameArena = nullptr;
+    // The taffy tree this window lays out in, kept between frames. Made on
+    // the first frame and freed with the window.
+    LayoutCache* layout = nullptr;
     // The selection over this window's selectable runs. Made on the first
     // press that lands on text and dropped with the window.
     WindowSelection* sel = nullptr;
     // The view this window renders. GPUI's Window holds a root view too.
     EntityId root = {};
+    // Every entity `EntityRender` was asked for while the last frame was
+    // built — GPUI's `Window::dirty_views`, and what makes `Notify` name a
+    // window rather than every window. Rebuilt each frame.
+    Vec<EntityId> rendered;
     int hoverId = 0;
     int focusId = 0;
     // window.focus_generation: bumped every time the focus moves, so a
@@ -4337,6 +4384,26 @@ struct Subscription {
 
 Subscription EntitySubscribeRaw(App* app, EntityId emitter, Listener handler);
 void EntityUnsubscribe(App* app, Subscription sub);
+
+// ─── observers (crates/gpui/src/app.rs, `observers`) ─────────────────────
+//
+// `cx.observe(&entity, |this, observed, cx| ..)`: the untyped half of the
+// pair above. An emitter sends an event and says what it is; an entity that
+// notifies says only that it changed, and whoever is watching hears about it.
+// The handler is called with the entity that notified, so one observer can
+// watch several.
+Subscription EntityObserveRaw(App* app, EntityId observed, Listener handler);
+void EntityUnobserve(App* app, Subscription sub);
+int EntityObserverCount(App* app, EntityId observed);
+
+// `cx.notify()` for an entity that is not the one in hand, and the whole of
+// what `Notify(cx)` does: run the observers, then invalidate the windows that
+// rendered that entity last frame. A window that has never rendered it — a
+// state entity that is not a view, a view whose first frame has not been
+// built — falls back to `from`, and to every window when there is none, which
+// is what this did for everything before there was anything to be precise
+// with.
+void NotifyEntity(App* app, EntityId id, Window* from);
 // cx.emit(ev): every live subscriber hears it, oldest first. `ev` is the
 // event struct the emitter sends, by pointer, and it does not outlive the
 // call.
@@ -4354,6 +4421,24 @@ Subscription Subscribe(Ctx* cx, Entity<T> emitter,
     l.fn = (void*)fn;
     l.view = cx->self;
     return EntitySubscribeRaw(cx->app, emitter.id, l);
+}
+
+// cx.observe(&entity, ..): `handler` runs on `cx->self` whenever `observed`
+// notifies. The event pointer a listener takes is the notifying EntityId,
+// since an observer that watches more than one has to tell them apart.
+template <typename T, typename S>
+Subscription Observe(Ctx* cx, Entity<T> observed,
+                     void (*handler)(S*, Ctx*, const EntityId*)) {
+    Listener l = Listen(cx, handler);
+    return EntityObserveRaw(cx->app, observed.id, l);
+}
+
+// The same for a caller that has the observer's handle rather than a Ctx.
+template <typename T, typename S>
+Subscription ObserveTo(App* app, Entity<T> observed, Entity<S> observer,
+                       void (*handler)(S*, Ctx*, const EntityId*)) {
+    Listener l = ListenTo(observer, handler);
+    return EntityObserveRaw(app, observed.id, l);
 }
 
 // The same, for a subscriber that is not the one rendering.

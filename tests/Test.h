@@ -93,6 +93,8 @@ void TestInspector();
 void TestThemeColor();
 void TestColor();
 void TestWryUri();
+void TestObservers();
+void TestStyleEq();
 void TestDockState();
 void TestFocusTrap();
 void TestKeymap();

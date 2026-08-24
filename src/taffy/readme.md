@@ -53,6 +53,17 @@ Not ported, and not planned:
 - `detailed_layout_info` — an accessor for the computed grid track sizes.
   Nothing in this tree reads it.
 
+## The PartialEq derive
+
+Rust derives `PartialEq` on `Style` and on the types it holds; that derive is
+ported (`operator==` in `style.h` / `style.cpp`) because `src/gpui`'s layout
+cache asks whether an element's style is the one its node already carries. Two
+notes on it, both in comments where they apply: `Optf` is Rust's
+`Option<f32>` with a NaN standing for None and is compared by bits, since
+`NaN == NaN` would report two Nones unequal; and every field of `Style` is
+compared by hand, so a field added to `Style` has to be added there too or a
+change to it will not reach layout.
+
 ## Deliberate differences
 
 Each of these is also stated in a comment at the place it applies.

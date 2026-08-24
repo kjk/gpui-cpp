@@ -385,7 +385,8 @@ The runtime mirrors GPUI's shape. Read this before touching `src/gpui`, adding a
 | `cx.new(...)`                    | `EntityNew<T>(app)`                                                                 |
 | `cx.listener(...)`               | `Listen(cx, &T::OnThing)` / `ListenTo(entity, &T::OnThing)`                         |
 | `cx.listener(move \|…\| … ix …)` | `Listen(cx, &T::OnThing, ix)` — the captured value                                  |
-| `cx.notify()`                    | `Notify(cx)`                                                                        |
+| `cx.notify()`                    | `Notify(cx)` — the entity, its observers, the windows it is on                       |
+| `cx.observe(&e, ..)`             | `Observe(cx, e, &T::OnChanged)`; `ObserveTo` where `SubscribeTo` would be           |
 | `Drop for T`                     | `~T()`, run when the entity is dropped                                              |
 | `window.use_keyed_state`         | `KeyedState<T>(cx, key)`                                                            |
 | `cx.spawn(...)` with no await    | `WindowPost(win, Listener)` — runs against its entity on the next pass             |
@@ -430,7 +431,7 @@ Rules:
 5. `El::Click(id)` is identity only: hit-testing, hover, focus, Tab traps — GPUI's `ElementId`. It does not dispatch. `WindowOnUnhandledClick` fires for a click no element handled, which is the outside click that dismisses an overlay. A widget that wants the press itself rather than the click takes `El::OnMouseDown` / `OnMouseUp` / `OnDragMove` — `div().on_mouse_down(..)` and `on_drag_move` — where the element that took the press keeps the moves until the button comes back up, which is what GPUI's drag entity does for a drag.
 6. Window-level input is a subscription bound to a view, one per event type the way `window.on_mouse_event::<T>` is: `WindowOnKey`, `WindowOnMouseDown` / `Up` / `Move` / `Exit`, `WindowOnScrollWheel`, `WindowSetInterval` / `WindowSetTimeout` (GPUI spells the last two `cx.spawn` + `Timer::after`). The handler takes the matching GPUI event — `MouseDownEvent`, `ScrollWheelEvent` — and the platform window builds those into a `PlatformInput` for `WindowDispatchInput`, which is Rust's `Window::dispatch_event`. Any number of timers can be armed; each returns a handle for `WindowCancelTimer`, and one whose view goes stale is dropped the way Rust drops a `Task` with its entity. Work that is not on a clock but on another thread goes through `src/sys/executor.h`: `ExecSpawn` runs it on the pool and `WindowPost` brings the answer back to a listener on the main thread, which is where everything the UI owns is touched. A worker never reaches for an entity, a window or the frame arena.
 7. A blinking caret is state, not a function of the clock: `BlinkStart` / `Stop` / `Pause` / `Visible`, a port of `crates/base/src/input/base/blink_cursor.rs`. Sampling `TimeNow()` at paint time instead makes the caret invisible whenever nothing happens to repaint during the lit half. One cursor per field, as an entity — `InputState::blink` is Rust's `InputState::blink_cursor`. `InputFocus` / `InputBlur` start and stop it, the way Rust's `on_focus` / `on_blur` do, and the runtime does the same handoff for whichever `InputState` a view points `win->input` at, so only a custom text widget has to do it itself. `AppRequestAnim` is for real animation (the FPS HUD), never for a caret.
-8. `Notify(cx)` schedules a repaint. The frame tree is rebuilt from scratch every paint, so it is coarser than GPUI's per-observer invalidation — the API matches, the machinery does not.
+8. `Notify(cx)` marks the entity in hand and schedules a repaint of the windows that entity is on. It is GPUI's `App::notify`: the observers of that entity run (`Observe(cx, entity, &T::OnChanged)` is `cx.observe`), and a window is invalidated only when the entity that notified is one of the views it rendered last frame — GPUI's `Window::dirty_views`, kept here as `Window::rendered`. An entity nothing has rendered yet — a state entity that is not a view, a view on its first frame — falls back to the window the notify came from, and to every window when it came from none. What is still coarser than GPUI: a repaint rebuilds the whole window's element tree, because an `El` is arena-allocated per frame and hover, focus and animation are resolved while it is built. Layout is not rebuilt with it — see the layout cache below.
 9. Entity handles are generational, not refcounted. `Entity<T>::Get` returns null once the slot is recycled; check it.
 10. **Geometry is `Point` / `Size` / `Bounds` / `Edges`, all DIP floats, named the way Rust names them.** Rust's `Point<T>` and friends are generic over a *unit* — `Pixels`, `ScaledPixels`, `DevicePixels` — not over an element type, and everything above `Paint.h` here is DIPs, so the parameter is gone and the arithmetic is written out once. Use them for what is produced, returned or passed whole: a measured `Size`, a hit box, the positioner's arguments. Code that writes one component at a time — the layout pass over `El`, a mouse event's position — keeps flat fields. A unit that is not DIPs gets a named struct of its own (`WinSize` carries both the DIP and the device-pixel size of a window), never a template.
 
@@ -453,6 +454,25 @@ Rust's `request_measured_layout`. What taffy does not model — `fixed`,
 `anchorBelow` / `anchorAbove` / `anchorCenterX`, the `relative(f)` half of an
 inset, and scroll offsets — is applied around it, and the comment above
 `LayoutEl` says how.
+
+**The taffy tree is kept between frames, not rebuilt.** A window owns a
+`LayoutCache`; each frame the element tree is reconciled against it by
+position — the nth child of the nth child is the same node it was — and a node
+is told something only when it has something to hear: its `taffy::Style` is
+not the one it carries (`operator==` on `taffy::Style` is the `PartialEq`
+derive Rust has, ported for this), or it is a measured leaf whose text, font,
+weight, line height, wrap or image has moved. Everything else keeps the cache
+taffy filled last frame, and a `PerformLayout` that hits that cache does not
+walk the subtree at all. A hover that only recolours a box changes neither a
+style taffy knows about nor a measurement, so it costs no layout.
+
+That is what took a story frame's layout from 1.85 ms to 0.24 — the frame
+from 2.34 to 0.69 — and what is left of the 0.24 is this tree's own walk, not
+taffy's. `GPUI_LAYOUT_REUSE=off` rebuilds every frame the way it used to, and
+is the first thing to try if a frame ever comes out laid out stale;
+`GPUI_FRAME_BENCH` prints what each frame had to tell taffy about
+(`nodes=1466 made=0 dropped=0 restyled=0 remeasured=0` is a page that did not
+change).
 
 When a layout question comes up, the answer is in `src/taffy/`, and behind that
 in the Rust crate. Do not add a special case to `LayoutEl` for something CSS

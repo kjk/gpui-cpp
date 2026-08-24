@@ -4321,3 +4321,129 @@ said so all along. Somebody at that Mac's keyboard running `bun cmd/run.ts
 
 The Windows half is unchanged and still passes: 17,910 checks, all 25
 examples, and the Linux stub still compiles and runs.
+
+## Carrying layout across frames, and a notify that knows what it woke
+
+Two entries above this one end with the same sentence: the structural win left
+in layout is carrying it across frames rather than rebuilding the tree. It is
+carried now, and a story frame is **0.70 ms, from 2.34** — layout **0.24 ms,
+from 1.85** — with the other two phases where they were (build 0.25, paint
+0.19). The four fixes before this one took 2.62 to 2.29 by making the work
+cheaper; this one stops doing it.
+
+### The tree is reconciled, not rebuilt
+
+`gLayoutTree` was already kept between frames, but only so its node slots and
+child arrays could be recycled: every frame called `Clear()` and built the
+tree again from nothing. That threw away the thing worth keeping — **taffy's
+own per-node cache**. A `PerformChildLayout` that hits that cache returns the
+node's last answer and does not walk the subtree at all, so a page where
+nothing moved should cost one cache hit at the root and nothing else. Instead
+it cost `AddChild`, which marks a parent dirty, 1466 times.
+
+A window now owns a `LayoutCache`, and each frame the element tree is
+reconciled against it. The key is position — the nth child of the nth child is
+the node it was last frame — because an `El` has no identity to key on: it is
+built out of the frame arena every frame, and `El::Click(id)` names only the
+handful of boxes that hit-test. Where the kinds no longer match, that subtree
+is dropped and built again, which is what a page switch is.
+
+A node is told something only when it has something to hear:
+
+- **its style is not the one it carries.** `operator==` on `taffy::Style` is
+  the `PartialEq` derive Rust has and this port had left out; it is in
+  `src/taffy/style.h` now, field by field, with `Optf` compared by bits
+  (Rust's `Option<f32>` is a NaN here, and `NaN == NaN` would report two
+  Nones unequal) and the grid template slices compared by contents the way a
+  `Vec` is. `tests/StyleEqTests.cpp` moves each field in turn, because the one
+  way to get a stale frame out of this is a field the comparison forgot.
+- **it is a measured leaf whose content moved.** The text bytes, the font it
+  was prepared with, the weight, the line height, the wrap, and an image's
+  natural size — which arrives after the load and changes the answer when it
+  does. That hash is the node's `measKey`, and it is the only thing that marks
+  a text leaf dirty.
+
+Neither of those moves when a row is hovered, because a hover recolours a box
+and a colour is not in `taffy::Style`. A hovered row costs no layout at all.
+
+Two smaller things the shape forced:
+
+- **The element pointer cannot go in the node's context.** `SetNodeContext`
+  marks a node dirty, so handing taffy this frame's `El*` would undo the
+  caching. The context is a `LayoutNode` record instead — allocated once,
+  recycled with the node, and holding the `El*` and the `measKey` that are
+  written in place. The measure function reads the element through it.
+- **The root's `stretch_auto_size_to_fill` had to move inside the sync.** It
+  used to be applied after the tree was built, which would have made the root
+  differ from itself every frame and dirtied the whole page.
+
+`MeasureEl` keeps a scratch cache of its own, reset per call: a measure builds
+an element tree that has nothing to do with the last one, and a measure in the
+middle of a frame must not disturb the window's tree. A `LayoutEl` with no
+cache — a test, a one-shot — gets that same scratch, which is what every
+caller had before.
+
+`GPUI_LAYOUT_REUSE=off` resets the cache every frame, which is the old
+behaviour exactly: 2.42 ms and layout 1.91, against the 2.34 / 1.85 this
+started at. It is the first thing to try if a frame ever comes out laid out
+stale, and it is what the two paths were compared with.
+`GPUI_FRAME_BENCH` now prints what the frame had to tell taffy —
+`nodes=1466 made=0 dropped=0 restyled=0 remeasured=0` is a page that did not
+change.
+
+**What is measured and what is not.** The bench draws the same frame back to
+back, so what it shows is the cost of a repaint that changes nothing — which
+is most repaints: a caret blink, a fade, a timer in one view. A frame that
+changes *everything* does the work `reuse=off` measures plus one `operator==`
+per node; that case is not separately benched, and the honest way to read
+0.24 ms is "the floor is now the walk this tree does itself", not "layout is
+free". The skeleton and progress pages, which animate colour and not size,
+come out at 0.009 and 0.012 ms with `restyled=0` — the case this was built
+for.
+
+### Notify names the entity, and the windows that have it
+
+`Notify(cx)` invalidated the window in hand, or every window when there was
+none. It is `App::notify` now: it marks the entity, runs that entity's
+**observers** — `Observe(cx, entity, &T::OnChanged)` is `cx.observe`, the
+untyped half of the `Subscribe`/`Emit` pair that was already here — and
+invalidates only the windows that rendered that entity in their last frame.
+That set is `Window::rendered`, filled by `EntityRender` as the frame is
+built, and it is GPUI's `Window::dirty_views` under another name.
+
+The fallback is where the old behaviour lives on, and it has to: an entity
+nothing has rendered — a state entity that is not a view, a view on its first
+frame — still has to reach the screen, so it invalidates the window the notify
+came from, and every window when it came from none. So this is a refinement
+and never a regression: a notify that cannot be placed does what it always
+did.
+
+`tests/ObserverTests.cpp` pins the parts that are not the repaint: an observer
+hears which entity notified, two observers both hear it, an observation can be
+given up, an observer whose entity has gone is swept rather than called, and
+`EntityRender` records the view against the window that asked for it.
+
+**What is still coarser than GPUI, and why it stays that way.** A repaint
+rebuilds the whole window's element tree. GPUI does the same — its per-observer
+invalidation decides whether a window draws, not which subtrees rebuild — so
+this is not the deviation it reads as. Retaining per-view subtrees *here*
+would need dependency tracking this tree does not have: a view's render reads
+hover, focus, the theme, the clock and whatever entities it feels like, and
+none of that is declared. The build phase is 0.25 ms of the 0.70; that is what
+it would be worth, and it would be bought with a class of bug — a view that
+quietly stops updating — that nothing in the tree can currently catch.
+
+### Checking it
+
+All 65 story pages shot before and after: pixel-identical except `skeleton`
+and `spinner`, which differ run to run against themselves because they
+animate. Then the same 64 pages *touched* first — a scroll, a click and two
+typed characters each — with the cache off and on: identical except the two
+animating pages and three carets, each of which was re-shot on a quiet machine
+and came out identical. Where a page differed only under load — `avatar`,
+`collapsible`, `scrollbar` — the fresh shot matches the pre-change baseline
+exactly, so what the sweep caught was a frame taken mid-fade while the machine
+was building something else.
+
+17,958 checks pass, `bun cmd/build.ts -rel -all` builds all 25 examples, and
+the Linux and macOS builds compile.

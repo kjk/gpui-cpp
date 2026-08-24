@@ -125,6 +125,14 @@ static void FrameBenchTick(Window* win, float secs) {
     }
     logf("frame-bench phases build=%.3fms layout=%.3fms paint=%.3fms", sb / n,
          sl / n, sp / n);
+    // What the last frame's layout had to tell taffy about. On a page that
+    // did not change, made and dropped are zero and restyled is the handful
+    // of boxes whose style is a function of something that moved.
+    LayoutCacheStats ls = LayoutCacheLastStats(win->layout);
+    logf(
+        "frame-bench layout nodes=%d made=%d dropped=%d restyled=%d "
+        "remeasured=%d",
+        ls.nodes, ls.made, ls.dropped, ls.restyled, ls.remeasured);
 #if GPUI_OS_WINDOWS
     if (PaintGpuOn()) {
         const gpuw::FrameStats& st = gpuw::LastFrameStats();
@@ -265,6 +273,9 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
 
     // The three phases, timed apart, for GPUI_FRAME_BENCH.
     double tBuild0 = TimeNow();
+    // The views this frame is made of, collected as they render: what a
+    // notify aims at. GPUI's Window::dirty_views is filled the same way.
+    win->rendered.len = 0;
     El* root = EntityRender(win->app, win, win->frameArena, win->root);
     gFrameBuildSecs = TimeNow() - tBuild0;
 
@@ -274,8 +285,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     gFramePaintSecs = 0;
     if (root) {
         double tLay0 = TimeNow();
+        if (!win->layout) {
+            win->layout = LayoutCacheNew();
+        }
         LayoutEl(&win->paint, root, 0, 0, dipW, dipH, ThemeFontSize(),
-                 th.foreground);
+                 th.foreground, win->layout);
         FocusCollect(win, root);
         // A dialog that has just opened takes focus into itself, which is what
         // Rust gets from tracking focus on the trap container.
@@ -1921,6 +1935,8 @@ void AppFree(App* app) {
             ArenaDelete(w->frameArena);
         }
         TextMeasClear(&w->paint);
+        LayoutCacheFree(w->layout);
+        w->layout = nullptr;
         WindowSelectionFree(w);
         PaintTargetFree(&w->paint);
         w->timers.Reset();
@@ -1932,6 +1948,7 @@ void AppFree(App* app) {
     // The decoded images outlive a window but not the backend that made
     // them, so they go before it does.
     ImageCacheClear();
+    LayoutScratchFree();
     ScrollFadeClear();
     StyleOverrideClearAll();
     AppRunShutdownFns();
