@@ -3586,3 +3586,43 @@ rather than a textbook one.
 side by side (`bun cmd/compare-story.ts resizable`, `theme-colors`,
 `color-picker`), and the theme viewer's default list, its inherited list and
 its hex readouts line up with upstream's.
+
+- 2026-08-24: **four files moved to the name the Rust has.** A sweep of every
+  `src/base`, `src/ui` and `src/gpui` file against the module its header
+  comment names turned up four places where the path had drifted from the
+  crate the code came from, and they are now the Rust's:
+
+  | was | is | Rust |
+  | --- | --- | --- |
+  | `src/gpui/positioner.{h,cpp}` | `src/base/positioner.{h,cpp}` | `crates/base/src/positioner.rs` |
+  | `src/ui/history.{h,cpp}` | `src/base/history.{h,cpp}` | `crates/base/src/history.rs` |
+  | `src/ui/theme_registry.{h,cpp}` | `src/ui/theme.{h,cpp}` | `crates/ui/src/theme/` |
+  | `src/gpui/fps.{h,cpp}` | `src/fps/fps.{h,cpp}` | `crates/fps/` |
+
+  `positioner` is a gpui-base module, not a runtime one — `gpui.cpp` calls it
+  for the built-in tooltip and now includes `base/positioner.h`, which is the
+  third gpui→base include and no new kind of edge. `history` is upstream's
+  `crates/base/src/history.rs`; `crates/ui/src/history.rs` is a one-line
+  re-export of it, so the file that had been `component::History` in `src/ui`
+  is plain `gpui::History` in `src/base`, which is what a `crates/base` type is
+  here. `theme_registry` was one file for what upstream keeps in a `theme/`
+  directory, and `theme.h` is the name that directory has. `fps` is a crate of
+  its own — `crates/fps`, which leans on gpui the way `crates/base` does — so
+  it gets a directory of its own, the way `src/taffy` and `src/markdown` do.
+  Nothing else moved: `src/base/{list,tiles,dock,dock_state,data_table,
+  popup_menu,sankey}` hold the unstyled halves of `crates/ui` modules on
+  purpose, and `src/taffy` and `src/markdown` map through the tables in their
+  readmes.
+
+  `src/base/lib.h` had drifted out of alphabetical order in five places; it is
+  sorted again, with the two new headers in it. `src/ui/sizing.h` now names
+  `crates/ui/src/sizing.rs`, which it always was.
+
+  Still divergent, and not fixed here: `crates/base`'s `theme.rs`,
+  `theme_tokens.rs`, `geometry.rs`, `measure.rs`, `text_boundary.rs`,
+  `event.rs`, `styled.rs` and `global_state.rs` have no file of their own —
+  they are folded into `src/gpui/gpui.h` and `gpui.cpp`, where the runtime
+  they extend lives. Splitting them back out is surgery on a header the whole
+  tree includes, and it wants its own session.
+
+  17,455 checks pass and `bun cmd/build.ts -all` builds all 24 examples.

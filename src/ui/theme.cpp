@@ -1,4 +1,4 @@
-#include "ui/theme_registry.h"
+#include "ui/theme.h"
 
 #include "gpui/assets.h"
 

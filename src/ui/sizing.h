@@ -1,4 +1,5 @@
-/* Shared types for the themed gpui-component façade (crates/ui). */
+/* Shared types for the themed gpui-component façade
+   crates/ui/src/sizing.rs */
 
 #include "gpui/gpui.h"
 #include "base/lib.h"

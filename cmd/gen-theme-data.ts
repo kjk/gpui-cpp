@@ -70,7 +70,7 @@ function main() {
   out.push("   other one is resolved against. Re-run the generator to take a later");
   out.push("   upstream palette. */");
   out.push("");
-  out.push('#include "ui/theme_registry.h"');
+  out.push('#include "ui/theme.h"');
   out.push("");
   out.push("namespace gpui {");
   out.push("");

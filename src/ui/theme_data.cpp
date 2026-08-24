@@ -5,7 +5,7 @@
    other one is resolved against. Re-run the generator to take a later
    upstream palette. */
 
-#include "ui/theme_registry.h"
+#include "ui/theme.h"
 
 namespace gpui {
 

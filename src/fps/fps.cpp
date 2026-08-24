@@ -1,4 +1,4 @@
-#include "gpui/fps.h"
+#include "fps/fps.h"
 #include "gpui/paint.h"
 
 namespace gpui {

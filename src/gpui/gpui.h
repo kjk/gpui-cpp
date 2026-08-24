@@ -608,7 +608,7 @@ const Theme& ThemeLight();
 const Theme& ThemeDefaultDark();
 const Theme& ThemeDefaultLight();
 // The last step of Theme::apply_config: the resolved palette becomes the
-// light or the dark theme. `ui/theme_registry.h` is what produces one.
+// light or the dark theme. `ui/theme.h` is what produces one.
 void ThemeInstall(ThemeMode mode, const Theme& t);
 // Theme::font_size and Theme::radius, which the story's Appearance menu
 // writes the way Rust writes `Theme::global_mut(cx).font_size`. The themes

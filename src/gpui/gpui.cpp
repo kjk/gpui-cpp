@@ -3,7 +3,7 @@
 #include "base/scrollbar.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
-#include "gpui/positioner.h"
+#include "base/positioner.h"
 #include "gpui/svg.h"
 
 #include <math.h>

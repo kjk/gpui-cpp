@@ -689,6 +689,7 @@ src/sys/               system metrics, the executor, the fetch table
                        (portable + one file per OS where the OS differs)
 src/base/              crates/base unstyled primitives (Button, …)
 src/ui/                themed crates/ui façade (component::Button, Func0/Func1 callbacks)
+src/fps/               the crates/fps performance HUD (FpsMonitorEl)
 examples/              AppLog.cpp (log hooks) + system_monitor, app_assets, showcase/, story/
 assets/app_assets/     Lucide SVGs for the app_assets example
 assets/icons/          Lucide SVGs; the source cmd/svg-to-bytecode.ts compiles in

@@ -1,8 +1,6 @@
-#include "ui/history.h"
+#include "base/history.h"
 
 namespace gpui {
-
-namespace component {
 
 void History::Push(Str s) {
     if (n < 32) {
@@ -30,5 +28,4 @@ Str History::Redo() {
     return cursor >= 0 ? items[cursor] : Str{};
 }
 
-} // namespace component
 } // namespace gpui

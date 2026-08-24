@@ -1,6 +1,6 @@
 #include "ui/color_picker.h"
 #include "base/actions.h"
-#include "ui/theme_registry.h"
+#include "ui/theme.h"
 
 namespace gpui {
 
