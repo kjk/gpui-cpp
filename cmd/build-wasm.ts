@@ -48,6 +48,7 @@ const simpleExamples = [
   "html",
   "large_text",
   "dock",
+  "tiles",
 ];
 
 const knownTargets = [

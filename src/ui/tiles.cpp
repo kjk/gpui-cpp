@@ -14,10 +14,11 @@ Tiles* Tiles::New(Ctx* cx, Str id, Entity<TilesState> state) {
     return t;
 }
 
-Tiles* Tiles::Panel(Str title, El* content) {
+Tiles* Tiles::Panel(Str title, El* content, El* suffix) {
     TilePanelDef d;
     d.title = title;
     d.content = content;
+    d.suffix = suffix;
     panels.Append(a, d);
     return this;
 }
@@ -135,6 +136,12 @@ El* Tiles::IntoEl() {
         if (p >= 0 && p < panels.len && panels[p].title.s) {
             // Tiles names no text size; a panel title reads at the base.
             bar->Child(TextEl(a, panels[p].title)->Fg(th.foreground));
+        }
+        if (p >= 0 && p < panels.len && panels[p].suffix) {
+            // title_suffix sits at the far end of the bar, which is what the
+            // spacer between them makes room for.
+            bar->Child(Div(a)->Flex1());
+            bar->Child(panels[p].suffix);
         }
         bar->OnMouseDown(
             ListenTo(state, &TilesState::OnMoveDown, (intptr_t)ix));

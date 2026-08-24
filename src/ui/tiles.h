@@ -14,6 +14,10 @@ namespace component {
 struct TilePanelDef {
     Str title = {};
     El* content = nullptr;
+    // Panel::title_suffix: what the panel puts at the far end of its own bar
+    // — upstream's tiles example hangs a search field there. A DockPanelDef
+    // has had one all along; this is the same hook on a tile.
+    El* suffix = nullptr;
 };
 
 struct Tiles {
@@ -27,7 +31,7 @@ struct Tiles {
     static Tiles* New(Ctx* cx, Str id, Entity<TilesState> state);
     // The panel for the tile at that index. A tile with no panel draws its
     // frame and nothing inside it.
-    Tiles* Panel(Str title, El* content);
+    Tiles* Panel(Str title, El* content, El* suffix = nullptr);
     El* IntoEl();
 };
 
