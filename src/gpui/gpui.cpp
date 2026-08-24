@@ -1543,7 +1543,14 @@ ScrollbarMotion ScrollbarMotionFor(ScrollbarMode mode) {
     m.thumbHoverEntrance = mode == ScrollbarMode::Hover
                                ? ScrollbarEntrance::SlideAndFade
                                : ScrollbarEntrance::Fade;
-    if (PlatReduceMotion()) {
+    // Asked once. SPI_GETCLIENTAREAANIMATION is a system call, and this runs
+    // per scrollable box per frame; src/base/motion.cpp caches it the same
+    // way for the same reason.
+    static int reduced = -1;
+    if (reduced < 0) {
+        reduced = PlatReduceMotion() ? 1 : 0;
+    }
+    if (reduced == 1) {
         // A motionless policy adopts its target outright, which is what a
         // zero duration means to every transition below.
         m.enter = 0;

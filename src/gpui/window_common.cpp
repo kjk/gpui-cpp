@@ -1823,7 +1823,10 @@ int WindowTimerMs(Window* win) {
     double now = TimeNow();
     double soonest = -1;
     if (win->anim || win->opts.anim || win->animFrame) {
-        soonest = now + 0.016;
+        // WindowOptions::inactive_frame_interval. A window nobody is looking
+        // at animates at 2 FPS rather than at the display's rate, which is
+        // what the story app asks GPUI for; an active window keeps the 16 ms.
+        soonest = now + (win->active ? 0.016 : kInactiveFrameInterval);
     }
     // A fetch in flight used to be a reason to come back at 20 Hz and ask the
     // table whether it had landed yet. It reports itself now: the executor

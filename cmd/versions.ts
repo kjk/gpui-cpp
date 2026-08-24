@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "81305ef4a0fd86f64777791dd38ead5c303a15f4",
+  sha: "972a3ebfd01afca7da6d8b6f31c9a51288ea5565",
   date: "2026-08-17",
-  subject: "popup: Fix popup placement and base showcase startup (#2732)",
+  subject: "chore: Configure inactive GPUI frame throttling (#2749)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

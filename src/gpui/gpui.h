@@ -1137,6 +1137,11 @@ enum class ScrollbarMode : uint8_t {
 // FADE_OUT_DELAY / FADE_OUT_DURATION, in seconds. The curve between them is
 // Rust's `1 - (elapsed - delay)^10`: flat for most of the second, then a
 // drop off the end.
+// `WindowOptions::inactive_frame_interval`: how long a window that is not
+// the active one waits between animation frames. 500 ms caps background
+// animation at 2 FPS, which is what the story app asks for upstream.
+const double kInactiveFrameInterval = 0.5;
+
 // The stacking layers a frame paints in, in the order it paints them. Rust
 // gives a deferred element a `with_priority` and lets GPUI's scene sort on
 // it — `POPUP_PRIORITY` is 100 and `TOOLTIP_PRIORITY` is 200, which is what
