@@ -25,9 +25,6 @@
    - **Selection: Plain / Source** would have to map a selection in the
      rendered document back to the markdown that produced it, and an MdNode
      here carries no source offsets.
-   - **Table: Scroll / Wrap** — every table in this tree wraps, the way
-     `render_wrap_table` does; the measured-width scrolling layout upstream
-     defaults to is not ported.
    - **KaTeX**: upstream's math plugin renders a formula by handing it to
      KaTeX in node and reading the SVG back. The plugin is here and takes the
      example's own fallback path instead — the formula set italic with the
@@ -59,6 +56,9 @@ struct MarkdownApp {
     InputState source;
     Entity<component::ResizableState> split = {};
     float previewScroll = 0;
+    // Which of the two table layouts the preview uses. Rust defaults to the
+    // scrolling one and the status bar's button says which is on.
+    bool tableWrap = false;
     // The last link the preview reported, shown in the status bar — Rust
     // prints it and opens the URL; opening a browser mid-demo is not what a
     // screenshot wants, so this says the handler ran instead.
@@ -810,6 +810,13 @@ static void OnLink(MarkdownApp* self, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// The status bar's `table-wrap` button: which layout the preview's tables
+// take, the measured one that scrolls or the one that wraps to fit.
+static void OnToggleTableWrap(MarkdownApp* self, Ctx* cx, const ClickEvent*) {
+    self->tableWrap = !self->tableWrap;
+    Notify(cx);
+}
+
 static void OnPreviewScroll(MarkdownApp* self, Ctx* cx, const ScrollEvent* ev) {
     self->previewScroll = ev->offsetY;
     Notify(cx);
@@ -885,7 +892,8 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     tv->Plugin(StrL("ticker"), &TickerParse, &TickerRender);
     tv->Plugin(StrL("user-card"), &UserCardParse, &UserCardRender);
     tv->Plugin(StrL("math"), &MathParse, &MathRender);
-    El* preview = tv->Selectable()
+    El* preview = tv->TableScroll(!self->tableWrap)
+                      ->Selectable()
                       ->OnLink(Listen(cx, &OnLink))
                       ->CodeBlockActions(&CodeActions, self)
                       ->IntoEl();
@@ -910,6 +918,13 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     if (self->lastLink[0]) {
         bar->Left(Str(self->lastLink));
     }
+    bar->Right(component::Button::New(cx, StrL("table-wrap"))
+                   ->Ghost()
+                   ->WithSize(UiSize::XSmall)
+                   ->Label(self->tableWrap ? StrL("Table: Wrap")
+                                           : StrL("Table: Scroll"))
+                   ->OnClick(Listen(cx, &OnToggleTableWrap))
+                   ->IntoEl());
 
     return Div(a)
         ->FlexCol()

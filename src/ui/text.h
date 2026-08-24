@@ -196,6 +196,15 @@ struct TextView {
     // a column's width is a fraction of the table, proportional to the length
     // of its content, the way render_wrap_table distributes the space.
     float tableColW = 64;
+    // TextViewStyle::table with overflow-x: scroll. A table laid out this way
+    // takes its column widths from the measured text rather than from a
+    // character count, and scrolls sideways once the columns are down to
+    // their floors — node.rs render_scroll_table, which is what the markdown
+    // example defaults to.
+    bool tableScroll = false;
+    // How many scrolling tables have been built this frame, which is what
+    // names each one's scroll offset.
+    int tableIx = 0;
 
     // text_view.rs TextView::markdown / TextView::html.
     static TextView* New(Ctx* cx, Str source);
@@ -204,6 +213,7 @@ struct TextView {
     TextView* HeadingFont(float px);
     TextView* Selectable(bool on = true);
     TextView* TableColumnWidth(float px);
+    TextView* TableScroll(bool on = true);
     TextView* ParagraphGap(float px);
     // text_view::LinkClickHandlerFn. The handler's intptr_t is the link's
     // href as a NUL-terminated `const char*`; it points into the parse the
@@ -233,6 +243,8 @@ struct TextView {
     // The text a plugin's parser sees, and the block a plugin claimed.
     Str BlockText(MdNode* n);
     El* PluginBlock(MdNode* n);
+    // node.rs render_scroll_table: the same table, measured and scrolling.
+    El* ScrollTable(MdNode* n);
     // node.rs render_block. `depth` is the list nesting level, `inList` and
     // `isLast` decide whether the block carries a paragraph gap below it.
     El* Block(MdNode* n, int depth, bool inList, bool isLast);

@@ -1018,6 +1018,152 @@ El* TextView::CodeLines(Str code, SyntaxLang lang) {
     return col;
 }
 
+// node.rs render_scroll_table, which is what `style.table` opts a table into
+// with overflow-x: scroll. The columns are as wide as the widest text in
+// them — measured, not counted, since a character count is a poor guess on a
+// proportional font — and they grow to fill a frame wider than the content.
+// A narrower frame squeezes them, their text wrapping, until each is down to
+// its floor; below that the table keeps the floors and scrolls, so nothing
+// it holds is ever out of reach.
+// The offset one scrolling table is at. Rust keeps a ScrollHandle in keyed
+// state under the table's own span; the key here is the view and which table
+// in it this is, which is the same thing said with what this tree has.
+struct MdTableScroll {
+    float x = 0;
+};
+
+static void OnMdTableScroll(MdTableScroll* st, Ctx* cx, const ScrollEvent* ev) {
+    st->x = ev->offsetX;
+    Notify(cx);
+}
+
+El* TextView::ScrollTable(MdNode* n) {
+    enum {
+        kMaxCols = 32
+    };
+    // px_2 either side, the border every column but the last draws, and the
+    // track's own border on both sides.
+    const float kCellPad = 16.f;
+    const float kCellMin = 48.f;
+    const float kCellBorder = 1.f;
+    const float kTableBorder = 2.f;
+    // A column stops shrinking at about the width its text would wrap to two
+    // lines at, held between the two bounds so a moderate column can still
+    // wrap and one huge column cannot push the scrolling threshold up on its
+    // own.
+    const float kWrapLines = 2.f;
+    const float kWrapMin = 160.f;
+    const float kWrapMax = 480.f;
+
+    const Theme& th = cx->theme();
+    PaintCtx* paint = cx->win ? &cx->win->paint : nullptr;
+    float colW[kMaxCols] = {};
+    uint8_t colAlign[kMaxCols] = {};
+    int nCols = 0;
+    for (MdNode* r = n->first; r; r = r->next) {
+        int ix = 0;
+        for (MdNode* c = r->first; c && ix < kMaxCols; c = c->next, ix++) {
+            if (colAlign[ix] == MdAlignDefault) {
+                colAlign[ix] = c->align;
+            }
+            if (ix + 1 > nCols) {
+                nCols = ix + 1;
+            }
+            if (colW[ix] < kCellMin) {
+                colW[ix] = kCellMin;
+            }
+            float w = 0;
+            if (paint) {
+                for (MdRun* run = c->runFirst; run; run = run->next) {
+                    // Unwrapped, so what comes back is the run's own width.
+                    Size sz = MeasureText(paint, run->text, baseFont, 0, false,
+                                          r->head ? 2 : 0);
+                    w += sz.w;
+                }
+            } else {
+                w = (float)RunsLen(c) * baseFont * 0.5f;
+            }
+            w += kCellPad + (ix + 1 < kMaxCols ? kCellBorder : 0);
+            if (w > colW[ix]) {
+                colW[ix] = w;
+            }
+        }
+    }
+    if (nCols == 0) {
+        return Div(a);
+    }
+    float minTotal = kTableBorder;
+    float colMin[kMaxCols] = {};
+    for (int i = 0; i < nCols; i++) {
+        float floorW = colW[i] / kWrapLines;
+        if (floorW < kWrapMin) {
+            floorW = kWrapMin;
+        }
+        if (floorW > kWrapMax) {
+            floorW = kWrapMax;
+        }
+        colMin[i] = floorW < colW[i] ? floorW : colW[i];
+        minTotal += colMin[i];
+    }
+
+    El* track = Div(a)
+                    ->FlexCol()
+                    ->W(kFill)
+                    ->MinW(minTotal)
+                    ->Border(1, th.border)
+                    ->Radius(th.radius);
+    for (MdNode* r = n->first; r; r = r->next) {
+        El* row = Div(a)->FlexRow()->W(kFill);
+        if (r->next) {
+            row->BorderB(1, th.border);
+        }
+        int ix = 0;
+        for (MdNode* c = r->first; c; c = c->next, ix++) {
+            int col = ix < nCols ? ix : nCols - 1;
+            // The measured width is the basis and what the growth is shared
+            // out in proportion to, and the floor is where the squeezing
+            // stops and the track starts to be wider than its frame.
+            El* cell = Div(a)
+                           ->Basis(colW[col])
+                           ->Grow(colW[col])
+                           ->MinW(colMin[col])
+                           ->ClipX()
+                           ->PadX(8)
+                           ->PadY(4);
+            if (c->next) {
+                cell->BorderR(1, th.border);
+            }
+            uint8_t align = c->align;
+            if (align == MdAlignDefault) {
+                align = colAlign[col];
+            }
+            cell->Child(Inline(c, baseFont, BlockFg(), r->head ? 2 : 0, align));
+            row->Child(cell);
+        }
+        track->Child(row);
+    }
+    // The viewport: it clips and scrolls sideways, and the frame is on the
+    // track inside it so it wraps the table rather than the box it slides in.
+    // The offset is the table's own, so two tables in a document scroll
+    // apart.
+    // Which table in this view it is — the parse is rebuilt every frame, so
+    // the node's address is not a name that lasts, and its position in the
+    // document is.
+    tableIx++;
+    uint32_t name =
+        (uint32_t)(cx->self.index + 1) * 1000003u + (uint32_t)tableIx;
+    uint32_t key = KeyedKey(name, (uint32_t)HashClickId(StrL("md-table")));
+    Entity<MdTableScroll> ent = KeyedEntity<MdTableScroll>(cx, key);
+    MdTableScroll* st = ent.Get(cx->app);
+    return Div(a)
+        ->W(kFill)
+        ->ClipX()
+        ->ScrollX(st ? st->x : 0)
+        ->ScrollId((int)key)
+        ->OnScroll(ListenTo(ent, &OnMdTableScroll))
+        ->Child(track);
+}
+
 // node.rs render_wrap_table proportions the columns by content length and
 // lets them shrink to fit, with a floor per column. Same here: the widths are
 // fractions of the table, TableColumnWidth is the floor, and a table whose
@@ -1239,7 +1385,8 @@ El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
         case MdKind::Code:
             return Div(a)->W(kFill)->PadB(mb)->Child(CodeBlock(n));
         case MdKind::Table:
-            return Div(a)->W(kFill)->PadB(mb)->Child(Table(n));
+            return Div(a)->W(kFill)->PadB(mb)->Child(
+                tableScroll ? ScrollTable(n) : Table(n));
         case MdKind::Item: {
             // Only reached for a stray list item; treat it as its contents.
             El* box = Div(a)->FlexCol()->W(kFill)->PadB(mb);
@@ -1331,6 +1478,11 @@ TextView* TextView::Selectable(bool on) {
 
 TextView* TextView::TableColumnWidth(float px) {
     tableColW = px;
+    return this;
+}
+
+TextView* TextView::TableScroll(bool on) {
+    tableScroll = on;
     return this;
 }
 
