@@ -55,8 +55,96 @@ static void TheDarkPaletteIsDefaultDark() {
     utassert(IsA(t.selection, 0x1d4ed8, 0x4d));
 }
 
+// theme_tokens.rs: the palette read as roles rather than as component names,
+// and the same set written back onto one.
+static void TheSemanticTokensAreTheRolesOfThePalette() {
+    const Theme& t = ThemeLight();
+    SemanticThemeTokens tk = ThemeSemanticTokens(t);
+    utassert(Is(tk.colors.background, 0xffffff));
+    utassert(Is(tk.colors.foreground, 0x0a0a0a));
+    // `surface` is the popover pair, which both default themes give the
+    // window's own colours.
+    utassert(Is(tk.colors.surface, 0xffffff));
+    utassert(Is(tk.colors.surfaceForeground, 0x0a0a0a));
+    utassert(Is(tk.colors.destructive,
+                t.danger.r << 16 | t.danger.g << 8 | t.danger.b));
+    // radius_tokens: sm is half the radius, xl twice it, full a number no box
+    // can reach.
+    utassert(tk.radius.md == t.radius);
+    utassert(tk.radius.sm == t.radius / 2.f);
+    utassert(tk.radius.xl == t.radius * 2.f);
+    utassert(tk.radius.lg == t.radiusLg);
+    utassert(tk.radius.full == 9999.f);
+    // The scales that are defaults and nothing else.
+    utassert(tk.spacing.md == 12.f && tk.spacing.xxl == 32.f);
+    utassert(tk.typography.sm.size == 14.f && tk.typography.sm
+                                                      .lineHeight == 20.f);
+    utassert(tk.typography.monoMd.size == kMonoFontSize);
+    // ShadowTokens::elevations, at 18% black.
+    utassert(tk.shadow.has);
+    utassert(tk.shadow.md.y == 4.f && tk.shadow.md.blur == 8.f &&
+             tk.shadow.md.spread == -2.f);
+    utassert(tk.shadow.lg.blur == 24.f);
+}
+
+// apply_semantic_tokens: the subset the legacy palette can hold comes back,
+// tokens included, and the rest is dropped on the floor.
+static void ASemanticSetAppliesBackToAPalette() {
+    Theme t = ThemeLight();
+    SemanticThemeTokens tk = ThemeSemanticTokens(t);
+    tk.colors.background = Rgb(0x11, 0x22, 0x33);
+    tk.colors.surface = Rgb(0x44, 0x55, 0x66);
+    tk.colors.destructive = Rgb(0x77, 0x00, 0x00);
+    tk.radius.md = 10;
+    tk.radius.lg = 14;
+    ThemeApplySemanticTokens(&t, tk);
+    utassert(Is(t.background, 0x112233));
+    utassert(Is(t.popover, 0x445566));
+    utassert(Is(t.danger, 0x770000));
+    utassert(t.radius == 10.f && t.radiusLg == 14.f);
+    // The renderable tokens follow the flat colours, so a gradient left over
+    // from the palette this was applied to cannot outlive it.
+    utassert(Is(t.tokens.popover.color, 0x445566));
+    utassert(Is(t.tokens.background.color, 0x112233));
+}
+
+// SemanticThemeConfig: a document in the token vocabulary, resolved over a
+// set. Every field is optional and what it leaves out stays as it was.
+static void ASemanticConfigOnlyChangesWhatItNames() {
+    Arena* a = ArenaNew();
+    SemanticThemeTokens tk = ThemeSemanticTokens(ThemeLight());
+    float wasLg = tk.radius.lg;
+    Str doc = StrL(
+        "{\"tokens\":{\"colors\":{\"primary\":\"#123456\","
+        "\"ring\":\"blue-500\"},\"radius\":{\"md\":10},"
+        "\"spacing\":{\"md\":20},"
+        "\"typography\":{\"mono\":\"Cascadia\","
+        "\"sm\":{\"size\":15}},"
+        "\"shadow\":{\"md\":{\"y\":6,\"color\":\"#00000033\"}}}}");
+    JsonValue* json = JsonParse(a, doc);
+    utassert(json != nullptr);
+    utassert(ThemeSemanticConfigApply(json, &tk));
+    utassert(Is(tk.colors.primary, 0x123456));
+    utassert(Is(tk.colors.ring, 0x3b82f6));
+    utassert(tk.radius.md == 10.f);
+    // Untouched by the document.
+    utassert(tk.radius.lg == wasLg);
+    utassert(tk.spacing.md == 20.f && tk.spacing.lg == 16.f);
+    utassert(tk.typography.sm.size == 15.f && tk.typography.sm
+                                                      .lineHeight == 20.f);
+    utassert(StrEqI(tk.typography.mono, StrL("Cascadia")));
+    utassert(tk.shadow.md.y == 6.f && tk.shadow.md.blur == 8.f);
+    // A document with no `tokens` object is not one of these at all.
+    JsonValue* other = JsonParse(a, StrL("{\"themes\":[]}"));
+    utassert(!ThemeSemanticConfigApply(other, &tk));
+    ArenaDelete(a);
+}
+
 void TestThemeColor() {
     TestSuite("theme_color");
     TheLightPaletteIsDefaultLight();
     TheDarkPaletteIsDefaultDark();
+    TheSemanticTokensAreTheRolesOfThePalette();
+    ASemanticSetAppliesBackToAPalette();
+    ASemanticConfigOnlyChangesWhatItNames();
 }

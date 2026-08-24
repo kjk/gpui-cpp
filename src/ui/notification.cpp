@@ -290,7 +290,7 @@ El* Notification::IntoEl() {
                    ->PadY(14)
                    ->PadX(16)
                    ->Border(1, th.border)
-                   ->Bg(th.tokens.background)
+                   ->Bg(th.tokens.popover)
                    // shadow_md: there is no box shadow in paint.h, so the
                    // border is what separates the card from the page.
                    ->Radius(th.radiusLg);

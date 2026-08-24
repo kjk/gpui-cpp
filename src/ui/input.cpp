@@ -790,7 +790,7 @@ El* SearchPanel::IntoEl() {
                     ->PadY(8)
                     ->PadX(12)
                     ->Gap(4)
-                    ->Bg(th.tokens.background)
+                    ->Bg(th.tokens.popover)
                     ->BorderB(1, th.border)
                     ->Radius(th.radius * 0.5f)
                     ->OnKeyDown(ListenTo(ent, &SearchPanelState::OnKey));

@@ -763,6 +763,10 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
     Background listEven = PickBg(c, "list.even.background", list);
     Background listHead = PickBg(c, "list.head.background", list);
 
+    SetToken(&out->popover, &out->tokens.popover,
+             PickBg(c, "popover.background", out->tokens.background));
+    out->popoverFg = Pick(c, "popover.foreground", out->foreground);
+
     SetToken(&out->progress, &out->tokens.progress,
              PickBg(c, "progress.bar.background", out->tokens.primary));
     out->ring = Pick(c, "ring", out->blue);
@@ -973,6 +977,155 @@ void ThemeRegistryInit() {
             gActive[(int)gThemes[i].mode] = gThemes[i].name;
         }
     }
+}
+
+// ─── a theme written as semantic tokens ──────────────────────────────────
+//
+// `SemanticThemeConfigFile`: a document whose whole content is
+// `{"tokens": {...}}`, in the vocabulary of `theme_tokens.rs` rather than the
+// legacy key list. Rust resolves it over the theme in force — every field is
+// an Option and what it leaves out stays as it was — and then applies the
+// result back onto that theme. Same here, over the mode's current palette.
+static void ApplyColorField(const JsonValue* obj, const char* key, Rgba* out) {
+    Str v = JsonString(JsonGet(obj, key));
+    Rgba c;
+    if (v.s && ThemeParseColor(v, &c)) {
+        *out = c;
+    }
+}
+
+static void ApplyFloatField(const JsonValue* obj, const char* key, float* out) {
+    const JsonValue* v = JsonGet(obj, key);
+    if (v && v->kind == JsonKind::Number) {
+        *out = (float)v->num;
+    }
+}
+
+static void ApplyTextStyle(const JsonValue* obj, const char* key,
+                           SemanticTextStyle* out) {
+    const JsonValue* v = JsonGet(obj, key);
+    if (!v || v->kind != JsonKind::Object) {
+        return;
+    }
+    ApplyFloatField(v, "size", &out->size);
+    ApplyFloatField(v, "line_height", &out->lineHeight);
+    ApplyFloatField(v, "weight", &out->weight);
+}
+
+static void ApplyShadowLevel(const JsonValue* obj, const char* key,
+                             SemanticShadow* out, bool* any) {
+    const JsonValue* v = JsonGet(obj, key);
+    if (!v || v->kind != JsonKind::Object) {
+        return;
+    }
+    *any = true;
+    ApplyFloatField(v, "x", &out->x);
+    ApplyFloatField(v, "y", &out->y);
+    ApplyFloatField(v, "blur", &out->blur);
+    ApplyFloatField(v, "spread", &out->spread);
+    ApplyColorField(v, "color", &out->color);
+}
+
+bool ThemeSemanticConfigApply(const JsonValue* doc, SemanticThemeTokens* io) {
+    const JsonValue* tokens = JsonGet(doc, "tokens");
+    if (!tokens || tokens->kind != JsonKind::Object) {
+        return false;
+    }
+    if (const JsonValue* c = JsonGet(tokens, "colors")) {
+        SemanticColorTokens& t = io->colors;
+        ApplyColorField(c, "background", &t.background);
+        ApplyColorField(c, "foreground", &t.foreground);
+        ApplyColorField(c, "surface", &t.surface);
+        ApplyColorField(c, "surface_foreground", &t.surfaceForeground);
+        ApplyColorField(c, "primary", &t.primary);
+        ApplyColorField(c, "primary_foreground", &t.primaryForeground);
+        ApplyColorField(c, "secondary", &t.secondary);
+        ApplyColorField(c, "secondary_foreground", &t.secondaryForeground);
+        ApplyColorField(c, "muted", &t.muted);
+        ApplyColorField(c, "muted_foreground", &t.mutedForeground);
+        ApplyColorField(c, "accent", &t.accent);
+        ApplyColorField(c, "accent_foreground", &t.accentForeground);
+        ApplyColorField(c, "destructive", &t.destructive);
+        ApplyColorField(c, "destructive_foreground", &t.destructiveForeground);
+        ApplyColorField(c, "border", &t.border);
+        ApplyColorField(c, "input", &t.input);
+        ApplyColorField(c, "ring", &t.ring);
+    }
+    if (const JsonValue* r = JsonGet(tokens, "radius")) {
+        ApplyFloatField(r, "none", &io->radius.none);
+        ApplyFloatField(r, "sm", &io->radius.sm);
+        ApplyFloatField(r, "md", &io->radius.md);
+        ApplyFloatField(r, "lg", &io->radius.lg);
+        ApplyFloatField(r, "xl", &io->radius.xl);
+        ApplyFloatField(r, "full", &io->radius.full);
+    }
+    if (const JsonValue* sp = JsonGet(tokens, "spacing")) {
+        ApplyFloatField(sp, "xxs", &io->spacing.xxs);
+        ApplyFloatField(sp, "xs", &io->spacing.xs);
+        ApplyFloatField(sp, "sm", &io->spacing.sm);
+        ApplyFloatField(sp, "md", &io->spacing.md);
+        ApplyFloatField(sp, "lg", &io->spacing.lg);
+        ApplyFloatField(sp, "xl", &io->spacing.xl);
+        ApplyFloatField(sp, "xxl", &io->spacing.xxl);
+    }
+    if (const JsonValue* ty = JsonGet(tokens, "typography")) {
+        Str sans = JsonString(JsonGet(ty, "sans"));
+        Str mono = JsonString(JsonGet(ty, "mono"));
+        if (sans.s) {
+            io->typography.sans = sans;
+        }
+        if (mono.s) {
+            io->typography.mono = mono;
+        }
+        ApplyTextStyle(ty, "xs", &io->typography.xs);
+        ApplyTextStyle(ty, "sm", &io->typography.sm);
+        ApplyTextStyle(ty, "md", &io->typography.md);
+        ApplyTextStyle(ty, "lg", &io->typography.lg);
+        ApplyTextStyle(ty, "xl", &io->typography.xl);
+        ApplyTextStyle(ty, "mono_md", &io->typography.monoMd);
+    }
+    if (const JsonValue* sh = JsonGet(tokens, "shadow")) {
+        bool any = false;
+        ApplyShadowLevel(sh, "sm", &io->shadow.sm, &any);
+        ApplyShadowLevel(sh, "md", &io->shadow.md, &any);
+        ApplyShadowLevel(sh, "lg", &io->shadow.lg, &any);
+        if (any) {
+            io->shadow.has = true;
+        }
+    }
+    return true;
+}
+
+bool ThemeApplySemanticConfigStr(ThemeMode mode, Str json,
+                                 SemanticThemeTokens* out) {
+    if (!json.s || json.len <= 0) {
+        return false;
+    }
+    ThemeRegistryInit();
+    // The document is read and thrown away: nothing a semantic config holds
+    // outlives the colours it is turned into.
+    Arena* a = ArenaNew();
+    JsonValue* doc = JsonParse(a, json);
+    Theme t = mode == ThemeMode::Dark ? ThemeDark() : ThemeLight();
+    SemanticThemeTokens tokens = ThemeSemanticTokens(t);
+    bool ok = doc && ThemeSemanticConfigApply(doc, &tokens);
+    // The two font families are the only strings a token set keeps, and they
+    // point into the document. They move to the registry's own arena — where
+    // every theme's name already lives — so the answer outlives the parse.
+    if (ok && gArena) {
+        tokens.typography.sans = StrDup(gArena, tokens.typography.sans);
+        tokens.typography.mono = StrDup(gArena, tokens.typography.mono);
+    }
+    ArenaDelete(a);
+    if (!ok) {
+        return false;
+    }
+    ThemeApplySemanticTokens(&t, tokens);
+    ThemeInstall(mode, t);
+    if (out) {
+        *out = tokens;
+    }
+    return true;
 }
 
 int ThemeRegistryLoadDir(Str dir) {

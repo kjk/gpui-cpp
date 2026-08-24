@@ -240,7 +240,10 @@ El* PopupMenu::IntoEl() {
     El* root = Div(a)
                    ->FlexCol()
                    ->W(menuW)
-                   ->Bg(th.tokens.background)
+                   // `.bg(cx.theme().tokens.popover)`: a menu floats over the
+                   // page, so it takes the popover surface rather than the
+                   // window's. Both default themes give them the same colour.
+                   ->Bg(th.tokens.popover)
                    ->Border(1, th.border)
                    ->Radius(th.radius);
     // .key_context(CONTEXT).track_focus(&self.focus_handle) and the six

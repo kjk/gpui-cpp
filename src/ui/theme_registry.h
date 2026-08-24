@@ -103,6 +103,19 @@ int ThemeRegistryLoadStr(Str json);
 // added. A relative path is resolved against the asset roots.
 int ThemeRegistryLoadDir(Str dir);
 
+// `Theme::apply_semantic_config_str`: a theme written in the semantic
+// vocabulary — `{"tokens": {"colors": {..}, "radius": {..}, ..}}` — resolved
+// over the palette in force for that mode and applied to it. Every field is
+// optional and what a document leaves out stays as it was. False for a
+// document that is not one. `out` takes the resolved set, which is what Rust
+// hands back for application-owned UI to read.
+bool ThemeApplySemanticConfigStr(ThemeMode mode, Str json,
+                                 SemanticThemeTokens* out = nullptr);
+// The resolve half on its own, over tokens the caller already has: what
+// `SemanticThemeConfig::apply_to` does. Exposed for the tests, which drive it
+// without installing a theme.
+bool ThemeSemanticConfigApply(const JsonValue* doc, SemanticThemeTokens* io);
+
 // sorted_themes: the defaults first, then light before dark, then by name
 // folded to lower case.
 int ThemeRegistryCount();
