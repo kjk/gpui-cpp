@@ -250,8 +250,53 @@ El* List::IntoEl() {
         return root;
     }
 
+    // prepare_items_if_needed: the item that stands for the rest, and a
+    // section header and footer, each laid out on its own to see what it
+    // wants to be. Rust measures at MinContent on both axes and so does
+    // `MeasureEl`; the pass runs on the frame arena and the elements are
+    // thrown away, since what is wanted is the number.
+    //
+    // A row that measures nothing keeps whatever the state had — a delegate
+    // that answers null for the row it was asked to measure should not
+    // collapse the list to zero-height rows.
+    float itemH = s->rowH;
+    if (item) {
+        ListRow m = ListRowAt(s, ListRowOfEntry(s, 0));
+        ListItem* probe = item(cx, data, m.section, m.row, m.entry);
+        if (probe) {
+            float got = MeasureEl(cx->win ? &cx->win->paint : nullptr,
+                                  probe->IntoEl(StrL("list-measure"), {}, {}))
+                            .h;
+            if (got > 0) {
+                itemH = got;
+            }
+        }
+    }
+    float headerH = s->sectionHeaders ? s->headerH : 0;
+    if (s->sectionHeaders && header) {
+        float got =
+            MeasureEl(cx->win ? &cx->win->paint : nullptr, header(cx, data, 0))
+                .h;
+        if (got > 0) {
+            headerH = got;
+        }
+    }
+    float footerH = s->sectionFooters ? s->footerH : 0;
+    if (s->sectionFooters && footer) {
+        float got =
+            MeasureEl(cx->win ? &cx->win->paint : nullptr, footer(cx, data, 0))
+                .h;
+        if (got > 0) {
+            footerH = got;
+        }
+    }
+    ListPrepareRowHeights(s, itemH, headerH, footerH);
+
     int total = ListRowCount(s);
-    VirtualRange range = VirtualListVisibleRows(total, s->rowH, s->scrollY, h);
+    const float* sizes = ListRowHeights(s);
+    VirtualRange range =
+        sizes ? VirtualListVisibleRange(sizes, total, s->scrollY, h)
+              : VirtualListVisibleRows(total, s->rowH, s->scrollY, h);
     El* body = Div(a)
                    ->FlexCol()
                    ->W(kFill)
@@ -260,9 +305,13 @@ El* List::IntoEl() {
                    ->ScrollY(s->scrollY)
                    ->ScrollId(HashClickId(id))
                    ->OnScroll(ListenTo(state, &ListState::OnScroll));
+    // The two spacers stand in for the rows that were not built. With a size
+    // per row they are the running scan `VirtualListItemOrigin` does, not a
+    // count times one height.
     if (range.first > 0) {
-        body->Child(
-            Div(a)->W(kFill)->Shrink0()->H((float)range.first * s->rowH));
+        float before = sizes ? VirtualListItemOrigin(sizes, total, range.first)
+                             : (float)range.first * s->rowH;
+        body->Child(Div(a)->W(kFill)->Shrink0()->H(before));
     }
     Listener click = ListenTo(state, &ListState::OnRowClick, 0);
     Listener down = ListenTo(state, &ListState::OnRowMouseDown, 0);
@@ -289,21 +338,24 @@ El* List::IntoEl() {
                     ListenerArg(down, row.entry));
             }
         }
-        // Every row is the same height, which is what uniform_list asks for
-        // and what lets the two spacers stand in for the rest. Shrink0
-        // because the rows are taller than the box they scroll in: a flex
-        // column shrinks what overflows it, and a row squeezed to fit is a
-        // row the visible range -- worked out against rowH -- no longer
-        // measures, which left a band of empty list under the last one.
-        El* slot = Div(a)->FlexCol()->W(kFill)->Shrink0()->H(s->rowH);
+        // Each row takes the height it was measured at, which is what lets
+        // the two spacers stand in for the rest. Shrink0 because the rows are
+        // taller than the box they scroll in: a flex column shrinks what
+        // overflows it, and a row squeezed to fit is a row the visible range
+        // -- worked out against these same heights -- no longer measures,
+        // which left a band of empty list under the last one.
+        float slotH = sizes && r < total ? sizes[r] : s->rowH;
+        El* slot = Div(a)->FlexCol()->W(kFill)->Shrink0()->H(slotH);
         if (el) {
             slot->Child(el);
         }
         body->Child(slot);
     }
     if (range.end < total) {
-        body->Child(Div(a)->W(kFill)->Shrink0()->H((float)(total - range.end) *
-                                                   s->rowH));
+        float after = sizes ? VirtualListContentSize(sizes, total) -
+                                  VirtualListItemOrigin(sizes, total, range.end)
+                            : (float)(total - range.end) * s->rowH;
+        body->Child(Div(a)->W(kFill)->Shrink0()->H(after));
     }
     root->Child(body);
 

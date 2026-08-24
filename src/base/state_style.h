@@ -29,6 +29,7 @@ enum StateField : uint32_t {
     StateFieldRadius = StyleFieldRadius,
     StateFieldHoverBg = StyleFieldHoverBg,
     StateFieldHoverFg = StyleFieldHoverFg,
+    StateFieldActiveBg = StyleFieldActiveBg,
     // What Rust's own `disabled(|style| style.opacity(0.5))` names.
     StateFieldOpacity = StyleFieldOpacity,
 };
@@ -43,6 +44,7 @@ struct StateStyle {
     StateStyle& Radius(float v);
     StateStyle& HoverBg(Background c);
     StateStyle& HoverFg(Rgba c);
+    StateStyle& ActiveBg(Background c);
     StateStyle& Opacity(float v);
 
     bool Has(StateField f) const { return (set & (uint32_t)f) != 0; }

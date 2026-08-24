@@ -1450,6 +1450,13 @@ struct Style {
     // element paints with, for the descendants that set no color of their own.
     Rgba hoverFg = {};
     bool hasHoverFg = false;
+    // active(|style| style.bg(..)): what the box paints with while it is held
+    // down. GPUI's `clicked_state` is set by the press and cleared by the
+    // release, so it stays on while the pointer slides off the element —
+    // which is what lets a reader see a button still pressed as they move
+    // away from it, and see it come back to hover when they move back.
+    Background activeBg = {};
+    bool hasActiveBg = false;
     // div().group(""): this element is the group a descendant's
     // `group_hover` is resolved against, and the pointer being anywhere in
     // its box is what counts as hovered — not the pointer being on this
@@ -1909,6 +1916,10 @@ struct El {
     El* RightRel(float frac);
     El* HoverBg(Background c);
     El* HoverFg(Rgba c);
+    // .active(|style| style.bg(..)): the fill while the box is held down. It
+    // wins over the hover fill, the way Rust refines the active style over
+    // the hovered one.
+    El* ActiveBg(Background c);
     // div().group("") and .group_hover(..): the group, and a descendant that
     // only paints while the pointer is inside it.
     // The press-focus opt-in above.
@@ -2105,7 +2116,8 @@ enum StyleField : uint32_t {
     // they are fields a StyleRefinement can name, and `state_style.h` names
     // them.
     StyleFieldHoverBg = 1u << 11,
-    StyleFieldHoverFg = 1u << 12
+    StyleFieldHoverFg = 1u << 12,
+    StyleFieldActiveBg = 1u << 13
 };
 
 // StyleRefinement::refine, over the fields `fields` names and no others. The
@@ -2173,6 +2185,11 @@ struct PaintCtx {
     float viewW = 0;
     float viewH = 0;
     int hoverId = 0;
+    // The element holding the press, which is what `Style::activeBg` is
+    // matched against — GPUI's `clicked_state.element`. It is the id the
+    // press landed on for as long as the button is down, and 0 otherwise,
+    // so it does not follow the pointer the way hoverId does.
+    int activeId = 0;
     // Whether the pointer is inside the nearest enclosing `Group()` box,
     // pushed down as the tree paints the way element opacity is.
     bool groupHovered = false;
@@ -3827,6 +3844,17 @@ void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
                         Rgba color, bool wavy = false);
 void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
               float availH, float inheritFont, Rgba inheritFg);
+// AnyElement::layout_as_root(size(MinContent, MinContent)): what one element
+// wants to be, laid out on its own and away from the tree it will go into.
+// A virtualized list measures a row this way and then places every row at
+// that size, since it cannot ask the layout what the rows it did not build
+// would have come out as.
+//
+// It runs the same pass `LayoutEl` does and leaves the boxes on the element,
+// so the caller may either read the returned size or go on to use `e` — but
+// the next `LayoutEl` clears the tree, so nothing survives the frame.
+Size MeasureEl(PaintCtx* ctx, El* e, float inheritFont = 0,
+               Rgba inheritFg = {});
 void PaintEl(PaintCtx* ctx, El* e);
 int HitTest(PaintCtx* ctx, float x, float y);
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y);
@@ -3854,6 +3882,23 @@ bool TextMultiClickRange(PaintCtx* ctx, float x, float y, int clickCount,
 bool TextMultiClickRangeIn(PaintCtx* ctx, float x, float y, int clickCount,
                            int scope, int* outA, int* outB, int* outScope);
 int HashClickId(Str s);
+
+// Which of the three fills a box paints. GPUI resolves this by refining the
+// hovered style and then the active one over the base, so the pressed fill
+// wins where a box has both and is being held. Split out from the paint pass
+// because it is the whole of what `Style::activeBg` means and the pointer
+// cannot be driven from a test.
+//
+// Both states need a click id of their own: without one the box would match a
+// `hoverId` / `activeId` of 0, which is what "nothing is hovered" and
+// "nothing is held" are spelled as.
+enum class BoxFill : uint8_t {
+    Base,
+    Hover,
+    Active
+};
+BoxFill BoxFillFor(bool hasActiveBg, bool hasHoverBg, int clickId, int activeId,
+                   int hoverId);
 
 // Whether a release makes a click. GPUI holds the press as
 // `pending_mouse_down` and fires on_click from the mouse-up handler, where it

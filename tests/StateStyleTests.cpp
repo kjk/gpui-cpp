@@ -72,10 +72,12 @@ static void ADisabledStyleOnlyAppliesWhileDisabled() {
     disabled.Bg(kDisabled);
 
     const StateStyle* enabled[] = {nullptr};
-    utassert(Same(StateStyleResolve(instance, enabled, 1).style.bg.color, kInstance));
+    utassert(Same(StateStyleResolve(instance, enabled, 1).style.bg.color,
+                  kInstance));
 
     const StateStyle* off[] = {&disabled};
-    utassert(Same(StateStyleResolve(instance, off, 1).style.bg.color, kDisabled));
+    utassert(
+        Same(StateStyleResolve(instance, off, 1).style.bg.color, kDisabled));
 
     // And with no instance style of its own, the state is all there is.
     StateStyle bare;
@@ -134,8 +136,61 @@ static void AStateWinsOverWhatIsChainedAfterIt() {
     ArenaDelete(a);
 }
 
+// The three fills a box can paint, and which one the pointer picks. GPUI
+// refines the hovered style and then the active one over the base, so a box
+// that is both hovered and held paints its pressed fill.
+static void TheHeldBoxPaintsItsPressedFill() {
+    utassert(BoxFillFor(true, true, 7, 7, 7) == BoxFill::Active);
+    utassert(BoxFillFor(true, true, 7, 0, 7) == BoxFill::Hover);
+    utassert(BoxFillFor(true, true, 7, 7, 0) == BoxFill::Active);
+    utassert(BoxFillFor(true, true, 7, 0, 0) == BoxFill::Base);
+}
+
+// A press that slides off keeps the pressed fill and loses the hover: the
+// window holds `activeId` from the press to the release, where `hoverId`
+// follows the pointer.
+static void APressThatSlidOffStaysPressed() {
+    utassert(BoxFillFor(true, true, 7, 7, 8) == BoxFill::Active);
+    // And the box it slid onto is neither: nothing else can be held.
+    utassert(BoxFillFor(true, true, 8, 7, 8) == BoxFill::Hover);
+}
+
+// Both states need a click id of their own, the way the hover always has:
+// without one the box matches the 0 that means nothing is hovered or held.
+static void ABoxWithNoClickIdIsNeitherHoveredNorHeld() {
+    utassert(BoxFillFor(true, true, 0, 0, 0) == BoxFill::Base);
+}
+
+// A box that never named a pressed fill falls through to the hover it did
+// name, which is every element in the tree that predates `activeBg`.
+static void AFillThatWasNeverNamedIsNotPainted() {
+    utassert(BoxFillFor(false, true, 7, 7, 7) == BoxFill::Hover);
+    utassert(BoxFillFor(false, false, 7, 7, 7) == BoxFill::Base);
+    utassert(BoxFillFor(true, false, 7, 7, 7) == BoxFill::Active);
+}
+
+// StyleRefinement::refine over the pressed fill, which is what lets a
+// control state name one.
+static void AStateCanNameThePressedFill() {
+    StateStyle instance;
+    instance.Bg(kInstance);
+    StateStyle over;
+    over.ActiveBg(kSelected);
+    const StateStyle* states[1] = {&over};
+    StateStyle out = StateStyleResolve(instance, states, 1);
+    utassert(out.Has(StateFieldActiveBg));
+    utassert(Same(out.style.activeBg.color, kSelected));
+    // And it says nothing about the fill underneath it.
+    utassert(Same(out.style.bg.color, kInstance));
+}
+
 void TestStateStyle() {
     TestSuite("state_style");
+    TheHeldBoxPaintsItsPressedFill();
+    APressThatSlidOffStaysPressed();
+    ABoxWithNoClickIdIsNeitherHoveredNorHeld();
+    AFillThatWasNeverNamedIsNotPainted();
+    AStateCanNameThePressedFill();
     TheInstanceStyleIsTheBaseline();
     AnActiveStateOverridesTheInstance();
     LaterStatesOverrideEarlierOnes();

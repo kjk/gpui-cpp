@@ -100,10 +100,25 @@ struct ListState {
     Vec<int> sectionCounts;
     bool sectionHeaders = false;
     bool sectionFooters = false;
-    // The list is virtualized, and uniform_list wants every row the same
-    // height. `viewportH` is what the last frame was laid out at, which is
-    // what scroll_to_item measures against.
+    // The list is virtualized through `v_virtual_list`, which takes a size
+    // per row rather than one for all of them: a section header is not an
+    // item's height, and neither is a footer. `rowH` is the item height and
+    // is *measured* — `prepare_items_if_needed` lays out the row at
+    // `itemToMeasure` on its own and takes what it came out as — with 32 the
+    // value it starts at, for the frame before anything has been built.
+    // `viewportH` is what the last frame was laid out at, which is what
+    // scroll_to_item measures against.
     float rowH = 32;
+    float headerH = 0;
+    float footerH = 0;
+    // item_to_measure_index: which row stands for the rest. Rust defaults to
+    // the first and lets a delegate name another, for a list whose first row
+    // is not typical of it.
+    IndexPath itemToMeasure = {};
+    // entries_sizes: the height of every flattened row, which is what the
+    // virtual list scrolls and places against. Rebuilt whenever the sections
+    // or the three measured heights change.
+    Vec<float> rowHeights;
     float scrollY = 0;
     float viewportH = 0;
     // delegate.loading() / has_more() / load_more_threshold(): the rows are
@@ -119,7 +134,10 @@ struct ListState {
     // its subscribers without the caller carrying its handle around.
     EntityId self = {};
 
-    ~ListState() { sectionCounts.Reset(); }
+    ~ListState() {
+        sectionCounts.Reset();
+        rowHeights.Reset();
+    }
 
     // Rust's ListState is an Entity, which is what lets the item closures
     // capture it; here the row elements name these handlers instead, so a
@@ -145,6 +163,17 @@ int ListRowCount(const ListState* s);
 ListRow ListRowAt(const ListState* s, int rowIx);
 // Where an item sits among the flattened rows, or -1.
 int ListRowOfEntry(const ListState* s, int entry);
+// RowsCache::prepare_if_needed: the per-row heights, rebuilt from the three
+// measured ones. Rust rebuilds when the sections or the measured sizes have
+// changed; the check here is the same, since the walk is the cost and the
+// list is rebuilt every frame. A header or a footer that measured 0 — because
+// the list has none — still takes a row of its own only when the state says
+// the section has one, which is what SectionRows already counts.
+void ListPrepareRowHeights(ListState* s, float itemH, float headerH,
+                           float footerH);
+// The heights the virtual list scrolls against, or null before anything has
+// been measured — in which case every row is `rowH`.
+const float* ListRowHeights(const ListState* s);
 // The two directions between the flat entry index this tree keys on and the
 // IndexPath Rust keys on. An entry outside the list is section 0, row -1;
 // a path outside it is -1.

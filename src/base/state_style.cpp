@@ -38,6 +38,13 @@ StateStyle& StateStyle::HoverFg(Rgba c) {
     return *this;
 }
 
+StateStyle& StateStyle::ActiveBg(Background c) {
+    style.activeBg = c;
+    style.hasActiveBg = true;
+    set |= StateFieldActiveBg;
+    return *this;
+}
+
 StateStyle& StateStyle::Opacity(float v) {
     style.opacity = v;
     set |= StateFieldOpacity;
@@ -62,6 +69,9 @@ void StateStyleRefine(StateStyle* into, const StateStyle& over) {
     }
     if (over.Has(StateFieldHoverFg)) {
         into->HoverFg(over.style.hoverFg);
+    }
+    if (over.Has(StateFieldActiveBg)) {
+        into->ActiveBg(over.style.activeBg);
     }
     if (over.Has(StateFieldOpacity)) {
         into->Opacity(over.style.opacity);

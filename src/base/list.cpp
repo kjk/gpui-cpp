@@ -135,6 +135,39 @@ ListRow ListRowAt(const ListState* s, int rowIx) {
     return r;
 }
 
+void ListPrepareRowHeights(ListState* s, float itemH, float headerH,
+                           float footerH) {
+    if (!s) {
+        return;
+    }
+    int total = ListRowCount(s);
+    // need_update: the sections have not moved and nothing measured
+    // differently, so the vector already standing is the answer.
+    bool same = s->rowHeights.len == total && s->rowH == itemH &&
+                s->headerH == headerH && s->footerH == footerH;
+    s->rowH = itemH;
+    s->headerH = headerH;
+    s->footerH = footerH;
+    if (same) {
+        return;
+    }
+    s->rowHeights.len = 0;
+    for (int r = 0; r < total; r++) {
+        ListRow row = ListRowAt(s, r);
+        float h = row.kind == ListRowKind::SectionHeader   ? headerH
+                  : row.kind == ListRowKind::SectionFooter ? footerH
+                                                           : itemH;
+        s->rowHeights.Append(h);
+    }
+}
+
+const float* ListRowHeights(const ListState* s) {
+    if (!s || s->rowHeights.len == 0) {
+        return nullptr;
+    }
+    return s->rowHeights.els;
+}
+
 IndexPath ListIndexPathOf(const ListState* s, int entry) {
     IndexPath p;
     p.row = -1;
@@ -195,8 +228,15 @@ void ListScrollToItem(ListState* s, int entry, ScrollStrategy strategy) {
     if (row < 0) {
         return;
     }
-    s->scrollY = VirtualListScrollToRow(ListRowCount(s), s->rowH, row,
-                                        s->scrollY, s->viewportH, strategy);
+    // A list whose header and footer are not an item's height scrolls against
+    // the per-row sizes, the way `v_virtual_list` places them. Before the
+    // first measure there are none, and every row is `rowH`.
+    const float* sizes = ListRowHeights(s);
+    int total = ListRowCount(s);
+    s->scrollY = sizes ? VirtualListScrollToItem(sizes, total, row, s->scrollY,
+                                                 s->viewportH, strategy)
+                       : VirtualListScrollToRow(total, s->rowH, row, s->scrollY,
+                                                s->viewportH, strategy);
 }
 
 bool ListShouldLoadMore(const ListState* s, int lastVisibleRow) {

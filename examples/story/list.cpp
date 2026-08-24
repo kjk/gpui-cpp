@@ -138,7 +138,10 @@ static El* SectionHeader(Ctx* cx, void*, int section) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     const QuoteSection& s = kSections[section];
-    El* head = Div(a)->FlexRow()->PadX(8)->PadT(8)->Gap(8)->ItemsCenter();
+    // `h_flex().pb_1().px_2().gap_2()`: the padding is below the header, not
+    // above it. It only started to show once the list measured a header
+    // rather than forcing it to an item's height.
+    El* head = Div(a)->FlexRow()->PadX(8)->PadB(4)->Gap(8)->ItemsCenter();
     head->Child(IconEl(a, IconName::Folder, 16)->Fg(th.mutedFg));
     head->Child(StoryTxt(cx, Str(s.industry), 14, th.mutedFg));
     head->Child(
@@ -149,7 +152,10 @@ static El* SectionHeader(Ctx* cx, void*, int section) {
 static El* SectionFooter(Ctx* cx, void*, int section) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    return Div(a)->PadX(8)->PadT(4)->Child(StoryTxt(
+    // `div().pt_1().pb_5().px_2()`: the twenty below the footer is the gap
+    // between one section and the next, and it belongs to the footer rather
+    // than to the header under it.
+    return Div(a)->PadX(8)->PadT(4)->PadB(20)->Child(StoryTxt(
         cx,
         StoryFmt(cx, "Total %d items in section.", kSections[section].count),
         12, th.mutedFg));
@@ -169,6 +175,11 @@ static component::ListItem* RenderQuote(Ctx* cx, void* data, int section,
     right->Child(Div(a)->FlexRow()->W(65)->JustifyEnd()->Child(
         StoryTxt(cx, Str(r.change), 12, r.up ? th.green : th.red)->PadX(4)));
     line->Child(right);
+    // list_story.rs also refines the row with `.px_2().py_1().border_1()
+    // .rounded(radius)`. The border is not written here because a border
+    // takes no room in this tree — `ToTaffyStyle` never sets `t.border` —
+    // so it would be two pixels the row does not get. That is why the row
+    // measures 34 where upstream's is 36; see port-progress.md.
     return component::ListItem::New(cx, line)
         ->Confirmed(self->confirmedRow == entry);
 }
@@ -228,10 +239,6 @@ El* ListStory::Render(ListStory* self, Ctx* cx) {
     // can show are ever built, which is what the delegate is for.
     if (st) {
         st->loading = self->loading;
-        // Rust measures the item it built and scrolls on that; the rows here
-        // are uniform, so the story names the height its own row comes out
-        // at -- py_1 and a border around a text_sm line, which is 36.
-        st->rowH = 36;
     }
     component::List* list =
         component::List::New(cx, StrL("list-story"), self->list)

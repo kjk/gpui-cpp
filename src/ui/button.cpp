@@ -150,97 +150,171 @@ Button* Button::OnClick(Listener l) {
 
 El* Button::IntoEl() {
     const Theme& th = cx->theme();
-    // The default variant is the background with an input-colored border, not
-    // a secondary fill: crates/ui falls `button` back to the theme background
-    // in light mode, and hovers toward the input color.
-    // bg and hover are Backgrounds, not colours: a theme may spell either as
-    // a gradient, and a button is where most of them land.
-    Background bg = th.tokens.background,
-               hover = RgbaOpacity(th.inputBorder, 0.5f);
-    Rgba fg = th.foreground, bd = th.inputBorder;
-    // The status variants are washes, not fills: crates/ui's button_danger and
-    // friends are the status color mixed 20% toward transparent, with the
-    // color itself as the text and the same wash as the border. Outlined, the
-    // wash drops to 10% and the border goes to 60%.
-    // The status variants' accent is a fill, not a colour: schema.rs lets
-    // `danger.background` and friends be gradients, and the wash a button
-    // paints is that fill faded rather than a flat colour faded.
+    const Rgba clear = Rgba8(0, 0, 0, 0);
+    const bool dark = cx->themeMode() == ThemeMode::Dark;
+    // ButtonVariant::bg_color / hovered / active / border_color / text_color,
+    // in button.rs. Every fill a variant paints is a *token* there —
+    // `tokens.button_primary_hover` and not a mix computed at the call — so
+    // that a theme file naming `button.primary.hover.background` is honoured.
+    // The mixes this used to do are still the numbers, but they live in
+    // `ThemeFillDerived` as the fallbacks schema.rs spells, which is the one
+    // place they belong.
+    //
+    // bg, hover and press are Backgrounds, not colours: a theme may spell any
+    // of them as a gradient, and a button is where most of them land.
+    Background bg = th.tokens.button, hover = th.tokens.buttonHover,
+               press = th.tokens.buttonActive;
+    Rgba fg = th.buttonFg, bd = th.inputBorder;
+    // hovered().fg / active().fg only ever differ from normal().fg for Link
+    // and Text, the two that paint no fill: what the pointer moves on them is
+    // the ink. Everything else answers the pointer with its background.
+    Rgba fgHover = {};
+    bool hasFgHover = false;
+    // The status variants keep their accent around because `outline` re-derives
+    // its three fills from it — `outline_background` is written against
+    // `tokens.danger` and friends, not against the `button_danger` family.
     Background accent = {};
     bool hasAccent = false;
     switch (variant) {
         case ButtonVariant::Secondary:
-            bg = th.tokens.secondary;
-            fg = th.secondaryFg;
-            hover = th.secondaryHover;
+            bg = th.tokens.buttonSecondary;
+            fg = th.buttonSecondaryFg;
+            hover = th.tokens.buttonSecondaryHover;
+            press = th.tokens.buttonSecondaryActive;
             bd = th.border;
             break;
         case ButtonVariant::Primary:
-            bg = th.tokens.primary;
-            fg = th.primaryFg;
-            hover = RgbaMix(th.primary, th.foreground, 0.85f);
+            bg = th.tokens.buttonPrimary;
+            fg = th.buttonPrimaryFg;
+            hover = th.tokens.buttonPrimaryHover;
+            press = th.tokens.buttonPrimaryActive;
             bd = th.primary;
             break;
         case ButtonVariant::Danger:
             accent = th.tokens.danger;
             hasAccent = true;
+            bg = th.tokens.buttonDanger;
+            fg = th.buttonDangerFg;
+            hover = th.tokens.buttonDangerHover;
+            press = th.tokens.buttonDangerActive;
+            bd = th.buttonDanger;
             break;
         case ButtonVariant::Success:
             accent = th.tokens.success;
             hasAccent = true;
+            bg = th.tokens.buttonSuccess;
+            fg = th.buttonSuccessFg;
+            hover = th.tokens.buttonSuccessHover;
+            press = th.tokens.buttonSuccessActive;
+            bd = th.buttonSuccess;
             break;
         case ButtonVariant::Warning:
             accent = th.tokens.warning;
             hasAccent = true;
+            bg = th.tokens.buttonWarning;
+            fg = th.buttonWarningFg;
+            hover = th.tokens.buttonWarningHover;
+            press = th.tokens.buttonWarningActive;
+            bd = th.buttonWarning;
             break;
         case ButtonVariant::Info:
             accent = th.tokens.info;
             hasAccent = true;
+            bg = th.tokens.buttonInfo;
+            fg = th.buttonInfoFg;
+            hover = th.tokens.buttonInfoHover;
+            press = th.tokens.buttonInfoActive;
+            bd = th.buttonInfo;
             break;
         case ButtonVariant::Ghost:
+            // The one family with no token of its own: button.rs computes it
+            // from `secondary`, lightened in dark and darkened in light, and
+            // at 0.8 alpha in both. Twice as far for the pressed state.
+            bg = clear;
+            fg = th.secondaryFg;
+            hover = RgbaOpacity(dark ? RgbaLighten(th.secondary, 0.1f)
+                                     : RgbaDarken(th.secondary, 0.1f),
+                                0.8f);
+            press = RgbaOpacity(dark ? RgbaLighten(th.secondary, 0.2f)
+                                     : RgbaDarken(th.secondary, 0.2f),
+                                0.8f);
+            bd = clear;
+            break;
         case ButtonVariant::Text:
-            bg = Rgba8(0, 0, 0, 0);
-            fg = th.foreground;
-            hover = th.tokens.muted;
-            bd = Rgba8(0, 0, 0, 0);
+            // Link and Text paint no fill in any state — what changes under
+            // the pointer is the text colour, which `HoverFg` carries.
+            bg = clear;
+            fg = RgbaOpacity(th.foreground, 0.9f);
+            fgHover = th.foreground;
+            hasFgHover = true;
+            hover = clear;
+            press = clear;
+            bd = clear;
             break;
         case ButtonVariant::Link:
-            bg = Rgba8(0, 0, 0, 0);
-            fg = th.blue;
-            hover = th.tokens.muted;
-            bd = Rgba8(0, 0, 0, 0);
+            bg = clear;
+            fg = th.link;
+            fgHover = th.linkHover;
+            hasFgHover = true;
+            hover = clear;
+            press = clear;
+            bd = clear;
             break;
         default:
             break;
-    }
-    if (hasAccent) {
-        bg = BackgroundOpacity(accent, 0.2f);
-        fg = accent.color;
-        hover = BackgroundOpacity(accent, 0.3f);
-        bd = bg.color;
     }
     if (hasCustom) {
         fg = custom;
         bd = custom;
         bg = outline ? th.background : RgbaOpacity(custom, 0.12f);
         hover = RgbaOpacity(custom, 0.2f);
+        press = RgbaOpacity(custom, 0.3f);
     }
     if (outline && !hasCustom) {
+        // outline_background(state): the semantic token at 0.1 / 0.2 / 0.4,
+        // and Default on the input colour mixed toward transparent instead.
         if (hasAccent) {
             bg = BackgroundOpacity(accent, 0.1f);
             bd = RgbaOpacity(accent.color, 0.6f);
             hover = BackgroundOpacity(accent, 0.2f);
+            press = BackgroundOpacity(accent, 0.4f);
         } else if (variant == ButtonVariant::Primary) {
             bg = BackgroundOpacity(th.tokens.primary, 0.1f);
             fg = th.primary;
-            hover = BackgroundOpacity(th.tokens.primary, 0.2f);
+            hover = BackgroundOpacity(th.tokens.primaryHover, 0.2f);
+            press = BackgroundOpacity(th.tokens.primaryActive, 0.4f);
+        } else if (variant == ButtonVariant::Secondary) {
+            bg = BackgroundOpacity(th.tokens.secondary, 0.1f);
+            fg = th.secondaryFg;
+            hover = BackgroundOpacity(th.tokens.secondaryHover, 0.2f);
+            press = BackgroundOpacity(th.tokens.secondaryActive, 0.4f);
+        } else if (variant == ButtonVariant::Ghost ||
+                   variant == ButtonVariant::Link ||
+                   variant == ButtonVariant::Text) {
+            // Transparent in every state, outlined or not.
         } else {
-            bg = th.tokens.background;
-            hover = th.tokens.muted;
+            bg = th.inputBg;
+            hover = RgbaMixOklab(th.inputBorder, clear, 0.5f);
+            press = RgbaMixOklab(th.inputBorder, clear, 0.7f);
         }
     }
     if (selected) {
-        bg = th.secondaryActive;
-        hover = th.secondaryHover;
+        // ButtonVariant::selected: the variant's *own* active fill, not a
+        // secondary one for everybody. Ghost is the exception — it has no
+        // button family, so it takes `secondary_active` straight — and Link
+        // and Text stay transparent the way they are in every other state.
+        switch (variant) {
+            case ButtonVariant::Ghost:
+                bg = th.tokens.secondaryActive;
+                break;
+            case ButtonVariant::Link:
+            case ButtonVariant::Text:
+                bg = clear;
+                break;
+            default:
+                bg = press;
+                break;
+        }
     }
     if (disabled) {
         // ButtonVariant::disabled. The foreground is muted at half — which is
@@ -300,6 +374,9 @@ El* Button::IntoEl() {
     }
     if (resolved.Has(StateFieldHoverBg)) {
         hover = resolved.style.hoverBg;
+    }
+    if (resolved.Has(StateFieldActiveBg)) {
+        press = resolved.style.activeBg;
     }
     // crates/ui/src/button: h_5/px_1, h_6/px_2, h_8/px_2p5, h_8/px_3, with a
     // tighter px when compact. Buttons do not use the generic control height.
@@ -397,10 +474,23 @@ El* Button::IntoEl() {
     if (bg.gradient || bg.color.a) {
         e->Bg(bg);
     }
-    if (!disabled) {
+    if (!disabled && onClick.IsValid()) {
+        e->OnClick(onClick);
+    }
+    // The ink the label and the icons inherit, so the pointer can move it:
+    // `text_color(normal_style.fg)` on the root, with `hover` and `active`
+    // refining it. Only the caret names a colour of its own, since Rust
+    // builds it from `normal_style.fg` and it does not follow the state.
+    e->Fg(fg);
+    // button.rs hangs the hover and the active style off
+    // `when(!disabled && !selected)` and then `when(interactive)`: a selected
+    // button shows its selected fill and nothing else, and a loading one
+    // keeps its normal colours because it is not waiting for another click.
+    if (interactive && !selected) {
         e->HoverBg(hover);
-        if (onClick.IsValid()) {
-            e->OnClick(onClick);
+        e->ActiveBg(press);
+        if (hasFgHover) {
+            e->HoverFg(fgHover);
         }
     }
     // button.rs: `cursor_default`, and the hand only for the two variants that
@@ -422,9 +512,12 @@ El* Button::IntoEl() {
     if (extra) {
         e->Child(extra);
     } else if (loading) {
-        e->Child(IconEl(a, loadingIcon, iconPx)->Fg(fg));
+        e->Child(IconEl(a, loadingIcon, iconPx));
     } else if (icon != IconName::None) {
-        El* ic = IconEl(a, icon, iconPx)->Fg(hasIconColor ? iconColor : fg);
+        El* ic = IconEl(a, icon, iconPx);
+        if (hasIconColor) {
+            ic->Fg(iconColor);
+        }
         e->Child(ic);
     }
     if (label.s) {
@@ -433,7 +526,7 @@ El* Button::IntoEl() {
         float fontPx = size == UiSize::XSmall  ? 12.f
                        : size == UiSize::Small ? 14.f
                                                : 16.f;
-        El* text = TextEl(a, label)->Font(fontPx)->Fg(fg);
+        El* text = TextEl(a, label)->Font(fontPx);
         // ButtonVariant::underline: only the link looks like a link.
         if (variant == ButtonVariant::Link) {
             text->Underline();
@@ -441,7 +534,7 @@ El* Button::IntoEl() {
         e->Child(text);
     }
     if (iconRight != IconName::None) {
-        e->Child(IconEl(a, iconRight, iconPx)->Fg(fg));
+        e->Child(IconEl(a, iconRight, iconPx));
     }
     if (dropdown) {
         // dropdown_caret adds the caret and nothing else: a DropdownButton's

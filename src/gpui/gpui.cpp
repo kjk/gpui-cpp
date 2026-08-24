@@ -1518,6 +1518,10 @@ void StyleApplyFields(Style* into, const Style& over, uint32_t fields) {
         into->hoverFg = over.hoverFg;
         into->hasHoverFg = true;
     }
+    if (fields & StyleFieldActiveBg) {
+        into->activeBg = over.activeBg;
+        into->hasActiveBg = true;
+    }
 }
 
 void StyleOverrideApply(El* e) {
@@ -1763,6 +1767,20 @@ El* El::Caret(int off, Rgba color, float width) {
     return this;
 }
 
+BoxFill BoxFillFor(bool hasActiveBg, bool hasHoverBg, int clickId, int activeId,
+                   int hoverId) {
+    if (clickId == 0) {
+        return BoxFill::Base;
+    }
+    if (hasActiveBg && clickId == activeId) {
+        return BoxFill::Active;
+    }
+    if (hasHoverBg && clickId == hoverId) {
+        return BoxFill::Hover;
+    }
+    return BoxFill::Base;
+}
+
 bool ClickFromRelease(bool pending, int pressedId, MouseButton pressedButton,
                       bool dragged, int upId, MouseButton upButton) {
     if (!pending) {
@@ -1911,6 +1929,11 @@ El* El::HoverBg(Background c) {
 El* El::HoverFg(Rgba c) {
     style.hoverFg = c;
     style.hasHoverFg = true;
+    return this;
+}
+El* El::ActiveBg(Background c) {
+    style.activeBg = c;
+    style.hasActiveBg = true;
     return this;
 }
 
@@ -3256,8 +3279,11 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
     }
 }
 
-void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
-              float availH, float inheritFont, Rgba inheritFg) {
+// The one layout pass, with the space it is run in left to the caller: the
+// frame runs it against the viewport, a measure runs it against MinContent.
+static void LayoutElIn(PaintCtx* ctx, El* e, float x, float y, float availW,
+                       float availH, bool minContent, float inheritFont,
+                       Rgba inheritFg) {
     if (!e) {
         return;
     }
@@ -3298,10 +3324,15 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
     }
 
     taffy::SizeAvail space;
-    space.width = availW > 0 ? taffy::AvailableSpace::Definite(availW)
-                             : taffy::AvailableSpace::MaxContent();
-    space.height = availH > 0 ? taffy::AvailableSpace::Definite(availH)
-                              : taffy::AvailableSpace::MaxContent();
+    if (minContent) {
+        space.width = taffy::AvailableSpace::MinContent();
+        space.height = taffy::AvailableSpace::MinContent();
+    } else {
+        space.width = availW > 0 ? taffy::AvailableSpace::Definite(availW)
+                                 : taffy::AvailableSpace::MaxContent();
+        space.height = availH > 0 ? taffy::AvailableSpace::Definite(availH)
+                                  : taffy::AvailableSpace::MaxContent();
+    }
 
     LayoutMeasureCtx mc = {ctx};
     gLayoutTree.ComputeLayoutWithMeasure(root, space, LayoutMeasure, &mc);
@@ -3313,6 +3344,19 @@ void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
         WriteBackEl(ctx, gLayoutFixed[i], 0, 0);
     }
     PlaceAnchored(e, ctx ? ctx->viewW : 0.f, ctx ? ctx->viewH : 0.f);
+}
+
+void LayoutEl(PaintCtx* ctx, El* e, float x, float y, float availW,
+              float availH, float inheritFont, Rgba inheritFg) {
+    LayoutElIn(ctx, e, x, y, availW, availH, false, inheritFont, inheritFg);
+}
+
+Size MeasureEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
+    if (!e) {
+        return Size{0, 0};
+    }
+    LayoutElIn(ctx, e, 0, 0, 0, 0, true, inheritFont, inheritFg);
+    return Size{e->w, e->h};
 }
 
 // ─── paint ────────────────────────────────────────────────────────────────
@@ -4432,16 +4476,14 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->style.borderColor = ThemeNow().ring;
     }
 
-    // The hover background needs a click id of its own: without one the
-    // element would match hoverId 0, which means nothing is hovered.
-    if (e->style.hasHoverBg && e->clickId && e->clickId == ctx->hoverId) {
+    BoxFill fill = BoxFillFor(e->style.hasActiveBg, e->style.hasHoverBg,
+                              e->clickId, ctx->activeId, ctx->hoverId);
+    if (fill != BoxFill::Base || e->style.hasBg) {
+        const Background& b = fill == BoxFill::Active  ? e->style.activeBg
+                              : fill == BoxFill::Hover ? e->style.hoverBg
+                                                       : e->style.bg;
         FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius,
-                       e->style.hasCorners ? &e->style.corners : nullptr,
-                       e->style.hoverBg);
-    } else if (e->style.hasBg) {
-        FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius,
-                       e->style.hasCorners ? &e->style.corners : nullptr,
-                       e->style.bg);
+                       e->style.hasCorners ? &e->style.corners : nullptr, b);
     }
     if (e->style.border > 0) {
         if (e->style.borderDashed) {

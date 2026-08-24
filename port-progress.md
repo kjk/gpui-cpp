@@ -3138,6 +3138,93 @@ with `dbghelp` at the point a chain block is added named `ThemeRegistryInit`.
 births with no matching death came to 2.3 MB over 120 frames, three orders of
 magnitude short of what the process was holding.
 
+- 2026-08-24: **five reported depth gaps, and the two of them that were still
+  open.** Checked one at a time against the Rust at the pinned SHA.
+
+  Already done, and verified rather than redone: the **no-wrap Textarea's
+  horizontal scrollbar** (`2b01c4c`; `!softWrap → box->ScrollX(..)` in
+  `ui/input.cpp`, and `gpui.cpp` paints a real track and thumb once
+  `contentW > w`), and **element opacity** (`Style::opacity` has been there
+  since 2026-08-20, and both things named as waiting on it already use it —
+  `dialog.cpp` fades the whole layer by the motion's delta, and
+  `notification.cpp` fades a card past the third by its `"toast-visibility"`
+  transition).
+
+  The **theme viewer's Inherited Colors** turned out to be done too, and the
+  reason it looked open is worth writing down: `ThemeConfig` keeps the
+  file's parsed `colors` object rather than a struct of fields, so
+  `ThemeConfigNames` *is* the record of which keys a file named — aliases
+  included, since `FindColor` resolves them. What the page cannot do is match
+  the rows whose mapper name and schema name differ, and that is upstream's
+  own wart, not a gap here: `mapper.rs` has no `button*` arm at all, so
+  `parse_theme_key("button_primary_hover")` falls to the default and its
+  `canonical_key` is `button_primary_hover`, where `config_keys` holds
+  `button.primary.hover.background`. They can never match, so every `button.*`
+  row reads as inherited in the Rust story as well. Nothing pinned any of
+  this, so `ThemeRegistryTests` now does.
+
+  **Buttons read the `button.*` tokens instead of recomputing them.**
+  `Button::IntoEl` had one computed mix per variant — Primary hovered to
+  `RgbaMix(primary, foreground, 0.85)`, the status variants to their accent at
+  0.3 — and a theme file naming `button.primary.hover.background` changed
+  nothing. Those numbers were never wrong; they are the *fallbacks*
+  `schema.rs` spells, and `ThemeFillDerived` already computed all of them onto
+  the tokens. So the fix was to delete the second copy: every variant now
+  takes `tokens.button*`, `tokens.button*Hover` and `tokens.button*Active`,
+  and only Ghost still computes — it has no token family upstream either, and
+  its formula is `secondary` lightened in dark and darkened in light at 0.8.
+
+  What that exposed is that the port had no pressed state at all. `El` had
+  `hoverBg` and nothing beside it, so `.active(|style| style.bg(..))` had
+  nowhere to land. `Style::activeBg` is that, `PaintCtx::activeId` is GPUI's
+  `clicked_state.element` — the id the press landed on, held until the button
+  comes back up, so it does not follow the pointer the way the hover does —
+  and `BoxFillFor` is the three-way choice, split out of the paint pass
+  because the pointer cannot be driven from a test. Two more of button.rs
+  fell out of it once there was a state to put them in: `selected` is the
+  variant's own active fill rather than `secondaryActive` for everybody, and
+  a selected or loading button now has no hover and no press, which is what
+  `when(!disabled && !selected)` and `when(interactive)` say. Link and Text
+  paint no fill in any state and move their *ink* instead, so the button
+  passes its colour down and the label and icons inherit it rather than each
+  naming it — the caret keeps naming its own, since Rust builds it from
+  `normal_style.fg` and it does not follow the state.
+
+  **The list measures its rows.** `prepare_items_if_needed` lays out the item
+  at `item_to_measure_index` on its own, and the section header and footer
+  beside it, and `RowsCache` turns the three into a size per flattened row;
+  this tree pinned one `rowH` of 32 for all of them and the story hand-set 36
+  over the top. `MeasureEl` is `layout_as_root(size(MinContent, MinContent))`
+  — the same pass `LayoutEl` runs, with the space left to the caller — and
+  `ListPrepareRowHeights` is `prepare_if_needed`, rebuilt only when the
+  sections or the three measured heights move. The rows then go through the
+  non-uniform half of the virtual list, which was already there:
+  `VirtualListVisibleRange`, `VirtualListItemOrigin` and
+  `VirtualListContentSize` over the sizes, and `ListScrollToItem` with them.
+  The story's header and footer had drifted while every row was being forced
+  to one height — `pb_1` written as a padding on *top*, and the `pb_5` that is
+  the gap between sections missing altogether — and both are Rust's now.
+
+  The table was not touched, and should not be: `table_row_height()` is a
+  constant of the size in Rust too (26/30/32/40), which `ui/sizing.h` already
+  matches, and `state.rs` reads it the same way this tree does. Only the list
+  measures upstream.
+
+  **One thing found on the way and deliberately not fixed: a border takes no
+  room.** `ToTaffyStyle` never sets `t.border`, where GPUI hands
+  `border_widths` straight to taffy, so every bordered box in this tree is its
+  border's width shorter and narrower than upstream's and the border is
+  painted inside the box instead of beside the content. It is why the list
+  row measures 34 where Rust's is 36 — `list_story.rs` refines the row with
+  `.border_1()` and those are two of its pixels — and the pinned 36 had been
+  hiding it for this one box while the rest of the tree stayed short. Setting
+  the field is one line and makes the list row exactly 36; it also moves 55 of
+  the 66 story pages, which is a session of its own with the Rust side open
+  page by page, not a side effect of a row-height change. Left as it is, said
+  out loud in `examples/story/list.cpp`, and the next thing to pick up here.
+
+  17,512 checks pass and `bun cmd/build.ts -rel -all` builds all 24 examples.
+
 - 2026-08-24: **a story frame is 2.29 ms, from 2.62.** Profiled with `winperf`
   again (`record -i 2000 -write-agent`, 1500 frames under
   `GPUI_FRAME_BENCH`). Layout is still the frame — 66% of the samples inside

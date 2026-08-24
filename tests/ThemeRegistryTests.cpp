@@ -285,6 +285,42 @@ static void AGradientReachesTheTokenAndItsFallbacks() {
     utassert(t.tokens.selection.to.color.a <= 0x4d + 1);
 }
 
+// is_explicit, which the theme viewer's `Inherited Colors` toggle is the
+// other side of: whether the file names this token itself or leaves it to
+// the fallback chain. Rust builds the set from the config struct the file
+// deserialized into, so an alias counts under the name schema.rs renamed it
+// to; the registry keeps the parsed `colors` object and asks it the same
+// question.
+static void AConfigKnowsWhichKeysItsFileNamed() {
+    const char* doc =
+        "{ \"name\": \"named-set\", \"themes\": [ { \"name\": \"Named\", "
+        "\"mode\": \"light\", \"colors\": { "
+        "\"primary\": \"#1E293B\", "
+        "\"button.primary.hover.background\": \"#334155\", "
+        "\"selection.background\": \"#1D4ED8\" "
+        "} } ] }";
+    utassert(ThemeRegistryLoadStr(Str(doc)) >= 1);
+    const ThemeConfig* cfg = ThemeRegistryFind(StrL("Named"));
+    utassert(cfg != nullptr);
+
+    // Named by the file, and so shown whether or not the toggle is on.
+    utassert(ThemeConfigNames(cfg, "primary"));
+    utassert(ThemeConfigNames(cfg, "button.primary.hover.background"));
+    utassert(ThemeConfigNames(cfg, "selection.background"));
+    // Not named: these come out of the chain, and are the rows the toggle
+    // hides. `primary.hover.background` is the one worth pinning — the file
+    // named the *button's* hover and not the semantic one behind it, and the
+    // two are separate keys.
+    utassert(!ThemeConfigNames(cfg, "primary.hover.background"));
+    utassert(!ThemeConfigNames(cfg, "background"));
+    utassert(!ThemeConfigNames(cfg, "title_bar.background"));
+    // A key no schema has is named by nothing.
+    utassert(!ThemeConfigNames(cfg, "not.a.token"));
+    // And a null config names nothing rather than crashing, which is what the
+    // viewer holds before a theme has been picked.
+    utassert(!ThemeConfigNames(nullptr, "primary"));
+}
+
 void TestThemeRegistry() {
     TestSuite("theme_registry");
     AColourIsAHexOrAName();
@@ -292,4 +328,5 @@ void TestThemeRegistry() {
     TheDefaultThemeResolvesToTheDefaultPalette();
     ABackgroundIsAColourOrAGradient();
     AGradientReachesTheTokenAndItsFallbacks();
+    AConfigKnowsWhichKeysItsFileNamed();
 }

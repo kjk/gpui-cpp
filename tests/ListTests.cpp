@@ -134,6 +134,57 @@ static void LoadMoreAsksNearTheEnd() {
     utassert(!ListShouldLoadMore(&s, 100));
 }
 
+// RowsCache::prepare_if_needed: a size per flattened row, taken from the
+// three that were measured. A header is not an item.s height and neither is
+// a footer, which is why `v_virtual_list` takes a vector rather than one
+// number.
+static void EachRowKindKeepsItsOwnHeight() {
+    ListState s;
+    int counts[2] = {2, 1};
+    ListSetSections(&s, counts, 2, true, true);
+    // header, two items, footer, then header, one item, footer.
+    utassert(ListRowCount(&s) == 7);
+    ListPrepareRowHeights(&s, 36, 24, 20);
+    const float* h = ListRowHeights(&s);
+    utassert(h != nullptr);
+    utassertnear(h[0], 24.f);
+    utassertnear(h[1], 36.f);
+    utassertnear(h[2], 36.f);
+    utassertnear(h[3], 20.f);
+    utassertnear(h[4], 24.f);
+    utassertnear(h[5], 36.f);
+    utassertnear(h[6], 20.f);
+    // The whole list is what the virtual list scrolls against.
+    utassertnear(VirtualListContentSize(h, 7),
+                 24 + 36 + 36 + 20 + 24 + 36 + 20);
+}
+
+// need_update: the same sections measured the same way rebuild nothing, and a
+// measure that moved rebuilds all of it.
+static void TheHeightsAreRebuiltOnlyWhenSomethingMoved() {
+    ListState s;
+    ListSetCount(&s, 3);
+    ListPrepareRowHeights(&s, 32, 0, 0);
+    const float* first = ListRowHeights(&s);
+    utassert(first != nullptr);
+    utassertnear(first[0], 32.f);
+    ListPrepareRowHeights(&s, 32, 0, 0);
+    utassertnear(ListRowHeights(&s)[0], 32.f);
+    // A row that measured taller takes every row with it.
+    ListPrepareRowHeights(&s, 40, 0, 0);
+    utassertnear(ListRowHeights(&s)[2], 40.f);
+    utassertnear(s.rowH, 40.f);
+}
+
+// Before anything has been measured there are no per-row heights at all, and
+// the list falls back to the one it starts at.
+static void AListThatHasNotMeasuredHasNoHeights() {
+    ListState s;
+    ListSetCount(&s, 4);
+    utassert(ListRowHeights(&s) == nullptr);
+    utassertnear(s.rowH, 32.f);
+}
+
 void TestList() {
     TheKeyTable();
     NextAndPrevWrap();
@@ -142,4 +193,7 @@ void TestList() {
     AnEmptySectionTakesItsHeaderWithIt();
     AListWithNoSectionsIsOneSection();
     LoadMoreAsksNearTheEnd();
+    EachRowKindKeepsItsOwnHeight();
+    TheHeightsAreRebuiltOnlyWhenSomethingMoved();
+    AListThatHasNotMeasuredHasNoHeights();
 }
