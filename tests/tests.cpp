@@ -99,6 +99,7 @@ int GpuiMain(int argc, char** argv) {
     TestObservers();
     TestStyleEq();
     TestScrollbarMotion();
+    TestAnchorFlip();
     TestDockState();
     TestFocusTrap();
     TestKeymap();

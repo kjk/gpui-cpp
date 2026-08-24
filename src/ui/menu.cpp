@@ -455,7 +455,9 @@ El* DropdownMenu::IntoEl() {
         wrap->Child(trigger);
     }
     if (menu && st && st->open) {
-        El* el = menu->IntoEl()->AnchorBelow(gap)->Deferred();
+        // `dropdown_positioner`: side placement, so a menu with no room
+        // under its trigger opens above it rather than being clamped.
+        El* el = menu->IntoEl()->AnchorBelow(gap)->AnchorFlip()->Deferred();
         if (anchorRight) {
             el->Right(0);
         } else {
@@ -580,8 +582,12 @@ El* AppMenuBar::IntoEl() {
         if (on && menus[i]) {
             // The menu of the open title hangs under it, over everything the
             // frame drew after it.
-            wrap->Child(
-                menus[i]->IntoEl()->AnchorBelow(2)->Left(0)->Deferred());
+            wrap->Child(menus[i]
+                            ->IntoEl()
+                            ->AnchorBelow(2)
+                            ->AnchorFlip()
+                            ->Left(0)
+                            ->Deferred());
         }
         bar->Child(wrap);
     }

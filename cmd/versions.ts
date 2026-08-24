@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "8c9a8f93acc2eb746eb8e24cb43dec9b97e217d8",
+  sha: "81305ef4a0fd86f64777791dd38ead5c303a15f4",
   date: "2026-08-17",
-  subject: "calendar: Fix calendar 8-column regression introduced in 1bb129b (#2745)",
+  subject: "popup: Fix popup placement and base showcase startup (#2732)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

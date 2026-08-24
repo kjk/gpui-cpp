@@ -1532,6 +1532,12 @@ struct Style {
     // deferred(): a popup anchored to its trigger still draws over the page
     // below it, and hit-tests before it.
     bool deferred = false;
+    // Side placement rather than corner anchoring: the requested side when the
+    // popup fits there, the opposite side when it does not, and the roomier of
+    // the two when neither does — `Positioner::side`, which is what a dropdown
+    // uses upstream so a menu near the bottom of the window opens upward
+    // instead of being clamped against the edge.
+    bool anchorFlip = false;
     bool anchorBelow = false;   // absolute, just under the parent box
     bool anchorAbove = false;   // absolute, just over it
     bool anchorCenterX = false; // absolute, centered on the parent box
@@ -2003,6 +2009,10 @@ struct El {
     El* Fixed();
     El* Deferred();
     El* AnchorBelow(float gap = 0);
+    // `Positioner::side`: flip to the other side rather than clamping when
+    // the anchored side has no room. Dropdowns say this; a popup placed at a
+    // named corner does not.
+    El* AnchorFlip(bool on = true);
     El* AnchorAbove(float gap = 0);
     El* AnchorCenterX();
     El* Top(float v);

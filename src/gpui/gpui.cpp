@@ -1778,6 +1778,11 @@ void StyleOverrideApply(El* e) {
 // How opaque a Scrolling bar is right now, and whether the window has to come
 // back for the rest of the fade. `held` is the pointer resting on the bar,
 // which Rust answers by stamping the time again.
+El* El::AnchorFlip(bool on) {
+    style.anchorFlip = on;
+    return this;
+}
+
 El* El::Rotate(float turns) {
     style.rotate = turns;
     return this;
@@ -3736,11 +3741,25 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
             ax = e->x + e->w - e->style.pad.right - absR -
                  innerW * s.absRightRel - c->w;
         }
-        if (s.anchorBelow) {
-            ay = e->y + e->h + s.anchorGap;
+        bool below = s.anchorBelow;
+        if ((s.anchorBelow || s.anchorAbove) && s.anchorFlip && viewH > 0) {
+            // `Positioner::side`, written where the anchor is applied: the
+            // requested side if the popup fits there, the opposite side if it
+            // fits and the first does not, and the roomier of the two when
+            // neither does. The clamp below is what runs afterwards either
+            // way, which is the order positioner.rs places and then clamps in.
+            float roomBelow =
+                viewH - (e->y + e->h) - s.anchorGap - kPopupMargin;
+            float roomAbove = e->y - s.anchorGap - kPopupMargin;
+            float want = below ? roomBelow : roomAbove;
+            float other = below ? roomAbove : roomBelow;
+            if (want < c->h) {
+                below = other >= c->h ? !below : roomBelow >= roomAbove;
+            }
         }
-        if (s.anchorAbove) {
-            ay = e->y - c->h - s.anchorGap;
+        if (s.anchorBelow || s.anchorAbove) {
+            ay = below ? (e->y + e->h + s.anchorGap)
+                       : (e->y - c->h - s.anchorGap);
         }
         if (s.anchorCenterX) {
             ax = e->x + (e->w - c->w) * 0.5f;

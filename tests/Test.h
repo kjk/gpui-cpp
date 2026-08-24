@@ -96,6 +96,7 @@ void TestWryUri();
 void TestObservers();
 void TestStyleEq();
 void TestScrollbarMotion();
+void TestAnchorFlip();
 void TestDockState();
 void TestFocusTrap();
 void TestKeymap();
