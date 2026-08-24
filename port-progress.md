@@ -3202,7 +3202,11 @@ magnitude short of what the process was holding.
   ResolveOrZero` (3.2%, deliberately out of line). The structural win is
   still carrying layout across frames rather than rebuilding the tree.
 
-  A trap for whoever runs `winperf` next: `record -- out/rel/story.exe`
-  fails with `CreateProcessW ... err 0x2` and then profiles the machine
-  rather than the app, because the elevated helper does not have this
-  directory as its own. Pass the full Windows path.
+  One thing this turned up in `winperf` itself, fixed there rather than
+  worked around here: `record -- out/rel/story.exe` failed with
+  `CreateProcessW ... err 0x2` — CreateProcessW parses the command line
+  itself when given no application name, and its parser does not take `/` as
+  a path separator — and then went on to stop xperf, parse the trace and
+  print a full summary of the two seconds of everything else the machine had
+  been doing. It now translates the path, and a workload that never starts is
+  an error rather than a profile of the wrong thing.
