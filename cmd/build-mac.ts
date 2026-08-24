@@ -38,6 +38,7 @@ const simpleExamples = [
   "markdown",
   "html",
   "large_text",
+  "dock",
 ];
 
 const knownTargets = [
