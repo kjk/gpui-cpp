@@ -112,8 +112,10 @@ struct ShowcaseApp {
     char comboboxSel[32] = "Select framework";
     InputState comboQuery;
     bool dateOpen = false;
-    int calYear = 0; // 0 = fill from local date on first calendar render
-    int calMonth = 0;
+    // The calendar page's state, which is the calendar's own: the month it
+    // is looking at, which grid is up and which page of the years — filled
+    // from the local date on the first render.
+    CalendarState cal = {};
     int calDay = 0; // 0 = no selection; today is outlined like Rust
     bool dialogOpen = false;
     bool popoverOpen = false;

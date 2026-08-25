@@ -94,39 +94,6 @@ Calendar* Calendar::OnYear(Listener fn) {
     return this;
 }
 
-static int Dim(int y, int m) {
-    static const int k[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) {
-        return 29;
-    }
-    return k[m];
-}
-
-// Sakamoto: 0 = Sunday. The grid starts on the weekday the 1st falls on and
-// fills the flanks with the neighbouring months, as crates/ui does.
-static int Dow(int y, int m, int d) {
-    static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-    if (m < 3) {
-        y -= 1;
-    }
-    return (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;
-}
-
-static void OffsetMonth(int year, int month, int offset, int* outYear,
-                        int* outMonth) {
-    int value = month - 1 + offset;
-    *outYear = year + value / 12;
-    *outMonth = value % 12 + 1;
-}
-
-static bool SameDate(LocalDate a, LocalDate b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-}
-
-static bool DateAtOrBefore(LocalDate a, LocalDate b) {
-    return DatePickerDateKey(a) <= DatePickerDateKey(b);
-}
-
 static float CalendarCellSize(UiSize size) {
     if (size == UiSize::Small) {
         return 28;
@@ -151,9 +118,13 @@ static float CalendarWidth(UiSize size) {
     return 248;
 }
 
-static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
-    Arena* a = self->a;
-    Ctx* cx = self->cx;
+// The themed item — crates/ui/src/time/calendar.rs. The calendar builds
+// every slot and hands it over; what is left up here is the look and the
+// label, which is all a theme has to say about a calendar.
+static El* ThemedCalendarItem(void* user, Ctx* cx, El* item,
+                              const CalendarItemState& st) {
+    Calendar* self = (Calendar*)user;
+    Arena* a = cx->a;
     const Theme& th = cx->theme();
     // t!("Calendar.week.N"): the heads are the locale's, so a calendar in
     // Chinese reads 日 一 二 rather than Su Mo Tu.
@@ -161,95 +132,6 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                                      "Calendar.week.2", "Calendar.week.3",
                                      "Calendar.week.4", "Calendar.week.5",
                                      "Calendar.week.6"};
-    // calendar.rs used to build a month as one `h_flex().flex_wrap()` holding
-    // the seven weekday headers and every day cell after them, which put
-    // eight cells on a row wherever the width fitted eight and shifted the
-    // month by one from the second row on. It is a column of rows now — the
-    // weekday header, then one `h_flex` per week — so seven is seven whatever
-    // the panel is given.
-    El* panel = Div(a)->FlexCol();
-    El* header = Div(a)->FlexRow();
-    for (int i = 0; i < 7; i++) {
-        header->Child(
-            Div(a)
-                ->W(cellSize)
-                ->H(cellSize)
-                ->ItemsCenter()
-                ->JustifyCenter()
-                ->Child(TextEl(a, Tr(weekdays[i]))->Font(12)->Fg(th.mutedFg)));
-    }
-    panel->Child(header);
-    LocalDate today = DateToday();
-    LocalDate selected = {
-        self->selectedYear ? self->selectedYear : self->year,
-        self->selectedMonth ? self->selectedMonth : self->month,
-        self->day,
-    };
-    int offset = CalendarGridOffset(Dow(year, month, 1));
-    int cells = CalendarGridCells(offset, Dim(year, month));
-    LocalDate first = DateAddDays({year, month, 1}, -offset);
-    El* week = nullptr;
-    for (int i = 0; i < cells; i++) {
-        if (i % 7 == 0) {
-            week = Div(a)->FlexRow();
-            panel->Child(week);
-        }
-        {
-            LocalDate date = DateAddDays(first, i);
-            bool outside = date.month != month;
-            bool disabled = DateMatcherMatches(self->disabledMatcher, date);
-            bool muted = outside || disabled;
-            bool active =
-                SameDate(date, selected) || SameDate(date, self->rangeEnd);
-            bool inRange = self->day > 0 && self->rangeEnd.day > 0 &&
-                           DateAtOrBefore(selected, date) &&
-                           DateAtOrBefore(date, self->rangeEnd);
-            bool isToday = SameDate(date, today);
-            El* cell =
-                CalendarItem::New(cx,
-                                  StrDup(a, fmt("date-%d-%02d-%02d", date.year,
-                                                date.month, date.day)))
-                    ->W(cellSize)
-                    ->H(cellSize)
-                    ->ItemsCenter()
-                    ->JustifyCenter()
-                    ->Radius(self->size == UiSize::Small   ? th.radius * 0.5f
-                             : self->size == UiSize::Large ? th.radius * 2.f
-                                                           : th.radius);
-            Rgba fg = muted ? th.mutedFg : th.foreground;
-            if (disabled) {
-                // calendar.rs fades the whole cell rather than the ink, so a
-                // day that is both picked and blocked shows its primary
-                // square at half strength.
-                cell->Opacity(0.5f);
-            }
-            if (active) {
-                cell->Bg(th.tokens.primary);
-                fg = th.primaryFg;
-            } else if (inRange || isToday) {
-                cell->Bg(th.tokens.accent);
-                fg = th.foreground;
-            } else if (!disabled) {
-                cell->HoverBg(th.secondaryHover);
-            }
-            cell->Child(
-                TextEl(a, StrDup(a, fmt("%d", date.day)))->Font(14)->Fg(fg));
-            if (!disabled) {
-                if (self->onDate.IsValid()) {
-                    cell->OnClick(
-                        ListenerArg(self->onDate, DatePickerDateKey(date)));
-                } else if (!outside && self->onDay.IsValid()) {
-                    cell->OnClick(ListenerArg(self->onDay, date.day));
-                }
-            }
-            week->Child(cell);
-        }
-    }
-    return panel;
-}
-
-El* Calendar::IntoEl() {
-    const Theme& th = cx->theme();
     // t!("Calendar.month.January"). One-based, so a month number indexes it.
     static const char* months[] = {
         "",
@@ -266,189 +148,137 @@ El* Calendar::IntoEl() {
         "Calendar.month.November",
         "Calendar.month.December",
     };
-    float cellSize = CalendarCellSize(size);
+    float cellSize = CalendarCellSize(self->size);
+    switch (st.kind) {
+    case CalendarItemKind::Previous:
+    case CalendarItemKind::Next: {
+        bool on = !st.disabled;
+        item->Radius(th.radius)->Child(
+            IconEl(a,
+                   st.kind == CalendarItemKind::Previous
+                       ? IconName::ChevronLeft
+                       : IconName::ChevronRight,
+                   16)
+                ->Fg(on ? th.foreground : th.mutedFg));
+        if (on) {
+            item->HoverBg(th.secondaryHover)->FocusId(HashClickId(
+                st.kind == CalendarItemKind::Previous ? StrL("cal-prev")
+                                                      : StrL("cal-next")));
+        }
+        return item;
+    }
+    case CalendarItemKind::MonthToggle:
+    case CalendarItemKind::YearToggle: {
+        bool isMonth = st.kind == CalendarItemKind::MonthToggle;
+        // Several months at once are plain labels rather than toggles, and
+        // the calendar says so by handing over a slot with no id.
+        if (self->numberOfMonths > 1) {
+            return item->Child(TextEl(a, isMonth
+                                             ? Tr(months[st.value])
+                                             : StrDup(a, fmt("%d", st.value)))
+                                   ->Font(14)
+                                   ->Semibold()
+                                   ->Fg(th.foreground));
+        }
+        item->Radius(th.radius);
+        if (st.active) {
+            item->Bg(th.tokens.primary);
+        }
+        item->FocusId(HashClickId(isMonth ? StrL("cal-month-toggle")
+                                          : StrL("cal-year-toggle")));
+        return item->Child(
+            TextEl(a, isMonth ? Tr(months[st.value])
+                              : StrDup(a, fmt("%d", st.value)))
+                ->Font(14)
+                ->Semibold()
+                ->Fg(st.active ? th.primaryFg : th.foreground));
+    }
+    case CalendarItemKind::Weekday:
+        return item->Child(
+            TextEl(a, Tr(weekdays[st.value]))->Font(12)->Fg(th.mutedFg));
+    case CalendarItemKind::Day: {
+        item->Radius(self->size == UiSize::Small   ? th.radius * 0.5f
+                     : self->size == UiSize::Large ? th.radius * 2.f
+                                                   : th.radius);
+        Rgba fg = st.muted ? th.mutedFg : th.foreground;
+        if (st.disabled) {
+            // calendar.rs fades the whole cell rather than the ink, so a day
+            // that is both picked and blocked shows its primary square at
+            // half strength.
+            item->Opacity(0.5f);
+        }
+        if (st.active) {
+            item->Bg(th.tokens.primary);
+            fg = th.primaryFg;
+        } else if (st.inRange || st.today) {
+            item->Bg(th.tokens.accent);
+            fg = th.foreground;
+        } else if (!st.disabled) {
+            item->HoverBg(th.secondaryHover);
+        }
+        return item->Child(
+            TextEl(a, StrDup(a, fmt("%d", st.value)))->Font(14)->Fg(fg));
+    }
+    case CalendarItemKind::Month:
+        item->Radius(th.radius)->HoverBg(th.secondaryHover);
+        if (st.active) {
+            item->Bg(th.tokens.primary);
+        }
+        // `uses_compact_text`: a month option and nothing else, because
+        // "September" is what overflows.
+        return item->Child(TextEl(a, Tr(months[st.value]))
+                               ->Font(12)
+                               ->Fg(st.active ? th.primaryFg : th.foreground));
+    case CalendarItemKind::Year:
+        item->Radius(th.radius)->HoverBg(th.secondaryHover);
+        if (st.active) {
+            item->Bg(th.tokens.primary);
+        }
+        return item->Child(TextEl(a, StrDup(a, fmt("%d", st.value)))
+                               ->Font(14)
+                               ->Fg(st.active ? th.primaryFg : th.foreground));
+    }
+    (void)cellSize;
+    return item;
+}
+
+El* Calendar::IntoEl() {
+    const Theme& th = cx->theme();
     // date_picker.rs sizes the calendar in its popup itself — 196 / 224 / 280
     // a month — because that one is built `border_0().rounded_none().p_0()`
     // and so has none of the padding the panel width above counts in. The
     // three pairs differ by exactly the 12 either side.
     float width = (CalendarWidth(size) - (bare ? 24.f : 0.f)) * numberOfMonths;
-    El* root =
-        gpui::Calendar::New(cx, StrL("calendar"))->FlexCol()->W(width)->Gap(2);
+    // The calendar itself is the base one; what is set here is what it is
+    // looking at, and the item function that gives it a look.
+    CalendarOpts o;
+    o.year = year;
+    o.month = month;
+    o.numberOfMonths = numberOfMonths;
+    o.view = view;
+    o.cellSize = CalendarCellSize(size);
+    o.selected = {selectedYear ? selectedYear : year,
+                  selectedMonth ? selectedMonth : month, day};
+    o.rangeEnd = rangeEnd;
+    o.today = DateToday();
+    o.disabledMatcher = disabledMatcher;
+    o.yearMin = yearMin;
+    o.yearMax = yearMax;
+    o.yearPageStart = yearPageStart;
+    o.onDay = onDay;
+    o.onDate = onDate;
+    o.onPrev = onPrev;
+    o.onNext = onNext;
+    o.onMonthToggle = onMonthToggle;
+    o.onYearToggle = onYearToggle;
+    o.onMonth = onMonth;
+    o.onYear = onYear;
+    o.item = &ThemedCalendarItem;
+    o.user = this;
+    El* root = gpui::Calendar::New(cx, StrL("calendar"), o)->W(width);
     if (!bare) {
         root->Pad(12)->Border(1, th.border)->Radius(th.radiusLg);
     }
-
-    El* nav = Div(a)->FlexRow()->W(kFill)->JustifyBetween()->ItemsCenter();
-    bool canPrev = view == CalendarView::Day ||
-                   (view == CalendarView::Year && yearPageStart > yearMin);
-    El* prev = Div(a)
-                   ->W(cellSize)
-                   ->H(cellSize)
-                   ->ItemsCenter()
-                   ->JustifyCenter()
-                   ->Radius(th.radius)
-                   ->Child(IconEl(a, IconName::ChevronLeft, 16)
-                               ->Fg(canPrev ? th.foreground : th.mutedFg));
-    if (canPrev) {
-        prev->HoverBg(th.secondaryHover);
-        BindClick(prev, StrL("cal-prev"), onPrev);
-    }
-    El* labels = Div(a)->FlexRow()->Flex1()->ItemsCenter();
-    for (int i = 0; i < numberOfMonths; i++) {
-        int shownYear = 0, shownMonth = 0;
-        OffsetMonth(year, month, i, &shownYear, &shownMonth);
-        if (numberOfMonths == 1) {
-            El* label = Div(a)
-                            ->FlexRow()
-                            ->H(cellSize)
-                            ->Flex1()
-                            ->Gap(16)
-                            ->ItemsCenter()
-                            ->JustifyCenter();
-            El* monthLabel = Div(a)
-                                 ->H(cellSize)
-                                 ->PadX(8)
-                                 ->ItemsCenter()
-                                 ->Radius(th.radius)
-                                 ->Child(TextEl(a, Tr(months[shownMonth]))
-                                             ->Font(14)
-                                             ->Semibold()
-                                             ->Fg(view == CalendarView::Month
-                                                      ? th.primaryFg
-                                                      : th.foreground));
-            if (view == CalendarView::Month) {
-                monthLabel->Bg(th.tokens.primary);
-            }
-            BindClick(monthLabel, StrL("cal-month-toggle"), onMonthToggle);
-            El* yearLabel =
-                Div(a)
-                    ->H(cellSize)
-                    ->PadX(8)
-                    ->ItemsCenter()
-                    ->Radius(th.radius)
-                    ->Child(TextEl(a, StrDup(a, fmt("%d", shownYear)))
-                                ->Font(14)
-                                ->Semibold()
-                                ->Fg(view == CalendarView::Year
-                                         ? th.primaryFg
-                                         : th.foreground));
-            if (view == CalendarView::Year) {
-                yearLabel->Bg(th.tokens.primary);
-            }
-            BindClick(yearLabel, StrL("cal-year-toggle"), onYearToggle);
-            label->Child(monthLabel)->Child(yearLabel);
-            labels->Child(label);
-        } else {
-            El* label = Div(a)
-                            ->FlexCol()
-                            ->H(cellSize)
-                            ->Flex1()
-                            ->ItemsCenter()
-                            ->JustifyCenter();
-            label->Child(TextEl(a, Tr(months[shownMonth]))
-                             ->Font(14)
-                             ->Semibold()
-                             ->Fg(th.foreground));
-            label->Child(TextEl(a, StrDup(a, fmt("%d", shownYear)))
-                             ->Font(14)
-                             ->Semibold()
-                             ->Fg(th.foreground));
-            labels->Child(label);
-        }
-    }
-    bool canNext = view == CalendarView::Day ||
-                   (view == CalendarView::Year && yearPageStart + 20 < yearMax);
-    El* next = Div(a)
-                   ->W(cellSize)
-                   ->H(cellSize)
-                   ->ItemsCenter()
-                   ->JustifyCenter()
-                   ->Radius(th.radius)
-                   ->Child(IconEl(a, IconName::ChevronRight, 16)
-                               ->Fg(canNext ? th.foreground : th.mutedFg));
-    if (canNext) {
-        next->HoverBg(th.secondaryHover);
-        BindClick(next, StrL("cal-next"), onNext);
-    }
-    nav->Child(prev)->Child(labels)->Child(next);
-    root->Child(nav);
-
-    El* body = Div(a)->FlexRow()->W(kFill);
-    if (view == CalendarView::Day) {
-        // `h_flex().justify_around()`: the months sit side by side with the
-        // space shared out around them.
-        body->JustifyAround();
-        for (int i = 0; i < numberOfMonths; i++) {
-            int shownYear = 0, shownMonth = 0;
-            OffsetMonth(year, month, i, &shownYear, &shownMonth);
-            body->Child(CalendarMonth(this, shownYear, shownMonth, cellSize));
-        }
-    } else if (view == CalendarView::Month) {
-        // `picker_grid_layout`: three columns, 4 between them, and a cell that
-        // fills its column. Rust says `grid_cols(3)`; there is no grid in this
-        // tree's style, so the same shape is rows of three with the cells
-        // grown — a wrapping row of items sized as a share of a width they may
-        // not have is what the fix was about.
-        body->FlexCol()->Gap(8);
-        El* row = nullptr;
-        for (int m = 1; m <= 12; m++) {
-            if ((m - 1) % 3 == 0) {
-                row = Div(a)->FlexRow()->W(kFill)->Gap(4);
-                body->Child(row);
-            }
-            El* item =
-                CalendarItem::New(cx, StrDup(a, fmt("calendar-month-%d", m)))
-                    ->Flex1()
-                    ->H(cellSize)
-                    ->ItemsCenter()
-                    ->JustifyCenter()
-                    ->Radius(th.radius)
-                    ->HoverBg(th.secondaryHover)
-                    ->Child(
-                        // `uses_compact_text`: a month option and nothing
-                        // else, because "September" is what overflows.
-                        TextEl(a, Tr(months[m]))
-                            ->Font(12)
-                            ->Fg(m == month ? th.primaryFg : th.foreground));
-            if (m == month) {
-                item->Bg(th.tokens.primary);
-            }
-            item->OnClick(ListenerArg(onMonth, m));
-            row->Child(item);
-        }
-    } else {
-        // Five columns for the years, on the same rule.
-        body->FlexCol()->Gap(8);
-        int minYear = yearMin ? yearMin : year - 50;
-        int maxYear = yearMax ? yearMax : year + 50;
-        int firstYear = yearPageStart ? yearPageStart : minYear;
-        int last = std::min(firstYear + 20, maxYear);
-        El* row = nullptr;
-        int ix = 0;
-        for (int y = firstYear; y < last; y++, ix++) {
-            if (ix % 5 == 0) {
-                row = Div(a)->FlexRow()->W(kFill)->Gap(4);
-                body->Child(row);
-            }
-            El* item =
-                CalendarItem::New(cx, StrDup(a, fmt("calendar-year-%d", y)))
-                    ->Flex1()
-                    ->H(cellSize)
-                    ->ItemsCenter()
-                    ->JustifyCenter()
-                    ->Radius(th.radius)
-                    ->HoverBg(th.secondaryHover)
-                    ->Child(TextEl(a, StrDup(a, fmt("%d", y)))
-                                ->Font(14)
-                                ->Fg(y == year ? th.primaryFg : th.foreground));
-            if (y == year) {
-                item->Bg(th.tokens.primary);
-            }
-            item->OnClick(ListenerArg(onYear, y));
-            row->Child(item);
-        }
-    }
-    root->Child(body);
     return root;
 }
 

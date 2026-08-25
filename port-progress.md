@@ -5098,3 +5098,33 @@ story, where something else is always redrawing. The handle now fills its own
 panel instead, which needs no measurement: the showcase's divider drags on the
 first frame, and the story's resizable, dock and tiles pages are
 pixel-identical.
+
+
+## The calendar that every caller drew again
+
+`base/calendar.rs` is a thousand lines and `Calendar::new(id, &state)` is an
+element: the header with its two arrows, the month and year toggles, the day
+grid with its flanking days, and the month and year pickers the toggles switch
+to. What a *cell* looks like is the caller's, through
+`.item(|item, state, _, _| ...)` — the calendar builds the slot and hands it
+over. Here `base/calendar.h` was date arithmetic and a marker div, and the
+whole element was `component::`, so the base showcase's page wrote its own
+`DaysInMonth`, its own Sakamoto weekday, its own six-by-seven loop and its own
+`ClickCalDay + 0..41` block of ids — and got no month picker, no year picker
+and no toggles, because a page is not going to write those twice.
+
+`Calendar::New(cx, id, CalendarOpts)` is that element, moved down.
+`CalendarItemKind` and `CalendarItemState` are Rust's, and `CalendarItemFn` is
+`item(..)`: the slot's kind, what it stands for, and the five flags a look
+could turn on — active, in range, muted, disabled, today. The themed calendar
+is now one function of ninety lines that switches on the kind, and the story's
+calendar and date-picker pages are pixel-identical.
+
+The showcase page is then upstream's page: an item function and the state.
+Clicking `Aug` opens the month picker, clicking a month closes it, the arrows
+page the years in the year view, and a day in a flanking month selects into
+that month — because the cell carries its own date, which is what stops the
+page having to work out which month a click landed in.
+
+`CalendarOpts::today` is passed in rather than asked for, so what day it is
+can be said rather than assumed.
