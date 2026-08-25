@@ -617,6 +617,17 @@ void AppInvalidate(Window* win) {
     }
 }
 
+void AppActivate(Window* win) {
+    HWND hwnd = Hwnd(win);
+    if (!hwnd) {
+        return;
+    }
+    if (IsIconic(hwnd)) {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+    SetForegroundWindow(hwnd);
+}
+
 void AppMinimize(Window* win) {
     HWND hwnd = Hwnd(win);
     if (hwnd) {

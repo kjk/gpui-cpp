@@ -80,6 +80,7 @@ void TestDock();
 void TestTab();
 void TestSetting();
 void TestCommand();
+void TestNotification();
 void TestSearchableList();
 void TestSidebar();
 void TestWindowBorder();

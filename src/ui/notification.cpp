@@ -1,5 +1,6 @@
 #include "ui/notification.h"
 #include "base/motion.h"
+#include "sys/notify.h"
 #include "ui/alert.h"
 #include "ui/title_bar.h"
 
@@ -53,6 +54,210 @@ Notification* Notification::OnClick(Listener fn) {
     return this;
 }
 
+bool NotificationDeliveryIncludesInApp(NotificationDelivery d) {
+    return d == NotificationDelivery::InApp ||
+           d == NotificationDelivery::InAppAndSystem;
+}
+
+bool NotificationDeliveryIncludesSystem(NotificationDelivery d) {
+    return d == NotificationDelivery::System ||
+           d == NotificationDelivery::InAppAndSystem;
+}
+
+// --- the system half ------------------------------------------------------
+
+// SYSTEM_TAG_PREFIX. A response to a tag without it belongs to whoever posted
+// it, and is not ours to retract or dispatch.
+static const char kSystemTagPrefix[] = "gpui-component/notification/";
+
+Str NotificationSystemTag(char* buf, int cap, int id) {
+    if (!buf || cap <= 0) {
+        return {};
+    }
+    TempStr s = fmt("%d", id);
+    int prefixLen = (int)sizeof(kSystemTagPrefix) - 1;
+    int n = prefixLen + s.len;
+    if (n > cap - 1) {
+        n = cap - 1;
+    }
+    int take = n < prefixLen ? n : prefixLen;
+    memcpy(buf, kSystemTagPrefix, (size_t)take);
+    if (n > take) {
+        memcpy(buf + take, s.s, (size_t)(n - take));
+    }
+    buf[n] = 0;
+    return Str(buf, n);
+}
+
+bool NotificationTagId(Str tag, int* outId) {
+    int prefixLen = (int)sizeof(kSystemTagPrefix) - 1;
+    if (!tag.s || tag.len <= prefixLen) {
+        return false;
+    }
+    if (memcmp(tag.s, kSystemTagPrefix, (size_t)prefixLen) != 0) {
+        return false;
+    }
+    int id = 0;
+    for (int i = prefixLen; i < tag.len; i++) {
+        char c = tag.s[i];
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        id = id * 10 + (c - '0');
+    }
+    if (id <= 0) {
+        return false;
+    }
+    if (outId) {
+        *outId = id;
+    }
+    return true;
+}
+
+// Rust keeps this in an App global; a file static is the same one-per-process
+// table, and the fixed array is what MAX_SYSTEM_NOTIFICATION_ENTRIES caps
+// anyway. Oldest first, so overflow prunes the stalest.
+static NotificationSystemEntry gSysEntries[kNotificationSystemMax];
+static int gNSysEntries = 0;
+static bool gSysInited = false;
+
+static void SysEntryRemoveAt(int ix) {
+    for (int i = ix; i < gNSysEntries - 1; i++) {
+        gSysEntries[i] = gSysEntries[i + 1];
+    }
+    gNSysEntries--;
+    gSysEntries[gNSysEntries] = {};
+}
+
+// The platform's response, on the main thread. Only the tag comes back, so
+// everything else is what the registry kept.
+static void OnSysNotifyResponse(Str tag, void*) {
+    NotificationSystemResponse(tag);
+}
+
+void NotificationInitSystem() {
+    if (gSysInited) {
+        return;
+    }
+    gSysInited = true;
+    SysNotifyOnResponse(OnSysNotifyResponse, nullptr);
+    // Whatever the platform is holding — on Windows a notification area icon
+    // — is given back when the app goes.
+    AppOnShutdown(SysNotifyShutdown);
+}
+
+void NotificationSystemInsert(const NotificationSystemEntry& e) {
+    for (int i = 0; i < gNSysEntries; i++) {
+        if (gSysEntries[i].id == e.id) {
+            SysEntryRemoveAt(i);
+            break;
+        }
+    }
+    if (gNSysEntries >= kNotificationSystemMax) {
+        SysEntryRemoveAt(0);
+    }
+    gSysEntries[gNSysEntries++] = e;
+}
+
+const NotificationSystemEntry* NotificationSystemFind(int id, Window* win) {
+    for (int i = 0; i < gNSysEntries; i++) {
+        if (gSysEntries[i].id == id && gSysEntries[i].win == win) {
+            return &gSysEntries[i];
+        }
+    }
+    return nullptr;
+}
+
+int NotificationSystemCount() {
+    return gNSysEntries;
+}
+
+static void SysDismissTag(int id) {
+    char buf[64];
+    SysNotifyDismiss(NotificationSystemTag(buf, (int)sizeof(buf), id));
+}
+
+void NotificationSystemDismiss(int id, Window* win) {
+    for (int i = 0; i < gNSysEntries; i++) {
+        if (gSysEntries[i].id == id && gSysEntries[i].win == win) {
+            SysEntryRemoveAt(i);
+            SysDismissTag(id);
+            return;
+        }
+    }
+}
+
+void NotificationSystemDismissAll(Window* win) {
+    for (int i = gNSysEntries - 1; i >= 0; i--) {
+        if (gSysEntries[i].win == win) {
+            int id = gSysEntries[i].id;
+            SysEntryRemoveAt(i);
+            SysDismissTag(id);
+        }
+    }
+}
+
+void NotificationSystemResponse(Str tag) {
+    int id = 0;
+    if (!NotificationTagId(tag, &id)) {
+        return;
+    }
+    // Platforms usually take a clicked notification away themselves; the ones
+    // that keep it are why this is asked for at all.
+    SysNotifyDismiss(tag);
+    const NotificationSystemEntry* found = nullptr;
+    for (int i = 0; i < gNSysEntries; i++) {
+        if (gSysEntries[i].id == id) {
+            found = &gSysEntries[i];
+            break;
+        }
+    }
+    // The platform can deliver a response for a notification posted before
+    // the process restarted, and entries past the cap are pruned. Rust brings
+    // the application forward even then; there is no window named here to
+    // bring forward, so nothing happens.
+    if (!found) {
+        return;
+    }
+    Window* win = found->win;
+    EntityId list = found->list;
+    AppActivate(win);
+    if (!list.IsValid()) {
+        // Nothing to dispatch to: the list never rendered, so its handle was
+        // never stamped. The window is still brought forward.
+        return;
+    }
+    // Off the platform's own event and onto the next turn of the loop, which
+    // is where an entity may be touched. The post is dropped if the window or
+    // the list has gone by then.
+    Entity<NotificationListState> e;
+    e.id = list;
+    WindowPost(win, ListenTo(e, &NotificationListState::OnSystemResponse,
+                             (intptr_t)id));
+}
+
+void NotificationListState::OnSystemResponse(NotificationListState* self,
+                                             Ctx* cx, const ClickEvent*,
+                                             intptr_t idArg) {
+    int id = (int)idArg;
+    Listener onClick = {};
+    for (int i = 0; i < gNSysEntries; i++) {
+        if (gSysEntries[i].id == id && gSysEntries[i].win == cx->win) {
+            onClick = gSysEntries[i].onClick;
+            SysEntryRemoveAt(i);
+            break;
+        }
+    }
+    // A no-op when the card already closed or was never created, which is
+    // what system-only delivery leaves.
+    NotificationDismiss(self, cx, id);
+    if (onClick.IsValid()) {
+        ClickEvent ev = {};
+        ListenerCall(cx->app, cx->win, onClick, &ev);
+    }
+    Notify(cx);
+}
+
 int NotificationIndexOf(const NotificationListState* s, int id) {
     for (int i = 0; i < s->n; i++) {
         if (s->items[i].id == id) {
@@ -70,7 +275,40 @@ static void NotificationRemoveAt(NotificationListState* s, int ix) {
     s->n--;
 }
 
-int NotificationPush(NotificationListState* s, NotificationItem item,
+// push_system: what the OS notification center is given, and the registry
+// entry its response comes back through.
+static void NotificationPushSystem(NotificationListState* s, Ctx* cx,
+                                   const NotificationItem& item) {
+    Str title = item.title;
+    Str body = item.message;
+    if (title.len == 0) {
+        // A message with no title becomes the system notification's title,
+        // and one with neither — a content-only notification — has nothing
+        // textual to show.
+        if (body.len == 0) {
+            return;
+        }
+        title = body;
+        body = Str{};
+    }
+    NotificationInitSystem();
+    char buf[64];
+    Str tag = NotificationSystemTag(buf, (int)sizeof(buf), item.id);
+    // Rust registers and then posts; the order is the other way here because
+    // a platform that cannot post — every one but Windows so far — would
+    // otherwise leave an entry waiting for a response that cannot come.
+    if (!SysNotifyShow(tag, title, body)) {
+        return;
+    }
+    NotificationSystemEntry e;
+    e.id = item.id;
+    e.list = s->self;
+    e.win = cx->win;
+    e.onClick = item.onClick;
+    NotificationSystemInsert(e);
+}
+
+int NotificationPush(NotificationListState* s, Ctx* cx, NotificationItem item,
                      int timeoutMs) {
     // A push with an id already in the list replaces that one: Rust keys its
     // notifications by NotificationId, so the same one never stacks twice.
@@ -82,6 +320,17 @@ int NotificationPush(NotificationListState* s, NotificationItem item,
     } else {
         item.id = s->nextId++;
     }
+    // The id has to be settled before this: it is what the system tag names,
+    // and what makes a second push with the same id replace the first there
+    // as well.
+    NotificationDelivery delivery =
+        item.hasDelivery ? item.delivery : s->delivery;
+    if (cx && NotificationDeliveryIncludesSystem(delivery)) {
+        NotificationPushSystem(s, cx, item);
+    }
+    if (!NotificationDeliveryIncludesInApp(delivery)) {
+        return item.id;
+    }
     // max_items: the oldest goes to make room.
     while (s->n >= s->maxItems || s->n >= kToastStackCap) {
         NotificationRemoveAt(s, 0);
@@ -91,7 +340,12 @@ int NotificationPush(NotificationListState* s, NotificationItem item,
     return item.id;
 }
 
-void NotificationDismiss(NotificationListState* s, int id) {
+void NotificationDismiss(NotificationListState* s, Ctx* cx, int id) {
+    // Unconditional, as Rust's close() is: a system-only notification has no
+    // card to animate out and must still be retracted.
+    if (cx) {
+        NotificationSystemDismiss(id, cx->win);
+    }
     for (int i = 0; i < s->stack.n; i++) {
         if (s->stack.entries[i].id == id) {
             // The card animates out first; advance drops it when it is done.
@@ -102,9 +356,12 @@ void NotificationDismiss(NotificationListState* s, int id) {
     }
 }
 
-void NotificationClear(NotificationListState* s) {
+void NotificationClear(NotificationListState* s, Ctx* cx) {
+    if (cx) {
+        NotificationSystemDismissAll(cx->win);
+    }
     for (int i = 0; i < s->n; i++) {
-        NotificationDismiss(s, s->items[i].id);
+        NotificationDismiss(s, cx, s->items[i].id);
     }
 }
 
@@ -134,7 +391,7 @@ bool NotificationAdvance(NotificationListState* s, int deltaMs) {
 
 void NotificationListState::OnCloseClick(NotificationListState* self, Ctx* cx,
                                          const ClickEvent*, intptr_t id) {
-    NotificationDismiss(self, (int)id);
+    NotificationDismiss(self, cx, (int)id);
     Notify(cx);
 }
 
@@ -144,7 +401,7 @@ void NotificationListState::OnItemClick(NotificationListState* self, Ctx* cx,
     if (at >= 0 && self->items[at].onClick.IsValid()) {
         ListenerCall(cx->app, cx->win, self->items[at].onClick, ev);
     }
-    NotificationDismiss(self, (int)id);
+    NotificationDismiss(self, cx, (int)id);
     Notify(cx);
 }
 
@@ -178,6 +435,11 @@ NotificationList* NotificationList::New(Ctx* cx,
 
 El* NotificationList::IntoEl() {
     NotificationListState* s = state.Get(cx);
+    if (s) {
+        // cx.entity(): what a system notification's response is dispatched
+        // back to.
+        s->self = state.id;
+    }
     if (!s || s->n == 0) {
         return Div(a);
     }

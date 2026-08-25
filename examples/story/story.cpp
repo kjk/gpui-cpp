@@ -1504,6 +1504,11 @@ static void ParseSlug(int argc, char** argv, char* out, int cap) {
 
 int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
+    // cx.set_app_identity(..): what the platform calls the application when it
+    // shows one of its notifications. Windows names the notification area icon
+    // with it; the other backends do not have one to name yet.
+    SysNotifySetAppIdentity(StrL("com.longbridge.gpui-component.story"),
+                            StrL("GPUI Component"));
     ThemeSet(app, ThemeMode::Light);
     AssetsClear();
     AssetsAddDefaultRoots(Str{});

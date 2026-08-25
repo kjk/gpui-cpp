@@ -540,6 +540,13 @@ void AppQuit(Window* win) {
     }
 }
 
+// A tab cannot raise itself either — only the browser decides which one is
+// in front, and window.focus() is ignored for anything but a popup a script
+// opened.
+void AppActivate(Window* win) {
+    (void)win;
+}
+
 // A tab cannot iconify itself. GPUI's minimize has no meaning here and the
 // title bar's control is left drawing nothing.
 void AppMinimize(Window* win) {

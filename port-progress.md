@@ -4507,3 +4507,84 @@ change: every difference is the sub-percent animation noise those sweeps always
 carry, and the one page that changed on purpose — a clicked field — was checked
 against Rust by hand. 18,167 checks pass and `bun cmd/build.ts -rel -all` builds
 every example.
+
+
+## The notification that leaves the window
+
+gpui-component b80bb899 bridges a notification to the operating system's
+notification center. Upstream builds it on gpui's `SystemNotification` — post
+under a tag, retract that tag, hear that the user clicked one — which this port
+does not have. So the checkin arrives in two halves: the component half, which
+is a straight port, and a platform seam that had to be written first.
+
+### The seam
+
+`src/sys/notify.h` is the four calls, alongside `sys/http.h` and
+`sys/sysinfo.h`, per-platform files and all. Only Windows has a backend.
+
+It is not the WinRT toast API. That one wants an AppUserModelID registered
+against a Start-menu shortcut, and — for a notification that outlives the
+process — a COM activation server with its own CLSID under `HKCU\Software\
+Classes`. What it buys over the alternative is a richer toast body and
+retraction from the Action Center. The alternative is the notification area:
+one hidden window owns one icon, and a balloon on that icon is what Windows 10
+and 11 turn into a real toast and file in the Action Center, with the click
+coming back as `NIN_BALLOONUSERCLICK` on the icon's callback message — on the
+main thread, inside the loop that is already running. The cost is stated where
+it is paid: one balloon at a time (a second post replaces the first, which is
+what a tag asks for anyway), retraction takes the balloon off the screen but
+not out of the Action Center, and the application has an icon in the
+notification area from its first system notification until it exits.
+
+macOS, Linux and wasm answer `SysNotifyAvailable() == false` and drop a post.
+That is the same degrading Rust does on a mac that is not running from a
+bundled `.app` and on a Linux with no notification daemon — the difference is
+that here it is every run rather than some of them. `AppActivate` is new on all
+four platforms: `window.activate_window()`, which a click on a notification
+needs and nothing had needed before.
+
+### The component half
+
+`NotificationDelivery` is `InApp` (the default), `System` or `InAppAndSystem`;
+`NotificationListState::delivery` is the global one and an item overrides it
+with `hasDelivery`, which is how this tree spells `Option<T>` on a builder.
+Only the title and the message cross over: an action, a content element and a
+placement are the toast's alone, and a content-only notification — nothing
+textual to show — is not posted at all. A message with no title becomes the
+system notification's title, as upstream does.
+
+The tag is `gpui-component/notification/<id>`, which does two things: a repeat
+push with the same id replaces the notification in the center as it replaces
+the card in the stack, and a response to a tag without that prefix belongs to
+whoever posted it and is left alone. Rust derives the tag from a `TypeId`; the
+ids here are the ints this port has always keyed notifications by.
+
+`NotificationSystemEntry` is what a response needs — the window, the list, the
+`onClick` — because a response arrives as a tag and nothing else. It is a
+file-static array of 100, oldest pruned, where Rust keeps an `App` global of
+the same size. A dismiss only retracts an entry posted from its own window: a
+second window that pushed the same id owns the tag now. Retraction is on
+explicit dismissal — the close button, `NotificationDismiss`,
+`NotificationClear` — and not on autohide expiry, which leaves the notification
+in the center, which is upstream's rule and the one a user would expect.
+
+The response arrives from the platform's own event handler, so it is posted
+back through `WindowPost` rather than acted on where it lands: the window comes
+forward at once, and closing the card and firing `onClick` happen on the next
+turn of the loop, where an entity may be touched. A post is dropped if the
+window or the list has gone, which is what Rust's `WeakEntity` upgrade
+swallows.
+
+`NotificationPush` and its two siblings take a `Ctx*` now, as Rust's `push`
+takes a `Window`. A null one is the in-app half on its own, which is what the
+tests push.
+
+### Checking it
+
+The story grows the "System notification" section upstream added, and
+`story.cpp` sets the app identity its `main.rs` now sets. Clicking "System
+only" leaves the stack empty and "In-app and system" raises the card — both
+shot and compared. A throwaway probe confirmed `Shell_NotifyIcon` accepts the
+post on this machine. What is not automated is the part that needs a person:
+that the toast is in the Action Center, and that clicking it brings the window
+back. 18,207 checks pass and `bun cmd/build.ts -rel -all` builds every example.

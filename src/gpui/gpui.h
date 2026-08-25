@@ -4911,6 +4911,10 @@ void AppRefreshWindows(App* app);
 // back somewhere or every ASan run reports it. Registering the same function
 // twice registers it once.
 void AppOnShutdown(void (*fn)());
+// window.activate_window() / cx.activate(true): bring this window forward
+// and the application with it, restoring it if it was minimized. What a
+// click on a system notification asks for.
+void AppActivate(Window* win);
 void AppMinimize(Window* win);
 void AppToggleMaximize(Window* win);
 void AppClose(Window* win);

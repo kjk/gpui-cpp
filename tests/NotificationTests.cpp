@@ -1,0 +1,204 @@
+/* Ported from crates/ui/src/notification.rs, the system-delivery half.
+ *
+ * Where a notification goes, the tag the OS notification is posted under, and
+ * the registry that turns a response — which arrives as a tag and nothing
+ * else — back into a window, a list and an on_click. The platform half is not
+ * exercised here: with no icon in the notification area a post goes nowhere
+ * and a retraction is a no-op, which is exactly what every platform but
+ * Windows does anyway. */
+
+#include "Test.h"
+
+using namespace gpui;
+using namespace gpui::component;
+
+// The registry keys on the window a notification was posted from, and never
+// dereferences it. Two addresses that are not each other are the whole of
+// what these need.
+static Window* const kWinA = (Window*)0x1000;
+static Window* const kWinB = (Window*)0x2000;
+
+static void ADeliverySaysWhichHalvesRun() {
+    utassert(NotificationDeliveryIncludesInApp(NotificationDelivery::InApp));
+    utassert(!NotificationDeliveryIncludesSystem(NotificationDelivery::InApp));
+    utassert(!NotificationDeliveryIncludesInApp(NotificationDelivery::System));
+    utassert(NotificationDeliveryIncludesSystem(NotificationDelivery::System));
+    utassert(NotificationDeliveryIncludesInApp(
+        NotificationDelivery::InAppAndSystem));
+    utassert(NotificationDeliveryIncludesSystem(
+        NotificationDelivery::InAppAndSystem));
+}
+
+static void ATagIsNamespacedAndCarriesTheId() {
+    char buf[64];
+    Str tag = NotificationSystemTag(buf, (int)sizeof(buf), 7);
+    utassert(tag.len > 0);
+    int id = 0;
+    utassert(NotificationTagId(tag, &id) && id == 7);
+
+    // The same id gives the same tag, which is what makes a second push
+    // replace the first in the notification center.
+    char other[64];
+    Str again = NotificationSystemTag(other, (int)sizeof(other), 7);
+    utassert(again.len == tag.len && memcmp(again.s, tag.s, (size_t)tag.len) == 0);
+
+    // Two ids never collide.
+    char third[64];
+    Str next = NotificationSystemTag(third, (int)sizeof(third), 8);
+    utassert(next.len != tag.len || memcmp(next.s, tag.s, (size_t)tag.len) != 0);
+
+    // A tag the application posted itself is not ours to answer.
+    utassert(!NotificationTagId(StrL("com.example.app/own-tag"), &id));
+    utassert(!NotificationTagId(StrL("gpui-component/notification/"), &id));
+    utassert(!NotificationTagId(StrL("gpui-component/notification/abc"), &id));
+}
+
+static void TheRegistryKeepsOneEntryPerIdAndWindow() {
+    NotificationSystemDismissAll(kWinA);
+    NotificationSystemDismissAll(kWinB);
+    utassert(NotificationSystemCount() == 0);
+
+    NotificationSystemEntry e;
+    e.id = 1;
+    e.win = kWinA;
+    NotificationSystemInsert(e);
+    e.id = 2;
+    NotificationSystemInsert(e);
+    utassert(NotificationSystemCount() == 2);
+
+    // A repeat push with the same id replaces its entry rather than stacking
+    // a second one.
+    NotificationSystemInsert(e);
+    utassert(NotificationSystemCount() == 2);
+    utassert(NotificationSystemFind(2, kWinA) != nullptr);
+    // And that entry belongs to the window it was posted from.
+    utassert(NotificationSystemFind(2, kWinB) == nullptr);
+
+    NotificationSystemDismissAll(kWinA);
+    utassert(NotificationSystemCount() == 0);
+}
+
+static void ADismissLeavesAnotherWindowsNotificationAlone() {
+    NotificationSystemDismissAll(kWinA);
+    NotificationSystemDismissAll(kWinB);
+    NotificationSystemEntry a;
+    a.id = 5;
+    a.win = kWinA;
+    NotificationSystemInsert(a);
+    NotificationSystemEntry b;
+    b.id = 5;
+    b.win = kWinB;
+    NotificationSystemInsert(b);
+    // The same id from a second window took the tag over; the first window's
+    // entry went with it, as Rust's insert drops the entry the tag had.
+    utassert(NotificationSystemCount() == 1);
+    utassert(NotificationSystemFind(5, kWinB) != nullptr);
+
+    // A dismiss from the window that no longer owns the tag does nothing.
+    NotificationSystemDismiss(5, kWinA);
+    utassert(NotificationSystemFind(5, kWinB) != nullptr);
+    NotificationSystemDismiss(5, kWinB);
+    utassert(NotificationSystemCount() == 0);
+}
+
+static void TheOldestEntriesArePrunedPastTheCap() {
+    NotificationSystemDismissAll(kWinA);
+    for (int i = 1; i <= kNotificationSystemMax + 5; i++) {
+        NotificationSystemEntry e;
+        e.id = i;
+        e.win = kWinA;
+        NotificationSystemInsert(e);
+    }
+    utassert(NotificationSystemCount() == kNotificationSystemMax);
+    // The first five went; the last one is still there.
+    utassert(NotificationSystemFind(1, kWinA) == nullptr);
+    utassert(NotificationSystemFind(5, kWinA) == nullptr);
+    utassert(NotificationSystemFind(6, kWinA) != nullptr);
+    utassert(NotificationSystemFind(kNotificationSystemMax + 5, kWinA) !=
+             nullptr);
+    NotificationSystemDismissAll(kWinA);
+    utassert(NotificationSystemCount() == 0);
+}
+
+static void AResponseToAForeignTagIsIgnored() {
+    NotificationSystemDismissAll(kWinA);
+    NotificationSystemEntry e;
+    e.id = 3;
+    e.win = kWinA;
+    NotificationSystemInsert(e);
+    // Applications may post their own system notifications; a response for
+    // one of those is not ours to dispatch, and takes nothing off the
+    // registry.
+    NotificationSystemResponse(StrL("com.example.app/own-tag"));
+    utassert(NotificationSystemFind(3, kWinA) != nullptr);
+    NotificationSystemDismissAll(kWinA);
+}
+
+// The in-app half, which a null Ctx leaves on its own.
+static NotificationItem Item(int id, const char* message) {
+    NotificationItem it;
+    it.id = id;
+    it.message = Str(message);
+    return it;
+}
+
+static void SystemOnlyDeliveryShowsNoCard() {
+    NotificationListState s;
+    NotificationItem it = Item(0, "in-app");
+    utassert(NotificationPush(&s, nullptr, it, 1000) > 0);
+    utassert(s.n == 1);
+
+    // The delivery that has no in-app half pushes nothing onto the stack —
+    // and still answers with the id, which is what a later dismiss names.
+    it = Item(0, "system only");
+    it.hasDelivery = true;
+    it.delivery = NotificationDelivery::System;
+    int id = NotificationPush(&s, nullptr, it, 1000);
+    utassert(id > 0);
+    utassert(s.n == 1);
+
+    // The list's own delivery is what an item with none of its own takes.
+    s.delivery = NotificationDelivery::System;
+    utassert(NotificationPush(&s, nullptr, Item(0, "by default"), 1000) > 0);
+    utassert(s.n == 1);
+
+    // And an item that overrides it the other way is still shown.
+    it = Item(0, "override");
+    it.hasDelivery = true;
+    it.delivery = NotificationDelivery::InAppAndSystem;
+    utassert(NotificationPush(&s, nullptr, it, 1000) > 0);
+    utassert(s.n == 2);
+}
+
+static void AutohideExpiryDoesNotRetractTheSystemHalf() {
+    NotificationSystemDismissAll(kWinA);
+    NotificationSystemEntry e;
+    e.id = 11;
+    e.win = kWinA;
+    NotificationSystemInsert(e);
+
+    NotificationListState s;
+    NotificationItem it = Item(11, "both");
+    NotificationPush(&s, nullptr, it, 100);
+    // Long enough to animate in, count down and animate out.
+    for (int i = 0; i < 20; i++) {
+        NotificationAdvance(&s, 100);
+    }
+    utassert(s.n == 0);
+    // Gone from the screen, kept in the notification center: only an explicit
+    // dismissal retracts one.
+    utassert(NotificationSystemFind(11, kWinA) != nullptr);
+    NotificationSystemDismissAll(kWinA);
+}
+
+void TestNotification() {
+    TestSuite("notification");
+    ADeliverySaysWhichHalvesRun();
+    ATagIsNamespacedAndCarriesTheId();
+    TheRegistryKeepsOneEntryPerIdAndWindow();
+    ADismissLeavesAnotherWindowsNotificationAlone();
+    TheOldestEntriesArePrunedPastTheCap();
+    AResponseToAForeignTagIsIgnored();
+    SystemOnlyDeliveryShowsNoCard();
+    AutohideExpiryDoesNotRetractTheSystemHalf();
+}

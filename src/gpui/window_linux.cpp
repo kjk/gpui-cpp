@@ -1194,6 +1194,17 @@ void AppInvalidate(Window* win) {
     }
 }
 
+void AppActivate(Window* win) {
+    if (!win || !win->plat) {
+        return;
+    }
+    XMapRaised(gDpy, win->plat->xwin);
+    // The window manager may refuse this without a timestamp it likes; there
+    // is nothing else a client can do about focus from here.
+    XSetInputFocus(gDpy, win->plat->xwin, RevertToParent, CurrentTime);
+    XFlush(gDpy);
+}
+
 void AppMinimize(Window* win) {
     if (win && win->plat) {
         XIconifyWindow(gDpy, win->plat->xwin, gScreen);

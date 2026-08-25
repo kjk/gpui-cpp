@@ -132,6 +132,23 @@ static NotifySpec NotifySpecFor(int which) {
         case 11:
             return {911,     K::Info,       nullptr, "Notification B",
                     A::None, kNotifyTimeout};
+        // The system-delivered pair, both under one id: a second push
+        // replaces the first in the notification center as it does in the
+        // stack.
+        case 50:
+            return {950,
+                    K::Info,
+                    "Build finished",
+                    "Delivered straight to the notification center.",
+                    A::None,
+                    kNotifyTimeout};
+        case 51:
+            return {950,
+                    K::Info,
+                    "Build finished",
+                    "Shown as a toast and in the notification center.",
+                    A::None,
+                    0};
         case 21:
             return {0,
                     K::Info,
@@ -155,6 +172,10 @@ static void ClickNote(NotificationStory*, Ctx*, const ClickEvent*) {
     log(StrL("[notification] on_click fired\n"));
 }
 
+static void ClickSystemNote(NotificationStory*, Ctx*, const ClickEvent*) {
+    log(StrL("[notification] system notification clicked\n"));
+}
+
 static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
                        intptr_t which) {
     component::NotificationListState* st = StoryNotifications(cx).Get(cx);
@@ -170,6 +191,15 @@ static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
     if (which == 21) {
         item.onClick = Listen(cx, &ClickNote);
     }
+    // .system() and .in_app_and_system(): where this one goes, whatever the
+    // list's own delivery is.
+    if (which == 50 || which == 51) {
+        item.hasDelivery = true;
+        item.delivery = which == 50
+                            ? component::NotificationDelivery::System
+                            : component::NotificationDelivery::InAppAndSystem;
+        item.onClick = Listen(cx, &ClickSystemNote);
+    }
     // Placement per notification: the buttons in that section move the whole
     // stack, which is the corner a notification without one of its own goes
     // to as well.
@@ -180,7 +210,7 @@ static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
                                                 TopLeft);
         item.message = StrL("This notification is at the new placement.");
     }
-    NotificationPush(st, item, spec.timeoutMs);
+    NotificationPush(st, cx, item, spec.timeoutMs);
     Notify(cx);
 }
 
@@ -188,7 +218,7 @@ static void ShowNotify(NotificationStory*, Ctx* cx, const ClickEvent*,
 static void DismissAll(NotificationStory*, Ctx* cx, const ClickEvent*) {
     component::NotificationListState* st = StoryNotifications(cx).Get(cx);
     if (st) {
-        NotificationClear(st);
+        NotificationClear(st, cx);
     }
     Notify(cx);
 }
@@ -365,6 +395,28 @@ El* NotificationStory::Render(NotificationStory* self, Ctx* cx) {
                             ->IntoEl());
     }
     page->Child(place);
+
+    // The system half: the same notification handed to the OS notification
+    // center rather than — or as well as — the in-app stack.
+    El* system = StorySection(
+        cx, "System notification",
+        "Deliver to the OS notification center; click the system "
+        "notification to bring the window back. Windows shows these in the "
+        "Action Center; macOS, Linux and the browser have no backend here "
+        "and fall back to the in-app toast.");
+    StorySectionAdd(system,
+                    component::Button::New(cx, StrL("show-notify-system"))
+                        ->OnClick(Listen(cx, &ShowNotify, 50))
+                        ->Outline()
+                        ->Label(StrL("System only"))
+                        ->IntoEl());
+    StorySectionAdd(system, component::Button::New(
+                                cx, StrL("show-notify-in-app-and-system"))
+                                ->OnClick(Listen(cx, &ShowNotify, 51))
+                                ->Outline()
+                                ->Label(StrL("In-app and system"))
+                                ->IntoEl());
+    page->Child(system);
 
     // Custom content: markdown the application owns.
     El* customSec = StorySection(

@@ -114,6 +114,12 @@ Entity<component::NotificationListState> WindowNotifications(Ctx* cx) {
     if (!l->notifications.IsValid()) {
         l->notifications =
             EntityNewState<component::NotificationListState>(cx->app);
+        if (component::NotificationListState* st = l->notifications.Get(cx)) {
+            // What a system notification's response is dispatched back to,
+            // stamped here as well as at render because a push can come
+            // before the list has ever drawn.
+            st->self = l->notifications.id;
+        }
         // Rust spawns a task that advances the list every 50 ms; a window
         // timer is the same clock, and it is armed here rather than by an
         // application because the list is the window's.
@@ -131,7 +137,7 @@ int WindowPushNotification(Ctx* cx, component::NotificationItem item,
     if (!st) {
         return 0;
     }
-    int id = component::NotificationPush(st, item, timeoutMs);
+    int id = component::NotificationPush(st, cx, item, timeoutMs);
     Notify(cx);
     return id;
 }
@@ -151,7 +157,7 @@ void WindowClearNotifications(Ctx* cx) {
         return;
     }
     if (component::NotificationListState* st = l->notifications.Get(cx)) {
-        component::NotificationClear(st);
+        component::NotificationClear(st, cx);
         Notify(cx);
     }
 }

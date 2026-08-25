@@ -679,6 +679,17 @@ void AppInvalidate(Window* win) {
     }
 }
 
+void AppActivate(Window* win) {
+    if (!win || !win->plat) {
+        return;
+    }
+    if ([win->plat->window isMiniaturized]) {
+        [win->plat->window deminiaturize:nil];
+    }
+    [NSApp activateIgnoringOtherApps:YES];
+    [win->plat->window makeKeyAndOrderFront:nil];
+}
+
 void AppMinimize(Window* win) {
     if (win && win->plat) {
         [win->plat->window miniaturize:nil];
