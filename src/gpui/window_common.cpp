@@ -1365,9 +1365,29 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // What the press focuses is what the element said it is focusable *as*,
     // which until focus handles existed was always the same number it is hit
     // as. A box tracking a handle is the first case where the two differ.
-    int focusTarget = hit ? hit->focusId : 0;
-    if (focusTarget && FocusIdIsFocusable(win, focusTarget) &&
-        FocusIdTakesPress(win, focusTarget)) {
+    //
+    // Asked of the chain, not of the one rect the hit test names: a press is
+    // *on* every box that contains it, the way `hovered` is. That is what
+    // `list.rs` and `data_table.rs` rely on — the focus call hangs off a press
+    // on a row, and the row is inside the thing that takes the focus. The
+    // innermost box that wants the press wins, so a field inside a table still
+    // takes it for itself, and a row that is only hit-testable is stepped over
+    // rather than swallowing the press on the way past.
+    int focusTarget = 0;
+    {
+        Vec<int> chain;
+        HitChain(win, x, y, &chain);
+        for (int k = 0; k < chain.len; k++) {
+            int fid = win->paint.hits[chain[k]].focusId;
+            if (fid && FocusIdIsFocusable(win, fid) &&
+                FocusIdTakesPress(win, fid)) {
+                focusTarget = fid;
+                break;
+            }
+        }
+        chain.Reset();
+    }
+    if (focusTarget) {
         WindowSetFocusId(win, focusTarget);
     }
     // on_mouse_down, ahead of the click: an element that wants the press

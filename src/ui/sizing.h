@@ -103,8 +103,13 @@ inline El* BindClick(El* e, Str id, Listener onClick) {
 // GlobalElementId is. A widget that names its parts this way stops spelling
 // its caller's id into every child — `("col-header", ix)` upstream, not
 // `format!("{id}-col-header-{ix}")`.
+//
+// Hit-testable and nothing else, which is what `.id()` on its own is. The
+// parts a widget builds by the hundred — a table's rows, its cells, its
+// heads — are all `.id()` upstream; the one focusable element is the widget
+// itself, so the keyboard reaches it once rather than row by row.
 inline El* BindPathClick(El* e, Str name, Listener onClick) {
-    e->PathId(name);
+    e->PathClick(name);
     if (onClick.IsValid()) {
         e->OnClick(onClick);
     }

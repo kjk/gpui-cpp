@@ -5655,3 +5655,45 @@ so it wants its own sweep.
 
 Verified: the story's DataTable at rest, on a row click, a column-header
 click and a sort click, all identical to the build before.
+
+## A press is on every box that contains it
+
+The dead keyboard from the last entry, fixed — and it was three things, not
+one.
+
+**The press only ever asked the innermost rect.** `focusTarget = hit->focusId`
+took the focus id of the one rect the hit test names. GPUI asks this of the
+chain, the way it asks `hovered`: a press is *on* every box containing it, so
+`list.rs` and `data_table.rs` can hang `focus_handle.focus(..)` off a press on
+a row and have the list take the focus. `WindowSetFocusId` now walks the hit
+chain innermost-out and stops at the first box that both is focusable and
+wants the press — so a field inside a table still takes it for itself, and a
+row that is only hit-testable is stepped over rather than swallowing it.
+
+**The rows were focusable and the roots were not on the chain.** `BindClick`
+gave every row, cell and head a focus id, which is what shadowed the table.
+Upstream they are `div().id()` — hit-testable, nothing else — so
+`BindPathClick` binds `PathClick` now. It also means they were all tab stops:
+Tab walked a five-thousand-row table row by row. Meanwhile the table root and
+the list root carried a focus id but no click id, so they had no hit rect at
+all and the chain could not reach them. `gpui::Table::New` takes `PathClick`,
+and so does the list's root.
+
+**The list had the same bug, and now has the same fix.** Its root tracks a
+`FocusHandle` on `ListState`, as `data_table`'s does on `TableState`.
+
+Only the root of a table is a hit target, not every part, though every part is
+`div().id()` upstream. A click here is delivered to the innermost hit rect
+alone rather than bubbling out of it, so making the cells hit-testable for the
+sake of the shape swallowed the click their row was listening for — verified,
+not guessed: with `TableCell` on `PathClick` a row click selected nothing.
+That is the next divergence worth its own look.
+
+Pinned in `tests/DataTableTests.cpp`: the table root is a hit target,
+focusable as its state's handle and taking the press; its rows and heads are
+focusable as nothing.
+
+Verified across 14 story pages × {at rest, a click, a click then Down} against
+the build before: 42 shots, and the only two that differ are the two dead
+keyboards now working — the DataTable's arrows and Escape, and the list's
+arrows. Both pages are byte-identical at rest and on the click alone.

@@ -430,7 +430,7 @@ static void TwoTablesOnOnePageAreTwoTables() {
     cx.win = win;
     cx.a = a;
 
-    Entity<TableState> state = {};
+    Entity<TableState> state = EntityNewState<TableState>(&app);
     El* page = Div(a);
     El* left = Div(a)->Id(StrL("left"));
     El* right = Div(a)->Id(StrL("right"));
@@ -462,6 +462,20 @@ static void TwoTablesOnOnePageAreTwoTables() {
     utassert(thL->clickId != 0 && headL->clickId != 0);
     utassert(thL->clickId != headL->clickId);
     utassert(FindNamed(right, "th-0")->clickId != thL->clickId);
+
+    // The root is a hit target and the rows are not focusable — `div().id()`
+    // on both upstream, with `track_focus` only on the root. That pair is what
+    // lets a press on a row reach the table: the press walks the chain of
+    // boxes containing it, steps over the row because the row wants no focus,
+    // and lands on the table, whose key context is what makes the arrows and
+    // Escape mean anything. With the row focusable and the root not even on
+    // the chain, the press focused nothing and the table's keys were dead.
+    El* root = left->first;
+    utassert(root && root->clickId != 0);
+    utassert(root->style.focusId == state.Get(&app)->focus.id);
+    utassert(root->style.focusId != 0 && root->style.focusOnPress);
+    utassert(rowL->style.focusId == 0);
+    utassert(thL->style.focusId == 0 && headL->style.focusId == 0);
 
     ArenaDelete(a);
     delete win;

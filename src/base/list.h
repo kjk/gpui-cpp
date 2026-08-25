@@ -133,6 +133,11 @@ struct ListState {
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
     EntityId self = {};
+    // The list's own focus handle — `self.focus_handle(cx)`, which list.rs
+    // tracks on the element it declares the key context on. Asked for once and
+    // kept, because the state is what outlives the frame; the port derived it
+    // from the caller's id instead.
+    FocusHandle focus = {};
 
     ~ListState() {
         sectionCounts.Reset();

@@ -378,11 +378,15 @@ El* List::IntoEl() {
         ListEvent ev = {ListEventKind::Select, s->count, false};
         ListenerCall(cx->app, cx->win, s->onLoadMore, &ev);
     }
-    // list.rs declares the "List" context on the element it tracks focus
-    // on; the root is focusable here for the same reason — clicking a row
-    // focuses the row, which is inside it, and Tab reaches the list itself.
+    // list.rs declares the "List" context on the element it tracks focus on,
+    // and `div().id("list")` makes that element a hit target — which is what
+    // puts it on the chain a press walks, so a press on a row is a press on
+    // the list and the list is what takes the focus.
     // list.rs `self.focus_handle(cx).focus(window, cx)` on a row press.
-    root->FocusId(HashClickId(id))->FocusRing(false)->FocusOnPress();
+    if (!s->focus.IsValid()) {
+        s->focus = FocusHandleNew(cx);
+    }
+    root->PathClick(id)->TrackFocus(s->focus)->FocusRing(false)->FocusOnPress();
     ListBindKeys(cx, root, state);
     return root;
 }
