@@ -241,6 +241,9 @@ El* PopupMenu::IntoEl() {
     // surface rather than the window's. Both default themes give them the
     // same colour.
     El* root = PopoverSurface(cx, Div(a)->FlexCol()->W(menuW));
+    // The menu's own name, so a row is `("item", ix)` and two menus on one
+    // page do not have to be told apart by their rows' spelling.
+    root->Id(id);
     // .key_context(CONTEXT).track_focus(&self.focus_handle) and the six
     // on_action handlers behind it. The menu is its own focus trap and the
     // only focusable inside it, so arming the trap while it is the deepest
@@ -374,16 +377,15 @@ El* PopupMenu::IntoEl() {
         }
         if (it.kind == MenuItemKind::Item && !it.disabled) {
             if (it.submenu) {
-                BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
+                BindClick(row, StrDup(a, fmt("%d", i)),
                           ListenerArg(submenuClick, i));
                 row->OnHover(ListenerArg(submenuHover, i));
             } else if (it.isLink && it.href.s) {
-                BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
+                BindClick(row, StrDup(a, fmt("%d", i)),
                           ListenerArg(linkClick, (intptr_t)&it.href));
                 row->OnHover(ListenerArg(hover, i));
             } else {
-                BindClick(row, StrDup(a, fmt("%s-%d", id, i)),
-                          ListenerArg(click, i));
+                BindClick(row, StrDup(a, fmt("%d", i)), ListenerArg(click, i));
                 // `window.dispatch_action(action.boxed_clone(), cx)`, beside
                 // the click the menu itself needs to close on.
                 if (it.action) {

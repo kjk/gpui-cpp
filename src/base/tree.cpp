@@ -302,7 +302,7 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
         if (!it) {
             break;
         }
-        El* wrap = TreeItemEl::New(cx, StrDup(a, fmt("%s-row-%d", id, i)),
+        El* wrap = TreeItemEl::New(cx, StrDup(a, fmt("row-%d", i)),
                                    ListenerArg(click, i))
                        ->FlexCol()
                        ->W(kFill);
@@ -320,6 +320,9 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
     }
 
     El* box = Tree::New(cx)
+                  // The tree's own name, so its rows are `("row", ix)` rather
+                  // than spelling it out again in each of them.
+                  ->Id(id)
                   ->FlexCol()
                   ->W(kFill)
                   ->H(h)
@@ -344,9 +347,7 @@ El* TreeItemEl::New(Ctx* cx, Str id, Listener onClick) {
         // context on the focused ancestry — a tree with a row selected is one
         // the arrows can walk. Not a tab stop: Tab reaches the tree itself,
         // not each of its hundreds of rows.
-        e->Id(id)
-            ->Click(HashClickId(id))
-            ->FocusId(HashClickId(id))
+        e->PathId(id)
             ->TabStop(false)
             // The selected row is drawn by the tree itself; a ring around the
             // last one pressed is not something Rust's tree shows.

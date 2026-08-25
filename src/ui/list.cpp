@@ -344,10 +344,9 @@ El* List::IntoEl() {
                 // row's IndexPath, the way `impl From<IndexPath> for
                 // ElementId` spells it, so it stays the same when a section
                 // above it grows or shrinks and the flat index shifts.
-                el = it->IntoEl(
-                    StrDup(a, fmt("%s-%s", id, IndexPathIdStr(a, row.Path()))),
-                    ListenerArg(click, row.entry),
-                    ListenerArg(down, row.entry));
+                el = it->IntoEl(StrDup(a, IndexPathIdStr(a, row.Path())),
+                                ListenerArg(click, row.entry),
+                                ListenerArg(down, row.entry));
             }
         }
         // Each row takes the height it was measured at, which is what lets

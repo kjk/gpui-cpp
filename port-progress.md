@@ -5807,3 +5807,27 @@ to decide, not the library's.
 Verified: 133 story shots and all 40 showcase pages identical to before; the
 select's × again clears without opening, byte-identical to the build from
 before bubbling existed.
+
+## Rows are named by their place, not by their list
+
+The tree, the popup menu and the `List` all spelled their container's id into
+every row: `%s-row-%d`, `%s-%d`, `%s-<indexpath>`. Each container is now named
+— `Id(id)` on the tree's box and on the menu's surface, the list root already
+had one — and the rows are `row-%d`, `%d` and the IndexPath on its own, which
+is how `impl From<IndexPath> for ElementId` spells it upstream.
+
+`TreeItemEl` takes `PathId` rather than three calls deriving one number from
+one name. It keeps its focus id, unlike a table row: a tree row *is*
+`FocusOnPress` here, which is how the tree's arrows reach the tree at all.
+
+Verified against the build before: the menu page's item click and submenu
+click; the tree page's row select, folder expand, and arrows after a row
+click; the list page's row click and arrows — all byte-identical, and each
+demonstrably doing something.
+
+**A note on the sweeps.** The story's dropdown page is not deterministic
+between runs: three shots of the same build give two distinct results,
+differing by 0.2%. The same is true of the calendar, modal and toast pages.
+They animate, and the shutter catches whatever phase the window is in. A stale
+baseline on one of those pages reads as a regression and is not one — check by
+re-shooting both sides rather than trusting an old capture.
