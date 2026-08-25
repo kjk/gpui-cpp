@@ -1916,6 +1916,13 @@ El* El::BindInput(InputState* s) {
     if (s) {
         InputInitKeys();
         KeyContext(InputContext());
+        // A press on a field focuses it — `InputState::on_mouse_down` calls
+        // `focus_handle.focus(window, cx)` — and focus is what stacks the
+        // "Input" context over the keystroke, so every chord state.rs binds
+        // resolves. Without it a clicked field took the characters (they go
+        // to the focused InputState) but not the arrows, the escape or the
+        // backspace, which are actions and so want the context.
+        FocusOnPress();
     }
     return this;
 }
