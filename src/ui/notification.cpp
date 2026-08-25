@@ -8,18 +8,6 @@ namespace gpui {
 
 namespace component {
 
-// toast.rs: every offset the stack works out is transitioned rather than
-// taken, over ToastMotion::duration and along CSS's `ease`.
-static float ToastEase(float t) {
-    return CubicBezier(0.25f, 0.1f, 0.25f, 1.f, t);
-}
-
-static Motion ToastMotionPolicy() {
-    Motion m = MotionNew((float)kToastTransitionMs);
-    m.ease = ToastEase;
-    return m;
-}
-
 Notification* Notification::New(Ctx* cx, Str title, Str message) {
     Arena* a = cx->a;
     Notification* n = ArenaNew<Notification>(a);
@@ -459,12 +447,19 @@ El* NotificationList::IntoEl() {
     float collapsedH = ToastStackGeometry(
         heights, s->n, kToastCollapsedPeek, kToastExpandedGap, bottom,
         collapsedOff, expandedOff, &expandedH);
-    Motion policy = ToastMotionPolicy();
+    // toast.rs: the geometry is sprung rather than transitioned — a pointer
+    // arriving and leaving retargets every offset while they are still
+    // moving, and a spring turns them around from where they are. A pixel's
+    // tenth is arrived; the fade keeps the finer default, since it runs over
+    // 0..1.
+    Spring geometry = SpringNew((float)kToastTransitionMs);
+    geometry.epsilon = 0.1f;
+    Spring fade = SpringNew((float)kToastTransitionMs);
     // The stack's own height, which is what opens the space the cards move
     // into rather than snapping the whole layer taller.
     float stackH =
-        MotionValue(cx, MotionId(StrL("notification-stack"), StrL("height")),
-                    expanded ? expandedH : collapsedH, policy);
+        SpringValue(cx, MotionId(StrL("notification-stack"), StrL("height")),
+                    expanded ? expandedH : collapsedH, geometry);
 
     // The stack floats over the window in the corner its placement names.
     El* layer = Div(a)->Absolute()->Fixed()->W(s->width)->H(stackH)->OnHover(
@@ -498,9 +493,9 @@ El* NotificationList::IntoEl() {
         // it in the tree at zero opacity, where it would still be in the way
         // of the pointer.
         Str key = StrDup(a, fmt("%d", it.id));
-        float visible = MotionValue(
+        float visible = SpringValue(
             cx, MotionId(StrL("toast-visibility"), key),
-            (expanded || rank < kToastCollapsedVisible) ? 1.f : 0.f, policy);
+            (expanded || rank < kToastCollapsedVisible) ? 1.f : 0.f, fade);
         if (visible <= 0.01f) {
             continue;
         }
@@ -509,16 +504,16 @@ El* NotificationList::IntoEl() {
         // on its id, so a stack that opens moves each of them from wherever it
         // had got to.
         float off =
-            MotionValue(cx, MotionId(StrL("toast-offset"), key),
-                        expanded ? expandedOff[i] : collapsedOff[i], policy);
-        float shrink = MotionValue(
+            SpringValue(cx, MotionId(StrL("toast-offset"), key),
+                        expanded ? expandedOff[i] : collapsedOff[i], geometry);
+        float shrink = SpringValue(
             cx, MotionId(StrL("toast-inset"), key),
             expanded ? 0.f
                      : s->width * kToastCollapsedScaleStep *
                            (float)(rank < kToastCollapsedVisible
                                        ? rank
                                        : kToastCollapsedVisible - 1),
-            policy);
+            geometry);
         El* card =
             Notification::New(cx, it.title, it.message)
                 ->Kind(it.kind)

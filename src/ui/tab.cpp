@@ -5,11 +5,11 @@ namespace gpui {
 
 namespace component {
 
-// tab_bar.rs: the indicator slides to the selected tab over 200 ms along
-// ease_in_out_cubic. Rust keeps the box it is coming from in an epoch-stamped
-// state; a transition here remembers where it had got to on its own, so what
-// the bar has to keep is only the box it is going to.
-static const float kTabIndicatorMotionMs = 200.f;
+// tab_bar.rs INDICATOR_SPRING: the period the indicator's slide is felt at.
+// Rust keeps the box it is coming from in an epoch-stamped state; a spring
+// here remembers where it had got to and how fast it was going, so what the
+// bar has to keep is only the box it is going to.
+static const float kTabIndicatorMotionMs = 250.f;
 
 float TabHeight(TabVariant v, UiSize size) {
     bool under = v == TabVariant::Underline;
@@ -469,16 +469,21 @@ El* Tabs::IntoEl() {
     auto* stripBox = (Bounds*)MotionSlot(cx, MotionId(StrL("tab-strip"), id),
                                          (int)sizeof(Bounds));
     strip->BoundsOut(stripBox);
-    Motion indMotion = MotionNew(kTabIndicatorMotionMs);
-    indMotion.ease = EaseInOutCubic;
+    // INDICATOR_SPRING: the selection moves again while the indicator is
+    // still travelling — a run down a row of tabs — so it is sprung, and
+    // slightly under critical so it arrives with a little of the overshoot
+    // the eye reads as weight. A tenth of a pixel is arrived.
+    Spring indSpring = SpringNew(kTabIndicatorMotionMs);
+    indSpring.damping = 0.85f;
+    indSpring.epsilon = 0.1f;
     float indX = 0;
     float indW = 0;
     bool sliding = false;
     if (selBox && selBox->w > 0) {
-        indX = MotionValue(cx, MotionId(StrL("tab-ind-x"), id), selBox->x,
-                           indMotion);
-        indW = MotionValue(cx, MotionId(StrL("tab-ind-w"), id), selBox->w,
-                           indMotion);
+        indX = SpringValue(cx, MotionId(StrL("tab-ind-x"), id), selBox->x,
+                           indSpring);
+        indW = SpringValue(cx, MotionId(StrL("tab-ind-w"), id), selBox->w,
+                           indSpring);
         // In flight: the tab it belongs to holds back its own selected look
         // while the indicator is on its way, which is what Rust does too.
         float dx = indX - selBox->x;

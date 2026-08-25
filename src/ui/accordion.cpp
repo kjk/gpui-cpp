@@ -222,10 +222,12 @@ El* Accordion::IntoEl() {
         // own box, into a slot that is asked for whether or not the panel is
         // mounted so a closed item still knows how tall it will be.
         Str key = StrDup(a, fmt("%s-%d", id, i));
-        Motion motion = MotionNew(kAccordionMotionMs);
-        motion.ease = EaseOutCubic;
-        float progress = MotionValue(cx, MotionId(StrL("accordion"), key),
-                                     item->open ? 1.f : 0.f, motion);
+        // PANEL_SPRING: a header clicked twice retargets the panel while
+        // it is still opening, and the spring decelerates into the reversal
+        // instead of snapping to a new curve's opening pace.
+        float progress =
+            SpringValue(cx, MotionId(StrL("accordion"), key),
+                        item->open ? 1.f : 0.f, SpringNew(kAccordionMotionMs));
         auto* natural = (Bounds*)MotionSlot(
             cx, MotionId(StrL("accordion-h"), key), (int)sizeof(Bounds));
         if (progress > 0.001f) {

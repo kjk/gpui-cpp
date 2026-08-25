@@ -9,10 +9,10 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "7d0aaf55852add1e0af48cabd7ae6fa3ae791cde",
+  sha: "cc86f8d48783ef84d7ae3a1aba263855774460ef",
   date: "2026-08-24",
   subject:
-    "input: Keep a masked value out of the clipboard, and settle boolean reader naming (#2810)",
+    "motion: Add spring transitions and use them where a target changes mid-flight (#2811)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
@@ -27,15 +27,15 @@ export const gpuiComponent = {
  */
 export const zedGpui = {
   repo: "https://github.com/zed-industries/zed",
-  sha: "e0931d5a9dbf4f781b336fdf448739e74a2ac0b5",
+  sha: "8b1497dbd22fb06f5838a7c0b84a1e54fafa71bc",
   date: "2026-08-17",
-  subject: "Reuse char-scan invisibles detection in `highlight_invisibles` (#62715)",
+  subject: "gpui: Add spring animations; examples (#62778)",
   crates: {
     gpui: "0.2.2",
     gpui_platform: "0.2.2",
     gpui_macros: "0.2.2",
   },
-  lock: "git+https://github.com/zed-industries/zed#e0931d5a9dbf4f781b336fdf448739e74a2ac0b5",
+  lock: "git+https://github.com/zed-industries/zed#8b1497dbd22fb06f5838a7c0b84a1e54fafa71bc",
 } as const;
 
 /**

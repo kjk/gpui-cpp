@@ -172,6 +172,84 @@ void MotionSeed(Ctx* cx, uint32_t key, T from) {
     st->startedAt = MotionNow(cx);
 }
 
+// ─── springs ──────────────────────────────────────────────────────────────
+//
+// motion::Spring. A transition cannot carry *velocity* across a change of
+// target: it restarts its curve from the value sampled at that instant, which
+// is continuous in position and not in speed, so a value reversed mid-flight
+// jumps to the new curve's initial pace. A spring turns around instead.
+//
+// The rule upstream applies, and this follows: spring where the target
+// changes faster than the motion finishes — a switch toggled twice, a tab
+// indicator chasing the pointer, a dock being dragged — and transition where
+// a target is set once and runs to its end.
+struct Spring {
+    // The period one full undamped oscillation would take, which is the scale
+    // the motion is felt at rather than the moment it stops. A spring has no
+    // end to schedule: it settles once it is within `epsilon` of its target.
+    // Zero adopts the target on the spot, as a zero duration does.
+    float responseMs = 0;
+    // The damping ratio. 1 is critical — it never passes its target — below
+    // that it overshoots and comes back, above it crawls in. A value bounded
+    // by the geometry around it (a thumb inside a track) keeps 1.
+    float damping = 1.f;
+    // How close counts as arrived, in the target's own units. The default
+    // suits a 0..1 value; a spring over pixels settles perceptibly sooner
+    // with a coarser one, and stops asking for frames it has nothing to draw
+    // with.
+    float epsilon = 0.001f;
+    // Whether the spring travels at all. A value the pointer is already
+    // moving — a panel being dragged by its handle — must not lag behind it,
+    // so travel is off for as long as the drag lasts; the state stays pinned
+    // to the target meanwhile, so travel resumes from where the drag left it
+    // rather than from where the spring had got to before it started.
+    bool travel = true;
+};
+
+inline Spring SpringNew(float responseMs) {
+    Spring s;
+    s.responseMs = responseMs;
+    return s;
+}
+
+// Where a sprung value is and how fast it is going. `target` is what it was
+// travelling to over the frame that just elapsed; a new one is adopted for
+// the frame to come, keeping both.
+struct SpringState {
+    float position = 0;
+    float velocity = 0;
+    float target = 0;
+    double updatedAt = 0;
+    bool init = false;
+};
+
+struct SpringStep {
+    float value = 0;
+    bool running = false;
+};
+
+// The whole rule with the state and the clock passed in, which is what makes
+// it testable without a window.
+SpringStep SpringAdvance(SpringState* st, float target, const Spring& s,
+                         double now, bool reduced);
+
+// motion::spring: the value to draw now, on its way to `target`.
+float SpringValue(Ctx* cx, uint32_t key, float target, const Spring& s);
+
+// MotionSeed's counterpart: where a spring starts from, for a value whose
+// first frame is not where it is going.
+inline void SpringSeed(Ctx* cx, uint32_t key, float from) {
+    auto* st = (SpringState*)MotionSlot(cx, key, (int)sizeof(SpringState));
+    if (!st) {
+        return;
+    }
+    st->init = true;
+    st->position = from;
+    st->velocity = 0;
+    st->target = from;
+    st->updatedAt = MotionNow(cx);
+}
+
 // motion::transition: the value to draw now, on its way to `target`.
 template <typename T>
 T MotionValue(Ctx* cx, uint32_t key, T target, const Motion& m) {

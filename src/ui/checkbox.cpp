@@ -5,8 +5,9 @@ namespace gpui {
 
 namespace component {
 
-// checkbox.rs: the tick takes 0.25 s to arrive, and as long to leave.
-static const float kCheckboxMotionMs = 250.f;
+// checkbox.rs MARK_SPRING: the period the tick's fade is felt at, which
+// upstream sets to 0.2 s where the transition ran for 0.25.
+static const float kCheckboxMotionMs = 200.f;
 
 Checkbox* Checkbox::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
@@ -84,8 +85,11 @@ El* Checkbox::IntoEl() {
     // which one value going the other way says as well.
     float on = checked ? 1.f : 0.f;
     if (!disabled) {
-        on = MotionValue(cx, MotionId(id, StrL("checkbox-tick")), on,
-                         MotionNew(kCheckboxMotionMs));
+        // MARK_SPRING: a box clicked twice reverses the fade mid-flight,
+        // which is where a spring beats a curve restarted from the value it
+        // happened to be at.
+        on = SpringValue(cx, MotionId(id, StrL("checkbox-tick")), on,
+                         SpringNew(kCheckboxMotionMs));
     }
     if (on > 0.01f) {
         Rgba tick = disabled ? RgbaOpacity(th.primaryFg, 0.5f) : th.primaryFg;

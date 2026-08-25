@@ -331,6 +331,143 @@ static void OpacityMultipliesEveryColourItPaints() {
     ArenaDelete(a);
 }
 
+// ─── springs ──────────────────────────────────────────────────────────────
+
+// Run a spring forward in 16 ms frames, answering where it ends up.
+static float SpringRun(SpringState* st, float target, const Spring& s,
+                       double* now, int frames) {
+    float v = 0;
+    for (int i = 0; i < frames; i++) {
+        *now += 0.016;
+        v = SpringAdvance(st, target, s, *now, false).value;
+    }
+    return v;
+}
+
+static void ASpringArrivesAndStops() {
+    Spring s = SpringNew(200);
+    s.epsilon = 0.001f;
+    SpringState st;
+    double now = 0;
+    // The first target is adopted outright, as a transition's is.
+    SpringStep first = SpringAdvance(&st, 0.f, s, now, false);
+    utassert(first.value == 0.f && !first.running);
+
+    // It travels, without passing the target: critically damped.
+    float mid = SpringRun(&st, 1.f, s, &now, 6);
+    utassert(mid > 0.f && mid < 1.f);
+    float v = SpringRun(&st, 1.f, s, &now, 60);
+    utassertnear(v, 1.f);
+    // And once it is there it asks for nothing more.
+    now += 0.016;
+    utassert(!SpringAdvance(&st, 1.f, s, now, false).running);
+}
+
+// The whole point of a spring: a target that changes mid-flight is turned
+// around rather than restarted, so the value keeps going the way it was for
+// a moment before it comes back.
+static void ASpringCarriesItsVelocityThroughAReversal() {
+    Spring s = SpringNew(200);
+    SpringState st;
+    double now = 0;
+    SpringAdvance(&st, 0.f, s, now, false);
+    SpringRun(&st, 1.f, s, &now, 5);
+    float atTurn = st.position;
+    utassert(atTurn > 0.f && atTurn < 1.f);
+    utassert(st.velocity > 0.f);
+
+    // Back to 0 from here. The next frame is still moving the old way.
+    now += 0.016;
+    float after = SpringAdvance(&st, 0.f, s, now, false).value;
+    utassert(after > atTurn);
+    utassert(st.velocity > 0.f);
+    // It decelerates, turns, and gets back.
+    float back = SpringRun(&st, 0.f, s, &now, 60);
+    utassertnear(back, 0.f);
+}
+
+static void ASpringUnderOneOvershoots() {
+    Spring s = SpringNew(200);
+    s.damping = 0.5f;
+    SpringState st;
+    double now = 0;
+    SpringAdvance(&st, 0.f, s, now, false);
+    float peak = 0;
+    for (int i = 0; i < 30; i++) {
+        now += 0.016;
+        float v = SpringAdvance(&st, 1.f, s, now, false).value;
+        if (v > peak) {
+            peak = v;
+        }
+    }
+    utassert(peak > 1.f);
+    // Critically damped, the same run never passes it.
+    Spring critical = SpringNew(200);
+    SpringState st2;
+    double now2 = 0;
+    SpringAdvance(&st2, 0.f, critical, now2, false);
+    for (int i = 0; i < 30; i++) {
+        now2 += 0.016;
+        utassert(SpringAdvance(&st2, 1.f, critical, now2, false).value <= 1.f);
+    }
+}
+
+static void ASuspendedSpringPinsItselfToTheTarget() {
+    Spring s = SpringNew(200);
+    SpringState st;
+    double now = 0;
+    SpringAdvance(&st, 0.f, s, now, false);
+    SpringRun(&st, 1.f, s, &now, 3);
+    utassert(st.position < 1.f);
+    // travel(false) is a value the pointer is already moving: it takes the
+    // target on the spot and keeps its state there, so travel resumes from
+    // where the drag left it.
+    s.travel = false;
+    now += 0.016;
+    SpringStep step = SpringAdvance(&st, 5.f, s, now, false);
+    utassert(step.value == 5.f && !step.running);
+    utassert(st.position == 5.f && st.velocity == 0.f);
+
+    // Reduced motion does the same, whatever the travel says.
+    s.travel = true;
+    now += 0.016;
+    utassert(SpringAdvance(&st, 9.f, s, now, true).value == 9.f);
+    utassert(st.position == 9.f);
+    // A response of zero is the degenerate spring: infinitely stiff.
+    Spring instant = SpringNew(0);
+    SpringState st3;
+    double now3 = 0;
+    SpringAdvance(&st3, 0.f, instant, now3, false);
+    now3 += 0.016;
+    utassert(SpringAdvance(&st3, 1.f, instant, now3, false).value == 1.f);
+}
+
+static void ACoarseEpsilonSettlesSooner() {
+    Spring fine = SpringNew(200);
+    Spring coarse = SpringNew(200);
+    coarse.epsilon = 1.f;
+    SpringState a;
+    SpringState b;
+    double now = 0;
+    SpringAdvance(&a, 0.f, fine, now, false);
+    SpringAdvance(&b, 0.f, coarse, now, false);
+    int fineFrames = 0;
+    int coarseFrames = 0;
+    for (int i = 0; i < 200; i++) {
+        now += 0.016;
+        if (SpringAdvance(&a, 100.f, fine, now, false).running) {
+            fineFrames++;
+        }
+        if (SpringAdvance(&b, 100.f, coarse, now, false).running) {
+            coarseFrames++;
+        }
+    }
+    // Both arrive; the coarse one stops asking for frames first.
+    utassertnear(a.position, 100.f);
+    utassertnear(b.position, 100.f);
+    utassert(coarseFrames < fineFrames);
+}
+
 void TestMotion() {
     TestSuite("motion");
     TheEasingsAreTheCurvesRustNames();
@@ -349,4 +486,9 @@ void TestMotion() {
     TheSameRuleCarriesAPointAndAColor();
     AChannelKeepsTwoValuesOfOneElementApart();
     OpacityMultipliesEveryColourItPaints();
+    ASpringArrivesAndStops();
+    ASpringCarriesItsVelocityThroughAReversal();
+    ASpringUnderOneOvershoots();
+    ASuspendedSpringPinsItselfToTheTarget();
+    ACoarseEpsilonSettlesSooner();
 }

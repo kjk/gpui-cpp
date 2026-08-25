@@ -456,32 +456,34 @@ static El* RenderTabs(Ctx* cx, Str id, Entity<DockState> st, int node) {
         box->Child(body);
     }
 
-    // The drop placeholder, tweened. `sync_drop_placeholder` keeps a from, a
-    // to and an epoch and restarts a 150 ms ease_out_cubic run whenever the
-    // zone changes; the four numbers are transitions here, which restart
-    // themselves when their target moves. The one thing a transition cannot
-    // work out for itself is where the *first* one starts, so a drag reaching
-    // a group seeds them with the dragged tab's preview and the placeholder
-    // flies in from under the pointer.
+    // The drop placeholder, sprung. `sync_drop_placeholder` keeps a from, a
+    // to and an epoch and restarts a run whenever the zone changes; the four
+    // numbers are springs here, and a pointer crossing from one half of a
+    // group to the other retargets them faster than they arrive — which is
+    // what a spring is for. PLACEHOLDER_SPRING: a 200 ms response, and half a
+    // pixel is arrived. The one thing they cannot work out for themselves is
+    // where the *first* one starts, so a drag reaching a group seeds them
+    // with the dragged tab's preview and the placeholder flies in from under
+    // the pointer.
     if (s->dropNode == node) {
         Bounds ph = DockDropPlaceholder(n.bounds, s->dropAt);
-        Motion motion = MotionNew(150.f);
-        motion.ease = EaseOutCubic;
+        Spring spring = SpringNew(200.f);
+        spring.epsilon = 0.5f;
         uint32_t kx = MotionId(id, StrL("drop-x"));
         uint32_t ky = MotionId(id, StrL("drop-y"));
         uint32_t kw = MotionId(id, StrL("drop-w"));
         uint32_t kh = MotionId(id, StrL("drop-h"));
         if (s->dropFromPending) {
             s->dropFromPending = false;
-            MotionSeed(cx, kx, s->dropFrom.x);
-            MotionSeed(cx, ky, s->dropFrom.y);
-            MotionSeed(cx, kw, s->dropFrom.w);
-            MotionSeed(cx, kh, s->dropFrom.h);
+            SpringSeed(cx, kx, s->dropFrom.x);
+            SpringSeed(cx, ky, s->dropFrom.y);
+            SpringSeed(cx, kw, s->dropFrom.w);
+            SpringSeed(cx, kh, s->dropFrom.h);
         }
-        float x = MotionValue(cx, kx, ph.x, motion);
-        float y = MotionValue(cx, ky, ph.y, motion);
-        float w = MotionValue(cx, kw, ph.w, motion);
-        float h = MotionValue(cx, kh, ph.h, motion);
+        float x = SpringValue(cx, kx, ph.x, spring);
+        float y = SpringValue(cx, ky, ph.y, spring);
+        float w = SpringValue(cx, kw, ph.w, spring);
+        float h = SpringValue(cx, kh, ph.h, spring);
         box->Child(Div(a)
                        ->Absolute()
                        ->Left(x - n.bounds.x)

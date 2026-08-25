@@ -131,4 +131,131 @@ void MotionWantsFrame(Ctx* cx) {
     }
 }
 
+// ─── springs ──────────────────────────────────────────────────────────────
+
+// The damped harmonic oscillator, stepped exactly rather than integrated: at
+// these frame times an Euler step visibly changes the motion with the frame
+// rate, and the closed form does not. Mass is 1, so the stiffness is w0 * w0
+// and the damping coefficient 2 * zeta * w0.
+//
+// x is the displacement from the target, v the velocity. Each case is the
+// standard solution of x'' + 2*zeta*w0*x' + w0^2*x = 0 for the initial
+// conditions (x, v).
+static void SpringStepExact(float w0, float zeta, float dt, float* x,
+                            float* v) {
+    float x0 = *x;
+    float v0 = *v;
+    if (dt <= 0 || w0 <= 0) {
+        return;
+    }
+    if (zeta < 1.f - 1e-4f) {
+        // Underdamped: it passes the target and comes back.
+        float wd = w0 * sqrtf(1.f - zeta * zeta);
+        float e = expf(-zeta * w0 * dt);
+        float c1 = x0;
+        float c2 = (v0 + zeta * w0 * x0) / wd;
+        float cosd = cosf(wd * dt);
+        float sind = sinf(wd * dt);
+        *x = e * (c1 * cosd + c2 * sind);
+        *v = e * ((c2 * wd - zeta * w0 * c1) * cosd -
+                  (c1 * wd + zeta * w0 * c2) * sind);
+        return;
+    }
+    if (zeta > 1.f + 1e-4f) {
+        // Overdamped: two real rates, and it crawls in on the slower one.
+        float r = w0 * sqrtf(zeta * zeta - 1.f);
+        float r1 = -zeta * w0 + r;
+        float r2 = -zeta * w0 - r;
+        float c2 = (v0 - r1 * x0) / (r2 - r1);
+        float c1 = x0 - c2;
+        float e1 = expf(r1 * dt);
+        float e2 = expf(r2 * dt);
+        *x = c1 * e1 + c2 * e2;
+        *v = c1 * r1 * e1 + c2 * r2 * e2;
+        return;
+    }
+    // Critically damped, which is the default: the fastest approach that
+    // never passes the target.
+    float e = expf(-w0 * dt);
+    float c = v0 + w0 * x0;
+    *x = (x0 + c * dt) * e;
+    *v = (v0 - c * w0 * dt) * e;
+}
+
+SpringStep SpringAdvance(SpringState* st, float target, const Spring& s,
+                         double now, bool reduced) {
+    SpringStep out;
+    out.value = target;
+    if (!st->init) {
+        st->init = true;
+        st->position = target;
+        st->velocity = 0;
+        st->target = target;
+        st->updatedAt = now;
+        return out;
+    }
+    // The common case by far: a spring nothing is moving. It has no state to
+    // advance and no frame to ask for.
+    if (st->position == target && st->velocity == 0) {
+        st->target = target;
+        st->updatedAt = now;
+        return out;
+    }
+    if (reduced || !s.travel || s.responseMs <= 0) {
+        st->position = target;
+        st->velocity = 0;
+        st->target = target;
+        st->updatedAt = now;
+        return out;
+    }
+    // Over the frame that just elapsed, which the *previous* target governed,
+    // before adopting the new one for the frame to come. That is what carries
+    // the velocity through a reversal.
+    float dt = (float)(now - st->updatedAt);
+    if (dt < 0) {
+        dt = 0;
+    }
+    // A tab out and back is not a frame's worth of motion to catch up on.
+    if (dt > 0.1f) {
+        dt = 0.1f;
+    }
+    float w0 = 6.2831853f / (s.responseMs / 1000.f);
+    float x = st->position - st->target;
+    float v = st->velocity;
+    SpringStepExact(w0, s.damping, dt, &x, &v);
+    float position = st->target + x;
+    st->target = target;
+    st->updatedAt = now;
+    // Settled: within epsilon of the target, and slow enough that what is
+    // left to travel is inside it too — a velocity in units per second is
+    // read as the distance one response period of it would cover.
+    float rest = position - target;
+    float restAbs = rest < 0 ? -rest : rest;
+    float speed = v < 0 ? -v : v;
+    if (restAbs <= s.epsilon && speed * (s.responseMs / 1000.f) <= s.epsilon) {
+        st->position = target;
+        st->velocity = 0;
+        out.value = target;
+        return out;
+    }
+    st->position = position;
+    st->velocity = v;
+    out.value = position;
+    out.running = true;
+    return out;
+}
+
+float SpringValue(Ctx* cx, uint32_t key, float target, const Spring& s) {
+    auto* st = (SpringState*)MotionSlot(cx, key, (int)sizeof(SpringState));
+    if (!st) {
+        return target;
+    }
+    SpringStep step =
+        SpringAdvance(st, target, s, MotionNow(cx), MotionReduced());
+    if (step.running) {
+        MotionWantsFrame(cx);
+    }
+    return step.value;
+}
+
 } // namespace gpui
