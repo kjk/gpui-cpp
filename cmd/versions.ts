@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "9e6d5000b4020e7849e167faa1f3ee8932480ff6",
-  date: "2026-08-20",
-  subject: "theme: Align dark syntax highlighting (#2802)",
+  sha: "334bbed2e8c47d606eb79ab05ddcebd60b823429",
+  date: "2026-08-24",
+  subject: "docs: Correct the i18n override docs (#2808)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
