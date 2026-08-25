@@ -9,9 +9,10 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "ea5fc0c7a5a51ce34419a05f56e24c3fb2f115db",
+  sha: "5e5a1a304b2a5a3d725c03b8759e9ba2b4ad58b3",
   date: "2026-08-20",
-  subject: "dock: Stop clipping descenders in the single-panel title bar (#2775)",
+  subject:
+    "command: Add a `filterable` option for externally filtered palettes (#2776)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
