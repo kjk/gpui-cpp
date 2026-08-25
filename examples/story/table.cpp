@@ -63,7 +63,8 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
 
     El* def = StorySection(cx, "Default", nullptr);
     StorySectionBody(def)->W(kFill);
-    component::Table* table = component::Table::New(cx)->WithSize(size);
+    component::Table* table = component::Table::New(cx, StrL("invoices"))
+                                  ->WithSize(size);
     table->Child(component::TableHeader::New(cx)
                      ->Child(component::TableRow::New(cx)
                                  ->Child(TextHead(cx, "Invoice")->W(150))
@@ -105,8 +106,9 @@ El* TableStory::Render(TableStory* self, Ctx* cx) {
 
     El* bordered = StorySection(cx, "Bordered", nullptr);
     StorySectionBody(bordered)->W(kFill);
-    component::Table* box =
-        component::Table::New(cx)->WithSize(size)->Bordered();
+    component::Table* box = component::Table::New(cx, StrL("invoices-bordered"))
+                                ->WithSize(size)
+                                ->Bordered();
     box->Child(component::TableHeader::New(cx)
                    ->Child(component::TableRow::New(cx)
                                ->Child(TextHead(cx, "Invoice")->W(100))

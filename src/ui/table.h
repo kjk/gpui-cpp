@@ -242,8 +242,12 @@ struct Table {
     bool bordered = false;
     ArenaVec<TableGroup*> groups;
     TableCaption* caption = nullptr;
+    // What every part under it is scoped by. Rust takes one for the same
+    // reason: a name only has to be unique among its siblings, and the table
+    // is what makes two rows called `row-0` two different rows.
+    Str id = {};
 
-    static Table* New(Ctx* cx);
+    static Table* New(Ctx* cx, Str id);
     Table* WithSize(UiSize s);
     // `.border_1().border_color(..).rounded(..)`, which the story's second
     // table asks for by hand. Kept as one flag rather than as a style

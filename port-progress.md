@@ -5291,10 +5291,17 @@ worth being able to ask whether this tree does. What it says:
   of 197. The cause is not a hash collision, it is a name: `component::Table`
   opens with `gpui::Table::New(cx, StrL("table"))` and its rows are
   `table-row-%d`, neither of which knows which table it belongs to. Two tables
-  on one page are one id space. This is precisely the case the path removes
-  upstream, and it is the one the fold cannot fix on its own — two siblings
-  named the same are still one id, in Rust too. It wants an id from the
-  caller, which is an API change to `component::Table`.
+  on one page are one id space. **Fixed**: `component::Table::New` takes an id
+  now, the way `Table::new("example-table")` does upstream, and every part
+  under it is named locally — `row-3`, `head-1`, `body-0` — and told apart by
+  the path. The story's table page goes from 20 shared ids to none.
+
+  Two details from doing it. Naming the *ancestors* is what scopes a part:
+  `IdCollect` folds on any element carrying an `Id`, interactive or not, so
+  the table root needed a name and nothing more. And only the row and the head
+  opt into being *found* by the path — a cell is `Id` and nothing else, here
+  and upstream, and giving it a click id would have handed it the press the
+  row is there to take. The count says it did not: 37 ids before and 37 after.
 - Two pairs share an id on purpose and are worth knowing about: the story's
   search pill and the field inside it (the pill is what draws the focus ring,
   because the field is `Appearance(false)`), and a table head and the label
@@ -5315,9 +5322,11 @@ already is here, and what the rest of them would have to become.
 So the fold is in and tested, and adopting it is per-widget work that has to
 carry its references with it. Converting a widget while something else still
 computes `HashClickId` of the same name would put two schemes in one space,
-which is worse than either. The order that works: give `component::Table` an
-id (it is the one live defect), then move the paint-time questions — drag-over
-and hover — onto refinements, then convert widgets from the leaves up.
+which is worse than either. `component::Table` is the first one across, and it
+was safe precisely because nothing outside it names its parts. The order for
+the rest: move the paint-time questions — drag-over and hover — onto style
+refinements the way `HoverBg` already is, which is what frees the widgets that
+stash an id on their state, then convert from the leaves up.
 
 A note on the other half of `HashClickId`'s callers: `KeyedEntity`,
 `KeyedKey`, `MotionId`, `FocusTrapId` and `IndexPath` hash a name to key

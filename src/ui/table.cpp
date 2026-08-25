@@ -54,9 +54,9 @@ TableCellEl* TableCellEl::Child(El* e) {
 
 El* TableCellEl::IntoEl() {
     Edges p = UiTableCellPadding(size);
-    Str id = head ? StrDup(a, fmt("table-head-%d", ix))
-                  : StrDup(a, fmt("table-cell-%d", ix));
-    El* e = head ? gpui::TableHead::New(cx, id) : gpui::TableCell::New(cx, id);
+    Str id = StrDup(a, fmt(head ? "head-%d" : "cell-%d", ix));
+    El* e = head ? gpui::TableHead::New(cx, id)->PathClick(id)
+                 : gpui::TableCell::New(cx, id);
     e->FlexRow()->ItemsCenter();
     // `.when(self.style.size.width.is_none(), ..)`: a cell the caller sized
     // keeps that width and shrinks from it like any flex item; one that was
@@ -99,9 +99,9 @@ TableRow* TableRow::Child(TableCellEl* c) {
 
 El* TableRow::IntoEl() {
     const Theme& th = cx->theme();
-    El* row = gpui::TableRow::New(cx, StrDup(a, fmt("table-row-%d", ix)))
-                  ->W(kFill)
-                  ->FlexRow();
+    Str rowId = StrDup(a, fmt("row-%d", ix));
+    El* row =
+        gpui::TableRow::New(cx, rowId)->PathClick(rowId)->W(kFill)->FlexRow();
     if (hasBg) {
         row->Bg(bg);
     }
@@ -147,7 +147,7 @@ El* TableGroup::IntoEl() {
     const Theme& th = cx->theme();
     El* g = nullptr;
     if (kind == TableGroupKind::Header) {
-        g = gpui::TableHeader::New(cx, StrDup(a, fmt("table-header-%d", ix)))
+        g = gpui::TableHeader::New(cx, StrDup(a, fmt("header-%d", ix)))
                 ->W(kFill)
                 ->FlexCol()
                 ->Bg(th.tokens.tableHead)
@@ -155,13 +155,13 @@ El* TableGroup::IntoEl() {
     } else if (kind == TableGroupKind::Footer) {
         // A footer is a plain div in Rust, not one of the semantic parts.
         g = Div(a)
-                ->Id(StrDup(a, fmt("table-footer-%d", ix)))
+                ->Id(StrDup(a, fmt("footer-%d", ix)))
                 ->W(kFill)
                 ->FlexCol()
                 ->Bg(th.tokens.tableFoot)
                 ->BorderT(1, th.tableRowBorder);
     } else {
-        g = gpui::TableBody::New(cx, StrDup(a, fmt("table-body-%d", ix)))
+        g = gpui::TableBody::New(cx, StrDup(a, fmt("body-%d", ix)))
                 ->W(kFill)
                 ->FlexCol();
     }
@@ -187,7 +187,7 @@ TableCaption* TableCaption::Child(El* e) {
 
 El* TableCaption::IntoEl() {
     Edges p = UiTableCellPadding(size);
-    El* e = gpui::TableCaption::New(cx, StrL("table-caption"))
+    El* e = gpui::TableCaption::New(cx, StrL("caption"))
                 ->W(kFill)
                 ->FlexRow()
                 ->JustifyCenter()
@@ -199,11 +199,16 @@ El* TableCaption::IntoEl() {
     return e;
 }
 
-Table* Table::New(Ctx* cx) {
+// The id is the caller's, the way `Table::new("example-table")` is upstream.
+// Everything under it is named locally and told apart by the path, so two
+// tables on one page are two id spaces — which they were not while every one
+// of them opened with the constant "table".
+Table* Table::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     Table* t = ArenaNew<Table>(a);
     t->a = a;
     t->cx = cx;
+    t->id = id;
     return t;
 }
 Table* Table::WithSize(UiSize s) {
@@ -225,12 +230,8 @@ Table* Table::Child(TableCaption* c) {
 
 El* Table::IntoEl() {
     const Theme& th = cx->theme();
-    El* t = gpui::Table::New(cx, StrL("table"))
-                ->FlexCol()
-                ->W(kFill)
-                ->ClipY()
-                ->ClipX()
-                ->Bg(th.tokens.tableBg);
+    El* t = gpui::Table::New(cx, id)->FlexCol()->W(kFill)->ClipY()->ClipX()->Bg(
+        th.tokens.tableBg);
     if (bordered) {
         t->Border(1, th.border)->Radius(th.radius);
     }
