@@ -4724,6 +4724,12 @@ odd, and the freed up left side of the title bar names the window instead. It
 stays switchable — the row is in the Appearance menu — because a component
 gallery is where you would want to look at the component itself.
 
+That menu carries actions now as well, which it did not: it was a table of
+rows dispatched by their index, and the switch would have been the one row in
+the story that worked some other way. `SelectFont(18)` is the action with the
+value on it, and the three toggles carry nothing because what they flip is
+what they read. Nothing in the story's menus reports an index any more.
+
 **Where a row's chord actually comes from.** A menu row has no shortcut field,
 here or in Rust: it shows what the keymap has bound to its action. So a Quit
 row with no ⌘Q is an application that never bound one, and the story now binds

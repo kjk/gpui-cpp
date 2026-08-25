@@ -861,11 +861,48 @@ static int StoryNotificationCount(Ctx* cx) {
     return WindowNotificationCount(cx);
 }
 
+// ─── the story's actions ──────────────────────────────────────────────────
+//
+// `actions!(story, [..])`, spelled out: an action here is its name hashed.
+// Every row of every menu in this file names one of these and carries no
+// handler of its own — which is what lets the same row be drawn into the
+// title bar, installed into the macOS menu bar, or reached by the chord the
+// keymap binds to it, and run the same thing all three ways.
+
+#define STORY_ACTION(fn, spelled)                     \
+    static uint32_t fn() {                            \
+        static uint32_t id = ActionOf(StrL(spelled)); \
+        return id;                                    \
+    }
+
+STORY_ACTION(ActAbout, "story::About")
+STORY_ACTION(ActOpen, "story::Open")
+STORY_ACTION(ActQuit, "story::Quit")
+STORY_ACTION(ActNewWindow, "story::NewWindow")
+STORY_ACTION(ActCloseWindow, "story::CloseWindow")
+STORY_ACTION(ActDocumentation, "story::Documentation")
+// The payload rides on the action, which is what `SwitchThemeMode(mode)`,
+// `SelectTheme(name)`, `SelectFont(px)`, `SelectRadius(px)` and
+// `SelectScrollbarMode(mode)` carry in Rust: the mode as 0 or 1, a theme as
+// its place in the registry, and the other three as the value itself.
+STORY_ACTION(ActSwitchThemeMode, "story::SwitchThemeMode")
+STORY_ACTION(ActSelectTheme, "story::SelectTheme")
+STORY_ACTION(ActSelectFont, "story::SelectFont")
+STORY_ACTION(ActSelectRadius, "story::SelectRadius")
+STORY_ACTION(ActSelectScrollbarMode, "story::SelectScrollbarMode")
+STORY_ACTION(ActToggleListActiveHighlight, "story::ToggleListActiveHighlight")
+STORY_ACTION(ActToggleFpsMonitor, "story::ToggleFpsMonitor")
+STORY_ACTION(ActToggleAppMenuBar, "story::ToggleAppMenuBar")
+// The two rows Rust's menu does not have, and so the two actions it does not
+// declare.
+STORY_ACTION(ActToggleReduceMotion, "story::ToggleReduceMotion")
+STORY_ACTION(ActToggleFocusRing, "story::ToggleFocusRing")
+
 // AppTitleBar's FontSizeSelector, which is the Appearance menu behind the
-// Settings2 button. Rust gives each row an action — SelectFont, SelectRadius,
-// SelectScrollbarMode, ToggleListActiveHighlight, ToggleFpsMonitor — and
-// dispatches it through the focus chain; a PopupMenu here reports which row
-// was taken, so one table both builds the menu and says what each row does.
+// Settings2 button. Every row names one of the actions above and carries the
+// value it sets, which is what Rust's `SelectFont(18)` is; the table says
+// which action a kind of row names, whether it is ticked, and what it reads
+// back to say so.
 enum class ApKind : uint8_t {
     Label,
     Sep,
@@ -946,46 +983,30 @@ static bool ApChecked(const StoryApp* app, const ApRow& r) {
     }
 }
 
-static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
-                             intptr_t ix) {
-    if (ix < 0 || ix >= kAppearanceRows) {
-        return;
-    }
-    const ApRow& r = kAppearance[ix];
-    switch (r.kind) {
+// Which action a row of the table dispatches. The three that carry a value
+// hand it over as the action's payload — `SelectFont(18)` — and the toggles
+// carry nothing, since what they flip is what they read.
+static uint32_t ApAction(ApKind kind) {
+    switch (kind) {
         case ApKind::Font:
-            ThemeSetFontSize(r.value);
-            break;
+            return ActSelectFont();
         case ApKind::Radius:
-            ThemeSetRadius(r.value);
-            break;
+            return ActSelectRadius();
         case ApKind::Scroll:
-            ScrollbarModeSet((ScrollbarMode)(int)r.value);
-            break;
-        case ApKind::ListHighlight: {
-            ListSettings s = ListSettingsNow();
-            s.activeHighlight = !s.activeHighlight;
-            ListSettingsSet(s);
-            break;
-        }
+            return ActSelectScrollbarMode();
+        case ApKind::ListHighlight:
+            return ActToggleListActiveHighlight();
         case ApKind::Fps:
-            app->fpsMonitor = !app->fpsMonitor;
-            break;
+            return ActToggleFpsMonitor();
         case ApKind::MenuBar:
-            app->appMenuBar = !app->appMenuBar;
-            break;
+            return ActToggleAppMenuBar();
         case ApKind::Reduce:
-            MotionSetReduced(!MotionReduced());
-            break;
+            return ActToggleReduceMotion();
         case ApKind::Ring:
-            ThemeSetFocusRing(!ThemeFocusRing());
-            break;
+            return ActToggleFocusRing();
         default:
-            break;
+            return 0;
     }
-    // window.refresh(), and the layout memo goes with it: a font size or a
-    // radius changes every box that inherited one.
-    Notify(cx);
 }
 
 // create_new_window_with_size: everything one gallery window is, so the menu
@@ -1083,16 +1104,15 @@ static El* AppearanceMenu(StoryApp* app, Ctx* cx) {
                 menu->Separator();
                 break;
             default:
-                menu->MenuWithCheck(Str(r.label), ApChecked(app, r));
+                menu->MenuWithAction(Str(r.label), ApAction(r.kind),
+                                     (intptr_t)r.value);
+                menu->Checked(ApChecked(app, r));
                 break;
         }
     }
     // check_side(Right): the tick sits on the far edge, so the labels start
     // flush.
     menu->CheckSide(Side::Right);
-    if (PopupMenuState* st = menu->state.Get(cx)) {
-        st->onConfirm = Listen(cx, &OnAppearanceItem);
-    }
     return component::DropdownMenu::New(cx, StrL("story-appearance"))
         ->Trigger(component::Button::New(cx, StrL("story-title-settings"))
                       ->Icon(IconName::Settings2)
@@ -1131,24 +1151,6 @@ static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
 // One menu Rust has is not here: `Language` wants rust_i18n. One it does not
 // is: `Window`, because `App` has held a window list and ended its loop with
 // the last one for a while, and nothing else opens a second one.
-
-#define STORY_ACTION(fn, spelled)                     \
-    static uint32_t fn() {                            \
-        static uint32_t id = ActionOf(StrL(spelled)); \
-        return id;                                    \
-    }
-
-STORY_ACTION(ActAbout, "story::About")
-STORY_ACTION(ActOpen, "story::Open")
-STORY_ACTION(ActQuit, "story::Quit")
-STORY_ACTION(ActNewWindow, "story::NewWindow")
-STORY_ACTION(ActCloseWindow, "story::CloseWindow")
-STORY_ACTION(ActDocumentation, "story::Documentation")
-// The payload rides on the action, which is what `SwitchThemeMode(mode)` and
-// `SelectTheme(name)` carry in Rust: the mode as 0 or 1, and a theme as its
-// place in the registry.
-STORY_ACTION(ActSwitchThemeMode, "story::SwitchThemeMode")
-STORY_ACTION(ActSelectTheme, "story::SelectTheme")
 
 static void OnAboutAction(StoryApp*, Ctx* cx, const ActionEvent*) {
     // window.open_dialog(cx, ..): the window takes the entity and Root draws
@@ -1233,6 +1235,58 @@ static void StoryInitKeys() {
     KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
 }
 
+// FontSizeSelector's own handlers. Rust hangs these off the selector's
+// element, which is where the menu is; they are on the root here because the
+// window is what the menu is over, and the story is the entity that answers
+// for both.
+static void OnSelectFontAction(StoryApp*, Ctx* cx, const ActionEvent* ev) {
+    ThemeSetFontSize((float)ev->arg);
+    // window.refresh(), and the layout memo goes with it: a font size or a
+    // radius changes every box that inherited one.
+    Notify(cx);
+}
+
+static void OnSelectRadiusAction(StoryApp*, Ctx* cx, const ActionEvent* ev) {
+    ThemeSetRadius((float)ev->arg);
+    Notify(cx);
+}
+
+static void OnSelectScrollbarModeAction(StoryApp*, Ctx* cx,
+                                        const ActionEvent* ev) {
+    ScrollbarModeSet((ScrollbarMode)(int)ev->arg);
+    Notify(cx);
+}
+
+static void OnToggleListActiveHighlightAction(StoryApp*, Ctx* cx,
+                                              const ActionEvent*) {
+    ListSettings s = ListSettingsNow();
+    s.activeHighlight = !s.activeHighlight;
+    ListSettingsSet(s);
+    Notify(cx);
+}
+
+static void OnToggleFpsMonitorAction(StoryApp* app, Ctx* cx,
+                                     const ActionEvent*) {
+    app->fpsMonitor = !app->fpsMonitor;
+    Notify(cx);
+}
+
+static void OnToggleAppMenuBarAction(StoryApp* app, Ctx* cx,
+                                     const ActionEvent*) {
+    app->appMenuBar = !app->appMenuBar;
+    Notify(cx);
+}
+
+static void OnToggleReduceMotionAction(StoryApp*, Ctx* cx, const ActionEvent*) {
+    MotionSetReduced(!MotionReduced());
+    Notify(cx);
+}
+
+static void OnToggleFocusRingAction(StoryApp*, Ctx* cx, const ActionEvent*) {
+    ThemeSetFocusRing(!ThemeFocusRing());
+    Notify(cx);
+}
+
 // Every handler above, hung off the root so a row chosen in either bar finds
 // one. Rust registers these with `cx.on_action` on the app rather than on an
 // element, which is the same reach — nothing between the root and the focused
@@ -1245,7 +1299,18 @@ static El* StoryBindMenuActions(El* root, Ctx* cx) {
         ->OnAction(ActCloseWindow(), Listen(cx, &OnCloseWindowAction))
         ->OnAction(ActDocumentation(), Listen(cx, &OnDocumentationAction))
         ->OnAction(ActSwitchThemeMode(), Listen(cx, &OnSwitchThemeModeAction))
-        ->OnAction(ActSelectTheme(), Listen(cx, &OnSelectThemeAction));
+        ->OnAction(ActSelectTheme(), Listen(cx, &OnSelectThemeAction))
+        ->OnAction(ActSelectFont(), Listen(cx, &OnSelectFontAction))
+        ->OnAction(ActSelectRadius(), Listen(cx, &OnSelectRadiusAction))
+        ->OnAction(ActSelectScrollbarMode(),
+                   Listen(cx, &OnSelectScrollbarModeAction))
+        ->OnAction(ActToggleListActiveHighlight(),
+                   Listen(cx, &OnToggleListActiveHighlightAction))
+        ->OnAction(ActToggleFpsMonitor(), Listen(cx, &OnToggleFpsMonitorAction))
+        ->OnAction(ActToggleAppMenuBar(), Listen(cx, &OnToggleAppMenuBarAction))
+        ->OnAction(ActToggleReduceMotion(),
+                   Listen(cx, &OnToggleReduceMotionAction))
+        ->OnAction(ActToggleFocusRing(), Listen(cx, &OnToggleFocusRingAction));
 }
 
 static const int kStoryMenus = 4;
