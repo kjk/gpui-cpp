@@ -98,5 +98,17 @@ inline El* BindClick(El* e, Str id, Listener onClick) {
     return e;
 }
 
+// The same as BindClick for an element whose name only has to be unique among
+// its siblings: the id is the fold of the path down to it, which is what a
+// GlobalElementId is. A widget that names its parts this way stops spelling
+// its caller's id into every child — `("col-header", ix)` upstream, not
+// `format!("{id}-col-header-{ix}")`.
+inline El* BindPathClick(El* e, Str name, Listener onClick) {
+    e->PathId(name);
+    if (onClick.IsValid()) {
+        e->OnClick(onClick);
+    }
+    return e;
+}
 } // namespace component
 } // namespace gpui

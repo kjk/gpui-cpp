@@ -55,8 +55,7 @@ TableCellEl* TableCellEl::Child(El* e) {
 El* TableCellEl::IntoEl() {
     Edges p = UiTableCellPadding(size);
     Str id = StrDup(a, fmt(head ? "head-%d" : "cell-%d", ix));
-    El* e = head ? gpui::TableHead::New(cx, id)->PathClick(id)
-                 : gpui::TableCell::New(cx, id);
+    El* e = head ? gpui::TableHead::New(cx, id) : gpui::TableCell::New(cx, id);
     e->FlexRow()->ItemsCenter();
     // `.when(self.style.size.width.is_none(), ..)`: a cell the caller sized
     // keeps that width and shrinks from it like any flex item; one that was
@@ -100,8 +99,7 @@ TableRow* TableRow::Child(TableCellEl* c) {
 El* TableRow::IntoEl() {
     const Theme& th = cx->theme();
     Str rowId = StrDup(a, fmt("row-%d", ix));
-    El* row =
-        gpui::TableRow::New(cx, rowId)->PathClick(rowId)->W(kFill)->FlexRow();
+    El* row = gpui::TableRow::New(cx, rowId)->W(kFill)->FlexRow();
     if (hasBg) {
         row->Bg(bg);
     }
@@ -398,8 +396,7 @@ static El* ResizeHandle(Ctx* cx, Str id, int col, Entity<TableState> state) {
     // and the line down it are as tall as the head, which is what h_full says
     // in Rust.
     El* e = Div(a)
-                ->Id(id)
-                ->Click(HashClickId(id))
+                ->PathClick(id)
                 ->FlexRow()
                 ->W(kTableResizeHandleW)
                 ->JustifyEnd()
@@ -563,7 +560,7 @@ El* DataTable::IntoEl() {
 // render_row_header_cell: `w_3`, a rule down its right edge and the head's
 // own surface. On a body row it takes a click and selects that row, which is
 // the whole reason it is there; the one in the head does nothing.
-static El* RowHeaderCell(Ctx* cx, Str id, Entity<TableState> state, int row,
+static El* RowHeaderCell(Ctx* cx, Entity<TableState> state, int row,
                          bool head) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
@@ -580,8 +577,8 @@ static El* RowHeaderCell(Ctx* cx, Str id, Entity<TableState> state, int row,
     if (s->selectedRow == row && s->mode == TableSelectionMode::Row) {
         e->Bg(th.tokens.tableActive);
     }
-    BindClick(e, StrDup(a, fmt("%s-rowhead-%d", id, row)),
-              ListenTo(state, &TableState::OnRowClick, (intptr_t)row));
+    BindPathClick(e, StrDup(a, fmt("row-header-%d", row)),
+                  ListenTo(state, &TableState::OnRowClick, (intptr_t)row));
     return e;
 }
 
@@ -693,16 +690,15 @@ El* DataTable::BuildEl() {
 
     Listener headClick = ListenTo(state, &TableState::OnHeadClick, 0);
     Listener sortClick = ListenTo(state, &TableState::OnSortClick, 0);
-    El* headFixed = gpui::TableHeader::New(cx, StrDup(a, fmt("%s-head-f", id)))
+    El* headFixed = gpui::TableHeader::New(cx, StrL("head-fixed"))
                         ->FlexRow()
                         ->Shrink0()
                         ->H(rowHeight)
                         ->BorderB(1, th.border);
     El* headWrap = follow(
         Div(a)->FlexRow()->W(kFill)->H(rowHeight)->BorderB(1, th.border));
-    El* headScroll = gpui::TableHeader::New(cx, StrDup(a, fmt("%s-head", id)))
-                         ->FlexRow()
-                         ->Shrink0();
+    El* headScroll =
+        gpui::TableHeader::New(cx, StrL("head"))->FlexRow()->Shrink0();
     headWrap->Child(headScroll);
     // Every column's slot in one go: `BoundsOut` keeps a pointer into the
     // array, so it must not grow again while the heads are being built.
@@ -710,14 +706,14 @@ El* DataTable::BuildEl() {
         TableEnsureCols(s, nColumns);
     }
     if (rowHeaderOn) {
-        headFixed->Child(RowHeaderCell(cx, id, state, 0, true));
+        headFixed->Child(RowHeaderCell(cx, state, 0, true));
     }
     for (int d = 0; d < nColumns; d++) {
         // The columns are drawn in the order the table keeps, which is what a
         // head drag rewrites.
         int c = s ? TableColAt(s, d) : d;
         const TableColumn& col = columns[c];
-        El* th_ = gpui::TableHead::New(cx, StrDup(a, fmt("%s-th-%d", id, c)))
+        El* th_ = gpui::TableHead::New(cx, StrDup(a, fmt("th-%d", c)))
                       ->FlexRow()
                       ->Shrink0()
                       ->W(ColWidth(s, c));
@@ -752,8 +748,8 @@ El* DataTable::BuildEl() {
         content->Child(
             TextEl(a, col.title)->Font(14)->Fg(th.foreground)->LineHeight(1.f));
         if (col.selectable) {
-            BindClick(content, StrDup(a, fmt("%s-th-%d", id, c)),
-                      ListenerArg(headClick, c));
+            BindPathClick(content, StrDup(a, fmt("col-header-%d", c)),
+                          ListenerArg(headClick, c));
         }
         // on_drag(DragColumn(..)): a press on the head picks the column up,
         // and the whole head is the drop target for another one.
@@ -768,14 +764,14 @@ El* DataTable::BuildEl() {
             // The sort icon is its own hit box inside the head, so clicking it
             // sorts rather than selecting the column.
             El* icon = SortIcon(a, th, TableSortOf(s, c));
-            BindClick(icon, StrDup(a, fmt("%s-sort-%d", id, c)),
-                      ListenerArg(sortClick, c));
+            BindPathClick(icon, StrDup(a, fmt("icon-sort-%d", c)),
+                          ListenerArg(sortClick, c));
             content->Child(icon);
         }
         th_->Child(content);
         if (s && s->colResizable && col.resizable) {
-            th_->Child(ResizeHandle(cx, StrDup(a, fmt("%s-resize-%d", id, c)),
-                                    c, state));
+            th_->Child(ResizeHandle(
+                cx, StrDup(a, fmt("resizable-handle-%d", c)), c, state));
         }
         (d < nFixed ? headFixed : headScroll)->Child(th_);
     }
@@ -802,12 +798,10 @@ El* DataTable::BuildEl() {
     Listener rowDown = ListenTo(state, &TableState::OnRowMouseDown, 0);
     Listener cellClick = ListenTo(state, &TableState::OnCellClick, 0);
     Listener cellDown = ListenTo(state, &TableState::OnCellMouseDown, 0);
-    El* bodyFixed = gpui::TableBody::New(cx, StrDup(a, fmt("%s-body-f", id)))
-                        ->FlexCol()
-                        ->Shrink0();
-    El* bodyScroll = gpui::TableBody::New(cx, StrDup(a, fmt("%s-body", id)))
-                         ->FlexCol()
-                         ->W(kFill);
+    El* bodyFixed =
+        gpui::TableBody::New(cx, StrL("body-fixed"))->FlexCol()->Shrink0();
+    El* bodyScroll =
+        gpui::TableBody::New(cx, StrL("body"))->FlexCol()->W(kFill);
     // The rows are virtualized when the caller gave the body a height: only
     // the ones it can show are built, with a spacer at each end standing in
     // for the rest. Without one every row is built, which is what a short
@@ -852,15 +846,14 @@ El* DataTable::BuildEl() {
     }
     for (int r = range.first; r < range.end; r++) {
         El* rowFixed =
-            gpui::TableRow::New(cx, StrDup(a, fmt("%s-rowf-%d", id, r)))
+            gpui::TableRow::New(cx, StrDup(a, fmt("row-fixed-%d", r)))
                 ->FlexRow()
                 ->Shrink0()
                 ->BorderB(1, th.tableRowBorder);
-        El* rowScroll =
-            gpui::TableRow::New(cx, StrDup(a, fmt("%s-row-%d", id, r)))
-                ->FlexRow()
-                ->Shrink0()
-                ->BorderB(1, th.tableRowBorder);
+        El* rowScroll = gpui::TableRow::New(cx, StrDup(a, fmt("row-%d", r)))
+                            ->FlexRow()
+                            ->Shrink0()
+                            ->BorderB(1, th.tableRowBorder);
         El* rows[2] = {rowFixed, rowScroll};
         for (El* row : rows) {
             if (s && h > 0) {
@@ -887,12 +880,13 @@ El* DataTable::BuildEl() {
             }
         }
         if (rowHeaderOn) {
-            rowFixed->Child(RowHeaderCell(cx, id, state, r, false));
+            rowFixed->Child(RowHeaderCell(cx, state, r, false));
         }
         for (int d = 0; d < nColumns; d++) {
             int c = s ? TableColAt(s, d) : d;
             El* cellEl = cell ? cell(cx, data, r, c) : nullptr;
-            El* td = gpui::TableCell::New(cx, StrDup(a, fmt("c%d", c)))
+            Str cellId = StrDup(a, fmt("cell-%d-%d", r, c));
+            El* td = gpui::TableCell::New(cx, cellId)
                          ->FlexRow()
                          ->Shrink0()
                          ->W(ColWidth(s, c))
@@ -928,8 +922,8 @@ El* DataTable::BuildEl() {
             // A cell takes the click when the table is cell-selectable, which
             // is what `SelectCell` and `DoubleClickedCell` come from.
             if (s && s->cellSelectable) {
-                BindClick(td, StrDup(a, fmt("%s-cell-%d-%d", id, r, c)),
-                          ListenerArg(cellClick, TableCellPack(r, c)));
+                BindPathClick(td, cellId,
+                              ListenerArg(cellClick, TableCellPack(r, c)));
                 td->OnMouseDown(ListenerArg(cellDown, TableCellPack(r, c)));
             }
             if (cellEl) {
@@ -944,11 +938,11 @@ El* DataTable::BuildEl() {
         }
         rowScroll->Child(LastEmptyColEl(cx, lastEmptyCol, data));
         if (s && s->rowSelectable && !s->cellSelectable) {
-            BindClick(rowScroll, StrDup(a, fmt("%s-row-%d", id, r)),
-                      ListenerArg(rowClick, r));
+            BindPathClick(rowScroll, StrDup(a, fmt("row-%d", r)),
+                          ListenerArg(rowClick, r));
             rowScroll->OnMouseDown(ListenerArg(rowDown, r));
-            BindClick(rowFixed, StrDup(a, fmt("%s-rowf-%d", id, r)),
-                      ListenerArg(rowClick, r));
+            BindPathClick(rowFixed, StrDup(a, fmt("row-fixed-%d", r)),
+                          ListenerArg(rowClick, r));
             rowFixed->OnMouseDown(ListenerArg(rowDown, r));
         }
         bodyFixed->Child(rowFixed);

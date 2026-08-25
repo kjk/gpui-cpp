@@ -5574,3 +5574,48 @@ before the change.
 
 Left: `component::DataTable`'s hand-built `%s-th-%d` / `%s-row-%d` prefixes,
 and then the widgets onto `PathId` from the leaves up.
+
+## A name only has to be unique among its siblings
+
+`component::DataTable` spelled its caller's id into every child it built:
+`%s-head`, `%s-th-%d`, `%s-row-%d`, `%s-rowf-%d`, `%s-cell-%d-%d`,
+`%s-sort-%d`, `%s-resize-%d`, `%s-rowhead-%d`. That is the fold done by hand,
+and it was the last widget still doing it — the presentational `Table` beside
+it had already moved.
+
+Upstream names them `("table-row", ix)`, `("col-header", col_ix)`,
+`("icon-sort", col_ix)`, `("resizable-handle", ix)`, `("row-header", row_ix)`,
+and the DataTable's own root is `div().id("table")` — a fixed string, because
+whatever the caller wrapped it in is the scope. So the names here are now
+`row-%d`, `col-header-%d`, `icon-sort-%d`, `resizable-handle-%d`,
+`row-header-%d`, and the id is the fold of the path down to them.
+
+`BindPathClick` beside `BindClick` in `sizing.h` is the same binding for a
+sibling-unique name. The two base parts that carried an explicit
+`Click(HashClickId(id))` — `TableRow` and `TableHead` — take `PathClick`
+instead, which is what `Stateful<Div>` is, and the presentational table drops
+the `->PathClick(id)` it had been adding to undo them.
+
+One thing changed on the way: the head cell and the box inside it were handed
+the same name, so they hashed to the same id. They are `("table-head", ix)`
+and `("col-header", col_ix)` upstream — two elements — and are now two ids.
+Nothing depended on their being one: the hit test already gave the inner box
+the click, and the head is a drop target by drag kind rather than by id.
+
+Left qualified, on purpose: the context menu that *wraps* the table is not
+inside it, so its name has nothing to fold against; and a `ScrollId` is
+resolved before `IdsCollect` runs.
+
+Pinned in `tests/DataTableTests.cpp`: two DataTables built with the same id
+under two different parents give their `row-0` and `th-0` different ids, and
+the head and its label are no longer one.
+
+Verified against the build before the change: the story's DataTable page at
+rest, on a row click, a column-header click, a sort click and a
+column-resize drag; the story's Table page at rest and on a row click; and
+the showcase's table page. All identical.
+
+Next: the widgets themselves onto `PathId`, from the leaves up. The table's
+own focus is still `FocusId(HashClickId(id))` where upstream tracks the
+state's handle — the same shape the select and the popup menu have already
+taken.

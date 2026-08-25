@@ -363,11 +363,10 @@ static void ADumpRangeIsClampedToTheTable() {
     Ctx cx = {};
     cx.a = a;
     Entity<TableState> state = {};
-    component::DataTable* t =
-        component::DataTable::New(&cx, StrL("t"), state)
-            ->Columns(kDumpColumns, 2)
-            ->Rows(3, nullptr, nullptr)
-            ->CellText(DumpCellText);
+    component::DataTable* t = component::DataTable::New(&cx, StrL("t"), state)
+                                  ->Columns(kDumpColumns, 2)
+                                  ->Rows(3, nullptr, nullptr)
+                                  ->CellText(DumpCellText);
 
     Vec<Str> heads;
     Vec<Str> cells;
@@ -400,8 +399,78 @@ static void ADumpRangeIsClampedToTheTable() {
     ArenaDelete(a);
 }
 
+// The first element under `root` whose name is `name`, wherever it is.
+static El* FindNamed(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamed(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// state.rs names a row `("table-row", ix)` and a head `("col-header", ix)` —
+// a name that only has to be unique among siblings, because GPUI scopes it by
+// the stack of ids above it. The port spelled the caller's id into every one
+// of them instead: `format!("{id}-row-{r}")`. Now that the fold does that
+// work, the name is local and two tables on one page are still two tables.
+static void TwoTablesOnOnePageAreTwoTables() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    Entity<TableState> state = {};
+    El* page = Div(a);
+    El* left = Div(a)->Id(StrL("left"));
+    El* right = Div(a)->Id(StrL("right"));
+    left->Child(component::DataTable::New(&cx, StrL("t"), state)
+                    ->Columns(kDumpColumns, 2)
+                    ->Rows(3, nullptr, nullptr)
+                    ->CellText(DumpCellText)
+                    ->IntoEl());
+    right->Child(component::DataTable::New(&cx, StrL("t"), state)
+                     ->Columns(kDumpColumns, 2)
+                     ->Rows(3, nullptr, nullptr)
+                     ->CellText(DumpCellText)
+                     ->IntoEl());
+    page->Child(left)->Child(right);
+    IdsCollect(page);
+
+    El* rowL = FindNamed(left, "row-0");
+    El* rowR = FindNamed(right, "row-0");
+    utassert(rowL && rowR);
+    // Both are hit targets, and they are not the same one.
+    utassert(rowL->clickId != 0 && rowR->clickId != 0);
+    utassert(rowL->clickId != rowR->clickId);
+
+    // The same holds a level down, where the head cell and the box inside it
+    // used to be handed the one name twice over.
+    El* thL = FindNamed(left, "th-0");
+    El* headL = FindNamed(left, "col-header-0");
+    utassert(thL && headL);
+    utassert(thL->clickId != 0 && headL->clickId != 0);
+    utassert(thL->clickId != headL->clickId);
+    utassert(FindNamed(right, "th-0")->clickId != thL->clickId);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestDataTable() {
     ADumpRangeIsClampedToTheTable();
+    TwoTablesOnOnePageAreTwoTables();
     TheDelegateHearsAboutTheRangeOnlyWhenItMoves();
     TheVisibleColumnsAreTheOnesUnderTheOffset();
     ScrollingToAColumnBringsItIn();

@@ -16,11 +16,11 @@ El* TableBody::New(Ctx* cx, Str id) {
 }
 El* TableRow::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->Id(id)->Click(HashClickId(id));
+    return Div(a)->PathClick(id);
 }
 El* TableHead::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->Id(id)->Click(HashClickId(id));
+    return Div(a)->PathClick(id);
 }
 El* TableCell::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
