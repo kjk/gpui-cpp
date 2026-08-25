@@ -106,8 +106,8 @@ bool NumberStepForKey(int key, StepAction* out) {
     return false;
 }
 
-El* NumberInput::New(Ctx* cx) {
+El* NumberInput::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a);
+    return Div(a)->Id(id);
 }
 } // namespace gpui

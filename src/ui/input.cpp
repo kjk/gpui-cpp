@@ -383,7 +383,8 @@ El* NumberInput::IntoEl() {
     // border: the editor inside wears no appearance of its own, so the frame
     // is the only thing that can say the editor has the keyboard.
     bool focused = state && state->focused && !disabled;
-    El* frame = gpui::NumberInput::New(cx)->FlexRow()->W(width)->H(h);
+    Str base = id.s ? id : StrL("number");
+    El* frame = gpui::NumberInput::New(cx, base)->FlexRow()->W(width)->H(h);
     if (appearance) {
         frame->Radius(th.radius)
             ->Bg(hasBg ? bg
@@ -412,17 +413,14 @@ El* NumberInput::IntoEl() {
     // the editor focused, or the frame's ring flickers on every click. That is
     // what number_input.rs pins with
     // `pressing_a_step_button_never_takes_focus_off_the_editor`.
-    Str base = id.s ? id : StrL("number");
-    El* dec = gpui::Button::New(cx, StrDup(a, fmt("%s-dec", base)), disabled,
-                                onDec, false)
+    El* dec = gpui::Button::New(cx, StrL("decrement"), disabled, onDec, false)
                   ->W(btn)
                   ->H(kFill)
                   ->Corners(stepR, 0, 0, stepR)
                   ->ItemsCenter()
                   ->JustifyCenter()
                   ->Child(IconEl(a, IconName::Minus, font)->Fg(stepFg));
-    El* inc = gpui::Button::New(cx, StrDup(a, fmt("%s-inc", base)), disabled,
-                                onInc, false)
+    El* inc = gpui::Button::New(cx, StrL("increment"), disabled, onInc, false)
                   ->W(btn)
                   ->H(kFill)
                   ->Corners(0, stepR, stepR, 0)
@@ -435,7 +433,7 @@ El* NumberInput::IntoEl() {
     }
     frame->Child(dec);
     // The editor sits between them, centered and without its own frame.
-    Input* editor = Input::New(cx, id.s ? id : StrL("number"), state)
+    Input* editor = Input::New(cx, StrL("input"), state)
                         ->WithSize(size)
                         ->Align(InputAlign::Center)
                         ->Appearance(false)
@@ -787,7 +785,12 @@ El* SearchPanel::IntoEl() {
         ss->replaceMode = false;
     }
 
+    // `v_flex().id("search-panel")`: the bar names itself, so the buttons and
+    // the two fields under it are named by their place in it rather than by
+    // the bar's id spelled into each one. The id is the caller's, standing in
+    // for the fold upstream gets from the tree the panel is rendered in.
     El* panel = Div(a)
+                    ->Id(id)
                     ->FlexCol()
                     ->W(kFill)
                     ->PadY(8)
@@ -799,7 +802,7 @@ El* SearchPanel::IntoEl() {
                     ->OnKeyDown(ListenTo(ent, &SearchPanelState::OnKey));
 
     El* row = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
-    El* caseBtn = Button::New(cx, StrDup(a, fmt("%s-case", id)))
+    El* caseBtn = Button::New(cx, StrL("case-insensitive"))
                       ->Text()
                       ->Compact()
                       ->WithSize(UiSize::XSmall)
@@ -808,7 +811,7 @@ El* SearchPanel::IntoEl() {
                       ->OnClick(ListenTo(ent, &SearchPanelState::OnToggleCase))
                       ->IntoEl();
     El* queryBox = Div(a)->FlexRow()->Flex1()->Gap(4);
-    queryBox->Child(Input::New(cx, StrDup(a, fmt("%s-q", id)), &st->query)
+    queryBox->Child(Input::New(cx, StrL("q"), &st->query)
                         ->WithSize(UiSize::Small)
                         ->FocusRing(false)
                         ->Suffix(caseBtn)
@@ -817,7 +820,7 @@ El* SearchPanel::IntoEl() {
     row->Child(queryBox);
     if (allowReplace) {
         row->Child(
-            Button::New(cx, StrDup(a, fmt("%s-mode", id)))
+            Button::New(cx, StrL("replace-mode"))
                 ->Ghost()
                 ->WithSize(UiSize::XSmall)
                 ->Icon(IconName::Replace)
@@ -825,14 +828,14 @@ El* SearchPanel::IntoEl() {
                 ->OnClick(ListenTo(ent, &SearchPanelState::OnToggleReplace))
                 ->IntoEl());
     }
-    row->Child(Button::New(cx, StrDup(a, fmt("%s-prev", id)))
+    row->Child(Button::New(cx, StrL("prev"))
                    ->Ghost()
                    ->WithSize(UiSize::XSmall)
                    ->Icon(IconName::ChevronLeft)
                    ->Disabled(!hasMatches)
                    ->OnClick(ListenTo(ent, &SearchPanelState::OnPrev))
                    ->IntoEl());
-    row->Child(Button::New(cx, StrDup(a, fmt("%s-next", id)))
+    row->Child(Button::New(cx, StrL("next"))
                    ->Ghost()
                    ->WithSize(UiSize::XSmall)
                    ->Icon(IconName::ChevronRight)
@@ -845,7 +848,7 @@ El* SearchPanel::IntoEl() {
                    ->Fg(hasMatches ? th.foreground : th.mutedFg));
     // div().w_7(): the gap that keeps the close button off the counter.
     row->Child(Div(a)->W(28));
-    row->Child(Button::New(cx, StrDup(a, fmt("%s-close", id)))
+    row->Child(Button::New(cx, StrL("close"))
                    ->Ghost()
                    ->WithSize(UiSize::XSmall)
                    ->Icon(IconName::WindowClose)
@@ -859,21 +862,21 @@ El* SearchPanel::IntoEl() {
         // which is what Rust's `input_width` is for. Zero on the first frame,
         // before the query field has been laid out; growing stands in.
         float w = st->queryBounds.w > 1 ? st->queryBounds.w : kFill;
-        El* rep = Input::New(cx, StrDup(a, fmt("%s-r", id)), &st->replacement)
+        El* rep = Input::New(cx, StrL("r"), &st->replacement)
                       ->WithSize(UiSize::Small)
                       ->FocusRing(false)
                       ->W(w)
                       ->IntoEl();
         row2->Child(rep);
         row2->Child(
-            Button::New(cx, StrDup(a, fmt("%s-rep1", id)))
+            Button::New(cx, StrL("replace-one"))
                 ->WithSize(UiSize::Small)
                 ->Label(Tr("Input.Replace"))
                 ->Disabled(!hasMatches)
                 ->OnClick(ListenTo(ent, &SearchPanelState::OnReplaceOne))
                 ->IntoEl());
         row2->Child(
-            Button::New(cx, StrDup(a, fmt("%s-repall", id)))
+            Button::New(cx, StrL("replace-all"))
                 ->WithSize(UiSize::Small)
                 ->Label(Tr("Input.Replace All"))
                 ->Disabled(!hasMatches)

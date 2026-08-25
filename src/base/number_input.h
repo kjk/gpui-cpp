@@ -32,8 +32,11 @@ bool NumberStepForKey(int key, StepAction* out);
 
 // The frame around the editor and its two step buttons. Identity only; the
 // caller owns the parts, and the step buttons are Buttons that decline focus
-// so a press on one leaves the editor focused.
+// so a press on one leaves the editor focused. `InputBase::new(("number-
+// input", state.entity_id()))`: the frame names itself so that "decrement"
+// and "increment" under it are one spinbutton's and not another's — the id
+// the caller passes is what stands in for the state's entity id here.
 struct NumberInput {
-    static El* New(Ctx* cx);
+    static El* New(Ctx* cx, Str id);
 };
 } // namespace gpui

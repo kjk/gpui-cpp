@@ -1803,6 +1803,64 @@ static void DocumentColorsAreAskedForAgainAfterAnEdit() {
     utassert(plain.documentColors.len == 0);
 }
 
+static El* FindNamedEl(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamedEl(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// search.rs: `v_flex().id("search-panel")` over `Button::new("prev")`,
+// `Button::new("next")`, `Button::new("close")` and the rest. The names only
+// have to be unique among siblings because the bar above them is a stateful
+// element, and two editors on one page are two bars. The port spelled the
+// bar's id into every child instead.
+static void TwoFindBarsHaveTwoPrevButtons() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    InputState one;
+    InputState two;
+    one.searchable = true;
+    two.searchable = true;
+    InputOpenSearch(&one, &app, win, false);
+    InputOpenSearch(&two, &app, win, false);
+
+    El* page = Div(a);
+    El* left = component::SearchPanel::New(&cx, StrL("left"), &one)->IntoEl();
+    El* right = component::SearchPanel::New(&cx, StrL("right"), &two)->IntoEl();
+    page->Child(left)->Child(right);
+    IdsCollect(page);
+
+    El* prevL = FindNamedEl(left, "prev");
+    El* prevR = FindNamedEl(right, "prev");
+    utassert(prevL && prevR);
+    utassert(prevL->clickId != 0 && prevR->clickId != 0);
+    utassert(prevL->clickId != prevR->clickId);
+    // And the bar's own children are not each other.
+    El* nextL = FindNamedEl(left, "next");
+    utassert(nextL && nextL->clickId != prevL->clickId);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestInputState() {
     TestSuite("input_state");
     SingleLineRemovesNewlines();
@@ -1872,4 +1930,5 @@ void TestInputState() {
     AnAcceptedItemWritesItsInsertText();
     TheCodeActionMenuRewritesWhatIsSelected();
     DocumentColorsAreAskedForAgainAfterAnEdit();
+    TwoFindBarsHaveTwoPrevButtons();
 }

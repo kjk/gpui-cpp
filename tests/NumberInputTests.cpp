@@ -65,8 +65,62 @@ static void AStepThatDoesNotMoveIsNoStep() {
                               false, 0, out, (int)sizeof(out)));
 }
 
+static El* FindNamed(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamed(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// `InputBase::new(("number-input", state.entity_id()))` wrapping
+// `Button::new("decrement")` and `Button::new("increment")`: the step buttons
+// are named only among their siblings, and the frame is what tells one
+// spinbutton's from another's. The port spelled the caller's id into each
+// button instead; now the frame carries it and the fold does the rest.
+static void TwoSpinbuttonsHaveTwoIncrements() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    InputState one;
+    InputState two;
+    El* page = Div(a);
+    page->Child(component::NumberInput::New(&cx, StrL("first"), &one)
+                    ->IntoEl());
+    page->Child(component::NumberInput::New(&cx, StrL("second"), &two)
+                    ->IntoEl());
+    IdsCollect(page);
+
+    El* incOne = FindNamed(page->first, "increment");
+    El* incTwo = FindNamed(page->first->next, "increment");
+    utassert(incOne && incTwo);
+    utassert(incOne->clickId != 0 && incTwo->clickId != 0);
+    utassert(incOne->clickId != incTwo->clickId);
+    // And the two buttons of one frame are not each other.
+    El* decOne = FindNamed(page->first, "decrement");
+    utassert(decOne && decOne->clickId != incOne->clickId);
+
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestNumberInput() {
     TestSuite("number_input");
+    TwoSpinbuttonsHaveTwoIncrements();
     AStepKeepsTheTextsPrecision();
     TextThatIsNotANumberStepsFromZero();
     TheRangeClampsAndWidens();
