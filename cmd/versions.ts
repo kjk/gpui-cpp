@@ -9,10 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "5e5a1a304b2a5a3d725c03b8759e9ba2b4ad58b3",
+  sha: "2cadad2274c98172c112de0ec174288bd5725678",
   date: "2026-08-20",
-  subject:
-    "command: Add a `filterable` option for externally filtered palettes (#2776)",
+  subject: "dock: Add the pure-data layout foundation in gpui-base (#2772)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

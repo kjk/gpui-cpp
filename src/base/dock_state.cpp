@@ -465,6 +465,10 @@ bool DockLoad(DockState* s, const DockAreaState* st, Arena* a,
     LoadSide(s, st, st->left, a, invalidRender, &s->left);
     LoadSide(s, st, st->right, a, invalidRender, &s->right);
     LoadSide(s, st, st->bottom, a, invalidRender, &s->bottom);
+    // A file may hold any tree at all — an empty group, a split of one, a
+    // split inside a split of the same axis — and the edits from here on
+    // assume the canonical shape.
+    DockNormalize(s);
     return s->center >= 0;
 }
 

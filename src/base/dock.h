@@ -257,6 +257,19 @@ inline int DockUnpackIx(intptr_t v) {
 }
 
 // Register a panel. The index it answers with is what the tree names.
+// normalize (crates/base/src/dock/layout/normalize.rs): the tree collapsed
+// to its canonical shape, bottom up and repeated until nothing changes. An
+// empty group or split is dropped, a split with one child is replaced by that
+// child, a split nested in a split of the same axis is spliced into it, and a
+// tab group's active index is clamped to what it holds. A root — the centre
+// item and the three docks — is kept whatever shape it is in, which is what
+// Rust's RootKind::Split does.
+//
+// The edits here collapse as they go (see the prune in dock.cpp), so this is
+// for the shapes an edit cannot make: a layout read back from a file, which
+// may hold any tree at all.
+void DockNormalize(DockState* s);
+
 int DockAddPanelDef(DockState* s, DockPanelDef def);
 // DockItem::tabs / DockItem::split, as node indices. -1 when the tree is full.
 int DockNewTabs(DockState* s);

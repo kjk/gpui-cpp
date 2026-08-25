@@ -271,6 +271,120 @@ static void DockRemoveNode(DockState* s, int node) {
     DockPrune(s, parent);
 }
 
+static bool DockIsRootNode(const DockState* s, int node) {
+    return s->center == node || s->left.node == node ||
+           s->bottom.node == node || s->right.node == node;
+}
+
+// Rule 3's arithmetic: `distribute_slot`. The children moving up a level
+// share the slot their split occupied, in the proportions they had; a slot
+// with nothing to scale against passes the inner sizes through.
+static void DockSpliceChild(DockState* s, int node, int at) {
+    DockNode& n = s->nodes[node];
+    int childNode = n.child[at];
+    float slot = n.size[at];
+    float total = 0;
+    for (int j = 0; j < s->nodes[childNode].size.len; j++) {
+        total += s->nodes[childNode].size[j];
+    }
+    Vec<int> child;
+    Vec<float> size;
+    for (int i = 0; i < n.child.len; i++) {
+        if (i != at) {
+            child.Append(n.child[i]);
+            size.Append(n.size[i]);
+            continue;
+        }
+        const DockNode& cn = s->nodes[childNode];
+        for (int j = 0; j < cn.child.len; j++) {
+            child.Append(cn.child[j]);
+            size.Append(total > 0 ? cn.size[j] * (slot / total) : cn.size[j]);
+        }
+    }
+    for (int j = 0; j < s->nodes[childNode].child.len; j++) {
+        s->nodes[s->nodes[childNode].child[j]].parent = node;
+    }
+    s->nodes[childNode] = DockNode{};
+    n.child = child;
+    n.size = size;
+    child.Reset();
+    size.Reset();
+}
+
+// One pass, answering whether it changed anything.
+static bool DockNormalizePass(DockState* s) {
+    bool changed = false;
+    for (int i = 0; i < s->nodes.len; i++) {
+        if (!s->nodes[i].used) {
+            continue;
+        }
+        bool root = DockIsRootNode(s, i);
+        if (!s->nodes[i].split) {
+            DockNode& n = s->nodes[i];
+            // Rule 4.
+            int clamped = n.activeIx;
+            if (n.panel.len == 0) {
+                clamped = 0;
+            } else if (clamped >= n.panel.len) {
+                clamped = n.panel.len - 1;
+            } else if (clamped < 0) {
+                clamped = 0;
+            }
+            if (clamped != n.activeIx) {
+                n.activeIx = clamped;
+                changed = true;
+            }
+            // Rule 1.
+            if (n.panel.len == 0 && !root && n.parent >= 0) {
+                DockRemoveNode(s, i);
+                changed = true;
+            }
+            continue;
+        }
+        // Rule 1, for a split.
+        if (s->nodes[i].child.len == 0 && !root && s->nodes[i].parent >= 0) {
+            DockRemoveNode(s, i);
+            changed = true;
+            continue;
+        }
+        // Rule 2. The child keeps its own slot in the parent, which is the
+        // size the split it replaces was given.
+        if (s->nodes[i].child.len == 1 && !root) {
+            int only = s->nodes[i].child[0];
+            DockReplace(s, i, only);
+            s->nodes[i] = DockNode{};
+            changed = true;
+            continue;
+        }
+        // Rule 3.
+        for (int k = 0; k < s->nodes[i].child.len; k++) {
+            int c = s->nodes[i].child[k];
+            const DockNode& cn = s->nodes[c];
+            if (!cn.split || cn.axis != s->nodes[i].axis || cn.child.len == 0) {
+                continue;
+            }
+            DockSpliceChild(s, i, k);
+            changed = true;
+            break;
+        }
+    }
+    return changed;
+}
+
+void DockNormalize(DockState* s) {
+    if (!s) {
+        return;
+    }
+    // MAX_NORMALIZE_PASSES. Every pass that changes anything takes a node or
+    // a level of nesting out of the tree, so this is a ceiling against a rule
+    // that one day fights another rather than a bound on any real layout.
+    for (int pass = 0; pass < 64; pass++) {
+        if (!DockNormalizePass(s)) {
+            return;
+        }
+    }
+}
+
 void DockSetActive(DockState* s, Ctx* cx, int node, int ix) {
     if (node < 0 || node >= s->nodes.len) {
         return;

@@ -417,6 +417,93 @@ static void ANonCollapsibleDockOpens() {
     utassert(!s.left.collapsible);
 }
 
+// normalize.rs. The shapes an edit never makes but a saved file may hold.
+static void NormalizeCollapsesWhatAnEditNeverMakes() {
+    DockState s;
+    for (int i = 0; i < 3; i++) {
+        DockPanelDef def;
+        def.title = StrL("panel");
+        DockAddPanelDef(&s, def);
+    }
+    int a = DockNewTabs(&s);
+    DockTabsAdd(&s, a, 0);
+    int b = DockNewTabs(&s);
+    DockTabsAdd(&s, b, 1);
+    int empty = DockNewTabs(&s);
+    // An inner split along the same axis as the one holding it, a split with
+    // one child, and a group with nothing in it.
+    int inner = DockNewSplit(&s, Axis::Horizontal);
+    DockSplitAdd(&s, inner, a, 100);
+    DockSplitAdd(&s, inner, b, 300);
+    int single = DockNewSplit(&s, Axis::Vertical);
+    int c = DockNewTabs(&s);
+    DockTabsAdd(&s, c, 2);
+    DockSplitAdd(&s, single, c, 200);
+    int root = DockNewSplit(&s, Axis::Horizontal);
+    DockSplitAdd(&s, root, inner, 400);
+    DockSplitAdd(&s, root, single, 200);
+    DockSplitAdd(&s, root, empty, 100);
+    s.center = root;
+
+    DockNormalize(&s);
+
+    // The same-axis split was spliced in, the single-child split is its
+    // child, and the empty group is gone: three children, all tab groups.
+    utassert(s.center == root);
+    utassert(s.nodes[root].child.len == 3);
+    for (int i = 0; i < s.nodes[root].child.len; i++) {
+        utassert(!s.nodes[s.nodes[root].child[i]].split);
+        utassert(s.nodes[s.nodes[root].child[i]].parent == root);
+    }
+    utassert(!s.nodes[inner].used);
+    utassert(!s.nodes[single].used);
+    utassert(!s.nodes[empty].used);
+    // distribute_slot: the two spliced children share the 400 the split they
+    // were in had, in the proportions they had inside it.
+    utassert(s.nodes[root].size[0] == 100.f);
+    utassert(s.nodes[root].size[1] == 300.f);
+    // And the single-child split's slot went to the child that replaced it —
+    // plus the empty group's 100, since taking a node out of a split here
+    // hands its space to a neighbour rather than shrinking the split, which
+    // is what the edits have always done.
+    utassert(s.nodes[root].size[2] == 300.f);
+
+    // Idempotent: normalize(normalize(t)) == normalize(t).
+    int before = s.nodes[root].child.len;
+    float first = s.nodes[root].size[0];
+    DockNormalize(&s);
+    utassert(s.nodes[root].child.len == before);
+    utassert(s.nodes[root].size[0] == first);
+}
+
+static void NormalizeClampsTheActiveTab() {
+    DockState s;
+    DockPanelDef def;
+    def.title = StrL("panel");
+    DockAddPanelDef(&s, def);
+    int tabs = DockNewTabs(&s);
+    DockTabsAdd(&s, tabs, 0);
+    s.center = tabs;
+    // A saved active index past what the group holds.
+    s.nodes[tabs].activeIx = 4;
+    DockNormalize(&s);
+    utassert(s.nodes[tabs].activeIx == 0);
+}
+
+static void NormalizeKeepsARoot() {
+    DockState s;
+    int root = DockNewSplit(&s, Axis::Horizontal);
+    s.center = root;
+    // An empty root split and an empty root group both stay: the centre item
+    // and the three docks are always there, which is Rust's RootKind::Split.
+    DockNormalize(&s);
+    utassert(s.center == root && s.nodes[root].used);
+    int tabs = DockNewTabs(&s);
+    s.left.node = tabs;
+    DockNormalize(&s);
+    utassert(s.left.node == tabs && s.nodes[tabs].used);
+}
+
 void TestDock() {
     TheFiveDropZones();
     ThePlaceholderCoversEachZone();
@@ -436,4 +523,7 @@ void TestDock() {
     TheLastPanelStays();
     TheTogglesPickTheirGroup();
     ANonCollapsibleDockOpens();
+    NormalizeCollapsesWhatAnEditNeverMakes();
+    NormalizeClampsTheActiveTab();
+    NormalizeKeepsARoot();
 }
