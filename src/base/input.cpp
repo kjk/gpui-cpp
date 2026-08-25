@@ -947,11 +947,14 @@ El* Editor::New(Ctx* cx, InputState* state, const InputEditorStyle& style) {
    `InputKind` and those methods return early — `InputMoveVertical` on an
    `InputKind::Input` is the compile error Rust would have raised.
 
-   What is deliberately not ported, because it needs machinery this tree does
-   not have: code folding, the LSP and code-editor features, and the search
-   session. The display map is here, so vertical movement walks display rows;
-   start_of_line / end_of_line still take the logical line, which is the one
-   branch of Rust's that has no "first press goes to the visual line" here. */
+   What is not ported is one thing: a language *server*. Every seam in
+   `input/editor/lsp` is here — completion, hover, code actions, document
+   colours, semantic tokens, definitions — but there is no JSON-RPC and no
+   child process behind them, so a provider is a function pointer an
+   application fills. Code folding, the search session and the display map
+   came over in later passes; vertical movement walks display rows, and
+   start_of_line / end_of_line take the wrapped row first and the logical line
+   on a second press, the way Rust gates it on soft wrap in a code editor. */
 
 // ─── the document ─────────────────────────────────────────────────────────
 //
