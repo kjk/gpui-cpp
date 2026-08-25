@@ -233,6 +233,37 @@ static void MaskedRedoRestoresActualCursor() {
     utassert(InputCursor(&s) == 13);
 }
 
+// A masked field keeps what it holds to itself: the clipboard never sees it,
+// and the word motions have no boundaries to work with, since every character
+// shows as the same bullet.
+static void AMaskedValueStaysInTheField() {
+    InputState s;
+    s.masked = true;
+    InputSetValue(&s, StrL("hunter2 secret"));
+    InputSelectAll(&s, nullptr, nullptr);
+    utassert(!InputIsCopyable(&s));
+    // A cut is a copy that also deletes, so it does neither.
+    Act(&s, InputAction::Cut);
+    utassert(ValueIs(s, "hunter2 secret"));
+
+    // Word-wise motion is the whole field either way.
+    InputMoveTo(&s, nullptr, nullptr, 10);
+    utassert(InputPreviousStartOfWord(&s) == 0);
+    utassert(InputNextEndOfWord(&s) == 14);
+    // And word-wise delete goes back to the start rather than stepping
+    // through boundaries the reader cannot see.
+    Act(&s, InputAction::DeleteToPreviousWordStart);
+    utassert(ValueIs(s, "cret"));
+
+    // The same field unmasked copies and moves by words again.
+    s.masked = false;
+    InputSetValue(&s, StrL("hello brave world"));
+    InputMoveTo(&s, nullptr, nullptr, 11);
+    utassert(InputPreviousStartOfWord(&s) == 6);
+    InputSelectAll(&s, nullptr, nullptr);
+    utassert(InputIsCopyable(&s));
+}
+
 static void WordMovement() {
     InputState s;
     InputSetValue(&s, StrL("hello brave world"));
@@ -1766,6 +1797,7 @@ void TestInputState() {
     ForwardDeleteRestoresCursor();
     NoopEditPreservesRedo();
     MaskedRedoRestoresActualCursor();
+    AMaskedValueStaysInTheField();
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();

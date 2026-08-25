@@ -1329,6 +1329,13 @@ bool InputIsSingleLine(const InputState* s) {
     return !InputIsMultiLine(s);
 }
 
+// is_copyable: whether the selection may leave the field. A masked one may
+// not — what it shows is not what it holds, and the clipboard would get what
+// it holds.
+bool InputIsCopyable(const InputState* s) {
+    return s && !s->selectedRange.IsEmpty() && !s->masked;
+}
+
 bool InputIsEditable(const InputState* s) {
     return !s->disabled && !s->readonly;
 }
@@ -1462,6 +1469,12 @@ int InputEndOfLine(const InputState* s, Window* win) {
 // text is not all whitespace; the same answer falls out of walking the
 // character classes text_boundary.rs already sorts characters into.
 int InputPreviousStartOfWord(const InputState* s) {
+    if (s->masked) {
+        // Every character shows as the same bullet, so there are no word
+        // boundaries on screen to move or delete by: the word is the whole
+        // of it.
+        return 0;
+    }
     Str t = InputValue(s);
     int off = RopeClipOffset(t, s->selectedRange.start, Bias::Left);
     while (off > 0) {
@@ -1494,6 +1507,10 @@ int InputPreviousStartOfWord(const InputState* s) {
 
 int InputNextEndOfWord(const InputState* s) {
     Str t = InputValue(s);
+    if (s->masked) {
+        // See InputPreviousStartOfWord.
+        return t.len;
+    }
     int off = RopeClipOffset(t, InputCursor(s), Bias::Left);
     while (off < t.len) {
         uint32_t c = 0;
@@ -3342,7 +3359,7 @@ static void DeleteRange(InputState* s, App* app, Window* win, int a, int b) {
 }
 
 static void DoCopy(InputState* s, Window* win) {
-    if (s->selectedRange.IsEmpty() || !win) {
+    if (!InputIsCopyable(s) || !win) {
         return;
     }
     ClipboardSetText(win, InputSelectedValue(s));
@@ -3812,7 +3829,9 @@ bool InputPerform(InputState* s, App* app, Window* win, InputAction action,
             DoCopy(s, win);
             return true;
         case InputAction::Cut:
-            if (s->selectedRange.IsEmpty()) {
+            // A masked value stays where it is: a cut would put it on the
+            // clipboard just as a copy would.
+            if (!InputIsCopyable(s)) {
                 return true;
             }
             DoCopy(s, win);

@@ -3479,6 +3479,10 @@ Str InputSelectedValue(const InputState* s);
 bool InputIsMultiLine(const InputState* s);
 bool InputIsSingleLine(const InputState* s);
 bool InputIsEditable(const InputState* s);
+// is_copyable: whether the selection may leave the field. A masked one may
+// not — what it shows is not what it holds, and a copy or a cut would put
+// what it holds on the clipboard.
+bool InputIsCopyable(const InputState* s);
 // cursor(): the caret offset, which end of the selection depends on which way
 // it was dragged.
 int InputCursor(const InputState* s);
