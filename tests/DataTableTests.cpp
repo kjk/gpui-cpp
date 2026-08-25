@@ -347,7 +347,61 @@ static void ASecondClickOnACellTakesTheRowWhenThereIsNoRowHeader() {
     utassert(!TableEscalatesToRow(&s, 3, 1, false));
 }
 
+static const component::TableColumn kDumpColumns[] = {
+    {StrL("ID")},
+    {StrL("Name")},
+};
+
+static Str DumpCellText(Ctx*, void*, int row, int col) {
+    return Str(col == 0 ? (row == 0 ? "1" : (row == 1 ? "2" : "3"))
+                        : (row == 0 ? "a" : (row == 1 ? "b" : "c")));
+}
+
+// dump_range: the rows inside the range, and the headers whatever it is.
+static void ADumpRangeIsClampedToTheTable() {
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.a = a;
+    Entity<TableState> state = {};
+    component::DataTable* t =
+        component::DataTable::New(&cx, StrL("t"), state)
+            ->Columns(kDumpColumns, 2)
+            ->Rows(3, nullptr, nullptr)
+            ->CellText(DumpCellText);
+
+    Vec<Str> heads;
+    Vec<Str> cells;
+    t->DumpRange(1, 3, &heads, &cells);
+    utassert(heads.len == 2);
+    // Two rows of two.
+    utassert(cells.len == 4);
+    utassert(cells[0].s[0] == '2' && cells[1].s[0] == 'b');
+    utassert(cells[2].s[0] == '3' && cells[3].s[0] == 'c');
+
+    // Past the end clamps rather than reading off it, so a caller can walk a
+    // table in fixed steps without knowing where it ends.
+    heads.Reset();
+    cells.Reset();
+    t->DumpRange(2, 99, &heads, &cells);
+    utassert(cells.len == 2);
+    // A range the wrong way round, or past the end entirely, is no rows.
+    heads.Reset();
+    cells.Reset();
+    t->DumpRange(3, 1, &heads, &cells);
+    utassert(cells.len == 0 && heads.len == 2);
+
+    // The whole table is what dump answers.
+    heads.Reset();
+    cells.Reset();
+    t->Dump(&heads, &cells);
+    utassert(cells.len == 6);
+    heads.Reset();
+    cells.Reset();
+    ArenaDelete(a);
+}
+
 void TestDataTable() {
+    ADumpRangeIsClampedToTheTable();
     TheDelegateHearsAboutTheRangeOnlyWhenItMoves();
     TheVisibleColumnsAreTheOnesUnderTheOffset();
     ScrollingToAColumnBringsItIn();

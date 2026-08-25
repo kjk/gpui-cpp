@@ -108,6 +108,13 @@ struct DataTable {
     // freed. It lives on the table rather than the state because the table
     // *is* the delegate here, and `cell_text` is the delegate's.
     void Dump(Vec<Str>* heads, Vec<Str>* cells);
+    // TableState::headers. A batched export reads them once here and streams
+    // the rows through DumpRange.
+    void Headers(Vec<Str>* heads);
+    // TableState::dump_range: the same two, for the rows in `[lo, hi)`. The
+    // range is clamped to what the table holds, so a caller can walk a big
+    // table in bounded steps without checking the end itself.
+    void DumpRange(int lo, int hi, Vec<Str>* heads, Vec<Str>* cells);
     El* IntoEl();
     // The table itself, before the context menu is hung off it.
     El* BuildEl();

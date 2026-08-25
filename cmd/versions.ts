@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "c6ffd3e166abb43bff8845f0aa61711adb128dcf",
+  sha: "1a2741411fe8f7556dbb572fa7cce8d9e5a8f36b",
   date: "2026-08-20",
-  subject: "dock: Keep a split filled when its last slot is hidden (#2788)",
+  subject: "table: Add ranged dumps for batched export (#2755)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

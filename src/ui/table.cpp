@@ -305,15 +305,43 @@ DataTable* DataTable::CellText(Str (*fn)(Ctx*, void*, int, int)) {
     return this;
 }
 
-void DataTable::Dump(Vec<Str>* heads, Vec<Str>* cells) {
+void DataTable::Headers(Vec<Str>* heads) {
+    if (!heads) {
+        return;
+    }
     for (int c = 0; c < nColumns; c++) {
         heads->Append(columns[c].title);
     }
-    for (int r = 0; r < nRows; r++) {
+}
+
+void DataTable::DumpRange(int lo, int hi, Vec<Str>* heads, Vec<Str>* cells) {
+    Headers(heads);
+    if (!cells) {
+        return;
+    }
+    if (lo < 0) {
+        lo = 0;
+    }
+    if (lo > nRows) {
+        lo = nRows;
+    }
+    if (hi > nRows) {
+        hi = nRows;
+    }
+    if (hi < lo) {
+        hi = lo;
+    }
+    for (int r = lo; r < hi; r++) {
         for (int c = 0; c < nColumns; c++) {
             cells->Append(cellText ? cellText(cx, data, r, c) : Str());
         }
     }
+}
+
+// The whole table at once, which is every row of it in memory. A big one is
+// what DumpRange is for.
+void DataTable::Dump(Vec<Str>* heads, Vec<Str>* cells) {
+    DumpRange(0, nRows, heads, cells);
 }
 DataTable* DataTable::GroupHeader(const TableGroupCell* cells, int n) {
     if (nGroupHeaders < 4 && cells && n > 0) {
