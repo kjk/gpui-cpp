@@ -101,8 +101,10 @@ El* Rating::IntoEl() {
                    UiIconPx(size))
                 ->Fg(lit ? activeC : th.foreground));
         if (!disabled) {
-            BindClick(star, StrDup(a, fmt("%s-%d", id, i)),
-                      ListenTo(st, &RatingState::OnStarClick, i));
+            // `div().id(ix)`: the star is named by its number alone, which
+            // the row's own id scopes.
+            BindPathClick(star, StrDup(a, fmt("%d", i)),
+                          ListenTo(st, &RatingState::OnStarClick, i));
             star->OnHover(ListenTo(st, &RatingState::OnStarHover, i));
         }
         row->Child(star);

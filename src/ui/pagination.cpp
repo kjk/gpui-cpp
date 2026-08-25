@@ -68,12 +68,12 @@ El* Pagination::IntoEl() {
     int nextPage = PaginationNextPage(&st);
     bool hasPrev = prevPage != 0;
     bool hasNext = nextPage != 0;
-    Button* prev = Button::New(cx, StrDup(a, fmt("%s-prev", base)))
+    Button* prev = Button::New(cx, StrL("prev"))
                        ->Ghost()
                        ->Compact()
                        ->WithSize(size)
                        ->Disabled(disabled || !hasPrev);
-    Button* next = Button::New(cx, StrDup(a, fmt("%s-next", base)))
+    Button* next = Button::New(cx, StrL("next"))
                        ->Ghost()
                        ->Compact()
                        ->WithSize(size)
@@ -101,6 +101,11 @@ El* Pagination::IntoEl() {
             if (items[i].page == 0) {
                 // The ellipsis is a dropdown over the pages it hid, so a jump
                 // into the middle of a long run does not need the arrows.
+                // Still spelled out: this one is not only an element name.
+                // It keys the two entities below, and a keyed entity is a flat
+                // hash here where `window.use_keyed_state` upstream is scoped
+                // by the id stack — so two paginations on one page would share
+                // a state if the name were local.
                 Str menuId = StrDup(a, fmt("%s-ellipsis-%d", base, i));
                 El* trigger = Button::New(cx, menuId)
                                   ->Ghost()
@@ -139,13 +144,12 @@ El* Pagination::IntoEl() {
                 continue;
             }
             bool selected = items[i].page == page;
-            Button* b =
-                Button::New(cx,
-                            StrDup(a, fmt("%s-page-%d", base, items[i].page)))
-                    ->Label(StrDup(a, fmt("%d", items[i].page)))
-                    ->Compact()
-                    ->WithSize(size)
-                    ->Disabled(disabled);
+            // `Button::new(page)`: the page number is the whole name.
+            Button* b = Button::New(cx, StrDup(a, fmt("%d", items[i].page)))
+                            ->Label(StrDup(a, fmt("%d", items[i].page)))
+                            ->Compact()
+                            ->WithSize(size)
+                            ->Disabled(disabled);
             if (selected) {
                 b->Outline();
             } else {

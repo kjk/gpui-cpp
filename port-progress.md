@@ -5731,3 +5731,36 @@ it was the caret's blink phase, not the change. Everything else is byte-for-
 byte.
 
 Next: the widgets themselves onto `PathId`, from the leaves up.
+
+## The widgets, from the leaves up
+
+`Button` first, since everything is built out of it. `div().id(self.id)` is
+all upstream gives it, so a button's name only has to be unique among its
+siblings — which is why `Button::new("prev")` sits inside a pagination
+upstream rather than `Button::new(format!("{base}-prev"))`. `Button::New` now
+takes `PathClick`, and `PathId` when it is focusable, so the fold does the
+part the caller was doing by hand.
+
+Then the two leaves whose parts are plainly children of a root carrying the
+widget's id: a rating's stars are `div().id(ix)` — the number is the whole
+name — and a pagination's buttons are `Button::new("prev")`,
+`Button::new(page)`.
+
+**And a constraint that shapes the rest of it.** A pagination's ellipsis id is
+still spelled out, because it is not only an element name: it keys two
+entities. `window.use_keyed_state(id, ..)` upstream is keyed by the
+`GlobalElementId` — the whole stack — so it is path-scoped for free.
+`KeyedEntity` here is a flat hash of one name, so an id that doubles as a
+state key has to stay globally unique or two widgets on one page would share
+a state. Every remaining `%s-` in the port is one of these two things, and
+only the first kind can move; making keyed state path-scoped is its own piece
+of work, and it needs the id stack at build time, which `IdsCollect` only has
+after the tree exists.
+
+Verified: 133 story shots (19 pages × at rest and six click points) and all 40
+showcase pages, byte-identical to the build before the Button change. Then,
+specifically for the two leaves: the story's pagination page has two
+paginations whose buttons are now both named `prev`, `next` and `5` — a page
+change, a Next, and an ellipsis dropdown all behave as before and land on the
+right one of the two; and the rating page's three ratings answer their stars
+as before.
