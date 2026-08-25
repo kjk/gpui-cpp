@@ -666,13 +666,54 @@ void AppSetTitle(Window* win, Str title) {
     }
 }
 
+// What a SetTimer delay of `ms` has to be asked for as.
+//
+// A USER timer runs off the system clock tick — 15.625 ms unless something
+// has raised the resolution — and SetTimer rounds a request *up* to the next
+// whole tick. So the 16 ms an animating window asks for lands on the second
+// tick, 31.25 ms, and the window runs at 32 FPS on a 60 Hz display no matter
+// how little it spends drawing. That is what `fps_monitor` was showing: a
+// 1.1 ms frame arriving every 29 ms.
+//
+// Nothing can deliver a deadline finer than the tick, so the ask is rounded
+// *down* to a whole number of ticks instead: the timer then fires at the last
+// tick before the deadline rather than the first one after it. Early is safe
+// and late is not — WindowTimerTick skips the timers that are not due yet and
+// re-arms from what is left, so an early wake costs one more pass through the
+// loop, while a late one is a frame that did not happen.
+//
+// GPUI does not use a timer here at all: its Windows backend waits on the
+// compositor clock (`DCompositionWaitForCompositorClock`), which is the
+// display's own cadence rather than an approximation of it. This lands within
+// a tick of the same rate without a second thread; what it does not get is
+// the phase, so a frame can still be handed to DWM just after a vblank.
+static UINT TimerDelay(int ms) {
+    static double tick = 0;
+    if (tick <= 0) {
+        DWORD adjust = 0;
+        DWORD increment = 0;
+        BOOL disabled = FALSE;
+        // The tick in 100 ns units, which is what the timer counts in.
+        if (GetSystemTimeAdjustment(&adjust, &increment, &disabled) &&
+            increment > 0) {
+            tick = (double)increment / 10000.0;
+        } else {
+            tick = 15.625;
+        }
+    }
+    double whole = (double)((int)((double)ms / tick)) * tick;
+    // Shorter than one tick is as short as it goes: the next tick, whenever
+    // it comes.
+    return whole >= 1.0 ? (UINT)whole : 1;
+}
+
 void PlatSetTimer(Window* win, int ms) {
     HWND hwnd = Hwnd(win);
     if (!hwnd) {
         return;
     }
     if (ms > 0) {
-        SetTimer(hwnd, 1, (UINT)ms, nullptr);
+        SetTimer(hwnd, 1, TimerDelay(ms), nullptr);
     } else {
         KillTimer(hwnd, 1);
     }

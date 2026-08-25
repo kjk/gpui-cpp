@@ -4,6 +4,14 @@
 //
 // The number of curves is adjustable, which makes it a load knob for watching
 // the frame time trace react.
+//
+//   fps_monitor -bench 10 [-bench-out <path>] [-curves N] [-size WxH]
+//
+// -bench runs the window for real and writes the distribution of Window::draw
+// after a one second warm-up, which is a number to compare against instead of
+// a photograph of the HUD. -size matters as much as -curves: what a line costs
+// is mostly per segment, but a window is what says how many pixels each one
+// covers.
 
 #include "gpui.h"
 
@@ -415,6 +423,8 @@ int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
     Entity<FpsApp> view = EntityNew<FpsApp>(app);
     FpsApp* self = view.Get(app);
+    int winW = 800;
+    int winH = 600;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-bench") == 0 && i + 1 < argc) {
             self->benchSecs = atof(argv[++i]);
@@ -422,6 +432,18 @@ int GpuiMain(int argc, char** argv) {
             self->benchOut = argv[++i];
         } else if (strcmp(argv[i], "-curves") == 0 && i + 1 < argc) {
             self->curves = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-size") == 0 && i + 1 < argc) {
+            // -size WxH: the load knob the curve count is not. Line drawing
+            // costs what it covers, so a number measured at one window size
+            // says nothing about another.
+            const char* s = argv[++i];
+            int w = atoi(s);
+            const char* x = strchr(s, 'x');
+            int h = x ? atoi(x + 1) : 0;
+            if (w > 0 && h > 0) {
+                winW = w;
+                winH = h;
+            }
         }
     }
     ThemeSet(app, ThemeMode::Dark);
@@ -433,7 +455,7 @@ int GpuiMain(int argc, char** argv) {
     opts.anim = true;
     opts.timerMs = 16;
     Window* win =
-        WindowOpenView(app, StrL("FPS Monitor C++"), 800, 600, view.id, opts);
+        WindowOpenView(app, StrL("FPS Monitor C++"), winW, winH, view.id, opts);
     WindowOnMouseMove(win, ListenTo(view, &OnMouseMove));
     int rc = AppRun(app);
     AppFree(app);

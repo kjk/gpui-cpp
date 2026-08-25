@@ -4763,3 +4763,65 @@ the Windows and Linux side of the same change — the drawn bar, its submenus,
 the chords beside Open and Quit, the actions arriving through the root, Quit
 leaving nothing running, and the title-only title bar — plus the numbering,
 the keymap lookup and the key names under test.
+
+
+## Thirty-two frames a second, and where they went
+
+`fps_monitor` looked twice as slow as it is, and was.
+
+**The measurement first.** Three numbers that are not the same thing kept
+getting compared: what a frame *costs*, how often a frame *happens*, and what
+the HUD's FRAME row reads. The HUD is a mean over the last 120 frames, so for
+the first seconds after launch it still has the warm-up in it — the swap
+chain, the shaders, the glyph atlas — and reads high. And the cost itself
+moves with the CPU's clock: the same build, same window, same six curves is
+1.02 ms with a busy core beside it and 1.9–3.2 ms on an otherwise idle
+machine, because a process that sleeps 25 ms between frames wakes on a core
+that has clocked down. Every number below was taken with `-bench`, which runs
+the window for real and reports the distribution of `Window::draw`, with a
+spinner pinned on another core so two runs can be compared at all.
+
+**No regression.** The same benchmark at `9787520`, `8e8b045` and `b0bd623` —
+three weeks of commits — gives 1.076, 1.073 and 1.092 ms. Nothing in the
+recent work touched it.
+
+**What was actually wrong: the frame rate.** An animating window asks for a
+16 ms timer, and `SetTimer` counts in system clock ticks — 15.625 ms — and
+rounds a request *up* to the next whole one. So 16 ms landed on the second
+tick, 31.25 ms, and every animated window in the tree ran at 32 FPS on a
+60 Hz display no matter how little it spent drawing: a 1.0 ms frame arriving
+every 29 ms. `PlatSetTimer` now rounds the ask *down* to a whole number of
+ticks, so the timer fires at the last tick before the deadline instead of the
+first one after it. Early is safe and late is not — `WindowTimerTick` skips
+the timers that are not due and re-arms from what is left, so an early wake
+costs one more pass through the loop, while a late one is a frame that did not
+happen. `fps_monitor` goes 34.6 FPS -> 63.2 FPS at the same 1.0 ms a frame,
+and the HUD reads 64 with the figure green rather than 39 in amber.
+
+GPUI does not use a timer here at all: its Windows backend waits on the
+compositor clock (`DCompositionWaitForCompositorClock`), which is the display's
+own cadence rather than an approximation of it. This lands within a tick of the
+same rate without a second thread; what it does not get is the phase, so a
+frame can still be handed to DWM just after a vblank.
+
+**Where the 1.0 ms goes.** `winperf record -i 2000 -print-agent` on a paced
+run puts 59% of the process inside `CanvasLine` — D2D's `DrawLine`, and under
+it `WidenLine`, `FillRectangleTessellator::SendGeometryStatic`,
+`AddAntialiasedTriangleStripPoints`: the CPU tessellating ~2300 antialiased
+hairlines into triangle strips, one command each. `PaintEl` — the port's own
+drawing, which only records into the scene — is 0.25 ms of that frame, and
+`EndDraw` plus `Present` together are 0.4 ms. This is the same wall an earlier
+session hit, and batching a colour run into one stroked path does not move it,
+because the tessellation is per segment either way.
+
+One earlier claim here was wrong and is worth correcting: a bigger window is
+*not* fill-bound in this demo. At 1600x1020 the frame costs 1.022 ms against
+1.023 ms at 800x600 — the cost is per segment, not per pixel.
+
+The backend that does not have this cost is already here: `GPUI_PAINT=gpu`
+rasterizes the same frame in a shader and runs it in 0.364 ms, 2.8x faster
+than Direct2D, at either size. That is what GPUI does on every platform. It is
+still not the default, for the two reasons `src/gpui/paintgpu.h` gives.
+
+`fps_monitor` gained `-size WxH` alongside `-bench` and `-curves`, since a
+line-drawing number measured at one window size says nothing about another.
