@@ -7,8 +7,12 @@
 
 namespace gpui {
 
+// `InputBase::new(id)`: the frame is a stateful element, so its click and
+// focus ids are the fold of the name down from the root rather than a hash of
+// the one name. `interactive` is Rust's `.when(!disabled, ..)` around the
+// listeners: a disabled field is not a hit target and takes no focus.
 struct InputBase {
-    static El* New(Ctx* cx, Str id, int clickId = 0);
+    static El* New(Ctx* cx, Str id, bool interactive = false);
 };
 
 // gpui_base::input::InputEditorStyle. The base draws the text, the selection

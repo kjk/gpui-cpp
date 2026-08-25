@@ -11,9 +11,9 @@
 
 namespace gpui {
 
-El* InputBase::New(Ctx* cx, Str id, int clickId) {
+El* InputBase::New(Ctx* cx, Str id, bool interactive) {
     Arena* a = cx->a;
-    return UiRoot(a, id, clickId);
+    return interactive ? Div(a)->PathId(id) : Div(a)->Id(id);
 }
 
 // The washes one row carries: the search matches that fall inside it, and the

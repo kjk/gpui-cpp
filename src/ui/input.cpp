@@ -138,7 +138,7 @@ El* Input::IntoEl() {
     if (disabled) {
         editor.foreground = th.mutedFg;
     }
-    El* field = InputBase::New(cx, id, disabled ? 0 : HashClickId(id))
+    El* field = InputBase::New(cx, id, !disabled)
                     ->BindInput(disabled ? nullptr : state)
                     ->FlexRow()
                     ->W(col ? kFill : width)
@@ -276,7 +276,7 @@ El* Textarea::IntoEl() {
     if (state && h > 0) {
         state->viewH = h - 2 * 8;
     }
-    El* box = InputBase::New(cx, id, HashClickId(id))
+    El* box = InputBase::New(cx, id, true)
                   ->BindInput(state)
                   ->W(kFill)
                   ->H(h)
