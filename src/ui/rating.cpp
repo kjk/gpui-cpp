@@ -74,7 +74,7 @@ Rating* Rating::OnClick(Listener fn) {
 El* Rating::IntoEl() {
     const Theme& th = cx->theme();
     Entity<RatingState> st =
-        KeyedEntity<RatingState>(cx, (uint32_t)HashClickId(id));
+        KeyedEntity<RatingState>(cx, KeyedName(cx, id));
     RatingState* s = st.Get(cx);
     int shown = value;
     if (s) {

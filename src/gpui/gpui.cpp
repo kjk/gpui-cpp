@@ -6446,6 +6446,10 @@ static uint32_t IdFold(uint32_t parent, Str name) {
     return h;
 }
 
+uint32_t IdFoldName(uint32_t parent, Str name) {
+    return IdFold(parent, name);
+}
+
 static int IdToClick(uint32_t h) {
     int id = (int)(h & 0x3fffffff);
     // Zero is "nothing hovered / nothing focused / no hit".

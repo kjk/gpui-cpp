@@ -8,7 +8,7 @@ namespace gpui {
 namespace component {
 
 Entity<ColorPickerState> ColorPickerStateFor(Ctx* cx, Str id) {
-    return KeyedEntity<ColorPickerState>(cx, (uint32_t)HashClickId(id));
+    return KeyedEntity<ColorPickerState>(cx, KeyedName(cx, id));
 }
 
 ColorPicker* ColorPicker::New(Ctx* cx, Str id) {

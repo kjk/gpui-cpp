@@ -60,7 +60,7 @@ Clipboard* Clipboard::OnCopied(Listener fn) {
 
 El* Clipboard::IntoEl() {
     Entity<ClipboardState> st =
-        KeyedEntity<ClipboardState>(cx, (uint32_t)HashClickId(id));
+        KeyedEntity<ClipboardState>(cx, KeyedName(cx, id));
     ClipboardState* s = st.Get(cx);
     if (s) {
         // The value and the callback are the caller's every frame, the way

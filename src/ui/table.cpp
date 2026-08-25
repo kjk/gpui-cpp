@@ -535,7 +535,13 @@ static El* WrapContextMenu(Ctx* cx, Str id, El* box, const TableState* s,
                            PopupMenu* (*build)(Ctx*, void*, int, PopupMenu*),
                            void* data) {
     Arena* a = cx->a;
-    PopupMenu* menu = PopupMenu::New(cx, StrDup(a, fmt("%s-ctx-menu", id)));
+    // Everything the wrapper builds is the table's, so the table's name goes
+    // on the stack of ids around it and the menu's state is named by its
+    // place inside. The wrapper element itself keeps the qualified name: it
+    // sits *above* the table's own element, so there is nothing named over it
+    // for a local name to fold under.
+    IdScope scope(cx, id);
+    PopupMenu* menu = PopupMenu::New(cx, StrL("ctx-menu"));
     if (s && s->rightClickedRow >= 0) {
         menu = build(cx, data, s->rightClickedRow, menu);
     }

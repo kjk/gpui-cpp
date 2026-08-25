@@ -64,10 +64,138 @@ static void EveryPageChangeRequestIsValidated() {
     utassert(!PaginationCanRequest(&off, 2));
 }
 
+static El* FindNamedPg(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamedPg(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// The first element whose name starts with `prefix`, which is how the two
+// ellipses are found without the test knowing where in the row they landed.
+static El* FindPrefixed(El* root, const char* prefix) {
+    if (!root) {
+        return nullptr;
+    }
+    int n = (int)Str(prefix).len;
+    if (root->id.s && root->id.len >= n &&
+        StrEqI(Str(root->id.s, n), Str(prefix))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindPrefixed(c, prefix)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// window.element_id_stack: GPUI has the ids of everything a widget is being
+// built inside already pushed by the time that widget's render runs, so a
+// `use_keyed_state` asked for under a local name is scoped for free. The port
+// builds its tree before anything is folded, so a widget that owns a name
+// says so, and IdScope is what a `.id()` on the way down amounts to.
+static void AScopeIsWhatMakesALocalNameItsOwn() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+
+    uint32_t bare = KeyedName(&cx, StrL("ellipsis-1"));
+    uint32_t left = 0;
+    {
+        IdScope scope(&cx, StrL("left"));
+        left = KeyedName(&cx, StrL("ellipsis-1"));
+        utassert(left != bare);
+    }
+    // And it is off the stack again once the widget is built.
+    utassert(cx.path == 0);
+    {
+        IdScope scope(&cx, StrL("right"));
+        utassert(KeyedName(&cx, StrL("ellipsis-1")) != left);
+    }
+
+    WindowKeyedFree(win);
+    delete win;
+    EntityDropAll(&app);
+}
+
+struct PgSink {
+    int page = 0;
+    static void OnPage(PgSink* self, Ctx*, const ClickEvent*, intptr_t p) {
+        self->page = (int)p;
+    }
+};
+
+// Two paginations on one page. The ellipsis is `ellipsis-{i}` in both, and
+// the row it sits in is what keeps the dropdown it opens — the element, and
+// the two states behind it — from being the other row's.
+static void TwoPaginationsHaveTwoEllipsisMenus() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    // An ellipsis is only a dropdown if a page change has somewhere to go, so
+    // both rows need a handler before either grows one.
+    Entity<PgSink> sink = EntityNewState<PgSink>(&app);
+    Listener onPage = ListenTo(sink, &PgSink::OnPage);
+    El* page = Div(a);
+    El* left = component::Pagination::New(&cx, 5, 10)
+                   ->Id(StrL("left"))
+                   ->OnChange(onPage)
+                   ->IntoEl();
+    El* right = component::Pagination::New(&cx, 5, 10)
+                    ->Id(StrL("right"))
+                    ->OnChange(onPage)
+                    ->IntoEl();
+    page->Child(left)->Child(right);
+    IdsCollect(page);
+
+    El* boxL = FindPrefixed(left, "ellipsis-");
+    El* boxR = FindPrefixed(right, "ellipsis-");
+    utassert(boxL && boxR);
+    if (boxL && boxR) {
+        // The same local name in both rows, and two different folds.
+        utassert(StrEqI(boxL->id, boxR->id));
+        utassert(boxL->pathId != boxR->pathId);
+        // The trigger inside each is named among its siblings and is still
+        // its own hit target.
+        El* trigL = FindNamedPg(boxL, "trigger");
+        El* trigR = FindNamedPg(boxR, "trigger");
+        utassert(trigL && trigR);
+        if (trigL && trigR) {
+            utassert(trigL->clickId != 0 && trigR->clickId != 0);
+            utassert(trigL->clickId != trigR->clickId);
+        }
+    }
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestPagination() {
     TestSuite("pagination");
     ClampsControlledValuesAndNavigationBoundaries();
     CreatesPagesAndNavigableEllipsisRanges();
     ASinglePageHasNothingToNavigate();
     EveryPageChangeRequestIsValidated();
+    AScopeIsWhatMakesALocalNameItsOwn();
+    TwoPaginationsHaveTwoEllipsisMenus();
 }

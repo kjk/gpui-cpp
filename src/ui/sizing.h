@@ -89,20 +89,20 @@ inline float UiFontPx(UiSize s) {
 
 namespace component {
 
-inline El* BindClick(El* e, Str id, Listener onClick) {
-    int cid = HashClickId(id);
-    e->Id(id)->Click(cid)->FocusId(cid);
+// `div().id(name).track_focus(..).on_click(..)`: the name, the hit target and
+// the focus, which the fold down from the root turns into one number.
+inline El* BindClick(El* e, Str name, Listener onClick) {
+    e->PathId(name);
     if (onClick.IsValid()) {
         e->OnClick(onClick);
     }
     return e;
 }
 
-// The same as BindClick for an element whose name only has to be unique among
-// its siblings: the id is the fold of the path down to it, which is what a
-// GlobalElementId is. A widget that names its parts this way stops spelling
-// its caller's id into every child — `("col-header", ix)` upstream, not
-// `format!("{id}-col-header-{ix}")`.
+// The same as BindClick for an element that is a hit target and nothing else.
+// A name only has to be unique among its siblings, because the id is the fold
+// of the path down to it, which is what a GlobalElementId is — `("col-header",
+// ix)` upstream, not `format!("{id}-col-header-{ix}")`.
 //
 // Hit-testable and nothing else, which is what `.id()` on its own is. The
 // parts a widget builds by the hundred — a table's rows, its cells, its

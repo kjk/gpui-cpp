@@ -7,6 +7,10 @@ uint32_t MotionId(Str id) {
     return (uint32_t)HashClickId(id);
 }
 
+uint32_t MotionName(Ctx* cx, Str name) {
+    return KeyedName(cx, name);
+}
+
 uint32_t MotionId(Str id, Str channel) {
     // ElementId::NamedChild(id, channel): the channel is part of the key, so
     // one element can transition its fill and its offset separately.

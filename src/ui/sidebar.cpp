@@ -89,7 +89,7 @@ El* SidebarMenuItem::IntoEl(Str id) {
     Entity<SidebarMenuState> st = {};
     bool isOpen = false;
     if (isSubmenu) {
-        st = KeyedEntity<SidebarMenuState>(cx, (uint32_t)HashClickId(id));
+        st = KeyedEntity<SidebarMenuState>(cx, KeyedName(cx, id));
         SidebarMenuState* s = st.Get(cx);
         if (s) {
             if (!s->seeded) {

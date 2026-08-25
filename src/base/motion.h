@@ -35,6 +35,10 @@ inline Motion MotionNew(float durationMs) {
 // without their state colliding; the same pair hashed is the key here.
 uint32_t MotionId(Str id);
 uint32_t MotionId(Str id, Str channel);
+// `window.use_keyed_state(id, ..)` in motion.rs is keyed by the whole id
+// stack, so a transition named among its siblings is still its own. This is
+// that name folded into the stack the widget is being built under.
+uint32_t MotionName(Ctx* cx, Str name);
 
 // Transition::progress: nothing has happened yet while the delay runs, a
 // duration of zero is over as soon as it starts, and the rest is the fraction

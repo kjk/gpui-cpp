@@ -8,7 +8,7 @@ namespace gpui {
 namespace component {
 
 Entity<PopupMenuState> PopupMenuStateFor(Ctx* cx, Str id) {
-    return KeyedEntity<PopupMenuState>(cx, (uint32_t)HashClickId(id));
+    return KeyedEntity<PopupMenuState>(cx, KeyedName(cx, id));
 }
 
 PopupMenu* PopupMenu::New(Ctx* cx, Str id) {
@@ -443,7 +443,10 @@ DropdownMenu* DropdownMenu::AnchorRight(bool v) {
 }
 
 El* DropdownMenu::IntoEl() {
-    El* wrap = Div(a)->FlexCol();
+    // The trigger and the open transition are named inside the dropdown, so
+    // two dropdowns with the same local name are still two dropdowns.
+    IdScope scope(cx, id);
+    El* wrap = Div(a)->Id(id)->FlexCol();
     PopupMenuState* st = menu ? menu->state.Get(cx) : nullptr;
     if (trigger) {
         // The trigger opens and closes the menu it holds; a caller that wants
@@ -452,7 +455,7 @@ El* DropdownMenu::IntoEl() {
             // The menu as this frame has it goes with the handler, the way
             // Rust's Popover captures `open` at render time and hands it to
             // the trigger's press.
-            BindClick(trigger, id,
+            BindClick(trigger, StrL("trigger"),
                       ListenTo(menu->state, &PopupMenuState::OnTriggerClick,
                                (intptr_t)st->open));
         }
@@ -461,8 +464,7 @@ El* DropdownMenu::IntoEl() {
     if (menu && st && st->open) {
         // `dropdown_positioner`: side placement, so a menu with no room
         // under its trigger opens above it rather than being clamped.
-        El* el = DropdownOpen(cx, menu->IntoEl(),
-                              HashClickId(StrDup(a, fmt("%s-open", id))))
+        El* el = DropdownOpen(cx, menu->IntoEl(), MotionName(cx, StrL("open")))
                      ->AnchorBelow(gap)
                      ->AnchorFlip()
                      ->Deferred();
@@ -500,8 +502,7 @@ El* ContextMenu::IntoEl() {
         return box;
     }
     // The element needs identity for the press to reach it.
-    box->Id(id)
-        ->Click(HashClickId(id))
+    box->PathClick(id)
         ->OnMouseDown(ListenTo(menu->state, &PopupMenuState::OnContextDown));
     if (st->open) {
         box->Child(

@@ -87,7 +87,7 @@ bool HoverCardIsOpen(Ctx* cx, Entity<HoverCardState> state) {
 // asks for it and kept by the app afterwards. Without it the delays would be
 // thrown away with the tree that armed them.
 Entity<HoverCardState> HoverCardStateFor(Ctx* cx, Str id) {
-    return KeyedEntity<HoverCardState>(cx, (uint32_t)HashClickId(id));
+    return KeyedEntity<HoverCardState>(cx, KeyedName(cx, id));
 }
 
 bool HoverCardIsOpen(Ctx* cx, Str id) {

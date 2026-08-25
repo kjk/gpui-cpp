@@ -73,7 +73,7 @@ Popover* Popover::Button(MouseButton b) {
 // The keyed state behind one popover id — Rust's
 // `window.use_keyed_state(self.id, |cx| PopoverState::new(default_open, cx))`.
 static Entity<PopoverState> PopState(Ctx* cx, Str id) {
-    return KeyedEntity<PopoverState>(cx, (uint32_t)HashClickId(id));
+    return KeyedEntity<PopoverState>(cx, KeyedName(cx, id));
 }
 
 bool PopoverOpen(Ctx* cx, Str id) {

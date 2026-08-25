@@ -190,7 +190,7 @@ void DatePickerBindKeys(Ctx* cx, El* root, Str name, Listener onToggle,
     }
     DatePickerInitKeys();
     Entity<DatePickerKeys> keys = KeyedEntity<DatePickerKeys>(
-        cx, KeyedKey((uint32_t)HashClickId(name),
+        cx, KeyedKey(KeyedName(cx, name),
                      (uint32_t)HashClickId(StrL("gpui::DatePickerKeys"))));
     if (DatePickerKeys* k = keys.Get(cx)) {
         k->onToggle = onToggle;

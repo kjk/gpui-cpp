@@ -4420,10 +4420,41 @@ struct Ctx {
     Window* win = nullptr;
     Arena* a = nullptr;
     EntityId self = {};
+    // The ids of the widgets this one is being built inside, folded together
+    // — window.element_id_stack, which GPUI has already pushed by the time a
+    // child's render runs. The port builds its tree before IdsCollect folds
+    // anything, so a widget that names itself pushes it here as well, and a
+    // `use_keyed_state` asked for underneath is keyed by the whole stack.
+    // See IdScope.
+    uint32_t path = 0;
 
     // cx.theme() — the colors every widget reads.
     const Theme& theme() const;
     ThemeMode themeMode() const;
+};
+
+// The same fold IdsCollect uses on the element tree, over one more name.
+uint32_t IdFoldName(uint32_t parent, Str name);
+
+// with_element_id: the widget's name is on the stack while its parts are
+// built, and off it again afterwards. A widget that owns a name pushes one of
+// these at the top of the function that builds its children.
+struct IdScope {
+    Ctx* cx = nullptr;
+    uint32_t prev = 0;
+
+    IdScope(Ctx* c, Str name) : cx(c), prev(c ? c->path : 0) {
+        if (cx) {
+            cx->path = IdFoldName(prev, name);
+        }
+    }
+    ~IdScope() {
+        if (cx) {
+            cx->path = prev;
+        }
+    }
+    IdScope(const IdScope&) = delete;
+    IdScope& operator=(const IdScope&) = delete;
 };
 
 EntityId EntityNewRaw(App* app, void* ptr, RenderFn render, DropFn drop);
@@ -4697,6 +4728,14 @@ inline uint32_t KeyedKey(uint32_t name, uint32_t kind) {
     uint32_t h = name * 2654435761u;
     h ^= kind + 0x9e3779b9u + (h << 6) + (h >> 2);
     return h ? h : 1u;
+}
+
+// use_keyed_state's key: the name folded into the stack of ids above it, so
+// the same local name under two different widgets is two states. A caller
+// that has already qualified its name by hand gets the same answer it did
+// before, since nothing above it has pushed a scope.
+inline uint32_t KeyedName(Ctx* cx, Str name) {
+    return IdFoldName(cx ? cx->path : 0, name);
 }
 
 template <typename T>

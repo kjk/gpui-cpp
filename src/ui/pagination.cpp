@@ -52,6 +52,9 @@ Pagination* Pagination::OnChange(Listener fn) {
 
 El* Pagination::IntoEl() {
     Str base = id.s ? id : StrL("pagination");
+    // The row names itself, so everything built under it — the buttons, and
+    // the state the ellipsis menus keep — is named by its place in the row.
+    IdScope scope(cx, base);
     // gpui_base::PaginationState owns the clamping, the bounds and the
     // ellipsis window; this layer only paints what it is told.
     PaginationState st = PaginationStateNew(page, total);
@@ -101,12 +104,10 @@ El* Pagination::IntoEl() {
             if (items[i].page == 0) {
                 // The ellipsis is a dropdown over the pages it hid, so a jump
                 // into the middle of a long run does not need the arrows.
-                // Still spelled out: this one is not only an element name.
-                // It keys the two entities below, and a keyed entity is a flat
-                // hash here where `window.use_keyed_state` upstream is scoped
-                // by the id stack — so two paginations on one page would share
-                // a state if the name were local.
-                Str menuId = StrDup(a, fmt("%s-ellipsis-%d", base, i));
+                // The name keys three entities as well as naming an element,
+                // and the scope above is what keeps two paginations on one
+                // page from sharing them.
+                Str menuId = StrDup(a, fmt("ellipsis-%d", i));
                 El* trigger = Button::New(cx, menuId)
                                   ->Ghost()
                                   ->Compact()
@@ -127,7 +128,7 @@ El* Pagination::IntoEl() {
                 }
                 Entity<PaginationMenuState> ment =
                     KeyedEntity<PaginationMenuState>(
-                        cx, KeyedKey(HashClickId(menuId),
+                        cx, KeyedKey(KeyedName(cx, menuId),
                                      HashClickId(StrL("pagination-menu"))));
                 if (PaginationMenuState* ms = ment.Get(cx)) {
                     ms->firstPage = items[i].from;
