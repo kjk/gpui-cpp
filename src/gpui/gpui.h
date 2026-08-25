@@ -1759,6 +1759,18 @@ struct El {
     // The refinement above, and the fields it names. Zero is no refinement.
     Style refine = {};
     uint32_t refineSet = 0;
+    // `div().hover(|this| ..)` and `div().drag_over::<T>(|this, ..| ..)`:
+    // refinements that hold only while the pointer is over the box, or while
+    // a drag of `dragOverKind` is. Resolved where GPUI resolves them — in
+    // `compute_style` during prepaint, against the hover the last frame left
+    // — so unlike `HoverBg` they can name any field a refinement can, and a
+    // caller no longer has to ask the window whether it is hovered and branch
+    // on the answer while building.
+    Style hoverStyle = {};
+    uint32_t hoverSet = 0;
+    Style dragOverStyle = {};
+    uint32_t dragOverSet = 0;
+    Str dragOverKind = {};
     // on_drag: what a press on this element picks up. The payload rides along
     // on every DragMoveEvent the drag produces.
     DragPayload drag = {};
@@ -2020,6 +2032,12 @@ struct El {
     // instance style underneath it, and the instance style is whatever the
     // caller chains onto the element after the primitive handed it back.
     El* Refine(const Style& s, uint32_t fields);
+    // `div().hover(..)`. The refinement is a StateStyle, which is what every
+    // other refinement in this tree is built with.
+    El* Hover(const struct StateStyle& s);
+    // `div().drag_over::<T>(..)`, where `kind` is the drag payload's kind the
+    // way `OnDrop` names it.
+    El* DragOver(Str dragKind, const struct StateStyle& s);
     El* BoundsOut(gpui::Bounds* out);
     El* Cursor(CursorKind c);
     El* BindSlider(SliderState* s, Axis axis = Axis::Horizontal);
@@ -2286,7 +2304,14 @@ enum StyleField : uint32_t {
     // them.
     StyleFieldHoverBg = 1u << 11,
     StyleFieldHoverFg = 1u << 12,
-    StyleFieldActiveBg = 1u << 13
+    StyleFieldActiveBg = 1u << 13,
+    // One side each, because Rust's `.border_l_2()` names the left edge and
+    // leaves the other three alone — a refinement that copied all four would
+    // clear whatever the box already had on them.
+    StyleFieldBorderT = 1u << 14,
+    StyleFieldBorderB = 1u << 15,
+    StyleFieldBorderL = 1u << 16,
+    StyleFieldBorderR = 1u << 17
 };
 
 // StyleRefinement::refine, over the fields `fields` names and no others. The
@@ -2354,6 +2379,11 @@ struct PaintCtx {
     float viewW = 0;
     float viewH = 0;
     int hoverId = 0;
+    // Which drop target the pointer is over and what is being dragged, so a
+    // `DragOver` refinement can be resolved beside the hover one. GPUI reads
+    // the same pair off the window in `compute_style`.
+    int dragOverId = 0;
+    Str dragKind = {};
     // The element holding the press, which is what `Style::activeBg` is
     // matched against — GPUI's `clicked_state.element`. It is the id the
     // press landed on for as long as the button is down, and 0 otherwise,

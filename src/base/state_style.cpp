@@ -20,6 +20,30 @@ StateStyle& StateStyle::Border(float w, Rgba c) {
     set |= StateFieldBorder;
     return *this;
 }
+StateStyle& StateStyle::BorderL(float w, Rgba c) {
+    style.borderL = w;
+    style.borderColor = c;
+    set |= StateFieldBorderL;
+    return *this;
+}
+StateStyle& StateStyle::BorderR(float w, Rgba c) {
+    style.borderR = w;
+    style.borderColor = c;
+    set |= StateFieldBorderR;
+    return *this;
+}
+StateStyle& StateStyle::BorderT(float w, Rgba c) {
+    style.borderT = w;
+    style.borderColor = c;
+    set |= StateFieldBorderT;
+    return *this;
+}
+StateStyle& StateStyle::BorderB(float w, Rgba c) {
+    style.borderB = w;
+    style.borderColor = c;
+    set |= StateFieldBorderB;
+    return *this;
+}
 StateStyle& StateStyle::Radius(float v) {
     style.radius = v;
     set |= StateFieldRadius;

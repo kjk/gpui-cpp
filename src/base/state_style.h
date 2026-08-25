@@ -26,6 +26,11 @@ enum StateField : uint32_t {
     StateFieldFg = StyleFieldColor,
     // Width and colour together, as `border_*` is.
     StateFieldBorder = StyleFieldBorder | StyleFieldBorderColor,
+    // One edge at a time, which is what `.border_l_2()` names.
+    StateFieldBorderL = StyleFieldBorderL | StyleFieldBorderColor,
+    StateFieldBorderR = StyleFieldBorderR | StyleFieldBorderColor,
+    StateFieldBorderT = StyleFieldBorderT | StyleFieldBorderColor,
+    StateFieldBorderB = StyleFieldBorderB | StyleFieldBorderColor,
     StateFieldRadius = StyleFieldRadius,
     StateFieldHoverBg = StyleFieldHoverBg,
     StateFieldHoverFg = StyleFieldHoverFg,
@@ -41,6 +46,10 @@ struct StateStyle {
     StateStyle& Bg(Background c);
     StateStyle& Fg(Rgba c);
     StateStyle& Border(float w, Rgba c);
+    StateStyle& BorderL(float w, Rgba c);
+    StateStyle& BorderR(float w, Rgba c);
+    StateStyle& BorderT(float w, Rgba c);
+    StateStyle& BorderB(float w, Rgba c);
     StateStyle& Radius(float v);
     StateStyle& HoverBg(Background c);
     StateStyle& HoverFg(Rgba c);

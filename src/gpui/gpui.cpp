@@ -1747,6 +1747,18 @@ void StyleApplyFields(Style* into, const Style& over, uint32_t fields) {
     if (fields & StyleFieldBorder) {
         into->border = over.border;
     }
+    if (fields & StyleFieldBorderT) {
+        into->borderT = over.borderT;
+    }
+    if (fields & StyleFieldBorderB) {
+        into->borderB = over.borderB;
+    }
+    if (fields & StyleFieldBorderL) {
+        into->borderL = over.borderL;
+    }
+    if (fields & StyleFieldBorderR) {
+        into->borderR = over.borderR;
+    }
     if (fields & StyleFieldFontSize) {
         into->fontSize = over.fontSize;
     }
@@ -1889,6 +1901,21 @@ El* El::OnMouseUpOut(Listener l) {
 El* El::OnDrop(Str acceptKind, Listener l) {
     dropKind = acceptKind;
     onDrop = l;
+    return this;
+}
+El* El::Hover(const StateStyle& s) {
+    if (s.set) {
+        StyleApplyFields(&hoverStyle, s.style, s.set);
+        hoverSet |= s.set;
+    }
+    return this;
+}
+El* El::DragOver(Str dragKind, const StateStyle& s) {
+    if (s.set) {
+        dragOverKind = dragKind;
+        StyleApplyFields(&dragOverStyle, s.style, s.set);
+        dragOverSet |= s.set;
+    }
     return this;
 }
 El* El::Refine(const Style& s, uint32_t fields) {
@@ -3403,6 +3430,17 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     if (e->refineSet) {
         StyleApplyFields(&e->style, e->refine, e->refineSet);
         e->refineSet = 0;
+    }
+    // Then the two that hold only while something is true of the pointer.
+    // Both need a click id of their own, for the same reason HoverBg does:
+    // without one the element would match a hoverId of 0, which is what
+    // "nothing is hovered" is spelled as.
+    if (e->hoverSet && e->clickId && ctx && e->clickId == ctx->hoverId) {
+        StyleApplyFields(&e->style, e->hoverStyle, e->hoverSet);
+    }
+    if (e->dragOverSet && e->clickId && ctx && e->clickId == ctx->dragOverId &&
+        StrSame(e->dragOverKind, ctx->dragKind)) {
+        StyleApplyFields(&e->style, e->dragOverStyle, e->dragOverSet);
     }
     StyleOverrideApply(e);
 

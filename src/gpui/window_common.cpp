@@ -274,6 +274,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     win->paint.selA = -1;
     win->paint.selB = -1;
     win->paint.hoverId = win->hoverId;
+    win->paint.dragOverId = win->dragOverId;
+    win->paint.dragKind = win->activeDrag.kind;
     // clicked_state.element: the element the press landed on, held until the
     // button comes back up. Unlike the hover it does not move with the
     // pointer, so a press that slides off still paints its active style.

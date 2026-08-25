@@ -181,28 +181,9 @@ El* DockBindTabStrip(const DockTabGroup* g, El* strip) {
     return strip;
 }
 
-static bool DragOver(const DockTabGroup* g, Str elId) {
-    const DragPayload* drag = WindowActiveDrag(g->cx);
-    if (!drag || !StrSame(drag->kind, kDockPanelDrag)) {
-        return false;
-    }
-    return WindowDragOverId(g->cx) == HashClickId(elId);
-}
-
-bool DockTabDropOver(const DockTabGroup* g, int ix) {
-    DockState* s = GroupState(g);
-    if (!s || g->collapsed || !DockNodeDroppable(s, g->node)) {
-        return false;
-    }
-    return DragOver(g, DockElId(g->cx, g->id, "tab", g->node, ix));
-}
-
-bool DockTabRestDropOver(const DockTabGroup* g) {
-    DockState* s = GroupState(g);
-    if (!s || g->collapsed || !DockNodeDroppable(s, g->node)) {
-        return false;
-    }
-    return DragOver(g, DockElId(g->cx, g->id, "tabrest", g->node, 0));
+bool DockGroupDroppable(const DockTabGroup* g) {
+    DockState* st = GroupState(g);
+    return st && !g->collapsed && DockNodeDroppable(st, g->node);
 }
 
 El* DockBindTitleDrag(const DockTabGroup* g, int ix, El* e) {

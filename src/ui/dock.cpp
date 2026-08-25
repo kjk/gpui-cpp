@@ -256,10 +256,14 @@ static El* SkinTabBar(Ctx* cx, void*, const DockTabGroup* g) {
             tab->BorderL(1, th.border);
         }
         DockBindTab(g, i, tab);
-        // Rust marks the tab a drop would land before with a border down its
-        // left edge while the drag is over it.
-        if (DockTabDropOver(g, i)) {
-            tab->BorderL(2, th.primary);
+        // `.drag_over::<DragPanel>(|this, ..| this.border_l_2()
+        // .border_color(cx.theme().drag_border))`: the tab a drop would land
+        // before is marked down its left edge, and the mark is a refinement
+        // the element carries rather than a question the bar asks the window
+        // while it builds.
+        if (DockGroupDroppable(g)) {
+            tab->DragOver(kDockPanelDrag, StateStyle()
+                                              .BorderL(2, th.dragBorder));
         }
         // Tab::new().label(..): a tab's label is the tab bar's own size,
         // which is text_sm at Medium. `tab_name` is the short form a panel
@@ -284,8 +288,8 @@ static El* SkinTabBar(Ctx* cx, void*, const DockTabGroup* g) {
     // last_empty_space: the run of bar past the last tab, which takes a drop
     // as "put it at the end" and lights up while a panel is over it.
     El* rest = DockBindTabRest(g, Div(a)->Flex1()->H(kFill)->MinW(64));
-    if (DockTabRestDropOver(g)) {
-        rest->Bg(BackgroundOpacity(th.tokens.primary, 0.2f));
+    if (DockGroupDroppable(g)) {
+        rest->DragOver(kDockPanelDrag, StateStyle().Bg(th.tokens.dropTarget));
     }
     strip->Child(rest);
     bar->Child(strip);

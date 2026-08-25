@@ -184,6 +184,101 @@ static void AStateCanNameThePressedFill() {
     utassert(Same(out.style.bg.color, kInstance));
 }
 
+// `div().hover(..)` and `div().drag_over::<T>(..)`: refinements that hold only
+// while the pointer is over the box, or while a drag of that kind is. GPUI
+// resolves both in `compute_style` during prepaint; here that is `PrepareEl`,
+// which layout runs, so the test drives layout and reads the style back.
+namespace {
+struct RefineCase {
+    Arena* a = nullptr;
+    PaintCtx ctx = {};
+    El* root = nullptr;
+    El* box = nullptr;
+
+    RefineCase() {
+        a = ArenaNew();
+        ctx.viewW = 200;
+        ctx.viewH = 100;
+        root = Div(a)->FlexCol()->W(200)->H(100);
+        box = Div(a)->W(100)->H(20)->Click(4242)->Bg(Rgb(1, 2, 3));
+        root->Child(box);
+    }
+    void Run() { LayoutEl(&ctx, root, 0, 0, 200, 100, 14, Rgba{}); }
+    ~RefineCase() { ArenaDelete(a); }
+};
+} // namespace
+
+static void AHoverRefinementHoldsOnlyWhileHovered() {
+    {
+        RefineCase c;
+        c.box->Hover(StateStyle().Bg(Rgb(9, 9, 9)));
+        c.ctx.hoverId = 0; // nothing hovered
+        c.Run();
+        utassert(c.box->style.bg.color.r == 1);
+    }
+    {
+        RefineCase c;
+        c.box->Hover(StateStyle().Bg(Rgb(9, 9, 9)));
+        c.ctx.hoverId = 4242;
+        c.Run();
+        utassert(c.box->style.bg.color.r == 9);
+    }
+    // A box with no click id of its own would match a hoverId of 0, which is
+    // what "nothing is hovered" is spelled as, so it is never refined.
+    {
+        RefineCase c;
+        c.box->Click(0)->Hover(StateStyle().Bg(Rgb(9, 9, 9)));
+        c.ctx.hoverId = 0;
+        c.Run();
+        utassert(c.box->style.bg.color.r == 1);
+    }
+}
+
+static void ADragOverRefinementNeedsTheRightKind() {
+    Str panel = StrL("dock-panel");
+    Str other = StrL("dock-resize");
+    {
+        RefineCase c;
+        c.box->DragOver(panel, StateStyle().BorderL(2, Rgb(7, 7, 7)));
+        c.ctx.dragOverId = 4242;
+        c.ctx.dragKind = panel;
+        c.Run();
+        utassert(c.box->style.borderL == 2);
+        utassert(c.box->style.borderColor.r == 7);
+    }
+    // Over the box, but dragging something it does not take.
+    {
+        RefineCase c;
+        c.box->DragOver(panel, StateStyle().BorderL(2, Rgb(7, 7, 7)));
+        c.ctx.dragOverId = 4242;
+        c.ctx.dragKind = other;
+        c.Run();
+        utassert(c.box->style.borderL == 0);
+    }
+    // The right kind, over something else.
+    {
+        RefineCase c;
+        c.box->DragOver(panel, StateStyle().BorderL(2, Rgb(7, 7, 7)));
+        c.ctx.dragOverId = 99;
+        c.ctx.dragKind = panel;
+        c.Run();
+        utassert(c.box->style.borderL == 0);
+    }
+}
+
+// `.border_l_2()` names the left edge and leaves the other three alone. A
+// refinement that copied all four would clear whatever the box already had.
+static void AnEdgeRefinementLeavesTheOtherEdgesAlone() {
+    RefineCase c;
+    c.box->BorderB(3, Rgb(4, 4, 4));
+    c.box->DragOver(StrL("k"), StateStyle().BorderL(2, Rgb(7, 7, 7)));
+    c.ctx.dragOverId = 4242;
+    c.ctx.dragKind = StrL("k");
+    c.Run();
+    utassert(c.box->style.borderL == 2);
+    utassert(c.box->style.borderB == 3);
+}
+
 void TestStateStyle() {
     TestSuite("state_style");
     TheHeldBoxPaintsItsPressedFill();
@@ -199,4 +294,7 @@ void TestStateStyle() {
     SelectedAndDisabledFollowTheSharedPriority();
     AResolvedStyleGoesOntoTheElement();
     AStateWinsOverWhatIsChainedAfterIt();
+    AHoverRefinementHoldsOnlyWhileHovered();
+    ADragOverRefinementNeedsTheRightKind();
+    AnEdgeRefinementLeavesTheOtherEdgesAlone();
 }

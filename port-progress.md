@@ -5333,3 +5333,55 @@ A note on the other half of `HashClickId`'s callers: `KeyedEntity`,
 *state*, not to identify an element. Rust keys element state by
 `GlobalElementId` too, so those are path-shaped upstream; here they are looked
 up while the tree is being built, which is before a path exists.
+
+
+## The two questions a box should not have to ask
+
+The blocker the fold ran into was that this tree asks about the pointer while
+it *builds*: the dock's tab bar wrote `WindowDragOverId(cx) == HashClickId(id)`
+and branched on the answer, which needs an id it can compute by hand and so
+cannot ever be a path. GPUI does not have that shape. There a box declares
+what it becomes and the answer is resolved later:
+
+```rust
+.drag_over::<DragPanel>(|this, _, _, cx| {
+    this.border_l_2().border_color(cx.theme().drag_border)
+})
+```
+
+`El::Hover(StateStyle)` and `El::DragOver(kind, StateStyle)` are that, and the
+resolution sits where GPUI's does — `compute_style` during prepaint, which is
+`PrepareEl` here, against the hover and the drag the last frame left. So unlike
+`HoverBg`, which is one field baked into `Style`, these name any field a
+refinement can; `StateStyle` is the builder, the same one semantic states are
+written with. `PaintCtx` carries `dragOverId` and `dragKind` beside `hoverId`
+now, which is the pair GPUI reads off the window in the same place.
+
+`StyleField` gained one bit per border edge. `.border_l_2()` names the left and
+leaves the other three, and a refinement that copied all four from a mostly
+empty style would have cleared whatever the box already had on them —
+`AnEdgeRefinementLeavesTheOtherEdgesAlone` is that case.
+
+The dock's two markers are the first callers, and they are upstream's two:
+`.drag_over::<DragPanel>(border_l_2, drag_border)` on a tab, and
+`.drag_over::<DragPanel>(bg(tokens.drop_target))` on the empty run past the
+last one. `DockTabDropOver` and `DockTabRestDropOver` are gone from base's API
+— the marker is not a question anyone asks any more — and what replaces them
+is `DockGroupDroppable`, which is upstream's `.when(droppable, ..)` and asks
+nothing about the pointer. Both markers now use the tokens Rust uses
+(`drag_border`, `tokens.drop_target`) rather than the primary they had been
+borrowing, which shows only while a drag is in flight.
+
+Three cases stay as they are, and each has a reason. The split handle is
+handed an `active` flag because upstream hands its own skin
+`ResizeHandleContext::is_active()` — that one is a query in Rust too. The
+slider's thumb ring keys off hover to drive a spring and grow a child, which
+is not a style refinement in either tree. And the showcase's tooltip and
+hover-card pages branch on hover to render a *different subtree*; upstream
+gives those an entity and an open state, which is a port of its own.
+
+`tests/StateStyleTests.cpp` drives layout with a `PaintCtx` and reads the
+resolved style back: a hover refinement holds only while hovered, a drag-over
+one only for the right kind on the right element, and a box with no click id
+of its own is never refined — it would otherwise match a `hoverId` of 0, which
+is what "nothing is hovered" is spelled as. 18523 checks.

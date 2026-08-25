@@ -423,10 +423,13 @@ El* DockBindTabRest(const DockTabGroup* g, El* rest);
 // and the tab a select asked for is brought into view from where the last
 // frame put it.
 El* DockBindTabStrip(const DockTabGroup* g, El* strip);
-// Whether a drag is over this tab, or over the empty run past the last one —
-// what a theme marks with a border down the left edge, or a wash.
-bool DockTabDropOver(const DockTabGroup* g, int ix);
-bool DockTabRestDropOver(const DockTabGroup* g);
+// droppable(): whether this group takes a panel at all. What a theme needs in
+// order to decide whether to hang a `DragOver` refinement on its tabs —
+// upstream's `.when(droppable, |this| this.drag_over::<DragPanel>(..))`. The
+// marker itself is no longer a question anyone asks while building: it is a
+// refinement the element carries, resolved against the frame's drag the way
+// GPUI resolves one in `compute_style`.
+bool DockGroupDroppable(const DockTabGroup* g);
 // The single-panel title row's drag (the title is what a press picks up), the
 // dock toggle buttons, the zoom button and a tab's close button.
 El* DockBindTitleDrag(const DockTabGroup* g, int ix, El* e);
