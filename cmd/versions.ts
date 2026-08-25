@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "f478ff6bd2af3676f8491e6c9280f598439df053",
+  sha: "c6ffd3e166abb43bff8845f0aa61711adb128dcf",
   date: "2026-08-20",
-  subject: "input: Stop copying the value into InputPresentation (#2785)",
+  subject: "dock: Keep a split filled when its last slot is hidden (#2788)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

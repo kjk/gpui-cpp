@@ -504,6 +504,41 @@ static void NormalizeKeepsARoot() {
     utassert(s.left.node == tabs && s.nodes[tabs].used);
 }
 
+// is_node_visible. A container whose panels are all hidden is not there —
+// and neither is the slot it had.
+static void AHiddenGroupIsNotASlot() {
+    DockState s;
+    for (int i = 0; i < 3; i++) {
+        DockPanelDef def;
+        def.title = StrL("panel");
+        DockAddPanelDef(&s, def);
+    }
+    int a = DockNewTabs(&s);
+    DockTabsAdd(&s, a, 0);
+    int b = DockNewTabs(&s);
+    DockTabsAdd(&s, b, 1);
+    int c = DockNewTabs(&s);
+    DockTabsAdd(&s, c, 2);
+    int split = DockNewSplit(&s, Axis::Horizontal);
+    DockSplitAdd(&s, split, a, 200);
+    DockSplitAdd(&s, split, b, 200);
+    DockSplitAdd(&s, split, c, 200);
+    s.center = split;
+    utassert(DockNodeVisible(&s, split));
+    utassert(DockNodeVisible(&s, c));
+
+    // The trailing group's only panel goes: the group has nothing to show,
+    // and the split still has.
+    s.panels[2].visible = false;
+    utassert(!DockNodeVisible(&s, c));
+    utassert(DockNodeVisible(&s, split));
+    // A split of hidden children is hidden too, which is what keeps the slot
+    // one level up from being held open by an empty one.
+    s.panels[0].visible = false;
+    s.panels[1].visible = false;
+    utassert(!DockNodeVisible(&s, split));
+}
+
 void TestDock() {
     TheFiveDropZones();
     ThePlaceholderCoversEachZone();
@@ -526,4 +561,5 @@ void TestDock() {
     NormalizeCollapsesWhatAnEditNeverMakes();
     NormalizeClampsTheActiveTab();
     NormalizeKeepsARoot();
+    AHiddenGroupIsNotASlot();
 }

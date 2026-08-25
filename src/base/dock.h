@@ -327,6 +327,10 @@ DockPlacement DockPlacementOfNode(const DockState* s, int node);
 // the one that is active — a hidden panel sitting at `activeIx` falls back to
 // the first visible one, which is Rust's `active_panel`.
 int DockVisibleCount(const DockState* s, int node);
+// is_node_visible: whether this node has anything to show — a tab group with
+// a visible panel, or a split with a visible child. A node with nothing takes
+// no room in the split holding it.
+bool DockNodeVisible(const DockState* s, int node);
 int DockActiveIx(const DockState* s, int node);
 // TabPanel::is_locked: the area is locked, this group is the zoomed one, or
 // it is a root with no split above it.

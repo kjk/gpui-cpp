@@ -610,6 +610,22 @@ int DockVisibleCount(const DockState* s, int node) {
     return count;
 }
 
+bool DockNodeVisible(const DockState* s, int node) {
+    if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
+        return false;
+    }
+    const DockNode& n = s->nodes[node];
+    if (!n.split) {
+        return DockVisibleCount(s, node) > 0;
+    }
+    for (int i = 0; i < n.child.len; i++) {
+        if (DockNodeVisible(s, n.child[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int DockActiveIx(const DockState* s, int node) {
     if (node < 0 || node >= s->nodes.len || !s->nodes[node].used) {
         return -1;

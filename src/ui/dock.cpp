@@ -507,11 +507,22 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node) {
         box->FlexCol();
     }
     box->BoundsOut(&n.bounds);
+    // A child with nothing to show takes no slot, and the slot that takes
+    // what is left has to be one that is drawn: a hidden slot grows nothing,
+    // so leaving the growth on the last child would end the split short of
+    // its box and show a band of the frame under the last visible panel.
+    int grows = -1;
     for (int i = 0; i < n.child.len; i++) {
+        if (DockNodeVisible(s, n.child[i])) {
+            grows = i;
+        }
+    }
+    for (int i = 0; i < n.child.len; i++) {
+        if (!DockNodeVisible(s, n.child[i])) {
+            continue;
+        }
         El* wrap = Div(a)->FlexCol();
-        // The last child takes what is left, so rounding never leaves a gap
-        // down the edge of the split.
-        if (i == n.child.len - 1) {
+        if (i == grows) {
             wrap->Flex1();
             if (horizontal) {
                 wrap->H(kFill);
@@ -525,7 +536,9 @@ static El* RenderSplit(Ctx* cx, Str id, Entity<DockState> st, int node) {
         }
         wrap->Child(RenderNode(cx, id, st, n.child[i]));
         box->Child(wrap);
-        if (i < n.child.len - 1) {
+        // A handle sits between two drawn slots, and there is one only while
+        // something is still to come.
+        if (i != grows) {
             box->Child(
                 ResizeHandle(cx, StrDup(a, fmt("%s-split-%d-%d", id, node, i)),
                              st, DockPack(node, i), n.axis));
