@@ -1,0 +1,221 @@
+/* Ported from crates/ui/src/command.
+ *
+ * The palette's model: which items a query leaves, what the rows around them
+ * come to — a heading only for a group that kept something, a separator only
+ * where something follows it — and where the highlight goes. An item's index
+ * path is its place in the model as it was given, before any filtering, which
+ * is what keeps a filtered selection pointing at the right business object. */
+
+#include "Test.h"
+
+using namespace gpui;
+using namespace gpui::component;
+
+static const Str kEmojiKeywords[] = {StrL("smile"), StrL("icon")};
+
+static const CommandItem kSuggestions[] = {
+    {StrL("Calendar")},
+    {StrL("Search Emoji"), kEmojiKeywords, 2},
+    // The disabled one, which the highlight skips.
+    {StrL("Calculator"), nullptr, 0, IconName::None, 0, 0, nullptr, false,
+     true},
+};
+static const CommandItem kSettings[] = {
+    {StrL("Profile")},
+    {StrL("Billing")},
+};
+static const CommandGroup kSuggestionsGroup = {StrL("Suggestions"),
+                                               kSuggestions, 3};
+static const CommandGroup kSettingsGroup = {StrL("Settings"), kSettings, 2};
+
+static void Install(CommandState* s, const CommandEntry* entries, int n,
+                    const char* query) {
+    InputSetValue(&s->query, query ? Str(query) : Str{});
+    CommandInstall(s, nullptr, entries, n, true);
+}
+
+static void TheQueryIsACaseInsensitiveSubstringOfTheLabelOrAKeyword() {
+    utassert(CommandItemMatches(&kSuggestions[0], StrL("cal")));
+    utassert(CommandItemMatches(&kSuggestions[0], StrL("CALENDAR")));
+    // The keywords are searched beside the label, so "smile" finds the emoji
+    // item whose label does not contain it.
+    utassert(CommandItemMatches(&kSuggestions[1], StrL("smile")));
+    utassert(!CommandItemMatches(&kSuggestions[1], StrL("smiley")));
+    // An empty query matches everything, as `contains("")` does.
+    utassert(CommandItemMatches(&kSuggestions[2], StrL("")));
+}
+
+static void GroupsFlattenIntoHeadingsAndItems() {
+    CommandEntry entries[2] = {CommandEntryOf(kSuggestionsGroup),
+                               CommandEntryOf(kSettingsGroup)};
+    CommandState s;
+    Install(&s, entries, 2, nullptr);
+    // Two headings and five items.
+    utassert(s.rows.len == 7);
+    utassert(s.rows[0].kind == CommandRowKind::Heading);
+    utassert(s.rows[1].kind == CommandRowKind::Item);
+    utassert(s.rows[4].kind == CommandRowKind::Heading);
+    utassert(CommandMatchedCount(&s) == 5);
+    // Group and item positions, with no ungrouped section in front of them.
+    utassert(s.matched[0].path.section == 0 && s.matched[0].path.row == 0);
+    utassert(s.matched[3].path.section == 1 && s.matched[3].path.row == 0);
+}
+
+static void AHeadingIsHiddenWhileItsGroupIsFilteredOut() {
+    CommandEntry entries[2] = {CommandEntryOf(kSuggestionsGroup),
+                               CommandEntryOf(kSettingsGroup)};
+    CommandState s;
+    Install(&s, entries, 2, "profile");
+    // Only the Settings group kept anything, so only its heading is drawn.
+    utassert(s.rows.len == 2);
+    utassert(s.rows[0].kind == CommandRowKind::Heading);
+    utassert(CommandMatchedCount(&s) == 1);
+    // And the item still reports where it was given, not where it landed.
+    utassert(s.matched[0].path.section == 1 && s.matched[0].path.row == 0);
+}
+
+static void UngroupedItemsKeepTheirGivenRow() {
+    CommandItem items[3] = {{StrL("Alpha")}, {StrL("Beta")}, {StrL("Gamma")}};
+    CommandEntry entries[3] = {CommandEntryOf(items[0]), CommandEntryOf(items[1]),
+                               CommandEntryOf(items[2])};
+    CommandState s;
+    Install(&s, entries, 3, "gam");
+    utassert(CommandMatchedCount(&s) == 1);
+    // Section 0 and the position it was given — filtering does not renumber
+    // it to 0, which is the whole point of the input-model coordinates.
+    utassert(s.matched[0].path.section == 0 && s.matched[0].path.row == 2);
+}
+
+static void AnUngroupedSectionComesBeforeTheGroups() {
+    CommandItem loose = {StrL("Loose")};
+    CommandEntry entries[2] = {CommandEntryOf(loose),
+                               CommandEntryOf(kSettingsGroup)};
+    CommandState s;
+    Install(&s, entries, 2, nullptr);
+    utassert(s.matched[0].path.section == 0);
+    // The group follows the implicit ungrouped section.
+    utassert(s.matched[1].path.section == 1);
+}
+
+static void ASeparatorIsDrawnOnlyWhereSomethingFollowsIt() {
+    CommandEntry entries[5] = {
+        CommandSeparatorEntry(), CommandEntryOf(kSuggestionsGroup),
+        CommandSeparatorEntry(), CommandEntryOf(kSettingsGroup),
+        CommandSeparatorEntry()};
+    CommandState s;
+    Install(&s, entries, 5, nullptr);
+    // The leading and the trailing one are dropped; the one between the two
+    // groups is kept.
+    int separators = 0;
+    for (int i = 0; i < s.rows.len; i++) {
+        if (s.rows[i].kind == CommandRowKind::Separator) {
+            separators++;
+        }
+    }
+    utassert(separators == 1);
+    utassert(s.rows[0].kind == CommandRowKind::Heading);
+    utassert(s.rows[s.rows.len - 1].kind == CommandRowKind::Item);
+
+    // And a query that empties the second group drops that one too.
+    Install(&s, entries, 5, "calendar");
+    for (int i = 0; i < s.rows.len; i++) {
+        utassert(s.rows[i].kind != CommandRowKind::Separator);
+    }
+}
+
+static void TheHighlightStartsOnTheFirstItemThatCanBeConfirmed() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, nullptr);
+    IndexPath path = {};
+    utassert(CommandSelectedIndex(&s, &path));
+    utassert(path.section == 0 && path.row == 0);
+
+    // A query that leaves only the disabled item leaves nothing highlighted.
+    Install(&s, entries, 1, "calculator");
+    utassert(CommandMatchedCount(&s) == 1);
+    utassert(!CommandSelectedIndex(&s, &path));
+}
+
+static void TheArrowsWrapAroundAndSkipTheDisabled() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, nullptr);
+    IndexPath path = {};
+    CommandSelectBy(&s, nullptr, 1);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+    // Calculator is disabled, so down from Search Emoji wraps to Calendar.
+    CommandSelectBy(&s, nullptr, 1);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 0);
+    // And up from the first goes to the last one that is not disabled.
+    CommandSelectBy(&s, nullptr, -1);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+}
+
+static void TheHighlightFollowsItsItemAcrossAModelInstall() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, nullptr);
+    CommandSelectBy(&s, nullptr, 1);
+    IndexPath path = {};
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+    // The same model again — the highlight is on the item, not on the row.
+    CommandInstall(&s, nullptr, entries, 1, true);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+}
+
+static void AClearedHighlightStaysCleared() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, nullptr);
+    CommandSetSelectedIndex(&s, nullptr, nullptr);
+    IndexPath path = {};
+    utassert(!CommandSelectedIndex(&s, &path));
+    // An install does not put it back on the first item.
+    CommandInstall(&s, nullptr, entries, 1, true);
+    utassert(!CommandSelectedIndex(&s, &path));
+    // Naming a path highlights it again.
+    IndexPath second = IndexPathNew(1).Section(0);
+    CommandSetSelectedIndex(&s, nullptr, &second);
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+    // A disabled one does not, and clears what there was.
+    IndexPath disabled = IndexPathNew(2).Section(0);
+    CommandSetSelectedIndex(&s, nullptr, &disabled);
+    utassert(!CommandSelectedIndex(&s, &path));
+}
+
+static void AQueryChangeResetsTheHighlight() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, nullptr);
+    CommandSelectBy(&s, nullptr, 1);
+    IndexPath path = {};
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 1);
+    // A new query re-filters and puts the highlight on the first item that
+    // can be confirmed, rather than carrying the old one across.
+    Install(&s, entries, 1, "cal");
+    utassert(CommandSelectedIndex(&s, &path) && path.row == 0);
+}
+
+static void AQueryIsTrimmedBeforeItIsMatched() {
+    CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
+    CommandState s;
+    Install(&s, entries, 1, "  calendar  ");
+    utassert(CommandMatchedCount(&s) == 1);
+}
+
+void TestCommand() {
+    TestSuite("command");
+    TheQueryIsACaseInsensitiveSubstringOfTheLabelOrAKeyword();
+    GroupsFlattenIntoHeadingsAndItems();
+    AHeadingIsHiddenWhileItsGroupIsFilteredOut();
+    UngroupedItemsKeepTheirGivenRow();
+    AnUngroupedSectionComesBeforeTheGroups();
+    ASeparatorIsDrawnOnlyWhereSomethingFollowsIt();
+    TheHighlightStartsOnTheFirstItemThatCanBeConfirmed();
+    TheArrowsWrapAroundAndSkipTheDisabled();
+    TheHighlightFollowsItsItemAcrossAModelInstall();
+    AClearedHighlightStaysCleared();
+    AQueryChangeResetsTheHighlight();
+    AQueryIsTrimmedBeforeItIsMatched();
+}

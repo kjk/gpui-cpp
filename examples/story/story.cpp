@@ -84,6 +84,7 @@ static const StoryInfo kMeta[StoryCount] = {
     {"combobox", "Combobox",
      "An autocomplete input paired with a searchable dropdown "
      "list."},
+    {"command", "Command", "A searchable list of commands and quick actions."},
     {"data-table", "DataTable",
      "A complex data table with selection, sorting, column moving, "
      "and loading more."},

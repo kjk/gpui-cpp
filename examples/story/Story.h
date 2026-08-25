@@ -20,6 +20,7 @@ enum {
     StoryCollapsible,
     StoryColorPicker,
     StoryCombobox,
+    StoryCommand,
     StoryDataTable,
     StoryDatePicker,
     StoryDescriptionList,

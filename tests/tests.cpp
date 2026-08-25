@@ -82,6 +82,7 @@ int GpuiMain(int argc, char** argv) {
     TestDock();
     TestTab();
     TestSetting();
+    TestCommand();
     TestSearchableList();
     TestSidebar();
     TestWindowBorder();

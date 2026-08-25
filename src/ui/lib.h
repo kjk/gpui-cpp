@@ -13,6 +13,7 @@
 #include "ui/collapsible.h"
 #include "ui/color_picker.h"
 #include "ui/combobox.h"
+#include "ui/command.h"
 #include "ui/sizing.h"
 #include "ui/time.h"
 #include "ui/description_list.h"

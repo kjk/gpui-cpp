@@ -79,6 +79,7 @@ void TestDataTable();
 void TestDock();
 void TestTab();
 void TestSetting();
+void TestCommand();
 void TestSearchableList();
 void TestSidebar();
 void TestWindowBorder();

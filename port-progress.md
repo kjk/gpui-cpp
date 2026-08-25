@@ -4447,3 +4447,63 @@ was building something else.
 
 17,958 checks pass, `bun cmd/build.ts -rel -all` builds all 25 examples, and
 the Linux and macOS builds compile.
+
+## The command palette, and the field that was never focused
+
+`gpui-component` cc89092f adds a `Command`: a search field over a filtered list
+of commands, with groups, separators, keybinding hints and keyboard
+navigation. It is the first component in this port that was ported whole from
+upstream rather than being found there while chasing a fix, and one thing had
+to be fixed underneath before its keyboard worked at all.
+
+### The split, and where the model lives
+
+Upstream splits it in two. `Command` owns the entries and the rendering policy
+and is pushed into the state on every render; `CommandState` keeps the
+interaction state — the query, the highlight, loading and scrolling. The same
+split holds here, with one difference that runs through the whole tree: the
+model is not copied into the state. The entries are the caller's array, the way
+a `SearchableList`'s items are, so they have to outlive the frame.
+
+`IndexPath` is the part worth being careful about. An item reports where it was
+given, not where the filtering left it: an ungrouped item is section 0 and its
+own position, a grouped one is its group and its position in the group, and a
+model that mixes both puts the implicit ungrouped section first. That is what
+lets an application answer `on_select` and `on_confirm` against its own model
+while the palette shows a filtered list. `tests/CommandTests.cpp` pins it, along
+with the heading that disappears with its group, the separator that is only
+drawn where something follows it, and the highlight that skips the disabled
+items and wraps.
+
+Two things are done differently and knowingly. Rust measures every flattened row
+with `layout_as_root` before handing the sizes to the virtual list, so a custom
+row can be any height; there is no measure pass here, so the two standard rows
+are the heights their padding and text come to and a custom row states its own
+with `CommandItem::contentH`. And `input.set_loading` has no equivalent — an
+`InputState` here has no spinner — so a loading palette puts one where the field
+ends, which is the same information in the same place.
+
+### The field that took the characters but not the chords
+
+The palette would filter as you typed and would not answer an arrow, an escape
+or an Enter. The cause was older than this component. `InputState::on_mouse_down`
+upstream calls `focus_handle.focus(window, cx)`; the press here set `win->input`
+— which is what WM_CHAR follows — and left `win->focusId` alone. Key *actions*
+resolve against the contexts stacked over the focused element, so a clicked
+field had no context over it, "Input" never matched, and every chord state.rs
+binds resolved to nothing. Anything that focused a field some other way — a
+dialog's focus trap, a select taking its content handle — worked, which is why
+nothing had caught it.
+
+`El::BindInput` is where a field is declared, so that is where the press-to-focus
+opt-in went. The visible half of the fix is the focus ring: a clicked field now
+shows one, and so does the Rust story's for the same click.
+
+### Checking it
+
+`bun cmd/compare-ui.ts input click:400,300 shot:focus` puts the two focused
+fields side by side. All 62 story pages were shot before and after the focus
+change: every difference is the sub-percent animation noise those sweeps always
+carry, and the one page that changed on purpose — a clicked field — was checked
+against Rust by hand. 18,167 checks pass and `bun cmd/build.ts -rel -all` builds
+every example.
