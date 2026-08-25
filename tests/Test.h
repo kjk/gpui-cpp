@@ -111,6 +111,7 @@ void TestStateStyle();
 void TestClick();
 void TestVec();
 void TestElementId();
+void TestHoverCard();
 void TestArenaVec();
 void TestDrawOps();
 void TestHttp();

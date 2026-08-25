@@ -104,6 +104,10 @@ struct ShowcaseApp {
     bool collapsibleOpen = false;
     bool colorOpen = false;
     uint32_t colorHex = 0x2563eb;
+    // ColorPickerState's `preview: Option<Hsla>` — the color a swatch under
+    // the pointer is showing, which no click has committed.
+    uint32_t colorPreview = 0;
+    bool colorHasPreview = false;
     bool comboboxOpen = false;
     char comboboxSel[32] = "Select framework";
     InputState comboQuery;
@@ -156,7 +160,9 @@ struct ShowcaseApp {
     Entity<DockState> dock = {};
     int selA = -1;
     int selB = -1;
-    int hoverId = 0;
+    // `self.tooltip_visible`, set by the trigger's on_hover. A page is told
+    // what the pointer is doing; it does not ask the window.
+    bool tooltipVisible = false;
 };
 
 const char* CompSlug(int i);

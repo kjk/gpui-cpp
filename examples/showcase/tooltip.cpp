@@ -3,6 +3,16 @@
 
 using namespace gpui;
 
+// on_hover on the trigger: the page is *told* when the pointer arrives and
+// leaves, and keeps the answer. Rust's `self.tooltip_visible`.
+static void TooltipHover(ShowcaseApp* app, Ctx* cx, const HoverEvent* ev) {
+    if (app->tooltipVisible == ev->hovered) {
+        return;
+    }
+    app->tooltipVisible = ev->hovered;
+    Notify(cx);
+}
+
 El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     // Rust wraps the button in a hover target; the button itself has no hover
@@ -18,15 +28,14 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
                               ->Font(12)
                               ->Fg(Rgb(0x17, 0x17, 0x17)));
     El* trigger = Div(a)
-                      ->Id(StrL("tooltip-trigger"))
-                      ->Click(HashClickId(StrL("tooltip-trigger")))
+                      ->PathClick(StrL("tooltip-trigger"))
+                      ->OnHover(Listen(cx, &TooltipHover))
                       ->Child(btn);
     El* tip = nullptr;
-    if (app->hoverId == HashClickId(StrL("tooltip-trigger"))) {
+    if (app->tooltipVisible) {
         tip = Tooltip::New(cx, StrL("example-tooltip"))
                   ->AnchorBelow(0)
                   ->Left(0)
-                  ->Click(HashClickId(StrL("tooltip-trigger")))
                   ->PadX(8)
                   ->H(28)
                   ->ItemsCenter()

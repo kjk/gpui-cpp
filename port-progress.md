@@ -5440,3 +5440,64 @@ not a focus one — `PopupMenuState::OnPressOutside` hit-tests against it to
 leave the trigger's own toggle alone — and the showcase's tooltip and
 hover-card pages still ask `hoverId ==` to swap a subtree. Those are the two
 shapes left before the widgets themselves can move onto the path.
+
+## A page is told what the pointer is doing
+
+Three showcase pages asked the window who was hovered and swapped a subtree on
+the answer:
+
+```cpp
+if (app->hoverId == HashClickId(StrL("tooltip-trigger"))) { ... }
+```
+
+Rust never asks. The trigger carries `on_hover`, the handler writes state, and
+the next frame reads the state — `self.tooltip_visible` in `tooltip.rs`. A
+hover card goes further and does not even give the page a field: `HoverCard`
+holds `window.use_keyed_state(self.id, ..)`, and the content is a closure that
+runs only while the card is up.
+
+**What the three became.** The tooltip page has a `TooltipHover` handler and a
+`tooltipVisible` field. The hover-card page has neither: the base `HoverCard`
+now makes its own state, keyed off its id, so `HoverCard::New(cx, id)` with no
+entity is Rust's `use_keyed_state`, and the page asks `card->IsOpen()` before
+it builds a thing — which is what the Rust closure's laziness amounts to. The
+keying rule moved into `HoverCardStateFor` so the base card and the themed
+skin cannot disagree about which state a card id means. And the color picker's
+swatches preview through the `onHover` the swatch has always taken, writing
+`colorPreview` / `colorHasPreview` — `ColorPickerState`'s `preview:
+Option<Hsla>`, whose `displayed_color()` is `self.preview.or(self.value)`.
+
+**One of the three was dead.** `SwatchId(i)` hashed `color-swatch-%d` while
+the element it was looking for was built as `swatch-%d`, so the color picker's
+hover preview had never once fired. Two names for one thing, each right on its
+own. Confirmed by screenshot before and after: on the old build, hovering a
+swatch with the picker open changes nothing.
+
+**And porting the tooltip page faithfully found a runtime divergence.** Rust's
+trigger is `div().id("tooltip-trigger").on_hover(..)` wrapped around a
+`Button`, and in GPUI `hovered` is asked of an *element* — bounds containment
+on the top layer — so the wrapper hears the pointer even though the button
+inside it is what a hit test names. Here hover was the topmost hit rect and
+nothing else, so a wrapper around anything hit-testable could never hover: the
+ported page showed no tooltip at all. `WindowHoverChanged` now walks the chain
+of enclosing hit rects — which `HitRect::parent` already recorded for the two
+mouse phases — and fires `false` for the boxes the pointer left and `true` for
+the ones it entered, each exactly once, outermost first. Two absolutely placed
+siblings that overlap are not inside one another, so the chain is what bounds
+containment would have found anyway.
+
+`ShowcaseApp::hoverId` is gone, and with it the last place the showcase read
+`win->hoverId`.
+
+Pinned in `tests/HoverCardTests.cpp`: two card ids are two states and the same
+id asked twice is one — the point of keying, since the tree that armed a
+countdown is thrown away before it fires — and a close that lands while the
+card is hovered does nothing, which is `schedule_close`'s closure asking
+again. The hover chain itself has no unit-test seat (nothing in `tests/`
+drives window input), so its evidence is a screenshot pair: the tooltip page
+at rest and with the pointer on the trigger.
+
+What is still keyed by name: `menu`'s `triggerId`, a *click* id that
+`PopupMenuState::OnPressOutside` hit-tests against to leave the trigger's own
+toggle alone. That is the last of the two shapes; after it the widgets
+themselves can move onto the path.

@@ -33,15 +33,8 @@ HoverCard* HoverCard::CloseDelay(int ms) {
     return this;
 }
 
-// The keyed state behind one card id. Rust's
-// `window.use_keyed_state(self.id, ..)`, which is what makes the delays
-// survive the frame that armed them.
-static Entity<HoverCardState> CardState(Ctx* cx, Str id) {
-    return KeyedEntity<HoverCardState>(cx, (uint32_t)HashClickId(id));
-}
-
 bool HoverCardOpen(Ctx* cx, Str id) {
-    return HoverCardIsOpen(cx, CardState(cx, id));
+    return HoverCardIsOpen(cx, id);
 }
 HoverCard* HoverCard::New(Ctx* cx, Str id) {
     HoverCard* h = New(cx);
@@ -55,7 +48,7 @@ HoverCard* HoverCard::Anchor(HoverCardAnchor v) {
 
 El* HoverCard::IntoEl() {
     Str cardId = id.s ? id : StrL("hover-card");
-    Entity<HoverCardState> st = CardState(cx, cardId);
+    Entity<HoverCardState> st = HoverCardStateFor(cx, cardId);
     // sync(open_delay, close_delay): the caller's numbers every frame.
     HoverCardSetDelays(cx, st, openDelayMs, closeDelayMs);
     bool isOpen = controlled ? open : HoverCardIsOpen(cx, st);

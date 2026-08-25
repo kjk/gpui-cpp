@@ -5,19 +5,23 @@ using namespace gpui;
 
 El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
+    (void)app;
     El* trigger = Div(a)
-                      ->Id(StrL("hover-trigger"))
+                      ->PathClick(StrL("hover-trigger"))
                       ->PadX(12)
                       ->PadY(4)
-                      ->Click(HashClickId(StrL("hover-trigger")))
-                      ->FocusId(HashClickId(StrL("hover-trigger")))
                       ->Child(TextEl(a, StrL("Hover over gpui-base"))
                                   ->Font(12)
                                   ->Fg(Rgb(0x17, 0x17, 0x17))
                                   ->BorderB(1, Rgb(0x17, 0x17, 0x17)));
-    El* content = nullptr;
-    if (app->hoverId == HashClickId(StrL("hover-trigger"))) {
-        content =
+    HoverCard* card = HoverCard::New(cx, StrL("example-hover-card"));
+    card->Trigger(trigger);
+    // `.content(|_, _, _| ..)`: the builder runs only while the card is up, so
+    // a closed card builds nothing. The card is what knows — it holds the two
+    // delays and both hover reports — rather than the page asking the window
+    // what the pointer is over.
+    if (card->IsOpen()) {
+        card->Content(
             Div(a)
                 ->Id(StrL("hover-content"))
                 ->W(210)
@@ -50,12 +54,9 @@ El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
                 ->Child(Div(a)->PadT(8)->Child(
                     TextEl(a, StrL("Unstyled primitives for GPUI."))
                         ->Font(14)
-                        ->Fg(Rgb(0x73, 0x73, 0x73))));
+                        ->Fg(Rgb(0x73, 0x73, 0x73)))));
     }
-    return HoverCard::New(cx, StrL("example-hover-card"))
-        ->Trigger(trigger)
-        ->Content(content)
-        ->IntoEl();
+    return card->IntoEl();
 }
 
 SHOWCASE_PAGE(CompHoverCard, ShowcaseHoverCard);

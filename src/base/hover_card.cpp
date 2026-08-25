@@ -83,14 +83,30 @@ bool HoverCardIsOpen(Ctx* cx, Entity<HoverCardState> state) {
     return s && s->open;
 }
 
+// use_keyed_state(id): one state per card id, made on the frame that first
+// asks for it and kept by the app afterwards. Without it the delays would be
+// thrown away with the tree that armed them.
+Entity<HoverCardState> HoverCardStateFor(Ctx* cx, Str id) {
+    return KeyedEntity<HoverCardState>(cx, (uint32_t)HashClickId(id));
+}
+
+bool HoverCardIsOpen(Ctx* cx, Str id) {
+    return HoverCardIsOpen(cx, HoverCardStateFor(cx, id));
+}
+
 HoverCard* HoverCard::New(Ctx* cx, Str id, Entity<HoverCardState> state) {
     Arena* a = cx->a;
     HoverCard* h = ArenaNew<HoverCard>(a);
     h->a = a;
+    h->cx = cx;
     h->id = id;
-    h->state = state;
+    h->state = state.IsValid() ? state : HoverCardStateFor(cx, id);
     h->root = Div(a)->Id(id);
     return h;
+}
+
+bool HoverCard::IsOpen() const {
+    return HoverCardIsOpen(cx, state);
 }
 
 // A part only hovers if the frame can name it, so one that came without an

@@ -7,15 +7,6 @@ static const uint32_t kSwatches[] = {0xdc2626, 0xd97706, 0x16a34a, 0x2563eb,
                                      0x7c3aed};
 static const int kNSwatches = (int)(sizeof(kSwatches) / sizeof(kSwatches[0]));
 
-// The hover readout asks which swatch the pointer is over, and a hit id is
-// the only handle it has. The name is the swatch's own, so the answer and the
-// element agree by construction rather than by an offset from a base.
-static int SwatchId(int i) {
-    char buf[24];
-    snprintf(buf, sizeof(buf), "color-swatch-%d", i);
-    return HashClickId(Str(buf));
-}
-
 static Rgba FromHex(uint32_t h) {
     return Rgb((uint8_t)((h >> 16) & 0xff), (uint8_t)((h >> 8) & 0xff),
                (uint8_t)(h & 0xff));
@@ -29,15 +20,27 @@ static void SetHexBuf(ShowcaseApp* app) {
     WriteHex(app, app->colorHex);
 }
 
+// displayed_color(): `self.preview.or(self.value)`. A swatch under the
+// pointer previews without committing, so the trigger and the hex field show
+// the preview while there is one and the committed color once there is not.
 static uint32_t DisplayedColor(ShowcaseApp* app) {
-    if (app->colorOpen) {
-        for (int i = 0; i < kNSwatches; i++) {
-            if (app->hoverId == SwatchId(i)) {
-                return kSwatches[i] & 0xffffff;
-            }
-        }
+    uint32_t shown = app->colorHasPreview ? app->colorPreview : app->colorHex;
+    return shown & 0xffffff;
+}
+
+// on_hover on the swatch, with the color it stands for bound to the handler
+// the way Rust's closure captures it — entering previews, leaving restores.
+static void PreviewSwatch(ShowcaseApp* app, Ctx* cx, const HoverEvent* ev,
+                          intptr_t ix) {
+    if (ev->hovered) {
+        app->colorPreview = kSwatches[ix];
+        app->colorHasPreview = true;
+    } else if (app->colorHasPreview && app->colorPreview == kSwatches[ix]) {
+        app->colorHasPreview = false;
+    } else {
+        return;
     }
-    return app->colorHex & 0xffffff;
+    Notify(cx);
 }
 
 static void ToggleColor(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
@@ -55,6 +58,8 @@ static void FocusHex(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
 static void PickSwatch(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
                        intptr_t ix) {
     app->colorHex = kSwatches[ix];
+    // update_value: what was transient is now what the picker holds.
+    app->colorHasPreview = false;
     SetHexBuf(app);
     app->colorOpen = false;
     app->hexIn.focused = false;
@@ -99,10 +104,11 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                   ->Border(1, Rgb(0x17, 0x17, 0x17))
                   ->Bg(Rgb(0xff, 0xff, 0xff));
         El* sw = Div(a)->FlexRow()->Gap(4);
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < kNSwatches; i++) {
             bool on = (app->colorHex & 0xffffff) == kSwatches[i];
             sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i),
-                                       Listen(cx, &PickSwatch, i))
+                                       Listen(cx, &PickSwatch, i),
+                                       Listen(cx, &PreviewSwatch, i))
                           ->W(24)
                           ->H(24)
                           ->Bg(FromHex(kSwatches[i]))

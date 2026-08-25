@@ -37,9 +37,19 @@ void HoverCardContentHover(HoverCardState* self, Ctx* cx, const HoverEvent* ev);
 void HoverCardSetDelays(Ctx* cx, Entity<HoverCardState> state, int openMs,
                         int closeMs);
 bool HoverCardIsOpen(Ctx* cx, Entity<HoverCardState> state);
+// The state behind one card id — `window.use_keyed_state(id, ..)`. One place
+// keys it, so a skin that wants the delays and the card itself agree on which
+// state that is.
+Entity<HoverCardState> HoverCardStateFor(Ctx* cx, Str id);
+// The same question asked of a card's id rather than its entity, for a caller
+// that never named the state because the card made it.
+bool HoverCardIsOpen(Ctx* cx, Str id);
 
-// The card itself. `state` is the entity the two hover handlers run against;
-// pass {} for a card the caller opens on its own.
+// The card itself. `state` is the entity the two hover handlers run against.
+// A caller that passes {} gets the card's own, keyed off its id — Rust's
+// `window.use_keyed_state(self.id, ..)` in `HoverCard::render`, which is why
+// no page upstream declares a field for one. Pass an entity only to share a
+// card's state with something outside it.
 //
 // Hover is reported against an element identity, so the trigger and the
 // content are each given one if they arrived without. Rust wraps the trigger
@@ -48,11 +58,16 @@ bool HoverCardIsOpen(Ctx* cx, Entity<HoverCardState> state);
 // on.
 struct HoverCard {
     Arena* a = nullptr;
+    Ctx* cx = nullptr;
     El* root = nullptr;
     Str id = {};
     Entity<HoverCardState> state = {};
 
     static HoverCard* New(Ctx* cx, Str id, Entity<HoverCardState> state = {});
+    // Rust's content builder runs only when the card is open, so nothing is
+    // built for a card that is not showing. A builder here is handed a tree
+    // that is already made, so the caller asks first.
+    bool IsOpen() const;
     HoverCard* Trigger(El* trigger);
     HoverCard* Content(El* content);
     El* IntoEl();

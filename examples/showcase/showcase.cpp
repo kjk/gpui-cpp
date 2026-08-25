@@ -193,7 +193,6 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     Arena* frame = cx->a;
     Window* win = cx->win;
     WinSize size = WindowSize(win);
-    app->hoverId = win->hoverId;
     BindInput(app, win);
     bool showBack = app->navigationEnabled && app->component != CompOverview;
 

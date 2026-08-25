@@ -495,6 +495,81 @@ static const HitRect* HitRectById(Window* win, int id) {
     return nullptr;
 }
 
+// `hovered` in GPUI is asked of an element — bounds containment on the top
+// layer — not of the one box the hit test names, so a wrapper with an
+// on_hover hears the pointer arrive even when a button inside it is what was
+// hit. The enclosing hit rects are that set: each of them contains the
+// pointer, and two absolutely placed siblings are not inside one another, so
+// the chain is what bounds containment would have found anyway.
+static int HitIndexById(Window* win, int id) {
+    if (!win || !id) {
+        return -1;
+    }
+    for (int i = win->paint.hits.len - 1; i >= 0; i--) {
+        if (win->paint.hits[i].id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// The element and everything it is inside of, innermost first.
+static const int kHoverChainMax = 32;
+static int HoverChain(Window* win, int ix, int* out) {
+    int n = 0;
+    while (ix >= 0 && ix < win->paint.hits.len && n < kHoverChainMax) {
+        out[n++] = ix;
+        ix = win->paint.hits[ix].parent;
+    }
+    return n;
+}
+
+static bool InChain(const int* chain, int n, int ix) {
+    for (int i = 0; i < n; i++) {
+        if (chain[i] == ix) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Only what changed hears anything: a box the pointer was already inside and
+// is still inside stays hovered, which is what makes on_hover a pair of edges
+// rather than a report every move.
+static void WindowHoverChanged(Window* win, int wasId, int nowId) {
+    int wasC[kHoverChainMax];
+    int nowC[kHoverChainMax];
+    int nWas = HoverChain(win, HitIndexById(win, wasId), wasC);
+    int nNow = HoverChain(win, HitIndexById(win, nowId), nowC);
+    // The handlers are copied out first: one of them can rebuild the tree,
+    // and the frame these indices point into goes with it.
+    Listener leaving[kHoverChainMax];
+    Listener entering[kHoverChainMax];
+    int nLeaving = 0;
+    int nEntering = 0;
+    for (int i = 0; i < nWas; i++) {
+        const HitRect& hr = win->paint.hits[wasC[i]];
+        if (hr.onHover.IsValid() && !InChain(nowC, nNow, wasC[i])) {
+            leaving[nLeaving++] = hr.onHover;
+        }
+    }
+    // Outermost first, so a card hears its trigger before the box around it.
+    for (int i = nNow - 1; i >= 0; i--) {
+        const HitRect& hr = win->paint.hits[nowC[i]];
+        if (hr.onHover.IsValid() && !InChain(wasC, nWas, nowC[i])) {
+            entering[nEntering++] = hr.onHover;
+        }
+    }
+    HoverEvent left = {false};
+    HoverEvent entered = {true};
+    for (int i = 0; i < nLeaving; i++) {
+        ListenerCall(win->app, win, leaving[i], &left);
+    }
+    for (int i = 0; i < nEntering; i++) {
+        ListenerCall(win->app, win, entering[i], &entered);
+    }
+}
+
 // ─── input ────────────────────────────────────────────────────────────────
 
 // The press is this window's for as long as the button is down: GPUI grabs
@@ -1037,23 +1112,17 @@ static void DispatchMouseMove(Window* win, const MouseMoveEvent& in) {
         // one it entered hears true. Both are read off the frame that is still
         // on screen, before hoverId moves, so the leaving element is still
         // findable.
-        HoverEvent left = {false};
-        HoverEvent entered = {true};
-        const HitRect* was = HitRectById(win, win->hoverId);
         const HitRect* now = HitRectById(win, id);
+        Str tip = now ? now->tooltip : Str{};
+        Bounds tipAt = now ? now->bounds : Bounds{};
+        WindowHoverChanged(win, win->hoverId, id);
         win->hoverId = id;
-        if (was && was->onHover.IsValid()) {
-            ListenerCall(win->app, win, was->onHover, &left);
-        }
-        if (now && now->onHover.IsValid()) {
-            ListenerCall(win->app, win, now->onHover, &entered);
-        }
         // El::Tip is a tooltip trigger. Rust's triggers call request_show and
         // request_hide on the window's one overlay; the hover change is where
         // that happens here, since the trigger is a style flag rather than an
         // element that could carry handlers of its own.
-        if (now && now->tooltip.s) {
-            TooltipRequestShow(win, now->tooltip, now->bounds);
+        if (tip.s) {
+            TooltipRequestShow(win, tip, tipAt);
         } else {
             TooltipRequestHide(win);
         }
