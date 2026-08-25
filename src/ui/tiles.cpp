@@ -25,13 +25,13 @@ Tiles* Tiles::Panel(Str title, El* content, El* suffix) {
 
 // One of the five grab strips: four along the edges, and the corner that
 // takes the right and the bottom together.
-static El* ResizeHandle(Ctx* cx, Str tid, Entity<TilesState> st, int ix,
-                        int panel, TileSide side, Bounds b) {
+static El* ResizeHandle(Ctx* cx, Entity<TilesState> st, int ix, int panel,
+                        TileSide side, Bounds b) {
     Arena* a = cx->a;
     // Keyed by the panel rather than by the tile's place in the list, so
     // bringing a tile to the front does not renumber every element on it.
-    Str hid = fmt("%s-resize-%d-%d", tid, panel, (int)side);
-    El* e = Div(a)->Id(hid)->Click(HashClickId(hid))->Absolute();
+    Str hid = fmt("resize-%d-%d", panel, (int)side);
+    El* e = Div(a)->PathClick(hid)->Absolute();
     switch (side) {
         case TileSide::Left:
             e->Left(0)->Top(0)->W(kTileHandleSize)->H(b.h);
@@ -72,7 +72,9 @@ static El* ResizeHandle(Ctx* cx, Str tid, Entity<TilesState> st, int ix,
 El* Tiles::IntoEl() {
     const Theme& th = cx->theme();
     TilesState* s = state.Get(cx);
-    El* root = Div(a)->SizeFull()->ClipX()->ClipY();
+    // The area names itself, so the drag bar and the resize strips on every
+    // tile in it are named by the panel they belong to and nothing more.
+    El* root = Div(a)->Id(id)->SizeFull()->ClipX()->ClipY();
     if (!s) {
         return root;
     }
@@ -119,10 +121,9 @@ El* Tiles::IntoEl() {
                 ->OnMouseUp(ListenTo(state, &TilesState::OnTileUp, ix));
 
         // The drag bar: the strip along the top that moves the tile.
-        Str bid = fmt("%s-bar-%d", id, item.panel);
+        Str bid = fmt("bar-%d", item.panel);
         El* bar = Div(a)
-                      ->Id(bid)
-                      ->Click(HashClickId(bid))
+                      ->PathClick(bid)
                       ->FlexRow()
                       ->ItemsCenter()
                       ->W(kFill)
@@ -161,7 +162,7 @@ El* Tiles::IntoEl() {
                                    TileSide::Top, TileSide::Bottom,
                                    TileSide::BottomRight};
         for (TileSide side : kSides) {
-            tile->Child(ResizeHandle(cx, id, state, ix, p, side, b));
+            tile->Child(ResizeHandle(cx, state, ix, p, side, b));
         }
         root->Child(tile);
     }

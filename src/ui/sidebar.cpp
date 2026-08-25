@@ -103,7 +103,10 @@ El* SidebarMenuItem::IntoEl(Str id) {
         }
     }
 
-    El* root = Div(a)->FlexCol()->W(kFill);
+    // The item names itself, so the row, its caret, the context menu over it
+    // and every child under it are named by their place in the item.
+    IdScope scope(cx, id);
+    El* root = Div(a)->Id(id)->FlexCol()->W(kFill);
     El* row = Div(a)
                   ->FlexRow()
                   ->W(kFill)
@@ -144,7 +147,7 @@ El* SidebarMenuItem::IntoEl(Str id) {
             // The caret is its own button: it opens the submenu without
             // being a click on the item.
             row->Child(
-                Button::New(cx, StrDup(a, fmt("%s-caret", id)))
+                Button::New(cx, StrL("caret"))
                     ->Icon(isOpen ? IconName::ChevronDown
                                   : IconName::ChevronRight)
                     ->Ghost()
@@ -161,12 +164,12 @@ El* SidebarMenuItem::IntoEl(Str id) {
         // open rules before handing over to the caller.
         Listener l =
             isSubmenu ? ListenTo(st, &SidebarMenuState::OnItemClick) : onClick;
-        BindClick(row, id, l);
+        BindClick(row, StrL("row"), l);
     }
     // context_menu(..): a right press on the row opens the caller's menu
     // where the pointer is.
     if (contextMenu) {
-        row = ContextMenu::New(cx, StrDup(a, fmt("%s-ctx", id)))
+        row = ContextMenu::New(cx, StrL("ctx"))
                   ->Child(row)
                   ->Menu(contextMenu)
                   ->IntoEl();
@@ -178,7 +181,7 @@ El* SidebarMenuItem::IntoEl(Str id) {
             1, th.sidebarBorder);
         for (int i = 0; i < nChildren; i++) {
             children[i]->collapsed = collapsed;
-            sub->Child(children[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
+            sub->Child(children[i]->IntoEl(StrDup(a, fmt("%d", i))));
         }
         // ml_3p5: the rule down the submenu sits in from the parent's edge,
         // under the icon column rather than beside it.
@@ -207,10 +210,11 @@ SidebarMenu* SidebarMenu::Child(SidebarMenuItem* item) {
 }
 
 El* SidebarMenu::IntoEl(Str id) {
-    El* col = Div(a)->FlexCol()->W(kFill)->Gap(8);
+    IdScope scope(cx, id);
+    El* col = Div(a)->Id(id)->FlexCol()->W(kFill)->Gap(8);
     for (int i = 0; i < n; i++) {
         items[i]->collapsed = collapsed;
-        col->Child(items[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
+        col->Child(items[i]->IntoEl(StrDup(a, fmt("%d", i))));
     }
     return col;
 }
@@ -232,7 +236,8 @@ SidebarGroup* SidebarGroup::Child(SidebarMenu* menu) {
 
 El* SidebarGroup::IntoEl(Str id) {
     const Theme& th = cx->theme();
-    El* col = Div(a)->FlexCol()->W(kFill);
+    IdScope scope(cx, id);
+    El* col = Div(a)->Id(id)->FlexCol()->W(kFill);
     if (!collapsed && label.s) {
         col->Child(Div(a)
                        ->FlexRow()
@@ -247,7 +252,7 @@ El* SidebarGroup::IntoEl(Str id) {
     El* inner = Div(a)->FlexCol()->W(kFill)->Gap(8);
     for (int i = 0; i < n; i++) {
         menus[i]->collapsed = collapsed;
-        inner->Child(menus[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
+        inner->Child(menus[i]->IntoEl(StrDup(a, fmt("%d", i))));
     }
     col->Child(inner);
     return col;
@@ -431,7 +436,11 @@ El* Sidebar::IntoEl() {
                         ? width
                         : (iconCollapsed ? kSidebarCollapsedWidth : width);
 
+    // The sidebar names itself, and the groups under it are named by their
+    // place in it.
+    IdScope scope(cx, id);
     El* root = Div(a)
+                   ->Id(id)
                    ->FlexCol()
                    ->Shrink0()
                    ->W(natural)
@@ -470,7 +479,7 @@ El* Sidebar::IntoEl() {
         // of the spacing around them, and two groups touch. `inner`'s
         // `gap_y_3` never applies, since the list is its only child.
         El* box = Div(a)->FlexCol()->W(kFill)->Child(
-            groups[i]->IntoEl(StrDup(a, fmt("%s-%d", id, i))));
+            groups[i]->IntoEl(StrDup(a, fmt("%d", i))));
         if (i == 0) {
             box->PadT(12);
         }

@@ -1858,6 +1858,11 @@ El* El::PathClick(Str name) {
     clickFromPath = true;
     return this;
 }
+El* El::PathFocus(Str name) {
+    id = name;
+    style.focusFromPath = true;
+    return this;
+}
 El* El::OnClick(Func0 fn) {
     onClick = fn;
     return this;
@@ -6464,9 +6469,11 @@ static void IdCollect(El* e, uint32_t parent) {
     e->pathId = here;
     if (e->clickFromPath) {
         e->clickId = IdToClick(here);
-        if (e->style.focusFromPath) {
-            e->style.focusId = e->clickId;
-        }
+    }
+    // A focus handle is not a hit target: `track_focus` without `.id()` is
+    // an element the keyboard can reach and the mouse cannot.
+    if (e->style.focusFromPath) {
+        e->style.focusId = IdToClick(here);
     }
     for (El* c = e->first; c; c = c->next) {
         IdCollect(c, here);

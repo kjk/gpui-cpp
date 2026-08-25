@@ -175,6 +175,10 @@ Select* Select::Footer(El* e) {
 }
 
 El* Select::IntoEl() {
+    // The whole control is the select's, so its name goes on the stack of ids
+    // around what it builds — the open transition below, and the popover's
+    // state under it.
+    IdScope scope(cx, id);
     const Theme& th = cx->theme();
     SearchableListState* s = state.Get(cx);
     // input_size / input_text_size, by size.
@@ -271,7 +275,7 @@ El* Select::IntoEl() {
         // The list is the whole dropdown: the query, the sections, the checks
         // and the empty state are all its own.
         SearchableList* list =
-            SearchableList::New(cx, StrDup(a, fmt("%s-list", id)), state, query)
+            SearchableList::New(cx, StrL("list"), state, query)
                 ->InSelect(true)
                 ->Items(items, nItems)
                 ->W(menuWidth > 0 ? menuWidth : (width > 0 ? width : 240))
@@ -297,8 +301,7 @@ El* Select::IntoEl() {
         // over it: the dropdown fades up while sliding the last 8 px out of
         // the trigger's edge.
         menu = PopoverSurface(cx, list->IntoEl());
-        menu =
-            DropdownOpen(cx, menu, HashClickId(StrDup(a, fmt("%s-open", id))));
+        menu = DropdownOpen(cx, menu, MotionName(cx, StrL("open")));
     } else if (s) {
         // A closed list still has to know its items and what the query left,
         // so the trigger can name the selection and the keys can move it.

@@ -5831,3 +5831,74 @@ differing by 0.2%. The same is true of the calendar, modal and toast pages.
 They animate, and the shutter catches whatever phase the window is in. A stale
 baseline on one of those pages reads as a regression and is not one — check by
 re-shooting both sides rather than trusting an old capture.
+
+## The id stack, and what it unlocked
+
+Every remaining `%s-` fell into one of two kinds: an element name that could
+fold, and a name that also keyed a state and could not. The second kind is
+what this round is about.
+
+`window.use_keyed_state(name, cx, init)` upstream is keyed by a
+`GlobalElementId`, not by the name alone: GPUI has already pushed the ids of
+everything the widget is being built inside onto `window.element_id_stack` by
+the time that widget's `render` runs, because rendering happens during the
+ancestors' layout. So a keyed state under a local name is scoped for free. The
+port builds its whole tree before `IdsCollect` folds anything, so there was
+nowhere for a keyed name to be scoped by, and every one of them had to carry
+its caller's id.
+
+`Ctx::path` is that stack. `IdScope` is what a `.id()` on the way down amounts
+to — pushed at the top of the function that builds a widget's parts, popped
+when it returns. `KeyedName(cx, name)` is the fold a keyed state is looked up
+under, and `MotionName(cx, name)` the same for a transition. Adoption is
+per-widget and monotone: a widget that has not pushed a scope keys exactly
+what it keyed before, so nothing that was distinct becomes shared.
+
+With that in place the leaves went onto the fold first, from the bottom up —
+`InputBase`, the checkbox, the radio, the switch, the toggle, the link, the
+accordion header, the calendar day, the colour swatch, the OTP row, the alert
+dialog's two buttons, and `BindClick` itself, which had been the last helper
+still hashing one name. Then the containers could name themselves and their
+parts could go local:
+
+- the find bar is `search-panel` over `prev` / `next` / `close` /
+  `case-insensitive` / `replace-mode` / `replace-one` / `replace-all`, which is
+  what search.rs calls them;
+- the spinbutton is a named frame over `decrement` and `increment`, which is
+  what number_input.rs calls them;
+- the settings pane names itself, and its search field, page rows, group rows,
+  items, the control on each item and its reset button are all named by their
+  place;
+- the command palette's `query`, `spinner`, `list` and `row-%d`;
+- the sidebar's groups, menus, items, carets and context menus, all the way
+  down four levels of nesting;
+- the tiles area's drag bars and resize strips, named by the panel they belong
+  to;
+- the colour picker's `trigger`, `mode` and `hex`;
+- the select's `list` and its open transition;
+- the pagination ellipsis is `ellipsis-{i}`, and the data table's context menu
+  is `ctx-menu` — the two that were waiting on the id stack.
+
+`El::PathFocus` is new beside `PathId` and `PathClick`: `track_focus` without
+`.id()` is an element the keyboard can reach and the pointer cannot, which is
+what the command palette's box and a few others want.
+
+**What did not move, and why.** `base/dock_area.cpp` names every element by
+hand because it reads its own id back at build time — `win->pressedId == cid`
+and `win->hoverId == cid` on the split handle — and a folded id does not exist
+until the tree does. Fixing that needs the scope stack to mirror the element
+tree exactly, which means naming every intermediate container in the dock;
+`ui/dock.cpp`'s panel menu is qualified for the same reason. A widget's
+outermost element is also stuck: the select's `%s-popup`, the colour picker's
+`%s-pop` and the table's `%s-ctx` all sit *above* the element that carries the
+widget's name, so there is nothing named over them to fold under.
+
+Verified: all 107 story and showcase pages identical to the build before,
+except the skeleton and the spinner, which animate. Then 45 interactions
+across two rounds — every checkbox, radio, switch, toggle, accordion header,
+OTP field, alert dialog, link, both disabled controls that should do nothing,
+three separate pagination ellipsis menus, a data table right-click, ten
+settings interactions including two number inputs and two selects on one page,
+four sidebar rows, four command palette interactions and three select ones —
+all byte-identical to the same interaction on the build before, and each one
+demonstrably doing something.

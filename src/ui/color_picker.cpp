@@ -260,7 +260,7 @@ El* ColorPicker::IntoEl() {
     if (label.s) {
         trigger->Child(TextEl(a, label)->Font(16)->Fg(th.foreground));
     }
-    BindClick(trigger, StrDup(a, fmt("%s-trigger", id)),
+    BindClick(trigger, StrL("trigger"),
               ListenTo(st, &ColorPickerState::OnToggleOpen));
 
     El* pop = nullptr;
@@ -277,7 +277,7 @@ El* ColorPicker::IntoEl() {
         // `TabBar::new("mode").segmented()` names no size, so it is the
         // default one; the port asked for Small, which is a shorter strip
         // with a smaller label than Rust draws.
-        pop->Child(Tabs::New(cx, StrDup(a, fmt("%s-mode", id)))
+        pop->Child(Tabs::New(cx, StrL("mode"))
                        ->Segmented()
                        ->Tab(Tr("ColorPicker.Palette"))
                        ->Flex1()
@@ -303,7 +303,7 @@ El* ColorPicker::IntoEl() {
                            ->Border(1, RgbaDarken(hovered, 0.2f)));
             s->hexInput.onChange = ListenTo(st, &ColorPickerState::OnHexChange);
             row->Child(
-                Input::New(cx, StrDup(a, fmt("%s-hex", id)), &s->hexInput)
+                Input::New(cx, StrL("hex"), &s->hexInput)
                     ->WithSize(UiSize::Small)
                     ->OnFocus(ListenTo(st, &ColorPickerState::OnHexFocus))
                     ->IntoEl());
@@ -314,6 +314,9 @@ El* ColorPicker::IntoEl() {
         }
     }
     El* root = gpui::ColorPicker::New(cx, id)->Child(trigger);
+    // The popup's box is the outermost element of the picker — there is
+    // nothing named above it for a local name to fold under, so this one
+    // stays spelled out. Everything inside it is named by its place.
     El* wrap = Popup::New(cx, StrDup(a, fmt("%s-pop", id)), root)
                    ->Content(pop)
                    ->IntoEl();

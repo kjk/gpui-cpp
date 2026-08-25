@@ -2023,6 +2023,9 @@ struct El {
     // The same without joining the tab order, for a box that is a hit target
     // and nothing else.
     El* PathClick(Str name);
+    // The name, and the focus id from the fold — for an element the keyboard
+    // reaches without the pointer being able to press it.
+    El* PathFocus(Str name);
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
     // The scrollbar's own handler. Rust's scrollbar writes straight into the

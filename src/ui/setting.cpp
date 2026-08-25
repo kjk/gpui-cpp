@@ -526,12 +526,16 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
                       bool first, bool pageResettable, bool* anyDirty) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
+    // The row is what names the item, so the control on it and the reset
+    // button beside it are named by their place on the row rather than by the
+    // item's id spelled into each.
+    IdScope scope(cx, id);
     // item.rs: `div().w_full()` with `gap_3`, `justify_between().items_start()`
     // when it is horizontal — and no padding and no rule of its own. The
     // padding is the GroupBox's `p_4` and the space between two items is its
     // `gap_4`; the port gave every item a box of its own and drew a line
     // between them, which is a table where Rust has a stack.
-    El* line = Div(a)->W(kFill)->Gap(12);
+    El* line = Div(a)->Id(id)->W(kFill)->Gap(12);
     if (it.layout == Axis::Horizontal) {
         line->FlexRow()->ItemsStart()->JustifyBetween();
     } else {
@@ -548,7 +552,7 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     }
     line->Child(text);
     El* right = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
-    FieldEl f = RenderField(cx, s, it, id, pageResettable);
+    FieldEl f = RenderField(cx, s, it, StrL("field"), pageResettable);
     if (f.dirty && f.resettable && f.onReset.IsValid()) {
         *anyDirty = true;
     }
@@ -559,7 +563,7 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
     if (f.dirty && f.resettable && f.onReset.IsValid()) {
         // Rust's reset button carries an Undo2 icon; the nearest one this
         // tree has is the arrow that points back.
-        right->Child(Button::New(cx, StrDup(a, fmt("%s-reset", id)))
+        right->Child(Button::New(cx, StrL("reset"))
                          ->Icon(IconName::ArrowLeft)
                          ->Ghost()
                          ->WithSize(UiSize::XSmall)
@@ -582,7 +586,11 @@ El* Settings::IntoEl() {
         st->fields.Clear();
     }
 
-    El* row = Div(a)->FlexRow()->W(kFill)->H(h)->ItemsStart();
+    // The whole settings pane is one widget, so its name is what scopes the
+    // search field, the page rows, the group rows and every item under them —
+    // and the states the fields keep, which is what the id stack is for.
+    IdScope scope(cx, id);
+    El* row = Div(a)->Id(id)->FlexRow()->W(kFill)->H(h)->ItemsStart();
 
     // The sidebar: the search field, then a row per page, with the groups of
     // the open page under it.
@@ -601,7 +609,7 @@ El* Settings::IntoEl() {
         if (!search->placeholder.s) {
             InputSetPlaceholder(search, Tr("Settings.search_placeholder"));
         }
-        side->Child(Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
+        side->Child(Input::New(cx, StrL("search"), search)
                         ->Prefix(Div(a)->PadL(10)->Child(
                             IconEl(a, IconName::Search, 16)->Fg(th.mutedFg)))
                         ->WithSize(UiSize::Small)
@@ -644,7 +652,7 @@ El* Settings::IntoEl() {
                        16)
                     ->Fg(th.mutedFg));
         }
-        BindClick(item, StrDup(a, fmt("%s-page-%d", id, i)),
+        BindClick(item, StrDup(a, fmt("page-%d", i)),
                   ListenTo(state, &SettingsState::OnPageClick, (intptr_t)i));
         side->Child(item);
         // click_to_open: the open page lists its groups under it, and each
@@ -670,7 +678,7 @@ El* Settings::IntoEl() {
                 sub->Bg(BackgroundOpacity(th.tokens.accent, 0.6f));
             }
             sub->Child(TextEl(a, group.title)->Font(16)->Fg(th.foreground));
-            BindClick(sub, StrDup(a, fmt("%s-group-%d-%d", id, i, g)),
+            BindClick(sub, StrDup(a, fmt("group-%d-%d", i, g)),
                       ListenTo(state, &SettingsState::OnGroupClick,
                                (intptr_t)(i * 64 + g)));
             side->Child(sub);
@@ -709,10 +717,10 @@ El* Settings::IntoEl() {
                 if (!SettingItemMatches(&it, query)) {
                     continue;
                 }
-                card->Child(RenderItem(
-                    cx, this, it,
-                    StrDup(a, fmt("%s-%d-%d-%d", id, selected, g, itemIx)),
-                    shown == 0, p.resettable, &anyDirty));
+                card->Child(
+                    RenderItem(cx, this, it,
+                               StrDup(a, fmt("%d-%d-%d", selected, g, itemIx)),
+                               shown == 0, p.resettable, &anyDirty));
                 shown++;
             }
             body->Child(card);
@@ -737,7 +745,7 @@ El* Settings::IntoEl() {
         // left its default.
         if (anyDirty) {
             titleRow->Child(
-                Button::New(cx, StrDup(a, fmt("%s-reset-all", id)))
+                Button::New(cx, StrL("reset-all"))
                     ->Icon(IconName::ArrowLeft)
                     ->Tooltip(Tr("Settings.Reset All"))
                     ->Ghost()

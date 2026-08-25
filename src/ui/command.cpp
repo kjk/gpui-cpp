@@ -629,7 +629,6 @@ Command* Command::OnCancel(Listener fn) {
 // builds its rows, which is inside `IntoEl` and never nested.
 static CommandState* gRowState = nullptr;
 static Entity<CommandState> gRowEntity = {};
-static Str gRowId = {};
 
 static El* CommandRowEl(Ctx* cx, int rowIx) {
     Arena* a = cx->a;
@@ -701,7 +700,7 @@ static El* CommandRowEl(Ctx* cx, int rowIx) {
         Listener click = ListenTo(gRowEntity, &CommandState::OnRowClick, 0);
         Listener hover = ListenTo(gRowEntity, &CommandState::OnRowHover, 0);
         line->HoverBg(th.tokens.accent);
-        BindClick(line, StrDup(cx->a, fmt("%s-row-%d", gRowId, rowIx)),
+        BindClick(line, StrDup(cx->a, fmt("row-%d", rowIx)),
                   ListenerArg(click, matchIx));
         line->OnHover(ListenerArg(hover, matchIx));
     }
@@ -749,15 +748,15 @@ El* Command::IntoEl() {
                         ->ItemsCenter()
                         ->BorderB(1, th.border);
         field->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
-        field->Child(Div(a)->Flex1()->Child(
-            Input::New(cx, StrDup(a, fmt("%s-query", id)), &s->query)
-                ->Appearance(false)
-                ->IntoEl()));
+        field->Child(
+            Div(a)->Flex1()->Child(Input::New(cx, StrL("query"), &s->query)
+                                       ->Appearance(false)
+                                       ->IntoEl()));
         // `input.set_loading`: there is no spinner inside a field here, so the
         // palette puts one where the field ends.
         if (s->loading) {
             field->Child(Spinner::New(cx)
-                             ->Id(StrDup(a, fmt("%s-spinner", id)))
+                             ->Id(StrL("spinner"))
                              ->WithSize(UiSize::Small)
                              ->IntoEl());
         }
@@ -784,9 +783,8 @@ El* Command::IntoEl() {
         }
         gRowState = s;
         gRowEntity = state;
-        gRowId = id;
         El* list = VirtualList::New(cx, s->rows.len)
-                       ->Id(StrDup(a, fmt("%s-list", id)))
+                       ->Id(StrL("list"))
                        ->Sizes(s->rowSizes.els)
                        ->ViewH(viewH)
                        ->Handle(&s->scroll)
@@ -809,8 +807,7 @@ El* Command::IntoEl() {
     // about.
     CommandInitKeys();
     Listener onAction = ListenTo(state, &CommandState::OnAction);
-    box->Id(id)
-        ->FocusId(HashClickId(id))
+    box->PathFocus(id)
         ->FocusRing(false)
         ->KeyContext(CommandContext())
         ->OnAction(action::SelectUp(), onAction)
