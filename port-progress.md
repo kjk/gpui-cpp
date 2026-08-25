@@ -4588,3 +4588,83 @@ shot and compared. A throwaway probe confirmed `Shell_NotifyIcon` accepts the
 post on this machine. What is not automated is the part that needs a person:
 that the toast is in the Action Center, and that clicking it brings the window
 back. 18,207 checks pass and `bun cmd/build.ts -rel -all` builds every example.
+
+
+## Twenty-six checkins, and what a port does with them
+
+From `b80bb899` to `7885c416` — gpui-component's 19th to 24th of August. The
+OS-notification bridge has its own section above; this is the rest, and mostly
+it is about what *not* to write.
+
+### The ones that landed
+
+**A canonical dock tree.** `2cadad22` moves the whole dock foundation into
+`gpui-base` and rebuilds the skin over it: the layout becomes pure data
+addressed by NodeId, and two mutually recursive `remove_self_if_empty` methods
+reaching through weak parent pointers inside `window.defer` become one
+idempotent `normalize`. Nearly all of that is how this port was already
+arranged — an array of nodes naming each other by index, a skin rebuilt from it
+every frame — so what was actually missing was the canonical *shape*.
+`DockPrune` collapses upward from an edit and knows about an empty node and a
+split of one; it says nothing about a split nested in a split of the same axis,
+or an active tab past the end, because no edit makes either. A file can, so
+`DockNormalize` is the four rules run to a fixpoint and `DockLoad` ends with it.
+
+**Springs.** `cc86f8d4` is the one substantial new mechanism. A transition
+restarts its curve from the value sampled at the instant its target changes:
+continuous in position, discontinuous in speed. A spring carries velocity
+instead, so a switch toggled twice or an indicator chasing a click decelerates
+and turns around. The integrator here is the closed form of the damped
+oscillator rather than an Euler step — at these frame times an integrator makes
+the motion depend on the frame rate — with the underdamped, critical and
+overdamped cases spelled out. Sprung: the switch thumb, the checkbox tick, the
+accordion panel, the slider's thumb ring, the tab indicator, the dock's drop
+placeholder, the toast stack's geometry and fade. A response is not a duration,
+so upstream's numbers replaced the durations rather than sitting beside them.
+
+**Two real bugs, both about state outliving what it described.** A committed
+IME composition never closed its undo transaction, because neither platform
+sends an unmark after a confirmed candidate — so everything typed afterwards
+merged into it and one undo took the lot. And a field removed from the tree
+while focused left the window pointing at it, which here is a pointer that
+outlives the state; the field now takes its registration with it, and a closing
+window blurs what it had.
+
+**Smaller.** A masked field keeps its value out of the clipboard and treats the
+whole of itself as one word (there are no boundaries on screen to move by). The
+title bar draws window controls only when the frame is actually ours, which on
+X11 means the Motif hint *and* an empty `_NET_FRAME_EXTENTS`. A hidden dock slot
+stops occupying a slot, and the growth goes to the last one that is drawn. The
+command palette gained `Filterable(false)` for a source that answers the query
+itself, and its rows' inset moved onto the virtual list, where it behaves as CSS
+scroll-padding does. The editor's rows follow its font. The dark syntax palette
+came from upstream's own JSON through `gen-theme-data.ts`.
+
+### The ones that did not, and why
+
+Ten checkins fixed things this port cannot have. Two are worth naming because
+they say something about the shape of the port.
+
+`e5b8a3f4` snaps highlight runs to character boundaries because gpui's shaper
+*panics* when a run splits a multi-byte character, and a stale tree-sitter tree
+can hand it one. Neither half exists here: a line is shaped whole and a span
+only clips what is drawn, and the highlighter is a synchronous scan of the
+current text with no background reparse to fall behind. The fix is real; the
+failure is not reachable.
+
+`16274ece` and `f478ff6b` are Rust ownership — wrapping without copying lines
+out of the rope, not copying the value into a presentation struct. The text
+here is a flat buffer and `InputValue` hands back a borrow of it. A port whose
+data structures differ inherits neither the cost nor the fix.
+
+The rest: two docs runs, a skills bundle, a Cargo feature, a Rust build config,
+a scrollable that needs an explicit id because Rust derives one from the
+caller's source location, a dock resize handle for the same reason, a combobox
+whose selection is resolved against the filtered view, a single-line input
+painting scrollbars, a menu icon read from the CWD, and a dock size animation
+added and then removed two checkins later.
+
+One is deferred rather than declined: `cb87f2cf` moves the story's app menus
+into the macOS system menu bar. There is nowhere to move them to — `native_menu`
+here is popup and context menus, and nothing sets NSApp's main menu — and
+hiding the in-window bar without that would leave a Mac with no menus at all.
