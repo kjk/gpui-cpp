@@ -248,19 +248,23 @@ El* PopupMenu::IntoEl() {
     // opens takes the focus off its parent, which is what makes escape close
     // one level at a time without anything walking the tree.
     PopupMenuInitKeys();
-    int focusId = HashClickId(id);
-    root->KeyContext(PopupMenuContext())->FocusId(focusId)->TrapId(focusId);
+    // The handle the state owns — asked for once and kept, which is what lets
+    // dismissal put focus back without the menu having to be found by name.
+    // The trap is keyed on the same number, since a trap is the container the
+    // focus is held inside.
+    if (s && !s->focus.IsValid()) {
+        s->focus = FocusHandleNew(cx);
+    }
+    FocusHandle focus = s ? s->focus : FocusHandle{};
+    root->KeyContext(PopupMenuContext())->TrackFocus(focus)->TrapId(focus.id);
     if (s) {
-        // The handle dismissal puts focus back from, named the same way every
-        // frame so a state that outlives the frame can still find it.
-        s->focusId = focusId;
         // .on_mouse_down_out(Self::on_mouse_down_out), and the box it is
         // measured against.
         root->BoundsOut(&s->bounds)
             ->OnMouseUpOut(ListenTo(state, &PopupMenuState::OnPressOutside));
     }
     if (s && s->openSubmenu < 0) {
-        FocusTrapArm(cx->win, focusId);
+        FocusTrapArm(cx->win, focus.id);
     }
     Listener onAction = ListenTo(state, &PopupMenuState::OnAction);
     root->OnAction(action::Confirm(), onAction)

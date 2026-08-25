@@ -1293,8 +1293,13 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     // `when(!disabled)`, so pressing one leaves focus where it was; and
     // `track_focus` on an enabled one still does not focus it, which is why
     // only the widgets that call `focus()` themselves are `FocusOnPress`.
-    if (id && FocusIdIsFocusable(win, id) && FocusIdTakesPress(win, id)) {
-        WindowSetFocusId(win, id);
+    // What the press focuses is what the element said it is focusable *as*,
+    // which until focus handles existed was always the same number it is hit
+    // as. A box tracking a handle is the first case where the two differ.
+    int focusTarget = hit ? hit->focusId : 0;
+    if (focusTarget && FocusIdIsFocusable(win, focusTarget) &&
+        FocusIdTakesPress(win, focusTarget)) {
+        WindowSetFocusId(win, focusTarget);
     }
     // on_mouse_down, ahead of the click: an element that wants the press
     // itself — a slider jumping to it — gets the whole event, not the

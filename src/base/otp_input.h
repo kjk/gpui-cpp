@@ -18,6 +18,10 @@ struct OtpState {
     // The caret's clock, the way InputState has one. Rust gives OtpState its
     // own Entity<BlinkCursor> for the same reason.
     EntityId blink = {};
+    // otp_input.rs's `focus_handle`. The row is focusable *as* this, so
+    // whether the field has focus is asked of the handle rather than by
+    // hashing the element's name a second time and comparing.
+    FocusHandle focus = {};
 };
 
 // to_digit_char: an ASCII digit, or a full-width one folded onto it. Answers 0

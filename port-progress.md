@@ -5385,3 +5385,58 @@ resolved style back: a hover refinement holds only while hovered, a drag-over
 one only for the right kind on the right element, and a box with no click id
 of its own is never refined — it would otherwise match a `hoverId` of 0, which
 is what "nothing is hovered" is spelled as. 18523 checks.
+
+
+## A focus handle is not an element's name
+
+The next thing in the way of the path was focus. Rust's is a `FocusHandle`: a
+refcounted slotmap key made with `cx.focus_handle()`, owned by whatever holds
+the state, attached to a box with `div().track_focus(&handle)`. It has nothing
+to do with the element's name. Here every focusable box derived its focus id
+from its own name with `HashClickId`, which is why a state that had to
+remember one — a popover, a menu, a select — stashed a number it recomputed
+from the same string every frame. The popover's line says the rest:
+
+```cpp
+p->focusId = HashClickId(id) * 31 + 1;
+```
+
+The `* 31 + 1` was there for one reason: to keep the popover's focus id clear
+of the *click* id that same name produced. Two things forced into one number.
+
+`FocusHandle` is now a type, `FocusHandleNew(cx)` is `cx.focus_handle()`, and
+`El::TrackFocus(h)` is `track_focus`. Handles are allocated downwards from
+-1000, so they cannot meet a hashed element id (positive) or the window chrome
+(-1..-4) — no band, no arithmetic twist. There is no refcount and nothing is
+given back: an int is cheap, and the state that owns the handle is what makes
+it mean anything.
+
+One change underneath made it work: `HitRect` carries the element's focus id
+now, and a press focuses *that* rather than the id the box was hit as. Until
+handles existed the two were always the same number, so nothing could tell;
+a box tracking a handle is the first case where they differ.
+
+Five states hold handles instead of numbers: `PopoverState` (its own and the
+one it tracks), `PopupMenuState`, `SearchableListState` (the select's trigger
+and content), and `OtpState` — whose "am I focused?" was
+`WindowFocusedId(cx->win) == HashClickId(id)`, hashing the element's name a
+second time to compare against it, and is now
+`FocusHandleIsFocused(win, s->focus)`. Every `previousFocusId` became a
+`previousFocus`, which is Rust's `previous_focus_handle`.
+
+**One wart the conversion made visible rather than fixed.** A select parks
+focus on its `contentFocus` while the list is up, but the list's box only
+takes a focus id when it is *not* in a select (`if (!inSelect)` in
+`searchable_list.cpp`) — so the handle names nothing in the tree, and focus
+sits on an element that is not there. It behaves, because every question asked
+of it is `win->focusId == handle`, which is true either way. With a number
+that was invisible; with a handle it is a thing the list should be tracking.
+Left alone here because giving the box a real focus id adds a tab stop inside
+an open dropdown, and this session cannot drive a keyboard to see what that
+does.
+
+What is still keyed by name, and why: `menu`'s `triggerId` is a *click* id,
+not a focus one — `PopupMenuState::OnPressOutside` hit-tests against it to
+leave the trigger's own toggle alone — and the showcase's tooltip and
+hover-card pages still ask `hoverId ==` to swap a subtree. Those are the two
+shapes left before the widgets themselves can move onto the path.

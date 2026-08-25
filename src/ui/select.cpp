@@ -132,18 +132,16 @@ void SelectToggleOpen(SearchableListState* s, Ctx* cx) {
     // `previous.focus(..)` on the way out, which is Rust's toggle. Focus that
     // has moved somewhere else on purpose is left alone.
     if (s->open) {
-        s->previousFocusId = WindowFocusedId(cx->win);
-        if (s->contentFocusId) {
-            WindowSetFocusId(cx->win, s->contentFocusId);
-        }
+        s->previousFocus = WindowFocused(cx->win);
+        FocusHandleFocus(cx->win, s->contentFocus);
     } else {
-        if (s->previousFocusId &&
-            WindowFocusWithin(cx->win, s->contentFocusId)) {
-            if (!WindowRestoreFocus(cx->win, s->previousFocusId)) {
-                WindowRestoreFocus(cx->win, s->triggerFocusId);
+        if (s->previousFocus.IsValid() &&
+            FocusHandleContainsFocused(cx->win, s->contentFocus)) {
+            if (!FocusHandleRestore(cx->win, s->previousFocus)) {
+                FocusHandleRestore(cx->win, s->triggerFocus);
             }
         }
-        s->previousFocusId = 0;
+        s->previousFocus = {};
     }
     // Opening starts the keyboard on whatever is already picked, so the first
     // arrow steps from there rather than from the top.
@@ -242,11 +240,21 @@ El* Select::IntoEl() {
         BindClick(box, id, onToggle);
         box->FocusRing(focusRing);
     }
-    // The two handles the toggle above moves focus between, named the same way
-    // every frame so a state that outlives the frame can still find them.
+    // The two handles the toggle above moves focus between. Asked for once
+    // and kept on the state, the way Rust's `focus_handle` and
+    // `content_focus_handle` are, rather than derived from the element's name
+    // each frame — which is what let the trigger's focus id and its *click*
+    // id be the same number by accident.
     if (s) {
-        s->triggerFocusId = HashClickId(id);
-        s->contentFocusId = HashClickId(StrDup(a, fmt("%s-list", id)));
+        if (!s->triggerFocus.IsValid()) {
+            s->triggerFocus = FocusHandleNew(cx);
+        }
+        if (!s->contentFocus.IsValid()) {
+            s->contentFocus = FocusHandleNew(cx);
+        }
+        if (!disabled) {
+            box->TrackFocus(s->triggerFocus);
+        }
     }
 
     El* menu = nullptr;

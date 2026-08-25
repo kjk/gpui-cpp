@@ -24,18 +24,17 @@ void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
         return;
     }
     if (open) {
-        s->previousFocusId = WindowFocusedId(cx->win);
-        int take = s->trackedFocusId ? s->trackedFocusId : s->focusId;
-        if (take) {
-            WindowSetFocusId(cx->win, take);
-        }
+        s->previousFocus = WindowFocused(cx->win);
+        FocusHandle take =
+            s->trackedFocus.IsValid() ? s->trackedFocus : s->focus;
+        FocusHandleFocus(cx->win, take);
     } else {
-        if (s->previousFocusId &&
-            (WindowFocusWithin(cx->win, s->focusId) ||
-             WindowFocusWithin(cx->win, s->trackedFocusId))) {
-            WindowRestoreFocus(cx->win, s->previousFocusId);
+        if (s->previousFocus.IsValid() &&
+            (FocusHandleContainsFocused(cx->win, s->focus) ||
+             FocusHandleContainsFocused(cx->win, s->trackedFocus))) {
+            FocusHandleRestore(cx->win, s->previousFocus);
         }
-        s->previousFocusId = 0;
+        s->previousFocus = {};
     }
     s->open = open;
 }
@@ -72,16 +71,23 @@ Popover* Popover::New(Ctx* cx, Str id, Entity<PopoverState> state,
     // The popover's own focus handle. Rust hangs it off the content, not off
     // the trigger's container, so opening moves focus into what came up and
     // Tab from the trigger still walks the page.
-    p->focusId = HashClickId(id) * 31 + 1;
+    // `PopoverState::new` asks the app for a handle once and keeps it; the
+    // state outlives the frame, so the handle it holds is what the content
+    // picks up again each time. Nothing about it comes from `id` any more —
+    // the old `HashClickId(id) * 31 + 1` existed only to stay clear of the
+    // click id that same name produced.
     if (PopoverState* st = state.Get(cx)) {
-        st->focusId = p->focusId;
+        if (!st->focus.IsValid()) {
+            st->focus = FocusHandleNew(cx);
+        }
+        p->focus = st->focus;
     }
     return p;
 }
 
-Popover* Popover::TrackedFocus(int trackedId) {
+Popover* Popover::TrackedFocus(FocusHandle tracked) {
     if (PopoverState* st = state.Get(cx)) {
-        st->trackedFocusId = trackedId;
+        st->trackedFocus = tracked;
     }
     return this;
 }
@@ -118,7 +124,7 @@ Popover* Popover::Content(El* content) {
         PopupPlaceContent(content, anchor, 4);
         // track_focus, not focus_ring_style: the surface takes focus and
         // does not draw a ring around itself for it.
-        content->FocusId(focusId)->FocusRing(false);
+        content->TrackFocus(focus)->FocusRing(false);
         root->Child(content);
     }
     return this;

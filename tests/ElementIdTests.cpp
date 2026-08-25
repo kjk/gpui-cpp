@@ -141,6 +141,40 @@ static void TheSameTreeGivesTheSameIds() {
     ArenaDelete(a);
 }
 
+// FocusHandle — `cx.focus_handle()`. GPUI hands out a refcounted slotmap key
+// that has nothing to do with the element's name; a handle here is an int from
+// a counter, allocated below -1000 so it can never be mistaken for a hashed
+// element id (positive) or the window chrome (-1..-4).
+static void EveryHandleIsItsOwnAndOutOfTheHashedRange() {
+    FocusHandle a = FocusHandleNew((App*)nullptr);
+    FocusHandle b = FocusHandleNew((App*)nullptr);
+    utassert(a.IsValid() && b.IsValid());
+    utassert(a != b);
+    utassert(a.id <= -1000 && b.id <= -1000);
+    // A default handle is nothing, which is what an unset one means.
+    FocusHandle none;
+    utassert(!none.IsValid());
+    utassert(none.id == 0);
+}
+
+// `div().track_focus(&handle)`: the box is focusable *as* the handle, and what
+// it is hit as is a separate question. Until handles existed the two were
+// forced to be one number, which is why a popover had to spell its focus id
+// `HashClickId(id) * 31 + 1` to keep clear of its own click id.
+static void TrackFocusIsIndependentOfTheHitId() {
+    Arena* ar = ArenaNew();
+    FocusHandle h = FocusHandleNew((App*)nullptr);
+    El* root = Div(ar)->Id(StrL("root"));
+    El* box = Div(ar)->PathId(StrL("box"))->TrackFocus(h);
+    root->Child(box);
+
+    IdsCollect(root);
+    utassert(box->clickId > 0);
+    utassert(box->style.focusId == h.id);
+    utassert(box->style.focusId != box->clickId);
+    ArenaDelete(ar);
+}
+
 void TestElementId() {
     TestSuite("element-id");
     TheSameNameUnderTwoParentsIsTwoElements();
@@ -149,4 +183,6 @@ void TestElementId() {
     TheSeparatorKeepsTwoPathsApart();
     AnExplicitIdWins();
     TheSameTreeGivesTheSameIds();
+    EveryHandleIsItsOwnAndOutOfTheHashedRange();
+    TrackFocusIsIndependentOfTheHitId();
 }

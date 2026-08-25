@@ -86,14 +86,14 @@ struct SearchableListState {
     // What the caller hears once a click has been applied, carrying the item
     // it was about. Rust's `on_confirm`.
     Listener onChange = {};
-    // The select's focus handles. Rust's Select focuses its `content` handle
-    // when the list comes up — `tracked_focus_handle` — and puts focus back
-    // on the trigger when it goes away; these are the ids that stand in for
-    // the two handles, filled in by whatever renders the select, plus where
-    // focus was before it opened.
-    int triggerFocusId = 0;
-    int contentFocusId = 0;
-    int previousFocusId = 0;
+    // The select's focus handles, which are handles now rather than ids
+    // standing in for them. Rust's Select focuses its `content` handle when
+    // the list comes up — `tracked_focus_handle` — and puts focus back on the
+    // trigger when it goes away. Both are asked for once and kept here,
+    // because the state is what outlives the frame the elements are built in.
+    FocusHandle triggerFocus = {};
+    FocusHandle contentFocus = {};
+    FocusHandle previousFocus = {};
 
     static void OnRowClick(SearchableListState* self, Ctx* cx,
                            const ClickEvent* ev, intptr_t match);

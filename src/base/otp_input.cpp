@@ -107,9 +107,13 @@ El* OtpInput::New(Ctx* cx, Str id, Entity<OtpState> state) {
     if (!s || !id.s) {
         return e;
     }
+    if (!s->focus.IsValid()) {
+        s->focus = FocusHandleNew(cx);
+    }
+    e->TrackFocus(s->focus);
     // focused follows the window, so a click anywhere else blurs the field
     // without every page having to say so.
-    bool has = WindowFocusedId(cx->win) == HashClickId(id);
+    bool has = FocusHandleIsFocused(cx->win, s->focus);
     if (has != s->focused) {
         if (has) {
             OtpFocus(s, cx->app, cx->win);

@@ -1704,6 +1704,13 @@ struct SelSource {
     const SelBlock* block = nullptr;
 };
 
+struct FocusHandle {
+    int id = 0;
+    bool IsValid() const { return id != 0; }
+    bool operator==(const FocusHandle& o) const { return id == o.id; }
+    bool operator!=(const FocusHandle& o) const { return id != o.id; }
+};
+
 struct El {
     ElKind kind = ElKind::Div;
     // The frame arena this was built on, so a builder that has to allocate —
@@ -2103,6 +2110,10 @@ struct El {
     El* Group();
     El* GroupHoverVisible();
     El* FocusId(int v);
+    // `div().track_focus(&handle)`. The element is focusable, and what it is
+    // focusable *as* is the handle the caller's state owns rather than
+    // anything derived from the element's name.
+    El* TrackFocus(FocusHandle handle);
     El* KeyContext(Str name);
     // on_action::<A>(..). The listener is called with an ActionEvent; setting
     // its `propagate` passes the action on outwards, which is cx.propagate().
@@ -2154,6 +2165,11 @@ El* ChartEl(Arena* a, const float* ys, int n, Rgba stroke, Rgba fillTop,
 // ─── paint / window ───────────────────────────────────────────────────────
 
 struct HitRect {
+    // FocusHandle: what a press on this box focuses. Until handles existed
+    // this was always `id` — every focusable box derived both numbers from
+    // one name — and a box tracking a handle is the first case where the two
+    // differ.
+    int focusId = 0;
     int id = 0;
     Bounds bounds = {};
     Func0 onClick;
@@ -4920,6 +4936,35 @@ void IdsCollect(El* root);
 int FocusNext(Window* win, int trapId, bool backward);
 // Move the focus. Everything that focuses goes through here, so the
 // generation a keystroke is stamped with counts every move.
+// FocusHandle — crates/gpui. In GPUI a focus handle is a refcounted key into
+// the window's slotmap, made with `cx.focus_handle()`, owned by whatever holds
+// the state, and attached to a box with `div().track_focus(&handle)`. It has
+// nothing to do with the element's name: a state that wants focus asks for a
+// handle and keeps it, and the element tree picks it up again each frame.
+//
+// The port used to derive a focus id from an element's name — sometimes with
+// an arithmetic twist to keep it clear of that name's *click* id, which is
+// what `HashClickId(id) * 31 + 1` in the popover was. A handle is that done
+// properly. Handles are allocated below -1000 and hashed element ids are
+// positive, so the two spaces cannot meet by construction; the window chrome
+// keeps -1..-4.
+//
+// There is no refcount and nothing is given back: an int is cheap, and the
+// state that owns the handle is what keeps it meaningful.
+
+// cx.focus_handle().
+FocusHandle FocusHandleNew(App* app);
+FocusHandle FocusHandleNew(Ctx* cx);
+// handle.is_focused(window) / handle.focus(window) / window.focused(cx).
+bool FocusHandleIsFocused(const Window* win, FocusHandle h);
+// contains_focused: the handle, or anything inside the box tracking it.
+bool FocusHandleContainsFocused(const Window* win, FocusHandle h);
+void FocusHandleFocus(Window* win, FocusHandle h);
+FocusHandle WindowFocused(const Window* win);
+// The restore half of `previous_focus_handle.take()`: focus it again if the
+// frame still has somewhere to put it.
+bool FocusHandleRestore(Window* win, FocusHandle h);
+
 void WindowSetFocusId(Window* win, int id);
 // window.focused(cx): which element has focus, or 0. What a widget stashes
 // before it takes focus for itself.

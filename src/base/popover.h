@@ -25,11 +25,11 @@ struct PopoverState {
     // *inside* the content does not read as the popover's, so a popover the
     // reader tabbed into is left alone on close rather than pulled back;
     // Rust's handle answers for its whole subtree.
-    int focusId = 0;
-    int trackedFocusId = 0;
+    FocusHandle focus = {};
+    FocusHandle trackedFocus = {};
     // previous_focus_handle: where focus was when it opened, put back on
     // close if the popover still holds it.
-    int previousFocusId = 0;
+    FocusHandle previousFocus = {};
 };
 
 // Open or close, doing what Rust's `toggle_open` does around it: the focus
@@ -54,7 +54,7 @@ struct Popover {
     Ctx* cx = nullptr;
     El* root = nullptr;
     Entity<PopoverState> state = {};
-    int focusId = 0;
+    FocusHandle focus = {};
     MouseButton button = MouseButton::Left;
     // Popover::anchor, which is the corner of the trigger the content hangs
     // off — Top* below it, Bottom* above it, and Left/Center/Right the edge
@@ -66,7 +66,7 @@ struct Popover {
     Popover* Anchor(PopupAnchor v);
     // Popover::tracked_focus_handle: what takes focus when it opens, instead
     // of the popover itself.
-    Popover* TrackedFocus(int trackedId);
+    Popover* TrackedFocus(FocusHandle tracked);
     Popover* Trigger(El* trigger);
     Popover* Content(El* content);
     El* IntoEl();

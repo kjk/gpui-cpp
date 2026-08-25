@@ -2234,6 +2234,9 @@ El* El::FocusId(int v) {
     style.focusFromPath = false;
     return this;
 }
+El* El::TrackFocus(FocusHandle handle) {
+    return FocusId(handle.id);
+}
 El* El::KeyContext(Str name) {
     style.keyContext = KeyContextOf(name);
     return this;
@@ -5178,6 +5181,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->cursor != CursorKind::Arrow || e->slider) {
         HitRect hr;
         hr.id = e->clickId;
+        hr.focusId = e->style.focusId;
         hr.bounds = e->Bounds();
         hr.onClick = e->onClick;
         hr.clickAction = e->clickAction;
@@ -6554,6 +6558,40 @@ void WindowSetFocusId(Window* win, int id) {
     // focus_generation: what a pending keystroke is stamped with, so the move
     // is what tells it the element under it changed.
     win->focusGen++;
+}
+
+// cx.focus_handle(). GPUI's slotmap hands out a refcounted key; a counter is
+// enough here, since nothing is ever given back. Downwards from -1000: hashed
+// element ids are positive and the window chrome is -1..-4, so a handle can
+// never be mistaken for either.
+static int gNextFocusHandle = -1000;
+
+FocusHandle FocusHandleNew(App*) {
+    FocusHandle h;
+    h.id = gNextFocusHandle--;
+    return h;
+}
+FocusHandle FocusHandleNew(Ctx* cx) {
+    return FocusHandleNew(cx ? cx->app : nullptr);
+}
+bool FocusHandleIsFocused(const Window* win, FocusHandle h) {
+    return win && h.IsValid() && win->focusId == h.id;
+}
+bool FocusHandleContainsFocused(const Window* win, FocusHandle h) {
+    return h.IsValid() && WindowFocusWithin(win, h.id);
+}
+void FocusHandleFocus(Window* win, FocusHandle h) {
+    if (win && h.IsValid()) {
+        WindowSetFocusId(win, h.id);
+    }
+}
+FocusHandle WindowFocused(const Window* win) {
+    FocusHandle h;
+    h.id = win ? win->focusId : 0;
+    return h;
+}
+bool FocusHandleRestore(Window* win, FocusHandle h) {
+    return h.IsValid() && WindowRestoreFocus(win, h.id);
 }
 
 int WindowFocusedId(const Window* win) {
