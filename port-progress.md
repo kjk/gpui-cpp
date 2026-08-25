@@ -5544,3 +5544,33 @@ their references with them. Still open before that: the select's
 `contentFocus`, whose handle names nothing in the tree because
 `searchable_list.cpp` only gives the box a focus id `if (!inSelect)`; and
 `component::DataTable`'s hand-built `%s-th-%d` / `%s-row-%d` prefixes.
+
+## The handle that named nothing
+
+`searchable_list.cpp` gave its box a focus id only `if (!inSelect)`. A select's
+dropdown therefore had none — while `SelectToggleOpen` moved focus *into* it,
+setting `win->focusId` to a handle that no element in the frame carried.
+
+Upstream's `content_focus_handle` is `state.list.focus_handle(cx)`: the list
+entity's own handle, tracked on the list's own element. So the list inside a
+select now tracks the shared state's `contentFocus`.
+
+Closing looked like it worked only because `WindowFocusWithin` starts with
+`win->focusId == id`, and nothing else held that number. The moment focus went
+on into the query field inside the list, containment was the question being
+asked and the answer was false — so `SelectToggleOpen` restored nothing and
+left focus on an input that was about to stop being drawn. With the handle on
+the box the field is inside it, which is what `contains_focused` means.
+
+`TabStop(false)`, because GPUI's `track_focus` only makes an element
+focusable; `.tab_stop(true)` is asked for on the select's trigger and nowhere
+else. Tab still walks past an open dropdown rather than into it.
+
+Pinned in `tests/SelectTests.cpp`: a list built `InSelect(true)` is focusable
+as the state's content handle and is not a tab stop, and one built without it
+still takes its focus id from its own name and stays in the tab order. The
+two open dropdowns on the story's select page are pixel-identical to the build
+before the change.
+
+Left: `component::DataTable`'s hand-built `%s-th-%d` / `%s-row-%d` prefixes,
+and then the widgets onto `PathId` from the leaves up.

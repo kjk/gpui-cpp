@@ -358,6 +358,22 @@ El* SearchableList::IntoEl() {
             ->OnAction(action::Confirm(), onAction)
             ->OnAction(action::SelectUp(), onAction)
             ->OnAction(action::SelectDown(), onAction);
+    } else if (s && s->contentFocus.IsValid()) {
+        // `content_focus_handle` is the *list's* handle upstream —
+        // `state.list.focus_handle(cx)` — tracked on the list's own element,
+        // so the focus a select moves into its dropdown lands on something
+        // the frame can name. It named nothing here: the select set
+        // `win->focusId` to a handle no element carried, and only the id
+        // comparison in WindowFocusWithin made closing look like it worked.
+        // With the handle on the box, focus that has gone on into the query
+        // field is still the list's, so closing puts it back where it was
+        // rather than leaving it on an input that has gone.
+        //
+        // Not a tab stop: `track_focus` alone only makes an element
+        // focusable, and upstream asks for `.tab_stop(true)` on the trigger
+        // and nowhere else — so Tab still walks past an open dropdown rather
+        // than into it.
+        box->TrackFocus(s->contentFocus)->TabStop(false)->FocusRing(false);
     }
     return box;
 }
