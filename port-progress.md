@@ -4875,3 +4875,42 @@ answering with itself, a locale that does not exist being refused, and the two
 invariants the generated table has to keep — sorted keys, because the lookup
 is a binary search, and an English value on every row, because that is what
 the fallback rests on.
+
+
+## The frame that was drawn to the window's old size
+
+Maximize the showcase and its overview comes back a single narrow column of
+tiles instead of three, and it stays that way for as long as you leave it
+alone. Click anything and it is suddenly right. The same thing on a smaller
+scale is what a resize drag looks like, and what "the border around *All
+components* is badly drawn for a moment" was.
+
+The scene layer culls: a primitive whose bounds fall outside the view is not
+drawn, which is where three quarters of the story's primitives go. The view it
+culls against is `gViewW/gViewH`, taken in `scene::FrameBegin` from
+`PaintCtx::viewW/viewH`. And `FrameBegin` runs inside `PaintTargetBegin`,
+which `WindowDrawFrame` called **before** it set those two fields for this
+frame. So every frame culled against the *previous* frame's view.
+
+That is invisible while a window keeps its size, and wrong the moment it
+changes: a window that has just grown draws one frame with everything outside
+the old rectangle thrown away — the left 840×640 of a 1920×1129 window, which
+for the overview is the first column of each row and nothing else. Nothing
+asks for another frame after a resize, because nothing has changed as far as
+the application is concerned, so that culled frame is what stays on screen
+until the next click or keystroke. Seconds, if you are reading rather than
+clicking.
+
+The fix is the two assignments moved above `PaintTargetBegin`, where the
+comment now says why the order matters.
+
+Two things this cost, both worth writing down. The tooling could not see it:
+`cmd/shot.ts` captures with `PrintWindow`, which makes the window render, so
+every screenshot showed a correct frame no matter what was on screen — and a
+screen grab is not available from a headless agent session (`BitBlt` from the
+screen DC comes back black, `CopyFromScreen` throws). What found it was the
+app's own log: the scene's `view=` printed 840×640 on the frame after a
+`WM_SIZE` that said 1920×1129. And `GPUI_LAYOUT_REUSE=off` "fixing" it was a
+red herring — rebuilding the layout tree every frame changes what is dirty,
+not what the scene culls against, and the wrong frame it drew was simply a
+different wrong frame.

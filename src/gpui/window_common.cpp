@@ -175,6 +175,14 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // still has somewhere to go asks again below.
     win->frameNow = drawStart;
     win->animFrame = false;
+    // Before the target is opened, because opening it starts the scene's
+    // frame and the scene culls and clips against this size. A window that
+    // has just grown would otherwise draw one frame culled to the size it
+    // had before — everything outside the old view thrown away — and since
+    // nothing asks for another frame after a resize, that frame is what
+    // stays on screen until the next click or keystroke.
+    win->paint.viewW = dipW;
+    win->paint.viewH = dipH;
     if (!PaintTargetBegin(&win->paint, native, pxW, pxH)) {
         return;
     }
@@ -216,8 +224,6 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         win->paint.mouseX = win->inspector.pendingX;
         win->paint.mouseY = win->inspector.pendingY;
     }
-    win->paint.viewW = dipW;
-    win->paint.viewH = dipH;
     TextMeasBeginFrame(&win->paint);
     // Whatever a trap asked for last frame has been settled; this frame's
     // containers ask again as they build.
