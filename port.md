@@ -243,7 +243,7 @@ Each has a matching `examples/<name>.cpp` and `bun cmd/build.ts <name>` target:
 
 ### gpui-base showcase (ported 2026-08-16)
 
-Rust: `.work/gpui-component/crates/base/examples/showcase` via `cargo run -p gpui-base --example base_components -- [slug]`.
+Rust: `.work/gpui-component/crates/base/examples/showcase` via `cargo run -p gpui-base --example components -- [slug]`.
 
 C++: `examples/showcase/` — `bun cmd/build.ts showcase`, window 840×640, light `#ffffff` / `#171717`. No slug opens the 3-column overview; `showcase.exe button` jumps to that page without the back bar.
 

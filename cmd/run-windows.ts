@@ -354,7 +354,7 @@ function findCargo(): string | null {
 function rustBuildArgs(target: Target, debug: boolean): string[] {
   const prof = debug ? [] : ["--release"];
   if (target === "showcase") {
-    return ["build", ...prof, "-p", "gpui-base", "--example", "base_components"];
+    return ["build", ...prof, "-p", "gpui-base", "--example", "components"];
   }
   if (target === "story") {
     return ["build", ...prof, "-p", "gpui-component-story"];
@@ -365,7 +365,7 @@ function rustBuildArgs(target: Target, debug: boolean): string[] {
 function rustExePath(target: Target, debug: boolean): string {
   const prof = debug ? "debug" : "release";
   if (target === "showcase") {
-    return join(rustDir(), "target", prof, "examples", "base_components.exe");
+    return join(rustDir(), "target", prof, "examples", "components.exe");
   }
   if (target === "story") {
     return join(rustDir(), "target", prof, "gpui-component-story.exe");

@@ -131,7 +131,7 @@ function rustDir(): string {
 
 function rustExe(debug: boolean): string {
   const prof = debug ? "debug" : "release";
-  return join(rustDir(), "target", prof, "examples", "base_components.exe");
+  return join(rustDir(), "target", prof, "examples", "components.exe");
 }
 
 function cppExe(debug: boolean): string {
@@ -207,7 +207,7 @@ if (!nobuild) {
   if (run(["bun", "cmd/build.ts", debug ? "-dbg" : "-rel", "showcase"], root) !== 0) {
     process.exit(1);
   }
-  const rustArgs = ["build", ...(debug ? [] : ["--release"]), "-p", "gpui-base", "--example", "base_components"];
+  const rustArgs = ["build", ...(debug ? [] : ["--release"]), "-p", "gpui-base", "--example", "components"];
   console.log(`Building rust: cargo ${rustArgs.join(" ")}`);
   if (run(["cargo", ...rustArgs], rustRoot) !== 0) {
     process.exit(1);
