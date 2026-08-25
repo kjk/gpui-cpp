@@ -8,9 +8,9 @@ namespace gpui {
 
 namespace component {
 
-// progress.rs: a value that changes takes 0.15 s to get there, and the
+// progress.rs: a value that changes takes 0.18 s to get there, and the
 // indeterminate sweep is a one-second loop.
-static const float kProgressMotionMs = 150.f;
+static const float kProgressMotionMs = 180.f;
 static const float kProgressLoopMs = 1000.f;
 
 Progress* Progress::New(Ctx* cx) {
@@ -48,7 +48,18 @@ El* Progress::IntoEl() {
                         ->H(h)
                         ->Radius(th.radiusFull)
                         ->Bg(th.tokens.progress);
-    if (loading) {
+    if (loading && MotionReduced()) {
+        // Reduced motion: the bar says the same thing standing still, in the
+        // middle of the track. A spinner keeps spinning under this setting —
+        // a still spinner says the wrong thing — but an indeterminate bar
+        // reads as "working" without the sweep.
+        indicator->Absolute()
+            ->Top(0)
+            ->Left(0)
+            ->Right(0)
+            ->LeftRel(0.325f)
+            ->RightRel(0.325f);
+    } else if (loading) {
         // The indeterminate sweep: both edges are fractions of the track, and
         // the trailing one only starts moving halfway through the loop, so the
         // bar grows out of the left and then leaves by the right.

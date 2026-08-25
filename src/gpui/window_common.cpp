@@ -1878,6 +1878,14 @@ void WindowClosed(Window* win) {
     if (!win) {
         return;
     }
+    // The focused field outlives the window it was focused in — it belongs to
+    // a view, and the app may still hold that view — so the two let go of
+    // each other here rather than leaving a pointer either way.
+    if (win->input) {
+        InputBlur(win->input, win->app, win);
+    }
+    win->input = nullptr;
+    win->prevInput = nullptr;
     PaintTargetFree(&win->paint);
     win->plat = nullptr;
     win->running = false;

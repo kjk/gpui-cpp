@@ -3245,6 +3245,12 @@ struct InputState {
     bool maskPatternSet = false;
     Str placeholder = {}; // owned
     bool focused = false;
+    // The window this field is the focused one of, so that a field taken out
+    // of the tree while focused can take its registration with it. Rust drops
+    // a stale one lazily — `focused_input` checks the handle is still focused
+    // — which needs a handle that outlives the view; here the state *is* the
+    // registration, so it clears itself when it goes.
+    Window* focusWin = nullptr;
     bool disabled = false;
     bool readonly = false;
     bool loading = false;

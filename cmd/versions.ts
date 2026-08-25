@@ -9,10 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "cc86f8d48783ef84d7ae3a1aba263855774460ef",
+  sha: "7885c41663c7a6cc68ad0c99b1ba33550f807ff0",
   date: "2026-08-24",
-  subject:
-    "motion: Add spring transitions and use them where a target changes mid-flight (#2811)",
+  subject: "fps: Enable gpui/profiler on the crate that uses it (#2823)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

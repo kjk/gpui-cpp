@@ -971,6 +971,18 @@ const char* InputCStr(const InputState* s) {
 }
 
 InputState::~InputState() {
+    // A field removed from the tree while it had the keyboard: the window
+    // still points at it, and nothing would ever render it again to say
+    // otherwise. Rust drops that registration the next time it is read; here
+    // the field takes it with it, which also keeps the pointer from dangling.
+    if (focusWin) {
+        if (focusWin->input == this) {
+            focusWin->input = nullptr;
+        }
+        if (focusWin->prevInput == this) {
+            focusWin->prevInput = nullptr;
+        }
+    }
     StrFree(placeholder);
     MaskPatternFree(&maskPattern);
 }
@@ -4105,6 +4117,7 @@ void InputFocus(InputState* s, App* app, Window* win) {
         InputBlur(win->input, app, win);
     }
     s->focused = true;
+    s->focusWin = win;
     win->input = s;
     win->prevInput = s;
     BlinkStart(app, win, &s->blink);
@@ -4121,6 +4134,7 @@ void InputBlur(InputState* s, App* app, Window* win) {
     UndoBreakCoalescing(&s->undo);
     s->focused = false;
     s->selecting = false;
+    s->focusWin = nullptr;
     if (win) {
         BlinkStop(app, win, &s->blink);
         if (win->input == s) {

@@ -264,6 +264,27 @@ static void AMaskedValueStaysInTheField() {
     utassert(InputIsCopyable(&s));
 }
 
+// A field taken out of the tree while it had the keyboard takes its
+// registration with it: the window points at nothing rather than at a state
+// that has been freed.
+static void AFocusedFieldGoingTakesItsRegistrationWithIt() {
+    Window win = {};
+    {
+        InputState s;
+        InputFocus(&s, nullptr, &win);
+        utassert(win.input == &s);
+        utassert(win.prevInput == &s);
+    }
+    utassert(win.input == nullptr);
+    utassert(win.prevInput == nullptr);
+
+    // A field that blurred first has nothing left to clear.
+    InputState other;
+    InputFocus(&other, nullptr, &win);
+    InputBlur(&other, nullptr, &win);
+    utassert(win.input == nullptr);
+}
+
 static void WordMovement() {
     InputState s;
     InputSetValue(&s, StrL("hello brave world"));
@@ -1798,6 +1819,7 @@ void TestInputState() {
     NoopEditPreservesRedo();
     MaskedRedoRestoresActualCursor();
     AMaskedValueStaysInTheField();
+    AFocusedFieldGoingTakesItsRegistrationWithIt();
     WordMovement();
     DeleteToWordAndLineBoundaries();
     LineBoundaries();

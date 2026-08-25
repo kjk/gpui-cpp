@@ -526,7 +526,13 @@ El* Button::IntoEl() {
         float fontPx = size == UiSize::XSmall  ? 12.f
                        : size == UiSize::Small ? 14.f
                                                : 16.f;
-        El* text = TextEl(a, label)->Font(fontPx);
+        // `line_height(relative(1.))` on the base button: with the inherited
+        // line height the text box is taller than the glyphs, so the padding
+        // no longer decides the control's height and a button cannot be sized
+        // precisely. A label is one line and is cut rather than wrapped —
+        // `min_w_0`, `whitespace_nowrap`, `truncate` — since a button that
+        // grew a second line would push everything around it.
+        El* text = TextEl(a, label)->Font(fontPx)->LineHeight(1.f)->Truncate();
         // ButtonVariant::underline: only the link looks like a link.
         if (variant == ButtonVariant::Link) {
             text->Underline();
