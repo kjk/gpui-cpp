@@ -447,9 +447,12 @@ El* DropdownMenu::IntoEl() {
         // The trigger opens and closes the menu it holds; a caller that wants
         // to know can subscribe to the menu itself.
         if (st) {
+            // The menu as this frame has it goes with the handler, the way
+            // Rust's Popover captures `open` at render time and hands it to
+            // the trigger's press.
             BindClick(trigger, id,
-                      ListenTo(menu->state, &PopupMenuState::OnTriggerClick));
-            st->triggerId = HashClickId(id);
+                      ListenTo(menu->state, &PopupMenuState::OnTriggerClick,
+                               (intptr_t)st->open));
         }
         wrap->Child(trigger);
     }

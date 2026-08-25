@@ -5501,3 +5501,46 @@ What is still keyed by name: `menu`'s `triggerId`, a *click* id that
 `PopupMenuState::OnPressOutside` hit-tests against to leave the trigger's own
 toggle alone. That is the last of the two shapes; after it the widgets
 themselves can move onto the path.
+
+## The toggle is computed from what was drawn
+
+`PopupMenuState::triggerId` is gone. It held the dropdown trigger's click id
+so `OnPressOutside` could hit-test the press against it and refuse to close —
+because the outside dismissal runs on the release, before the click the same
+release makes, so without the exemption the trigger's toggle only ever
+reopened what the dismissal had just closed.
+
+Rust does not know the trigger's id. `DropdownMenuPopover` is a `Popover`, and
+the `Popover`'s trigger handler reads:
+
+```rust
+state.set_open(open, cx);
+state.toggle_open(window, cx);
+```
+
+where `open` was captured when the trigger was *rendered*. `set_open` is a
+plain flag setter — the focus bookkeeping is all in `toggle_open` — so the
+line rewinds the state to the menu as it was on screen and toggles from there.
+The dismissal is welcome to have already run; the toggle does not care what
+the state has become since the release began.
+
+So `OnTriggerClick` now takes that value as a bound argument, the way
+`ListenTo` carries anything else a frame knows, and `DropdownMenu::IntoEl`
+hands it `st->open`. Rewinding the flag and dismissing twice is harmless for
+the same reason it is in Rust: `PopupMenuDismiss` clears `previousFocus`, so
+the second pass restores nothing — `previous_focus_handle.take()`.
+
+Pinned in `tests/PopupMenuTests.cpp`: a trigger drawn closed opens, and one
+drawn open closes whether or not the dismissal got there first.
+
+Verified on the story's menu page — the trigger opens, the trigger closes, a
+press outside closes, and a row still runs after the menu it was in has gone.
+
+Also corrected a comment in `base/popover.h` pointing at a
+`PopoverDismissOnOutsideClick` that no longer exists.
+
+Next: the widgets themselves onto `PathId`, from the leaves up, carrying
+their references with them. Still open before that: the select's
+`contentFocus`, whose handle names nothing in the tree because
+`searchable_list.cpp` only gives the box a focus id `if (!inSelect)`; and
+`component::DataTable`'s hand-built `%s-th-%d` / `%s-row-%d` prefixes.

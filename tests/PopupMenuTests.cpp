@@ -174,6 +174,40 @@ static void TheMenuBarWrapsBothWays() {
     utassert(AppMenuBarNextIndex(0, 0) == 0);
 }
 
+// DropdownMenuPopover's trigger: `state.set_open(open); state.toggle_open()`,
+// where `open` is what the frame that drew the trigger had. The trigger sits
+// outside the menu, so the outside dismissal has already closed the menu by
+// the time the trigger's click lands; the toggle is computed from the drawn
+// state rather than the live one, which is what stops the press from
+// reopening what the dismissal just closed. Nothing here asks who was hit.
+static void ATriggerTogglesTheMenuAsItWasDrawn() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+
+    PopupMenuState s;
+    // Drawn closed: the press opens it.
+    PopupMenuState::OnTriggerClick(&s, &cx, nullptr, 0);
+    utassert(s.open);
+
+    // Drawn open, and the outside dismissal has already run — so the flag
+    // says closed by the time the click arrives. It still closes.
+    s.open = false;
+    PopupMenuState::OnTriggerClick(&s, &cx, nullptr, 1);
+    utassert(!s.open);
+
+    // Drawn open with no dismissal in between is the same answer.
+    s.open = true;
+    PopupMenuState::OnTriggerClick(&s, &cx, nullptr, 1);
+    utassert(!s.open);
+
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestPopupMenu() {
     TheBindingsAreTheOnesRustBinds();
     TheWalkStepsOverWhatCannotBeClicked();
@@ -181,5 +215,6 @@ void TestPopupMenu() {
     AMenuWithNoRows();
     ALongStoryMenuFitsWithoutTruncation();
     AnOpenMenuAnswersTheChordItself();
+    ATriggerTogglesTheMenuAsItWasDrawn();
     TheMenuBarWrapsBothWays();
 }

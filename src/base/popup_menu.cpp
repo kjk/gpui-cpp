@@ -261,7 +261,15 @@ void PopupMenuState::OnItemClick(PopupMenuState* self, Ctx* cx,
 }
 
 void PopupMenuState::OnTriggerClick(PopupMenuState* self, Ctx* cx,
-                                    const ClickEvent*) {
+                                    const ClickEvent*, intptr_t wasOpen) {
+    // `state.set_open(open); state.toggle_open()`: the toggle is computed
+    // from the menu as it was *drawn*, not from what the state has become
+    // since the release began. The trigger sits outside the menu, so the
+    // outside dismissal has already closed it by the time this click lands;
+    // without the rewind the toggle would only ever reopen what that
+    // dismissal had just closed. Only the flag is rewound — set_open is a
+    // plain setter in Rust too, so the focus a dismissal put back stays put.
+    self->open = wasOpen != 0;
     if (self->open) {
         PopupMenuDismiss(self, cx);
     } else {
@@ -284,10 +292,6 @@ void PopupMenuState::OnPressOutside(PopupMenuState* self, Ctx* cx,
         if (p->open && p->bounds.Contains({ev->x, ev->y})) {
             return;
         }
-    }
-    if (self->triggerId && cx->win &&
-        HitTest(&cx->win->paint, ev->x, ev->y) == self->triggerId) {
-        return;
     }
     PopupMenuDismissAll(self, cx);
 }

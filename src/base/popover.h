@@ -11,8 +11,8 @@ namespace gpui {
 //
 // Rust's state also parks the previously focused handle and restores it on
 // close; so does this one. The dismiss subscription is the window's single
-// unhandled-click slot, so that half is still the caller's — see the note on
-// PopoverDismissOnOutsideClick.
+// unhandled-click slot, so that half is still the caller's: it wires
+// PopoverDismiss to whatever reports the press that landed elsewhere.
 struct PopoverState {
     bool open = false;
     // Whether default_open has been applied yet. Rust passes it to
