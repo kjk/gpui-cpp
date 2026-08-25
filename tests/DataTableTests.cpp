@@ -476,6 +476,11 @@ static void TwoTablesOnOnePageAreTwoTables() {
     utassert(root->style.focusId != 0 && root->style.focusOnPress);
     utassert(rowL->style.focusId == 0);
     utassert(thL->style.focusId == 0 && headL->style.focusId == 0);
+    // Every part is `div().id()` upstream, so a cell is a hit target too —
+    // which it can only afford to be because a click bubbles out of the rect
+    // it landed on to the row that is listening for it.
+    El* cell = FindNamed(left, "cell-0-0");
+    utassert(cell && cell->clickId != 0 && cell->style.focusId == 0);
 
     ArenaDelete(a);
     delete win;

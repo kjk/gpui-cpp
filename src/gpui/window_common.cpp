@@ -1514,9 +1514,31 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
         if (hit) {
             ev.el = hit->bounds;
         }
-        if (hit && hit->listener.IsValid()) {
-            ListenerCall(win->app, win, hit->listener, &ev);
-        } else if (win->onClick.IsValid() && !(hit && hit->slider)) {
+        // on_click bubbles. GPUI registers it in the Bubble phase against the
+        // element's hitbox, so every enclosing element that asked for one
+        // hears the click, innermost first, until one stops it — and none of
+        // gpui-component's own do: a `Button`'s handler stops nothing, and a
+        // table's sort icon sits inside the column head whose click selects
+        // the column, so pressing it sorts *and* selects. The port delivered
+        // the click to the one rect the hit test named, which is why a box
+        // made hit-testable anywhere between the pointer and a listener took
+        // the click away from it.
+        bool handled = false;
+        {
+            Vec<int> chain;
+            HitChain(win, in.x, in.y, &chain);
+            win->stopPropagation = false;
+            for (int k = 0; k < chain.len && !win->stopPropagation; k++) {
+                const HitRect& hr = win->paint.hits[chain[k]];
+                if (!hr.listener.IsValid()) {
+                    continue;
+                }
+                handled = true;
+                ListenerCall(win->app, win, hr.listener, &ev);
+            }
+            chain.Reset();
+        }
+        if (!handled && win->onClick.IsValid() && !(hit && hit->slider)) {
             // A press on a slider is handled by the slider, so it is not the
             // outside click that dismisses an overlay.
             ListenerCall(win->app, win, win->onClick, &ev);

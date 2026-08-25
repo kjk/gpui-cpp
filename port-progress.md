@@ -5697,3 +5697,37 @@ Verified across 14 story pages × {at rest, a click, a click then Down} against
 the build before: 42 shots, and the only two that differ are the two dead
 keyboards now working — the DataTable's arrows and Escape, and the list's
 arrows. Both pages are byte-identical at rest and on the click alone.
+
+## A click bubbles
+
+The divergence the last entry recorded, looked at and closed.
+
+GPUI registers `on_click` in the Bubble phase against the element's hitbox, so
+every enclosing element that asked for one hears the click, innermost first,
+until one stops it. And in gpui-component none of them do: a `Button`'s
+handler stops nothing — only a *disabled* button stops the mouse down — and a
+table's sort icon sits inside the column head whose click selects the column,
+so pressing it sorts *and* selects. The port delivered the click to the one
+rect the hit test named, which is why a box made hit-testable anywhere between
+the pointer and a listener took the click away from it.
+
+The window's own unhandled-click — the outside press that dismisses an
+overlay — now runs when *nothing* in the chain took the click, rather than
+when the innermost rect had no listener.
+
+With that, every table part is `div().id(id)` as upstream has it: the header,
+the body, the cell and the caption join the root, the row and the head. The
+case that failed before is the proof — with `TableCell` hit-testable, a row
+click now selects the row and the shot is byte-identical to the one taken
+before any of this.
+
+The behaviour that changes, and matches Rust: clicking a column's sort icon
+sorts the column and selects it. Neither handler upstream stops propagation
+and the icon is a child of the head, so that is what Rust does too.
+
+Swept 19 story pages × {at rest, six click points} against the build before —
+133 shots. One came back different and reproduced identical on a re-take, so
+it was the caret's blink phase, not the change. Everything else is byte-for-
+byte.
+
+Next: the widgets themselves onto `PathId`, from the leaves up.
