@@ -5207,3 +5207,50 @@ tab switching, tab dragging, dock resizing and Bottom toggle have been read
 rather than driven. The behavior they run through is unchanged and shared with
 the story's dock page, which is pixel-identical, but the next session should
 drive the page once.
+
+
+## What was left of the click-id era
+
+`ClickRadioStd` and `ClickRadioExpress` came out with the dock work: two
+constants in the radio page's id enum that nothing had named since the pages
+stopped switching on a click id. A sweep of every enumerator declared under
+`examples/` says there were twenty-seven more.
+
+Seven enums were dead outright — `system_monitor`'s `enum ClickId` (its tabs
+and its four sortable columns), and the showcase's date-picker, number-input,
+pagination, popover, sheet and toast pages. Six more had a dead member beside
+a live one, and the story's shared enum carried ten: the search's clear
+button, the five toolbar size ids, the two menus and the four accordion
+option ids. `src/` has none — its four `ClickWin*` are all in use.
+
+Three helpers went with them, all of them shaped by that era: `ScField`,
+`ScBtnInk` and `ScBtnLine` each take an `int id`, and nothing in the tree has
+called any of them since.
+
+**And the gap the sweep was really for.** `InputBase::New(cx, id, clickId)`
+is `UiRoot`, which gives the element a `Click` and a `FocusId` only when the
+id is non-zero — `src/ui/input.cpp` passes `disabled ? 0 : HashClickId(id)`,
+so zero is what that call means by *disabled*. Four showcase fields were
+passing a literal `0` while being perfectly enabled: the colour picker's hex
+readout, the combobox's search box, the dialog's Display name and the
+number input's field. None of them was a tab stop, none could take the focus
+ring, and none had a hit id of its own — the same shape of bug as the dock's
+drop markers, which named an id the element never carried. All seven of the
+showcase's fields now derive the id from their own name, the way `src/ui`
+does, and `ClickEditor`, `ClickInput` and `ClickTextarea` died with the
+change. `focusOnPress` defaults false, so this adds a tab stop and a focus
+target and changes nothing about what a press does.
+
+Thirty-five of the forty showcase pages are byte-identical; the five that
+move are the scrollbar, tree and virtual-list thumbs mid-fade and the caret
+mid-blink on the editor, input and number-input pages, all of which differ
+between two runs of the same binary.
+
+What is deliberately left: the hand-numbered id space itself. Nine constants
+are still live — `ClickBack`, `ClickOverview + Comp*`, `ClickStory + Story*`,
+`ClickSearch`, `ClickAlertCancel`, `ClickColor`, `ClickSwatch + 0..4`,
+`ClickCombo`, `ClickDlgCancel`, `ClickHover`, `ClickSlider`, `ClickPara + i`,
+`ClickTooltip`, and `dialog_overlay`'s seven — and the arithmetic ones are
+the fragile part: `ClickPara = 531` runs into `ClickTextarea = 540` at the
+tenth paragraph, and there are four. Turning each into
+`HashClickId(fmt("para-%d", i))` is the rest of this job.

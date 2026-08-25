@@ -4,8 +4,7 @@
 using namespace gpui;
 
 enum {
-    ClickDlgCancel = 351,
-    ClickDlgField = 353
+    ClickDlgCancel = 351
 };
 
 static void OpenDlg(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
@@ -62,7 +61,8 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->Child(Div(a)->PadT(12)->Child(TextEl(a, StrL("Display name"))
                                                 ->Font(14)
                                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-            ->Child(InputBase::New(cx, StrL("dialog-name"), 0)
+            ->Child(InputBase::New(cx, StrL("dialog-name"),
+                                   HashClickId(StrL("dialog-name")))
                         ->OnClick(Listen(cx, &FocusDlgField))
                         ->W(264)
                         ->H(28)

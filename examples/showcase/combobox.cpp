@@ -4,9 +4,7 @@
 using namespace gpui;
 
 enum {
-    ClickCombo = 320,
-    ClickComboQ = 321,
-    ClickCombo0 = 322
+    ClickCombo = 320
 };
 
 static const char* kFwCombo[] = {"GPUI", "React", "SwiftUI", "Vue"};
@@ -72,7 +70,8 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                   ->Pad(4)
                   ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                   ->Bg(Rgb(0xff, 0xff, 0xff));
-        pop->Child(InputBase::New(cx, StrL("combobox-search"), 0)
+        pop->Child(InputBase::New(cx, StrL("combobox-search"),
+                                  HashClickId(StrL("combobox-search")))
                        ->OnClick(Listen(cx, &FocusComboQuery))
                        ->W(kFill)
                        ->H(28)

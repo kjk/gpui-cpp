@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickInput = 380
-};
-
 static void OnInput(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     (void)app;
     app->input.focused = true;
@@ -24,7 +20,8 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
             TextEl(a, StrL("Project name"))
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(cx, StrL("example-input"), ClickInput)
+        ->Child(InputBase::New(cx, StrL("example-input"),
+                               HashClickId(StrL("example-input")))
                     ->OnClick(Listen(cx, &OnInput))
                     ->W(224)
                     ->H(28)

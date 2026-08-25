@@ -5,7 +5,6 @@ using namespace gpui;
 
 enum {
     ClickColor = 300,
-    ClickHex = 301,
     ClickSwatch = 302
 };
 
@@ -103,7 +102,8 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                                          : Rgb(0xff, 0xff, 0xff)));
         }
         pop->Child(sw);
-        pop->Child(InputBase::New(cx, StrL("color-hex-input"), 0)
+        pop->Child(InputBase::New(cx, StrL("color-hex-input"),
+                                  HashClickId(StrL("color-hex-input")))
                        ->OnClick(Listen(cx, &FocusHex))
                        ->W(204)
                        ->H(28)

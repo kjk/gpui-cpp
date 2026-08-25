@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickTextarea = 540
-};
-
 static void OnTextarea(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->textareaOn = true;
     InputFocus(&app->textarea, cx);
@@ -22,7 +18,8 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
         ->ItemsStart()
         ->Child(Div(a)->H(16)->ItemsCenter()->Child(
             TextEl(a, StrL("Textarea"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(cx, StrL("example-textarea"), ClickTextarea)
+        ->Child(InputBase::New(cx, StrL("example-textarea"),
+                               HashClickId(StrL("example-textarea")))
                     ->OnClick(Listen(cx, &OnTextarea))
                     ->W(224)
                     ->H(64)

@@ -77,17 +77,6 @@ enum {
 enum {
     ClickStory = 1000, // + Story*
     ClickSearch = 990,
-    ClickSearchClear = 992,
-    ClickSizeXs = 980,
-    ClickSizeSm = 981,
-    ClickSizeMd = 982,
-    ClickSizeLg = 983,
-    ClickSizeMenu = 984,
-    ClickOptsMenu = 985,
-    ClickAccMultiple = 2120,
-    ClickAccIcon = 2121,
-    ClickAccDisabled = 2122,
-    ClickAccBordered = 2123,
 };
 
 struct StoryApp {

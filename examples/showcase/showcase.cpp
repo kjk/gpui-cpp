@@ -75,20 +75,6 @@ El* ScTxt(Ctx* cx, Str s, float px, Rgba c) {
     return TextEl(a, s)->Font(px)->Fg(c);
 }
 
-El* ScBtnInk(Ctx* cx, int id, Listener onClick, Str label) {
-    Arena* a = cx->a;
-    return Div(a)
-        ->H(28)
-        ->PadX(12)
-        ->ItemsCenter()
-        ->JustifyCenter()
-        ->Bg(ScInk())
-        ->HoverBg(Rgb(0x40, 0x40, 0x40))
-        ->OnClick(onClick)
-        ->FocusId(id)
-        ->Child(ScTxt(cx, label, 12, ScWhite()));
-}
-
 El* ScBtnGhost(Ctx* cx, int id, Listener onClick, Str label) {
     Arena* a = cx->a;
     return Div(a)
@@ -102,44 +88,6 @@ El* ScBtnGhost(Ctx* cx, int id, Listener onClick, Str label) {
         ->OnClick(onClick)
         ->FocusId(id)
         ->Child(ScTxt(cx, label, 12, ScInk()));
-}
-
-El* ScBtnLine(Ctx* cx, int id, Listener onClick, Str label) {
-    Arena* a = cx->a;
-    return Div(a)
-        ->H(28)
-        ->PadX(12)
-        ->ItemsCenter()
-        ->JustifyCenter()
-        ->Border(1, ScBorder())
-        ->Bg(ScWhite())
-        ->HoverBg(ScHover())
-        ->OnClick(onClick)
-        ->FocusId(id)
-        ->Child(ScTxt(cx, label, 12, ScInk()));
-}
-
-El* ScField(Ctx* cx, InputState* in, int clickId, float w, bool valid) {
-    Arena* a = cx->a;
-    Str value = InputValue(in);
-    Str shown = value.len > 0 ? value : in->placeholder;
-    Rgba fg = value.len > 0 ? ScInk() : ScMutedC();
-    Rgba border = ScBorder();
-    if (!valid) {
-        border = ScMutedC();
-    } else if (in->focused) {
-        border = ScInk();
-    }
-    return Div(a)
-        ->W(w)
-        ->H(28)
-        ->PadX(8)
-        ->ItemsCenter()
-        ->Border(1, border)
-        ->Bg(ScWhite())
-        ->Click(clickId)
-        ->FocusId(clickId)
-        ->Child(ScTxt(cx, shown, 12, fg));
 }
 
 El* ScComingSoon(Ctx* cx, const char* name) {

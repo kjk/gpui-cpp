@@ -3,11 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickSheetOpen = 490,
-    ClickSheetDone = 491
-};
-
 static void OpenSheet(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->sheetOpen = true;
     Notify(cx);

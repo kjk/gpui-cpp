@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickEditor = 360
-};
-
 static const char* kEditorDefault =
     "use std::collections::HashMap;\n"
     "\n"
@@ -67,7 +63,8 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
             TextEl(a, StrL("Rust Editor"))
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(cx, StrL("example-editor"), ClickEditor)
+        ->Child(InputBase::New(cx, StrL("example-editor"),
+                               HashClickId(StrL("example-editor")))
                     ->OnClick(Listen(cx, &OnEditor))
                     ->W(320)
                     ->H(128)

@@ -3,11 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickPopover = 440,
-    ClickPopoverDone = 441
-};
-
 static void TogglePopover(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->popoverOpen = !app->popoverOpen;
     Notify(cx);

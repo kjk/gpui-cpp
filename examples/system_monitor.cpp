@@ -5,15 +5,6 @@ using namespace gpui;
 static const int kMaxHist = 120;
 static const int kKeepProcs = 200;
 
-enum ClickId : int {
-    ClickTabSystem = 1,
-    ClickTabProcesses = 2,
-    ClickSortPid = 10,
-    ClickSortName = 11,
-    ClickSortCpu = 12,
-    ClickSortMem = 13,
-};
-
 struct MonitorApp {
     static El* Render(MonitorApp* self, Ctx* cx);
     // Dropped with the entity; this is what onShutdown used to do.

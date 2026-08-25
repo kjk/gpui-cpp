@@ -164,17 +164,13 @@ struct ShowcaseApp {
     int hoverId = 0;
 };
 
-El* ScField(Ctx* cx, InputState* in, int clickId, float w, bool valid);
-
 const char* CompSlug(int i);
 int CompFromSlug(const char* slug);
 Str DupA(Ctx* cx, const char* s);
 Str DupFmt(Ctx* cx, const char* fmt, ...);
 
 El* ScTxt(Ctx* cx, Str s, float px, Rgba c);
-El* ScBtnInk(Ctx* cx, int id, Listener onClick, Str label);
 El* ScBtnGhost(Ctx* cx, int id, Listener onClick, Str label);
-El* ScBtnLine(Ctx* cx, int id, Listener onClick, Str label);
 El* ScComingSoon(Ctx* cx, const char* name);
 
 El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx);

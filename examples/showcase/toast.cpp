@@ -3,11 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickToastShow = 550,
-    ClickToastDismiss = 551
-};
-
 static void ShowToast(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->toastOn = true;
     Notify(cx);

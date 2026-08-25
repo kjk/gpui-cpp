@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickDate = 340
-};
-
 static void ToggleDate(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->dateOpen = !app->dateOpen;
     Notify(cx);

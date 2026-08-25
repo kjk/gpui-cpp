@@ -3,12 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickNumField = 400,
-    ClickNumDec = 401,
-    ClickNumInc = 402
-};
-
 static bool ParseNum(const char* s, int* out) {
     if (!s || !s[0]) {
         return false;
@@ -87,7 +81,8 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
                     ->ItemsCenter()
                     ->Border(1, valid ? Rgb(0x17, 0x17, 0x17)
                                       : Rgb(0x73, 0x73, 0x73))
-                    ->Child(InputBase::New(cx, StrL("number-field"), 0)
+                    ->Child(InputBase::New(cx, StrL("number-field"),
+                                           HashClickId(StrL("number-field")))
                                 ->OnClick(Listen(cx, &FocusNum))
                                 ->Flex1()
                                 ->H(28)

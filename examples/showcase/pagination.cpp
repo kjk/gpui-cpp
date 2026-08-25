@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickPageBase = 420
-};
-
 static void GoPage(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
                    intptr_t page) {
     app->page = (int)page;

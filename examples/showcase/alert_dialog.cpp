@@ -4,7 +4,6 @@
 using namespace gpui;
 
 enum {
-    ClickAlertOpen = 210,
     ClickAlertCancel = 211
 };
 
