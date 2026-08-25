@@ -191,6 +191,61 @@ VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
     return VirtualListVisibleRows(count, itemSize, h->offset, h->viewport);
 }
 
+El* VirtualList::New(Ctx* cx, Str id, const VirtualListOpts& o) {
+    Arena* a = cx->a;
+    // The layout is where the handle is answered: it learns how many items
+    // there are and how much of them is showing, a pending scroll_to_item is
+    // applied against that, and the offset is clamped to the list.
+    float offset = o.scrollY;
+    if (o.handle) {
+        VirtualListHandleLayout(o.handle, o.sizes, o.count, o.rowH, o.viewH);
+        offset = o.handle->offset;
+    }
+    // The rows the viewport can show, and a spacer at each end standing in
+    // for the ones that were not built — without the second one the list
+    // would scroll only as far as the last row it made.
+    VirtualRange range =
+        o.sizes ? VirtualListVisibleRange(o.sizes, o.count, offset, o.viewH)
+                : VirtualListVisibleRows(o.count, o.rowH, offset, o.viewH);
+    El* list = Div(a)->FlexCol();
+    if (range.first > 0) {
+        float before = o.sizes
+                           ? VirtualListItemOrigin(o.sizes, o.count, range.first)
+                           : (float)range.first * o.rowH;
+        list->Child(Div(a)->H(before));
+    }
+    for (int ix = range.first; ix < range.end; ix++) {
+        if (El* built = o.row ? o.row(o.user, cx, ix) : nullptr) {
+            list->Child(built);
+        }
+    }
+    if (range.end < o.count) {
+        float content = o.sizes ? VirtualListContentSize(o.sizes, o.count)
+                                : (float)o.count * o.rowH;
+        float built = o.sizes
+                          ? VirtualListItemOrigin(o.sizes, o.count, range.end)
+                          : (float)range.end * o.rowH;
+        list->Child(Div(a)->H(content - built));
+    }
+
+    El* e = New(cx, id)->H(o.viewH + o.pad * 2)->ClipY()->ScrollY(offset);
+    if (o.pad > 0) {
+        e->Pad(o.pad);
+    }
+    // Both axes: a row wider than the viewport slides under it rather than
+    // being cut, which is what the story's Axis: Both asks for.
+    e->ClipX()->ScrollX(o.scrollX);
+    if (o.axis == ScrollAxis::Vertical) {
+        e->HideScrollbarX();
+    } else if (o.axis == ScrollAxis::Horizontal) {
+        e->HideScrollbarY();
+    }
+    if (o.scrollId) {
+        e->ScrollId(o.scrollId)->OnScroll(o.onScroll);
+    }
+    return e->Child(list);
+}
+
 El* VirtualList::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
     return Div(a)->Id(id);

@@ -1,6 +1,7 @@
 /* Unstyled virtual list host — crates/base/src/virtual_list.rs */
 
 #include "gpui/gpui.h"
+#include "base/scrollbar.h"
 
 namespace gpui {
 
@@ -112,7 +113,51 @@ VirtualRange VirtualListHandleRange(const VirtualListScrollHandle* h,
                                     const float* sizes, int count,
                                     float itemSize);
 
+// virtual_list.rs's list itself. Rust's `v_virtual_list(entity, id, sizes,
+// |_, range, _, _| ...)` hands the closure the whole visible range and takes
+// back the rows; this asks for one row at a time and carries the user pointer
+// an element that holds no closures needs.
+using VirtualRowFn = El* (*)(void* user, Ctx* cx, int ix);
+
+// What the list is: how many items, how long each is, how much of it shows,
+// and where it has scrolled to. `sizes` null is the uniform list, which is
+// `rowH` per item.
+struct VirtualListOpts {
+    int count = 0;
+    float rowH = 32;
+    float viewH = 192;
+    const float* sizes = nullptr;
+    // The offsets, for a list without a handle. A list with one reads its
+    // offset from the handle instead — `track_scroll(&handle)`.
+    float scrollY = 0;
+    float scrollX = 0;
+    VirtualListScrollHandle* handle = nullptr;
+    // The id the scroll is tracked under and where the wheel reports. Zero
+    // leaves the list unscrollable by the wheel, for a caller that scrolls it
+    // some other way; anything else must set both, since a region with no
+    // listener is skipped and the wheel falls through to the window.
+    int scrollId = 0;
+    Listener onScroll = {};
+    // Which bars are drawn. The axis names the bars, not the scrolling: a
+    // list set to Vertical still slides sideways under the wheel, it just
+    // does not draw the bar along the bottom — Rust's `.scrollbar(&handle,
+    // axis)` hangs the bar layer beside the list rather than inside it.
+    ScrollAxis axis = ScrollAxis::Both;
+    // The list's own inset, which behaves as CSS scroll-padding does: the two
+    // ends keep their inset and a row scrolled under the edge clips flush
+    // against it. `viewH` is the rows' height, so the element is this much
+    // taller.
+    float pad = 0;
+    VirtualRowFn row = nullptr;
+    void* user = nullptr;
+};
+
 struct VirtualList {
+    // The bare box, for a caller that builds the rows itself.
     static El* New(Ctx* cx, Str id);
+    // The list: only the rows the viewport can show are built, and a spacer
+    // at each end stands in for the rest — without the second one the list
+    // would scroll only as far as the last row it made.
+    static El* New(Ctx* cx, Str id, const VirtualListOpts& o);
 };
 } // namespace gpui

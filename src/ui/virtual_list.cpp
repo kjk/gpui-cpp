@@ -58,70 +58,54 @@ VirtualList* VirtualList::Row(El* (*fn)(Ctx*, int)) {
     return this;
 }
 
+// The default row, for a list that named none: `Item N` in the theme's own
+// text colour, which is the half of this that belongs up here.
+struct DefaultRow {
+    const float* sizes;
+    float rowH;
+};
+
+static El* ThemedDefaultRow(void* user, Ctx* cx, int ix) {
+    Arena* a = cx->a;
+    const DefaultRow* d = (const DefaultRow*)user;
+    float h = d->sizes ? d->sizes[ix] : d->rowH;
+    return Div(a)->H(h)->PadX(8)->ItemsCenter()->Child(
+        TextEl(a, StrDup(a, fmt("Item %d", ix)))
+            ->Font(12)
+            ->Fg(cx->theme().foreground));
+}
+
+// The caller's row builder takes no user pointer, so it is carried through
+// one — `Tree::item(..)`'s closure has the same shape and the same problem.
+static El* CallerRow(void* user, Ctx* cx, int ix) {
+    auto fn = (El* (*)(Ctx*, int))user;
+    return fn(cx, ix);
+}
+
 El* VirtualList::IntoEl() {
-    const Theme& th = cx->theme();
-    // The layout is where the handle is answered: it learns how many items
-    // there are and how much of them is showing, a pending scroll_to_item is
-    // applied against that, and the offset is clamped to the list.
-    float offset = scrollY;
-    if (handle) {
-        VirtualListHandleLayout(handle, sizes, count, rowH, viewH);
-        offset = handle->offset;
+    // The list is the base one. What is left up here is the theme: the row a
+    // caller did not supply, and nothing else.
+    VirtualListOpts o;
+    o.count = count;
+    o.rowH = rowH;
+    o.viewH = viewH;
+    o.sizes = sizes;
+    o.scrollY = scrollY;
+    o.scrollX = scrollX;
+    o.handle = handle;
+    o.scrollId = scrollId;
+    o.onScroll = onScroll;
+    o.axis = axis;
+    o.pad = pad;
+    DefaultRow d = {sizes, rowH};
+    if (row) {
+        o.row = &CallerRow;
+        o.user = (void*)row;
+    } else {
+        o.row = &ThemedDefaultRow;
+        o.user = &d;
     }
-    // The rows the viewport can show, and a spacer at each end standing in
-    // for the ones that were not built — without the second one the list
-    // would scroll only as far as the last row it made.
-    VirtualRange range =
-        sizes ? VirtualListVisibleRange(sizes, count, offset, viewH)
-              : VirtualListVisibleRows(count, rowH, offset, viewH);
-    int first = range.first;
-    El* list = Div(a)->FlexCol();
-    if (first > 0) {
-        float before = sizes ? VirtualListItemOrigin(sizes, count, first)
-                             : (float)first * rowH;
-        list->Child(Div(a)->H(before));
-    }
-    for (int ix = first; ix < range.end; ix++) {
-        if (row) {
-            list->Child(row(cx, ix));
-        } else {
-            float h = sizes ? sizes[ix] : rowH;
-            list->Child(Div(a)->H(h)->PadX(8)->ItemsCenter()->Child(
-                TextEl(a, StrDup(a, fmt("Item %d", ix)))
-                    ->Font(12)
-                    ->Fg(th.foreground)));
-        }
-    }
-    if (range.end < count) {
-        float content =
-            sizes ? VirtualListContentSize(sizes, count) : (float)count * rowH;
-        float built = sizes ? VirtualListItemOrigin(sizes, count, range.end)
-                            : (float)range.end * rowH;
-        list->Child(Div(a)->H(content - built));
-    }
-    El* e = gpui::VirtualList::New(cx, id)
-                ->H(viewH + pad * 2)
-                ->ClipY()
-                ->ScrollY(offset);
-    if (pad > 0) {
-        e->Pad(pad);
-    }
-    // Both axes: a row wider than the viewport slides under it rather than
-    // being cut, which is what the story's Axis: Both asks for.
-    e->ClipX()->ScrollX(scrollX);
-    // The axis names the bars, not the scrolling: a list set to Vertical
-    // still slides sideways under the wheel, it just does not draw the bar
-    // along the bottom. That is what Rust's `.scrollbar(&handle, axis)` does,
-    // since the bar layer is a sibling of the list rather than part of it.
-    if (axis == ScrollAxis::Vertical) {
-        e->HideScrollbarX();
-    } else if (axis == ScrollAxis::Horizontal) {
-        e->HideScrollbarY();
-    }
-    if (scrollId) {
-        e->ScrollId(scrollId)->OnScroll(onScroll);
-    }
-    return e->Child(list);
+    return gpui::VirtualList::New(cx, id, o);
 }
 
 } // namespace component

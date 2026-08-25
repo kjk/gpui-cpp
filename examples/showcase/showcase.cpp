@@ -353,13 +353,6 @@ void ShowcaseKey(ShowcaseApp* app, Window* win, int vk, bool down) {
 void ShowcaseWheel(ShowcaseApp* app, float x, float y, float delta) {
     (void)x;
     (void)y;
-    if (app->component == CompVirtualList) {
-        app->virtualScroll -= delta * 2;
-        if (app->virtualScroll < 0) {
-            app->virtualScroll = 0;
-        }
-        return;
-    }
     app->scrollY -= delta;
     if (app->scrollY < 0) {
         app->scrollY = 0;

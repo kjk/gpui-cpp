@@ -5045,3 +5045,28 @@ scrollbar and dialog pages are pixel-identical; `ScrollAxis` moved down to
 The page is then upstream's page: a list, a `Scrollbar::Vertical`, and no
 arithmetic. The wheel scrolls it, the thumb tracks, and dragging the thumb to
 the bottom brings up Activity 20 — none of which the page had before.
+
+
+## The virtual list that was virtual only on the page
+
+`ui/virtual_list.rs` upstream is twenty-two lines, and all of it is a
+re-export plus a test asserting the ui type *is* the base type. The list
+itself — the visible range, the spacers, the handle, the deferred
+`scroll_to_item` — is `base/virtual_list.rs`, 879 lines of it. Here the
+arithmetic was in `src/base` and the assembly was in `component::`, so the
+base showcase, which cannot reach `src/ui`, worked out its own window of rows,
+translated them with an absolute `Top(first * rowH - scroll)`, drew its own
+thumb, and had the offset moved by a branch in the window's wheel handler.
+
+`VirtualList::New(cx, id, opts)` is the assembly, moved down. `VirtualListOpts`
+is what Rust passes to `v_virtual_list`: how many items, how long each is, the
+handle or the offsets, the axis the bars follow, and the row builder — a
+function and a user pointer, since an element here holds no closures.
+`component::VirtualList` keeps its builder API and is now the theme and
+nothing else: the `Item N` row a caller did not supply. The story's
+virtual-list and list pages are pixel-identical.
+
+The showcase page is then upstream's: a row function and an `Opts`. It has a
+real thumb, the wheel reaches it because the list sets both the scroll id and
+the listener, and the window's wheel handler no longer needs to know which
+page is open.
