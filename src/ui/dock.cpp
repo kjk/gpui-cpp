@@ -232,12 +232,12 @@ static El* RenderTitleRow(Ctx* cx, Str id, Entity<DockState> st, int node,
     if (leading) {
         row->Child(RenderToggles(cx, id, st, node, false));
     }
-    El* title =
-        Div(a)->Flex1()->MinW(64)->ClipX()->Child(TextEl(a, def.title)
-                                                      ->Font(14)
-                                                      ->Truncate()
-                                                      ->Fg(th.foreground)
-                                                      ->LineHeight(1.f));
+    // No line height of its own: `rems(1.0)` is exactly the 16px font size, so
+    // the line box has no room for a descender and an `Agent` or a `Properties`
+    // loses the tail of its letters wherever the wrapper clips. The row's own
+    // 30px and its centring are what place the title.
+    El* title = Div(a)->Flex1()->MinW(64)->ClipX()->Child(
+        TextEl(a, def.title)->Font(14)->Truncate()->Fg(th.foreground));
     if (DockNodeDraggable(s, node)) {
         title->Id(StrDup(a, fmt("%s-title-%d", id, node)))
             ->OnDrag(kDockPanelDrag, panelIx)

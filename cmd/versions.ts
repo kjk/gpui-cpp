@@ -9,10 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "b77f352589503a114cdf709507c0738a88e28364",
-  date: "2026-08-19",
-  subject:
-    "title_bar: Skip drawn window controls under server-side decorations (#2773)",
+  sha: "ea5fc0c7a5a51ce34419a05f56e24c3fb2f115db",
+  date: "2026-08-20",
+  subject: "dock: Stop clipping descenders in the single-panel title bar (#2775)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
