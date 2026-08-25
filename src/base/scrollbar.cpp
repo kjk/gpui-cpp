@@ -69,4 +69,33 @@ El* Scrollbar::New(Ctx* cx) {
     Arena* a = cx->a;
     return Div(a);
 }
+
+El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
+                   Listener onScroll, ScrollAxis axis, ScrollbarMode mode) {
+    El* box = New(cx)->ScrollMode(mode);
+    // Each axis is asked for on its own: a box that only scrolls down still
+    // clips what runs off its side.
+    box->ClipY();
+    if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
+        box->ScrollY(scrollY);
+    }
+    if (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) {
+        box->ScrollX(scrollX);
+    } else {
+        box->ClipX();
+    }
+    // The id and the listener together are what make the box a scroll region
+    // the wheel can find; without the listener it is only a clip, and the
+    // wheel falls through to whatever is behind it.
+    box->ScrollId(HashClickId(id.s ? id : StrL("scrollbar")));
+    if (onScroll.IsValid()) {
+        box->OnScroll(onScroll);
+    }
+    return box;
+}
+
+El* Scrollbar::Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll,
+                        ScrollbarMode mode) {
+    return New(cx, id, scrollY, 0, onScroll, ScrollAxis::Vertical, mode);
+}
 } // namespace gpui

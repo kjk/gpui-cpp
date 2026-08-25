@@ -6,12 +6,10 @@ namespace gpui {
 
 namespace component {
 
-// ScrollbarAxis: which bars a scroll area has.
-enum class ScrollAxis : uint8_t {
-    Vertical,
-    Horizontal,
-    Both
-};
+// ScrollbarAxis. The axis belongs to the box that scrolls, which is
+// `base/scrollbar.h` — this is the same enum under the name the themed side
+// has always used it by.
+using ScrollAxis = gpui::ScrollAxis;
 
 struct Scrollable {
     Arena* a = nullptr;

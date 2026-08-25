@@ -3,6 +3,15 @@
 
 using namespace gpui;
 
+// `div().id(..).overflow_scroll().track_scroll(&self.example_scroll)` with
+// `Scrollbar::new(&self.example_scroll).mode(Always)` hung off it. The offset
+// is the view's, so the box reports where it should be and the page stores
+// it — which is what `track_scroll` does with a handle.
+static void OnExampleScroll(ShowcaseApp* app, Ctx* cx, const ScrollEvent* ev) {
+    app->exampleScroll = ev->offsetY;
+    Notify(cx);
+}
+
 El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* list = Div(a)->FlexCol();
@@ -15,42 +24,22 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
                         ->BorderB(1, Rgb(0xe5, 0xe7, 0xeb))
                         ->Child(TextEl(a, DupFmt(cx, "Activity %d", i))
                                     ->Font(12)
-                                    ->Fg(Rgb(0x17, 0x17, 0x17)))
+                                    ->Fg(ScInk()))
                         ->Child(TextEl(a, i % 3 == 0 ? StrL("Completed")
                                                      : StrL("Pending"))
                                     ->Font(12)
-                                    ->Fg(Rgb(0x17, 0x17, 0x17))));
+                                    ->Fg(ScInk())));
     }
-    const float viewH = 192;
-    const float contentH = 20.f * 28.f;
-    float maxS = contentH - viewH;
-    if (maxS < 0) {
-        maxS = 0;
-    }
-    if (app->exampleScroll < 0) {
-        app->exampleScroll = 0;
-    }
-    if (app->exampleScroll > maxS) {
-        app->exampleScroll = maxS;
-    }
-    float thumbH = viewH * viewH / contentH;
-    if (thumbH < 48) {
-        thumbH = 48;
-    }
-    float thumbY = (app->exampleScroll / maxS) * (viewH - thumbH);
-    if (thumbY < 0) {
-        thumbY = 0;
-    }
-    El* box = Scrollbar::New(cx)
-                  ->W(288)
-                  ->H(viewH)
-                  ->Border(1, Rgb(0x17, 0x17, 0x17))
-                  ->ClipY()
-                  ->ScrollY(app->exampleScroll)
-                  ->Child(list);
-    box->Child(Div(a)->Absolute()->Right(4)->Top(thumbY)->W(8)->H(thumbH)->Bg(
-        Rgb(0xa3, 0xa3, 0xa3)));
-    return box;
+    // The thumb, the track press and the drag all belong to the scrolled box,
+    // so nothing here works out where the thumb goes. The page used to, and
+    // what it drew could not be dragged.
+    return Scrollbar::Vertical(cx, StrL("example-scroll-region"),
+                               app->exampleScroll,
+                               Listen(cx, &OnExampleScroll))
+        ->W(288)
+        ->H(192)
+        ->Border(1, ScInk())
+        ->Child(list);
 }
 
 SHOWCASE_PAGE(CompScrollbar, ShowcaseScrollbar);

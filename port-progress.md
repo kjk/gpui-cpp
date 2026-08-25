@@ -5012,3 +5012,36 @@ One thing to know when building a `TreeState`: it keeps the `Str`s it is
 given rather than copying them, and it outlives the frame, so the ids and
 labels must not come from the frame arena. The page's first attempt did, and
 drew a treeful of replacement characters.
+
+
+## The thumb that could not be dragged
+
+The showcase's scrollbar page drew its own thumb. It worked out `thumbH` and
+`thumbY` from the offset and laid an absolutely-positioned grey box over the
+content, and the offset itself came from a branch in the window's wheel
+handler — `if (app->component == CompScrollbar) { app->exampleScroll -= delta; }`.
+So the bar was a picture: pressing it did nothing, dragging it did nothing,
+and the page it was demonstrating was the one page in the showcase where the
+scrollbar was not real.
+
+The element was not missing. `Scrollbar::New(cx)` in `src/base` returned a
+bare div, and everything a scrollbar is — the thumb, the hover widening, the
+track press, the drag, the fade — was already in the renderer under this
+tree, where a scrolled box draws its own bars. What was missing was the way
+in: a box becomes a scroll region only when it has **both** a `ScrollId` and
+an `OnScroll`, because `DispatchScrollWheel` skips a region with no listener
+and lets the wheel fall through to the window. A caller could set `ClipY` and
+`ScrollY`, get something that looked scrolled, and never take the wheel. That
+is the same half-wired box the showcase's tree had.
+
+`Scrollbar::New(cx, id, scrollY, scrollX, onScroll, axis, mode)` is the whole
+thing in one call — Rust's
+`div().overflow_scroll().track_scroll(&h).child(Scrollbar::new(&h))` — so the
+halves cannot be separated. `Scrollbar::Vertical(..)` is the common case.
+`component::Scrollable` is now a themed wrapper over it and the story's
+scrollbar and dialog pages are pixel-identical; `ScrollAxis` moved down to
+`base/scrollbar.h` beside the box that owns it.
+
+The page is then upstream's page: a list, a `Scrollbar::Vertical`, and no
+arithmetic. The wheel scrolls it, the thumb tracks, and dragging the thumb to
+the bottom brings up Activity 20 — none of which the page had before.

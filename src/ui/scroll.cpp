@@ -46,23 +46,13 @@ Scrollable* Scrollable::H(float v) {
 }
 
 El* Scrollable::IntoEl() {
-    El* box = Scrollbar::New(cx)->H(h)->W(kFill)->ScrollMode(mode);
-    // Each axis is asked for on its own: a box that only scrolls down still
-    // clips what runs off its side.
-    if (axis == ScrollAxis::Vertical || axis == ScrollAxis::Both) {
-        box->ClipY()->ScrollY(scrollY);
-    } else {
-        box->ClipY();
-    }
-    if (axis == ScrollAxis::Horizontal || axis == ScrollAxis::Both) {
-        box->ScrollX(scrollX);
-    } else {
-        box->ClipX();
-    }
-    if (onScroll.IsValid()) {
-        box->ScrollId(HashClickId(id.s ? id : StrL("scrollable")))
-            ->OnScroll(onScroll);
-    }
+    // The scrolled box is the base one — the clip, the offsets, the id and
+    // the listener all come together there, so the themed wrapper cannot end
+    // up with a box that clips but does not take the wheel.
+    El* box = Scrollbar::New(cx, id.s ? id : StrL("scrollable"), scrollY,
+                             scrollX, onScroll, axis, mode)
+                  ->H(h)
+                  ->W(kFill);
     if (child) {
         box->Child(child);
     }
