@@ -73,6 +73,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
         pop->Child(InputBase::New(cx, StrL("combobox-search"),
                                   HashClickId(StrL("combobox-search")))
                        ->OnClick(Listen(cx, &FocusComboQuery))
+                       ->FocusId(0)
                        ->W(kFill)
                        ->H(28)
                        ->PadX(8)

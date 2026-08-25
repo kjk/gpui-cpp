@@ -64,6 +64,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->Child(InputBase::New(cx, StrL("dialog-name"),
                                    HashClickId(StrL("dialog-name")))
                         ->OnClick(Listen(cx, &FocusDlgField))
+                        ->FocusId(0)
                         ->W(264)
                         ->H(28)
                         ->PadX(8)

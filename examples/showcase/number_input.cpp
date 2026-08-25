@@ -84,6 +84,7 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
                     ->Child(InputBase::New(cx, StrL("number-field"),
                                            HashClickId(StrL("number-field")))
                                 ->OnClick(Listen(cx, &FocusNum))
+                                ->FocusId(0)
                                 ->Flex1()
                                 ->H(28)
                                 ->PadX(8)

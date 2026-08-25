@@ -5250,7 +5250,21 @@ What is deliberately left: the hand-numbered id space itself. Nine constants
 are still live — `ClickBack`, `ClickOverview + Comp*`, `ClickStory + Story*`,
 `ClickSearch`, `ClickAlertCancel`, `ClickColor`, `ClickSwatch + 0..4`,
 `ClickCombo`, `ClickDlgCancel`, `ClickHover`, `ClickSlider`, `ClickPara + i`,
-`ClickTooltip`, and `dialog_overlay`'s seven — and the arithmetic ones are
-the fragile part: `ClickPara = 531` runs into `ClickTextarea = 540` at the
-tenth paragraph, and there are four. Turning each into
-`HashClickId(fmt("para-%d", i))` is the rest of this job.
+`ClickTooltip`, and `dialog_overlay`'s seven — plus the story's two raw
+`ScrollId(1)` / `ScrollId(2)`.
+
+Rust has no such space at all, which is worth writing down. `ElementId` there
+is a *value* — `Name`, `Integer`, `NamedInteger`, `View`, `FocusHandle`, and
+five more — and what identifies an element is the **path**:
+`GlobalElementId` is the stack of ids from the root down, pushed and popped by
+`Window::with_id`, so an id only has to be unique among its siblings. That is
+why upstream writes `div().id(("showcase-tab", ix))` inside every tab group
+and never has to think about the one next door. Here a hit rect is found by a
+single flat `int` per frame with no path above it, so an id has to be unique
+across the whole window, and `HashClickId` is the bridge: FNV-1a of the name,
+masked to 30 bits, and — this is the giveaway — bumped to 1000 if it lands
+below, which is a band reserved for exactly these hand-assigned constants.
+
+The one that is *not* in the reserved band is the story's `ClickStory = 1000`
+plus its seventy pages, 1000..1069, which sits inside the hashed range. It
+has never collided, and it is the first one to convert.
