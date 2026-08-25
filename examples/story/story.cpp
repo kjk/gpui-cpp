@@ -995,6 +995,13 @@ static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
 static void OnUnhandledClick(StoryApp* app, Ctx* cx, const ClickEvent* ev);
 static void OnKey(StoryApp* app, Ctx* cx, const KeyEvent* ev);
 
+// create_new_window("GPUI Component", ..): the name the window is opened
+// under, and so the name the title bar shows when the menus are not in it —
+// Rust hands the same string to `create_new_window` and to `AppTitleBar`.
+static Str StoryWindowTitle() {
+    return StrL("GPUI Component C++");
+}
+
 static Window* StoryOpenWindow(App* app, int story) {
     Entity<StoryApp> view = EntityNew<StoryApp>(app);
     StoryApp* self = view.Get(app);
@@ -1009,8 +1016,8 @@ static Window* StoryOpenWindow(App* app, int story) {
     // Windows and X11 have none, so component::TitleBar draws the minimize /
     // maximize / close controls there itself.
     opts.clientTitleBar = true;
-    Window* win = WindowOpenView(app, StrL("GPUI Component C++"), 1600, 1200,
-                                 view.id, opts);
+    Window* win =
+        WindowOpenView(app, StoryWindowTitle(), 1600, 1200, view.id, opts);
     if (!win) {
         return nullptr;
     }
@@ -1443,8 +1450,7 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx, const MenuDef* defs,
         // The system menu bar owns the menus, so the freed up left side names
         // the window the way a Mac application does.
         menus->Child(Div(a)->PadX(8)->Child(
-            StoryTxt(cx, StrL("GPUI Component C++"), 14, th.foreground)
-                ->Medium()));
+            StoryTxt(cx, StoryWindowTitle(), 14, th.foreground)->Medium()));
     }
     El* tools =
         Div(a)
