@@ -503,6 +503,13 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
             FpsLevelColor(style, r.droppedPercent > 0 ? 1.f : 0.f, 0.5f),
             style));
     if (self->showResources && self->hasResources) {
+        // The GPU reading is a row of its own, and is left out where the
+        // platform publishes no counter for it — `when_some(gpu_percent)`.
+        if (self->resources.gpuPercent >= 0) {
+            hud->Child(FpsReading(cx, StrL("GPU"),
+                                  fmt("%.1f%%", self->resources.gpuPercent),
+                                  style.foreground, style));
+        }
         // CPU and memory share a row: both are coarse background samples,
         // unlike the per-frame numbers.
         hud->Child(
@@ -515,12 +522,6 @@ El* FpsMonitor::Render(FpsMonitor* self, Ctx* cx) {
                 ->Child(FpsPair(cx, StrL("CPU"),
                                 fmt("%.1f%%", self->resources.cpuPercent),
                                 style))
-                ->Child(self->resources.gpuPercent >= 0
-                            ? FpsPair(cx, StrL("GPU"),
-                                      fmt("%.1f%%",
-                                          self->resources.gpuPercent),
-                                      style)
-                            : nullptr)
                 ->Child(FpsPair(cx, StrL("MEM"),
                                 FpsFormatBytes(self->resources.memoryBytes),
                                 style)));
