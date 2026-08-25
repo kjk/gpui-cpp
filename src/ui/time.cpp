@@ -150,93 +150,96 @@ static El* ThemedCalendarItem(void* user, Ctx* cx, El* item,
     };
     float cellSize = CalendarCellSize(self->size);
     switch (st.kind) {
-    case CalendarItemKind::Previous:
-    case CalendarItemKind::Next: {
-        bool on = !st.disabled;
-        item->Radius(th.radius)->Child(
-            IconEl(a,
-                   st.kind == CalendarItemKind::Previous
-                       ? IconName::ChevronLeft
-                       : IconName::ChevronRight,
-                   16)
-                ->Fg(on ? th.foreground : th.mutedFg));
-        if (on) {
-            item->HoverBg(th.secondaryHover)->FocusId(HashClickId(
-                st.kind == CalendarItemKind::Previous ? StrL("cal-prev")
-                                                      : StrL("cal-next")));
+        case CalendarItemKind::Previous:
+        case CalendarItemKind::Next: {
+            bool on = !st.disabled;
+            item->Radius(th.radius)
+                ->Child(IconEl(a,
+                               st.kind == CalendarItemKind::Previous
+                                   ? IconName::ChevronLeft
+                                   : IconName::ChevronRight,
+                               16)
+                            ->Fg(on ? th.foreground : th.mutedFg));
+            if (on) {
+                item->HoverBg(th.secondaryHover)
+                    ->FocusId(HashClickId(st.kind == CalendarItemKind::Previous
+                                              ? StrL("cal-prev")
+                                              : StrL("cal-next")));
+            }
+            return item;
         }
-        return item;
-    }
-    case CalendarItemKind::MonthToggle:
-    case CalendarItemKind::YearToggle: {
-        bool isMonth = st.kind == CalendarItemKind::MonthToggle;
-        // Several months at once are plain labels rather than toggles, and
-        // the calendar says so by handing over a slot with no id.
-        if (self->numberOfMonths > 1) {
-            return item->Child(TextEl(a, isMonth
-                                             ? Tr(months[st.value])
-                                             : StrDup(a, fmt("%d", st.value)))
-                                   ->Font(14)
-                                   ->Semibold()
-                                   ->Fg(th.foreground));
+        case CalendarItemKind::MonthToggle:
+        case CalendarItemKind::YearToggle: {
+            bool isMonth = st.kind == CalendarItemKind::MonthToggle;
+            // Several months at once are plain labels rather than toggles, and
+            // the calendar says so by handing over a slot with no id.
+            if (self->numberOfMonths > 1) {
+                return item
+                    ->Child(TextEl(a, isMonth ? Tr(months[st.value])
+                                              : StrDup(a, fmt("%d", st.value)))
+                                ->Font(14)
+                                ->Semibold()
+                                ->Fg(th.foreground));
+            }
+            item->Radius(th.radius);
+            if (st.active) {
+                item->Bg(th.tokens.primary);
+            }
+            item->FocusId(HashClickId(isMonth ? StrL("cal-month-toggle")
+                                              : StrL("cal-year-toggle")));
+            return item
+                ->Child(TextEl(a, isMonth ? Tr(months[st.value])
+                                          : StrDup(a, fmt("%d", st.value)))
+                            ->Font(14)
+                            ->Semibold()
+                            ->Fg(st.active ? th.primaryFg : th.foreground));
         }
-        item->Radius(th.radius);
-        if (st.active) {
-            item->Bg(th.tokens.primary);
+        case CalendarItemKind::Weekday:
+            return item->Child(
+                TextEl(a, Tr(weekdays[st.value]))->Font(12)->Fg(th.mutedFg));
+        case CalendarItemKind::Day: {
+            item->Radius(self->size == UiSize::Small   ? th.radius * 0.5f
+                         : self->size == UiSize::Large ? th.radius * 2.f
+                                                       : th.radius);
+            Rgba fg = st.muted ? th.mutedFg : th.foreground;
+            if (st.disabled) {
+                // calendar.rs fades the whole cell rather than the ink, so a
+                // day that is both picked and blocked shows its primary square
+                // at half strength.
+                item->Opacity(0.5f);
+            }
+            if (st.active) {
+                item->Bg(th.tokens.primary);
+                fg = th.primaryFg;
+            } else if (st.inRange || st.today) {
+                item->Bg(th.tokens.accent);
+                fg = th.foreground;
+            } else if (!st.disabled) {
+                item->HoverBg(th.secondaryHover);
+            }
+            return item->Child(
+                TextEl(a, StrDup(a, fmt("%d", st.value)))->Font(14)->Fg(fg));
         }
-        item->FocusId(HashClickId(isMonth ? StrL("cal-month-toggle")
-                                          : StrL("cal-year-toggle")));
-        return item->Child(
-            TextEl(a, isMonth ? Tr(months[st.value])
-                              : StrDup(a, fmt("%d", st.value)))
-                ->Font(14)
-                ->Semibold()
-                ->Fg(st.active ? th.primaryFg : th.foreground));
-    }
-    case CalendarItemKind::Weekday:
-        return item->Child(
-            TextEl(a, Tr(weekdays[st.value]))->Font(12)->Fg(th.mutedFg));
-    case CalendarItemKind::Day: {
-        item->Radius(self->size == UiSize::Small   ? th.radius * 0.5f
-                     : self->size == UiSize::Large ? th.radius * 2.f
-                                                   : th.radius);
-        Rgba fg = st.muted ? th.mutedFg : th.foreground;
-        if (st.disabled) {
-            // calendar.rs fades the whole cell rather than the ink, so a day
-            // that is both picked and blocked shows its primary square at
-            // half strength.
-            item->Opacity(0.5f);
-        }
-        if (st.active) {
-            item->Bg(th.tokens.primary);
-            fg = th.primaryFg;
-        } else if (st.inRange || st.today) {
-            item->Bg(th.tokens.accent);
-            fg = th.foreground;
-        } else if (!st.disabled) {
-            item->HoverBg(th.secondaryHover);
-        }
-        return item->Child(
-            TextEl(a, StrDup(a, fmt("%d", st.value)))->Font(14)->Fg(fg));
-    }
-    case CalendarItemKind::Month:
-        item->Radius(th.radius)->HoverBg(th.secondaryHover);
-        if (st.active) {
-            item->Bg(th.tokens.primary);
-        }
-        // `uses_compact_text`: a month option and nothing else, because
-        // "September" is what overflows.
-        return item->Child(TextEl(a, Tr(months[st.value]))
-                               ->Font(12)
-                               ->Fg(st.active ? th.primaryFg : th.foreground));
-    case CalendarItemKind::Year:
-        item->Radius(th.radius)->HoverBg(th.secondaryHover);
-        if (st.active) {
-            item->Bg(th.tokens.primary);
-        }
-        return item->Child(TextEl(a, StrDup(a, fmt("%d", st.value)))
-                               ->Font(14)
-                               ->Fg(st.active ? th.primaryFg : th.foreground));
+        case CalendarItemKind::Month:
+            item->Radius(th.radius)->HoverBg(th.secondaryHover);
+            if (st.active) {
+                item->Bg(th.tokens.primary);
+            }
+            // `uses_compact_text`: a month option and nothing else, because
+            // "September" is what overflows.
+            return item
+                ->Child(TextEl(a, Tr(months[st.value]))
+                            ->Font(12)
+                            ->Fg(st.active ? th.primaryFg : th.foreground));
+        case CalendarItemKind::Year:
+            item->Radius(th.radius)->HoverBg(th.secondaryHover);
+            if (st.active) {
+                item->Bg(th.tokens.primary);
+            }
+            return item
+                ->Child(TextEl(a, StrDup(a, fmt("%d", st.value)))
+                            ->Font(14)
+                            ->Fg(st.active ? th.primaryFg : th.foreground));
     }
     (void)cellSize;
     return item;
@@ -475,7 +478,8 @@ El* DatePicker::IntoEl() {
                            ->WithSize(UiSize::XSmall)
                            ->Icon(IconName::X)
                            ->OnClick(onClear)
-                           ->IntoEl());
+                           ->IntoEl()
+                           ->StopClick());
     } else {
         trigger->Child(IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
     }

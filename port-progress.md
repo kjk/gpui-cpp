@@ -5764,3 +5764,46 @@ paginations whose buttons are now both named `prev`, `next` and `5` — a page
 change, a Next, and an ellipsis dropdown all behave as before and land on the
 right one of the two; and the rating page's three ratings answer their stars
 as before.
+
+## What bubbling broke, and the audit that found it
+
+The click-bubbling commit regressed the select's clear button: pressing the ×
+cleared the value *and* opened the list, because the × sits inside the trigger
+and the trigger is listening for the same click. The sweep that commit ran did
+not catch it — 133 shots, and none of the click points landed on the ×. That
+is worth saying plainly: a grid of clicks is not coverage of nested controls,
+because the controls that break are the small ones.
+
+Upstream has the guard. `SelectState::clean` is
+`cx.stop_propagation(); self.set_selected_index(None, ..)`, and the same call
+appears in `clipboard.rs`, `otp_input.rs`, `sheet.rs` and `dialog.rs`.
+
+`El::StopClick()` is that call, said on the element instead of inside the
+handler — which is where a port whose listeners cannot wrap one another can
+say it. The click chain stops after a rect that carries it.
+
+**So the sampling was replaced with an audit.** After `PaintEl`, walk the hit
+rects and report every listener that has a listener above it: one shot per
+page tells you every nesting that page has, instead of hoping a click lands on
+one. Across all 40 showcase pages: none. Across all 66 story pages: the story
+shell's own tab chip, plus 31 in ten pages — every one of them a 12–20px
+control inside a 28–32px row.
+
+Guarded, each because the widget says so upstream: the select's ×, an input's
+× and mask toggle, a date or time picker's ×, a dock tab's close, a
+`Clipboard` (which is meant to be dropped into a row and so stops its click
+wherever it lands), and the sidebar's submenu caret — whose comment already
+said "it opens the submenu without being a click on the item", which is
+exactly what it had stopped doing.
+
+Left alone on purpose: the data table's sort icon inside its column head.
+Neither handler stops propagation upstream and the icon is a child of the
+head, so sorting *and* selecting the column is what Rust does.
+
+Left for the pages themselves: three nestings in story code — a control in a
+form row, one in a combobox row, one in a sidebar row. Those are the example's
+to decide, not the library's.
+
+Verified: 133 story shots and all 40 showcase pages identical to before; the
+select's × again clears without opening, byte-identical to the build from
+before bubbling existed.

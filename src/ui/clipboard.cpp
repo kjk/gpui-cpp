@@ -86,7 +86,10 @@ El* Clipboard::IntoEl() {
     if (!copied) {
         btn->OnClick(ListenTo(st, &ClipboardState::OnCopy));
     }
-    return btn->IntoEl();
+    // clipboard.rs stops the click: a copy button is meant to sit inside
+    // anything — a table row, a description list, a nav item — and copying
+    // must not also be a press on whatever it was dropped into.
+    return btn->IntoEl()->StopClick();
 }
 
 } // namespace component

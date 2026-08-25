@@ -229,6 +229,7 @@ El* SearchableList::IntoEl() {
     const Theme& th = cx->theme();
     SearchableListState* s = state.Get(cx);
     El* box = Div(a)
+                  ->Id(id)
                   ->FlexCol()
                   ->W(w)
                   ->Pad(4)
@@ -246,11 +247,10 @@ El* SearchableList::IntoEl() {
         El* row =
             Div(a)->FlexRow()->W(kFill)->H(32)->PadX(4)->Gap(8)->ItemsCenter();
         row->Child(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg));
-        row->Child(Div(a)->Flex1()->Child(
-            Input::New(cx, StrDup(a, fmt("%s-query", id)), query)
-                ->Appearance(false)
-                ->OnFocus(onQueryFocus)
-                ->IntoEl()));
+        row->Child(Div(a)->Flex1()->Child(Input::New(cx, StrL("query"), query)
+                                              ->Appearance(false)
+                                              ->OnFocus(onQueryFocus)
+                                              ->IntoEl()));
         row->BorderB(1, th.border);
         box->Child(row);
     }
@@ -333,8 +333,8 @@ El* SearchableList::IntoEl() {
         }
         row->Child(trail);
         if (enabled) {
-            BindClick(row, StrDup(a, fmt("%s-row-%d", id, ix)),
-                      ListenerArg(click, m));
+            BindPathClick(row, StrDup(a, fmt("row-%d", ix)),
+                          ListenerArg(click, m));
         }
         rows->Child(row);
     }

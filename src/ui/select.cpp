@@ -196,7 +196,12 @@ El* Select::IntoEl() {
     bool open = s && s->open && !disabled;
     bool hasValue = s && s->selected.len > 0;
     Str title = SelectTriggerTitle(s, placeholder, titlePrefix, a);
+    // The select's own name, so the parts inside it are scoped by it rather
+    // than spelling it out. BindClick below names it again for the enabled
+    // case; a disabled select is named all the same, since its children still
+    // need something to fold against.
     El* box = Div(a)
+                  ->Id(id)
                   ->FlexRow()
                   ->W(width)
                   ->H(h)
@@ -223,12 +228,16 @@ El* Select::IntoEl() {
         box->Child(
             TextEl(a, title)->Font(font)->Fg(hasValue ? fg : th.mutedFg));
         if (cleanable && hasValue && !disabled) {
-            box->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
+            // `SelectState::clean` calls cx.stop_propagation() first: the ×
+            // sits inside the trigger, which is listening for the same click,
+            // and a clear that also opened the list would be no clear at all.
+            box->Child(Button::New(cx, StrL("clean"))
                            ->Text()
                            ->WithSize(UiSize::XSmall)
                            ->Icon(IconName::X)
                            ->OnClick(onClear)
-                           ->IntoEl());
+                           ->IntoEl()
+                           ->StopClick());
         } else if (icon != IconName::None) {
             // A custom icon replaces the caret, at xsmall.
             box->Child(IconEl(a, icon, 12)->Fg(th.mutedFg));

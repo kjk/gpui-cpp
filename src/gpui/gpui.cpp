@@ -1894,6 +1894,10 @@ El* El::OnDrag(Str dragKind, int ix, void* data) {
     drag.data = data;
     return this;
 }
+El* El::StopClick() {
+    stopClick = true;
+    return this;
+}
 El* El::OnMouseUpOut(Listener l) {
     onMouseUpOut = l;
     return this;
@@ -5203,6 +5207,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.slider = e->slider;
         hr.sliderAxis = e->sliderAxis;
         hr.input = e->input;
+        hr.stopClick = e->stopClick;
         ctx->hits.Append(hr);
         // Everything under this element names it as the ancestor its events
         // pass through, which is the chain the two phases walk.

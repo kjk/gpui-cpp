@@ -181,24 +181,26 @@ El* Input::IntoEl() {
         field->Child(gpui::Input::New(cx, state, editor));
     }
     if (maskToggle) {
-        field->Child(Button::New(cx, StrDup(a, fmt("%s-mask", id)))
+        field->Child(Button::New(cx, StrL("mask"))
                          ->Text()
                          ->WithSize(UiSize::XSmall)
                          ->Icon(IconName::Eye)
                          ->TabStop(false)
                          ->OnClick(onToggleMask)
-                         ->IntoEl());
+                         ->IntoEl()
+                         ->StopClick());
     }
     if (cleanable && hasValue && !disabled) {
         // clear_button.rs: `.tab_stop(false)`. The X belongs to the field, and
         // Tab should move to the next field rather than stop at it.
-        field->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
+        field->Child(Button::New(cx, StrL("clean"))
                          ->Text()
                          ->WithSize(UiSize::XSmall)
                          ->Icon(IconName::X)
                          ->TabStop(false)
                          ->OnClick(onClear)
-                         ->IntoEl());
+                         ->IntoEl()
+                         ->StopClick());
     }
     if (suffix) {
         field->Child(suffix);

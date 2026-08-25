@@ -285,7 +285,10 @@ El* TabsStory::Render(TabsStory* self, Ctx* cx) {
                      ->WithSize(UiSize::XSmall)
                      ->Icon(IconName::X)
                      ->OnClick(Listen(cx, &CloseDynamicTab, i))
-                     ->IntoEl());
+                     ->IntoEl()
+                     // The X is inside the tab, which takes the same click:
+                     // closing a tab must not also select it on the way.
+                     ->StopClick());
         dynBar->Child(t);
     }
     StorySectionAdd(dynamic, dynBar);

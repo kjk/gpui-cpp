@@ -232,7 +232,9 @@ El* DockBindClose(const DockTabGroup* g, int ix, El* e) {
     BindId(e, DockElId(g->cx, g->id, "close", g->node, ix), true);
     e->OnClick(
         ListenTo(g->state, &DockState::OnCloseClick, DockPack(g->node, ix)));
-    e->TabStop(false);
+    // The X sits inside the tab, which is listening for the same click now
+    // that a click bubbles: closing a panel must not also select it first.
+    e->TabStop(false)->StopClick();
     return e;
 }
 

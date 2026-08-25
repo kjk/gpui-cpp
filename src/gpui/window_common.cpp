@@ -1534,7 +1534,11 @@ static void DispatchMouseUp(Window* win, const MouseUpEvent& in) {
                     continue;
                 }
                 handled = true;
+                bool stops = hr.stopClick;
                 ListenerCall(win->app, win, hr.listener, &ev);
+                if (stops) {
+                    break;
+                }
             }
             chain.Reset();
         }

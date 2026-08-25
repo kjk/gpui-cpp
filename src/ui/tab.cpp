@@ -503,7 +503,7 @@ El* Tabs::IntoEl() {
             // box behind it that the indicator is carrying.
             st.fg = TabSelected(variant, th).fg;
         }
-        Str tabId = StrDup(a, fmt("%s-%d", id, i));
+        Str tabId = StrDup(a, fmt("%d", i));
         El* tab = gpui::Tab::New(
                       cx, tabId, item.disabled,
                       item.disabled ? Listener{} : ListenerArg(onChange, i))

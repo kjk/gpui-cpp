@@ -1740,6 +1740,8 @@ struct El {
     // El::PathId: the click id is the path rather than a number the caller
     // picked. An explicit Click(v) clears it and wins.
     bool clickFromPath = false;
+    // El::StopClick — see HitRect::stopClick.
+    bool stopClick = false;
     Func0 onClick;
     Listener listener;
     // El::OnClickAction — dispatched from the release, beside onClick.
@@ -2033,6 +2035,8 @@ struct El {
     El* OnDragMove(Listener l);
     El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
     El* OnMouseUpOut(Listener l);
+    // cx.stop_propagation() for the click this element takes.
+    El* StopClick();
     El* OnDrop(Str acceptKind, Listener l);
     // StyleRefinement, applied at layout time rather than as the caller
     // chains: a semantic state — selected, disabled — is meant to win over the
@@ -2200,6 +2204,12 @@ struct HitRect {
     // El::OnClickAction: the action a click dispatches, and what it carries.
     uint32_t clickAction = 0;
     intptr_t clickActionArg = 0;
+    // El::StopClick: the click stops here rather than carrying on outwards.
+    // `cx.stop_propagation()` in a handler, said on the element instead —
+    // which is where a port whose listeners cannot wrap one another can say
+    // it. A field's clear button is the case: pressing the × must not also be
+    // a press on the trigger it sits in.
+    bool stopClick = false;
 };
 
 // A scrolled box the frame painted, and the scrollbar drawn down its right

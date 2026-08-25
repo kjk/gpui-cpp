@@ -150,7 +150,10 @@ El* SidebarMenuItem::IntoEl(Str id) {
                     ->Ghost()
                     ->WithSize(UiSize::XSmall)
                     ->OnClick(ListenTo(st, &SidebarMenuState::OnCaretClick))
-                    ->IntoEl());
+                    ->IntoEl()
+                    // "without being a click on the item" is what
+                    // stop_propagation says now that a click bubbles.
+                    ->StopClick());
         }
     }
     if (!disabled) {
