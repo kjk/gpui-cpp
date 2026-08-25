@@ -197,6 +197,30 @@ static void AQueryChangeResetsTheHighlight() {
     utassert(CommandSelectedIndex(&s, &path) && path.row == 0);
 }
 
+static void AnUnfilterablePaletteKeepsEveryItem() {
+    CommandEntry entries[2] = {CommandEntryOf(kSuggestionsGroup),
+                               CommandEntryOf(kSettingsGroup)};
+    CommandState s;
+    Install(&s, entries, 2, nullptr);
+    IndexPath second = IndexPathNew(1).Section(1);
+    CommandSetSelectedIndex(&s, nullptr, &second);
+
+    // "Bil" locally matches only Billing. A palette whose source answers the
+    // query keeps every row it was given...
+    InputSetValue(&s.query, Str("Bil"));
+    CommandInstall(&s, nullptr, entries, 2, true, false);
+    utassert(CommandMatchedCount(&s) == 5);
+    // ...and the highlight goes back to the first item rather than to the
+    // textual match.
+    IndexPath path = {};
+    utassert(CommandSelectedIndex(&s, &path));
+    utassert(path.section == 0 && path.row == 0);
+
+    // The same query with the filtering on is the one item it matches.
+    CommandInstall(&s, nullptr, entries, 2, true, true);
+    utassert(CommandMatchedCount(&s) == 1);
+}
+
 static void AQueryIsTrimmedBeforeItIsMatched() {
     CommandEntry entries[1] = {CommandEntryOf(kSuggestionsGroup)};
     CommandState s;
@@ -217,5 +241,6 @@ void TestCommand() {
     TheHighlightFollowsItsItemAcrossAModelInstall();
     AClearedHighlightStaysCleared();
     AQueryChangeResetsTheHighlight();
+    AnUnfilterablePaletteKeepsEveryItem();
     AQueryIsTrimmedBeforeItIsMatched();
 }

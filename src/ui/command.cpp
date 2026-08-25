@@ -137,7 +137,7 @@ static const CommandItem* ItemOfMatch(const CommandState* s, int matchIx) {
 
 static bool ItemMatchesQuery(const CommandState* s, const CommandItem* item,
                              Str query) {
-    if (!s->searchable || query.len == 0) {
+    if (!s->searchable || !s->filterable || query.len == 0) {
         return true;
     }
     return CommandItemMatches(item, query);
@@ -318,13 +318,14 @@ static void FireSelect(CommandState* s, Ctx* cx, bool hadPrev, IndexPath prev) {
 }
 
 void CommandInstall(CommandState* s, Ctx* cx, const CommandEntry* entries,
-                    int nEntries, bool searchable) {
+                    int nEntries, bool searchable, bool filterable) {
     if (!s) {
         return;
     }
     s->entries = entries;
     s->nEntries = nEntries;
     s->searchable = searchable;
+    s->filterable = filterable;
     Str query = TrimQuery(InputValue(&s->query));
     // Rust hears the field's Change event; a change is seen here as the query
     // no longer being the one the matches were worked out for, which is what
@@ -572,6 +573,10 @@ Command* Command::Searchable(bool v) {
     searchable = v;
     return this;
 }
+Command* Command::Filterable(bool v) {
+    filterable = v;
+    return this;
+}
 Command* Command::Placeholder(Str s) {
     placeholder = s;
     return this;
@@ -726,7 +731,7 @@ El* Command::IntoEl() {
     if (placeholder.len > 0) {
         InputSetPlaceholder(&s->query, placeholder);
     }
-    CommandInstall(s, cx, entries, nEntries, searchable);
+    CommandInstall(s, cx, entries, nEntries, searchable, filterable);
 
     if (header) {
         box->Child(header);

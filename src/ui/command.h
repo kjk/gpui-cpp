@@ -143,6 +143,10 @@ struct CommandState {
     const CommandEntry* entries = nullptr;
     int nEntries = 0;
     bool searchable = true;
+    // Command::filterable: whether the query filters the entries here. Off is
+    // a palette whose source already answered the query — an async search —
+    // where a local substring pass only drops matches the source understood.
+    bool filterable = true;
     Vec<CommandRow> rows;
     Vec<CommandMatch> matched;
     Vec<float> rowSizes;
@@ -181,7 +185,7 @@ struct CommandState {
 // under the query, and the selection carried across — by the item's path, so
 // filtering does not move the highlight onto somebody else.
 void CommandInstall(CommandState* s, Ctx* cx, const CommandEntry* entries,
-                    int nEntries, bool searchable);
+                    int nEntries, bool searchable, bool filterable = true);
 // The highlighted item's path in the model as it was given, before filtering.
 // False when nothing is highlighted.
 bool CommandSelectedIndex(const CommandState* s, IndexPath* out);
@@ -209,6 +213,7 @@ struct Command {
     const CommandEntry* entries = nullptr;
     int nEntries = 0;
     bool searchable = true;
+    bool filterable = true;
     Str placeholder = {};
     // Command::empty / header / footer: Rust builds them from a closure it
     // hands the state; they are elements here, built by the caller for this
@@ -230,6 +235,10 @@ struct Command {
     // they were given, which is what Rust's `.items(..)` comes to.
     Command* Items(const CommandItem* items, int n);
     Command* Searchable(bool v);
+    // Keep the field, the spinner and the keys, and leave the filtering to
+    // whoever answers `OnQuery`. A query change then hands the highlight back
+    // to the first item rather than to a local textual match.
+    Command* Filterable(bool v);
     Command* Placeholder(Str s);
     Command* Empty(El* e);
     Command* Header(El* e);
