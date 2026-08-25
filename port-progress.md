@@ -4724,13 +4724,36 @@ odd, and the freed up left side of the title bar names the window instead. It
 stays switchable — the row is in the Appearance menu — because a component
 gallery is where you would want to look at the component itself.
 
-Two things are not done and are worth naming. There is no `os_action`: gpui
-maps a handful of menu rows onto AppKit's own selectors, which is where ⌘Q on
-Quit comes from, so a row here shows a shortcut only if the keymap binds its
-action and the story binds none of its own. And the bar itself was not seen: a
-process started over ssh never joins the console session, so the macOS build
-compiles and runs but its window and its menu bar need somebody at the
-machine. What was verified here is the Windows and Linux side of the same
-change — the drawn bar, its submenus, the actions arriving through the root,
-and the title-only title bar — plus the numbering and the keymap lookup under
-test.
+**Where a row's chord actually comes from.** A menu row has no shortcut field,
+here or in Rust: it shows what the keymap has bound to its action. So a Quit
+row with no ⌘Q is an application that never bound one, and the story now binds
+what upstream's story binds — `secondary-o` for Open, ⌘Q on macOS and alt-F4
+elsewhere for Quit. Alt-F4 is upstream's too, and is a fallback rather than the
+path: Windows and most window managers close the window before the keystroke
+reaches the application. The two Window rows are the port's own, so their
+chords are as well, and only on the Mac — ⌘N and ⌘W are what every application
+there uses for them, and an unscoped ctrl-w elsewhere would close the window
+out from under whatever was in the middle of something. `KeyName` learned to
+spell f1..f12 on the way, which is the other half of a parse that has always
+read them and the reason Alt+F4 showed as nothing beside Quit.
+
+Quit also had to become quit. `AppQuit(win)` closes the window it names and the
+loop ends when the last one has gone, which is the same thing while there is
+one window and not the same thing at all once the Window menu can open a
+second. `AppQuitAll` is `cx.quit()`: the list copied, then every window still
+in it closed.
+
+What gpui's `os_action` is, for the record, is not that: it maps six rows — cut,
+copy, paste, select-all, undo, redo — onto AppKit's own selectors so the
+responder chain handles them in a native control. Nothing in this port is a
+native control; a field here is drawn by the port and already answers those
+actions, and the menu dispatches them to it. There is nothing for the
+responder chain to do.
+
+One thing is still not verified. A process started over ssh never joins the
+console session, so the macOS build compiles and runs but its window, its menu
+bar and the ⌘Q on it need somebody at the machine. What was checked here is
+the Windows and Linux side of the same change — the drawn bar, its submenus,
+the chords beside Open and Quit, the actions arriving through the root, Quit
+leaving nothing running, and the title-only title bar — plus the numbering,
+the keymap lookup and the key names under test.

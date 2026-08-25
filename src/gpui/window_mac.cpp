@@ -911,6 +911,20 @@ static NSString* KeyEquivalent(const char* key) {
             return [NSString stringWithCharacters:&ch length:1];
         }
     }
+    // f1..f12, which AppKit also names with a code point of its own.
+    if ((key[0] == 'f' || key[0] == 'F') && key[1] >= '0' && key[1] <= '9') {
+        int n = key[1] - '0';
+        if (key[2] >= '0' && key[2] <= '9' && key[3] == 0) {
+            n = n * 10 + (key[2] - '0');
+        } else if (key[2] != 0) {
+            n = 0;
+        }
+        if (n >= 1 && n <= 12) {
+            unichar ch = (unichar)(NSF1FunctionKey + n - 1);
+            return [NSString stringWithCharacters:&ch length:1];
+        }
+        return @"";
+    }
     // A letter, a digit or a punctuation key is its own equivalent, and a
     // binding already spells it lowercase — which is what AppKit wants, with
     // the shift in the modifier mask rather than in the character.

@@ -4911,6 +4911,11 @@ bool WindowDispatchKeyEvent(Window* win, KeyEvent* ev);
 using ActionFn = void (*)(Window* win, ActionEvent* ev);
 void AppOnAction(uint32_t action, ActionFn fn);
 void AppQuit(Window* win);
+// cx.quit(): the application ends, not just this window. AppQuit closes the
+// window it names and the loop ends when the last one has gone, which is the
+// same thing while there is only one — a Quit row with two windows open is
+// where the two part company.
+void AppQuitAll(App* app);
 void AppInvalidate(Window* win);
 // cx.refresh_windows(): every window this app owns repaints. What a change
 // with no one view behind it — the theme, the font size — asks for.

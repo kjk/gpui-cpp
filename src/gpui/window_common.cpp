@@ -2153,6 +2153,30 @@ void AppClose(Window* win) {
     AppQuit(win);
 }
 
+void AppQuitAll(App* app) {
+    if (!app) {
+        return;
+    }
+    // Closing a window takes it out of the list, so the list is copied first
+    // and each entry checked against what is left — a window that closed
+    // another one on its way out is not visited twice.
+    Vec<Window*> windows;
+    for (int i = 0; i < app->windows.len; i++) {
+        windows.Append(app->windows[i]);
+    }
+    for (int i = 0; i < windows.len; i++) {
+        Window* win = windows[i];
+        bool live = false;
+        for (int j = 0; j < app->windows.len; j++) {
+            live = live || app->windows[j] == win;
+        }
+        if (live) {
+            AppQuit(win);
+        }
+    }
+    windows.FreeEls();
+}
+
 bool AppIsMaximized(Window* win) {
     return win && win->maximized;
 }

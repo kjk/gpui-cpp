@@ -598,10 +598,21 @@ static void TheChordAnActionIsReachedBy() {
     utassert(StrSame(KeyName(KeyPageDown), StrL("pagedown")));
     utassert(StrSame(KeyName('7'), StrL("7")));
 
+    // A function key is spelled the way a binding writes it, both halves of
+    // the range: a menu row bound on one has to be able to show it.
+    utassert(StrSame(KeyName(112), StrL("f1")));
+    utassert(StrSame(KeyName(115), StrL("f4")));
+    utassert(StrSame(KeyName(120), StrL("f9")));
+    utassert(StrSame(KeyName(121), StrL("f10")));
+    utassert(StrSame(KeyName(123), StrL("f12")));
+    // And nothing past it: 124 is F13, which no binding here names.
+    utassert(KeyName(124).len == 0);
+
     // Round trip: every name KeyChordParse reads, KeyName spells again.
     const char* specs[] = {"enter", "escape", "tab", "space", "backspace",
                            "delete", "left", "up", "right", "down",
-                           "home", "end", "pageup", "pagedown"};
+                           "home", "end", "pageup", "pagedown",
+                           "f1", "f7", "f11", "f12"};
     for (const char* spec : specs) {
         KeyChord parsed = {};
         utassert(KeyChordParse(Str(spec), &parsed));

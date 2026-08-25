@@ -1002,7 +1002,10 @@ static Str StoryWindowTitle() {
     return StrL("GPUI Component C++");
 }
 
+static void StoryInitKeys();
+
 static Window* StoryOpenWindow(App* app, int story) {
+    StoryInitKeys();
     Entity<StoryApp> view = EntityNew<StoryApp>(app);
     StoryApp* self = view.Get(app);
     if (!self) {
@@ -1161,8 +1164,10 @@ static void OnOpenAction(StoryApp*, Ctx*, const ActionEvent*) {
     // it (PromptForPath), and it is that example that wants it, not this menu.
 }
 
+// `cx.on_action(|_: &Quit, cx| cx.quit())`: every window, not the one the row
+// was chosen from. Close Window below is the one that closes one.
 static void OnQuitAction(StoryApp*, Ctx* cx, const ActionEvent*) {
-    AppQuit(cx->win);
+    AppQuitAll(cx->app);
 }
 
 static void OnNewWindowAction(StoryApp*, Ctx* cx, const ActionEvent*) {
@@ -1193,6 +1198,39 @@ static void OnSelectThemeAction(StoryApp*, Ctx* cx, const ActionEvent* ev) {
     }
     ThemeSet(cx->app, cfg->mode);
     Notify(cx);
+}
+
+// cx.bind_keys([..]) in the story's init. A menu row shows the chord bound to
+// its action and nothing else — there is no shortcut field on a row, here or
+// in Rust — so an application that wants ⌘Q beside Quit binds ⌘Q to Quit.
+// Upstream binds Open and Quit; the two Window rows are the port's own, and so
+// are their chords.
+static void StoryInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
+    }
+    bound = KeymapGeneration();
+    KeyBinding bindings[] = {
+        // cmd-o on macOS, ctrl-o elsewhere, which is what `secondary-` is.
+        {"secondary-o", ActOpen(), nullptr},
+#if GPUI_OS_MAC
+        {"cmd-q", ActQuit(), nullptr},
+        // Not upstream's, because upstream has no such rows: on a Mac these
+        // two chords are what every application uses for them. Elsewhere
+        // there is no such convention, and an unscoped ctrl-w would close the
+        // window out from under whatever the pointer was in the middle of.
+        {"cmd-n", ActNewWindow(), nullptr},
+        {"cmd-w", ActCloseWindow(), nullptr},
+#else
+        // Rust binds this too. Both Windows and most window managers close
+        // the window on alt-F4 before a keystroke reaches the application, so
+        // it is the fallback for the ones that do not rather than the path
+        // this normally takes.
+        {"alt-f4", ActQuit(), nullptr},
+#endif
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
 }
 
 // Every handler above, hung off the root so a row chosen in either bar finds

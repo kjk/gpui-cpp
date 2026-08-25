@@ -599,6 +599,22 @@ Str KeyName(int vk) {
             return Str(kNamedKeys[i].name);
         }
     }
+    // f1..f12, the other half of the parse above: a binding may be written on
+    // one, so a menu row or a tooltip has to be able to say which. The buffer
+    // is static for the same reason the one below is — the name outlives the
+    // call, and only one is ever being looked at.
+    if (vk >= 112 && vk <= 123) {
+        static char fkey[4] = {};
+        int n = vk - 111;
+        fkey[0] = 'f';
+        if (n < 10) {
+            fkey[1] = (char)('0' + n);
+            return Str(fkey, 2);
+        }
+        fkey[1] = '1';
+        fkey[2] = (char)('0' + (n - 10));
+        return Str(fkey, 3);
+    }
     // A letter or a digit is its own lowercase name, which is how a binding
     // spells it. The buffer is static because a name outlives the call and
     // there is only ever one being looked at.
