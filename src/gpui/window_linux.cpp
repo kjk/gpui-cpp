@@ -66,6 +66,7 @@ static Str gClipboard = {};
 
 static Atom aWmDeleteWindow, aWmProtocols, aNetWmName, aUtf8String;
 static Atom aNetWmState, aNetWmStateMaxVert, aNetWmStateMaxHorz;
+static Atom aNetFrameExtents;
 static Atom aNetWmMoveResize, aMotifWmHints, aGtkShowWindowMenu;
 static Atom aClipboard, aTargets, aClipTarget;
 
@@ -1194,6 +1195,39 @@ void AppInvalidate(Window* win) {
     }
 }
 
+bool WindowClientDecorated(Window* win) {
+    if (!win || !win->plat || !ClientDecorated(win)) {
+        return false;
+    }
+    // Asking is not getting: SetUndecorated is a Motif hint, and a window
+    // manager is free to keep its frame — which it then draws its own title
+    // bar and controls on. _NET_FRAME_EXTENTS is what a manager that framed
+    // the window reports, so a non-zero extent means the decorations are the
+    // server's after all.
+    Atom type = 0;
+    int format = 0;
+    unsigned long n = 0, after = 0;
+    unsigned char* data = nullptr;
+    if (XGetWindowProperty(gDpy, win->plat->xwin, aNetFrameExtents, 0, 4, False,
+                           XA_CARDINAL, &type, &format, &n, &after,
+                           &data) != Success) {
+        return true;
+    }
+    bool framed = false;
+    if (data && format == 32) {
+        auto* extents = (unsigned long*)data;
+        for (unsigned long i = 0; i < n && i < 4; i++) {
+            if (extents[i] != 0) {
+                framed = true;
+            }
+        }
+    }
+    if (data) {
+        XFree(data);
+    }
+    return !framed;
+}
+
 void AppActivate(Window* win) {
     if (!win || !win->plat) {
         return;
@@ -1335,6 +1369,7 @@ bool PlatInit(App* app) {
     aNetWmName = XInternAtom(gDpy, "_NET_WM_NAME", False);
     aUtf8String = XInternAtom(gDpy, "UTF8_STRING", False);
     aNetWmState = XInternAtom(gDpy, "_NET_WM_STATE", False);
+    aNetFrameExtents = XInternAtom(gDpy, "_NET_FRAME_EXTENTS", False);
     aNetWmStateMaxVert =
         XInternAtom(gDpy, "_NET_WM_STATE_MAXIMIZED_VERT", False);
     aNetWmStateMaxHorz =

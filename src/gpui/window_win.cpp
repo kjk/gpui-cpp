@@ -617,6 +617,12 @@ void AppInvalidate(Window* win) {
     }
 }
 
+bool WindowClientDecorated(Window* win) {
+    // The caption is dropped for both of these and the frame is left; nothing
+    // else draws min/max/close.
+    return win && (win->opts.clientTitleBar || win->opts.borderless);
+}
+
 void AppActivate(Window* win) {
     HWND hwnd = Hwnd(win);
     if (!hwnd) {

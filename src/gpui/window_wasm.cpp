@@ -540,6 +540,11 @@ void AppQuit(Window* win) {
     }
 }
 
+bool WindowClientDecorated(Window* win) {
+    // A tab has no frame at all, so what the page draws is all there is.
+    return win != nullptr;
+}
+
 // A tab cannot raise itself either — only the browser decides which one is
 // in front, and window.focus() is ignored for anything but a popup a script
 // opened.

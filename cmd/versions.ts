@@ -9,9 +9,10 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "fa700dc2abf1574473ed945712a1b364d28366fa",
+  sha: "b77f352589503a114cdf709507c0738a88e28364",
   date: "2026-08-19",
-  subject: "command: Move the row inset onto the virtual list (#2771)",
+  subject:
+    "title_bar: Skip drawn window controls under server-side decorations (#2773)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

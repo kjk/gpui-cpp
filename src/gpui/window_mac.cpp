@@ -679,6 +679,12 @@ void AppInvalidate(Window* win) {
     }
 }
 
+bool WindowClientDecorated(Window* win) {
+    // The traffic lights are Cocoa's over a transparent title bar, and
+    // component::TitleBar draws no controls of its own here.
+    return win != nullptr;
+}
+
 void AppActivate(Window* win) {
     if (!win || !win->plat) {
         return;
