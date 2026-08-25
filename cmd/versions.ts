@@ -9,9 +9,10 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "cc89092fedc61acc839b4c113eb4778eee12b605",
+  sha: "b80bb899151cb43db7bdc6f7586736f9fa17253a",
   date: "2026-08-19",
-  subject: "command: Add a Command palette component (#2765)",
+  subject:
+    "notification: Bridge notifications to the OS notification center (#2770)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",
@@ -26,15 +27,15 @@ export const gpuiComponent = {
  */
 export const zedGpui = {
   repo: "https://github.com/zed-industries/zed",
-  sha: "cc053a4a6fa2fd0e8793201ed9099466af1be0b1",
-  date: "2026-08-07",
-  subject: "gpui: Expose accessibility identifiers to platform clients (#61926)",
+  sha: "e0931d5a9dbf4f781b336fdf448739e74a2ac0b5",
+  date: "2026-08-17",
+  subject: "Reuse char-scan invisibles detection in `highlight_invisibles` (#62715)",
   crates: {
     gpui: "0.2.2",
     gpui_platform: "0.2.2",
     gpui_macros: "0.2.2",
   },
-  lock: "git+https://github.com/zed-industries/zed#cc053a4a6fa2fd0e8793201ed9099466af1be0b1",
+  lock: "git+https://github.com/zed-industries/zed#e0931d5a9dbf4f781b336fdf448739e74a2ac0b5",
 } as const;
 
 /**
