@@ -1594,6 +1594,11 @@ struct Style {
     // whether or not it is showing.
     bool groupHoverVisible = false;
     int focusId = 0;
+    // El::PathId asked for the focus id to be the element's path, which is
+    // only known once the tree is built. An explicit FocusId(v) — including
+    // FocusId(0), which is how a decorated wrapper stays out of the tab
+    // order — clears this and wins.
+    bool focusFromPath = false;
     // FocusHandle::tab_index / tab_stop. The index groups the traversal: Tab
     // visits every element of the lowest index in the order they were painted,
     // then the next index, and so on, which is how a control can be reached
@@ -1715,6 +1720,19 @@ struct El {
     ChartSeries chart = {};
     float progress = 0; // 0..100
     int clickId = 0;
+    // GlobalElementId. GPUI identifies an element by the *stack* of
+    // ElementIds from the root down to it — `Window::with_id` pushes and pops
+    // — so a name only has to be unique among its siblings, which is why
+    // upstream can write `div().id(("showcase-tab", ix))` inside every tab
+    // group without a thought for the one next door. There is no stack here:
+    // an element is found by one flat int, so the path is folded into a hash
+    // of it. `IdCollect` walks the built tree once a frame and fills this in;
+    // an element with no name of its own inherits its parent's, exactly as an
+    // element with no `.id()` pushes nothing in Rust.
+    uint32_t pathId = 0;
+    // El::PathId: the click id is the path rather than a number the caller
+    // picked. An explicit Click(v) clears it and wins.
+    bool clickFromPath = false;
     Func0 onClick;
     Listener listener;
     // El::OnClickAction — dispatched from the release, beside onClick.
@@ -1974,6 +1992,16 @@ struct El {
     El* ScrollMode(ScrollbarMode m);
     El* ScrollId(int v);
     El* Click(int v);
+    // `div().id(name)` — the whole of it. The element is named, and the id it
+    // is found by is that name folded with its ancestors'. This is what a
+    // widget should reach for: two `Button::New(cx, StrL("save"))` under
+    // different parents are two different elements, the way Rust's two
+    // `Button::new("save")` are, and neither caller has to invent a name the
+    // other will not also pick.
+    El* PathId(Str name);
+    // The same without joining the tab order, for a box that is a hit target
+    // and nothing else.
+    El* PathClick(Str name);
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
     // The scrollbar's own handler. Rust's scrollbar writes straight into the
@@ -4858,6 +4886,7 @@ void WindowRequestAnimationFrame(Window* win);
 
 // Collect focusable click targets from last paint for Tab cycling.
 void FocusCollect(Window* win, El* root);
+void IdsCollect(El* root);
 int FocusNext(Window* win, int trapId, bool backward);
 // Move the focus. Everything that focuses goes through here, so the
 // generation a keystroke is stamped with counts every move.

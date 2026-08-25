@@ -113,6 +113,7 @@ int GpuiMain(int argc, char** argv) {
     TestStateStyle();
     TestClick();
     TestVec();
+    TestElementId();
     TestArenaVec();
     TestDrawOps();
     TestHttp();

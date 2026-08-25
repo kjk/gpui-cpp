@@ -1832,6 +1832,18 @@ El* El::ScrollId(int v) {
 }
 El* El::Click(int v) {
     clickId = v;
+    clickFromPath = false;
+    return this;
+}
+El* El::PathId(Str name) {
+    id = name;
+    clickFromPath = true;
+    style.focusFromPath = true;
+    return this;
+}
+El* El::PathClick(Str name) {
+    id = name;
+    clickFromPath = true;
     return this;
 }
 El* El::OnClick(Func0 fn) {
@@ -2192,6 +2204,7 @@ El* El::GroupHoverVisible() {
 }
 El* El::FocusId(int v) {
     style.focusId = v;
+    style.focusFromPath = false;
     return this;
 }
 El* El::KeyContext(Str name) {
@@ -6364,6 +6377,116 @@ bool WindowDispatchAction(Window* win, uint32_t action, intptr_t arg) {
     // Bound but unhandled. Rust leaves the keystroke to whatever is under the
     // action dispatch, and so does this: the caller carries on.
     return false;
+}
+
+// GlobalElementId, folded. Rust pushes an ElementId per named element and
+// compares the whole stack; a hit rect here is one int, so the stack is a
+// rolling hash instead — the same FNV-1a `HashClickId` uses, so a name at the
+// root hashes to what `HashClickId(name)` always gave it.
+//
+// An element with no name of its own inherits its parent's, which is what
+// GPUI's `with_id` does by pushing nothing for an element that declared no
+// ElementId.
+static uint32_t IdFold(uint32_t parent, Str name) {
+    uint32_t h = parent ? parent : 2166136261u;
+    // The separator is what keeps "ab"+"c" apart from "a"+"bc".
+    h ^= (uint8_t)'/';
+    h *= 16777619u;
+    for (int i = 0; i < name.len; i++) {
+        h ^= (uint8_t)name.s[i];
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static int IdToClick(uint32_t h) {
+    int id = (int)(h & 0x3fffffff);
+    // Zero is "nothing hovered / nothing focused / no hit".
+    return id ? id : 1;
+}
+
+static void IdCollect(El* e, uint32_t parent) {
+    uint32_t here = parent;
+    if (e->id.s && e->id.len > 0) {
+        here = IdFold(parent, e->id);
+    }
+    e->pathId = here;
+    if (e->clickFromPath) {
+        e->clickId = IdToClick(here);
+        if (e->style.focusFromPath) {
+            e->style.focusId = e->clickId;
+        }
+    }
+    for (El* c = e->first; c; c = c->next) {
+        IdCollect(c, here);
+    }
+}
+
+// GPUI_ID_CHECK=1 reports every id two elements in one frame share. Rust
+// cannot have this problem — it compares whole id paths, never a hash of one
+// — so it is worth being able to ask whether this tree does. Two elements
+// deliberately sharing an id (a tooltip and the trigger it stays open over)
+// show up here too; the point is the ones that are a surprise.
+static bool IdCheckOn() {
+    static int on = -1;
+    if (on >= 0) {
+        return on != 0;
+    }
+    const char* env = getenv("GPUI_ID_CHECK");
+    on = (env && env[0] && env[0] != '0') ? 1 : 0;
+    return on != 0;
+}
+
+struct IdSeen {
+    int id;
+    Str name;
+};
+
+// A hit rect is found by `clickId` and a focus rect by `style.focusId`, and
+// the two are one space rather than two: a press hands the *hit* id to
+// WindowSetFocusId, so an element whose two ids disagree cannot be focused by
+// pressing it. Both go in.
+static void IdCheckCollect(El* e, Vec<IdSeen>* seen) {
+    if (e->clickId > 0) {
+        IdSeen s = {e->clickId, e->id};
+        seen->Append(s);
+    }
+    if (e->style.focusId > 0 && e->style.focusId != e->clickId) {
+        IdSeen s = {e->style.focusId, e->id};
+        seen->Append(s);
+    }
+    for (El* c = e->first; c; c = c->next) {
+        IdCheckCollect(c, seen);
+    }
+}
+
+static void IdCheck(El* root) {
+    Vec<IdSeen> seen;
+    IdCheckCollect(root, &seen);
+    int dups = 0;
+    for (int i = 0; i < seen.len; i++) {
+        for (int j = i + 1; j < seen.len; j++) {
+            if (seen[i].id != seen[j].id) {
+                continue;
+            }
+            dups++;
+            Str a = seen[i].name.s ? seen[i].name : StrL("(unnamed)");
+            Str b = seen[j].name.s ? seen[j].name : StrL("(unnamed)");
+            logf("id-check: %d shared by \"%s\" and \"%s\"", seen[i].id, a, b);
+        }
+    }
+    logf("id-check: %d ids, %d shared", seen.len, dups);
+    seen.Reset();
+}
+
+void IdsCollect(El* root) {
+    if (!root) {
+        return;
+    }
+    IdCollect(root, 0);
+    if (IdCheckOn()) {
+        IdCheck(root);
+    }
 }
 
 void FocusCollect(Window* win, El* root) {

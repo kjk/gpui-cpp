@@ -356,6 +356,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     El* root = EntityRender(win->app, win, win->frameArena, win->root);
     gFrameBuildSecs = TimeNow() - tBuild0;
 
+    // Every named element's id, joined with its ancestors'. Before layout,
+    // because the hit rects paint reads and the focus rects FocusCollect
+    // gathers are both keyed by what this fills in.
+    IdsCollect(root);
+
     const Theme& th = ThemeNow();
     CanvasClear(&win->paint, th.background);
     gFrameLayoutSecs = 0;

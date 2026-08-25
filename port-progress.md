@@ -5268,3 +5268,59 @@ below, which is a band reserved for exactly these hand-assigned constants.
 The one that is *not* in the reserved band is the story's `ClickStory = 1000`
 plus its seventy pages, 1000..1069, which sits inside the hashed range. It
 has never collided, and it is the first one to convert.
+
+
+## GlobalElementId, folded — and what it found
+
+`El::PathId(name)` is `div().id(name)`: the element is named, and the id it is
+found by is that name folded with its ancestors'. `IdsCollect` walks the built
+tree once a frame, before layout, and fills `El::pathId` in; an element with no
+name inherits its parent's, exactly as one with no `.id()` pushes nothing in
+Rust. `PathClick` is the same without joining the tab order. An explicit
+`Click(v)` or `FocusId(v)` — including `FocusId(0)`, how a decorated wrapper
+stays out of the tab order — wins over both. `tests/ElementIdTests.cpp` pins
+the six rules, and the walk costs nothing measurable: the story's build phase
+is 0.295 ms against 0.288 before it, inside the run-to-run spread.
+
+`GPUI_ID_CHECK=1` reports every id two elements in one frame share. Rust cannot
+have that problem — it compares whole id paths, never a hash of one — so it is
+worth being able to ask whether this tree does. What it says:
+
+- **The showcase is clean.** Forty pages, no page sharing an id.
+- **The story's `table` and `data-table` pages are not**: 20 of 37 ids and 45
+  of 197. The cause is not a hash collision, it is a name: `component::Table`
+  opens with `gpui::Table::New(cx, StrL("table"))` and its rows are
+  `table-row-%d`, neither of which knows which table it belongs to. Two tables
+  on one page are one id space. This is precisely the case the path removes
+  upstream, and it is the one the fold cannot fix on its own — two siblings
+  named the same are still one id, in Rust too. It wants an id from the
+  caller, which is an API change to `component::Table`.
+- Two pairs share an id on purpose and are worth knowing about: the story's
+  search pill and the field inside it (the pill is what draws the focus ring,
+  because the field is `Appearance(false)`), and a table head and the label
+  inside it (hovering the label lights the whole head).
+
+**Why the tree has not moved onto it wholesale.** A path id is only known once
+the tree is built, and this tree asks for ids *during* the build in more places
+than expected: `select` stashes `triggerFocusId` and `contentFocusId` on its
+state, `menu` stashes `triggerId`, `popover` derives a `focusId`, three
+widgets keep a `previousFocusId` to restore, `otp_input` asks
+`WindowFocusedId(cx->win) == HashClickId(id)`, `DropdownOpen` is handed one,
+the dock's drop markers compare `WindowDragOverId`, and the showcase's tooltip
+and hover-card pages branch on `hoverId ==`. None of those can ask for a path.
+GPUI does not have the problem because the equivalents are resolved at paint
+against hitboxes and applied as style refinements — which is what `HoverBg`
+already is here, and what the rest of them would have to become.
+
+So the fold is in and tested, and adopting it is per-widget work that has to
+carry its references with it. Converting a widget while something else still
+computes `HashClickId` of the same name would put two schemes in one space,
+which is worse than either. The order that works: give `component::Table` an
+id (it is the one live defect), then move the paint-time questions — drag-over
+and hover — onto refinements, then convert widgets from the leaves up.
+
+A note on the other half of `HashClickId`'s callers: `KeyedEntity`,
+`KeyedKey`, `MotionId`, `FocusTrapId` and `IndexPath` hash a name to key
+*state*, not to identify an element. Rust keys element state by
+`GlobalElementId` too, so those are path-shaped upstream; here they are looked
+up while the tree is being built, which is before a path exists.

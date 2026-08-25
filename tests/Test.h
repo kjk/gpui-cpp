@@ -110,6 +110,7 @@ void TestListSettings();
 void TestStateStyle();
 void TestClick();
 void TestVec();
+void TestElementId();
 void TestArenaVec();
 void TestDrawOps();
 void TestHttp();
