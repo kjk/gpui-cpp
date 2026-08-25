@@ -887,6 +887,7 @@ STORY_ACTION(ActDocumentation, "story::Documentation")
 // its place in the registry, and the other three as the value itself.
 STORY_ACTION(ActSwitchThemeMode, "story::SwitchThemeMode")
 STORY_ACTION(ActSelectTheme, "story::SelectTheme")
+STORY_ACTION(ActSelectLocale, "story::SelectLocale")
 STORY_ACTION(ActSelectFont, "story::SelectFont")
 STORY_ACTION(ActSelectRadius, "story::SelectRadius")
 STORY_ACTION(ActSelectScrollbarMode, "story::SelectScrollbarMode")
@@ -897,6 +898,25 @@ STORY_ACTION(ActToggleAppMenuBar, "story::ToggleAppMenuBar")
 // declare.
 STORY_ACTION(ActToggleReduceMotion, "story::ToggleReduceMotion")
 STORY_ACTION(ActToggleFocusRing, "story::ToggleFocusRing")
+
+// language_menu(): the three the Rust story offers. The names are the
+// language's own, which is what a language menu shows everywhere — a reader
+// who wants Chinese is not looking for the word "Chinese" in English. The
+// catalogue behind them carries more (zh-HK, zh-TW, it), and an application
+// that wants those in its menu names them the same way.
+struct StoryLocale {
+    const char* code;
+    const char* label;
+};
+
+static const StoryLocale kStoryLocales[] = {
+    {"en", "English"},
+    {"zh-CN", "简体中文"},
+    {"fr", "Français"},
+};
+
+static const int kStoryLocaleCount =
+    (int)(sizeof(kStoryLocales) / sizeof(kStoryLocales[0]));
 
 // AppTitleBar's FontSizeSelector, which is the Appearance menu behind the
 // Settings2 button. Every row names one of the actions above and carries the
@@ -1287,6 +1307,21 @@ static void OnToggleFocusRingAction(StoryApp*, Ctx* cx, const ActionEvent*) {
     Notify(cx);
 }
 
+// SelectLocale(code): rust_i18n::set_locale, and the frame after it reads
+// every label out of the catalogue again. Rust reloads its menus here because
+// its menu bar is built once; ours is built every frame and installed when a
+// row moves, so the language reaches the system bar the same way.
+static void OnSelectLocaleAction(StoryApp*, Ctx* cx, const ActionEvent* ev) {
+    int ix = (int)ev->arg;
+    if (ix < 0 || ix >= kStoryLocaleCount) {
+        return;
+    }
+    component::LocaleSet(Str(kStoryLocales[ix].code));
+    // The locale is not the theme: nothing observes it, and every label was
+    // read at build time, so the whole window has to be built again.
+    AppRefreshWindows(cx->app);
+}
+
 // Every handler above, hung off the root so a row chosen in either bar finds
 // one. Rust registers these with `cx.on_action` on the app rather than on an
 // element, which is the same reach — nothing between the root and the focused
@@ -1300,6 +1335,7 @@ static El* StoryBindMenuActions(El* root, Ctx* cx) {
         ->OnAction(ActDocumentation(), Listen(cx, &OnDocumentationAction))
         ->OnAction(ActSwitchThemeMode(), Listen(cx, &OnSwitchThemeModeAction))
         ->OnAction(ActSelectTheme(), Listen(cx, &OnSelectThemeAction))
+        ->OnAction(ActSelectLocale(), Listen(cx, &OnSelectLocaleAction))
         ->OnAction(ActSelectFont(), Listen(cx, &OnSelectFontAction))
         ->OnAction(ActSelectRadius(), Listen(cx, &OnSelectRadiusAction))
         ->OnAction(ActSelectScrollbarMode(),
@@ -1353,7 +1389,16 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
         themes[i].checked = StrSame(cfg->name, active);
     }
 
-    MenuRow* appRows = StoryRows(cx, 8);
+    Str locale = component::LocaleNow();
+    MenuRow* languages = StoryRows(cx, kStoryLocaleCount);
+    for (int i = 0; i < kStoryLocaleCount; i++) {
+        languages[i].label = Str(kStoryLocales[i].label);
+        languages[i].action = ActSelectLocale();
+        languages[i].arg = i;
+        languages[i].checked = StrSame(Str(kStoryLocales[i].code), locale);
+    }
+
+    MenuRow* appRows = StoryRows(cx, 9);
     appRows[0].label = StrL("About GPUI Component");
     appRows[0].action = ActAbout();
     appRows[1].separator = true;
@@ -1370,12 +1415,15 @@ static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
     // disabled says so, and is what a themes directory that is not there
     // leaves behind.
     appRows[5].disabled = nThemes == 0;
-    appRows[6].separator = true;
-    appRows[7].label = StrL("Quit");
-    appRows[7].action = ActQuit();
+    appRows[6].label = StrL("Language");
+    appRows[6].submenu = languages;
+    appRows[6].submenuN = kStoryLocaleCount;
+    appRows[7].separator = true;
+    appRows[8].label = StrL("Quit");
+    appRows[8].action = ActQuit();
     out[0].name = StrL("GPUI Component");
     out[0].items = appRows;
-    out[0].n = 8;
+    out[0].n = 9;
 
     // Every row of the Edit menu names one of the input's actions and carries
     // no handler of its own: choosing it dispatches the action to whatever

@@ -4825,3 +4825,53 @@ still not the default, for the two reasons `src/gpui/paintgpu.h` gives.
 
 `fps_monitor` gained `-size WxH` alongside `-bench` and `-curves`, since a
 line-drawing number measured at one window size says nothing about another.
+
+
+## The language the components speak
+
+`rust_i18n` was the last thing in `crates/ui` with no counterpart here, and it
+is why the app menu had no Language submenu and why a calendar read `Su Mo Tu`
+whatever the application asked for.
+
+**The catalogue is upstream's, not a transcription.** `crates/ui/locales/ui.yml`
+is 55 keys — the weekday heads and month names, the placeholders, the dock's
+tab menu, the colour picker's rows, the dialog's two buttons, the find bar's,
+pagination's — each with up to five translations. `cmd/gen-locale-data.ts`
+reads it and `crates/story/locales/ui.yml`, which is where the French comes
+from, and writes `src/ui/locale_data.cpp`: one row per key, sorted, one string
+per locale, null where the catalogue has nothing. It is the same arrangement
+`gen-theme-data.ts` has for the palette, and for the same reason — a later
+checkin's wording lands by re-running the generator rather than by somebody
+retyping it. The parse is not a YAML parser and says so: both files are three
+levels of `key:` lines, the story's nested one deeper under rust_i18n's crate
+namespace, and anything else in them is a reason to look rather than to widen
+the reader.
+
+**`Tr("Dialog.ok")` is `t!("Dialog.ok")`.** A `Str` over a string literal, so
+it outlives the frame and needs no copy; the locale in force is process-wide,
+the way the theme and the scrollbar mode are, since an App here is not a
+container for globals. A key with no value in the current locale falls back to
+English, which every key has — that is how Chinese gets a calendar and French
+gets `OK`. A key nothing has answers with itself, which is what rust_i18n does:
+a missing translation reads as `Dialog.nope` on screen instead of as an empty
+label nobody notices.
+
+Thirteen components read from it now, which is every place the catalogue has a
+key for and this tree has somewhere to put it. Two keys have no home yet and
+are left alone rather than faked: `Input.Decrement` / `Input.Increment` are
+accessibility labels on the number input's steppers, and the six under
+`Input.Cut` and friends belong to a field's context menu, which is not ported.
+
+**The story's Language menu** is `language_menu()`: English, 简体中文,
+Français, checked against the locale in force and dispatching
+`story::SelectLocale`. Rust reloads its menus from that action because its
+menu bar is built once; ours is built every frame and installed when a row
+moves, so the language reaches the macOS menu bar the same way it reaches the
+drawn one. Switching refreshes every window — nothing observes the locale, and
+every label was read while the frame was built.
+
+`tests/I18nTests.cpp` pins the lookup: the fallback to English, an unknown key
+answering with itself, a locale that does not exist being refused, and the two
+invariants the generated table has to keep — sorted keys, because the lookup
+is a binary search, and an English value on every row, because that is what
+the fallback rests on.

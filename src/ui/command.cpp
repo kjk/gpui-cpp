@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/lib.h"
 #include "ui/command.h"
 #include "ui/input.h"
@@ -711,7 +712,7 @@ static El* DefaultEmpty(Ctx* cx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
     return Div(a)->W(kFill)->PadY(24)->ItemsCenter()->JustifyCenter()->Child(
-        TextEl(a, StrL("No results found."))->Font(14)->Fg(th.mutedFg));
+        TextEl(a, Tr("Command.empty"))->Font(14)->Fg(th.mutedFg));
 }
 
 El* Command::IntoEl() {
@@ -728,9 +729,11 @@ El* Command::IntoEl() {
     s->onSelect = onSelect;
     s->onConfirm = onConfirm;
     s->onCancel = onCancel;
-    if (placeholder.len > 0) {
-        InputSetPlaceholder(&s->query, placeholder);
-    }
+    // t!("Command.placeholder") where the caller named none, which is Rust's
+    // own `unwrap_or_else` on the same key.
+    InputSetPlaceholder(&s->query, placeholder.len > 0
+                                       ? placeholder
+                                       : Tr("Command.placeholder"));
     CommandInstall(s, cx, entries, nEntries, searchable, filterable);
 
     if (header) {

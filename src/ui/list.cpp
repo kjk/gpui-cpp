@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/list.h"
 #include "base/list_settings.h"
 #include "ui/input.h"
@@ -227,7 +228,7 @@ El* List::IntoEl() {
         // the state when the list makes it, so a caller that gave a field of
         // its own with a placeholder already on it keeps that one.
         if (!search->placeholder.s) {
-            InputSetPlaceholder(search, StrL("Search..."));
+            InputSetPlaceholder(search, Tr("List.search_placeholder"));
         }
         searchRow->Child(Div(a)->Flex1()->Child(
             Input::New(cx, StrDup(a, fmt("%s-search", id)), search)

@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/setting.h"
 #include "ui/button.h"
 #include "ui/checkbox.h"
@@ -594,6 +595,12 @@ El* Settings::IntoEl() {
                    ->ClipX()
                    ->BorderR(1, th.border);
     if (search) {
+        // settings.rs sets the field's placeholder itself rather than leaving
+        // it to the caller, so the search box reads the same in every
+        // application that shows one.
+        if (!search->placeholder.s) {
+            InputSetPlaceholder(search, Tr("Settings.search_placeholder"));
+        }
         side->Child(Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
                         ->Prefix(Div(a)->PadL(10)->Child(
                             IconEl(a, IconName::Search, 16)->Fg(th.mutedFg)))
@@ -732,7 +739,7 @@ El* Settings::IntoEl() {
             titleRow->Child(
                 Button::New(cx, StrDup(a, fmt("%s-reset-all", id)))
                     ->Icon(IconName::ArrowLeft)
-                    ->Tooltip(StrL("Reset All"))
+                    ->Tooltip(Tr("Settings.Reset All"))
                     ->Ghost()
                     ->WithSize(UiSize::Small)
                     ->OnClick(ListenTo(state, &SettingsState::OnResetPage, 0))

@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/dock.h"
 #include "ui/menu.h"
 
@@ -171,14 +172,14 @@ static El* RenderTools(Ctx* cx, Str id, Entity<DockState> st, int node,
     // reach them.
     Str menuId = StrDup(a, fmt("%s-menu-%d", id, node));
     component::PopupMenu* menu = component::PopupMenu::New(cx, menuId);
-    menu->Menu(zoomed ? StrL("Zoom Out") : StrL("Zoom In"));
+    menu->Menu(zoomed ? Tr("Dock.Zoom Out") : Tr("Dock.Zoom In"));
     if (!DockPanelControlMenu(def.zoomable) && !zoomed) {
         menu->Disabled(true);
     }
     // `closable`: the last panel of a dock has no Close, so a dock cannot be
     // emptied by hand.
     if (def.closable && !DockIsLastPanel(s, node) && !DockNodeLocked(s, node)) {
-        menu->Separator()->Menu(StrL("Close"));
+        menu->Separator()->Menu(Tr("Dock.Close"));
     }
     if (PopupMenuState* ms = menu->state.Get(cx)) {
         // The menu hands its listener the row that was taken, so the node

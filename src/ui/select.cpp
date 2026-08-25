@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/select.h"
 #include "ui/button.h"
 
@@ -100,7 +101,7 @@ Select* Select::OnClear(Listener fn) {
 
 Str SelectTriggerTitle(const SearchableListState* s, Str placeholder,
                        Str titlePrefix, Arena* a) {
-    Str none = placeholder.s ? placeholder : StrL("Please select");
+    Str none = placeholder.s ? placeholder : Tr("Select.placeholder");
     if (!s || s->selected.len == 0 || !s->items) {
         return none;
     }

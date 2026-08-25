@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/pagination.h"
 #include "ui/button.h"
 #include "ui/menu.h"
@@ -83,8 +84,8 @@ El* Pagination::IntoEl() {
     } else {
         // The nav content is a row of [label, icon], reversed for Previous:
         // the chevron leads the word going back and follows it going on.
-        prev->Icon(IconName::ChevronLeft)->Label(StrL("Previous"));
-        next->Label(StrL("Next"))->IconRight(IconName::ChevronRight);
+        prev->Icon(IconName::ChevronLeft)->Label(Tr("Pagination.previous"));
+        next->Label(Tr("Pagination.next"))->IconRight(IconName::ChevronRight);
     }
     if (hasPrev && onChange.IsValid()) {
         prev->OnClick(ListenerArg(onChange, prevPage));

@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/tab.h"
 #include "base/motion.h"
 
@@ -402,7 +403,7 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
             menu->Element(IconEl(cx->a, it.icon, 16));
             menu->Checked(i == tabs->selected);
         } else {
-            menu->MenuWithCheck(StrL("Unnamed"), i == tabs->selected);
+            menu->MenuWithCheck(Tr("Dock.Unnamed"), i == tabs->selected);
         }
         if (it.disabled) {
             menu->Disabled(true);

@@ -88,6 +88,7 @@ void TestAvatar();
 void TestKbd();
 void TestNativeMenu();
 void TestAppMenu();
+void TestI18n();
 void TestTiles();
 void TestRoot();
 void TestSankey();

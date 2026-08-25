@@ -25,6 +25,7 @@
 #include "ui/group_box.h"
 #include "ui/highlighter.h"
 #include "ui/hover_card.h"
+#include "ui/i18n.h"
 #include "ui/icon.h"
 #include "ui/input.h"
 #include "ui/kbd.h"

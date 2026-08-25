@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/input.h"
 #include "ui/button.h"
 
@@ -865,14 +866,14 @@ El* SearchPanel::IntoEl() {
         row2->Child(
             Button::New(cx, StrDup(a, fmt("%s-rep1", id)))
                 ->WithSize(UiSize::Small)
-                ->Label(StrL("Replace"))
+                ->Label(Tr("Input.Replace"))
                 ->Disabled(!hasMatches)
                 ->OnClick(ListenTo(ent, &SearchPanelState::OnReplaceOne))
                 ->IntoEl());
         row2->Child(
             Button::New(cx, StrDup(a, fmt("%s-repall", id)))
                 ->WithSize(UiSize::Small)
-                ->Label(StrL("Replace All"))
+                ->Label(Tr("Input.Replace All"))
                 ->Disabled(!hasMatches)
                 ->OnClick(ListenTo(ent, &SearchPanelState::OnReplaceAll))
                 ->IntoEl());

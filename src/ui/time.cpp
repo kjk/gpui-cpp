@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/time.h"
 #include "ui/button.h"
 
@@ -154,7 +155,12 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
     Arena* a = self->a;
     Ctx* cx = self->cx;
     const Theme& th = cx->theme();
-    static const char* weekdays[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
+    // t!("Calendar.week.N"): the heads are the locale's, so a calendar in
+    // Chinese reads 日 一 二 rather than Su Mo Tu.
+    static const char* weekdays[] = {"Calendar.week.0", "Calendar.week.1",
+                                     "Calendar.week.2", "Calendar.week.3",
+                                     "Calendar.week.4", "Calendar.week.5",
+                                     "Calendar.week.6"};
     // calendar.rs used to build a month as one `h_flex().flex_wrap()` holding
     // the seven weekday headers and every day cell after them, which put
     // eight cells on a row wherever the width fitted eight and shifted the
@@ -170,7 +176,7 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
                 ->H(cellSize)
                 ->ItemsCenter()
                 ->JustifyCenter()
-                ->Child(TextEl(a, Str(weekdays[i]))->Font(12)->Fg(th.mutedFg)));
+                ->Child(TextEl(a, Tr(weekdays[i]))->Font(12)->Fg(th.mutedFg)));
     }
     panel->Child(header);
     LocalDate today = DateToday();
@@ -244,10 +250,21 @@ static El* CalendarMonth(Calendar* self, int year, int month, float cellSize) {
 
 El* Calendar::IntoEl() {
     const Theme& th = cx->theme();
+    // t!("Calendar.month.January"). One-based, so a month number indexes it.
     static const char* months[] = {
-        "",        "January",  "February", "March",  "April",
-        "May",     "June",     "July",     "August", "September",
-        "October", "November", "December",
+        "",
+        "Calendar.month.January",
+        "Calendar.month.February",
+        "Calendar.month.March",
+        "Calendar.month.April",
+        "Calendar.month.May",
+        "Calendar.month.June",
+        "Calendar.month.July",
+        "Calendar.month.August",
+        "Calendar.month.September",
+        "Calendar.month.October",
+        "Calendar.month.November",
+        "Calendar.month.December",
     };
     float cellSize = CalendarCellSize(size);
     // date_picker.rs sizes the calendar in its popup itself — 196 / 224 / 280
@@ -293,7 +310,7 @@ El* Calendar::IntoEl() {
                                  ->PadX(8)
                                  ->ItemsCenter()
                                  ->Radius(th.radius)
-                                 ->Child(TextEl(a, Str(months[shownMonth]))
+                                 ->Child(TextEl(a, Tr(months[shownMonth]))
                                              ->Font(14)
                                              ->Semibold()
                                              ->Fg(view == CalendarView::Month
@@ -328,7 +345,7 @@ El* Calendar::IntoEl() {
                             ->Flex1()
                             ->ItemsCenter()
                             ->JustifyCenter();
-            label->Child(TextEl(a, Str(months[shownMonth]))
+            label->Child(TextEl(a, Tr(months[shownMonth]))
                              ->Font(14)
                              ->Semibold()
                              ->Fg(th.foreground));
@@ -390,7 +407,7 @@ El* Calendar::IntoEl() {
                     ->Child(
                         // `uses_compact_text`: a month option and nothing
                         // else, because "September" is what overflows.
-                        TextEl(a, Str(months[m]))
+                        TextEl(a, Tr(months[m]))
                             ->Font(12)
                             ->Fg(m == month ? th.primaryFg : th.foreground));
             if (m == month) {
@@ -584,7 +601,7 @@ El* DatePicker::IntoEl() {
     bool complete = hasDate && (!rangeMode || day2 > 0);
     Str title;
     if (!complete) {
-        title = placeholder.s ? placeholder : StrL("Select date");
+        title = placeholder.s ? placeholder : Tr("DatePicker.placeholder");
     } else if (rangeMode) {
         title =
             StrDup(a, fmt("%s - %s", FormatDate(a, format, year, month, day),

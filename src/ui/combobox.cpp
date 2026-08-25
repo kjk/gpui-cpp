@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/combobox.h"
 
 namespace gpui {
@@ -105,13 +106,17 @@ El* Combobox::IntoEl() {
     // A ComboBox is a Select that is always searchable, so it is one: the
     // trigger, the list and the popup are all the Select's, and the query
     // field is what tells them apart.
-    if (query && searchPlaceholder.s) {
-        InputSetPlaceholder(query, searchPlaceholder);
+    // t!("ComboBox.search_placeholder") where the caller named none, which
+    // is where Rust's own default comes from too.
+    if (query) {
+        InputSetPlaceholder(query, searchPlaceholder.s
+                                       ? searchPlaceholder
+                                       : Tr("ComboBox.search_placeholder"));
     }
     Select* sel = Select::New(cx, id, state)
                       ->Items(items, nItems)
                       ->Placeholder(placeholder)
-                      ->Empty(empty)
+                      ->Empty(empty.s ? empty : Tr("ComboBox.empty"))
                       ->W(width)
                       ->Icon(icon)
                       ->CheckIcon(checkIcon)

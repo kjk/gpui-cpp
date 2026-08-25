@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/dialog.h"
 #include "base/motion.h"
 #include "ui/button.h"
@@ -230,13 +231,13 @@ El* Dialog::Actions() {
     El* cancel = nullptr;
     if (showCancel) {
         cancel = Button::New(cx, LayerId(StrL("dialog-cancel")))
-                     ->Label(cancelText.s ? cancelText : StrL("Cancel"))
+                     ->Label(cancelText.s ? cancelText : Tr("Dialog.cancel"))
                      ->Outline()
                      ->OnClick(onCancel.IsValid() ? onCancel : onClose)
                      ->IntoEl();
     }
     Button* okBtn = Button::New(cx, LayerId(StrL("dialog-ok")))
-                        ->Label(okText.s ? okText : StrL("OK"))
+                        ->Label(okText.s ? okText : Tr("Dialog.ok"))
                         ->OnClick(onOk);
     switch (okVariant) {
         case ButtonVariant::Danger:

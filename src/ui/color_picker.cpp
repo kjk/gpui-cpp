@@ -1,3 +1,4 @@
+#include "ui/i18n.h"
 #include "ui/color_picker.h"
 #include "base/actions.h"
 #include "ui/theme.h"
@@ -194,17 +195,18 @@ static El* SliderPanel(Ctx* cx, Entity<ColorPickerState> st) {
     float alpha = s->sliders[3].value.End();
 
     El* panel = Div(a)->FlexCol()->Gap(8);
-    panel->Child(SliderRow(cx, st, StrL("Hue"), StripeTrack(cx, HueAt, h), 0,
+    panel->Child(SliderRow(cx, st, Tr("ColorPicker.Hue"),
+                           StripeTrack(cx, HueAt, h), 0,
                            StrDup(a, fmt("%.0f", (double)(h * 360.f)))));
     panel->Child(SliderRow(
-        cx, st, StrL("Saturation"),
+        cx, st, Tr("ColorPicker.Saturation"),
         GradientTrack(cx, RgbaHsla(h, 0.f, l, 1.f), RgbaHsla(h, 1.f, l, 1.f)),
         1, StrDup(a, fmt("%.0f", (double)(sat * 100.f)))));
-    panel->Child(SliderRow(cx, st, StrL("Lightness"),
+    panel->Child(SliderRow(cx, st, Tr("ColorPicker.Lightness"),
                            StripeTrack(cx, LightnessAt, h), 2,
                            StrDup(a, fmt("%.0f", (double)(l * 100.f)))));
     panel->Child(
-        SliderRow(cx, st, StrL("Alpha"),
+        SliderRow(cx, st, Tr("ColorPicker.Alpha"),
                   GradientTrack(cx, RgbaOpacity(RgbaHsla(h, sat, l, 1.f), 0.f),
                                 RgbaHsla(h, sat, l, 1.f)),
                   3, StrDup(a, fmt("%.0f", (double)(alpha * 100.f)))));
@@ -277,9 +279,9 @@ El* ColorPicker::IntoEl() {
         // with a smaller label than Rust draws.
         pop->Child(Tabs::New(cx, StrDup(a, fmt("%s-mode", id)))
                        ->Segmented()
-                       ->Tab(StrL("Palette"))
+                       ->Tab(Tr("ColorPicker.Palette"))
                        ->Flex1()
-                       ->Tab(StrL("HSLA"))
+                       ->Tab(Tr("ColorPicker.HSLA"))
                        ->Flex1()
                        ->Selected(s->activeTab)
                        ->OnChange(ListenTo(st, &ColorPickerState::OnTab))
