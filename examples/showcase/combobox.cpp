@@ -66,8 +66,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
                   ->Pad(4)
                   ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                   ->Bg(Rgb(0xff, 0xff, 0xff));
-        pop->Child(InputBase::New(cx, StrL("combobox-search"),
-                                  HashClickId(StrL("combobox-search")))
+        pop->Child(InputBase::New(cx, StrL("combobox-search"), true)
                        ->OnClick(Listen(cx, &FocusComboQuery))
                        ->FocusId(0)
                        ->W(kFill)

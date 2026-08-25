@@ -74,15 +74,14 @@ El* ShowcaseNumberInput(ShowcaseApp* app, Ctx* cx) {
         ->Gap(4)
         ->Child(
             TextEl(a, StrL("Quantity"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
-        ->Child(NumberInput::New(cx)
+        ->Child(NumberInput::New(cx, StrL("quantity"))
                     ->FlexRow()
                     ->W(kFill)
                     ->H(28)
                     ->ItemsCenter()
                     ->Border(1, valid ? Rgb(0x17, 0x17, 0x17)
                                       : Rgb(0x73, 0x73, 0x73))
-                    ->Child(InputBase::New(cx, StrL("number-field"),
-                                           HashClickId(StrL("number-field")))
+                    ->Child(InputBase::New(cx, StrL("number-field"), true)
                                 ->OnClick(Listen(cx, &FocusNum))
                                 ->FocusId(0)
                                 ->Flex1()

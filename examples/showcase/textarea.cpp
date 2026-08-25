@@ -18,8 +18,7 @@ El* ShowcaseTextarea(ShowcaseApp* app, Ctx* cx) {
         ->ItemsStart()
         ->Child(Div(a)->H(16)->ItemsCenter()->Child(
             TextEl(a, StrL("Textarea"))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(cx, StrL("example-textarea"),
-                               HashClickId(StrL("example-textarea")))
+        ->Child(InputBase::New(cx, StrL("example-textarea"), true)
                     ->OnClick(Listen(cx, &OnTextarea))
                     ->W(224)
                     ->H(64)

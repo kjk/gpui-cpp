@@ -19,7 +19,8 @@ static Entity<ResizableState> ShowcaseResizeState(ShowcaseApp* app, Ctx* cx) {
 
 El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    El* nav = Div(a)->SizeFull()->Pad(8)->FlexCol()->Gap(4)->BorderR(1, ScInk());
+    El* nav =
+        Div(a)->SizeFull()->Pad(8)->FlexCol()->Gap(4)->BorderR(1, ScInk());
     nav->Child(TextEl(a, StrL("PROJECT"))->Font(12)->Fg(ScMutedC()));
     const char* items[] = {"Overview", "Components", "Settings"};
     for (int i = 0; i < 3; i++) {

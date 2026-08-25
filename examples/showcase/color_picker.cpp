@@ -116,8 +116,7 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                                          : Rgb(0xff, 0xff, 0xff)));
         }
         pop->Child(sw);
-        pop->Child(InputBase::New(cx, StrL("color-hex-input"),
-                                  HashClickId(StrL("color-hex-input")))
+        pop->Child(InputBase::New(cx, StrL("color-hex-input"), true)
                        ->OnClick(Listen(cx, &FocusHex))
                        ->FocusId(0)
                        ->W(204)

@@ -34,8 +34,7 @@ El* ShowcaseScrollbar(ShowcaseApp* app, Ctx* cx) {
     // so nothing here works out where the thumb goes. The page used to, and
     // what it drew could not be dragged.
     return Scrollbar::Vertical(cx, StrL("example-scroll-region"),
-                               app->exampleScroll,
-                               Listen(cx, &OnExampleScroll))
+                               app->exampleScroll, Listen(cx, &OnExampleScroll))
         ->W(288)
         ->H(192)
         ->Border(1, ScInk())

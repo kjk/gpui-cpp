@@ -109,14 +109,17 @@ bool HoverCard::IsOpen() const {
     return HoverCardIsOpen(cx, state);
 }
 
-// A part only hovers if the frame can name it, so one that came without an
-// identity is given the card's own with a suffix.
-static void HoverPart(Arena* a, El* e, Str id, const char* suffix) {
-    if (e->clickId) {
+// A part only hovers if it can name itself, so one that came without an
+// identity is given the name its place in the card asks for. The card's root
+// is what scopes it, which is why the name needs no prefix.
+static void HoverPart(El* e, const char* suffix) {
+    // A hit target may be one the fold has not numbered yet — the id is
+    // computed after the tree exists — so asking for the number here would
+    // read zero off every element that names itself by its path.
+    if (e->clickId || e->clickFromPath) {
         return;
     }
-    Str partId = StrDup(a, fmt("%s-%s", id, Str(suffix)));
-    e->Id(partId)->Click(HashClickId(partId));
+    e->PathClick(Str(suffix));
 }
 
 HoverCard* HoverCard::Trigger(El* trigger) {
@@ -124,7 +127,7 @@ HoverCard* HoverCard::Trigger(El* trigger) {
         return this;
     }
     if (state.IsValid()) {
-        HoverPart(a, trigger, id, "trigger");
+        HoverPart(trigger, "trigger");
         trigger->OnHover(ListenTo(state, &HoverCardTriggerHover));
     }
     root->Child(trigger);
@@ -140,7 +143,7 @@ HoverCard* HoverCard::Content(El* content) {
         content->Absolute()->Top(22)->Left(0);
     }
     if (state.IsValid()) {
-        HoverPart(a, content, id, "content");
+        HoverPart(content, "content");
         content->OnHover(ListenTo(state, &HoverCardContentHover));
     }
     root->Child(content);

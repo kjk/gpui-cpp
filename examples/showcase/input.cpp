@@ -20,8 +20,7 @@ El* ShowcaseInput(ShowcaseApp* app, Ctx* cx) {
             TextEl(a, StrL("Project name"))
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(cx, StrL("example-input"),
-                               HashClickId(StrL("example-input")))
+        ->Child(InputBase::New(cx, StrL("example-input"), true)
                     ->OnClick(Listen(cx, &OnInput))
                     ->W(224)
                     ->H(28)

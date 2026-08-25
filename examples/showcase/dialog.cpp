@@ -57,8 +57,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
             ->Child(Div(a)->PadT(12)->Child(TextEl(a, StrL("Display name"))
                                                 ->Font(14)
                                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-            ->Child(InputBase::New(cx, StrL("dialog-name"),
-                                   HashClickId(StrL("dialog-name")))
+            ->Child(InputBase::New(cx, StrL("dialog-name"), true)
                         ->OnClick(Listen(cx, &FocusDlgField))
                         ->FocusId(0)
                         ->W(264)

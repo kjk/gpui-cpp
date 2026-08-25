@@ -73,10 +73,8 @@ int CalendarWeekday(int year, int month, int day) {
 }
 
 int CalendarDaysInMonth(int year, int month) {
-    static const int k[] = {0,  31, 28, 31, 30, 31, 30,
-                            31, 31, 30, 31, 30, 31};
-    if (month == 2 &&
-        ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) {
+    static const int k[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month == 2 && ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)) {
         return 29;
     }
     return k[month];
@@ -161,8 +159,8 @@ static El* CalMonthGrid(Ctx* cx, const CalendarOpts& o, int year, int month) {
                 click = ListenerArg(o.onDay, date.day);
             }
         }
-        Str id =
-            StrDup(a, fmt("date-%d-%02d-%02d", date.year, date.month, date.day));
+        Str id = StrDup(
+            a, fmt("date-%d-%02d-%02d", date.year, date.month, date.day));
         week->Child(CalSlot(cx, o, id, st, click)
                         ->W(o.cellSize)
                         ->H(o.cellSize)
@@ -327,7 +325,7 @@ El* CalendarItem::New(Ctx* cx, Str id, Listener onClick) {
     Arena* a = cx->a;
     El* e = Div(a);
     if (id.s) {
-        e->Id(id)->Click(HashClickId(id));
+        e->PathClick(id);
     }
     if (onClick.IsValid()) {
         e->OnClick(onClick);

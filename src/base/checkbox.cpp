@@ -10,14 +10,14 @@ CheckboxState CheckboxActivated(CheckboxState state) {
 El* Checkbox::New(Ctx* cx, Str id, CheckboxState state, bool disabled,
                   Listener onChange) {
     Arena* a = cx->a;
-    int clickId = HashClickId(id);
     // `div().id(id)` is unconditional in Rust; `track_focus` and `on_click`
-    // both hang off `when(!disabled)`.
-    El* e = Div(a)->Id(id)->Click(clickId);
+    // both hang off `when(!disabled)`. The id is the fold of the name down
+    // from the root, so a checkbox named among its siblings is still its own.
+    El* e = Div(a)->PathClick(id);
     if (disabled) {
         return e;
     }
-    e->FocusId(clickId);
+    e->PathId(id);
     if (onChange.IsValid()) {
         e->OnClick(ListenerFill(onChange, (intptr_t)CheckboxActivated(state)));
     }

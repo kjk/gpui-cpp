@@ -63,8 +63,7 @@ El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx) {
             TextEl(a, StrL("Rust Editor"))
                 ->Font(12)
                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(InputBase::New(cx, StrL("example-editor"),
-                               HashClickId(StrL("example-editor")))
+        ->Child(InputBase::New(cx, StrL("example-editor"), true)
                     ->OnClick(Listen(cx, &OnEditor))
                     ->W(320)
                     ->H(128)

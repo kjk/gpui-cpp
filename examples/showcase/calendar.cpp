@@ -84,46 +84,50 @@ static void CalPickDate(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
 static El* CalItem(void* user, Ctx* cx, El* item, const CalendarItemState& st) {
     auto* app = (ShowcaseApp*)user;
     switch (st.kind) {
-    case CalendarItemKind::Previous:
-    case CalendarItemKind::Next:
-        return item->W(28)->H(28)->HoverBg(ScHover())->Child(
-            ScTxt(cx, st.kind == CalendarItemKind::Previous ? StrL("‹")
-                                                            : StrL("›"),
-                  14, ScInk()));
-    case CalendarItemKind::MonthToggle:
-        return item->H(28)->PadX(4)->Child(
-            ScTxt(cx, Str(kMon[st.value]), 12, ScInk()));
-    case CalendarItemKind::YearToggle:
-        return item->H(28)->PadX(4)->Child(
-            ScTxt(cx, DupFmt(cx, "%d", st.value), 12, ScInk()));
-    case CalendarItemKind::Weekday:
-        return item->Child(ScTxt(cx, Str(kWd[st.value]), 12, ScMutedC()));
-    case CalendarItemKind::Day: {
-        bool active = st.active;
-        if (active) {
-            return item->Bg(ScInk())->Child(
-                ScTxt(cx, DupFmt(cx, "%d", st.value), 12, ScWhite()));
+        case CalendarItemKind::Previous:
+        case CalendarItemKind::Next:
+            return item->W(28)->H(28)->HoverBg(ScHover())->Child(ScTxt(
+                cx,
+                st.kind == CalendarItemKind::Previous ? StrL("‹") : StrL("›"),
+                14, ScInk()));
+        case CalendarItemKind::MonthToggle:
+            return item->H(28)
+                ->PadX(4)
+                ->Child(ScTxt(cx, Str(kMon[st.value]), 12, ScInk()));
+        case CalendarItemKind::YearToggle:
+            return item->H(28)
+                ->PadX(4)
+                ->Child(ScTxt(cx, DupFmt(cx, "%d", st.value), 12, ScInk()));
+        case CalendarItemKind::Weekday:
+            return item->Child(ScTxt(cx, Str(kWd[st.value]), 12, ScMutedC()));
+        case CalendarItemKind::Day: {
+            bool active = st.active;
+            if (active) {
+                return item->Bg(ScInk())->Child(
+                    ScTxt(cx, DupFmt(cx, "%d", st.value), 12, ScWhite()));
+            }
+            if (st.today) {
+                item->Border(1, ScBorder());
+            }
+            if (!st.disabled) {
+                item->HoverBg(ScHover());
+            }
+            return item->Child(ScTxt(cx, DupFmt(cx, "%d", st.value), 12,
+                                     st.muted ? ScSilver() : ScInk()));
         }
-        if (st.today) {
-            item->Border(1, ScBorder());
+        case CalendarItemKind::Month:
+        case CalendarItemKind::Year: {
+            Str label = st.kind == CalendarItemKind::Month
+                            ? Str(kMon[st.value])
+                            : DupFmt(cx, "%d", st.value);
+            item->W(74)->H(28);
+            if (st.active) {
+                return item->Bg(ScInk())
+                    ->Child(ScTxt(cx, label, 12, ScWhite()));
+            }
+            return item->HoverBg(ScHover())
+                ->Child(ScTxt(cx, label, 12, ScInk()));
         }
-        if (!st.disabled) {
-            item->HoverBg(ScHover());
-        }
-        return item->Child(ScTxt(cx, DupFmt(cx, "%d", st.value), 12,
-                                 st.muted ? ScSilver() : ScInk()));
-    }
-    case CalendarItemKind::Month:
-    case CalendarItemKind::Year: {
-        Str label = st.kind == CalendarItemKind::Month
-                        ? Str(kMon[st.value])
-                        : DupFmt(cx, "%d", st.value);
-        item->W(74)->H(28);
-        if (st.active) {
-            return item->Bg(ScInk())->Child(ScTxt(cx, label, 12, ScWhite()));
-        }
-        return item->HoverBg(ScHover())->Child(ScTxt(cx, label, 12, ScInk()));
-    }
     }
     (void)app;
     return item;

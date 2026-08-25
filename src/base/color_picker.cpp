@@ -299,7 +299,7 @@ El* ColorPicker::New(Ctx* cx, Str id) {
 
 El* ColorSwatch::New(Ctx* cx, Str id, Listener onClick, Listener onHover) {
     Arena* a = cx->a;
-    El* e = Div(a)->Id(id)->Click(HashClickId(id));
+    El* e = Div(a)->PathClick(id);
     if (onClick.IsValid()) {
         e->OnClick(onClick);
     }

@@ -10,7 +10,7 @@ El* Accordion::New(Ctx* cx, Str id) {
 El* AccordionTrigger::New(Ctx* cx, Str id, bool open, bool disabled,
                           Listener onChange) {
     Arena* a = cx->a;
-    El* e = Div(a)->Id(id)->Click(HashClickId(id));
+    El* e = Div(a)->PathClick(id);
     if (!disabled && onChange.IsValid()) {
         e->OnClick(ListenerFill(onChange, !open));
     }
