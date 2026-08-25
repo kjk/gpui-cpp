@@ -5070,3 +5070,31 @@ The showcase page is then upstream's: a row function and an `Opts`. It has a
 real thumb, the wheel reaches it because the list sets both the scroll id and
 the listener, and the window's wheel handler no longer needs to know which
 page is open.
+
+
+## The resizable group Rust never gave a themed half
+
+Upstream has no `ui/resizable.rs` at all. `ResizableState`, the panel group,
+the handle over each boundary and the drag that moves it are 1278 lines of
+`crates/base/src/resizable`, and the only thing a theme has to say about any
+of it is what colour the hairline is. Here the arithmetic —
+`resize_panel_at_handle` and `adjust_to_container_size` — was in `src/base`
+with two bare divs beside it, and everything else was `component::`. So the
+base showcase's page carried its own `OnResizeDown`, `OnResizeDrag` and
+`OnResizeUp`, its own 116..210 clamp written out twice, and a divider that was
+a div: it was the only page in the showcase with hand-written mouse handlers.
+
+The group moved down whole. The one line that could not follow is the
+hairline's colour, so the group takes it: `HandleColors(rest, dragging)`,
+which the themed `component::Resizable::New` fills with `th.border` and
+`th.dragBorder` and the base showcase fills itself, the way it supplies every
+other colour on its pages. `component::Resizable` is now that one call.
+
+**And a bug that came out with it.** The handle was sized across the axis from
+the group's *measured* box, which is written at paint — so on the frame that
+first measures it the handle has no height, and a page that draws once and
+then stops has a handle that cannot be grabbed at all. It never showed in the
+story, where something else is always redrawing. The handle now fills its own
+panel instead, which needs no measurement: the showcase's divider drags on the
+first frame, and the story's resizable, dock and tiles pages are
+pixel-identical.

@@ -142,7 +142,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* flexBtnRow = Div(a)->FlexRow()->W(kFill)->Gap(8);
     flexBtnRow->Child(flexBtns);
     flexCol->Child(flexBtnRow);
-    component::Resizable* flexGroup =
+    gpui::Resizable* flexGroup =
         component::Resizable::New(cx, StrL("rz-flex"), self->flex);
     // Both sized panels are declared either way; `flex_none` is what decides
     // whether they keep their width when the left one goes away or take a
