@@ -756,8 +756,11 @@ El* Command::IntoEl() {
         box->Child(field);
     }
 
-    El* listBox = Div(a)->FlexCol()->W(kFill)->Pad(4)->MaxH(maxH)->ClipY();
+    El* listBox = Div(a)->FlexCol()->W(kFill)->MaxH(maxH)->ClipY();
     if (s->rows.len == 0) {
+        // The inset is the list's own; only the empty slot needs it from the
+        // box around it.
+        listBox->Pad(4);
         // While a search is in flight the list is empty because the answer
         // has not arrived, which is not the same as no match.
         if (!s->loading) {
@@ -780,6 +783,7 @@ El* Command::IntoEl() {
                        ->ViewH(viewH)
                        ->Handle(&s->scroll)
                        ->Axis(ScrollAxis::Vertical)
+                       ->Pad(4)
                        ->Row(CommandRowEl)
                        ->IntoEl();
         gRowState = nullptr;

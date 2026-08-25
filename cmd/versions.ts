@@ -9,10 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "b80bb899151cb43db7bdc6f7586736f9fa17253a",
+  sha: "fa700dc2abf1574473ed945712a1b364d28366fa",
   date: "2026-08-19",
-  subject:
-    "notification: Bridge notifications to the OS notification center (#2770)",
+  subject: "command: Move the row inset onto the virtual list (#2771)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

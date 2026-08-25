@@ -34,6 +34,14 @@ struct VirtualList {
     // named — it does not decide what scrolls, so a list showing one bar
     // still takes the wheel both ways.
     ScrollAxis axis = ScrollAxis::Both;
+    // The list's own inset. Rust's command palette puts `p_1` on the virtual
+    // list rather than on the box around it, where it behaves as CSS
+    // scroll-padding does: the two ends of the scroll keep their inset, and a
+    // row scrolled under the edge clips flush against it rather than against
+    // a padded box. The clip is the element's border box, so the padding is
+    // outside it and the height given is the rows' — the element is that much
+    // taller.
+    float pad = 0;
 
     static VirtualList* New(Ctx* cx, int count);
     VirtualList* Id(Str v);
@@ -45,6 +53,7 @@ struct VirtualList {
     VirtualList* Handle(VirtualListScrollHandle* h);
     VirtualList* Scroll(int id, Listener onScroll);
     VirtualList* Axis(ScrollAxis v);
+    VirtualList* Pad(float v);
     // The row builder. Rust's is a closure that captured `cx`, so this takes
     // one: a row that reads the theme has no other way to.
     VirtualList* Row(El* (*fn)(Ctx*, int));

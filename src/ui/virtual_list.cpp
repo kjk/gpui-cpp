@@ -49,6 +49,10 @@ VirtualList* VirtualList::Axis(ScrollAxis v) {
     axis = v;
     return this;
 }
+VirtualList* VirtualList::Pad(float v) {
+    pad = v;
+    return this;
+}
 VirtualList* VirtualList::Row(El* (*fn)(Ctx*, int)) {
     row = fn;
     return this;
@@ -95,7 +99,13 @@ El* VirtualList::IntoEl() {
                             : (float)range.end * rowH;
         list->Child(Div(a)->H(content - built));
     }
-    El* e = gpui::VirtualList::New(cx, id)->H(viewH)->ClipY()->ScrollY(offset);
+    El* e = gpui::VirtualList::New(cx, id)
+                ->H(viewH + pad * 2)
+                ->ClipY()
+                ->ScrollY(offset);
+    if (pad > 0) {
+        e->Pad(pad);
+    }
     // Both axes: a row wider than the viewport slides under it rather than
     // being cut, which is what the story's Axis: Both asks for.
     e->ClipX()->ScrollX(scrollX);
