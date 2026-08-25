@@ -202,6 +202,11 @@ struct TableState {
     // The element stamps this as it builds, so a state can send an event to
     // its subscribers without the caller carrying its handle around.
     EntityId self = {};
+    // The table's own focus handle — `self.state.focus_handle(cx)`, which
+    // data_table.rs tracks on the element that declares the key context. Asked
+    // for once and kept, because the state is what outlives the frame the
+    // element is built in; the port derived it from the caller's id instead.
+    FocusHandle focus = {};
 
     ~TableState() {
         colWidth.Reset();

@@ -5619,3 +5619,39 @@ Next: the widgets themselves onto `PathId`, from the leaves up. The table's
 own focus is still `FocusId(HashClickId(id))` where upstream tracks the
 state's handle — the same shape the select and the popup menu have already
 taken.
+
+## The table's focus is the state's handle
+
+`box->FocusId(HashClickId(id))` was the last widget deriving its focus from
+its own name. `data_table.rs` tracks `self.state.focus_handle(cx)` on the
+element that declares the key context, so `TableState` holds a `FocusHandle`
+now, asked for once and kept — the same move the popover, the popup menu and
+the select have already made.
+
+**And it uncovered a dead feature.** The DataTable's key actions never fire
+when the table is reached by clicking. A press focuses `hit->focusId` — the
+focus id of the one rect the hit test names — and that rect is the *row*,
+which `BindClick` had made focusable. The row is focusable but is not
+`FocusOnPress`, so the press focuses nothing, the table never takes focus,
+and Escape and the arrows go nowhere. Verified on the build before this one
+too, so it is not new: clicking a row and pressing Down twice, or Escape,
+leaves the page byte-identical.
+
+Upstream has neither half of that. A row is `.id()` — hit-testable and not
+focusable — and only the table's own handle is `tab_stop(true)`. So there is
+nothing between the press and the table.
+
+Two things to do about it, and neither belongs in this commit:
+
+  1. Rows, cells and heads should be `PathClick`, not `PathId`. They are hit
+     targets upstream and nothing else, and their focus ids are what shadow
+     the table's.
+  2. `FocusOnPress` should be asked of the chain, not of the innermost rect —
+     the same correction the hover dispatch already took. A press is *on*
+     every box that contains it, and the table is one of them.
+
+The second touches core dispatch and every widget that focuses from a click,
+so it wants its own sweep.
+
+Verified: the story's DataTable at rest, on a row click, a column-header
+click and a sort click, all identical to the build before.

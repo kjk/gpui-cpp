@@ -964,7 +964,13 @@ El* DataTable::BuildEl() {
     // data_table.rs declares its context on the element it tracks focus on,
     // and binds tab to the column walk there — which is why the window's
     // focus ring only takes a tab the table did not want.
-    box->FocusId(HashClickId(id))->FocusRing(false)->FocusOnPress();
+    if (s) {
+        if (!s->focus.IsValid()) {
+            s->focus = FocusHandleNew(cx);
+        }
+        box->TrackFocus(s->focus);
+    }
+    box->FocusRing(false)->FocusOnPress();
     TableBindKeys(cx, box, state);
     return box;
 }
