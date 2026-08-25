@@ -328,8 +328,15 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         return TextEl(a, Str{});
     }
     float font = style.fontSize > 0 ? style.fontSize : 12.f;
-    float lineMult = kInputLineH / font;
-    state->lastLineH = kInputLineH;
+    // EDITOR_LINE_HEIGHT: a code editor takes its rows from its own font, so
+    // a smaller or larger one keeps its leading in proportion. Every other
+    // field keeps Input::LINE_HEIGHT — 1.25rem whatever the text size is —
+    // which is what Rust sets on the input rather than on the editor. At the
+    // theme's 13px monospace the two are the same 20.
+    float lineH =
+        state->kind == InputKind::Editor ? roundf(font * 1.5f) : kInputLineH;
+    float lineMult = lineH / font;
+    state->lastLineH = lineH;
     state->lastMono = style.mono;
     Str text = InputValue(state);
     bool caret =
@@ -364,11 +371,10 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // editor takes it off the box the rows were laid out in last frame, since
     // nothing here can tell how many times a line will break; until there is
     // one, a line apiece is the estimate.
-    state->contentH = (float)rows * kInputLineH;
+    state->contentH = (float)rows * lineH;
     if (LayoutModeIsFolding(state->mode)) {
         FoldMapRebuild(&state->folds, rows);
-        state->contentH =
-            (float)FoldMapDisplayRowCount(&state->folds) * kInputLineH;
+        state->contentH = (float)FoldMapDisplayRowCount(&state->folds) * lineH;
     }
     if (wrap && state->contentBox.h > 0) {
         state->contentH = state->contentBox.h;
@@ -436,7 +442,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
     // and the table do it, so the scrolled height and the scrollbar are the
     // ones the whole document has.
     //
-    // Without soft wrap every row is `kInputLineH` and the range is
+    // Without soft wrap every row is `lineH` and the range is
     // arithmetic. With it a row is as tall as its own text, so the range
     // comes off last frame's boxes — one frame stale, which is what the fold
     // gutter's hitbox already is — and a row with no box yet is estimated at
@@ -452,12 +458,12 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         float top = state->scrollY;
         float bottom = top + state->viewH;
         if (!wrap || state->rowBoxes.len != rows) {
-            int first = (int)(top / kInputLineH) - kSlack;
-            int end = (int)(bottom / kInputLineH) + 1 + kSlack;
+            int first = (int)(top / lineH) - kSlack;
+            int end = (int)(bottom / lineH) + 1 + kSlack;
             firstRow = first < 0 ? 0 : (first > rows ? rows : first);
             endRow = end < firstRow ? firstRow : (end > rows ? rows : end);
-            padTop = (float)firstRow * kInputLineH;
-            padBottom = (float)(rows - endRow) * kInputLineH;
+            padTop = (float)firstRow * lineH;
+            padBottom = (float)(rows - endRow) * lineH;
         } else {
             // The recorded boxes are in window coordinates; the content box
             // is where the first of them starts, so the difference is the
@@ -469,7 +475,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             for (int i = 0; i < rows; i++) {
                 float h = state->rowBoxes[i].h;
                 if (h <= 0) {
-                    h = kInputLineH;
+                    h = lineH;
                 }
                 float y = state->rowBoxes[i].h > 0
                               ? state->rowBoxes[i].y - origin
@@ -491,12 +497,12 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             padTop = 0;
             for (int i = 0; i < firstRow; i++) {
                 float h = state->rowBoxes[i].h;
-                padTop += h > 0 ? h : kInputLineH;
+                padTop += h > 0 ? h : lineH;
             }
             padBottom = 0;
             for (int i = endRow; i < rows; i++) {
                 float h = state->rowBoxes[i].h;
-                padBottom += h > 0 ? h : kInputLineH;
+                padBottom += h > 0 ? h : lineH;
             }
         }
     }
@@ -813,7 +819,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
             if (guides) {
                 only = Div(a)->W(kFill)->Child(guides)->Child(el);
                 if (!wrap) {
-                    only->H(kInputLineH);
+                    only->H(lineH);
                 }
             }
             if (wrap && row < state->rowBoxes.len) {
@@ -826,12 +832,12 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         if (wrap) {
             // A wrapped row is as tall as its own text, and its line number
             // sits at the top of it rather than in the middle.
-            band->MinH(kInputLineH)->ItemsStart();
+            band->MinH(lineH)->ItemsStart();
             if (row < state->rowBoxes.len) {
                 band->BoundsOut(&state->rowBoxes[row]);
             }
         } else {
-            band->H(kInputLineH);
+            band->H(lineH);
         }
         // active_line: the wash under the row the caret is on, gutter and all.
         if (row == caretRow && style.activeLine.a != 0) {
@@ -886,7 +892,7 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
         }
         // Where the caret was last painted, in the column's own coordinates.
         float gx = state->caretWinX - state->contentBox.x;
-        float gy = state->caretWinY - state->contentBox.y - kInputLineH;
+        float gy = state->caretWinY - state->contentBox.y - lineH;
         Str rest = state->inlineCompletion.text;
         for (int line = 0; rest.len > 0 || line == 0; line++) {
             int nl = -1;
@@ -902,8 +908,8 @@ El* Textarea::New(Ctx* cx, InputState* state, const InputEditorStyle& style,
                 El* ghost = Div(a)
                                 ->Absolute()
                                 ->Left(line == 0 ? gx : textLeft)
-                                ->Top(gy + (float)line * kInputLineH)
-                                ->H(kInputLineH)
+                                ->Top(gy + (float)line * lineH)
+                                ->H(lineH)
                                 ->Bg(style.background);
                 El* run = TextEl(a, one)->Font(font)->LineHeight(lineMult)->Fg(
                     ghostFg);

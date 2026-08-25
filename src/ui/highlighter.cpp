@@ -21,6 +21,10 @@ Highlighter* Highlighter::H(float v) {
     h = v;
     return this;
 }
+Highlighter* Highlighter::Font(float px) {
+    fontSize = px;
+    return this;
+}
 Highlighter* Highlighter::Language(Str name) {
     lang = SyntaxLangFor(name);
     return this;
@@ -310,8 +314,10 @@ El* Highlighter::IntoEl() {
     style.caret = th.caret;
     style.selection = RgbaOpacity(th.selection, 0.4f);
     // theme.mono_font_size, which is 13 rather than the 12 this drew at: a
-    // narrower row is a row that does not soft-wrap where Rust's does.
-    style.fontSize = 13;
+    // narrower row is a row that does not soft-wrap where Rust's does. A
+    // caller that set a size of its own refines over it, and the rows follow
+    // that size — Rust's `line_height(relative(1.5))` on the editor.
+    style.fontSize = fontSize > 0 ? fontSize : 13;
     // .font_family(theme.mono_font_family).text_size(theme.mono_font_size)
     style.mono = true;
     if (activeLine) {

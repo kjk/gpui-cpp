@@ -18,6 +18,8 @@ struct Highlighter {
     // content, which is what an editor inside something else that scrolls
     // wants.
     float h = 0;
+    // theme.mono_font_size until a caller says otherwise.
+    float fontSize = 0;
     // EditorState::language: what the rows are scanned as. None leaves them
     // in the editor's own colour.
     SyntaxLang lang = SyntaxLangNone;
@@ -42,6 +44,9 @@ struct Highlighter {
     static Highlighter* New(Ctx* cx, InputState* state);
     static Highlighter* New(Ctx* cx, Str id, InputState* state);
     Highlighter* H(float v);
+    // `.text_size(..)` on the editor: the size the rows are drawn at, and
+    // what their height follows. Zero is the theme's monospace size.
+    Highlighter* Font(float px);
     Highlighter* Language(Str name);
     Highlighter* Decorations(const TextSpan* runs, int n);
     Highlighter* ActiveLine(bool v = true);
