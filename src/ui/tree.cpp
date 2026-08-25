@@ -22,97 +22,58 @@ Tree* Tree::Icons(bool v) {
     return this;
 }
 
-El* Tree::IntoEl() {
+// The themed row — crates/ui/src/tree.rs. tree_story.rs's row is an icon and
+// a label and nothing else: File for a leaf, FolderOpen for an open folder
+// and Folder for a shut one.
+static El* TreeRow(void* user, Ctx* cx, int entryIx) {
+    Tree* self = (Tree*)user;
     const Theme& th = cx->theme();
-    TreeState* s = state.Get(cx);
-    if (!s) {
+    TreeState* s = self->state.Get(cx);
+    const TreeItem* it = s ? TreeEntryItem(s, entryIx) : nullptr;
+    if (!it) {
+        return nullptr;
+    }
+    Arena* a = cx->a;
+    El* row = Div(a)
+                  ->FlexRow()
+                  ->W(kFill)
+                  ->H(s->rowH)
+                  // ListItem is px_3, and the story's row adds
+                  // `pl(px(16.) * entry.depth() + px(12.))` on top of it,
+                  // which is the whole of the indent: there is no spacer
+                  // child and no chevron column.
+                  ->PadR(12)
+                  ->PadL(12 + (float)it->depth * 16)
+                  ->Gap(8)
+                  ->ItemsCenter()
+                  ->Radius(th.radius);
+    if (!it->disabled) {
+        row->HoverBg(th.tokens.muted);
+    }
+    if (entryIx == s->selected) {
+        row->Bg(th.tokens.accent);
+    } else if (entryIx == s->rightClicked) {
+        row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
+    }
+    if (self->icons) {
+        IconName ic = !it->folder    ? IconName::File
+                      : it->expanded ? IconName::FolderOpen
+                                     : IconName::Folder;
+        row->Child(IconEl(a, ic, 16)
+                       ->Fg(it->disabled ? th.mutedFg : th.foreground));
+    }
+    // ListItem is text_base, not text_sm.
+    row->Child(TextEl(a, it->label)
+                   ->Font(16)
+                   ->Fg(it->disabled ? th.mutedFg : th.foreground));
+    return row;
+}
+
+El* Tree::IntoEl() {
+    if (!state.Get(cx)) {
         return Div(a)->H(h);
     }
-    s->self = state.id;
-    // The height the list was laid out at is what scroll_to_item measures
-    // against, and the caller is the one that knows it.
-    s->viewportH = h;
-
-    // uniform_list: only the rows the viewport can show are built, and the
-    // two spacers stand in for the rest so the scrollbar spans the whole
-    // tree.
-    VirtualRange range =
-        VirtualListVisibleRows(s->entries.len, s->rowH, s->scrollY, h);
-    int first = range.first;
-    int end = range.end;
-
-    El* list = Div(a)->FlexCol()->W(kFill);
-    if (first > 0) {
-        list->Child(Div(a)->W(kFill)->H((float)first * s->rowH));
-    }
-    Listener click = ListenTo(state, &TreeState::OnRowClick, 0);
-    Listener down = ListenTo(state, &TreeState::OnRowMouseDown, 0);
-    for (int i = first; i < end; i++) {
-        const TreeItem* it = TreeEntryItem(s, i);
-        if (!it) {
-            break;
-        }
-        bool on = i == s->selected;
-        El* row = TreeItemEl::New(cx, StrDup(a, fmt("%s-row-%d", id, i)),
-                                  ListenerArg(click, i))
-                      ->FlexRow()
-                      ->W(kFill)
-                      ->H(s->rowH)
-                      // ListItem is px_3, and the story's row adds
-                      // `pl(px(16.) * entry.depth() + px(12.))` on top of it,
-                      // which is the whole of the indent: there is no
-                      // spacer child and no chevron column.
-                      ->PadR(12)
-                      ->PadL(12 + (float)it->depth * 16)
-                      ->Gap(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius);
-        if (!it->disabled) {
-            row->HoverBg(th.tokens.muted);
-            row->OnMouseDown(ListenerArg(down, i));
-        }
-        if (on) {
-            row->Bg(th.tokens.accent);
-        } else if (i == s->rightClicked) {
-            row->Bg(BackgroundOpacity(th.tokens.accent, 0.5f));
-        }
-        // tree_story.rs's row is an icon and a label and nothing else: File
-        // for a leaf, FolderOpen for an open folder and Folder for a shut
-        // one. The chevron column the port drew is not there — what a folder
-        // is doing is the icon's job.
-        if (icons) {
-            IconName ic = !it->folder    ? IconName::File
-                          : it->expanded ? IconName::FolderOpen
-                                         : IconName::Folder;
-            row->Child(IconEl(a, ic, 16)
-                           ->Fg(it->disabled ? th.mutedFg : th.foreground));
-        }
-        // ListItem is text_base, not text_sm.
-        row->Child(TextEl(a, it->label)
-                       ->Font(16)
-                       ->Fg(it->disabled ? th.mutedFg : th.foreground));
-        list->Child(row);
-    }
-    if (end < s->entries.len) {
-        list->Child(
-            Div(a)->W(kFill)->H((float)(s->entries.len - end) * s->rowH));
-    }
-
-    El* box = gpui::Tree::New(cx)
-                  ->FlexCol()
-                  ->W(kFill)
-                  ->H(h)
-                  ->ClipY()
-                  ->ScrollY(s->scrollY)
-                  ->ScrollId(HashClickId(id))
-                  ->OnScroll(ListenTo(state, &TreeState::OnScroll));
-    box->Child(list);
-    // The tree's own context and the four arrows in it. The rows are not
-    // focusable, so the box is: Rust tracks focus on the same element it
-    // declares the context on.
-    box->FocusId(HashClickId(id))->FocusRing(false)->FocusOnPress();
-    TreeBindKeys(cx, box, state);
-    return box;
+    return TreeList::New(cx, id, state, h, &TreeRow, this);
 }
 
 } // namespace component

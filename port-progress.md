@@ -4977,3 +4977,38 @@ run whether the reconcile is to blame.
 `tests/LayoutReuseTests.cpp` pins all three shapes — a child whose kind
 changed, a page switch that replaces a whole subtree, and a parent that lost a
 child — and each of them fails on the code as it was.
+
+
+## The tree that could not be scrolled
+
+A wheel over the showcase's tree scrolled the page behind it. The tree had
+nothing to scroll with: the page built its own rows into a clipped box, and a
+clipped box is not a scroll container — no offset, no `ScrollId`, no
+`OnScroll`, so `DispatchScrollWheel` walked past it to the window's own
+handler.
+
+The reason it was hand-built is where this port had put the tree. Upstream
+splits it the way it splits everything else: `crates/base/src/tree.rs` is the
+*unstyled, virtualized element* — a `uniform_list` with `track_scroll`, whose
+row comes from the caller's `item(..)` closure — and `crates/ui/src/tree.rs`
+is a row drawn into it. This tree had the state in `src/base` and the element
+in `src/ui`, so the base showcase, which may not touch `src/ui`, had no
+scrollable tree to reach for and drew a box instead.
+
+`TreeList::New(cx, id, state, h, row, user)` is that element, moved down where
+Rust keeps it: the visible range, the two spacers standing in for the rest,
+the scroll container, the press handlers around each row and the tree's key
+context. The row is the caller's — a function and a user pointer, since an
+element here holds no closures. `component::Tree` is now its themed row and
+nothing else, and the story's tree page is pixel-identical to before.
+
+The showcase's page is then upstream's: a `TreeState` on the app, the base
+element, and an `item` that draws the indent, the chevron and the label. It
+scrolls with the wheel, walks with the arrows, and its rows select and expand
+on a press — all of which come with the element rather than being spelled out
+again on the page.
+
+One thing to know when building a `TreeState`: it keeps the `Str`s it is
+given rather than copying them, and it outlives the frame, so the ids and
+labels must not come from the frame arena. The page's first attempt did, and
+drew a treeful of replacement characters.

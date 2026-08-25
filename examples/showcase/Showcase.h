@@ -145,8 +145,10 @@ struct ShowcaseApp {
     float virtualScroll = 0;
     float resizeW = 124;
     bool draggingResize = false;
-    bool treeOpen[8] = {true, true, false, false, false, false, false, false};
-    int treeSel = -1;
+    // The tree page's state, which is the base tree's own: the items, what
+    // is expanded, what is selected and where it is scrolled — `self.tree`
+    // in the Rust page. Made on the page's first frame.
+    Entity<TreeState> tree = {};
     int selA = -1;
     int selB = -1;
     int hoverId = 0;

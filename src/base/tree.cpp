@@ -274,6 +274,68 @@ El* Tree::New(Ctx* cx) {
     return Div(a);
 }
 
+El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
+                  TreeRowFn row, void* user) {
+    Arena* a = cx->a;
+    TreeState* s = state.Get(cx);
+    if (!s || !row) {
+        return Div(a)->H(h);
+    }
+    s->self = state.id;
+    // The height the list was laid out at is what scroll_to_item measures
+    // against, and the caller is the one that knows it.
+    s->viewportH = h;
+
+    // uniform_list: only the rows the viewport can show are built, and the
+    // two spacers stand in for the rest so the scrollbar spans the whole
+    // tree.
+    VirtualRange range =
+        VirtualListVisibleRows(s->entries.len, s->rowH, s->scrollY, h);
+    El* list = Div(a)->FlexCol()->W(kFill);
+    if (range.first > 0) {
+        list->Child(Div(a)->W(kFill)->H((float)range.first * s->rowH));
+    }
+    Listener click = ListenTo(state, &TreeState::OnRowClick, 0);
+    Listener down = ListenTo(state, &TreeState::OnRowMouseDown, 0);
+    for (int i = range.first; i < range.end; i++) {
+        const TreeItem* it = TreeEntryItem(s, i);
+        if (!it) {
+            break;
+        }
+        El* wrap = TreeItemEl::New(cx, StrDup(a, fmt("%s-row-%d", id, i)),
+                                   ListenerArg(click, i))
+                       ->FlexCol()
+                       ->W(kFill);
+        if (!it->disabled) {
+            wrap->OnMouseDown(ListenerArg(down, i));
+        }
+        if (El* built = row(user, cx, i)) {
+            wrap->Child(built);
+        }
+        list->Child(wrap);
+    }
+    if (range.end < s->entries.len) {
+        list->Child(
+            Div(a)->W(kFill)->H((float)(s->entries.len - range.end) * s->rowH));
+    }
+
+    El* box = Tree::New(cx)
+                  ->FlexCol()
+                  ->W(kFill)
+                  ->H(h)
+                  ->ClipY()
+                  ->ScrollY(s->scrollY)
+                  ->ScrollId(HashClickId(id))
+                  ->OnScroll(ListenTo(state, &TreeState::OnScroll));
+    box->Child(list);
+    // The tree's own context and the four arrows in it. The rows are not
+    // focusable, so the box is: Rust tracks focus on the same element it
+    // declares the context on.
+    box->FocusId(HashClickId(id))->FocusRing(false)->FocusOnPress();
+    TreeBindKeys(cx, box, state);
+    return box;
+}
+
 El* TreeItemEl::New(Ctx* cx, Str id, Listener onClick) {
     Arena* a = cx->a;
     El* e = Div(a);

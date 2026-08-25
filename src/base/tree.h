@@ -137,6 +137,25 @@ void TreeBindKeys(Ctx* cx, El* root, Entity<TreeState> state);
 struct Tree {
     static El* New(Ctx* cx);
 };
+
+// tree.rs's `Tree`: the unstyled, virtualized element. Only the rows the
+// viewport can show are built, and two spacers stand in for the rest, so the
+// scrollbar spans the whole tree; the offset, the selection and the keyboard
+// belong to the state. What a row *looks* like is the caller's, which is
+// `Tree::item(..)` in Rust and a function with its user pointer here, since
+// an element in this tree holds no closures.
+//
+// The wrapper around each row carries the press handlers and nothing else —
+// the caller's element is what has the height, the padding and the
+// background, the way Rust's item closure builds its own div.
+using TreeRowFn = El* (*)(void* user, Ctx* cx, int entryIx);
+
+struct TreeList {
+    // `h` is the height the list is laid out at, which is also what
+    // scroll_to_item measures against.
+    static El* New(Ctx* cx, Str id, Entity<TreeState> state, float h,
+                   TreeRowFn row, void* user);
+};
 // on_entry_click selects the entry and toggles it, so a press on a folder's
 // row opens it and a press on a leaf just selects.
 struct TreeItemEl {

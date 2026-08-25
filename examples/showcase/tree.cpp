@@ -1,94 +1,104 @@
 #include "Showcase.h"
 #include "gpui.h"
 
+#include <stdio.h>
+
 using namespace gpui;
 
-struct TreeNode {
+// crates/base/examples/showcase/components/tree.rs. The page is the base
+// tree with a row of its own: `Tree::new(&self.tree).w_64().h_48()` and an
+// `item(..)` closure that draws the indent, the chevron and the label.
+struct TreeRow {
     const char* label;
     int parent; // -1 root
-    bool folder;
 };
 
-static const TreeNode kTree[] = {
-    {"src", -1, true},         {"components", 0, true},
-    {"button.rs", 1, false},   {"tree.rs", 1, false},
-    {"lib.rs", 0, false},      {"examples", -1, true},
-    {"showcase.rs", 5, false}, {"Cargo.toml", -1, false},
+static const TreeRow kTree[] = {
+    {"src", -1},   {"components", 0}, {"button.rs", 1},   {"tree.rs", 1},
+    {"lib.rs", 0}, {"examples", -1},  {"showcase.rs", 5}, {"Cargo.toml", -1},
 };
 
-static bool Visible(ShowcaseApp* app, int i) {
-    int p = kTree[i].parent;
-    while (p >= 0) {
-        if (!app->treeOpen[p]) {
-            return false;
-        }
-        p = kTree[p].parent;
+static const int kTreeCount = (int)(sizeof(kTree) / sizeof(kTree[0]));
+
+// The items go in once, in the order they are declared, since a child has to
+// be added after its parent. `src` and `components` start open, the way the
+// Rust page's fixture does.
+static Entity<TreeState> ShowcaseTreeState(ShowcaseApp* app, Ctx* cx) {
+    if (!app->tree.IsValid()) {
+        app->tree = EntityNewState<TreeState>(cx->app);
     }
-    return true;
+    TreeState* s = app->tree.Get(cx);
+    if (!s || s->items.len > 0) {
+        return app->tree;
+    }
+    // A row is 32 here, not the ListItem's 34: the page draws its own.
+    s->rowH = 32;
+    // The state keeps the strings it is given rather than copying them, and
+    // it outlives the frame — so these are the literals in the table above
+    // and a static id per row, never the frame arena.
+    static char ids[kTreeCount][16];
+    for (int i = 0; i < kTreeCount; i++) {
+        snprintf(ids[i], sizeof(ids[i]), "sc-tree-%d", i);
+        TreeAddItem(s, Str(ids[i]), Str(kTree[i].label), kTree[i].parent);
+    }
+    for (int i = 0; i < s->items.len; i++) {
+        s->items[i].expanded = i == 0 || i == 1;
+    }
+    TreeRebuild(s);
+    return app->tree;
 }
 
-static int Depth(int i) {
-    int d = 0;
-    int p = kTree[i].parent;
-    while (p >= 0) {
-        d++;
-        p = kTree[p].parent;
+// One row: the indent, a chevron for a folder, and the label.
+static El* ShowcaseTreeRow(void* user, Ctx* cx, int entryIx) {
+    auto* app = (ShowcaseApp*)user;
+    TreeState* s = app->tree.Get(cx);
+    const TreeItem* it = s ? TreeEntryItem(s, entryIx) : nullptr;
+    if (!it) {
+        return nullptr;
     }
-    return d;
-}
-
-static void PickTree(ShowcaseApp* app, Ctx* cx, const ClickEvent*, intptr_t i) {
-    app->treeSel = (int)i;
-    if (kTree[i].folder) {
-        app->treeOpen[i] = !app->treeOpen[i];
-    }
-    Notify(cx);
-}
-
-El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     // The rows fill the tree: Rust's item is mx_1 inside a size_full list, so
     // the selected background runs the width of the box less 4px a side.
-    El* list = Div(a)->FlexCol()->W(kFill)->PadX(4)->PadY(4);
-    for (int i = 0; i < 8; i++) {
-        if (!Visible(app, i)) {
-            continue;
-        }
-        int depth = Depth(i);
-        bool sel = app->treeSel == i;
-        El* row = TreeItemEl::New(cx, DupFmt(cx, "tree-%d", i),
-                                  Listen(cx, &PickTree, i))
-                      ->H(32)
-                      ->W(kFill)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->Gap(4)
-                      ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
-        if (sel) {
-            row->Bg(Rgb(0xf0, 0xf0, 0xf0));
-        }
-        if (depth) {
-            row->Child(Div(a)->W((float)depth * 12));
-        }
-        // A 12px chevron, right when the folder is collapsed and down when it
-        // is open — the two SVGs the Rust example inlines. The box is there
-        // for a file too, so the labels line up.
-        El* icon = Div(a)->W(12)->H(12)->ItemsCenter()->JustifyCenter();
-        if (kTree[i].folder) {
-            IconName chevron = app->treeOpen[i] ? IconName::ChevronDown
-                                                : IconName::ChevronRight;
-            icon->Child(IconEl(a, chevron, 12)->Fg(ScInk()));
-        }
-        row->Child(icon);
-        row->Child(ScTxt(cx, Str(kTree[i].label), 14, ScInk()));
-        list->Child(row);
+    El* row = Div(a)
+                  ->FlexRow()
+                  ->W(kFill)
+                  ->H(32)
+                  ->PadX(8)
+                  ->ItemsCenter()
+                  ->Gap(4)
+                  ->HoverBg(Rgb(0xf5, 0xf5, 0xf5));
+    if (entryIx == s->selected) {
+        row->Bg(Rgb(0xf0, 0xf0, 0xf0));
     }
-    return Tree::New(cx)
+    if (it->depth > 0) {
+        row->Child(Div(a)->W((float)it->depth * 12));
+    }
+    // A 12px chevron, right when the folder is collapsed and down when it is
+    // open — the two SVGs the Rust example inlines. The box is there for a
+    // file too, so the labels line up.
+    El* icon = Div(a)->W(12)->H(12)->ItemsCenter()->JustifyCenter();
+    if (it->folder) {
+        IconName chevron =
+            it->expanded ? IconName::ChevronDown : IconName::ChevronRight;
+        icon->Child(IconEl(a, chevron, 12)->Fg(ScInk()));
+    }
+    row->Child(icon);
+    row->Child(ScTxt(cx, it->label, 14, ScInk()));
+    return row;
+}
+
+El* ShowcaseTree(ShowcaseApp* app, Ctx* cx) {
+    Entity<TreeState> state = ShowcaseTreeState(app, cx);
+    // The tree is the base element, so the wheel over it scrolls the tree and
+    // the keyboard walks it — `Tree::new(&self.tree).w_64().h_48()`.
+    return TreeList::New(cx, StrL("sc-tree"), state, 192, &ShowcaseTreeRow, app)
         ->W(256)
-        ->H(192)
-        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
-        ->ClipY()
-        ->Child(list);
+        // Rust's row is `mx_1` inside a `size_full` list and the box itself
+        // is `py_1`; there are no margins here, so the inset either side is
+        // the box's padding instead — the same 4px, and the selected
+        // background still stops short of the border.
+        ->Pad(4)
+        ->Border(1, Rgb(0xd4, 0xd4, 0xd4));
 }
 
 SHOWCASE_PAGE(CompTree, ShowcaseTree);
