@@ -11,15 +11,40 @@ static void ToggleBold(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
     Notify(cx);
 }
 
+// The group's two other cells are bits of one selection, which is Rust's
+// `toggle_group_selection: u8` and its `|= 1` / `&= !1` pair.
+static void ToggleItalic(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                         intptr_t next) {
+    app->toggleGroup = next ? (uint8_t)(app->toggleGroup | 1)
+                            : (uint8_t)(app->toggleGroup & ~1);
+    Notify(cx);
+}
+
+static void ToggleUnderline(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
+                            intptr_t next) {
+    app->toggleGroup = next ? (uint8_t)(app->toggleGroup | 2)
+                            : (uint8_t)(app->toggleGroup & ~2);
+    Notify(cx);
+}
+
+// `borderLeft` is Rust's `border_l_0` on the group's second and third cells:
+// the row is `gap_0`, so the cells share one hairline between them rather
+// than drawing two side by side.
 static El* ToggleCell(Ctx* cx, Str id, Listener onChange, const char* label,
-                      bool on) {
+                      bool on, bool borderLeft = true) {
     Arena* a = cx->a;
     El* b = Toggle::New(cx, id, on, false, onChange)
                 ->W(28)
                 ->H(28)
                 ->ItemsCenter()
-                ->JustifyCenter()
-                ->Border(1, Rgb(0x17, 0x17, 0x17));
+                ->JustifyCenter();
+    if (borderLeft) {
+        b->Border(1, Rgb(0x17, 0x17, 0x17));
+    } else {
+        b->BorderT(1, Rgb(0x17, 0x17, 0x17))
+            ->BorderR(1, Rgb(0x17, 0x17, 0x17))
+            ->BorderB(1, Rgb(0x17, 0x17, 0x17));
+    }
     if (on) {
         b->Bg(Rgb(0x17, 0x17, 0x17))
             ->Child(TextEl(a, Str(label))
@@ -48,9 +73,10 @@ El* ShowcaseToggleGroup(ShowcaseApp* app, Ctx* cx) {
     return ToggleGroup::New(cx, StrL("example-toggle-group"))
         ->FlexRow()
         ->Child(ShowcaseToggle(app, cx))
-        ->Child(ToggleCell(cx, StrL("italic-toggle"), Listener{}, "I", italic))
-        ->Child(
-            ToggleCell(cx, StrL("underline-toggle"), Listener{}, "U", under));
+        ->Child(ToggleCell(cx, StrL("italic-toggle"), Listen(cx, &ToggleItalic),
+                           "I", italic, false))
+        ->Child(ToggleCell(cx, StrL("underline-toggle"),
+                           Listen(cx, &ToggleUnderline), "U", under, false));
 }
 
 SHOWCASE_PAGE(CompToggle, ShowcaseToggle);

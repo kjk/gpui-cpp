@@ -45,6 +45,7 @@ export const slugs = [
   "combobox",
   "date-picker",
   "dialog",
+  "dock",
   "editor",
   "hover-card",
   "input",

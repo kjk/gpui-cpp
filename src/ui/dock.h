@@ -17,8 +17,6 @@ El* DockInvalidPanelRender(Ctx* cx, void* data);
 
 // The tab bar of a tab group (TabPanel::render_title_bar).
 const float kDockTabBarH = 30;
-// resize_handle: the grab between two panels, and along a Dock's inner edge.
-const float kDockHandleW = 4;
 
 struct DockArea {
     Arena* a = nullptr;

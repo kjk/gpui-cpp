@@ -3,11 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickRadioStd = 460,
-    ClickRadioExpress = 461
-};
-
 static void PickRadio(ShowcaseApp* app, Ctx* cx, const ClickEvent*,
                       intptr_t ix) {
     app->radioSel = (int)ix;
@@ -26,25 +21,44 @@ static El* RadioDot(Ctx* cx, bool on) {
 }
 
 static El* RadioRow(Ctx* cx, Str id, Listener onClick, bool on,
-                    const char* title, const char* sub, bool disabled) {
+                    const char* title, const char* sub) {
     Arena* a = cx->a;
-    El* row = Radio::New(cx, id, on, disabled, onClick)
-                  ->FlexRow()
-                  ->ItemsStart()
-                  ->Gap(8);
+    El* row =
+        Radio::New(cx, id, on, false, onClick)->FlexRow()->ItemsStart()->Gap(8);
     row->Child(Div(a)->PadT(2)->Child(RadioDot(cx, on)));
-    Rgba titleC = disabled ? Rgb(0x73, 0x73, 0x73) : Rgb(0x17, 0x17, 0x17);
     row->Child(
         Div(a)
             ->FlexCol()
-            ->Child(TextEl(a, Str(title))->Font(12)->Fg(titleC))
+            ->Child(TextEl(a, Str(title))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
             ->Child(TextEl(a, Str(sub))->Font(12)->Fg(Rgb(0x73, 0x73, 0x73))));
     return row;
 }
 
+// The group's third row, which is Rust's own shape rather than the other
+// two's: a disabled radio at 0.45 opacity, an empty box with no dot branch at
+// all, and a second line that keeps the ink colour the muted one has.
+static El* RadioRowDisabled(Ctx* cx, Str id, const char* title,
+                            const char* sub) {
+    Arena* a = cx->a;
+    return Radio::New(cx, id, false, true, Listener{})
+        ->FlexRow()
+        ->ItemsStart()
+        ->Gap(8)
+        ->Opacity(0.45f)
+        ->Child(Div(a)->PadT(2)->Child(
+            Div(a)->W(14)->H(14)->Shrink0()->Border(1, Rgb(0x17, 0x17, 0x17))))
+        ->Child(
+            Div(a)
+                ->FlexCol()
+                ->Child(
+                    TextEl(a, Str(title))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17)))
+                ->Child(
+                    TextEl(a, Str(sub))->Font(12)->Fg(Rgb(0x17, 0x17, 0x17))));
+}
+
 El* ShowcaseRadio(ShowcaseApp* app, Ctx* cx) {
     return RadioRow(cx, StrL("example-radio"), Listen(cx, &PickRadio, 0),
-                    app->radioSel == 0, "Standard", "3–5 business days", false);
+                    app->radioSel == 0, "Standard", "3–5 business days");
 }
 
 El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
@@ -52,14 +66,11 @@ El* ShowcaseRadioGroup(ShowcaseApp* app, Ctx* cx) {
         ->W(224)
         ->FlexCol()
         ->Gap(8)
-        ->Child(RadioRow(cx, StrL("example-radio"), Listen(cx, &PickRadio, 0),
-                         app->radioSel == 0, "Standard", "3–5 business days",
-                         false))
+        ->Child(ShowcaseRadio(app, cx))
         ->Child(RadioRow(cx, StrL("express-radio"), Listen(cx, &PickRadio, 1),
-                         app->radioSel == 1, "Express", "Next business day",
-                         false))
-        ->Child(RadioRow(cx, StrL("pickup-radio"), Listener{}, false,
-                         "Local pickup", "Currently unavailable", true));
+                         app->radioSel == 1, "Express", "Next business day"))
+        ->Child(RadioRowDisabled(cx, StrL("pickup-radio"), "Local pickup",
+                                 "Currently unavailable"));
 }
 
 SHOWCASE_PAGE(CompRadio, ShowcaseRadio);

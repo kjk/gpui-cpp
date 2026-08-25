@@ -24,16 +24,16 @@ El* ShowcaseRenderRegistered(ShowcaseApp* app, Ctx* cx, WinSize size) {
 }
 
 static const char* kSlugs[CompCount] = {
-    "accordion",  "alert-dialog", "avatar",       "button",
-    "calendar",   "checkbox",     "collapsible",  "color-picker",
-    "combobox",   "date-picker",  "dialog",       "editor",
-    "hover-card", "input",        "link",         "number-input",
-    "otp-input",  "pagination",   "popover",      "popup",
-    "progress",   "radio",        "radio-group",  "resizable",
-    "scrollbar",  "select",       "sheet",        "slider",
-    "switch",     "table",        "tabs",         "text-selection",
-    "textarea",   "toast",        "toggle",       "toggle-group",
-    "tooltip",    "tree",         "virtual-list",
+    "accordion",      "alert-dialog", "avatar",      "button",
+    "calendar",       "checkbox",     "collapsible", "color-picker",
+    "combobox",       "date-picker",  "dialog",      "dock",
+    "editor",         "hover-card",   "input",       "link",
+    "number-input",   "otp-input",    "pagination",  "popover",
+    "popup",          "progress",     "radio",       "radio-group",
+    "resizable",      "scrollbar",    "select",      "sheet",
+    "slider",         "switch",       "table",       "tabs",
+    "text-selection", "textarea",     "toast",       "toggle",
+    "toggle-group",   "tooltip",      "tree",        "virtual-list",
 };
 
 const char* CompSlug(int i) {
@@ -262,19 +262,31 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
     }
 
     El* content = RenderComp(app, cx, size);
+    // Surfaces rather than parts: a few pages take the whole viewport.
+    // Centring one inside a `flex_none` box leaves a percentage size with
+    // nothing to resolve against, and it collapses.
+    bool fillsViewport = app->component == CompDock;
+    El* page = Div(frame)
+                   ->W(kFill)
+                   ->MinH(size.dipH - (showBack ? 40.f : 0.f))
+                   ->Pad(16);
+    El* wrap = Div(frame)->FlexCol();
+    if (fillsViewport) {
+        // Rust's row, whose height is its content's: `size_full` resolves
+        // against a parent with no definite height, so what is left is the
+        // 420 floor the page names.
+        page->FlexRow();
+        wrap->Flex1()->SizeFull()->MinH(420);
+    } else {
+        page->FlexCol()->ItemsCenter()->JustifyCenter();
+        wrap->Shrink0();
+    }
     El* scroller = Div(frame)
                        ->Flex1()
                        ->ClipY()
                        ->ScrollY(app->scrollY)
                        ->W(kFill)
-                       ->Child(Div(frame)
-                                   ->FlexCol()
-                                   ->W(kFill)
-                                   ->MinH(size.dipH - (showBack ? 40.f : 0.f))
-                                   ->Pad(16)
-                                   ->ItemsCenter()
-                                   ->JustifyCenter()
-                                   ->Child(content));
+                       ->Child(page->Child(wrap->Child(content)));
     root->Child(scroller);
     return root;
 }

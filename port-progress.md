@@ -5128,3 +5128,82 @@ page having to work out which month a click landed in.
 
 `CalendarOpts::today` is passed in rather than asked for, so what day it is
 can be said rather than assumed.
+
+
+## The dock that had no skin to hand out
+
+Upstream's base showcase has forty pages and this one had thirty-nine. The
+missing one is `dock`, and the reason it was missing is the same reason the
+tree, the scrollbar, the virtual list, the resizable group and the calendar
+were half-built: the split between `crates/base` and `crates/ui` had not been
+drawn here. `crates/base/src/dock` owns the tree, the drag, the drop and the
+resize and **draws nothing at all** — every pixel comes back through
+`DockAreaRenderer`, `TabGroupRenderer` and `TilesRenderer`, and `crates/ui` is
+one implementation of those traits. That is what lets upstream's showcase put
+a dock on a page: its `ShowcaseDockSkin` is the other implementation, 478
+lines of it. Here the whole element was `src/ui/dock.cpp`, so the base
+showcase, which may not touch `src/ui`, had no dock to reach for and simply
+had no page.
+
+`src/base/dock_area.cpp` is that element, moved down: `DockArea::New(cx, id,
+state, renderer)` walks the tree, lays the three Docks around the centre,
+sizes each split and its handles, puts each group's body under its bar, springs
+the drop placeholder and defers the dragged tab's preview. `DockRenderer` is
+the trait table — an element holds no closures, so it is function pointers and
+a `data`, the way `CalendarItemFn` and `VirtualListOpts` already are — and a
+null hook falls back to a bare `Div`, which is a default method.
+
+Where Rust hands the skin a context object whose methods reach back into the
+area, this hands it a `DockCtx` / `DockHandleCtx` / `DockTabGroup` and a set of
+`DockBind*` calls: the skin builds the element and base wires the behavior onto
+it. `DockBindTab` is `group.select_tab(ix)` plus `group.drag_panel(ix, cx)`
+plus the drop that lands on a tab; `DockBindTabStrip` is `track_scroll` and
+`scroll_to_item`; `DockBindResizeStrip` is the drag upstream's showcase skin
+stashes a `DockContext` for. `DockHandleCtx` carries a `hovered` Rust has no
+need for, because nothing in this layer may read the window's hover itself and
+a theme that lights the strip under the pointer has no other way to ask.
+
+`src/ui/dock.cpp` is then one skin: the tab bar with its toggles, its zoom
+button and its ⋯ menu, the single-panel title row, the four-DIP grab's paint,
+the Dock boxes and the drag preview. The story's `dock` and `tiles` pages are
+pixel-identical to the build before.
+
+The showcase page is then upstream's page: five panels, a centre split of two
+groups, a bottom Dock, and a skin of its own in the flat palette every base
+showcase page supplies for itself (`0xf4f4f5` chrome, `0x2563eb` accent) —
+26-DIP tab bars, hairline split handles, an absolutely-positioned resize strip
+on each Dock's inner edge and a 20%-accent drop indicator. It is the first
+showcase page that takes the whole viewport rather than being centred in it:
+`fillsViewport` in `ShowcaseApp::Render` is Rust's `fills_viewport`, and the
+row it switches the page container to is why the dock resolves to its 420 floor
+instead of collapsing.
+
+**And two dead branches that came out with it.** The themed tab bar marked the
+tab a drop would land before, and lit the run of bar past the last tab, by
+comparing `WindowDragOverId(cx)` against the hash of an id string the element
+never carried — `Id(..)` is only a name and a hit rect is found by `clickId`,
+which was still the *other* id `BindClick` had set. Neither marker had ever
+drawn. One id per element in `DockBindTab` / `DockBindTabRest` is what fixed
+it.
+
+Two smaller gaps closed with the same sweep, both on pages this tree had but
+had not finished. The toggle group's Italic and Underline cells were built with
+an empty `Listener{}`: they drew their pressed state and could not be pressed.
+They are `toggle_group_selection`'s two bits now, `|= 1` / `&= !1` the way Rust
+writes them, and the second and third cells lost their left border
+(`border_l_0`) so a `gap_0` row shares one hairline rather than drawing two.
+The radio group's disabled row was the enabled row with a flag; it is Rust's
+own shape now — `opacity(0.45)`, an empty box with no dot branch at all, and a
+second line that keeps the ink colour rather than the muted one.
+
+Thirty-five of the thirty-nine existing showcase pages are pixel-identical;
+the four that moved are the overview (a fortieth tile), radio-group and
+toggle-group (the fixes above), and `dock` itself.
+
+**Not verified interactively.** Synthetic clicks did not land in the session
+this was written in — `cmd/shot.ts -click` changed nothing on any page,
+including ones that predate this work, while `-wheel` did — so the dock page's
+tab switching, tab dragging, dock resizing and Bottom toggle have been read
+rather than driven. The behavior they run through is unchanged and shared with
+the story's dock page, which is pixel-identical, but the next session should
+drive the page once.

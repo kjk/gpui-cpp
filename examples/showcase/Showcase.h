@@ -17,6 +17,7 @@ enum {
     CompCombobox,
     CompDatePicker,
     CompDialog,
+    CompDock,
     CompEditor,
     CompHoverCard,
     CompInput,
@@ -153,6 +154,11 @@ struct ShowcaseApp {
     // is expanded, what is selected and where it is scrolled — `self.tree`
     // in the Rust page. Made on the page's first frame.
     Entity<TreeState> tree = {};
+    // The dock page's state, which is the area's own: the tree of panels, the
+    // three Docks and what a drag left them at — `self.dock` in the Rust
+    // page, built once, since rebuilding it every frame would discard the
+    // layout the viewer arranged.
+    Entity<DockState> dock = {};
     int selA = -1;
     int selB = -1;
     int hoverId = 0;
@@ -184,6 +190,7 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseDatePicker(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx);
+El* ShowcaseDock(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseEditor(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx);
 El* ShowcaseInput(ShowcaseApp* app, Ctx* cx);

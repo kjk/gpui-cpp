@@ -13,6 +13,8 @@ namespace gpui {
 
 // PANEL_MIN_SIZE, from crates/base/src/resizable.
 const float kDockPanelMinSize = 100.f;
+// resize_handle: the grab between two panels, and along a Dock's inner edge.
+const float kDockHandleW = 4;
 // A closed bottom dock keeps its tab bar, so there is something left to click
 // to open it again (Dock::render).
 const float kDockCollapsedH = 29.f;
@@ -351,5 +353,134 @@ int DockRightTopTabs(const DockState* s, int node);
 // Dock::set_collapsible: a dock that may not be collapsed is opened, so it
 // can never be left shut and unreachable.
 void DockSetCollapsible(DockState* s, DockPlacement p, bool collapsible);
+
+// ---------------------------------------------------------------------------
+// The skin
+//
+// Upstream splits the dock the way it splits everything else: `crates/base`
+// owns the tree, the drag, the drop and the resize, and every pixel is the
+// caller's, handed over through `DockAreaRenderer`, `TabGroupRenderer` and
+// `TilesRenderer`. `crates/ui` is one implementation of those traits and the
+// base showcase is another — which is why upstream's showcase can put a dock
+// on a page without reaching for the themed one.
+//
+// An element here holds no closures, so a trait object is a struct of
+// function pointers and a `data`, the way `CalendarItemFn` and
+// `VirtualListOpts` already are. Where Rust hands the skin a context object
+// with methods that reach back into the area, this hands it a `DockCtx` /
+// `DockTabGroup` and a set of `DockBind*` calls that wire base's behavior
+// onto whatever element the skin built.
+
+// DockContext: one Dock as the skin sees it.
+struct DockCtx {
+    Ctx* cx = nullptr;
+    Entity<DockState> state = {};
+    Str id = {};
+    DockPlacement placement = DockPlacement::Left;
+    float size = 0;
+    bool open = true;
+};
+
+// ResizeHandleContext: one boundary between two panels, and how it is being
+// touched. Rust's `is_active()` is the drag; `hovered` is here because a
+// theme that lights the strip under the pointer has no other way to ask —
+// nothing in this layer reads the window's hover itself.
+struct DockHandleCtx {
+    Axis axis = Axis::Horizontal;
+    bool active = false;
+    bool hovered = false;
+};
+
+// TabGroupContext: one tab group as the skin sees it.
+struct DockTabGroup {
+    Ctx* cx = nullptr;
+    Entity<DockState> state = {};
+    Str id = {};
+    int node = -1;
+    // TabPanel::collapsed — the group is in a Dock that is shut, so it keeps
+    // its bar and nothing else.
+    bool collapsed = false;
+};
+
+// group.panels() and group.active_ix().
+int DockGroupCount(const DockTabGroup* g);
+const DockPanelDef* DockGroupPanel(const DockTabGroup* g, int ix);
+int DockGroupActiveIx(const DockTabGroup* g);
+DockPlacement DockGroupPlacement(const DockTabGroup* g);
+// Which Dock, if any, carries its toggle button on this group —
+// `update_toggle_button_tab_panels`, asked rather than cached.
+bool DockGroupHasToggle(const DockTabGroup* g, DockPlacement p);
+
+// group.select_tab(ix), group.drag_panel(ix, cx) and the drop that lands on a
+// tab, wired onto the element the skin built. The element comes back so the
+// call chains. A collapsed group's tab clicks to open the Dock and does
+// neither of the other two, which is Rust's `when(!self.collapsed, ..)`.
+El* DockBindTab(const DockTabGroup* g, int ix, El* tab);
+// last_empty_space: the run of bar past the last tab, which takes a drop as
+// "put it at the end".
+El* DockBindTabRest(const DockTabGroup* g, El* rest);
+// TabBar::track_scroll: a row of tabs wider than the bar scrolls sideways,
+// and the tab a select asked for is brought into view from where the last
+// frame put it.
+El* DockBindTabStrip(const DockTabGroup* g, El* strip);
+// Whether a drag is over this tab, or over the empty run past the last one —
+// what a theme marks with a border down the left edge, or a wash.
+bool DockTabDropOver(const DockTabGroup* g, int ix);
+bool DockTabRestDropOver(const DockTabGroup* g);
+// The single-panel title row's drag (the title is what a press picks up), the
+// dock toggle buttons, the zoom button and a tab's close button.
+El* DockBindTitleDrag(const DockTabGroup* g, int ix, El* e);
+El* DockBindToggle(const DockTabGroup* g, DockPlacement p, El* e);
+El* DockBindZoom(const DockTabGroup* g, int panelIx, El* e);
+El* DockBindClose(const DockTabGroup* g, int ix, El* e);
+// The strip on a Dock's inner edge that resizes it. Rust's showcase skin
+// stashes the DockContext on mouse down and follows the pointer from the area
+// frame; the drag is base's here, so the strip only has to say it is one.
+El* DockBindResizeStrip(const DockCtx* d, El* e);
+// A menu the skin opens over a group: which node it belongs to, so the row it
+// reports lands on the right panel.
+void DockGroupOpenMenu(const DockTabGroup* g, bool open);
+
+// DockAreaRenderer + TabGroupRenderer, as one table. A null hook falls back
+// to a bare `Div`, so a skin only writes what it has an opinion about.
+struct DockRenderer {
+    void* data = nullptr;
+    // DockAreaRenderer::frame — the area's own box, which base then fills.
+    El* (*frame)(Ctx* cx, void* data) = nullptr;
+    // center_frame and split_frame.
+    El* (*centerFrame)(Ctx* cx, void* data) = nullptr;
+    El* (*splitFrame)(Ctx* cx, void* data, int node, Axis axis) = nullptr;
+    // render_split_handle: the paint inside the grab, which base sizes,
+    // gives a cursor and drags.
+    El* (*splitHandle)(Ctx* cx, void* data, const DockHandleCtx* h) = nullptr;
+    // render_dock: the box one Dock is drawn in, with its content inside.
+    // A skin that answers null for a shut Dock takes it out of the layout,
+    // which is what upstream's does.
+    El* (*dock)(Ctx* cx, void* data, const DockCtx* d, El* content) = nullptr;
+    // TabGroupRenderer::frame, content_frame and render_tab_bar. The bar is
+    // the whole of the chrome — tabs, toggles, tools, the lot.
+    El* (*tabGroupFrame)(Ctx* cx, void* data, const DockTabGroup* g) = nullptr;
+    El* (*tabContentFrame)(Ctx* cx, void* data,
+                           const DockTabGroup* g) = nullptr;
+    El* (*tabBar)(Ctx* cx, void* data, const DockTabGroup* g) = nullptr;
+    // render_drop_indicator: the paint over the half a drop would take.
+    // `to` is in the group's own coordinates, already sprung.
+    El* (*dropIndicator)(Ctx* cx, void* data, Bounds to) = nullptr;
+    // TabPanel::render_drag_panel. Base's own DragPanel renders nothing,
+    // because a preview is appearance; base places it under the pointer and
+    // defers it, and this draws it.
+    El* (*dragPreview)(Ctx* cx, void* data, const DockPanelDef* def) = nullptr;
+};
+
+// DockArea, as an element. The tree, the three Docks around the centre, the
+// splits and their handles, each group's body and the drop placeholder are
+// base's; everything drawn comes back through `r`.
+//
+// `r` must outlive the frame — a skin is a static table, or something the
+// caller keeps, not a frame-arena temporary.
+struct DockArea {
+    static El* New(Ctx* cx, Str id, Entity<DockState> state,
+                   const DockRenderer* r);
+};
 
 } // namespace gpui
