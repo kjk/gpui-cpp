@@ -9,9 +9,9 @@ import { dirname, join, resolve } from "node:path";
 /** Spec we port: crates/base, crates/ui, crates/story, examples. */
 export const gpuiComponent = {
   repo: "https://github.com/longbridge/gpui-component",
-  sha: "334bbed2e8c47d606eb79ab05ddcebd60b823429",
+  sha: "15aa26dd718aa6f0f5dfe9922510debf0d0664d0",
   date: "2026-08-24",
-  subject: "docs: Correct the i18n override docs (#2808)",
+  subject: "input: Close the IME undo transaction when text is committed (#2809)",
   crates: {
     "gpui-base": "0.5.2",
     "gpui-component": "0.5.2",

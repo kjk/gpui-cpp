@@ -1942,8 +1942,18 @@ bool InputReplaceTextInRange(InputState* s, App* app, Window* win,
     s->selectionReversed = false;
     s->hasSelectedWordRange = false;
     // The text went in for real, so there is nothing provisional left.
+    bool wasComposing = s->imeMarking;
     s->imeMarking = false;
     s->imeMarked = {};
+    // A commit ends the composition, and neither platform follows it with an
+    // unmark: macOS delivers `insertText:` for the confirmed candidate, and
+    // Windows a GCS_RESULTSTR. Leaving the transaction open would merge every
+    // later edit into it, so an undo would take back the whole of what was
+    // typed after the composition — and put the caret back where the first
+    // candidate started.
+    if (wasComposing) {
+        UndoCommitTransaction(&s->undo);
+    }
     UpdatePreferredColumn(s);
     // update_search: every edit goes through here, so a find bar left open
     // follows what is typed.

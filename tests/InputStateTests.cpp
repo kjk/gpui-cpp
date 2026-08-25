@@ -1471,6 +1471,32 @@ static void AnAbandonedCompositionLeavesNothingBehind() {
     utassert(MarkIs(s, -1, -1));
 }
 
+// Two compositions in a row are two undo steps, and what is typed after one
+// is a third. The commit ends the transaction: neither platform follows a
+// confirmed candidate with an unmark, and a transaction left open would swallow
+// everything typed after it.
+static void ConsecutiveCompositionsUndoSeparately() {
+    InputState s;
+    Mark(&s, "j");
+    Mark(&s, "jin");
+    // The commit: a replace with no range of its own, which is what
+    // `insertText:` and GCS_RESULTSTR come to.
+    Type(&s, "ä»å¤©"); // 今天
+    Mark(&s, "w");
+    Mark(&s, "wo");
+    Type(&s, "æä»¬"); // 我们
+    utassert(ValueIs(s, "ä»å¤©æä»¬"));
+
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, "ä»å¤©"));
+    Act(&s, InputAction::Undo);
+    utassert(ValueIs(s, ""));
+    Act(&s, InputAction::Redo);
+    utassert(ValueIs(s, "ä»å¤©"));
+    Act(&s, InputAction::Redo);
+    utassert(ValueIs(s, "ä»å¤©æä»¬"));
+}
+
 // A commit that names no range of its own replaces the marked text rather
 // than the selection — which is how the platform hands over a result string.
 static void ACommitReplacesWhatWasMarked() {
@@ -1772,6 +1798,7 @@ void TestInputState() {
     ACompositionReplacesItselfUntilItCommits();
     ACompositionUndoesAsOneThing();
     AnAbandonedCompositionLeavesNothingBehind();
+    ConsecutiveCompositionsUndoSeparately();
     ACommitReplacesWhatWasMarked();
     EnterInsertsANewlineOnlyWhereItShould();
     MaskFormatsWhileTyping();
