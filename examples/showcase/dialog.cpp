@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickDlgCancel = 351
-};
-
 static void OpenDlg(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->dialogOpen = true;
     app->input.focused = true;
@@ -82,7 +78,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                     // its own and the hit test takes the innermost rect, so
                     // it needs the handler too.
                     ->Child(
-                        DialogClose::New(cx, ClickDlgCancel)
+                        DialogClose::New(cx, HashClickId(StrL("dialog-close")))
                             ->OnClick(Listen(cx, &CloseDlg))
                             ->Child(
                                 Button::New(cx, StrL("dialog-cancel"), false,
@@ -110,7 +106,7 @@ El* ShowcaseDialog(ShowcaseApp* app, Ctx* cx) {
                        ->W(kFill)
                        ->H(kFill)
                        ->Bg(Rgba8(0, 0, 0, 51))
-                       ->Click(ClickDlgCancel)
+                       ->Click(HashClickId(StrL("dialog-backdrop")))
                        ->OnClick(Listen(cx, &CloseDlg));
     El* popup = DialogPopup::New(cx)
                     ->Absolute()

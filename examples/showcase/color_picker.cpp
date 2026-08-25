@@ -3,13 +3,18 @@
 
 using namespace gpui;
 
-enum {
-    ClickColor = 300,
-    ClickSwatch = 302
-};
-
 static const uint32_t kSwatches[] = {0xdc2626, 0xd97706, 0x16a34a, 0x2563eb,
                                      0x7c3aed};
+static const int kNSwatches = (int)(sizeof(kSwatches) / sizeof(kSwatches[0]));
+
+// The hover readout asks which swatch the pointer is over, and a hit id is
+// the only handle it has. The name is the swatch's own, so the answer and the
+// element agree by construction rather than by an offset from a base.
+static int SwatchId(int i) {
+    char buf[24];
+    snprintf(buf, sizeof(buf), "color-swatch-%d", i);
+    return HashClickId(Str(buf));
+}
 
 static Rgba FromHex(uint32_t h) {
     return Rgb((uint8_t)((h >> 16) & 0xff), (uint8_t)((h >> 8) & 0xff),
@@ -25,9 +30,12 @@ static void SetHexBuf(ShowcaseApp* app) {
 }
 
 static uint32_t DisplayedColor(ShowcaseApp* app) {
-    if (app->colorOpen && app->hoverId >= ClickSwatch &&
-        app->hoverId < ClickSwatch + 5) {
-        return kSwatches[app->hoverId - ClickSwatch] & 0xffffff;
+    if (app->colorOpen) {
+        for (int i = 0; i < kNSwatches; i++) {
+            if (app->hoverId == SwatchId(i)) {
+                return kSwatches[i] & 0xffffff;
+            }
+        }
     }
     return app->colorHex & 0xffffff;
 }
@@ -68,7 +76,7 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                       ->Border(1, Rgb(0x17, 0x17, 0x17))
                       ->Bg(Rgb(0xff, 0xff, 0xff))
                       ->OnClick(Listen(cx, &ToggleColor))
-                      ->FocusId(ClickColor)
+                      ->FocusId(HashClickId(StrL("color-trigger")))
                       ->Child(Div(a)
                                   ->W(14)
                                   ->H(14)

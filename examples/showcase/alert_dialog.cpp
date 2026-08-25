@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickAlertCancel = 211
-};
-
 static void OpenAlert(ShowcaseApp* app, Ctx* cx, const ClickEvent*) {
     app->alertOpen = true;
     Notify(cx);
@@ -86,7 +82,7 @@ El* ShowcaseAlertDialog(ShowcaseApp* app, Ctx* cx) {
                        ->W(kFill)
                        ->H(kFill)
                        ->Bg(Rgba8(0, 0, 0, 46))
-                       ->Click(ClickAlertCancel);
+                       ->Click(HashClickId(StrL("alert-backdrop")));
     // Rust AlertDialogPopup is flex items/justify center with no inset_0,
     // so it sits at the top of the viewport host (not vertically centered).
     El* popup = AlertDialogPopup::New(cx)

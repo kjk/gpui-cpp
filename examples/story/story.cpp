@@ -693,7 +693,7 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
                       ->ItemsCenter()
                       ->Radius(6)
                       ->OnClick(Listen(cx, &OpenStory, i))
-                      ->FocusId(ClickStory + i);
+                      ->FocusId(HashClickId(StrDup(a, fmt("story-nav-%d", i))));
         // SidebarMenuItem is text_sm.
         El* label = StoryTxt(cx, Str(m->title), 14, th.sidebarFg);
         if (on) {
@@ -728,7 +728,7 @@ static El* SearchBox(StoryApp* app, Ctx* cx) {
                   ->ItemsCenter()
                   ->Radius(18)
                   ->Bg(th.tokens.secondary)
-                  ->FocusId(ClickSearch);
+                  ->FocusId(HashClickId(StrL("story-search")));
     box->Child(component::Input::New(cx, StrL("story-search"), &app->search)
                    ->Appearance(false)
                    ->Cleanable()
@@ -797,7 +797,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->sideScrollY)
-                       ->ScrollId(2)
+                       ->ScrollId(HashClickId(StrL("story-sidebar-scroll")))
                        ->OnScroll(Listen(cx, &OnPaneScroll))
                        ->W(kFill);
     if (!app->collapsed) {
@@ -1725,7 +1725,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
                        ->MinH(0)
                        ->ClipY()
                        ->ScrollY(app->scrollY)
-                       ->ScrollId(1)
+                       ->ScrollId(HashClickId(StrL("story-page-scroll")))
                        ->OnScroll(Listen(cx, &OnPaneScroll))
                        ->W(kFill);
     scroller->Child(

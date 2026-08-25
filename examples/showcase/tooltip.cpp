@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickTooltip = 570
-};
-
 El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     // Rust wraps the button in a hover target; the button itself has no hover
@@ -21,14 +17,16 @@ El* ShowcaseTooltip(ShowcaseApp* app, Ctx* cx) {
                   ->Child(TextEl(a, StrL("Command menu"))
                               ->Font(12)
                               ->Fg(Rgb(0x17, 0x17, 0x17)));
-    El* trigger =
-        Div(a)->Id(StrL("tooltip-trigger"))->Click(ClickTooltip)->Child(btn);
+    El* trigger = Div(a)
+                      ->Id(StrL("tooltip-trigger"))
+                      ->Click(HashClickId(StrL("tooltip-trigger")))
+                      ->Child(btn);
     El* tip = nullptr;
-    if (app->hoverId == ClickTooltip) {
+    if (app->hoverId == HashClickId(StrL("tooltip-trigger"))) {
         tip = Tooltip::New(cx, StrL("example-tooltip"))
                   ->AnchorBelow(0)
                   ->Left(0)
-                  ->Click(ClickTooltip)
+                  ->Click(HashClickId(StrL("tooltip-trigger")))
                   ->PadX(8)
                   ->H(28)
                   ->ItemsCenter()

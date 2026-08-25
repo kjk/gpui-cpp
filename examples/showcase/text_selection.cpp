@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickPara = 531
-};
-
 static const char* kParas[] = {
     "Text selection across renderers",
     "Selection should feel like a natural part of reading a product brief. "
@@ -90,7 +86,7 @@ El* ShowcaseTextSelection(ShowcaseApp* app, Ctx* cx) {
         El* t = ScTxt(cx, Str(kParas[i]), size, i == 0 ? ScInk() : ScGray())
                     ->Wrap()
                     ->MaxW(560)
-                    ->Click(ClickPara + i);
+                    ->Click(HashClickId(DupFmt(cx, "para-%d", i)));
         if (i == 0) {
             t->Semibold();
         }

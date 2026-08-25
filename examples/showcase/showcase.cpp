@@ -137,18 +137,19 @@ El* ShowcaseOverview(ShowcaseApp* app, Ctx* cx) {
                 r->Child(Div(a)->Flex1());
                 continue;
             }
-            r->Child(Div(a)
-                         ->Flex1()
-                         ->H(36)
-                         ->PadX(12)
-                         ->ItemsCenter()
-                         ->JustifyStart()
-                         ->Border(1, ScBorder())
-                         ->Bg(ScWhite())
-                         ->HoverBg(ScHover())
-                         ->OnClick(Listen(cx, &OpenComp, i))
-                         ->FocusId(ClickOverview + i)
-                         ->Child(ScTxt(cx, Str(kSlugs[i]), 12, ScInk())));
+            r->Child(
+                Div(a)
+                    ->Flex1()
+                    ->H(36)
+                    ->PadX(12)
+                    ->ItemsCenter()
+                    ->JustifyStart()
+                    ->Border(1, ScBorder())
+                    ->Bg(ScWhite())
+                    ->HoverBg(ScHover())
+                    ->OnClick(Listen(cx, &OpenComp, i))
+                    ->FocusId(HashClickId(DupFmt(cx, "overview-item-%d", i)))
+                    ->Child(ScTxt(cx, Str(kSlugs[i]), 12, ScInk())));
         }
         grid->Child(r);
     }
@@ -205,7 +206,8 @@ El* ShowcaseApp::Render(ShowcaseApp* app, Ctx* cx) {
                 ->ItemsCenter()
                 ->Shrink0()
                 ->BorderB(1, ScLine())
-                ->Child(ScBtnGhost(cx, ClickBack, Listen(cx, &BackToOverview),
+                ->Child(ScBtnGhost(cx, HashClickId(StrL("back-to-overview")),
+                                   Listen(cx, &BackToOverview),
                                    StrL("All components"))));
     }
 

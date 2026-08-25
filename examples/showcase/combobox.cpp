@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickCombo = 320
-};
-
 static const char* kFwCombo[] = {"GPUI", "React", "SwiftUI", "Vue"};
 
 static bool Matches(const char* label, const char* q) {
@@ -56,7 +52,7 @@ El* ShowcaseCombobox(ShowcaseApp* app, Ctx* cx) {
             ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
             ->Bg(Rgb(0xff, 0xff, 0xff))
             ->OnClick(Listen(cx, &ToggleCombo))
-            ->FocusId(ClickCombo)
+            ->FocusId(HashClickId(StrL("combobox-trigger")))
             ->HoverBg(Rgb(0xf5, 0xf5, 0xf5))
             ->Child(TextEl(a, Str(app->comboboxSel))
                         ->Font(12)

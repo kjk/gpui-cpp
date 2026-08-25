@@ -3,10 +3,6 @@
 
 using namespace gpui;
 
-enum {
-    ClickSlider = 500
-};
-
 // SliderEvent::Change, raised by the window while the track is pressed or
 // dragged. The state already holds the new value; the page only has to ask
 // for a repaint.
@@ -38,7 +34,7 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
     // The track is what a press lands on, so the state is bound here and the
     // window moves it — SliderTrack::on_mouse_down and its on_drag_move.
     El* track = SliderTrack::New(cx, &app->slider)
-                    ->Click(ClickSlider)
+                    ->Click(HashClickId(StrL("example-slider-track")))
                     ->W(trackW)
                     ->H(28);
     track->Child(SliderIndicator::New(cx, &app->slider)

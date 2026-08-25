@@ -2,15 +2,15 @@
 
 using namespace gpui;
 
-enum {
-    ClickOpenDialog = 1,
-    ClickOpenSheet = 2,
-    ClickCloseOverlay = 3,
-    ClickHoverArea = 4,
-    ClickOverlayScrim = 5,
-    ClickOverlayPanel = 6,
-    ClickMenuBase = 10, // + item index
-};
+// One name per element, hashed into the id a hit rect is found by. Rust
+// names them the same way — `div().id("overlay-scrim")` — and scopes them by
+// where they sit in the tree; here the name carries the whole of it.
+static int OverlayId(const char* name) {
+    return HashClickId(Str(name));
+}
+static int OverlayMenuId(Arena* a, int i) {
+    return HashClickId(StrDup(a, fmt("overlay-menu-%d", i)));
+}
 
 enum {
     OverlayNone = 0,
@@ -89,7 +89,7 @@ static El* OverlayHeader(Ctx* cx, Str title) {
                    ->JustifyCenter()
                    ->Radius(4)
                    ->HoverBg(th.tokens.muted)
-                   ->Click(ClickCloseOverlay)
+                   ->Click(OverlayId("overlay-close"))
                    ->OnClick(Listen(cx, &CloseOverlay))
                    ->Child(IconEl(a, IconName::X, 14)->Fg(th.mutedFg)));
     return row;
@@ -123,7 +123,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
             ->Border(1, Rgb(0, 0, 0))
             ->Dashed()
             ->HoverBg(RgbaOpacity(Rgb(255, 255, 0), 0.2f))
-            ->Click(ClickHoverArea)
+            ->Click(OverlayId("hover-area"))
             ->Child(TextEl(frame, StrL("Hover test here."))
                         ->Font(14)
                         ->Fg(th.foreground))
@@ -140,11 +140,11 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
             ->Child(Div(frame)
                         ->FlexRow()
                         ->Gap(16)
-                        ->Child(ButtonEl(frame, ClickOpenDialog,
+                        ->Child(ButtonEl(frame, OverlayId("open-dialog"),
                                          StrL("Open dialog"), BtnKind::Outline)
                                     ->OnClick(Listen(cx, &OpenOverlay,
                                                      OverlayDialog)))
-                        ->Child(ButtonEl(frame, ClickOpenSheet,
+                        ->Child(ButtonEl(frame, OverlayId("open-sheet"),
                                          StrL("Open Sheet"), BtnKind::Outline)
                                     ->OnClick(Listen(cx, &OpenOverlay,
                                                      OverlaySheet))))
@@ -173,7 +173,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                         ->Left(0)
                         ->W(size.dipW)
                         ->H(size.dipH)
-                        ->Click(ClickOverlayScrim)
+                        ->Click(OverlayId("overlay-scrim"))
                         ->OnClick(Listen(cx, &CloseOverlay));
         if (!dialog) {
             scrim->Bg(Rgba8(0, 0, 0, 13));
@@ -187,7 +187,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                         ->FlexCol()
                         ->Gap(8)
                         ->Bg(th.tokens.background)
-                        ->Click(ClickOverlayPanel)
+                        ->Click(OverlayId("overlay-panel"))
                         // The trap is what makes the overlay a selection
                         // scope as well as a focus one: a drag that began on
                         // the panel's text cannot run on into the page
@@ -248,7 +248,7 @@ El* DialogApp::Render(DialogApp* app, Ctx* cx) {
                             ->PadX(12)
                             ->ItemsCenter()
                             ->HoverBg(th.tokens.muted)
-                            ->Click(ClickMenuBase + i)
+                            ->Click(OverlayMenuId(frame, i))
                             ->OnClick(Listen(cx, &MenuPicked, i))
                             ->Child(TextEl(frame, Str(kMenuItems[i]))
                                         ->Font(14)

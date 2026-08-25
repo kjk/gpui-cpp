@@ -74,11 +74,6 @@ enum {
     StoryCount,
 };
 
-enum {
-    ClickStory = 1000, // + Story*
-    ClickSearch = 990,
-};
-
 struct StoryApp {
     static El* Render(StoryApp* self, Ctx* cx);
 

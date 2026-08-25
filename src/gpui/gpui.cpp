@@ -2052,8 +2052,12 @@ int HashClickId(Str s) {
         }
     }
     int id = (int)(h & 0x3fffffff);
-    if (id < 1000) {
-        id += 1000;
+    // Zero is what "nothing is hovered", "nothing is focused" and "no hit"
+    // are spelled as, so it can never be an element's id. Nothing else is
+    // reserved: this used to bump anything under 1000 clear of a band of
+    // hand-assigned constants, and there are none left.
+    if (id == 0) {
+        id = 1;
     }
     return id;
 }

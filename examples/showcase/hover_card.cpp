@@ -3,24 +3,20 @@
 
 using namespace gpui;
 
-enum {
-    ClickHover = 370
-};
-
 El* ShowcaseHoverCard(ShowcaseApp* app, Ctx* cx) {
     Arena* a = cx->a;
     El* trigger = Div(a)
                       ->Id(StrL("hover-trigger"))
                       ->PadX(12)
                       ->PadY(4)
-                      ->Click(ClickHover)
-                      ->FocusId(ClickHover)
+                      ->Click(HashClickId(StrL("hover-trigger")))
+                      ->FocusId(HashClickId(StrL("hover-trigger")))
                       ->Child(TextEl(a, StrL("Hover over gpui-base"))
                                   ->Font(12)
                                   ->Fg(Rgb(0x17, 0x17, 0x17))
                                   ->BorderB(1, Rgb(0x17, 0x17, 0x17)));
     El* content = nullptr;
-    if (app->hoverId == ClickHover) {
+    if (app->hoverId == HashClickId(StrL("hover-trigger"))) {
         content =
             Div(a)
                 ->Id(StrL("hover-content"))

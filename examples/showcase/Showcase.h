@@ -49,11 +49,6 @@ enum {
     CompCount,
 };
 
-enum {
-    ClickBack = 1,
-    ClickOverview = 100, // + Comp*
-};
-
 // crates/base is the *unstyled* layer, so its showcase supplies the colors
 // itself: the Rust pages write rgb(0x171717), rgb(0xd4d4d4) and friends
 // inline. These mirror those literals; they are not theme tokens.

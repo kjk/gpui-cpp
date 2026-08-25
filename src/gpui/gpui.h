@@ -4111,9 +4111,10 @@ bool ClickFromRelease(bool pending, int pressedId, MouseButton pressedButton,
 bool ClickFromKeyRelease(bool pending, int pendingGen, int focusGen, int key,
                          bool modified);
 
-// Reserved click ids for custom window chrome (WM_NCHITTEST).
-// Widget click ids must not use these — 100/101/102/200 used to be
-// hardcoded here and collided with the showcase overview grid.
+// The window chrome's own click ids (WM_NCHITTEST). Negative, so they cannot
+// collide with a hashed one: HashClickId is non-negative by construction.
+// They were 100/101/102/200 once, and collided with the showcase overview
+// grid — which is what a flat id space costs when two people pick numbers.
 enum {
     ClickWinMin = -1,
     ClickWinMax = -2,
