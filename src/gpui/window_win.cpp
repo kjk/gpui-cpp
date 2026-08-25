@@ -903,6 +903,19 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     return selected;
 }
 
+bool PlatHasAppMenu() {
+    // Windows puts an application's menus in its own window, not in a bar the
+    // shell keeps: a menu bar here is a row of the window, which is what
+    // component::AppMenuBar draws. Nothing to install.
+    return false;
+}
+
+void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
+    (void)app;
+    (void)items;
+    (void)n;
+}
+
 // cx.open_url. ShellExecute with no verb runs the shell's default action for
 // the scheme, which is what the user has chosen as their browser.
 // SPI_GETCLIENTAREAANIMATION is the Windows switch behind Settings ▸

@@ -761,6 +761,20 @@ bool KeymapBindingForAction(uint32_t action, const uint32_t* contexts,
     return false;
 }
 
+bool KeymapAnyBindingForAction(uint32_t action, KeyChord* out) {
+    if (!action || !out) {
+        return false;
+    }
+    // Backwards, so the last binding for an action wins here too.
+    for (int i = gNBindings - 1; i >= 0; i--) {
+        if (gBindings[i].action == action && gBindings[i].nStrokes > 0) {
+            *out = gBindings[i].strokes[0];
+            return true;
+        }
+    }
+    return false;
+}
+
 KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
                      int nContexts) {
     if (gNPending >= kMaxStrokes) {

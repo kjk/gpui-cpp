@@ -2157,6 +2157,162 @@ bool AppIsMaximized(Window* win) {
     return win && win->maximized;
 }
 
+// ─── the application menu bar ──────────────────────────────────────────────
+//
+// cx.set_menus(): the menus turned into what the platform takes, and the
+// table that turns the id a chosen row reports back into its action. GPUI
+// keeps a `Vec<OwnedMenuItem>` for the same reason — the OS answers with a
+// number, and something has to remember what the number meant.
+
+struct AppMenuBinding {
+    uint32_t action = 0;
+    intptr_t arg = 0;
+};
+
+// More rows than a menu bar has any business having; the story's four menus
+// come to about forty with the theme list in them.
+static const int kMaxAppMenuRows = 512;
+static AppMenuBinding gAppMenuRows[kMaxAppMenuRows];
+static int gNAppMenuRows = 0;
+// Whose menus these are, so a row chosen later can be dispatched into it.
+static App* gAppMenuApp = nullptr;
+// The labels and the PlatMenuItem tree the last call built. The platform is
+// told not to keep them, but the arena outlives the call anyway: it is reset
+// and refilled every time the menus change, which is far rarer than a frame.
+static Arena* gAppMenuArena = nullptr;
+
+static void AppMenuShutdown() {
+    if (gAppMenuArena) {
+        ArenaDelete(gAppMenuArena);
+        gAppMenuArena = nullptr;
+    }
+    gNAppMenuRows = 0;
+    gAppMenuApp = nullptr;
+}
+
+// The rows as the platform takes them, numbering every row that can be
+// chosen in preorder — the same rule NativeMenu::Show numbers by, so the two
+// halves agree without either spelling the order out to the other.
+static PlatMenuItem* AppMenuToPlat(Arena* a, const MenuRow* rows, int n) {
+    if (!rows || n <= 0) {
+        return nullptr;
+    }
+    auto* out = (PlatMenuItem*)a->Push((uint64_t)n * sizeof(PlatMenuItem),
+                                       alignof(PlatMenuItem), true);
+    for (int i = 0; i < n; i++) {
+        const MenuRow& r = rows[i];
+        PlatMenuItem& p = out[i];
+        if (r.separator || r.label.len <= 0) {
+            p.separator = true;
+            continue;
+        }
+        p.label = StrDup(a, r.label).s;
+        p.disabled = r.disabled;
+        p.checked = r.checked;
+        if (r.submenu && r.submenuN > 0) {
+            p.submenu = AppMenuToPlat(a, r.submenu, r.submenuN);
+            p.submenuN = r.submenuN;
+            continue;
+        }
+        // A row that cannot be chosen is not numbered, so it cannot be
+        // reported either — which is what leaving its id at zero says.
+        if (r.disabled || gNAppMenuRows >= kMaxAppMenuRows) {
+            continue;
+        }
+        gAppMenuRows[gNAppMenuRows].action = r.action;
+        gAppMenuRows[gNAppMenuRows].arg = r.arg;
+        p.id = ++gNAppMenuRows;
+        // The shortcut beside the label, out of the keymap rather than typed
+        // into the row: the menu bar matches it itself, and what it fires is
+        // the row, which dispatches the action the chord would have reached.
+        KeyChord chord = {};
+        if (r.action && KeymapAnyBindingForAction(r.action, &chord)) {
+            Str key = KeyName(chord.vk);
+            if (key.len > 0) {
+                p.key = StrDup(a, key).s;
+                p.keyMods.control = chord.ctrl;
+                p.keyMods.alt = chord.alt;
+                p.keyMods.shift = chord.shift;
+                p.keyMods.platform = chord.platform;
+            }
+        }
+    }
+    return out;
+}
+
+bool AppHasMenuBar() {
+    return PlatHasAppMenu();
+}
+
+void AppSetMenus(App* app, const MenuDef* menus, int n) {
+    if (!app || !menus || n <= 0) {
+        return;
+    }
+    if (!gAppMenuArena) {
+        gAppMenuArena = ArenaNew();
+        AppOnShutdown(&AppMenuShutdown);
+    }
+    if (!gAppMenuArena) {
+        return;
+    }
+    gAppMenuApp = app;
+    gNAppMenuRows = 0;
+    gAppMenuArena->Reset();
+    Arena* a = gAppMenuArena;
+    auto* bar = (PlatMenuItem*)a->Push((uint64_t)n * sizeof(PlatMenuItem),
+                                       alignof(PlatMenuItem), true);
+    for (int i = 0; i < n; i++) {
+        bar[i].label = StrDup(a, menus[i].name).s;
+        bar[i].submenu = AppMenuToPlat(a, menus[i].items, menus[i].n);
+        bar[i].submenuN = menus[i].n;
+    }
+    // The table is built whether or not anything shows it: a platform with no
+    // menu bar still has the rows, and the numbering is what the tests read.
+    PlatSetAppMenu(app, bar, n);
+}
+
+bool AppMenuRowForId(int id, uint32_t* action, intptr_t* arg) {
+    if (id <= 0 || id > gNAppMenuRows) {
+        return false;
+    }
+    if (action) {
+        *action = gAppMenuRows[id - 1].action;
+    }
+    if (arg) {
+        *arg = gAppMenuRows[id - 1].arg;
+    }
+    return true;
+}
+
+void AppMenuChosen(int id) {
+    uint32_t action = 0;
+    intptr_t arg = 0;
+    if (!AppMenuRowForId(id, &action, &arg) || !action || !gAppMenuApp) {
+        return;
+    }
+    // The window the menu bar was over. GPUI dispatches a menu action to the
+    // key window, and falls back to the application's own handlers when there
+    // is none — which is what WindowDispatchAction ends with anyway.
+    Window* win = nullptr;
+    for (int i = 0; i < gAppMenuApp->windows.len; i++) {
+        Window* w = gAppMenuApp->windows[i];
+        if (w && w->active) {
+            win = w;
+            break;
+        }
+    }
+    if (!win && gAppMenuApp->windows.len > 0) {
+        win = gAppMenuApp->windows[0];
+    }
+    if (!win) {
+        return;
+    }
+    WindowDispatchAction(win, action, arg);
+    // The choice arrives between frames, so nothing else would repaint what
+    // the handler changed.
+    AppInvalidate(win);
+}
+
 // SPI_GETWHEELSCROLLLINES is three on a default Windows install and the other
 // two platforms scroll by the same three lines; nothing here reads the
 // setting, so the constant is named rather than spelled out four times.

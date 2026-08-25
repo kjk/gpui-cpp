@@ -631,6 +631,17 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     return 0;
 }
 
+bool PlatHasAppMenu() {
+    // A tab has no menu bar to put anything in.
+    return false;
+}
+
+void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
+    (void)app;
+    (void)items;
+    (void)n;
+}
+
 bool PlatReduceMotion() {
     return GpJsReduceMotion() != 0;
 }

@@ -87,6 +87,7 @@ void TestWindowBorder();
 void TestAvatar();
 void TestKbd();
 void TestNativeMenu();
+void TestAppMenu();
 void TestTiles();
 void TestRoot();
 void TestSankey();

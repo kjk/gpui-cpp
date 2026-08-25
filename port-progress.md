@@ -4664,7 +4664,73 @@ whose selection is resolved against the filtered view, a single-line input
 painting scrollbars, a menu icon read from the CWD, and a dock size animation
 added and then removed two checkins later.
 
-One is deferred rather than declined: `cb87f2cf` moves the story's app menus
-into the macOS system menu bar. There is nowhere to move them to — `native_menu`
-here is popup and context menus, and nothing sets NSApp's main menu — and
-hiding the in-window bar without that would leave a Mac with no menus at all.
+One was deferred rather than declined: `cb87f2cf` moves the story's app menus
+into the macOS system menu bar. There was nowhere to move them to — `native_menu`
+here is popup and context menus, and nothing set NSApp's main menu — and
+hiding the in-window bar without that would have left a Mac with no menus at
+all. The section below is that missing half, written and then the checkin
+applied on top of it.
+
+
+## The menus that are not in the window
+
+`AppSetMenus` is the port of gpui's `App::set_menus`, and `cb87f2cf` — the
+story's macOS menu bar — is what it was written for.
+
+A Mac application's menus are not in its window. They are the bar at the top
+of the screen, they belong to whichever application is in front, and they are
+there whether or not that application has a window open at all. Nothing else
+this tree targets works that way: Windows and X11 leave a menu bar to the
+application, which is what `component::AppMenuBar` draws into the title bar,
+and a browser tab has nowhere to put one. So the seam is one call and three
+platforms that ignore it — `PlatSetAppMenu`, with the honest answer to
+`PlatHasAppMenu()` beside each one.
+
+**A row carries an action.** That is the whole of `MenuRow`: a label, an
+action and what it carries, and either rows under it or not. It is what Rust's
+`MenuItem::action` is, and it is what makes one table serve both bars —
+choosing a row dispatches, and where the handler lives is the same question it
+was for the keystroke. The alternative, a callback per row, would have made
+the OS bar a second wiring of the same menu, which is exactly the drift the
+Rust checkin does not have: `build_menus()` feeds `cx.set_menus` and the
+in-window `AppMenuBar` from one value.
+
+The story now does the same. Its four menus are one `MenuDef` table built each
+frame; `StoryMenuBar` turns them into the PopupMenus the title bar opens, and
+`StorySetSystemMenus` installs them when a row has moved — hashing the rows is
+cheaper than rebuilding an NSMenu sixty times a second, and it is the same
+"only when something changed" that Rust gets from observing the theme. The
+handlers moved off the row indexes onto the root as `OnAction`, which is where
+Rust's `cx.on_action` reaches from.
+
+**The shortcut is not typed into the row.** `KeymapAnyBindingForAction` is
+Rust's `bindings_for_action`: the contexts are ignored, because a menu row is
+outside every element and the binding that names its action belongs to
+whichever one it applies to — the Edit menu's rows are bound in `Input`. What
+the OS is handed is the chord, and matching it is then the menu bar's job:
+⌘C fires the row, the row dispatches `input::Copy`, and the field that has the
+focus handles it. Which is the same place the keystroke would have arrived on
+its own.
+
+**What macOS gets that the drawn bar does not.** The first menu is the
+application menu whatever it is called — AppKit titles that one after the
+process — and a menu named `Window` is handed to `setWindowsMenu:`, which is
+what adds Minimize, Zoom and the list of open windows to it. Neither has a
+counterpart in the window, and neither is worth faking there.
+
+The story's own half of `cb87f2cf`: `showAppMenuBar` is off on macOS, where
+the menus are in the system bar already and a second copy of them would be
+odd, and the freed up left side of the title bar names the window instead. It
+stays switchable — the row is in the Appearance menu — because a component
+gallery is where you would want to look at the component itself.
+
+Two things are not done and are worth naming. There is no `os_action`: gpui
+maps a handful of menu rows onto AppKit's own selectors, which is where ⌘Q on
+Quit comes from, so a row here shows a shortcut only if the keymap binds its
+action and the story binds none of its own. And the bar itself was not seen: a
+process started over ssh never joins the console session, so the macOS build
+compiles and runs but its window and its menu bar need somebody at the
+machine. What was verified here is the Windows and Linux side of the same
+change — the drawn bar, its submenus, the actions arriving through the root,
+and the title-only title bar — plus the numbering and the keymap lookup under
+test.

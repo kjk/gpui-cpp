@@ -164,6 +164,15 @@ struct PlatMenuItem {
     const char* iconPath = nullptr;
     const PlatMenuItem* submenu = nullptr;
     int submenuN = 0;
+    // The chord the row fires on, for the menus the OS keeps open across
+    // keystrokes: a menu bar's rows work whether their menu is showing or
+    // not, so the shortcut is the OS's to match rather than a hint drawn
+    // beside the label. `key` is the key's name as a binding spells it — "s",
+    // "z", "left" — and null is a row with no shortcut, which is every row of
+    // a popup menu: those are chosen with the pointer, and the keystroke that
+    // would have reached the same action never goes through the menu at all.
+    const char* key = nullptr;
+    Modifiers keyMods = {};
 };
 
 // Whether this platform has a popup menu of its own. False sends the caller
@@ -175,5 +184,34 @@ bool PlatHasMenu();
 // is gone. `dark` asks for the dark rendering where the OS can be told.
 int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
                  float y, bool dark);
+
+// ─── the application menu bar (App::set_menus) ───────────────────────────
+
+// Whether this platform draws the application's menus itself. macOS does:
+// the front application's menus live at the top of the screen and not in any
+// of its windows, so a Mac application that draws its own has two copies of
+// them. Nothing else here does — Windows and X11 leave a menu bar to the
+// application, which is what component::AppMenuBar draws, and a browser tab
+// has nowhere to put one.
+bool PlatHasAppMenu();
+
+// Install `items` as the application's menu bar, replacing whatever was
+// there. Every top-level row is a submenu, because a menu bar has no bare
+// rows, and the first one is the application menu — macOS titles that one
+// after the process whatever it is called here, and adds its own rows to it.
+// The rows are numbered the way PlatShowMenu's are, and a row that is chosen
+// is reported by AppMenuChosen(id) rather than returned: the OS holds the
+// menu bar for the life of the process and reports a choice whenever one is
+// made, on the main thread.
+//
+// `items` and everything they point at belong to the caller and are not kept
+// past the call; a platform that needs the labels later copies them, which
+// AppKit does for itself.
+void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n);
+
+// The platform reporting which row of the application menu bar was chosen.
+// Implemented in WindowCommon.cpp: the id is looked up in the table the last
+// AppSetMenus built and the row's action is dispatched to the front window.
+void AppMenuChosen(int id);
 
 } // namespace gpui

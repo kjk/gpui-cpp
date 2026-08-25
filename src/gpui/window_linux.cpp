@@ -726,6 +726,20 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
     return 0;
 }
 
+bool PlatHasAppMenu() {
+    // The same on X11. A desktop can export a window's menus to a panel over
+    // dbus — Unity's appmenu, and KDE's global menu after it — but that is a
+    // protocol and a service, not an X11 call, and a window whose menus went
+    // unexported would be left with none at all.
+    return false;
+}
+
+void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
+    (void)app;
+    (void)items;
+    (void)n;
+}
+
 // cx.open_url. xdg-open is the desktop's own answer to "what opens this";
 // the fork keeps a browser that takes its time from holding up the frame, and
 // the child replaces itself so nothing here waits on it.

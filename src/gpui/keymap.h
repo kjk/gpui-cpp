@@ -154,6 +154,15 @@ KeyMatch KeymapMatch(const KeyChord& chord, const uint32_t* contexts,
 bool KeymapBindingForAction(uint32_t action, const uint32_t* contexts,
                             int nContexts, KeyChord* out);
 
+// The same, with the contexts a binding was scoped to ignored — Rust's
+// `Keymap::bindings_for_action`, which is what a menu row's shortcut is
+// looked up with. A row of the application's menu bar is outside every
+// element, so there is no context stack to resolve against; the chord it
+// shows is the one bound to the action wherever that binding applies, and
+// pressing it dispatches the action to whatever has the focus, which is the
+// same place the chord would have reached on its own.
+bool KeymapAnyBindingForAction(uint32_t action, KeyChord* out);
+
 // The name a key goes by in a binding spec — "c", "enter", "pagedown" — which
 // is the inverse of what KeyChordParse reads. Empty for a key with no name,
 // which is a key no binding could have named either.

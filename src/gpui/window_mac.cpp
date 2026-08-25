@@ -876,8 +876,72 @@ static NSImage* MenuIconImage(Window* win, const char* path) {
     return image;
 }
 
+// A row's key equivalent as AppKit spells it: one character, which for the
+// keys that have no character of their own is the private-use code point
+// AppKit reserves for it. A key with neither is a row with no shortcut —
+// which is what a key nothing here names would be on the keyboard anyway.
+static NSString* KeyEquivalent(const char* key) {
+    if (!key || !key[0]) {
+        return @"";
+    }
+    struct Named {
+        const char* name;
+        unichar ch;
+    };
+    static const Named kNamed[] = {
+        {"enter", 0x0d},
+        {"return", 0x0d},
+        {"tab", 0x09},
+        {"escape", 0x1b},
+        {"space", ' '},
+        {"backspace", 0x08},
+        {"delete", NSDeleteFunctionKey},
+        {"up", NSUpArrowFunctionKey},
+        {"down", NSDownArrowFunctionKey},
+        {"left", NSLeftArrowFunctionKey},
+        {"right", NSRightArrowFunctionKey},
+        {"home", NSHomeFunctionKey},
+        {"end", NSEndFunctionKey},
+        {"pageup", NSPageUpFunctionKey},
+        {"pagedown", NSPageDownFunctionKey},
+    };
+    for (size_t i = 0; i < sizeof(kNamed) / sizeof(kNamed[0]); i++) {
+        if (strcmp(kNamed[i].name, key) == 0) {
+            unichar ch = kNamed[i].ch;
+            return [NSString stringWithCharacters:&ch length:1];
+        }
+    }
+    // A letter, a digit or a punctuation key is its own equivalent, and a
+    // binding already spells it lowercase — which is what AppKit wants, with
+    // the shift in the modifier mask rather than in the character.
+    if (key[1] == 0) {
+        return [NSString stringWithUTF8String:key];
+    }
+    return @"";
+}
+
+static NSEventModifierFlags KeyEquivalentMask(const Modifiers& mods) {
+    NSEventModifierFlags mask = 0;
+    if (mods.control) {
+        mask |= NSEventModifierFlagControl;
+    }
+    if (mods.alt) {
+        mask |= NSEventModifierFlagOption;
+    }
+    if (mods.shift) {
+        mask |= NSEventModifierFlagShift;
+    }
+    if (mods.platform) {
+        mask |= NSEventModifierFlagCommand;
+    }
+    return mask;
+}
+
+// `target` and `sel` are what a chosen row reports to: a popup menu answers
+// into the variable its tracking loop is waiting on, and the application menu
+// bar, which outlives every tracking loop, dispatches the row's action.
 static NSMenu* BuildMenu(Window* win, const PlatMenuItem* items, int n,
-                         GpuiMenuTarget* target) {
+                         id target, SEL sel) {
     NSMenu* menu = [[NSMenu alloc] init];
     // Without this AppKit greys every row whose target does not answer
     // validateMenuItem:, which is all of them.
@@ -901,14 +965,21 @@ static NSMenu* BuildMenu(Window* win, const PlatMenuItem* items, int n,
             }
         }
         if (it.submenu && it.submenuN > 0) {
-            [item setSubmenu:BuildMenu(win, it.submenu, it.submenuN, target)];
+            [item setSubmenu:BuildMenu(win, it.submenu, it.submenuN, target,
+                                       sel)];
         } else {
             [item setTag:it.id];
             [item setState:(it.checked ? NSControlStateValueOn
                                        : NSControlStateValueOff)];
+            NSString* equivalent = KeyEquivalent(it.key);
+            if ([equivalent length] > 0) {
+                [item setKeyEquivalent:equivalent];
+                [item
+                    setKeyEquivalentModifierMask:KeyEquivalentMask(it.keyMods)];
+            }
             if (!it.disabled) {
                 [item setTarget:target];
-                [item setAction:@selector(gpuiMenuItemChosen:)];
+                [item setAction:sel];
             }
         }
         [menu addItem:item];
@@ -923,12 +994,74 @@ int PlatShowMenu(Window* win, const PlatMenuItem* items, int n, float x,
         return 0;
     }
     GpuiMenuTarget* target = [[GpuiMenuTarget alloc] init];
-    NSMenu* menu = BuildMenu(win, items, n, target);
+    NSMenu* menu =
+        BuildMenu(win, items, n, target, @selector(gpuiMenuItemChosen:));
     gMenuChoice = 0;
     // The view is flipped, so the position is the one the window works in.
     NSPoint at = NSMakePoint(x, y);
     [menu popUpMenuPositioningItem:nil atLocation:at inView:win->plat->view];
     return gMenuChoice;
+}
+
+} // namespace gpui
+
+// The object every row of the application menu bar sends its action to. The
+// popup menus have one per menu, made and dropped inside the tracking loop;
+// this one is the application's and lives as long as the bar does.
+@interface GpuiAppMenuTarget : NSObject
+@end
+
+@implementation GpuiAppMenuTarget
+- (void)gpuiAppMenuItemChosen:(id)sender {
+    gpui::AppMenuChosen((int)[(NSMenuItem*)sender tag]);
+}
+@end
+
+namespace gpui {
+
+static GpuiAppMenuTarget* gAppMenuTarget = nil;
+
+bool PlatHasAppMenu() {
+    return true;
+}
+
+void PlatSetAppMenu(App* app, const PlatMenuItem* items, int n) {
+    (void)app;
+    if (!items || n <= 0) {
+        return;
+    }
+    if (!gAppMenuTarget) {
+        gAppMenuTarget = [[GpuiAppMenuTarget alloc] init];
+    }
+    NSMenu* bar = [[NSMenu alloc] init];
+    [bar setAutoenablesItems:NO];
+    for (int i = 0; i < n; i++) {
+        const PlatMenuItem& it = items[i];
+        NSString* title =
+            [NSString stringWithUTF8String:(it.label ? it.label : "")];
+        // A menu bar is a row of submenus: the item carries the name and the
+        // menu under it carries the rows. AppKit reads the *first* one as the
+        // application menu and titles it after the process, whatever this
+        // says — which is why the story's first menu is the one named for the
+        // application in Rust too.
+        NSMenu* sub =
+            BuildMenu(nullptr, it.submenu, it.submenuN, gAppMenuTarget,
+                      @selector(gpuiAppMenuItemChosen:));
+        [sub setTitle:title];
+        NSMenuItem* row = [[NSMenuItem alloc] initWithTitle:title
+                                                     action:nil
+                                              keyEquivalent:@""];
+        [row setSubmenu:sub];
+        [bar addItem:row];
+        // The menu AppKit keeps the window list in. Telling it which one adds
+        // the Minimize / Zoom / Bring All to Front rows and one row per open
+        // window, which is what makes a Mac application's Window menu behave
+        // the way every other one does.
+        if (strcmp(it.label ? it.label : "", "Window") == 0) {
+            [NSApp setWindowsMenu:sub];
+        }
+    }
+    [NSApp setMainMenu:bar];
 }
 
 // cx.open_url. NSWorkspace hands the URL to whichever application is

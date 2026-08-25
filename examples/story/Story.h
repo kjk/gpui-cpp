@@ -103,6 +103,15 @@ struct StoryApp {
     EntityId pages[StoryCount] = {};
     // ToggleFpsMonitor: AppState::show_fps_monitor, the HUD over the window.
     bool fpsMonitor = false;
+    // AppState::show_app_menu_bar: whether the title bar draws the menus
+    // itself. macOS puts an application's menus in the bar at the top of the
+    // screen, so a Mac drawing them here as well would show two copies of
+    // them; off there by default, and still switchable from the Appearance
+    // menu so the component stays demoable on a Mac.
+    bool appMenuBar = GPUI_OS_MAC == 0;
+    // What the menus hashed to when they were last installed, so the OS bar
+    // is rebuilt when a row moves and not once a frame.
+    uint32_t menuHash = 0;
     bool seeded = false;
 };
 

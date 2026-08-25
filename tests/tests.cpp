@@ -90,6 +90,7 @@ int GpuiMain(int argc, char** argv) {
     TestAvatar();
     TestKbd();
     TestNativeMenu();
+    TestAppMenu();
     TestTiles();
     TestRoot();
     TestSankey();

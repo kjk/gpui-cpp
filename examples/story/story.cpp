@@ -828,10 +828,10 @@ static El* Header(StoryApp* app, Ctx* cx) {
 // AppTitleBar in crates/story, on top of component::TitleBar: the menu and
 // tool buttons claim their own hit rectangles, and the surface left over is
 // the window drag region.
-static El* StoryTitleMenuItem(Ctx* cx, const char* label, bool semibold) {
+static El* StoryTitleMenuItem(Ctx* cx, Str label, bool semibold) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    El* text = StoryTxt(cx, Str(label), 14, th.foreground);
+    El* text = StoryTxt(cx, label, 14, th.foreground);
     if (semibold) {
         text->Semibold();
     }
@@ -874,6 +874,7 @@ enum class ApKind : uint8_t {
     Scroll,
     ListHighlight,
     Fps,
+    MenuBar,
     Reduce,
     Ring
 };
@@ -905,6 +906,10 @@ static const ApRow kAppearance[] = {
     {ApKind::Sep, nullptr, 0},
     {ApKind::ListHighlight, "List Active Highlight", 0},
     {ApKind::Fps, "FPS Monitor", 0},
+    // ToggleAppMenuBar. Rust's row is in this menu too, and switchable on
+    // every platform: on a Mac the menus are already in the system bar, and
+    // this is what puts the component itself on screen beside them.
+    {ApKind::MenuBar, "App Menu Bar", 0},
     // Not a row Rust's menu has. `cx.reduce_motion()` is the desktop's own
     // setting, which a gallery of components that move is the one place you
     // would want to try both ways without leaving to change it.
@@ -930,6 +935,8 @@ static bool ApChecked(const StoryApp* app, const ApRow& r) {
             return ListSettingsNow().activeHighlight;
         case ApKind::Fps:
             return app->fpsMonitor;
+        case ApKind::MenuBar:
+            return app->appMenuBar;
         case ApKind::Reduce:
             return MotionReduced();
         case ApKind::Ring:
@@ -963,6 +970,9 @@ static void OnAppearanceItem(StoryApp* app, Ctx* cx, const ClickEvent*,
         }
         case ApKind::Fps:
             app->fpsMonitor = !app->fpsMonitor;
+            break;
+        case ApKind::MenuBar:
+            app->appMenuBar = !app->appMenuBar;
             break;
         case ApKind::Reduce:
             MotionSetReduced(!MotionReduced());
@@ -1009,18 +1019,6 @@ static Window* StoryOpenWindow(App* app, int story) {
     return win;
 }
 
-// The Window menu. Rust's has one item, Toggle Search; these two are what a
-// second window needs to be reachable at all — `App` has held a window list
-// and ended its loop with the last one for a while, and nothing opened one.
-static void OnWindowMenuItem(StoryApp*, Ctx* cx, const ClickEvent*,
-                             intptr_t ix) {
-    if (ix == 0) {
-        StoryOpenWindow(cx->app, StoryFromSlug(""));
-    } else if (ix == 1) {
-        AppClose(cx->win);
-    }
-}
-
 // The About dialog, which the Help menu raises. It is an entity of its own
 // rather than something a page renders, which is what WindowExt is for: the
 // menu handler has no view that draws dialogs and does not need one, and the
@@ -1061,105 +1059,6 @@ struct AboutDialog {
             ->IntoEl(WindowSize(cx->win));
     }
 };
-
-static void OnHelpMenuItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
-    if (ix == 0) {
-        OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
-    } else if (ix == 1) {
-        // window.open_dialog(cx, ..): the window takes the entity and Root
-        // draws it, whatever page is up.
-        WindowOpenDialog(cx, EntityNew<AboutDialog>(cx->app));
-    }
-}
-
-static El* HelpMenu(Ctx* cx) {
-    Arena* a = cx->a;
-    const Theme& th = cx->theme();
-    component::PopupMenu* menu =
-        component::PopupMenu::New(cx, StrL("story-help-menu"));
-    menu->Menu(StrL("Documentation"));
-    menu->Menu(StrL("About GPUI Component"));
-    if (PopupMenuState* st = menu->state.Get(cx)) {
-        st->onConfirm = Listen(cx, &OnHelpMenuItem);
-    }
-    return component::DropdownMenu::New(cx, StrL("story-help"))
-        ->Trigger(Div(a)
-                      ->H(28)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius)
-                      ->HoverBg(th.tokens.muted)
-                      ->Cursor(CursorKind::Pointer)
-                      ->Child(StoryTxt(cx, StrL("Help"), 14, th.foreground)))
-        ->Menu(menu)
-        ->IntoEl();
-}
-
-// app_menus.rs's Edit menu. Every row names one of the input's actions and
-// carries no handler of its own: choosing it dispatches the action to
-// whatever field has the keyboard, which is the same handler the chord
-// reaches, and the shortcut on the right is looked up in the keymap rather
-// than typed here.
-static El* EditMenu(Ctx* cx) {
-    Arena* a = cx->a;
-    const Theme& th = cx->theme();
-    component::PopupMenu* menu =
-        component::PopupMenu::New(cx, StrL("story-edit-menu"))
-            ->MinW(220)
-            // The field's own key context, which is where those actions are
-            // bound and so where their chords are found.
-            ->ActionContext("Input")
-            ->MenuWithAction(StrL("Undo"), input::Undo())
-            ->MenuWithAction(StrL("Redo"), input::Redo())
-            ->Separator()
-            ->MenuWithAction(StrL("Cut"), input::Cut())
-            ->MenuWithAction(StrL("Copy"), input::Copy())
-            ->MenuWithAction(StrL("Paste"), input::Paste())
-            ->Separator()
-            ->MenuWithAction(StrL("Delete"), input::Delete())
-            ->MenuWithAction(StrL("Delete Previous Word"),
-                             input::DeleteToPreviousWordStart())
-            ->MenuWithAction(StrL("Delete Next Word"),
-                             input::DeleteToNextWordEnd())
-            ->Separator()
-            ->MenuWithAction(StrL("Find"), input::Search())
-            ->Separator()
-            ->MenuWithAction(StrL("Select All"), input::SelectAll());
-    return component::DropdownMenu::New(cx, StrL("story-edit"))
-        ->Trigger(Div(a)
-                      ->H(28)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius)
-                      ->HoverBg(th.tokens.muted)
-                      ->Cursor(CursorKind::Pointer)
-                      ->Child(StoryTxt(cx, StrL("Edit"), 14, th.foreground)))
-        ->Menu(menu)
-        ->IntoEl();
-}
-
-static El* WindowMenu(Ctx* cx) {
-    Arena* a = cx->a;
-    const Theme& th = cx->theme();
-    component::PopupMenu* menu =
-        component::PopupMenu::New(cx, StrL("story-window-menu"));
-    menu->Menu(StrL("New Window"));
-    menu->Menu(StrL("Close Window"));
-    if (PopupMenuState* st = menu->state.Get(cx)) {
-        st->onConfirm = Listen(cx, &OnWindowMenuItem);
-    }
-    return component::DropdownMenu::New(cx, StrL("story-window"))
-        ->Trigger(Div(a)
-                      ->H(28)
-                      ->PadX(8)
-                      ->ItemsCenter()
-                      ->Radius(th.radius)
-                      ->HoverBg(th.tokens.muted)
-                      ->Cursor(CursorKind::Pointer)
-                      ->Child(StoryTxt(cx, StrL("Window"), 14, th.foreground)))
-        ->Menu(menu)
-        ->IntoEl();
-}
 
 static El* AppearanceMenu(StoryApp* app, Ctx* cx) {
     component::PopupMenu* menu =
@@ -1204,47 +1103,84 @@ static void OnGithub(StoryApp*, Ctx*, const ClickEvent*) {
     OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
 }
 
-// app_menus.rs's first menu, the one named for the application. One of its
-// rows is not here: `Language` wants rust_i18n. The rest is what the Rust
-// menu does with the same rows — the About dialog, `Open...`, the light/dark
-// pair, the theme table, and Quit.
-enum {
-    AppMenuAbout = 0,
-    AppMenuSep1,
-    AppMenuOpen,
-    AppMenuSep2,
-    AppMenuAppearance,
-    AppMenuTheme,
-    AppMenuSep3,
-    AppMenuQuit
-};
+// ─── app_menus.rs ─────────────────────────────────────────────────────────
+//
+// One table, two bars. Rust builds its `Vec<Menu>` once and hands it to both
+// `cx.set_menus` — the macOS menu bar, which belongs to the front application
+// and sits at the top of the screen rather than in any of its windows — and
+// to the AppMenuBar drawn into the title bar. The same rows here become the
+// MenuDefs the runtime installs and the PopupMenus the title bar opens, so
+// neither bar can drift from the other.
+//
+// A row carries an action and nothing else, the way `MenuItem::action` does.
+// Whichever bar it was chosen from, and whether it was chosen with the
+// pointer or with the chord the menu shows beside it, the same handler runs —
+// the one an element registered for that action, which is also where the
+// keystroke on its own would have arrived.
+//
+// One menu Rust has is not here: `Language` wants rust_i18n. One it does not
+// is: `Window`, because `App` has held a window list and ended its loop with
+// the last one for a while, and nothing else opens a second one.
 
-static void OnAppMenuItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
-    if (ix == AppMenuAbout) {
-        WindowOpenDialog(cx, EntityNew<AboutDialog>(cx->app));
-    } else if (ix == AppMenuOpen) {
-        // `cx.on_action(|_action: &Open, _cx| {})` in the gallery: the row is
-        // there and the handler is empty, because a component gallery has
-        // nothing to open a file into. What a real one does with the same
-        // action is `on_action_open` in the markdown example — this tree has
-        // the dialog for it (PromptForPath), and it is that example that
-        // wants it, not this menu.
-    } else if (ix == AppMenuQuit) {
-        AppQuit(cx->win);
+#define STORY_ACTION(fn, spelled)                     \
+    static uint32_t fn() {                            \
+        static uint32_t id = ActionOf(StrL(spelled)); \
+        return id;                                    \
     }
+
+STORY_ACTION(ActAbout, "story::About")
+STORY_ACTION(ActOpen, "story::Open")
+STORY_ACTION(ActQuit, "story::Quit")
+STORY_ACTION(ActNewWindow, "story::NewWindow")
+STORY_ACTION(ActCloseWindow, "story::CloseWindow")
+STORY_ACTION(ActDocumentation, "story::Documentation")
+// The payload rides on the action, which is what `SwitchThemeMode(mode)` and
+// `SelectTheme(name)` carry in Rust: the mode as 0 or 1, and a theme as its
+// place in the registry.
+STORY_ACTION(ActSwitchThemeMode, "story::SwitchThemeMode")
+STORY_ACTION(ActSelectTheme, "story::SelectTheme")
+
+static void OnAboutAction(StoryApp*, Ctx* cx, const ActionEvent*) {
+    // window.open_dialog(cx, ..): the window takes the entity and Root draws
+    // it, whatever page is up.
+    WindowOpenDialog(cx, EntityNew<AboutDialog>(cx->app));
+}
+
+static void OnOpenAction(StoryApp*, Ctx*, const ActionEvent*) {
+    // `cx.on_action(|_action: &Open, _cx| {})` in the gallery: the row is
+    // there and the handler is empty, because a component gallery has nothing
+    // to open a file into. What a real one does with the same action is
+    // `on_action_open` in the markdown example — this tree has the dialog for
+    // it (PromptForPath), and it is that example that wants it, not this menu.
+}
+
+static void OnQuitAction(StoryApp*, Ctx* cx, const ActionEvent*) {
+    AppQuit(cx->win);
+}
+
+static void OnNewWindowAction(StoryApp*, Ctx* cx, const ActionEvent*) {
+    StoryOpenWindow(cx->app, StoryFromSlug(""));
+}
+
+static void OnCloseWindowAction(StoryApp*, Ctx* cx, const ActionEvent*) {
+    AppClose(cx->win);
+}
+
+static void OnDocumentationAction(StoryApp*, Ctx*, const ActionEvent*) {
+    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
 }
 
 // SwitchThemeMode(ThemeMode::Light | ::Dark), checked against the mode in
 // force.
-static void OnAppModeItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
-    ThemeSet(cx->app, ix == 0 ? ThemeMode::Light : ThemeMode::Dark);
+static void OnSwitchThemeModeAction(StoryApp*, Ctx* cx, const ActionEvent* ev) {
+    ThemeSet(cx->app, ev->arg == 0 ? ThemeMode::Light : ThemeMode::Dark);
     Notify(cx);
 }
 
-// SwitchTheme(name): the registry resolves the file into the palette for its
+// SelectTheme(name): the registry resolves the file into the palette for its
 // own mode, and switching to that mode is what puts it on screen.
-static void OnAppThemeItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
-    const ThemeConfig* cfg = ThemeRegistryAt((int)ix);
+static void OnSelectThemeAction(StoryApp*, Ctx* cx, const ActionEvent* ev) {
+    const ThemeConfig* cfg = ThemeRegistryAt((int)ev->arg);
     if (!cfg || !ThemeRegistryApply(cx->app, cfg)) {
         return;
     }
@@ -1252,66 +1188,264 @@ static void OnAppThemeItem(StoryApp*, Ctx* cx, const ClickEvent*, intptr_t ix) {
     Notify(cx);
 }
 
-static El* AppMenu(Ctx* cx) {
+// Every handler above, hung off the root so a row chosen in either bar finds
+// one. Rust registers these with `cx.on_action` on the app rather than on an
+// element, which is the same reach — nothing between the root and the focused
+// element claims them.
+static El* StoryBindMenuActions(El* root, Ctx* cx) {
+    return root->OnAction(ActAbout(), Listen(cx, &OnAboutAction))
+        ->OnAction(ActOpen(), Listen(cx, &OnOpenAction))
+        ->OnAction(ActQuit(), Listen(cx, &OnQuitAction))
+        ->OnAction(ActNewWindow(), Listen(cx, &OnNewWindowAction))
+        ->OnAction(ActCloseWindow(), Listen(cx, &OnCloseWindowAction))
+        ->OnAction(ActDocumentation(), Listen(cx, &OnDocumentationAction))
+        ->OnAction(ActSwitchThemeMode(), Listen(cx, &OnSwitchThemeModeAction))
+        ->OnAction(ActSelectTheme(), Listen(cx, &OnSelectThemeAction));
+}
+
+static const int kStoryMenus = 4;
+
+static MenuRow* StoryRows(Ctx* cx, int n) {
+    // Zeroed is what every MenuRow field defaults to, which is what makes a
+    // row a plain enabled item until something is written into it.
+    return (MenuRow*)cx->a
+        ->Push((uint64_t)n * sizeof(MenuRow), alignof(MenuRow), true);
+}
+
+// build_menus(): the four menus as they stand right now — the mode that is
+// checked, the theme in use, whatever `themes/` holds.
+static int StoryBuildMenus(Ctx* cx, MenuDef* out, int cap) {
+    if (!out || cap < kStoryMenus) {
+        return 0;
+    }
     // The same `themes/` directory the Theme Colors page reads, so the menu
     // lists whatever that page lists whichever of the two is opened first.
     ThemeRegistryLoadDir(StrL("themes"));
-
     bool dark = ThemeGet() == ThemeMode::Dark;
-    component::PopupMenu* appearance =
-        component::PopupMenu::New(cx, StrL("story-app-appearance"))
-            ->MenuWithCheck(StrL("Light"), !dark)
-            ->MenuWithCheck(StrL("Dark"), dark);
-    if (PopupMenuState* st = appearance->state.Get(cx)) {
-        st->onConfirm = Listen(cx, &OnAppModeItem);
-    }
 
-    Str activeTheme = ThemeRegistryActive(ThemeGet());
-    component::PopupMenu* themes =
-        component::PopupMenu::New(cx, StrL("story-app-theme"))->Scrollable();
-    for (int i = 0; i < ThemeRegistryCount(); i++) {
+    MenuRow* appearance = StoryRows(cx, 2);
+    appearance[0].label = StrL("Light");
+    appearance[0].action = ActSwitchThemeMode();
+    appearance[0].checked = !dark;
+    appearance[1].label = StrL("Dark");
+    appearance[1].action = ActSwitchThemeMode();
+    appearance[1].arg = 1;
+    appearance[1].checked = dark;
+
+    Str active = ThemeRegistryActive(ThemeGet());
+    int nThemes = ThemeRegistryCount();
+    MenuRow* themes = StoryRows(cx, nThemes > 0 ? nThemes : 1);
+    for (int i = 0; i < nThemes; i++) {
         const ThemeConfig* cfg = ThemeRegistryAt(i);
-        themes->MenuWithCheck(cfg->name, StrSame(cfg->name, activeTheme));
-    }
-    if (PopupMenuState* st = themes->state.Get(cx)) {
-        st->onConfirm = Listen(cx, &OnAppThemeItem);
+        themes[i].label = cfg->name;
+        themes[i].action = ActSelectTheme();
+        themes[i].arg = i;
+        themes[i].checked = StrSame(cfg->name, active);
     }
 
-    component::PopupMenu* menu =
-        component::PopupMenu::New(cx, StrL("story-app-menu"))
-            ->MinW(220)
-            ->Menu(StrL("About GPUI Component"))
-            ->Separator()
-            ->Menu(StrL("Open..."))
-            ->Separator()
-            ->Submenu(StrL("Appearance"), appearance)
-            ->Submenu(StrL("Theme"), themes)
-            ->Separator()
-            ->Menu(StrL("Quit"));
-    if (PopupMenuState* st = menu->state.Get(cx)) {
-        st->onConfirm = Listen(cx, &OnAppMenuItem);
+    MenuRow* appRows = StoryRows(cx, 8);
+    appRows[0].label = StrL("About GPUI Component");
+    appRows[0].action = ActAbout();
+    appRows[1].separator = true;
+    appRows[2].label = StrL("Open...");
+    appRows[2].action = ActOpen();
+    appRows[3].separator = true;
+    appRows[4].label = StrL("Appearance");
+    appRows[4].submenu = appearance;
+    appRows[4].submenuN = 2;
+    appRows[5].label = StrL("Theme");
+    appRows[5].submenu = themes;
+    appRows[5].submenuN = nThemes;
+    // A submenu with nothing under it is a row that would report nothing;
+    // disabled says so, and is what a themes directory that is not there
+    // leaves behind.
+    appRows[5].disabled = nThemes == 0;
+    appRows[6].separator = true;
+    appRows[7].label = StrL("Quit");
+    appRows[7].action = ActQuit();
+    out[0].name = StrL("GPUI Component");
+    out[0].items = appRows;
+    out[0].n = 8;
+
+    // Every row of the Edit menu names one of the input's actions and carries
+    // no handler of its own: choosing it dispatches the action to whatever
+    // field has the keyboard, which is the same handler the chord reaches,
+    // and the shortcut beside it is looked up in the keymap rather than typed
+    // here.
+    struct EditRow {
+        const char* label;
+        uint32_t action;
+    };
+    const EditRow kEdit[] = {
+        {"Undo", input::Undo()},
+        {"Redo", input::Redo()},
+        {nullptr, 0},
+        {"Cut", input::Cut()},
+        {"Copy", input::Copy()},
+        {"Paste", input::Paste()},
+        {nullptr, 0},
+        {"Delete", input::Delete()},
+        {"Delete Previous Word", input::DeleteToPreviousWordStart()},
+        {"Delete Next Word", input::DeleteToNextWordEnd()},
+        {nullptr, 0},
+        {"Find", input::Search()},
+        {nullptr, 0},
+        {"Select All", input::SelectAll()},
+    };
+    const int nEdit = (int)(sizeof(kEdit) / sizeof(kEdit[0]));
+    MenuRow* editRows = StoryRows(cx, nEdit);
+    for (int i = 0; i < nEdit; i++) {
+        if (!kEdit[i].label) {
+            editRows[i].separator = true;
+            continue;
+        }
+        editRows[i].label = Str(kEdit[i].label);
+        editRows[i].action = kEdit[i].action;
     }
-    return component::DropdownMenu::New(cx, StrL("story-app"))
-        ->Trigger(StoryTitleMenuItem(cx, "GPUI Component", true))
-        ->Menu(menu)
-        ->IntoEl();
+    out[1].name = StrL("Edit");
+    out[1].items = editRows;
+    out[1].n = nEdit;
+
+    MenuRow* windowRows = StoryRows(cx, 2);
+    windowRows[0].label = StrL("New Window");
+    windowRows[0].action = ActNewWindow();
+    windowRows[1].label = StrL("Close Window");
+    windowRows[1].action = ActCloseWindow();
+    out[2].name = StrL("Window");
+    out[2].items = windowRows;
+    out[2].n = 2;
+
+    MenuRow* helpRows = StoryRows(cx, 2);
+    helpRows[0].label = StrL("Documentation");
+    helpRows[0].action = ActDocumentation();
+    helpRows[1].label = StrL("About GPUI Component");
+    helpRows[1].action = ActAbout();
+    out[3].name = StrL("Help");
+    out[3].items = helpRows;
+    out[3].n = 2;
+    return kStoryMenus;
+}
+
+// What the menus look like right now, so the OS bar is only rebuilt when
+// something in it moved: a checked row, a theme that appeared, a label. Rust
+// re-runs `update_app_menu` from the theme observer and the locale action for
+// the same reason — installing a menu bar is not a per-frame thing.
+static uint32_t StoryMenuHash(const MenuRow* rows, int n, uint32_t h) {
+    for (int i = 0; i < n; i++) {
+        const MenuRow& r = rows[i];
+        for (int c = 0; c < r.label.len; c++) {
+            h = (h ^ (uint32_t)(uint8_t)r.label.s[c]) * 16777619u;
+        }
+        h = (h ^ r.action) * 16777619u;
+        h = (h ^ (uint32_t)r.arg) * 16777619u;
+        uint32_t flags = (r.separator ? 1u : 0u) | (r.disabled ? 2u : 0u) |
+                         (r.checked ? 4u : 0u);
+        h = (h ^ flags) * 16777619u;
+        if (r.submenu && r.submenuN > 0) {
+            h = StoryMenuHash(r.submenu, r.submenuN, h);
+        }
+    }
+    return h;
+}
+
+// cx.set_menus(build_menus(..)). Called every frame and installing on almost
+// none of them. The platforms without a menu bar of their own ignore it,
+// which is why nothing here asks first: a call that only ran on a Mac is a
+// call only a Mac would ever find wrong.
+static void StorySetSystemMenus(StoryApp* app, Ctx* cx, const MenuDef* menus,
+                                int n) {
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < n; i++) {
+        for (int c = 0; c < menus[i].name.len; c++) {
+            h = (h ^ (uint32_t)(uint8_t)menus[i].name.s[c]) * 16777619u;
+        }
+        h = StoryMenuHash(menus[i].items, menus[i].n, h);
+    }
+    if (h == app->menuHash) {
+        return;
+    }
+    app->menuHash = h;
+    AppSetMenus(cx->app, menus, n);
+}
+
+// The same rows as the menu the title bar draws. `id` keys the menu's state,
+// and a submenu takes one of its own under it.
+static component::PopupMenu* StoryPopupMenu(Ctx* cx, Str id,
+                                            const MenuRow* rows, int n) {
+    component::PopupMenu* menu = component::PopupMenu::New(cx, id);
+    for (int i = 0; i < n; i++) {
+        const MenuRow& r = rows[i];
+        if (r.separator || r.label.len <= 0) {
+            menu->Separator();
+            continue;
+        }
+        if (r.submenu && r.submenuN > 0) {
+            menu->Submenu(r.label,
+                          StoryPopupMenu(cx, StoryFmt(cx, "%s-%d", id, i),
+                                         r.submenu, r.submenuN));
+            menu->Disabled(r.disabled);
+            continue;
+        }
+        menu->MenuWithAction(r.label, r.action, r.arg);
+        menu->Checked(r.checked);
+        menu->Disabled(r.disabled);
+    }
+    // PopupMenu::scrollable, for the one submenu that is a list rather than a
+    // handful of rows: `themes/` holds as many as somebody put there.
+    if (n > 12) {
+        menu->Scrollable();
+    }
+    return menu;
+}
+
+// AppMenuBar: the menus drawn into the title bar, for the platforms whose
+// windows own their menus — and for a Mac that would rather see the component
+// than the system bar.
+static El* StoryMenuBar(Ctx* cx, const MenuDef* menus, int n) {
+    Arena* a = cx->a;
+    El* bar = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
+    for (int i = 0; i < n; i++) {
+        component::PopupMenu* menu =
+            StoryPopupMenu(cx, StoryFmt(cx, "story-menu-%d", i), menus[i].items,
+                           menus[i].n)
+                ->MinW(220);
+        if (i == 1) {
+            // The field's own key context, which is where the Edit menu's
+            // actions are bound and so where their chords are found.
+            menu->ActionContext("Input");
+        }
+        // The application's own menu is the one named for it, and is the one
+        // set in the heavier weight — which is what makes it read as a title
+        // rather than as the first of four.
+        El* trigger = StoryTitleMenuItem(cx, menus[i].name, i == 0);
+        bar->Child(component::DropdownMenu::New(
+                       cx, StoryFmt(cx, "story-menu-trigger-%d", i))
+                       ->Trigger(trigger)
+                       ->Menu(menu)
+                       ->IntoEl());
+    }
+    return bar;
 }
 
 // The three tools at the right of the title bar. They are ghost buttons, and
 // button.rs gives a ghost button the arrow — the hand is for the variants that
 // look like a link. Over a title bar there is nothing else to say an icon is a
 // control rather than an ornament, so these three ask for it themselves.
-static El* StoryTitleBar(StoryApp* app, Ctx* cx) {
+static El* StoryTitleBar(StoryApp* app, Ctx* cx, const MenuDef* defs,
+                         int nDefs) {
     Arena* a = cx->a;
+    const Theme& th = cx->theme();
 
-    El* menus = Div(a)
-                    ->FlexRow()
-                    ->H(kFill)
-                    ->ItemsCenter()
-                    ->Child(AppMenu(cx))
-                    ->Child(EditMenu(cx))
-                    ->Child(WindowMenu(cx))
-                    ->Child(HelpMenu(cx));
+    El* menus = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
+    if (app->appMenuBar) {
+        menus->Child(StoryMenuBar(cx, defs, nDefs));
+    } else {
+        // The system menu bar owns the menus, so the freed up left side names
+        // the window the way a Mac application does.
+        menus->Child(Div(a)->PadX(8)->Child(
+            StoryTxt(cx, StrL("GPUI Component C++"), 14, th.foreground)
+                ->Medium()));
+    }
     El* tools =
         Div(a)
             ->FlexRow()
@@ -1409,8 +1543,15 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     // The window's outermost view is a Root, which is what Rust puts under
     // every window: the page, and over it the layers the window owns.
     El* root = Div(frame)->FlexCol()->SizeFull();
+    // build_menus() once: the OS menu bar is installed from it when something
+    // in it has moved, the title bar draws it, and the root answers for every
+    // action either of them dispatches.
+    MenuDef defs[kStoryMenus] = {};
+    int nDefs = StoryBuildMenus(cx, defs, kStoryMenus);
+    StorySetSystemMenus(app, cx, defs, nDefs);
+    StoryBindMenuActions(root, cx);
     if (cx->win->opts.clientTitleBar) {
-        root->Child(StoryTitleBar(app, cx));
+        root->Child(StoryTitleBar(app, cx, defs, nDefs));
     }
     El* body = Div(frame)->FlexRow()->Flex1()->W(kFill)->MinH(0)->H(kFill);
     body->Child(Sidebar(app, cx));

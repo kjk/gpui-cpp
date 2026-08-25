@@ -4929,6 +4929,57 @@ void AppOnShutdown(void (*fn)());
 // would stack a second close button on top of the manager's.
 bool WindowClientDecorated(Window* win);
 
+// ─── the application menu bar ────────────────────────────────────────────
+//
+// cx.set_menus(app_menus()). The menus of the application itself, as opposed
+// to the ones an element opens: on macOS they are the bar at the top of the
+// screen, which belongs to the front application and not to any of its
+// windows. A row carries an action and nothing else, the way Rust's
+// `MenuItem::action` does, so choosing it runs the same handler the chord
+// bound to it reaches — and the shortcut the OS shows beside the label is
+// looked up in the keymap rather than spelled out here.
+//
+// Nothing else has a menu bar of its own to install into. The call is not
+// conditional for that: an application says what its menus are once, and the
+// platforms without one ignore it, which is where component::AppMenuBar
+// comes in — the same menus drawn into the window.
+
+// gpui::MenuItem. A row with no label is a separator, and a row with rows
+// under it opens onto them rather than doing anything itself.
+struct MenuRow {
+    Str label = {};
+    // The action dispatched when the row is chosen, and what it carries.
+    // Zero is a row that does nothing, which is what a separator, a submenu
+    // and a placeholder row all are.
+    uint32_t action = 0;
+    intptr_t arg = 0;
+    bool separator = false;
+    bool disabled = false;
+    bool checked = false;
+    const MenuRow* submenu = nullptr;
+    int submenuN = 0;
+};
+
+// gpui::Menu: one menu of the bar, which is a name and its rows.
+struct MenuDef {
+    Str name = {};
+    const MenuRow* items = nullptr;
+    int n = 0;
+};
+
+// Whether the menus set below reach an OS menu bar. An application asks so it
+// can decide whether to draw its own as well — which is what the story does,
+// and what Rust decides with `cfg!(target_os = "macos")`.
+bool AppHasMenuBar();
+// Install these menus as the application's. Called again whenever a row's
+// label or checked state changes, which is how the checked appearance and
+// theme rows keep up; the platform replaces the bar wholesale.
+void AppSetMenus(App* app, const MenuDef* menus, int n);
+// What row `id` names, `id` being what a platform menu answers with. The
+// numbering is the contract between the two halves — the selectable rows in
+// preorder, from 1 — so it is worth being able to ask.
+bool AppMenuRowForId(int id, uint32_t* action, intptr_t* arg);
+
 // window.activate_window() / cx.activate(true): bring this window forward
 // and the application with it, restoring it if it was minimized. What a
 // click on a system notification asks for.
