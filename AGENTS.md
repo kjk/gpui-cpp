@@ -34,6 +34,8 @@ bun cmd/run-wasm.ts showcase
 GPUI_PAINT=gpu out/rel/story.exe            # the second Windows backend
 GPUI_SCENE=off out/rel/story.exe            # draw straight, without the scene
 GPUI_FRAME_BENCH=600 out/rel/story.exe      # frame time, by phase
+GPUI_LAYOUT_DUMP=lay.txt out/rel/story.exe  # every frame's laid-out tree
+GPUI_LAYOUT_REUSE=off out/rel/story.exe     # rebuild the taffy tree each frame
 ```
 
 Rust references (in `.work/gpui-component`):

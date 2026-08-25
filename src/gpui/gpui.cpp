@@ -3599,9 +3599,15 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
     // measured leaf and a box are not the same node even when their styles
     // agree.
     if (!rec || rec->kind != (uint8_t)e->kind) {
-        if (havePrev) {
-            LayoutDropSubtree(lc, prev);
-        }
+        // The old node stays where it is. Its caller holds an index into the
+        // parent's child list and is about to put this new node there, and
+        // taffy's Remove — Rust's too — takes a node *out* of that list,
+        // which shifts every sibling after it: the replace would then land on
+        // the wrong child, or past the end of a list that has just become
+        // shorter, in which case the new subtree is never attached at all and
+        // nothing lays it out. Dropping is the caller's, once the swap is
+        // done. It is also Rust's order — `replace_child_at_index` and then
+        // `remove`.
         return LayoutBuild(sc, e, isRoot);
     }
 
@@ -3640,6 +3646,9 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
             taffy::NodeId now = LayoutSync(sc, c, old, true, false);
             if (now != old) {
                 lc->tree.ReplaceChildAtIndex(prev, i, now);
+                // The swap has taken `old` out of the list, so dropping it
+                // now leaves the list — and every index into it — alone.
+                LayoutDropSubtree(lc, old);
             }
         } else {
             lc->tree.AddChild(prev, LayoutBuild(sc, c, false));
@@ -3648,8 +3657,17 @@ static taffy::NodeId LayoutSync(LayoutSyncCtx* sc, El* e, taffy::NodeId prev,
     }
     // Whatever the element no longer has. Dropping a child detaches it, so
     // the parent's list shortens as they go.
+    bool dropped = false;
     for (int j = lc->tree.ChildCount(prev) - 1; j >= i; j--) {
         LayoutDropSubtree(lc, lc->tree.ChildAtIndex(prev, j));
+        dropped = true;
+    }
+    // taffy's Remove does not dirty the parent — Rust's does not either,
+    // because Rust's callers reach for `set_children`, which does. A node
+    // that lost a child and changed in no other way would otherwise keep the
+    // layout it had when the child was still there.
+    if (dropped) {
+        lc->tree.MarkDirty(prev);
     }
     return prev;
 }
@@ -3835,6 +3853,9 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
     // inside the sync, so that the style the node carries is the one the
     // next frame compares against.
     taffy::NodeId root = LayoutSync(&sc, e, lc->root, lc->hasRoot, true);
+    if (lc->hasRoot && root != lc->root) {
+        LayoutDropSubtree(lc, lc->root);
+    }
     lc->root = root;
     lc->hasRoot = true;
 
@@ -3859,12 +3880,18 @@ static void LayoutElIn(LayoutCache* lc, PaintCtx* ctx, El* e, float x, float y,
             lc->tree.AddChild(root, now);
         } else if (now != old) {
             lc->tree.ReplaceChildAtIndex(root, at, now);
+            LayoutDropSubtree(lc, old);
         }
     }
     // A fixed element that has gone takes its node with it.
+    bool droppedFixed = false;
     for (int j = lc->tree.ChildCount(root) - 1; j >= own + gLayoutFixed.len;
          j--) {
         LayoutDropSubtree(lc, lc->tree.ChildAtIndex(root, j));
+        droppedFixed = true;
+    }
+    if (droppedFixed) {
+        lc->tree.MarkDirty(root);
     }
 
     taffy::SizeAvail space;

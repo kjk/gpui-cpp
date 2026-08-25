@@ -1,0 +1,125 @@
+/* The taffy tree carried across frames, and what reconciling it has to get
+ * right.
+ *
+ * The tree is rebuilt as elements every frame and reconciled against the
+ * nodes of the last one by position, so what a frame costs is only what
+ * actually changed. What it must never cost is a frame laid out wrong: a
+ * node that ends up detached is never laid out at all, and everything under
+ * it writes back a zero rectangle — a page drawn as nothing, and left that
+ * way until the next thing that happens to redraw. */
+
+#include "Test.h"
+
+using namespace gpui;
+
+// A child whose *kind* changed cannot keep the node: the reconcile builds a
+// new one and puts it where the old one sat. Taking the old one out first
+// would shorten the parent's child list under the index the new one is about
+// to be written at — and where that index was the last, the new subtree is
+// never attached and never laid out.
+static void AChildOfAnotherKindIsStillLaidOut() {
+    TestSuite("layout reuse");
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+
+    // A parent with one child, which is what makes the index the last one.
+    El* first = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    first->Child(Div(a)->W(100)->H(20));
+    LayoutEl(nullptr, first, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(first->first->w == 100 && first->first->h == 20);
+
+    // The same position, a different kind of element: an icon measures a
+    // constant, so its size says whether it was laid out at all.
+    a->Reset();
+    El* second = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    second->Child(IconEl(a, IconName::Check, 16));
+    LayoutEl(nullptr, second, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(second->first->w == 16 && second->first->h == 16);
+
+    // And back the other way, which is the same swap in reverse.
+    a->Reset();
+    El* third = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    third->Child(Div(a)->W(120)->H(24));
+    LayoutEl(nullptr, third, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(third->first->w == 120 && third->first->h == 24);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
+// A whole subtree replaced at once — a page switch, which is where this was
+// found. Every box in the new page has to have a size.
+static void APageSwitchLaysOutEveryBox() {
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+
+    El* page = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    page->Child(Div(a)->FlexCol()->W(kFill)->Child(IconEl(a, IconName::Check,
+                                                          16)));
+    LayoutEl(nullptr, page, 0, 0, 400, 300, 14, Rgba{}, lc);
+
+    // The next frame's page is deeper and wider than the one before it: the
+    // reconcile keeps the top of the tree and builds the rest.
+    a->Reset();
+    El* other = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    El* row = Div(a)->FlexRow()->W(kFill)->H(40);
+    for (int i = 0; i < 4; i++) {
+        row->Child(Div(a)->W(50)->H(20));
+    }
+    other->Child(row);
+    other->Child(Div(a)->W(80)->H(30));
+    LayoutEl(nullptr, other, 0, 0, 400, 300, 14, Rgba{}, lc);
+
+    utassert(row->w == 400 && row->h == 40);
+    int n = 0;
+    for (El* c = row->first; c; c = c->next) {
+        utassert(c->w == 50 && c->h == 20);
+        utassert(c->x == 50.f * n);
+        n++;
+    }
+    utassert(n == 4);
+    utassert(other->first->next->w == 80 && other->first->next->h == 30);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
+// A parent that only *loses* a child changes in no other way, so nothing
+// restyles it and nothing remeasures it. Taking a child out does not dirty a
+// node in taffy — Rust's `remove` does not either, because Rust's callers
+// reach for `set_children`, which does — so the reconcile has to say so
+// itself, or the parent keeps the height it had when the child was there.
+static void AParentThatLostAChildShrinks() {
+    LayoutCache* lc = LayoutCacheNew();
+    Arena* a = ArenaNew();
+
+    // Inside a root, because a root is stretched to the space it was given
+    // and would say nothing about its own content.
+    El* root = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    El* column = Div(a)->FlexCol()->W(200);
+    for (int i = 0; i < 3; i++) {
+        column->Child(Div(a)->W(kFill)->H(20));
+    }
+    root->Child(column);
+    LayoutEl(nullptr, root, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(column->h == 60);
+
+    a->Reset();
+    El* root2 = Div(a)->FlexCol()->W(kFill)->H(kFill);
+    El* shorter = Div(a)->FlexCol()->W(200);
+    for (int i = 0; i < 2; i++) {
+        shorter->Child(Div(a)->W(kFill)->H(20));
+    }
+    root2->Child(shorter);
+    LayoutEl(nullptr, root2, 0, 0, 400, 300, 14, Rgba{}, lc);
+    utassert(shorter->h == 40);
+
+    ArenaDelete(a);
+    LayoutCacheFree(lc);
+}
+
+void TestLayoutReuse() {
+    AChildOfAnotherKindIsStillLaidOut();
+    APageSwitchLaysOutEveryBox();
+    AParentThatLostAChildShrinks();
+}

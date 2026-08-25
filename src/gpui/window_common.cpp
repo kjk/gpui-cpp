@@ -3,6 +3,8 @@
    here; nothing here calls back out except through Platform.h. */
 
 #include "gpui/platform.h"
+
+#include <stdio.h>
 #include "gpui/keymap.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
@@ -162,6 +164,75 @@ static void FrameBenchTick(Window* win, float secs) {
     want = 0;
     PlatSetTimer(win, 0);
     AppQuit(win);
+}
+
+// ─── the laid-out tree, as text ───────────────────────────────────────────
+//
+// `GPUI_LAYOUT_DUMP=<path>` writes every frame's tree to a file: a header line
+// per frame, then a line per element with where layout put it. It is the only
+// way to see what a frame was laid out as without asking the window to draw
+// again — a screenshot on Windows goes through PrintWindow, which makes the
+// window render, so a capture can never show a frame that came out wrong and
+// was left on screen. Diffing two consecutive frames says what moved.
+//
+// Inert unless the variable is set.
+static FILE* LayoutDumpFile() {
+    static FILE* f = nullptr;
+    static bool tried = false;
+    if (tried) {
+        return f;
+    }
+    tried = true;
+    const char* path = getenv("GPUI_LAYOUT_DUMP");
+    if (!path || !path[0]) {
+        return nullptr;
+    }
+    f = fopen(path, "wb");
+    if (f) {
+        logf("layout: dumping every frame to %s (GPUI_LAYOUT_DUMP)", Str(path));
+    }
+    return f;
+}
+
+static void LayoutDumpEl(FILE* f, El* e, int depth) {
+    if (!e) {
+        return;
+    }
+    // The text, cut short: what is on the line matters for telling one
+    // element from another, not what it says.
+    char text[41] = {};
+    int n = e->text.len < 40 ? e->text.len : 40;
+    for (int i = 0; i < n; i++) {
+        char c = e->text.s[i];
+        text[i] = (c == '\n' || c == '\r' || c == '\t') ? ' ' : c;
+    }
+    fprintf(f, "%*s%d id=%d x=%.1f y=%.1f w=%.1f h=%.1f%s%s\n", depth * 2, "",
+            (int)e->kind, e->clickId, e->x, e->y, e->w, e->h,
+            text[0] ? " " : "", text);
+    for (El* c = e->first; c; c = c->next) {
+        LayoutDumpEl(f, c, depth + 1);
+    }
+}
+
+static void LayoutDumpFrame(Window* win, El* root) {
+    FILE* f = LayoutDumpFile();
+    if (!f || !win || !root) {
+        return;
+    }
+    // What became of the frame, beside what it was: a frame the scene found
+    // identical to the last one is not presented, so a dump that shows the
+    // right layout and `presented=0` is a screen that is still showing the
+    // frame before it.
+    LayoutCacheStats ls = LayoutCacheLastStats(win->layout);
+    fprintf(f,
+            "--- frame %llu t=%.3f view=%.0fx%.0f prims=%d presented=%d "
+            "nodes=%d made=%d dropped=%d restyled=%d remeasured=%d\n",
+            (unsigned long long)win->frameSeq, TimeNow(), win->paint.viewW,
+            win->paint.viewH, SceneOn() ? scene::Stats().prims : -1,
+            (SceneOn() && scene::SkipPresent()) ? 0 : 1, ls.nodes, ls.made,
+            ls.dropped, ls.restyled, ls.remeasured);
+    LayoutDumpEl(f, root, 0);
+    fflush(f);
 }
 
 void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
@@ -344,6 +415,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // multisampled surface is resolved, which is part of what drawing cost.
     gFramePaintSecs += TimeNow() - tEnd0;
     TextMeasEndFrame(&win->paint);
+    LayoutDumpFrame(win, root);
 
     // The pick a press asked for is settled against the frame it aimed at.
     if (win->inspector.pending) {

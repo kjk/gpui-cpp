@@ -4914,3 +4914,66 @@ app's own log: the scene's `view=` printed 840×640 on the frame after a
 red herring — rebuilding the layout tree every frame changes what is dirty,
 not what the scene culls against, and the wrong frame it drew was simply a
 different wrong frame.
+
+
+## The page that was never attached to the tree
+
+Click a component in the showcase and click *All components* to come back, and
+the overview is drawn as nothing — every box at zero size — and stays that way
+until the next click or keystroke redraws it. Seconds, if you are reading
+rather than clicking. This is the bug the previous two entries were circling.
+
+**What it was.** The taffy tree is carried across frames and reconciled
+against the element tree by position. Where a child's *kind* changed, the node
+cannot be reused: `LayoutSync` built a new one and the caller put it where the
+old one sat —
+
+```
+taffy::NodeId now = LayoutSync(sc, c, old, true, false);   // drops `old`
+if (now != old) {
+    lc->tree.ReplaceChildAtIndex(prev, i, now);            // ...at index i
+}
+```
+
+— except that the drop inside `LayoutSync` calls taffy's `Remove`, and Remove
+takes the node **out of its parent's child list**. The list is then one
+shorter, and the index the caller is holding points at the wrong child, or
+past the end. Where the replaced child was the last one — a page's whole
+content under a container that has exactly one child, which is every page in
+the showcase — `ReplaceChildAtIndex` found index 0 in a list of length 0 and
+did nothing at all. The new subtree was never attached to the tree, so taffy
+never laid it out, and all 96 of its boxes wrote back the zero rectangle they
+were made with.
+
+The order is Rust's, and it is the other way round: `replace_child_at_index`
+first, `remove` second. The drop moved out to the three callers, after the
+swap.
+
+**And a second one beside it.** taffy's `Remove` does not dirty the parent —
+Rust's does not either, because Rust's callers reach for `set_children`, which
+does. Our reconcile removes trailing children directly, so a parent that only
+*lost* a child changed in no other way that taffy could see, and kept the
+layout it had when the child was still there. It says so itself now.
+
+**How it was found.** Not by screenshot: `cmd/shot.ts` captures with
+`PrintWindow`, which makes the window render, so every capture came out of a
+frame drawn after the fact and looked right. `GPUI_LAYOUT_DUMP=<path>` is what
+found it — every frame's laid-out tree written to a file, with what became of
+the frame in the header:
+
+```
+--- frame 7 t=4.837 view=840x640 prims=82 presented=1 nodes=99 made=96 dropped=21
+0 id=0 x=0.0 y=0.0 w=840.0 h=640.0
+  0 id=0 x=0.0 y=0.0 w=840.0 h=640.0
+    0 id=0 x=0.0 y=0.0 w=840.0 h=640.0
+      0 id=0 x=0.0 y=0.0 w=0.0 h=0.0        <- and everything under it
+```
+
+96 new nodes, 96 zero rectangles, and `presented=1`: that frame went to the
+screen and nothing asked for another. It is worth keeping for the next time
+something is laid out wrong, and `GPUI_LAYOUT_REUSE=off` beside it says in one
+run whether the reconcile is to blame.
+
+`tests/LayoutReuseTests.cpp` pins all three shapes — a child whose kind
+changed, a page switch that replaces a whole subtree, and a parent that lost a
+child — and each of them fails on the code as it was.
