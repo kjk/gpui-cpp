@@ -2,10 +2,21 @@
    the editor's own switches under it.
 
    The tree walks the working directory and opens a file into the editor,
-   which scans it as whatever its extension names. The status bar carries the
-   switches Rust's does — line numbers, soft wrap, indent guides, folding,
-   read only — with the caret's `line:column` on the right opening the Go to
-   line dialog.
+   which scans it as whatever its extension names. Rust filters the walk
+   through the `autocorrect` ignorer, which reads .gitignore; `kSkipDirs`
+   below is the short list that stands in for it.
+
+   Over it is the bar `crates/story/src/title_bar.rs` draws: Rust's editor
+   window is a StoryRoot, whose AppTitleBar carries the app menu bar on the
+   left and the appearance menu, the GitHub link and the notification bell on
+   the right. This example is a window of its own, so it draws that bar
+   itself.
+
+   Under it is the status bar, with the caret's one-based `line:column (byte)`
+   on the right opening the Go to line dialog. Five of its eight switches are
+   here — line numbers, soft wrap, indent guides, folding, read only. The
+   three that are not are the three the editor engine has no setting for yet:
+   show whitespaces, scroll beyond last line, and cursor surrounding lines.
 
    The diagnostics are the part that differs and says so. Upstream lints the
    open document with the `autocorrect` crate and publishes what it finds
@@ -29,19 +40,19 @@
 using namespace gpui;
 
 // The directories a walk does not go into. Rust asks the `autocorrect`
-// ignorer, which reads .gitignore; this is the short list that keeps the tree
-// to the source.
-static const char* const kSkipDirs[] = {
-    ".git", ".work", "out", "target", "node_modules", ".vs", ".cache"};
+// ignorer, which reads .gitignore, and skips `.git` on top of it; this is the
+// short list that stands in for the ignorer -- the entries this repo's own
+// .gitignore names, plus the ones a sibling checkout tends to leave about.
+//
+// A leading dot is not itself a reason to skip: `.github`, `.gitignore` and
+// `.clang-format` are in the tree the ignorer keeps, so they are in this one.
+static const char* const kSkipDirs[] = {".git",         ".work",  "out",
+                                        "target",       ".emsdk", "build",
+                                        "node_modules", ".vs",    ".cache"};
 
 static bool SkipEntry(const char* name) {
-    if (!name[0] || name[0] == '.') {
-        for (const char* d : kSkipDirs) {
-            if (strcmp(name, d) == 0) {
-                return true;
-            }
-        }
-        return name[0] == '.';
+    if (!name[0]) {
+        return true;
     }
     for (const char* d : kSkipDirs) {
         if (strcmp(name, d) == 0) {
@@ -853,14 +864,408 @@ static void ConfirmGoTo(EditorApp* self, Ctx* cx, const ClickEvent* ev) {
     CloseGoTo(self, cx, ev);
 }
 
+// A switch in the status bar. Rust says what is on with a check in front of
+// the label rather than with a pressed look: `.when(on, |this|
+// this.icon(IconName::Check))`.
 static El* ToggleButton(Ctx* cx, Str id, Str label, bool on, Listener toggle,
                         intptr_t which) {
-    return component::Button::New(cx, id)
-        ->Ghost()
-        ->WithSize(UiSize::XSmall)
-        ->Label(label)
-        ->Selected(on)
-        ->OnClick(ListenerArg(toggle, which))
+    component::Button* b = component::Button::New(cx, id)
+                               ->Ghost()
+                               ->WithSize(UiSize::XSmall)
+                               ->Label(label);
+    if (on) {
+        b->Icon(IconName::Check);
+    }
+    return b->OnClick(ListenerArg(toggle, which))->IntoEl();
+}
+
+// ─── the title bar ────────────────────────────────────────────────────────
+//
+// crates/story/src/title_bar.rs, and crates/story/src/app_menus.rs under it.
+// Rust's editor window is opened by `create_new_window_with_size`, which
+// wraps the view in a StoryRoot whose AppTitleBar draws the app menu bar on
+// the left and the tools on the right. This example is a window of its own
+// rather than a page of the gallery, so it draws the same bar itself.
+//
+// One menu Rust builds is not here: `Language` wants rust_i18n and a locale
+// table, and this example has no labels to translate. Rust's `Go` menu names
+// the gallery's command palette and theme picker; the editor's own way of
+// going somewhere is the Go to line dialog, so that is the row under it.
+
+#define EDITOR_ACTION(fn, spelled)                    \
+    static uint32_t fn() {                            \
+        static uint32_t id = ActionOf(StrL(spelled)); \
+        return id;                                    \
+    }
+
+EDITOR_ACTION(ActAbout, "editor::About")
+EDITOR_ACTION(ActOpen, "editor::Open")
+EDITOR_ACTION(ActQuit, "editor::Quit")
+EDITOR_ACTION(ActGoToLine, "editor::GoToLine")
+EDITOR_ACTION(ActDocumentation, "editor::Documentation")
+EDITOR_ACTION(ActOpenWebsite, "editor::OpenWebsite")
+// The payload rides on the action, the way `SwitchThemeMode(mode)`,
+// `SelectFont(px)` and `SelectRadius(px)` carry theirs in Rust.
+EDITOR_ACTION(ActSwitchThemeMode, "editor::SwitchThemeMode")
+EDITOR_ACTION(ActSelectFont, "editor::SelectFont")
+EDITOR_ACTION(ActSelectRadius, "editor::SelectRadius")
+
+// `MenuItem::action("About", About)`. The gallery answers this with a dialog
+// of its own; this example already owns one dialog, and says it in the place
+// a window says everything else.
+static void OnAboutAction(EditorApp*, Ctx* cx, const ActionEvent*) {
+    WindowPushNotification(cx, component::NotificationKind::Info,
+                           StrL("Editor example — the C++ port of "
+                                "crates/story/examples/editor.rs"));
+}
+
+// `on_action_open`: the desktop's own dialog, and what it answers is read
+// into the editor.
+static void OnOpenAction(EditorApp* self, Ctx* cx, const ActionEvent*) {
+    char path[1024] = {};
+    PathPrompt prompt;
+    prompt.files = true;
+    prompt.directories = true;
+    prompt.title = StrL("Select a source file");
+    if (!PromptForPath(cx->win, prompt, path, (int)sizeof(path))) {
+        return;
+    }
+    OpenFile(self, path);
+    Notify(cx);
+}
+
+static void OnQuitAction(EditorApp*, Ctx* cx, const ActionEvent*) {
+    AppQuitAll(cx->app);
+}
+
+static void OnGoToLineAction(EditorApp* self, Ctx* cx, const ActionEvent*) {
+    OpenGoTo(self, cx, nullptr);
+}
+
+static void OnDocumentationAction(EditorApp*, Ctx*, const ActionEvent*) {
+    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+}
+
+static void OnOpenWebsiteAction(EditorApp*, Ctx*, const ActionEvent*) {
+    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+}
+
+static void OnGithubClick(EditorApp*, Ctx*, const ClickEvent*) {
+    OpenUrl(StrL("https://github.com/longbridge/gpui-component"));
+}
+
+static void OnSwitchThemeModeAction(EditorApp*, Ctx* cx,
+                                    const ActionEvent* ev) {
+    ThemeSet(cx->app, ev->arg == 0 ? ThemeMode::Light : ThemeMode::Dark);
+    Notify(cx);
+}
+
+static void OnSelectFontAction(EditorApp*, Ctx* cx, const ActionEvent* ev) {
+    ThemeSetFontSize((float)ev->arg);
+    Notify(cx);
+}
+
+static void OnSelectRadiusAction(EditorApp*, Ctx* cx, const ActionEvent* ev) {
+    ThemeSetRadius((float)ev->arg);
+    Notify(cx);
+}
+
+// Every handler above, hung off the root so a row chosen in either bar finds
+// one. Rust registers these with `cx.on_action` on the app rather than on an
+// element, which is the same reach.
+static El* EditorBindMenuActions(El* root, Ctx* cx) {
+    return root->OnAction(ActAbout(), Listen(cx, &OnAboutAction))
+        ->OnAction(ActOpen(), Listen(cx, &OnOpenAction))
+        ->OnAction(ActQuit(), Listen(cx, &OnQuitAction))
+        ->OnAction(ActGoToLine(), Listen(cx, &OnGoToLineAction))
+        ->OnAction(ActDocumentation(), Listen(cx, &OnDocumentationAction))
+        ->OnAction(ActOpenWebsite(), Listen(cx, &OnOpenWebsiteAction))
+        ->OnAction(ActSwitchThemeMode(), Listen(cx, &OnSwitchThemeModeAction))
+        ->OnAction(ActSelectFont(), Listen(cx, &OnSelectFontAction))
+        ->OnAction(ActSelectRadius(), Listen(cx, &OnSelectRadiusAction));
+}
+
+// cx.bind_keys: a menu row shows the chord bound to its action and nothing
+// else, so the rows that want one have one bound to them.
+static void EditorInitKeys() {
+    static uint32_t bound = 0;
+    if (bound == KeymapGeneration()) {
+        return;
+    }
+    bound = KeymapGeneration();
+    KeyBinding bindings[] = {
+        {"secondary-o", ActOpen(), nullptr},
+        {"secondary-g", ActGoToLine(), nullptr},
+#if GPUI_OS_MAC
+        {"cmd-q", ActQuit(), nullptr},
+#else
+        {"alt-f4", ActQuit(), nullptr},
+#endif
+    };
+    KeymapBind(bindings, (int)(sizeof(bindings) / sizeof(bindings[0])));
+}
+
+static const int kEditorMenus = 4;
+
+static MenuRow* EditorRows(Ctx* cx, int n) {
+    // Zeroed is what every MenuRow field defaults to, which is what makes a
+    // row that sets nothing a row that does nothing.
+    return (MenuRow*)cx->a
+        ->Push((uint64_t)n * sizeof(MenuRow), alignof(MenuRow), true);
+}
+
+// build_menus(title, cx), with the window's own name on the first one.
+static int EditorBuildMenus(Ctx* cx, MenuDef* out, int cap) {
+    if (cap < kEditorMenus) {
+        return 0;
+    }
+    bool dark = ThemeGet() == ThemeMode::Dark;
+    MenuRow* appearance = EditorRows(cx, 2);
+    appearance[0].label = StrL("Light");
+    appearance[0].action = ActSwitchThemeMode();
+    appearance[0].arg = 0;
+    appearance[0].checked = !dark;
+    appearance[1].label = StrL("Dark");
+    appearance[1].action = ActSwitchThemeMode();
+    appearance[1].arg = 1;
+    appearance[1].checked = dark;
+
+    MenuRow* appRows = EditorRows(cx, 7);
+    appRows[0].label = StrL("About");
+    appRows[0].action = ActAbout();
+    appRows[1].separator = true;
+    appRows[2].label = StrL("Open...");
+    appRows[2].action = ActOpen();
+    appRows[3].separator = true;
+    appRows[4].label = StrL("Appearance");
+    appRows[4].submenu = appearance;
+    appRows[4].submenuN = 2;
+    appRows[5].separator = true;
+    appRows[6].label = StrL("Quit");
+    appRows[6].action = ActQuit();
+    out[0].name = StrL("Editor");
+    out[0].items = appRows;
+    out[0].n = 7;
+
+    // Every row of the Edit menu names one of the input's actions and carries
+    // no handler of its own: choosing it dispatches the action to whatever
+    // field has the keyboard, which is the same handler the chord reaches,
+    // and the shortcut beside it is looked up in the keymap rather than typed
+    // here.
+    struct EditRow {
+        const char* label;
+        uint32_t action;
+    };
+    const EditRow kEdit[] = {
+        {"Undo", input::Undo()},
+        {"Redo", input::Redo()},
+        {nullptr, 0},
+        {"Cut", input::Cut()},
+        {"Copy", input::Copy()},
+        {"Paste", input::Paste()},
+        {nullptr, 0},
+        {"Delete", input::Delete()},
+        {"Delete Previous Word", input::DeleteToPreviousWordStart()},
+        {"Delete Next Word", input::DeleteToNextWordEnd()},
+        {nullptr, 0},
+        {"Find", input::Search()},
+        {nullptr, 0},
+        {"Select All", input::SelectAll()},
+    };
+    const int nEdit = (int)(sizeof(kEdit) / sizeof(kEdit[0]));
+    MenuRow* editRows = EditorRows(cx, nEdit);
+    for (int i = 0; i < nEdit; i++) {
+        if (!kEdit[i].label) {
+            editRows[i].separator = true;
+            continue;
+        }
+        editRows[i].label = Str(kEdit[i].label);
+        editRows[i].action = kEdit[i].action;
+    }
+    out[1].name = StrL("Edit");
+    out[1].items = editRows;
+    out[1].n = nEdit;
+
+    MenuRow* goRows = EditorRows(cx, 1);
+    goRows[0].label = StrL("Go to Line/Column...");
+    goRows[0].action = ActGoToLine();
+    out[2].name = StrL("Go");
+    out[2].items = goRows;
+    out[2].n = 1;
+
+    MenuRow* helpRows = EditorRows(cx, 3);
+    helpRows[0].label = StrL("Documentation");
+    helpRows[0].action = ActDocumentation();
+    helpRows[0].disabled = true;
+    helpRows[1].separator = true;
+    helpRows[2].label = StrL("Open Website");
+    helpRows[2].action = ActOpenWebsite();
+    out[3].name = StrL("Help");
+    out[3].items = helpRows;
+    out[3].n = 3;
+    return kEditorMenus;
+}
+
+static component::PopupMenu* EditorPopupMenu(Ctx* cx, Str id,
+                                             const MenuRow* rows, int n) {
+    component::PopupMenu* menu = component::PopupMenu::New(cx, id);
+    for (int i = 0; i < n; i++) {
+        const MenuRow& r = rows[i];
+        if (r.separator || r.label.len <= 0) {
+            menu->Separator();
+            continue;
+        }
+        if (r.submenu && r.submenuN > 0) {
+            Str subId = StrDup(cx->a, fmt("%s-%d", id, i));
+            menu->Submenu(r.label,
+                          EditorPopupMenu(cx, subId, r.submenu, r.submenuN));
+            menu->Disabled(r.disabled);
+            continue;
+        }
+        menu->MenuWithAction(r.label, r.action, r.arg);
+        menu->Checked(r.checked);
+        menu->Disabled(r.disabled);
+    }
+    return menu;
+}
+
+static El* EditorTitleMenuItem(Ctx* cx, Str label, bool semibold) {
+    Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* text = TextEl(a, label)->Font(14)->Fg(th.foreground);
+    if (semibold) {
+        text->Semibold();
+    }
+    Str clickId = StrDup(a, fmt("editor-title-%s", label));
+    return Div(a)
+        ->H(kFill)
+        ->PadX(8)
+        ->ItemsCenter()
+        ->Radius(th.radius)
+        ->Click(HashClickId(clickId))
+        ->HoverBg(th.tokens.muted)
+        ->Child(text);
+}
+
+// AppMenuBar: the menus drawn into the title bar.
+static El* EditorMenuBar(Ctx* cx, const MenuDef* menus, int n) {
+    Arena* a = cx->a;
+    El* bar = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
+    for (int i = 0; i < n; i++) {
+        Str menuId = StrDup(a, fmt("editor-menu-%d", i));
+        component::PopupMenu* menu =
+            EditorPopupMenu(cx, menuId, menus[i].items, menus[i].n)->MinW(220);
+        if (i == 1) {
+            // The field's own key context, which is where the Edit menu's
+            // actions are bound and so where their chords are found.
+            menu->ActionContext("Input");
+        }
+        // The application's own menu is the one named for it, in the heavier
+        // weight that makes it read as a title rather than as the first of
+        // four.
+        Str triggerId = StrDup(a, fmt("editor-menu-trigger-%d", i));
+        bar->Child(component::DropdownMenu::New(cx, triggerId)
+                       ->Trigger(EditorTitleMenuItem(cx, menus[i].name, i == 0))
+                       ->Menu(menu)
+                       ->IntoEl());
+    }
+    return bar;
+}
+
+// FontSizeSelector: the menu behind the Settings2 button. Rust's carries the
+// gallery's own switches under these two groups — the scrollbar mode, the FPS
+// monitor, the menu bar itself; the two groups here are the ones that are the
+// theme's rather than the gallery's, and so the ones an editor window can
+// answer for.
+static El* EditorAppearanceMenu(Ctx* cx) {
+    struct ApRow {
+        const char* label;
+        uint32_t action;
+        float value;
+    };
+    // A row with no action is a heading, and one with no label a separator.
+    const ApRow kRows[] = {
+        {"Font Size", 0, 0},
+        {"Large", ActSelectFont(), 18},
+        {"Medium (default)", ActSelectFont(), 16},
+        {"Small", ActSelectFont(), 14},
+        {nullptr, 0, 0},
+        {"Border Radius", 0, 0},
+        {"8px", ActSelectRadius(), 8},
+        {"6px (default)", ActSelectRadius(), 6},
+        {"4px", ActSelectRadius(), 4},
+        {"0px", ActSelectRadius(), 0},
+    };
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("editor-appearance"))->MinW(220);
+    for (const ApRow& r : kRows) {
+        if (!r.label) {
+            menu->Separator();
+            continue;
+        }
+        if (r.action == 0) {
+            menu->Label(Str(r.label));
+            continue;
+        }
+        bool on = r.action == ActSelectFont() ? ThemeFontSize() == r.value
+                                              : ThemeNow().radius == r.value;
+        menu->MenuWithAction(Str(r.label), r.action, (intptr_t)r.value);
+        menu->Checked(on);
+    }
+    El* trigger = component::Button::New(cx, StrL("editor-title-settings"))
+                      ->Icon(IconName::Settings2)
+                      ->Ghost()
+                      ->WithSize(UiSize::Small)
+                      ->Tooltip(StrL("Appearance"))
+                      ->IntoEl()
+                      ->Cursor(CursorKind::Pointer);
+    return component::DropdownMenu::New(cx, StrL("editor-appearance-trigger"))
+        ->Trigger(trigger)
+        ->Menu(menu)
+        ->IntoEl();
+}
+
+// The three tools at the right of the title bar. They are ghost buttons, and
+// over a title bar there is nothing else to say an icon is a control rather
+// than an ornament, so they ask for the hand themselves.
+static El* EditorTitleBar(Ctx* cx, const MenuDef* defs, int nDefs) {
+    Arena* a = cx->a;
+    El* tools =
+        Div(a)
+            ->FlexRow()
+            ->H(kFill)
+            ->ItemsCenter()
+            ->PadX(8)
+            ->Gap(2)
+            ->Child(EditorAppearanceMenu(cx))
+            ->Child(component::Button::New(cx, StrL("editor-title-github"))
+                        ->Icon(IconName::Github)
+                        ->Ghost()
+                        ->Compact()
+                        ->WithSize(UiSize::Small)
+                        ->Tooltip(StrL("GitHub"))
+                        ->OnClick(Listen(cx, &OnGithubClick))
+                        ->IntoEl()
+                        ->Cursor(CursorKind::Pointer))
+            // Badge::count: how many notifications are up, capped at 99. The
+            // bell itself has nothing to do in Rust either — the count is the
+            // whole of it.
+            ->Child(component::Badge::New(cx)
+                        ->Count(WindowNotificationCount(cx))
+                        ->Max(99)
+                        ->Child(component::Button::New(
+                                    cx, StrL("editor-title-bell"))
+                                    ->Icon(IconName::Bell)
+                                    ->Ghost()
+                                    ->Compact()
+                                    ->WithSize(UiSize::Small)
+                                    ->Tooltip(StrL("Notifications"))
+                                    ->IntoEl()
+                                    ->Cursor(CursorKind::Pointer))
+                        ->IntoEl());
+    return component::TitleBar::New(cx)
+        ->Child(EditorMenuBar(cx, defs, nDefs))
+        ->Child(tools)
         ->IntoEl();
 }
 
@@ -883,8 +1288,20 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     }
     cx->win->input = self->dialogOpen ? &self->goToLine : &self->editor;
 
+    EditorInitKeys();
+    // build_menus() once: the OS menu bar is installed from it, the title bar
+    // draws it, and the root answers for every action either of them
+    // dispatches.
+    MenuDef defs[kEditorMenus] = {};
+    int nDefs = EditorBuildMenus(cx, defs, kEditorMenus);
+    AppSetMenus(cx->app, defs, nDefs);
+
     WinSize win = WindowSize(cx->win);
-    float bodyH = win.dipH - 30;
+    // The status bar under it, and the title bar over it where the window
+    // owns one; what is left is the tree and the editor.
+    float chrome =
+        30 + (cx->win->opts.clientTitleBar ? component::kTitleBarHeight : 0);
+    float bodyH = win.dipH - chrome;
 
     // The tree reports a selection rather than a click; a row that names a
     // file and is not the one already open is the one to read in.
@@ -936,22 +1353,27 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
                            self->indentGuides, toggle, kToggleIndentGuides));
     bar->Left(ToggleButton(cx, StrL("folding"), StrL("Folding"), self->folding,
                            toggle, kToggleFolding));
-    bar->Left(ToggleButton(cx, StrL("readonly"), StrL("Read Only"),
+    bar->Left(ToggleButton(cx, StrL("readonly"), StrL("Read only"),
                            self->readOnly, toggle, kToggleReadOnly));
+    // render_go_to_line_button: the point one-based the way an editor counts
+    // it, and the byte the caret stands on beside it.
     RopePoint at = InputCursorPosition(&self->editor);
-    bar->Right(component::Button::New(cx, StrL("line-column"))
-                   ->Ghost()
-                   ->WithSize(UiSize::XSmall)
-                   ->Label(StrDup(a, fmt("%d:%d", at.row, at.column)))
-                   ->OnClick(Listen(cx, &OpenGoTo))
-                   ->IntoEl());
+    bar->Right(
+        component::Button::New(cx, StrL("line-column"))
+            ->Ghost()
+            ->WithSize(UiSize::XSmall)
+            ->Label(StrDup(a, fmt("%d:%d (%d byte)", at.row + 1, at.column + 1,
+                                  InputCursor(&self->editor))))
+            ->Tooltip(StrL("Go to Line/Column"))
+            ->OnClick(Listen(cx, &OpenGoTo))
+            ->IntoEl());
 
-    El* root = Div(a)
-                   ->FlexCol()
-                   ->SizeFull()
-                   ->Bg(th.tokens.background)
-                   ->Child(body)
-                   ->Child(bar->IntoEl());
+    El* root = Div(a)->FlexCol()->SizeFull()->Bg(th.tokens.background);
+    EditorBindMenuActions(root, cx);
+    if (cx->win->opts.clientTitleBar) {
+        root->Child(EditorTitleBar(cx, defs, nDefs));
+    }
+    root->Child(body)->Child(bar->IntoEl());
     if (self->dialogOpen) {
         root->Child(component::Dialog::New(cx)
                         ->Open(true)
@@ -965,7 +1387,12 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
                         ->OnOk(Listen(cx, &ConfirmGoTo))
                         ->IntoEl(win));
     }
-    return root;
+    // Bordered only where the window is client-decorated; a system frame
+    // draws its own.
+    return component::Root::New(cx)
+        ->Bordered(cx->win->opts.clientTitleBar)
+        ->Child(root)
+        ->IntoEl();
 }
 
 int GpuiMain(int argc, char** argv) {
@@ -1012,8 +1439,12 @@ int GpuiMain(int argc, char** argv) {
     // The file the example opens with, which is its own source.
     OpenFile(self, "examples/editor.cpp");
     self->editor.focused = true;
-    Window* win = WindowOpenView(app, StrL("Editor Example"), 1280, 900,
-                                 view.id, WinOpts{});
+    // TitleBar::window_options(): the example owns its title bar, so the
+    // window is opened without the system caption on the platforms whose
+    // windows can be.
+    WinOpts opts;
+    opts.clientTitleBar = true;
+    Window* win = WindowOpenView(app, StrL("Editor"), 1200, 750, view.id, opts);
     (void)win;
     int rc = AppRun(app);
     AppFree(app);

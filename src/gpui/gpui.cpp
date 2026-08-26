@@ -5456,11 +5456,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                            hi, e->selColor);
         }
         if (e->markLo >= 0 && e->markHi > e->markLo) {
-            PaintTextUnderline(ctx, e->text, font,
-                               e->laidMaxW > 0 ? e->laidMaxW : e->w,
-                               e->style.wrap, ElTextWeight(e),
-                               e->style.lineHeight, e->x, e->y, e->markLo,
-                               e->markHi, c);
+            PaintTextUnderline(
+                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                e->style.wrap, ElTextWeight(e), e->style.lineHeight, e->x, e->y,
+                e->markLo, e->markHi, c);
         }
         if (e->nSpans > 0 && e->text.s) {
             PaintTextSpans(ctx, e, font, c);
@@ -5497,11 +5496,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             if (u.hi <= u.lo || u.color.a == 0) {
                 continue;
             }
-            PaintTextUnderline(ctx, e->text, font,
-                               e->laidMaxW > 0 ? e->laidMaxW : e->w,
-                               e->style.wrap, ElTextWeight(e),
-                               e->style.lineHeight, e->x, e->y, u.lo, u.hi,
-                               u.color, u.wavy);
+            PaintTextUnderline(
+                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                e->style.wrap, ElTextWeight(e), e->style.lineHeight, e->x, e->y,
+                u.lo, u.hi, u.color, u.wavy);
         }
         if (clipText) {
             CanvasPopClip(ctx);
