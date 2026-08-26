@@ -3174,9 +3174,6 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     // A menu of actions on what was selected has nothing to say about a
     // document that has changed under it, so typing puts it away.
     InputDismissCodeActions(s);
-    // A menu of actions on what was selected has nothing to say about a
-    // document that has changed under it, so typing puts it away.
-    InputDismissCodeActions(s);
     // is_completion_trigger. The provider decides where it has an opinion;
     // the rule underneath is the one every provider in this tree has wanted:
     // a word character carries a menu that is already up and opens one that
