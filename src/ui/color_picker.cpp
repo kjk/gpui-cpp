@@ -313,20 +313,19 @@ El* ColorPicker::IntoEl() {
             cx->win->input = &s->hexInput;
         }
     }
-    El* root = gpui::ColorPicker::New(cx, id)->Child(trigger);
-    // The popup's box is the outermost element of the picker — there is
-    // nothing named above it for a local name to fold under, so this one
-    // stays spelled out. Everything inside it is named by its place.
-    El* wrap = Popup::New(cx, StrDup(a, fmt("%s-pop", id)), root)
-                   ->Content(pop)
-                   ->IntoEl();
+    // `BaseColorPicker::new(id).child(Popover::new("popover").trigger(..))`:
+    // the picker is the outer element and the popover is inside it, holding
+    // the trigger and the panel. The port had the two the other way up, which
+    // is what left the popover with nothing named above it.
+    El* root = gpui::ColorPicker::New(cx, id)->Child(
+        Popup::New(cx, StrL("popover"), trigger)->Content(pop)->IntoEl());
     // color_picker.rs binds escape to Cancel in the "ColorPicker" context;
     // the toggle the trigger carries is what closes an open one.
     if (s->open) {
-        CancelBindKeys(cx, wrap, "ColorPicker", id,
+        CancelBindKeys(cx, root, "ColorPicker", id,
                        ListenTo(st, &ColorPickerState::OnToggleOpen));
     }
-    return wrap;
+    return root;
 }
 
 } // namespace component

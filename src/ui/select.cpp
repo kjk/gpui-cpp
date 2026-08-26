@@ -309,6 +309,10 @@ El* Select::IntoEl() {
                              query ? InputValue(query) : Str{});
     }
     El* root = gpui::Select::New(cx, id)->W(width)->Child(box);
+    // `("select-popup", cx.entity_id())`: the open list is deferred out of
+    // the tree, so Rust qualifies its name with an identity rather than
+    // leaning on the stack. The picker's id is what stands for the entity
+    // here, so the spelled-out name is the faithful one.
     El* wrap = Popup::New(cx, StrDup(a, fmt("%s-popup", id)), root)
                    ->Content(menu)
                    ->IntoEl();

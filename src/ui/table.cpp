@@ -537,9 +537,11 @@ static El* WrapContextMenu(Ctx* cx, Str id, El* box, const TableState* s,
     Arena* a = cx->a;
     // Everything the wrapper builds is the table's, so the table's name goes
     // on the stack of ids around it and the menu's state is named by its
-    // place inside. The wrapper element itself keeps the qualified name: it
-    // sits *above* the table's own element, so there is nothing named over it
-    // for a local name to fold under.
+    // place inside. The wrapper element itself keeps the qualified name, and
+    // that is what Rust does too: `ContextMenuExt::context_menu` builds its
+    // id as `format!("context-menu-{:?}", id)` off the element it wraps,
+    // because the wrapper sits *above* that element and has nothing named
+    // over it to fold under.
     IdScope scope(cx, id);
     PopupMenu* menu = PopupMenu::New(cx, StrL("ctx-menu"));
     if (s && s->rightClickedRow >= 0) {
