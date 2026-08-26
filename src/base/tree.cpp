@@ -328,7 +328,7 @@ El* TreeList::New(Ctx* cx, Str id, Entity<TreeState> state, float h,
                   ->H(h)
                   ->ClipY()
                   ->ScrollY(s->scrollY)
-                  ->ScrollId(HashClickId(id))
+                  ->ScrollFromPath()
                   ->OnScroll(ListenTo(state, &TreeState::OnScroll));
     box->Child(list);
     // The tree's own context and the four arrows in it. The rows are not

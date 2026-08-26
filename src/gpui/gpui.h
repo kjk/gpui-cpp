@@ -1852,6 +1852,10 @@ struct El {
     bool noScrollbarX = false;
     bool noScrollbarY = false;
     int scrollId = 0;
+    // El::ScrollFromPath: the scroll handle's identity is the element's place
+    // in the tree rather than a number the caller hashed. An explicit
+    // ScrollId(v) clears it and wins.
+    bool scrollFromPath = false;
     float contentW = 0;
     float contentH = 0;
     int selLo = -1; // UTF-8 offsets into text, -1 = none
@@ -2026,6 +2030,11 @@ struct El {
     // The name, and the focus id from the fold — for an element the keyboard
     // reaches without the pointer being able to press it.
     El* PathFocus(Str name);
+    // `ScrollHandle::new()` kept on the view: what scrolls is identified by
+    // which box it is, not by a name. The box already has a place in the
+    // tree, so this takes the scroll id from the fold and leaves the name
+    // alone — an element can be named for one thing and scroll as another.
+    El* ScrollFromPath();
     El* OnClick(Func0 fn);
     El* OnClick(Listener l);
     // The scrollbar's own handler. Rust's scrollbar writes straight into the

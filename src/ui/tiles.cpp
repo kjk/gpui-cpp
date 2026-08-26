@@ -84,7 +84,7 @@ El* Tiles::IntoEl() {
     root->ScrollX(s->scrollX)
         ->ScrollY(s->scrollY)
         ->ScrollMode(s->scrollbarMode)
-        ->ScrollId(HashClickId(id))
+        ->ScrollFromPath()
         ->OnScroll(ListenTo(state, &TilesState::OnScroll));
     // The tiles are all out of flow, so nothing in the box has a size of its
     // own; this is what the scrollbars measure against.

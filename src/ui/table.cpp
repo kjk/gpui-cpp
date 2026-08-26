@@ -820,17 +820,14 @@ El* DataTable::BuildEl() {
         range = VirtualListVisibleRows(nRows, s->rowH, s->scrollY, h);
         // Both panes move down together off the one offset; only the wide one
         // takes the sideways wheel back.
-        bodyFixed->H(h)
-            ->ClipY()
-            ->ScrollY(s->scrollY)
-            ->ScrollId(HashClickId(StrDup(a, fmt("%s-f", id))));
+        bodyFixed->H(h)->ClipY()->ScrollY(s->scrollY)->ScrollFromPath();
         bodyFixed->OnScroll(ListenTo(state, &TableState::OnScroll));
         bodyFixed->noScrollbar = true;
         bodyScroll->H(h)
             ->ClipY()
             ->ScrollY(s->scrollY)
             ->ScrollX(s->scrollX)
-            ->ScrollId(HashClickId(id))
+            ->ScrollFromPath()
             ->OnScroll(ListenTo(state, &TableState::OnScrollXY));
         if (range.first > 0) {
             float pad = (float)range.first * s->rowH;

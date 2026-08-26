@@ -1840,6 +1840,11 @@ El* El::ScrollMode(ScrollbarMode m) {
 }
 El* El::ScrollId(int v) {
     scrollId = v;
+    scrollFromPath = false;
+    return this;
+}
+El* El::ScrollFromPath() {
+    scrollFromPath = true;
     return this;
 }
 El* El::Click(int v) {
@@ -6474,6 +6479,9 @@ static void IdCollect(El* e, uint32_t parent) {
     // an element the keyboard can reach and the mouse cannot.
     if (e->style.focusFromPath) {
         e->style.focusId = IdToClick(here);
+    }
+    if (e->scrollFromPath) {
+        e->scrollId = IdToClick(here);
     }
     for (El* c = e->first; c; c = c->next) {
         IdCollect(c, here);

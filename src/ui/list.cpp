@@ -310,12 +310,13 @@ El* List::IntoEl() {
         sizes ? VirtualListVisibleRange(sizes, total, s->scrollY, h)
               : VirtualListVisibleRows(total, s->rowH, s->scrollY, h);
     El* body = Div(a)
+                   ->Id(StrL("body"))
                    ->FlexCol()
                    ->W(kFill)
                    ->H(h)
                    ->ClipY()
                    ->ScrollY(s->scrollY)
-                   ->ScrollId(HashClickId(id))
+                   ->ScrollFromPath()
                    ->OnScroll(ListenTo(state, &ListState::OnScroll));
     // The two spacers stand in for the rows that were not built. With a size
     // per row they are the running scan `VirtualListItemOrigin` does, not a
