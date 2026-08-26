@@ -62,8 +62,11 @@ struct SettingItem {
     // Switch / Checkbox.
     bool* boolValue = nullptr;
     bool defBool = false;
-    // Input / NumberInput.
-    InputState* input = nullptr;
+    // Input / NumberInput. `value` is what the field reads on the frame it is
+    // first built -- `get_value(&field, cx)`, which upstream asks the setting
+    // registry for. The field itself belongs to the row it is on and is keyed
+    // there, not held by the caller.
+    Str value = {};
     Str defStr = {};
     NumberFieldOptions num = {};
     // Dropdown.
@@ -123,12 +126,28 @@ struct SettingBinding {
     int defIndex = 0;
 };
 
+// The field behind one string or number setting. `use_keyed_state("string-
+// state-{page}-{group}-{item}", .., |window, cx| InputState::new(window, cx)
+// .default_value(value))`: the input belongs to the row it is drawn on, and
+// the port's id stack is what folds the page, the group and the item into its
+// name. `seeded` is `default_value`, which only the first frame does.
+struct SettingFieldInput {
+    InputState input;
+    bool seeded = false;
+};
+
 // SettingsState: which page is showing, which group the sidebar last jumped
-// to, and the fields the last frame built — the values behind them are the
-// caller's.
+// to, the field the sidebar searches by, and the fields the last frame built —
+// the values behind those are the caller's.
 struct SettingsState {
     int page = 0;
     int group = -1;
+    // `SettingsState { search_input: cx.new(|cx| InputState::new(window, cx)
+    // .placeholder(t!("Settings.search_placeholder"))), .. }`: the pane's own
+    // field, made with the state rather than asked of the application. Every
+    // settings pane has one and they all read the same, so there is nothing
+    // for a caller to decide about it.
+    InputState search;
     Vec<SettingBinding> fields;
 
     ~SettingsState() { fields.Reset(); }
@@ -150,6 +169,10 @@ struct SettingsState {
     // reset_all: every field the page has built goes back to its default.
     static void OnResetPage(SettingsState* self, Ctx* cx, const ClickEvent* ev,
                             intptr_t unused);
+    // A click in the search field, which is where the window's keystrokes go
+    // from then on.
+    static void OnSearchFocus(SettingsState* self, Ctx* cx,
+                              const ClickEvent* ev);
 };
 
 struct Settings {
@@ -160,16 +183,15 @@ struct Settings {
     // The three levels grow into the frame arena the builder is on, so a
     // page is as long as the caller makes it.
     ArenaVec<SettingPage> pages;
-    // The search field, which filters the pages, the groups and the items.
-    InputState* search = nullptr;
-    Listener onSearchFocus = {};
     float sidebarWidth = 220;
     float h = 480;
     // GroupBoxVariant: whether a group is a card with a border or a plain
     // run of rows under a heading.
     bool bordered = true;
 
-    static Settings* New(Ctx* cx, Str id, Entity<SettingsState> state);
+    // The state is optional, as `use_keyed_state(self.id, ..)` is upstream:
+    // a pane left to itself keys its own off the id.
+    static Settings* New(Ctx* cx, Str id, Entity<SettingsState> state = {});
     Settings* Page(Str title, IconName icon = IconName::None,
                    Str description = {});
     Settings* Group(Str title, Str description = {});
@@ -181,8 +203,8 @@ struct Settings {
                           bool hasDefault = false);
     Settings* CheckboxField(bool* value, bool defValue = false,
                             bool hasDefault = false);
-    Settings* InputField(InputState* input, Str defValue = {});
-    Settings* NumberField(InputState* input, NumberFieldOptions opts = {},
+    Settings* InputField(Str value = {}, Str defValue = {});
+    Settings* NumberField(Str value = {}, NumberFieldOptions opts = {},
                           Str defValue = {});
     Settings* DropdownField(Entity<SearchableListState> list,
                             const SearchableItem* items, int nItems,
@@ -199,7 +221,6 @@ struct Settings {
     Settings* Disabled(bool v = true);
     Settings* Resettable(bool dirty, Listener onReset);
     Settings* Layout(Axis axis);
-    Settings* Searchable(InputState* search, Listener onFocus);
     Settings* SidebarWidth(float v);
     Settings* H(float v);
     Settings* Bordered(bool v);

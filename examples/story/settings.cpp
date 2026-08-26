@@ -23,7 +23,6 @@ static const component::SearchableItem kGroupSizes[] = {
 };
 
 struct SettingsStory {
-    Entity<component::SettingsState> settings = {};
     bool darkMode = false;
     bool autoSwitch = false;
     bool resettable = true;
@@ -34,19 +33,10 @@ struct SettingsStory {
     bool disabled = false;
     bool foo = false;
     bool autoUpdates = true;
-    InputState search;
-    InputState fontSize;
-    InputState lineHeight;
     bool seeded = false;
 
     static El* Render(SettingsStory* self, Ctx* cx);
 };
-
-static void FocusSettingsSearch(SettingsStory* self, Ctx* cx,
-                                const ClickEvent*) {
-    self->search.focused = true;
-    Notify(cx);
-}
 
 // cx.open_url("https://longbridge.github.io/gpui-component/").
 static void OpenDocs(SettingsStory*, Ctx*, const ClickEvent*) {
@@ -57,10 +47,6 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     Arena* a = cx->a;
     if (!self->seeded) {
         self->seeded = true;
-        InputSetPlaceholder(&self->search, StrL("Search..."));
-        InputSetValue(&self->fontSize, StrL("14"));
-        InputSetValue(&self->lineHeight, StrL("12"));
-        self->settings = EntityNewState<component::SettingsState>(cx->app);
         self->fontFamily =
             EntityNewState<component::SearchableListState>(cx->app);
         self->groupVariant =
@@ -74,15 +60,9 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
             }
         }
     }
-    if (self->search.focused) {
-        cx->win->input = &self->search;
-    }
-
-    component::Settings* s =
-        component::Settings::New(cx, StrL("settings"), self->settings)
-            ->Searchable(&self->search, Listen(cx, &FocusSettingsSearch))
-            ->SidebarWidth(200)
-            ->H(WindowSize(cx->win).dipH - 160);
+    component::Settings* s = component::Settings::New(cx, StrL("settings"))
+                                 ->SidebarWidth(200)
+                                 ->H(WindowSize(cx->win).dipH - 160);
 
     // SettingPage::resettable: the story's own switch, which turns the reset
     // buttons on this page off.
@@ -122,11 +102,11 @@ El* SettingsStory::Render(SettingsStory* self, Ctx* cx) {
     s->Item(
         StrL("Font Size"),
         StrL("Adjust the font size for better readability between 8 and 72."));
-    s->NumberField(&self->fontSize, {8, 72, 1}, StrL("14"))->FieldWidth(140);
+    s->NumberField(StrL("14"), {8, 72, 1}, StrL("14"))->FieldWidth(140);
     s->Item(StrL("Line Height"),
             StrL("Adjust the line height for better readability between 0 and "
                  "100."));
-    s->NumberField(&self->lineHeight, {0, 100, 1})->FieldWidth(140);
+    s->NumberField(StrL("12"), {0, 100, 1})->FieldWidth(140);
 
     // The Other group: a switch that locks the rest, one that is only
     // findable by its keyword, and a row that is all content.

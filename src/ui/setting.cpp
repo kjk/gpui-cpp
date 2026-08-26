@@ -207,6 +207,12 @@ void SettingsState::OnResetPage(SettingsState* self, Ctx* cx,
     }
 }
 
+void SettingsState::OnSearchFocus(SettingsState* self, Ctx* cx,
+                                  const ClickEvent*) {
+    self->search.focused = true;
+    Notify(cx);
+}
+
 void SettingsState::OnFieldInc(SettingsState* self, Ctx* cx, const ClickEvent*,
                                intptr_t ix) {
     FieldStep(self, cx, ix, 1);
@@ -223,7 +229,17 @@ Settings* Settings::New(Ctx* cx, Str id, Entity<SettingsState> state) {
     s->a = a;
     s->cx = cx;
     s->id = id;
-    s->state = state;
+    s->state = state.IsValid() ? state
+                               : ElementStateEntity<SettingsState>(
+                                     cx, id, StrL("gpui::SettingsState"));
+    if (SettingsState* st = s->state.Get(cx)) {
+        // settings.rs sets the field's placeholder itself rather than leaving
+        // it to the caller, so the search box reads the same in every
+        // application that shows one.
+        if (!st->search.placeholder.s) {
+            InputSetPlaceholder(&st->search, Tr("Settings.search_placeholder"));
+        }
+    }
     return s;
 }
 
@@ -340,20 +356,20 @@ Settings* Settings::CheckboxField(bool* value, bool defValue, bool hasDefault) {
     return this;
 }
 
-Settings* Settings::InputField(InputState* input, Str defValue) {
+Settings* Settings::InputField(Str value, Str defValue) {
     SettingItem* it = LastItem(this);
     if (it) {
         it->field = SettingFieldKind::Input;
-        it->input = input;
+        it->value = value;
         it->defStr = defValue;
         it->hasDefault = defValue.s != nullptr;
     }
     return this;
 }
 
-Settings* Settings::NumberField(InputState* input, NumberFieldOptions opts,
+Settings* Settings::NumberField(Str value, NumberFieldOptions opts,
                                 Str defValue) {
-    InputField(input, defValue);
+    InputField(value, defValue);
     SettingItem* it = LastItem(this);
     if (it) {
         it->field = SettingFieldKind::NumberInput;
@@ -399,11 +415,6 @@ Settings* Settings::FieldWidth(float v) {
     return this;
 }
 
-Settings* Settings::Searchable(InputState* s, Listener onFocus) {
-    search = s;
-    onSearchFocus = onFocus;
-    return this;
-}
 Settings* Settings::SidebarWidth(float v) {
     sidebarWidth = v;
     return this;
@@ -442,11 +453,29 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
 
     // The binding the listeners find this field again by, appended in the
     // order the fields paint.
+    // The row's own field, keyed where the row is. Nothing outside asks for
+    // it, so nothing outside holds it.
+    InputState* input = nullptr;
+    if (it.field == SettingFieldKind::Input ||
+        it.field == SettingFieldKind::NumberInput) {
+        Entity<SettingFieldInput> fe = ElementStateEntity<SettingFieldInput>(
+            cx, StrL("field"), StrL("gpui::SettingFieldInput"));
+        if (SettingFieldInput* f = fe.Get(cx)) {
+            if (!f->seeded) {
+                f->seeded = true;
+                if (it.value.s) {
+                    InputSetValue(&f->input, it.value);
+                }
+            }
+            input = &f->input;
+        }
+    }
+
     SettingBinding b;
     b.kind = it.field;
     b.boolValue = it.boolValue;
     b.defBool = it.defBool;
-    b.input = it.input;
+    b.input = input;
     b.defStr = it.defStr;
     b.num = it.num;
     b.list = it.list;
@@ -476,23 +505,23 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
             out.dirty = it.boolValue && *it.boolValue != it.defBool;
             break;
         case SettingFieldKind::Input:
-            out.el = Input::New(cx, id, it.input)
+            out.el = Input::New(cx, id, input)
                          ->W(w)
                          ->Disabled(it.disabled)
                          ->WithSize(UiSize::Small)
                          ->IntoEl();
-            out.dirty = it.input && !StrSame(InputValue(it.input), it.defStr);
+            out.dirty = input && !StrSame(InputValue(input), it.defStr);
             break;
         case SettingFieldKind::NumberInput:
             out.el =
-                NumberInput::New(cx, id, it.input)
+                NumberInput::New(cx, id, input)
                     ->W(w)
                     ->Disabled(it.disabled)
                     ->WithSize(UiSize::Small)
                     ->OnInc(ListenTo(s->state, &SettingsState::OnFieldInc, ix))
                     ->OnDec(ListenTo(s->state, &SettingsState::OnFieldDec, ix))
                     ->IntoEl();
-            out.dirty = it.input && !StrSame(InputValue(it.input), it.defStr);
+            out.dirty = input && !StrSame(InputValue(input), it.defStr);
             break;
         case SettingFieldKind::Dropdown: {
             out.el = Select::New(cx, id, it.list)
@@ -577,7 +606,7 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
 El* Settings::IntoEl() {
     const Theme& th = cx->theme();
     SettingsState* st = state.Get(cx);
-    Str query = search ? InputValue(search) : Str{};
+    Str query = st ? InputValue(&st->search) : Str{};
     // The bindings are this frame's, in the order the fields paint. The
     // listeners hung off the last frame's are still resolving against it
     // until this one has painted, which is the same table with the same
@@ -602,19 +631,17 @@ El* Settings::IntoEl() {
                    ->Gap(4)
                    ->ClipX()
                    ->BorderR(1, th.border);
-    if (search) {
-        // settings.rs sets the field's placeholder itself rather than leaving
-        // it to the caller, so the search box reads the same in every
-        // application that shows one.
-        if (!search->placeholder.s) {
-            InputSetPlaceholder(search, Tr("Settings.search_placeholder"));
+    if (st) {
+        side->Child(
+            Input::New(cx, StrL("search"), &st->search)
+                ->Prefix(Div(a)->PadL(10)->Child(IconEl(a, IconName::Search, 16)
+                                                     ->Fg(th.mutedFg)))
+                ->WithSize(UiSize::Small)
+                ->OnFocus(ListenTo(state, &SettingsState::OnSearchFocus))
+                ->IntoEl());
+        if (st->search.focused) {
+            cx->win->input = &st->search;
         }
-        side->Child(Input::New(cx, StrL("search"), search)
-                        ->Prefix(Div(a)->PadL(10)->Child(
-                            IconEl(a, IconName::Search, 16)->Fg(th.mutedFg)))
-                        ->WithSize(UiSize::Small)
-                        ->OnFocus(onSearchFocus)
-                        ->IntoEl());
     }
     int selected = st ? st->page : 0;
     int i = -1;
