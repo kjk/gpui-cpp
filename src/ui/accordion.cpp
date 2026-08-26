@@ -160,10 +160,17 @@ El* Accordion::IntoEl() {
     if (bordered) {
         root->Border(1, th.border)->Radius(th.radiusLg)->ClipY();
     }
+    // The group's name is on the stack while its items are built, so an
+    // item is `0`, `1`, `2` inside it.
+    IdScope group(cx, id);
     float font = AccordionFontPx(size);
     float padY = 0, padX = 0;
     AccordionPad(size, &padY, &padX);
     for (int i = 0; i < nItems; i++) {
+        // The item's own name, on the stack while the item is built: the two
+        // transitions below are named among the item's parts rather than
+        // spelling the group and the row out again.
+        IdScope scope(cx, StrDup(a, fmt("%d", i)));
         AccordionItem* item = items[i];
         El* trig = AccordionTrigger::New(cx, StrDup(a, fmt("trigger-%d", i)),
                                          item->open, disabled,
@@ -221,15 +228,14 @@ El* Accordion::IntoEl() {
         // the element's state from its prepaint; here the panel reports its
         // own box, into a slot that is asked for whether or not the panel is
         // mounted so a closed item still knows how tall it will be.
-        Str key = StrDup(a, fmt("%s-%d", id, i));
         // PANEL_SPRING: a header clicked twice retargets the panel while
         // it is still opening, and the spring decelerates into the reversal
         // instead of snapping to a new curve's opening pace.
         float progress =
-            SpringValue(cx, MotionId(StrL("accordion"), key),
+            SpringValue(cx, MotionName(cx, StrL("accordion")),
                         item->open ? 1.f : 0.f, SpringNew(kAccordionMotionMs));
         auto* natural = (Bounds*)MotionSlot(
-            cx, MotionId(StrL("accordion-h"), key), (int)sizeof(Bounds));
+            cx, MotionName(cx, StrL("accordion-h")), (int)sizeof(Bounds));
         if (progress > 0.001f) {
             El* clip = Div(a)->W(kFill)->ClipY();
             if (natural && natural->h > 0) {
