@@ -1,20 +1,51 @@
 # gpui-cpp-dist
 
-The single-file build of [gpui-cpp](https://github.com/kjk/gpui-cpp): `gpui.h` and `gpui.cpp`,
-amalgamated from that repo's `src/**` by its `cmd/update-dist.ts`. Nothing
-here is written by hand, so issues and pull requests belong in the source repo.
+The single-file build of [gpui-cpp](https://github.com/kjk/gpui-cpp): the whole
+library is `gpui.h` and `gpui.cpp`, amalgamated from that repo's `src/**` by its
+`cmd/update-dist.ts`. Everything beside those two files is here so you can run
+them before you commit to them — every example, the assets they load, and the
+build and run scripts, which are the same ones the source repo uses.
+
+Nothing here is written by hand, so issues and pull requests belong in the
+source repo.
 
 ## Try it
 
-First install [bun](https://bun.sh/). On Windows, install Visual Studio 2026
-(the free community edition is fine).
+First install [bun](https://bun.sh/), then a compiler:
 
-Run: `bun run.ts story`
+- **Windows** — Visual Studio 2026; the free Community edition is fine, and
+  2022 works too. `build.ts` finds it with vswhere, so no developer prompt.
+- **Linux** — `g++` or `clang++`, plus `pkg-config`, X11, cairo and pangocairo.
+- **macOS** — the Xcode command line tools (`xcode-select --install`).
 
-This runs a comprehensive showcase of the available functionality
-([examples/story](./examples/story)).
+Then:
 
-Run `bun run.ts` to see all the options.
+```
+bun run.ts story
+```
+
+That builds and launches a comprehensive showcase of the available
+functionality ([examples/story](./examples/story)) — a sidebar gallery with a
+page per widget. `bun run.ts showcase` is the shorter tour, and `bun run.ts` with no
+arguments lists every example and every option.
+
+```
+bun build.ts -all              # build every example, do not run one
+bun run.ts -dbg input          # debug build
+bun run.ts -wasm story         # build for the browser, serve it, open a tab
+```
+
+## What is here
+
+```
+gpui.h, gpui.cpp   the library, and the only two files you need
+examples/          every example, including story/ and showcase/
+assets/            icons, images and documents the examples load at runtime
+web/shell.html     the page a -wasm build is served in
+build.ts, run.ts   the source repo's own build and run scripts
+```
+
+`out/` is where builds land. Nothing else is generated in place.
 
 ## Use it
 
@@ -36,7 +67,7 @@ No other dependencies, no build system, no STL containers.
 
 ## This copy
 
-Amalgamated from gpui-cpp [`<checkin-sha1>`](https://github.com/kjk/gpui-cpp/commit/<checkin-sha1>) — input: one dismiss, not two
+Amalgamated from gpui-cpp [`<checkin-sha1>`](https://github.com/kjk/gpui-cpp/commit/<checkin-sha1>).
 
 [What has changed in gpui-cpp since](https://github.com/kjk/gpui-cpp/compare/<checkin-sha1>...main)
 shows every commit this copy is behind by; if that page is empty, it is current.
