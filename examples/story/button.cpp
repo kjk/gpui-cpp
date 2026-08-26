@@ -51,14 +51,14 @@ static void OnButtonClick(ButtonStory*, Ctx*, const ClickEvent*) {
     logf("Button clicked\n");
 }
 
-// The Selection group reports the indices selected after the click, one bit
-// per child, and this page keeps its four flags in them.
-static void OnSelectionGroup(ButtonStory* self, Ctx* cx, const ClickEvent*,
-                             intptr_t bits) {
-    self->disabled = (bits & 1) != 0;
-    self->loading = (bits & 2) != 0;
-    self->selected = (bits & 4) != 0;
-    self->compact = (bits & 8) != 0;
+// The Selection group reports the ordered indices selected after the click,
+// and this page keeps its four flags in them.
+static void OnSelectionGroup(ButtonStory* self, Ctx* cx,
+                             const component::ButtonGroupEvent* ev) {
+    self->disabled = ev->Contains(0);
+    self->loading = ev->Contains(1);
+    self->selected = ev->Contains(2);
+    self->compact = ev->Contains(3);
     Notify(cx);
 }
 

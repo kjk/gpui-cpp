@@ -156,7 +156,22 @@ struct DropdownButton {
 };
 
 // crates/ui/src/button/button_group.rs: buttons joined into one control,
-// which is also a toggle group.
+// which is also a toggle group. The selection slice belongs to the dispatch
+// and is valid for the duration of the listener call, like Rust's &Vec<usize>.
+struct ButtonGroupEvent {
+    const int* selected = nullptr;
+    int count = 0;
+
+    bool Contains(int index) const {
+        for (int i = 0; i < count; i++) {
+            if (selected[i] == index) {
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
 struct ButtonGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -171,11 +186,7 @@ struct ButtonGroup {
     ButtonVariant variant = ButtonVariant::Default;
     bool hasSize = false;
     UiSize size = UiSize::Medium;
-    // Rust hands the handler `&Vec<usize>`, the indices selected after the
-    // click. A Listener carries one intptr_t, so the currently selected first
-    // word is a bit per index. Groups may contain any number of buttons; the
-    // callback representation exposes the first machine word, matching every
-    // existing caller while the children themselves remain Vec-backed.
+    // Receives ButtonGroupEvent, the ordered indices selected after the click.
     Listener onClick;
 
     static ButtonGroup* New(Ctx* cx, Str id);

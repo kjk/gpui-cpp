@@ -763,15 +763,61 @@ ButtonGroup* ButtonGroup::OnClick(Listener l) {
     return this;
 }
 
+// The group's builder and its selected-index scratch are frame-owned, while a
+// child listener has to survive until input dispatch. Rust uses an Rc<Cell>
+// shared by the rendered children and group; a keyed entity is the equivalent
+// lifetime seam in this runtime.
+struct ButtonGroupState {
+    Vec<int> selected;
+    bool multiple = false;
+    Listener onClick;
+
+    static void OnChildClick(ButtonGroupState* self, Ctx* cx,
+                             const ClickEvent*, intptr_t childIndex) {
+        Vec<int> next = self->selected;
+        int at = -1;
+        for (int i = 0; i < next.len; i++) {
+            if (next[i] == (int)childIndex) {
+                at = i;
+                break;
+            }
+        }
+        if (self->multiple) {
+            if (at >= 0) {
+                for (int i = at + 1; i < next.len; i++) {
+                    next[i - 1] = next[i];
+                }
+                next.len--;
+            } else {
+                next.Append((int)childIndex);
+            }
+        } else {
+            next.Clear();
+            next.Append((int)childIndex);
+        }
+
+        ButtonGroupEvent ev{next.els, next.len};
+        ListenerCall(cx->app, cx->win, self->onClick, &ev);
+    }
+};
+
 El* ButtonGroup::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
-    // The selection the group would report, which each child's click turns
-    // into: its own index toggled in, or replacing the lot when single.
-    intptr_t selected = 0;
-    const int selectionBits = (int)(sizeof(intptr_t) * 8);
-    for (int i = 0; i < children.len && i < selectionBits; i++) {
-        if (children[i]->selected) {
-            selected |= (intptr_t)1 << i;
+    Entity<ButtonGroupState> state;
+    ButtonGroupState* stateValue = nullptr;
+    if (onClick.IsValid() && !disabled) {
+        state = ElementStateEntity<ButtonGroupState>(
+            cx, id, StrL("gpui::component::ButtonGroupState"));
+        stateValue = state.Get(cx->app);
+        if (stateValue) {
+            stateValue->selected.Clear();
+            for (int i = 0; i < children.len; i++) {
+                if (children[i]->selected) {
+                    stateValue->selected.Append(i);
+                }
+            }
+            stateValue->multiple = multiple;
+            stateValue->onClick = onClick;
         }
     }
     El* box = gpui::ToggleGroup::New(
@@ -813,15 +859,10 @@ El* ButtonGroup::IntoEl() {
             b->edgeB = true;
             b->edgeR = true;
         }
-        if (onClick.IsValid() && !disabled) {
-            intptr_t next = selected;
-            intptr_t bit = i < selectionBits ? ((intptr_t)1 << i) : 0;
-            if (multiple) {
-                next ^= bit;
-            } else {
-                next = bit;
-            }
-            b->OnClick(ListenerArg(onClick, next));
+        if (stateValue) {
+            // Installing the group callback replaces a child's callback, as
+            // Button::on_click does in the Rust map that builds the group.
+            b->OnClick(ListenTo(state, &ButtonGroupState::OnChildClick, i));
         }
         box->Child(b->IntoEl());
     }

@@ -122,3 +122,4 @@ void TestAppGlobals();
 void TestBuilderCapacity();
 void TestHistory();
 void TestAccessibility();
+void TestButtonGroup();

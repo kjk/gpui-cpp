@@ -6419,10 +6419,12 @@ steppers, application menus, sidebars, pie/area charts, accordions,
 breadcrumbs, button groups, table group headers and setting keywords. Dock
 and resizable frame scratch storage grows with the number of panels, and
 pagination allocates for the requested visible-page count. Capacity tests
-cross the old boundaries with forty entries. ButtonGroup's existing Listener
-payload can report one machine word of selected indices; children beyond that
-are rendered but a symbol-complete port should replace that callback adapter
-with Rust's slice-shaped event.
+cross the old boundaries with forty entries. ButtonGroup now reports a
+`ButtonGroupEvent` slice of ordered selected indices, the direct equivalent of
+Rust's `&Vec<usize>`, instead of truncating selection to one `intptr_t`
+bitmask. Its keyed listener bridge preserves controlled selection and a test
+activates child 69 of a 70-button group to pin behavior beyond both 32- and
+64-bit word sizes.
 
 Base toast storage and NotificationList storage now use owning `Vec`s rather
 than the port-only sixteen-entry arrays. This uncovered and fixed the more
