@@ -20,6 +20,7 @@
 
 #include "base/json.h"
 #include "base/theme.h"
+#include "ui/sheet_settings.h"
 
 namespace gpui {
 // ─── theme (Default Dark) ─────────────────────────────────────────────────
@@ -349,6 +350,8 @@ struct Theme {
     // Every avatar, badge dot, radio, slider thumb and progress bar takes it
     // rather than half its own height, so one setting governs the lot.
     float radiusFull;
+    // Component behavior settings live beside the palette in Rust's Theme.
+    component::SheetSettings sheet = {};
     // The renderable half of the palette, for the tokens a theme file may
     // spell as a gradient. Every one of these carries the flat colour of the
     // same name, so reading a token instead of a field is never wrong.

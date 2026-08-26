@@ -86,7 +86,6 @@ const partialUi = new Set([
   "searchable_list",
   "select",
   "setting",
-  "sheet",
   "sidebar",
   "tab",
   "table",
@@ -158,6 +157,7 @@ const uiOverrides: Record<string, string[]> = {
   menu: ["src/ui/menu.h", "src/ui/menu.cpp", "src/ui/popup_menu.h", "src/base/popup_menu.h", "src/base/popup_menu.cpp"],
   plot: ["src/ui/plot.h", "src/ui/plot.cpp", "src/ui/sankey.h", "src/base/sankey.h", "src/base/sankey.cpp"],
   resizable: ["src/ui/resizable.h", "src/ui/resizable.cpp", "src/base/resizable.h", "src/base/resizable.cpp"],
+  sheet: ["src/ui/sheet_settings.h", "src/ui/sheet.h", "src/ui/sheet.cpp"],
   text: ["src/ui/text.h", "src/ui/text.cpp", "src/ui/html.h", "src/ui/html.cpp"],
   table: [
     "src/ui/table.h",

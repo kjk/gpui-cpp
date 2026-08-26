@@ -7232,3 +7232,33 @@ The upstream label-value tests and builder/lifetime projections are covered,
 including 40 Sankey lines. UI Chart is full: the audit moves to 76 full, 45
 partial, 8 adapters and 2 exclusions with 330 unresolved spellings. MSVC
 release passes 19,591 checks, and the release story build passes.
+
+## The themed Sheet consumes settings and preserves its full builder shape
+
+`SheetSettings` was the only public declaration missing from the module, but
+following it into the renderer found behavior that a declaration count could
+not: `margin_top` was a local 34-DIP literal instead of part of the active
+Theme; the story's *Close on overlay click* option never reached Base Sheet;
+titles were strings only; content was one pre-wrapped element; the public
+`resizable` value and `StyleRefinement` were absent; and every placement drew
+a border on all four sides rather than only the edge attached to the page.
+
+The leaf `sheet_settings.h` breaks the natural Theme/Sheet include cycle and
+retains the pinned default, with a compile-time check against
+`kTitleBarHeight`. Theme owns the settings value and Sheet reads it every
+frame, so a programmatically installed theme can move the surface. The builder
+now accepts string or element titles, an arbitrary arena-backed child list,
+footer, resizable and overlay-close values, plus a general style refinement.
+Placement size and offsets apply after that refinement as they do upstream;
+body horizontal padding is derived from it.
+
+The surface now occludes the dismiss capture behind empty areas, uses the
+theme's overlay token, forwards both overlay flags to Base Sheet, and draws
+only the pinned placement-side border. The story forwards its option instead
+of displaying an inert toggle. Tests install a non-default margin, inspect
+right/bottom geometry, attached-edge borders, element title, 40 children and
+refinement precedence, then drive the real non-closable capture to prove it
+swallows without closing. UI Sheet is full: the audit moves to 77 full, 44
+partial, 8 adapters and 2 exclusions with 329 unresolved spellings. MSVC
+release passes 19,606 checks, the release story build passes, and the open
+right-sheet page was visually smoke-tested.

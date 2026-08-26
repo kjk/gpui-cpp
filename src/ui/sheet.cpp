@@ -2,6 +2,7 @@
 #include "base/actions.h"
 #include "base/motion.h"
 #include "ui/button.h"
+#include "ui/title_bar.h"
 
 namespace gpui {
 
@@ -9,6 +10,7 @@ namespace component {
 
 // sheet.rs: the surface takes 0.15 s to slide in.
 static const float kSheetMotionMs = 150.f;
+static_assert(kSheetDefaultMarginTop == kTitleBarHeight);
 
 Sheet* Sheet::New(Ctx* cx) {
     Arena* a = cx->a;
@@ -19,6 +21,12 @@ Sheet* Sheet::New(Ctx* cx) {
 }
 Sheet* Sheet::Title(Str s) {
     title = s;
+    titleEl = nullptr;
+    return this;
+}
+Sheet* Sheet::Title(El* e) {
+    titleEl = e;
+    title = {};
     return this;
 }
 Sheet* Sheet::Placement(SheetPlacement p) {
@@ -29,8 +37,16 @@ Sheet* Sheet::Size(float px) {
     size = px;
     return this;
 }
+Sheet* Sheet::Resizable(bool v) {
+    resizable = v;
+    return this;
+}
 Sheet* Sheet::Overlay(bool v) {
     overlay = v;
+    return this;
+}
+Sheet* Sheet::OverlayClosable(bool v) {
+    overlayClosable = v;
     return this;
 }
 Sheet* Sheet::Open(bool v) {
@@ -41,8 +57,19 @@ Sheet* Sheet::Body(El* e) {
     body = e;
     return this;
 }
+Sheet* Sheet::Child(El* e) {
+    if (e) {
+        children.Append(a, e);
+    }
+    return this;
+}
 Sheet* Sheet::Footer(El* e) {
     footer = e;
+    return this;
+}
+Sheet* Sheet::Refine(const Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleSet |= fields;
     return this;
 }
 Sheet* Sheet::Scroll(int id, float y, Listener fn) {
@@ -71,15 +98,21 @@ El* Sheet::IntoEl(WinSize win) {
     // against the edge and rules the footer off across the whole width.
     // theme.sheet.margin_top: a sheet that hangs from the top starts under
     // the title bar rather than over it. One rising from the bottom does not.
-    const float kMarginTop = 34.f;
-    float marginTop = placement == SheetPlacement::Bottom ? 0.f : kMarginTop;
+    float marginTop = placement == SheetPlacement::Bottom
+                          ? 0.f
+                          : th.sheet.marginTop;
     El* surface = Div(a)
                       ->Absolute()
-                      ->W(horizontal ? size : viewW)
-                      ->H(horizontal ? viewH - marginTop : size)
                       ->FlexCol()
                       ->Bg(th.tokens.background)
-                      ->Border(1, th.border);
+                      // gpui's occlude(): an empty part of the surface still
+                      // stands above the dismiss capture behind it.
+                      ->StopMouseDown();
+    StyleApplyFields(&surface->style, style, styleSet);
+    // These are applied after refine_style in Rust and therefore win over a
+    // caller's width/height and edge placement refinements.
+    surface->W(horizontal ? size : viewW)
+        ->H(horizontal ? viewH - marginTop : size);
     // sheet.rs's "slide": 0.15 s from a hundred pixels off its own edge to
     // where it belongs. GPUI's default easing is linear, and the offset is
     // whichever way the sheet came in from.
@@ -87,16 +120,18 @@ El* Sheet::IntoEl(WinSize win) {
     float off = -100.f + delta * 100.f;
     switch (placement) {
         case SheetPlacement::Left:
-            surface->Top(marginTop)->Left(off);
+            surface->Top(marginTop)->Left(off)->BorderR(1, th.border);
             break;
         case SheetPlacement::Top:
-            surface->Top(marginTop + off)->Left(0);
+            surface->Top(marginTop + off)->Left(0)->BorderB(1, th.border);
             break;
         case SheetPlacement::Bottom:
-            surface->Top(viewH - size - off)->Left(0);
+            surface->Top(viewH - size - off)->Left(0)->BorderT(1, th.border);
             break;
         default:
-            surface->Top(marginTop)->Left(viewW - size - off);
+            surface->Top(marginTop)
+                ->Left(viewW - size - off)
+                ->BorderL(1, th.border);
             break;
     }
     El* head = Div(a)
@@ -108,7 +143,9 @@ El* Sheet::IntoEl(WinSize win) {
                    ->PadY(8)
                    ->ItemsCenter()
                    ->JustifyBetween();
-    head->Child(TextEl(a, title)->Font(16)->Semibold()->Fg(th.foreground));
+    head->Child(titleEl ? titleEl
+                        : TextEl(a, title)->Font(16)->Semibold()->Fg(
+                              th.foreground));
     head->Child(Button::New(cx, StrL("sheet-close"))
                     ->Ghost()
                     ->WithSize(UiSize::Small)
@@ -116,15 +153,25 @@ El* Sheet::IntoEl(WinSize win) {
                     ->OnClick(onClose)
                     ->IntoEl());
     surface->Child(head);
-    if (body) {
+    if (body || children.len > 0) {
+        float bodyPadL = (styleSet & StyleFieldPad) ? style.pad.left : 16.f;
+        float bodyPadR = (styleSet & StyleFieldPad) ? style.pad.right : 16.f;
+        El* bodyColumn = Div(a)->FlexCol()->W(kFill)->H(kFill);
+        if (body) {
+            bodyColumn->Child(body);
+        }
+        for (El* child : children) {
+            bodyColumn->Child(child);
+        }
         El* pane = Div(a)
                        ->FlexCol()
                        ->W(kFill)
                        ->Flex1()
                        ->MinH(0)
                        ->ClipY()
-                       ->PadX(16)
-                       ->Child(body);
+                       ->PadL(bodyPadL)
+                       ->PadR(bodyPadR)
+                       ->Child(bodyColumn);
         if (scrollId) {
             pane->ScrollY(scrollY)->ScrollId(scrollId)->OnScroll(onScroll);
         }
@@ -145,10 +192,12 @@ El* Sheet::IntoEl(WinSize win) {
     if (overlay) {
         backdrop =
             Div(a)->Absolute()->Top(0)->Left(0)->W(viewW)->H(viewH)->Bg(
-                Rgba8(0, 0, 0, 40));
+                th.overlay);
     }
     return gpui::Sheet::New(cx)
         ->Overlay(backdrop)
+        ->OverlayInteractive(overlay)
+        ->OverlayClosable(overlay && overlayClosable)
         ->Surface(surface)
         ->OnClose(onClose)
         ->IntoEl()

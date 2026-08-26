@@ -160,6 +160,87 @@ static void SheetOverlayOptionsChangeTheActualCapture() {
     EntityDropAll(&app);
 }
 
+static void ThemedSheetReadsItsMarginFromSheetSettings() {
+    App app;
+    component::Init(&app);
+    ThemeSet(&app, ThemeMode::Light);
+    Theme custom = ThemeLight(&app);
+    custom.sheet.marginTop = 73.f;
+    ThemeInstall(&app, ThemeMode::Light, custom);
+
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Entity<SheetRecorder> recorder = EntityNewState<SheetRecorder>(&app);
+    Ctx cx = {&app, win, a, recorder.id};
+    El* customTitle = Div(a)->Id(StrL("custom-sheet-title"));
+    Style refinement = {};
+    refinement.pad = EdgesAll(7);
+    refinement.width = 999;
+    component::Sheet* themed = component::Sheet::New(&cx)
+                                   ->Open(true)
+                                   ->Title(customTitle)
+                                   ->OverlayClosable(false)
+                                   ->OnClose(Listen(&cx, &SheetRecorder::Closed))
+                                   ->Refine(refinement, StyleFieldPad |
+                                                           StyleFieldWidth);
+    for (int i = 0; i < 40; i++) {
+        themed->Child(Div(a));
+    }
+    El* root = themed->IntoEl(WinSize{800, 600});
+    El* visual = root->first;
+    El* capture = visual ? visual->next : nullptr;
+    El* surface = capture ? capture->next : nullptr;
+    utassert(surface != nullptr);
+    utassert(surface && surface->style.absolute);
+    utassertnear(surface ? surface->style.absTop : 0, 73.f);
+    utassertnear(surface ? surface->style.height : 0, 527.f);
+    // Placement sizing follows refine_style and therefore wins over a
+    // width refinement, while padding and the attached-edge border remain.
+    utassertnear(surface ? surface->style.width : 0, 350.f);
+    utassertnear(surface ? surface->style.pad.left : 0, 7.f);
+    utassertnear(surface ? surface->style.borderL : 0, 1.f);
+    utassertnear(surface ? surface->style.borderT : 0, 0.f);
+    El* head = surface ? surface->first : nullptr;
+    El* pane = head ? head->next : nullptr;
+    El* bodyColumn = pane ? pane->first : nullptr;
+    utassert(head && head->first == customTitle);
+    utassertnear(pane ? pane->style.pad.left : 0, 7.f);
+    int childCount = 0;
+    for (El* child = bodyColumn ? bodyColumn->first : nullptr; child;
+         child = child->next) {
+        childCount++;
+    }
+    utassert(childCount == 40);
+
+    MouseDownEvent press = {};
+    press.button = MouseButton::Left;
+    press.y = 100;
+    ListenerCall(&app, win, capture->onMouseDown, &press);
+    SheetRecorder* seen = recorder.Get(&app);
+    utassert(seen && seen->n == 0);
+    utassert(win->stopPropagation);
+
+    // A bottom sheet starts at the lower edge and deliberately ignores the
+    // title-bar margin, matching the source's placement match.
+    El* bottomRoot = component::Sheet::New(&cx)
+                         ->Open(true)
+                         ->Placement(component::SheetPlacement::Bottom)
+                         ->Body(Div(a))
+                         ->IntoEl(WinSize{800, 600});
+    El* bottomVisual = bottomRoot->first;
+    El* bottomCapture = bottomVisual ? bottomVisual->next : nullptr;
+    El* bottom = bottomCapture ? bottomCapture->next : nullptr;
+    utassert(bottom != nullptr);
+    utassertnear(bottom ? bottom->style.height : 0, 350.f);
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+    AppGlobalClear(&app);
+}
+
 void TestSheet() {
     TestSuite("sheet");
     ASheetOverlayPressHasThreeOutcomes();
@@ -167,4 +248,5 @@ void TestSheet() {
     EscapeClosesASheet();
     TheBuiltSheetOwnsDismissalAndFocus();
     SheetOverlayOptionsChangeTheActualCapture();
+    ThemedSheetReadsItsMarginFromSheetSettings();
 }

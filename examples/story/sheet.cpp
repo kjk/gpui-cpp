@@ -323,6 +323,7 @@ El* SheetStory::Render(SheetStory* self, Ctx* cx) {
                            ? 400.f
                            : 540.f)
                 ->Overlay(self->overlay)
+                ->OverlayClosable(self->overlayClosable)
                 ->Body(body)
                 ->Scroll(7, self->sheetScrollY, Listen(cx, &OnSheetScroll))
                 ->OnClose(Listen(cx, &CloseSheet));
