@@ -80,6 +80,11 @@ struct EditorApp {
     bool folding = true;
     bool readOnly = false;
 
+    // The two the appearance menu keeps for itself: Rust's AppState carries
+    // these, since neither is a theme setting.
+    bool fpsMonitor = false;
+    bool appMenuBar = true;
+
     // The file the editor holds, and what the tree said last.
     char openPath[1024] = {};
     Str language = {};
@@ -909,6 +914,10 @@ EDITOR_ACTION(ActOpenWebsite, "editor::OpenWebsite")
 EDITOR_ACTION(ActSwitchThemeMode, "editor::SwitchThemeMode")
 EDITOR_ACTION(ActSelectFont, "editor::SelectFont")
 EDITOR_ACTION(ActSelectRadius, "editor::SelectRadius")
+EDITOR_ACTION(ActSelectScrollbarMode, "editor::SelectScrollbarMode")
+EDITOR_ACTION(ActToggleListActiveHighlight, "editor::ToggleListActiveHighlight")
+EDITOR_ACTION(ActToggleFpsMonitor, "editor::ToggleFpsMonitor")
+EDITOR_ACTION(ActToggleAppMenuBar, "editor::ToggleAppMenuBar")
 
 // `MenuItem::action("About", About)`. The gallery answers this with a dialog
 // of its own; this example already owns one dialog, and says it in the place
@@ -970,6 +979,32 @@ static void OnSelectRadiusAction(EditorApp*, Ctx* cx, const ActionEvent* ev) {
     Notify(cx);
 }
 
+static void OnSelectScrollbarModeAction(EditorApp*, Ctx* cx,
+                                        const ActionEvent* ev) {
+    ScrollbarModeSet((ScrollbarMode)(int)ev->arg);
+    Notify(cx);
+}
+
+static void OnToggleListActiveHighlightAction(EditorApp*, Ctx* cx,
+                                              const ActionEvent*) {
+    ListSettings s = ListSettingsNow();
+    s.activeHighlight = !s.activeHighlight;
+    ListSettingsSet(s);
+    Notify(cx);
+}
+
+static void OnToggleFpsMonitorAction(EditorApp* self, Ctx* cx,
+                                     const ActionEvent*) {
+    self->fpsMonitor = !self->fpsMonitor;
+    Notify(cx);
+}
+
+static void OnToggleAppMenuBarAction(EditorApp* self, Ctx* cx,
+                                     const ActionEvent*) {
+    self->appMenuBar = !self->appMenuBar;
+    Notify(cx);
+}
+
 // Every handler above, hung off the root so a row chosen in either bar finds
 // one. Rust registers these with `cx.on_action` on the app rather than on an
 // element, which is the same reach.
@@ -982,7 +1017,14 @@ static El* EditorBindMenuActions(El* root, Ctx* cx) {
         ->OnAction(ActOpenWebsite(), Listen(cx, &OnOpenWebsiteAction))
         ->OnAction(ActSwitchThemeMode(), Listen(cx, &OnSwitchThemeModeAction))
         ->OnAction(ActSelectFont(), Listen(cx, &OnSelectFontAction))
-        ->OnAction(ActSelectRadius(), Listen(cx, &OnSelectRadiusAction));
+        ->OnAction(ActSelectRadius(), Listen(cx, &OnSelectRadiusAction))
+        ->OnAction(ActSelectScrollbarMode(),
+                   Listen(cx, &OnSelectScrollbarModeAction))
+        ->OnAction(ActToggleListActiveHighlight(),
+                   Listen(cx, &OnToggleListActiveHighlightAction))
+        ->OnAction(ActToggleFpsMonitor(), Listen(cx, &OnToggleFpsMonitorAction))
+        ->OnAction(ActToggleAppMenuBar(),
+                   Listen(cx, &OnToggleAppMenuBarAction));
 }
 
 // cx.bind_keys: a menu row shows the chord bound to its action and nothing
@@ -1172,64 +1214,153 @@ static El* EditorMenuBar(Ctx* cx, const MenuDef* menus, int n) {
     return bar;
 }
 
-// FontSizeSelector: the menu behind the Settings2 button. Rust's carries the
-// gallery's own switches under these two groups — the scrollbar mode, the FPS
-// monitor, the menu bar itself; the two groups here are the ones that are the
-// theme's rather than the gallery's, and so the ones an editor window can
-// answer for.
-static El* EditorAppearanceMenu(Ctx* cx) {
-    struct ApRow {
-        const char* label;
-        uint32_t action;
-        float value;
-    };
-    // A row with no action is a heading, and one with no label a separator.
-    const ApRow kRows[] = {
-        {"Font Size", 0, 0},
-        {"Large", ActSelectFont(), 18},
-        {"Medium (default)", ActSelectFont(), 16},
-        {"Small", ActSelectFont(), 14},
-        {nullptr, 0, 0},
-        {"Border Radius", 0, 0},
-        {"8px", ActSelectRadius(), 8},
-        {"6px (default)", ActSelectRadius(), 6},
-        {"4px", ActSelectRadius(), 4},
-        {"0px", ActSelectRadius(), 0},
-    };
-    component::PopupMenu* menu =
-        component::PopupMenu::New(cx, StrL("editor-appearance"))->MinW(220);
-    for (const ApRow& r : kRows) {
-        if (!r.label) {
-            menu->Separator();
-            continue;
-        }
-        if (r.action == 0) {
-            menu->Label(Str(r.label));
-            continue;
-        }
-        bool on = r.action == ActSelectFont() ? ThemeFontSize() == r.value
-                                              : ThemeNow().radius == r.value;
-        menu->MenuWithAction(Str(r.label), r.action, (intptr_t)r.value);
-        menu->Checked(on);
+// AppTitleBar's FontSizeSelector, which is the Appearance menu behind the
+// Settings2 button. Every row names one of the actions above and carries the
+// value it sets, which is what Rust's `SelectFont(18)` is; the table says
+// which action a kind of row names, whether it is ticked, and what it reads
+// back to say so.
+enum class ApKind : uint8_t {
+    Label,
+    Sep,
+    Font,
+    Radius,
+    Scroll,
+    ListHighlight,
+    Fps,
+    MenuBar
+};
+
+struct ApRow {
+    ApKind kind;
+    const char* label;
+    // The font size or radius in DIPs, or the scrollbar mode; unused by the
+    // three toggles, which read what they toggle.
+    float value;
+};
+
+static const ApRow kAppearance[] = {
+    {ApKind::Label, "Font Size", 0},
+    {ApKind::Font, "Large", 18},
+    {ApKind::Font, "Medium (default)", 16},
+    {ApKind::Font, "Small", 14},
+    {ApKind::Sep, nullptr, 0},
+    {ApKind::Label, "Border Radius", 0},
+    {ApKind::Radius, "8px", 8},
+    {ApKind::Radius, "6px (default)", 6},
+    {ApKind::Radius, "4px", 4},
+    {ApKind::Radius, "0px", 0},
+    {ApKind::Sep, nullptr, 0},
+    {ApKind::Label, "Scrollbar", 0},
+    {ApKind::Scroll, "Scrolling to show", (float)ScrollbarMode::Scrolling},
+    {ApKind::Scroll, "Hover to show", (float)ScrollbarMode::Hover},
+    {ApKind::Scroll, "Always show", (float)ScrollbarMode::Always},
+    {ApKind::Sep, nullptr, 0},
+    {ApKind::ListHighlight, "List Active Highlight", 0},
+    {ApKind::Fps, "FPS Monitor", 0},
+    // ToggleAppMenuBar: on a Mac the menus are already in the system bar, and
+    // this is what puts the component itself on screen beside them. Turning
+    // it off gives the freed up left side back to the window's name.
+    {ApKind::MenuBar, "App Menu Bar", 0},
+};
+
+static const int kAppearanceRows = (int)(sizeof(kAppearance) / sizeof(ApRow));
+
+// menu_with_check: which row is the one in force.
+static bool ApChecked(const EditorApp* self, const ApRow& r) {
+    switch (r.kind) {
+        case ApKind::Font:
+            return ThemeFontSize() == r.value;
+        case ApKind::Radius:
+            return ThemeNow().radius == r.value;
+        case ApKind::Scroll:
+            return ScrollbarModeNow() == (ScrollbarMode)(int)r.value;
+        case ApKind::ListHighlight:
+            return ListSettingsNow().activeHighlight;
+        case ApKind::Fps:
+            return self->fpsMonitor;
+        case ApKind::MenuBar:
+            return self->appMenuBar;
+        default:
+            return false;
     }
-    El* trigger = component::Button::New(cx, StrL("editor-title-settings"))
+}
+
+// Which action a row of the table dispatches. The three that carry a value
+// hand it over as the action's payload — `SelectFont(18)` — and the toggles
+// carry nothing, since what they flip is what they read.
+static uint32_t ApAction(ApKind kind) {
+    switch (kind) {
+        case ApKind::Font:
+            return ActSelectFont();
+        case ApKind::Radius:
+            return ActSelectRadius();
+        case ApKind::Scroll:
+            return ActSelectScrollbarMode();
+        case ApKind::ListHighlight:
+            return ActToggleListActiveHighlight();
+        case ApKind::Fps:
+            return ActToggleFpsMonitor();
+        case ApKind::MenuBar:
+            return ActToggleAppMenuBar();
+        default:
+            return 0;
+    }
+}
+
+static El* EditorAppearanceMenu(EditorApp* self, Ctx* cx) {
+    component::PopupMenu* menu =
+        component::PopupMenu::New(cx, StrL("editor-appearance-menu"));
+    for (int i = 0; i < kAppearanceRows; i++) {
+        const ApRow& r = kAppearance[i];
+        switch (r.kind) {
+            case ApKind::Label:
+                menu->Label(Str(r.label));
+                break;
+            case ApKind::Sep:
+                menu->Separator();
+                break;
+            default:
+                menu->MenuWithAction(Str(r.label), ApAction(r.kind),
+                                     (intptr_t)r.value);
+                menu->Checked(ApChecked(self, r));
+                break;
+        }
+    }
+    // check_side(Right): the tick sits on the far edge, so the labels start
+    // flush.
+    menu->CheckSide(Side::Right);
+    return component::DropdownMenu::New(cx, StrL("editor-appearance"))
+        ->Trigger(component::Button::New(cx, StrL("editor-title-settings"))
                       ->Icon(IconName::Settings2)
                       ->Ghost()
+                      ->Compact()
                       ->WithSize(UiSize::Small)
                       ->Tooltip(StrL("Appearance"))
                       ->IntoEl()
-                      ->Cursor(CursorKind::Pointer);
-    return component::DropdownMenu::New(cx, StrL("editor-appearance-trigger"))
-        ->Trigger(trigger)
+                      ->Cursor(CursorKind::Pointer))
         ->Menu(menu)
+        // Anchor::TopRight: the menu's right edge lines up with the button's,
+        // which is what keeps it on screen at the corner of the window.
+        ->AnchorRight()
         ->IntoEl();
 }
 
 // The three tools at the right of the title bar. They are ghost buttons, and
 // over a title bar there is nothing else to say an icon is a control rather
 // than an ornament, so they ask for the hand themselves.
-static El* EditorTitleBar(Ctx* cx, const MenuDef* defs, int nDefs) {
+static El* EditorTitleBar(EditorApp* self, Ctx* cx, const MenuDef* defs,
+                          int nDefs) {
     Arena* a = cx->a;
+    const Theme& th = cx->theme();
+    El* menus = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
+    if (self->appMenuBar) {
+        menus->Child(EditorMenuBar(cx, defs, nDefs));
+    } else {
+        // The system menu bar owns the menus, so the freed up left side names
+        // the window the way a Mac application does.
+        menus->Child(Div(a)->PadX(8)->Child(
+            TextEl(a, StrL("Editor"))->Font(14)->Fg(th.foreground)->Medium()));
+    }
     El* tools =
         Div(a)
             ->FlexRow()
@@ -1237,7 +1368,7 @@ static El* EditorTitleBar(Ctx* cx, const MenuDef* defs, int nDefs) {
             ->ItemsCenter()
             ->PadX(8)
             ->Gap(2)
-            ->Child(EditorAppearanceMenu(cx))
+            ->Child(EditorAppearanceMenu(self, cx))
             ->Child(component::Button::New(cx, StrL("editor-title-github"))
                         ->Icon(IconName::Github)
                         ->Ghost()
@@ -1263,10 +1394,7 @@ static El* EditorTitleBar(Ctx* cx, const MenuDef* defs, int nDefs) {
                                     ->IntoEl()
                                     ->Cursor(CursorKind::Pointer))
                         ->IntoEl());
-    return component::TitleBar::New(cx)
-        ->Child(EditorMenuBar(cx, defs, nDefs))
-        ->Child(tools)
-        ->IntoEl();
+    return component::TitleBar::New(cx)->Child(menus)->Child(tools)->IntoEl();
 }
 
 El* EditorApp::Render(EditorApp* self, Ctx* cx) {
@@ -1371,7 +1499,7 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     El* root = Div(a)->FlexCol()->SizeFull()->Bg(th.tokens.background);
     EditorBindMenuActions(root, cx);
     if (cx->win->opts.clientTitleBar) {
-        root->Child(EditorTitleBar(cx, defs, nDefs));
+        root->Child(EditorTitleBar(self, cx, defs, nDefs));
     }
     root->Child(body)->Child(bar->IntoEl());
     if (self->dialogOpen) {
@@ -1386,6 +1514,10 @@ El* EditorApp::Render(EditorApp* self, Ctx* cx) {
                         ->OnCancel(Listen(cx, &CloseGoTo))
                         ->OnOk(Listen(cx, &ConfirmGoTo))
                         ->IntoEl(win));
+    }
+    // ToggleFpsMonitor: the HUD places itself over the top right corner.
+    if (self->fpsMonitor) {
+        root->Child(FpsMonitorEl(cx));
     }
     // Bordered only where the window is client-decorated; a system frame
     // draws its own.
