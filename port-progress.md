@@ -5902,3 +5902,60 @@ settings interactions including two number inputs and two selects on one page,
 four sidebar rows, four command palette interactions and three select ones —
 all byte-identical to the same interaction on the build before, and each one
 demonstrably doing something.
+
+## The rest of the hand-folded names
+
+Three more rounds of the same work, now that the id stack exists.
+
+**The date picker.** The picker's root carried its name and its hit rect by
+hand, so the three parts under it — the trigger, the clear button and the
+popup — each spelled that name out again. `gpui::DatePicker::New` moves onto
+the fold and the parts become `input`, `clean` and `pop`. The open branch is
+what `PathFocus` was added for: while the calendar is up the trigger stops
+taking the press — the popup's own mouse-out is what closes it — but it keeps
+the focus it was given, because the picker's key context has to stay over
+whatever holds the focus or escape belongs to nobody. That is `track_focus`
+without `.id()`.
+
+**Four containers.** The list's search field, the tab bar's overflow menu and
+its button, the split button's caret and its dropdown, and the app menu bar's
+titles. Three of the four roots already carried the name — the list root has
+`PathClick(id)`, the tab bar is `gpui::Tabs::New(cx, id)`, the split button's
+row has `Id(id)` — so only the parts had to change. The menu bar is given a
+name here, the way `list.rs` gives its root `.id("list-state")`.
+
+The split button and the tab bar push their name on the *stack* as well as
+onto the tree, because the dropdown under them keeps a `PopupMenuState` and
+that is keyed rather than folded. Which turned up a piece of trivia worth
+writing down: `DropdownMenu::IntoEl` renames whatever trigger it is handed to
+`trigger`, so `%s-more-btn` had never reached the tree at all. Rust does not
+do this — `Button::new(id)` keeps its own ElementId under a Popover — and it
+is the reason the tab test looks for `trigger` and not for the name the
+button asked for.
+
+**The accordion.** An item's panel spring and the slot that remembers how tall
+the panel wants to be were keyed on the group's name and the row's index
+folded into one string. Two nested scopes replace it — the group, then the
+index — and the transitions are `accordion` and `accordion-h` inside, which is
+what `motion.rs`'s `use_keyed_state` gets for free from the stack GPUI has
+already pushed by then.
+
+`use_keyed_state` being keyed by the whole stack, which is the premise all of
+this rests on, is now read rather than inferred: gpui's source is vendored on
+this machine under `~/.cargo/git/checkouts/zed-*/crates/gpui/src/window.rs`,
+where `use_keyed_state` goes through `with_global_id`, which pushes the key on
+`element_id_stack` and builds the `GlobalElementId` from the whole of it.
+
+**What is left, and what it is waiting on.** Twelve `%s-` sites. Three are
+already faithful: the switch's `track` is a tuple ElementId upstream too, the
+dialog's layer index is a layer index, and `dock_area.cpp` names everything by
+hand for the reason above. Four are the outermost-element problem — the
+select's popup, the colour picker's, the table's context menu and the
+highlighter's search bar all sit *beside or above* the element that carries
+the widget's name. The rest are ids read back as numbers while the frame is
+being built: the resizable's handles, the table's scroll id, and the dock's
+panel menu.
+
+Verified: 107 pages and seven interactions for the middle round, nine shots
+for the date picker, five for the accordion. Everything identical to the build
+before except the skeleton and the spinner, which differ from themselves.
