@@ -123,6 +123,33 @@ static void ATrapIsNamedNotNumbered() {
     utassert(FocusTrapId(StrL("dialog")) != 0);
 }
 
+// FocusTrapContainer delegates layout to the supplied element in Rust. The
+// arena tree expresses the same wrapper as an in-place semantic refinement:
+// wrapper identity, tracked focus and descendant trap membership.
+static void ThePublicContainerRefinesItsElement() {
+    App app;
+    Window* win = new Window();
+    Arena* a = ArenaNew();
+    Ctx cx = {&app, win, a, {}};
+    FocusHandle focus = {77};
+    El* child = Div(a)->Child(Div(a)->FocusId(78));
+    El* trap = FocusTrapContainer::New(&cx, StrL("modal"), focus, child);
+    utassert(trap == child);
+    utassert(StrEqI(trap->id, StrL("modal")));
+    utassert(trap->style.focusId == 77);
+    utassert(trap->style.trapId == 77);
+
+    FocusCollect(win, trap);
+    utassert(win->focusEls.len == 2);
+    utassert(win->focusEls[0].id == 77);
+    utassert(win->focusEls[0].trapId == 77);
+    utassert(win->focusEls[1].id == 78);
+    utassert(win->focusEls[1].trapId == 77);
+
+    delete win;
+    ArenaDelete(a);
+}
+
 // FocusHandle::tab_stop(false): still focusable, still shows its ring when it
 // is clicked, simply not somewhere Tab stops. An input's clear button and a
 // dock tab bar's tools are what Rust turns it off for.
@@ -257,6 +284,7 @@ void TestFocusTrap() {
     ATrapWithNothingFocusableLeavesFocusAlone();
     NothingArmedTouchesNothing();
     ATrapIsNamedNotNumbered();
+    ThePublicContainerRefinesItsElement();
     TabSkipsWhatIsNotAStop();
     ATrapOfNonStopsLeavesFocusAlone();
     ATrapFocusesItsOwnContainer();

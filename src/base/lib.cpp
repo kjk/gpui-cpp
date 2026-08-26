@@ -8,6 +8,7 @@ void BaseInit(App* app) {
     }
     (void)BaseThemeGlobal(app);
     BaseGlobalStateInit(app);
+    FocusTrapInit(app);
 
     DialogInitKeys();
     DatePickerInitKeys();

@@ -51,7 +51,6 @@ const partialBase = new Set([
   "color_picker",
   "dialog",
   "dock",
-  "focus_trap",
   "global_state",
   "input",
   "macos_accessibility",
@@ -339,6 +338,16 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   "base/geometry.rs::trait LengthExt": {
     collapse:
       "C++ builders accept resolved DIP floats and pass relative/auto lengths directly to taffy, so no retained gpui::Length exists to extend",
+  },
+  "base/focus_trap.rs::fn active_focus_trap": {
+    spellings: ["FocusTrapActive"],
+  },
+  "base/focus_trap.rs::fn init": {
+    spellings: ["FocusTrapInit"],
+  },
+  "base/focus_trap.rs::trait FocusTrapElement": {
+    collapse:
+      "C++ El::TrapId plus FocusTrapContainer::New is the extension surface; the POD tree has no inheritance trait wrapper",
   },
   "base/history.rs::trait HistoryItem": {
     collapse:

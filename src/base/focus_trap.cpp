@@ -2,6 +2,19 @@
 
 namespace gpui {
 
+void FocusTrapInit(App* app) {
+    // Membership is frame-local in Window::focusEls, so unlike Rust's weak
+    // handle map there is no global state to initialize or clean up.
+    (void)app;
+}
+
+El* FocusTrapContainer::New(Ctx* cx, Str id, FocusHandle focus, El* child) {
+    if (!cx || !child || !focus.IsValid()) {
+        return child;
+    }
+    return child->Id(id)->TrackFocus(focus)->TrapId(focus.id);
+}
+
 int FocusTrapId(Str name) {
     return HashClickId(name);
 }

@@ -15,6 +15,19 @@
 
 namespace gpui {
 
+// focus_trap.rs::init. Rust installs a global weak-handle registry; C++
+// rebuilds the equivalent trap membership from the element tree every frame,
+// so initialization has no allocation to perform but remains a named crate
+// seam.
+void FocusTrapInit(App* app);
+
+// The concrete result of Rust's FocusTrapElement::focus_trap. Rust can
+// delegate Element layout through a generic wrapper; the POD element tree
+// refines the supplied element in place and returns it.
+struct FocusTrapContainer {
+    static El* New(Ctx* cx, Str id, FocusHandle focus, El* child);
+};
+
 // The name a container traps under. Same hash as a click id — a dialog can
 // pass its own id and get a trap of its own without inventing a number.
 int FocusTrapId(Str name);

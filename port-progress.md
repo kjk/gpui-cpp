@@ -6933,3 +6933,28 @@ duplicate the existing seam without increasing behavior.
 Base Geometry is full. The audit moves to 68 full, 53 partial, 8 adapters and
 2 exclusions, with 346 unresolved spellings. MSVC release passes 19,145
 checks.
+
+## Focus Trap's runtime collapse has a public container surface
+
+Focus trapping was already one of the deeper Base ports: focus collection
+projects a container's trap id onto every descendant, Tab cycles within the
+active id, traversal outside a trap skips its members, and a newly armed modal
+focuses its tracked host or first stop. What remained partial was structural:
+the public `FocusTrapContainer`, `FocusTrapElement`, `active_focus_trap` and
+`init` declarations were not accounted for.
+
+`FocusTrapContainer::New` now gives C++ callers the concrete pinned result
+type. Rust's generic wrapper delegates every element phase to its base; the
+POD arena tree expresses the same operation by refining that `El` in place
+with wrapper identity, the supplied focus handle and descendant trap id. The
+test proves both the host and its child collect under that id. The extension
+trait maps to that factory plus `El::TrapId`, and `active_focus_trap` maps to
+`FocusTrapActive`'s id because C++ focus handles are the same integer handle.
+
+`FocusTrapInit` is a named no-allocation seam called by `BaseInit`. Rust needs
+a global map of weak handles because its retained elements register during
+layout; C++ rebuilds `Window::focusEls` from the live frame tree and therefore
+has no stale entry to retain or clean. That intentional ownership difference
+is recorded in source and the declaration ledger. Base Focus Trap is full:
+the audit is 69 full, 52 partial, 8 adapters and 2 exclusions with 342
+unresolved spellings. MSVC release passes 19,154 checks.
