@@ -978,7 +978,34 @@ function isMacAmalgam(srcFile: string): boolean {
   return srcFile === `${amalgamDir()}/gpui.cpp`;
 }
 
+/**
+ * One line a reader can paste back into a shell. Only arguments that need it
+ * are quoted -- a command line where every token is in quotes is unreadable,
+ * and the point of printing it is to be read. Double quotes because they are
+ * what cmd.exe and a POSIX shell agree on, and a Windows path's backslashes
+ * survive inside them in both.
+ */
+export function formatCmd(cmd: string[]): string {
+  return cmd
+    .map((arg) => {
+      if (arg === "") {
+        return '""';
+      }
+      if (!/[\s"]/.test(arg)) {
+        return arg;
+      }
+      return `"${arg.replaceAll('"', '\\"')}"`;
+    })
+    .join(" ");
+}
+
+/** The `> ` marks a line as something to run, not something that happened. */
+export function printCmd(cmd: string[]): void {
+  console.log(`> ${formatCmd(cmd)}`);
+}
+
 function spawnOrExit(tc: Toolchain, cmd: string[]): void {
+  printCmd(cmd);
   const r = Bun.spawnSync(cmd, {
     cwd: root,
     stdout: "inherit",
@@ -1236,6 +1263,13 @@ export type BuildRequest = {
 export async function build(req: BuildRequest): Promise<void> {
   const { names, plat, flags, fail } = req;
   const tc = findToolchain(plat, flags, fail);
+  // Every compile and link below is echoed with a `> `, and the two things a
+  // reader needs to run one by hand are not on the line itself: where it runs
+  // from, and -- on Windows -- the INCLUDE/LIB/PATH this script read out of
+  // vcvars, which a Developer Command Prompt exports and a plain shell does
+  // not. Said once here rather than on every line.
+  const from = `run from ${root}`;
+  console.log(Object.keys(tc.env).length > 0 ? `${from}, in a shell with the MSVC environment set` : from);
   await ensureAmalgam(fail);
   const dir = outDir(plat, flags);
   if (flags.clean) {

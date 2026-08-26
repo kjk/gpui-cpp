@@ -42,6 +42,8 @@ import {
   outFilePath,
   platformFor,
   printSizeTable,
+  formatCmd,
+  printCmd,
   root,
   scriptDir,
   scriptPath,
@@ -727,7 +729,10 @@ function buildRustTwin(target: string, debug: boolean): string {
     );
   }
   const args = rustBuildArgs(target, debug);
-  console.log(`Building rust: cargo ${args.join(" ")}`);
+  // The Rust build runs in the spec tree, not in this repo, which is the one
+  // thing the echoed line cannot say for itself.
+  console.log(`Building rust, from ${rustRoot}`);
+  printCmd([cargo, ...args]);
   const rc = run([cargo, ...args], rustRoot);
   if (rc !== 0) {
     process.exit(rc);
@@ -752,7 +757,9 @@ function ensureMacWindowPlacer(): string {
   }
   mkdirSync(outputDir, { recursive: true });
   console.log("Building macOS compare window placer");
-  const rc = run(["xcrun", "clang", "-fobjc-arc", "-dynamiclib", "-framework", "Cocoa", "-o", output, source], root);
+  const cmd = ["xcrun", "clang", "-fobjc-arc", "-dynamiclib", "-framework", "Cocoa", "-o", output, source];
+  printCmd(cmd);
+  const rc = run(cmd, root);
   if (rc !== 0 || !existsSync(output)) {
     die("Could not build the macOS compare window placer. Install the command line tools: xcode-select --install");
   }
@@ -813,14 +820,14 @@ async function runNative(a: RunArgs): Promise<never> {
   if (dbg?.foreground) {
     // The debugger owns this terminal, so nothing can be placed beside it.
     if (rustExe) {
-      console.log(`Launching rust ${rustExe}`);
+      console.log(`Launching rust ${formatCmd([rustExe])}`);
       launchDetached([rustExe], rustTreeDir(root));
     }
-    console.log(`Launching ${dbg.kind} ${exe}`);
+    console.log(`Launching ${dbg.kind} ${formatCmd([exe])}`);
     process.exit(run(cppCmd, cwd));
   }
 
-  console.log(`Launching ${cppCmd.join(" ")}`);
+  console.log(`Launching ${formatCmd(cppCmd)}`);
   if (!rustExe) {
     launchDetached(cppCmd, cwd);
     process.exit(0);
@@ -832,14 +839,14 @@ async function runNative(a: RunArgs): Promise<never> {
   }
   if (a.plat === "mac") {
     const placer = ensureMacWindowPlacer();
-    console.log(`Launching rust ${rustExe} (left)`);
+    console.log(`Launching rust ${formatCmd([rustExe])} (left)`);
     launchDetached([rustExe], rustTreeDir(root), macPlacerEnv(placer, "left"));
     launchDetached(cppCmd, cwd, macPlacerEnv(placer, "right"));
     process.exit(0);
   }
   // Linux has no window placement here; the window manager decides.
   launchDetached(cppCmd, cwd);
-  console.log(`Launching rust ${rustExe}`);
+  console.log(`Launching rust ${formatCmd([rustExe])}`);
   launchDetached([rustExe], rustTreeDir(root));
   process.exit(0);
 }
@@ -862,7 +869,7 @@ async function placeWindowsPair(cppCmd: string[], cwd: string, rustExe: string, 
 
   setProcessDpiAware();
   const existingCpp = new Set(findVisibleClassWindows(cppWndClass));
-  console.log(`Launching rust ${rustExe}`);
+  console.log(`Launching rust ${formatCmd([rustExe])}`);
   const rustProc = launchDetached([rustExe], rustTreeDir(root));
   console.log(`Launching c++ (will wait for ${cppWndClass})`);
   launchDetached(cppCmd, cwd);
