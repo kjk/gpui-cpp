@@ -473,7 +473,7 @@ El* DatePicker::IntoEl() {
     trigger->Child(TextEl(a, title)->Font(font)->Fg(complete ? th.foreground
                                                              : th.mutedFg));
     if (cleanable && hasDate) {
-        trigger->Child(Button::New(cx, StrDup(a, fmt("%s-clean", id)))
+        trigger->Child(Button::New(cx, StrL("clean"))
                            ->Text()
                            ->WithSize(UiSize::XSmall)
                            ->Icon(IconName::X)
@@ -484,7 +484,7 @@ El* DatePicker::IntoEl() {
         trigger->Child(IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
     }
     if (!open) {
-        BindClick(trigger, StrDup(a, fmt("%s-input", id)), onToggle);
+        BindClick(trigger, StrL("input"), onToggle);
         trigger->FocusRing(focusRing);
     } else {
         // The trigger stops taking the press while the calendar is up — the
@@ -492,8 +492,7 @@ El* DatePicker::IntoEl() {
         // handle it was given when it was pressed. Rust's track_focus is
         // unconditional for the same reason: the picker's key context has to
         // stay over whatever has the focus, or escape belongs to nobody.
-        trigger->FocusId(HashClickId(StrDup(a, fmt("%s-input", id))))
-            ->FocusRing(false);
+        trigger->PathFocus(StrL("input"))->FocusRing(false);
     }
     El* popup = nullptr;
     if (open) {
@@ -543,12 +542,9 @@ El* DatePicker::IntoEl() {
     }
     // Both halves of the picker take focus — the outer element and the
     // trigger inside it — so the opt-out has to reach both.
-    El* root = gpui::DatePicker::New(cx, id)
-                   ->FocusRing(focusRing)
-                   ->W(width)
-                   ->Child(Popup::New(cx, StrDup(a, fmt("%s-pop", id)), trigger)
-                               ->Content(popup)
-                               ->IntoEl());
+    El* root =
+        gpui::DatePicker::New(cx, id)->FocusRing(focusRing)->W(width)->Child(
+            Popup::New(cx, StrL("pop"), trigger)->Content(popup)->IntoEl());
     // date_picker.rs::init binds enter, escape and the two delete keys in the
     // picker's context; the toggle and the clear the caller gave are what
     // they run, which is what Rust's on_action handlers reach for too.

@@ -99,6 +99,75 @@ static void RangeSelectionRestartsAndCompletes() {
                                   disabled) == DateSelectionResult::Rejected);
 }
 
+static El* FindNamedDp(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamedDp(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// The trigger, the clear and the popup are `input`, `clean` and `pop` in
+// every picker; the picker's own name over them is what tells two of them
+// apart, the way GPUI's element id stack does.
+static void TwoPickersHaveTwoTriggers() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    El* page = Div(a);
+    El* one = component::DatePicker::New(&cx)
+                  ->Id(StrL("one"))
+                  ->Year(2025)
+                  ->Month(2)
+                  ->Day(10)
+                  ->Cleanable()
+                  ->IntoEl();
+    El* two = component::DatePicker::New(&cx)
+                  ->Id(StrL("two"))
+                  ->Year(2025)
+                  ->Month(2)
+                  ->Day(11)
+                  ->Cleanable()
+                  ->IntoEl();
+    page->Child(one)->Child(two);
+    IdsCollect(page);
+
+    El* inOne = FindNamedDp(one, "input");
+    El* inTwo = FindNamedDp(two, "input");
+    utassert(inOne && inTwo);
+    if (inOne && inTwo) {
+        utassert(inOne->clickId != 0 && inTwo->clickId != 0);
+        utassert(inOne->clickId != inTwo->clickId);
+        // The trigger is what the keyboard reaches, and it is reached
+        // separately in each picker.
+        utassert(inOne->style.focusId != inTwo->style.focusId);
+    }
+    El* clearOne = FindNamedDp(one, "clean");
+    El* clearTwo = FindNamedDp(two, "clean");
+    utassert(clearOne && clearTwo);
+    if (clearOne && clearTwo) {
+        utassert(clearOne->clickId != clearTwo->clickId);
+    }
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestDatePicker() {
     TestSuite("date_picker");
     EnterOnlyOpens();
@@ -108,4 +177,5 @@ void TestDatePicker() {
     OtherKeysAreNotThePickers();
     MatchersKeepTheirRustSemantics();
     RangeSelectionRestartsAndCompletes();
+    TwoPickersHaveTwoTriggers();
 }
