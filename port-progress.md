@@ -6705,3 +6705,31 @@ omissions: `pub` below a private Rust module is not exported API, and traits
 often become builders or function tables here. Each nevertheless needs an
 explicit mapping/collapse record or an implementation before its module can
 return to full.
+
+## Composable effect transitions close Base animation
+
+The earlier animation pass deliberately stopped short of `EffectTransition`
+because Rust's `AnimationElement` retains a styling closure while this tree's
+frame elements retain neither closures nor graph lifetime. The equivalent C++
+shape is now `EffectTransition`: a frame-arena builder that stores an unbounded
+`ArenaVec` of effects, samples the window's keyed one-shot animation state, and
+writes that frame's values onto the new element. It ports all five upstream
+effects (`SlideY`, `SlideX`, `Fade`, `Width`, and `Height`), the ease-out-cubic
+default and caller-selected easing. Rebuilding the builder and element under
+the same id on the next frame continues the same animation, which is the
+observable contract of GPUI's retained `with_animation` wrapper. The renamed
+upstream compatibility type remains available as `Transition`.
+
+The motion regression suite checks the beginning and midpoint of every effect
+and composes 80 horizontal effects to prove the arena-backed collection does
+not introduce a port-only capacity. Base animation is therefore full at the
+module-declaration level rather than carrying a known omitted combinator.
+
+The declaration ledger can now distinguish a renamed symbol from a deliberate
+structural collapse. A collapse has a mandatory prose reason and `-surface`
+prints it beside the pinned declaration. `HistoryItem` is the first such
+record: Rust expresses `Version`, `SetVersion`, and equality as a trait, while
+the POD-friendly C++ `History<I>` requires that convention directly on `I`.
+With animation implemented and history accounted for, the audit is 60 full,
+61 partial, 8 adapters and 2 exclusions; 359 declaration spellings remain for
+review in partial modules. MSVC release passes 19,042 checks.

@@ -25,11 +25,13 @@ For every module marked full, the ordinary audit now also requires each
 declaration's Rust spelling (or the direct PascalCase form of a free function)
 in its C++ targets. The small `declarationMappings` table records intentional
 placements and spellings such as `init` to `BaseInit`, `locale` to
-`LocaleNow`, and the runtime-owned `AutoScroll`. `-missing-declarations`
-prints the unresolved names in partial modules. Rust permits a public item
-under a private submodule, and traits and functions frequently project into a
-C++ builder or function table, so each of those results still needs an
-explicit mapping or deliberate-collapse decision.
+`LocaleNow`, and the runtime-owned `AutoScroll`, as well as deliberate
+collapses with a required reason. `-surface` prints those decisions next to
+the Rust declaration, and `-missing-declarations` prints the unresolved names
+in partial modules. Rust permits a public item under a private submodule, and
+traits and functions frequently project into a C++ builder or function table,
+so each of those results still needs an explicit mapping or
+deliberate-collapse decision.
 
 Statuses mean:
 
@@ -88,7 +90,13 @@ The important non-mechanical mappings are encoded in the audit:
   deliberate smaller substitute for html5ever.
 - `History<I>` is generic over the C++ `HistoryItem` convention and matches
   upstream's two stacks, versions, grouping interval, explicit grouping,
-  uniqueness, ignore state and 1,000-entry default retention.
+  uniqueness, ignore state and 1,000-entry default retention. The audit
+  records that `HistoryItem` is a POD-friendly item convention rather than an
+  inherited C++ trait.
+- `EffectTransition` is the composable arena builder corresponding to Rust's
+  retained animation closure. It applies every upstream slide, fade and size
+  effect to a freshly built element from keyed one-shot state, and keeps the
+  deprecated `Transition` alias.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -119,7 +127,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 362 declaration spellings still reported in partial modules,
+  2. Review the 359 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

@@ -46,7 +46,6 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
   .split(/\s+/);
 
 const partialBase = new Set([
-  "animation",
   "calendar",
   "checkbox",
   "color_picker",
@@ -55,7 +54,6 @@ const partialBase = new Set([
   "focus_trap",
   "geometry",
   "global_state",
-  "history",
   "input",
   "macos_accessibility",
   "motion",
@@ -323,7 +321,11 @@ const testTargets: Record<string, string[]> = {
   "ui/virtual_list": ["tests/VirtualListTests.cpp"],
 };
 
-type DeclarationMapping = { spellings: string[]; targets?: string[] };
+type DeclarationMapping = {
+  spellings?: string[];
+  targets?: string[];
+  collapse?: string;
+};
 
 // Rust's crate façade uses free snake_case functions. The C++ façade keeps
 // the same operation but follows this tree's subsystem-prefix convention.
@@ -335,6 +337,10 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     targets: ["src/gpui/gpui.h"],
   },
   "base/lib.rs::fn init": { spellings: ["BaseInit"] },
+  "base/history.rs::trait HistoryItem": {
+    collapse:
+      "C++ History<I> requires Version, SetVersion and operator== directly on its POD-friendly item type",
+  },
   "base/select.rs::fn init": { spellings: ["SelectInitKeys"] },
   "ui/lib.rs::fn init": { spellings: ["Init"] },
   "ui/lib.rs::fn locale": {
@@ -552,25 +558,34 @@ if (existsSync(rustRoot)) {
         const [kind, name] = item.name.split(" ");
         if (kind !== "mod") {
           const mapping = declarationMappings[declarationKey];
-          const searchTargets = mapping?.targets ?? targets;
-          const cpp = declarationSourceText(searchTargets);
-          const pascal = name!
-            .split("_")
-            .map((part) => part.length ? part[0]!.toUpperCase() + part.slice(1) : "")
-            .join("");
-          const spellings = mapping?.spellings ?? (kind === "fn" ? [name!, pascal] : [name!]);
-          if (!spellings.some((spelling) => new RegExp(`\\b${spelling}\\b`).test(cpp))) {
-            const message =
-              `${crate} ${status} missing ${item.path} :: ${item.name} -> ${searchTargets.join(", ")}`;
-            if (status === "full" || status === "facade") errors.push(message);
-            else if (missingDeclarations) console.log(message);
+          if (!mapping?.collapse) {
+            const searchTargets = mapping?.targets ?? targets;
+            const cpp = declarationSourceText(searchTargets);
+            const pascal = name!
+              .split("_")
+              .map((part) => part.length ? part[0]!.toUpperCase() + part.slice(1) : "")
+              .join("");
+            const spellings = mapping?.spellings ?? (kind === "fn" ? [name!, pascal] : [name!]);
+            if (!spellings.some((spelling) => new RegExp(`\\b${spelling}\\b`).test(cpp))) {
+              const message =
+                `${crate} ${status} missing ${item.path} :: ${item.name} -> ${searchTargets.join(", ")}`;
+              if (status === "full" || status === "facade") errors.push(message);
+              else if (missingDeclarations) console.log(message);
+            }
           }
         }
       }
       if (verboseSurface) {
+        const mapping = item.kind === "declaration" ? declarationMappings[declarationKey] : undefined;
+        const mappingNote = mapping?.collapse
+          ? ` [collapsed: ${mapping.collapse}]`
+          : mapping?.spellings
+            ? ` [C++ spelling: ${mapping.spellings.join(" | ")}` +
+              `${mapping.targets ? ` in ${mapping.targets.join(", ")}` : ""}]`
+            : "";
         console.log(
           `${crate} ${item.kind} ${item.path} :: ${item.name} -> ` +
-            `${status} ${targets.length ? targets.join(", ") : "(standing exclusion)"}`,
+            `${status} ${targets.length ? targets.join(", ") : "(standing exclusion)"}${mappingNote}`,
         );
       }
     }
@@ -589,6 +604,14 @@ if (existsSync(rustRoot)) {
   for (const key of Object.keys(declarationMappings)) {
     if (!seenDeclarations.has(key)) {
       errors.push(`public declaration mapping has no pinned Rust declaration: ${key}`);
+    }
+    const mapping = declarationMappings[key]!;
+    const hasSpellings = !!mapping.spellings?.length;
+    const hasCollapse = !!mapping.collapse?.trim();
+    if (hasSpellings === hasCollapse) {
+      errors.push(
+        `public declaration mapping needs exactly one spelling list or collapse reason: ${key}`,
+      );
     }
   }
 }

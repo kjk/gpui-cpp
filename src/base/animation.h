@@ -1,11 +1,5 @@
-/* Easing and interpolation — crates/base/src/animation.rs
-
-   The two halves of Rust's module that cross: the easing curves, and the Lerp
-   trait's three implementations. What does not cross is `EffectTransition`,
-   which hands a GPUI `AnimationElement` a closure that restyles the element on
-   every frame — an element here carries no closures, and the frame tree is
-   rebuilt from scratch anyway, so a caller reads the value it wants from
-   `motion.h` and spells the effect itself. */
+/* Easing, interpolation and composable element effects —
+   crates/base/src/animation.rs */
 
 #include "gpui/gpui.h"
 
@@ -63,5 +57,48 @@ Point Lerp(Point a, Point b, float t);
 // step through gpui::Hsla; the ends come back as they were given, since eight
 // bits a channel cannot promise a round trip lands on the byte it started on.
 Rgba Lerp(Rgba a, Rgba b, float t);
+
+// animation.rs::EffectTransition. Rust stores a SmallVec of effects and hands
+// a closure to GPUI's AnimationElement. A frame element cannot retain a
+// closure here, so this arena builder samples the equivalent keyed one-shot
+// state and writes that frame's values straight onto the element.
+struct EffectTransition {
+    float durationMs = 0;
+
+    static EffectTransition* New(Ctx* cx, float durationMs);
+    EffectTransition* Ease(EaseFn fn);
+    EffectTransition* SlideY(float from, float to);
+    EffectTransition* SlideX(float from, float to);
+    EffectTransition* Fade(float from, float to);
+    EffectTransition* Width(float from, float to);
+    EffectTransition* Height(float from, float to);
+    El* Apply(El* element, Str id);
+
+  private:
+    // Rust's TransitionEffect is private to animation.rs too: it is builder
+    // storage, not another public component vocabulary.
+    enum class EffectKind : uint8_t {
+        SlideY,
+        SlideX,
+        Fade,
+        Width,
+        Height
+    };
+    struct Effect {
+        EffectKind kind = EffectKind::Fade;
+        float from = 0;
+        float to = 0;
+    };
+
+    Ctx* cx = nullptr;
+    EaseFn easing = EaseOutCubic;
+    ArenaVec<Effect> effects;
+
+    EffectTransition* Add(EffectKind kind, float from, float to);
+};
+
+// The deprecated upstream name remains source-compatible. motion.rs's other
+// Transition is `Motion` here, so the two names do not collide in C++.
+using Transition = EffectTransition;
 
 } // namespace gpui

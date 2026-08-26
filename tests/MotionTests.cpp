@@ -143,6 +143,59 @@ static void TheLerpsAreTheThreeRustImplements() {
     utassert(end.r == 255 && end.g == 255 && end.b == 255);
 }
 
+static void EffectTransitionAppliesEveryUpstreamEffect() {
+    App app;
+    Window* win = new Window();
+    Arena* arena = ArenaNew();
+    win->app = &app;
+    Ctx cx = {&app, win, arena, {}};
+
+    win->frameNow = 10.0;
+    El* first = Div(arena);
+    Transition::New(&cx, 100)
+        ->Ease(EaseLinear)
+        ->SlideY(-4, 0)
+        ->SlideX(8, 0)
+        ->Fade(0, 1)
+        ->Width(20, 40)
+        ->Height(10, 30)
+        ->Apply(first, StrL("entrance"));
+    utassertnear(first->style.absTop, -4);
+    utassertnear(first->style.absLeft, 8);
+    utassertnear(first->style.opacity, 0);
+    utassertnear(first->style.width, 20);
+    utassertnear(first->style.height, 10);
+
+    // The element tree and builder are new next frame, while the keyed
+    // animation state survives on the window exactly as with_animation does.
+    win->frameNow = 10.05;
+    El* half = Div(arena);
+    EffectTransition::New(&cx, 100)
+        ->Ease(EaseLinear)
+        ->SlideY(-4, 0)
+        ->SlideX(8, 0)
+        ->Fade(0, 1)
+        ->Width(20, 40)
+        ->Height(10, 30)
+        ->Apply(half, StrL("entrance"));
+    utassertnear(half->style.absTop, -2);
+    utassertnear(half->style.absLeft, 4);
+    utassertnear(half->style.opacity, 0.5f);
+    utassertnear(half->style.width, 30);
+    utassertnear(half->style.height, 20);
+
+    // The SmallVec upstream can grow; the arena-backed port does too.
+    EffectTransition* many = EffectTransition::New(&cx, 100);
+    for (int i = 0; i < 80; i++) {
+        many->SlideX((float)i, (float)i + 1);
+    }
+    El* grown = many->Apply(Div(arena), StrL("many-effects"));
+    utassertnear(grown->style.absLeft, 79);
+
+    delete win;
+    ArenaDelete(arena);
+}
+
 // Transition::progress and ::sample.
 static void ProgressWaitsOutTheDelayAndStopsAtTheEnd() {
     Motion m = MotionNew(100);
@@ -476,6 +529,7 @@ void TestMotion() {
     TheBezierMatchesWhatAnEngineSays();
     ThirdsMapTimeIdentically();
     TheLerpsAreTheThreeRustImplements();
+    EffectTransitionAppliesEveryUpstreamEffect();
     ProgressWaitsOutTheDelayAndStopsAtTheEnd();
     AZeroDurationTargetChangeIsImmediate();
     AChangedTargetTransitionsOverTime();

@@ -1,5 +1,13 @@
 #include "base/animation.h"
 
+// Declared in motion.h. Keeping these two declarations here avoids making
+// animation.h and motion.h include one another merely for EffectTransition's
+// implementation.
+namespace gpui {
+uint32_t MotionName(Ctx* cx, Str name);
+float MotionAppear(Ctx* cx, uint32_t key, float durationMs, EaseFn ease);
+}
+
 namespace gpui {
 
 // The same three-line clamp scrollbar.cpp and slider.cpp each keep: base has
@@ -144,6 +152,74 @@ Rgba Lerp(Rgba a, Rgba b, float t) {
     Hsla y = HslaFromRgba(b);
     return HslaToRgba(Hsla{Lerp(x.h, y.h, t), Lerp(x.s, y.s, t),
                            Lerp(x.l, y.l, t), Lerp(x.a, y.a, t)});
+}
+
+EffectTransition* EffectTransition::New(Ctx* cx, float durationMs) {
+    if (!cx || !cx->a) {
+        return nullptr;
+    }
+    EffectTransition* out = ArenaNew<EffectTransition>(cx->a);
+    out->cx = cx;
+    out->durationMs = durationMs > 0 ? durationMs : 0;
+    return out;
+}
+
+EffectTransition* EffectTransition::Ease(EaseFn fn) {
+    easing = fn ? fn : EaseOutCubic;
+    return this;
+}
+
+EffectTransition* EffectTransition::Add(EffectKind kind, float from, float to) {
+    effects.Append(cx->a, Effect{kind, from, to});
+    return this;
+}
+
+EffectTransition* EffectTransition::SlideY(float from, float to) {
+    return Add(EffectKind::SlideY, from, to);
+}
+
+EffectTransition* EffectTransition::SlideX(float from, float to) {
+    return Add(EffectKind::SlideX, from, to);
+}
+
+EffectTransition* EffectTransition::Fade(float from, float to) {
+    return Add(EffectKind::Fade, from, to);
+}
+
+EffectTransition* EffectTransition::Width(float from, float to) {
+    return Add(EffectKind::Width, from, to);
+}
+
+EffectTransition* EffectTransition::Height(float from, float to) {
+    return Add(EffectKind::Height, from, to);
+}
+
+El* EffectTransition::Apply(El* element, Str id) {
+    if (!element || !cx) {
+        return element;
+    }
+    float delta = MotionAppear(cx, MotionName(cx, id), durationMs, easing);
+    for (const Effect& effect : effects) {
+        float value = Lerp(effect.from, effect.to, delta);
+        switch (effect.kind) {
+            case EffectKind::SlideY:
+                element->Top(value);
+                break;
+            case EffectKind::SlideX:
+                element->Left(value);
+                break;
+            case EffectKind::Fade:
+                element->Opacity(value);
+                break;
+            case EffectKind::Width:
+                element->W(value);
+                break;
+            case EffectKind::Height:
+                element->H(value);
+                break;
+        }
+    }
+    return element;
 }
 
 } // namespace gpui
