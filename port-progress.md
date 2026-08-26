@@ -6608,11 +6608,11 @@ picker roles, input content types and secret/read-only behavior. Release and
 debug tests pass 19,017 checks; all 26 Windows targets build in release and
 debug. The audit is now 110 full, 11 partial, 8 adapters and 2 exclusions.
 
-Still outside this completed Base/UI pass: native export through Windows UI
-Automation, Linux AT-SPI and macOS NSAccessibility. The portable frame tree is
-the shared source those platform adapters need; `base/macos_accessibility`
-remains partial because only its existing AppKit hit-test forwarding seam is
-connected today.
+Still outside this completed Base/UI pass at that point was native export
+through Windows UI Automation, Linux AT-SPI and macOS NSAccessibility. The
+portable frame tree is the shared source those platform adapters need;
+`base/macos_accessibility` remains partial because only its existing AppKit
+hit-test forwarding seam is connected today.
 
 ## The audit now tracks public re-exports and upstream tests
 
@@ -6631,3 +6631,35 @@ module ledger and all test destination paths. A checkout with
 closes the re-export/test gate. Public declarations that are not re-exported
 are the next audit-depth step rather than being silently called
 symbol-complete.
+
+## Windows exports the semantic tree through UI Automation
+
+`src/gpui/accessibility_win.cpp` is a raw UI Automation fragment provider over
+the portable frame tree. `WM_GETOBJECT` returns a retained root provider; node
+providers keep only that root plus the stable frame id and resolve every name,
+state, bound and action against the newest `Window::accessibility` record.
+They therefore never retain strings from a reset frame arena. Closing the
+window detaches it before releasing the platform reference, so UIA-held stale
+nodes answer `UIA_E_ELEMENTNOTAVAILABLE` instead of dereferencing the window.
+
+The adapter maps the AccessKit roles to Windows control types and exposes
+author ids, names, placeholders, orientation, set position, hierarchy, focus,
+offscreen state and grid metadata. Invoke, Toggle, Value, RangeValue,
+ExpandCollapse and SelectionItem patterns call the same portable dispatch
+paths as pointer and keyboard input. RangeValue gained an absolute numeric
+setter that clamps and snaps through `SliderState`, emits the ordinary slider
+change event and invalidates. Selection removal is deliberately rejected: the
+portable item record does not say whether its container allows empty or
+multiple selection, so guessing a toggle would be incorrect.
+
+Semantic content is hashed after layout; UIA gets one children-invalidated
+event only when it changes rather than on every animation frame. Internal
+focus moves raise the UIA focus event for the semantic node carrying that
+focus id. The Windows-only conformance probe covers COM properties, every
+advertised pattern, runtime ids, fragment-root linkage and stale-provider
+lifetime. Release and debug suites pass 19,029 checks. Linux AT-SPI and the
+full macOS NSAccessibility element adapter remain; the existing macOS window
+hit-test forwarder alone does not export the tree. Windows still exposes
+editable text through Value rather than UIA Text, and tables through roles and
+row/column metadata rather than Grid/Table and selection-container patterns;
+those are adapter-depth gaps, not omissions in the portable semantic tree.

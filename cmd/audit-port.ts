@@ -452,6 +452,8 @@ const gpuiSources = ["src/gpui/gpui.cpp", "src/gpui/entity.cpp", "src/gpui/windo
 const uiThemeHeader = readFileSync(join(root, "src/ui/theme.h"), "utf8");
 const baseThemeTokens = readFileSync(join(root, "src/base/theme_tokens.h"), "utf8");
 const windowCommon = readFileSync(join(root, "src/gpui/window_common.cpp"), "utf8");
+const accessibilityWin = readFileSync(join(root, "src/gpui/accessibility_win.cpp"), "utf8");
+const windowWin = readFileSync(join(root, "src/gpui/window_win.cpp"), "utf8");
 if (/\bstruct\s+Theme(?:Tokens)?\b/.test(gpuiHeader)) {
   errors.push("theme layering: component Theme type leaked into gpui/gpui.h");
 }
@@ -485,6 +487,25 @@ if (
   !windowCommon.includes("WindowAccessibilityPerform(")
 ) {
   errors.push("accessibility runtime: frame projection or action dispatch is not wired");
+}
+for (const marker of [
+  "IRawElementProviderFragmentRoot",
+  "UiaReturnRawElementProvider",
+  "IInvokeProvider",
+  "IToggleProvider",
+  "IValueProvider",
+  "IRangeValueProvider",
+  "IExpandCollapseProvider",
+  "ISelectionItemProvider",
+  "UiaRaiseStructureChangedEvent",
+  "UIA_AutomationFocusChangedEventId",
+]) {
+  if (!accessibilityWin.includes(marker)) {
+    errors.push(`Windows accessibility adapter: missing ${marker}`);
+  }
+}
+if (!windowWin.includes("case WM_GETOBJECT") || !windowWin.includes("AccessibilityWinGetObject(")) {
+  errors.push("Windows accessibility adapter: WM_GETOBJECT is not wired");
 }
 
 const counts = (status: Status) => entries.filter((e) => e.status === status).length;

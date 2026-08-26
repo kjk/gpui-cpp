@@ -37,8 +37,8 @@ Every non-full entry carries a reason in the ledger. Modules that assign
 semantic accessibility roles upstream now project those roles, names, values,
 states and actions into the runtime's laid-out frame tree; they are no longer
 classified partial merely because keyboard behavior used to be their only
-accessible seam. Native UI Automation, AT-SPI and NSAccessibility adapters
-remain runtime work outside the Base/UI module ledger.
+accessible seam. Native adapter depth remains runtime work outside the Base/UI
+module ledger.
 
 The important non-mechanical mappings are encoded in the audit:
 
@@ -88,6 +88,10 @@ The important non-mechanical mappings are encoded in the audit:
 - input content types project the same specialized phone, email, URL,
   password, date and date-time roles as Rust, secret values stay out of the
   tree, and developer accessibility ids remain distinct from element ids.
+- Windows publishes that live tree through a raw UI Automation fragment
+  provider reached from `WM_GETOBJECT`. Roles, names, bounds, focus and
+  Invoke, Toggle, Value, RangeValue, ExpandCollapse and SelectionItem patterns
+  resolve current frame nodes; semantic and focus changes raise native events.
 - the audit inventories every public re-export and upstream test below module
   granularity. Base currently contributes 113 re-export statements and 569
   tests across 46 tested module families; UI contributes 159 and 478 across
@@ -97,9 +101,11 @@ The important non-mechanical mappings are encoded in the audit:
 
 ## Next fidelity order
 
-  1. Export the portable accessibility tree through UI Automation, AT-SPI and
-     NSAccessibility. This is GPUI platform-adapter work; Base/UI semantics no
-     longer depend on it.
+  1. Export the portable accessibility tree through Linux AT-SPI and macOS
+     NSAccessibility, then deepen Windows with Text, Grid/Table and selection-
+     container patterns. Windows already has the core fragment/action export;
+     this remaining work is in GPUI platform adapters and does not change
+     Base/UI semantics.
   2. Extend the surface inventory from re-exports to every public declaration,
      using explicit spelling overrides where Rust traits or snake_case
      functions project into C++ builders.

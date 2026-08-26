@@ -614,6 +614,15 @@ void PlatInstallAccessibilityHitTest(Window* win) {
     (void)win;
 }
 
+void PlatAccessibilityTreeChanged(Window* win) {
+    (void)win;
+}
+
+void PlatAccessibilityFocusChanged(Window* win, int focusId) {
+    (void)win;
+    (void)focusId;
+}
+
 // A page has no popup menu of its own, so the caller draws one — Rust's
 // FallbackMenuOverlay, which is what the X11 window gets too.
 bool PlatHasMenu() {

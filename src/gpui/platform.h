@@ -141,9 +141,15 @@ void* PlatWindowHandle(Window* win);
 // crates/base/src/macos_accessibility.rs. VoiceOver hit-tests the window, and
 // AppKit's NSWindow answers for itself rather than asking the view that drew
 // everything, so nothing inside is reachable. This adds an
-// accessibilityHitTest: to the window's class that forwards to the content
-// view. Only macOS has anything to do here; the other two are no-ops.
+// accessibilityHitTest: install the native adapter that publishes the
+// portable semantic tree. Windows answers WM_GETOBJECT; macOS currently only
+// forwards hit-testing to its content view; Linux and wasm are no-ops.
 void PlatInstallAccessibilityHitTest(Window* win);
+// The portable tree is live data; native accessibility clients need change
+// notifications beside their queries. The focus id is GPUI's internal id,
+// which the adapter resolves back to the semantic node that exposes it.
+void PlatAccessibilityTreeChanged(Window* win);
+void PlatAccessibilityFocusChanged(Window* win, int focusId);
 
 // ─── OS popup menus (crates/ui/src/native_menu) ──────────────────────────
 

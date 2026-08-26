@@ -3,6 +3,7 @@
 #include "base/scrollbar.h"
 #include "gpui/image.h"
 #include "gpui/paint.h"
+#include "gpui/platform.h"
 #include "base/positioner.h"
 #include "base/text_boundary.h"
 #include "gpui/svg.h"
@@ -756,7 +757,7 @@ static ScrollbarMode ElScrollMode(const El* e, const App* app) {
 // The thumb's colour: `thumb_hover` under the pointer or in a drag, `thumb`
 // otherwise, faded by however far through the Scrolling fade the bar is.
 static Background ScrollbarThumbBg(const RuntimeStyle& th, bool hot,
-                                    float alpha) {
+                                   float alpha) {
     Background c = hot ? th.scrollbarThumbHover : th.scrollbarThumb;
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
@@ -3962,13 +3963,11 @@ static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
     if (horizontal) {
         float tx = c.barAlign == BarAlign::Left ? rx + rw + 4 : rx - 34;
         DrawTextAt(ctx, text, tx, ry + rh * 0.5f - 7.f, 30, 14, 10,
-                   th.mutedForeground,
-                   c.barAlign != BarAlign::Left);
+                   th.mutedForeground, c.barAlign != BarAlign::Left);
     } else {
         float ty = c.barAlign == BarAlign::Top ? ry + rh + 2 : ry - 14.f;
         DrawTextAt(ctx, text, rx + rw * 0.5f - 20.f, ty, 40, 14, 10,
-                   th.mutedForeground,
-                   true);
+                   th.mutedForeground, true);
     }
 }
 
@@ -4185,8 +4184,7 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                     tx = px - tw * 0.5f;
                 }
                 DrawTextAt(ctx, label, tx, py - 5.f, tw, 14, 10,
-                           th.mutedForeground,
-                           false);
+                           th.mutedForeground, false);
             }
         }
         return;
@@ -4889,9 +4887,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             e->input->lastBounds = e->Bounds();
             e->input->lastFont = font;
         }
-        Rgba c =
-            e->style.hasColor ? e->style.color
-                              : RuntimeStyleNow(ctx->app).foreground;
+        Rgba c = e->style.hasColor ? e->style.color
+                                   : RuntimeStyleNow(ctx->app).foreground;
         int lo = e->selLo;
         int hi = e->selHi;
         if (e->selectable && e->text.s) {
@@ -5017,8 +5014,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         if (img) {
             ImageDraw(ctx, img, e->Bounds(), e->style.radius);
         } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
-                              e->style.hasColor ? e->style.color
-                                                : RuntimeStyleNow(ctx->app).foreground,
+                              e->style.hasColor
+                                  ? e->style.color
+                                  : RuntimeStyleNow(ctx->app).foreground,
                               0)) {
             // An SVG is not a bitmap for any of the three backends to decode;
             // it is the vector the icon renderer already walks, and a picture
@@ -5039,9 +5037,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                        e->style.lineHeight);
         }
     } else if (e->kind == ElKind::Icon) {
-        Rgba c =
-            e->style.hasColor ? e->style.color
-                              : RuntimeStyleNow(ctx->app).foreground;
+        Rgba c = e->style.hasColor ? e->style.color
+                                   : RuntimeStyleNow(ctx->app).foreground;
         float s = e->w > 0 ? e->w : 16;
         // Every lucide icon is compiled in as draw-op bytecode
         // (asset_icons.cpp), so this reads no file; an application's own
@@ -5231,10 +5228,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // Which is why `Theme::focus_ring` exists: an application that clips
         // its containers turns the ring off and keeps the border above.
         Bounds ring = e->Bounds().Inset(-kFocusRingWidth);
-        DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
-                        e->style.radius + kFocusRingWidth, kFocusRingWidth,
-                        RgbaOpacity(RuntimeStyleNow(ctx->app).ring,
-                                    kFocusRingOpacity));
+        DrawRoundStroke(
+            ctx, ring.x, ring.y, ring.w, ring.h,
+            e->style.radius + kFocusRingWidth, kFocusRingWidth,
+            RgbaOpacity(RuntimeStyleNow(ctx->app).ring, kFocusRingOpacity));
     }
 }
 
@@ -6359,6 +6356,7 @@ void WindowSetFocusId(Window* win, int id) {
     // focus_generation: what a pending keystroke is stamped with, so the move
     // is what tells it the element under it changed.
     win->focusGen++;
+    PlatAccessibilityFocusChanged(win, id);
 }
 
 // cx.focus_handle(). GPUI's slotmap hands out a refcounted key; a counter is

@@ -1,8 +1,16 @@
 /* Accessibility semantics ported from the role/state/action assertions in
- * crates/base and crates/ui. The OS adapters consume this frame tree; these
- * tests pin the portable part independently of UI Automation, AT-SPI or NSAX. */
+ * crates/base and crates/ui. Most tests pin the portable tree independently
+ * of an OS; Windows also probes the actual UI Automation COM projection. */
 
 #include "Test.h"
+
+#if GPUI_OS_WINDOWS
+namespace gpui {
+// Internal conformance probe implemented beside the UIA provider, not part of
+// the published header surface.
+bool AccessibilityWinSmokeTest(Window* win, uint32_t nodeId);
+} // namespace gpui
+#endif
 
 struct AccessibilityFrame {
     App app;
@@ -79,8 +87,8 @@ static void TheTreeSkipsVisualBoxesButKeepsSemanticParents() {
         utassert(buttonNode->actions & AccessibilityActionDefault);
         utassert(buttonNode->actions & AccessibilityActionFocus);
         utassert(WindowAccessibilityNode(f.win, buttonNode->id) == buttonNode);
-        utassert(WindowAccessibilityPerform(
-            f.win, buttonNode->id, AccessibilityAction::Default));
+        utassert(WindowAccessibilityPerform(f.win, buttonNode->id,
+                                            AccessibilityAction::Default));
         utassert(clicks == 1);
         utassert(WindowAccessibilityPerform(f.win, buttonNode->id,
                                             AccessibilityAction::Focus));
@@ -147,9 +155,7 @@ struct SemanticActionView {
     int decrements = 0;
     int defaults = 0;
 
-    static El* Render(SemanticActionView*, Ctx* cx) {
-        return Div(cx->a);
-    }
+    static El* Render(SemanticActionView*, Ctx* cx) { return Div(cx->a); }
 
     static void Increment(SemanticActionView* self, Ctx*, const ClickEvent*) {
         self->increments++;
@@ -175,10 +181,9 @@ static void ExplicitSemanticListenersAreInvoked() {
                    ->OnAccessibilityDecrement(
                        Listen(&f.cx, &SemanticActionView::Decrement));
     AccessibilityCollect(node, &f.win->accessibility);
-    const AccessibilityNode* semantic = RoleNode(
-        f.win->accessibility, AccessibilityRole::SpinButton);
-    utassert(semantic &&
-             (semantic->actions & AccessibilityActionDefault) &&
+    const AccessibilityNode* semantic =
+        RoleNode(f.win->accessibility, AccessibilityRole::SpinButton);
+    utassert(semantic && (semantic->actions & AccessibilityActionDefault) &&
              (semantic->actions & AccessibilityActionIncrement) &&
              (semantic->actions & AccessibilityActionDecrement));
     if (semantic) {
@@ -201,8 +206,8 @@ static void ConditionalAndCompositeRolesMatchUpstream() {
     El* colorPicker =
         ColorPicker::New(&f.cx, StrL("picker"), true, false, StrL("Color"))
             ->Child(Div(f.arena)->PathId(StrL("trigger")));
-    El* unnamedHeader = AccordionHeader::New(
-        &f.cx, AccordionTrigger::New(&f.cx, StrL("u")));
+    El* unnamedHeader =
+        AccordionHeader::New(&f.cx, AccordionTrigger::New(&f.cx, StrL("u")));
     El* namedHeader = AccordionHeader::New(
         &f.cx, AccordionTrigger::New(&f.cx, StrL("n")), StrL("heading"), 4);
     El* root = Div(f.arena)
@@ -212,7 +217,7 @@ static void ConditionalAndCompositeRolesMatchUpstream() {
                    ->Child(AccordionPanel::New(&f.cx, StrL("region")))
                    ->Child(colorPicker)
                    ->Child(ColorSwatch::New(&f.cx, StrL("swatch"), {}, {},
-                                           0x12ab34, true))
+                                            0x12ab34, true))
                    ->Child(DatePicker::New(&f.cx, StrL("date"), false, true));
     IdsCollect(root);
     AccessibilityCollect(root, &f.win->accessibility);
@@ -273,14 +278,14 @@ static void BaseControlsProjectTheirControlledState() {
     AccessibilityFrame f = NewAccessibilityFrame();
     El* root = Div(f.arena)
                    ->Child(Checkbox::New(&f.cx, StrL("check"),
-                                        CheckboxState::Indeterminate))
+                                         CheckboxState::Indeterminate))
                    ->Child(Radio::New(&f.cx, StrL("radio"), true))
                    ->Child(Switch::New(&f.cx, StrL("switch"), true))
                    ->Child(Toggle::New(&f.cx, StrL("toggle"), true))
                    ->Child(Progress::New(&f.cx, StrL("done"), 120))
                    ->Child(Progress::New(&f.cx, StrL("busy"), 40, true))
                    ->Child(Tab::New(&f.cx, StrL("account"), false, {}, true,
-                                   StrL("Account"), 2, 5));
+                                    StrL("Account"), 2, 5));
     AccessibilityCollect(root, &f.win->accessibility);
 
     const AccessibilityNode* check =
@@ -293,8 +298,8 @@ static void BaseControlsProjectTheirControlledState() {
         RoleNode(f.win->accessibility, AccessibilityRole::Button);
     const AccessibilityNode* done =
         RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator);
-    const AccessibilityNode* busy = RoleNode(
-        f.win->accessibility, AccessibilityRole::ProgressIndicator, 1);
+    const AccessibilityNode* busy =
+        RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator, 1);
     const AccessibilityNode* tab =
         RoleNode(f.win->accessibility, AccessibilityRole::Tab);
     utassert(check && check->info.toggled == AccessibilityToggled::Mixed);
@@ -348,20 +353,27 @@ static void SliderActionsUseTheSlidersOwnStep() {
     AccessibilityCollect(slider, &f.win->accessibility);
     const AccessibilityNode* node =
         RoleNode(f.win->accessibility, AccessibilityRole::Slider);
-    utassert(node && node->info.orientation ==
-                         AccessibilityOrientation::Vertical);
+    utassert(node &&
+             node->info.orientation == AccessibilityOrientation::Vertical);
     utassert(node && node->info.hasNumericValue &&
              TestNear(node->info.numericValue, 5));
     utassert(node && (node->actions & AccessibilityActionIncrement));
     utassert(node && (node->actions & AccessibilityActionDecrement));
     if (node) {
         uint32_t id = node->id;
+#if GPUI_OS_WINDOWS
+        utassert(AccessibilityWinSmokeTest(f.win, id));
+#endif
         utassert(WindowAccessibilityPerform(f.win, id,
                                             AccessibilityAction::Increment));
         utassertnear(state.value.End(), 7);
         utassert(WindowAccessibilityPerform(f.win, id,
                                             AccessibilityAction::Decrement));
         utassertnear(state.value.End(), 5);
+        utassert(WindowAccessibilitySetNumericValue(f.win, id, 8.6f));
+        utassertnear(state.value.End(), 8);
+        utassert(WindowAccessibilitySetNumericValue(f.win, id, 100));
+        utassertnear(state.value.End(), 10);
     }
     FreeAccessibilityFrame(&f);
 }
@@ -379,9 +391,8 @@ static void EditableTextOffersSetValueAndReadOnlyTextDoesNot() {
     utassert(node && (node->actions & AccessibilityActionSetValue));
     utassert(node && SameText(node->info.value, StrL("old")));
     if (node) {
-        utassert(WindowAccessibilityPerform(f.win, node->id,
-                                            AccessibilityAction::SetValue,
-                                            StrL("new value")));
+        utassert(WindowAccessibilityPerform(
+            f.win, node->id, AccessibilityAction::SetValue, StrL("new value")));
         utassert(SameText(InputValue(&editable), StrL("new value")));
     }
 

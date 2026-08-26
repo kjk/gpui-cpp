@@ -709,6 +709,15 @@ void PlatInstallAccessibilityHitTest(Window* win) {
     (void)win;
 }
 
+void PlatAccessibilityTreeChanged(Window* win) {
+    (void)win;
+}
+
+void PlatAccessibilityFocusChanged(Window* win, int focusId) {
+    (void)win;
+    (void)focusId;
+}
+
 bool PlatHasMenu() {
     // X11 has no popup menu of its own — a toolkit draws its own. The caller
     // falls back to the drawn menu, which is what Rust does here too.

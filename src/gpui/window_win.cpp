@@ -4,6 +4,7 @@
 
 #include "gpui/platform.h"
 #include "gpui/paint.h"
+#include "gpui/accessibility_win.h"
 #include "sys/executor.h"
 
 #include <dwmapi.h>
@@ -18,6 +19,10 @@ static const wchar_t* kWndClass = L"GpuiSystemMonitor";
 
 struct PlatWindow {
     HWND hwnd = nullptr;
+    // Installed when component::Root first renders (with a WM_GETOBJECT
+    // fallback for a custom root). Nodes retain it, and close detaches the
+    // Window before the last COM reference can disappear.
+    WinAccessibility* accessibility = nullptr;
     // WM_SETCURSOR fires on every move over the client area and has to put it
     // back, so the window remembers what it last asked for.
     HCURSOR cursor = nullptr;
@@ -353,6 +358,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             PlatSetTimer(win, WindowTimerMs(win));
             return 0;
         }
+        case WM_GETOBJECT:
+            if ((LONG)lParam == UiaRootObjectId) {
+                if (!win->plat->accessibility) {
+                    win->plat
+                        ->accessibility = AccessibilityWinNew(win, (void*)hwnd);
+                }
+                return (LRESULT)AccessibilityWinGetObject(
+                    win->plat->accessibility, (uintptr_t)wParam,
+                    (intptr_t)lParam);
+            }
+            break;
         case WM_KEYDOWN:
             WindowKeyDown(win, (int)wParam, ShiftDown(), CtrlDown(), AltDown(),
                           WinDown());
@@ -629,6 +645,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
         case WM_DESTROY: {
             KillTimer(hwnd, 1);
             App* app = win->app;
+            AccessibilityWinClose(win->plat->accessibility);
+            win->plat->accessibility = nullptr;
             delete win->plat;
             WindowClosed(win);
             // The message loop ends when the last window closes.
@@ -800,14 +818,30 @@ int PlatDoubleClickMs() {
     return (int)GetDoubleClickTime();
 }
 
-// Only macOS has an NSWindow to teach; VoiceOver reaches the tree here through
-// the platform's own means.
 void* PlatWindowHandle(Window* win) {
     return (void*)Hwnd(win);
 }
 
 void PlatInstallAccessibilityHitTest(Window* win) {
-    (void)win;
+    // Root::Render calls the cross-platform seam. Windows exposes the tree
+    // through WM_GETOBJECT, so installing it means making the retained root
+    // ready before an automation client asks.
+    if (win && win->plat && !win->plat->accessibility) {
+        win->plat
+            ->accessibility = AccessibilityWinNew(win, (void*)win->plat->hwnd);
+    }
+}
+
+void PlatAccessibilityTreeChanged(Window* win) {
+    if (win && win->plat) {
+        AccessibilityWinTreeChanged(win->plat->accessibility);
+    }
+}
+
+void PlatAccessibilityFocusChanged(Window* win, int focusId) {
+    if (win && win->plat) {
+        AccessibilityWinFocusChanged(win->plat->accessibility, focusId);
+    }
 }
 
 bool PlatHasMenu() {

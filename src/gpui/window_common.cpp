@@ -236,6 +236,74 @@ static void LayoutDumpFrame(Window* win, El* root) {
     fflush(f);
 }
 
+static uint64_t AccessibilityHashBytes(uint64_t hash, const void* data,
+                                       int len) {
+    const uint8_t* bytes = (const uint8_t*)data;
+    for (int i = 0; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= 0x100000001b3ull;
+    }
+    return hash;
+}
+
+static uint64_t AccessibilityHashStr(uint64_t hash, Str value) {
+    hash = AccessibilityHashBytes(hash, &value.len, (int)sizeof(value.len));
+    return value.s && value.len > 0
+               ? AccessibilityHashBytes(hash, value.s, value.len)
+               : hash;
+}
+
+static uint64_t AccessibilityTreeHash(const Vec<AccessibilityNode>& nodes) {
+    uint64_t hash = 0xcbf29ce484222325ull;
+    hash = AccessibilityHashBytes(hash, &nodes.len, (int)sizeof(nodes.len));
+#define GPUI_A11Y_HASH(value) \
+    hash = AccessibilityHashBytes(hash, &(value), (int)sizeof(value))
+    for (int i = 0; i < nodes.len; i++) {
+        const AccessibilityNode& node = nodes[i];
+        const AccessibilityInfo& info = node.info;
+        GPUI_A11Y_HASH(node.id);
+        GPUI_A11Y_HASH(node.parent);
+        GPUI_A11Y_HASH(node.actions);
+        GPUI_A11Y_HASH(node.focusId);
+        GPUI_A11Y_HASH(info.role);
+        hash = AccessibilityHashStr(hash, info.authorId);
+        hash = AccessibilityHashStr(hash, info.label);
+        hash = AccessibilityHashStr(hash, info.value);
+        hash = AccessibilityHashStr(hash, info.placeholder);
+        GPUI_A11Y_HASH(info.toggled);
+        GPUI_A11Y_HASH(info.orientation);
+        GPUI_A11Y_HASH(info.numericValue);
+        GPUI_A11Y_HASH(info.minNumericValue);
+        GPUI_A11Y_HASH(info.maxNumericValue);
+        GPUI_A11Y_HASH(info.numericValueStep);
+        GPUI_A11Y_HASH(info.positionInSet);
+        GPUI_A11Y_HASH(info.sizeOfSet);
+        GPUI_A11Y_HASH(info.rowCount);
+        GPUI_A11Y_HASH(info.columnCount);
+        GPUI_A11Y_HASH(info.rowIndex);
+        GPUI_A11Y_HASH(info.columnIndex);
+        GPUI_A11Y_HASH(info.level);
+        GPUI_A11Y_HASH(info.hasNumericValue);
+        GPUI_A11Y_HASH(info.hasMinNumericValue);
+        GPUI_A11Y_HASH(info.hasMaxNumericValue);
+        GPUI_A11Y_HASH(info.hasNumericValueStep);
+        GPUI_A11Y_HASH(info.hasPositionInSet);
+        GPUI_A11Y_HASH(info.hasSizeOfSet);
+        GPUI_A11Y_HASH(info.hasRowCount);
+        GPUI_A11Y_HASH(info.hasColumnCount);
+        GPUI_A11Y_HASH(info.hasRowIndex);
+        GPUI_A11Y_HASH(info.hasColumnIndex);
+        GPUI_A11Y_HASH(info.hasLevel);
+        GPUI_A11Y_HASH(info.selected);
+        GPUI_A11Y_HASH(info.hasSelected);
+        GPUI_A11Y_HASH(info.expanded);
+        GPUI_A11Y_HASH(info.hasExpanded);
+        GPUI_A11Y_HASH(info.disabled);
+    }
+#undef GPUI_A11Y_HASH
+    return hash;
+}
+
 void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
                      float dipH) {
     if (!win) {
@@ -378,8 +446,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         if (!win->layout) {
             win->layout = LayoutCacheNew();
         }
-        LayoutEl(&win->paint, root, 0, 0, dipW, dipH,
-                 th.fontSize,
+        LayoutEl(&win->paint, root, 0, 0, dipW, dipH, th.fontSize,
                  th.foreground, win->layout);
         FocusCollect(win, root);
         AccessibilityCollect(root, &win->accessibility);
@@ -390,6 +457,11 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         double tPaint0 = TimeNow();
         PaintEl(&win->paint, root);
         gFramePaintSecs = TimeNow() - tPaint0;
+    }
+    uint64_t accessibilityHash = AccessibilityTreeHash(win->accessibility);
+    if (accessibilityHash != win->accessibilityHash) {
+        win->accessibilityHash = accessibilityHash;
+        PlatAccessibilityTreeChanged(win);
     }
     // A Scrolling scrollbar part-way through its fade wants the next frame.
     // One ask for the whole tree, after it has painted, the way Rust's
@@ -816,7 +888,7 @@ static void SliderEmit(Window* win, SliderState* s, SliderEventKind kind) {
 }
 
 const AccessibilityNode* WindowAccessibilityNode(const Window* win,
-                                                  uint32_t nodeId) {
+                                                 uint32_t nodeId) {
     if (!win || !nodeId) {
         return nullptr;
     }
@@ -906,6 +978,41 @@ bool WindowAccessibilityPerform(Window* win, uint32_t nodeId,
     if (node.clickAction) {
         WindowDispatchAction(win, node.clickAction, node.clickActionArg);
     }
+    AppInvalidate(win);
+    return true;
+}
+
+bool WindowAccessibilitySetNumericValue(Window* win, uint32_t nodeId,
+                                        float value) {
+    const AccessibilityNode* found = WindowAccessibilityNode(win, nodeId);
+    if (!found || found->info.disabled || !found->slider) {
+        return false;
+    }
+    AccessibilityNode node = *found;
+    SliderState* slider = node.slider;
+    float lo = slider->value.range ? slider->value.lo : slider->min;
+    if (value < lo) {
+        value = lo;
+    }
+    if (value > slider->max) {
+        value = slider->max;
+    }
+    if (slider->step > 0) {
+        value = roundf(value / slider->step) * slider->step;
+        if (value < lo) {
+            value = lo;
+        }
+        if (value > slider->max) {
+            value = slider->max;
+        }
+    }
+    if (value == slider->value.End()) {
+        return true;
+    }
+    SliderValue next = slider->value;
+    SliderValueSetEnd(&next, value);
+    SliderSetValue(slider, next);
+    SliderEmit(win, slider, SliderEventKind::Change);
     AppInvalidate(win);
     return true;
 }
@@ -2650,8 +2757,7 @@ void AppSetMenus(App* app, const MenuDef* menus, int n) {
                                        alignof(PlatMenuItem), true);
     for (int i = 0; i < n; i++) {
         bar[i].label = StrDup(a, menus[i].name).s;
-        bar[i].submenu =
-            AppMenuToPlat(state, a, menus[i].items, menus[i].n);
+        bar[i].submenu = AppMenuToPlat(state, a, menus[i].items, menus[i].n);
         bar[i].submenuN = menus[i].n;
     }
     // The table is built whether or not anything shows it: a platform with no
@@ -2663,8 +2769,7 @@ bool AppMenuRowForId(int id, uint32_t* action, intptr_t* arg) {
     return AppMenuRowForId(gAppMenuApp, id, action, arg);
 }
 
-bool AppMenuRowForId(const App* app, int id, uint32_t* action,
-                     intptr_t* arg) {
+bool AppMenuRowForId(const App* app, int id, uint32_t* action, intptr_t* arg) {
     AppMenuState* state = AppGlobalGet<AppMenuState>(app);
     if (!state || id <= 0 || id > state->rows.len) {
         return false;
@@ -2692,8 +2797,8 @@ void AppMenuClear(App* app) {
 void AppMenuChosen(int id) {
     uint32_t action = 0;
     intptr_t arg = 0;
-    if (!gAppMenuApp ||
-        !AppMenuRowForId(gAppMenuApp, id, &action, &arg) || !action) {
+    if (!gAppMenuApp || !AppMenuRowForId(gAppMenuApp, id, &action, &arg) ||
+        !action) {
         return;
     }
     // The window the menu bar was over. GPUI dispatches a menu action to the

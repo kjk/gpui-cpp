@@ -763,8 +763,7 @@ struct RuntimeStyle {
     Rgba popoverForeground = Rgb(0x17, 0x17, 0x17);
     Background progress = Background(Rgb(0x17, 0x17, 0x17));
     Background scrollbarThumb = Background(Rgba8(0x17, 0x17, 0x17, 0x33));
-    Background scrollbarThumbHover =
-        Background(Rgba8(0x17, 0x17, 0x17, 0x66));
+    Background scrollbarThumbHover = Background(Rgba8(0x17, 0x17, 0x17, 0x66));
     Background scrollbarTrack = Background(Rgba8(0, 0, 0, 0));
 
     // Compatibility styling for the old arena-only ButtonEl helper. New UI
@@ -4207,6 +4206,10 @@ struct Window {
     // Rebuilt after layout from the frame's element tree. Platform adapters
     // read this; it owns no strings or callbacks beyond the frame arena.
     Vec<AccessibilityNode> accessibility;
+    // Semantic-content hash from the last frame. Native adapters receive one
+    // children-invalidated event only when it changes, not on every animation
+    // repaint.
+    uint64_t accessibilityHash = 0;
     int hoverId = 0;
     int focusId = 0;
     // window.focus_generation: bumped every time the focus moves, so a
@@ -4348,7 +4351,6 @@ struct Ctx {
     // `use_keyed_state` asked for underneath is keyed by the whole stack.
     // See IdScope.
     uint32_t path = 0;
-
 };
 
 // The same fold IdsCollect uses on the element tree, over one more name.
@@ -4919,9 +4921,13 @@ void FocusCollect(Window* win, El* root);
 void IdsCollect(El* root);
 void AccessibilityCollect(El* root, Vec<AccessibilityNode>* out);
 const AccessibilityNode* WindowAccessibilityNode(const Window* win,
-                                                  uint32_t nodeId);
+                                                 uint32_t nodeId);
 bool WindowAccessibilityPerform(Window* win, uint32_t nodeId,
                                 AccessibilityAction action, Str value = {});
+// RangeValue::SetValue needs an absolute numeric setter rather than a run of
+// Increment actions. Only a live, enabled slider node accepts it.
+bool WindowAccessibilitySetNumericValue(Window* win, uint32_t nodeId,
+                                        float value);
 int FocusNext(Window* win, int trapId, bool backward);
 // Move the focus. Everything that focuses goes through here, so the
 // generation a keystroke is stamped with counts every move.
@@ -5078,8 +5084,7 @@ void AppSetMenus(App* app, const MenuDef* menus, int n);
 // numbering is the contract between the two halves — the selectable rows in
 // preorder, from 1 — so it is worth being able to ask.
 bool AppMenuRowForId(int id, uint32_t* action, intptr_t* arg);
-bool AppMenuRowForId(const App* app, int id, uint32_t* action,
-                     intptr_t* arg);
+bool AppMenuRowForId(const App* app, int id, uint32_t* action, intptr_t* arg);
 // Drops the menu model owned by this App. AppFree calls it before globals are
 // destroyed so the platform callback cannot retain a stale App pointer.
 void AppMenuClear(App* app);

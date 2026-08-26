@@ -842,6 +842,8 @@ const winLibs = [
   "dwmapi.lib",
   "psapi.lib",
   "ole32.lib",
+  // src/gpui/accessibility_win.cpp publishes the portable semantic tree.
+  "uiautomationcore.lib",
   "windowscodecs.lib",
   "user32.lib",
   "imm32.lib",

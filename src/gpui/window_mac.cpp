@@ -809,6 +809,15 @@ void PlatInstallAccessibilityHitTest(Window* win) {
                     (IMP)GpuiAccessibilityHitTest, "@@:{CGPoint=dd}");
 }
 
+void PlatAccessibilityTreeChanged(Window* win) {
+    (void)win;
+}
+
+void PlatAccessibilityFocusChanged(Window* win, int focusId) {
+    (void)win;
+    (void)focusId;
+}
+
 bool PlatHasMenu() {
     return true;
 }
