@@ -568,7 +568,9 @@ AppMenuBar* AppMenuBar::Menu(Str title, PopupMenu* menu) {
 El* AppMenuBar::IntoEl() {
     const Theme& th = cx->theme();
     AppMenuBarState* s = state.Get(cx);
-    El* bar = Div(a)->FlexRow()->ItemsCenter()->Gap(2)->H(28)->W(kFill);
+    // The bar carries the name, so a title is `0`, `1`, `2` inside it.
+    IdScope scope(cx, id);
+    El* bar = Div(a)->Id(id)->FlexRow()->ItemsCenter()->Gap(2)->H(28)->W(kFill);
     Listener click = ListenTo(state, &AppMenuBarState::OnMenuClick, 0);
     Listener hover = ListenTo(state, &AppMenuBarState::OnMenuHover, 0);
     for (int i = 0; i < n; i++) {
@@ -585,7 +587,7 @@ El* AppMenuBar::IntoEl() {
             item->Bg(th.tokens.secondary);
         }
         item->Child(TextEl(a, titles[i])->Font(14)->Fg(th.foreground));
-        BindClick(item, StrDup(a, fmt("%s-%d", id, i)), ListenerArg(click, i));
+        BindClick(item, StrDup(a, fmt("%d", i)), ListenerArg(click, i));
         item->OnHover(ListenerArg(hover, i));
         wrap->Child(item);
         if (on && menus[i]) {

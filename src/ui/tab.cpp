@@ -386,7 +386,10 @@ static TabStyle TabDisabled(TabVariant v, bool selected, const Theme& th) {
 // menu confirms is the index the bar's on_click wants.
 static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
     Ctx* cx = tabs->cx;
-    Str menuId = StrDup(cx->a, fmt("%s-menu", tabs->id));
+    // The button and its menu are built inside the bar, so the bar's name is
+    // what tells one strip's overflow menu from another's.
+    IdScope scope(cx, tabs->id);
+    Str menuId = StrL("menu");
     Entity<PopupMenuState> st = PopupMenuStateFor(cx, menuId);
     if (PopupMenuState* s = st.Get(cx)) {
         s->onConfirm = tabs->onChange;
@@ -409,8 +412,8 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
             menu->Disabled(true);
         }
     }
-    return DropdownMenu::New(cx, StrDup(cx->a, fmt("%s-more", tabs->id)))
-        ->Trigger(Button::New(cx, StrDup(cx->a, fmt("%s-more-btn", tabs->id)))
+    return DropdownMenu::New(cx, StrL("more"))
+        ->Trigger(Button::New(cx, StrL("more-btn"))
                       ->Ghost()
                       ->WithSize(UiSize::XSmall)
                       ->DropdownCaret()

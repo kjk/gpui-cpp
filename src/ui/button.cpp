@@ -624,6 +624,7 @@ El* DropdownButton::IntoEl() {
     // joined at all.
     bool attached = !(v == ButtonVariant::Ghost && !isSelected);
 
+    IdScope scope(cx, id);
     El* row = Div(a)->Id(id)->FlexRow()->ItemsCenter();
     if (attached) {
         // Joined: the two ends are rounded by the wrapper and the seam is one
@@ -649,7 +650,7 @@ El* DropdownButton::IntoEl() {
     // action button, and a loading action button leaves it available: loading
     // is action-specific, `Disabled(true)` is what shuts both halves.
     if (menu) {
-        Button* caret = Button::New(cx, StrDup(a, fmt("%s-popup", id)))
+        Button* caret = Button::New(cx, StrL("popup"))
                             ->DropdownCaret()
                             ->Selected(isSelected)
                             ->Disabled(disabled)
@@ -666,7 +667,7 @@ El* DropdownButton::IntoEl() {
         if (disabled) {
             row->Child(trigger);
         } else {
-            row->Child(DropdownMenu::New(cx, StrDup(a, fmt("%s-menu", id)))
+            row->Child(DropdownMenu::New(cx, StrL("menu"))
                            ->Trigger(trigger)
                            ->Menu(menu)
                            ->AnchorRight(anchorRight)

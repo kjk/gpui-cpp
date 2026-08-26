@@ -88,6 +88,69 @@ static void OnlySegmentedRoundsItsBar() {
     utassertnear(TabInnerRadius(TabVariant::Pill, UiSize::Medium, r, rlg), 0.f);
 }
 
+static El* FindNamedTab(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamedTab(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// The overflow menu is `more`, `more-btn` and `menu` in every bar, and the
+// bar's own name over them is what keeps two strips' menus apart -- both the
+// element and the PopupMenuState behind it, which is why the name is pushed
+// on the id stack and not only onto the tree.
+static void TwoBarsHaveTwoOverflowMenus() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = a;
+
+    El* page = Div(a);
+    El* left = component::Tabs::New(&cx, StrL("left"))
+                   ->Menu()
+                   ->Tab(StrL("One"))
+                   ->Tab(StrL("Two"))
+                   ->IntoEl();
+    uint32_t leftPath = cx.path;
+    El* right = component::Tabs::New(&cx, StrL("right"))
+                    ->Menu()
+                    ->Tab(StrL("One"))
+                    ->Tab(StrL("Two"))
+                    ->IntoEl();
+    // The scope is off the stack again once a bar is built.
+    utassert(leftPath == 0 && cx.path == 0);
+    page->Child(left)->Child(right);
+    IdsCollect(page);
+
+    // DropdownMenu names its trigger `trigger` among the dropdown's own
+    // parts, so the button's name is the one the caller asked for and this
+    // is the one that reaches the tree.
+    El* btnL = FindNamedTab(left, "trigger");
+    El* btnR = FindNamedTab(right, "trigger");
+    utassert(btnL && btnR);
+    if (btnL && btnR) {
+        utassert(btnL->clickId != 0 && btnR->clickId != 0);
+        utassert(btnL->clickId != btnR->clickId);
+    }
+
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestTab() {
     TestSuite("tab");
     UnderlineIsTallerThanEveryOtherVariant();
@@ -95,4 +158,5 @@ void TestTab() {
     UnderlinePadsFromTheBarInstead();
     OnlyTheStripsThatNeedGapsHaveThem();
     OnlySegmentedRoundsItsBar();
+    TwoBarsHaveTwoOverflowMenus();
 }

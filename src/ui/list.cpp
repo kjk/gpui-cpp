@@ -231,7 +231,7 @@ El* List::IntoEl() {
             InputSetPlaceholder(search, Tr("List.search_placeholder"));
         }
         searchRow->Child(Div(a)->Flex1()->Child(
-            Input::New(cx, StrDup(a, fmt("%s-search", id)), search)
+            Input::New(cx, StrL("search"), search)
                 ->Appearance(false)
                 ->Cleanable(true)
                 ->Prefix(IconEl(a, IconName::Search, 16)->Fg(th.mutedFg))
