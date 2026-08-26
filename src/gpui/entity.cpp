@@ -483,21 +483,28 @@ void WindowCancelTimer(Window* win, int id) {
     PlatSetTimer(win, WindowTimerMs(win));
 }
 
-void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop) {
-    if (!win || size <= 0) {
+void* WindowKeyedState(Window* win, uint32_t key, void* fresh, DropFn drop) {
+    if (!win || !fresh || !drop) {
+        if (fresh && drop) {
+            drop(fresh);
+        }
         return nullptr;
     }
     for (int i = 0; i < win->keyed.len; i++) {
         if (win->keyed[i].key == key) {
+            drop(fresh);
             return win->keyed[i].ptr;
         }
     }
     KeyedSlot s = {};
     s.key = key;
-    s.ptr = AllocZero(1, size);
+    s.ptr = fresh;
     s.drop = drop;
-    win->keyed.Append(s);
-    return s.ptr;
+    if (!win->keyed.Append(s)) {
+        drop(fresh);
+        return nullptr;
+    }
+    return fresh;
 }
 
 // window.use_keyed_state, when the state has to be an entity so timers and
@@ -583,10 +590,14 @@ void WindowKeyedFree(Window* win) {
         return;
     }
     for (int i = 0; i < win->keyed.len; i++) {
-        // AllocZero'd, so free the memory without running a destructor. An
-        // entity slot holds no memory of its own — the app owns that.
         if (win->keyed[i].ptr) {
-            Free(nullptr, win->keyed[i].ptr);
+            if (win->keyed[i].drop) {
+                win->keyed[i].drop(win->keyed[i].ptr);
+            } else {
+                // Entity-valued slots only carry their handle in `entity`;
+                // pointer slots always have a drop function.
+                Free(nullptr, win->keyed[i].ptr);
+            }
         }
     }
     win->keyed.Reset();

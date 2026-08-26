@@ -4724,7 +4724,11 @@ void ListenerCall(App* app, Window* win, const Listener& l, const void* ev);
 El* EntityRender(App* app, Window* win, Arena* a, EntityId id);
 
 // window.use_keyed_state(key, cx, init)
-void* WindowKeyedState(Window* win, uint32_t key, int size, DropFn drop);
+// Pointer-valued use_keyed_state. `fresh` is a fully constructed object;
+// the first call adopts it, later calls delete the unused candidate and
+// return the object already stored under the key. WindowKeyedFree runs every
+// adopted object's drop function.
+void* WindowKeyedState(Window* win, uint32_t key, void* fresh, DropFn drop);
 void WindowKeyedFree(Window* win);
 
 // The transition state behind one id, created zeroed on first ask and marked
@@ -4738,7 +4742,7 @@ void WindowMotionFree(Window* win);
 
 template <typename T>
 T* KeyedState(Ctx* cx, uint32_t key) {
-    void* p = WindowKeyedState(cx->win, key, (int)sizeof(T), &EntityDropT<T>);
+    void* p = WindowKeyedState(cx->win, key, new T(), &EntityDropT<T>);
     return (T*)p;
 }
 

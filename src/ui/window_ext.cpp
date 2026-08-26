@@ -9,7 +9,7 @@ WindowLayers* WindowLayersOf(Window* win) {
     // window.use_keyed_state, which is the same lifetime Rust's Root has: the
     // window's, dropped with it.
     uint32_t key = (uint32_t)HashClickId(StrL("gpui-window-layers"));
-    void* p = WindowKeyedState(win, key, (int)sizeof(WindowLayers),
+    void* p = WindowKeyedState(win, key, new WindowLayers(),
                                &EntityDropT<WindowLayers>);
     return (WindowLayers*)p;
 }

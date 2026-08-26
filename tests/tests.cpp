@@ -128,6 +128,7 @@ int GpuiMain(int argc, char** argv) {
     TestAccessibility();
     TestButtonGroup();
     TestIcon();
+    TestKeyedState();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

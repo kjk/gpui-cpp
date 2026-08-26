@@ -7013,3 +7013,19 @@ no portable EWMH signal in the current adapter, and the runtime still lacks
 Rust's blurred two-layer Linux box shadow, so Window Border remains honestly
 partial with that explicit reason. Its public declaration surface is complete,
 reducing the unresolved report to 340. MSVC release passes 19,338 checks.
+
+## Pointer keyed state now owns constructed objects
+
+The WindowExt lifecycle review found that `WindowKeyedState` recorded a drop
+function but allocated zeroed bytes rather than a C++ object, and
+`WindowKeyedFree` ignored that function and freed the bytes directly. Any
+non-trivial keyed value therefore never ran its destructor; WindowLayers in
+particular leaked its dialog vector and could not release owned layer state at
+window teardown.
+
+Pointer keyed state now follows the existing keyed-entity adoption convention:
+the template supplies a constructed candidate, the first call adopts it,
+later calls delete the unused candidate, and window teardown invokes the stored
+drop function. A lifecycle seam test pins construction, reuse and exact
+destruction. This is a prerequisite for WindowExt ownership rather than a
+module-status change. MSVC release passes 19,344 checks.

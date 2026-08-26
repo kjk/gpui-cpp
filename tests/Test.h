@@ -125,3 +125,4 @@ void TestHistory();
 void TestAccessibility();
 void TestButtonGroup();
 void TestIcon();
+void TestKeyedState();
