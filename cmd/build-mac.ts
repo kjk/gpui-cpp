@@ -473,7 +473,7 @@ if (amalgamIsWork()) {
   const amalgam = buildDist({ outDir: ".work" });
   console.log(
     `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
-      `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources)`,
+      `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources, markdown ${amalgam.markdown})`,
   );
 } else {
   for (const f of ["gpui.h", "gpui.cpp"]) {

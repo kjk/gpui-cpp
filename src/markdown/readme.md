@@ -11,6 +11,10 @@ The pin lives in [`cmd/versions.ts`](../../cmd/versions.ts) (`markdown`)
 alongside the gpui-component, Zed GPUI and taffy pins, and moves when they do
 — see [`port-upstream.md`](../../port-upstream.md).
 
+This remains the default parser. `GPUI_MARKDOWN=mini` selects the independent,
+size-focused implementation in [`src/markdown-mini`](../markdown-mini) while
+keeping this directory's public `markdown.h` and compact mdast representation.
+
 Everything is in `namespace markdown`, not `gpui`, because it is a port of a
 crate of its own: `gpui::CharKind` and `markdown::CharKind` both exist and mean
 different things, and so do `Name`, `Link`, `Point` and `Node`.

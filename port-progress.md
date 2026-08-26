@@ -6051,3 +6051,36 @@ new test, which checks that two areas' handles fold apart.
 Everything else held: 107 pages, and sixteen dock interactions — tabs in three
 groups, both ⋯ menus, zoom, close, the dock toggle, the bottom dock's resize
 strip and a tab dragged from one group into another.
+
+## A compile-time mini Markdown parser
+
+`src/markdown-mini/` is a size-oriented implementation of the public
+`markdown/markdown.h` API. It produces the same compact mdast and therefore
+needs no alternate path in `ui/text.cpp`. `cmd/build-dist.ts` reads
+`GPUI_MARKDOWN=full|mini` while creating the amalgam, defaults to `full`, and
+puts exactly one implementation in `gpui.cpp`; the generated header exposes
+`GPUI_MARKDOWN_FULL` and `GPUI_MARKDOWN_MINI` so parser-specific tests can say
+which contract they are checking.
+
+The mini contract is paragraphs, ATX/setext headings, bold and italic,
+inline/fenced/indented code, ordered and unordered (including nested) lists,
+blockquotes, inline links and images, rules, escapes and hard breaks, numeric
+entities, and six common named entities. The omitted size tail is GFM tables,
+task lists, footnotes, raw HTML, autolinks, reference links, math/frontmatter,
+strikethrough, and markdown-rs's 2,125-name HTML entity database. Unsupported
+syntax stays readable as text.
+
+Measured on Windows x64 with MSVC, static release CRT and the ordinary story
+build:
+
+| parser | `out/rel/story.exe` |
+| --- | ---: |
+| full | 2,245,632 bytes |
+| mini | 2,115,072 bytes |
+
+The mini build is 130,560 bytes (127.5 KiB, 5.81%) smaller. Verified with the
+full release suite (18,590 checks) and the mini release suite (9,802 checks);
+both pass. The mini suite substitutes public-API coverage for the full
+parser's internal/GFM-only tests, while the HTML parser's own tests remain in
+both builds. The same mini release suite also passes under g++ in WSL (9,802
+checks), covering the non-MSVC compilation path.

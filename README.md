@@ -46,6 +46,17 @@ bun cmd/run.ts -rel -compare story
 
 `bun cmd/build.ts` with no example name lists targets (`system_monitor`, `showcase`, `story`, …).
 
+Markdown defaults to the complete CommonMark + GFM parser. Applications that
+prefer a smaller executable can select the basic parser at build time:
+
+```
+GPUI_MARKDOWN=mini bun cmd/build.ts -rel story
+GPUI_MARKDOWN=full bun cmd/build.ts -rel story   # default
+```
+
+The mini feature list and intentional omissions are in
+[`src/markdown-mini/readme.md`](src/markdown-mini/readme.md).
+
 **Windows** needs MSVC `cl.exe` on PATH and [Bun](https://bun.sh).
 
 **Linux** needs g++ (or clang++), pkg-config and the X11 / cairo / pango dev

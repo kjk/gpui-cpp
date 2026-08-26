@@ -81,7 +81,23 @@ export type BuildDistResult = {
   sourceCount: number;
   /** The _win / _linux / _mac / _posix ones, all of them. */
   platformSourceCount: number;
+  /** Parser implementation compiled into gpui.cpp. */
+  markdown: MarkdownVariant;
 };
+
+export type MarkdownVariant = "full" | "mini";
+
+// GPUI_MARKDOWN is a build-time choice: the amalgam contains one parser or
+// the other, never both. Keep the complete CommonMark + GFM port as the
+// default; the mini parser is for applications where executable size matters
+// more than the long tail of the grammar.
+function markdownVariant(): MarkdownVariant {
+  const value = process.env.GPUI_MARKDOWN ?? "full";
+  if (value !== "full" && value !== "mini") {
+    throw new Error(`GPUI_MARKDOWN must be full or mini, got "${value}"`);
+  }
+  return value;
+}
 
 // Which platform halves a source file belongs to. Empty means it is portable
 // and goes in gpui.cpp; the two _posix suffixes belong to more than one.
@@ -447,7 +463,7 @@ function collapseBlankRuns(text: string): string {
 // anything. The amalgam compiles the whole of src/ as one translation unit,
 // so nothing else would notice the day one of them reached for a gpui type.
 // This does.
-const isolatedDirs = ["src/taffy/", "src/markdown/", "src/wry/"];
+const isolatedDirs = ["src/taffy/", "src/markdown/", "src/markdown-mini/", "src/wry/"];
 
 function checkIsolation(files: string[]): void {
   const bad: string[] = [];
@@ -461,7 +477,11 @@ function checkIsolation(files: string[]): void {
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const inc = quotedIncRe.exec(lines[i]);
-      if (inc && inc[1] !== "base.h" && !inc[1].startsWith(own)) {
+      // markdown-mini deliberately implements markdown/markdown.h: sharing
+      // the public mdast keeps the API identical and costs far less than a
+      // second representation plus an adapter in ui/text.cpp.
+      const markdownApi = dir === "src/markdown-mini/" && inc && inc[1].startsWith("markdown/");
+      if (inc && inc[1] !== "base.h" && !inc[1].startsWith(own) && !markdownApi) {
         bad.push(`${rel}:${i + 1}: includes "${inc[1]}"`);
       }
     }
@@ -473,15 +493,27 @@ function checkIsolation(files: string[]): void {
     }
   }
   if (bad.length > 0) {
-    throw new Error("src/taffy and src/markdown may only use base.h and their own headers:\n  " + bad.join("\n  "));
+    throw new Error("isolated crates may only use base.h and their own headers:\n  " + bad.join("\n  "));
   }
 }
 
 export function buildDist(opts: BuildDistOpts): BuildDistResult {
   const outDir = opts.outDir;
+  const markdown = markdownVariant();
   const headers = listSrc(".h");
-  const allCpps = preferredCppOrder(listSrc(".cpp"));
-  checkIsolation([...headers, ...allCpps]);
+  const foundCpps = preferredCppOrder(listSrc(".cpp"));
+  checkIsolation([...headers, ...foundCpps]);
+  const allCpps = foundCpps.filter((rel) => {
+    if (markdown === "full") {
+      return !rel.startsWith("src/markdown-mini/");
+    }
+    if (rel.startsWith("src/markdown-mini/")) {
+      return true;
+    }
+    // The mdast representation and its small storage helpers are the shared
+    // API. Everything else under markdown/ is the full parser.
+    return !rel.startsWith("src/markdown/") || rel === "src/markdown/mdast.cpp";
+  });
   const cpps = allCpps.filter((f) => filePlatforms(f).length === 0);
   const platCpps = allCpps.filter((f) => filePlatforms(f).length > 0);
   if (headers.length === 0 || cpps.length === 0) {
@@ -500,6 +532,8 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     "#ifndef GPUI_AMALGAM",
     "#define GPUI_AMALGAM 1",
     "#endif",
+    `#define GPUI_MARKDOWN_FULL ${markdown === "full" ? 1 : 0}`,
+    `#define GPUI_MARKDOWN_MINI ${markdown === "mini" ? 1 : 0}`,
     "",
   ];
   for (const rel of headerOrder) {
@@ -645,6 +679,7 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     headerCount: headerOrder.length + 1,
     sourceCount: cpps.length,
     platformSourceCount: platCpps.length,
+    markdown,
   };
 }
 
@@ -825,7 +860,7 @@ function main(): void {
   console.log(`wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${built.headerCount} headers)`);
   console.log(
     `wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ` +
-      `${built.sourceCount} + ${built.platformSourceCount} sources)`,
+      `${built.sourceCount} + ${built.platformSourceCount} sources, markdown ${built.markdown})`,
   );
   if (check) {
     checkExamples();

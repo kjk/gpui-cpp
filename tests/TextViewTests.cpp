@@ -101,6 +101,8 @@ static void TestMarkdownBlocks(Arena* a) {
     utassert(TextIs(a, Child(Child(list, 1), 0), "two"));
 }
 
+#if GPUI_MARKDOWN_FULL
+
 // GFM task list items: mdast reports the `[x]` as the item's `checked` and
 // takes the marker off the text, which is what markdown.rs carries onto the
 // BlockNode.
@@ -168,6 +170,8 @@ static void TestMarkdownHtmlBlock(Arena* a) {
     utassert(TextIs(a, Child(div, 0), "Inside"));
     utassert(TextIs(a, Child(doc, 2), "After"));
 }
+
+#endif // GPUI_MARKDOWN_FULL
 
 // ─── html ─────────────────────────────────────────────────────────────────
 
@@ -655,6 +659,8 @@ static void TestSourceIgnoresPlainRuns() {
                    "hello\nworld"));
 }
 
+#if GPUI_MARKDOWN_FULL
+
 // `Table::to_markdown`, which gpui-component b1e78a51 fixed on its way to the
 // table_actions hook: it used to join cells straight out of the paragraph
 // writer -- which trails a blank line -- and emit no outer pipes, so a
@@ -683,14 +689,18 @@ static void TestTableToMarkdown(Arena* a) {
                    "| l | c | r |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |\n"));
 }
 
+#endif // GPUI_MARKDOWN_FULL
+
 void TestTextView() {
     TestSuite("TextView");
     Arena* a = ArenaNew();
     TestMarkdownBlocks(a);
+#if GPUI_MARKDOWN_FULL
     TestMarkdownTableAlign(a);
     TestTableToMarkdown(a);
     TestMarkdownInlineHtml(a);
     TestMarkdownHtmlBlock(a);
+#endif
     TestMarkdownImage(a);
     TestHtmlBlocks(a);
     TestHtmlInlineMarks(a);
@@ -718,6 +728,8 @@ void TestTextView() {
     TestSourceImage();
     TestSourceImageAtTheEnds();
     TestSourceIgnoresPlainRuns();
+#if GPUI_MARKDOWN_FULL
     TestMarkdownTaskList(a);
+#endif
     ArenaDelete(a);
 }

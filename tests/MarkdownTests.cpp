@@ -17,6 +17,96 @@
 
 using namespace markdown;
 
+#if GPUI_MARKDOWN_MINI
+
+static Node* MiniChild(Arena* a, Node* n, int ix) {
+    return n ? NodeChild(a, n, ix) : nullptr;
+}
+
+static bool MiniTextIs(Arena* a, Node* n, const char* want) {
+    if (!n) {
+        return false;
+    }
+    Str got = NodeToString(a, n);
+    int len = (int)strlen(want);
+    return got.len == len &&
+           (len == 0 || memcmp(got.s, want, (size_t)len) == 0);
+}
+
+static bool MiniStrIs(Str got, const char* want) {
+    int len = (int)strlen(want);
+    return got.len == len &&
+           (len == 0 || memcmp(got.s, want, (size_t)len) == 0);
+}
+
+void TestMarkdown() {
+    TestSuite("markdown mini");
+    Arena* a = ArenaNew();
+    ParseOptions options = ParseOptions::Gfm();
+
+    Node* root = ToMdast(a, StrL("# Hi **bold** and _italic_\n"), options);
+    Node* heading = MiniChild(a, root, 0);
+    utassert(heading && heading->kind == NodeKind::Heading);
+    utassert(NodePerKind(a, heading) == 1);
+    utassert(MiniTextIs(a, heading, "Hi bold and italic"));
+    utassert(MiniChild(a, heading, 1)->kind == NodeKind::Strong);
+    utassert(MiniChild(a, heading, 3)->kind == NodeKind::Emphasis);
+
+    root = ToMdast(a, StrL("- one\n- two\n\n3. three\n4. four\n"), options);
+    Node* bullets = MiniChild(a, root, 0);
+    Node* numbers = MiniChild(a, root, 1);
+    utassert(bullets && bullets->kind == NodeKind::List);
+    utassert(NodeChildCount(a, bullets) == 2);
+    utassert(!bullets->Has(NodeOrdered));
+    utassert(numbers && numbers->Has(NodeOrdered));
+    utassert(NodePerKind(a, numbers) == 3);
+    utassert(MiniTextIs(a, MiniChild(a, bullets, 1), "two"));
+
+    root = ToMdast(a, StrL("- outer\n  - nested\n- next\n"), options);
+    bullets = MiniChild(a, root, 0);
+    Node* outer = MiniChild(a, bullets, 0);
+    utassert(MiniChild(a, outer, 1)->kind == NodeKind::List);
+    utassert(MiniTextIs(a, MiniChild(a, outer, 1), "nested"));
+
+    root = ToMdast(a, StrL("Setext\n=======\n\na  \nb\n"), options);
+    heading = MiniChild(a, root, 0);
+    Node* paragraph = MiniChild(a, root, 1);
+    utassert(heading->kind == NodeKind::Heading);
+    utassert(NodePerKind(a, heading) == 1);
+    utassert(MiniChild(a, paragraph, 1)->kind == NodeKind::Break);
+
+    root = ToMdast(a,
+                   StrL("> quote with `code`\n\n---\n\n"
+                        "```cpp\nint x;\n```\n"),
+                   options);
+    utassert(MiniChild(a, root, 0)->kind == NodeKind::Blockquote);
+    utassert(MiniChild(a, root, 1)->kind == NodeKind::ThematicBreak);
+    Node* code = MiniChild(a, root, 2);
+    utassert(code && code->kind == NodeKind::Code);
+    utassert(MiniTextIs(a, code, "int x;"));
+    utassert(MiniStrIs(NodeGetStr(a, code, NodeStrKind::Lang), "cpp"));
+
+    root = ToMdast(a, StrL("[home](https://x.dev) ![alt](a.png) &amp; &#65;\n"),
+                   options);
+    paragraph = MiniChild(a, root, 0);
+    utassert(MiniChild(a, paragraph, 0)->kind == NodeKind::Link);
+    utassert(MiniChild(a, paragraph, 2)->kind == NodeKind::Image);
+    utassert(MiniTextIs(a, paragraph, "home  & A"));
+
+    // GFM-only syntax is intentionally readable text, not a half-supported
+    // table/task/strikethrough node.
+    root = ToMdast(a, StrL("~~kept~~\n\n| a | b |\n|---|---|\n"), options);
+    utassert(MiniTextIs(a, MiniChild(a, root, 0), "~~kept~~"));
+    utassert(MiniChild(a, root, 1)->kind == NodeKind::Paragraph);
+
+    utassert(DecodeNamed(a, StrL("copy")).s == nullptr);
+    utassert(MiniStrIs(DecodeNamed(a, StrL("amp")), "&"));
+    utassert(MiniStrIs(DecodeNumeric(a, StrL("41"), 16), "A"));
+    ArenaDelete(a);
+}
+
+#else
+
 // The tree of a source, in an arena the caller owns.
 // A node's strings are ArenaStr — an offset into the arena the tree was
 // parsed into — so reading one back needs that arena. Every check here runs
@@ -522,3 +612,5 @@ void TestMarkdown() {
     TestMarkdownPositions();
     ArenaDelete(a);
 }
+
+#endif // GPUI_MARKDOWN_MINI

@@ -103,6 +103,13 @@ features = ["serde"] }`. It is the parser, not a reference: every
 `component::TextView` in this tree reads its mdast, the way
 `crates/ui/src/text/format/markdown.rs` reads the crate's.
 
+`src/markdown-mini/` is the size-oriented alternative selected by
+`GPUI_MARKDOWN=mini`. It shares `markdown.h` and `mdast.*` with the port but is
+not itself an upstream crate: do not mechanically ingest new markdown-rs
+constructs into it. Keep its deliberately smaller feature contract in
+`src/markdown-mini/readme.md` and add a basic construct only when an
+application that chooses the mini parser needs it.
+
 **It moves when the gpui-component pin moves.** After bumping
 `gpuiComponent.sha`, check whether the resolved `markdown` changed:
 
