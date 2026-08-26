@@ -173,10 +173,18 @@ static void TwoPaginationsHaveTwoEllipsisMenus() {
         // The same local name in both rows, and two different folds.
         utassert(StrEqI(boxL->id, boxR->id));
         utassert(boxL->pathId != boxR->pathId);
-        // The trigger inside each is named among its siblings and is still
-        // its own hit target.
-        El* trigL = FindNamedPg(boxL, "trigger");
-        El* trigR = FindNamedPg(boxR, "trigger");
+        // `Button::new("ellipsis-{start}-{end}").dropdown_menu(..)`: the
+        // button carries the name and the dropdown is built around it, so the
+        // trigger inside keeps the name it came with rather than being given
+        // one. It is still its own hit target, folded under the row.
+        El* trigL = nullptr;
+        El* trigR = nullptr;
+        for (El* c = boxL->first; c && !trigL; c = c->next) {
+            trigL = FindNamedPg(c, boxL->id.s);
+        }
+        for (El* c = boxR->first; c && !trigR; c = c->next) {
+            trigR = FindNamedPg(c, boxR->id.s);
+        }
         utassert(trigL && trigR);
         if (trigL && trigR) {
             utassert(trigL->clickId != 0 && trigR->clickId != 0);

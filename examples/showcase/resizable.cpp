@@ -9,15 +9,10 @@ using namespace gpui;
 // left. The handle between them, the drag that moves it and the arithmetic
 // that settles the neighbours all belong to the group — this page used to
 // carry its own mouse down, drag and up, and its own clamp, because the
-// group lived where the base could not reach it.
-static Entity<ResizableState> ShowcaseResizeState(ShowcaseApp* app, Ctx* cx) {
-    if (!app->resize.IsValid()) {
-        app->resize = EntityNewState<ResizableState>(cx->app);
-    }
-    return app->resize;
-}
-
+// group lived where the base could not reach it. Nothing here reads the sizes
+// back, so nothing here holds them: the group keys its own off the id.
 El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
+    (void)app;
     Arena* a = cx->a;
     El* nav =
         Div(a)->SizeFull()->Pad(8)->FlexCol()->Gap(4)->BorderR(1, ScInk());
@@ -42,8 +37,7 @@ El* ShowcaseResizable(ShowcaseApp* app, Ctx* cx) {
                         ->MaxW(140));
     // The unstyled layer reads no theme, so the hairline's colour comes from
     // the page, the way every other colour in this showcase does.
-    El* group = Resizable::New(cx, StrL("example-resizable"),
-                               ShowcaseResizeState(app, cx))
+    El* group = Resizable::New(cx, StrL("example-resizable"))
                     ->HandleColors(ScInk(), ScInk())
                     ->Panel(nav, 124, 116, 210)
                     ->Grow(main)

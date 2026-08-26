@@ -21,7 +21,7 @@
 
 import { existsSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { amalgamDir, amalgamIsWork, buildDist } from "./build-dist.ts";
+import { amalgamDir, amalgamIsWork, buildDist } from "./update-dist.ts";
 import { printSizeTable } from "./sizes.ts";
 import { ensureRustTree } from "./versions.ts";
 import { findEmcc } from "./emsdk.ts";

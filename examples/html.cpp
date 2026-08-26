@@ -19,7 +19,6 @@ using namespace gpui;
 
 struct HtmlApp {
     InputState source;
-    Entity<component::ResizableState> split = {};
     float previewScroll = 0;
     char lastLink[512] = {};
     bool seeded = false;
@@ -43,7 +42,6 @@ El* HtmlApp::Render(HtmlApp* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        self->split = EntityNewState<component::ResizableState>(cx->app);
     }
     Str text = InputValue(&self->source);
     cx->win->input = &self->source;
@@ -71,7 +69,7 @@ El* HtmlApp::Render(HtmlApp* self, Ctx* cx) {
             ->OnScroll(Listen(cx, &OnPreviewScroll))
             ->Child(Div(a)->FlexCol()->W(kFill)->Pad(20)->Child(preview));
 
-    El* split = component::Resizable::New(cx, StrL("container"), self->split)
+    El* split = component::Resizable::New(cx, StrL("container"))
                     ->H(kFill)
                     ->Panel(left, 520, 200)
                     ->Grow(right, 200)

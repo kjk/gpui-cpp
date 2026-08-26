@@ -55,7 +55,6 @@ static const int kMaxMarkers = 256;
 
 struct MarkdownApp {
     InputState source;
-    Entity<component::ResizableState> split = {};
     float previewScroll = 0;
     // Which of the two table layouts the preview uses. Rust defaults to the
     // scrolling one and the status bar's button says which is on.
@@ -952,7 +951,6 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        self->split = EntityNewState<component::ResizableState>(cx->app);
     }
     // The editor holds the document; the preview reads it back every frame,
     // which is what makes a keystroke on the left redraw the right.
@@ -994,7 +992,7 @@ El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
             ->OnScroll(Listen(cx, &OnPreviewScroll))
             ->Child(Div(a)->FlexCol()->W(kFill)->Pad(20)->Child(preview));
 
-    El* split = component::Resizable::New(cx, StrL("container"), self->split)
+    El* split = component::Resizable::New(cx, StrL("container"))
                     ->H(kFill)
                     ->Panel(left, 520, 200)
                     ->Grow(right, 200)

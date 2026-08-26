@@ -184,8 +184,15 @@ Resizable* Resizable::New(Ctx* cx, Str id, Entity<ResizableState> state,
     r->a = a;
     r->cx = cx;
     r->id = id;
-    r->state = state;
-    if (ResizableState* s = state.Get(cx)) {
+    // `self.state.unwrap_or(window.use_keyed_state(self.id, .., ResizableState
+    // ::default()))`: a group only needs the caller to hold its state when the
+    // caller means to drive it -- the programmatic story resizes panels from
+    // buttons. Every other group is `h_resizable("id")` and nothing more, and
+    // the sizes a drag leaves belong to the element that was dragged.
+    r->state = state.IsValid() ? state
+                               : ElementStateEntity<ResizableState>(
+                                     cx, id, StrL("gpui::ResizableState"));
+    if (ResizableState* s = r->state.Get(cx)) {
         s->axis = axis;
     }
     return r;
@@ -465,10 +472,6 @@ El* Resizable::IntoEl() {
     return root;
 }
 
-El* Resizable::New(Ctx* cx, Str id) {
-    Arena* a = cx->a;
-    return Div(a)->Id(id);
-}
 El* ResizablePanel::New(Ctx* cx) {
     Arena* a = cx->a;
     return Div(a);

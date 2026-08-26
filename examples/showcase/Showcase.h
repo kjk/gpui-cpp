@@ -145,10 +145,6 @@ struct ShowcaseApp {
     bool toastOn = false;
     float exampleScroll = 0;
     float virtualScroll = 0;
-    // The resizable page's state, which is the group's own: the panels'
-    // sizes, the box they lie in and which boundary is being dragged —
-    // `self.resizable_state` in the Rust page.
-    Entity<ResizableState> resize = {};
     // The tree page's state, which is the base tree's own: the items, what
     // is expanded, what is selected and where it is scrolled — `self.tree`
     // in the Rust page. Made on the page's first frame.

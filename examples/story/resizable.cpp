@@ -1,17 +1,14 @@
 #include "Story.h"
 
-// One ResizableState per group, the way the Rust story makes one per
-// ResizablePanelGroup: the sizes the drags leave belong to the state, not to
-// the elements, which are rebuilt every frame.
+// One state, for the one group this page resizes itself. The Rust story keeps
+// the same one and no others: every other group here is `h_resizable("id")`,
+// and the sizes its drags leave belong to the element that was dragged rather
+// than to the page, which is rebuilt every frame either way.
 struct ResizableStory {
     bool showLeft = true;
     bool useFlexNone = true;
     float leftSize = 200;
     float rightSize = 200;
-    Entity<component::ResizableState> nested = {};
-    Entity<component::ResizableState> nestedTop = {};
-    Entity<component::ResizableState> grow = {};
-    Entity<component::ResizableState> flex = {};
     Entity<component::ResizableState> prog = {};
     bool seeded = false;
 
@@ -68,11 +65,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     Arena* a = cx->a;
     if (!self->seeded) {
         self->seeded = true;
-        for (Entity<component::ResizableState>* e :
-             {&self->nested, &self->nestedTop, &self->grow, &self->flex,
-              &self->prog}) {
-            *e = EntityNewState<component::ResizableState>(cx->app);
-        }
+        self->prog = EntityNewState<component::ResizableState>(cx->app);
     }
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
 
@@ -81,7 +74,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
                               "constrained panel sizes.");
     StorySectionBody(nested)->W(kFill);
     El* topRow =
-        component::Resizable::New(cx, StrL("rz-nested-top"), self->nestedTop)
+        component::Resizable::New(cx, StrL("rz-nested-top"))
             ->H(264)
             // None of these calls `flex_none`, so each of them keeps a size
             // of its own *and* takes its share of the line: that is what
@@ -93,19 +86,19 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
             ->Panel(PanelBox(cx, "Right"), 300)
             ->Flex()
             ->IntoEl();
-    El* nestedBox = component::Resizable::New(cx, StrL("rz-nested"),
-                                              self->nested, Axis::Vertical)
-                        ->H(600)
-                        // The inner group is a plain child of the outer one, so
-                        // it is a panel with no size of its own — not the 264
-                        // this used to declare.
-                        ->Grow(topRow)
-                        ->Grow(PanelBox(cx, "Center"))
-                        // The label says 150; `size_range` says `Pixels::MAX`,
-                        // and the range is what the drag obeys.
-                        ->Panel(PanelBox(cx, "Bottom (80px .. 150px)"), 80, 80)
-                        ->Flex()
-                        ->IntoEl();
+    El* nestedBox =
+        component::Resizable::New(cx, StrL("rz-nested"), {}, Axis::Vertical)
+            ->H(600)
+            // The inner group is a plain child of the outer one, so
+            // it is a panel with no size of its own — not the 264
+            // this used to declare.
+            ->Grow(topRow)
+            ->Grow(PanelBox(cx, "Center"))
+            // The label says 150; `size_range` says `Pixels::MAX`,
+            // and the range is what the drag obeys.
+            ->Panel(PanelBox(cx, "Bottom (80px .. 150px)"), 80, 80)
+            ->Flex()
+            ->IntoEl();
     StorySectionAdd(nested, Frame(cx, 600)->Child(nestedBox));
     page->Child(nested);
 
@@ -113,7 +106,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
                             "A flexible panel absorbs the space left by a "
                             "constrained neighbor.");
     StorySectionBody(grow)->W(kFill);
-    El* growRow = component::Resizable::New(cx, StrL("rz-grow"), self->grow)
+    El* growRow = component::Resizable::New(cx, StrL("rz-grow"))
                       ->Panel(PanelBox(cx, "Left 2"), 200, 200, 400)
                       ->Flex()
                       ->Grow(PanelBox(cx, "Right (Grow)"))
@@ -142,8 +135,7 @@ El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {
     El* flexBtnRow = Div(a)->FlexRow()->W(kFill)->Gap(8);
     flexBtnRow->Child(flexBtns);
     flexCol->Child(flexBtnRow);
-    gpui::Resizable* flexGroup =
-        component::Resizable::New(cx, StrL("rz-flex"), self->flex);
+    gpui::Resizable* flexGroup = component::Resizable::New(cx, StrL("rz-flex"));
     // Both sized panels are declared either way; `flex_none` is what decides
     // whether they keep their width when the left one goes away or take a
     // share of what it left behind.

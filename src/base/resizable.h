@@ -119,9 +119,6 @@ float ResizablePanelSize(const ResizableState* s, int ix, float declared);
 // thing a theme has to say about it is what colour the hairline is — which is
 // `HandleColors` here, since nothing in this layer may read a theme.
 struct Resizable {
-    // The bare box, for a caller that builds the panels itself.
-    static El* New(Ctx* cx, Str id);
-
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
@@ -139,7 +136,11 @@ struct Resizable {
     ArenaVec<bool> grows;
     ArenaVec<bool> shown;
 
-    static Resizable* New(Ctx* cx, Str id, Entity<ResizableState> state,
+    // `h_resizable(id)` / `v_resizable(id)`. The state is optional, as
+    // `.state(..)` is upstream: a group left to itself keys its own off the
+    // id, and only a caller that means to resize the panels itself -- from a
+    // button, rather than from the handle -- has to hold one.
+    static Resizable* New(Ctx* cx, Str id, Entity<ResizableState> state = {},
                           Axis axis = Axis::Horizontal);
     Resizable* W(float v);
     Resizable* H(float v);

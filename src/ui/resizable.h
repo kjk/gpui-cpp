@@ -19,7 +19,8 @@ struct Resizable {
     // The base group with the theme's border on its handles. The chain that
     // follows — `W`, `Panel`, `Grow`, `Flex`, `Visible`, `IntoEl` — is the
     // base group's own.
-    static gpui::Resizable* New(Ctx* cx, Str id, Entity<ResizableState> state,
+    static gpui::Resizable* New(Ctx* cx, Str id,
+                                Entity<ResizableState> state = {},
                                 Axis axis = Axis::Horizontal);
 };
 
