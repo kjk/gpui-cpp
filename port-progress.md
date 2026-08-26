@@ -7106,3 +7106,36 @@ variant identity, clamps, axis factories and the actual emitted row/cell
 styles. UI Description List is full: the audit moves to 72 full, 49 partial,
 8 adapters and 2 exclusions with 338 unresolved spellings. MSVC release passes
 19,418 checks.
+
+## Label is one styled run with the pinned matching semantics
+
+UI Label previously rendered the primary and secondary strings as separate
+flex children with a six-pixel gap. Rust builds one `StyledText` containing a
+literal space, which is observable: a match can cross that boundary, secondary
+color begins at the main label's byte length (and therefore includes the
+space), and typography refinement applies to the whole run. The split port
+also skipped overlapping matches, suppressed highlighting while masked,
+forced 14 px instead of inheriting text size, and replaced at most 63 bytes
+with ASCII `*` characters.
+
+`HighlightsMatch` is now the explicit Prefix/Full tagged string value from the
+source API. The range pass ports case-insensitive prefix matching, every full
+match, one-character advancement for overlaps, secondary ranges and UTF-8 byte
+offsets. Rendering combines those possibly overlapping ranges into ordered,
+non-overlapping `TextSpan`s for the shared shaped layout, with match blue
+taking precedence over muted secondary text. Main and secondary content are
+one element; the default 1.25 line height, foreground and inherited font are
+applied at the outer label refinement.
+
+Masking counts Unicode scalar values across the complete combined text and
+emits the pinned U+2022 bullet for every one, with no fixed buffer or length
+cap. Portable case comparison includes ASCII and the common fixed-width Latin,
+Greek, Cyrillic and Armenian simple mappings; uncased Unicode compares
+directly. Rust's rare expanding lowercase mappings remain deliberately out:
+they do not preserve the byte offsets that its own StyledText ranges use.
+
+Focused tests port the pinned full/prefix, secondary, cross-boundary,
+overlapping and CJK assertions and inspect the combined styled run, precedence,
+inheritance and an 80-character mask. UI Label is full: the audit moves to 73
+full, 48 partial, 8 adapters and 2 exclusions with 337 unresolved spellings.
+MSVC release passes 19,458 checks.

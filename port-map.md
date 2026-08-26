@@ -145,6 +145,9 @@ The important non-mechanical mappings are encoded in the audit:
 - UI Description List retains Rust's `DescriptionText` variants and
   `DescriptionItem` builder, exact span grouping and separator rows, fractional
   cell bases, 1–10 column clamp, axis factories and pinned size/border rules.
+- UI Label renders primary and secondary content as one styled run, preserving
+  literal spacing, cross-boundary and overlapping highlights, prefix/full match
+  variants, inherited typography and Unicode bullet masking without a cap.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -175,7 +178,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 338 declaration spellings still reported in partial modules,
+  2. Review the 337 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.
