@@ -136,9 +136,9 @@ if (!noBuild) {
 }
 
 setProcessDpiAware();
-// AppLog writes out\gpui2.log relative to cwd.
+// AppLog writes out\gpui.log relative to cwd.
 mkdirSync(join(exeDir, "out"), { recursive: true });
-const logPath = join(exeDir, "out", "gpui2.log");
+const logPath = join(exeDir, "out", "gpui.log");
 try {
   await Bun.file(logPath).delete();
 } catch {}

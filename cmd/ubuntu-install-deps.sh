@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install everything needed to build and debug gpui2 on Ubuntu/Debian.
+# Install everything needed to build and debug gpui on Ubuntu/Debian.
 # Non-interactive: safe to run from a script, a Dockerfile, or `wsl bash`.
 #
 #   bash cmd/ubuntu-install-deps.sh
@@ -96,7 +96,7 @@ $SUDO apt-get install $APT_FLAGS --no-install-recommends fonts-noto-cjk ||
 
 echo "==> lldb (optional)"
 $SUDO apt-get install $APT_FLAGS --no-install-recommends lldb ||
-  echo "lldb is unavailable on this release; gdb is installed and is what cmd/run-linux.ts -gdb uses."
+  echo "lldb is unavailable on this release; gdb is installed and is what cmd/run.ts -gdb uses."
 
 if command -v bun >/dev/null 2>&1; then
   echo "==> bun already installed ($(bun --version))"

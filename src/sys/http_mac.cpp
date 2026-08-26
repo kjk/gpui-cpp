@@ -54,7 +54,7 @@ bool HttpGet(Str url, HttpRsp* out) {
                 cachePolicy:NSURLRequestUseProtocolCachePolicy
             timeoutInterval:(NSTimeInterval)kHttpTimeoutMs / 1000.0];
         [req setHTTPMethod:@"GET"];
-        [req setValue:@"gpui2/1.0" forHTTPHeaderField:@"User-Agent"];
+        [req setValue:@"gpui/1.0" forHTTPHeaderField:@"User-Agent"];
 
         __block NSData* body = nil;
         __block NSHTTPURLResponse* rsp = nil;

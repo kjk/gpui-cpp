@@ -69,7 +69,7 @@ halves are written out instead, and both are in `wry_win.cpp`:
 ## The macOS backend
 
 `wry_mac.cpp` is `wkwebview/` and takes no dependency at all: WKWebView is in
-the system SDK, and `cmd/build-mac.ts` links one more framework for it. The
+the system SDK, and `cmd/build.ts` links one more framework for it. The
 amalgam is compiled `-x objective-c++ -fobjc-arc` on macOS, so an
 Objective-C pointer in one of the C++ structs there is a strong reference and
 Rust's `Retained<T>` fields need nothing said about them.

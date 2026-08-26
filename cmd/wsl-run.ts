@@ -1,11 +1,11 @@
-// Run the Linux build of a gpui2 example from a Windows checkout, by handing
-// cmd/run-linux.ts to WSL. The window comes up through WSLg.
+// Run the Linux build of a gpui example from a Windows checkout, by handing
+// cmd/run.ts to WSL. The window comes up through WSLg.
 //
 //   bun cmd/wsl-run.ts hello_world
 //   bun cmd/wsl-run.ts -dbg system_monitor
 //   bun cmd/wsl-run.ts -d Ubuntu-24.04 -rel showcase
 //
-// Flags other than -d/--distro go straight to cmd/run-linux.ts. The Linux
+// Flags other than -d/--distro go straight to cmd/run.ts. The Linux
 // build writes to the same out/ tree as the Windows one but with no .exe
 // suffix, so the two never collide.
 //
@@ -17,11 +17,11 @@ import { dirname, resolve } from "node:path";
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);
 
-const usage = `Usage: bun cmd/wsl-run.ts [-d <distro>] [run-linux.ts flags] <example>
+const usage = `Usage: bun cmd/wsl-run.ts [-d <distro>] [run.ts flags] <example>
 
   -d, --distro <name>  WSL distribution to use (default: the WSL default)
 
-Everything else is forwarded to cmd/run-linux.ts inside WSL.`;
+Everything else is forwarded to cmd/run.ts inside WSL.`;
 
 function die(msg: string): never {
   console.error(msg);
@@ -77,7 +77,7 @@ const inner = [
   quote(linuxRoot),
   "&&",
   "bun",
-  "cmd/run-linux.ts",
+  "cmd/run.ts",
   ...forward.map(quote),
 ].join(" ");
 

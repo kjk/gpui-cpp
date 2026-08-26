@@ -14,7 +14,7 @@
 
 namespace gpui {
 
-static const wchar_t* kWndClass = L"Gpui2SystemMonitor";
+static const wchar_t* kWndClass = L"GpuiSystemMonitor";
 
 struct PlatWindow {
     HWND hwnd = nullptr;

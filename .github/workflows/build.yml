@@ -87,4 +87,4 @@ jobs:
       # Under node, not a browser: the suite draws nothing and needs no canvas.
       - name: Test (wasm)
         if: matrix.name == 'wasm'
-        run: bun cmd/run-wasm.ts -rel tests
+        run: bun cmd/run.ts -wasm -rel tests

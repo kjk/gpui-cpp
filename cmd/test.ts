@@ -1,44 +1,54 @@
-// Build and run the test suite: bun cmd/test.ts [-dbg|-rel] [-asan] [-clean]
+// Build and run the test suite: bun cmd/test.ts [-dbg|-rel] [-asan] [-clang] [-clean]
 //
 // The tests live in tests/ and are ports of the pure-logic ones in
 // .work/gpui-component at the SHA in cmd/versions.ts. The runner is an
 // ordinary build target, so every flag build.ts takes works here too; the
 // binary prints its own report and exits nonzero on the first failure.
+//
+// For the wasm build of the same suite — the only place this tree is checked
+// on a 32-bit word — use `bun cmd/run.ts -wasm tests`, which runs it under
+// the node emsdk ships.
 
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
+import {
+  build,
+  checkBuildFlags,
+  defaultBuildFlags,
+  outDir,
+  outFileName,
+  platformFor,
+  root,
+  takeBuildFlag,
+} from "./build.ts";
 
-const root = resolve(dirname(Bun.main), "..");
-process.chdir(root);
-
-const argv = Bun.argv.slice(2);
-let debug = false;
-let asan = false;
-for (const a of argv) {
-  if (a === "-dbg" || a === "--dbg") {
-    debug = true;
-  } else if (a === "-rel" || a === "--rel") {
-    debug = false;
-  } else if (a === "-asan" || a === "--asan") {
-    asan = true;
-  }
+function die(msg: string): never {
+  console.error(msg);
+  process.exit(1);
 }
 
-const build = Bun.spawnSync(["bun", join("cmd", "build.ts"), ...argv, "tests"], {
-  cwd: root,
+const flags = defaultBuildFlags();
+for (const a of Bun.argv.slice(2)) {
+  // --dbg and friends have always been accepted here too.
+  if (takeBuildFlag(a.replace(/^--/, "-"), flags)) {
+    continue;
+  }
+  die(`Unknown flag: ${a}`);
+}
+if (flags.wasm) {
+  die("The wasm suite runs under node, not here: bun cmd/run.ts -wasm tests");
+}
+const plat = platformFor(flags, die);
+checkBuildFlags(flags, plat, die);
+
+build({ names: ["tests"], plat, flags, fail: die, quiet: true });
+
+// build.ts owns the out/ layout — Linux, macOS and a clang-cl build each keep
+// a tree of their own — so ask it where the binary landed rather than
+// spelling the rule out a second time.
+const dir = join(root, outDir(plat, flags));
+const r = Bun.spawnSync([join(dir, outFileName(plat, "tests"))], {
+  cwd: dir,
   stdout: "inherit",
   stderr: "inherit",
 });
-if (build.exitCode !== 0) {
-  process.exit(build.exitCode ?? 1);
-}
-
-// Same layout rule the build scripts use: Linux and macOS keep their own tree
-// so a checkout built for more than one platform does not collide.
-const base = debug ? "dbg" : "rel";
-const cfg = asan ? `${base}_asan` : base;
-const outDir =
-  process.platform === "win32" ? join("out", cfg) : join("out", process.platform === "darwin" ? "mac" : "linux", cfg);
-const exe = join(root, outDir, process.platform === "win32" ? "tests.exe" : "tests");
-
-const run = Bun.spawnSync([exe], { cwd: join(root, outDir), stdout: "inherit", stderr: "inherit" });
-process.exit(run.exitCode ?? 1);
+process.exit(r.exitCode ?? 1);

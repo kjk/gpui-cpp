@@ -57,7 +57,11 @@ GPUI_MARKDOWN=full bun cmd/build.ts -rel story   # default
 The mini feature list and intentional omissions are in
 [`src/markdown-mini/readme.md`](src/markdown-mini/readme.md).
 
-**Windows** needs MSVC `cl.exe` on PATH and [Bun](https://bun.sh).
+**Windows** needs [Bun](https://bun.sh) and the MSVC C++ toolset. `cl.exe` on
+PATH is used as it is; otherwise Visual Studio is found through `vswhere` and
+its `vcvars64.bat` is read for the environment, so a plain shell builds.
+`bun cmd/build.ts -clang <example>` builds with `clang-cl` from the same
+toolset instead.
 
 **Linux** needs g++ (or clang++), pkg-config and the X11 / cairo / pango dev
 packages. On Ubuntu or Debian:
@@ -73,7 +77,7 @@ builds from any of the three:
 
 ```
 bun cmd/build.ts -wasm story
-bun cmd/run-wasm.ts story          # builds, serves, opens a tab
+bun cmd/run.ts -wasm story         # builds, serves, opens a tab
 ```
 
 It needs [emscripten](https://emscripten.org), found through `$EMCC`, `$EMSDK`,

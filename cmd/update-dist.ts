@@ -782,14 +782,9 @@ function writeDistReadme(sha: string, subject: string): string {
 // does. GPUI_AMALGAM_DIR points the platform build at this copy instead of
 // .work/, and its objects go to their own out/ tree.
 function checkExamples(): void {
-  const script =
-    process.platform === "win32"
-      ? "cmd/build-windows.ts"
-      : process.platform === "darwin"
-        ? "cmd/build-mac.ts"
-        : "cmd/build-linux.ts";
   console.log(`building every example against ${distRepoDir}`);
-  const code = run(["bun", script, "-rel", "-all"], { env: { GPUI_AMALGAM_DIR: distRepoDir } });
+  // cmd/build.ts picks this host's toolchain itself.
+  const code = run(["bun", "cmd/build.ts", "-rel", "-all"], { env: { GPUI_AMALGAM_DIR: distRepoDir } });
   if (code !== 0) {
     die(`the examples do not build against ${distRepoDir} (exit ${code})`);
   }

@@ -3183,7 +3183,9 @@ void InputTypeChar(InputState* s, App* app, Window* win, uint32_t ch) {
     // is not, `.` opens one where the caret stands, and anything else closes
     // it.
     if (s->completionProvider) {
-        Str typed = Str(buf, (int)strlen(buf));
+        // n, not strlen: buf holds the UTF-8 bytes of one code point and is
+        // not terminated, so strlen would read past the end of the array.
+        Str typed = Str(buf, n);
         CompletionTrigger want;
         if (s->completionTrigger) {
             want = s->completionTrigger(s->completionData, InputValue(s),

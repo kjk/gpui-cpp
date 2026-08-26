@@ -115,7 +115,9 @@ float GpuUsagePercent() {
     DWORD count = 0;
     PDH_STATUS sized = PdhGetFormattedCounterArrayW(
         gProbe.counter, PDH_FMT_DOUBLE, &bytes, &count, nullptr);
-    if (sized != PDH_MORE_DATA || bytes == 0) {
+    // PDH_MORE_DATA is a DWORD constant, PDH_STATUS is a LONG; clang warns
+    // on the signedness of the comparison unless the cast is spelled out.
+    if (sized != (PDH_STATUS)PDH_MORE_DATA || bytes == 0) {
         return -1.f;
     }
     gProbe.buffer.len = 0;

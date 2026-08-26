@@ -6,14 +6,14 @@
 
 using namespace gpui;
 
-// out/gpui2.log next to the binary's working directory, appended to for the
+// out/gpui.log next to the binary's working directory, appended to for the
 // life of the process.
 static void LogToFile(Str s) {
     static FILE* f = nullptr;
     static bool tried = false;
     if (!tried) {
         tried = true;
-        f = fopen("out/gpui2.log", "wb");
+        f = fopen("out/gpui.log", "wb");
     }
     if (!f || !s.s || s.len <= 0) {
         return;

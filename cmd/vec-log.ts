@@ -20,11 +20,9 @@
 // realloc for it cannot be seen. Read the 1.5x rows with that in mind; the
 // rows that only ever raise a capacity are exact.
 
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { mkdirSync } from "node:fs";
-
-const root = resolve(dirname(Bun.main), "..");
-process.chdir(root);
+import { build, defaultBuildFlags, outDir as buildOutDir, outFileName, platformFor, root } from "./build.ts";
 
 const argv = Bun.argv.slice(2);
 let debug = true;
@@ -48,16 +46,22 @@ for (const a of argv) {
   }
 }
 
-const cfg = debug ? "dbg" : "rel";
-const outDir =
-  process.platform === "win32" ? join("out", cfg) : join("out", process.platform === "darwin" ? "mac" : "linux", cfg);
-const exeSuffix = process.platform === "win32" ? ".exe" : "";
+function die(msg: string): never {
+  console.error(msg);
+  process.exit(2);
+}
+
+// build.ts owns the out/ layout and the toolchain; ask it rather than
+// spelling the rule out a second time.
+const flags = defaultBuildFlags();
+flags.debug = debug;
+const plat = platformFor(flags, die);
+const outDir = buildOutDir(plat, flags);
 
 function run(): string {
   const target = rest[0];
   if (!target) {
-    console.error("usage: bun cmd/vec-log.ts [-dbg] <tests|bench|shot|EXAMPLE> [args...]");
-    process.exit(2);
+    die("usage: bun cmd/vec-log.ts [-dbg] <tests|bench|shot|EXAMPLE> [args...]");
   }
   mkdirSync(outDir, { recursive: true });
   const log = resolve(root, outPath || join(outDir, `vec-log-${target}.txt`));
@@ -66,13 +70,8 @@ function run(): string {
 
   let cmd: string[];
   if (target === "tests" || target === "bench") {
-    const build = Bun.spawnSync(["bun", join("cmd", "build.ts"), flag, target], {
-      cwd: root,
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    if (build.exitCode !== 0) process.exit(build.exitCode ?? 1);
-    cmd = [join(root, outDir, target + exeSuffix), ...rest.slice(1)];
+    build({ names: [target], plat, flags, fail: die, quiet: true });
+    cmd = [join(root, outDir, outFileName(plat, target)), ...rest.slice(1)];
   } else if (target === "shot") {
     // shot.ts builds, opens the window, takes the picture and kills it, which
     // is the only way to get an example's frame-building work into a log

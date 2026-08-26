@@ -1,7 +1,7 @@
 // Compile the macOS build on the Mac, from any checkout that can reach it
 // over ssh. There is no cross-compiler for Cocoa, so the source has to get
 // to a Mac: this pushes the working tree to a scratch branch, then has the
-// Mac fetch it and run cmd/build-mac.ts.
+// Mac fetch it and run cmd/build.ts.
 //
 //   bun cmd/mac-build.ts -rel hello_world
 //   bun cmd/mac-build.ts -dbg -all
@@ -22,13 +22,13 @@ const defaultHost = "kjk@macbook-pro-14";
 const defaultDir = "~/src/gpui-cpp";
 const defaultBranch = "mac-build-tmp";
 
-const usage = `Usage: bun cmd/mac-build.ts [-h <user@host>] [-d <dir>] [-b <branch>] [build-mac.ts flags] <example>
+const usage = `Usage: bun cmd/mac-build.ts [-h <user@host>] [-d <dir>] [-b <branch>] [build.ts flags] <example>
 
   -h, --host <user@host>  ssh target (default: ${defaultHost})
   -d, --dir <path>        checkout on the Mac (default: ${defaultDir})
   -b, --branch <name>     scratch branch to push (default: ${defaultBranch})
 
-Everything else is forwarded to cmd/build-mac.ts, so -rel / -dbg / -all /
+Everything else is forwarded to cmd/build.ts, so -rel / -dbg / -all /
 -clean / -asan and an example name all work.`;
 
 function die(msg: string): never {
@@ -127,10 +127,10 @@ const remote = [
   `&& cd ${dir}`,
   `&& git fetch --quiet --force origin ${branch}`,
   `&& git checkout --quiet --detach ${commit}`,
-  `&& bun cmd/build-mac.ts ${forward.join(" ")}`,
+  `&& bun cmd/build.ts ${forward.join(" ")}`,
 ].join(" ");
 
-console.log(`ssh ${host}: build-mac.ts ${forward.join(" ")}`);
+console.log(`ssh ${host}: build.ts ${forward.join(" ")}`);
 const r = Bun.spawnSync(["ssh", host, remote], {
   cwd: root,
   stdout: "inherit",

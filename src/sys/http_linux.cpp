@@ -68,7 +68,7 @@ bool HttpGet(Str url, HttpRsp* out) {
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 5L);
     curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, (long)kHttpTimeoutMs);
-    curl_easy_setopt(c, CURLOPT_USERAGENT, "gpui2/1.0");
+    curl_easy_setopt(c, CURLOPT_USERAGENT, "gpui/1.0");
     // This runs on a worker thread and curl's alarm-based DNS timeout is not
     // something to install from one.
     curl_easy_setopt(c, CURLOPT_NOSIGNAL, 1L);

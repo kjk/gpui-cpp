@@ -156,7 +156,7 @@ bool HttpGet(Str url, HttpRsp* out) {
         // WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY wants Windows 8.1; this one is
         // the constant that works everywhere this tree runs.
         session
-            .h = WinHttpOpen(L"gpui2/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+            .h = WinHttpOpen(L"gpui/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                              WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (session.h) {
             WinHttpSetTimeouts(session.h, kHttpTimeoutMs, kHttpTimeoutMs,

@@ -1,4 +1,4 @@
-# gpui2 — C++ port of gpui-component
+# gpui — C++ port of gpui-component
 
 This repository is a C++ port of [longbridge/gpui-component](https://github.com/longbridge/gpui-component) targeting **Windows, Linux, macOS and the browser** (wasm, through emscripten). The goal is to port **as much of the Rust as this tree can hold**: every module of `crates/base` and `crates/ui`, the story gallery, the showcase and the examples. Assume a thing is in scope until a hard rule below says otherwise; the answer to "should we port X?" is yes unless X needs a dependency or a runtime we have ruled out.
 
@@ -29,7 +29,8 @@ bun cmd/build.ts -rel showcase
 bun cmd/build.ts -dbg -all
 bun cmd/build.ts -rel -asan system_monitor
 bun cmd/build.ts -wasm system_monitor
-bun cmd/run-wasm.ts showcase
+bun cmd/build.ts -clang -rel showcase   # Windows: clang-cl, not cl.exe
+bun cmd/run.ts -wasm showcase
 
 GPUI_PAINT=gpu out/rel/story.exe            # the second Windows backend
 GPUI_SCENE=off out/rel/story.exe            # draw straight, without the scene
@@ -254,10 +255,10 @@ without the variable it is inert.
 ### The browser
 
 `bun cmd/build.ts -wasm <example>` builds a page instead of a binary, and
-`bun cmd/run-wasm.ts <example>` builds it, serves it and opens it — a wasm
+`bun cmd/run.ts -wasm <example>` builds it, serves it and opens it — a wasm
 module has to come off a server, so there is no double-clicking the html.
 Emscripten is found through `$EMCC`, `$EMSDK`, `PATH` or a sibling `.emsdk`
-checkout; nothing else is needed, because the browser half draws through
+checkout, and only ever when the target is wasm; nothing else is needed, because the browser half draws through
 Canvas2D and takes no library at all. `web/shell.html` is the page: it puts a
 canvas called `gpui-canvas` at the top left of the viewport and does nothing
 else, which is what lets `window_wasm.cpp` read a `clientX` as a window
@@ -548,20 +549,41 @@ bun cmd/build.ts
 bun cmd/build.ts -rel system_monitor
 bun cmd/run.ts
 bun cmd/run.ts -dbg hello_world
-bun cmd/run.ts -rel -windbg showcase
+bun cmd/run.ts -debugger showcase
+bun cmd/run.ts -wasm story
 ```
 
-`cmd/build.ts` and `cmd/run.ts` are dispatchers: they forward every flag to
-`cmd/build-windows.ts` / `cmd/run-windows.ts` on Windows,
-`cmd/build-linux.ts` / `cmd/run-linux.ts` on Linux, or
-`cmd/build-mac.ts` / `cmd/run-mac.ts` on macOS. Use those names directly only
-when you mean one specific toolchain.
+`cmd/build.ts` is the whole build, for every platform: MSVC on Windows,
+g++/clang++ on Linux, clang++ on macOS, emscripten with `-wasm` from any of
+the three. `cmd/run.ts` imports it rather than spawning it, so a flag means
+the same thing and lands in the same `out/` directory on both sides.
+
+On Windows `cl.exe` is used off PATH when the MSVC environment is already
+set; otherwise Visual Studio is found with `vswhere` (or by scanning the
+default install roots, 2026 first) and its `vcvars64.bat` is run once for the
+`INCLUDE`/`LIB`/`PATH` it exports, so a plain shell builds. `-clang` builds
+with `clang-cl` from the same toolset instead, into `out/rel_clang/`.
+
+Neither script downloads what the build does not need: the Rust spec tree
+under `.work/` is cloned only by `cmd/run.ts -compare`, and emscripten is
+only looked for with `-wasm`.
 
 No example name (or a flag last) prints the valid example list. The example is the last argument.
 
 Debug: `bun cmd/build.ts -dbg system_monitor` (writes `out/dbg/` on Windows). Release+ASan: `bun cmd/build.ts -rel -asan system_monitor` (`out/rel_asan/` on Windows). Clean rebuild of that dir: add `-clean`. Linux and macOS write under `out/linux/` and `out/mac/`, so building the same checkout for multiple platforms never clobbers another platform's output.
 
-`bun cmd/run.ts` takes the same flags as `build.ts`, plus `-windbg` on Windows (launch under `windbgx.exe`), `-gdb` on Linux, and `-lldb` on macOS. It does not accept `-all` — pick one binary.
+`bun cmd/run.ts` takes the same flags as `build.ts`, plus:
+
+- `-debugger` runs the binary under whichever debugger this machine has —
+  WinDbg then cdb on Windows, gdb then lldb on Linux, lldb on macOS. Force one
+  with `-windbg`, `-cdb`, `-gdb` or `-lldb`; a named debugger that is not
+  installed is an error carrying the command that installs it, never a quiet
+  fallback to a different one. `-dbg` is still the debug *build*, not this.
+- `-compare` cargo-builds and launches the Rust twin beside ours.
+- `-wasm` serves the page and opens a tab; `-no-open` and `-port N` steer that.
+- `-no-build` launches what is already in `out/`.
+
+It does not accept `-all` — pick one binary.
 
 Linux prerequisites (g++/clang++, pkg-config, X11 + cairo + Pango headers,
 gdb, bun, rust) install with `bash cmd/ubuntu-install-deps.sh`; add
@@ -654,13 +676,15 @@ port-upstream.md       how to ingest later checkins (pins live in cmd/versions.t
 cmd/versions.ts        exact gpui-component + zed gpui SHAs, and the taffy and
                        markdown crate versions we are porting
 cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
-cmd/build.ts           dispatches to build-windows.ts / build-linux.ts by host
-cmd/build-windows.ts   MSVC compile/link via bun; also clones the pinned Rust spec
-cmd/build-linux.ts     g++/clang++ compile/link, X11 + cairo + pango via pkg-config
-cmd/run.ts             dispatches to run-windows.ts / run-linux.ts by host
-cmd/run-windows.ts     build then run; same flags as build.ts plus -windbg / -compare
-cmd/run-linux.ts       build then run; same flags plus -gdb / -compare
-cmd/wsl-run.ts         run cmd/run-linux.ts inside WSL from a Windows checkout
+cmd/build.ts           the whole build, every platform: MSVC (or clang-cl, -clang)
+                       on Windows, g++/clang++ on Linux, clang++ on macOS,
+                       emscripten with -wasm from any host. Finds cl.exe through
+                       vswhere + vcvars when it is not already on PATH. Exports
+                       its pieces so cmd/run.ts builds through it in-process
+cmd/run.ts             build then run; build.ts's flags plus -debugger /
+                       -windbg / -cdb / -gdb / -lldb, -compare, -no-build, and
+                       -wasm (serve the page and open a tab)
+cmd/wsl-run.ts         run cmd/run.ts inside WSL from a Windows checkout
 cmd/ubuntu-install-deps.sh  non-interactive apt + bun + rustup setup for Linux
 cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords).
                        Waits for the window to reach the foreground before the shutter
