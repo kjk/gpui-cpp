@@ -119,7 +119,7 @@ static El* RenderTools(const DockTabGroup* g) {
     }
     // The menu button: the same two actions, where a narrow bar can still
     // reach them.
-    Str menuId = StrDup(a, fmt("%s-menu-%d", g->id, g->node));
+    Str menuId = StrDup(a, fmt("menu-%d", g->node));
     component::PopupMenu* menu = component::PopupMenu::New(cx, menuId);
     menu->Menu(zoomed ? Tr("Dock.Zoom Out") : Tr("Dock.Zoom In"));
     if (!DockPanelControlMenu(def.zoomable) && !zoomed) {
@@ -321,8 +321,11 @@ static El* SkinTabContent(Ctx* cx, void*, const DockTabGroup*) {
 // render_split_handle: base keeps the four-DIP grab, the cursor and the drag;
 // all this says is what it looks like under the pointer.
 static El* SkinSplitHandle(Ctx* cx, void*, const DockHandleCtx* h) {
-    El* e = Div(cx->a)->SizeFull();
-    if (h->hovered || h->active) {
+    // `div().bg(bg_color).group_hover("handle", |this| this.bg(bg_color))`:
+    // the drag colours the line, and so does the pointer being anywhere in
+    // the grab area around it -- which is the group base put on the handle.
+    El* e = Div(cx->a)->SizeFull()->GroupHoverBg(cx->theme().border);
+    if (h->active) {
         e->Bg(cx->theme().border);
     }
     return e;

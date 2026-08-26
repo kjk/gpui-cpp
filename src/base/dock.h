@@ -203,6 +203,13 @@ struct DockState {
     // The side being resized, and the split handle being dragged.
     DockPlacement resizingSide = DockPlacement::Center;
     bool resizing = false;
+    // Which handle. Rust keeps `ResizeHandleState { active }` on the handle
+    // itself and sets it from the press; the handle here has no state of its
+    // own, so the one being dragged is named on the area's. Either way the
+    // handle does not have to look itself up in the window while the frame
+    // is being built -- which it could not do, since a folded id does not
+    // exist until the tree does.
+    int resizingHandle = -1;
 
     Listener onEvent;
 
@@ -382,13 +389,12 @@ struct DockCtx {
 };
 
 // ResizeHandleContext: one boundary between two panels, and how it is being
-// touched. Rust's `is_active()` is the drag; `hovered` is here because a
-// theme that lights the strip under the pointer has no other way to ask —
-// nothing in this layer reads the window's hover itself.
+// touched. `is_active()` is the drag, and it is the whole of what Rust hands
+// the appearance callback: the pointer being over the strip is answered by
+// `group_hover` on what the callback returns, not by asking the window.
 struct DockHandleCtx {
     Axis axis = Axis::Horizontal;
     bool active = false;
-    bool hovered = false;
 };
 
 // TabGroupContext: one tab group as the skin sees it.

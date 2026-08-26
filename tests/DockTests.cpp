@@ -539,6 +539,70 @@ static void AHiddenGroupIsNotASlot() {
     utassert(!DockNodeVisible(&s, split));
 }
 
+static El* FindNamedDk(El* root, const char* name) {
+    if (!root) {
+        return nullptr;
+    }
+    if (root->id.s && StrEqI(root->id, Str(name))) {
+        return root;
+    }
+    for (El* c = root->first; c; c = c->next) {
+        if (El* hit = FindNamedDk(c, name)) {
+            return hit;
+        }
+    }
+    return nullptr;
+}
+
+// Every part of an area is named among the area's own parts -- a handle is
+// `split-{node}-{ix}` and not the area's name spelled out again -- so two
+// areas on one page need the area's name over them to stay apart. That is
+// what stopped the dock moving onto the fold for as long as the handle read
+// its own number back out of the window while the frame was being built.
+static void TwoAreasHaveTwoSplitHandles() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* arena = ArenaNew();
+    Ctx cx = {};
+    cx.app = &app;
+    cx.win = win;
+    cx.a = arena;
+
+    Entity<DockState> one = EntityNewState<DockState>(&app);
+    Entity<DockState> two = EntityNewState<DockState>(&app);
+    int a = 0, b = 0;
+    Seed(one.Get(&cx), &a, &b);
+    Seed(two.Get(&cx), &a, &b);
+
+    El* page = Div(arena);
+    El* left = DockArea::New(&cx, StrL("left"), one, nullptr);
+    El* right = DockArea::New(&cx, StrL("right"), two, nullptr);
+    page->Child(left)->Child(right);
+    IdsCollect(page);
+
+    // The scope is off the stack again once an area is built.
+    utassert(cx.path == 0);
+
+    // Seed builds the split as node 2, over the two tab groups.
+    const char* name = "split-2-0";
+    El* hL = FindNamedDk(left, name);
+    El* hR = FindNamedDk(right, name);
+    utassert(hL && hR);
+    if (hL && hR) {
+        utassert(hL->clickId != 0 && hR->clickId != 0);
+        utassert(hL->clickId != hR->clickId);
+    }
+    // A handle knows it is not the one being dragged without asking the
+    // window what it pressed: nothing is.
+    utassert(one.Get(&cx)->resizingHandle == -1);
+
+    WindowKeyedFree(win);
+    ArenaDelete(arena);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestDock() {
     TheFiveDropZones();
     ThePlaceholderCoversEachZone();
@@ -562,4 +626,5 @@ void TestDock() {
     NormalizeClampsTheActiveTab();
     NormalizeKeepsARoot();
     AHiddenGroupIsNotASlot();
+    TwoAreasHaveTwoSplitHandles();
 }

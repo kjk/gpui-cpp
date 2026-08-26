@@ -15,20 +15,21 @@ namespace gpui {
 
 namespace {
 
-Str DockElId(Ctx* cx, Str id, const char* what, int a1, int a2) {
-    return StrDup(cx->a, fmt("%s-%s-%d-%d", id, Str(what), a1, a2));
+// A name among the area's own parts. The area is what carries the caller's
+// id, so a tab is `tab-{node}-{ix}` inside it rather than spelling the area
+// out again -- which is `("tab", ix)` under the panel's own id in Rust.
+Str DockElId(Ctx* cx, const char* what, int a1, int a2) {
+    return StrDup(cx->a, fmt("%s-%d-%d", Str(what), a1, a2));
 }
 
-// Every bound element names itself the same way: an id string for the tree
-// and its hash for the hit rect, since a hit rect is found by `clickId` and
-// `Id` is only a name.
-int BindId(El* e, Str id, bool focus = false) {
-    int cid = HashClickId(id);
-    e->Id(id)->Click(cid);
+// Every bound element names itself the same way, and the id it is found by
+// is that name folded with the area's.
+void BindId(El* e, Str id, bool focus = false) {
     if (focus) {
-        e->FocusId(cid);
+        e->PathId(id);
+    } else {
+        e->PathClick(id);
     }
-    return cid;
 }
 
 DockState* GroupState(const DockTabGroup* g) {
@@ -112,7 +113,7 @@ El* DockBindTab(const DockTabGroup* g, int ix, El* tab) {
         return tab;
     }
     int panelIx = n.panel[ix];
-    BindId(tab, DockElId(cx, g->id, "tab", g->node, ix), true);
+    BindId(tab, DockElId(cx, "tab", g->node, ix), true);
     tab->OnClick(
         ListenTo(g->state, &DockState::OnTabClick, DockPack(g->node, ix)));
     // `when(!droppable, ..)`, where that local is `self.collapsed`: a shut
@@ -147,7 +148,7 @@ El* DockBindTabRest(const DockTabGroup* g, El* rest) {
     if (!s || !rest || g->collapsed || !DockNodeDroppable(s, g->node)) {
         return rest;
     }
-    BindId(rest, DockElId(g->cx, g->id, "tabrest", g->node, 0));
+    BindId(rest, DockElId(g->cx, "tabrest", g->node, 0));
     rest->OnDrop(kDockPanelDrag, ListenTo(g->state, &DockState::OnDropTabBar,
                                           (intptr_t)g->node));
     return rest;
@@ -172,9 +173,9 @@ El* DockBindTabStrip(const DockTabGroup* g, El* strip) {
             WindowRequestAnimationFrame(g->cx->win);
         }
     }
-    Str scrollId = DockElId(g->cx, g->id, "tabscroll", g->node, 0);
-    strip->ScrollX(n.tabScrollX)
-        ->ScrollId(HashClickId(scrollId))
+    strip->Id(DockElId(g->cx, "tabscroll", g->node, 0))
+        ->ScrollX(n.tabScrollX)
+        ->ScrollFromPath()
         ->OnScroll(
             ListenTo(g->state, &DockState::OnTabBarScroll, (intptr_t)g->node))
         ->BoundsOut(&n.tabStripBounds);
@@ -195,7 +196,7 @@ El* DockBindTitleDrag(const DockTabGroup* g, int ix, El* e) {
     if (ix < 0 || ix >= n.panel.len) {
         return e;
     }
-    e->Id(DockElId(g->cx, g->id, "title", g->node, ix))
+    e->Id(DockElId(g->cx, "title", g->node, ix))
         ->OnDrag(kDockPanelDrag, n.panel[ix])
         ->OnDragMove(ListenTo(g->state, &DockState::OnTabDragMove))
         ->OnMouseUpOut(ListenTo(g->state, &DockState::OnTabDragEnd))
@@ -207,7 +208,7 @@ El* DockBindToggle(const DockTabGroup* g, DockPlacement p, El* e) {
     if (!e) {
         return e;
     }
-    BindId(e, DockElId(g->cx, g->id, "toggle", g->node, (int)p), true);
+    BindId(e, DockElId(g->cx, "toggle", g->node, (int)p), true);
     e->OnClick(ListenTo(g->state, &DockState::OnToggleSide, (intptr_t)p));
     // tab_panel.rs marks every tool on the bar `.tab_stop(false)`: the panel
     // is what Tab moves between, not the buttons hung off its edge.
@@ -219,7 +220,7 @@ El* DockBindZoom(const DockTabGroup* g, int panelIx, El* e) {
     if (!e) {
         return e;
     }
-    BindId(e, DockElId(g->cx, g->id, "zoom", g->node, panelIx), true);
+    BindId(e, DockElId(g->cx, "zoom", g->node, panelIx), true);
     e->OnClick(ListenTo(g->state, &DockState::OnZoomClick, (intptr_t)panelIx));
     e->TabStop(false);
     return e;
@@ -229,7 +230,7 @@ El* DockBindClose(const DockTabGroup* g, int ix, El* e) {
     if (!e) {
         return e;
     }
-    BindId(e, DockElId(g->cx, g->id, "close", g->node, ix), true);
+    BindId(e, DockElId(g->cx, "close", g->node, ix), true);
     e->OnClick(
         ListenTo(g->state, &DockState::OnCloseClick, DockPack(g->node, ix)));
     // The X sits inside the tab, which is listening for the same click now
@@ -242,7 +243,7 @@ El* DockBindResizeStrip(const DockCtx* d, El* e) {
     if (!e) {
         return e;
     }
-    BindId(e, DockElId(d->cx, d->id, "dockresize", (int)d->placement, 0));
+    BindId(e, DockElId(d->cx, "dockresize", (int)d->placement, 0));
     e->Cursor(d->placement == DockPlacement::Bottom ? CursorKind::RowResize
                                                     : CursorKind::ColResize);
     e->OnDrag(kDockResizeDrag,
@@ -287,15 +288,19 @@ El* SplitHandle(const AreaCtx& ac, int node, int ix, Axis axis) {
     } else {
         e->H(kDockHandleW)->W(kFill)->Cursor(CursorKind::RowResize);
     }
-    int cid = BindId(e, DockElId(cx, ac.id, "split", node, ix));
+    BindId(e, DockElId(cx, "split", node, ix));
+    // `.group("handle")`: what the line inside asks about is the pointer
+    // being in the grab area around it, not the line being the hovered
+    // element -- the two differ by the four DIPs of padding either side.
+    e->Group();
     e->OnDrag(kDockResizeDrag, (int)DockPack(node, ix));
     e->OnDragMove(ListenTo(ac.state, &DockState::OnResizeDrag));
     e->OnMouseUpOut(ListenTo(ac.state, &DockState::OnResizeEnd));
     e->OnMouseUp(ListenTo(ac.state, &DockState::OnResizeEnd));
     DockHandleCtx h;
     h.axis = axis;
-    h.active = ac.s->resizing && cx->win && cx->win->pressedId == cid;
-    h.hovered = cx->win && cx->win->hoverId == cid;
+    h.active =
+        ac.s->resizing && ac.s->resizingHandle == (int)DockPack(node, ix);
     if (ac.r->splitHandle) {
         if (El* paint = ac.r->splitHandle(cx, ac.r->data, &h)) {
             e->Child(paint);
@@ -512,6 +517,10 @@ El* RenderDock(const AreaCtx& ac, DockPlacement p, const DockSide& side) {
 El* DockArea::New(Ctx* cx, Str id, Entity<DockState> state,
                   const DockRenderer* r) {
     Arena* a = cx->a;
+    // The area's name, on the stack and on the tree, while everything under
+    // it is built: a tab, a handle and a group's menu are all named among the
+    // area's parts, and two areas on one page are still two areas.
+    IdScope scope(cx, id);
     static const DockRenderer kBare;
     AreaCtx ac;
     ac.cx = cx;
@@ -528,7 +537,7 @@ El* DockArea::New(Ctx* cx, Str id, Entity<DockState> state,
     if (!box) {
         box = Div(a);
     }
-    box->FlexCol()->SizeFull();
+    box->Id(id)->FlexCol()->SizeFull();
     box->BoundsOut(&s->bounds);
 
     // ToggleZoom: one panel over the whole area, and nothing else rendered.
