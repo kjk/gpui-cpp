@@ -79,7 +79,6 @@ const partialUi = new Set([
   "form",
   "global_state",
   "group_box",
-  "icon",
   "input",
   "inspector",
   "label",

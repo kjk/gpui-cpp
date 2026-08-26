@@ -6958,3 +6958,31 @@ has no stale entry to retain or clean. That intentional ownership difference
 is recorded in source and the declaration ledger. Base Focus Trap is full:
 the audit is 69 full, 52 partial, 8 adapters and 2 exclusions with 342
 unresolved spellings. MSVC release passes 19,154 checks.
+
+## Icon restores the pinned asset and inherited-style surface
+
+UI Icon previously exposed only a named, fixed-16-pixel wrapper over 78 local
+SVGs. The pinned asset crate contains 99 names, so valid upstream choices such
+as `Close`, `BatteryWarning`, `SortAscending`, `ResizeCorner`, undo/redo and
+thumb icons could neither compile nor draw. The missing 22 SVGs are now copied
+verbatim from the pinned checkout and compiled into the generated draw-op
+table. `IconName` and `IconNamePath` expose every pinned spelling; the older
+C++ `X`/`x.svg` pair remains as a documented compatibility addition.
+
+Rust's `IconNamed` trait has one operation, returning an asset path. Its C++
+projection is therefore a POD `IconNamed` path value rather than an inherited
+object: application icon enums can return that value and use the same `New`
+path as built-in names. The builder also has custom `Path`, `Empty`, pixel and
+semantic sizes, color, transform/rotation, and preserves flex shrink zero.
+Most importantly, an icon with no explicit size now resolves both dimensions
+from the inherited text size before Taffy layout. Intrinsic measurement alone
+was insufficient because cross-axis stretch could otherwise turn it into a
+tall rectangle; this matches Rust stamping `window.text_style().font_size`
+onto the SVG before layout. Foreground already follows the same inherited
+style cascade.
+
+The focused seam tests cover inheritance, custom/named paths, semantic sizing,
+color and rotation, while the existing converter parity suite now validates
+all 100 compiled files against runtime SVG conversion. UI Icon is full: the
+audit moves to 70 full, 51 partial, 8 adapters and 2 exclusions with 341
+unresolved spellings. MSVC release passes 19,328 checks.

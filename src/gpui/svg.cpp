@@ -1541,6 +1541,8 @@ bool SvgDraw(PaintCtx* ctx, Str assetPath, float x, float y, float size,
 
 Str IconNamePath(IconName name) {
     switch (name) {
+        case IconName::ALargeSmall:
+            return StrL("icons/a-large-small.svg");
         case IconName::ArrowLeft:
             return StrL("icons/arrow-left.svg");
         case IconName::ArrowRight:
@@ -1603,6 +1605,10 @@ Str IconNamePath(IconName name) {
             return StrL("icons/battery-medium.svg");
         case IconName::BatteryFull:
             return StrL("icons/battery-full.svg");
+        case IconName::BatteryLow:
+            return StrL("icons/battery-low.svg");
+        case IconName::BatteryWarning:
+            return StrL("icons/battery-warning.svg");
         case IconName::WindowMinimize:
             return StrL("icons/window-minimize.svg");
         case IconName::WindowMaximize:
@@ -1617,6 +1623,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/calendar.svg");
         case IconName::Folder:
             return StrL("icons/folder.svg");
+        case IconName::FolderClosed:
+            return StrL("icons/folder-closed.svg");
         case IconName::Settings:
             return StrL("icons/settings.svg");
         case IconName::GalleryVerticalEnd:
@@ -1643,6 +1651,10 @@ Str IconNamePath(IconName name) {
             return StrL("icons/panel-right-close.svg");
         case IconName::Info:
             return StrL("icons/info.svg");
+        case IconName::Inspector:
+            return StrL("icons/inspector.svg");
+        case IconName::Close:
+            return StrL("icons/close.svg");
         case IconName::X:
             return StrL("icons/x.svg");
         case IconName::CircleCheck:
@@ -1657,6 +1669,8 @@ Str IconNamePath(IconName name) {
             return StrL("icons/loader-circle.svg");
         case IconName::Ellipsis:
             return StrL("icons/ellipsis.svg");
+        case IconName::EllipsisVertical:
+            return StrL("icons/ellipsis-vertical.svg");
         case IconName::ChevronsUpDown:
             return StrL("icons/chevrons-up-down.svg");
         case IconName::SquareTerminal:
@@ -1697,6 +1711,36 @@ Str IconNamePath(IconName name) {
             return StrL("icons/plus.svg");
         case IconName::Copy:
             return StrL("icons/copy.svg");
+        case IconName::Dash:
+            return StrL("icons/dash.svg");
+        case IconName::Delete:
+            return StrL("icons/delete.svg");
+        case IconName::Menu:
+            return StrL("icons/menu.svg");
+        case IconName::Network:
+            return StrL("icons/network.svg");
+        case IconName::Pause:
+            return StrL("icons/pause.svg");
+        case IconName::Redo:
+            return StrL("icons/redo.svg");
+        case IconName::Redo2:
+            return StrL("icons/redo-2.svg");
+        case IconName::ResizeCorner:
+            return StrL("icons/resize-corner.svg");
+        case IconName::SortAscending:
+            return StrL("icons/sort-ascending.svg");
+        case IconName::SortDescending:
+            return StrL("icons/sort-descending.svg");
+        case IconName::StarOff:
+            return StrL("icons/star-off.svg");
+        case IconName::ThumbsDown:
+            return StrL("icons/thumbs-down.svg");
+        case IconName::ThumbsUp:
+            return StrL("icons/thumbs-up.svg");
+        case IconName::Undo:
+            return StrL("icons/undo.svg");
+        case IconName::Undo2:
+            return StrL("icons/undo-2.svg");
         default:
             return {};
     }

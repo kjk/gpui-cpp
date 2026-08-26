@@ -386,16 +386,17 @@ El* TextEl(Arena* a, Str s) {
 }
 
 El* IconEl(Arena* a, IconName name) {
-    return IconEl(a, name, 16.f);
-}
-
-El* IconEl(Arena* a, IconName name, float size) {
     El* e = NewEl(a, ElKind::Icon);
     e->icon = name;
     e->iconPath = IconNamePath(name);
+    e->style.flexShrink = 0;
+    return e;
+}
+
+El* IconEl(Arena* a, IconName name, float size) {
+    El* e = IconEl(a, name);
     e->style.width = size;
     e->style.height = size;
-    e->style.flexShrink = 0;
     return e;
 }
 
@@ -2882,9 +2883,13 @@ static taffy::SizeF LayoutMeasure(taffy::SizeFOpt known, taffy::SizeAvail avail,
             return {taffy::UnwrapOr(known.w, text.w),
                     taffy::UnwrapOr(known.h, text.h)};
         }
-        case ElKind::Icon:
-            return {taffy::UnwrapOr(known.w, 16.0f),
-                    taffy::UnwrapOr(known.h, 16.0f)};
+        case ElKind::Icon: {
+            // svg().size(window.text_style().font_size): an icon that names
+            // no size follows the text size inherited from its container.
+            float size = font > 0 ? font : 16.0f;
+            return {taffy::UnwrapOr(known.w, size),
+                    taffy::UnwrapOr(known.h, size)};
+        }
         case ElKind::Progress:
             return {taffy::UnwrapOr(known.w, 48.0f),
                     taffy::UnwrapOr(known.h, 8.0f)};
@@ -3020,6 +3025,15 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
         }
     }
     e->laidFont = font;
+    if (e->kind == ElKind::Icon && e->style.width == kAuto &&
+        e->style.height == kAuto) {
+        // Icon::render asks the inherited text style for its pixel size and
+        // writes that into both SVG dimensions before layout. Leaving this
+        // solely to intrinsic measurement would let align-stretch supply a
+        // known cross size and turn the icon into a tall flex item.
+        e->style.width = font > 0 ? font : 16.f;
+        e->style.height = font > 0 ? font : 16.f;
+    }
     if (e->kind == ElKind::Image) {
         ResolveImageStyle(ctx, e);
     }
@@ -3096,8 +3110,8 @@ static uint64_t LayoutMeasureKey(PaintCtx* ctx, El* e) {
     uint64_t h = 1469598103934665603ull;
     uint8_t kind = (uint8_t)e->kind;
     h = FnvMix(h, &kind, 1);
-    if (e->kind == ElKind::Icon || e->kind == ElKind::Progress) {
-        // Both answer with a constant, so nothing about the element moves it.
+    if (e->kind == ElKind::Progress) {
+        // Progress answers with a constant, so nothing about it moves it.
         return h;
     }
     if (e->text.len > 0 && e->text.s) {

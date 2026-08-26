@@ -4,6 +4,10 @@ namespace gpui {
 
 namespace component {
 
+IconNamed IconNamed::From(IconName name) {
+    return {IconNamePath(name)};
+}
+
 Icon* Icon::New(Ctx* cx, IconName name) {
     Arena* a = cx->a;
     Icon* i = ArenaNew<Icon>(a);
@@ -12,20 +16,59 @@ Icon* Icon::New(Ctx* cx, IconName name) {
     i->name = name;
     return i;
 }
-Icon* Icon::Size(float v) {
-    size = v;
+
+Icon* Icon::New(Ctx* cx, IconNamed named) {
+    Icon* i = New(cx, IconName::None);
+    i->path = named.path;
+    return i;
+}
+
+Icon* Icon::Empty(Ctx* cx) {
+    return New(cx, IconName::None);
+}
+
+Icon* Icon::Path(Str assetPath) {
+    path = assetPath;
     return this;
 }
+
+Icon* Icon::Size(float v) {
+    size = v;
+    hasSize = true;
+    return this;
+}
+
+Icon* Icon::Size(UiSize v) {
+    size = UiIconPx(v);
+    hasSize = true;
+    return this;
+}
+
 Icon* Icon::Color(Rgba c) {
     color = c;
     hasColor = true;
     return this;
 }
 
+Icon* Icon::Transform(float turns) {
+    rotation = turns;
+    return this;
+}
+
+Icon* Icon::Rotate(float turns) {
+    return Transform(turns);
+}
+
 El* Icon::IntoEl() {
-    El* e = IconEl(a, name, size);
+    El* e = hasSize ? IconEl(a, name, size) : IconEl(a, name);
+    if (path.s) {
+        e->iconPath = path;
+    }
     if (hasColor) {
         e->Fg(color);
+    }
+    if (rotation != 0) {
+        e->Rotate(rotation);
     }
     return e;
 }
