@@ -77,7 +77,6 @@ const partialUi = new Set([
   "dock",
   "form",
   "global_state",
-  "group_box",
   "input",
   "inspector",
   "list",
@@ -279,7 +278,7 @@ const testTargets: Record<string, string[]> = {
     "tests/AccessibilityTests.cpp",
   ],
   "ui/dock": ["tests/DockTests.cpp", "tests/DockStateTests.cpp", "tests/TilesTests.cpp"],
-  "ui/group_box": ["tests/AccessibilityTests.cpp"],
+  "ui/group_box": ["tests/GroupBoxTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/highlighter": ["tests/SyntaxTests.cpp"],
   "ui/index_path": ["tests/IndexPathTests.cpp"],
   "ui/input": [
@@ -375,6 +374,9 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   },
   "ui/title_bar.rs::const TITLE_BAR_HEIGHT": {
     spellings: ["kTitleBarHeight"],
+  },
+  "ui/group_box.rs::trait GroupBoxVariants": {
+    spellings: ["WithVariant", "Normal", "Fill", "Outline"],
   },
   "ui/window_ext.rs::trait WindowExt": {
     collapse:

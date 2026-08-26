@@ -7139,3 +7139,34 @@ overlapping and CJK assertions and inspect the combined styled run, precedence,
 inheritance and an 80-character mask. UI Label is full: the audit moves to 73
 full, 48 partial, 8 adapters and 2 exclusions with 337 unresolved spellings.
 MSVC release passes 19,458 checks.
+
+## Group Box restores its variant and container surface
+
+UI Group Box previously represented Normal, Fill and Outline with two booleans,
+accepted a title in its constructor instead of making it optional, and retained
+only one child. The story compensated by nesting all of a box's controls in a
+second column. Element titles also bypassed the muted, one-line-height title
+wrapper entirely, and the root/title/content `StyleRefinement`s had no general
+C++ seam.
+
+`GroupBoxVariant`, its case-insensitive string conversion, and
+`WithVariant`/`Normal`/`Fill`/`Outline` now project the pinned enum and
+`GroupBoxVariants` trait directly. `New(cx)` is the source constructor, with
+the old title overload retained as a convenience; ids default to `group-box`,
+titles remain optional elements, and an `ArenaVec<El*>` holds every child.
+Root, title and content each retain an independent Style-plus-field-mask
+refinement and apply it after the source defaults. The earlier story-specific
+style helpers remain compatible shorthands.
+
+Rendering now always places a supplied title inside the muted, line-height-one
+wrapper, then builds the content column with the exact variant background,
+border, padding, gap and radius rules. The story adds its controls directly to
+GroupBox and expresses the custom example's background/padding on the root,
+where Rust applies them, rather than incorrectly moving the background into
+the content pane.
+
+The pinned variant conversion test is ported, and focused tests cover all
+builders, 40 children, ids, title elements, variant structure and all three
+refinement targets. UI Group Box is full: the audit moves to 74 full, 47
+partial, 8 adapters and 2 exclusions with 335 unresolved spellings. MSVC
+release passes 19,492 checks, and the release story build passes.

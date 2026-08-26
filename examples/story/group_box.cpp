@@ -56,7 +56,8 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
     El* def = StorySection(cx, "Default", nullptr);
     // Rust adds the three checkboxes and the button straight to the
     // GroupBox, so what separates them is its content pane's `gap_4`.
-    El* mail = Div(a)->FlexCol()->W(kFill)->Gap(16);
+    component::GroupBox* mail =
+        component::GroupBox::New(cx, StrL("Email notifications"));
     static const char* kMail[3] = {"All activity", "Product updates",
                                    "Account activity"};
     static const char* kMailIds[3] = {"all", "news-letter", "account-activity"};
@@ -72,15 +73,15 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
                     ->Label(StrL("Save preferences"))
                     ->IntoEl());
     StorySectionBody(def)->W(512);
-    StorySectionAdd(def,
-                    component::GroupBox::New(cx, StrL("Email notifications"))
-                        ->Child(mail)
-                        ->IntoEl());
+    StorySectionAdd(def, mail->IntoEl());
     page->Child(def);
 
     // Filled: two switch rows and a Save.
     El* filled = StorySection(cx, "Filled", nullptr);
-    El* activity = Div(a)->FlexCol()->W(kFill)->Gap(16);
+    component::GroupBox* activity =
+        component::GroupBox::New(cx, StrL("Contributions & activity"))
+            ->Id(StrL("activity"))
+            ->Fill();
     activity
         ->Child(SwitchRow(cx, StrL("Make profile private and hide activity"),
                           StrL("profile-private"), self->profilePrivate,
@@ -94,11 +95,7 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
                         ->Label(StrL("Save"))
                         ->IntoEl());
     StorySectionBody(filled)->W(512);
-    StorySectionAdd(
-        filled, component::GroupBox::New(cx, StrL("Contributions & activity"))
-                    ->Filled(true)
-                    ->Child(activity)
-                    ->IntoEl());
+    StorySectionAdd(filled, activity->IntoEl());
     page->Child(filled);
 
     // Outlined: a vertical radio group.
@@ -117,6 +114,7 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
                      ->IntoEl();
     StorySectionBody(outlined)->W(512);
     StorySectionAdd(outlined, component::GroupBox::New(cx, StrL("Appearance"))
+                                  ->Id(StrL("appearance"))
                                   ->Outline()
                                   ->Child(themes)
                                   ->IntoEl());
@@ -137,23 +135,32 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
     // Custom Style: title_style and content_style, refined independently.
     El* custom = StorySection(cx, "Custom Style", nullptr);
     StorySectionBody(custom)->W(512);
+    Style rootStyle = {};
+    rootStyle.bg = ThemeNow(cx->app).groupBox;
+    rootStyle.radius = 12;
+    rootStyle.pad = EdgesAll(20);
+    Style contentStyle = {};
+    contentStyle.radius = 12;
+    contentStyle.pad = Edges::New(16, 16, 12, 12);
+    contentStyle.border = 2;
     StorySectionAdd(
         custom,
-        (component::GroupBox::New(cx, StrL("This is a custom style"))
-             ->Outline()
-             ->TitleSemibold()
-             ->TitlePadX(12)
-             ->ContentBg(ThemeNow(cx->app).groupBox)
-             ->ContentRadius(12)
-             ->ContentPad(16)
-             ->ContentBorder(2)
-             ->Child(component::TextView::New(
-                         cx, StrL("You can use `title_style` to customize "
-                                  "the style of the title. And any style in "
-                                  "`GroupBox` will apply to the content "
-                                  "container."))
-                         ->IntoEl())
-             ->IntoEl()));
+        component::GroupBox::New(cx, StrL("This is a custom style"))
+            ->Outline()
+            ->Refine(rootStyle,
+                     StyleFieldBg | StyleFieldRadius | StyleFieldPad)
+            ->TitleSemibold()
+            ->TitlePadX(12)
+            ->ContentStyle(contentStyle,
+                           StyleFieldRadius | StyleFieldPad |
+                               StyleFieldBorder)
+            ->Child(component::TextView::New(
+                        cx, StrL("You can use `title_style` to customize "
+                                 "the style of the title. And any style in "
+                                 "`GroupBox` will apply to the content "
+                                 "container."))
+                        ->IntoEl())
+            ->IntoEl());
     page->Child(custom);
     return page;
 }

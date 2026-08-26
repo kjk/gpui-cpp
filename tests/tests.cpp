@@ -132,6 +132,7 @@ int GpuiMain(int argc, char** argv) {
     TestWindowExt();
     TestDescriptionList();
     TestLabel();
+    TestGroupBox();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

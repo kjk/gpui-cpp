@@ -129,3 +129,4 @@ void TestKeyedState();
 void TestWindowExt();
 void TestDescriptionList();
 void TestLabel();
+void TestGroupBox();

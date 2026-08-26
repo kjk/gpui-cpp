@@ -6,18 +6,36 @@ namespace gpui {
 
 namespace component {
 
+enum class GroupBoxVariant : uint8_t {
+    Normal,
+    Fill,
+    Outline
+};
+
+GroupBoxVariant GroupBoxVariantFromStr(Str text);
+Str GroupBoxVariantAsStr(GroupBoxVariant variant);
+
 struct GroupBox {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
+    Str id = StrL("group-box");
     Str title = {};
     // GroupBox::title takes `impl IntoElement`, not a string: the usage card
     // gives it a row with a label and a button in it.
     El* titleEl = nullptr;
-    El* child = nullptr;
-    // GroupBoxVariant: Normal by default, with fill() and outline() as the
-    // other two.
-    bool outline = false;
-    bool filled = false;
+    bool hasTitle = false;
+    ArenaVec<El*> children;
+    GroupBoxVariant variant = GroupBoxVariant::Normal;
+
+    // StyleRefinement is a Style plus the fields it actually names in the
+    // runtime POD seam. These are the root/title/content refinements Rust
+    // stores independently.
+    Style rootStyle = {};
+    uint32_t rootStyleSet = 0;
+    Style titleStyle = {};
+    uint32_t titleStyleSet = 0;
+    Style contentStyle = {};
+    uint32_t contentStyleSet = 0;
 
     // The story's Custom Style section refines the box, its title and its
     // content container; these are the pieces it reaches for.
@@ -29,11 +47,20 @@ struct GroupBox {
     float contentPad = -1;
     float contentBorder = -1;
 
+    static GroupBox* New(Ctx* cx);
     static GroupBox* New(Ctx* cx, Str title);
+    GroupBox* Id(Str value);
     GroupBox* Title(El* e);
     GroupBox* Child(El* e);
+    GroupBox* WithVariant(GroupBoxVariant value);
+    GroupBox* Normal();
+    GroupBox* Fill();
     GroupBox* Outline();
+    // Compatibility spelling retained from the earlier port.
     GroupBox* Filled(bool v);
+    GroupBox* Refine(const Style& style, uint32_t fields);
+    GroupBox* TitleStyle(const Style& style, uint32_t fields);
+    GroupBox* ContentStyle(const Style& style, uint32_t fields);
     GroupBox* TitleSemibold(bool v = true);
     GroupBox* TitlePadX(float px);
     GroupBox* ContentBg(Background c);
