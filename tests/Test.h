@@ -127,3 +127,4 @@ void TestButtonGroup();
 void TestIcon();
 void TestKeyedState();
 void TestWindowExt();
+void TestDescriptionList();

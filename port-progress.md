@@ -7082,3 +7082,27 @@ records the complete `Window*` free-function family as the deliberate trait
 collapse. UI WindowExt is full: the audit moves to 71 full, 50 partial, 8
 adapters and 2 exclusions with 339 unresolved spellings. MSVC release passes
 19,379 checks.
+
+## Description List restores variants, grouping and exact cell structure
+
+UI Description List previously flattened Rust's three-way `DescriptionText`
+payload into either a string or an `El*`, dropped separators while grouping,
+and used flex grow factors with an automatic basis. That changed both its
+public shape and its layout: content width could bias the column split, while
+the separator band shown by the pinned story never reached the element tree.
+
+`DescriptionText` is now an explicit POD tag for String, Text and AnyElement,
+and `DescriptionItem` exposes the pinned new/value/span/separator construction
+surface. `DescriptionGroupRows` ports the source algorithm exactly, including
+full-span separator rows and its behavior for over-wide spans. Rendering uses
+the source's fractional basis, both-axis overflow clipping, horizontal-only
+fixed label width, exact per-side label borders, theme radius, separator
+height/background, 1–10 column clamp and XSmall/Small/Medium/Large padding and
+gap constants. The default string value again inherits the surrounding text
+size instead of being forced to 14 px; only labels apply `text_sm`.
+
+Focused tests port the upstream grouping assertion and pin separator grouping,
+variant identity, clamps, axis factories and the actual emitted row/cell
+styles. UI Description List is full: the audit moves to 72 full, 49 partial,
+8 adapters and 2 exclusions with 338 unresolved spellings. MSVC release passes
+19,418 checks.

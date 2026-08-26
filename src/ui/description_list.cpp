@@ -4,6 +4,101 @@ namespace gpui {
 
 namespace component {
 
+DescriptionText DescriptionText::From(Str text) {
+    DescriptionText out;
+    out.string = text;
+    return out;
+}
+
+DescriptionText DescriptionText::Text(El* text) {
+    DescriptionText out;
+    out.kind = DescriptionTextKind::Text;
+    out.element = text;
+    return out;
+}
+
+DescriptionText DescriptionText::AnyElement(El* element) {
+    DescriptionText out;
+    out.kind = DescriptionTextKind::AnyElement;
+    out.element = element;
+    return out;
+}
+
+El* DescriptionText::IntoEl(Ctx* cx) const {
+    if (kind == DescriptionTextKind::String) {
+        return Div(cx->a)->Child(TextEl(cx->a, string)->Wrap());
+    }
+    return element ? element : Div(cx->a);
+}
+
+DescriptionItem DescriptionItem::New(DescriptionText labelText) {
+    DescriptionItem out;
+    out.label = labelText;
+    out.value = DescriptionText::From(Str{});
+    return out;
+}
+
+DescriptionItem DescriptionItem::Separator() {
+    DescriptionItem out;
+    out.separator = true;
+    return out;
+}
+
+DescriptionItem& DescriptionItem::Value(DescriptionText valueText) {
+    if (!separator) {
+        value = valueText;
+    }
+    return *this;
+}
+
+DescriptionItem& DescriptionItem::Span(int spanValue) {
+    if (!separator) {
+        // Rust's public value is usize. Preserve zero (which is meaningful
+        // to flex-basis) but do not let the signed C++ seam invent a value
+        // the source API cannot express.
+        span = spanValue < 0 ? 0 : spanValue;
+    }
+    return *this;
+}
+
+int DescriptionGroupRows(const DescriptionItem* items, int n, int columns,
+                         int* rowCounts, int capacity) {
+    if (!items || n <= 0) {
+        return 0;
+    }
+    if (columns < 1) {
+        columns = 1;
+    } else if (columns > 10) {
+        columns = 10;
+    }
+    int rows = 0;
+    int currentSpan = 0;
+    auto addRow = [&]() {
+        if (rowCounts && rows < capacity) {
+            rowCounts[rows] = 0;
+        }
+        rows++;
+        currentSpan = 0;
+    };
+    for (int i = 0; i < n; i++) {
+        int span = items[i].separator ? columns : items[i].span;
+        if (rows == 0) {
+            addRow();
+        }
+        if (currentSpan + span > columns) {
+            addRow();
+        }
+        if (rowCounts && rows - 1 < capacity) {
+            rowCounts[rows - 1]++;
+        }
+        currentSpan += span;
+    }
+    // Rust removes empty rows only from the end. The algorithm above cannot
+    // produce a trailing empty one, but it can deliberately retain a leading
+    // empty row for an over-wide first item.
+    return rows;
+}
+
 DescriptionList* DescriptionList::New(Ctx* cx) {
     Arena* a = cx->a;
     DescriptionList* d = ArenaNew<DescriptionList>(a);
@@ -12,28 +107,42 @@ DescriptionList* DescriptionList::New(Ctx* cx) {
     return d;
 }
 
+DescriptionList* DescriptionList::Horizontal(Ctx* cx) {
+    return New(cx);
+}
+
+DescriptionList* DescriptionList::Vertical(Ctx* cx) {
+    return New(cx)->Vertical();
+}
+
 DescriptionList* DescriptionList::Item(Str label, Str value, int span) {
-    return ItemEl(label, TextEl(a, value)->Font(14)->Wrap(), span);
+    return Item(DescriptionText::From(label), DescriptionText::From(value),
+                span);
+}
+
+DescriptionList* DescriptionList::Item(DescriptionText label,
+                                       DescriptionText value, int span) {
+    DescriptionItem item = DescriptionItem::New(label);
+    item.Value(value).Span(span);
+    return Child(item);
 }
 
 DescriptionList* DescriptionList::ItemEl(Str label, El* value, int span) {
-    DescriptionItem item = {};
-    item.label = label;
-    item.value = value;
-    item.span = span < 1 ? 1 : span;
+    return Item(DescriptionText::From(label),
+                DescriptionText::AnyElement(value), span);
+}
+
+DescriptionList* DescriptionList::Child(const DescriptionItem& item) {
     items.Append(a, item);
     return this;
 }
 
 DescriptionList* DescriptionList::Separator() {
-    DescriptionItem item = {};
-    item.separator = true;
-    items.Append(a, item);
-    return this;
+    return Child(DescriptionItem::Separator());
 }
 
 DescriptionList* DescriptionList::Columns(int v) {
-    columns = v < 1 ? 1 : v;
+    columns = v < 1 ? 1 : (v > 10 ? 10 : v);
     return this;
 }
 DescriptionList* DescriptionList::LabelWidth(float w) {
@@ -42,6 +151,10 @@ DescriptionList* DescriptionList::LabelWidth(float w) {
 }
 DescriptionList* DescriptionList::Bordered(bool v) {
     bordered = v;
+    return this;
+}
+DescriptionList* DescriptionList::Layout(Axis axis) {
+    vertical = axis == Axis::Vertical;
     return this;
 }
 DescriptionList* DescriptionList::Vertical(bool v) {
@@ -65,62 +178,76 @@ El* DescriptionList::IntoEl() {
         padX = 12;
         padY = 6;
     }
-    float gap = bordered ? 0.f : padY;
+    float baseGap = size == UiSize::Large ? 8.f :
+                    (size == UiSize::Medium ? 4.f : 2.f);
+    float gap = bordered ? 0.f : baseGap;
     if (!bordered) {
         padX = 0;
         padY = 0;
     }
 
-    El* root = Div(a)->FlexCol()->W(kFill)->Gap(gap)->ClipY();
+    El* root = Div(a)->FlexCol()->Gap(gap)->ClipX()->ClipY();
     if (bordered) {
-        root->Border(1, th.border)->Radius(padX);
+        root->Border(1, th.border)->Radius(th.radius);
     }
 
-    // Pack the items into rows of `columns`, spans included; a separator ends
-    // the row it lands in.
-    int i = 0;
-    while (i < items.len) {
-        int used = 0;
-        int count = 0;
-        while (i < items.len && used < columns) {
-            if (items[i].separator) {
-                i++;
-                break;
-            }
-            if (used + items[i].span > columns && count > 0) {
-                break;
-            }
-            count++;
-            used += items[i].span;
-            i++;
-        }
-        if (count == 0) {
-            continue;
-        }
-        int first = i - count;
-        El* row = Div(a)->FlexRow()->W(kFill);
-        bool last = i >= items.len;
+    int* rowCounts =
+        (int*)Alloc(a, (int)sizeof(int) * (items.len + 1));
+    DescriptionItem* flatItems = items.Flatten(a);
+    int rows = DescriptionGroupRows(flatItems, items.len, columns, rowCounts,
+                                    items.len + 1);
+    int itemAt = 0;
+    for (int rowIx = 0; rowIx < rows; rowIx++) {
+        int count = rowCounts ? rowCounts[rowIx] : 0;
+        El* row = Div(a)->FlexRow()->ItemsCenter();
+        bool last = rowIx == rows - 1;
         if (bordered && !last) {
             row->BorderB(1, th.border);
         }
         for (int k = 0; k < count; k++) {
-            const DescriptionItem& it = items[first + k];
-            El* cell = Div(a)->Grow((float)it.span);
-            cell = vertical ? cell->FlexCol() : cell->FlexRow();
-            El* label = Div(a)->Shrink0()->PadX(padX)->PadY(padY)->Child(
-                TextEl(a, it.label)->Font(14)->Wrap()->Fg(th.descListLabelFg));
+            const DescriptionItem& it = items[itemAt++];
+            if (it.separator) {
+                El* separator = Div(a)->H(8)->W(kFill);
+                if (bordered) {
+                    separator->Bg(th.descListLabel);
+                }
+                row->Child(separator);
+                continue;
+            }
+            El* cell = Div(a)
+                           ->Flex1()
+                           ->BasisFrac((float)it.span / (float)columns)
+                           ->ClipX();
+            cell = vertical ? cell->FlexCol() : cell->FlexRow()->H(kFill);
+            El* label = Div(a)
+                            ->PadX(padX)
+                            ->PadY(padY)
+                            ->Font(14)
+                            ->Fg(th.descListLabelFg)
+                            ->Child(it.label.IntoEl(cx));
             if (!vertical) {
-                label->W(labelWidth);
+                label->W(labelWidth)->H(kFill)->Shrink0();
             } else {
                 label->W(kFill);
             }
             if (bordered) {
-                label->Bg(th.descListLabel)->Border(1, th.border);
+                label->Bg(th.descListLabel);
+                if (vertical) {
+                    label->BorderB(1, th.border);
+                } else {
+                    label->BorderR(1, th.border);
+                    if (k != 0) {
+                        label->BorderL(1, th.border);
+                    }
+                }
             }
-            El* value = Div(a)->Flex1()->PadX(padX)->PadY(padY)->ClipY();
-            if (it.value) {
-                value->Child(it.value);
-            }
+            El* value = Div(a)
+                            ->Flex1()
+                            ->PadX(padX)
+                            ->PadY(padY)
+                            ->ClipX()
+                            ->ClipY();
+            value->Child(it.value.IntoEl(cx));
             cell->Child(label)->Child(value);
             row->Child(cell);
         }
