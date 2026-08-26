@@ -10,9 +10,13 @@ namespace gpui {
 // and a caller that wants to drive it calls PopoverSetOpen every frame.
 //
 // Rust's state also parks the previously focused handle and restores it on
-// close; so does this one. The dismiss subscription is the window's single
-// unhandled-click slot, so that half is still the caller's: it wires
-// PopoverDismiss to whatever reports the press that landed elsewhere.
+// close; so does this one. Outside dismissal is attached to the content's
+// hitbox through El::OnMouseDownOut, so it remains per-popover rather than
+// taking the window's single unhandled-click compatibility slot.
+struct PopoverOpenChangeEvent {
+    bool open = false;
+};
+
 struct PopoverState {
     // The Entity<PopoverState> that owns this state. Rust's Context<Self>
     // supplies it when deferred context is registered; C++ keeps it here for
@@ -34,6 +38,13 @@ struct PopoverState {
     // previous_focus_handle: where focus was when it opened, put back on
     // close if the popover still holds it.
     FocusHandle previousFocus = {};
+    // Rust's Rc<dyn Fn(&bool, ..)>. Listener is the port's generational,
+    // retained callback record; the event carries the new bool without
+    // narrowing the callback to close-only.
+    Listener onOpenChange = {};
+    // Compatibility for the older themed C++ OnClose surface. It is invoked
+    // only by dismissal (outside press or Escape), not by the trigger toggle.
+    Listener onDismiss = {};
 };
 
 // Open or close, doing what Rust's `toggle_open` does around it: the focus
@@ -49,6 +60,8 @@ void PopoverSetOpen(Ctx* cx, Entity<PopoverState> state, bool open);
 void PopoverToggle(PopoverState* self, Ctx* cx, const MouseDownEvent* ev,
                    intptr_t button);
 void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent* ev);
+void PopoverDismissOnMouseDown(PopoverState* self, Ctx* cx,
+                               const MouseDownEvent* ev);
 
 // The popover. The trigger takes the *press*, not the click, and on whichever
 // button was asked for — `Popover::mouse_button`, which is what a right-click
@@ -62,6 +75,7 @@ struct Popover {
     Entity<PopoverState> state = {};
     FocusHandle focus = {};
     MouseButton button = MouseButton::Left;
+    bool overlayClosable = true;
     // Popover::anchor, the gpui::Anchor Popup resolves.
     PopupAnchor anchor = PopupAnchor::TopLeft;
 
@@ -71,6 +85,11 @@ struct Popover {
     // Popover::tracked_focus_handle: what takes focus when it opens, instead
     // of the popover itself.
     Popover* TrackedFocus(FocusHandle tracked);
+    Popover* OverlayClosable(bool closable);
+    Popover* OnOpenChange(Listener fn);
+    // C++ compatibility seam used by the themed facade. Rust expresses this
+    // as an on_open_change callback which ignores the true half.
+    Popover* OnDismiss(Listener fn);
     Popover* Trigger(El* trigger);
     Popover* Content(El* content);
     El* IntoEl();

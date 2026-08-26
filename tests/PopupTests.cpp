@@ -113,6 +113,122 @@ static void PopoverOpenStateOwnsItsDeferredRegistration() {
     AppGlobalClear(&app);
 }
 
+namespace {
+
+struct PopoverRecorder {
+    int changes = 0;
+    bool lastOpen = false;
+    int dismisses = 0;
+    float dismissX = 0;
+
+    static void OnOpenChange(PopoverRecorder* self, Ctx*,
+                             const PopoverOpenChangeEvent* ev) {
+        self->changes++;
+        self->lastOpen = ev->open;
+    }
+
+    static void OnDismiss(PopoverRecorder* self, Ctx*,
+                          const ClickEvent* ev) {
+        self->dismisses++;
+        self->dismissX = ev->x;
+    }
+};
+
+} // namespace
+
+static void PopoverOwnsOpenCallbacksAndOutsideDismissal() {
+    App app;
+    Window* win = new Window();
+    Arena* a = ArenaNew();
+    win->app = &app;
+    win->frameArena = a;
+    BaseGlobalStateInit(&app);
+    Entity<PopoverState> state = EntityNewState<PopoverState>(&app);
+    Entity<PopoverRecorder> recorder = EntityNewState<PopoverRecorder>(&app);
+    Ctx cx = {&app, win, a, recorder.id};
+
+    El* trigger = Div(a)->W(50)->H(20);
+    El* content = Div(a)->W(100)->H(100);
+    gpui::Popover::New(&cx, StrL("lifecycle"), state)
+        ->OnOpenChange(Listen(&cx, &PopoverRecorder::OnOpenChange))
+        ->OnDismiss(Listen(&cx, &PopoverRecorder::OnDismiss))
+        ->Trigger(trigger)
+        ->Content(content)
+        ->IntoEl();
+    utassert(content->onMouseDownOut.IsValid());
+
+    MouseDownEvent triggerPress = {};
+    triggerPress.button = MouseButton::Left;
+    ListenerCall(&app, win, trigger->onMouseDown, &triggerPress);
+    PopoverRecorder* seen = recorder.Get(&app);
+    utassert(PopoverIsOpen(&cx, state));
+    utassert(seen->changes == 1 && seen->lastOpen);
+
+    // Feed the runtime a currently rendered content hitbox. A press anywhere
+    // outside it reaches the per-element on_mouse_down_out listener even
+    // though no ordinary element handled that location.
+    HitRect hr = {};
+    hr.bounds = {0, 0, 100, 100};
+    hr.onMouseDownOut = content->onMouseDownOut;
+    win->paint.hits.Append(hr);
+    PlatformInput outside = {};
+    outside.kind = PlatformInputKind::MouseDown;
+    outside.mouseDown.x = 240;
+    outside.mouseDown.y = 180;
+    outside.mouseDown.button = MouseButton::Left;
+    WindowDispatchInput(win, &outside);
+    utassert(!PopoverIsOpen(&cx, state));
+    utassert(seen->changes == 2 && !seen->lastOpen);
+    utassert(seen->dismisses == 1);
+    utassertnear(seen->dismissX, 240.f);
+
+    // The trigger is outside the popup content. Its ordinary mouse-down must
+    // toggle first; the content's mouse-down-out then sees the already closed
+    // state and does not turn the same press into a second dismissal.
+    win->paint.hits.Clear();
+    El* closeTrigger = Div(a)->W(50)->H(20);
+    El* closeContent = Div(a)->W(100)->H(100);
+    gpui::Popover::New(&cx, StrL("lifecycle"), state)
+        ->OnOpenChange(Listen(&cx, &PopoverRecorder::OnOpenChange))
+        ->OnDismiss(Listen(&cx, &PopoverRecorder::OnDismiss))
+        ->Trigger(closeTrigger)
+        ->Content(closeContent);
+    ListenerCall(&app, win, closeTrigger->onMouseDown, &triggerPress);
+    utassert(PopoverIsOpen(&cx, state));
+    HitRect openContent = {};
+    openContent.bounds = {100, 100, 100, 100};
+    openContent.onMouseDownOut = closeContent->onMouseDownOut;
+    win->paint.hits.Append(openContent);
+    HitRect openTrigger = {};
+    openTrigger.bounds = {0, 0, 50, 20};
+    openTrigger.onMouseDown = closeTrigger->onMouseDown;
+    win->paint.hits.Append(openTrigger);
+    PlatformInput triggerAgain = {};
+    triggerAgain.kind = PlatformInputKind::MouseDown;
+    triggerAgain.mouseDown.x = 10;
+    triggerAgain.mouseDown.y = 10;
+    triggerAgain.mouseDown.button = MouseButton::Left;
+    WindowDispatchInput(win, &triggerAgain);
+    utassert(!PopoverIsOpen(&cx, state));
+    utassert(seen->changes == 4 && !seen->lastOpen);
+    utassert(seen->dismisses == 1);
+
+    // overlay_closable(false) omits the observer rather than occupying a
+    // global slot with a handler which has to branch at dispatch time.
+    El* fixed = Div(a)->W(100)->H(100);
+    gpui::Popover::New(&cx, StrL("fixed"), state)
+        ->OverlayClosable(false)
+        ->Content(fixed);
+    utassert(!fixed->onMouseDownOut.IsValid());
+
+    win->paint.hits.Reset();
+    AppGlobalClear(&app);
+    WindowKeyedFree(win);
+    delete win;
+    ArenaDelete(a);
+    EntityDropAll(&app);
+}
+
 static void TheSideAnchorsFallBackToTheOrigin() {
     // Rust hands back the origin for both: a popup anchored sideways is
     // placed by the positioner rather than by a corner.
@@ -133,4 +249,5 @@ void TestPopup() {
     PopupContentUsesThePinnedCornerMarginAndDeferredLayer();
     TriggerCaptureEnablesContentOnTheNextFrame();
     PopoverOpenStateOwnsItsDeferredRegistration();
+    PopoverOwnsOpenCallbacksAndOutsideDismissal();
 }

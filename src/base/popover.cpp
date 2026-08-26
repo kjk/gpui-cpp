@@ -3,6 +3,29 @@
 
 namespace gpui {
 
+static void PopoverReportOpenChange(PopoverState* s, Ctx* cx) {
+    if (!s || !s->onOpenChange.IsValid()) {
+        return;
+    }
+    PopoverOpenChangeEvent ev = {s->open};
+    ListenerCall(cx->app, cx->win, s->onOpenChange, &ev);
+}
+
+static void PopoverReportDismiss(PopoverState* s, Ctx* cx, float x, float y,
+                                 MouseButton button, int clickCount,
+                                 Modifiers modifiers) {
+    if (!s || !s->onDismiss.IsValid()) {
+        return;
+    }
+    ClickEvent ev = {};
+    ev.x = x;
+    ev.y = y;
+    ev.button = button;
+    ev.clickCount = clickCount;
+    ev.modifiers = modifiers;
+    ListenerCall(cx->app, cx->win, s->onDismiss, &ev);
+}
+
 bool PopoverIsOpen(Ctx* cx, Entity<PopoverState> state) {
     PopoverState* s = state.Get(cx);
     return s && s->open;
@@ -42,6 +65,7 @@ void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
     s->open = open;
     BaseDeferredPopoverSet(cx->app,
                            s->self.IsValid() ? s->self : cx->self, open);
+    PopoverReportOpenChange(s, cx);
 }
 
 // toggle_open, off the trigger's press. Rust stops propagation here so the
@@ -56,11 +80,24 @@ void PopoverToggle(PopoverState* self, Ctx* cx, const MouseDownEvent* ev,
     Notify(cx);
 }
 
-void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent*) {
+void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent* ev) {
     if (!self->open) {
         return;
     }
     PopoverSetOpenFocused(self, cx, false);
+    PopoverReportDismiss(self, cx, ev->x, ev->y, ev->button, ev->clickCount,
+                         ev->modifiers);
+    Notify(cx);
+}
+
+void PopoverDismissOnMouseDown(PopoverState* self, Ctx* cx,
+                               const MouseDownEvent* ev) {
+    if (!self->open) {
+        return;
+    }
+    PopoverSetOpenFocused(self, cx, false);
+    PopoverReportDismiss(self, cx, ev->x, ev->y, ev->button, ev->clickCount,
+                         ev->modifiers);
     Notify(cx);
 }
 
@@ -83,6 +120,12 @@ Popover* Popover::New(Ctx* cx, Str id, Entity<PopoverState> state,
     // click id that same name produced.
     if (PopoverState* st = state.Get(cx)) {
         st->self = state.id;
+        // The keyed state outlives a frame; these are frame-supplied builder
+        // values, so omission in a later frame clears rather than retaining
+        // a callback or tracked handle which is no longer rendered.
+        st->trackedFocus = {};
+        st->onOpenChange = {};
+        st->onDismiss = {};
         if (st->open) {
             BaseDeferredPopoverSet(cx->app, state.id, true);
         }
@@ -97,6 +140,25 @@ Popover* Popover::New(Ctx* cx, Str id, Entity<PopoverState> state,
 Popover* Popover::TrackedFocus(FocusHandle tracked) {
     if (PopoverState* st = state.Get(cx)) {
         st->trackedFocus = tracked;
+    }
+    return this;
+}
+
+Popover* Popover::OverlayClosable(bool closable) {
+    overlayClosable = closable;
+    return this;
+}
+
+Popover* Popover::OnOpenChange(Listener fn) {
+    if (PopoverState* st = state.Get(cx)) {
+        st->onOpenChange = fn;
+    }
+    return this;
+}
+
+Popover* Popover::OnDismiss(Listener fn) {
+    if (PopoverState* st = state.Get(cx)) {
+        st->onDismiss = fn;
     }
     return this;
 }
@@ -131,6 +193,9 @@ Popover* Popover::Content(El* e) {
         // track_focus, not focus_ring_style: the surface takes focus and
         // does not draw a ring around itself for it.
         e->TrackFocus(focus)->FocusRing(false);
+        if (overlayClosable && state.IsValid()) {
+            e->OnMouseDownOut(ListenTo(state, &PopoverDismissOnMouseDown));
+        }
         content = e;
     }
     return this;

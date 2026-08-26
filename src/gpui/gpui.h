@@ -1560,6 +1560,11 @@ struct El {
     // entity. Needs a Click(id): the tree is rebuilt every frame, so the id
     // is what finds the element again.
     Listener onDragMove;
+    // on_mouse_down_out: a press anywhere outside this element. Unlike a
+    // window subscription this is per element, so several open overlays can
+    // independently observe the same press, just as GPUI's interactive
+    // element handler does.
+    Listener onMouseDownOut;
     // The refinement above, and the fields it names. Zero is no refinement.
     Style refine = {};
     uint32_t refineSet = 0;
@@ -1877,6 +1882,7 @@ struct El {
     El* OnMouseUp(Listener l, DispatchPhase phase = DispatchPhase::Bubble);
     El* OnDragMove(Listener l);
     El* OnDrag(Str dragKind, int ix = 0, void* data = nullptr);
+    El* OnMouseDownOut(Listener l);
     El* OnMouseUpOut(Listener l);
     // cx.stop_propagation() for the click this element takes.
     El* StopClick();
@@ -2039,6 +2045,7 @@ struct HitRect {
     int parent = -1;
     Listener onDragMove;
     DragPayload drag = {};
+    Listener onMouseDownOut;
     Listener onMouseUpOut;
     Str dropKind = {};
     Listener onDrop;

@@ -1390,6 +1390,10 @@ El* El::OnDrag(Str dragKind, int ix, void* data) {
     drag.data = data;
     return this;
 }
+El* El::OnMouseDownOut(Listener l) {
+    onMouseDownOut = l;
+    return this;
+}
 El* El::StopClick() {
     stopClick = true;
     return this;
@@ -4750,7 +4754,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     if (e->clickId || e->onClick.IsValid() || e->listener.IsValid() ||
         e->clickAction || e->onHover.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
-        e->onMouseUpOut.IsValid() || e->drag.IsValid() || e->onDrop.IsValid() ||
+        e->onMouseDownOut.IsValid() || e->onMouseUpOut.IsValid() ||
+        e->drag.IsValid() || e->onDrop.IsValid() ||
         e->cursor != CursorKind::Arrow || e->slider ||
         e->suppressTextSelection) {
         HitRect hr;
@@ -4770,6 +4775,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.parent = ctx->hitParent;
         hr.onDragMove = e->onDragMove;
         hr.drag = e->drag;
+        hr.onMouseDownOut = e->onMouseDownOut;
         hr.onMouseUpOut = e->onMouseUpOut;
         hr.dropKind = e->dropKind;
         hr.onDrop = e->onDrop;

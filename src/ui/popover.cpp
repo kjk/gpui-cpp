@@ -77,6 +77,14 @@ Popover* Popover::OnClose(Listener fn) {
     onClose = fn;
     return this;
 }
+Popover* Popover::OverlayClosable(bool v) {
+    overlayClosable = v;
+    return this;
+}
+Popover* Popover::OnOpenChange(Listener fn) {
+    onOpenChange = fn;
+    return this;
+}
 Popover* Popover::Anchor(PopupAnchor v) {
     anchor = v;
     return this;
@@ -112,6 +120,9 @@ El* Popover::IntoEl() {
     bool isOpen = PopoverIsOpen(cx, st);
     El* root = gpui::Popover::New(cx, popId, st, button)
                    ->Anchor(anchor)
+                   ->OverlayClosable(overlayClosable)
+                   ->OnOpenChange(onOpenChange)
+                   ->OnDismiss(onClose)
                    ->Trigger(trigger)
                    ->Content(isOpen ? content : nullptr)
                    ->IntoEl();
@@ -119,9 +130,8 @@ El* Popover::IntoEl() {
     // on it. A controlled popover's flag is the caller's, so it says what to
     // run; an uncontrolled one closes its own state.
     if (isOpen) {
-        Listener close =
-            onClose.IsValid() ? onClose : ListenTo(st, &PopoverDismiss);
-        CancelBindKeys(cx, root, "Popover", popId, close);
+        CancelBindKeys(cx, root, "Popover", popId,
+                       ListenTo(st, &PopoverDismiss));
     }
     return root;
 }

@@ -1498,6 +1498,22 @@ static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
     win->stopPropagation = false;
 }
 
+// Every element whose box does not contain this press hears it. This walks
+// the frame rather than the hit chain: GPUI registers on_mouse_down_out
+// against an element's hitbox and it observes empty window space and sibling
+// overlays too. It runs after the ordinary mouse-down chain, matching
+// on_mouse_up_out and ensuring an open popover's trigger closes it before the
+// content (which is necessarily elsewhere) observes the same press.
+static void DispatchMouseDownOut(Window* win, const MouseDownEvent& in) {
+    for (int i = 0; i < win->paint.hits.len; i++) {
+        const HitRect& hr = win->paint.hits[i];
+        if (hr.onMouseDownOut.IsValid() &&
+            !hr.bounds.Contains({in.x, in.y})) {
+            ListenerCall(win->app, win, hr.onMouseDownOut, &in);
+        }
+    }
+}
+
 static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     float x = in.x;
     float y = in.y;
@@ -1526,6 +1542,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
                 return hr.mouseDownPhase == phase ? hr.onMouseDown : Listener{};
             });
         chain.Reset();
+        DispatchMouseDownOut(win, in);
         ClearPendingClick(win);
         AppInvalidate(win);
         return;
@@ -1539,6 +1556,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         win->inspector.pending = true;
         win->inspector.pendingX = x;
         win->inspector.pendingY = y;
+        DispatchMouseDownOut(win, in);
         ClearPendingClick(win);
         AppInvalidate(win);
         return;
@@ -1548,6 +1566,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     if (bar) {
         SetMouseDown(win, true);
         ScrollbarPress(win, bar, x, y, barHorizontal);
+        DispatchMouseDownOut(win, in);
         // The bar took the press, so nothing is waiting to become a click.
         ClearPendingClick(win);
         AppInvalidate(win);
@@ -1615,6 +1634,7 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
             });
         chain.Reset();
     }
+    DispatchMouseDownOut(win, in);
     // A semantic control can suppress selection without consuming the mouse
     // event. Ask the whole hit chain because a text/icon child may be the
     // innermost rectangle while the Button around it owns the press.

@@ -65,6 +65,8 @@ struct Popover {
     PopupAnchor anchor = PopupAnchor::TopLeft;
     // Popover::mouse_button. A right-button popover is a context menu.
     MouseButton button = MouseButton::Left;
+    bool overlayClosable = true;
+    Listener onOpenChange;
     Listener onClose;
 
     static Popover* New(Ctx* cx);
@@ -75,9 +77,13 @@ struct Popover {
     Popover* DefaultOpen(bool v);
     Popover* Button(MouseButton b);
     Popover* Anchor(PopupAnchor v);
+    Popover* OverlayClosable(bool v);
+    // Receives PopoverOpenChangeEvent with the new state for both opening and
+    // closing, matching Rust's on_open_change surface.
+    Popover* OnOpenChange(Listener fn);
     // What escape runs on a controlled popover, whose open flag is the
-    // caller's — Rust's on_open_change, narrowed to the one direction a key
-    // can take. An uncontrolled popover closes its own state instead.
+    // caller's. Kept for source compatibility; OnOpenChange is the faithful
+    // two-direction surface.
     Popover* OnClose(Listener fn);
     El* IntoEl();
 };

@@ -6780,3 +6780,30 @@ Rust's per-state outside-dismiss subscription remain narrower here.
 The resulting honest audit is 60 full, 61 partial, 8 adapters and 2 exclusions
 with 358 unresolved declaration spellings. MSVC release passes 19,064 checks,
 and the showcase and story targets build in release.
+
+## Popover owns its complete dismissal and callback lifecycle
+
+Base Popover no longer depends on a caller to occupy the window's single
+unhandled-click callback. The runtime now exposes GPUI's per-element
+`on_mouse_down_out` beside its existing `on_mouse_up_out`: every rendered
+element that requested it observes a press outside its own bounds, so several
+open overlays can dismiss independently and no window-level listener is
+replaced. Popover attaches that handler to the dialog content only when
+`overlay_closable` is true.
+
+`PopoverState` retains the caller's generational open-change listener and
+reports the new bool after both trigger toggles and dismissals. The unstyled
+and themed builders expose `OverlayClosable` and `OnOpenChange`; the themed
+builder's older `OnClose` remains as a close-only adapter and is deliberately
+not fired by a trigger toggle. Escape and outside presses both close through
+the state now, so controlled popovers receive the same callback and focus,
+notification and deferred-context lifecycle as uncontrolled ones. Frame-
+supplied listeners and tracked focus are cleared when a later build omits
+them instead of leaking stale builder state through the keyed entity.
+
+The regression test drives the trigger listener and a real runtime
+mouse-down-out dispatch, checks the two callback directions and close-only
+adapter, and verifies that a non-closable surface registers no outside
+observer. Base Popover returns to full: the audit is 61 full, 60 partial, 8
+adapters and 2 exclusions, with the unrelated 358 partial-module declaration
+spellings unchanged. MSVC release passes 19,076 checks.
