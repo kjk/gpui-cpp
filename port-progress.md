@@ -6515,3 +6515,25 @@ action receives all 40 columns and 69 body rows. `bun cmd/test.ts` passes
 18,900 checks. `ui/text` stays partial because the handwritten HTML vocabulary
 and scanner-backed highlighting are smaller dependency-rule adapters, not
 because long valid input is truncated.
+
+## History is generic, versioned and grouped
+
+The string/cursor `History` specialization has been replaced with the pinned
+`History<I: HistoryItem>` structure. C++ expresses the trait as a
+POD-friendly item convention — `Version()`, `SetVersion()` and equality — and
+the history owns generic `Vec<I>` undo and redo stacks. It now carries the
+upstream version counter, optional grouping interval, explicit grouping,
+uniqueness, ignore flag and configurable maximum with the same 1,000-entry
+default.
+
+Undo and redo return every item sharing the popped version, in pop order, and
+copy that group to the opposite stack. Push deliberately does not clear redo:
+that is unusual for a cursor history, but it is what the pinned Rust code and
+its test specify. Unique mode removes an equal item from both stacks before
+putting the newest version on undo. `clear` leaves configuration and version
+state intact, and `set_ignoring` remains a state flag for callers rather than
+silently changing `push`.
+
+The tests port the upstream tab-index cases and add deterministic explicit and
+timed grouping, ignore/clear and default-retention coverage. `base/history`
+is now classified full rather than partial by the structural audit.

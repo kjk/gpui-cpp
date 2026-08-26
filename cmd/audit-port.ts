@@ -42,7 +42,7 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 
 const partialBase = new Set([
   "accordion", "alert_dialog", "button", "checkbox", "color_picker",
-  "date_picker", "dialog", "global_state", "history", "input", "link",
+  "date_picker", "dialog", "global_state", "input", "link",
   "macos_accessibility", "number_input", "pagination", "popover", "progress",
   "radio", "radio_group", "scrollbar", "select", "slider", "styled",
   "switch", "table", "tabs", "text_selection", "theme", "toast", "toggle",
@@ -58,7 +58,6 @@ const adapterUi = new Set([
 ]);
 
 const partialReasons: Record<string, string> = {
-  "base/history": "the C++ specialization is not the generic versioned/grouped History API",
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
   "base/input": "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
   "base/macos_accessibility": "only the native hit-test forwarding seam is present",

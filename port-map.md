@@ -65,6 +65,9 @@ The important non-mechanical mappings are encoded in the audit:
   own: nesting, tag names, entities, plugins, marked/code runs and table
   shapes grow with the document. The supported HTML vocabulary remains a
   deliberate smaller substitute for html5ever.
+- `History<I>` is generic over the C++ `HistoryItem` convention and matches
+  upstream's two stacks, versions, grouping interval, explicit grouping,
+  uniqueness, ignore state and 1,000-entry default retention.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 
@@ -72,14 +75,12 @@ The important non-mechanical mappings are encoded in the audit:
 
 1. Add a runtime accessibility tree (role, name/value, checked/expanded state,
    actions and per-platform export), then clear the role-driven partial set.
-2. Make `History` generic/versioned/grouped rather than a string
-   specialization.
-3. Decouple the large component `Theme` palette from `gpui/gpui.h`; the
+2. Decouple the large component `Theme` palette from `gpui/gpui.h`; the
    runtime should consume a narrow paint/style interface while Base and UI own
    their respective theme types.
-4. Extend `cmd/audit-port.ts` below module granularity: inventory every
+3. Extend `cmd/audit-port.ts` below module granularity: inventory every
    upstream `pub use` and test, requiring `full`, `adapter` or `excluded` plus
    a C++ symbol/test destination.
 
-`port-progress.md` remains the detailed behavioral log until item 4 makes the
+`port-progress.md` remains the detailed behavioral log until item 3 makes the
 ledger symbol-complete.
