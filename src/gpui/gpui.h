@@ -1593,6 +1593,12 @@ struct Style {
     // not hovered, which is how a card's close button takes its corner
     // whether or not it is showing.
     bool groupHoverVisible = false;
+    // .group_hover("", |this| this.bg(c)): the fill while the pointer is
+    // anywhere inside the group, which is a different question from this
+    // element being the hovered one. The element's own hover and active
+    // fills still win over it.
+    Background groupHoverBg = {};
+    bool hasGroupHoverBg = false;
     int focusId = 0;
     // El::PathId asked for the focus id to be the element's path, which is
     // only known once the tree is built. An explicit FocusId(v) — including
@@ -2125,6 +2131,9 @@ struct El {
     El* FocusOnPress(bool v = true);
     El* Group();
     El* GroupHoverVisible();
+    // The other half of `group_hover`: a fill rather than a visibility, for a
+    // strip that lights when the pointer is in the box around it.
+    El* GroupHoverBg(Background c);
     El* FocusId(int v);
     // `div().track_focus(&handle)`. The element is focusable, and what it is
     // focusable *as* is the handle the caller's state owns rather than

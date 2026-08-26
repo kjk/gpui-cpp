@@ -2239,6 +2239,11 @@ El* El::Group() {
     return this;
 }
 
+El* El::GroupHoverBg(Background c) {
+    style.groupHoverBg = c;
+    style.hasGroupHoverBg = true;
+    return this;
+}
 El* El::GroupHoverVisible() {
     style.groupHoverVisible = true;
     return this;
@@ -5255,9 +5260,14 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
 
     BoxFill fill = BoxFillFor(e->style.hasActiveBg, e->style.hasHoverBg,
                               e->clickId, ctx->activeId, ctx->hoverId);
-    if (fill != BoxFill::Base || e->style.hasBg) {
+    // The group's hover is asked only when the element's own state has
+    // nothing to say, which is the order the two refinements are applied in.
+    bool groupFill =
+        fill == BoxFill::Base && e->style.hasGroupHoverBg && ctx->groupHovered;
+    if (fill != BoxFill::Base || groupFill || e->style.hasBg) {
         const Background& b = fill == BoxFill::Active  ? e->style.activeBg
                               : fill == BoxFill::Hover ? e->style.hoverBg
+                              : groupFill              ? e->style.groupHoverBg
                                                        : e->style.bg;
         FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius,
                        e->style.hasCorners ? &e->style.corners : nullptr, b);
