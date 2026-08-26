@@ -4,7 +4,7 @@ This repository is a C++ port of [longbridge/gpui-component](https://github.com/
 
 The Rust sources live under `.work/gpui-component/` (gitignored clone). Do not treat that tree as something to compile into this binary. Read it as the specification. `bun cmd/build.ts` and `bun cmd/run.ts` clone that tree at the pinned SHA if it is missing.
 
-**Upstream pins** — source of truth: [`cmd/versions.ts`](cmd/versions.ts) (`gpuiComponent`, `zedGpui`, and the three crates we port: `taffy`, `markdown` and `wry`). How to ingest a later checkin: `port-upstream.md`.
+**Upstream pins** — source of truth: the pin block at the top of [`cmd/run.ts`](cmd/run.ts) (`gpuiComponent`, `zedGpui`, and the three crates we port: `taffy`, `markdown` and `wry`); `bun cmd/run.ts -versions` prints them. How to ingest a later checkin: `port-upstream.md`.
 
 ## Goal
 
@@ -16,7 +16,7 @@ log of what has been done and what a session found; read its tail before
 picking up something new.
 
 Fidelity is the bar. When a widget's look or numbers are in question, read the
-Rust file under `.work/gpui-component/` at the SHA in `cmd/versions.ts` and
+Rust file under `.work/gpui-component/` at the SHA in `cmd/run.ts` and
 copy the constants. Where this tree has to differ — because the runtime does
 not have the seam Rust does, or a dependency is out — say so in the comment
 where it differs and in the progress log, rather than quietly doing something
@@ -123,7 +123,7 @@ rediscover it.
 3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs — plus WinHTTP for `src/sys/http_win.cpp`. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`, and libcurl the same way when it is installed (the one soft dependency: without it the tree still builds and only loses remote images). macOS: clang++ with Cocoa, Core Graphics, Core Text, IOKit and Foundation's NSURLSession from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no vendored library and no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). Vendoring one would need a bar nothing has cleared: no build system of its own, no transitive dependencies, and a reason neither of those two routes works.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
-6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/versions.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
+6. **When unsure about a widget's look or numbers, read the Rust file** under `.work/gpui-component/` (the SHA in `cmd/run.ts`) and copy constants (heights, gaps, colors, column widths). Do not invent a different design system.
 7. **Portable by default.** `GPUI_OS_WINDOWS` / `GPUI_OS_LINUX` / `GPUI_OS_MAC` are for the handful of places where a single expression differs. Anything larger gets a portable signature in a shared header and an implementation in `<name>_win.cpp`, `<name>_linux.cpp` and `<name>_mac.cpp`. Never call an OS API from a shared file.
 
 ## What we are actually porting
@@ -488,7 +488,7 @@ the Rust is `.flex_1()` — grow 1, **shrink 1, basis 0** — and `El::Grow()` l
 the basis at `auto`, which sizes an item by its content instead of by the line.
 `El::Flex1()` is the faithful one; `Grow(f)` is for a factor that is not 1.
 
-**The port is kept current.** When `cmd/versions.ts` moves to a gpui-component
+**The port is kept current.** When the `gpuiComponent` pin moves to a checkin
 whose `Cargo.lock` resolves a different taffy, the port moves with it — bump
 `taffy.version` there and diff the crate. `src/taffy/readme.md` has the
 file-for-file map and `port-upstream.md` has the procedure.
@@ -515,7 +515,7 @@ that in the Rust crate. Do not add a special case to `MdParse` for something
 CommonMark already has a rule for.
 
 **The port is kept current**, on the same terms as taffy: bump
-`markdown.version` in `cmd/versions.ts` and diff the crate.
+`markdown.version` in `cmd/run.ts` and diff the crate.
 `src/markdown/readme.md` has the file-for-file map — including what is
 deliberately not ported, MDX and `to_html` — and `port-upstream.md` has the
 procedure.
@@ -658,10 +658,10 @@ for the deprecated CRT names. Each carries a comment saying why.
 
 After changing `.cpp` / `.h` / `.ts` files, run `bun cmd/format.ts` on those paths (or with no args for the whole tree) before finishing. It runs clang-format on C++ in `src/` and `examples/` (`/.clang-format`, Chromium-based, 80 columns) and Prettier on TypeScript (`.prettierrc.json`: `printWidth` 120, `endOfLine` lf). Use `-ts` or `-cpp` to run only Prettier or only clang-format. Do not format `.work/` or `out/`. `.gitattributes` forces `eol=lf`.
 
-The Rust reference (optional, slow first build because it pulls Zed). `bun cmd/build.ts` / `bun cmd/versions.ts` installs `.work/gpui-component` at the SHA in `cmd/versions.ts`:
+The Rust reference (optional, slow first build because it pulls Zed). `bun cmd/build.ts` and `bun cmd/run.ts -versions` both install `.work/gpui-component` at the pinned SHA:
 
 ```
-bun cmd/versions.ts
+bun cmd/run.ts -versions
 cd .work\gpui-component
 cargo run -p system_monitor
 ```
@@ -672,9 +672,7 @@ cargo run -p system_monitor
 AGENTS.md              this file
 port.md                phased porting plan
 port-progress.md       what is done / what is next
-port-upstream.md       how to ingest later checkins (pins live in cmd/versions.ts)
-cmd/versions.ts        exact gpui-component + zed gpui SHAs, and the taffy and
-                       markdown crate versions we are porting
+port-upstream.md       how to ingest later checkins (pins live in cmd/run.ts)
 cmd/format.ts          clang-format src/**/*.{cpp,h} + examples/ and prettier cmd/*.ts (`-ts` / `-cpp` to run one)
 cmd/build.ts           the whole build, every platform: MSVC (or clang-cl, -clang)
                        on Windows, g++/clang++ on Linux, clang++ on macOS,
@@ -683,7 +681,10 @@ cmd/build.ts           the whole build, every platform: MSVC (or clang-cl, -clan
                        its pieces so cmd/run.ts builds through it in-process
 cmd/run.ts             build then run; build.ts's flags plus -debugger /
                        -windbg / -cdb / -gdb / -lldb, -compare, -no-build, and
-                       -wasm (serve the page and open a tab)
+                       -wasm (serve the page and open a tab). Also holds the
+                       upstream pins — the exact gpui-component and zed gpui
+                       SHAs and the taffy / markdown / wry crate versions we
+                       are porting — which -versions prints and syncs
 cmd/wsl-run.ts         run cmd/run.ts inside WSL from a Windows checkout
 cmd/ubuntu-install-deps.sh  non-interactive apt + bun + rustup setup for Linux
 cmd/shot.ts            screenshot one example; -click=X,Y clicks first (client coords).

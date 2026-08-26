@@ -9,7 +9,7 @@
 //
 //   bun cmd/gen-locale-data.ts
 //
-// It needs `.work/gpui-component` at the pinned SHA (`bun cmd/versions.ts`).
+// It needs `.work/gpui-component` at the pinned SHA (`bun cmd/run.ts -versions`).
 //
 // The parse is not a YAML parser and does not need to be: both files are
 // three levels of plain `key:` lines with a scalar at the bottom, and the

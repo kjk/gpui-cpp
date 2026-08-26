@@ -27,7 +27,7 @@ import {
   sleep,
   waitForPidWindow,
 } from "./winapi.ts";
-import { ensureRustTree, rustTreeDir } from "./versions.ts";
+import { ensureRustTree, rustTreeDir } from "./run.ts";
 
 const root = resolve(dirname(Bun.main), "..");
 process.chdir(root);

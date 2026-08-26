@@ -1,7 +1,7 @@
 // Build and run the test suite: bun cmd/test.ts [-dbg|-rel] [-asan] [-clang] [-clean]
 //
 // The tests live in tests/ and are ports of the pure-logic ones in
-// .work/gpui-component at the SHA in cmd/versions.ts. The runner is an
+// .work/gpui-component at the SHA pinned in cmd/run.ts. The runner is an
 // ordinary build target, so every flag build.ts takes works here too; the
 // binary prints its own report and exits nonzero on the first failure.
 //
@@ -40,7 +40,7 @@ if (flags.wasm) {
 const plat = platformFor(flags, die);
 checkBuildFlags(flags, plat, die);
 
-build({ names: ["tests"], plat, flags, fail: die, quiet: true });
+await build({ names: ["tests"], plat, flags, fail: die, quiet: true });
 
 // build.ts owns the out/ layout — Linux, macOS and a clang-cl build each keep
 // a tree of their own — so ask it where the binary landed rather than

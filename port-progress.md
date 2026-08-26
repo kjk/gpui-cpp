@@ -96,10 +96,10 @@ out\rel\story.exe Alert
 
 `cmd/build.ts` and `cmd/run.ts` dispatch by host: `build-windows.ts` / `run-windows.ts` on Windows, `build-linux.ts` / `run-linux.ts` on Linux, and `build-mac.ts` / `run-mac.ts` on macOS. On Linux the binaries land in `out/linux/rel/showcase` (no `.exe`) and need X11 + cairo + Pango; `bash cmd/ubuntu-install-deps.sh` installs the lot. macOS binaries land under `out/mac/`. From a Windows checkout, `bun cmd/wsl-run.ts -rel showcase` builds and runs the Linux binary under WSLg.
 
-Rust reference (slow first build; pulls Zed GPUI). Pins: [`cmd/versions.ts`](cmd/versions.ts). `bun cmd/build.ts` clones `.work/gpui-component` at that SHA if missing.
+Rust reference (slow first build; pulls Zed GPUI). Pins: the block at the top of [`cmd/run.ts`](cmd/run.ts). `bun cmd/build.ts` clones `.work/gpui-component` at that SHA if missing.
 
 ```
-bun cmd/versions.ts
+bun cmd/run.ts -versions
 cd .work\gpui-component
 cargo run -p system_monitor
 ```
@@ -6227,3 +6227,41 @@ copying the workaround and not the behaviour.
 None of this moved a pixel on any story page — sixteen interactive captures
 say so, the six anchors of the popover story's Anchor demo among them. The
 flip only fires where a popup does not fit, and none of the story's do.
+
+## One pair of scripts, two repos
+
+`gpui-cpp-dist` used to be two files. It is now a checkout you can build in:
+`gpui.h`, `gpui.cpp`, every example, `assets/`, `web/shell.html`, and
+`build.ts` + `run.ts` at the top level. `cmd/update-dist.ts` writes all of it,
+including the `.gitignore` that keeps `out/` and `.work/` out of the snapshot.
+
+The scripts are copied verbatim rather than forked, so both trees run the same
+code and there is no dist-only copy to drift. What differs is discovered at
+startup: `isDist` is `existsSync(scriptDir + "/gpui.h")`, and the repo root,
+the amalgam directory, the `out/` layout, the target list and the usage text
+all hang off it. That test is exact in both directions — the dist repo exists
+to carry a `gpui.h` beside those scripts, and this repo never has one there,
+because its amalgam goes to gitignored `.work/` precisely so nothing but
+`cmd/update-dist.ts` writes a published copy.
+
+Two couplings had to go before that could work.
+
+`build.ts` imported `cmd/update-dist.ts` for `buildDist`, which the dist repo
+does not have — and a static import of a missing module fails at load, before
+any check could say it was not needed. `ensureAmalgam` now imports it
+dynamically, on the one branch that amalgamates, which made it and `build()`
+async and rippled `await` out to the six call sites. In the snapshot there is
+nothing to amalgamate: the pair beside the script *is* the source.
+
+`run.ts` imported `cmd/versions.ts` for the upstream pins, so `-compare` could
+clone the Rust twin. `versions.ts` is gone and its contents live in `run.ts`,
+which is where the only thing that acts on them already was. `bun
+cmd/versions.ts` became `bun cmd/run.ts -versions`, and `cmd/compare-*.ts`
+import the pins from `run.ts` — which meant guarding `run.ts`'s main behind
+`import.meta.main`, since an import must not parse the importer's argv.
+
+`-compare` works in the snapshot too, and that is the reason `winapi.ts` and
+`mac-window-place.m` are copied alongside: they are how the two windows get
+placed on the two halves of the screen, and `run.ts` reaches for them by name.
+Both are found relative to the script's own directory now rather than at
+`<root>/cmd/`, which is the same fix as everything else here.

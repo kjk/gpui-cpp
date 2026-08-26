@@ -27,14 +27,57 @@
 // cmd/run.ts imports this module and builds through it rather than spawning
 // it, so the two can never disagree about a flag, an output directory or a
 // compiler command line.
+//
+// This script runs in two trees. Here it lives in cmd/ and the amalgam it
+// compiles is regenerated from src/** before every build. In gpui-cpp-dist it
+// lives at the top level beside a checked-in gpui.h + gpui.cpp, which are the
+// only sources that repo has, and there is no src/** and no update-dist.ts to
+// regenerate from. Everything that differs between the two hangs off `isDist`
+// below.
 
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { amalgamDir, amalgamIsWork, buildDist } from "./update-dist.ts";
 
-export const root = resolve(import.meta.dir, "..");
+/** The directory holding build.ts, run.ts and the rest of their siblings. */
+export const scriptDir = import.meta.dir;
+
+/**
+ * True in a gpui-cpp-dist checkout, false in gpui-cpp. gpui.h beside the
+ * script is the whole test, and it is a good one: it is the file the dist
+ * repo exists to carry, and this repo never has one there — its amalgam goes
+ * to gitignored .work/ precisely so nothing but cmd/update-dist.ts writes a
+ * published copy.
+ */
+export const isDist = existsSync(join(scriptDir, "gpui.h"));
+
+export const root = isDist ? scriptDir : resolve(scriptDir, "..");
 process.chdir(root);
+
+/**
+ * Repo-relative directory holding the gpui.h + gpui.cpp a build compiles:
+ * the top level in gpui-cpp-dist, gitignored .work/ here. GPUI_AMALGAM_DIR
+ * overrides both — cmd/update-dist.ts sets it to the dist checkout so the
+ * examples get built against the published copy as its correctness check.
+ */
+export function amalgamDir(): string {
+  return process.env.GPUI_AMALGAM_DIR ?? (isDist ? "." : ".work");
+}
+
+/** Whether the amalgam is this repo's own regenerated one, rather than a published pair. */
+export function amalgamIsWork(): boolean {
+  return amalgamDir() === ".work";
+}
+
+/**
+ * How to spell one of these scripts on a command line from the repo root:
+ * `cmd/run.ts` here, `run.ts` in gpui-cpp-dist. Only usage text needs it, but
+ * usage text that tells a reader to type a path that is not there is worse
+ * than no usage text.
+ */
+export function scriptPath(name: string): string {
+  return isDist ? name : `cmd/${name}`;
+}
 
 // ─── size reporting ───────────────────────────────────────────────────────
 
@@ -152,9 +195,10 @@ export function examplesFor(plat: Platform): string[] {
 /** Every name the build accepts: the examples plus the two console runners. */
 export function targetsFor(plat: Platform): string[] {
   const skip = skippedOn(plat);
-  return ["system_monitor", "app_assets", ...dirExamples, ...consoleTargets, ...simpleExamples].filter(
-    (n) => !skip.has(n),
-  );
+  // tests/ and bench/ are this repo's own suites, run against src/**. The
+  // snapshot carries the examples and not them, so there they are not targets.
+  const runners = isDist ? [] : [...consoleTargets];
+  return ["system_monitor", "app_assets", ...dirExamples, ...runners, ...simpleExamples].filter((n) => !skip.has(n));
 }
 
 export function isKnownTarget(name: string, plat: Platform): boolean {
@@ -253,7 +297,10 @@ export function outDirName(plat: Platform, f: BuildFlags): string {
   if (plat === "win" && f.clang) {
     name += "_clang";
   }
-  if (!amalgamIsWork()) {
+  // Only in this repo, where a plain build is the .work/ pair and a
+  // GPUI_AMALGAM_DIR build is a published one: two amalgams, two out/ trees.
+  // In gpui-cpp-dist every build is the published pair, so out/rel is out/rel.
+  if (!isDist && !amalgamIsWork()) {
     name += "_dist";
   }
   if (plat === "win") {
@@ -946,13 +993,20 @@ function spawnOrExit(tc: Toolchain, cmd: string[]): void {
 // ─── the amalgam ──────────────────────────────────────────────────────────
 
 /**
- * A plain build regenerates .work/gpui.h + .work/gpui.cpp and compiles that.
- * When GPUI_AMALGAM_DIR names another copy — cmd/update-dist.ts pointing at
- * the dist repo — the build compiles that copy exactly as it was published,
- * and does not rewrite it.
+ * A plain build in this repo regenerates .work/gpui.h + .work/gpui.cpp from
+ * src/** and compiles that. Two things take the other path and compile a pair
+ * exactly as it was written, without rewriting it: GPUI_AMALGAM_DIR naming
+ * another copy (cmd/update-dist.ts pointing at the dist repo), and being in
+ * gpui-cpp-dist at all, where the pair beside this script *is* the source.
+ *
+ * cmd/update-dist.ts is imported dynamically, and only on the branch that
+ * amalgamates: it does not exist in gpui-cpp-dist, and a static import of it
+ * would fail there at module load — before this function ever decides it has
+ * nothing to amalgamate.
  */
-export function ensureAmalgam(fail: (msg: string) => never): void {
-  if (amalgamIsWork()) {
+export async function ensureAmalgam(fail: (msg: string) => never): Promise<void> {
+  if (!isDist && amalgamIsWork()) {
+    const { buildDist } = await import("./update-dist.ts");
     const amalgam = buildDist({ outDir: ".work" });
     console.log(
       `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
@@ -1179,10 +1233,10 @@ export type BuildRequest = {
  * in its own process, so there is no second `bun cmd/build.ts` and no way for
  * the two to pick different flags.
  */
-export function build(req: BuildRequest): void {
+export async function build(req: BuildRequest): Promise<void> {
   const { names, plat, flags, fail } = req;
   const tc = findToolchain(plat, flags, fail);
-  ensureAmalgam(fail);
+  await ensureAmalgam(fail);
   const dir = outDir(plat, flags);
   if (flags.clean) {
     const abs = join(root, dir);
@@ -1229,7 +1283,12 @@ export function formatElapsed(ms: number): string {
 
 // ─── command line ─────────────────────────────────────────────────────────
 
-const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean] [-all] [<example>]
+const amalgamLine = isDist
+  ? `Compiles the examples against the gpui.h and gpui.cpp beside this script.`
+  : `Always writes .work/gpui.h and .work/gpui.cpp, then compiles examples
+against that pair.`;
+
+const usage = `Usage: bun ${scriptPath("build.ts")} [-rel|-dbg] [-asan] [-clang] [-wasm] [-clean] [-all] [<example>]
 
   -rel    release (default)
   -dbg    debug
@@ -1240,8 +1299,7 @@ const usage = `Usage: bun cmd/build.ts [-rel|-dbg] [-asan] [-clang] [-wasm] [-cl
   -clean  delete out/<dir>/ before building
   -all    build every example (amalgamation + compile); print total elapsed
 
-Always writes .work/gpui.h and .work/gpui.cpp, then compiles examples
-against that pair.
+${amalgamLine}
 
 Outputs:
   out/rel/         Windows release      out/linux/rel/  Linux
@@ -1249,7 +1307,7 @@ Outputs:
   out/rel_asan/    release + asan       out/wasm/rel/   browser
   out/rel_clang/   release, clang-cl
 
-A wasm build is a page, so serve it with: bun cmd/run.ts -wasm <example>`;
+A wasm build is a page, so serve it with: bun ${scriptPath("run.ts")} -wasm <example>`;
 
 function die(msg?: string): never {
   if (msg) {
@@ -1273,7 +1331,7 @@ function printExamples(plat: Platform, msg?: string): never {
   process.exit(1);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const started = performance.now();
   const flags = defaultBuildFlags();
   let all = false;
@@ -1324,10 +1382,10 @@ function main(): void {
     wanted = [name];
   }
 
-  build({ names: wanted, plat, flags, fail: die });
+  await build({ names: wanted, plat, flags, fail: die });
   console.log(`elapsed ${formatElapsed(performance.now() - started)}`);
 }
 
 if (import.meta.main) {
-  main();
+  await main();
 }

@@ -20,7 +20,7 @@ An earlier STL-based sketch exists in `../gpui/`. Ignore it for implementation. 
 
 Workspace crates: `gpui-component` (`crates/ui`), `gpui-base`, `gpui-component-assets`, `gpui-component-macros`, `story`, `fps`, `webview`.
 
-Pinned GPUI from `zed-industries/zed` (`gpui`, `gpui_platform`, `gpui_macros`). That pull brings Taffy, Blade, font-kit, cosmic-text/rustybuzz, and a huge Windows crate surface. Exact SHAs: [`cmd/versions.ts`](cmd/versions.ts).
+Pinned GPUI from `zed-industries/zed` (`gpui`, `gpui_platform`, `gpui_macros`). That pull brings Taffy, Blade, font-kit, cosmic-text/rustybuzz, and a huge Windows crate surface. Exact SHAs: [`cmd/run.ts`](cmd/run.ts).
 
 Taffy is the one of those we **do** port: `src/taffy/` is a C++ port of taffy
 0.12.2, the version that `Cargo.lock` resolves for `gpui`. See §4.3.

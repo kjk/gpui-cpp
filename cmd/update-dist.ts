@@ -15,7 +15,7 @@
 // gitignored, so an ordinary build never touches what gets published. `outDir`
 // is required for that reason — there is no default to fall into.
 //
-//   bun cmd/update-dist.ts              # sync, build, check, readme, publish
+//   bun cmd/update-dist.ts              # sync, build, check, copy, readme, publish
 //   bun cmd/update-dist.ts -no-publish  # everything but the commit and push
 //   bun cmd/update-dist.ts -work        # just the .work/ pair a build compiles
 //
@@ -30,7 +30,7 @@
 // all -- so a line in it is the line the `#line 1 "src/..."` marker above it
 // says, and a debugger or a compiler diagnostic lands where you expect.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "..");
@@ -42,20 +42,9 @@ export const srcRepoUrl = "https://github.com/kjk/gpui-cpp";
 export const srcBranch = "main";
 export const distRepoUrl = "https://github.com/kjk/gpui-cpp-dist.git";
 export const distRepoDir = ".work/gpui-cpp-dist";
+export const distBranch = "main";
 
 export type DistOutDir = ".work" | typeof distRepoDir;
-
-// The amalgam a build compiles against. cmd/update-dist.ts sets
-// GPUI_AMALGAM_DIR to the dist repo checkout, so the examples get built
-// against the published copy as its correctness check; every other build
-// leaves it unset and uses .work/, which it regenerates itself.
-export function amalgamDir(): string {
-  return process.env.GPUI_AMALGAM_DIR ?? ".work";
-}
-
-export function amalgamIsWork(): boolean {
-  return amalgamDir() === ".work";
-}
 
 export type Platform = "win" | "linux" | "mac" | "wasm";
 
@@ -76,6 +65,8 @@ export type BuildDistResult = {
   sourcePath: string;
   headerBytes: number;
   sourceBytes: number;
+  headerLines: number;
+  sourceLines: number;
   headerCount: number;
   /** Portable sources. */
   sourceCount: number;
@@ -676,11 +667,29 @@ export function buildDist(opts: BuildDistOpts): BuildDistResult {
     sourcePath: srcRel(sourcePath),
     headerBytes: Buffer.byteLength(headerText, "utf8"),
     sourceBytes: Buffer.byteLength(sourceText, "utf8"),
+    headerLines: countLines(headerText),
+    sourceLines: countLines(sourceText),
     headerCount: headerOrder.length + 1,
     sourceCount: cpps.length,
     platformSourceCount: platCpps.length,
     markdown,
   };
+}
+
+// A file's line count is how many lines an editor shows, so a trailing
+// newline does not add one.
+function countLines(text: string): number {
+  if (text === "") {
+    return 0;
+  }
+  const n = text.split("\n").length;
+  return text.endsWith("\n") ? n - 1 : n;
+}
+
+// 123,434 — thousands separated, so the two files' sizes can be compared at a
+// glance rather than counted digit by digit.
+function formatCount(n: number): string {
+  return n.toLocaleString("en-US");
 }
 
 function formatBytes(n: number): string {
@@ -713,75 +722,94 @@ function capture(cmd: string[], cwd?: string): string {
   return new TextDecoder().decode(r.stdout).trim();
 }
 
-// Clone the dist repo on the first run, fast-forward it after that. A failure
-// to reach GitHub is a warning, not the end: the amalgam still builds against
-// whatever is on disk.
+function cloneDistRepo(): void {
+  const abs = join(root, distRepoDir);
+  console.log(`cloning ${distRepoUrl} into ${distRepoDir}`);
+  mkdirSync(dirname(abs), { recursive: true });
+  if (run(["git", "clone", distRepoUrl, distRepoDir]) !== 0) {
+    die(`git clone ${distRepoUrl} failed`);
+  }
+}
+
+// Why the checkout has to be clean: this script writes the whole of it and
+// then commits whatever `git status` reports, so a stray file or a checked-out
+// branch that is not main would be published along with the snapshot. Nothing
+// in there is written by hand and nothing in there is worth keeping, so the
+// cheapest way back to a known state is to throw the directory away and clone
+// it again rather than to try to repair it.
 function syncDistRepo(): void {
   const abs = join(root, distRepoDir);
   if (!existsSync(join(abs, ".git"))) {
-    console.log(`cloning ${distRepoUrl} into ${distRepoDir}`);
-    mkdirSync(dirname(abs), { recursive: true });
-    if (run(["git", "clone", distRepoUrl, distRepoDir]) !== 0) {
-      die(`git clone ${distRepoUrl} failed`);
-    }
+    cloneDistRepo();
+    return;
+  }
+  const branch = capture(["git", "-C", distRepoDir, "rev-parse", "--abbrev-ref", "HEAD"]);
+  const dirty = capture(["git", "-C", distRepoDir, "status", "--porcelain"]);
+  if (branch !== distBranch || dirty !== "") {
+    const why = branch !== distBranch ? `on ${branch || "a detached HEAD"}, not ${distBranch}` : "has local changes";
+    console.log(`${distRepoDir} ${why}; removing it and cloning afresh`);
+    rmSync(abs, { recursive: true, force: true });
+    cloneDistRepo();
     return;
   }
   console.log(`updating ${distRepoDir}`);
   if (run(["git", "-C", distRepoDir, "pull", "--ff-only"]) !== 0) {
-    console.error(`warning: could not fast-forward ${distRepoDir}; using what is on disk`);
+    die(`could not fast-forward ${distRepoDir}`);
   }
 }
 
-// Where the prose above stops and the provenance below begins.
+// Everything the snapshot carries besides the two amalgamated files.
 //
-// Both halves are written from here every time. They used to not be: the head
-// was taken from the published file when there was one, and only the tail was
-// rewritten, so the prose could be edited in the dist repo and survive. What
-// it actually did was strand it — the published head still described a
-// vendored md4c this tree has not carried since src/markdown/ replaced it,
-// still said the pair builds "on all three" a wasm target later made four,
-// and still named cmd/build-dist.ts two renames ago. None of that could ever
-// be corrected from here, which is the opposite of what the file says about
-// itself in its first paragraph.
-const readmeMarker = "## This copy";
+// build.ts and run.ts land at the top level rather than in a cmd/ of their
+// own, and that placement is what tells them which tree they are in: both
+// resolve the repo root and the amalgam relative to their own directory, and
+// gpui.h beside them means "this is the snapshot". winapi.ts and
+// mac-window-place.m come along because run.ts -compare reaches for them by
+// name — they are how it puts the two windows on the two halves of the
+// screen. assets/ is what the examples load at runtime and web/ is the wasm
+// shell page, so without them app_assets and every -wasm build are broken.
+//
+// Each directory is emptied before it is written, so a file deleted here is
+// deleted there too rather than lingering as something that no longer
+// compiles.
+const distScripts = ["build.ts", "run.ts", "winapi.ts", "mac-window-place.m"];
+const distDirs = ["examples", "assets", "web"];
 
-const readmeHead = `# gpui-cpp-dist
+// The snapshot is a working checkout, not just two files: `bun run.ts -rel
+// showcase` writes out/, `-compare` clones .work/gpui-component, and a -wasm
+// build may install .emsdk/. None of that is the snapshot, and the publish
+// step commits whatever git reports, so it has to be ignored over there too.
+const distGitignore = `${[".work/", "out/", ".emsdk/", "*.obj", "*.exe", "*.pdb", "*.ilk", "*.exp", "*.lib"].join("\n")}\n`;
 
-The single-file build of [gpui-cpp](${srcRepoUrl}): \`gpui.h\` and \`gpui.cpp\`,
-amalgamated from that repo's \`src/**\` by its \`cmd/update-dist.ts\`. Nothing
-here is written by hand, so issues and pull requests belong in the source repo.
+function copyDistExtras(): void {
+  const abs = join(root, distRepoDir);
+  for (const dir of distDirs) {
+    const dst = join(abs, dir);
+    rmSync(dst, { recursive: true, force: true });
+    cpSync(join(root, dir), dst, { recursive: true });
+  }
+  for (const name of distScripts) {
+    cpSync(join(root, "cmd", name), join(abs, name));
+  }
+  writeFileSync(join(abs, ".gitignore"), distGitignore, "utf8");
+  console.log(`copied ${distDirs.map((d) => `${d}/`).join(", ")} and ${distScripts.join(", ")} into ${distRepoDir}`);
+}
 
-## Use it
+// readme-dist.md in this repo is the published readme. It is the one hand-
+// written file the snapshot carries, and it is written here rather than over
+// there: this script overwrites the dist copy every run, so an edit made in
+// the dist repo would be lost the next time without ever reaching a reader of
+// the source. `<checkin-sha1>` in it stands for the commit the snapshot was
+// cut from, and every occurrence of it is filled in on the way across.
+const shaPlaceholder = /<checkin-sha1>/g;
 
-Drop both files into your tree, \`#include "gpui.h"\` where you need the API,
-and compile \`gpui.cpp\` as one more source file. It is C++20, and the platform
-halves are already inside it behind \`GPUI_OS_*\` guards, so the same pair
-builds on all four:
-
-- **Windows** — \`cl /std:c++20 /EHsc /utf-8 /DUNICODE /D_UNICODE\`, static CRT;
-  links against the Win32, Direct2D and DirectWrite import libraries.
-- **Linux** — \`g++ -std=c++20\` with \`pkg-config --cflags --libs x11 cairo pangocairo\`.
-- **macOS** — \`clang++ -std=c++20 -x objective-c++\` with the Cocoa, CoreText and
-  IOKit frameworks. The file is Objective-C++ because the mac half is.
-- **wasm** — \`em++ -std=c++20\` with \`-sALLOW_MEMORY_GROWTH\`; the browser half
-  draws through Canvas2D and needs no library at all. em++ rather than emcc:
-  the link needs the C++ runtime and emcc leaves it out.
-
-No other dependencies, no build system, no STL containers.`;
-
-function writeDistReadme(sha: string, subject: string): string {
+function writeDistReadme(sha: string): string {
+  const src = join(root, "readme-dist.md");
+  const text = readFileSync(src, "utf8").replace(shaPlaceholder, sha);
+  if (!text.includes(sha)) {
+    die("readme-dist.md has no <checkin-sha1> to fill in");
+  }
   const abs = join(root, distRepoDir, "readme.md");
-  const short = sha.slice(0, 12);
-  const body = [
-    readmeMarker,
-    "",
-    `Amalgamated from gpui-cpp [\`${short}\`](${srcRepoUrl}/commit/${sha}) — ${subject}`,
-    "",
-    `[What has changed in gpui-cpp since](${srcRepoUrl}/compare/${sha}...${srcBranch})`,
-    "shows every commit this copy is behind by; if that page is empty, it is current.",
-    "",
-  ].join("\n");
-  const text = `${readmeHead}\n\n${body}`;
   writeFileSync(abs, text, "utf8");
   return srcRel(abs);
 }
@@ -861,9 +889,13 @@ function main(): void {
     syncDistRepo();
   }
   const built = buildDist({ outDir });
-  console.log(`wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${built.headerCount} headers)`);
   console.log(
-    `wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ` +
+    `wrote ${built.headerPath} (${formatBytes(built.headerBytes)}, ${formatCount(built.headerBytes)} bytes, ` +
+      `${formatCount(built.headerLines)} lines, ${built.headerCount} headers)`,
+  );
+  console.log(
+    `wrote ${built.sourcePath} (${formatBytes(built.sourceBytes)}, ${formatCount(built.sourceBytes)} bytes, ` +
+      `${formatCount(built.sourceLines)} lines, ` +
       `${built.sourceCount} + ${built.platformSourceCount} sources, markdown ${built.markdown})`,
   );
   if (check) {
@@ -872,9 +904,9 @@ function main(): void {
   if (outDir !== distRepoDir) {
     return;
   }
+  copyDistExtras();
   const sha = capture(["git", "rev-parse", "HEAD"]);
-  const subject = capture(["git", "log", "-1", "--pretty=%s"]);
-  const readme = writeDistReadme(sha, subject);
+  const readme = writeDistReadme(sha);
   console.log(`wrote ${readme} for ${sha.slice(0, 12)}`);
   if (capture(["git", "branch", "-r", "--contains", sha]) === "") {
     console.error(

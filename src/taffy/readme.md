@@ -6,7 +6,7 @@ defined by. Everything in `src/gpui` that has a box lays it out through here.
 
 The pinned version is the one `gpui-component`'s `Cargo.lock` resolves for
 `gpui`, which asks for `taffy = "=0.12.2"`. The pin lives in
-[`cmd/versions.ts`](../../cmd/versions.ts) (`taffy`) alongside the
+[`cmd/run.ts`](../../cmd/run.ts) (`taffy`) alongside the
 gpui-component and Zed GPUI pins, and moves when they do — see
 [`port-upstream.md`](../../port-upstream.md).
 
@@ -143,7 +143,7 @@ pins the first draws against that crate.
 
 ## Refreshing the port
 
-When `cmd/versions.ts` moves to a gpui-component whose `Cargo.lock` resolves a
+When the `gpuiComponent` pin moves to a checkin whose `Cargo.lock` resolves a
 different taffy, bump `taffy.version` there too and diff the crate:
 
 ```

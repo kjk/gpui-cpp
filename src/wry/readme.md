@@ -6,7 +6,7 @@ on, and therefore the crate that defines what a webview in a gpui window
 means. `src/webview/` is the gpui-side half — the port of `crates/webview`
 itself — and it is the only thing in the tree that calls in here.
 
-The pin lives in [`cmd/versions.ts`](../../cmd/versions.ts) (`wry`) next to
+The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`wry`) next to
 the gpui-component, Zed GPUI, taffy and markdown pins, and moves the same way
 — see [`port-upstream.md`](../../port-upstream.md).
 

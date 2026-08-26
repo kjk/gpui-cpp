@@ -7,7 +7,7 @@ This is a port of [markdown-rs](https://github.com/wooorm/markdown-rs)
 returns into its `MdNode` tree, which is what
 `crates/ui/src/text/format/markdown.rs` does with `ast_to_node`.
 
-The pin lives in [`cmd/versions.ts`](../../cmd/versions.ts) (`markdown`)
+The pin lives in [`cmd/run.ts`](../../cmd/run.ts) (`markdown`)
 alongside the gpui-component, Zed GPUI and taffy pins, and moves when they do
 — see [`port-upstream.md`](../../port-upstream.md).
 
@@ -188,7 +188,7 @@ cell.
 
 ## Refreshing the port
 
-When `cmd/versions.ts` moves to a gpui-component whose `Cargo.lock` resolves a
+When the `gpuiComponent` pin moves to a checkin whose `Cargo.lock` resolves a
 different `markdown`, bump `markdown.version` there too and diff the crate:
 
 ```

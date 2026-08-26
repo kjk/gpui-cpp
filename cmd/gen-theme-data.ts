@@ -10,7 +10,7 @@
 //
 //   bun cmd/gen-theme-data.ts
 //
-// It needs `.work/gpui-component` at the pinned SHA (`bun cmd/versions.ts`).
+// It needs `.work/gpui-component` at the pinned SHA (`bun cmd/run.ts -versions`).
 
 import { join } from "path";
 import { readFileSync, writeFileSync } from "fs";

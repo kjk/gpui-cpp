@@ -58,7 +58,7 @@ flags.debug = debug;
 const plat = platformFor(flags, die);
 const outDir = buildOutDir(plat, flags);
 
-function run(): string {
+async function run(): Promise<string> {
   const target = rest[0];
   if (!target) {
     die("usage: bun cmd/vec-log.ts [-dbg] <tests|bench|shot|EXAMPLE> [args...]");
@@ -70,7 +70,7 @@ function run(): string {
 
   let cmd: string[];
   if (target === "tests" || target === "bench") {
-    build({ names: [target], plat, flags, fail: die, quiet: true });
+    await build({ names: [target], plat, flags, fail: die, quiet: true });
     cmd = [join(root, outDir, outFileName(plat, target)), ...rest.slice(1)];
   } else if (target === "shot") {
     // shot.ts builds, opens the window, takes the picture and kills it, which
@@ -442,7 +442,7 @@ function report(recs: VecRec[], kind: string, policies: Policy[], label: string)
   }
 }
 
-const logPath = readOnly ? resolve(root, readOnly) : run();
+const logPath = readOnly ? resolve(root, readOnly) : await run();
 const recs = await parse(logPath);
 console.log(`log: ${logPath}  (${fmtN(recs.length)} vecs)`);
 report(recs, "V", vecPolicies, "Vec  — heap, reallocating");

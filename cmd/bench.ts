@@ -47,7 +47,7 @@ if (flags.wasm) {
 const plat = platformFor(flags, die);
 checkBuildFlags(flags, plat, die);
 
-build({ names: ["bench"], plat, flags, fail: die, quiet: true });
+await build({ names: ["bench"], plat, flags, fail: die, quiet: true });
 
 // build.ts owns the out/ layout — Linux, macOS and a clang-cl build each keep
 // a tree of their own — so ask it where the binary landed rather than

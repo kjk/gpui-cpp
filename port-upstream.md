@@ -1,14 +1,14 @@
 # Upstream pins
 
-**Source of truth for which checkin we are porting: [`cmd/versions.ts`](cmd/versions.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`, `wry.version`). `bun cmd/build.ts`, `bun cmd/run.ts`, and `bun cmd/versions.ts` clone or reset `.work/gpui-component` to that SHA.
+**Source of truth for which checkin we are porting: the pin block at the top of [`cmd/run.ts`](cmd/run.ts)** (`gpuiComponent.sha`, `zedGpui.sha`, `taffy.version`, `markdown.version`, `wry.version`). `bun cmd/build.ts` and `bun cmd/run.ts -versions` clone or reset `.work/gpui-component` to that SHA.
 
-This file is the ingest playbook. Diff Rust from the SHA in `cmd/versions.ts`, not `HEAD`.
+This file is the ingest playbook. Diff Rust from the pinned SHA, not `HEAD`.
 
-When bumping a pin: change `gpuiComponent.sha` (and `zedGpui` if `Cargo.lock` moved) in `cmd/versions.ts`, run `bun cmd/versions.ts`, `git log OLD..NEW` on the crates we ported, apply the C++ equivalent.
+When bumping a pin: change `gpuiComponent.sha` (and `zedGpui` if `Cargo.lock` moved) in `cmd/run.ts`, run `bun cmd/run.ts -versions`, `git log OLD..NEW` on the crates we ported, apply the C++ equivalent.
 
 ## gpui-component (what we port)
 
-See `gpuiComponent` in `cmd/versions.ts` for repo, SHA, date, subject, and crate versions.
+See `gpuiComponent` in `cmd/run.ts` for repo, SHA, date, subject, and crate versions; `bun cmd/run.ts -versions` prints them.
 
 | | |
 | --- | --- |
@@ -42,7 +42,7 @@ again when the pin moves: `cp .work/gpui-component/README.md assets/story/`.
 Ingest a newer checkin:
 
 ```
-bun cmd/versions.ts
+bun cmd/run.ts -versions
 cd .work/gpui-component
 git fetch origin
 git log --oneline <gpuiComponent.sha>..origin/main -- crates/base crates/ui crates/story crates/base/examples/showcase examples
@@ -51,7 +51,7 @@ git diff <gpuiComponent.sha> origin/main -- <path>
 
 ## Zed GPUI (reference only — not a crate we port)
 
-`Cargo.lock` pins GPUI from Zed. Fields live in `zedGpui` in `cmd/versions.ts`. Read that snapshot when matching runtime behavior (text measure cache, DirectWrite shaping, window). Do **not** treat later Zed `main` as the spec.
+`Cargo.lock` pins GPUI from Zed. Fields live in `zedGpui` in `cmd/run.ts`. Read that snapshot when matching runtime behavior (text measure cache, DirectWrite shaping, window). Do **not** treat later Zed `main` as the spec.
 
 Local cargo checkout (after a rust build): `%USERPROFILE%\.cargo\git\checkouts\zed-*\<zedGpui.sha prefix>\`
 
@@ -71,7 +71,7 @@ a reference: every box in this tree goes through it.
 grep -A3 'name = "taffy"' .work/gpui-component/Cargo.lock
 ```
 
-If it did, set `taffy.version` in `cmd/versions.ts` to the new one and diff the
+If it did, set `taffy.version` in `cmd/run.ts` to the new one and diff the
 crate between the two versions:
 
 ```
@@ -117,7 +117,7 @@ application that chooses the mini parser needs it.
 grep -A3 'name = "markdown"' .work/gpui-component/Cargo.lock
 ```
 
-If it did, set `markdown.version` in `cmd/versions.ts` to the new one and diff
+If it did, set `markdown.version` in `cmd/run.ts` to the new one and diff
 the crate between the two versions:
 
 ```
@@ -154,7 +154,7 @@ itself and drives this one exactly as `gpui-wry` drives the crate.
 grep -A3 'name = "lb-wry"' .work/gpui-component/Cargo.lock
 ```
 
-If it did, set `wry.version` in `cmd/versions.ts` to the new one and diff the
+If it did, set `wry.version` in `cmd/run.ts` to the new one and diff the
 crate between the two versions. `lb-wry` is published from a fork, so the
 crate tarball is the thing to compare rather than a git tag:
 
