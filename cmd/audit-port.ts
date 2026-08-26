@@ -87,7 +87,6 @@ const partialUi = new Set([
   "select",
   "setting",
   "sidebar",
-  "tab",
   "table",
   "text",
   "theme",

@@ -161,6 +161,11 @@ The important non-mechanical mappings are encoded in the audit:
 - UI Sheet carries `SheetSettings` in the active Theme and exposes the pinned
   title/footer/child, overlay-close, resizable and style-refinement surface;
   Base Sheet remains the owner of focus and modal dismissal ordering.
+- UI Tab preserves the source split between an independently buildable `Tab`
+  and `TabBar` (with `Tabs` retained as a compatibility alias). Tabs accept
+  arbitrary prefix/content/suffix children, local callbacks and refinements;
+  the bar owns callback precedence, viewport scrolling, overflow, selection
+  motion, suffix spacing and the source theme tokens.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes

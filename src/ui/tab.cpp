@@ -166,96 +166,247 @@ float TabInnerRadius(TabVariant v, UiSize size, float radius, float radiusLg) {
     return r > 0 ? r : 0;
 }
 
-Tabs* Tabs::New(Ctx* cx) {
+Tab* Tab::New(Ctx* cx) {
+    return New(cx, {});
+}
+Tab* Tab::New(Ctx* cx, Str label) {
+    Tab* tab = ArenaNew<Tab>(cx->a);
+    tab->a = cx->a;
+    tab->cx = cx;
+    tab->label = label;
+    return tab;
+}
+Tab* Tab::Label(Str value) {
+    label = value;
+    return this;
+}
+Tab* Tab::AriaLabel(Str value) {
+    ariaLabel = value;
+    return this;
+}
+Tab* Tab::Icon(IconName value) {
+    icon = value;
+    return this;
+}
+Tab* Tab::Prefix(El* value) {
+    prefix = value;
+    return this;
+}
+Tab* Tab::Suffix(El* value) {
+    suffix = value;
+    return this;
+}
+Tab* Tab::Child(El* value) {
+    if (value) {
+        children.Append(a, value);
+    }
+    return this;
+}
+Tab* Tab::Disabled(bool value) {
+    disabled = value;
+    return this;
+}
+Tab* Tab::Selected(bool value) {
+    selected = value;
+    return this;
+}
+Tab* Tab::OnClick(Listener value) {
+    onClick = value;
+    return this;
+}
+Tab* Tab::WithVariant(TabVariant value) {
+    variant = value;
+    return this;
+}
+Tab* Tab::Outline() {
+    return WithVariant(TabVariant::Outline);
+}
+Tab* Tab::Pill() {
+    return WithVariant(TabVariant::Pill);
+}
+Tab* Tab::Segmented() {
+    return WithVariant(TabVariant::Segmented);
+}
+Tab* Tab::Underline() {
+    return WithVariant(TabVariant::Underline);
+}
+Tab* Tab::WithSize(UiSize value) {
+    size = value;
+    return this;
+}
+Tab* Tab::Flex1() {
+    flex1 = true;
+    return this;
+}
+Tab* Tab::MaxWidth(float value) {
+    maxWidth = value;
+    return this;
+}
+Tab* Tab::TabBarPrefix(bool value) {
+    tabBarPrefix = value;
+    return this;
+}
+Tab* Tab::Refine(const Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleSet |= fields;
+    return this;
+}
+
+static El* FindTabById(El* root, Str id) {
+    if (!root) {
+        return nullptr;
+    }
+    if (StrSame(root->id, id)) {
+        return root;
+    }
+    for (El* child = root->first; child; child = child->next) {
+        if (El* found = FindTabById(child, id)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+El* Tab::IntoEl() {
+    // Use the same rendering path as a TabBar so the state tables cannot
+    // drift. The returned node is the tab itself; the two temporary layout
+    // wrappers remain harmless frame-arena allocations.
+    TabBar* bar = TabBar::New(cx, StrL("standalone-tab"));
+    bar->items.Append(a, *this);
+    bar->variant = variant;
+    bar->size = size;
+    bar->maxWidth = maxWidth;
+    El* root = bar->IntoEl();
+    return FindTabById(root, StrL("0"));
+}
+
+TabBar* TabBar::New(Ctx* cx) {
     return New(cx, StrL("tabs"));
 }
-Tabs* Tabs::New(Ctx* cx, Str id) {
+TabBar* TabBar::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    Tabs* t = ArenaNew<Tabs>(a);
+    TabBar* t = ArenaNew<TabBar>(a);
     t->a = a;
     t->cx = cx;
     t->id = id;
+    t->lastEmptySpace = Div(a)->W(12)->Shrink0();
     return t;
 }
-Tabs* Tabs::Tab(Str label) {
+TabBar* TabBar::Child(component::Tab* child) {
+    if (child) {
+        items.Append(a, *child);
+    }
+    return this;
+}
+TabBar* TabBar::Child(Str label) {
+    return Tab(label);
+}
+TabBar* TabBar::Tab(Str label) {
     return Tab(label, IconName::None, false);
 }
-Tabs* Tabs::Tab(Str label, IconName icon, bool disabled) {
-    TabItem it;
+TabBar* TabBar::Tab(Str label, IconName icon, bool disabled) {
+    component::Tab it;
+    it.a = a;
+    it.cx = cx;
     it.label = label;
     it.icon = icon;
     it.disabled = disabled;
     items.Append(a, it);
     return this;
 }
-Tabs* Tabs::W(float v) {
+TabBar* TabBar::W(float v) {
     width = v;
     return this;
 }
-Tabs* Tabs::WFill() {
+TabBar* TabBar::WFill() {
     width = kFill;
     return this;
 }
-Tabs* Tabs::Flex1() {
+TabBar* TabBar::Flex1() {
     if (items.len > 0) {
         items[items.len - 1].flex1 = true;
     }
     return this;
 }
-Tabs* Tabs::AriaLabel(Str label) {
+TabBar* TabBar::AriaLabel(Str label) {
     if (items.len > 0) {
         items[items.len - 1].ariaLabel = label;
     }
     return this;
 }
-Tabs* Tabs::Disabled(int ix, bool v) {
+TabBar* TabBar::Disabled(int ix, bool v) {
     if (ix >= 0 && ix < items.len) {
         items[ix].disabled = v;
     }
     return this;
 }
-Tabs* Tabs::Selected(int i) {
+TabBar* TabBar::Selected(int i) {
     selected = i;
     return this;
 }
-Tabs* Tabs::OnChange(Listener fn) {
+TabBar* TabBar::OnChange(Listener fn) {
     onChange = fn;
     return this;
 }
-Tabs* Tabs::Variant(TabVariant v) {
+TabBar* TabBar::OnClick(Listener fn) {
+    return OnChange(fn);
+}
+TabBar* TabBar::Variant(TabVariant v) {
     variant = v;
     return this;
 }
-Tabs* Tabs::Outline() {
+TabBar* TabBar::WithVariant(TabVariant v) {
+    return Variant(v);
+}
+TabBar* TabBar::Outline() {
     return Variant(TabVariant::Outline);
 }
-Tabs* Tabs::Pill() {
+TabBar* TabBar::Pill() {
     return Variant(TabVariant::Pill);
 }
-Tabs* Tabs::Segmented() {
+TabBar* TabBar::Segmented() {
     return Variant(TabVariant::Segmented);
 }
-Tabs* Tabs::Underline() {
+TabBar* TabBar::Underline() {
     return Variant(TabVariant::Underline);
 }
-Tabs* Tabs::Size(UiSize v) {
+TabBar* TabBar::Size(UiSize v) {
     size = v;
     return this;
 }
-Tabs* Tabs::MaxWidth(float v) {
+TabBar* TabBar::WithSize(UiSize v) {
+    return Size(v);
+}
+TabBar* TabBar::MaxWidth(float v) {
     maxWidth = v;
     return this;
 }
-Tabs* Tabs::Prefix(El* e) {
+TabBar* TabBar::Prefix(El* e) {
     prefix = e;
     return this;
 }
-Tabs* Tabs::Suffix(El* e) {
+TabBar* TabBar::Suffix(El* e) {
     suffix = e;
     return this;
 }
-Tabs* Tabs::Menu(bool v) {
+TabBar* TabBar::LastEmptySpace(El* e) {
+    lastEmptySpace = e;
+    return this;
+}
+TabBar* TabBar::Menu(bool v) {
     menu = v;
+    return this;
+}
+TabBar* TabBar::TrackScroll(int scrollKey, float offset, Listener fn) {
+    trackScroll = true;
+    scrollId = scrollKey;
+    scrollX = offset;
+    onScroll = fn;
+    return this;
+}
+TabBar* TabBar::Refine(const Style& value, uint32_t fields) {
+    StyleApplyFields(&style, value, fields);
+    styleSet |= fields;
     return this;
 }
 
@@ -390,7 +541,7 @@ static TabStyle TabDisabled(TabVariant v, bool selected, const Theme& th) {
 // TabBar::menu's "more" button: an xsmall ghost with a caret, whose dropdown
 // is the tab list itself. The rows are the tabs in order, so the index the
 // menu confirms is the index the bar's on_click wants.
-static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
+static El* TabMenuButton(TabBar* tabs, const Theme&, float) {
     Ctx* cx = tabs->cx;
     // The button and its menu are built inside the bar, so the bar's name is
     // what tells one strip's overflow menu from another's.
@@ -402,7 +553,7 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
     }
     PopupMenu* menu = PopupMenu::New(cx, menuId, st)->Scrollable();
     int i = -1;
-    for (const TabItem& it : tabs->items) {
+    for (const component::Tab& it : tabs->items) {
         i++;
         // A tab with no label is an icon-only one; Rust puts the icon in the
         // row, and falls back to "Unnamed" when there is neither.
@@ -429,7 +580,17 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
         ->IntoEl();
 }
 
-El* Tabs::IntoEl() {
+struct TabBarScrollState {
+    float offset = 0;
+
+    static void OnScroll(TabBarScrollState* self, Ctx* cx,
+                         const ScrollEvent* ev) {
+        self->offset = ev->offsetX;
+        Notify(cx);
+    }
+};
+
+El* TabBar::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     float h = TabHeight(variant, size);
     float innerH = TabInnerHeight(variant, size);
@@ -451,7 +612,7 @@ El* Tabs::IntoEl() {
     if (variant == TabVariant::Tab) {
         bar->Bg(th.tokens.tabBar);
     } else if (variant == TabVariant::Segmented) {
-        bar->Bg(th.tokens.tabBar);
+        bar->Bg(th.tokens.tabBarSegmented);
     }
     if (barPadX > 0) {
         bar->PadX(barPadX);
@@ -461,6 +622,7 @@ El* Tabs::IntoEl() {
     if (variant == TabVariant::Tab || variant == TabVariant::Underline) {
         bar->BorderB(1, th.border);
     }
+    bar->Refine(style, styleSet);
     if (prefix) {
         bar->Child(prefix);
     }
@@ -468,7 +630,34 @@ El* Tabs::IntoEl() {
     // h_flex().id("tabs").flex_1().overflow_x_hidden(): the strip gives way
     // before the bar does, so a suffix and the overflow menu keep their place
     // when there are more tabs than fit.
-    El* strip = Div(a)->FlexRow()->ItemsCenter()->Flex1()->H(kFill)->ClipX();
+    El* viewport = Div(a)
+                       ->Id(StrL("tabs"))
+                       ->FlexRow()
+                       ->ItemsCenter()
+                       ->Flex1()
+                       ->H(kFill)
+                       ->ClipX();
+    float activeScrollX = scrollX;
+    int activeScrollId = scrollId;
+    Listener activeOnScroll = onScroll;
+    if (!trackScroll && cx->win) {
+        Entity<TabBarScrollState> state = ElementStateEntity<TabBarScrollState>(
+            cx, id, StrL("gpui::component::TabBarScrollState"));
+        if (TabBarScrollState* value = state.Get(cx)) {
+            activeScrollX = value->offset;
+        }
+        activeScrollId = HashClickId(id);
+        activeOnScroll = ListenTo(state, &TabBarScrollState::OnScroll);
+    }
+    El* strip = Div(a)
+                    ->Id(StrL("tabs-inner"))
+                    ->FlexRow()
+                    ->ItemsCenter()
+                    ->W(kFill)
+                    ->H(kFill)
+                    ->ScrollX(activeScrollX)
+                    ->ScrollId(activeScrollId)
+                    ->OnScroll(activeOnScroll);
     if (gap > 0) {
         strip->Gap(gap);
     }
@@ -501,9 +690,9 @@ El* Tabs::IntoEl() {
         sliding = (dx < -0.5f || dx > 0.5f) || (dw < -0.5f || dw > 0.5f);
     }
     int i = -1;
-    for (const TabItem& item : items) {
+    for (const component::Tab& item : items) {
         i++;
-        bool on = i == selected;
+        bool on = selected >= 0 ? i == selected : item.selected;
         TabStyle st = item.disabled      ? TabDisabled(variant, on, th)
                       : (on && !sliding) ? TabSelected(variant, th)
                                          : TabNormal(variant, th);
@@ -513,28 +702,37 @@ El* Tabs::IntoEl() {
             st.fg = TabSelected(variant, th).fg;
         }
         Str tabId = StrDup(a, fmt("%d", i));
+        Listener click = onChange.IsValid() ? ListenerArg(onChange, i)
+                                            : item.onClick;
         El* tab = gpui::Tab::New(
                       cx, tabId, item.disabled,
-                      item.disabled ? Listener{} : ListenerArg(onChange, i),
+                      item.disabled ? Listener{} : click,
                       on, item.ariaLabel.s ? item.ariaLabel : item.label,
                       i + 1, items.len)
                       ->FlexRow()
                       ->ItemsCenter()
                       ->JustifyCenter()
+                      ->Shrink0()
                       ->H(kFill)
+                      ->Gap(4)
                       ->Radius(radius);
+        // The instance refinement is applied before selected/disabled state,
+        // the same order gpui-base::Tab resolves its StateStyle.
+        StyleApplyFields(&tab->style, item.style, item.styleSet);
         if (st.bg.a) {
             tab->Bg(st.bg);
         }
-        // The first folder tab drops its left border, so the strip does not
-        // open with a line down its edge.
+        // A caller with no prefix can opt out of the first folder tab's left
+        // edge, matching Rust's tab_bar_prefix(false) refinement.
         if (st.borderT > 0 && st.borderL > 0 && st.borderR > 0 &&
             st.borderB > 0) {
             // Edges::all: a ring rather than four rules, so the radius the
             // tab asked for is what the stroke follows.
             tab->Border(st.borderT, st.borderColor);
         } else {
-            if (st.borderL > 0 && !(i == 0 && variant == TabVariant::Tab)) {
+            if (st.borderL > 0 &&
+                !(i == 0 && variant == TabVariant::Tab &&
+                  !item.tabBarPrefix)) {
                 tab->BorderL(st.borderL, st.borderColor);
             }
             if (st.borderR > 0) {
@@ -578,13 +776,19 @@ El* Tabs::IntoEl() {
             if (padX > 0) {
                 inner->PadX(padX);
             }
-            El* label = TextEl(a, item.label)->Font(font)->Fg(st.fg);
-            if (maxWidth > 0) {
+            if (item.label.s) {
+                El* label = TextEl(a, item.label)->Font(font)->Fg(st.fg);
+                if (maxWidth > 0) {
                 // Text takes its natural width, so capping a tab means
                 // giving the label a box it is allowed to shrink inside.
-                label->MaxW(maxWidth - padX * 2)->Truncate();
+                    float labelMax = maxWidth - padX * 2;
+                    label->MaxW(labelMax > 0 ? labelMax : 0)->Truncate();
+                }
+                inner->Child(label);
             }
-            inner->Child(label);
+            for (El* child : item.children) {
+                inner->Child(child);
+            }
         }
         // Tab::flex_1(). Upstream wraps every tab of a variant that has an
         // indicator — Segmented, Pill, Underline — in a
@@ -601,7 +805,21 @@ El* Tabs::IntoEl() {
             tab->Flex1();
             inner->W(kFill);
         }
+        if (item.prefix) {
+            El* prefixWrap = Div(a)->Child(item.prefix);
+            if (maxWidth > 0) {
+                prefixWrap->Shrink0();
+            }
+            tab->Child(prefixWrap);
+        }
         tab->Child(inner);
+        if (item.suffix) {
+            El* suffixWrap = Div(a)->Child(item.suffix);
+            if (maxWidth > 0) {
+                suffixWrap->Shrink0();
+            }
+            tab->Child(suffixWrap);
+        }
         if (maxWidth > 0 && item.icon == IconName::None) {
             tab->MaxW(maxWidth);
         }
@@ -610,6 +828,9 @@ El* Tabs::IntoEl() {
             tab->BoundsOut(selBox);
         }
         strip->Child(tab);
+    }
+    if ((suffix || menu) && lastEmptySpace) {
+        strip->Child(lastEmptySpace);
     }
     if (sliding && stripBox) {
         // The indicator itself, which is whatever the selected tab would have
@@ -639,7 +860,8 @@ El* Tabs::IntoEl() {
             strip->Child(ind);
         }
     }
-    bar->Child(strip);
+    viewport->Child(strip);
+    bar->Child(viewport);
     if (menu) {
         bar->Child(TabMenuButton(this, th, font));
     }

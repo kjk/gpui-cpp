@@ -7262,3 +7262,31 @@ swallows without closing. UI Sheet is full: the audit moves to 77 full, 44
 partial, 8 adapters and 2 exclusions with 329 unresolved spellings. MSVC
 release passes 19,606 checks, the release story build passes, and the open
 right-sheet page was visually smoke-tested.
+
+## Tab and TabBar recover their separate source roles
+
+The themed tab module previously compressed Rust's independently buildable
+`Tab` and its owning `TabBar` into one `Tabs` builder and a private string
+record. That hid per-tab prefix/suffix/content elements and callbacks, made the
+selection implicitly controlled at index zero, used the ordinary tab-bar
+token for segmented bars, and left the strip without the source's clipped,
+tracked horizontal viewport. The first folder tab also dropped its left edge
+by default even though upstream's `tab_bar_prefix` default retains it.
+
+`Tab` is now a public arena-backed value with label/aria, icon, arbitrary
+prefix/content/suffix elements, local selection and disabled state, callback,
+variant/size/width controls and style refinement. `TabBar` is the primary
+source-facing owner (`Tabs` remains a compatibility alias): it accepts those
+values directly, defaults to uncontrolled selection, gives a group callback
+precedence over local callbacks, retains the selected spring indicator and
+overflow menu, and adds the source viewport/inner-strip structure with keyed
+or caller-tracked scroll state. Its optional last-empty-space child, bar
+refinement and segmented theme token are preserved as well.
+
+Tests cover content order, aria projection, group/local callback precedence,
+disabled suppression, 40 tab values, explicit scrolling, spacer/refinement
+retention and the standalone Tab path. UI Tab is full: the audit moves to 78
+full, 43 partial, 8 adapters and 2 exclusions, with the existing 329
+unresolved spellings all belonging to other partial modules. MSVC release
+passes 19,626 checks, the release story build passes, and all five tab variants
+plus dynamic tabs were visually smoke-tested.

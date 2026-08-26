@@ -150,6 +150,145 @@ static void TwoBarsHaveTwoOverflowMenus() {
     EntityDropAll(&app);
 }
 
+namespace {
+struct TabCallbackRecorder {
+    int child = 0;
+    int group = 0;
+    int scroll = 0;
+
+    static void Child(TabCallbackRecorder* self, Ctx*, const ClickEvent*) {
+        self->child++;
+    }
+    static void Group(TabCallbackRecorder* self, Ctx*, const ClickEvent*,
+                      intptr_t ix) {
+        self->group = (int)ix + 1;
+    }
+    static void Scroll(TabCallbackRecorder* self, Ctx*, const ScrollEvent*) {
+        self->scroll++;
+    }
+};
+} // namespace
+
+static void SourceNamedTabAndTabBarKeepContentAndCallbackRules() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Entity<TabCallbackRecorder> recorder =
+        EntityNewState<TabCallbackRecorder>(&app);
+    Ctx cx = {&app, win, a, recorder.id};
+
+    El* prefix = Div(a)->Id(StrL("tab-prefix"));
+    El* content = Div(a)->Id(StrL("tab-content"));
+    El* suffix = Div(a)->Id(StrL("tab-suffix"));
+    component::Tab* item = component::Tab::New(&cx)
+                               ->Label(StrL("First"))
+                               ->AriaLabel(StrL("First accessible"))
+                               ->Prefix(prefix)
+                               ->Child(content)
+                               ->Suffix(suffix)
+                               ->OnClick(Listen(&cx,
+                                                &TabCallbackRecorder::Child));
+    TabBar* bar = TabBar::New(&cx, StrL("source-tabs"))
+                      ->Child(item)
+                      ->OnClick(Listen(&cx, &TabCallbackRecorder::Group));
+    El* root = bar->IntoEl();
+    El* tab = FindNamedTab(root, "0");
+    utassert(tab != nullptr);
+    utassert(tab && StrSame(tab->accessibility.label,
+                            StrL("First accessible")));
+    El* prefixWrap = tab ? tab->first : nullptr;
+    El* inner = prefixWrap ? prefixWrap->next : nullptr;
+    El* suffixWrap = inner ? inner->next : nullptr;
+    utassert(prefixWrap && prefixWrap->first == prefix);
+    utassert(inner && inner->last == content);
+    utassert(suffixWrap && suffixWrap->first == suffix);
+    utassert(!suffixWrap || suffixWrap->next == nullptr);
+
+    ClickEvent click = {};
+    ListenerCall(&app, win, tab->listener, &click);
+    TabCallbackRecorder* seen = recorder.Get(&app);
+    utassert(seen && seen->child == 0 && seen->group == 1);
+
+    TabBar* childOnly = TabBar::New(&cx, StrL("child-only"))->Child(item);
+    El* childTab = FindNamedTab(childOnly->IntoEl(), "0");
+    ListenerCall(&app, win, childTab->listener, &click);
+    utassert(seen && seen->child == 1 && seen->group == 1);
+
+    item->Disabled();
+    El* disabled = FindNamedTab(
+        TabBar::New(&cx, StrL("disabled"))->Child(item)->OnClick(
+            Listen(&cx, &TabCallbackRecorder::Group))->IntoEl(),
+        "0");
+    utassert(disabled && !disabled->listener.IsValid());
+
+    WindowMotionFree(win);
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
+static void TabBarRetainsStyleSpacingScrollAndUnboundedChildren() {
+    App app;
+    Window* win = new Window();
+    win->app = &app;
+    Arena* a = ArenaNew();
+    Entity<TabCallbackRecorder> recorder =
+        EntityNewState<TabCallbackRecorder>(&app);
+    Ctx cx = {&app, win, a, recorder.id};
+
+    component::Tab* item = component::Tab::New(&cx, StrL("Many"))
+                               ->MaxWidth(90)
+                               ->Selected();
+    for (int i = 0; i < 40; i++) {
+        item->Child(Div(a));
+    }
+    Style refinement = {};
+    refinement.opacity = 0.5f;
+    El* empty = Div(a)->Id(StrL("last-empty"))->W(19);
+    TabBar* bar = TabBar::New(&cx, StrL("complete-tabs"))
+                      ->Child(item)
+                      ->Pill()
+                      ->Menu()
+                      ->LastEmptySpace(empty)
+                      ->TrackScroll(77, 15,
+                                    Listen(&cx, &TabCallbackRecorder::Scroll))
+                      ->Refine(refinement, StyleFieldOpacity);
+    El* root = bar->IntoEl();
+    utassert(root->refineSet == StyleFieldOpacity);
+    El* strip = FindNamedTab(root, "tabs-inner");
+    utassert(strip != nullptr);
+    utassert(strip && strip->style.overflowX == Overflow::Scroll);
+    utassertnear(strip ? strip->scrollX : 0, 15.f);
+    utassert(strip && strip->scrollId == 77);
+    utassert(strip && strip->onScroll.IsValid());
+    utassert(strip && strip->last == empty);
+
+    El* rendered = FindNamedTab(root, "0");
+    utassert(rendered && rendered->accessibility.selected);
+    El* inner = rendered ? rendered->first : nullptr;
+    int innerChildren = 0;
+    for (El* child = inner ? inner->first : nullptr; child;
+         child = child->next) {
+        innerChildren++;
+    }
+    // Visible label followed by every arbitrary child.
+    utassert(innerChildren == 41);
+
+    component::Tab* standalone =
+        component::Tab::New(&cx, StrL("Standalone"))->Outline()->Selected();
+    El* standaloneEl = standalone->IntoEl();
+    utassert(standaloneEl && StrSame(standaloneEl->id, StrL("0")));
+    utassert(standaloneEl && standaloneEl->accessibility.selected);
+
+    WindowMotionFree(win);
+    WindowKeyedFree(win);
+    ArenaDelete(a);
+    delete win;
+    EntityDropAll(&app);
+}
+
 void TestTab() {
     TestSuite("tab");
     UnderlineIsTallerThanEveryOtherVariant();
@@ -158,4 +297,6 @@ void TestTab() {
     OnlyTheStripsThatNeedGapsHaveThem();
     OnlySegmentedRoundsItsBar();
     TwoBarsHaveTwoOverflowMenus();
+    SourceNamedTabAndTabBarKeepContentAndCallbackRules();
+    TabBarRetainsStyleSpacingScrollAndUnboundedChildren();
 }
