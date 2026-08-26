@@ -1408,7 +1408,7 @@ int GpuiMain(int argc, char** argv) {
     self->editor.mode.tabSize = 4;
     self->editor.mode.lineNumber = true;
     self->editor.mode.folding = true;
-    InputSetPlaceholder(&self->editor, StrL("Open a file from the tree..."));
+    InputSetPlaceholder(&self->editor, StrL("Enter your code here..."));
     // The completion provider, which is what makes the menu open as a word is
     // typed and on `.`.
     self->editor.completionProvider = &CompleteFrom;
@@ -1436,8 +1436,17 @@ int GpuiMain(int argc, char** argv) {
     self->editor.semanticTokensProvider = &SemanticTokensFor;
     self->editor.semanticLegend = kMarkerLegend;
     self->editor.nSemanticLegend = kNMarkers;
-    // The file the example opens with, which is its own source.
-    OpenFile(self, "examples/editor.cpp");
+    // default_value(include_str!("./fixtures/test.rs")): the document the
+    // example opens with, vendored beside the completion items out of the
+    // same upstream fixtures directory. It is the one that exercises the
+    // colour provider -- its last line names four -- and it is what makes
+    // `bun cmd/run.ts -compare editor` put the same text in both windows.
+    TempStr fixture = AssetsLoadTextTemp(StrL("test.rs"));
+    if (fixture.len > 0) {
+        InputSetValue(&self->editor, Str(fixture.s, fixture.len));
+    }
+    self->language = StrL("rs");
+    Lint(self);
     self->editor.focused = true;
     // TitleBar::window_options(): the example owns its title bar, so the
     // window is opened without the system caption on the platforms whose
