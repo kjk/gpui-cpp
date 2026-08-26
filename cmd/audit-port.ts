@@ -52,7 +52,6 @@ const partialBase = new Set([
   "dialog",
   "dock",
   "focus_trap",
-  "geometry",
   "global_state",
   "input",
   "macos_accessibility",
@@ -330,6 +329,17 @@ const declarationMappings: Record<string, DeclarationMapping> = {
     targets: ["src/gpui/gpui.h"],
   },
   "base/lib.rs::fn init": { spellings: ["BaseInit"] },
+  "base/geometry.rs::struct Edges": {
+    spellings: ["Edges"],
+    targets: ["src/gpui/gpui.h", "src/base/geometry.h"],
+  },
+  "base/geometry.rs::trait AxisExt": {
+    spellings: ["AxisIsHorizontal", "AxisIsVertical"],
+  },
+  "base/geometry.rs::trait LengthExt": {
+    collapse:
+      "C++ builders accept resolved DIP floats and pass relative/auto lengths directly to taffy, so no retained gpui::Length exists to extend",
+  },
   "base/history.rs::trait HistoryItem": {
     collapse:
       "C++ History<I> requires Version, SetVersion and operator== directly on its POD-friendly item type",

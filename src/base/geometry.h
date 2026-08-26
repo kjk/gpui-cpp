@@ -30,8 +30,34 @@ inline bool SideIsLeft(Side s) {
     return s == Side::Left;
 }
 
+inline bool SideIsRight(Side s) {
+    return s == Side::Right;
+}
+
 inline bool AxisIsHorizontal(Axis a) {
     return a == Axis::Horizontal;
+}
+
+inline bool AxisIsVertical(Axis a) {
+    return a == Axis::Vertical;
+}
+
+inline bool PlacementIsHorizontal(Placement p) {
+    return p == Placement::Left || p == Placement::Right;
+}
+
+inline bool PlacementIsVertical(Placement p) {
+    return p == Placement::Top || p == Placement::Bottom;
+}
+
+inline Axis PlacementAxis(Placement p) {
+    return PlacementIsHorizontal(p) ? Axis::Horizontal : Axis::Vertical;
+}
+
+// Edges<T>::all. The runtime's Edges is the one retained DIP instantiation
+// of Rust's serializable generic wrapper.
+inline Edges EdgesAll(float value) {
+    return Edges::New(value, value, value, value);
 }
 
 } // namespace gpui

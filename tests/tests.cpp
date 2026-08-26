@@ -120,6 +120,7 @@ int GpuiMain(int argc, char** argv) {
     TestHttp();
     TestArenaStr();
     TestFmt();
+    TestGeometry();
     TestExecutor();
     TestAppGlobals();
     TestBuilderCapacity();

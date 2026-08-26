@@ -117,6 +117,7 @@ void TestDrawOps();
 void TestHttp();
 void TestArenaStr();
 void TestFmt();
+void TestGeometry();
 void TestExecutor();
 void TestAppGlobals();
 void TestBuilderCapacity();

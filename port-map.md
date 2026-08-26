@@ -123,6 +123,9 @@ The important non-mechanical mappings are encoded in the audit:
 - Base Sheet owns its pinned host focus trap, transparent overlay capture,
   cutoff, Escape binding and request-then-notify close order. Its listeners
   persist in keyed state after the frame builder is consumed.
+- Base Geometry's placement, side, axis and uniform-edge helpers cover the
+  pinned extension vocabulary. The runtime owns the DIP-only `Edges` alias;
+  the audit records the absent retained `Length` as a deliberate taffy seam.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -153,7 +156,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 349 declaration spellings still reported in partial modules,
+  2. Review the 346 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

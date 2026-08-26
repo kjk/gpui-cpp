@@ -6909,3 +6909,27 @@ listeners, pin callback order and Escape propagation, and cover non-closable,
 non-interactive and cutoff construction. Base Sheet is full: the audit is 67
 full, 54 partial, 8 adapters and 2 exclusions with 349 unresolved spellings.
 MSVC release passes 19,123 checks.
+
+## Geometry's extension surface is explicit and complete
+
+Base Geometry already held `Placement`, `Side`, `SideIsLeft` and
+`AxisIsHorizontal`, but it lacked the other halves of those public extension
+traits and the behaviors on Placement itself. It now exposes right/vertical
+tests, both placement orientation tests, placement-to-axis conversion and
+the uniform `EdgesAll` constructor. A focused suite ports the pinned
+base-compat assertions and covers every enum value and edge.
+
+The three declarations that do not belong physically in `geometry.h` are now
+explicit mappings rather than unexplained partial results. `Edges` names the
+runtime-owned DIP alias of the shared `base::RectF`; Rust's generic exists for
+serialization and the C++ tree has only the float instantiation. `AxisExt`
+projects into its two free functions because C++ cannot add members to the
+runtime enum from Base. `LengthExt` is a deliberate collapse: C++ builders
+already accept resolved DIP floats and send relative or auto sizes straight
+to taffy, so there is no retained `gpui::Length` value on which a conversion
+trait could operate. Adding one solely to convert it back before layout would
+duplicate the existing seam without increasing behavior.
+
+Base Geometry is full. The audit moves to 68 full, 53 partial, 8 adapters and
+2 exclusions, with 346 unresolved spellings. MSVC release passes 19,145
+checks.
