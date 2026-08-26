@@ -6152,3 +6152,78 @@ sub-threshold pixels), carets, the skeleton, the spinner, the introduction,
 and animations caught mid-flight. The rule that works is: `big=0` is noise;
 anything with `big>0` gets re-shot on both builds, and if it survives, shot
 again with the animation settled.
+
+## Three things the caller was holding for the widget
+
+`use_keyed_state` is the whole of this section. The port has had it since
+`ElementStateEntity` landed, but a handful of widgets still asked the
+application for state that upstream keys by the element's own id — which
+means the application had to hold a member, and hand it back, for no other
+reason than the widget's signature.
+
+**The resizable group.** `ResizablePanelGroup::render` is
+`self.state.unwrap_or(window.use_keyed_state(self.id, .., default()))`: the
+state is optional, and a caller holds one only when it means to resize the
+panels itself. The Rust story is the measure of that — it keeps exactly one
+`ResizableState`, `programmatic_state`, for the group its four buttons
+drive, and every other group on that page is `h_resizable("id")` and
+nothing more. The port's story kept five, the showcase page one, and the
+html and markdown examples one each; none of the four read a size back.
+`Resizable::New(cx, id)` — the bare `Div(a)->Id(id)` that no caller had
+ever asked for, and that upstream has no counterpart to — is what the
+default collided with, and it went too.
+
+**The settings pane**, three times over. Its state is
+`use_keyed_state(self.id, ..)` (setting/settings.rs:366). Its search field
+is built *inside* that state, placeholder and all, so every pane has one
+and there is nothing for a caller to decide about it — the port had
+`Searchable(&input, onFocus)`, which meant an application had to hold an
+InputState and wire the focus itself to get a search box. And its typed
+fields are `use_keyed_state("string-state-{page}-{group}-{item}", ..,
+InputState::new(..).default_value(value))`, one input per row: the port's
+`InputField`/`NumberField` took the InputState, and now take the value the
+field starts at. The port needs no `format!()` for that key, because the row
+already pushes an IdScope — `field` under it folds the page, the group and
+the item in by itself, which is the id stack doing what upstream's string
+does by hand.
+
+The story held four InputStates and two entities across the two widgets and
+read none of them back. It holds one, the group it resizes from buttons.
+
+## Only the dropdowns flip
+
+Reading `popup.rs` for the anchor state turned up something better. Every
+anchored surface upstream is a `Popup` — the Popover is
+`Popup::new(self.id, trigger)`, and so are the HoverCard, the color picker
+and the base showcase's select and combobox — and `Popup::render` places
+its content with `Positioner::corner`, which clamps into the window and
+never takes the opposite side. An anchor names a corner of the trigger; a
+popup that jumped to the other one would not be at the corner it was asked
+for. The menus reach the same behaviour by a different road,
+`anchored().snap_to_window_with_margin(px(8.))`, which also clamps.
+
+`Positioner::side`, which flips, is reached from exactly two places in the
+tree: `tooltip.rs`, and `dropdown_positioner` in ui/popover.rs — the shared
+placement for Select, Combobox and DatePicker.
+
+The port had it the other way up. `PopupPlaceContent` flipped for every
+caller, on the strength of the dropdowns needing it, so a popover or a
+hover card with no room below its trigger opened above it where upstream
+would have clamped it against the edge. The flip is `DropdownPlaceContent`
+now — the port's `dropdown_positioner` — and the three dropdowns are what
+reach it, Combobox through the Select that builds it.
+
+That also settles two functions that had been ported and never called.
+`PopupResolvedCorner` and `PositionCorner` are the corner placement, and
+with the flip gone `PopupPlaceContent` *is* the corner placement — resolved
+by the layout engine against the trigger's box rather than by arithmetic
+against a remembered one. Which is the same reason the port needs no
+`PopupAnchorState`: upstream keys the trigger's bounds and draws no content
+until it has captured them once, because its positioner runs at paint from
+a number it has to have kept. Nothing here is a frame behind, so there is
+nothing to wait for, and a state that only ever said "not yet" would be
+copying the workaround and not the behaviour.
+
+None of this moved a pixel on any story page — sixteen interactive captures
+say so, the six anchors of the popover story's Anchor demo among them. The
+flip only fires where a popup does not fit, and none of the story's do.
