@@ -999,9 +999,19 @@ export function formatCmd(cmd: string[]): string {
     .join(" ");
 }
 
-/** The `> ` marks a line as something to run, not something that happened. */
+/**
+ * The `> ` marks a line as something to run, not something that happened.
+ *
+ * The tool is printed as its bare name -- `cl.exe`, not the 96 characters of
+ * install path in front of it, which is most of the line and the same on every
+ * one of them. That is still the command you can run, because the environment
+ * these lines want is one where the tool is on PATH: a Developer Command
+ * Prompt for cl.exe, a shell with cargo installed for cargo. The full path is
+ * printed once, by whoever knows which tool this is.
+ */
 export function printCmd(cmd: string[]): void {
-  console.log(`> ${formatCmd(cmd)}`);
+  const [exe, ...rest] = cmd;
+  console.log(`> ${formatCmd([basename(exe ?? ""), ...rest])}`);
 }
 
 function spawnOrExit(tc: Toolchain, cmd: string[]): void {
@@ -1276,13 +1286,14 @@ export type BuildRequest = {
 export async function build(req: BuildRequest): Promise<void> {
   const { names, plat, flags, fail } = req;
   const tc = findToolchain(plat, flags, fail);
-  // Every compile and link below is echoed with a `> `, and the two things a
-  // reader needs to run one by hand are not on the line itself: where it runs
-  // from, and -- on Windows -- the INCLUDE/LIB/PATH this script read out of
-  // vcvars, which a Developer Command Prompt exports and a plain shell does
-  // not. Said once here rather than on every line.
+  // Every compile and link below is echoed with a `> `, and what those lines
+  // leave out is said once here rather than on every one of them: where they
+  // run from, which compiler the bare name on them is, and -- on Windows --
+  // the INCLUDE/LIB/PATH this script read out of vcvars, which a Developer
+  // Command Prompt exports and a plain shell does not.
   const from = `run from ${root}`;
   console.log(Object.keys(tc.env).length > 0 ? `${from}, in a shell with the MSVC environment set` : from);
+  console.log(`Using ${tc.exe}`);
   await ensureAmalgam(fail);
   const dir = outDir(plat, flags);
   if (flags.clean) {

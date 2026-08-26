@@ -729,9 +729,11 @@ function buildRustTwin(target: string, debug: boolean): string {
     );
   }
   const args = rustBuildArgs(target, debug);
-  // The Rust build runs in the spec tree, not in this repo, which is the one
-  // thing the echoed line cannot say for itself.
+  // Two things the echoed line cannot say for itself: it runs in the spec
+  // tree rather than in this repo, and its `cargo` is whichever one was
+  // found -- off PATH, or the one in ~/.cargo/bin that is not always on it.
   console.log(`Building rust, from ${rustRoot}`);
+  console.log(`Using ${cargo}`);
   printCmd([cargo, ...args]);
   const rc = run([cargo, ...args], rustRoot);
   if (rc !== 0) {
