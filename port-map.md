@@ -6,26 +6,36 @@ from the pinned `crates/base` and `crates/ui` module trees into `src/base` and
 
 ```
 bun cmd/audit-port.ts
-bun cmd/audit-port.ts -surface  # print every upstream re-export/test mapping
+bun cmd/audit-port.ts -surface  # print every declaration/re-export/test mapping
+bun cmd/audit-port.ts -missing-declarations # heuristic C++ spelling report
 ```
 
 The audit always checks the pinned SHA and every declared C++ destination. If
 `.work/gpui-component` exists it reads the complete Rust source trees, not
-just `lib.rs`: all 272 `pub use` statements and all 1,047 real tests are
-inventoried. Every item must belong to a classified module, every tested
-module names existing C++ suites that own its behavioral coverage, and stable
-content hashes fail when an export or test is added, removed or renamed at the
-pinned checkout. (`#[test]` in a doc comment is deliberately not a test.) This
-makes a pin update introduce explicit surface and test-mapping decisions
-rather than silently widening the gap. `-surface` prints the item-by-item
-status and destinations.
+just `lib.rs`: all 762 module-level public declarations, all 272 `pub use`
+statements and all 1,047 real tests are inventoried. Every item must belong to
+a classified module, every tested module names existing C++ suites that own
+its behavioral coverage, and stable content hashes fail when a declaration,
+export or test is added, removed or renamed at the pinned checkout. (`#[test]`
+in a doc comment is deliberately not a test.) This makes a pin update
+introduce explicit surface and test-mapping decisions rather than silently
+widening the gap. `-surface` prints the item-by-item status and destinations.
+
+`-missing-declarations` additionally reports declarations in modules marked
+full whose Rust spelling (or a direct PascalCase conversion for a free
+function) is absent from that module's C++ targets. It is deliberately a
+diagnostic, not a pass/fail rule: Rust permits a public item under a private
+submodule, and traits and functions frequently project into a C++ builder or
+function table under another spelling. Each reported family still needs an
+explicit spelling or deliberate-collapse decision before this comparison can
+become a hard gate.
 
 Statuses mean:
 
 - `full`: no concrete structural or behavioral gap is currently known in the
-  module surface used by upstream examples and stories. All public re-export
-  statements are inventoried, but this is not yet a claim that every public
-  declaration inside every module has a one-to-one C++ spelling.
+  module surface used by upstream examples and stories. All module-level
+  public declarations and re-export statements are inventoried, but this is
+  not yet a claim that each has a one-to-one C++ spelling.
 - `partial`: a destination exists but its public surface, ownership, runtime
   placement, accessibility, or tests still differ.
 - `adapter`: the repository's C++ runtime or hard dependency rules require a
@@ -92,12 +102,13 @@ The important non-mechanical mappings are encoded in the audit:
   provider reached from `WM_GETOBJECT`. Roles, names, bounds, focus and
   Invoke, Toggle, Value, RangeValue, ExpandCollapse and SelectionItem patterns
   resolve current frame nodes; semantic and focus changes raise native events.
-- the audit inventories every public re-export and upstream test below module
-  granularity. Base currently contributes 113 re-export statements and 569
-  tests across 46 tested module families; UI contributes 159 and 478 across
-  38. Test destinations are validated even when CI deliberately omits the
-  Rust reference checkout, while the pinned content hashes are checked
-  whenever that checkout is present.
+- the audit inventories every module-level public declaration, public
+  re-export and upstream test below module granularity. Base currently
+  contributes 359 declarations, 113 re-export statements and 569 tests across
+  46 tested module families; UI contributes 403, 159 and 478 across 38. Test
+  destinations are validated even when CI deliberately omits the Rust
+  reference checkout, while the pinned content hashes are checked whenever
+  that checkout is present.
 
 ## Next fidelity order
 
@@ -106,13 +117,13 @@ The important non-mechanical mappings are encoded in the audit:
      container patterns. Windows already has the core fragment/action export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Extend the surface inventory from re-exports to every public declaration,
-     using explicit spelling overrides where Rust traits or snake_case
-     functions project into C++ builders.
+  2. Turn the public-declaration spelling diagnostic into a hard gate, adding
+     explicit mappings where Rust traits or snake_case functions project into
+     C++ builders and marking deliberate private-submodule collapses.
 
   The theme layering item is complete: `src/ui/theme.h` owns the component
   palette, `src/base/theme.h` owns Base's semantic/behavior theme, and GPUI
   consumes only the projected `RuntimeStyle` fields its renderer needs.
 
 `port-progress.md` remains the detailed behavioral log while the declaration
-inventory makes the ledger symbol-complete.
+inventory and spelling report expose the next symbol-level work.

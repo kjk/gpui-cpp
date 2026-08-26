@@ -6663,3 +6663,23 @@ hit-test forwarder alone does not export the tree. Windows still exposes
 editable text through Value rather than UIA Text, and tables through roles and
 row/column metadata rather than Grid/Table and selection-container patterns;
 those are adapter-depth gaps, not omissions in the portable semantic tree.
+
+## The surface gate sees declarations, not only re-exports
+
+The pinned-source inventory now records every module-level `pub struct`,
+`enum`, `trait`, `fn`, `type`, `const`, `static` and `mod` below both crate
+roots: 359 declarations in Base and 403 in UI, beside the existing 272
+re-export statements and 1,047 tests. Their paths, kinds and names feed stable
+content hashes, so an upstream pin cannot silently add or remove a public
+declaration even when `lib.rs` itself is unchanged. `-surface` shows the C++
+module destination for each declaration.
+
+`-missing-declarations` is the next-depth diagnostic. For modules currently
+called full it reports a Rust name that is absent from their C++ targets,
+accepting the direct PascalCase form of a snake_case free function. It is not
+yet a failure because two classes of result require judgment: `pub` inside a
+private Rust submodule is not necessarily exported API, and a trait or helper
+often becomes a builder convention or function table here. Making this hard
+requires an explicit spelling/collapse table; until then the digest is the
+hard addition/removal gate and the module status/reason remains the fidelity
+claim.

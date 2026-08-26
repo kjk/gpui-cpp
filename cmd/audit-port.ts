@@ -254,7 +254,7 @@ const testTargets: Record<string, string[]> = {
   "ui/virtual_list": ["tests/VirtualListTests.cpp"],
 };
 
-type SurfaceKind = "pub-use" | "test";
+type SurfaceKind = "declaration" | "pub-use" | "test";
 type SurfaceItem = {
   crate: CrateName;
   kind: SurfaceKind;
@@ -294,6 +294,22 @@ function surfaceItems(crate: CrateName, src: string): SurfaceItem[] {
         items.push({ crate, kind: "pub-use", path: rel, name: statement.replace(/\s+/g, " ") });
         continue;
       }
+      // rustfmt leaves module-level declarations at column zero. Restricting
+      // this inventory to that column deliberately excludes public fields and
+      // impl methods: this gate tracks the crate/module surface, while method
+      // spelling is often a C++ builder convention rather than a free symbol.
+      const declaration = lines[i]!.match(
+        /^pub\s+(?:(?:unsafe|async|const)\s+|extern\s+"[^"]+"\s+)*(struct|enum|trait|fn|type|const|static|mod)\s+(?:r#)?([A-Za-z_][A-Za-z0-9_]*)/,
+      );
+      if (declaration) {
+        items.push({
+          crate,
+          kind: "declaration",
+          path: rel,
+          name: `${declaration[1]} ${declaration[2]}`,
+        });
+        continue;
+      }
       if (!/^\s*#\[(?:gpui::)?test(?:\([^\]]*\))?\]\s*$/.test(lines[i]!)) continue;
       let name = "";
       for (let j = i + 1; j < lines.length && j <= i + 20; j++) {
@@ -323,10 +339,12 @@ function surfaceDigest(items: SurfaceItem[], kind: SurfaceKind): string {
 // hash and forces this ledger to be reviewed with the pin update.
 const surfacePins: Record<CrateName, Record<SurfaceKind, { count: number; sha256: string }>> = {
   base: {
+    declaration: { count: 359, sha256: "3daafbdba646766d1b93c6c82980ba0bf184ce7dad4136506738caa14fb847d4" },
     "pub-use": { count: 113, sha256: "56ab53255f342a78397752cf9ed85e4a4e9cfb53f453ffb988ecbccc3bbc8123" },
     test: { count: 569, sha256: "085c090f4bfe3010b0a1afd9a55b9202f8edf5b013a52da55defa6998e9d8708" },
   },
   ui: {
+    declaration: { count: 403, sha256: "79655b6e6fe0e68186d279827d50a1babc1447a4a811ac41756307e5e4d1ec03" },
     "pub-use": { count: 159, sha256: "88c4d5ccda0c8301b0ee1bb07a352ec0f51feef66043a73711d63c879603b37f" },
     test: { count: 478, sha256: "94908e35450b3fb1c72567b42241cf2c36d54b3d38921bfeb1f6ef7177e277ff" },
   },
@@ -374,9 +392,10 @@ if (existsSync(rustRoot)) {
 
   const byModule = new Map(entries.map((entry) => [`${entry.crate}/${entry.module}`, entry]));
   const verboseSurface = Bun.argv.includes("-surface");
+  const missingDeclarations = Bun.argv.includes("-missing-declarations");
   for (const crate of ["base", "ui"] as const) {
     const items = surfaceItems(crate, join(rustRoot, crate, "src"));
-    for (const kind of ["pub-use", "test"] as const) {
+    for (const kind of ["declaration", "pub-use", "test"] as const) {
       const selected = items.filter((item) => item.kind === kind);
       const expected = surfacePins[crate][kind];
       const digest = surfaceDigest(items, kind);
@@ -416,6 +435,20 @@ if (existsSync(rustRoot)) {
           errors.push(`${key}: upstream test ${item.name} has no C++ test destination`);
         }
       }
+      if (item.kind === "declaration" && missingDeclarations && status === "full") {
+        const [kind, name] = item.name.split(" ");
+        if (kind !== "mod") {
+          const cpp = targets.map((target) => readFileSync(join(root, target), "utf8")).join("\n");
+          const pascal = name!
+            .split("_")
+            .map((part) => part.length ? part[0]!.toUpperCase() + part.slice(1) : "")
+            .join("");
+          const spellings = kind === "fn" ? [name!, pascal] : [name!];
+          if (!spellings.some((spelling) => new RegExp(`\\b${spelling}\\b`).test(cpp))) {
+            console.log(`${crate} missing ${item.path} :: ${item.name} -> ${targets.join(", ")}`);
+          }
+        }
+      }
       if (verboseSurface) {
         console.log(
           `${crate} ${item.kind} ${item.path} :: ${item.name} -> ` +
@@ -427,10 +460,11 @@ if (existsSync(rustRoot)) {
     for (const key of Object.keys(testTargets).filter((key) => key.startsWith(`${crate}/`))) {
       if (!testedModules.has(key)) errors.push(`${key}: test destination ledger has no upstream tests`);
     }
+    const declarations = items.filter((item) => item.kind === "declaration").length;
     const uses = items.filter((item) => item.kind === "pub-use").length;
     const tests = items.filter((item) => item.kind === "test").length;
     console.log(
-      `port surface: ${crate} ${uses} pub-use statements and ${tests} tests ` +
+      `port surface: ${crate} ${declarations} declarations, ${uses} pub-use statements and ${tests} tests ` +
         `across ${testedModules.size} tested modules`,
     );
   }
