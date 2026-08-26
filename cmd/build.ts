@@ -1041,22 +1041,37 @@ function spawnOrExit(tc: Toolchain, cmd: string[]): void {
  * would fail there at module load — before this function ever decides it has
  * nothing to amalgamate.
  */
+/** How big the pair a build is about to compile came out: the two files together. */
+function amalgamSize(bytes: number, lines: number): string {
+  return `${formatHumanBytes(bytes)}, ${lines.toLocaleString("en-US")} lines`;
+}
+
 export async function ensureAmalgam(fail: (msg: string) => never): Promise<void> {
   if (!isDist && amalgamIsWork()) {
     const { buildDist } = await import("./update-dist.ts");
-    const amalgam = buildDist({ outDir: ".work" });
+    const a = buildDist({ outDir: ".work" });
     console.log(
-      `amalgam ${amalgam.headerPath} + ${amalgam.sourcePath} ` +
-        `(${amalgam.headerCount} headers, ${amalgam.sourceCount} + ${amalgam.platformSourceCount} sources, markdown ${amalgam.markdown})`,
+      `amalgam ${a.headerPath} + ${a.sourcePath} ` +
+        `(${a.headerCount} headers, ${a.sourceCount} + ${a.platformSourceCount} sources, markdown ${a.markdown}, ` +
+        `${amalgamSize(a.headerBytes + a.sourceBytes, a.headerLines + a.sourceLines)})`,
     );
     return;
   }
+  // A published pair reports the same two numbers, read off the files: they
+  // are the whole of what is being compiled, so how big it is belongs here
+  // even when nothing generated it this run.
+  let bytes = 0;
+  let lines = 0;
   for (const f of ["gpui.h", "gpui.cpp"]) {
-    if (!existsSync(join(root, amalgamDir(), f))) {
+    const abs = join(root, amalgamDir(), f);
+    if (!existsSync(abs)) {
       fail(`missing ${amalgamDir()}/${f}`);
     }
+    const text = readFileSync(abs, "utf8");
+    bytes += Buffer.byteLength(text, "utf8");
+    lines += text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
   }
-  console.log(`amalgam ${amalgamDir()}/gpui.h + ${amalgamDir()}/gpui.cpp (as published)`);
+  console.log(`amalgam ${amalgamDir()}/gpui.h + ${amalgamDir()}/gpui.cpp (as published, ${amalgamSize(bytes, lines)})`);
 }
 
 // ─── assets ───────────────────────────────────────────────────────────────
