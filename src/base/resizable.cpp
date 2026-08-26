@@ -327,7 +327,12 @@ El* Resizable::IntoEl() {
         }
         // No clip: the handle straddles the boundary, four DIPs either side,
         // which is where Rust puts it and what a clip would cut off.
-        El* box = Div(a)->FlexCol()->Shrink0();
+        // `div().id(("resizable-panel", panel_ix))`: the panel names itself,
+        // which is what the handle drawn inside it folds under.
+        El* box = Div(a)
+                      ->Id(StrDup(a, fmt("resizable-panel-%d", i)))
+                      ->FlexCol()
+                      ->Shrink0();
         // What the handle is measured against: the panel's own size along
         // the axis. Across it the handle fills the panel — the group's
         // measured box would do as well, but not on the frame that measures
@@ -381,7 +386,9 @@ El* Resizable::IntoEl() {
             El* handle =
                 Div(a)
                     ->Absolute()
-                    ->Click(HashClickId(StrDup(a, fmt("%s-handle-%d", id, i))))
+                    // `resize_handle(("resizable-handle", ix), axis)`, drawn
+                    // from inside the panel it follows.
+                    ->PathClick(StrDup(a, fmt("resizable-handle-%d", i)))
                     ->OnMouseDown(ListenerArg(down, i))
                     ->OnDrag(kResizeDrag, i)
                     ->OnDragMove(drag)
