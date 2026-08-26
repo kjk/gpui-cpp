@@ -23,7 +23,7 @@ The dependency goes one way and stops early: this directory includes `base.h`
 and its own headers, and nothing else in the tree. `Str`, `Arena`, `ArenaVec`
 and `Alloc` are `base::`, which is the namespace the SumatraPDF base lives in
 for exactly this reason; no gpui header is included here and no `gpui::` name
-appears in the code. `cmd/build-dist.ts` fails the build if that stops being
+appears in the code. `cmd/update-dist.ts` fails the build if that stops being
 true, because the amalgam compiles all of `src/` as one translation unit and
 would not otherwise notice. Anything this port comes to need from the tree
 belongs in `base`, or it does not belong to this port.

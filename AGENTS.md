@@ -119,7 +119,7 @@ rediscover it.
 1. **No STL data structures.** C headers and the C++ headers SumatraPDF already uses (`cstdint`, `cstring`, `new`, `algorithm` for `std::min`/`std::max`, `utility`) are allowed. Do not introduce `std::string`, `std::vector`, `std::unique_ptr`, `std::optional`, `std::function`, `std::unordered_map`.
 2. **Use SumatraPDF base types.** `Str`, `Vec<T>`, `Arena`, `StrBuilder`, `fmt()`, `uint8_t`/`int32_t`/`uint32_t`/`int64_t`/`uint64_t`, `Func0`/`Func1`. Source of truth: `C:\Users\kjk\src\sumatrapdf\src\base`. A curated copy lives in `src/base.h` / `src/base.cpp` so this tree builds without that checkout, and it is `namespace base`. Everything else in `src/` lives in `namespace gpui` (themed widgets in `gpui::component`), which takes the base in with a using-directive, so gpui code writes `Str` unqualified and `gpui::Str` still names it from outside. Examples `#include "gpui.h"` and `using namespace gpui;`.
 
-   The two ported crates are the reason for the split. `src/taffy` and `src/markdown` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/build-dist.ts` fails the build if that stops being true. Keep it that way when adding to either — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
+   The two ported crates are the reason for the split. `src/taffy` and `src/markdown` are ports of crates that have never heard of gpui, so they are written against `base.h` and nothing else: they include no gpui header and name no gpui symbol, and `cmd/update-dist.ts` fails the build if that stops being true. Keep it that way when adding to either — anything one of them needs from the tree belongs in `base`, or it does not belong to them.
 3. **Three platforms, no third-party C++ libraries.** Windows: MSVC `cl.exe` on PATH, static CRT (`/MT` / `/MTd`) — no VC++ redistributable DLLs — plus WinHTTP for `src/sys/http_win.cpp`. Linux: g++ or clang++ with the system X11, cairo and Pango, found through `pkg-config`, and libcurl the same way when it is installed (the one soft dependency: without it the tree still builds and only loses remote images). macOS: clang++ with Cocoa, Core Graphics, Core Text, IOKit and Foundation's NSURLSession from the system SDK. `bun cmd/build.ts` picks the toolchain by host. Do not add CMake, vcpkg, or a C++ package manager. There is no vendored library and no `ext/`: what Rust gets from a crate this tree either writes itself or ports (`src/taffy`, `src/markdown`). Vendoring one would need a bar nothing has cleared: no build system of its own, no transitive dependencies, and a reason neither of those two routes works.
 4. **POD-friendly C++.** Prefer structs with explicit ownership. `Vec<T>` is memcpy/POD only. Heap strings are `Str` owned by `StrDup` / `StrFree` or an `Arena`. Frame UI trees allocate from a per-frame `Arena` and are discarded, not destructed as a graph of C++ objects.
 5. **No exceptions, no RTTI needed.** COM (`Direct2D` / `DirectWrite`) uses HRESULT checks, not C++ exceptions.
@@ -302,12 +302,12 @@ char** argv)`; the runtime provides `wWinMain` / `main`. Key codes are the
 `Key*` constants in `Gpui.h` (the Win32 `VK_*` values, which the X11 window
 maps keysyms onto), and the clipboard is `ClipboardSetText`.
 
-`cmd/build-dist.ts` amalgamates `src/` into two files:
+`cmd/update-dist.ts` amalgamates `src/` into two files:
 `gpui.h` and `gpui.cpp`. Both are the same on every platform. `.work/` is gitignored and is what
 every build compiles — `bun cmd/build.ts`, `cmd/test.ts` and CI all go through
 it. The published copy is a repo of its own,
 [gpui-cpp-dist](https://github.com/kjk/gpui-cpp-dist), cloned to
-`.work/gpui-cpp-dist` and refreshed only by running `bun cmd/build-dist.ts` by
+`.work/gpui-cpp-dist` and refreshed only by running `bun cmd/update-dist.ts` by
 hand: that syncs the clone, writes the pair into it, builds every example
 against it (`GPUI_AMALGAM_DIR` points the platform build at that copy, and its
 objects go to their own `out/*_dist` tree), rewrites its readme with the
@@ -707,7 +707,7 @@ cmd/imgdiff.ts         compare two shots, or two directories of them, and exit 1
                        takes -gpui-* out of argv before the example parses it.
 cmd/compare-story.ts   screenshot a story page from the Rust app and this one
                        (rust left half, ours right half, both 80% work-area tall)
-cmd/build-dist.ts      amalgamate src/** into gpui.h + gpui.cpp
+cmd/update-dist.ts      amalgamate src/** into gpui.h + gpui.cpp
                        (`.work/` for builds; run by hand to publish gpui-cpp-dist)
 cmd/test.ts            build tests/ and run it
 tests/                 utassert ports of the pure-logic Rust tests

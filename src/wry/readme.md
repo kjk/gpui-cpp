@@ -28,7 +28,7 @@ the gpui-component, Zed GPUI, taffy and markdown pins, and moves the same way
 Everything is in `namespace wry`, not `gpui`, and the directory is isolated
 the way `src/taffy` and `src/markdown` are: it includes `base.h` and its own
 header and nothing else, and names no `gpui::` symbol.
-`cmd/build-dist.ts` fails the build if that stops being true. The parent
+`cmd/update-dist.ts` fails the build if that stops being true. The parent
 window arrives as a `void*` — Rust takes a `raw_window_handle::
 HasWindowHandle`, and `src/gpui`'s `PlatWindowHandle` is what hands one over.
 

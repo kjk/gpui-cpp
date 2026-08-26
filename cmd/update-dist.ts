@@ -15,11 +15,11 @@
 // gitignored, so an ordinary build never touches what gets published. `outDir`
 // is required for that reason — there is no default to fall into.
 //
-//   bun cmd/build-dist.ts              # sync, build, check, readme, publish
-//   bun cmd/build-dist.ts -no-publish  # everything but the commit and push
-//   bun cmd/build-dist.ts -work        # just the .work/ pair a build compiles
+//   bun cmd/update-dist.ts              # sync, build, check, readme, publish
+//   bun cmd/update-dist.ts -no-publish  # everything but the commit and push
+//   bun cmd/update-dist.ts -work        # just the .work/ pair a build compiles
 //
-// import { buildDist } from "./build-dist.ts";
+// import { buildDist } from "./update-dist.ts";
 // buildDist({ outDir: ".work" });   // what a build script may do
 //
 // The two destinations differ. dist/ is what a reader opens: the comments are
@@ -45,7 +45,7 @@ export const distRepoDir = ".work/gpui-cpp-dist";
 
 export type DistOutDir = ".work" | typeof distRepoDir;
 
-// The amalgam a build compiles against. cmd/build-dist.ts sets
+// The amalgam a build compiles against. cmd/update-dist.ts sets
 // GPUI_AMALGAM_DIR to the dist repo checkout, so the examples get built
 // against the published copy as its correctness check; every other build
 // leaves it unset and uses .work/, which it regenerates itself.
@@ -64,7 +64,7 @@ export const allPlatforms: Platform[] = ["win", "linux", "mac", "wasm"];
 export type BuildDistOpts = {
   /**
    * Destination directory relative to the repo root. Required: the dist repo
-   * checkout is what gets published and only `bun cmd/build-dist.ts` may write
+   * checkout is what gets published and only `bun cmd/update-dist.ts` may write
    * it, so a build script has to say ".work" out loud.
    */
   outDir: DistOutDir;
@@ -732,14 +732,23 @@ function syncDistRepo(): void {
   }
 }
 
-// Everything above this line in the readme is written once and left alone;
-// everything from it down says which commit this copy came from.
+// Where the prose above stops and the provenance below begins.
+//
+// Both halves are written from here every time. They used to not be: the head
+// was taken from the published file when there was one, and only the tail was
+// rewritten, so the prose could be edited in the dist repo and survive. What
+// it actually did was strand it — the published head still described a
+// vendored md4c this tree has not carried since src/markdown/ replaced it,
+// still said the pair builds "on all three" a wasm target later made four,
+// and still named cmd/build-dist.ts two renames ago. None of that could ever
+// be corrected from here, which is the opposite of what the file says about
+// itself in its first paragraph.
 const readmeMarker = "## This copy";
 
 const readmeHead = `# gpui-cpp-dist
 
 The single-file build of [gpui-cpp](${srcRepoUrl}): \`gpui.h\` and \`gpui.cpp\`,
-amalgamated from that repo's \`src/**\` by its \`cmd/build-dist.ts\`. Nothing
+amalgamated from that repo's \`src/**\` by its \`cmd/update-dist.ts\`. Nothing
 here is written by hand, so issues and pull requests belong in the source repo.
 
 ## Use it
@@ -754,15 +763,15 @@ builds on all four:
 - **Linux** — \`g++ -std=c++20\` with \`pkg-config --cflags --libs x11 cairo pangocairo\`.
 - **macOS** — \`clang++ -std=c++20 -x objective-c++\` with the Cocoa, CoreText and
   IOKit frameworks. The file is Objective-C++ because the mac half is.
-- **wasm** — \`emcc -std=c++20\` with \`-sALLOW_MEMORY_GROWTH\`; the browser half
-  draws through Canvas2D and needs no library at all.
+- **wasm** — \`em++ -std=c++20\` with \`-sALLOW_MEMORY_GROWTH\`; the browser half
+  draws through Canvas2D and needs no library at all. em++ rather than emcc:
+  the link needs the C++ runtime and emcc leaves it out.
 
 No other dependencies, no build system, no STL containers.`;
 
 function writeDistReadme(sha: string, subject: string): string {
   const abs = join(root, distRepoDir, "readme.md");
   const short = sha.slice(0, 12);
-  const head = existsSync(abs) ? (readFileSync(abs, "utf8").split(readmeMarker)[0] ?? "").trimEnd() : readmeHead;
   const body = [
     readmeMarker,
     "",
@@ -772,7 +781,7 @@ function writeDistReadme(sha: string, subject: string): string {
     "shows every commit this copy is behind by; if that page is empty, it is current.",
     "",
   ].join("\n");
-  const text = `${head}\n\n${body}`;
+  const text = `${readmeHead}\n\n${body}`;
   writeFileSync(abs, text, "utf8");
   return srcRel(abs);
 }
@@ -819,7 +828,7 @@ function parseCli(argv: string[]): {
   let check = true;
   let sync = true;
   let publish = true;
-  const usage = "usage: bun cmd/build-dist.ts [-work] [-no-check] [-no-sync] [-no-publish]";
+  const usage = "usage: bun cmd/update-dist.ts [-work] [-no-check] [-no-sync] [-no-publish]";
   for (const raw of argv) {
     if (raw === "-work" || raw === "--work") {
       outDir = ".work";
