@@ -136,9 +136,12 @@ if (!noBuild) {
 }
 
 setProcessDpiAware();
+// The example runs from the repo root, the same as cmd/run.ts launches it,
+// so a relative path it opens means what it means to the rust twin.
+const runCwd = root;
 // AppLog writes out\gpui.log relative to cwd.
-mkdirSync(join(exeDir, "out"), { recursive: true });
-const logPath = join(exeDir, "out", "gpui.log");
+mkdirSync(join(runCwd, "out"), { recursive: true });
+const logPath = join(runCwd, "out", "gpui.log");
 try {
   await Bun.file(logPath).delete();
 } catch {}
@@ -147,7 +150,7 @@ try {
 // the flag out of argv before the example parses it. placeOnWorkAreaHalf below
 // still runs and is a no-op when this worked.
 const geom = half ? [`-gpui-window=${((r) => `${r.x},${r.y},${r.w},${r.h}`)(workAreaHalfRect(half))}`] : [];
-const proc = Bun.spawn([exe, ...geom, ...rest.slice(2)], { cwd: exeDir, stdout: "pipe", stderr: "pipe" });
+const proc = Bun.spawn([exe, ...geom, ...rest.slice(2)], { cwd: runCwd, stdout: "pipe", stderr: "pipe" });
 const hwnd = await waitForPidWindow(proc.pid ?? 0, 15000);
 if (!hwnd) {
   await killAndWait(proc);

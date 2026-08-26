@@ -4095,8 +4095,9 @@ void PaintTextRange(PaintCtx* ctx, Str s, float fontSize, float maxW, bool wrap,
                     uint8_t weight, float lineH, float x, float y, int u8a,
                     int u8b, Rgba color);
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
-                        bool wrap, float x, float y, int u8a, int u8b,
-                        Rgba color, bool wavy = false);
+                        bool wrap, uint8_t weight, float lineH, float x,
+                        float y, int u8a, int u8b, Rgba color,
+                        bool wavy = false);
 // The taffy tree a window lays out in, kept between frames so taffy's own
 // per-node caches are. It is reconciled against the element tree rather than
 // rebuilt: an element whose style and content are the ones its node already

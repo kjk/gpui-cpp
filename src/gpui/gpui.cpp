@@ -2883,13 +2883,13 @@ static void PaintWavyRun(PaintCtx* ctx, float x, float y, float w, Rgba color) {
 }
 
 void PaintTextUnderline(PaintCtx* ctx, Str s, float fontSize, float maxW,
-                        bool wrap, float x, float y, int u8a, int u8b,
-                        Rgba color, bool wavy) {
+                        bool wrap, uint8_t weight, float lineH, float x,
+                        float y, int u8a, int u8b, Rgba color, bool wavy) {
     if (!ctx || !ctx->rt || color.a == 0 || u8a >= u8b) {
         return;
     }
     TextLayout* layout =
-        TextMeasLayout(ctx, s, fontSize, maxW, wrap, 0, 0, nullptr);
+        TextMeasLayout(ctx, s, fontSize, maxW, wrap, weight, lineH, nullptr);
     if (!layout) {
         return;
     }
@@ -4541,7 +4541,8 @@ static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
         if (!sp.underline || sp.hi <= sp.lo) {
             continue;
         }
-        PaintTextUnderline(ctx, e->text, font, maxW, e->style.wrap, e->x, e->y,
+        PaintTextUnderline(ctx, e->text, font, maxW, e->style.wrap,
+                           ElTextWeight(e), e->style.lineHeight, e->x, e->y,
                            sp.lo, sp.hi, sp.color, sp.wavy);
     }
     TextLayoutRelease(layout);
@@ -5051,8 +5052,13 @@ static void PaintCaret(PaintCtx* ctx, El* e, float font) {
     float h = e->h;
     if (e->text.s && e->text.len > 0) {
         float maxW = e->laidMaxW > 0 ? e->laidMaxW : e->w;
-        TextLayout* tl = TextMeasLayout(ctx, e->text, font, maxW, e->style.wrap,
-                                        0, 0, nullptr);
+        // The weight and line height the run was drawn with, or the rects
+        // come back measured against a different font -- the mono family is a
+        // weight sentinel -- and the caret drifts further from the glyphs the
+        // further along the line it stands.
+        TextLayout* tl =
+            TextMeasLayout(ctx, e->text, font, maxW, e->style.wrap,
+                           ElTextWeight(e), e->style.lineHeight, nullptr);
         if (tl) {
             Bounds r[32] = {};
             int off = e->caretOff;
@@ -5450,9 +5456,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                            hi, e->selColor);
         }
         if (e->markLo >= 0 && e->markHi > e->markLo) {
-            PaintTextUnderline(
-                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
-                e->style.wrap, e->x, e->y, e->markLo, e->markHi, c);
+            PaintTextUnderline(ctx, e->text, font,
+                               e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                               e->style.wrap, ElTextWeight(e),
+                               e->style.lineHeight, e->x, e->y, e->markLo,
+                               e->markHi, c);
         }
         if (e->nSpans > 0 && e->text.s) {
             PaintTextSpans(ctx, e, font, c);
@@ -5489,9 +5497,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             if (u.hi <= u.lo || u.color.a == 0) {
                 continue;
             }
-            PaintTextUnderline(
-                ctx, e->text, font, e->laidMaxW > 0 ? e->laidMaxW : e->w,
-                e->style.wrap, e->x, e->y, u.lo, u.hi, u.color, u.wavy);
+            PaintTextUnderline(ctx, e->text, font,
+                               e->laidMaxW > 0 ? e->laidMaxW : e->w,
+                               e->style.wrap, ElTextWeight(e),
+                               e->style.lineHeight, e->x, e->y, u.lo, u.hi,
+                               u.color, u.wavy);
         }
         if (clipText) {
             CanvasPopClip(ctx);
