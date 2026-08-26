@@ -3086,10 +3086,13 @@ struct CompletionItem {
 };
 
 // CompletionProvider::completions, without the task: the provider is handed
-// the document, where the caret is and the word being typed, and writes as
-// many items as it has room for. Rust answers a future; there is nothing to
-// await on here, so a provider that has to go somewhere slow does the going
-// itself and answers what it has.
+// the document, where the caret is and the word being typed. It returns the
+// total number of available items and writes the first min(total, cap) when
+// `out` is non-null. Returning the total is important: the caller retries
+// with a larger buffer instead of silently turning Rust's Vec into a C++
+// limit. Rust answers a future; there is nothing to await on here, so a
+// provider that has to go somewhere slow does the going itself and answers
+// what it has.
 using CompletionFn = int (*)(void* data, Str text, int offset, Str query,
                              CompletionItem* out, int cap);
 
@@ -3102,9 +3105,14 @@ struct DocumentColor {
 };
 
 // DocumentColorProvider::document_colors, without the task: the provider is
-// handed the document and writes what it found, in document order.
+// handed the document and writes what it found, in document order. Like all
+// input collection providers it returns the total and writes at most `cap`.
 using DocumentColorFn = int (*)(void* data, Str text, DocumentColor* out,
                                 int cap);
+
+// The one intentional limit in this family. Rust rejects an entire provider
+// response above 10,000 rather than displaying a truncated prefix.
+const int kMaxDocumentColors = 10000;
 
 // CodeAction, flattened: a title, and the one edit it makes — the range it
 // replaces and what it puts there. Rust carries a WorkspaceEdit, which is a
@@ -3133,11 +3141,20 @@ using CodeActionPerformFn = bool (*)(void* data, InputState* s, App* app,
                                      Window* win, const CodeActionItem* item);
 
 // CodeActionProvider::code_actions, without the task: the provider is handed
-// the document and what is selected, and writes the actions it offers there.
-// Strings it answers are allocated out of `a`, which lives as long as the
-// menu is up.
+// the document and what is selected, returns the total action count and
+// writes at most `cap`. Strings it answers are allocated out of `a`, which
+// lives as long as the menu is up.
 using CodeActionFn = int (*)(void* data, Arena* a, Str text, Selection sel,
                              CodeActionItem* out, int cap);
+
+// One entry in Rust's Vec<Rc<dyn CodeActionProvider>>. Function pointers and
+// explicit capture data are the dependency-free equivalent of the trait
+// object; the Vec preserves Rust's unbounded provider count.
+struct CodeActionProviderEntry {
+    CodeActionFn provide = nullptr;
+    void* data = nullptr;
+    CodeActionPerformFn perform = nullptr;
+};
 
 // The code action menu while it is up — CodeActionMenu's own state.
 struct CodeActionSession {
@@ -3250,9 +3267,9 @@ struct SemanticRange {
 };
 
 // DocumentRangeSemanticTokensProvider::semantic_tokens, without the task: the
-// provider is handed the document and a byte range and writes the tokens in
-// it, delta-encoded as a server would send them. The legend beside it is
-// `DocumentRangeSemanticTokensProvider::legend`.
+// provider is handed the document and a byte range, returns the total token
+// count and writes at most `cap`, delta-encoded as a server would send them.
+// The legend beside it is `DocumentRangeSemanticTokensProvider::legend`.
 using SemanticTokensFn = int (*)(void* data, Str text, Selection range,
                                  SemanticToken* out, int cap);
 
@@ -3283,9 +3300,9 @@ struct DefinitionLink {
 };
 
 // DefinitionProvider::definitions, without the task: the provider is handed
-// the document and the offset, and writes the places that offset is defined
-// in. Strings it answers are allocated out of `a`, which lives until the next
-// question is asked.
+// the document and the offset, returns the total location count and writes at
+// most `cap`. Strings it answers are allocated out of `a`, which lives until
+// the next question is asked.
 using DefinitionFn = int (*)(void* data, Arena* a, Str text, int offset,
                              DefinitionLink* out, int cap);
 
@@ -3472,22 +3489,12 @@ struct InputState {
     bool documentColorsDirty = true;
     // The code action menu, and who fills it — cmd-. / ctrl-. asks whatever
     // is selected. Rust asks every registered provider and puts the answers
-    // in one list; there is one here, and an example that wants two answers
-    // both from the one it registers.
+    // in one list.
     CodeActionSession codeActions;
     // Rust holds a `Vec<Rc<dyn CodeActionProvider>>` and asks every one of
     // them, putting the answers in one list; each item remembers which
-    // provider it came from so performing it goes back to that one. The same
-    // here, with a small fixed table — a field with more than four sources of
-    // code actions is not a case upstream has either.
-    static const int kMaxCodeActionProviders = 4;
-    CodeActionFn codeActionProviders[kMaxCodeActionProviders] = {};
-    void* codeActionDatas[kMaxCodeActionProviders] = {};
-    // perform_code_action: the provider does it, if it wants to. A provider
-    // that says nothing has its edits applied by the editor, which is what
-    // every action in this tree writes.
-    CodeActionPerformFn codeActionPerform[kMaxCodeActionProviders] = {};
-    int nCodeActionProviders = 0;
+    // provider it came from so performing it goes back to that one.
+    Vec<CodeActionProviderEntry> codeActionProviders;
     // The first slot, under the name the one-provider callers already use.
     // Writing it is the same as registering one provider.
     CodeActionFn codeActionProvider = nullptr;

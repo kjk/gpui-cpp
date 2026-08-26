@@ -57,6 +57,10 @@ The important non-mechanical mappings are encoded in the audit:
   resizable colors into Base, and Base primitives consume that projection.
 - Rust `Vec`-backed public builders and toast/notification storage no longer
   silently truncate at C++-only fixed capacities.
+- Base input collection providers report their total result count and are
+  retried into growing buffers. Completions, code actions, definitions,
+  semantic tokens and edit lists no longer stop at port-only limits; document
+  colors preserve Rust's explicit reject-above-10,000 behavior.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 
@@ -64,16 +68,14 @@ The important non-mechanical mappings are encoded in the audit:
 
 1. Add a runtime accessibility tree (role, name/value, checked/expanded state,
    actions and per-platform export), then clear the role-driven partial set.
-2. Replace bounded host callback buffers in Base input/completion, semantic
-   tokens and code actions with retryable/growing result contracts.
-3. Lift the remaining dependency-free parser limits in UI text/HTML and make
+2. Lift the remaining dependency-free parser limits in UI text/HTML and make
    `History` generic/versioned/grouped rather than a string specialization.
-4. Decouple the large component `Theme` palette from `gpui/gpui.h`; the
+3. Decouple the large component `Theme` palette from `gpui/gpui.h`; the
    runtime should consume a narrow paint/style interface while Base and UI own
    their respective theme types.
-5. Extend `cmd/audit-port.ts` below module granularity: inventory every
+4. Extend `cmd/audit-port.ts` below module granularity: inventory every
    upstream `pub use` and test, requiring `full`, `adapter` or `excluded` plus
    a C++ symbol/test destination.
 
-`port-progress.md` remains the detailed behavioral log until item 5 makes the
+`port-progress.md` remains the detailed behavioral log until item 4 makes the
 ledger symbol-complete.

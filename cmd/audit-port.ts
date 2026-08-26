@@ -60,7 +60,7 @@ const adapterUi = new Set([
 const partialReasons: Record<string, string> = {
   "base/history": "the C++ specialization is not the generic versioned/grouped History API",
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
-  "base/input": "runtime adapters and bounded host callback buffers remain",
+  "base/input": "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
   "base/macos_accessibility": "only the native hit-test forwarding seam is present",
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
   "base/styled": "StyleRefinement is represented by the runtime El builder surface",

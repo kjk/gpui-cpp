@@ -2292,19 +2292,32 @@ void InputRequestCompletion(InputState* s, App* app, Window* win, bool force) {
         return;
     }
     // The items are the provider's own: it owns the strings, which outlive
-    // the menu the way a decoration's do.
-    const int kMaxItems = 128;
-    auto* items = AllocArray<CompletionItem>(kMaxItems);
-    if (!items) {
+    // the menu the way a decoration's do. A provider returns its total even
+    // when the first buffer is short, so retry until the whole Rust Vec fits.
+    Vec<CompletionItem> items;
+    int cap = 32;
+    if (!VecReserve(items, cap)) {
         return;
     }
-    int n = s->completionProvider(s->completionData, InputValue(s),
-                                  InputCursor(s), query, items, kMaxItems);
+    int n = 0;
+    for (;;) {
+        n = s->completionProvider(s->completionData, InputValue(s),
+                                  InputCursor(s), query, items.els, cap);
+        if (n < 0) {
+            n = 0;
+        }
+        if (n <= cap) {
+            break;
+        }
+        cap = n;
+        if (!VecReserve(items, cap)) {
+            return;
+        }
+    }
     s->completion.items.Clear();
     for (int i = 0; i < n; i++) {
-        s->completion.items.Append(items[i]);
+        s->completion.items.Append(items.els[i]);
     }
-    Free(nullptr, items);
     s->completion.open = n > 0;
     s->completion.triggerStart = start;
     s->completion.offset = InputCursor(s);
@@ -2339,22 +2352,28 @@ void InputAcceptCompletion(InputState* s, App* app, Window* win) {
     // top of the document, while the name goes in at the caret. Both the
     // item's strings and its edits live in the menu's arena, so they are
     // copied out before it is dismissed.
-    const int kMaxEdits = 32;
-    TextEditItem edits[kMaxEdits];
-    int n = 0;
-    edits[n].range = range;
-    edits[n].newText = StrDup(GetTempArena(), text);
-    n++;
-    for (int i = 0; i < item.nAdditionalEdits && n < kMaxEdits; i++, n++) {
-        edits[n] = item.additionalEdits[i];
-        edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
+    Vec<TextEditItem> edits;
+    if (item.nAdditionalEdits < 0 ||
+        (item.nAdditionalEdits > 0 && !item.additionalEdits) ||
+        !VecReserve(edits, item.nAdditionalEdits + 1)) {
+        return;
+    }
+    TextEditItem primary = {};
+    primary.range = range;
+    primary.newText = StrDup(GetTempArena(), text);
+    edits.Append(primary);
+    for (int i = 0; i < item.nAdditionalEdits; i++) {
+        TextEditItem edit = item.additionalEdits[i];
+        edit.newText = StrDup(GetTempArena(), edit.newText);
+        edits.Append(edit);
     }
     InputDismissCompletion(s);
     s->silentReplace = true;
-    if (n == 1) {
-        InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
+    if (edits.len == 1) {
+        InputReplaceTextInRange(s, app, win, &edits[0].range,
+                                edits[0].newText);
     } else {
-        InputApplyEdits(s, app, win, edits, n);
+        InputApplyEdits(s, app, win, edits.els, edits.len);
     }
     s->silentReplace = false;
 }
@@ -2464,23 +2483,29 @@ void InputInsertCompletion(InputState* s, App* app, Window* win,
     if (item->insertText.len > 0) {
         range.start = range.end;
     }
-    const int kMaxEdits = 32;
-    TextEditItem edits[kMaxEdits];
-    int n = 0;
-    edits[n].range = range;
-    edits[n].newText = StrDup(GetTempArena(), text);
-    n++;
-    for (int i = 0; i < item->nAdditionalEdits && n < kMaxEdits; i++, n++) {
-        edits[n] = item->additionalEdits[i];
-        edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
+    Vec<TextEditItem> edits;
+    if (item->nAdditionalEdits < 0 ||
+        (item->nAdditionalEdits > 0 && !item->additionalEdits) ||
+        !VecReserve(edits, item->nAdditionalEdits + 1)) {
+        return;
+    }
+    TextEditItem primary = {};
+    primary.range = range;
+    primary.newText = StrDup(GetTempArena(), text);
+    edits.Append(primary);
+    for (int i = 0; i < item->nAdditionalEdits; i++) {
+        TextEditItem edit = item->additionalEdits[i];
+        edit.newText = StrDup(GetTempArena(), edit.newText);
+        edits.Append(edit);
     }
     // completion_inserting: the write is not typing, so it opens no menu and
     // asks for no suggestion.
     s->silentReplace = true;
-    if (n == 1) {
-        InputReplaceTextInRange(s, app, win, &edits[0].range, edits[0].newText);
+    if (edits.len == 1) {
+        InputReplaceTextInRange(s, app, win, &edits[0].range,
+                                edits[0].newText);
     } else {
-        InputApplyEdits(s, app, win, edits, n);
+        InputApplyEdits(s, app, win, edits.els, edits.len);
     }
     s->silentReplace = false;
 }
@@ -2523,28 +2548,56 @@ bool InputCompletionAction(InputState* s, App* app, Window* win,
 // to await here, so the frame after an edit asks and the answer replaces what
 // was there.
 
+static int DocumentColorCompare(const void* va, const void* vb) {
+    const DocumentColor* a = (const DocumentColor*)va;
+    const DocumentColor* b = (const DocumentColor*)vb;
+    if (a->range.start != b->range.start) {
+        return a->range.start < b->range.start ? -1 : 1;
+    }
+    if (a->range.end != b->range.end) {
+        return a->range.end < b->range.end ? -1 : 1;
+    }
+    return 0;
+}
+
 void InputUpdateDocumentColors(InputState* s) {
     if (!s || !s->documentColorProvider || !s->documentColorsDirty) {
         return;
     }
     s->documentColorsDirty = false;
-    // MAX_DOCUMENT_COLORS is 10,000 in Rust, which is the cap on what one
-    // response may carry; a screen holds a handful, and a provider that
-    // answers more than this has its tail dropped rather than the whole
-    // answer thrown away.
-    const int kMax = 1024;
-    auto* buf =
-        (DocumentColor*)Alloc(nullptr, (int)sizeof(DocumentColor) * kMax);
-    if (!buf) {
+    // MAX_DOCUMENT_COLORS is 10,000 in Rust. It rejects the whole response
+    // above that number; it does not keep a prefix. Start small for ordinary
+    // documents and retry when the provider reports a larger total.
+    Vec<DocumentColor> buf;
+    int cap = 256;
+    if (!VecReserve(buf, cap)) {
         return;
     }
-    int n = s->documentColorProvider(s->documentColorData, InputValue(s), buf,
-                                     kMax);
+    int n = 0;
+    for (;;) {
+        n = s->documentColorProvider(s->documentColorData, InputValue(s),
+                                     buf.els, cap);
+        if (n < 0) {
+            n = 0;
+        }
+        if (n > kMaxDocumentColors) {
+            return;
+        }
+        if (n <= cap) {
+            break;
+        }
+        cap = n;
+        if (!VecReserve(buf, cap)) {
+            return;
+        }
+    }
+    // document_colors_from_response sorts by range start; an LSP response is
+    // not required to arrive in document order.
+    qsort(buf.els, (size_t)n, sizeof(DocumentColor), DocumentColorCompare);
     s->documentColors.Clear();
-    for (int i = 0; i < n && i < kMax; i++) {
+    for (int i = 0; i < n; i++) {
         s->documentColors.Append(buf[i]);
     }
-    Free(nullptr, buf);
 }
 
 // ─── code actions ─────────────────────────────────────────────────────────
@@ -2635,15 +2688,13 @@ bool InputAcceptInlineCompletion(InputState* s, App* app, Window* win) {
     }
     // The text is in the suggestion's own arena, which the insert below is
     // about to drop, so it is copied first.
-    Str text = s->inlineCompletion.text;
-    char stack[512];
-    Str keep = text;
-    if (text.len < (int)sizeof(stack)) {
-        memcpy(stack, text.s, (size_t)text.len);
-        keep = Str(stack, text.len);
+    Str keep = StrDup(s->inlineCompletion.text);
+    if (!keep.s && s->inlineCompletion.text.len > 0) {
+        return false;
     }
     InputClearInlineCompletion(s);
     InputInsert(s, app, win, keep);
+    StrFree(keep);
     return true;
 }
 
@@ -2770,27 +2821,37 @@ void InputUpdateSemanticTokens(InputState* s) {
     s->semanticTokensDirty = false;
     // Rust fetches the whole document and windows the answer at paint, so a
     // scroll never refetches; the same here.
-    const int kMax = 4096;
-    auto* buf =
-        (SemanticToken*)Alloc(nullptr, (int)sizeof(SemanticToken) * kMax);
-    auto* decoded =
-        (SemanticSpan*)Alloc(nullptr, (int)sizeof(SemanticSpan) * kMax);
-    if (!buf || !decoded) {
-        Free(nullptr, buf);
-        Free(nullptr, decoded);
+    Vec<SemanticToken> buf;
+    int cap = 256;
+    if (!VecReserve(buf, cap)) {
         return;
     }
     Str text = InputValue(s);
-    int n = s->semanticTokensProvider(s->semanticTokensData, text,
-                                      Selection{0, text.len}, buf, kMax);
-    int m = SemanticTokensDecode(buf, n, s->semanticLegend, s->nSemanticLegend,
-                                 decoded, kMax);
+    int n = 0;
+    for (;;) {
+        n = s->semanticTokensProvider(s->semanticTokensData, text,
+                                      Selection{0, text.len}, buf.els, cap);
+        if (n < 0) {
+            n = 0;
+        }
+        if (n <= cap) {
+            break;
+        }
+        cap = n;
+        if (!VecReserve(buf, cap)) {
+            return;
+        }
+    }
+    Vec<SemanticSpan> decoded;
+    if (n > 0 && !VecReserve(decoded, n)) {
+        return;
+    }
+    int m = SemanticTokensDecode(buf.els, n, s->semanticLegend,
+                                 s->nSemanticLegend, decoded.els, n);
     s->semanticTokens.Clear();
     for (int i = 0; i < m; i++) {
         s->semanticTokens.Append(decoded[i]);
     }
-    Free(nullptr, buf);
-    Free(nullptr, decoded);
 }
 
 // ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
@@ -2843,10 +2904,26 @@ void InputHoverDefinition(InputState* s, int offset) {
         ArenaDelete(s->hoverDef.arena);
         s->hoverDef.arena = ArenaNew();
     }
-    const int kMax = 8;
-    DefinitionLink buf[kMax];
-    int n = s->definitionProvider(s->definitionData, s->hoverDef.arena, text,
-                                  offset, buf, kMax);
+    Vec<DefinitionLink> buf;
+    int cap = 8;
+    if (!VecReserve(buf, cap)) {
+        return;
+    }
+    int n = 0;
+    for (;;) {
+        n = s->definitionProvider(s->definitionData, s->hoverDef.arena, text,
+                                  offset, buf.els, cap);
+        if (n < 0) {
+            n = 0;
+        }
+        if (n <= cap) {
+            break;
+        }
+        cap = n;
+        if (!VecReserve(buf, cap)) {
+            return;
+        }
+    }
     InputClearHoverDefinition(s);
     if (n <= 0) {
         return;
@@ -2865,7 +2942,7 @@ void InputHoverDefinition(InputState* s, int offset) {
         return;
     }
     s->hoverDef.symbolRange = symbol;
-    for (int i = 0; i < n && i < kMax; i++) {
+    for (int i = 0; i < n; i++) {
         s->hoverDef.locations.Append(buf[i]);
     }
 }
@@ -2969,35 +3046,37 @@ void InputAddCodeActionProvider(InputState* s, CodeActionFn fn, void* data,
     if (!s || !fn) {
         return;
     }
-    if (!s->codeActionProvider) {
+    bool hadDirectProvider = s->codeActionProvider != nullptr;
+    if (s->codeActionProviders.len == 0 && hadDirectProvider) {
+        // A caller may have used the original one-provider field and then
+        // added another. Preserve that first registration when the Vec is
+        // materialized.
+        s->codeActionProviders.Append(
+            {s->codeActionProvider, s->codeActionData, nullptr});
+    }
+    if (!hadDirectProvider) {
         // The first one is the field the one-provider callers already write.
         s->codeActionProvider = fn;
         s->codeActionData = data;
     }
-    if (s->nCodeActionProviders >= InputState::kMaxCodeActionProviders) {
-        return;
-    }
-    int at = s->nCodeActionProviders++;
-    s->codeActionProviders[at] = fn;
-    s->codeActionDatas[at] = data;
-    s->codeActionPerform[at] = perform;
+    s->codeActionProviders.Append({fn, data, perform});
 }
 
 // Every provider, in the order they were registered, with the field the
 // one-provider callers write standing in for a first registration they never
 // made.
 static int CodeActionProviderCount(const InputState* s) {
-    if (s->nCodeActionProviders > 0) {
-        return s->nCodeActionProviders;
+    if (s->codeActionProviders.len > 0) {
+        return s->codeActionProviders.len;
     }
     return s->codeActionProvider ? 1 : 0;
 }
 
 static CodeActionFn CodeActionProviderAt(const InputState* s, int i,
                                          void** data) {
-    if (s->nCodeActionProviders > 0) {
-        *data = s->codeActionDatas[i];
-        return s->codeActionProviders[i];
+    if (s->codeActionProviders.len > 0) {
+        *data = s->codeActionProviders[i].data;
+        return s->codeActionProviders[i].provide;
     }
     *data = s->codeActionData;
     return s->codeActionProvider;
@@ -3020,8 +3099,6 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
         ArenaDelete(s->codeActions.arena);
         s->codeActions.arena = ArenaNew();
     }
-    const int kMax = 32;
-    CodeActionItem buf[kMax];
     s->codeActions.items.Reset();
     // Every provider is asked and the answers go in one list, each item
     // remembering which one it came from.
@@ -3032,9 +3109,28 @@ void InputToggleCodeActions(InputState* s, App* app, Window* win) {
         if (!fn) {
             continue;
         }
-        int n = fn(data, s->codeActions.arena, InputValue(s), s->selectedRange,
-                   buf, kMax);
-        for (int i = 0; i < n && i < kMax; i++) {
+        Vec<CodeActionItem> buf;
+        int cap = 16;
+        if (!VecReserve(buf, cap)) {
+            continue;
+        }
+        int n = 0;
+        for (;;) {
+            n = fn(data, s->codeActions.arena, InputValue(s),
+                   s->selectedRange, buf.els, cap);
+            if (n < 0) {
+                n = 0;
+            }
+            if (n <= cap) {
+                break;
+            }
+            cap = n;
+            if (!VecReserve(buf, cap)) {
+                n = 0;
+                break;
+            }
+        }
+        for (int i = 0; i < n; i++) {
             buf[i].provider = p;
             s->codeActions.items.Append(buf[i]);
         }
@@ -3089,26 +3185,34 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
     CodeActionItem item = s->codeActions.items[ix];
     // The edits are in the menu's arena, which dismissing it frees, so they
     // are copied out first.
-    const int kMaxEdits = 32;
-    TextEditItem edits[kMaxEdits];
-    int n = 0;
+    Vec<TextEditItem> edits;
     if (item.nEdits > 0 && item.edits) {
-        for (; n < item.nEdits && n < kMaxEdits; n++) {
-            edits[n] = item.edits[n];
-            edits[n].newText = StrDup(GetTempArena(), edits[n].newText);
+        if (!VecReserve(edits, item.nEdits)) {
+            return;
+        }
+        for (int i = 0; i < item.nEdits; i++) {
+            TextEditItem edit = item.edits[i];
+            edit.newText = StrDup(GetTempArena(), edit.newText);
+            edits.Append(edit);
         }
     } else {
-        edits[0].range = item.range;
-        edits[0].newText = StrDup(GetTempArena(), item.newText);
-        n = 1;
+        if (!VecReserve(edits, 1)) {
+            return;
+        }
+        TextEditItem edit = {};
+        edit.range = item.range;
+        edit.newText = StrDup(GetTempArena(), item.newText);
+        edits.Append(edit);
     }
     // perform_code_action: the provider that answered with it does it, if it
     // said it would. Its edits are what the editor applies otherwise.
     CodeActionPerformFn perform = nullptr;
     void* performData = nullptr;
-    if (item.provider >= 0 && item.provider < s->nCodeActionProviders) {
-        perform = s->codeActionPerform[item.provider];
-        performData = s->codeActionDatas[item.provider];
+    if (item.provider >= 0 && item.provider < s->codeActionProviders.len) {
+        const CodeActionProviderEntry& provider =
+            s->codeActionProviders[item.provider];
+        perform = provider.perform;
+        performData = provider.data;
     }
     InputDismissCodeActions(s);
     if (perform && perform(performData, s, app, win, &item)) {
@@ -3116,7 +3220,7 @@ void InputPerformCodeAction(InputState* s, App* app, Window* win) {
         return;
     }
     s->silentReplace = true;
-    InputApplyEdits(s, app, win, edits, n);
+    InputApplyEdits(s, app, win, edits.els, edits.len);
     s->silentReplace = false;
     Notify(app, win);
 }

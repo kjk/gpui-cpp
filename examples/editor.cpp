@@ -347,7 +347,7 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
                         int cap) {
     LoadCompletionItems();
     int n = 0;
-    for (int i = 0; i < gNItems && n < cap; i++) {
+    for (int i = 0; i < gNItems; i++) {
         const CompletionItem& item = gItems[i];
         if (query.len > item.label.len) {
             continue;
@@ -356,16 +356,19 @@ static int CompleteFrom(void*, Str, int, Str query, CompletionItem* out,
             memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
             continue;
         }
-        out[n] = item;
-        // The items go out *thin*, which is what a server does with a
-        // thousand of them: the documentation is left for `resolve` to fill
-        // in when one is looked at.
-        out[n].documentation = Str{};
-        // One item brings an import with it, which is what
-        // `additionalTextEdits` is for.
-        if (item.label.len == 6 && memcmp(item.label.s, "unwrap", 6) == 0) {
-            out[n].additionalEdits = &kUseImport;
-            out[n].nAdditionalEdits = 1;
+        if (n < cap && out) {
+            out[n] = item;
+            // The items go out *thin*, which is what a server does with a
+            // thousand of them: the documentation is left for `resolve` to
+            // fill in when one is looked at.
+            out[n].documentation = Str{};
+            // One item brings an import with it, which is what
+            // `additionalTextEdits` is for.
+            if (item.label.len == 6 &&
+                memcmp(item.label.s, "unwrap", 6) == 0) {
+                out[n].additionalEdits = &kUseImport;
+                out[n].nAdditionalEdits = 1;
+            }
         }
         n++;
     }
@@ -506,54 +509,44 @@ struct MarkerHit {
 
 static int SemanticTokensFor(void*, Str text, Selection range,
                              SemanticToken* out, int cap) {
-    if (cap <= 0 || !text.s) {
+    if (!text.s) {
         return 0;
     }
-    const int kMaxHits = 512;
-    MarkerHit hits[kMaxHits];
-    int n = 0;
-    for (int t = 0; t < kNMarkers && n < kMaxHits; t++) {
-        Str word = Str(kSemanticMarkers[t].word);
-        for (int i = range.start; i + word.len <= range.end && n < kMaxHits;
-             i++) {
+    Vec<MarkerHit> hits;
+    // Walk the document first, rather than one token type at a time. The
+    // result is already in the document order LSP delta encoding requires,
+    // and Rust's Vec has no counterpart to the port's former 512-hit array.
+    for (int i = range.start; i < range.end; i++) {
+        for (int t = 0; t < kNMarkers; t++) {
+            Str word = Str(kSemanticMarkers[t].word);
+            if (i + word.len > range.end) {
+                continue;
+            }
             if (memcmp(text.s + i, word.s, (size_t)word.len) != 0) {
                 continue;
             }
             RopePoint p = RopeOffsetToPoint(text, i);
-            hits[n].line = p.row;
-            hits[n].col = p.column;
-            hits[n].len = word.len;
-            hits[n].type = t;
-            n++;
+            hits.Append({p.row, p.column, word.len, t});
             i += word.len - 1;
+            break;
         }
     }
-    // Document order, which is what the delta encoding is relative to.
-    for (int i = 1; i < n; i++) {
-        MarkerHit v = hits[i];
-        int j = i - 1;
-        while (j >= 0 && (hits[j].line > v.line ||
-                          (hits[j].line == v.line && hits[j].col > v.col))) {
-            hits[j + 1] = hits[j];
-            j--;
-        }
-        hits[j + 1] = v;
-    }
-    int m = 0;
     int prevLine = 0, prevCol = 0;
-    for (int i = 0; i < n && m < cap; i++) {
+    for (int i = 0; i < hits.len; i++) {
         int deltaLine = hits[i].line - prevLine;
-        out[m].deltaLine = (uint32_t)deltaLine;
-        out[m].deltaStart =
-            (uint32_t)(deltaLine == 0 ? hits[i].col - prevCol : hits[i].col);
-        out[m].length = (uint32_t)hits[i].len;
-        out[m].tokenType = (uint32_t)hits[i].type;
-        out[m].tokenModifiers = 0;
+        if (i < cap && out) {
+            out[i].deltaLine = (uint32_t)deltaLine;
+            out[i].deltaStart = (uint32_t)(deltaLine == 0
+                                                ? hits[i].col - prevCol
+                                                : hits[i].col);
+            out[i].length = (uint32_t)hits[i].len;
+            out[i].tokenType = (uint32_t)hits[i].type;
+            out[i].tokenModifiers = 0;
+        }
         prevLine = hits[i].line;
         prevCol = hits[i].col;
-        m++;
     }
-    return m;
+    return hits.len;
 }
 
 // ─── the definition provider ──────────────────────────────────────────────
@@ -576,9 +569,6 @@ static const DocLink kRustDocs[] = {
 
 static int DefinitionsAt(void*, Arena* a, Str text, int offset,
                          DefinitionLink* out, int cap) {
-    if (cap <= 0) {
-        return 0;
-    }
     int wa = offset, wb = offset;
     if (!TextWordRangeAt(text, offset, &wa, &wb) || wa >= wb) {
         return 0;
@@ -595,9 +585,11 @@ static int DefinitionsAt(void*, Arena* a, Str text, int offset,
             }
         }
         if (at >= 0) {
-            out[0].origin = {wa, wb};
-            out[0].uri = Str{};
-            out[0].target = {at, at + word.len};
+            if (cap > 0 && out) {
+                out[0].origin = {wa, wb};
+                out[0].uri = Str{};
+                out[0].target = {at, at + word.len};
+            }
             return 1;
         }
     }
@@ -605,10 +597,12 @@ static int DefinitionsAt(void*, Arena* a, Str text, int offset,
         if (!StrEqI(word, Str(d.name))) {
             continue;
         }
-        out[0].origin = {wa, wb};
-        out[0].uri = StrDup(
-            a, fmt("https://doc.rust-lang.org/std/%s.html", Str(d.path)));
-        out[0].target = {};
+        if (cap > 0 && out) {
+            out[0].origin = {wa, wb};
+            out[0].uri = StrDup(
+                a, fmt("https://doc.rust-lang.org/std/%s.html", Str(d.path)));
+            out[0].target = {};
+        }
         return 1;
     }
     return 0;
@@ -625,18 +619,19 @@ static int CodeActionsFor(void*, Arena* a, Str text, Selection sel,
     };
     Str selected(text.s + sel.start, sel.end - sel.start);
     int n = 0;
-    for (int i = 0; i < (int)(sizeof(kTitles) / sizeof(kTitles[0])) && n < cap;
-         i++) {
-        out[n].title = Str(kTitles[i]);
-        out[n].range = sel;
-        out[n].newText = CaseMapped(a, selected, i);
+    for (int i = 0; i < (int)(sizeof(kTitles) / sizeof(kTitles[0])); i++) {
+        if (n < cap && out) {
+            out[n].title = Str(kTitles[i]);
+            out[n].range = sel;
+            out[n].newText = CaseMapped(a, selected, i);
+        }
         n++;
     }
     // One action that is more than one edit, which is what a WorkspaceEdit
     // carries and what a rename or an extract is made of: the two ends of the
     // selection are written separately, last one first so the first does not
     // move the second.
-    if (n < cap) {
+    if (n < cap && out) {
         auto* edits = (TextEditItem*)Alloc(a, (int)sizeof(TextEditItem) * 2);
         if (edits) {
             edits[0].range = Selection{sel.end, sel.end};
@@ -646,9 +641,9 @@ static int CodeActionsFor(void*, Arena* a, Str text, Selection sel,
             out[n].title = StrL("Wrap in Parentheses");
             out[n].edits = edits;
             out[n].nEdits = 2;
-            n++;
         }
     }
+    n++;
     return n;
 }
 
@@ -765,7 +760,7 @@ static bool WordCharAt(Str text, int at) {
 
 static int DocumentColorsIn(void*, Str text, DocumentColor* out, int cap) {
     int n = 0;
-    for (int i = 0; i < text.len && n < cap; i++) {
+    for (int i = 0; i < text.len; i++) {
         Rgba color = {};
         int len = 0;
         if (text.s[i] == '#') {
@@ -778,8 +773,10 @@ static int DocumentColorsIn(void*, Str text, DocumentColor* out, int cap) {
         if (len <= 0) {
             continue;
         }
-        out[n].range = Selection{i, i + len};
-        out[n].color = color;
+        if (n < cap && out) {
+            out[n].range = Selection{i, i + len};
+            out[n].color = color;
+        }
         n++;
         i += len - 1;
     }

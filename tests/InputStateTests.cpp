@@ -345,12 +345,11 @@ static int OneAction(void* data, Arena* a, Str text, Selection sel,
     (void)a;
     (void)text;
     (void)sel;
-    if (cap <= 0) {
-        return 0;
+    if (cap > 0 && out) {
+        out[0].title = data ? StrL("second") : StrL("first");
+        out[0].range = sel;
+        out[0].newText = data ? StrL("B") : StrL("A");
     }
-    out[0].title = data ? StrL("second") : StrL("first");
-    out[0].range = sel;
-    out[0].newText = data ? StrL("B") : StrL("A");
     return 1;
 }
 
@@ -398,6 +397,59 @@ static void EveryProviderIsAsked() {
     Act(&s, InputAction::ToggleCodeActions);
     utassert(Menu2(&s, InputAction::Enter));
     utassert(ValueIs(s, "A"));
+}
+
+static int ManyActions(void* data, Arena* a, Str text, Selection sel,
+                       CodeActionItem* out, int cap) {
+    (void)a;
+    (void)text;
+    int total = (int)(intptr_t)data;
+    for (int i = 0; i < total && i < cap; i++) {
+        out[i].title = StrL("action");
+        out[i].range = sel;
+        out[i].newText = StrL("x");
+    }
+    return total;
+}
+
+// Rust stores providers and each provider's response in Vecs. Neither the
+// number of providers nor the number of answers stops at the port's former
+// four- and thirty-two-entry tables.
+static void CodeActionCollectionsGrowToTheirAnswers() {
+    InputState manyProviders;
+    manyProviders.kind = InputKind::Editor;
+    int tags[6] = {};
+    for (int i = 0; i < 6; i++) {
+        tags[i] = i + 1;
+        InputAddCodeActionProvider(&manyProviders, &OneAction, &tags[i]);
+    }
+    InputSetValue(&manyProviders, StrL("hello"));
+    InputSetSelectedRange(&manyProviders, nullptr, nullptr, 0, 5);
+    Act(&manyProviders, InputAction::ToggleCodeActions);
+    utassert(manyProviders.codeActions.items.len == 6);
+    utassert(manyProviders.codeActions.items[5].provider == 5);
+
+    // Materializing the provider Vec after a caller used the legacy direct
+    // field keeps that provider as the first entry.
+    InputState mixed;
+    mixed.kind = InputKind::Editor;
+    mixed.codeActionProvider = &OneAction;
+    InputAddCodeActionProvider(&mixed, &OneAction, &tags[0]);
+    InputSetValue(&mixed, StrL("hello"));
+    InputSetSelectedRange(&mixed, nullptr, nullptr, 0, 5);
+    Act(&mixed, InputAction::ToggleCodeActions);
+    utassert(mixed.codeActions.items.len == 2);
+    utassert(Is(mixed.codeActions.items[0].title, "first"));
+    utassert(Is(mixed.codeActions.items[1].title, "second"));
+
+    InputState manyAnswers;
+    manyAnswers.kind = InputKind::Editor;
+    manyAnswers.codeActionProvider = &ManyActions;
+    manyAnswers.codeActionData = (void*)(intptr_t)73;
+    InputSetValue(&manyAnswers, StrL("hello"));
+    InputSetSelectedRange(&manyAnswers, nullptr, nullptr, 0, 5);
+    Act(&manyAnswers, InputAction::ToggleCodeActions);
+    utassert(manyAnswers.codeActions.items.len == 73);
 }
 
 // Lsp::reset drops everything the layer was holding.
@@ -518,17 +570,19 @@ static int WrappingAction(void* data, Arena* a, Str text, Selection sel,
                           CodeActionItem* out, int cap) {
     (void)data;
     (void)text;
-    if (sel.IsEmpty() || cap < 1) {
+    if (sel.IsEmpty()) {
         return 0;
     }
-    auto* edits = (TextEditItem*)Alloc(a, (int)sizeof(TextEditItem) * 2);
-    edits[0].range = Selection{sel.end, sel.end};
-    edits[0].newText = StrL(")");
-    edits[1].range = Selection{sel.start, sel.start};
-    edits[1].newText = StrL("(");
-    out[0].title = StrL("Wrap in Parentheses");
-    out[0].edits = edits;
-    out[0].nEdits = 2;
+    if (cap > 0 && out) {
+        auto* edits = (TextEditItem*)Alloc(a, (int)sizeof(TextEditItem) * 2);
+        edits[0].range = Selection{sel.end, sel.end};
+        edits[0].newText = StrL(")");
+        edits[1].range = Selection{sel.start, sel.start};
+        edits[1].newText = StrL("(");
+        out[0].title = StrL("Wrap in Parentheses");
+        out[0].edits = edits;
+        out[0].nEdits = 2;
+    }
     return 1;
 }
 
@@ -559,12 +613,11 @@ static int ImportingCompletions(void* data, Str text, int offset, Str query,
     (void)text;
     (void)offset;
     (void)query;
-    if (cap <= 0) {
-        return 0;
+    if (cap > 0 && out) {
+        out[0].label = StrL("unwrap");
+        out[0].additionalEdits = &kTestImport;
+        out[0].nAdditionalEdits = 1;
     }
-    out[0].label = StrL("unwrap");
-    out[0].additionalEdits = &kTestImport;
-    out[0].nAdditionalEdits = 1;
     return 1;
 }
 
@@ -582,6 +635,35 @@ static void AnAcceptedItemBringsItsImport() {
     utassert(ValueIs(s, "u"));
 }
 
+static void CompletionAndActionEditListsGrowPastThirtyTwo() {
+    Vec<TextEditItem> additions;
+    VecReserve(additions, 40);
+    for (int i = 0; i < 40; i++) {
+        additions.Append({Selection{0, 0}, StrL("a")});
+    }
+
+    InputState completion;
+    completion.kind = InputKind::Editor;
+    CompletionItem item = {};
+    item.label = StrL("z");
+    item.additionalEdits = additions.els;
+    item.nAdditionalEdits = additions.len;
+    InputPresentCompletionItems(&completion, 0, {}, &item, 1);
+    InputAcceptCompletion(&completion, nullptr, nullptr);
+    utassert(InputValue(&completion).len == 41);
+    utassert(InputValue(&completion).s[40] == 'z');
+
+    InputState action;
+    action.kind = InputKind::Editor;
+    CodeActionItem codeAction = {};
+    codeAction.title = StrL("many edits");
+    codeAction.edits = additions.els;
+    codeAction.nEdits = additions.len;
+    InputPresentCodeActions(&action, &codeAction, 1);
+    InputPerformCodeAction(&action, nullptr, nullptr);
+    utassert(InputValue(&action).len == 40);
+}
+
 // ─── the rest of the completion surface (lsp/completions.rs) ─────────────
 
 static int gCompleteCalls = 0;
@@ -594,13 +676,36 @@ static int TestCompletions(void* data, Str text, int offset, Str query,
     (void)offset;
     (void)query;
     gCompleteCalls++;
-    if (cap <= 0) {
-        return 0;
+    if (cap > 0 && out) {
+        // The item goes out thin, the way a server sends a thousand of them.
+        out[0].label = StrL("break");
+        out[0].detail = StrL("keyword");
     }
-    // The item goes out thin, the way a server sends a thousand of them.
-    out[0].label = StrL("break");
-    out[0].detail = StrL("keyword");
     return 1;
+}
+
+static int ManyCompletions(void* data, Str text, int offset, Str query,
+                           CompletionItem* out, int cap) {
+    (void)text;
+    (void)offset;
+    (void)query;
+    int total = (int)(intptr_t)data;
+    for (int i = 0; i < total && i < cap; i++) {
+        out[i].label = StrL("candidate");
+    }
+    return total;
+}
+
+static void CompletionResponsesGrowPastTheOldBuffer() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.completionProvider = &ManyCompletions;
+    s.completionData = (void*)(intptr_t)257;
+    InputSetValue(&s, StrL("c"));
+    InputShowCompletions(&s, nullptr, nullptr);
+    utassert(s.completion.open);
+    utassert(s.completion.items.len == 257);
+    utassert(Is(s.completion.items[256].label, "candidate"));
 }
 
 static Str TestResolve(void* data, Arena* a, const CompletionItem* item) {
@@ -689,6 +794,18 @@ static Str TestInlineCompletion(void* data, Arena* a, Str text, int offset) {
     (void)offset;
     gInlineCalls++;
     return StrDup(a, StrL(" world"));
+}
+
+static Str LongInlineCompletion(void* data, Arena* a, Str text, int offset) {
+    (void)text;
+    (void)offset;
+    int n = (int)(intptr_t)data;
+    char* out = (char*)Alloc(a, n);
+    if (!out) {
+        return {};
+    }
+    memset(out, 'x', (size_t)n);
+    return Str(out, n);
 }
 
 // The provider is asked once the typing has stopped, and not before.
@@ -780,6 +897,24 @@ static void TabAcceptsAndEscapeDeclines() {
     utassert(!s.inlineCompletion.asked);
 }
 
+// Accepting clears the suggestion arena before it edits the document. A long
+// suggestion therefore needs an owning copy too; the former 512-byte stack
+// special case left a dangling pointer for anything larger.
+static void ALongInlineCompletionSurvivesAcceptance() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.inlineCompletionProvider = &LongInlineCompletion;
+    s.inlineCompletionData = (void*)(intptr_t)700;
+    Type(&s, "a");
+    s.inlineCompletion.dueAt = 0;
+    InputUpdateInlineCompletion(&s, false);
+    utassert(InputHasInlineCompletion(&s));
+    utassert(InputAcceptInlineCompletion(&s, nullptr, nullptr));
+    Str value = InputValue(&s);
+    utassert(value.len == 701);
+    utassert(value.s[0] == 'a' && value.s[700] == 'x');
+}
+
 // ─── range semantic tokens (lsp/semantic_tokens.rs, its own tests) ────────
 
 static const Str kSemanticLegend[] = {StrL("keyword"), StrL("comment")};
@@ -843,6 +978,36 @@ static void TheWindowIsBinarySearched() {
              0);
 }
 
+static int ManySemanticTokens(void* data, Str text, Selection range,
+                              SemanticToken* out, int cap) {
+    (void)text;
+    (void)range;
+    int total = (int)(intptr_t)data;
+    for (int i = 0; i < total && i < cap; i++) {
+        out[i] = {0, (uint32_t)(i == 0 ? 0 : 1), 1, 0, 0};
+    }
+    return total;
+}
+
+static void SemanticTokenResponsesGrowPastTheOldBuffer() {
+    const int total = 5000;
+    Vec<char> text;
+    VecReserve(text, total);
+    text.len = total;
+    memset(text.els, 'x', (size_t)total);
+
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, Str(text.els, text.len));
+    s.semanticTokensProvider = &ManySemanticTokens;
+    s.semanticTokensData = (void*)(intptr_t)total;
+    s.semanticLegend = kSemanticLegend;
+    s.nSemanticLegend = 2;
+    InputUpdateSemanticTokens(&s);
+    utassert(s.semanticTokens.len == total);
+    utassert(s.semanticTokens[total - 1].col == total - 1);
+}
+
 // ─── go to definition (input/editor/lsp/definitions.rs) ───────────────────
 
 // A provider that answers for one word: `Duration` is defined at the top of
@@ -854,27 +1019,53 @@ static int TestDefinitions(void* data, Arena* a, Str text, int offset,
     (void)data;
     (void)a;
     gDefCalls++;
-    if (cap <= 0) {
-        return 0;
-    }
     int wa = offset, wb = offset;
     if (!TextWordRangeAt(text, offset, &wa, &wb) || wa >= wb) {
         return 0;
     }
     Str word(text.s + wa, wb - wa);
     if (Is(word, "Duration")) {
-        out[0].origin = {wa, wb};
-        out[0].uri = Str{};
-        out[0].target = {0, 8};
+        if (cap > 0 && out) {
+            out[0].origin = {wa, wb};
+            out[0].uri = Str{};
+            out[0].target = {0, 8};
+        }
         return 1;
     }
     if (Is(word, "Arc")) {
-        out[0].origin = {wa, wb};
-        out[0].uri = StrL("https://doc.rust-lang.org/std/sync/struct.Arc.html");
-        out[0].target = {};
+        if (cap > 0 && out) {
+            out[0].origin = {wa, wb};
+            out[0].uri =
+                StrL("https://doc.rust-lang.org/std/sync/struct.Arc.html");
+            out[0].target = {};
+        }
         return 1;
     }
     return 0;
+}
+
+static int ManyDefinitions(void* data, Arena* a, Str text, int offset,
+                           DefinitionLink* out, int cap) {
+    (void)a;
+    (void)text;
+    (void)offset;
+    int total = (int)(intptr_t)data;
+    for (int i = 0; i < total && i < cap; i++) {
+        out[i].origin = {0, 4};
+        out[i].target = {i, i + 1};
+    }
+    return total;
+}
+
+static void DefinitionResponsesGrowPastTheOldBuffer() {
+    InputState s;
+    s.kind = InputKind::Editor;
+    InputSetValue(&s, StrL("word"));
+    s.definitionProvider = &ManyDefinitions;
+    s.definitionData = (void*)(intptr_t)19;
+    InputHoverDefinition(&s, 1);
+    utassert(s.hoverDef.locations.len == 19);
+    utassert(s.hoverDef.locations[18].target.start == 18);
 }
 
 static bool gShown = false;
@@ -1584,14 +1775,17 @@ static int Complete(void* data, Str, int, Str query, CompletionItem* out,
     }
     int n = 0;
     for (const CompletionItem& item : kItems) {
-        if (n >= cap || query.len > item.label.len) {
+        if (query.len > item.label.len) {
             continue;
         }
         if (query.len > 0 &&
             memcmp(item.label.s, query.s, (size_t)query.len) != 0) {
             continue;
         }
-        out[n++] = item;
+        if (n < cap && out) {
+            out[n] = item;
+        }
+        n++;
     }
     return n;
 }
@@ -1691,20 +1885,25 @@ static int Actions(void* data, Arena* a, Str text, Selection sel,
     if (data) {
         (*(int*)data)++;
     }
-    if (sel.IsEmpty() || cap < 2) {
+    if (sel.IsEmpty()) {
         return 0;
     }
-    char* up = (char*)Alloc(a, sel.end - sel.start);
-    for (int i = sel.start; i < sel.end; i++) {
-        char c = text.s[i];
-        up[i - sel.start] = c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
+    if (cap > 0 && out) {
+        char* up = (char*)Alloc(a, sel.end - sel.start);
+        for (int i = sel.start; i < sel.end; i++) {
+            char c = text.s[i];
+            up[i - sel.start] =
+                c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
+        }
+        out[0].title = StrL("Convert to Uppercase");
+        out[0].range = sel;
+        out[0].newText = Str(up, sel.end - sel.start);
     }
-    out[0].title = StrL("Convert to Uppercase");
-    out[0].range = sel;
-    out[0].newText = Str(up, sel.end - sel.start);
-    out[1].title = StrL("Delete");
-    out[1].range = sel;
-    out[1].newText = Str{};
+    if (cap > 1 && out) {
+        out[1].title = StrL("Delete");
+        out[1].range = sel;
+        out[1].newText = Str{};
+    }
     return 2;
 }
 
@@ -1766,11 +1965,13 @@ static int OneColor(void* data, Str text, DocumentColor* out, int cap) {
     if (data) {
         (*(int*)data)++;
     }
-    if (cap < 1 || text.len < 4) {
+    if (text.len < 4) {
         return 0;
     }
-    out[0].range = Selection{0, 4};
-    out[0].color = Rgba{1, 2, 3, 255};
+    if (cap > 0 && out) {
+        out[0].range = Selection{0, 4};
+        out[0].color = Rgba{1, 2, 3, 255};
+    }
     return 1;
 }
 
@@ -1801,6 +2002,38 @@ static void DocumentColorsAreAskedForAgainAfterAnEdit() {
     InputSetValue(&plain, StrL("#f0a"));
     InputUpdateDocumentColors(&plain);
     utassert(plain.documentColors.len == 0);
+}
+
+static int ManyDocumentColors(void* data, Str text, DocumentColor* out,
+                              int cap) {
+    (void)text;
+    int total = *(int*)data;
+    for (int i = 0; i < total && i < cap; i++) {
+        int start = total - 1 - i;
+        out[i].range = {start, start + 1};
+        out[i].color = Rgba{1, 2, 3, 255};
+    }
+    return total;
+}
+
+static void DocumentColorResponsesUseTheRustLimit() {
+    int total = 1500;
+    InputState s;
+    s.kind = InputKind::Editor;
+    s.documentColorProvider = &ManyDocumentColors;
+    s.documentColorData = &total;
+    InputSetValue(&s, StrL("x"));
+    InputUpdateDocumentColors(&s);
+    utassert(s.documentColors.len == 1500);
+    utassert(s.documentColors[0].range.start == 0);
+    utassert(s.documentColors[1499].range.start == 1499);
+
+    // Upstream rejects the whole response beyond 10,000. Keep the previous
+    // valid cache rather than displaying a misleading prefix.
+    total = kMaxDocumentColors + 1;
+    s.documentColorsDirty = true;
+    InputUpdateDocumentColors(&s);
+    utassert(s.documentColors.len == 1500);
 }
 
 static El* FindNamedEl(El* root, const char* name) {
@@ -1882,6 +2115,7 @@ void TestInputState() {
     DeleteToWordAndLineBoundaries();
     LineBoundaries();
     EveryProviderIsAsked();
+    CodeActionCollectionsGrowToTheirAnswers();
     ResetDropsWhatTheLayerHeld();
     AHostCanPresentItsOwnItems();
     AHostCanTakeTheKeys();
@@ -1889,19 +2123,24 @@ void TestInputState() {
     AnEditListIsOneStep();
     ACodeActionCanBeMoreThanOneEdit();
     AnAcceptedItemBringsItsImport();
+    CompletionAndActionEditListsGrowPastThirtyTwo();
+    CompletionResponsesGrowPastTheOldBuffer();
     TheProviderSaysWhenTheMenuOpens();
     DocumentationIsResolvedOnce();
     TheSuggestionWaitsForTheDebounce();
     ASuggestionThatMissedItsMomentIsDropped();
     TabAcceptsAndEscapeDeclines();
+    ALongInlineCompletionSurvivesAcceptance();
     TheDeltaEncodingIsUnpacked();
     ATokenOutsideTheLegendIsSkipped();
     OnlyTheVisibleTokensAreResolved();
     TheWindowIsBinarySearched();
+    SemanticTokenResponsesGrowPastTheOldBuffer();
     AHoveredSymbolIsAskedAboutOnce();
     ASecondaryClickFollowsTheDefinition();
     TheActionGoesByTheLastThingAHoverFound();
     TheHostSeesTheDocumentFirst();
+    DefinitionResponsesGrowPastTheOldBuffer();
     BoundariesStepCharacters();
     SelectionFollowsTheDragDirection();
     SelectWordAndLine();
@@ -1930,5 +2169,6 @@ void TestInputState() {
     AnAcceptedItemWritesItsInsertText();
     TheCodeActionMenuRewritesWhatIsSelected();
     DocumentColorsAreAskedForAgainAfterAnEdit();
+    DocumentColorResponsesUseTheRustLimit();
     TwoFindBarsHaveTwoPrevButtons();
 }

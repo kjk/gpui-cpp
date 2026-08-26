@@ -6449,9 +6449,43 @@ globals rather than static payloads.
 
 Known structural gaps were made more explicit, not hidden by the module
 count. Every module that assigns a semantic role upstream is partial until
-the runtime exports an accessibility tree. Base input still has bounded host
-callback buffers, UI text/HTML retain dependency-free parser limits, History
-is specialized, and the large component Theme palette still lives in the
-runtime header. Those are the next four implementation phases in
-`port-map.md`; async and third-party highlighter/parser substitutions remain
-the standing adapters/exclusions from `AGENTS.md`.
+the runtime exports an accessibility tree. At the end of that pass Base input
+still had bounded host callback buffers, UI text/HTML retained dependency-free
+parser limits, History was specialized, and the large component Theme palette
+still lived in the runtime header. `port-map.md` orders that work; async and
+third-party highlighter/parser substitutions remain the standing
+adapters/exclusions from `AGENTS.md`.
+
+## Base input provider collections grow like Rust Vecs
+
+The bounded Base input callback seam from the structural audit is closed.
+Completion, document-color, code-action, semantic-token and definition
+providers now return the total number of available results and write the
+prefix that fits. The input engine retries a short first buffer at the
+reported size, so the old limits of 128 completions, 32 actions, 4 action
+providers, 4,096 semantic tokens and 8 definitions no longer discard valid
+answers. Code-action providers themselves are a `Vec`, matching Rust's
+`Vec<Rc<dyn CodeActionProvider>>`. A caller that populated the original
+one-provider field before adding another is preserved as provider zero.
+
+Document colors keep the one limit that is upstream behavior rather than a
+port artifact: a response above `MAX_DOCUMENT_COLORS` (10,000) is rejected in
+full, leaving the previous valid cache in place. Responses at or below the
+limit grow past the old 1,024 buffer and are sorted by range start like
+`document_colors_from_response`.
+
+The same pass removed the 32-entry truncation from completion additional
+edits and code-action edit lists. It also fixed a lifetime bug independent of
+the count contract: accepting inline completion text at least 512 bytes long
+used to clear the arena while still pointing into it; the accepted text now
+has an owning copy until insertion finishes. The editor example's providers
+follow the total-count contract, and its marker semantic-token scan uses a
+`Vec` rather than a 512-hit stack array.
+
+Regression coverage asks for 257 completions, 73 code actions from one
+provider, six providers, 5,000 semantic tokens, 19 definitions, 1,500
+document colors, 40 edits and a 700-byte inline completion. `bun cmd/test.ts`
+passes 18,789 checks. Base input remains partial for structural reasons — its
+providers are synchronous function-pointer adapters and its document is a
+flat buffer rather than Rust's tasks, trait objects and Rope — no longer for
+silently bounded collection results.
