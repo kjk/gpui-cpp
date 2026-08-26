@@ -82,14 +82,15 @@ El* Progress::IntoEl() {
                               MotionNew(kProgressMotionMs));
         indicator->WFrac(v / 100.f);
     }
-    return gpui::Progress::New(cx, StrL("progress"))
-        ->W(w)
-        ->Child(gpui::ProgressTrack::New(cx)
-                    ->W(w)
-                    ->H(h)
-                    ->Radius(th.radiusFull)
-                    ->Bg(BackgroundOpacity(th.tokens.progress, 0.2f))
-                    ->Child(indicator));
+    El* root = gpui::Progress::New(cx, id.s ? id : StrL("progress"), value,
+                                   loading)
+                   ->W(w);
+    return root->Child(gpui::ProgressTrack::New(cx)
+                           ->W(w)
+                           ->H(h)
+                           ->Radius(th.radiusFull)
+                           ->Bg(BackgroundOpacity(th.tokens.progress, 0.2f))
+                           ->Child(indicator));
 }
 
 ProgressCircle* ProgressCircle::New(Ctx* cx) {
@@ -172,6 +173,7 @@ static void PaintCircleProgress(PaintCtx* ctx, El* e, void* user) {
 }
 
 El* ProgressCircle::IntoEl() {
+    float accessibilityValue = value;
     if (loading) {
         // The same sweep as the bar's, around a circle: the leading edge runs
         // the whole loop and the trailing one chases it from halfway.
@@ -184,7 +186,18 @@ El* ProgressCircle::IntoEl() {
                             MotionNew(kProgressMotionMs));
         startValue = 0;
     }
-    El* e = Div(a)->W(size)->H(size)->ItemsCenter()->JustifyCenter();
+    El* e = Div(a)
+                ->Id(id.s ? id : StrL("progress-circle"))
+                ->Role(AccessibilityRole::ProgressIndicator)
+                ->AriaMinNumericValue(0)
+                ->AriaMaxNumericValue(100)
+                ->W(size)
+                ->H(size)
+                ->ItemsCenter()
+                ->JustifyCenter();
+    if (!loading) {
+        e->AriaNumericValue(ProgressClampValue(accessibilityValue));
+    }
     e->customPaint = PaintCircleProgress;
     e->customUser = this;
     if (showLabel && size >= 28) {

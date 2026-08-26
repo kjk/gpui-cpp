@@ -51,8 +51,20 @@ SelectAction SelectActionOf(uint32_t id, bool open, bool disabled) {
     return SelectAction::None;
 }
 
-El* Select::New(Ctx* cx, Str id) {
+El* Select::New(Ctx* cx, Str id, bool open, bool disabled,
+                Str accessibilityLabel, Listener onOpenChange) {
     Arena* a = cx->a;
-    return Div(a)->Id(id);
+    El* e = Div(a)
+                ->Id(id)
+                ->Role(AccessibilityRole::ComboBox)
+                ->AriaExpanded(open)
+                ->AriaDisabled(disabled);
+    if (accessibilityLabel.s) {
+        e->AriaLabel(accessibilityLabel);
+    }
+    if (!disabled && onOpenChange.IsValid()) {
+        e->OnAccessibilityDefault(ListenerFill(onOpenChange, !open));
+    }
+    return e;
 }
 } // namespace gpui

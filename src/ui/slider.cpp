@@ -177,7 +177,14 @@ El* Slider::IntoEl() {
                                         ->BindSlider(bind, axis),
                                     thumbId, thumbBorder));
         }
-        return gpui::Slider::New(cx)->W(kH)->H(w)->Child(vtrack);
+        El* root = gpui::Slider::New(cx, state, axis)
+                       ->Id(id.s ? id : StrL("slider"))
+                       ->AriaDisabled(disabled)
+                       ->AriaOrientation(AccessibilityOrientation::Vertical)
+                       ->W(kH)
+                       ->H(w)
+                       ->Child(vtrack);
+        return root;
     }
 
     int tid = HashClickId(id.s ? id : StrL("slider"));
@@ -236,7 +243,12 @@ El* Slider::IntoEl() {
         thumb->Click(thumbId)->BindSlider(bind, axis);
         track->Child(ThumbRing(thumb, thumbId, thumbBorder));
     }
-    El* root = gpui::Slider::New(cx)->H(kH)->Child(track);
+    El* root = gpui::Slider::New(cx, state, axis)
+                   ->Id(id.s ? id : StrL("slider"))
+                   ->AriaDisabled(disabled)
+                   ->AriaOrientation(AccessibilityOrientation::Horizontal)
+                   ->H(kH)
+                   ->Child(track);
     return fill ? root->W(kFill) : root->W(w);
 }
 

@@ -308,7 +308,9 @@ El* Select::IntoEl() {
         SearchableListSearch(s, items, nItems,
                              query ? InputValue(query) : Str{});
     }
-    El* root = gpui::Select::New(cx, id)->W(width)->Child(box);
+    El* root = gpui::Select::New(cx, id, open, disabled, {}, onToggle)
+                   ->W(width)
+                   ->Child(box);
     // `("select-popup", cx.entity_id())`: the open list is deferred out of
     // the tree, so Rust qualifies its name with an identity rather than
     // leaning on the stack. The picker's id is what stands for the entity

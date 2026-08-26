@@ -80,21 +80,29 @@ struct ContentTypeRow {
     int slot;
     const char* label;
     bool maskToggle;
+    component::InputContentType contentType;
 };
 
 static const ContentTypeRow kContentTypes[] = {
-    {InCtName, "Name", false},
-    {InCtUsername, "Username", false},
-    {InCtPassword, "Password", true},
-    {InCtNewPassword, "New password", true},
-    {InCtOtp, "One-time code", false},
-    {InCtEmail, "Email", false},
-    {InCtTel, "Telephone", false},
-    {InCtUrl, "URL", false},
-    {InCtCard, "Credit card number", false},
-    {InCtCardExp, "Credit card expiration", false},
-    {InCtCardCvc, "Credit card security code", true},
-    {InCtPostal, "Postal code", false},
+    {InCtName, "Name", false, component::InputContentType::Name},
+    {InCtUsername, "Username", false, component::InputContentType::Username},
+    {InCtPassword, "Password", true, component::InputContentType::Password},
+    {InCtNewPassword, "New password", true,
+     component::InputContentType::NewPassword},
+    {InCtOtp, "One-time code", false,
+     component::InputContentType::OneTimeCode},
+    {InCtEmail, "Email", false, component::InputContentType::EmailAddress},
+    {InCtTel, "Telephone", false,
+     component::InputContentType::TelephoneNumber},
+    {InCtUrl, "URL", false, component::InputContentType::Url},
+    {InCtCard, "Credit card number", false,
+     component::InputContentType::CreditCardNumber},
+    {InCtCardExp, "Credit card expiration", false,
+     component::InputContentType::CreditCardExpiration},
+    {InCtCardCvc, "Credit card security code", true,
+     component::InputContentType::CreditCardSecurityCode},
+    {InCtPostal, "Postal code", false,
+     component::InputContentType::PostalCode},
 };
 
 struct InputStory {
@@ -186,6 +194,7 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
                                 ->Disabled(true)
                                 ->IntoEl());
     StorySectionAdd(states, Field(self, cx, InReadonly, focus, clear)
+                                ->Readonly()
                                 ->IntoEl());
     StorySectionAdd(states, Field(self, cx, InMask, focus, clear)
                                 ->Masked(!self->revealed[InMask])
@@ -205,7 +214,8 @@ El* InputStory::Render(InputStory* self, Ctx* cx) {
         line->Child(StoryTxt(cx, StoryDup(cx, row.label), 14, th.foreground)
                         ->W(192)
                         ->Shrink0());
-        component::Input* in = Field(self, cx, row.slot, focus, clear);
+        component::Input* in =
+            Field(self, cx, row.slot, focus, clear)->ContentType(row.contentType);
         if (row.maskToggle) {
             in->Masked(!self->revealed[row.slot])
                 ->MaskToggle()

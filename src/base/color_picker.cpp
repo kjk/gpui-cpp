@@ -292,18 +292,45 @@ void ColorPickerState::OnHexFocus(ColorPickerState* s, Ctx* cx,
     Notify(cx);
 }
 
-El* ColorPicker::New(Ctx* cx, Str id) {
+El* ColorPicker::New(Ctx* cx, Str id, bool open, bool disabled,
+                     Str accessibilityLabel, AccessibilityRole role,
+                     Listener onOpenChange) {
     Arena* a = cx->a;
-    return Div(a)->Id(id);
+    El* e = Div(a)
+                ->Id(id)
+                ->Role(role)
+                ->AriaExpanded(open)
+                ->AriaDisabled(disabled);
+    if (accessibilityLabel.s) {
+        e->AriaLabel(accessibilityLabel);
+    }
+    if (!disabled && onOpenChange.IsValid()) {
+        e->OnAccessibilityDefault(ListenerFill(onOpenChange, !open));
+    }
+    return e;
 }
 
-El* ColorSwatch::New(Ctx* cx, Str id, Listener onClick, Listener onHover) {
+El* ColorSwatch::New(Ctx* cx, Str id, Listener onClick, Listener onHover,
+                     uint32_t color, bool selected, bool disabled,
+                     Str accessibilityLabel) {
     Arena* a = cx->a;
-    El* e = Div(a)->PathClick(id);
-    if (onClick.IsValid()) {
+    El* e = Div(a)
+                ->PathClick(id)
+                ->Role(AccessibilityRole::RadioButton)
+                ->AriaLabel(accessibilityLabel.s
+                                ? accessibilityLabel
+                                : StrDup(a, fmt("#%06x", color & 0xffffffu)))
+                ->AriaToggled(selected ? AccessibilityToggled::True
+                                       : AccessibilityToggled::False)
+                ->AriaSelected(selected)
+                ->AriaDisabled(disabled);
+    if (!disabled) {
+        e->PathId(id);
+    }
+    if (!disabled && onClick.IsValid()) {
         e->OnClick(onClick);
     }
-    if (onHover.IsValid()) {
+    if (!disabled && onHover.IsValid()) {
         e->OnHover(onHover);
     }
     return e;

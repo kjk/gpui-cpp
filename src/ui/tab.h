@@ -44,6 +44,7 @@ float TabInnerRadius(TabVariant v, UiSize size, float radius, float radiusLg);
 
 struct TabItem {
     Str label = {};
+    Str ariaLabel = {};
     IconName icon = IconName::None;
     bool disabled = false;
     // Tab::flex_1(): the tab shares the bar with its siblings instead of
@@ -81,6 +82,8 @@ struct Tabs {
     Tabs* Tab(Str label, IconName icon, bool disabled = false);
     // `Tab::new().flex_1()`, applied to the tab just added.
     Tabs* Flex1();
+    // `Tab::aria_label`, applied to the tab most recently added.
+    Tabs* AriaLabel(Str label);
     Tabs* Disabled(int ix, bool v = true);
     Tabs* Selected(int i);
     Tabs* OnChange(Listener fn);

@@ -149,9 +149,8 @@ enum class TableAlign : uint8_t {
     Right
 };
 
-// A header cell or a data cell: `TableHead` and `TableCell` differ only in
-// the role they carry, which is the half of `crates/base/src/table.rs` this
-// tree has no accessibility layer for.
+// A header cell or a data cell: `TableHead` and `TableCell` differ in their
+// accessibility role; the parent stamps their one-based column index.
 struct TableCellEl {
     Arena* a = nullptr;
     Ctx* cx = nullptr;

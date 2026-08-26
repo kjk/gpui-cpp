@@ -230,6 +230,7 @@ El* SearchableList::IntoEl() {
     SearchableListState* s = state.Get(cx);
     El* box = Div(a)
                   ->Id(id)
+                  ->Role(AccessibilityRole::ListBox)
                   ->FlexCol()
                   ->W(w)
                   ->Pad(4)
@@ -287,6 +288,11 @@ El* SearchableList::IntoEl() {
         }
         bool checked = SearchableListIsChecked(s, items, nItems, ix);
         El* row = Div(a)
+                      ->Role(AccessibilityRole::ListBoxOption)
+                      ->AriaLabel(it.title)
+                      ->AriaSelected(checked)
+                      ->AriaPositionInSet(m + 1)
+                      ->AriaSizeOfSet(s->matches.len)
                       ->FlexRow()
                       ->W(kFill)
                       ->Shrink0()
@@ -297,6 +303,7 @@ El* SearchableList::IntoEl() {
                       ->JustifyBetween()
                       ->Radius(th.radius);
         bool enabled = SearchableListIsEnabled(s, items, nItems, ix);
+        row->AriaDisabled(!enabled);
         if (enabled) {
             row->HoverBg(th.tokens.accent);
         }

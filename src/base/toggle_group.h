@@ -9,6 +9,6 @@ namespace gpui {
 // out — so there is nothing here for it to set. The caller picks the
 // direction, the way it does in Rust.
 struct ToggleGroup {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, Axis axis = Axis::Horizontal);
 };
 } // namespace gpui

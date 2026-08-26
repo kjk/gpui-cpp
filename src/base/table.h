@@ -14,7 +14,8 @@ namespace gpui {
 // cell would put a box in the frame's hit list for every cell of a
 // two-hundred-row table, and nothing would ever look them up.
 struct Table {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, int rowCount = -1,
+                   int columnCount = -1);
 };
 struct TableHeader {
     static El* New(Ctx* cx, Str id);
@@ -23,13 +24,13 @@ struct TableBody {
     static El* New(Ctx* cx, Str id);
 };
 struct TableRow {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, int rowIndex = 0);
 };
 struct TableHead {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, int columnIndex = 0);
 };
 struct TableCell {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, int columnIndex = 0);
 };
 struct TableCaption {
     static El* New(Ctx* cx, Str id);

@@ -41,17 +41,12 @@ slider spinner status_bar stepper switch tab table tag text theme tooltip tree
 `.trim().split(/\s+/);
 
 const partialBase = new Set([
-  "accordion", "alert_dialog", "button", "checkbox", "color_picker",
-  "date_picker", "dialog", "global_state", "input", "link",
-  "macos_accessibility", "number_input", "pagination", "popover", "progress",
-  "radio", "radio_group", "scrollbar", "select", "slider", "styled",
-  "switch", "table", "tabs", "text_selection", "toast", "toggle",
-  "toggle_group", "tooltip",
+  "global_state", "input", "macos_accessibility", "scrollbar", "styled",
+  "text_selection",
 ]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
 const partialUi = new Set([
-  "alert", "breadcrumb", "button", "checkbox", "command", "global_state",
-  "input", "inspector", "list", "menu", "stepper", "text", "theme",
+  "global_state", "input", "inspector", "text", "theme",
 ]);
 const adapterUi = new Set([
   "async_util", "component_traits", "element_ext", "highlighter", "styled",
@@ -60,11 +55,12 @@ const adapterUi = new Set([
 const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
   "base/input": "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
-  "base/macos_accessibility": "only the native hit-test forwarding seam is present",
+  "base/macos_accessibility": "the portable semantic tree exists; only the native macOS hit-test forwarding seam is connected",
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
   "base/styled": "StyleRefinement is represented by the runtime El builder surface",
   "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
+  "ui/input": "native content-type/autofill synchronization and some rich editor integrations remain smaller than Rust",
   "ui/inspector": "the inspector is intentionally smaller than GPUI's debug inspector",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
   "ui/theme": "filesystem watch/reload and the richer highlight/list/sheet settings remain smaller than Rust",
@@ -80,16 +76,6 @@ const adapterReasons: Record<string, string> = {
   "ui/highlighter": "tree-sitter/syntect are excluded; a dependency-free scanner is used",
   "ui/styled": "fluent traits are C++ builders and the shared sizing vocabulary",
 };
-
-const a11yPartial = new Set([
-  "base/accordion", "base/alert_dialog", "base/button", "base/checkbox",
-  "base/color_picker", "base/date_picker", "base/dialog", "base/link",
-  "base/number_input", "base/pagination", "base/popover", "base/progress",
-  "base/radio", "base/radio_group", "base/select", "base/slider", "base/switch",
-  "base/table", "base/tabs", "base/toast", "base/toggle", "base/toggle_group",
-  "base/tooltip", "ui/alert", "ui/breadcrumb", "ui/button", "ui/checkbox",
-  "ui/command", "ui/input", "ui/list", "ui/menu", "ui/stepper",
-]);
 
 const baseOverrides: Record<string, string[]> = {
   async_util: [],
@@ -163,9 +149,7 @@ function entriesFor(crate: CrateName, modules: string[]): Entry[] {
       targets: module in overrides ? overrides[module] : defaultTargets(crate, module),
       reason: module === "async_util"
         ? "async is a standing repository non-goal"
-        : partialReasons[key] ?? adapterReasons[key] ?? (a11yPartial.has(key)
-          ? "semantic role/value/action export is not implemented by the runtime accessibility tree"
-          : undefined),
+        : partialReasons[key] ?? adapterReasons[key],
     };
   });
 }
@@ -222,6 +206,7 @@ const gpuiSources = ["src/gpui/gpui.cpp", "src/gpui/entity.cpp", "src/gpui/windo
   .join("\n");
 const uiThemeHeader = readFileSync(join(root, "src/ui/theme.h"), "utf8");
 const baseThemeTokens = readFileSync(join(root, "src/base/theme_tokens.h"), "utf8");
+const windowCommon = readFileSync(join(root, "src/gpui/window_common.cpp"), "utf8");
 if (/\bstruct\s+Theme(?:Tokens)?\b/.test(gpuiHeader)) {
   errors.push("theme layering: component Theme type leaked into gpui/gpui.h");
 }
@@ -234,6 +219,23 @@ if (!/\bstruct\s+Theme\b/.test(uiThemeHeader) ||
 }
 if (/\bThemeSemanticTokens\s*\(/.test(baseThemeTokens)) {
   errors.push("theme layering: Base declares a conversion from the component palette");
+}
+
+// Accessibility invariant: Base/UI roles are frame data owned by GPUI, then
+// projected after layout beside focus/hit state. Actions must route back
+// through the same listener/state seams as pointer and keyboard input.
+for (const marker of [
+  "struct AccessibilityInfo", "struct AccessibilityNode",
+  "Vec<AccessibilityNode> accessibility", "AccessibilityCollect(El* root",
+  "OnAccessibilityIncrement", "AccessibilityActionSetValue",
+]) {
+  if (!gpuiHeader.includes(marker)) {
+    errors.push(`accessibility runtime: missing ${marker}`);
+  }
+}
+if (!windowCommon.includes("AccessibilityCollect(root, &win->accessibility)") ||
+    !windowCommon.includes("WindowAccessibilityPerform(")) {
+  errors.push("accessibility runtime: frame projection or action dispatch is not wired");
 }
 
 const counts = (status: Status) => entries.filter((e) => e.status === status).length;

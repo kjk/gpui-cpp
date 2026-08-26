@@ -134,7 +134,13 @@ Dialog* Dialog::New(Ctx* cx) {
     Dialog* d = ArenaNew<Dialog>(a);
     d->cx = cx;
     d->trap = StrL("dialog");
-    d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
+    d->root = Div(a)
+                  ->Role(AccessibilityRole::Dialog)
+                  ->Fixed()
+                  ->Top(0)
+                  ->Left(0)
+                  ->W(kFill)
+                  ->H(kFill);
     return d;
 }
 

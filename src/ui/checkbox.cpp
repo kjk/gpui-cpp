@@ -50,6 +50,18 @@ Checkbox* Checkbox::FocusRing(bool v) {
     focusRing = v;
     return this;
 }
+Checkbox* Checkbox::Role(AccessibilityRole value) {
+    accessibilityRole = value;
+    return this;
+}
+Checkbox* Checkbox::TabIndex(int v) {
+    tabIndex = v;
+    return this;
+}
+Checkbox* Checkbox::TabStop(bool v) {
+    tabStop = v;
+    return this;
+}
 Checkbox* Checkbox::Tooltip(Str s) {
     tooltip = s;
     return this;
@@ -106,10 +118,16 @@ El* Checkbox::IntoEl() {
     // on a one-line label and drops the box half a description lower on a
     // labelled one, which is what it was doing.
     El* row = gpui::Checkbox::New(cx, id, state, disabled, onClick)
+                  ->Role(accessibilityRole)
+                  ->TabIndex(tabIndex)
+                  ->TabStop(tabStop)
                   ->FocusRing(focusRing)
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
+    if (label.s) {
+        row->AriaLabel(label);
+    }
     if (tooltip.s) {
         row->Tip(tooltip);
     }

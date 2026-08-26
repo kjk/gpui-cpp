@@ -52,6 +52,31 @@ Input* Input::Disabled(bool v) {
     disabled = v;
     return this;
 }
+Input* Input::Readonly(bool v) {
+    readonly = v;
+    if (state) {
+        state->readonly = v;
+    }
+    return this;
+}
+Input* Input::ContentType(InputContentType value) {
+    contentType = value;
+    hasContentType = true;
+    return this;
+}
+Input* Input::Role(AccessibilityRole value) {
+    accessibilityRole = value;
+    hasAccessibilityRole = true;
+    return this;
+}
+Input* Input::AccessibilityId(Str value) {
+    accessibilityId = value;
+    return this;
+}
+Input* Input::AriaLabel(Str value) {
+    ariaLabel = value;
+    return this;
+}
 Input* Input::Cleanable(bool v) {
     cleanable = v;
     return this;
@@ -93,6 +118,37 @@ static const float kInputPadX = 10;
 static const float kInputPadY = 8;
 static const float kInputGap = 6;
 static const float kInputTextSize = 14;
+
+static AccessibilityRole InputAccessibilityRole(
+    bool hasContentType, InputContentType contentType) {
+    if (!hasContentType) {
+        return AccessibilityRole::TextInput;
+    }
+    switch (contentType) {
+        case InputContentType::TelephoneNumber:
+            return AccessibilityRole::PhoneNumberInput;
+        case InputContentType::EmailAddress:
+            return AccessibilityRole::EmailInput;
+        case InputContentType::Url:
+            return AccessibilityRole::UrlInput;
+        case InputContentType::Password:
+        case InputContentType::NewPassword:
+            return AccessibilityRole::PasswordInput;
+        case InputContentType::DateTime:
+            return AccessibilityRole::DateTimeInput;
+        case InputContentType::Birthdate:
+            return AccessibilityRole::DateInput;
+        default:
+            return AccessibilityRole::TextInput;
+    }
+}
+
+static bool InputContentIsSecret(bool hasContentType,
+                                 InputContentType contentType) {
+    return hasContentType &&
+           (contentType == InputContentType::Password ||
+            contentType == InputContentType::NewPassword);
+}
 
 El* Input::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
@@ -138,8 +194,18 @@ El* Input::IntoEl() {
     if (disabled) {
         editor.foreground = th.mutedFg;
     }
-    El* field = InputBase::New(cx, id, !disabled)
-                    ->BindInput(disabled ? nullptr : state)
+    bool password = masked || (state && state->masked) ||
+                    InputContentIsSecret(hasContentType, contentType);
+    AccessibilityRole role =
+        hasAccessibilityRole
+            ? accessibilityRole
+            : InputAccessibilityRole(hasContentType, contentType);
+    El* field = InputBase::New(
+                    cx, id, !disabled,
+                    password && !hasAccessibilityRole
+                        ? AccessibilityRole::PasswordInput
+                        : role)
+                     ->BindInput(disabled ? nullptr : state)
                     ->FlexRow()
                     ->W(col ? kFill : width)
                     ->H(h)
@@ -150,7 +216,25 @@ El* Input::IntoEl() {
                     // The editor paints its own line into the field's box;
                     // a value wider than the field scrolls under it rather
                     // than spilling out past whatever is next to it.
-                    ->ClipX();
+                     ->ClipX();
+    if (state) {
+        if (state->placeholder.s) {
+            field->AriaPlaceholder(state->placeholder);
+        }
+        if (!password) {
+            field->AriaValue(InputValue(state));
+        }
+    }
+    if (accessibilityId.s) {
+        field->AccessibilityId(accessibilityId);
+    }
+    if (ariaLabel.s) {
+        field->AriaLabel(ariaLabel);
+    } else if (label.s) {
+        field->AriaLabel(label);
+    } else if (state && state->placeholder.s) {
+        field->AriaLabel(state->placeholder);
+    }
     // input.rs gates the whole focus appearance on `appearance`: a field with
     // none of its own is one somebody else has framed — a NumberInput's
     // editor, sitting inside a frame that shows the focus for it — and a ring
@@ -240,6 +324,14 @@ Textarea* Textarea::SoftWrap(bool v) {
     softWrap = v;
     return this;
 }
+Textarea* Textarea::Role(AccessibilityRole value) {
+    accessibilityRole = value;
+    return this;
+}
+Textarea* Textarea::AriaLabel(Str value) {
+    ariaLabel = value;
+    return this;
+}
 Textarea* Textarea::OnFocus(Listener fn) {
     onFocus = fn;
     return this;
@@ -276,8 +368,9 @@ El* Textarea::IntoEl() {
     if (state && h > 0) {
         state->viewH = h - 2 * 8;
     }
-    El* box = InputBase::New(cx, id, true)
-                  ->BindInput(state)
+    bool interactive = state && !state->disabled;
+    El* box = InputBase::New(cx, id, interactive, accessibilityRole)
+                   ->BindInput(state)
                   ->W(kFill)
                   ->H(h)
                   ->Pad(8)
@@ -292,7 +385,19 @@ El* Textarea::IntoEl() {
                   // frame that is on screen; the box is already named, so
                   // its place in the tree is what it is found by.
                   ->ScrollFromPath()
-                  ->Child(gpui::Textarea::New(cx, state, editor));
+                   ->Child(gpui::Textarea::New(cx, state, editor));
+    if (state) {
+        box->AriaValue(InputValue(state));
+        if (state->placeholder.s) {
+            box->AriaPlaceholder(state->placeholder);
+            if (!ariaLabel.s) {
+                box->AriaLabel(state->placeholder);
+            }
+        }
+    }
+    if (ariaLabel.s) {
+        box->AriaLabel(ariaLabel);
+    }
     // `Scrollbar::new(..)` against `Scrollbar::vertical(..)`: a field that
     // wraps has nothing to reach sideways, and one that does not is as wide
     // as its longest row and scrolls to the end of it.
@@ -385,7 +490,21 @@ El* NumberInput::IntoEl() {
     // is the only thing that can say the editor has the keyboard.
     bool focused = state && state->focused && !disabled;
     Str base = id.s ? id : StrL("number");
-    El* frame = gpui::NumberInput::New(cx, base)->FlexRow()->W(width)->H(h);
+    El* frame = gpui::NumberInput::New(cx, base)
+                    ->AriaDisabled(disabled)
+                    ->OnAccessibilityIncrement(onInc)
+                    ->OnAccessibilityDecrement(onDec)
+                    ->FlexRow()
+                    ->W(width)
+                    ->H(h);
+    if (state) {
+        Str inputValue = InputValue(state);
+        frame->AriaValue(inputValue);
+        double numeric = 0;
+        if (NumberParseValue(inputValue, &numeric)) {
+            frame->AriaNumericValue((float)numeric);
+        }
+    }
     if (appearance) {
         frame->Radius(th.radius)
             ->Bg(hasBg ? bg
@@ -415,6 +534,7 @@ El* NumberInput::IntoEl() {
     // what number_input.rs pins with
     // `pressing_a_step_button_never_takes_focus_off_the_editor`.
     El* dec = gpui::Button::New(cx, StrL("decrement"), disabled, onDec, false)
+                   ->AriaLabel(Tr("Input.Decrement"))
                   ->W(btn)
                   ->H(kFill)
                   ->Corners(stepR, 0, 0, stepR)
@@ -422,6 +542,7 @@ El* NumberInput::IntoEl() {
                   ->JustifyCenter()
                   ->Child(IconEl(a, IconName::Minus, font)->Fg(stepFg));
     El* inc = gpui::Button::New(cx, StrL("increment"), disabled, onInc, false)
+                   ->AriaLabel(Tr("Input.Increment"))
                   ->W(btn)
                   ->H(kFill)
                   ->Corners(0, stepR, stepR, 0)

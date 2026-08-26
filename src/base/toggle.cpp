@@ -5,7 +5,12 @@ namespace gpui {
 El* Toggle::New(Ctx* cx, Str id, bool pressed, bool disabled,
                 Listener onChange) {
     Arena* a = cx->a;
-    El* e = Div(a)->PathClick(id);
+    El* e = Div(a)
+                ->PathClick(id)
+                ->Role(AccessibilityRole::Button)
+                ->AriaToggled(pressed ? AccessibilityToggled::True
+                                     : AccessibilityToggled::False)
+                ->AriaDisabled(disabled);
     if (disabled) {
         return e;
     }

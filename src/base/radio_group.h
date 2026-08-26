@@ -8,6 +8,6 @@ namespace gpui {
 // the group's orientation to assistive technology and lays nothing out, so the
 // caller picks the direction here too.
 struct RadioGroup {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, Axis axis = Axis::Horizontal);
 };
 } // namespace gpui

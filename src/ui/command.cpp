@@ -658,6 +658,9 @@ static El* CommandRowEl(void* user, Ctx* cx, int rowIx) {
     bool selected = s->selected == matchIx && !disabled;
     Rgba iconFg = selected ? th.accentFg : th.mutedFg;
     El* line = Div(a)
+                   ->Role(AccessibilityRole::ListBoxOption)
+                   ->AriaSelected(selected)
+                   ->AriaDisabled(disabled)
                    ->FlexRow()
                    ->W(kFill)
                    ->ItemsCenter()
@@ -765,7 +768,12 @@ El* Command::IntoEl() {
         box->Child(field);
     }
 
-    El* listBox = Div(a)->FlexCol()->W(kFill)->MaxH(maxH)->ClipY();
+    El* listBox = Div(a)
+                      ->Role(AccessibilityRole::ListBox)
+                      ->FlexCol()
+                      ->W(kFill)
+                      ->MaxH(maxH)
+                      ->ClipY();
     if (s->rows.len == 0) {
         // The inset is the list's own; only the empty slot needs it from the
         // box around it.

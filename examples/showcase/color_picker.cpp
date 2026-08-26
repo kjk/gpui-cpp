@@ -108,7 +108,8 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
             bool on = (app->colorHex & 0xffffff) == kSwatches[i];
             sw->Child(ColorSwatch::New(cx, DupFmt(cx, "swatch-%d", i),
                                        Listen(cx, &PickSwatch, i),
-                                       Listen(cx, &PreviewSwatch, i))
+                                       Listen(cx, &PreviewSwatch, i),
+                                       kSwatches[i], on)
                           ->W(24)
                           ->H(24)
                           ->Bg(FromHex(kSwatches[i]))
@@ -126,7 +127,10 @@ El* ShowcaseColorPicker(ShowcaseApp* app, Ctx* cx) {
                        ->Border(1, Rgb(0xd4, 0xd4, 0xd4))
                        ->Child(Input::New(cx, &app->hexIn)));
     }
-    El* root = ColorPicker::New(cx, StrL("example-color-picker"))
+    El* root = ColorPicker::New(cx, StrL("example-color-picker"),
+                                app->colorOpen, false, StrL("Color"),
+                                AccessibilityRole::Button,
+                                Listen(cx, &ToggleColor))
                    ->W(220)
                    ->Child(trigger);
     return Popup::New(cx, StrL("example-color-picker-popup"), root)

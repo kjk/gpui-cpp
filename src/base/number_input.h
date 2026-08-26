@@ -24,6 +24,9 @@ enum class StepAction : uint8_t {
 bool NumberStepValue(Str value, StepAction action, double step, bool hasMin,
                      double min, bool hasMax, double max, char* out,
                      int outCap);
+// The same strict parser NumberInput uses before it steps, exposed so the
+// themed wrapper can project its numeric accessibility value.
+bool NumberParseValue(Str value, double* out);
 
 // The key table: crates/base/src/number_input.rs binds up to Increment and
 // down to Decrement in the "NumberInput" context. Answers false for anything

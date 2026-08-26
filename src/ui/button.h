@@ -48,6 +48,11 @@ struct Button {
     bool hasCustom = false;
     Rgba custom = {};
     Str tooltip = {};
+    Str accessibilityId = {};
+    AccessibilityRole accessibilityRole = AccessibilityRole::None;
+    bool hasAccessibilityRole = false;
+    bool accessibilityToggled = false;
+    bool hasAccessibilityToggled = false;
     El* extra = nullptr;
     // Size::Size(px), when the caller gave one instead of a Size.
     float sizePx = 0;
@@ -103,6 +108,10 @@ struct Button {
     Button* TabStop(bool v);
     Button* FocusRing(bool v);
     Button* Tooltip(Str s);
+    Button* AccessibilityId(Str s);
+    Button* Role(AccessibilityRole role);
+    // Accessibility state only; Selected controls the visual state.
+    Button* Toggled(bool v = true);
     Button* OnClick(Listener l);
     El* IntoEl();
 };

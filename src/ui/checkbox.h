@@ -20,6 +20,9 @@ struct Checkbox {
     UiSize size = UiSize::Medium;
     Str tooltip = {};
     bool focusRing = true;
+    AccessibilityRole accessibilityRole = AccessibilityRole::CheckBox;
+    int tabIndex = 0;
+    bool tabStop = true;
     float w = 0;
     Listener onClick;
 
@@ -33,6 +36,9 @@ struct Checkbox {
     Checkbox* W(float v);
     // FocusableExt::focus_ring: no focus appearance on this control.
     Checkbox* FocusRing(bool v);
+    Checkbox* Role(AccessibilityRole role);
+    Checkbox* TabIndex(int v);
+    Checkbox* TabStop(bool v);
     Checkbox* Tooltip(Str s);
     Checkbox* OnClick(Listener fn);
     El* IntoEl();

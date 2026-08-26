@@ -12,7 +12,8 @@ namespace gpui {
 // the one name. `interactive` is Rust's `.when(!disabled, ..)` around the
 // listeners: a disabled field is not a hit target and takes no focus.
 struct InputBase {
-    static El* New(Ctx* cx, Str id, bool interactive = false);
+    static El* New(Ctx* cx, Str id, bool interactive = false,
+                   AccessibilityRole role = AccessibilityRole::TextInput);
 };
 
 // gpui_base::input::InputEditorStyle. The base draws the text, the selection

@@ -623,8 +623,8 @@ El* Notification::IntoEl() {
     // Notification's own box, not an Alert: border_1 in theme.border on the
     // popover surface, radius_lg, shadow_md, py_3p5 px_4 gap_3. Nothing here
     // is tinted by the kind — only the icon is.
-    El* card = Div(a)
-                   ->FlexRow()
+    El* card = gpui::Toast::New(cx, StrL("notification"))
+                    ->FlexRow()
                    ->Group()
                    ->W(kFill)
                    ->Gap(12)

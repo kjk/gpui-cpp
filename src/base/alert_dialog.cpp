@@ -53,7 +53,14 @@ AlertDialog* AlertDialog::New(Ctx* cx) {
     // Viewport host, like Rust Dialog's deferred+anchored overlay.
     d->cx = cx;
     d->trap = StrL("alert-dialog");
-    d->root = Div(a)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill)->FlexCol();
+    d->root = Div(a)
+                  ->Role(AccessibilityRole::AlertDialog)
+                  ->Fixed()
+                  ->Top(0)
+                  ->Left(0)
+                  ->W(kFill)
+                  ->H(kFill)
+                  ->FlexCol();
     return d;
 }
 

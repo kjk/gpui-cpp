@@ -9,29 +9,45 @@ namespace gpui {
 // focus; and it is what a cell inside a clickable row can afford to be now
 // that a click bubbles out of the rect it landed on.
 
-El* Table::New(Ctx* cx, Str id) {
+El* Table::New(Ctx* cx, Str id, int rowCount, int columnCount) {
     Arena* a = cx->a;
-    return Div(a)->PathClick(id);
+    El* e = Div(a)->PathClick(id)->Role(AccessibilityRole::Table);
+    if (rowCount >= 0) {
+        e->AriaRowCount(rowCount);
+    }
+    if (columnCount >= 0) {
+        e->AriaColumnCount(columnCount);
+    }
+    return e;
 }
 El* TableHeader::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->PathClick(id);
+    return Div(a)->PathClick(id)->Role(AccessibilityRole::RowGroup);
 }
 El* TableBody::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->PathClick(id);
+    return Div(a)->PathClick(id)->Role(AccessibilityRole::RowGroup);
 }
-El* TableRow::New(Ctx* cx, Str id) {
+El* TableRow::New(Ctx* cx, Str id, int rowIndex) {
     Arena* a = cx->a;
-    return Div(a)->PathClick(id);
+    return Div(a)
+        ->PathClick(id)
+        ->Role(AccessibilityRole::Row)
+        ->AriaRowIndex(rowIndex);
 }
-El* TableHead::New(Ctx* cx, Str id) {
+El* TableHead::New(Ctx* cx, Str id, int columnIndex) {
     Arena* a = cx->a;
-    return Div(a)->PathClick(id);
+    return Div(a)
+        ->PathClick(id)
+        ->Role(AccessibilityRole::ColumnHeader)
+        ->AriaColumnIndex(columnIndex);
 }
-El* TableCell::New(Ctx* cx, Str id) {
+El* TableCell::New(Ctx* cx, Str id, int columnIndex) {
     Arena* a = cx->a;
-    return Div(a)->PathClick(id);
+    return Div(a)
+        ->PathClick(id)
+        ->Role(AccessibilityRole::Cell)
+        ->AriaColumnIndex(columnIndex);
 }
 El* TableCaption::New(Ctx* cx, Str id) {
     Arena* a = cx->a;

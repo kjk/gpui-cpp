@@ -344,6 +344,10 @@ DatePicker* DatePicker::FocusRing(bool v) {
     focusRing = v;
     return this;
 }
+DatePicker* DatePicker::Disabled(bool v) {
+    disabled = v;
+    return this;
+}
 DatePicker* DatePicker::Range(bool v) {
     range = v;
     return this;
@@ -470,9 +474,12 @@ El* DatePicker::IntoEl() {
             ->Bg(th.inputBg)
             ->Border(1, open ? th.ring : th.inputBorder);
     }
+    if (disabled) {
+        trigger->Opacity(0.5f);
+    }
     trigger->Child(TextEl(a, title)->Font(font)->Fg(complete ? th.foreground
                                                              : th.mutedFg));
-    if (cleanable && hasDate) {
+    if (cleanable && hasDate && !disabled) {
         trigger->Child(Button::New(cx, StrL("clean"))
                            ->Text()
                            ->WithSize(UiSize::XSmall)
@@ -480,10 +487,10 @@ El* DatePicker::IntoEl() {
                            ->OnClick(onClear)
                            ->IntoEl()
                            ->StopClick());
-    } else {
+    } else if (open) {
         trigger->Child(IconEl(a, IconName::Calendar, 12)->Fg(th.mutedFg));
     }
-    if (!open) {
+    if (!open && !disabled) {
         BindClick(trigger, StrL("input"), onToggle);
         trigger->FocusRing(focusRing);
     } else {
@@ -542,7 +549,7 @@ El* DatePicker::IntoEl() {
     }
     // Both halves of the picker take focus — the outer element and the
     // trigger inside it — so the opt-out has to reach both.
-    El* root = gpui::DatePicker::New(cx, id)
+    El* root = gpui::DatePicker::New(cx, id, disabled, open, onToggle)
                    ->FocusRing(focusRing)
                    ->W(width)
                    ->Child(Popup::New(cx, StrL("pop"), trigger)
@@ -551,7 +558,7 @@ El* DatePicker::IntoEl() {
     // date_picker.rs::init binds enter, escape and the two delete keys in the
     // picker's context; the toggle and the clear the caller gave are what
     // they run, which is what Rust's on_action handlers reach for too.
-    DatePickerBindKeys(cx, root, id, onToggle, onClear, open, false);
+    DatePickerBindKeys(cx, root, id, onToggle, onClear, open, disabled);
     return root;
 }
 

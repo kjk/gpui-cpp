@@ -201,9 +201,21 @@ bool SliderHandleRelease(SliderState* s) {
     return true;
 }
 
-El* Slider::New(Ctx* cx, int clickId) {
+El* Slider::New(Ctx* cx, SliderState* state, Axis axis, int clickId) {
     Arena* a = cx->a;
-    return UiRoot(a, StrL("example-slider"), clickId);
+    El* e = UiRoot(a, StrL("example-slider"), clickId)
+                ->Role(AccessibilityRole::Slider)
+                ->AriaOrientation(axis == Axis::Vertical
+                                      ? AccessibilityOrientation::Vertical
+                                      : AccessibilityOrientation::Horizontal);
+    if (state) {
+        e->slider = state;
+        e->AriaNumericValue(state->value.End())
+            ->AriaMinNumericValue(state->min)
+            ->AriaMaxNumericValue(state->max)
+            ->AriaNumericValueStep(state->step);
+    }
+    return e;
 }
 El* SliderTrack::New(Ctx* cx, SliderState* state, Axis axis) {
     Arena* a = cx->a;

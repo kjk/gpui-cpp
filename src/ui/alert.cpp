@@ -129,6 +129,7 @@ El* Alert::IntoEl() {
     // h_flex, so a banner keeps its parts centred; a card aligns them to the
     // top instead. text_sm whatever the size is.
     El* row = Div(a)
+                  ->Role(AccessibilityRole::Alert)
                   ->FlexRow()
                   ->W(kFill)
                   ->Gap(gap)

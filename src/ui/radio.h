@@ -16,6 +16,8 @@ struct Radio {
     bool disabled = false;
     UiSize size = UiSize::Medium;
     bool focusRing = true;
+    int tabIndex = 0;
+    bool tabStop = true;
     Listener onClick;
 
     static Radio* New(Ctx* cx, Str id);
@@ -26,6 +28,8 @@ struct Radio {
     Radio* WithSize(UiSize s);
     // FocusableExt::focus_ring: no focus appearance on this control.
     Radio* FocusRing(bool v);
+    Radio* TabIndex(int v);
+    Radio* TabStop(bool v);
     Radio* OnClick(Listener fn);
     El* IntoEl();
 };

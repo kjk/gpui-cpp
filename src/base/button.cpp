@@ -20,7 +20,11 @@ El* Button::New(Ctx* cx, Str id, bool disabled, Listener onClick,
     // siblings, since GPUI scopes it by the stack of ids above it. That is why
     // upstream writes `Button::new("prev")` inside a pagination rather than
     // `Button::new(format!("{base}-prev"))` — the fold does that part.
-    El* e = Div(a)->PathClick(id)->SuppressTextSelection();
+    El* e = Div(a)
+                ->PathClick(id)
+                ->SuppressTextSelection()
+                ->Role(AccessibilityRole::Button)
+                ->AriaDisabled(disabled);
     ApplyStyles(e, styles, selected, disabled);
     if (disabled) {
         return e;

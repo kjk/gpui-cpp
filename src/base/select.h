@@ -36,6 +36,8 @@ Str SelectContext();
 SelectAction SelectActionOf(uint32_t id, bool open, bool disabled);
 
 struct Select {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, bool open = false,
+                   bool disabled = false, Str accessibilityLabel = {},
+                   Listener onOpenChange = {});
 };
 } // namespace gpui

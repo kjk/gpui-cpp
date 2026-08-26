@@ -12,6 +12,57 @@ enum class InputAlign : uint8_t {
     Right
 };
 
+// crates/ui/src/input/content_type.rs. The role projection below uses the
+// semantic variants on every platform; a future native autofill adapter can
+// consume the same value without changing the component surface.
+enum class InputContentType : uint8_t {
+    Name,
+    NamePrefix,
+    GivenName,
+    MiddleName,
+    FamilyName,
+    NameSuffix,
+    Nickname,
+    JobTitle,
+    OrganizationName,
+    Location,
+    FullStreetAddress,
+    StreetAddressLine1,
+    StreetAddressLine2,
+    AddressCity,
+    AddressState,
+    AddressCityAndState,
+    Sublocality,
+    CountryName,
+    PostalCode,
+    TelephoneNumber,
+    EmailAddress,
+    Url,
+    CreditCardNumber,
+    CreditCardName,
+    CreditCardGivenName,
+    CreditCardMiddleName,
+    CreditCardFamilyName,
+    CreditCardSecurityCode,
+    CreditCardExpiration,
+    CreditCardExpirationMonth,
+    CreditCardExpirationYear,
+    CreditCardType,
+    Username,
+    Password,
+    NewPassword,
+    OneTimeCode,
+    ShipmentTrackingNumber,
+    FlightNumber,
+    DateTime,
+    Birthdate,
+    BirthdateDay,
+    BirthdateMonth,
+    BirthdateYear,
+    CellularEid,
+    CellularImei
+};
+
 struct Input {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
@@ -30,6 +81,13 @@ struct Input {
     bool maskToggle = false;
     bool appearance = true;
     bool focusRing = true;
+    bool readonly = false;
+    InputContentType contentType = InputContentType::Name;
+    bool hasContentType = false;
+    AccessibilityRole accessibilityRole = AccessibilityRole::None;
+    bool hasAccessibilityRole = false;
+    Str accessibilityId = {};
+    Str ariaLabel = {};
     Rgba textColor = {};
     bool hasTextColor = false;
     Listener onChange;
@@ -42,6 +100,12 @@ struct Input {
     Input* WithSize(UiSize s);
     Input* Align(InputAlign v);
     Input* Disabled(bool v);
+    Input* Readonly(bool v = true);
+    Input* ContentType(InputContentType value);
+    // AccessibilityRole::None is the presentational override.
+    Input* Role(AccessibilityRole role);
+    Input* AccessibilityId(Str id);
+    Input* AriaLabel(Str label);
     Input* Cleanable(bool v = true);
     Input* Masked(bool v);
     Input* MaskToggle(bool v = true);
@@ -89,6 +153,9 @@ struct Textarea {
     // The editor box height in pixels, or kFill for Rust's h(relative(1.)).
     float height = 0;
     bool softWrap = true;
+    AccessibilityRole accessibilityRole =
+        AccessibilityRole::MultilineTextInput;
+    Str ariaLabel = {};
     Listener onFocus;
 
     static Textarea* New(Ctx* cx, Str id, InputState* state);
@@ -98,6 +165,8 @@ struct Textarea {
     Textarea* Rows(int n);
     Textarea* H(float px);
     Textarea* SoftWrap(bool v);
+    Textarea* Role(AccessibilityRole role);
+    Textarea* AriaLabel(Str label);
     Textarea* OnFocus(Listener fn);
     El* IntoEl();
 };

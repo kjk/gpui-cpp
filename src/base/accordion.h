@@ -18,14 +18,16 @@ struct AccordionTrigger {
                    Listener onChange = {});
 };
 
-// Rust's heading around the trigger. Its `id` is optional and only there to
-// carry the heading role and level, neither of which we have a surface for.
+// Rust's heading around the trigger. Its `id` is optional; only a named
+// header becomes a semantic heading, at level 3 unless the caller overrides
+// it. This keeps decorative wrappers out of the accessibility tree.
 struct AccordionHeader {
-    static El* New(Ctx* cx, El* trigger);
+    static El* New(Ctx* cx, El* trigger, Str id = {}, int level = 3);
 };
 
 struct AccordionPanel {
-    static El* New(Ctx* cx);
+    // As upstream, only a panel with an id is exposed as a Region.
+    static El* New(Ctx* cx, Str id = {});
 };
 
 // The item pushes `open` and `disabled` down the way Rust's does: the header's

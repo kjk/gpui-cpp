@@ -139,7 +139,11 @@ static El* StepperTrigger(Arena* a, const Theme& th, StepperItem* it) {
 
 El* StepperItem::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
-    El* root = Div(a);
+    El* root = Div(a)
+                   ->Id(StrDup(a, fmt("stepper-item-%d", step)))
+                   ->Role(AccessibilityRole::ListItem)
+                   ->AriaPositionInSet(step + 1)
+                   ->AriaDisabled(disabled);
     if (layout == Axis::Horizontal) {
         root->FlexRow();
     } else {

@@ -15,10 +15,12 @@ struct Tabs {
 // compound tab list that does not exist yet — so it gets identity and the
 // click and no FocusId. `onClick` is passed through untouched: a tab produces
 // no value of its own, so whichever index the caller bound is what its handler
-// reads. Rust's `selected` only states the choice to assistive technology; the
-// caller paints it, so there is nothing here for it to carry.
+// reads. Selection, naming and set position are the semantic builder fields
+// Rust projects while rendering.
 struct Tab {
     static El* New(Ctx* cx, Str id, bool disabled = false,
-                   Listener onClick = {});
+                   Listener onClick = {}, bool selected = false,
+                   Str accessibilityLabel = {}, int positionInSet = 0,
+                   int sizeOfSet = 0);
 };
 } // namespace gpui

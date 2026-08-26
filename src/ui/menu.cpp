@@ -244,7 +244,12 @@ El* PopupMenu::IntoEl() {
     // menu is a view, so rendering it pushes its identity and a bare
     // `popup-menu` is enough; the port has no entity to push, so the menu's
     // own name stands in for one.
-    El* root = PopoverSurface(cx, Div(a)->Id(id)->FlexCol()->W(menuW));
+    El* root = PopoverSurface(
+        cx, Div(a)
+                ->Id(id)
+                ->Role(AccessibilityRole::Menu)
+                ->FlexCol()
+                ->W(menuW));
     // The menu's own name, so a row is `("item", ix)` and two menus on one
     // page do not have to be told apart by their rows' spelling.
     root->Id(id);
@@ -319,6 +324,11 @@ El* PopupMenu::IntoEl() {
         bool lit =
             selected == i && !it.disabled && it.kind == MenuItemKind::Item;
         El* row = Div(a)
+                      ->Role(AccessibilityRole::MenuItem)
+                      ->AriaLabel(it.label)
+                      ->AriaSelected(lit)
+                      ->AriaDisabled(it.disabled ||
+                                    it.kind == MenuItemKind::Label)
                       ->FlexRow()
                       ->W(kFill)
                       ->MinH(itemH)
@@ -587,13 +597,23 @@ El* AppMenuBar::IntoEl() {
     AppMenuBarState* s = state.Get(cx);
     // The bar carries the name, so a title is `0`, `1`, `2` inside it.
     IdScope scope(cx, id);
-    El* bar = Div(a)->Id(id)->FlexRow()->ItemsCenter()->Gap(2)->H(28)->W(kFill);
+    El* bar = Div(a)
+                  ->Id(id)
+                  ->Role(AccessibilityRole::MenuBar)
+                  ->FlexRow()
+                  ->ItemsCenter()
+                  ->Gap(2)
+                  ->H(28)
+                  ->W(kFill);
     Listener click = ListenTo(state, &AppMenuBarState::OnMenuClick, 0);
     Listener hover = ListenTo(state, &AppMenuBarState::OnMenuHover, 0);
     for (int i = 0; i < items.len; i++) {
         bool on = s && s->selected == i;
         El* wrap = Div(a)->FlexCol();
         El* item = Div(a)
+                       ->Role(AccessibilityRole::MenuItem)
+                       ->AriaLabel(items[i].title)
+                       ->AriaSelected(on)
                        ->FlexRow()
                        ->H(24)
                        ->PadX(8)

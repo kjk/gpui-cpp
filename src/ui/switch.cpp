@@ -110,6 +110,9 @@ El* Switch::IntoEl() {
                    ->FlexRow()
                    ->ItemsCenter()
                    ->Gap(8);
+    if (label.s) {
+        root->AriaLabel(label);
+    }
     root->Child(track);
     if (label.s) {
         // text_sm below Medium, text_base at and above it — and the label

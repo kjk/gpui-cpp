@@ -25,10 +25,12 @@ Statuses mean:
 - `excluded`: a standing non-goal in `AGENTS.md`; currently only async utility
   plumbing.
 
-Every non-full entry carries a reason in the ledger. In particular, modules
-that assign semantic accessibility roles upstream are now classified partial
-until the runtime can export an element accessibility tree; keyboard behavior
-alone no longer lets those modules count as full.
+Every non-full entry carries a reason in the ledger. Modules that assign
+semantic accessibility roles upstream now project those roles, names, values,
+states and actions into the runtime's laid-out frame tree; they are no longer
+classified partial merely because keyboard behavior used to be their only
+accessible seam. Native UI Automation, AT-SPI and NSAccessibility adapters
+remain runtime work outside the Base/UI module ledger.
 
 The important non-mechanical mappings are encoded in the audit:
 
@@ -70,14 +72,23 @@ The important non-mechanical mappings are encoded in the audit:
   uniqueness, ignore state and 1,000-entry default retention.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
+- the runtime builds a semantic tree after layout, skipping visual-only boxes
+  while preserving semantic ancestry. Base/UI controls project the pinned
+  AccessKit roles and aria fields; default, focus, slider increment/decrement,
+  spinbutton increment/decrement and editable SetValue actions route through
+  the same state/listener paths as pointer and keyboard interaction.
+- input content types project the same specialized phone, email, URL,
+  password, date and date-time roles as Rust, secret values stay out of the
+  tree, and developer accessibility ids remain distinct from element ids.
 
 ## Next fidelity order
 
-  1. Add a runtime accessibility tree (role, name/value, checked/expanded state,
-     actions and per-platform export), then clear the role-driven partial set.
-  2. Extend `cmd/audit-port.ts` below module granularity: inventory every
+  1. Extend `cmd/audit-port.ts` below module granularity: inventory every
      upstream `pub use` and test, requiring `full`, `adapter` or `excluded` plus
      a C++ symbol/test destination.
+  2. Export the portable accessibility tree through UI Automation, AT-SPI and
+     NSAccessibility. This is GPUI platform-adapter work; Base/UI semantics no
+     longer depend on it.
 
   The theme layering item is complete: `src/ui/theme.h` owns the component
   palette, `src/base/theme.h` owns Base's semantic/behavior theme, and GPUI

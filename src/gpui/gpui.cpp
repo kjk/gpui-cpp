@@ -1228,6 +1228,115 @@ El* El::Click(int v) {
     clickFromPath = false;
     return this;
 }
+El* El::Role(AccessibilityRole role) {
+    accessibility.role = role;
+    return this;
+}
+El* El::AccessibilityId(Str authorId) {
+    accessibility.authorId = authorId;
+    return this;
+}
+El* El::AriaLabel(Str label) {
+    accessibility.label = label;
+    return this;
+}
+El* El::AriaValue(Str value) {
+    accessibility.value = value;
+    return this;
+}
+El* El::AriaPlaceholder(Str placeholder) {
+    accessibility.placeholder = placeholder;
+    return this;
+}
+El* El::AriaDisabled(bool disabled) {
+    accessibility.disabled = disabled;
+    return this;
+}
+El* El::AriaToggled(AccessibilityToggled toggled) {
+    accessibility.toggled = toggled;
+    return this;
+}
+El* El::AriaSelected(bool selected) {
+    accessibility.selected = selected;
+    accessibility.hasSelected = true;
+    return this;
+}
+El* El::AriaExpanded(bool expanded) {
+    accessibility.expanded = expanded;
+    accessibility.hasExpanded = true;
+    return this;
+}
+El* El::AriaNumericValue(float value) {
+    accessibility.numericValue = value;
+    accessibility.hasNumericValue = true;
+    return this;
+}
+El* El::AriaMinNumericValue(float value) {
+    accessibility.minNumericValue = value;
+    accessibility.hasMinNumericValue = true;
+    return this;
+}
+El* El::AriaMaxNumericValue(float value) {
+    accessibility.maxNumericValue = value;
+    accessibility.hasMaxNumericValue = true;
+    return this;
+}
+El* El::AriaNumericValueStep(float value) {
+    accessibility.numericValueStep = value;
+    accessibility.hasNumericValueStep = true;
+    return this;
+}
+El* El::AriaOrientation(AccessibilityOrientation orientation) {
+    accessibility.orientation = orientation;
+    return this;
+}
+El* El::AriaPositionInSet(int position) {
+    accessibility.positionInSet = position;
+    accessibility.hasPositionInSet = true;
+    return this;
+}
+El* El::AriaSizeOfSet(int size) {
+    accessibility.sizeOfSet = size;
+    accessibility.hasSizeOfSet = true;
+    return this;
+}
+El* El::AriaRowCount(int count) {
+    accessibility.rowCount = count;
+    accessibility.hasRowCount = true;
+    return this;
+}
+El* El::AriaColumnCount(int count) {
+    accessibility.columnCount = count;
+    accessibility.hasColumnCount = true;
+    return this;
+}
+El* El::AriaRowIndex(int index) {
+    accessibility.rowIndex = index;
+    accessibility.hasRowIndex = true;
+    return this;
+}
+El* El::AriaColumnIndex(int index) {
+    accessibility.columnIndex = index;
+    accessibility.hasColumnIndex = true;
+    return this;
+}
+El* El::AriaLevel(int level) {
+    accessibility.level = level;
+    accessibility.hasLevel = true;
+    return this;
+}
+El* El::OnAccessibilityDefault(Listener fn) {
+    accessibilityDefault = fn;
+    return this;
+}
+El* El::OnAccessibilityIncrement(Listener fn) {
+    accessibilityIncrement = fn;
+    return this;
+}
+El* El::OnAccessibilityDecrement(Listener fn) {
+    accessibilityDecrement = fn;
+    return this;
+}
 El* El::PathId(Str name) {
     id = name;
     clickFromPath = true;
@@ -5969,6 +6078,258 @@ void IdsCollect(El* root) {
     if (IdCheckOn()) {
         IdCheck(root);
     }
+}
+
+static SliderState* AccessibilitySlider(El* e) {
+    if (!e) {
+        return nullptr;
+    }
+    if (e->slider) {
+        return e->slider;
+    }
+    for (El* child = e->first; child; child = child->next) {
+        if (SliderState* slider = AccessibilitySlider(child)) {
+            return slider;
+        }
+    }
+    return nullptr;
+}
+
+static InputState* AccessibilityInput(El* e) {
+    if (!e) {
+        return nullptr;
+    }
+    if (e->input) {
+        return e->input;
+    }
+    for (El* child = e->first; child; child = child->next) {
+        if (InputState* input = AccessibilityInput(child)) {
+            return input;
+        }
+    }
+    return nullptr;
+}
+
+static int AccessibilityVisualFocus(El* e, bool root = true) {
+    if (!e || (!root && e->accessibility.role != AccessibilityRole::None)) {
+        return 0;
+    }
+    if (e->style.focusId) {
+        return e->style.focusId;
+    }
+    for (El* child = e->first; child; child = child->next) {
+        if (int focus = AccessibilityVisualFocus(child, false)) {
+            return focus;
+        }
+    }
+    return 0;
+}
+
+static int AccessibilityInputFocus(El* e, InputState* input) {
+    if (!e || !input) {
+        return 0;
+    }
+    if (e->input == input && e->style.focusId) {
+        return e->style.focusId;
+    }
+    for (El* child = e->first; child; child = child->next) {
+        if (int focus = AccessibilityInputFocus(child, input)) {
+            return focus;
+        }
+    }
+    return 0;
+}
+
+static bool AccessibilityRoleCanFocus(AccessibilityRole role) {
+    switch (role) {
+        case AccessibilityRole::Button:
+        case AccessibilityRole::CheckBox:
+        case AccessibilityRole::ComboBox:
+        case AccessibilityRole::DateInput:
+        case AccessibilityRole::DateTimeInput:
+        case AccessibilityRole::EmailInput:
+        case AccessibilityRole::Link:
+        case AccessibilityRole::ListBoxOption:
+        case AccessibilityRole::MenuItem:
+        case AccessibilityRole::MultilineTextInput:
+        case AccessibilityRole::PasswordInput:
+        case AccessibilityRole::PhoneNumberInput:
+        case AccessibilityRole::RadioButton:
+        case AccessibilityRole::Slider:
+        case AccessibilityRole::SpinButton:
+        case AccessibilityRole::Switch:
+        case AccessibilityRole::Tab:
+        case AccessibilityRole::TextInput:
+        case AccessibilityRole::UrlInput:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// AccessKit derives an accessible name from text descendants when a node has
+// no explicit aria label. Keep the same useful default, but stop at another
+// semantic node: its text names that child, not its parent. All text runs are
+// joined in document order rather than silently taking only the first one.
+static int AccessibilityTextSize(El* e, int* pieces, bool root = true) {
+    if (!e || !pieces || *pieces < 0) {
+        return 0;
+    }
+    if (!root && e->accessibility.role != AccessibilityRole::None) {
+        return 0;
+    }
+    if (e->text.s && e->text.len > 0) {
+        (*pieces)++;
+        return e->text.len;
+    }
+    int size = 0;
+    for (El* child = e->first; child; child = child->next) {
+        int n = AccessibilityTextSize(child, pieces, false);
+        if (n > 0) {
+            if (size > INT_MAX - n) {
+                *pieces = -1;
+                return 0;
+            }
+            size += n;
+        }
+    }
+    return size;
+}
+
+static void AccessibilityTextWrite(El* e, char* out, int* at, bool* wrote,
+                                   bool root = true) {
+    if (!e || (!root && e->accessibility.role != AccessibilityRole::None)) {
+        return;
+    }
+    if (e->text.s && e->text.len > 0) {
+        if (*wrote) {
+            out[(*at)++] = ' ';
+        }
+        memcpy(out + *at, e->text.s, (size_t)e->text.len);
+        *at += e->text.len;
+        *wrote = true;
+        return;
+    }
+    for (El* child = e->first; child; child = child->next) {
+        AccessibilityTextWrite(child, out, at, wrote, false);
+    }
+}
+
+static Str AccessibilityText(El* e) {
+    int pieces = 0;
+    int textSize = AccessibilityTextSize(e, &pieces);
+    if (!e || !e->arena || textSize <= 0 || pieces <= 0 ||
+        textSize > INT_MAX - (pieces - 1)) {
+        return {};
+    }
+    int size = textSize + pieces - 1;
+    char* out = (char*)Alloc(e->arena, size);
+    if (!out) {
+        return {};
+    }
+    int at = 0;
+    bool wrote = false;
+    AccessibilityTextWrite(e, out, &at, &wrote);
+    return Str(out, at);
+}
+
+static bool AccessibilityNameFromContents(AccessibilityRole role) {
+    switch (role) {
+        case AccessibilityRole::ComboBox:
+        case AccessibilityRole::DateInput:
+        case AccessibilityRole::DateTimeInput:
+        case AccessibilityRole::EmailInput:
+        case AccessibilityRole::MultilineTextInput:
+        case AccessibilityRole::PasswordInput:
+        case AccessibilityRole::PhoneNumberInput:
+        case AccessibilityRole::ProgressIndicator:
+        case AccessibilityRole::Slider:
+        case AccessibilityRole::SpinButton:
+        case AccessibilityRole::TextInput:
+        case AccessibilityRole::UrlInput:
+            return false;
+        default:
+            return true;
+    }
+}
+
+static void AccessibilityCollectNode(El* e, Vec<AccessibilityNode>* out,
+                                     int semanticParent, uint32_t* nextId) {
+    if (!e || !out || !nextId) {
+        return;
+    }
+    int childParent = semanticParent;
+    if (e->accessibility.role != AccessibilityRole::None) {
+        AccessibilityNode node;
+        node.id = (*nextId)++;
+        node.parent = semanticParent;
+        node.bounds = e->Bounds();
+        node.info = e->accessibility;
+        if (!node.info.label.s &&
+            AccessibilityNameFromContents(node.info.role)) {
+            node.info.label = AccessibilityText(e);
+        }
+        node.clickId = e->clickId;
+        node.focusId = e->style.focusId;
+        node.onClick = e->onClick;
+        node.listener = e->listener;
+        node.accessibilityDefault = e->accessibilityDefault;
+        node.accessibilityIncrement = e->accessibilityIncrement;
+        node.accessibilityDecrement = e->accessibilityDecrement;
+        node.clickAction = e->clickAction;
+        node.clickActionArg = e->clickActionArg;
+        node.slider = e->slider;
+        node.input = e->input;
+        if (!node.slider && node.info.role == AccessibilityRole::Slider) {
+            // The semantic slider wraps its visual track; the track owns the
+            // state that mouse dragging needs. AccessKit puts the actions on
+            // the wrapper, so find that same state below it.
+            node.slider = AccessibilitySlider(e);
+        }
+        if (!node.input) {
+            node.input = AccessibilityInput(e);
+        }
+        if (!node.focusId && AccessibilityRoleCanFocus(node.info.role)) {
+            node.focusId =
+                node.info.role == AccessibilityRole::SpinButton && node.input
+                    ? AccessibilityInputFocus(e, node.input)
+                    : AccessibilityVisualFocus(e);
+        }
+        if (!node.info.disabled &&
+            (node.onClick.IsValid() || node.listener.IsValid() ||
+             node.accessibilityDefault.IsValid() || node.clickAction)) {
+            node.actions |= AccessibilityActionDefault;
+        }
+        if (!node.info.disabled &&
+            (node.slider || node.accessibilityIncrement.IsValid())) {
+            node.actions |= AccessibilityActionIncrement;
+        }
+        if (!node.info.disabled &&
+            (node.slider || node.accessibilityDecrement.IsValid())) {
+            node.actions |= AccessibilityActionDecrement;
+        }
+        if (!node.info.disabled && node.focusId) {
+            node.actions |= AccessibilityActionFocus;
+        }
+        if (!node.info.disabled && node.input && !node.input->disabled &&
+            !node.input->readonly) {
+            node.actions |= AccessibilityActionSetValue;
+        }
+        out->Append(node);
+        childParent = out->len - 1;
+    }
+    for (El* child = e->first; child; child = child->next) {
+        AccessibilityCollectNode(child, out, childParent, nextId);
+    }
+}
+
+void AccessibilityCollect(El* root, Vec<AccessibilityNode>* out) {
+    if (!out) {
+        return;
+    }
+    out->Clear();
+    uint32_t nextId = 1;
+    AccessibilityCollectNode(root, out, -1, &nextId);
 }
 
 void FocusCollect(Window* win, El* root) {

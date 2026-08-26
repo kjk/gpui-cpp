@@ -26,7 +26,7 @@ El* ShowcaseTabs(ShowcaseApp* app, Ctx* cx) {
         bool on = app->tab == i;
         El* tab =
             Tab::New(cx, DupFmt(cx, "tab-%d", i), false,
-                     Listen(cx, &PickTab, i))
+                     Listen(cx, &PickTab, i), on, Str(labels[i]), i + 1, 3)
                 ->H(28)
                 ->PadX(8)
                 ->ItemsCenter()

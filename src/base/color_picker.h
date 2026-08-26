@@ -92,11 +92,16 @@ bool ColorPickerParseHex(Str text, uint32_t* out);
 Str ColorPickerHexString(Arena* a, uint32_t color);
 
 struct ColorPicker {
-    static El* New(Ctx* cx, Str id);
+    static El* New(Ctx* cx, Str id, bool open = false,
+                   bool disabled = false, Str accessibilityLabel = {},
+                   AccessibilityRole role = AccessibilityRole::Button,
+                   Listener onOpenChange = {});
 };
 // A swatch previews on hover and commits on click, so it takes both.
 struct ColorSwatch {
     static El* New(Ctx* cx, Str id, Listener onClick = {},
-                   Listener onHover = {});
+                   Listener onHover = {}, uint32_t color = 0,
+                   bool selected = false, bool disabled = false,
+                   Str accessibilityLabel = {});
 };
 } // namespace gpui

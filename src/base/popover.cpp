@@ -123,6 +123,7 @@ Popover* Popover::Content(El* content) {
         // hard-coded `top: 28`, in flow, and so clipped by the section it
         // was in and mispositioned under any trigger that was not 28 tall.
         // Where it hangs, which is what `Positioner::corner` works out.
+        content->Role(AccessibilityRole::Dialog);
         PopupPlaceContent(content, anchor, 4);
         // track_focus, not focus_ring_style: the surface takes focus and
         // does not draw a ring around itself for it.

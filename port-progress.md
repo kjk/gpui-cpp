@@ -6560,3 +6560,54 @@ palette reads from core GPUI sources, and a Base declaration that converts
 from the UI palette. `base/theme` is classified full; `ui/theme` remains
 partial only for its real remaining gaps (filesystem watch/reload and richer
 highlight/list/sheet settings), not for cross-layer ownership.
+
+## Base/UI accessibility semantics have a runtime tree
+
+The role-driven gap from the structural audit is closed at the Base/UI and
+portable-runtime layers. `El` now carries the AccessKit vocabulary used by the
+pinned crates: roles, developer author id, accessible label/value/placeholder,
+toggled/selected/expanded/disabled state, numeric range and step, orientation,
+set position and table indices/counts. After layout, `WindowDrawFrame` projects
+only semantic elements into `Window::accessibility`, skipping visual wrappers
+while preserving the nearest semantic ancestor and laid-out bounds. A missing
+label is derived from descendant text only for roles whose names come from
+their contents; input, combobox, progress and slider values do not accidentally
+become names.
+
+The frame tree is actionable. Default and focus actions use the same listeners
+and focus ids as pointer/keyboard input; slider increment/decrement uses the
+controlled `SliderState` and its own step; number inputs expose their explicit
+increment/decrement listeners; SetValue edits a bound, enabled, non-readonly
+`InputState`. A semantic record is copied before application code runs, and the
+old projection is cleared before the frame arena it references is reset.
+
+The Base primitives now own the upstream roles and controlled state: buttons,
+checkboxes, switches, toggles, radios and groups, tabs, progress, sliders,
+tables, inputs/number inputs, links, pagination, select/date/color pickers and
+swatches, accordion, dialogs/popovers, alerts/toasts, tooltips and toolbars.
+The themed layer supplies visible labels and collection metadata for buttons,
+lists, command/search options, menus, radio/tab groups, tables, breadcrumbs and
+steppers. Loading buttons no longer remain focusable or clickable. Color and
+date/select roots expose expanded state and semantic activation; progress keeps
+indeterminate values absent rather than reporting a fabricated zero.
+
+`component::Input` also has the pinned `InputContentType` vocabulary, explicit
+role/aria-label/author-id overrides and readonly control. Phone, email, URL,
+password, date and date-time types map to their specialized roles; secret
+values are never copied into accessibility metadata. The input story now
+actually applies the content types it labels and makes its readonly example
+readonly. Native autofill synchronization remains one reason `ui/input` is
+partial.
+
+`tests/AccessibilityTests.cpp` pins hierarchy, optional-field presence,
+content-derived names, author ids, disabled action suppression, explicit and
+state-backed actions, table indices, conditional accordion roles, composite
+picker roles, input content types and secret/read-only behavior. Release and
+debug tests pass 19,017 checks; all 26 Windows targets build in release and
+debug. The audit is now 110 full, 11 partial, 8 adapters and 2 exclusions.
+
+Still outside this completed Base/UI pass: native export through Windows UI
+Automation, Linux AT-SPI and macOS NSAccessibility. The portable frame tree is
+the shared source those platform adapters need; `base/macos_accessibility`
+remains partial because only its existing AppKit hit-test forwarding seam is
+connected today.

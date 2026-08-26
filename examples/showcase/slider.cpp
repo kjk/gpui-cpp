@@ -71,7 +71,11 @@ El* ShowcaseSlider(ShowcaseApp* app, Ctx* cx) {
                     ->Child(TextEl(a, StrL("Drag to adjust"))
                                 ->Font(12)
                                 ->Fg(Rgb(0x17, 0x17, 0x17))))
-        ->Child(Slider::New(cx)->W(trackW)->H(28)->Child(track));
+        ->Child(Slider::New(cx, &app->slider)
+                    ->AriaLabel(StrL("Volume"))
+                    ->W(trackW)
+                    ->H(28)
+                    ->Child(track));
 }
 
 SHOWCASE_PAGE(CompSlider, ShowcaseSlider);

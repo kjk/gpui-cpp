@@ -5,7 +5,12 @@ namespace gpui {
 El* Switch::New(Ctx* cx, Str id, bool checked, bool disabled,
                 Listener onChange) {
     Arena* a = cx->a;
-    El* e = Div(a)->PathClick(id);
+    El* e = Div(a)
+                ->PathClick(id)
+                ->Role(AccessibilityRole::Switch)
+                ->AriaToggled(checked ? AccessibilityToggled::True
+                                      : AccessibilityToggled::False)
+                ->AriaDisabled(disabled);
     if (disabled) {
         return e;
     }

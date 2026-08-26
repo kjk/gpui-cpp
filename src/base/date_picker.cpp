@@ -204,14 +204,22 @@ void DatePickerBindKeys(Ctx* cx, El* root, Str name, Listener onToggle,
         ->OnAction(ActionOf(StrL("input::Delete")), onAction);
 }
 
-El* DatePicker::New(Ctx* cx, Str id, bool disabled) {
+El* DatePicker::New(Ctx* cx, Str id, bool disabled, bool open,
+                    Listener onOpenChange) {
     Arena* a = cx->a;
     // track_focus is unconditional in Rust; only tab_stop follows `disabled`,
     // and there is no separate tab-stop flag here, so a disabled picker keeps
     // its identity and gives up the traversal slot.
-    El* e = Div(a)->PathClick(id);
+    El* e = Div(a)
+                ->PathClick(id)
+                ->Role(AccessibilityRole::ComboBox)
+                ->AriaExpanded(open)
+                ->AriaDisabled(disabled);
     if (!disabled) {
         e->PathId(id);
+        if (!open && onOpenChange.IsValid()) {
+            e->OnAccessibilityDefault(ListenerFill(onOpenChange, true));
+        }
     }
     return e;
 }

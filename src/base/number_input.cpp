@@ -31,7 +31,7 @@ static int FractionDigitsOf(double v) {
 // The leading number in the text, or false if there is not one. Rust is
 // `value.trim().parse::<f64>().ok()`, which refuses trailing junk, so a
 // partial parse does not count.
-static bool ParseNumber(Str value, double* out) {
+bool NumberParseValue(Str value, double* out) {
     if (!value.s || value.len <= 0) {
         return false;
     }
@@ -58,7 +58,7 @@ bool NumberStepValue(Str value, StepAction action, double step, bool hasMin,
                      double min, bool hasMax, double max, char* out,
                      int outCap) {
     double current = 0;
-    bool haveCurrent = ParseNumber(value, &current);
+    bool haveCurrent = NumberParseValue(value, &current);
     double next = action == StepAction::Increment
                       ? (haveCurrent ? current : 0) + step
                       : (haveCurrent ? current : 0) - step;
@@ -108,6 +108,6 @@ bool NumberStepForKey(int key, StepAction* out) {
 
 El* NumberInput::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->Id(id);
+    return Div(a)->Id(id)->Role(AccessibilityRole::SpinButton);
 }
 } // namespace gpui

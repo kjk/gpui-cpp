@@ -259,6 +259,10 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         return;
     }
 
+    // Accessibility strings and callbacks point into the frame arena. Drop
+    // the old projection before that arena is reset, so no stale semantic
+    // record survives while the next view tree is being built.
+    win->accessibility.Clear();
     if (win->frameArena) {
         win->frameArena->Reset();
     } else {
@@ -378,6 +382,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
                  th.fontSize,
                  th.foreground, win->layout);
         FocusCollect(win, root);
+        AccessibilityCollect(root, &win->accessibility);
         // A dialog that has just opened takes focus into itself, which is what
         // Rust gets from tracking focus on the trap container.
         FocusTrapApplyPending(win);
@@ -808,6 +813,101 @@ static void SliderEmit(Window* win, SliderState* s, SliderEventKind kind) {
     }
     SliderEvent ev = {kind, s->value};
     ListenerCall(win->app, win, s->onChange, &ev);
+}
+
+const AccessibilityNode* WindowAccessibilityNode(const Window* win,
+                                                  uint32_t nodeId) {
+    if (!win || !nodeId) {
+        return nullptr;
+    }
+    for (int i = 0; i < win->accessibility.len; i++) {
+        if (win->accessibility[i].id == nodeId) {
+            return &win->accessibility[i];
+        }
+    }
+    return nullptr;
+}
+
+bool WindowAccessibilityPerform(Window* win, uint32_t nodeId,
+                                AccessibilityAction action, Str value) {
+    const AccessibilityNode* found = WindowAccessibilityNode(win, nodeId);
+    if (!found) {
+        return false;
+    }
+    // A listener may invalidate the window, so keep the frame record by value
+    // before invoking application code.
+    AccessibilityNode node = *found;
+    uint8_t required = AccessibilityActionNone;
+    switch (action) {
+        case AccessibilityAction::Default:
+            required = AccessibilityActionDefault;
+            break;
+        case AccessibilityAction::Focus:
+            required = AccessibilityActionFocus;
+            break;
+        case AccessibilityAction::Increment:
+            required = AccessibilityActionIncrement;
+            break;
+        case AccessibilityAction::Decrement:
+            required = AccessibilityActionDecrement;
+            break;
+        case AccessibilityAction::SetValue:
+            required = AccessibilityActionSetValue;
+            break;
+    }
+    if (!(node.actions & required)) {
+        return false;
+    }
+    ClickEvent ev = {};
+    ev.x = node.bounds.CenterX();
+    ev.y = node.bounds.CenterY();
+    ev.id = node.clickId;
+    ev.el = node.bounds;
+    ev.keyboard = true;
+    if (action == AccessibilityAction::Focus) {
+        WindowSetFocusId(win, node.focusId);
+        AppInvalidate(win);
+        return true;
+    }
+    if (action == AccessibilityAction::Increment ||
+        action == AccessibilityAction::Decrement) {
+        Listener fn = action == AccessibilityAction::Increment
+                          ? node.accessibilityIncrement
+                          : node.accessibilityDecrement;
+        if (fn.IsValid()) {
+            ListenerCall(win->app, win, fn, &ev);
+        } else {
+            int dir = action == AccessibilityAction::Increment ? 1 : -1;
+            if (!SliderStepBy(node.slider, dir, false)) {
+                return false;
+            }
+            SliderEmit(win, node.slider, SliderEventKind::Change);
+        }
+        AppInvalidate(win);
+        return true;
+    }
+    if (action == AccessibilityAction::SetValue) {
+        InputReplaceAll(node.input, win->app, win, value);
+        AppInvalidate(win);
+        return true;
+    }
+
+    if (node.accessibilityDefault.IsValid()) {
+        ListenerCall(win->app, win, node.accessibilityDefault, &ev);
+        AppInvalidate(win);
+        return true;
+    }
+    if (node.listener.IsValid()) {
+        ListenerCall(win->app, win, node.listener, &ev);
+    }
+    if (node.onClick.IsValid()) {
+        node.onClick.Call();
+    }
+    if (node.clickAction) {
+        WindowDispatchAction(win, node.clickAction, node.clickActionArg);
+    }
+    AppInvalidate(win);
+    return true;
 }
 
 // SliderTrack::on_mouse_down and its on_drag_move: a press jumps the value to

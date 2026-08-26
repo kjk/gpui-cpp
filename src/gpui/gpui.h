@@ -1359,6 +1359,125 @@ struct FocusHandle {
     bool operator!=(const FocusHandle& o) const { return id != o.id; }
 };
 
+// The AccessKit roles used by crates/base and crates/ui. GPUI's element tree
+// records this information during build and exports one accessibility tree
+// after layout, alongside the hit and focus trees.
+enum class AccessibilityRole : uint8_t {
+    None,
+    Alert,
+    AlertDialog,
+    Button,
+    Cell,
+    CheckBox,
+    ColumnHeader,
+    ComboBox,
+    DateInput,
+    DateTimeInput,
+    Dialog,
+    EmailInput,
+    GenericContainer,
+    Group,
+    Heading,
+    Link,
+    List,
+    ListBox,
+    ListBoxOption,
+    ListItem,
+    Menu,
+    MenuBar,
+    MenuItem,
+    MultilineTextInput,
+    Navigation,
+    PasswordInput,
+    PhoneNumberInput,
+    ProgressIndicator,
+    RadioButton,
+    RadioGroup,
+    Region,
+    Row,
+    RowGroup,
+    Slider,
+    SpinButton,
+    Switch,
+    Tab,
+    Table,
+    TabList,
+    TextInput,
+    Toolbar,
+    Tooltip,
+    UrlInput
+};
+
+enum class AccessibilityToggled : uint8_t {
+    Unset,
+    False,
+    True,
+    Mixed
+};
+
+enum class AccessibilityOrientation : uint8_t {
+    Unset,
+    Horizontal,
+    Vertical
+};
+
+enum AccessibilityActionBits : uint8_t {
+    AccessibilityActionNone = 0,
+    AccessibilityActionDefault = 1 << 0,
+    AccessibilityActionFocus = 1 << 1,
+    AccessibilityActionIncrement = 1 << 2,
+    AccessibilityActionDecrement = 1 << 3,
+    AccessibilityActionSetValue = 1 << 4
+};
+
+enum class AccessibilityAction : uint8_t {
+    Default,
+    Focus,
+    Increment,
+    Decrement,
+    SetValue
+};
+
+struct AccessibilityInfo {
+    AccessibilityRole role = AccessibilityRole::None;
+    // GPUI's `accessibility_id`: a developer-assigned identifier for test
+    // and automation clients, separate from the element id used by layout
+    // and hit testing.
+    Str authorId = {};
+    Str label = {};
+    Str value = {};
+    Str placeholder = {};
+    AccessibilityToggled toggled = AccessibilityToggled::Unset;
+    AccessibilityOrientation orientation = AccessibilityOrientation::Unset;
+    float numericValue = 0;
+    float minNumericValue = 0;
+    float maxNumericValue = 0;
+    float numericValueStep = 0;
+    int positionInSet = 0;
+    int sizeOfSet = 0;
+    int rowCount = 0;
+    int columnCount = 0;
+    int rowIndex = 0;
+    int columnIndex = 0;
+    int level = 0;
+    bool hasNumericValue = false;
+    bool hasMinNumericValue = false;
+    bool hasMaxNumericValue = false;
+    bool hasNumericValueStep = false;
+    bool hasPositionInSet = false;
+    bool hasSizeOfSet = false;
+    bool hasRowCount = false;
+    bool hasColumnCount = false;
+    bool hasRowIndex = false;
+    bool hasColumnIndex = false;
+    bool hasLevel = false;
+    bool selected = false;
+    bool hasSelected = false;
+    bool expanded = false;
+    bool hasExpanded = false;
+    bool disabled = false;
+};
+
 struct El {
     ElKind kind = ElKind::Div;
     // The frame arena this was built on, so a builder that has to allocate —
@@ -1369,6 +1488,7 @@ struct El {
     Str text;
     IconName icon = IconName::None;
     Str iconPath;
+    AccessibilityInfo accessibility = {};
     // ElKind::Image: what the document called the image. gpui/image.h says
     // what that may name.
     Str imgSrc;
@@ -1396,6 +1516,12 @@ struct El {
     bool suppressTextSelection = false;
     Func0 onClick;
     Listener listener;
+    // Semantic actions that do not need a pointer hit box. These listeners
+    // receive a keyboard-shaped ClickEvent, just like a button activated by
+    // Enter or Space.
+    Listener accessibilityDefault;
+    Listener accessibilityIncrement;
+    Listener accessibilityDecrement;
     // El::OnClickAction — dispatched from the release, beside onClick.
     uint32_t clickAction = 0;
     intptr_t clickActionArg = 0;
@@ -1681,6 +1807,30 @@ struct El {
     El* ScrollMode(ScrollbarMode m);
     El* ScrollId(int v);
     El* Click(int v);
+    El* Role(AccessibilityRole role);
+    El* AccessibilityId(Str authorId);
+    El* AriaLabel(Str label);
+    El* AriaValue(Str value);
+    El* AriaPlaceholder(Str placeholder);
+    El* AriaDisabled(bool disabled = true);
+    El* AriaToggled(AccessibilityToggled toggled);
+    El* AriaSelected(bool selected);
+    El* AriaExpanded(bool expanded);
+    El* AriaNumericValue(float value);
+    El* AriaMinNumericValue(float value);
+    El* AriaMaxNumericValue(float value);
+    El* AriaNumericValueStep(float value);
+    El* AriaOrientation(AccessibilityOrientation orientation);
+    El* AriaPositionInSet(int position);
+    El* AriaSizeOfSet(int size);
+    El* AriaRowCount(int count);
+    El* AriaColumnCount(int count);
+    El* AriaRowIndex(int index);
+    El* AriaColumnIndex(int index);
+    El* AriaLevel(int level);
+    El* OnAccessibilityDefault(Listener fn);
+    El* OnAccessibilityIncrement(Listener fn);
+    El* OnAccessibilityDecrement(Listener fn);
     // `div().id(name)` — the whole of it. The element is named, and the id it
     // is found by is that name folded with its ancestors'. This is what a
     // widget should reach for: two `Button::New(cx, StrL("save"))` under
@@ -1891,6 +2041,29 @@ struct HitRect {
     // a press on the trigger it sits in.
     bool stopClick = false;
     bool suppressTextSelection = false;
+};
+
+// One laid-out semantic element. `parent` is the nearest semantic ancestor,
+// by index in the same Vec; visual-only boxes are skipped without flattening
+// their semantic descendants out of the hierarchy. The action payload is a
+// frame copy of the element behavior so an OS adapter can invoke it later.
+struct AccessibilityNode {
+    uint32_t id = 0;
+    int parent = -1;
+    Bounds bounds = {};
+    AccessibilityInfo info = {};
+    uint8_t actions = AccessibilityActionNone;
+    int clickId = 0;
+    int focusId = 0;
+    Func0 onClick = {};
+    Listener listener = {};
+    Listener accessibilityDefault = {};
+    Listener accessibilityIncrement = {};
+    Listener accessibilityDecrement = {};
+    uint32_t clickAction = 0;
+    intptr_t clickActionArg = 0;
+    SliderState* slider = nullptr;
+    InputState* input = nullptr;
 };
 
 // A scrolled box the frame painted, and the scrollbar drawn down its right
@@ -4031,6 +4204,9 @@ struct Window {
     // built — GPUI's `Window::dirty_views`, and what makes `Notify` name a
     // window rather than every window. Rebuilt each frame.
     Vec<EntityId> rendered;
+    // Rebuilt after layout from the frame's element tree. Platform adapters
+    // read this; it owns no strings or callbacks beyond the frame arena.
+    Vec<AccessibilityNode> accessibility;
     int hoverId = 0;
     int focusId = 0;
     // window.focus_generation: bumped every time the focus moves, so a
@@ -4741,6 +4917,11 @@ void WindowRequestAnimationFrame(Window* win);
 // Collect focusable click targets from last paint for Tab cycling.
 void FocusCollect(Window* win, El* root);
 void IdsCollect(El* root);
+void AccessibilityCollect(El* root, Vec<AccessibilityNode>* out);
+const AccessibilityNode* WindowAccessibilityNode(const Window* win,
+                                                  uint32_t nodeId);
+bool WindowAccessibilityPerform(Window* win, uint32_t nodeId,
+                                AccessibilityAction action, Str value = {});
 int FocusNext(Window* win, int trapId, bool backward);
 // Move the focus. Everything that focuses goes through here, so the
 // generation a keystroke is stamped with counts every move.

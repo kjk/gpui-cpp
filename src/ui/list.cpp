@@ -40,6 +40,9 @@ ListItem* ListItem::Style(const StateStyle& s) {
 El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
     const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)
+                  ->Role(AccessibilityRole::ListItem)
+                  ->AriaSelected(selected)
+                  ->AriaDisabled(disabled)
                   ->FlexRow()
                   ->W(kFill)
                   ->PadX(8)
@@ -219,6 +222,7 @@ El* List::IntoEl() {
     // and the radius here are the story's.
     El* root = Div(a)
                    ->PathClick(id)
+                   ->Role(AccessibilityRole::List)
                    ->FlexCol()
                    ->W(kFill)
                    ->Pad(8)
@@ -362,6 +366,8 @@ El* List::IntoEl() {
                 el = it->IntoEl(StrDup(a, IndexPathIdStr(a, row.Path())),
                                 ListenerArg(click, row.entry),
                                 ListenerArg(down, row.entry));
+                el->AriaPositionInSet(row.entry + 1)
+                    ->AriaSizeOfSet(s->count);
             }
         }
         // Each row takes the height it was measured at, which is what lets

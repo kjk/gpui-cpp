@@ -71,9 +71,13 @@ static uint32_t HexOf(Rgba c) {
 // bordered in its own colour darkened a tenth.
 static El* Swatch(Ctx* cx, Entity<ColorPickerState> st, Str id, uint32_t hex) {
     Rgba c = RgbaHex(hex);
+    ColorPickerState* state = st.Get(cx);
+    bool selected = state && state->hasValue &&
+                    (state->value & 0xffffffu) == (hex & 0xffffffu);
     return ColorSwatch::New(cx, id,
                             ListenTo(st, &ColorPickerState::OnSwatchClick, hex),
-                            ListenTo(st, &ColorPickerState::OnSwatchHover, hex))
+                            ListenTo(st, &ColorPickerState::OnSwatchHover, hex),
+                            hex, selected)
         ->W(20)
         ->H(20)
         ->Shrink0()
@@ -317,7 +321,11 @@ El* ColorPicker::IntoEl() {
     // the picker is the outer element and the popover is inside it, holding
     // the trigger and the panel. The port had the two the other way up, which
     // is what left the popover with nothing named above it.
-    El* root = gpui::ColorPicker::New(cx, id)->Child(
+    El* root = gpui::ColorPicker::New(
+                   cx, id, s->open, false, label,
+                   AccessibilityRole::Button,
+                   ListenTo(st, &ColorPickerState::OnToggleOpen))
+                   ->Child(
         Popup::New(cx, StrL("popover"), trigger)->Content(pop)->IntoEl());
     // color_picker.rs binds escape to Cancel in the "ColorPicker" context;
     // the toggle the trigger carries is what closes an open one.

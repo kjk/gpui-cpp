@@ -91,6 +91,7 @@ struct DatePicker {
     bool cleanable = false;
     bool appearance = true;
     bool focusRing = true;
+    bool disabled = false;
     bool range = false;
     bool open = false;
     int numberOfMonths = 1;
@@ -128,6 +129,7 @@ struct DatePicker {
     DatePicker* Appearance(bool v);
     // FocusableExt::focus_ring: no focus appearance on this control.
     DatePicker* FocusRing(bool v);
+    DatePicker* Disabled(bool v = true);
     DatePicker* Range(bool v = true);
     DatePicker* NumberOfMonths(int count);
     DatePicker* CalendarMode(CalendarView value);

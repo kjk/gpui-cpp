@@ -81,6 +81,9 @@ int PaginationItems(const PaginationState* s, PaginationItem* out, int cap) {
 
 El* Pagination::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->Id(id);
+    return Div(a)
+        ->Id(id)
+        ->Role(AccessibilityRole::Navigation)
+        ->AriaLabel(StrL("Pagination"));
 }
 } // namespace gpui

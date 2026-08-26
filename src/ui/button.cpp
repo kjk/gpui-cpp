@@ -143,6 +143,20 @@ Button* Button::Tooltip(Str s) {
     tooltip = s;
     return this;
 }
+Button* Button::AccessibilityId(Str s) {
+    accessibilityId = s;
+    return this;
+}
+Button* Button::Role(AccessibilityRole value) {
+    accessibilityRole = value;
+    hasAccessibilityRole = true;
+    return this;
+}
+Button* Button::Toggled(bool v) {
+    accessibilityToggled = v;
+    hasAccessibilityToggled = true;
+    return this;
+}
 Button* Button::OnClick(Listener l) {
     onClick = l;
     return this;
@@ -422,11 +436,18 @@ El* Button::IntoEl() {
     if (sizePx > 0) {
         iconPx = sizePx * 0.75f;
     }
-    // The unstyled Button takes `disabled` here, and a click id of its own is
-    // not one: passing one made every enabled button non-focusable and gave
-    // disabled ones a focus handle, which is the opposite of both.
+    // The unstyled Button takes the interaction gate here. Loading is inert
+    // without taking disabled styling, so its visual state stays separate
+    // while Base still removes its focus and activation behavior.
     bool interactive = !(disabled || loading);
-    El* e = gpui::Button::New(cx, id, disabled)
+    AccessibilityRole role =
+        hasAccessibilityRole
+            ? accessibilityRole
+            : variant == ButtonVariant::Link ? AccessibilityRole::Link
+                                             : AccessibilityRole::Button;
+    El* e = gpui::Button::New(cx, id, !interactive)
+                ->Role(role)
+                ->AriaDisabled(!interactive)
                 ->TabIndex(tabIndex)
                 ->TabStop(tabStop)
                 ->FocusRing(focusRing)
@@ -437,6 +458,20 @@ El* Button::IntoEl() {
                 ->Gap(gap)
                 ->Radius(resolved.Has(StateFieldRadius) ? resolved.style.radius
                                                         : th.radius);
+    if (accessibilityId.s) {
+        e->AccessibilityId(accessibilityId);
+    }
+    if (hasAccessibilityToggled) {
+        e->AriaToggled(accessibilityToggled ? AccessibilityToggled::True
+                                           : AccessibilityToggled::False);
+    }
+    if (label.s) {
+        e->AriaLabel(label);
+    } else if (tooltip.s) {
+        // Icon-only buttons use their tooltip as the accessible name, the
+        // same fallback `Button::accessibility_label` takes upstream.
+        e->AriaLabel(tooltip);
+    }
     if (justifyStart) {
         e->JustifyStart();
     }
@@ -474,7 +509,7 @@ El* Button::IntoEl() {
     if (bg.gradient || bg.color.a) {
         e->Bg(bg);
     }
-    if (!disabled && onClick.IsValid()) {
+    if (interactive && onClick.IsValid()) {
         e->OnClick(onClick);
     }
     // The ink the label and the icons inherit, so the pointer can move it:
@@ -739,7 +774,8 @@ El* ButtonGroup::IntoEl() {
             selected |= (intptr_t)1 << i;
         }
     }
-    El* box = Div(a)->Id(id);
+    El* box = gpui::ToggleGroup::New(
+        cx, id, vertical ? Axis::Vertical : Axis::Horizontal);
     if (vertical) {
         // Rust's column stretches its children to the widest of them, because
         // taffy's default align_items is Stretch. Layout here only stretches
@@ -753,6 +789,9 @@ El* ButtonGroup::IntoEl() {
     box->Radius(th.radius)->ClipX()->ClipY();
     for (int i = 0; i < children.len; i++) {
         Button* b = children[i];
+        // A button's selected presentation alone is not a toggle state, but
+        // membership in ButtonGroup is: upstream stamps every group child.
+        b->Toggled(b->selected);
         if (hasSize) {
             b->WithSize(size);
         }

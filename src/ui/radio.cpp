@@ -37,6 +37,14 @@ Radio* Radio::FocusRing(bool v) {
     focusRing = v;
     return this;
 }
+Radio* Radio::TabIndex(int v) {
+    tabIndex = v;
+    return this;
+}
+Radio* Radio::TabStop(bool v) {
+    tabStop = v;
+    return this;
+}
 Radio* Radio::OnClick(Listener fn) {
     onClick = fn;
     return this;
@@ -72,10 +80,15 @@ El* Radio::IntoEl() {
     // gpui_base::Radio owns identity, focus and activation, and refuses the
     // click to the option that is already picked.
     El* row = gpui::Radio::New(cx, id, checked, disabled, onClick)
+                  ->TabIndex(tabIndex)
+                  ->TabStop(tabStop)
                   ->FocusRing(focusRing)
                   ->FlexRow()
                   ->ItemsStart()
                   ->Gap(8);
+    if (label.s) {
+        row->AriaLabel(label);
+    }
     row->Child(dot);
     if (label.s || hint.s) {
         // line_height(relative(1.2)) on the column, 1. on the label.
@@ -146,7 +159,8 @@ El* RadioGroup::IntoEl() {
     // radio.rs puts the flex line inside the BaseRadioGroup rather than on
     // it: the caller's own style — a width, a justification — lands on the
     // group, and the radios stay packed at their gap_3 inside it.
-    El* group = gpui::RadioGroup::New(cx, id);
+    El* group = gpui::RadioGroup::New(
+        cx, id, horizontal ? Axis::Horizontal : Axis::Vertical);
     El* base = Div(cx->a)->Gap(12);
     group->Child(base);
     if (horizontal) {
@@ -160,7 +174,9 @@ El* RadioGroup::IntoEl() {
         if (onClick.IsValid()) {
             r->OnClick(ListenerArg(onClick, i));
         }
-        base->Child(r->IntoEl());
+        base->Child(r->IntoEl()
+                        ->AriaPositionInSet(i + 1)
+                        ->AriaSizeOfSet(radios.len));
     }
     return group;
 }

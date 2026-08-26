@@ -1,0 +1,409 @@
+/* Accessibility semantics ported from the role/state/action assertions in
+ * crates/base and crates/ui. The OS adapters consume this frame tree; these
+ * tests pin the portable part independently of UI Automation, AT-SPI or NSAX. */
+
+#include "Test.h"
+
+struct AccessibilityFrame {
+    App app;
+    Window* win = nullptr;
+    Arena* arena = nullptr;
+    Ctx cx = {};
+};
+
+static AccessibilityFrame NewAccessibilityFrame() {
+    AccessibilityFrame f;
+    f.win = new Window();
+    f.arena = ArenaNew();
+    f.win->app = &f.app;
+    f.cx.app = &f.app;
+    f.cx.win = f.win;
+    f.cx.a = f.arena;
+    return f;
+}
+
+static void FreeAccessibilityFrame(AccessibilityFrame* f) {
+    f->win->accessibility.Reset();
+    WindowKeyedFree(f->win);
+    delete f->win;
+    f->win = nullptr;
+    ArenaDelete(f->arena);
+    f->arena = nullptr;
+    EntityDropAll(&f->app);
+}
+
+static const AccessibilityNode* RoleNode(const Vec<AccessibilityNode>& nodes,
+                                         AccessibilityRole role,
+                                         int occurrence = 0) {
+    for (int i = 0; i < nodes.len; i++) {
+        if (nodes[i].info.role == role && occurrence-- == 0) {
+            return &nodes[i];
+        }
+    }
+    return nullptr;
+}
+
+static bool SameText(Str a, Str b) {
+    return a.len == b.len &&
+           (a.len == 0 || (a.s && b.s && memcmp(a.s, b.s, a.len) == 0));
+}
+
+static void Increment(int* value) {
+    (*value)++;
+}
+
+static void TheTreeSkipsVisualBoxesButKeepsSemanticParents() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    int clicks = 0;
+    El* dialog = Div(f.arena)->Role(AccessibilityRole::Dialog);
+    El* visual = Div(f.arena)->Pad(8);
+    El* button = Button::New(&f.cx, StrL("save"))
+                     ->OnClick(MkFunc0(Increment, &clicks))
+                     ->Child(TextEl(f.arena, StrL("Save")))
+                     ->Child(TextEl(f.arena, StrL("changes")));
+    visual->Child(button);
+    dialog->Child(visual);
+
+    IdsCollect(dialog);
+    AccessibilityCollect(dialog, &f.win->accessibility);
+    utassert(f.win->accessibility.len == 2);
+    const AccessibilityNode* dialogNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::Dialog);
+    const AccessibilityNode* buttonNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::Button);
+    utassert(dialogNode && buttonNode);
+    if (dialogNode && buttonNode) {
+        utassert(dialogNode->parent == -1);
+        utassert(buttonNode->parent == 0);
+        utassert(SameText(buttonNode->info.label, StrL("Save changes")));
+        utassert(buttonNode->actions & AccessibilityActionDefault);
+        utassert(buttonNode->actions & AccessibilityActionFocus);
+        utassert(WindowAccessibilityNode(f.win, buttonNode->id) == buttonNode);
+        utassert(WindowAccessibilityPerform(
+            f.win, buttonNode->id, AccessibilityAction::Default));
+        utassert(clicks == 1);
+        utassert(WindowAccessibilityPerform(f.win, buttonNode->id,
+                                            AccessibilityAction::Focus));
+        utassert(f.win->focusId == buttonNode->focusId);
+    }
+    FreeAccessibilityFrame(&f);
+}
+
+static void ExplicitAriaFieldsSurviveCollection() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    El* node = Div(f.arena)
+                   ->Role(AccessibilityRole::Heading)
+                   ->AccessibilityId(StrL("heading.main"))
+                   ->AriaLabel(StrL("Explicit"))
+                   ->AriaValue(StrL("value"))
+                   ->AriaPlaceholder(StrL("placeholder"))
+                   ->AriaToggled(AccessibilityToggled::Mixed)
+                   ->AriaSelected(true)
+                   ->AriaExpanded(false)
+                   ->AriaNumericValue(4)
+                   ->AriaMinNumericValue(1)
+                   ->AriaMaxNumericValue(9)
+                   ->AriaNumericValueStep(2)
+                   ->AriaOrientation(AccessibilityOrientation::Vertical)
+                   ->AriaPositionInSet(3)
+                   ->AriaSizeOfSet(7)
+                   ->AriaRowCount(11)
+                   ->AriaColumnCount(5)
+                   ->AriaRowIndex(6)
+                   ->AriaColumnIndex(4)
+                   ->AriaLevel(2)
+                   ->AriaDisabled(true)
+                   ->Child(TextEl(f.arena, StrL("Derived")));
+    AccessibilityCollect(node, &f.win->accessibility);
+    utassert(f.win->accessibility.len == 1);
+    if (f.win->accessibility.len == 1) {
+        const AccessibilityInfo& a = f.win->accessibility[0].info;
+        utassert(SameText(a.authorId, StrL("heading.main")));
+        utassert(SameText(a.label, StrL("Explicit")));
+        utassert(SameText(a.value, StrL("value")));
+        utassert(SameText(a.placeholder, StrL("placeholder")));
+        utassert(a.toggled == AccessibilityToggled::Mixed);
+        utassert(a.hasSelected && a.selected);
+        utassert(a.hasExpanded && !a.expanded);
+        utassert(a.hasNumericValue && TestNear(a.numericValue, 4));
+        utassert(a.hasMinNumericValue && TestNear(a.minNumericValue, 1));
+        utassert(a.hasMaxNumericValue && TestNear(a.maxNumericValue, 9));
+        utassert(a.hasNumericValueStep && TestNear(a.numericValueStep, 2));
+        utassert(a.orientation == AccessibilityOrientation::Vertical);
+        utassert(a.positionInSet == 3 && a.sizeOfSet == 7);
+        utassert(a.hasPositionInSet && a.hasSizeOfSet);
+        utassert(a.rowCount == 11 && a.columnCount == 5);
+        utassert(a.hasRowCount && a.hasColumnCount);
+        utassert(a.rowIndex == 6 && a.columnIndex == 4);
+        utassert(a.hasRowIndex && a.hasColumnIndex);
+        utassert(a.level == 2 && a.hasLevel && a.disabled);
+        utassert(f.win->accessibility[0].actions == AccessibilityActionNone);
+    }
+    FreeAccessibilityFrame(&f);
+}
+
+struct SemanticActionView {
+    int increments = 0;
+    int decrements = 0;
+    int defaults = 0;
+
+    static El* Render(SemanticActionView*, Ctx* cx) {
+        return Div(cx->a);
+    }
+
+    static void Increment(SemanticActionView* self, Ctx*, const ClickEvent*) {
+        self->increments++;
+    }
+    static void Decrement(SemanticActionView* self, Ctx*, const ClickEvent*) {
+        self->decrements++;
+    }
+    static void Default(SemanticActionView* self, Ctx*, const ClickEvent*) {
+        self->defaults++;
+    }
+};
+
+static void ExplicitSemanticListenersAreInvoked() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    Entity<SemanticActionView> view = EntityNew<SemanticActionView>(&f.app);
+    f.cx.self = view.id;
+    El* node = Div(f.arena)
+                   ->Role(AccessibilityRole::SpinButton)
+                   ->OnAccessibilityDefault(
+                       Listen(&f.cx, &SemanticActionView::Default))
+                   ->OnAccessibilityIncrement(
+                       Listen(&f.cx, &SemanticActionView::Increment))
+                   ->OnAccessibilityDecrement(
+                       Listen(&f.cx, &SemanticActionView::Decrement));
+    AccessibilityCollect(node, &f.win->accessibility);
+    const AccessibilityNode* semantic = RoleNode(
+        f.win->accessibility, AccessibilityRole::SpinButton);
+    utassert(semantic &&
+             (semantic->actions & AccessibilityActionDefault) &&
+             (semantic->actions & AccessibilityActionIncrement) &&
+             (semantic->actions & AccessibilityActionDecrement));
+    if (semantic) {
+        uint32_t id = semantic->id;
+        utassert(WindowAccessibilityPerform(f.win, id,
+                                            AccessibilityAction::Default));
+        utassert(WindowAccessibilityPerform(f.win, id,
+                                            AccessibilityAction::Increment));
+        utassert(WindowAccessibilityPerform(f.win, id,
+                                            AccessibilityAction::Decrement));
+    }
+    SemanticActionView* state = view.Get(&f.app);
+    utassert(state && state->defaults == 1 && state->increments == 1 &&
+             state->decrements == 1);
+    FreeAccessibilityFrame(&f);
+}
+
+static void ConditionalAndCompositeRolesMatchUpstream() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    El* colorPicker =
+        ColorPicker::New(&f.cx, StrL("picker"), true, false, StrL("Color"))
+            ->Child(Div(f.arena)->PathId(StrL("trigger")));
+    El* unnamedHeader = AccordionHeader::New(
+        &f.cx, AccordionTrigger::New(&f.cx, StrL("u")));
+    El* namedHeader = AccordionHeader::New(
+        &f.cx, AccordionTrigger::New(&f.cx, StrL("n")), StrL("heading"), 4);
+    El* root = Div(f.arena)
+                   ->Child(unnamedHeader)
+                   ->Child(namedHeader)
+                   ->Child(AccordionPanel::New(&f.cx))
+                   ->Child(AccordionPanel::New(&f.cx, StrL("region")))
+                   ->Child(colorPicker)
+                   ->Child(ColorSwatch::New(&f.cx, StrL("swatch"), {}, {},
+                                           0x12ab34, true))
+                   ->Child(DatePicker::New(&f.cx, StrL("date"), false, true));
+    IdsCollect(root);
+    AccessibilityCollect(root, &f.win->accessibility);
+    utassert(RoleNode(f.win->accessibility, AccessibilityRole::Heading) &&
+             RoleNode(f.win->accessibility, AccessibilityRole::Heading)
+                     ->info.level == 4);
+    utassert(RoleNode(f.win->accessibility, AccessibilityRole::Region));
+    const AccessibilityNode* picker =
+        RoleNode(f.win->accessibility, AccessibilityRole::Button, 2);
+    utassert(picker && picker->info.hasExpanded && picker->info.expanded &&
+             SameText(picker->info.label, StrL("Color")) &&
+             (picker->actions & AccessibilityActionFocus));
+    const AccessibilityNode* swatch =
+        RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
+    utassert(swatch && swatch->info.hasSelected && swatch->info.selected &&
+             SameText(swatch->info.label, StrL("#12ab34")));
+    const AccessibilityNode* date =
+        RoleNode(f.win->accessibility, AccessibilityRole::ComboBox);
+    utassert(date && date->info.hasExpanded && date->info.expanded);
+    // The unnamed header and panel add neither role.
+    utassert(f.win->accessibility.len == 7);
+    FreeAccessibilityFrame(&f);
+}
+
+static void InputContentTypesAndSecretsProjectSafely() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    component::Init(&f.app);
+    InputState emailState;
+    InputSetValue(&emailState, StrL("ada@example.test"));
+    El* email = component::Input::New(&f.cx, StrL("email"), &emailState)
+                    ->ContentType(component::InputContentType::EmailAddress)
+                    ->AccessibilityId(StrL("account.email"))
+                    ->AriaLabel(StrL("Email address"))
+                    ->IntoEl();
+    AccessibilityCollect(email, &f.win->accessibility);
+    const AccessibilityNode* node =
+        RoleNode(f.win->accessibility, AccessibilityRole::EmailInput);
+    utassert(node && SameText(node->info.authorId, StrL("account.email")) &&
+             SameText(node->info.label, StrL("Email address")) &&
+             SameText(node->info.value, StrL("ada@example.test")) &&
+             (node->actions & AccessibilityActionSetValue));
+
+    InputState passwordState;
+    InputSetValue(&passwordState, StrL("never expose this"));
+    El* password =
+        component::Input::New(&f.cx, StrL("password"), &passwordState)
+            ->ContentType(component::InputContentType::Password)
+            ->Readonly()
+            ->IntoEl();
+    AccessibilityCollect(password, &f.win->accessibility);
+    node = RoleNode(f.win->accessibility, AccessibilityRole::PasswordInput);
+    utassert(node && !node->info.value.s &&
+             !(node->actions & AccessibilityActionSetValue));
+    FreeAccessibilityFrame(&f);
+}
+
+static void BaseControlsProjectTheirControlledState() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    El* root = Div(f.arena)
+                   ->Child(Checkbox::New(&f.cx, StrL("check"),
+                                        CheckboxState::Indeterminate))
+                   ->Child(Radio::New(&f.cx, StrL("radio"), true))
+                   ->Child(Switch::New(&f.cx, StrL("switch"), true))
+                   ->Child(Toggle::New(&f.cx, StrL("toggle"), true))
+                   ->Child(Progress::New(&f.cx, StrL("done"), 120))
+                   ->Child(Progress::New(&f.cx, StrL("busy"), 40, true))
+                   ->Child(Tab::New(&f.cx, StrL("account"), false, {}, true,
+                                   StrL("Account"), 2, 5));
+    AccessibilityCollect(root, &f.win->accessibility);
+
+    const AccessibilityNode* check =
+        RoleNode(f.win->accessibility, AccessibilityRole::CheckBox);
+    const AccessibilityNode* radio =
+        RoleNode(f.win->accessibility, AccessibilityRole::RadioButton);
+    const AccessibilityNode* sw =
+        RoleNode(f.win->accessibility, AccessibilityRole::Switch);
+    const AccessibilityNode* toggle =
+        RoleNode(f.win->accessibility, AccessibilityRole::Button);
+    const AccessibilityNode* done =
+        RoleNode(f.win->accessibility, AccessibilityRole::ProgressIndicator);
+    const AccessibilityNode* busy = RoleNode(
+        f.win->accessibility, AccessibilityRole::ProgressIndicator, 1);
+    const AccessibilityNode* tab =
+        RoleNode(f.win->accessibility, AccessibilityRole::Tab);
+    utassert(check && check->info.toggled == AccessibilityToggled::Mixed);
+    utassert(radio && radio->info.hasSelected && radio->info.selected);
+    utassert(sw && sw->info.toggled == AccessibilityToggled::True);
+    utassert(toggle && toggle->info.toggled == AccessibilityToggled::True);
+    utassert(done && done->info.hasNumericValue &&
+             TestNear(done->info.numericValue, 100));
+    utassert(busy && !busy->info.hasNumericValue);
+    utassert(tab && tab->info.hasSelected && tab->info.selected);
+    if (tab) {
+        utassert(SameText(tab->info.label, StrL("Account")));
+        utassert(tab->info.positionInSet == 2 && tab->info.sizeOfSet == 5);
+    }
+    FreeAccessibilityFrame(&f);
+}
+
+static void TablesKeepCountsAndOneBasedIndices() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    El* table = Table::New(&f.cx, StrL("table"), 12, 4);
+    El* body = TableBody::New(&f.cx, StrL("body"));
+    El* row = TableRow::New(&f.cx, StrL("row"), 3);
+    row->Child(TableCell::New(&f.cx, StrL("cell"), 2)
+                   ->Child(TextEl(f.arena, StrL("Ada"))));
+    body->Child(row);
+    table->Child(body);
+    AccessibilityCollect(table, &f.win->accessibility);
+
+    const AccessibilityNode* tableNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::Table);
+    const AccessibilityNode* bodyNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::RowGroup);
+    const AccessibilityNode* rowNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::Row);
+    const AccessibilityNode* cellNode =
+        RoleNode(f.win->accessibility, AccessibilityRole::Cell);
+    utassert(tableNode && tableNode->info.rowCount == 12 &&
+             tableNode->info.columnCount == 4);
+    utassert(bodyNode && bodyNode->parent == 0);
+    utassert(rowNode && rowNode->parent == 1 && rowNode->info.rowIndex == 3);
+    utassert(cellNode && cellNode->parent == 2 &&
+             cellNode->info.columnIndex == 2);
+    utassert(cellNode && SameText(cellNode->info.label, StrL("Ada")));
+    FreeAccessibilityFrame(&f);
+}
+
+static void SliderActionsUseTheSlidersOwnStep() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    SliderState state = SliderStateNew(0, 10, SliderSingle(5), 2);
+    El* slider = Slider::New(&f.cx, &state, Axis::Vertical);
+    AccessibilityCollect(slider, &f.win->accessibility);
+    const AccessibilityNode* node =
+        RoleNode(f.win->accessibility, AccessibilityRole::Slider);
+    utassert(node && node->info.orientation ==
+                         AccessibilityOrientation::Vertical);
+    utassert(node && node->info.hasNumericValue &&
+             TestNear(node->info.numericValue, 5));
+    utassert(node && (node->actions & AccessibilityActionIncrement));
+    utassert(node && (node->actions & AccessibilityActionDecrement));
+    if (node) {
+        uint32_t id = node->id;
+        utassert(WindowAccessibilityPerform(f.win, id,
+                                            AccessibilityAction::Increment));
+        utassertnear(state.value.End(), 7);
+        utassert(WindowAccessibilityPerform(f.win, id,
+                                            AccessibilityAction::Decrement));
+        utassertnear(state.value.End(), 5);
+    }
+    FreeAccessibilityFrame(&f);
+}
+
+static void EditableTextOffersSetValueAndReadOnlyTextDoesNot() {
+    AccessibilityFrame f = NewAccessibilityFrame();
+    InputState editable;
+    InputSetValue(&editable, StrL("old"));
+    El* input = InputBase::New(&f.cx, StrL("input"), true)
+                    ->BindInput(&editable)
+                    ->AriaValue(InputValue(&editable));
+    AccessibilityCollect(input, &f.win->accessibility);
+    const AccessibilityNode* node =
+        RoleNode(f.win->accessibility, AccessibilityRole::TextInput);
+    utassert(node && (node->actions & AccessibilityActionSetValue));
+    utassert(node && SameText(node->info.value, StrL("old")));
+    if (node) {
+        utassert(WindowAccessibilityPerform(f.win, node->id,
+                                            AccessibilityAction::SetValue,
+                                            StrL("new value")));
+        utassert(SameText(InputValue(&editable), StrL("new value")));
+    }
+
+    InputState readOnly;
+    readOnly.readonly = true;
+    El* locked = InputBase::New(&f.cx, StrL("locked"), true)
+                     ->BindInput(&readOnly);
+    AccessibilityCollect(locked, &f.win->accessibility);
+    node = RoleNode(f.win->accessibility, AccessibilityRole::TextInput);
+    utassert(node && !(node->actions & AccessibilityActionSetValue));
+    FreeAccessibilityFrame(&f);
+}
+
+void TestAccessibility() {
+    TestSuite("accessibility");
+    TheTreeSkipsVisualBoxesButKeepsSemanticParents();
+    ExplicitAriaFieldsSurviveCollection();
+    BaseControlsProjectTheirControlledState();
+    TablesKeepCountsAndOneBasedIndices();
+    SliderActionsUseTheSlidersOwnStep();
+    EditableTextOffersSetValueAndReadOnlyTextDoesNot();
+    ExplicitSemanticListenersAreInvoked();
+    ConditionalAndCompositeRolesMatchUpstream();
+    InputContentTypesAndSecretsProjectSafely();
+}

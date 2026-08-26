@@ -9,9 +9,17 @@ float ProgressClampValue(float value) {
     return value > 100 ? 100 : value;
 }
 
-El* Progress::New(Ctx* cx, Str id) {
+El* Progress::New(Ctx* cx, Str id, float value, bool indeterminate) {
     Arena* a = cx->a;
-    return Div(a)->Id(id);
+    El* e = Div(a)
+                ->Id(id)
+                ->Role(AccessibilityRole::ProgressIndicator)
+                ->AriaMinNumericValue(0)
+                ->AriaMaxNumericValue(100);
+    if (!indeterminate) {
+        e->AriaNumericValue(ProgressClampValue(value));
+    }
+    return e;
 }
 
 El* ProgressTrack::New(Ctx* cx) {

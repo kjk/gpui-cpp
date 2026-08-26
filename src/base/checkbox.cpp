@@ -13,7 +13,16 @@ El* Checkbox::New(Ctx* cx, Str id, CheckboxState state, bool disabled,
     // `div().id(id)` is unconditional in Rust; `track_focus` and `on_click`
     // both hang off `when(!disabled)`. The id is the fold of the name down
     // from the root, so a checkbox named among its siblings is still its own.
-    El* e = Div(a)->PathClick(id);
+    AccessibilityToggled toggled =
+        state == CheckboxState::Indeterminate
+            ? AccessibilityToggled::Mixed
+            : state == CheckboxState::Checked ? AccessibilityToggled::True
+                                               : AccessibilityToggled::False;
+    El* e = Div(a)
+                ->PathClick(id)
+                ->Role(AccessibilityRole::CheckBox)
+                ->AriaToggled(toggled)
+                ->AriaDisabled(disabled);
     if (disabled) {
         return e;
     }

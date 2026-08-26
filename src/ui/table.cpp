@@ -55,7 +55,8 @@ TableCellEl* TableCellEl::Child(El* e) {
 El* TableCellEl::IntoEl() {
     Edges p = UiTableCellPadding(size);
     Str id = StrDup(a, fmt(head ? "head-%d" : "cell-%d", ix));
-    El* e = head ? gpui::TableHead::New(cx, id) : gpui::TableCell::New(cx, id);
+    El* e = head ? gpui::TableHead::New(cx, id, ix + 1)
+                 : gpui::TableCell::New(cx, id, ix + 1);
     e->FlexRow()->ItemsCenter();
     // `.when(self.style.size.width.is_none(), ..)`: a cell the caller sized
     // keeps that width and shrinks from it like any flex item; one that was
@@ -99,7 +100,7 @@ TableRow* TableRow::Child(TableCellEl* c) {
 El* TableRow::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
     Str rowId = StrDup(a, fmt("row-%d", ix));
-    El* row = gpui::TableRow::New(cx, rowId)->W(kFill)->FlexRow();
+    El* row = gpui::TableRow::New(cx, rowId, ix + 1)->W(kFill)->FlexRow();
     if (hasBg) {
         row->Bg(bg);
     }
@@ -611,7 +612,7 @@ El* DataTable::BuildEl() {
     }
     float scrollX = s ? s->scrollX : 0;
 
-    El* box = gpui::Table::New(cx, id)
+    El* box = gpui::Table::New(cx, id, nRows, nColumns)
                   ->FlexCol()
                   ->W(kFill)
                   ->Radius(th.radius)
@@ -719,7 +720,8 @@ El* DataTable::BuildEl() {
         // head drag rewrites.
         int c = s ? TableColAt(s, d) : d;
         const TableColumn& col = columns[c];
-        El* th_ = gpui::TableHead::New(cx, StrDup(a, fmt("th-%d", c)))
+        El* th_ = gpui::TableHead::New(cx, StrDup(a, fmt("th-%d", c)), c + 1)
+                      ->AriaLabel(col.title)
                       ->FlexRow()
                       ->Shrink0()
                       ->W(ColWidth(s, c));
@@ -849,11 +851,12 @@ El* DataTable::BuildEl() {
     }
     for (int r = range.first; r < range.end; r++) {
         El* rowFixed =
-            gpui::TableRow::New(cx, StrDup(a, fmt("row-fixed-%d", r)))
+            gpui::TableRow::New(cx, StrDup(a, fmt("row-fixed-%d", r)), r + 1)
                 ->FlexRow()
                 ->Shrink0()
                 ->BorderB(1, th.tableRowBorder);
-        El* rowScroll = gpui::TableRow::New(cx, StrDup(a, fmt("row-%d", r)))
+        El* rowScroll = gpui::TableRow::New(cx, StrDup(a, fmt("row-%d", r)),
+                                            r + 1)
                             ->FlexRow()
                             ->Shrink0()
                             ->BorderB(1, th.tableRowBorder);
@@ -889,7 +892,7 @@ El* DataTable::BuildEl() {
             int c = s ? TableColAt(s, d) : d;
             El* cellEl = cell ? cell(cx, data, r, c) : nullptr;
             Str cellId = StrDup(a, fmt("cell-%d-%d", r, c));
-            El* td = gpui::TableCell::New(cx, cellId)
+            El* td = gpui::TableCell::New(cx, cellId, c + 1)
                          ->FlexRow()
                          ->Shrink0()
                          ->W(ColWidth(s, c))

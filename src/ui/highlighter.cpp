@@ -413,7 +413,8 @@ El* Highlighter::IntoEl() {
     if (h > 0) {
         // The scroll handle is the editor's: the rows slide under this box as
         // the caret moves, and the wheel moves them too.
-        scroller = InputBase::New(cx, id, true)
+        scroller = InputBase::New(cx, id, true,
+                                  AccessibilityRole::MultilineTextInput)
                        ->BindInput(state)
                        ->FlexCol()
                        ->W(kFill)

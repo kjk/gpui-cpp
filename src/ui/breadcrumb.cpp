@@ -26,9 +26,15 @@ El* BreadcrumbItem::IntoEl() {
     // The last level is where you are, so it gets the foreground; a disabled
     // one stays muted whatever its position.
     bool lit = isLast && !disabled;
-    El* el = Div(a)->Child(
-        TextEl(a, label)->Font(14)->Fg(lit ? th.foreground : th.mutedFg));
-    if (!disabled && onClick.IsValid()) {
+    bool clickable = !disabled && onClick.IsValid();
+    El* el = Div(a)
+                 ->Role(clickable ? AccessibilityRole::Link
+                                  : AccessibilityRole::ListItem)
+                 ->AriaLabel(label)
+                 ->AriaDisabled(disabled)
+                 ->Child(TextEl(a, label)->Font(14)->Fg(
+                     lit ? th.foreground : th.mutedFg));
+    if (clickable) {
         // breadcrumb.rs asks for the hand in the same `when_some(on_click)`
         // that binds the click: a level with nowhere to go is not a link.
         el->Cursor(CursorKind::Pointer);

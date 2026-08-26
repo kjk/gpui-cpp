@@ -11,9 +11,12 @@
 
 namespace gpui {
 
-El* InputBase::New(Ctx* cx, Str id, bool interactive) {
+El* InputBase::New(Ctx* cx, Str id, bool interactive,
+                   AccessibilityRole role) {
     Arena* a = cx->a;
-    return interactive ? Div(a)->PathId(id) : Div(a)->Id(id);
+    return (interactive ? Div(a)->PathId(id) : Div(a)->Id(id))
+        ->Role(role)
+        ->AriaDisabled(!interactive);
 }
 
 // The washes one row carries: the search matches that fall inside it, and the

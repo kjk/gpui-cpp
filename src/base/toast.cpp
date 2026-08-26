@@ -126,6 +126,6 @@ float ToastStackGeometry(const float* heights, int n, float peek, float gap,
 
 El* Toast::New(Ctx* cx, Str id) {
     Arena* a = cx->a;
-    return Div(a)->Id(id);
+    return Div(a)->Id(id)->Role(AccessibilityRole::Alert);
 }
 } // namespace gpui

@@ -202,6 +202,12 @@ Tabs* Tabs::Flex1() {
     }
     return this;
 }
+Tabs* Tabs::AriaLabel(Str label) {
+    if (items.len > 0) {
+        items[items.len - 1].ariaLabel = label;
+    }
+    return this;
+}
 Tabs* Tabs::Disabled(int ix, bool v) {
     if (ix >= 0 && ix < items.len) {
         items[ix].disabled = v;
@@ -509,7 +515,9 @@ El* Tabs::IntoEl() {
         Str tabId = StrDup(a, fmt("%d", i));
         El* tab = gpui::Tab::New(
                       cx, tabId, item.disabled,
-                      item.disabled ? Listener{} : ListenerArg(onChange, i))
+                      item.disabled ? Listener{} : ListenerArg(onChange, i),
+                      on, item.ariaLabel.s ? item.ariaLabel : item.label,
+                      i + 1, items.len)
                       ->FlexRow()
                       ->ItemsCenter()
                       ->JustifyCenter()
