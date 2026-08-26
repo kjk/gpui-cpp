@@ -21,6 +21,15 @@ Edges WindowBorderInsets(float shadowSize, WindowTiling tiling) {
     return e;
 }
 
+Edges WindowPaddings(Window* window) {
+    if (!window || !WindowClientDecorated(window)) {
+        return {};
+    }
+    float shadow = window->clientInset >= 0 ? window->clientInset
+                                             : kWindowShadowSize;
+    return WindowBorderInsets(shadow, window->tiling);
+}
+
 WindowEdge WindowResizeEdge(float x, float y, float w, float h, Edges insets,
                             WindowTiling tiling, float hitSize) {
     float innerLeft = insets.left;
@@ -81,23 +90,48 @@ WindowBorder* WindowBorder::ShadowSize(float v) {
     shadowSize = v;
     return this;
 }
+WindowBorder* WindowBorder::ResizeHitSize(float v) {
+    resizeHitSize = v;
+    return this;
+}
 WindowBorder* WindowBorder::Tiling(WindowTiling v) {
     tiling = v;
+    hasTiling = true;
     return this;
 }
 
 El* WindowBorder::IntoEl() {
     const Theme& th = ThemeNow(cx->app);
+    bool clientDecorated = !cx->win || WindowClientDecorated(cx->win);
+    WindowTiling effectiveTiling =
+        hasTiling || !cx->win ? tiling : cx->win->tiling;
     // window.set_client_inset(platform_inset). Rust keeps the full platform
     // inset even when tiling suppresses the visual shadow on one or all
     // edges, so Positioner never places a popup under the resize frame.
     if (cx->win) {
         cx->win->paint.clientInset = shadowSize;
+        cx->win->clientInset = shadowSize;
+        cx->win->tiling = effectiveTiling;
+        cx->win->resizeHitSize = resizeHitSize;
+    }
+    // Decorations::Server: the platform owns the frame, border and shadow.
+    // Keep the transparent wrapper because WindowBorder remains the Root's
+    // structural child in both decoration modes.
+    if (!clientDecorated) {
+        if (cx->win) {
+            cx->win->paint.clientInset = 0;
+            cx->win->clientInset = 0;
+        }
+        El* server = Div(a)->SizeFull();
+        if (child) {
+            server->Child(child);
+        }
+        return server;
     }
     // A window tiled on every side keeps its platform inset but draws no
     // shadow: there is nothing for one to fall on.
-    float visualShadow = tiling.AllTiled() ? 0.f : shadowSize;
-    Edges insets = WindowBorderInsets(visualShadow, tiling);
+    float visualShadow = effectiveTiling.AllTiled() ? 0.f : shadowSize;
+    Edges insets = WindowBorderInsets(visualShadow, effectiveTiling);
 
     El* backdrop = Div(a)->FlexCol()->SizeFull()->ClipY();
     if (insets.top > 0) {
@@ -120,16 +154,16 @@ El* WindowBorder::IntoEl() {
     if (!WindowIsActive(cx)) {
         border = RgbaOpacity(border, 0.7f);
     }
-    if (!tiling.top) {
+    if (!effectiveTiling.top) {
         frame->BorderT(kWindowBorderSize, border);
     }
-    if (!tiling.bottom) {
+    if (!effectiveTiling.bottom) {
         frame->BorderB(kWindowBorderSize, border);
     }
-    if (!tiling.left) {
+    if (!effectiveTiling.left) {
         frame->BorderL(kWindowBorderSize, border);
     }
-    if (!tiling.right) {
+    if (!effectiveTiling.right) {
         frame->BorderR(kWindowBorderSize, border);
     }
     if (child) {

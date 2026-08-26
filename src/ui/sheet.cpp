@@ -61,6 +61,9 @@ El* Sheet::IntoEl(WinSize win) {
         return Div(a);
     }
     const Theme& th = ThemeNow(cx->app);
+    Edges windowPadding = WindowPaddings(cx->win);
+    float viewW = win.dipW - windowPadding.left - windowPadding.right;
+    float viewH = win.dipH - windowPadding.top - windowPadding.bottom;
     bool horizontal =
         placement == SheetPlacement::Left || placement == SheetPlacement::Right;
     // The surface carries no padding of its own: the title bar, the body and
@@ -72,8 +75,8 @@ El* Sheet::IntoEl(WinSize win) {
     float marginTop = placement == SheetPlacement::Bottom ? 0.f : kMarginTop;
     El* surface = Div(a)
                       ->Absolute()
-                      ->W(horizontal ? size : win.dipW)
-                      ->H(horizontal ? win.dipH - marginTop : size)
+                      ->W(horizontal ? size : viewW)
+                      ->H(horizontal ? viewH - marginTop : size)
                       ->FlexCol()
                       ->Bg(th.tokens.background)
                       ->Border(1, th.border);
@@ -90,10 +93,10 @@ El* Sheet::IntoEl(WinSize win) {
             surface->Top(marginTop + off)->Left(0);
             break;
         case SheetPlacement::Bottom:
-            surface->Top(win.dipH - size - off)->Left(0);
+            surface->Top(viewH - size - off)->Left(0);
             break;
         default:
-            surface->Top(marginTop)->Left(win.dipW - size - off);
+            surface->Top(marginTop)->Left(viewW - size - off);
             break;
     }
     El* head = Div(a)
@@ -141,14 +144,18 @@ El* Sheet::IntoEl(WinSize win) {
     El* backdrop = nullptr;
     if (overlay) {
         backdrop =
-            Div(a)->Absolute()->Top(0)->Left(0)->W(win.dipW)->H(win.dipH)->Bg(
+            Div(a)->Absolute()->Top(0)->Left(0)->W(viewW)->H(viewH)->Bg(
                 Rgba8(0, 0, 0, 40));
     }
     return gpui::Sheet::New(cx)
         ->Overlay(backdrop)
         ->Surface(surface)
         ->OnClose(onClose)
-        ->IntoEl();
+        ->IntoEl()
+        ->Top(windowPadding.top)
+        ->Left(windowPadding.left)
+        ->W(viewW)
+        ->H(viewH);
 }
 
 } // namespace component

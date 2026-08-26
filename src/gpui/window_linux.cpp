@@ -591,11 +591,12 @@ static int ResizeEdge(Window* win, int x, int y) {
     }
     // No shadow padding here: the frame is the window, so the inner frame is
     // its whole box and the band straddles the edge.
-    component::WindowTiling tiling;
-    Edges insets = component::WindowBorderInsets(0, tiling);
+    Tiling tiling = win->tiling;
+    float inset = win->clientInset >= 0 ? win->clientInset : 0;
+    Edges insets = component::WindowBorderInsets(inset, tiling);
     return (int)component::WindowResizeEdge((float)x, (float)y, (float)pw->pxW,
                                             (float)pw->pxH, insets, tiling,
-                                            component::kWindowResizeHitSize);
+                                            win->resizeHitSize);
 }
 
 static void SetEdgeCursor(Window* win, int dir) {
@@ -1065,6 +1066,15 @@ static void HandleEvent(App* app, XEvent* ev) {
         case PropertyNotify:
             if (ev->xproperty.atom == aNetWmState) {
                 win->maximized = ReadMaximized(win);
+                // GPUI reports a maximized client window as tiled on every
+                // side, suppressing its shadow, borders and resize zones.
+                // Partial compositor tiling has no portable EWMH state; the
+                // component's explicit Tiling setter remains that seam.
+                win->tiling = {};
+                if (win->maximized) {
+                    win->tiling.top = win->tiling.bottom = true;
+                    win->tiling.left = win->tiling.right = true;
+                }
             }
             break;
         case KeyPress:

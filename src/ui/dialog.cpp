@@ -274,6 +274,9 @@ El* Dialog::IntoEl(WinSize size) {
         return Div(a);
     }
     const Theme& th = ThemeNow(cx->app);
+    Edges windowPadding = WindowPaddings(cx->win);
+    float viewW = size.dipW - windowPadding.left - windowPadding.right;
+    float viewH = size.dipH - windowPadding.top - windowPadding.bottom;
     // The parts carry the padding, so a footer that tints or rules itself
     // reaches the panel's edges (AlertDialog::p_0 in the Rust story).
     El* panel = Div(a)
@@ -319,8 +322,12 @@ El* Dialog::IntoEl(WinSize size) {
     float delta = MotionAppear(
         cx, MotionId(StrL("dialog"), StrDup(a, fmt("%d", layerIx))),
         kDialogMotionMs, DialogEase);
-    El* backdrop =
-        DialogBackdrop::New(cx)->Fixed()->Top(0)->Left(0)->W(kFill)->H(kFill);
+    El* backdrop = DialogBackdrop::New(cx)
+                       ->Fixed()
+                       ->Top(windowPadding.top)
+                       ->Left(windowPadding.left)
+                       ->W(viewW)
+                       ->H(viewH);
     if (overlay) {
         backdrop->Bg(th.tokens.overlay);
     }
@@ -332,13 +339,13 @@ El* Dialog::IntoEl(WinSize size) {
     // not centered in it.
     El* popup = DialogPopup::New(cx)
                     ->Fixed()
-                    ->Top(0)
-                    ->Left(0)
-                    ->W(kFill)
-                    ->H(kFill)
+                    ->Top(windowPadding.top)
+                    ->Left(windowPadding.left)
+                    ->W(viewW)
+                    ->H(viewH)
                     ->FlexCol()
                     ->ItemsCenter()
-                    ->PadT((size.dipH * 0.1f + layerIx * 16.f) * delta)
+                    ->PadT((viewH * 0.1f + layerIx * 16.f) * delta)
                     ->Child(panel);
     Str trap = StrDup(a, fmt("dialog-%d", layerIx));
     // The escape and enter bindings, on the popup that traps the focus. They

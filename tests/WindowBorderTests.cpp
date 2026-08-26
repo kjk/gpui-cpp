@@ -101,10 +101,67 @@ static void AWindowWithNoShadowIsGrabbedAtItsOwnEdges() {
     static_assert((int)WindowEdge::None == -1, "no edge");
 }
 
+static void WindowPaddingsFollowDecorationAndStableInset() {
+    Window window;
+    window.clientInset = 20;
+    window.tiling.left = true;
+#if GPUI_OS_LINUX
+    // A native X11 window is required to distinguish a successful Motif
+    // client-frame request from a window manager that retained its frame.
+    // With no adapter this test window is therefore server-decorated.
+    Edges e = WindowPaddings(&window);
+    utassertnear(e.top, 0.f);
+    utassertnear(e.left, 0.f);
+#else
+    window.opts.clientTitleBar = true;
+    Edges e = WindowPaddings(&window);
+    utassertnear(e.top, 20.f);
+    utassertnear(e.bottom, 20.f);
+    utassertnear(e.left, 0.f);
+    utassertnear(e.right, 20.f);
+#endif
+    Edges none = WindowPaddings(nullptr);
+    utassertnear(none.top, 0.f);
+    utassertnear(none.right, 0.f);
+}
+
+static void BuilderPublishesPlatformResizeSettings() {
+    App app;
+    Window* window = new Window();
+    window->app = &app;
+    window->opts.clientTitleBar = true;
+    Arena* arena = ArenaNew();
+    Ctx cx = {&app, window, arena, {}};
+    WindowTiling tiled;
+    tiled.left = true;
+
+    El* child = Div(arena);
+    El* border = WindowBorder::New(&cx)
+                     ->ShadowSize(17)
+                     ->ResizeHitSize(6)
+                     ->Tiling(tiled)
+                     ->Child(child)
+                     ->IntoEl();
+    utassert(border != nullptr);
+    utassertnear(window->resizeHitSize, 6.f);
+    utassert(window->tiling.left);
+#if GPUI_OS_LINUX
+    // No PlatWindow in this pure test means server decorations won.
+    utassertnear(window->clientInset, 0.f);
+#else
+    utassertnear(window->clientInset, 17.f);
+#endif
+
+    ArenaDelete(arena);
+    delete window;
+}
+
 void TestWindowBorder() {
     TestSuite("window_border");
     TilingTakesTheShadowOffThatSide();
     EachEdgeIsGrabbedAlongItsOwnSegment();
     ATiledSideIsNeverGrabbed();
     AWindowWithNoShadowIsGrabbedAtItsOwnEdges();
+    WindowPaddingsFollowDecorationAndStableInset();
+    BuilderPublishesPlatformResizeSettings();
 }

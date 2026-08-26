@@ -27,21 +27,18 @@ const float kWindowResizeHitSize = 4;
 // which is what Rust says here too.
 const float kWindowBorderRadius = 0;
 
-// Tiling: which sides the window manager has snapped flush against something.
-// A tiled side has no shadow, no border and no resize band.
-struct WindowTiling {
-    bool top = false;
-    bool bottom = false;
-    bool left = false;
-    bool right = false;
-
-    bool IsTiled() const { return top || bottom || left || right; }
-    bool AllTiled() const { return top && bottom && left && right; }
-};
+// Compatibility spelling retained for callers of the earlier port. The
+// state itself belongs to the platform window, as gpui::Tiling does in Rust.
+using WindowTiling = gpui::Tiling;
 
 // client_frame_insets: how far the visible frame sits inside the window, per
 // side.
 Edges WindowBorderInsets(float shadowSize, WindowTiling tiling);
+
+// window_paddings: visible-frame insets for fixed overlays. Server-decorated
+// windows have none; client decorations use the stable inset WindowBorder
+// installed, or the platform default before its first render.
+Edges WindowPaddings(Window* window);
 
 // ResizeEdge, numbered as _NET_WM_MOVERESIZE numbers its directions —
 // clockwise from the top-left corner — because that is what the X11 window
@@ -69,11 +66,14 @@ struct WindowBorder {
     Ctx* cx = nullptr;
     El* child = nullptr;
     float shadowSize = kWindowShadowSize;
+    float resizeHitSize = kWindowResizeHitSize;
     WindowTiling tiling = {};
+    bool hasTiling = false;
 
     static WindowBorder* New(Ctx* cx);
     WindowBorder* Child(El* e);
     WindowBorder* ShadowSize(float v);
+    WindowBorder* ResizeHitSize(float v);
     WindowBorder* Tiling(WindowTiling v);
     El* IntoEl();
 };

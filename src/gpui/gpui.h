@@ -4160,6 +4160,19 @@ enum {
 struct App;
 struct Window;
 
+// gpui::Tiling: the client-frame sides a window manager has placed flush
+// against another surface. UI's WindowBorder consumes it, while the platform
+// owns the state because decorations are a property of the native window.
+struct Tiling {
+    bool top = false;
+    bool bottom = false;
+    bool left = false;
+    bool right = false;
+
+    bool IsTiled() const { return top || bottom || left || right; }
+    bool AllTiled() const { return top && bottom && left && right; }
+};
+
 struct WinOpts {
     bool borderless = false;
     // The view draws the title bar. Cocoa keeps its traffic-light controls
@@ -4314,6 +4327,15 @@ struct Window {
     // What the pointer looks like right now; the OS is only told on a change.
     CursorKind cursor = CursorKind::Arrow;
     bool maximized = false;
+    // Window::client_inset and window_decorations(). WindowBorder writes the
+    // stable inset while it renders; fixed UI overlays read it while their
+    // own trees are built, which is before their enclosing Root is wrapped.
+    // Negative means no component has supplied one yet.
+    float clientInset = -1;
+    Tiling tiling = {};
+    // WindowBorder::resize_hit_size. Kept here because Linux starts native
+    // resizing in its event adapter rather than from a retained element.
+    float resizeHitSize = 4;
     // is_window_active: whether this window has the focus. A client-decorated
     // frame dims its border when it does not.
     bool active = true;

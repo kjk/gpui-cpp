@@ -6986,3 +6986,30 @@ color and rotation, while the existing converter parity suite now validates
 all 100 compiled files against runtime SVG conversion. UI Icon is full: the
 audit moves to 70 full, 51 partial, 8 adapters and 2 exclusions with 341
 unresolved spellings. MSVC release passes 19,328 checks.
+
+## Window paddings constrain fixed overlays to the visible client frame
+
+The C++ Window Border already had the pinned inset and resize-edge arithmetic,
+but it did not expose `window_paddings`, and fixed Dialog and Sheet layers used
+the full native window. On Linux that includes the transparent shadow band, so
+overlays began at the wrong origin, acquired the wrong viewport size, and
+could cover space outside the visible frame.
+
+`WindowPaddings` now mirrors the Rust decision: server decorations return zero;
+client decorations use the stable client inset, with the platform shadow size
+as the before-first-render fallback, and tiled sides return zero individually.
+`gpui::Tiling`, the stable inset and the configurable resize hit width live on
+`Window`, because they are native-window state. Window Border publishes them
+while rendering, takes the server-decoration branch without drawing a second
+frame, and retains the earlier `WindowTiling` spelling as an alias. Dialog and
+Sheet position and size their fixed hosts inside those paddings.
+
+Linux starts native window resizing in its event adapter rather than retained
+cursor-only elements. That adapter now uses the same inner-frame insets,
+tiling and builder-selected hit width as the UI module; maximized windows are
+reported as tiled on all four sides. This is the intentional projection of
+Rust's resize zones onto the C++ platform seam. Native partial-side tiling has
+no portable EWMH signal in the current adapter, and the runtime still lacks
+Rust's blurred two-layer Linux box shadow, so Window Border remains honestly
+partial with that explicit reason. Its public declaration surface is complete,
+reducing the unresolved report to 340. MSVC release passes 19,338 checks.

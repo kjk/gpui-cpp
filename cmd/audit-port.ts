@@ -117,6 +117,8 @@ const partialReasons: Record<string, string> = {
   "ui/inspector": "the inspector is intentionally smaller than GPUI's debug inspector",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
   "ui/theme": "filesystem watch/reload and the richer highlight/list/sheet settings remain smaller than Rust",
+  "ui/window_border":
+    "fixed-overlay insets and platform resize delegation are complete; blurred Linux shadows and native per-side tiling detection remain smaller",
 };
 
 const adapterReasons: Record<string, string> = {
