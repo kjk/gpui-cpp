@@ -6084,3 +6084,71 @@ both pass. The mini suite substitutes public-API coverage for the full
 parser's internal/GFM-only tests, while the HTML parser's own tests remain in
 both builds. The same mini release suite also passes under g++ in WSL (9,802
 checks), covering the non-MSVC compilation path.
+
+## Element state, and three things that fell out of it
+
+**`with_element_state`.** Rust keeps per-element state in
+`window.with_element_state(global_id, ..)`, keyed by the element id stack.
+The port had both pieces — a window-keyed store and the id stack — but no
+name for the idea, so every caller spelled
+`KeyedKey(KeyedName(cx, name), HashClickId(StrL(..)))` out and the widgets
+with no state of their own hoisted theirs onto the view. `ElementState` and
+`ElementStateEntity` are the idea; the five hand-rolled keys are calls to it.
+
+The resize handle gets what Rust gives it: `ResizeHandleState { active }`,
+set from the press and cleared by any release, which is the whole of what
+`ResizeHandleContext` reports. The field the dock's area was carrying so its
+handle could be told which boundary it was is gone.
+
+One wrinkle the port has and Rust does not: an element here carries one
+listener per event where `window.on_mouse_event` registers as many as ask.
+So the group's own down and up go *through* the handle's state, which is
+what Rust's closure does anyway once it has set the flag.
+
+This turned up a live bug. Nested resizable groups — the ordinary case, and
+what the story's first demo is — named their root element but never pushed
+that name on the id stack, so an inner group's `resizable-handle-0` and an
+outer group's were one element state. Without the `IdScope` the two groups
+crossed listeners and the drag did nothing at all.
+
+**The dropdown takes its trigger as it is.** `BasePopup` is
+`self.base.child(self.trigger)`. The port renamed it `trigger`, so a name the
+caller asked for never reached the tree: the tab bar's
+`Button::New(cx, StrL("more-btn"))` had been a dead string since it was
+written. Only a trigger that arrives without an identity is named now.
+
+**The last two anonymous scroll regions.** `popup_menu.rs` is
+`v_flex().id("popup-menu")` over `v_flex().id("items")`, and `scrollable.rs`
+is `div().id(root_id)` over `div().id((id, "area"))`. Both are named, both
+scroll by their place in the tree, and no `ScrollId(HashClickId(..))` is left
+anywhere.
+
+**The list is two elements, because Rust has two views.** `List::render` is
+`div().id("list").role(List).refine_style(&self.style).child(state)`, over
+the state's own `v_flex().id("list-state").key_context("List")
+.track_focus(..)`. The outer is what the caller styles; the inner declares
+the context, tracks the focus and takes the press. One behavioural
+difference falls out: the outer carries `.id()` on every path now, so a list
+that is loading or empty is a hit target, where the port's early returns
+left it without one.
+
+## What the screenshot harness was doing
+
+Worth writing down, because it makes every sweep before this one read
+better than it was. Two sources of noise, neither of them the port:
+
+- **Blank captures.** The shutter sometimes fires before the window has
+  painted anything, and the result is a white page — byte-identical whatever
+  page was asked for. One sweep had thirteen of them against the baseline's
+  three, which is most of what read as "47 pages differing". `shot1.sh`
+  re-shoots while the result hashes to the blank.
+- **Hover does not work here at all.** `shot.ts` says so — "the pointer
+  could not be placed (the session is probably locked); hover states will not
+  show" — so every `-hover` case in this repo's verification is inert.
+
+What is left is genuine and reads the same every time: the scrollbar's fade
+band (a page with a scrollbar differs from itself by a few thousand
+sub-threshold pixels), carets, the skeleton, the spinner, the introduction,
+and animations caught mid-flight. The rule that works is: `big=0` is noise;
+anything with `big>0` gets re-shot on both builds, and if it survives, shot
+again with the animation settled.
