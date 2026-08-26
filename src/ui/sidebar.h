@@ -77,9 +77,8 @@ struct SidebarMenuItem {
     bool clickToOpen = false;
     bool clickToToggle = false;
     El* suffix = nullptr;
-    SidebarMenuItem* children[16] = {};
+    ArenaVec<SidebarMenuItem*> children;
     PopupMenu* contextMenu = nullptr;
-    int nChildren = 0;
     // Filled in by whatever holds it.
     bool collapsed = false;
 
@@ -103,8 +102,7 @@ struct SidebarMenuItem {
 struct SidebarMenu {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    SidebarMenuItem* items[24] = {};
-    int n = 0;
+    ArenaVec<SidebarMenuItem*> items;
     bool collapsed = false;
 
     static SidebarMenu* New(Ctx* cx);
@@ -116,8 +114,7 @@ struct SidebarGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str label = {};
-    SidebarMenu* menus[8] = {};
-    int n = 0;
+    ArenaVec<SidebarMenu*> menus;
     bool collapsed = false;
 
     static SidebarGroup* New(Ctx* cx, Str label);
@@ -154,8 +151,7 @@ struct Sidebar {
     Str id = {};
     El* header = nullptr;
     El* footer = nullptr;
-    SidebarGroup* groups[8] = {};
-    int n = 0;
+    ArenaVec<SidebarGroup*> groups;
     Side side = Side::Left;
     SidebarCollapsible collapsible = SidebarCollapsible::Icon;
     bool collapsed = false;

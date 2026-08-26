@@ -2,20 +2,22 @@
 
 namespace gpui {
 
-static ListSettings gListSettings;
-
-const ListSettings& ListSettingsNow() {
-    return gListSettings;
+const ListSettings& ListSettingsNow(App* app) {
+    return *AppGlobalEnsure<ListSettings>(app);
 }
 
-void ListSettingsSet(ListSettings s) {
-    gListSettings = s;
+void ListSettingsSet(App* app, ListSettings s) {
+    ListSettings* current = AppGlobalEnsure<ListSettings>(app);
+    if (current) {
+        *current = s;
+    }
 }
 
-ListActiveStyle ListActiveStyleOf(Background active, Rgba activeBorder,
+ListActiveStyle ListActiveStyleOf(const ListSettings& settings,
+                                  Background active, Rgba activeBorder,
                                   Background accent, bool selected) {
     ListActiveStyle out;
-    bool highlight = gListSettings.activeHighlight;
+    bool highlight = settings.activeHighlight;
     // list_item.rs: the tint is for the selection proper — a row marked by a
     // right press takes `accent` either way — and the rule comes with the
     // setting, not with the row's state.

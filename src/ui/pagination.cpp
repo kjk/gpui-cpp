@@ -98,8 +98,12 @@ El* Pagination::IntoEl() {
     }
     row->Child(prev->IntoEl());
     if (!compact) {
-        PaginationItem items[32];
-        int n = PaginationItems(&st, items, 32);
+        int visible = st.visiblePages < 5 ? 5 : st.visiblePages;
+        int64_t wanted = (int64_t)visible + 2;
+        int cap = st.totalPages < wanted ? st.totalPages : (int)wanted;
+        PaginationItem* items =
+            (PaginationItem*)Alloc(a, (int)sizeof(PaginationItem) * cap);
+        int n = PaginationItems(&st, items, cap);
         for (int i = 0; i < n; i++) {
             if (items[i].page == 0) {
                 // The ellipsis is a dropdown over the pages it hid, so a jump

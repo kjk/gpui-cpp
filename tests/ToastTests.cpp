@@ -7,7 +7,7 @@
 #include "Test.h"
 
 static const ToastEntry* Find(const ToastStackState& s, int id) {
-    for (int i = 0; i < s.n; i++) {
+    for (int i = 0; i < s.entries.len; i++) {
         if (s.entries[i].id == id) {
             return &s.entries[i];
         }
@@ -35,7 +35,7 @@ static void AToastAnimatesInThenCountsDownThenLeaves() {
     // 200 ms of exit, and it is gone.
     utassert(ToastAdvance(&s, 200, false));
     utassert(Find(s, 1) == nullptr);
-    utassert(s.n == 0);
+    utassert(s.entries.len == 0);
 }
 
 static void PauseStopsTheCountdownButNotTheAnimations() {
@@ -56,7 +56,7 @@ static void PauseStopsTheCountdownButNotTheAnimations() {
     utassert(Find(s, 1)->status == ToastStatus::Ending);
     // The exit runs while paused too.
     utassert(ToastAdvance(&s, 200, true));
-    utassert(s.n == 0);
+    utassert(s.entries.len == 0);
 }
 
 static void AToastWithoutATimeoutStays() {
@@ -68,7 +68,7 @@ static void AToastWithoutATimeoutStays() {
     utassert(Find(s, 1)->status == ToastStatus::Present);
     // It goes when it is dismissed, and not before.
     utassert(ToastRemove(&s, 1));
-    utassert(s.n == 0);
+    utassert(s.entries.len == 0);
     utassert(!ToastRemove(&s, 1));
 }
 
@@ -82,16 +82,15 @@ static void TheStackAdvancesEveryToastAtOnce() {
     ToastAdvance(&s, 200, false);
     utassert(Find(s, 1) == nullptr);
     utassert(Find(s, 2)->status == ToastStatus::Present);
-    utassert(s.n == 1);
+    utassert(s.entries.len == 1);
 }
 
-static void TheStackHasABound() {
+static void TheStackGrowsLikeRustsVecDeque() {
     ToastStackState s;
-    for (int i = 0; i < kToastStackCap; i++) {
+    for (int i = 0; i < 100; i++) {
         utassert(ToastPush(&s, i, 1000));
     }
-    utassert(!ToastPush(&s, 999, 1000));
-    utassert(s.n == kToastStackCap);
+    utassert(s.entries.len == 100);
 }
 
 static void TheStackIsAsTallAsItsFrontPlusASliverOfEachOther() {
@@ -148,7 +147,7 @@ void TestToast() {
     PauseStopsTheCountdownButNotTheAnimations();
     AToastWithoutATimeoutStays();
     TheStackAdvancesEveryToastAtOnce();
-    TheStackHasABound();
+    TheStackGrowsLikeRustsVecDeque();
     TheStackIsAsTallAsItsFrontPlusASliverOfEachOther();
     ABottomStackGrowsUpwards();
     AnEmptyStackHasNoGeometry();

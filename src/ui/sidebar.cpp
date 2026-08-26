@@ -73,8 +73,8 @@ SidebarMenuItem* SidebarMenuItem::Suffix(El* e) {
     return this;
 }
 SidebarMenuItem* SidebarMenuItem::Child(SidebarMenuItem* item) {
-    if (nChildren < 16 && item) {
-        children[nChildren++] = item;
+    if (item) {
+        children.Append(a, item);
     }
     return this;
 }
@@ -85,7 +85,7 @@ SidebarMenuItem* SidebarMenuItem::OnClick(Listener fn) {
 
 El* SidebarMenuItem::IntoEl(Str id) {
     const Theme& th = cx->theme();
-    bool isSubmenu = nChildren > 0;
+    bool isSubmenu = children.len > 0;
     Entity<SidebarMenuState> st = {};
     bool isOpen = false;
     if (isSubmenu) {
@@ -179,7 +179,7 @@ El* SidebarMenuItem::IntoEl(Str id) {
     if (isOpen) {
         El* sub = Div(a)->FlexCol()->Gap(4)->PadY(2)->PadL(10)->BorderL(
             1, th.sidebarBorder);
-        for (int i = 0; i < nChildren; i++) {
+        for (int i = 0; i < children.len; i++) {
             children[i]->collapsed = collapsed;
             sub->Child(children[i]->IntoEl(StrDup(a, fmt("%d", i))));
         }
@@ -203,8 +203,8 @@ SidebarMenu* SidebarMenu::New(Ctx* cx) {
     return m;
 }
 SidebarMenu* SidebarMenu::Child(SidebarMenuItem* item) {
-    if (n < 24 && item) {
-        items[n++] = item;
+    if (item) {
+        items.Append(a, item);
     }
     return this;
 }
@@ -212,7 +212,7 @@ SidebarMenu* SidebarMenu::Child(SidebarMenuItem* item) {
 El* SidebarMenu::IntoEl(Str id) {
     IdScope scope(cx, id);
     El* col = Div(a)->Id(id)->FlexCol()->W(kFill)->Gap(8);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         items[i]->collapsed = collapsed;
         col->Child(items[i]->IntoEl(StrDup(a, fmt("%d", i))));
     }
@@ -228,8 +228,8 @@ SidebarGroup* SidebarGroup::New(Ctx* cx, Str label) {
     return g;
 }
 SidebarGroup* SidebarGroup::Child(SidebarMenu* menu) {
-    if (n < 8 && menu) {
-        menus[n++] = menu;
+    if (menu) {
+        menus.Append(a, menu);
     }
     return this;
 }
@@ -250,7 +250,7 @@ El* SidebarGroup::IntoEl(Str id) {
                            RgbaOpacity(th.sidebarFg, 0.7f))));
     }
     El* inner = Div(a)->FlexCol()->W(kFill)->Gap(8);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < menus.len; i++) {
         menus[i]->collapsed = collapsed;
         inner->Child(menus[i]->IntoEl(StrDup(a, fmt("%d", i))));
     }
@@ -358,8 +358,8 @@ Sidebar* Sidebar::Footer(El* e) {
     return this;
 }
 Sidebar* Sidebar::Child(SidebarGroup* group) {
-    if (n < 8 && group) {
-        groups[n++] = group;
+    if (group) {
+        groups.Append(a, group);
     }
     return this;
 }
@@ -472,7 +472,7 @@ El* Sidebar::IntoEl() {
     } else {
         inner->PadX(12);
     }
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < groups.len; i++) {
         groups[i]->collapsed = iconCollapsed;
         // The groups are rows of a `list(..)` in Rust, which has no gap of
         // its own: `pt_3` on the first and `pb_3` on the last are the whole
@@ -483,7 +483,7 @@ El* Sidebar::IntoEl() {
         if (i == 0) {
             box->PadT(12);
         }
-        if (i + 1 == n) {
+        if (i + 1 == groups.len) {
             box->PadB(12);
         }
         inner->Child(box);

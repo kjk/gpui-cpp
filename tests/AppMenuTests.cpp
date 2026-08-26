@@ -11,10 +11,9 @@
 
 using namespace gpui;
 
-// The menus are installed against an app, and nothing here dereferences it:
-// the table is the runtime's, and the pointer is only what a chosen row would
-// be dispatched into.
-static App* const kApp = (App*)0x1000;
+// The menu model is App-owned, like GPUI's `Vec<OwnedMenu>`.
+static App gMenuApp;
+static App* const kApp = &gMenuApp;
 
 static uint32_t Act(const char* name) {
     return ActionOf(Str(name));
@@ -108,10 +107,8 @@ static void AnUnlabelledRowIsASeparator() {
     utassert(!AppMenuRowForId(3, &action, nullptr));
 }
 
-// Nothing to install is not an installation: a call with no menus leaves the
-// bar that is up alone, the way `set_menus(vec![])` would have nothing to say
-// about it.
-static void NoMenusLeavesTheOnesThereAlone() {
+// set_menus replaces the App's Vec, including with an empty one.
+static void NoMenusClearsTheOnesThere() {
     uint32_t quit = Act("test::Quit");
     MenuRow rows[1] = {};
     rows[0].label = StrL("Quit");
@@ -125,7 +122,38 @@ static void NoMenusLeavesTheOnesThereAlone() {
     AppSetMenus(kApp, nullptr, 0);
     AppSetMenus(nullptr, menus, 1);
     uint32_t action = 0;
-    utassert(AppMenuRowForId(1, &action, nullptr) && action == quit);
+    utassert(!AppMenuRowForId(kApp, 1, &action, nullptr));
+}
+
+static void MenusAreAppOwnedAndUnbounded() {
+    const int n = 600;
+    MenuRow* rows = AllocArray<MenuRow>(n);
+    utassert(rows != nullptr);
+    if (!rows) {
+        return;
+    }
+    uint32_t many = Act("test::Many");
+    for (int i = 0; i < n; i++) {
+        rows[i].label = StrL("Row");
+        rows[i].action = many;
+        rows[i].arg = i;
+    }
+    MenuDef menu = {StrL("Many"), rows, n};
+    AppSetMenus(kApp, &menu, 1);
+    intptr_t arg = -1;
+    utassert(AppMenuRowForId(kApp, n, nullptr, &arg) && arg == n - 1);
+
+    App other = {};
+    MenuRow one = {StrL("Other"), Act("test::Other")};
+    MenuDef otherMenu = {StrL("Other"), &one, 1};
+    AppSetMenus(&other, &otherMenu, 1);
+    uint32_t action = 0;
+    utassert(AppMenuRowForId(&other, 1, &action, nullptr) &&
+             action == one.action);
+    utassert(AppMenuRowForId(kApp, n, nullptr, &arg) && arg == n - 1);
+
+    AppMenuClear(&other);
+    free(rows);
 }
 
 // The chord a menu row shows is looked up with the contexts ignored: the row
@@ -163,6 +191,8 @@ void TestAppMenu() {
     TestSuite("app_menu");
     OnlyTheRowsThatCanBeChosenAreNumbered();
     AnUnlabelledRowIsASeparator();
-    NoMenusLeavesTheOnesThereAlone();
+    NoMenusClearsTheOnesThere();
+    MenusAreAppOwnedAndUnbounded();
     AMenuRowFindsAChordBoundInsideAContext();
+    AppMenuClear(kApp);
 }

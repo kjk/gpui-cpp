@@ -61,11 +61,14 @@ struct Scrollbar {
     // it should now be and the caller stores it, rather than the box moving
     // itself.
     static El* New(Ctx* cx, Str id, float scrollY, float scrollX,
-                   Listener onScroll, ScrollAxis axis = ScrollAxis::Vertical,
-                   ScrollbarMode mode = ScrollbarMode::Always);
+                   Listener onScroll,
+                   ScrollAxis axis = ScrollAxis::Vertical);
+    static El* New(Ctx* cx, Str id, float scrollY, float scrollX,
+                   Listener onScroll, ScrollAxis axis, ScrollbarMode mode);
 
     // The vertical case, which is most of them.
+    static El* Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll);
     static El* Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll,
-                        ScrollbarMode mode = ScrollbarMode::Always);
+                        ScrollbarMode mode);
 };
 } // namespace gpui

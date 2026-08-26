@@ -65,7 +65,8 @@ El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
         // outlined rather than filled, so it is not mistaken for the
         // selection.
         ListActiveStyle st =
-            ListActiveStyleOf(th.tokens.listActive, th.listActiveBorder,
+            ListActiveStyleOf(ListSettingsNow(cx->app), th.tokens.listActive,
+                              th.listActiveBorder,
                               th.tokens.accent, selected);
         if (!secondarySelected) {
             row->Bg(st.bg);

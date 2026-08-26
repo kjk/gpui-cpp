@@ -923,50 +923,68 @@ const Theme& ThemeDefaultLight() {
     return t;
 }
 
-// The pair in force. The two above are what a theme file is resolved
-// against and never change; these are what everything paints from, and what
-// ThemeInstall replaces when a theme is applied.
-static Theme gActiveTheme[2];
-static bool gActiveThemeInit = false;
-
-static void ActiveThemeInit() {
-    if (gActiveThemeInit) {
-        return;
-    }
-    gActiveThemeInit = true;
-    gActiveTheme[(int)ThemeMode::Light] = ThemeDefaultLight();
-    gActiveTheme[(int)ThemeMode::Dark] = ThemeDefaultDark();
-}
-
+// Pure callers and theme resolution read the immutable defaults.
 const Theme& ThemeLight() {
-    ActiveThemeInit();
-    return gActiveTheme[(int)ThemeMode::Light];
+    return ThemeDefaultLight();
 }
 
 const Theme& ThemeDark() {
-    ActiveThemeInit();
-    return gActiveTheme[(int)ThemeMode::Dark];
+    return ThemeDefaultDark();
 }
 
-void ThemeInstall(ThemeMode mode, const Theme& t) {
-    ActiveThemeInit();
-    gActiveTheme[(int)mode] = t;
-}
-
-static ThemeMode gThemeMode = ThemeMode::Light;
 // theme/mod.rs: radius 6, radius_lg 8, font_size 16.
 static const float kDefaultFontSize = 16.f;
-static float gFontSize = kDefaultFontSize;
-static ScrollbarMode gScrollbarMode = ScrollbarMode::Always;
-// theme/mod.rs: `focus_ring: true`.
-static bool gFocusRing = true;
 
-void ThemeSetRadius(float radius) {
-    // Both palettes, since a theme here is a static rather than one window's
-    // Global and the mode can be switched under it.
-    const Theme* both[2] = {&ThemeLight(), &ThemeDark()};
+struct AppThemeState {
+    Theme active[2] = {};
+    float fontSize = kDefaultFontSize;
+    ScrollbarMode scrollbarMode = ScrollbarMode::Scrolling;
+    bool focusRing = true;
+    ThemeSyncFn sync = nullptr;
+    bool initialized = false;
+};
+
+static void ThemeDidChange(App* app, AppThemeState* state) {
+    if (state && state->sync) {
+        state->sync(app);
+    }
+}
+
+static AppThemeState* ThemeStateOf(const App* app) {
+    AppThemeState* state = AppGlobalEnsure<AppThemeState>((App*)app);
+    if (state && !state->initialized) {
+        state->active[(int)ThemeMode::Light] = ThemeDefaultLight();
+        state->active[(int)ThemeMode::Dark] = ThemeDefaultDark();
+        state->initialized = true;
+    }
+    return state;
+}
+
+const Theme& ThemeLight(const App* app) {
+    AppThemeState* state = ThemeStateOf(app);
+    return state ? state->active[(int)ThemeMode::Light] : ThemeDefaultLight();
+}
+
+const Theme& ThemeDark(const App* app) {
+    AppThemeState* state = ThemeStateOf(app);
+    return state ? state->active[(int)ThemeMode::Dark] : ThemeDefaultDark();
+}
+
+void ThemeInstall(App* app, ThemeMode mode, const Theme& t) {
+    AppThemeState* state = ThemeStateOf(app);
+    if (state) {
+        state->active[(int)mode] = t;
+        ThemeDidChange(app, state);
+    }
+}
+
+void ThemeSetRadius(App* app, float radius) {
+    AppThemeState* state = ThemeStateOf(app);
+    if (!state) {
+        return;
+    }
     for (int i = 0; i < 2; i++) {
-        Theme* t = const_cast<Theme*>(both[i]);
+        Theme* t = &state->active[i];
         t->radius = radius;
         t->radiusLg = radius > 0 ? radius + 2 : 0;
         // `radius_full` goes with it: a theme that squares its corners squares
@@ -974,53 +992,74 @@ void ThemeSetRadius(float radius) {
         // of permanently round elements behind.
         t->radiusFull = radius > 0 ? kRadiusFull : 0;
     }
+    ThemeDidChange(app, state);
 }
 
-float ThemeFontSize() {
-    return gFontSize;
+float ThemeFontSize(const App* app) {
+    AppThemeState* state = ThemeStateOf(app);
+    return state ? state->fontSize : kDefaultFontSize;
 }
 
-void ThemeSetFontSize(float px) {
-    gFontSize = px > 0 ? px : kDefaultFontSize;
+void ThemeSetFontSize(App* app, float px) {
+    AppThemeState* state = ThemeStateOf(app);
+    if (state) {
+        state->fontSize = px > 0 ? px : kDefaultFontSize;
+        ThemeDidChange(app, state);
+    }
 }
 
 // What an explicit `Font(12)` is multiplied by. Rust says its sizes in rems,
 // so they all follow `Theme::font_size`; these are in DIPs, so the base is
 // what they are measured against.
-static float ThemeFontScale() {
-    return gFontSize / kDefaultFontSize;
+static float ThemeFontScale(const App* app) {
+    return ThemeFontSize(app) / kDefaultFontSize;
 }
 
-bool ThemeFocusRing() {
-    return gFocusRing;
+bool ThemeFocusRing(const App* app) {
+    AppThemeState* state = ThemeStateOf(app);
+    return state ? state->focusRing : true;
 }
 
-void ThemeSetFocusRing(bool on) {
-    gFocusRing = on;
+void ThemeSetFocusRing(App* app, bool on) {
+    AppThemeState* state = ThemeStateOf(app);
+    if (state) {
+        state->focusRing = on;
+    }
 }
 
-ScrollbarMode ScrollbarModeNow() {
-    return gScrollbarMode;
+ScrollbarMode ScrollbarModeNow(const App* app) {
+    AppThemeState* state = ThemeStateOf(app);
+    return state ? state->scrollbarMode : ScrollbarMode::Always;
 }
 
-void ScrollbarModeSet(ScrollbarMode m) {
-    gScrollbarMode = m;
+void ScrollbarModeSet(App* app, ScrollbarMode m) {
+    AppThemeState* state = ThemeStateOf(app);
+    if (state) {
+        state->scrollbarMode = m;
+        ThemeDidChange(app, state);
+    }
 }
 
 void ThemeSet(App* app, ThemeMode mode) {
     if (app) {
         app->themeMode = mode;
+        ThemeDidChange(app, ThemeStateOf(app));
     }
-    // Painting happens below Ctx, so it reads the mode from here.
-    gThemeMode = mode;
 }
 
-ThemeMode ThemeGet() {
-    return gThemeMode;
+ThemeMode ThemeGet(const App* app) {
+    return app ? app->themeMode : ThemeMode::Light;
 }
 
-const Theme& ThemeNow() {
-    return gThemeMode == ThemeMode::Dark ? ThemeDark() : ThemeLight();
+void ThemeSetSyncFn(App* app, ThemeSyncFn fn) {
+    AppThemeState* state = ThemeStateOf(app);
+    if (state) {
+        state->sync = fn;
+    }
+}
+
+const Theme& ThemeNow(const App* app) {
+    return ThemeGet(app) == ThemeMode::Dark ? ThemeDark(app) : ThemeLight(app);
 }
 
 // ─── element builders ─────────────────────────────────────────────────────
@@ -1069,7 +1108,10 @@ El* ButtonEl(Arena* a, int clickId, Str label, BtnKind kind) {
 }
 
 El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected) {
-    const Theme& th = ThemeNow();
+    // Legacy arena-only helper: themed components take Ctx and therefore the
+    // App-owned active theme. With no App in hand this resolves against the
+    // immutable light default rather than mutable process state.
+    const Theme& th = ThemeLight();
     El* b = Div(a)
                 ->ItemsCenter()
                 ->JustifyCenter()
@@ -1403,8 +1445,8 @@ El* El::ClipX() {
 }
 // The bar an element shows: its own when it named one, the theme's default
 // otherwise.
-static ScrollbarMode ElScrollMode(const El* e) {
-    return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow();
+static ScrollbarMode ElScrollMode(const El* e, const App* app) {
+    return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow(app);
 }
 
 // The thumb's colour: `thumb_hover` under the pointer or in a drag, `thumb`
@@ -1415,6 +1457,15 @@ static Background ScrollbarThumbBg(const Theme& th, bool hot, float alpha) {
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
+static Background ScrollbarThumbBg(const El* e, const Theme& th, bool hot,
+                                    float alpha) {
+    if (!e->scrollThemeSet) {
+        return ScrollbarThumbBg(th, hot, alpha);
+    }
+    Background c = hot ? e->scrollThumbHover : e->scrollThumb;
+    return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
+}
+
 // The track behind it — `scrollbar.background`, which both default themes
 // leave transparent.
 static Background ScrollbarBarBg(const Theme& th, float alpha) {
@@ -1422,9 +1473,26 @@ static Background ScrollbarBarBg(const Theme& th, float alpha) {
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
+static Background ScrollbarBarBg(const El* e, const Theme& th, bool active,
+                                  float alpha) {
+    if (!e->scrollThemeSet) {
+        return ScrollbarBarBg(th, alpha);
+    }
+    Background c = active ? e->scrollTrackActive : e->scrollTrack;
+    return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
+}
+
 // clamp_thumb_radius: the theme's radius, never more than half the thumb.
 static float ThumbRadius(const Theme& th, float thumbW) {
     float r = th.radius;
+    return r > thumbW * 0.5f ? thumbW * 0.5f : r;
+}
+
+static float ThumbRadius(const El* e, const Theme& th, float thumbW) {
+    if (!e->scrollThemeSet) {
+        return ThumbRadius(th, thumbW);
+    }
+    float r = e->scrollThumbRadius;
     return r > thumbW * 0.5f ? thumbW * 0.5f : r;
 }
 
@@ -1545,6 +1613,10 @@ void ScrollFadeClear() {
 
 ScrollbarMotion ScrollbarMotionFor(ScrollbarMode mode) {
     ScrollbarMotion m;
+    m.idle = 2.f;
+    m.enter = 0.3f;
+    m.exit = 0.5f;
+    m.expand = 0.3f;
     // `with_thumb_hover_entrance`: hover mode slides, the other two fade.
     m.thumbHoverEntrance = mode == ScrollbarMode::Hover
                                ? ScrollbarEntrance::SlideAndFade
@@ -1906,6 +1978,10 @@ El* El::OnDrag(Str dragKind, int ix, void* data) {
 }
 El* El::StopClick() {
     stopClick = true;
+    return this;
+}
+El* El::SuppressTextSelection() {
+    suppressTextSelection = true;
     return this;
 }
 El* El::OnMouseUpOut(Listener l) {
@@ -3469,7 +3545,8 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     // An explicit size is in DIPs at the default font size and scales with
     // it; an inherited one has been scaled already, by the root or by
     // whichever ancestor set it.
-    float font = e->style.fontSize > 0 ? e->style.fontSize * ThemeFontScale()
+    float font = e->style.fontSize > 0
+                     ? e->style.fontSize * ThemeFontScale(ctx ? ctx->app : nullptr)
                                        : inheritFont;
     Rgba fg = e->style.hasColor ? e->style.color : inheritFg;
     // Like HoverBg, this needs a click id of its own: without one the element
@@ -4549,7 +4626,7 @@ static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
 }
 
 static void DrawChart(PaintCtx* ctx, El* e) {
-    const Theme& th = ThemeNow();
+    const Theme& th = ThemeNow(ctx->app);
     float x = e->x;
     float y = e->y;
     float w = e->w;
@@ -5203,7 +5280,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         e->clickAction || e->onHover.IsValid() || e->onMouseDown.IsValid() ||
         e->onMouseUp.IsValid() || e->onDragMove.IsValid() ||
         e->onMouseUpOut.IsValid() || e->drag.IsValid() || e->onDrop.IsValid() ||
-        e->cursor != CursorKind::Arrow || e->slider) {
+        e->cursor != CursorKind::Arrow || e->slider ||
+        e->suppressTextSelection) {
         HitRect hr;
         hr.id = e->clickId;
         hr.focusId = e->style.focusId;
@@ -5229,6 +5307,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         hr.sliderAxis = e->sliderAxis;
         hr.input = e->input;
         hr.stopClick = e->stopClick;
+        hr.suppressTextSelection = e->suppressTextSelection;
         ctx->hits.Append(hr);
         // Everything under this element names it as the ancestor its events
         // pass through, which is the chain the two phases walk.
@@ -5243,7 +5322,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         sr.scrollY = e->scrollY;
         sr.contentW = e->contentW;
         sr.scrollX = e->scrollX;
-        sr.mode = ElScrollMode(e);
+        sr.mode = ElScrollMode(e, ctx->app);
         sr.barX = !e->noScrollbar && !e->noScrollbarX;
         sr.barY = !e->noScrollbar && !e->noScrollbarY;
         sr.onScroll = e->onScroll;
@@ -5261,7 +5340,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     bool focused = e->style.focusId && e->style.focusId == ctx->focusId &&
                    e->style.focusRing;
     if (focused) {
-        e->style.borderColor = ThemeNow().ring;
+        e->style.borderColor = ThemeNow(ctx->app).ring;
     }
 
     BoxFill fill = BoxFillFor(e->style.hasActiveBg, e->style.hasHoverBg,
@@ -5391,7 +5470,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             e->input->lastBounds = e->Bounds();
             e->input->lastFont = font;
         }
-        Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
+        Rgba c =
+            e->style.hasColor ? e->style.color : ThemeNow(ctx->app).foreground;
         int lo = e->selLo;
         int hi = e->selHi;
         if (e->selectable && e->text.s) {
@@ -5518,7 +5598,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             ImageDraw(ctx, img, e->Bounds(), e->style.radius);
         } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
                               e->style.hasColor ? e->style.color
-                                                : ThemeNow().foreground,
+                                                : ThemeNow(ctx->app).foreground,
                               0)) {
             // An SVG is not a bitmap for any of the three backends to decode;
             // it is the vector the icon renderer already walks, and a picture
@@ -5531,13 +5611,15 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                 e->laidFont > 0
                     ? e->laidFont
                     : (e->style.fontSize > 0 ? e->style.fontSize : 14.f);
-            Rgba c = e->style.hasColor ? e->style.color : ThemeNow().mutedFg;
+            Rgba c = e->style.hasColor ? e->style.color
+                                       : ThemeNow(ctx->app).mutedFg;
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c, false,
                        e->style.wrap, e->laidMaxW, ElTextWeight(e),
                        e->style.lineHeight);
         }
     } else if (e->kind == ElKind::Icon) {
-        Rgba c = e->style.hasColor ? e->style.color : ThemeNow().foreground;
+        Rgba c =
+            e->style.hasColor ? e->style.color : ThemeNow(ctx->app).foreground;
         float s = e->w > 0 ? e->w : 16;
         // Every lucide icon is compiled in as draw-op bytecode
         // (asset_icons.cpp), so this reads no file; an application's own
@@ -5546,7 +5628,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         Str path = e->iconPath.s ? e->iconPath : IconNamePath(e->icon);
         SvgDraw(ctx, path, e->x, e->y, s, c, e->style.rotate);
     } else if (e->kind == ElKind::Progress) {
-        const Theme& th = ThemeNow();
+        const Theme& th = ThemeNow(ctx->app);
         Background track = BackgroundOpacity(th.tokens.progress, 0.2f);
         FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius, nullptr,
                        track);
@@ -5582,10 +5664,11 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     // painted — the band, the press geometry and the layout stay where they
     // are, which is what keeps a bar that is sliding out from swallowing a
     // click meant for the page.
-    ScrollbarMode barMode = ElScrollMode(e);
+    ScrollbarMode barMode = ElScrollMode(e, ctx->app);
     bool overBox = e->Bounds().Contains({ctx->mouseX, ctx->mouseY});
     bool dragging = ctx->scrollDragId != 0 && ctx->scrollDragId == e->scrollId;
-    ScrollbarMotion barMotion = ScrollbarMotionFor(barMode);
+    ScrollbarMotion barMotion =
+        e->scrollThemeSet ? e->scrollMotion : ScrollbarMotionFor(barMode);
     bool barVisible = !e->noScrollbar;
     float barAlpha = 1.f;
     float barSlide = 0.f;
@@ -5618,8 +5701,9 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         ScrollbarEntrance entrance = (barMode == ScrollbarMode::Hover && onBand)
                                          ? barMotion.thumbHoverEntrance
                                          : barMotion.entrance;
-        VisibilitySetVisible(f, want, entrance, barMotion.enter, barMotion.exit,
-                             now);
+        float enter = barMode == ScrollbarMode::Always ? 0 : barMotion.enter;
+        float exit = barMode == ScrollbarMode::Always ? 0 : barMotion.exit;
+        VisibilitySetVisible(f, want, entrance, enter, exit, now);
         ScrollbarVisibility vis = VisibilitySample(f, now);
         barAlpha = vis.opacity;
         // `visibility_translation`: the bar sits `track_width` off its edge at
@@ -5652,7 +5736,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                          : nullptr;
     // The thumb's radius is `theme.radius`, clamped to half the thumb — a
     // wider thumb rounds more, which is what `clamp_thumb_radius` says.
-    const Theme& barTheme = ThemeNow();
+    const Theme& barTheme = ThemeNow(ctx->app);
     if (barVisible && !e->noScrollbarY &&
         e->style.overflowY == Overflow::Scroll && e->contentH > e->h + 1.f &&
         e->h > 0) {
@@ -5679,10 +5763,10 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // bar slides in from the right, so the slide is along x.
         FillBackground(ctx, e->x + e->w - kScrollbarBandW + barSlide, e->y,
                        kScrollbarBandW, e->h, 0, nullptr,
-                       ScrollbarBarBg(barTheme, barAlpha));
+                       ScrollbarBarBg(e, barTheme, dragging, barAlpha));
         FillBackground(ctx, thumbX + barSlide, thumbY, thumbW, thumbH,
-                       ThumbRadius(barTheme, thumbW), nullptr,
-                       ScrollbarThumbBg(barTheme, onThumb, barAlpha));
+                       ThumbRadius(e, barTheme, thumbW), nullptr,
+                       ScrollbarThumbBg(e, barTheme, onThumb, barAlpha));
     }
     if (barVisible && !e->noScrollbarX &&
         e->style.overflowX == Overflow::Scroll && e->contentW > e->w + 1.f &&
@@ -5709,13 +5793,13 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         // A horizontal bar slides up from the bottom, so its slide is along y.
         FillBackground(ctx, e->x, e->y + e->h - kScrollbarBandW + barSlide,
                        e->w, kScrollbarBandW, 0, nullptr,
-                       ScrollbarBarBg(barTheme, barAlpha));
+                       ScrollbarBarBg(e, barTheme, dragging, barAlpha));
         FillBackground(ctx, thumbX, thumbY + barSlide, thumbW, thumbH,
-                       ThumbRadius(barTheme, thumbH), nullptr,
-                       ScrollbarThumbBg(barTheme, onThumb, barAlpha));
+                       ThumbRadius(e, barTheme, thumbH), nullptr,
+                       ScrollbarThumbBg(e, barTheme, onThumb, barAlpha));
     }
 
-    if (focused && ThemeFocusRing()) {
+    if (focused && ThemeFocusRing(ctx->app)) {
         // The other half of focus_ring_style: FOCUS_RING_WIDTH of the ring
         // colour at FOCUS_RING_OPACITY, in the three DIPs immediately outside
         // the element's border, with the corners widened to match. Rust hangs
@@ -5727,7 +5811,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         Bounds ring = e->Bounds().Inset(-kFocusRingWidth);
         DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
                         e->style.radius + kFocusRingWidth, kFocusRingWidth,
-                        RgbaOpacity(ThemeNow().ring, kFocusRingOpacity));
+                        RgbaOpacity(ThemeNow(ctx->app).ring,
+                                    kFocusRingOpacity));
     }
 }
 
@@ -5738,7 +5823,7 @@ void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
     if (!tip || !tip->visible || !tip->text.s) {
         return;
     }
-    const Theme& th = ThemeNow();
+    const Theme& th = ThemeNow(ctx->app);
     // tooltip.rs: the popover surface with the theme border round it, not a
     // dark plate — `bg(tokens.popover).text_color(popover_foreground)
     // .border_1().border_color(border).rounded(6).py_0p5().px_2().text_sm()`.

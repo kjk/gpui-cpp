@@ -29,6 +29,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     ThemeSet(app, ThemeMode::Light);
     return AppRunView(StrL("Hello World C++"), 800, 600,
                       EntityNew<Example>(app).id, app, WinOpts{});

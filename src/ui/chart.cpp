@@ -19,8 +19,8 @@ AreaChart* AreaChart::New(Ctx* cx, const float* ys, int n) {
 AreaChart* AreaChart::Stroke(Rgba c) {
     // Every setter after a `Y()` belongs to that series, which is what
     // Rust's `.y(..).stroke(..).fill(..).name(..)` chain says.
-    if (nMore > 0) {
-        more[nMore - 1].stroke = c;
+    if (more.len > 0) {
+        more[more.len - 1].stroke = c;
     } else {
         stroke = c;
     }
@@ -31,9 +31,9 @@ AreaChart* AreaChart::Fill(Rgba c) {
 }
 
 AreaChart* AreaChart::Fill(Rgba top, Rgba bottom) {
-    if (nMore > 0) {
-        more[nMore - 1].fillTop = top;
-        more[nMore - 1].fillBot = bottom;
+    if (more.len > 0) {
+        more[more.len - 1].fillTop = top;
+        more[more.len - 1].fillBot = bottom;
     } else {
         fill = top;
         fillBottom = bottom;
@@ -50,15 +50,14 @@ AreaChart* AreaChart::TickMargin(int t) {
     return this;
 }
 AreaChart* AreaChart::Y(const float* v) {
-    if (nMore < 4) {
-        more[nMore].ys = v;
-        // Until it is given one of its own, a series takes the last one's
-        // colours, so `.y(..)` alone still draws.
-        more[nMore].stroke = nMore > 0 ? more[nMore - 1].stroke : stroke;
-        more[nMore].fillTop = nMore > 0 ? more[nMore - 1].fillTop : fill;
-        more[nMore].fillBot = nMore > 0 ? more[nMore - 1].fillBot : fillBottom;
-        nMore++;
-    }
+    ChartSeriesExtra series = {};
+    series.ys = v;
+    // Until it is given one of its own, a series takes the last one's
+    // colours, so `.y(..)` alone still draws.
+    series.stroke = more.len > 0 ? more[more.len - 1].stroke : stroke;
+    series.fillTop = more.len > 0 ? more[more.len - 1].fillTop : fill;
+    series.fillBot = more.len > 0 ? more[more.len - 1].fillBot : fillBottom;
+    more.Append(a, series);
     return this;
 }
 AreaChart* AreaChart::Overlay(bool v) {
@@ -69,8 +68,8 @@ AreaChart* AreaChart::Overlay(bool v) {
 AreaChart* AreaChart::Tooltip(Str name) {
     // `name(..)` on a later series names that one in the tooltip; on the
     // first it also turns the crosshair on, the way `id(..)` does.
-    if (nMore > 0) {
-        more[nMore - 1].name = name;
+    if (more.len > 0) {
+        more[more.len - 1].name = name;
     } else {
         tooltipName = name;
     }
@@ -94,8 +93,8 @@ El* AreaChart::IntoEl() {
     e->chart.name = tooltipName;
     // The builder is on the frame arena, so the element can point at its
     // array rather than copying it.
-    e->chart.more = nMore > 0 ? more : nullptr;
-    e->chart.nMore = nMore;
+    e->chart.more = more.Flatten(a);
+    e->chart.nMore = more.len;
     return e;
 }
 
@@ -386,19 +385,14 @@ PieChart* PieChart::New(Ctx* cx) {
     return p;
 }
 PieChart* PieChart::Slice(float value, Rgba color, float outerInset) {
-    if (n < 12) {
-        slices[n].value = value;
-        slices[n].color = color;
-        slices[n].outerInset = outerInset;
-        n++;
-    }
+    slices.Append(a, PieSlice{value, color, outerInset, {}});
     return this;
 }
 // label(): names the slice that was added last, so a caller adds a slice and
 // then says what it is called.
 PieChart* PieChart::Label(Str text) {
-    if (n > 0) {
-        slices[n - 1].label = text;
+    if (slices.len > 0) {
+        slices[slices.len - 1].label = text;
         hasLabels = true;
     }
     return this;
@@ -442,37 +436,38 @@ struct PieLabelLayout {
 // spread_labels: sort by where each name wants to be, push crowded ones down,
 // then anchor the last one and pull the overflow back up. One neighbour at a
 // time would not settle a run of them.
-static void PieSpreadLabels(PieLabelLayout* items, int n, float top,
+static void PieSpreadLabels(ArenaVec<PieLabelLayout>* items, float top,
                             float bottom) {
+    int n = items->len;
     if (n <= 0) {
         return;
     }
     for (int i = 1; i < n; i++) {
-        PieLabelLayout key = items[i];
+        PieLabelLayout key = (*items)[i];
         int j = i - 1;
-        while (j >= 0 && items[j].y > key.y) {
-            items[j + 1] = items[j];
+        while (j >= 0 && (*items)[j].y > key.y) {
+            (*items)[j + 1] = (*items)[j];
             j--;
         }
-        items[j + 1] = key;
+        (*items)[j + 1] = key;
     }
     for (int i = 1; i < n; i++) {
-        float minY = items[i - 1].y + kPieTextHeight;
-        if (items[i].y < minY) {
-            items[i].y = minY;
+        float minY = (*items)[i - 1].y + kPieTextHeight;
+        if ((*items)[i].y < minY) {
+            (*items)[i].y = minY;
         }
     }
-    if (items[n - 1].y > bottom) {
-        items[n - 1].y = bottom;
+    if ((*items)[n - 1].y > bottom) {
+        (*items)[n - 1].y = bottom;
     }
     for (int i = n - 2; i >= 0; i--) {
-        float maxY = items[i + 1].y - kPieTextHeight;
-        if (items[i].y > maxY) {
-            items[i].y = maxY;
+        float maxY = (*items)[i + 1].y - kPieTextHeight;
+        if ((*items)[i].y > maxY) {
+            (*items)[i].y = maxY;
         }
     }
-    if (items[0].y < top) {
-        items[0].y = top;
+    if ((*items)[0].y < top) {
+        (*items)[0].y = top;
     }
 }
 
@@ -481,14 +476,13 @@ static void PaintPieLabels(PaintCtx* ctx, PieChart* p, float cx, float cy,
     if (!p->hasLabels || total <= 0) {
         return;
     }
-    const Theme& th = ThemeNow();
+    const Theme& th = ThemeNow(ctx->app);
     Rgba color = p->hasLabelColor ? p->labelColor : th.foreground;
     float labelR = p->outerRadius + p->labelGap;
-    PieLabelLayout right[12] = {};
-    PieLabelLayout left[12] = {};
-    int nRight = 0, nLeft = 0;
+    ArenaVec<PieLabelLayout> right = {};
+    ArenaVec<PieLabelLayout> left = {};
     float angle = -kPi * 0.5f;
-    for (int i = 0; i < p->n; i++) {
+    for (int i = 0; i < p->slices.len; i++) {
         const PieSlice& s = p->slices[i];
         float sweep = 2.f * kPi * (s.value / total);
         float a0 = angle, a1 = angle + sweep;
@@ -510,19 +504,19 @@ static void PaintPieLabels(PaintCtx* ctx, PieChart* p, float cx, float cy,
         item.arcX = cosf(mid) * edgeR;
         item.arcY = sinf(mid) * edgeR;
         if (item.labelX > 0) {
-            right[nRight++] = item;
+            right.Append(p->a, item);
         } else {
-            left[nLeft++] = item;
+            left.Append(p->a, item);
         }
     }
     float top = -cy + kPieTextHeight * 0.5f;
     float bottom = cy - kPieTextHeight * 0.5f;
-    PieSpreadLabels(right, nRight, top, bottom);
-    PieSpreadLabels(left, nLeft, top, bottom);
+    PieSpreadLabels(&right, top, bottom);
+    PieSpreadLabels(&left, top, bottom);
     for (int side = 0; side < 2; side++) {
         float sign = side == 0 ? 1.f : -1.f;
-        PieLabelLayout* items = side == 0 ? right : left;
-        int count = side == 0 ? nRight : nLeft;
+        ArenaVec<PieLabelLayout>& items = side == 0 ? right : left;
+        int count = items.len;
         for (int i = 0; i < count; i++) {
             const PieLabelLayout& it = items[i];
             CanvasLine(ctx, it.arcX + cx, it.arcY + cy, it.labelX + cx,
@@ -541,20 +535,20 @@ static void PaintPieLabels(PaintCtx* ctx, PieChart* p, float cx, float cy,
 
 static void PaintPie(PaintCtx* ctx, El* e, void* user) {
     auto* p = (PieChart*)user;
-    if (!p || !ctx->rt || p->n == 0) {
+    if (!p || !ctx->rt || p->slices.len == 0) {
         return;
     }
     float cx = e->x + e->w * 0.5f;
     float cy = e->y + e->h * 0.5f;
     float total = 0;
-    for (int i = 0; i < p->n; i++) {
+    for (int i = 0; i < p->slices.len; i++) {
         total += p->slices[i].value;
     }
     if (total <= 0) {
         return;
     }
     float angle = -kPi * 0.5f;
-    for (int i = 0; i < p->n; i++) {
+    for (int i = 0; i < p->slices.len; i++) {
         const PieSlice& s = p->slices[i];
         float sweep = 2.f * kPi * (s.value / total) - p->padAngle;
         if (sweep <= 0) {
@@ -760,7 +754,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     SankeyLayoutFrom(&gen, &g);
 
     // chart_1..chart_5 in Rust: the palette a node falls back to, by index.
-    const Theme& th = ThemeNow();
+    const Theme& th = ThemeNow(ctx->app);
     Rgba palette[5] = {th.blue, th.green, th.yellow, th.magenta, th.cyan};
     Rgba* colors = (Rgba*)Alloc(ta, (int)sizeof(Rgba) * nNodes);
     nodeIx = -1;

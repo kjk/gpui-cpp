@@ -225,6 +225,28 @@ static void ShiftClickExtendsFromTheAnchor() {
     WindowSelectionFree(&win);
 }
 
+static void AControlPressSuppressesWindowSelection() {
+    App app = {};
+    Window win;
+    win.app = &app;
+    AddRun(&win, 0, "hello", 0);
+    AddRun(&win, 40, "world", 0);
+    WindowSelectionPress(&win, 25, 5, 1, false);
+    WindowSelectionDrag(&win, 25, 45);
+    WindowSelectionRelease(&win);
+    utassert(WindowSelectionHas(&win));
+
+    BaseSuppressTextSelection(&app);
+    WindowSelectionPress(&win, 25, 5, 1, false);
+    utassert(!WindowSelectionHas(&win));
+
+    BaseResetTextSelectionSuppression(&app);
+    WindowSelectionPress(&win, 25, 5, 1, false);
+    utassert(win.sel && win.sel->gesture.selecting);
+    WindowSelectionFree(&win);
+    AppGlobalClear(&app);
+}
+
 void TestTextSelection() {
     TestSuite("text_selection");
     ADragThatNeverTouchesTextPublishesNothing();
@@ -241,4 +263,5 @@ void TestTextSelection() {
     ShiftClickExtendsFromTheAnchor();
     TwoClicksTakeTheWordAndThreeTheLine();
     AMultiClickOffTextTakesNothing();
+    AControlPressSuppressesWindowSelection();
 }

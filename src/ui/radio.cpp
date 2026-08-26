@@ -117,8 +117,8 @@ RadioGroup* RadioGroup::Horizontal(Ctx* cx, Str id) {
     return RadioGroupNew(cx, id, true);
 }
 RadioGroup* RadioGroup::Child(Radio* r) {
-    if (r && n < 16) {
-        radios[n++] = r;
+    if (r) {
+        radios.Append(a, r);
     }
     return this;
 }
@@ -154,7 +154,7 @@ El* RadioGroup::IntoEl() {
     } else {
         base->FlexCol();
     }
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < radios.len; i++) {
         Radio* r = radios[i];
         r->Checked(selected == i)->Disabled(disabled)->WithSize(size);
         if (onClick.IsValid()) {

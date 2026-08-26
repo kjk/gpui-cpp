@@ -7,6 +7,79 @@
 
 namespace gpui {
 
+void* AppGlobalGetRaw(const App* app, const void* key) {
+    if (!app || !key) {
+        return nullptr;
+    }
+    for (int i = 0; i < app->globals.len; i++) {
+        const AppGlobalSlot& slot = app->globals[i];
+        if (slot.key == key) {
+            return slot.value;
+        }
+    }
+    return nullptr;
+}
+
+void AppGlobalSetRaw(App* app, const void* key, void* value,
+                     AppGlobalFreeFn freeValue) {
+    if (!app || !key) {
+        if (value && freeValue) {
+            freeValue(value);
+        }
+        return;
+    }
+    for (int i = 0; i < app->globals.len; i++) {
+        AppGlobalSlot& slot = app->globals[i];
+        if (slot.key != key) {
+            continue;
+        }
+        if (slot.value && slot.freeValue) {
+            slot.freeValue(slot.value);
+        }
+        slot.value = value;
+        slot.freeValue = freeValue;
+        return;
+    }
+    app->globals.Append(AppGlobalSlot{key, value, freeValue});
+}
+
+bool AppGlobalRemoveRaw(App* app, const void* key) {
+    if (!app || !key) {
+        return false;
+    }
+    for (int i = 0; i < app->globals.len; i++) {
+        AppGlobalSlot& slot = app->globals[i];
+        if (slot.key != key) {
+            continue;
+        }
+        if (slot.value && slot.freeValue) {
+            slot.freeValue(slot.value);
+        }
+        for (int j = i; j < app->globals.len - 1; j++) {
+            app->globals[j] = app->globals[j + 1];
+        }
+        app->globals.len--;
+        if (app->globals.els) {
+            app->globals[app->globals.len] = {};
+        }
+        return true;
+    }
+    return false;
+}
+
+void AppGlobalClear(App* app) {
+    if (!app) {
+        return;
+    }
+    for (int i = app->globals.len - 1; i >= 0; i--) {
+        AppGlobalSlot& slot = app->globals[i];
+        if (slot.value && slot.freeValue) {
+            slot.freeValue(slot.value);
+        }
+    }
+    app->globals.Reset();
+}
+
 // Slot 0 is never handed out so a zeroed EntityId reads as null.
 EntityId EntityNewRaw(App* app, void* ptr, RenderFn render, DropFn drop) {
     EntityId id;
@@ -106,11 +179,11 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
 }
 
 const Theme& Ctx::theme() const {
-    return themeMode() == ThemeMode::Dark ? ThemeDark() : ThemeLight();
+    return ThemeNow(app);
 }
 
 ThemeMode Ctx::themeMode() const {
-    return app ? app->themeMode : ThemeGet();
+    return ThemeGet(app);
 }
 
 void NotifyApp(App* app) {

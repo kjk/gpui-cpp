@@ -175,8 +175,8 @@ Stepper* Stepper::New(Ctx* cx, Str id) {
     return s;
 }
 Stepper* Stepper::Item(StepperItem* item) {
-    if (n < 16 && item) {
-        items[n++] = item;
+    if (item) {
+        items.Append(a, item);
     }
     return this;
 }
@@ -227,14 +227,14 @@ El* Stepper::IntoEl() {
     if (itemsCenter) {
         root->ItemsCenter();
     }
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         StepperItem* it = items[i];
         it->step = i;
         it->checkedStep = step;
         it->layout = layout;
         it->size = size;
         it->textCenter = textCenter;
-        it->isLast = i + 1 == n;
+        it->isLast = i + 1 == items.len;
         // A stepper-level disabled turns every step off; a step can also say
         // so for itself, which Rust lets override the stepper's.
         it->disabled = it->disabled || disabled;

@@ -55,6 +55,14 @@ VirtualList* VirtualList::Pad(float v) {
 }
 VirtualList* VirtualList::Row(El* (*fn)(Ctx*, int)) {
     row = fn;
+    rowWithUser = nullptr;
+    rowUser = nullptr;
+    return this;
+}
+VirtualList* VirtualList::Row(VirtualRowFn fn, void* user) {
+    row = nullptr;
+    rowWithUser = fn;
+    rowUser = user;
     return this;
 }
 
@@ -98,7 +106,10 @@ El* VirtualList::IntoEl() {
     o.axis = axis;
     o.pad = pad;
     DefaultRow d = {sizes, rowH};
-    if (row) {
+    if (rowWithUser) {
+        o.row = rowWithUser;
+        o.user = rowUser;
+    } else if (row) {
         o.row = &CallerRow;
         o.user = (void*)row;
     } else {

@@ -161,6 +161,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     Entity<LargeTextApp> view = EntityNew<LargeTextApp>(app);
     LargeTextApp* self = view.Get(app);
     self->editor.kind = InputKind::Textarea;

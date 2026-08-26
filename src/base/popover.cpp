@@ -1,4 +1,5 @@
 #include "base/popover.h"
+#include "base/global_state.h"
 
 namespace gpui {
 
@@ -37,6 +38,7 @@ void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
         s->previousFocus = {};
     }
     s->open = open;
+    BaseDeferredPopoverSet(cx->app, cx->self, open);
 }
 
 // toggle_open, off the trigger's press. Rust stops propagation here so the

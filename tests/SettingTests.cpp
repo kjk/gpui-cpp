@@ -16,9 +16,9 @@ static SettingItem Item(const char* title, const char* desc) {
 }
 
 static void TheQueryMatchesTitleDescriptionAndKeywords() {
+    Arena* a = ArenaNew();
     SettingItem it = Item("Dark Mode", "Switch between light and dark themes.");
-    it.keywords[0] = StrL("appearance");
-    it.nKeywords = 1;
+    it.keywords.Append(a, StrL("appearance"));
 
     // An empty query matches everything, which is what an unfiltered list is.
     utassert(SettingItemMatches(&it, StrL("")));
@@ -35,6 +35,7 @@ static void TheQueryMatchesTitleDescriptionAndKeywords() {
     utassert(!SettingItemMatches(&it, StrL("font")));
     // A query longer than what it is matched against cannot be in it.
     utassert(!SettingItemMatches(&it, StrL("Dark Mode and then some")));
+    ArenaDelete(a);
 }
 
 static void AGroupIsShownWhenAnythingInItIs() {

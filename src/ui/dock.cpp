@@ -390,18 +390,17 @@ static El* SkinDragPreview(Ctx* cx, void*, const DockPanelDef* def) {
 }
 
 static const DockRenderer& ThemedRenderer() {
-    static DockRenderer r;
-    static bool inited = false;
-    if (!inited) {
-        inited = true;
-        r.frame = SkinFrame;
-        r.splitHandle = SkinSplitHandle;
-        r.dock = SkinDock;
-        r.tabContentFrame = SkinTabContent;
-        r.tabBar = SkinTabBar;
-        r.dropIndicator = SkinDropIndicator;
-        r.dragPreview = SkinDragPreview;
-    }
+    static const DockRenderer r = {nullptr,
+                                   SkinFrame,
+                                   nullptr,
+                                   nullptr,
+                                   SkinSplitHandle,
+                                   SkinDock,
+                                   nullptr,
+                                   SkinTabContent,
+                                   SkinTabBar,
+                                   SkinDropIndicator,
+                                   SkinDragPreview};
     return r;
 }
 

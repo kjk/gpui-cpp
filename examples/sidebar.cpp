@@ -174,6 +174,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     Entity<SidebarApp> view = EntityNew<SidebarApp>(app);
     ThemeSet(app, ThemeMode::Light);
     AssetsClear();

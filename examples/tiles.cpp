@@ -290,6 +290,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("tiles"));
     Entity<TilesApp> view = EntityNew<TilesApp>(app);

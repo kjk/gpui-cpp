@@ -1,9 +1,4 @@
-/* List presentation settings — crates/base/src/list_settings.rs
-
-   Rust keeps this on the theme (`cx.theme().list`) and the story toggles it
-   from its settings menu. The themes here are immutable statics, so it lives
-   beside the theme mode instead — one global, read where a row decides how a
-   selection looks. */
+/* List presentation settings — crates/base/src/list_settings.rs */
 
 #include "gpui/gpui.h"
 
@@ -16,8 +11,8 @@ struct ListSettings {
     bool activeHighlight = true;
 };
 
-const ListSettings& ListSettingsNow();
-void ListSettingsSet(ListSettings s);
+const ListSettings& ListSettingsNow(App* app);
+void ListSettingsSet(App* app, ListSettings s);
 
 // The pair a selected row paints with: the fill, and the rule drawn over the
 // row's own box so the highlight does not move anything. `active` is the theme
@@ -27,7 +22,8 @@ struct ListActiveStyle {
     Rgba border = {};
     bool hasBorder = false;
 };
-ListActiveStyle ListActiveStyleOf(Background active, Rgba activeBorder,
+ListActiveStyle ListActiveStyleOf(const ListSettings& settings,
+                                  Background active, Rgba activeBorder,
                                   Background accent, bool selected);
 
 // The rule itself: an absolutely positioned child that covers the row.

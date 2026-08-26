@@ -6377,3 +6377,81 @@ Checked: every one of the 26 targets resolves to a file that exists in the
 tree at the pinned SHA, `-compare editor` runs end to end onto the size table,
 and `cargo build -p gpui-component-story --example editor --example large-text`
 produces `editor.exe` and `large-text.exe` where `rustExePath` looks for them.
+
+## Base/UI structural fidelity pass
+
+The pinned `crates/base/src/lib.rs` and `crates/ui/src/lib.rs` now have a
+machine-checked module ledger in `cmd/audit-port.ts`, at the same
+`7885c41663c7a6cc68ad0c99b1ba33550f807ff0` pin as `cmd/run.ts`. The audit
+fails for an unclassified upstream module, a missing C++ destination, a pin
+change, or a non-full entry without a reason. CI runs it. `port-map.md` is the
+human view, including the next fidelity order.
+
+The public crate shape now has real umbrella initializers. `base/lib.h`
+exposes the pinned Base modules and `ui/lib.h` exposes the UI modules, with
+canonical forwarding headers for Rust modules whose dependency-free C++
+implementation is shared elsewhere. `BaseInit(App*)` and
+`component::Init(App*)` install globals/keymaps in Rust's order and are
+idempotent. All 26 examples call `component::Init` immediately after
+`AppNew`; no widget has to be rendered once merely to finish crate startup.
+
+Application globals are generic generationally-owned slots on `App`, with a
+destructor per type. The theme registry, active themes/settings, Base theme,
+UI global selection state, list settings, system-notification registry and
+application-menu model use them, which removes cross-application leakage.
+The OS menu/notification callbacks retain only the one process-wide active
+app pointer their native APIs require. Tests create two Apps and prove their
+models and registries stay apart and are destroyed on clear.
+
+The Base theme is now the actual Rust projection, not a placeholder global.
+It carries semantic tokens, scrollbar mode/motion/track/thumb styles and the
+resizable handle pair. UI installs a narrow theme-change callback in the
+runtime, so mode, radius, font-size, scrollbar-mode, registry and semantic
+theme mutations all rebuild Base's copy. Base scrollbar and resizable
+builders consume it. The bare Base default is motionless, while UI projects
+the Rust timing, and the application default is Rust's `Scrolling` rather
+than the port's old screenshot-oriented `Always`. Always-visible scrollbars
+skip visibility animation as upstream does.
+
+Every public builder found with a Rust `Vec` and a C++-only fixed child limit
+was converted to `ArenaVec`: avatar groups, descriptions, forms, radio groups,
+steppers, application menus, sidebars, pie/area charts, accordions,
+breadcrumbs, button groups, table group headers and setting keywords. Dock
+and resizable frame scratch storage grows with the number of panels, and
+pagination allocates for the requested visible-page count. Capacity tests
+cross the old boundaries with forty entries. ButtonGroup's existing Listener
+payload can report one machine word of selected indices; children beyond that
+are rendered but a symbol-complete port should replace that callback adapter
+with Rust's slice-shaped event.
+
+Base toast storage and NotificationList storage now use owning `Vec`s rather
+than the port-only sixteen-entry arrays. This uncovered and fixed the more
+important semantic mismatch: `NotificationSettings::max_items` filters the
+newest active toasts at render time; it does not evict mounted entries, and
+ending toasts remain visible until their exit completes. Duplicate ids still
+replace, and the explicit upstream 100-entry system-notification registry cap
+is retained. The string History specialization also grows to Rust's default
+1000 entries and truncates redo after a new push; generic item versions,
+grouping and uniqueness remain a documented partial.
+
+Command virtual rows no longer use frame-global mutable pointers. The row
+callback carries a frame-owned context. The themed dock renderer is immutable
+constant data. The only mutable Base/UI process registries left are adapters
+for process-owned services: keymap context registration and the cached OS
+reduced-motion preference; the former now grows rather than stopping after
+eight contexts.
+
+Window text selection now waits for element mouse-down bubbling and consults
+Base GlobalState suppression, so presses on buttons, inputs and sliders clear
+or avoid document selection the way Rust's event propagation does. Deferred
+popover entities and UI TextView state/order live in their respective App
+globals rather than static payloads.
+
+Known structural gaps were made more explicit, not hidden by the module
+count. Every module that assigns a semantic role upstream is partial until
+the runtime exports an accessibility tree. Base input still has bounded host
+callback buffers, UI text/HTML retain dependency-free parser limits, History
+is specialized, and the large component Theme palette still lives in the
+runtime header. Those are the next four implementation phases in
+`port-map.md`; async and third-party highlighter/parser substitutions remain
+the standing adapters/exclusions from `AGENTS.md`.

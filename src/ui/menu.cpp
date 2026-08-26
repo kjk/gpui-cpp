@@ -578,11 +578,7 @@ AppMenuBar* AppMenuBar::New(Ctx* cx, Str id, Entity<AppMenuBarState> state) {
     return b;
 }
 AppMenuBar* AppMenuBar::Menu(Str title, PopupMenu* menu) {
-    if (n < 12) {
-        titles[n] = title;
-        menus[n] = menu;
-        n++;
-    }
+    items.Append(a, AppMenuBarItem{title, menu});
     return this;
 }
 
@@ -594,7 +590,7 @@ El* AppMenuBar::IntoEl() {
     El* bar = Div(a)->Id(id)->FlexRow()->ItemsCenter()->Gap(2)->H(28)->W(kFill);
     Listener click = ListenTo(state, &AppMenuBarState::OnMenuClick, 0);
     Listener hover = ListenTo(state, &AppMenuBarState::OnMenuHover, 0);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         bool on = s && s->selected == i;
         El* wrap = Div(a)->FlexCol();
         El* item = Div(a)
@@ -607,15 +603,15 @@ El* AppMenuBar::IntoEl() {
         if (on) {
             item->Bg(th.tokens.secondary);
         }
-        item->Child(TextEl(a, titles[i])->Font(14)->Fg(th.foreground));
+        item->Child(TextEl(a, items[i].title)->Font(14)->Fg(th.foreground));
         BindClick(item, StrDup(a, fmt("%d", i)), ListenerArg(click, i));
         item->OnHover(ListenerArg(hover, i));
         wrap->Child(item);
-        if (on && menus[i]) {
+        if (on && items[i].menu) {
             // The menu of the open title hangs under it, over everything the
             // frame drew after it.
             wrap->Child(
-                menus[i]->IntoEl()->AnchorBelow(2)->Left(0)->Deferred());
+                items[i].menu->IntoEl()->AnchorBelow(2)->Left(0)->Deferred());
         }
         bar->Child(wrap);
     }

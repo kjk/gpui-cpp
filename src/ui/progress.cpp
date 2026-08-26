@@ -140,7 +140,7 @@ static void PaintCircleProgress(PaintCtx* ctx, El* e, void* user) {
     if (sw < 1.5f) {
         sw = 1.5f;
     }
-    Rgba col = p->hasColor ? p->color : ThemeNow().foreground;
+    Rgba col = p->hasColor ? p->color : ThemeNow(ctx->app).foreground;
     CanvasEllipse(ctx, cx, cy, r, r, sw, RgbaOpacity(col, 0.2f));
     float v = p->value;
     if (v < 0) {

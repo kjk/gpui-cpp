@@ -121,6 +121,9 @@ int GpuiMain(int argc, char** argv) {
     TestArenaStr();
     TestFmt();
     TestExecutor();
+    TestAppGlobals();
+    TestBuilderCapacity();
+    TestHistory();
 
     if (gTestFailures == 0) {
         printf("ok: %d checks\n", gTestChecks);

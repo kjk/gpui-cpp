@@ -28,42 +28,43 @@ struct ColorRow {
 // out of default-theme.json plus every theme file it found. A SearchableList
 // keeps a pointer to the items, so they outlive the frame — and the names
 // point into the registry's own arena, which outlives everything.
-static Vec<component::SearchableItem> gThemeItems;
-
 // One entry per theme in the registry, in its sorted order, with the light
 // ones in a section of their own so the list reads the way Rust's does.
-static void FillThemeItems() {
-    if (gThemeItems.len > 0) {
-        return;
-    }
-    // `themes/`, wherever an asset root has one — the pinned Rust clone ships
-    // twenty of them. Two entries are all the picker has without it.
-    ThemeRegistryLoadDir(StrL("themes"));
-    for (int i = 0; i < ThemeRegistryCount(); i++) {
-        const ThemeConfig* cfg = ThemeRegistryAt(i);
-        component::SearchableItem it = {};
-        it.title = cfg->name;
-        it.value = cfg->name;
-        it.section = cfg->mode == ThemeMode::Dark ? 1 : 0;
-        gThemeItems.Append(it);
-    }
-}
+struct ThemeColorsStory;
+static void FillThemeItems(ThemeColorsStory* self, App* app);
 
 struct ThemeColorsStory {
     Entity<component::SearchableListState> themes = {};
+    Vec<component::SearchableItem> themeItems;
     int openGroup = 0;
     bool showInherited = false;
     bool expandAll = false;
     bool optionsOpen = false;
-    // The right panel is a scrolling list in Rust — `list(list_state)` with a
-    // vertical scrollbar beside it — so the categories past the first screen
-    // are reachable rather than clipped away.
     float rightScrollY = 0;
     InputState filter;
     bool seeded = false;
 
+    ~ThemeColorsStory() { themeItems.Reset(); }
+
     static El* Render(ThemeColorsStory* self, Ctx* cx);
 };
+
+static void FillThemeItems(ThemeColorsStory* self, App* app) {
+    if (self->themeItems.len > 0) {
+        return;
+    }
+    // `themes/`, wherever an asset root has one — the pinned Rust clone ships
+    // twenty of them. Two entries are all the picker has without it.
+    ThemeRegistryLoadDir(app, StrL("themes"));
+    for (int i = 0; i < ThemeRegistryCount(app); i++) {
+        const ThemeConfig* cfg = ThemeRegistryAt(app, i);
+        component::SearchableItem it = {};
+        it.title = cfg->name;
+        it.value = cfg->name;
+        it.section = cfg->mode == ThemeMode::Dark ? 1 : 0;
+        self->themeItems.Append(it);
+    }
+}
 
 enum {
     ThemeActInherited = 400,
@@ -104,10 +105,11 @@ static void SetTheme(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
         return;
     }
     int ix = st->selected[0];
-    if (ix < 0 || ix >= gThemeItems.len) {
+    if (ix < 0 || ix >= self->themeItems.len) {
         return;
     }
-    const ThemeConfig* cfg = ThemeRegistryFind(gThemeItems[ix].title);
+    const ThemeConfig* cfg =
+        ThemeRegistryFind(cx->app, self->themeItems[ix].title);
     if (!cfg || !ThemeRegistryApply(cx->app, cfg)) {
         return;
     }
@@ -133,14 +135,15 @@ static void FocusFilter(ThemeColorsStory* self, Ctx* cx, const ClickEvent*) {
 // and before its children.
 static const float kCheckerSquare = 12.f;
 
-static Rgba CheckerBase() {
-    return ThemeGet() == ThemeMode::Dark ? RgbaHsla(0.f, 0.f, 0.1f, 1.f)
-                                         : RgbaHsla(0.f, 0.f, 1.f, 1.f);
+static Rgba CheckerBase(const App* app) {
+    return ThemeGet(app) == ThemeMode::Dark ? RgbaHsla(0.f, 0.f, 0.1f, 1.f)
+                                            : RgbaHsla(0.f, 0.f, 1.f, 1.f);
 }
 
 static void PaintCheckerboard(PaintCtx* ctx, El* e, void*) {
-    Rgba c2 = ThemeGet() == ThemeMode::Dark ? RgbaHsla(0.f, 0.f, 0.13f, 1.f)
-                                            : RgbaHsla(0.f, 0.f, 0.95f, 1.f);
+    Rgba c2 = ThemeGet(ctx->app) == ThemeMode::Dark
+                  ? RgbaHsla(0.f, 0.f, 0.13f, 1.f)
+                  : RgbaHsla(0.f, 0.f, 0.95f, 1.f);
     int rows = (int)ceilf(e->h / kCheckerSquare);
     int cols = (int)ceilf(e->w / kCheckerSquare);
     for (int row = 0; row < rows; row++) {
@@ -213,17 +216,18 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     const Theme& th = cx->theme();
     if (!self->seeded) {
         self->seeded = true;
-        FillThemeItems();
+        FillThemeItems(self, cx->app);
         InputSetPlaceholder(&self->filter, StrL("Search..."));
         self->themes = EntityNewState<component::SearchableListState>(cx->app);
         component::SearchableListState* t = self->themes.Get(cx);
         if (t) {
             // The picker opens on the theme that is showing, which is the
             // one the registry has installed for the mode in force.
-            Str active = ThemeRegistryActive(ThemeGet());
+            Str active =
+                ThemeRegistryActive(cx->app, ThemeGet(cx->app));
             int at = 0;
-            for (int i = 0; i < gThemeItems.len; i++) {
-                if (StrSame(gThemeItems[i].title, active)) {
+            for (int i = 0; i < self->themeItems.len; i++) {
+                if (StrSame(self->themeItems[i].title, active)) {
                     at = i;
                     break;
                 }
@@ -412,7 +416,8 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     // group is a run of rows with the same category and a filter can empty
     // one out.
     const ThemeConfig* active =
-        ThemeRegistryFind(ThemeRegistryActive(ThemeGet()));
+        ThemeRegistryFind(
+            cx->app, ThemeRegistryActive(cx->app, ThemeGet(cx->app)));
     Str query = InputValue(&self->filter);
     while (query.len > 0 && query.s[0] == '#') {
         query = Str(query.s + 1, query.len - 1);
@@ -444,7 +449,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     El* top = Div(a)->FlexCol()->W(kFill)->Gap(12);
     El* pick = Div(a)->FlexRow()->W(kFill)->Gap(8)->ItemsCenter();
     pick->Child(component::Select::New(cx, StrL("theme-select"), self->themes)
-                    ->Items(gThemeItems.els, gThemeItems.len)
+                    ->Items(self->themeItems.els, self->themeItems.len)
                     ->W(300)
                     ->OnToggle(Listen(cx, &ToggleThemeSelect))
                     ->IntoEl());
@@ -549,7 +554,7 @@ El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
                     ->ClipY()
                     ->Radius(th.radiusLg)
                     ->Border(1, th.border)
-                    ->Bg(CheckerBase());
+                    ->Bg(CheckerBase(cx->app));
     right->customPaint = PaintCheckerboard;
     El* inner = Div(a)->FlexCol()->W(kFill)->PadX(16);
     right->Child(component::Scrollable::New(cx, StrL("theme-colors-right"))

@@ -14,6 +14,7 @@
 #include "sys/http.h"
 #include "sys/executor.h"
 #include "base/focus_trap.h"
+#include "base/global_state.h"
 #include "base/text_selection.h"
 
 namespace gpui {
@@ -363,7 +364,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // gathers are both keyed by what this fills in.
     IdsCollect(root);
 
-    const Theme& th = ThemeNow();
+    win->paint.app = win->app;
+    const Theme& th = ThemeNow(win->app);
     CanvasClear(&win->paint, th.background);
     gFrameLayoutSecs = 0;
     gFramePaintSecs = 0;
@@ -372,7 +374,8 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
         if (!win->layout) {
             win->layout = LayoutCacheNew();
         }
-        LayoutEl(&win->paint, root, 0, 0, dipW, dipH, ThemeFontSize(),
+        LayoutEl(&win->paint, root, 0, 0, dipW, dipH,
+                 ThemeFontSize(win->app),
                  th.foreground, win->layout);
         FocusCollect(win, root);
         // A dialog that has just opened takes focus into itself, which is what
@@ -401,7 +404,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // picked: GPUI paints the same two highlights over everything.
     win->paint.paintLayer = kPaintLayerInspector;
     if (win->inspector.on) {
-        const Theme& ith = ThemeNow();
+        const Theme& ith = ThemeNow(win->app);
         if ((win->inspector.picking || win->inspector.pending) &&
             win->paint.pickHit) {
             Bounds b = win->paint.pick.bounds;
@@ -1289,6 +1292,9 @@ static void DispatchChain(Window* win, const Vec<int>& chain, Ev* ev,
 static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
     float x = in.x;
     float y = in.y;
+    // text_selection.rs resets this in capture phase. Controls that own the
+    // press set it while the event bubbles; selection begins afterwards.
+    BaseResetTextSelectionSuppression(win->app);
     if (win->onMouseDown.IsValid()) {
         ListenerCall(win->app, win, win->onMouseDown, &in);
     }
@@ -1338,12 +1344,6 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
         AppInvalidate(win);
         return;
     }
-    // The window's own selection hears the press first — Rust registers its
-    // handler on the window, above every participant — and only acts where
-    // there is selectable text. A press anywhere else drops what was
-    // selected, which is the outside click that clears it.
-    WindowSelectionPress(win, x, y, in.clickCount, in.modifiers.shift);
-
     const HitRect* hit = HitTestRect(&win->paint, x, y);
     int id = hit ? hit->id : 0;
     SetMouseDown(win, true);
@@ -1406,10 +1406,33 @@ static void DispatchMouseDown(Window* win, const MouseDownEvent& in) {
             });
         chain.Reset();
     }
+    // A semantic control can suppress selection without consuming the mouse
+    // event. Ask the whole hit chain because a text/icon child may be the
+    // innermost rectangle while the Button around it owns the press.
+    {
+        Vec<int> chain;
+        HitChain(win, x, y, &chain);
+        for (int i = 0; i < chain.len; i++) {
+            if (win->paint.hits[chain[i]].suppressTextSelection) {
+                BaseSuppressTextSelection(win->app);
+                break;
+            }
+        }
+        chain.Reset();
+    }
     if (hit && hit->slider) {
+        BaseSuppressTextSelection(win->app);
         SliderPress(win, hit, {x, y});
     }
+    InputState* inputAtPress = InputAtPosition(&win->paint, x, y);
+    if (inputAtPress && !inputAtPress->disabled) {
+        BaseSuppressTextSelection(win->app);
+    }
     InputPress(win, in);
+    // Bubble handlers and built-in controls have now had the same chance to
+    // suppress that Rust gives them. A press anywhere else starts or clears
+    // the window-owned selection.
+    WindowSelectionPress(win, x, y, in.clickCount, in.modifiers.shift);
     // The click itself is not here: GPUI holds the press and fires on_click
     // from the release, on the element that took both. DispatchMouseUp does
     // that; what the press leaves behind is pressedId and the count.
@@ -2202,7 +2225,9 @@ void AppFree(App* app) {
     LayoutScratchFree();
     ScrollFadeClear();
     StyleOverrideClearAll();
+    AppMenuClear(app);
     AppRunShutdownFns();
+    AppGlobalClear(app);
     PaintAppFree(app->paint);
     app->paint = nullptr;
     PlatShutdown(app);
@@ -2426,31 +2451,28 @@ struct AppMenuBinding {
     intptr_t arg = 0;
 };
 
-// More rows than a menu bar has any business having; the story's four menus
-// come to about forty with the theme list in them.
-static const int kMaxAppMenuRows = 512;
-static AppMenuBinding gAppMenuRows[kMaxAppMenuRows];
-static int gNAppMenuRows = 0;
-// Whose menus these are, so a row chosen later can be dispatched into it.
-static App* gAppMenuApp = nullptr;
-// The labels and the PlatMenuItem tree the last call built. The platform is
-// told not to keep them, but the arena outlives the call anyway: it is reset
-// and refilled every time the menus change, which is far rarer than a frame.
-static Arena* gAppMenuArena = nullptr;
+struct AppMenuState {
+    Arena* arena = nullptr;
+    Vec<AppMenuBinding> rows;
 
-static void AppMenuShutdown() {
-    if (gAppMenuArena) {
-        ArenaDelete(gAppMenuArena);
-        gAppMenuArena = nullptr;
+    ~AppMenuState() {
+        rows.Reset();
+        if (arena) {
+            ArenaDelete(arena);
+        }
     }
-    gNAppMenuRows = 0;
-    gAppMenuApp = nullptr;
-}
+};
+
+// Whose menus these are, so a row chosen later can be dispatched into it.
+// An OS application menu is process-wide even when the model behind it is an
+// App global; this is only the currently installed platform target.
+static App* gAppMenuApp = nullptr;
 
 // The rows as the platform takes them, numbering every row that can be
 // chosen in preorder — the same rule NativeMenu::Show numbers by, so the two
 // halves agree without either spelling the order out to the other.
-static PlatMenuItem* AppMenuToPlat(Arena* a, const MenuRow* rows, int n) {
+static PlatMenuItem* AppMenuToPlat(AppMenuState* state, Arena* a,
+                                   const MenuRow* rows, int n) {
     if (!rows || n <= 0) {
         return nullptr;
     }
@@ -2467,18 +2489,17 @@ static PlatMenuItem* AppMenuToPlat(Arena* a, const MenuRow* rows, int n) {
         p.disabled = r.disabled;
         p.checked = r.checked;
         if (r.submenu && r.submenuN > 0) {
-            p.submenu = AppMenuToPlat(a, r.submenu, r.submenuN);
+            p.submenu = AppMenuToPlat(state, a, r.submenu, r.submenuN);
             p.submenuN = r.submenuN;
             continue;
         }
         // A row that cannot be chosen is not numbered, so it cannot be
         // reported either — which is what leaving its id at zero says.
-        if (r.disabled || gNAppMenuRows >= kMaxAppMenuRows) {
+        if (r.disabled) {
             continue;
         }
-        gAppMenuRows[gNAppMenuRows].action = r.action;
-        gAppMenuRows[gNAppMenuRows].arg = r.arg;
-        p.id = ++gNAppMenuRows;
+        state->rows.Append(AppMenuBinding{r.action, r.arg});
+        p.id = state->rows.len;
         // The shortcut beside the label, out of the keymap rather than typed
         // into the row: the menu bar matches it itself, and what it fires is
         // the row, which dispatches the action the chord would have reached.
@@ -2502,25 +2523,33 @@ bool AppHasMenuBar() {
 }
 
 void AppSetMenus(App* app, const MenuDef* menus, int n) {
-    if (!app || !menus || n <= 0) {
+    if (!app) {
         return;
     }
-    if (!gAppMenuArena) {
-        gAppMenuArena = ArenaNew();
-        AppOnShutdown(&AppMenuShutdown);
+    AppMenuState* state = AppGlobalEnsure<AppMenuState>(app);
+    if (!state) {
+        return;
     }
-    if (!gAppMenuArena) {
+    if (!state->arena) {
+        state->arena = ArenaNew();
+    }
+    if (!state->arena) {
         return;
     }
     gAppMenuApp = app;
-    gNAppMenuRows = 0;
-    gAppMenuArena->Reset();
-    Arena* a = gAppMenuArena;
+    state->rows.Reset();
+    state->arena->Reset();
+    if (!menus || n <= 0) {
+        PlatSetAppMenu(app, nullptr, 0);
+        return;
+    }
+    Arena* a = state->arena;
     auto* bar = (PlatMenuItem*)a->Push((uint64_t)n * sizeof(PlatMenuItem),
                                        alignof(PlatMenuItem), true);
     for (int i = 0; i < n; i++) {
         bar[i].label = StrDup(a, menus[i].name).s;
-        bar[i].submenu = AppMenuToPlat(a, menus[i].items, menus[i].n);
+        bar[i].submenu =
+            AppMenuToPlat(state, a, menus[i].items, menus[i].n);
         bar[i].submenuN = menus[i].n;
     }
     // The table is built whether or not anything shows it: a platform with no
@@ -2529,22 +2558,40 @@ void AppSetMenus(App* app, const MenuDef* menus, int n) {
 }
 
 bool AppMenuRowForId(int id, uint32_t* action, intptr_t* arg) {
-    if (id <= 0 || id > gNAppMenuRows) {
+    return AppMenuRowForId(gAppMenuApp, id, action, arg);
+}
+
+bool AppMenuRowForId(const App* app, int id, uint32_t* action,
+                     intptr_t* arg) {
+    AppMenuState* state = AppGlobalGet<AppMenuState>(app);
+    if (!state || id <= 0 || id > state->rows.len) {
         return false;
     }
     if (action) {
-        *action = gAppMenuRows[id - 1].action;
+        *action = state->rows[id - 1].action;
     }
     if (arg) {
-        *arg = gAppMenuRows[id - 1].arg;
+        *arg = state->rows[id - 1].arg;
     }
     return true;
+}
+
+void AppMenuClear(App* app) {
+    if (!app) {
+        return;
+    }
+    if (gAppMenuApp == app) {
+        PlatSetAppMenu(app, nullptr, 0);
+        gAppMenuApp = nullptr;
+    }
+    AppGlobalRemove<AppMenuState>(app);
 }
 
 void AppMenuChosen(int id) {
     uint32_t action = 0;
     intptr_t arg = 0;
-    if (!AppMenuRowForId(id, &action, &arg) || !action || !gAppMenuApp) {
+    if (!gAppMenuApp ||
+        !AppMenuRowForId(gAppMenuApp, id, &action, &arg) || !action) {
         return;
     }
     // The window the menu bar was over. GPUI dispatches a menu action to the
@@ -2575,8 +2622,8 @@ void AppMenuChosen(int id) {
 // setting, so the constant is named rather than spelled out four times.
 static const float kWheelScrollLines = 3.f;
 
-float WheelNotchPixels() {
-    return kWheelScrollLines * ThemeFontSize() * kLineHeight;
+float WheelNotchPixels(const App* app) {
+    return kWheelScrollLines * ThemeFontSize(app) * kLineHeight;
 }
 
 } // namespace gpui

@@ -39,18 +39,13 @@ struct NumberFieldOptions {
     double step = 1;
 };
 
-// `keywords` is the one array left with a cap: Rust's `SettingItem::keywords`
-// is a Vec, and no caller of the builder below has ever named more than three.
-const int kMaxSettingKeywords = 4;
-
 // SettingItem::Item: the title, what it is for, and the control that changes
 // it. `keywords` is what the search box matches on beyond the two strings.
 struct SettingItem {
     Str title = {};
     Str description = {};
     El* control = nullptr;
-    Str keywords[kMaxSettingKeywords] = {};
-    int nKeywords = 0;
+    ArenaVec<Str> keywords;
     bool disabled = false;
     // is_resettable / on_reset: an item that has been changed shows a reset
     // button beside it. A typed field works both out for itself; these are
@@ -218,6 +213,7 @@ struct Settings {
     // The item last added: its keywords, whether it is disabled, and what a
     // reset does.
     Settings* Keywords(Str a1, Str a2 = {}, Str a3 = {});
+    Settings* Keyword(Str keyword);
     Settings* Disabled(bool v = true);
     Settings* Resettable(bool dirty, Listener onReset);
     Settings* Layout(Axis axis);

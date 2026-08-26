@@ -38,6 +38,7 @@ Scrollable* Scrollable::Axis(ScrollAxis v) {
 }
 Scrollable* Scrollable::Mode(ScrollbarMode v) {
     mode = v;
+    modeSet = true;
     return this;
 }
 Scrollable* Scrollable::H(float v) {
@@ -50,7 +51,8 @@ El* Scrollable::IntoEl() {
     // the listener all come together there, so the themed wrapper cannot end
     // up with a box that clips but does not take the wheel.
     El* box = Scrollbar::New(cx, id.s ? id : StrL("scrollable"), scrollY,
-                             scrollX, onScroll, axis, mode)
+                             scrollX, onScroll, axis,
+                             modeSet ? mode : ScrollbarModeNow(cx->app))
                   ->H(h)
                   ->W(kFill);
     if (child) {

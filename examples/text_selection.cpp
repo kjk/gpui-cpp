@@ -130,6 +130,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     Entity<SelApp> view = EntityNew<SelApp>(app);
     SelApp* self = view.Get(app);
     (void)self;

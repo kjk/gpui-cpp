@@ -533,6 +533,7 @@ static void ParseSlug(int argc, char** argv, char* out, int cap) {
 
 int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
+    component::Init(app);
     ThemeSet(app, ThemeMode::Light);
 
     Entity<ShowcaseApp> view = EntityNew<ShowcaseApp>(app);

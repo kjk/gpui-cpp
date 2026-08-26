@@ -86,7 +86,7 @@ static int FindFrom(Str hay, Str needle, int from) {
 // as a decoration in the colour its token type paints.
 static int FindMarkers(Ctx* cx, Str text, TextSpan* out, int cap) {
     const Theme& th = cx->theme();
-    ThemeMode mode = ThemeGet();
+    ThemeMode mode = ThemeGet(cx->app);
     int n = 0;
     for (int i = 0; i < kMarkerCount && n < cap; i++) {
         Str word = Str(kMarkers[i].word);
@@ -1036,6 +1036,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("markdown"));
     AssetsAddRoot(StrL("assets/markdown"));

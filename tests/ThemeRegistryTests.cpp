@@ -50,24 +50,27 @@ static void AColourIsAHexOrAName() {
 // The embedded default-theme.json is what the registry starts with, and its
 // two entries are the pair every other theme is resolved against.
 static void TheDefaultsAreInTheTable() {
-    utassert(ThemeRegistryCount() >= 2);
-    const ThemeConfig* light = ThemeRegistryFind(StrL("Default Light"));
-    const ThemeConfig* dark = ThemeRegistryFind(StrL("Default Dark"));
+    App app;
+    utassert(ThemeRegistryCount(&app) >= 2);
+    const ThemeConfig* light = ThemeRegistryFind(&app, StrL("Default Light"));
+    const ThemeConfig* dark = ThemeRegistryFind(&app, StrL("Default Dark"));
     utassert(light && dark);
     utassert(light->isDefault && dark->isDefault);
     utassert(light->mode == ThemeMode::Light);
     utassert(dark->mode == ThemeMode::Dark);
     utassert(light->colors && dark->colors);
     // sorted_themes puts the defaults first and light before dark.
-    utassert(ThemeRegistryAt(0) == light);
-    utassert(ThemeRegistryAt(1) == dark);
-    utassert(ThemeRegistryFind(StrL("No Such Theme")) == nullptr);
+    utassert(ThemeRegistryAt(&app, 0) == light);
+    utassert(ThemeRegistryAt(&app, 1) == dark);
+    utassert(ThemeRegistryFind(&app, StrL("No Such Theme")) == nullptr);
+    AppGlobalClear(&app);
 }
 
 // Resolving the file the hardcoded palette was transcribed from has to give
 // the hardcoded palette back. That is the whole point of reading the file:
 // the two cannot drift without this failing.
 static void TheDefaultThemeResolvesToTheDefaultPalette() {
+    App app;
     struct Token {
         const char* name;
         size_t off;
@@ -152,7 +155,7 @@ static void TheDefaultThemeResolvesToTheDefaultPalette() {
     const char* names[2] = {"Default Light", "Default Dark"};
     const Theme* bases[2] = {&ThemeDefaultLight(), &ThemeDefaultDark()};
     for (int m = 0; m < 2; m++) {
-        const ThemeConfig* cfg = ThemeRegistryFind(Str(names[m]));
+        const ThemeConfig* cfg = ThemeRegistryFind(&app, Str(names[m]));
         utassert(cfg != nullptr);
         if (!cfg) {
             continue;
@@ -173,6 +176,7 @@ static void TheDefaultThemeResolvesToTheDefaultPalette() {
             utassert(same);
         }
     }
+    AppGlobalClear(&app);
 }
 
 // try_parse_background: everything above, and a two-stop linear-gradient.
@@ -236,6 +240,7 @@ static void ABackgroundIsAColourOrAGradient() {
 // beside it carries its first stop, and a token nobody named falls back
 // through the same chain the colours do.
 static void AGradientReachesTheTokenAndItsFallbacks() {
+    App app;
     const char* doc =
         "{ \"name\": \"grad-set\", \"themes\": [ { \"name\": \"Grad\", "
         "\"mode\": \"light\", \"colors\": { "
@@ -246,8 +251,8 @@ static void AGradientReachesTheTokenAndItsFallbacks() {
         "\"selection.background\": \"linear-gradient(180deg, #1D4ED8, "
         "#1D4ED8FF)\" "
         "} } ] }";
-    utassert(ThemeRegistryLoadStr(Str(doc)) >= 1);
-    const ThemeConfig* cfg = ThemeRegistryFind(StrL("Grad"));
+    utassert(ThemeRegistryLoadStr(&app, Str(doc)) >= 1);
+    const ThemeConfig* cfg = ThemeRegistryFind(&app, StrL("Grad"));
     utassert(cfg != nullptr);
 
     Theme t = {};
@@ -283,6 +288,7 @@ static void AGradientReachesTheTokenAndItsFallbacks() {
     utassert(t.selection.a <= 0x4d + 1);
     utassert(t.tokens.selection.from.color.a <= 0x4d + 1);
     utassert(t.tokens.selection.to.color.a <= 0x4d + 1);
+    AppGlobalClear(&app);
 }
 
 // is_explicit, which the theme viewer's `Inherited Colors` toggle is the
@@ -292,6 +298,7 @@ static void AGradientReachesTheTokenAndItsFallbacks() {
 // to; the registry keeps the parsed `colors` object and asks it the same
 // question.
 static void AConfigKnowsWhichKeysItsFileNamed() {
+    App app;
     const char* doc =
         "{ \"name\": \"named-set\", \"themes\": [ { \"name\": \"Named\", "
         "\"mode\": \"light\", \"colors\": { "
@@ -299,8 +306,8 @@ static void AConfigKnowsWhichKeysItsFileNamed() {
         "\"button.primary.hover.background\": \"#334155\", "
         "\"selection.background\": \"#1D4ED8\" "
         "} } ] }";
-    utassert(ThemeRegistryLoadStr(Str(doc)) >= 1);
-    const ThemeConfig* cfg = ThemeRegistryFind(StrL("Named"));
+    utassert(ThemeRegistryLoadStr(&app, Str(doc)) >= 1);
+    const ThemeConfig* cfg = ThemeRegistryFind(&app, StrL("Named"));
     utassert(cfg != nullptr);
 
     // Named by the file, and so shown whether or not the toggle is on.
@@ -319,6 +326,20 @@ static void AConfigKnowsWhichKeysItsFileNamed() {
     // And a null config names nothing rather than crashing, which is what the
     // viewer holds before a theme has been picked.
     utassert(!ThemeConfigNames(nullptr, "primary"));
+    AppGlobalClear(&app);
+}
+
+static void RegistriesAreIsolatedPerApplication() {
+    App first;
+    App second;
+    const char* doc =
+        "{\"themes\":[{\"name\":\"Only First\",\"mode\":\"light\"}]}";
+    utassert(ThemeRegistryLoadStr(&first, Str(doc)) == 1);
+    utassert(ThemeRegistryFind(&first, StrL("Only First")) != nullptr);
+    utassert(ThemeRegistryFind(&second, StrL("Only First")) == nullptr);
+    utassert(ThemeRegistryCount(&first) == ThemeRegistryCount(&second) + 1);
+    AppGlobalClear(&first);
+    AppGlobalClear(&second);
 }
 
 void TestThemeRegistry() {
@@ -329,4 +350,5 @@ void TestThemeRegistry() {
     ABackgroundIsAColourOrAGradient();
     AGradientReachesTheTokenAndItsFallbacks();
     AConfigKnowsWhichKeysItsFileNamed();
+    RegistriesAreIsolatedPerApplication();
 }

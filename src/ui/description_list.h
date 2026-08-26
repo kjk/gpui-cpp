@@ -18,8 +18,7 @@ struct DescriptionItem {
 struct DescriptionList {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    DescriptionItem items[16] = {};
-    int n = 0;
+    ArenaVec<DescriptionItem> items;
     int columns = 3;
     float labelWidth = 120;
     bool bordered = true;

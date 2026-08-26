@@ -45,6 +45,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Audit Base/UI port map
+        run: bun cmd/audit-port.ts
+
       # X11, cairo and Pango are to Linux what Direct2D and DirectWrite are to
       # Windows: system libraries, found through pkg-config. --build-only is
       # the subset a compile needs, so this and a developer setup cannot drift.

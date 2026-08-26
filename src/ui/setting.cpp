@@ -50,7 +50,7 @@ bool SettingItemMatches(const SettingItem* it, Str query) {
     if (ContainsCI(it->title, query) || ContainsCI(it->description, query)) {
         return true;
     }
-    for (int i = 0; i < it->nKeywords; i++) {
+    for (int i = 0; i < it->keywords.len; i++) {
         if (ContainsCI(it->keywords[i], query)) {
             return true;
         }
@@ -297,16 +297,24 @@ static SettingItem* LastItem(Settings* s) {
 Settings* Settings::Keywords(Str a1, Str a2, Str a3) {
     SettingItem* it = LastItem(this);
     if (it) {
-        it->nKeywords = 0;
+        it->keywords.Truncate(0);
         if (a1.s) {
-            it->keywords[it->nKeywords++] = a1;
+            it->keywords.Append(a, a1);
         }
         if (a2.s) {
-            it->keywords[it->nKeywords++] = a2;
+            it->keywords.Append(a, a2);
         }
         if (a3.s) {
-            it->keywords[it->nKeywords++] = a3;
+            it->keywords.Append(a, a3);
         }
+    }
+    return this;
+}
+
+Settings* Settings::Keyword(Str keyword) {
+    SettingItem* it = LastItem(this);
+    if (it && keyword.s) {
+        it->keywords.Append(a, keyword);
     }
     return this;
 }

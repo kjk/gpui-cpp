@@ -685,11 +685,11 @@ ButtonGroup* ButtonGroup::New(Ctx* cx, Str id) {
     return g;
 }
 ButtonGroup* ButtonGroup::Child(Button* b) {
-    if (b && n < 8) {
+    if (b) {
         // child(): the group's `disabled` is pushed down as the child is
         // added, which is why the order of the two calls matters in Rust.
         b->Disabled(b->disabled || disabled);
-        children[n++] = b;
+        children.Append(a, b);
     }
     return this;
 }
@@ -733,7 +733,8 @@ El* ButtonGroup::IntoEl() {
     // The selection the group would report, which each child's click turns
     // into: its own index toggled in, or replacing the lot when single.
     intptr_t selected = 0;
-    for (int i = 0; i < n; i++) {
+    const int selectionBits = (int)(sizeof(intptr_t) * 8);
+    for (int i = 0; i < children.len && i < selectionBits; i++) {
         if (children[i]->selected) {
             selected |= (intptr_t)1 << i;
         }
@@ -750,7 +751,7 @@ El* ButtonGroup::IntoEl() {
     }
     // The ends are rounded by the group, so a child never has to be.
     box->Radius(th.radius)->ClipX()->ClipY();
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < children.len; i++) {
         Button* b = children[i];
         if (hasSize) {
             b->WithSize(size);
@@ -764,8 +765,8 @@ El* ButtonGroup::IntoEl() {
         if (outline) {
             b->Outline();
         }
-        b->joined = n > 1;
-        if (n > 1) {
+        b->joined = children.len > 1;
+        if (children.len > 1) {
             // First / middle / last: the seam between two children is drawn
             // once, by the one after it.
             b->edgeT = vertical ? (i == 0) : true;
@@ -775,7 +776,7 @@ El* ButtonGroup::IntoEl() {
         }
         if (onClick.IsValid() && !disabled) {
             intptr_t next = selected;
-            intptr_t bit = (intptr_t)1 << i;
+            intptr_t bit = i < selectionBits ? ((intptr_t)1 << i) : 0;
             if (multiple) {
                 next ^= bit;
             } else {

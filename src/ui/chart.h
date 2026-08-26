@@ -1,6 +1,7 @@
 /* Themed charts — crates/ui/src/chart */
 
 #include "ui/sizing.h"
+#include "ui/sankey.h"
 
 namespace gpui {
 
@@ -19,8 +20,7 @@ struct PieSlice {
 struct PieChart {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    PieSlice slices[12] = {};
-    int n = 0;
+    ArenaVec<PieSlice> slices;
     float outerRadius = 100;
     float innerRadius = 0;
     float padAngle = 0;
@@ -61,11 +61,8 @@ struct AreaChart {
     // with linear_gradient(0., ..). Alpha 0 means "fade `fill` out".
     Rgba fillBottom = {};
     ChartStroke strokeStyle = ChartStroke::Natural;
-    // The series after the first, in the order `Y()` named them. Four is what
-    // the gallery's widest chart asks for; Rust's list has no bound, and the
-    // day one here does the array becomes an ArenaVec.
-    ChartSeriesExtra more[4] = {};
-    int nMore = 0;
+    // The series after the first, in the order `Y()` named them.
+    ArenaVec<ChartSeriesExtra> more;
 
     static AreaChart* New(Ctx* cx, const float* ys, int n);
     // `.y(..)`: another series over the same axes. The `Stroke`, `Fill` and

@@ -6,7 +6,6 @@
 #include "ui/badge.h"
 #include "ui/breadcrumb.h"
 #include "ui/button.h"
-#include "ui/time.h"
 #include "ui/chart.h"
 #include "ui/checkbox.h"
 #include "ui/clipboard.h"
@@ -14,6 +13,7 @@
 #include "ui/color_picker.h"
 #include "ui/combobox.h"
 #include "ui/command.h"
+#include "ui/component_traits.h"
 #include "ui/sizing.h"
 #include "ui/time.h"
 #include "ui/description_list.h"
@@ -22,11 +22,14 @@
 #include "ui/tiles.h"
 #include "ui/inspector.h"
 #include "ui/form.h"
+#include "ui/global_state.h"
 #include "ui/group_box.h"
 #include "ui/highlighter.h"
+#include "ui/history.h"
 #include "ui/hover_card.h"
 #include "ui/i18n.h"
 #include "ui/icon.h"
+#include "ui/index_path.h"
 #include "ui/input.h"
 #include "ui/kbd.h"
 #include "ui/label.h"
@@ -41,6 +44,7 @@
 #include "ui/progress.h"
 #include "ui/radio.h"
 #include "ui/rating.h"
+#include "ui/resizable.h"
 #include "ui/root.h"
 #include "ui/scroll.h"
 #include "ui/searchable_list.h"
@@ -53,14 +57,27 @@
 #include "ui/slider.h"
 #include "ui/spinner.h"
 #include "ui/status_bar.h"
+#include "ui/styled.h"
 #include "ui/stepper.h"
 #include "ui/switch.h"
 #include "ui/tab.h"
 #include "ui/table.h"
 #include "ui/tag.h"
 #include "ui/text.h"
+#include "ui/theme.h"
 #include "ui/title_bar.h"
 #include "ui/tooltip.h"
 #include "ui/tree.h"
 #include "ui/virtual_list.h"
 #include "ui/window_border.h"
+#include "ui/window_ext.h"
+
+namespace gpui {
+namespace component {
+
+// crates/ui/src/lib.rs::init: themed infrastructure, then gpui-base, then
+// the modules with action bindings or system callbacks.
+void Init(App* app);
+
+} // namespace component
+} // namespace gpui

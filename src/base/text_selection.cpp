@@ -1,5 +1,6 @@
 #include "base/text_selection.h"
 #include "base/element_ext.h"
+#include "base/global_state.h"
 
 namespace gpui {
 
@@ -77,6 +78,10 @@ bool WindowSelectionHas(const Window* win) {
 
 void WindowSelectionPress(Window* win, float x, float y, int clickCount,
                           bool extend) {
+    if (win && BaseIsTextSelectionSuppressed(win->app)) {
+        WindowSelectionClear(win);
+        return;
+    }
     WindowSelection* s = WindowSelectionOf(win);
     if (!s) {
         return;

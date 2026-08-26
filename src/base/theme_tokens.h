@@ -106,7 +106,8 @@ struct SemanticThemeTokens {
 
 // Theme::semantic_tokens: the roles this palette comes to. `sm` is half the
 // radius and `xl` twice it, which is what `radius_tokens` says.
-SemanticThemeTokens ThemeSemanticTokens(const Theme& t);
+SemanticThemeTokens ThemeSemanticTokens(const Theme& t,
+                                        float fontSize = 16.f);
 // Theme::apply_semantic_tokens: the other way, for a theme written as tokens
 // rather than as the legacy key list. Only what the legacy palette can hold
 // comes back — the spacing scale and the text roles have nowhere to go.

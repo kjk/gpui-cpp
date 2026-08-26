@@ -37,8 +37,7 @@ struct RadioGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    Radio* radios[16] = {};
-    int n = 0;
+    ArenaVec<Radio*> radios;
     bool horizontal = false;
     int selected = -1;
     bool disabled = false;

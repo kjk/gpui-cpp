@@ -5,7 +5,7 @@
    which is what holds one; this is compute_delta, the only part of the Rust
    file that is not the background task driving it. */
 
-#include "gpui/gpui.h"
+#include "base/auto_scroll.h"
 
 namespace gpui {
 

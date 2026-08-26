@@ -155,6 +155,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     ThemeSet(app, ThemeMode::Dark);
     // Where the images in the two documents are looked up, the same way the
     // icons of any other example are.

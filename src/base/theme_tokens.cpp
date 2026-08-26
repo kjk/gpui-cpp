@@ -11,7 +11,7 @@ SemanticShadowTokens SemanticShadowElevations(Rgba color) {
     return out;
 }
 
-SemanticThemeTokens ThemeSemanticTokens(const Theme& t) {
+SemanticThemeTokens ThemeSemanticTokens(const Theme& t, float fontSize) {
     SemanticThemeTokens out;
     SemanticColorTokens& c = out.colors;
     c.background = t.background;
@@ -45,7 +45,7 @@ SemanticThemeTokens ThemeSemanticTokens(const Theme& t) {
     // leaves the rest of the scale at its defaults. The families are empty
     // here: this tree names no font on the theme — the paint layer asks the
     // platform for the UI face and for its monospace one.
-    out.typography.md.size = ThemeFontSize();
+    out.typography.md.size = fontSize > 0 ? fontSize : 16.f;
     out.typography.monoMd.size = kMonoFontSize;
 
     // `shadow_tokens`: the three elevations at 18% black. Rust gates them on

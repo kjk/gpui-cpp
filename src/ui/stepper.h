@@ -38,8 +38,7 @@ struct Stepper {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    StepperItem* items[16] = {};
-    int n = 0;
+    ArenaVec<StepperItem*> items;
     int step = 0;
     Axis layout = Axis::Horizontal;
     bool disabled = false;

@@ -12,11 +12,11 @@
 using namespace gpui;
 using namespace gpui::component;
 
-// The registry keys on the window a notification was posted from, and never
-// dereferences it. Two addresses that are not each other are the whole of
-// what these need.
-static Window* const kWinA = (Window*)0x1000;
-static Window* const kWinB = (Window*)0x2000;
+static App gNotificationApp;
+static Window gNotificationWinA;
+static Window gNotificationWinB;
+static Window* const kWinA = &gNotificationWinA;
+static Window* const kWinB = &gNotificationWinB;
 
 static void ADeliverySaysWhichHalvesRun() {
     utassert(NotificationDeliveryIncludesInApp(NotificationDelivery::InApp));
@@ -134,6 +134,20 @@ static void AResponseToAForeignTagIsIgnored() {
     NotificationSystemDismissAll(kWinA);
 }
 
+static void RegistriesAreIsolatedByApp() {
+    App other = {};
+    Window otherWin;
+    otherWin.app = &other;
+    NotificationSystemEntry e;
+    e.id = 71;
+    e.win = &otherWin;
+    NotificationSystemInsert(e);
+    utassert(NotificationSystemCount(&other) == 1);
+    utassert(NotificationSystemCount(&gNotificationApp) == 0);
+    NotificationSystemDismissAll(&otherWin);
+    AppGlobalClear(&other);
+}
+
 // The in-app half, which a null Ctx leaves on its own.
 static NotificationItem Item(int id, const char* message) {
     NotificationItem it;
@@ -146,7 +160,7 @@ static void SystemOnlyDeliveryShowsNoCard() {
     NotificationListState s;
     NotificationItem it = Item(0, "in-app");
     utassert(NotificationPush(&s, nullptr, it, 1000) > 0);
-    utassert(s.n == 1);
+    utassert(s.items.len == 1);
 
     // The delivery that has no in-app half pushes nothing onto the stack —
     // and still answers with the id, which is what a later dismiss names.
@@ -155,19 +169,19 @@ static void SystemOnlyDeliveryShowsNoCard() {
     it.delivery = NotificationDelivery::System;
     int id = NotificationPush(&s, nullptr, it, 1000);
     utassert(id > 0);
-    utassert(s.n == 1);
+    utassert(s.items.len == 1);
 
     // The list's own delivery is what an item with none of its own takes.
     s.delivery = NotificationDelivery::System;
     utassert(NotificationPush(&s, nullptr, Item(0, "by default"), 1000) > 0);
-    utassert(s.n == 1);
+    utassert(s.items.len == 1);
 
     // And an item that overrides it the other way is still shown.
     it = Item(0, "override");
     it.hasDelivery = true;
     it.delivery = NotificationDelivery::InAppAndSystem;
     utassert(NotificationPush(&s, nullptr, it, 1000) > 0);
-    utassert(s.n == 2);
+    utassert(s.items.len == 2);
 }
 
 static void AutohideExpiryDoesNotRetractTheSystemHalf() {
@@ -184,21 +198,42 @@ static void AutohideExpiryDoesNotRetractTheSystemHalf() {
     for (int i = 0; i < 20; i++) {
         NotificationAdvance(&s, 100);
     }
-    utassert(s.n == 0);
+    utassert(s.items.len == 0);
     // Gone from the screen, kept in the notification center: only an explicit
     // dismissal retracts one.
     utassert(NotificationSystemFind(11, kWinA) != nullptr);
     NotificationSystemDismissAll(kWinA);
 }
 
+static void MaxItemsLimitsVisibilityWithoutEvictingMountedToasts() {
+    NotificationListState s;
+    s.maxItems = 1;
+    NotificationPush(&s, nullptr, Item(1, "one"), 0);
+    NotificationPush(&s, nullptr, Item(2, "two"), 0);
+    NotificationPush(&s, nullptr, Item(3, "three"), 0);
+    // ToastManager::visible(1) chooses what renders. All three remain mounted
+    // and addressable, which is how an ending older toast can finish exiting.
+    utassert(s.items.len == 3);
+    utassert(s.stack.entries.len == 3);
+    NotificationDismiss(&s, nullptr, 1);
+    utassert(s.stack.entries[0].status == ToastStatus::Ending);
+    utassert(s.items.len == 3);
+}
+
 void TestNotification() {
     TestSuite("notification");
+    gNotificationWinA.app = &gNotificationApp;
+    gNotificationWinB.app = &gNotificationApp;
+    NotificationInitSystem(&gNotificationApp);
     ADeliverySaysWhichHalvesRun();
     ATagIsNamespacedAndCarriesTheId();
     TheRegistryKeepsOneEntryPerIdAndWindow();
     ADismissLeavesAnotherWindowsNotificationAlone();
     TheOldestEntriesArePrunedPastTheCap();
     AResponseToAForeignTagIsIgnored();
+    RegistriesAreIsolatedByApp();
     SystemOnlyDeliveryShowsNoCard();
     AutohideExpiryDoesNotRetractTheSystemHalf();
+    MaxItemsLimitsVisibilityWithoutEvictingMountedToasts();
+    AppGlobalClear(&gNotificationApp);
 }

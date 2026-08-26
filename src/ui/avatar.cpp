@@ -196,8 +196,8 @@ AvatarGroup* AvatarGroup::New(Ctx* cx) {
     return g;
 }
 AvatarGroup* AvatarGroup::Child(Avatar* av) {
-    if (av && n < 16) {
-        avatars[n++] = av;
+    if (av) {
+        avatars.Append(a, av);
     }
     return this;
 }
@@ -219,8 +219,8 @@ El* AvatarGroup::IntoEl() {
     // item_ml = -avatar_size * 0.3, so each avatar past the first overlaps
     // the one before it by that much; the ⋯ chip sits ml_1 past the last.
     float step = sz - sz * 0.3f;
-    int shown = n < limit ? n : limit;
-    bool more = ellipsis && n > limit;
+    int shown = avatars.len < limit ? avatars.len : limit;
+    bool more = ellipsis && avatars.len > limit;
     float chipLeft = shown * step + 4;
     float w = more ? chipLeft + sz : sz + (shown > 0 ? (shown - 1) * step : 0);
     El* box = Div(a)->H(sz)->W(w);

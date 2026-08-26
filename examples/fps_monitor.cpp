@@ -421,6 +421,7 @@ El* FpsApp::Render(FpsApp* app, Ctx* cx) {
 
 int GpuiMain(int argc, char** argv) {
     App* app = AppNew();
+    component::Init(app);
     Entity<FpsApp> view = EntityNew<FpsApp>(app);
     FpsApp* self = view.Get(app);
     int winW = 800;

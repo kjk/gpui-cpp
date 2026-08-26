@@ -45,8 +45,8 @@ Breadcrumb* Breadcrumb::New(Ctx* cx) {
     return b;
 }
 Breadcrumb* Breadcrumb::Child(BreadcrumbItem* item) {
-    if (n < 8 && item) {
-        items[n++] = item;
+    if (item) {
+        items.Append(a, item);
     }
     return this;
 }
@@ -57,13 +57,13 @@ Breadcrumb* Breadcrumb::Child(Str label) {
 El* Breadcrumb::IntoEl() {
     const Theme& th = cx->theme();
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < items.len; i++) {
         if (i) {
             row->Child(IconEl(a, IconName::ChevronRight, 14)->Fg(th.mutedFg));
         }
         BreadcrumbItem* it = items[i];
         it->ix = i;
-        it->isLast = i == n - 1;
+        it->isLast = i == items.len - 1;
         row->Child(it->IntoEl());
     }
     return row;

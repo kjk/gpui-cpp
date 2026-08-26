@@ -1095,7 +1095,7 @@ static void HandleEvent(App* app, XEvent* ev) {
             // as 6 and 7. A notch is WheelNotchPixels(), the same step the
             // Windows window uses; positive scrolls the view up and left.
             if (b >= Button4 && b <= 7) {
-                float notch = WheelNotchPixels();
+                float notch = WheelNotchPixels(win->app);
                 float dx = b == 6 ? notch : b == 7 ? -notch : 0.f;
                 float dy = b == Button4 ? notch : b == Button5 ? -notch : 0.f;
                 PlatformInput in = InputScrollWheel(x, y, dx, dy, false, mods,

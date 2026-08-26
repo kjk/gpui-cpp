@@ -152,8 +152,7 @@ struct ButtonGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     Str id = {};
-    Button* children[8] = {};
-    int n = 0;
+    ArenaVec<Button*> children;
     bool multiple = false;
     bool disabled = false;
     bool vertical = false;
@@ -164,8 +163,10 @@ struct ButtonGroup {
     bool hasSize = false;
     UiSize size = UiSize::Medium;
     // Rust hands the handler `&Vec<usize>`, the indices selected after the
-    // click. A Listener carries one intptr_t, so it carries them as a bit per
-    // index — bit 0 is the first child.
+    // click. A Listener carries one intptr_t, so the currently selected first
+    // word is a bit per index. Groups may contain any number of buttons; the
+    // callback representation exposes the first machine word, matching every
+    // existing caller while the children themselves remain Vec-backed.
     Listener onClick;
 
     static ButtonGroup* New(Ctx* cx, Str id);

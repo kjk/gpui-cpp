@@ -102,19 +102,39 @@ bool NotificationTagId(Str tag, int* outId) {
     return true;
 }
 
-// Rust keeps this in an App global; a file static is the same one-per-process
-// table, and the fixed array is what MAX_SYSTEM_NOTIFICATION_ENTRIES caps
-// anyway. Oldest first, so overflow prunes the stalest.
-static NotificationSystemEntry gSysEntries[kNotificationSystemMax];
-static int gNSysEntries = 0;
+static App* gSysApp = nullptr;
 static bool gSysInited = false;
 
-static void SysEntryRemoveAt(int ix) {
-    for (int i = ix; i < gNSysEntries - 1; i++) {
-        gSysEntries[i] = gSysEntries[i + 1];
+struct NotificationSystemState {
+    App* app = nullptr;
+    Vec<NotificationSystemEntry> entries;
+
+    ~NotificationSystemState() {
+        entries.Reset();
+        if (gSysApp == app) {
+            gSysApp = nullptr;
+        }
     }
-    gNSysEntries--;
-    gSysEntries[gNSysEntries] = {};
+};
+
+static NotificationSystemState* SysState(App* app) {
+    NotificationSystemState* state =
+        AppGlobalEnsure<NotificationSystemState>(app);
+    if (state && !state->app) {
+        state->app = app;
+    }
+    return state;
+}
+
+static NotificationSystemState* SysState(Window* win) {
+    return SysState(win ? win->app : gSysApp);
+}
+
+static void SysEntryRemoveAt(NotificationSystemState* state, int ix) {
+    for (int i = ix; i < state->entries.len - 1; i++) {
+        state->entries[i] = state->entries[i + 1];
+    }
+    state->entries.len--;
 }
 
 // The platform's response, on the main thread. Only the tag comes back, so
@@ -123,41 +143,59 @@ static void OnSysNotifyResponse(Str tag, void*) {
     NotificationSystemResponse(tag);
 }
 
-void NotificationInitSystem() {
-    if (gSysInited) {
+void NotificationInitSystem(App* app) {
+    if (!app) {
         return;
     }
-    gSysInited = true;
-    SysNotifyOnResponse(OnSysNotifyResponse, nullptr);
-    // Whatever the platform is holding — on Windows a notification area icon
-    // — is given back when the app goes.
-    AppOnShutdown(SysNotifyShutdown);
+    (void)SysState(app);
+    gSysApp = app;
+    if (!gSysInited) {
+        gSysInited = true;
+        SysNotifyOnResponse(OnSysNotifyResponse, nullptr);
+        // Whatever the platform is holding — on Windows a notification area
+        // icon — is given back when the process goes.
+        AppOnShutdown(SysNotifyShutdown);
+    }
 }
 
 void NotificationSystemInsert(const NotificationSystemEntry& e) {
-    for (int i = 0; i < gNSysEntries; i++) {
-        if (gSysEntries[i].id == e.id) {
-            SysEntryRemoveAt(i);
+    NotificationSystemState* state = SysState(e.win);
+    if (!state) {
+        return;
+    }
+    for (int i = 0; i < state->entries.len; i++) {
+        if (state->entries[i].id == e.id) {
+            SysEntryRemoveAt(state, i);
             break;
         }
     }
-    if (gNSysEntries >= kNotificationSystemMax) {
-        SysEntryRemoveAt(0);
+    if (state->entries.len >= kNotificationSystemMax) {
+        SysEntryRemoveAt(state, 0);
     }
-    gSysEntries[gNSysEntries++] = e;
+    state->entries.Append(e);
 }
 
 const NotificationSystemEntry* NotificationSystemFind(int id, Window* win) {
-    for (int i = 0; i < gNSysEntries; i++) {
-        if (gSysEntries[i].id == id && gSysEntries[i].win == win) {
-            return &gSysEntries[i];
+    NotificationSystemState* state = SysState(win);
+    if (!state) {
+        return nullptr;
+    }
+    for (int i = 0; i < state->entries.len; i++) {
+        if (state->entries[i].id == id && state->entries[i].win == win) {
+            return &state->entries[i];
         }
     }
     return nullptr;
 }
 
 int NotificationSystemCount() {
-    return gNSysEntries;
+    return NotificationSystemCount(gSysApp);
+}
+
+int NotificationSystemCount(const App* app) {
+    NotificationSystemState* state =
+        AppGlobalGet<NotificationSystemState>(app);
+    return state ? state->entries.len : 0;
 }
 
 static void SysDismissTag(int id) {
@@ -166,9 +204,13 @@ static void SysDismissTag(int id) {
 }
 
 void NotificationSystemDismiss(int id, Window* win) {
-    for (int i = 0; i < gNSysEntries; i++) {
-        if (gSysEntries[i].id == id && gSysEntries[i].win == win) {
-            SysEntryRemoveAt(i);
+    NotificationSystemState* state = SysState(win);
+    if (!state) {
+        return;
+    }
+    for (int i = 0; i < state->entries.len; i++) {
+        if (state->entries[i].id == id && state->entries[i].win == win) {
+            SysEntryRemoveAt(state, i);
             SysDismissTag(id);
             return;
         }
@@ -176,10 +218,14 @@ void NotificationSystemDismiss(int id, Window* win) {
 }
 
 void NotificationSystemDismissAll(Window* win) {
-    for (int i = gNSysEntries - 1; i >= 0; i--) {
-        if (gSysEntries[i].win == win) {
-            int id = gSysEntries[i].id;
-            SysEntryRemoveAt(i);
+    NotificationSystemState* state = SysState(win);
+    if (!state) {
+        return;
+    }
+    for (int i = state->entries.len - 1; i >= 0; i--) {
+        if (state->entries[i].win == win) {
+            int id = state->entries[i].id;
+            SysEntryRemoveAt(state, i);
             SysDismissTag(id);
         }
     }
@@ -193,11 +239,14 @@ void NotificationSystemResponse(Str tag) {
     // Platforms usually take a clicked notification away themselves; the ones
     // that keep it are why this is asked for at all.
     SysNotifyDismiss(tag);
+    NotificationSystemState* state = SysState(gSysApp);
     const NotificationSystemEntry* found = nullptr;
-    for (int i = 0; i < gNSysEntries; i++) {
-        if (gSysEntries[i].id == id) {
-            found = &gSysEntries[i];
-            break;
+    if (state) {
+        for (int i = 0; i < state->entries.len; i++) {
+            if (state->entries[i].id == id) {
+                found = &state->entries[i];
+                break;
+            }
         }
     }
     // The platform can deliver a response for a notification posted before
@@ -229,11 +278,15 @@ void NotificationListState::OnSystemResponse(NotificationListState* self,
                                              intptr_t idArg) {
     int id = (int)idArg;
     Listener onClick = {};
-    for (int i = 0; i < gNSysEntries; i++) {
-        if (gSysEntries[i].id == id && gSysEntries[i].win == cx->win) {
-            onClick = gSysEntries[i].onClick;
-            SysEntryRemoveAt(i);
-            break;
+    NotificationSystemState* state = SysState(cx->app);
+    if (state) {
+        for (int i = 0; i < state->entries.len; i++) {
+            if (state->entries[i].id == id &&
+                state->entries[i].win == cx->win) {
+                onClick = state->entries[i].onClick;
+                SysEntryRemoveAt(state, i);
+                break;
+            }
         }
     }
     // A no-op when the card already closed or was never created, which is
@@ -247,7 +300,7 @@ void NotificationListState::OnSystemResponse(NotificationListState* self,
 }
 
 int NotificationIndexOf(const NotificationListState* s, int id) {
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         if (s->items[i].id == id) {
             return i;
         }
@@ -257,10 +310,10 @@ int NotificationIndexOf(const NotificationListState* s, int id) {
 
 static void NotificationRemoveAt(NotificationListState* s, int ix) {
     ToastRemove(&s->stack, s->items[ix].id);
-    for (int i = ix; i < s->n - 1; i++) {
+    for (int i = ix; i < s->items.len - 1; i++) {
         s->items[i] = s->items[i + 1];
     }
-    s->n--;
+    s->items.len--;
 }
 
 // push_system: what the OS notification center is given, and the registry
@@ -279,7 +332,7 @@ static void NotificationPushSystem(NotificationListState* s, Ctx* cx,
         title = body;
         body = Str{};
     }
-    NotificationInitSystem();
+    NotificationInitSystem(cx->app);
     char buf[64];
     Str tag = NotificationSystemTag(buf, (int)sizeof(buf), item.id);
     // Rust registers and then posts; the order is the other way here because
@@ -319,12 +372,15 @@ int NotificationPush(NotificationListState* s, Ctx* cx, NotificationItem item,
     if (!NotificationDeliveryIncludesInApp(delivery)) {
         return item.id;
     }
-    // max_items: the oldest goes to make room.
-    while (s->n >= s->maxItems || s->n >= kToastStackCap) {
-        NotificationRemoveAt(s, 0);
+    // ToastManager keeps every mounted toast. `max_items` is applied by
+    // visible() while rendering; ending entries remain mounted and visible
+    // until their exit completes.
+    if (!s->items.Append(item)) {
+        return item.id;
     }
-    s->items[s->n++] = item;
-    ToastPush(&s->stack, item.id, timeoutMs);
+    if (!ToastPush(&s->stack, item.id, timeoutMs)) {
+        s->items.len--;
+    }
     return item.id;
 }
 
@@ -334,7 +390,7 @@ void NotificationDismiss(NotificationListState* s, Ctx* cx, int id) {
     if (cx) {
         NotificationSystemDismiss(id, cx->win);
     }
-    for (int i = 0; i < s->stack.n; i++) {
+    for (int i = 0; i < s->stack.entries.len; i++) {
         if (s->stack.entries[i].id == id) {
             // The card animates out first; advance drops it when it is done.
             s->stack.entries[i].status = ToastStatus::Ending;
@@ -348,7 +404,7 @@ void NotificationClear(NotificationListState* s, Ctx* cx) {
     if (cx) {
         NotificationSystemDismissAll(cx->win);
     }
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->items.len; i++) {
         NotificationDismiss(s, cx, s->items[i].id);
     }
 }
@@ -359,19 +415,19 @@ bool NotificationAdvance(NotificationListState* s, int deltaMs) {
         return false;
     }
     // Whatever the stack dropped goes from the list with it.
-    for (int i = s->n - 1; i >= 0; i--) {
+    for (int i = s->items.len - 1; i >= 0; i--) {
         bool alive = false;
-        for (int j = 0; j < s->stack.n; j++) {
+        for (int j = 0; j < s->stack.entries.len; j++) {
             if (s->stack.entries[j].id == s->items[i].id) {
                 alive = true;
                 break;
             }
         }
         if (!alive) {
-            for (int k = i; k < s->n - 1; k++) {
+            for (int k = i; k < s->items.len - 1; k++) {
                 s->items[k] = s->items[k + 1];
             }
-            s->n--;
+            s->items.len--;
         }
     }
     return true;
@@ -428,7 +484,7 @@ El* NotificationList::IntoEl() {
         // back to.
         s->self = state.id;
     }
-    if (!s || s->n == 0) {
+    if (!s || s->items.len == 0) {
         return Div(a);
     }
     WinSize win = WindowSize(cx->win);
@@ -437,15 +493,43 @@ El* NotificationList::IntoEl() {
                   s->placement == NotificationAnchor::BottomRight;
     bool expanded = s->stack.IsExpanded();
 
-    float heights[kToastStackCap];
-    float collapsedOff[kToastStackCap];
-    float expandedOff[kToastStackCap];
-    for (int i = 0; i < s->n; i++) {
+    // ToastManager::visible(max_items): newest active entries plus every
+    // ending entry, kept in display order.
+    int activeCount = 0;
+    for (int i = 0; i < s->stack.entries.len; i++) {
+        if (s->stack.entries[i].status != ToastStatus::Ending) {
+            activeCount++;
+        }
+    }
+    int maxItems = s->maxItems > 0 ? s->maxItems : 0;
+    int firstActive = activeCount > maxItems ? activeCount - maxItems : 0;
+    int activeIx = 0;
+    ArenaVec<int> shown;
+    for (int i = 0; i < s->stack.entries.len; i++) {
+        bool ending = s->stack.entries[i].status == ToastStatus::Ending;
+        bool visible = ending || activeIx >= firstActive;
+        if (!ending) {
+            activeIx++;
+        }
+        if (visible) {
+            shown.Append(a, i);
+        }
+    }
+    if (shown.len == 0) {
+        return Div(a);
+    }
+
+    float* heights = (float*)Alloc(a, (int)sizeof(float) * shown.len);
+    float* collapsedOff =
+        (float*)Alloc(a, (int)sizeof(float) * shown.len);
+    float* expandedOff =
+        (float*)Alloc(a, (int)sizeof(float) * shown.len);
+    for (int i = 0; i < shown.len; i++) {
         heights[i] = s->itemH;
     }
     float expandedH = 0;
     float collapsedH = ToastStackGeometry(
-        heights, s->n, kToastCollapsedPeek, kToastExpandedGap, bottom,
+        heights, shown.len, kToastCollapsedPeek, kToastExpandedGap, bottom,
         collapsedOff, expandedOff, &expandedH);
     // toast.rs: the geometry is sprung rather than transitioned — a pointer
     // arriving and leaving retargets every offset while they are still
@@ -484,9 +568,9 @@ El* NotificationList::IntoEl() {
     layer->Id(StrL("notification-stack"))
         ->Click(HashClickId(StrL("notification-stack")));
 
-    for (int i = 0; i < s->n; i++) {
-        const NotificationItem& it = s->items[i];
-        int rank = s->n - 1 - i;
+    for (int i = 0; i < shown.len; i++) {
+        const NotificationItem& it = s->items[shown[i]];
+        int rank = shown.len - 1 - i;
         // "visibility": collapsed_visible is how many of them show at all
         // when the stack is closed, and the ones past it fade rather than
         // vanishing. A card that has finished fading is left out — Rust keeps

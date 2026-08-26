@@ -19,13 +19,11 @@ static bool Same(Rgba a, Rgba b) {
 static void TheHighlightIsOnUnlessItIsTurnedOff() {
     ListSettings s;
     utassert(s.activeHighlight);
-    utassert(ListSettingsNow().activeHighlight);
 }
 
 static void ASelectedRowTakesTheTintAndTheRule() {
-    ListSettingsSet(ListSettings{});
     ListActiveStyle st =
-        ListActiveStyleOf(kActive, kActiveBorder, kAccent, true);
+        ListActiveStyleOf(ListSettings{}, kActive, kActiveBorder, kAccent, true);
     utassert(Same(st.bg.color, kActive));
     utassert(st.hasBorder);
     utassert(Same(st.border, kActiveBorder));
@@ -35,9 +33,8 @@ static void ASelectedRowTakesTheTintAndTheRule() {
 // whatever the setting says — the rule is the setting's, the fill is the
 // row's.
 static void ARowThatIsOnlySecondarySelectedKeepsAccent() {
-    ListSettingsSet(ListSettings{});
     ListActiveStyle st =
-        ListActiveStyleOf(kActive, kActiveBorder, kAccent, false);
+        ListActiveStyleOf(ListSettings{}, kActive, kActiveBorder, kAccent, false);
     utassert(Same(st.bg.color, kAccent));
     utassert(st.hasBorder);
 }
@@ -45,16 +42,26 @@ static void ARowThatIsOnlySecondarySelectedKeepsAccent() {
 static void WithTheHighlightOffASelectionIsAPlainBlock() {
     ListSettings off;
     off.activeHighlight = false;
-    ListSettingsSet(off);
     ListActiveStyle st =
-        ListActiveStyleOf(kActive, kActiveBorder, kAccent, true);
+        ListActiveStyleOf(off, kActive, kActiveBorder, kAccent, true);
     utassert(Same(st.bg.color, kAccent));
     utassert(!st.hasBorder);
     // And nothing about the setting is per-row.
-    st = ListActiveStyleOf(kActive, kActiveBorder, kAccent, false);
+    st = ListActiveStyleOf(off, kActive, kActiveBorder, kAccent, false);
     utassert(Same(st.bg.color, kAccent));
     utassert(!st.hasBorder);
-    ListSettingsSet(ListSettings{});
+}
+
+static void SettingsBelongToTheirApplication() {
+    App first;
+    App second;
+    ListSettings off;
+    off.activeHighlight = false;
+    ListSettingsSet(&first, off);
+    utassert(!ListSettingsNow(&first).activeHighlight);
+    utassert(ListSettingsNow(&second).activeHighlight);
+    AppGlobalClear(&first);
+    AppGlobalClear(&second);
 }
 
 // The rule is drawn over the row rather than around it, so turning the
@@ -92,4 +99,5 @@ void TestListSettings() {
     WithTheHighlightOffASelectionIsAPlainBlock();
     TheRuleCoversTheRowWithoutResizingIt();
     TheTableTakesTheListColorsWhenItHasNoneOfItsOwn();
+    SettingsBelongToTheirApplication();
 }

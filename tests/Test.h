@@ -118,3 +118,6 @@ void TestHttp();
 void TestArenaStr();
 void TestFmt();
 void TestExecutor();
+void TestAppGlobals();
+void TestBuilderCapacity();
+void TestHistory();

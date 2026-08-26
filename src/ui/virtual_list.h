@@ -26,6 +26,11 @@ struct VirtualList {
     VirtualListScrollHandle* handle = nullptr;
     Listener onRenderRow; // not used; rows built here
     El* (*row)(Ctx* cx, int ix) = nullptr;
+    // C++'s equivalent of Rust's row-builder closure. `user` carries only the
+    // closure environment for the duration of IntoEl; state itself stays in
+    // an Entity and is resolved by the callback.
+    VirtualRowFn rowWithUser = nullptr;
+    void* rowUser = nullptr;
     // The scroll id and the listener a scrolled list needs to hear the wheel.
     int scrollId = 0;
     Listener onScroll = {};
@@ -57,6 +62,7 @@ struct VirtualList {
     // The row builder. Rust's is a closure that captured `cx`, so this takes
     // one: a row that reads the theme has no other way to.
     VirtualList* Row(El* (*fn)(Ctx*, int));
+    VirtualList* Row(VirtualRowFn fn, void* user);
     El* IntoEl();
 };
 

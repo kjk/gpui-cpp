@@ -484,7 +484,7 @@ static EM_BOOL OnWheel(int, const EmscriptenWheelEvent* e, void*) {
     // is already in the units this tree draws in.
     float scale = 1.f;
     if (e->deltaMode == DOM_DELTA_LINE) {
-        scale = WheelNotchPixels();
+        scale = WheelNotchPixels(win->app);
     } else if (e->deltaMode == DOM_DELTA_PAGE) {
         scale = (float)win->plat->cssH;
     }

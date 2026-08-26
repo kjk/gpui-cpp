@@ -12,65 +12,61 @@ Form* Form::New(Ctx* cx) {
     return f;
 }
 Form* Form::Field(Str label, El* control) {
-    if (n < 12) {
-        fields[n] = FormField{};
-        fields[n].label = label;
-        fields[n].control = control;
-        n++;
-    }
+    FormField field = {};
+    field.label = label;
+    field.control = control;
+    fields.Append(a, field);
     return this;
 }
 Form* Form::FieldEl(El* label, El* control) {
-    if (n < 12) {
-        fields[n] = FormField{};
-        fields[n].labelEl = label;
-        fields[n].control = control;
-        n++;
-    }
+    FormField field = {};
+    field.labelEl = label;
+    field.control = control;
+    fields.Append(a, field);
     return this;
 }
 
 // Both apply to the field added last, the way the Rust builder chains onto
 // the field it is building.
 Form* Form::Required(bool v) {
-    if (n > 0) {
-        fields[n - 1].required = v;
+    if (fields.len > 0) {
+        fields[fields.len - 1].required = v;
     }
     return this;
 }
 Form* Form::Description(Str s) {
-    if (n > 0) {
-        fields[n - 1].description = s;
+    if (fields.len > 0) {
+        fields[fields.len - 1].description = s;
     }
     return this;
 }
 Form* Form::DescriptionEl(El* e) {
-    if (n > 0) {
-        fields[n - 1].descriptionEl = e;
+    if (fields.len > 0) {
+        fields[fields.len - 1].descriptionEl = e;
     }
     return this;
 }
 Form* Form::SpanAll(bool v) {
-    if (n > 0) {
-        fields[n - 1].spanAll = v;
+    if (fields.len > 0) {
+        fields[fields.len - 1].spanAll = v;
     }
     return this;
 }
 Form* Form::Visible(bool v) {
-    if (n > 0) {
-        fields[n - 1].visible = v;
+    if (fields.len > 0) {
+        fields[fields.len - 1].visible = v;
     }
     return this;
 }
 Form* Form::LabelIndent(bool v) {
-    if (n > 0) {
-        fields[n - 1].labelIndent = v;
+    if (fields.len > 0) {
+        fields[fields.len - 1].labelIndent = v;
     }
     return this;
 }
 Form* Form::Align(FieldAlign v) {
-    if (n > 0) {
-        fields[n - 1].align = v;
+    if (fields.len > 0) {
+        fields[fields.len - 1].align = v;
     }
     return this;
 }
@@ -109,7 +105,7 @@ El* Form::IntoEl() {
     El* col = Div(a)->FlexCol()->W(kFill)->Gap(kGap);
     El* row = nullptr; // the row being filled, when the form has columns
     int inRow = 0;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < fields.len; i++) {
         const FormField& fld = fields[i];
         // visible(false): the field is left out of the form entirely.
         if (!fld.visible) {

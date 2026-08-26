@@ -1,6 +1,34 @@
 #include "base/scrollbar.h"
+#include "base/theme.h"
 
 namespace gpui {
+
+static El* ApplyScrollbarTheme(Ctx* cx, El* box) {
+    const BaseTheme* theme = BaseThemeGlobal(cx->app);
+    if (!theme) {
+        return box;
+    }
+    const ScrollbarStyles& styles = theme->scrollbar.styles;
+    box->scrollThemeSet = true;
+    box->scrollMotion = theme->scrollbar.motion;
+    box->scrollTrack = styles.track.hasBackground
+                           ? styles.track.background
+                           : Background(Rgba{});
+    box->scrollTrackActive = styles.trackActive.hasBackground
+                                 ? styles.trackActive.background
+                                 : box->scrollTrack;
+    box->scrollTrackActiveBorder = styles.trackActive.border;
+    box->scrollTrackActiveBorderSet = styles.trackActive.hasBorder;
+    box->scrollThumb = styles.thumb.hasBackground
+                           ? styles.thumb.background
+                           : Background(Rgba{});
+    box->scrollThumbHover = styles.thumbHover.hasBackground
+                                ? styles.thumbHover.background
+                                : box->scrollThumb;
+    box->scrollThumbRadius =
+        styles.thumb.hasRadius ? styles.thumb.radius : 0;
+    return box;
+}
 
 // Rust's floor on the thumb: below this there is nothing left to aim at.
 static const float kMinThumb = 48.f;
@@ -67,12 +95,25 @@ float ScrollbarOffsetForDrag(float pos, float grab, float trackOrigin,
 
 El* Scrollbar::New(Ctx* cx) {
     Arena* a = cx->a;
-    return Div(a);
+    const BaseTheme* theme = BaseThemeGlobal(cx->app);
+    El* box = Div(a);
+    if (theme) {
+        box->ScrollMode(theme->scrollbar.mode);
+    }
+    return ApplyScrollbarTheme(cx, box);
+}
+
+El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
+                   Listener onScroll, ScrollAxis axis) {
+    const BaseTheme* theme = BaseThemeGlobal(cx->app);
+    ScrollbarMode mode =
+        theme ? theme->scrollbar.mode : ScrollbarMode::Scrolling;
+    return New(cx, id, scrollY, scrollX, onScroll, axis, mode);
 }
 
 El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
                    Listener onScroll, ScrollAxis axis, ScrollbarMode mode) {
-    El* box = New(cx)->ScrollMode(mode);
+    El* box = ApplyScrollbarTheme(cx, Div(cx->a))->ScrollMode(mode);
     // Each axis is asked for on its own: a box that only scrolls down still
     // clips what runs off its side.
     box->ClipY();
@@ -94,6 +135,10 @@ El* Scrollbar::New(Ctx* cx, Str id, float scrollY, float scrollX,
         box->OnScroll(onScroll);
     }
     return box;
+}
+
+El* Scrollbar::Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll) {
+    return New(cx, id, scrollY, 0, onScroll, ScrollAxis::Vertical);
 }
 
 El* Scrollbar::Vertical(Ctx* cx, Str id, float scrollY, Listener onScroll,

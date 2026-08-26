@@ -168,7 +168,7 @@ int WindowNotificationCount(Ctx* cx) {
         return 0;
     }
     component::NotificationListState* st = l->notifications.Get(cx);
-    return st ? st->n : 0;
+    return st ? st->items.len : 0;
 }
 
 // ─── the focused input ───────────────────────────────────────────────────

@@ -607,7 +607,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
             float x = PxToDip(&win->paint, pt.x);
             float y = PxToDip(&win->paint, pt.y);
             float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) /
-                          (float)WHEEL_DELTA * WheelNotchPixels();
+                          (float)WHEEL_DELTA * WheelNotchPixels(win->app);
             bool horizontal = msg == WM_MOUSEHWHEEL;
             PlatformInput in = InputScrollWheel(x, y, horizontal ? -delta : 0.f,
                                                 horizontal ? 0.f : delta, false,

@@ -28,8 +28,7 @@ struct BreadcrumbItem {
 struct Breadcrumb {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    BreadcrumbItem* items[8] = {};
-    int n = 0;
+    ArenaVec<BreadcrumbItem*> items;
 
     static Breadcrumb* New(Ctx* cx);
     Breadcrumb* Child(BreadcrumbItem* item);

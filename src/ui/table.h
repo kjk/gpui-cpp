@@ -2,7 +2,7 @@
 
 #include "ui/sizing.h"
 #include "ui/menu.h"
-#include "base/data_table.h"
+#include "ui/data_table.h"
 
 namespace gpui {
 
@@ -31,6 +31,11 @@ struct TableGroupCell {
     int span = 1;
 };
 
+struct TableGroupHeader {
+    const TableGroupCell* cells = nullptr;
+    int n = 0;
+};
+
 // The themed data table. The rows are the caller's — a delegate renders a
 // cell in Rust and a callback does the same here — and the table owns the
 // head, the sort icons, the selection and the striping.
@@ -48,9 +53,7 @@ struct DataTable {
     bool stripe = false;
     // group_headers: the extra head rows a caller stacks over the columns,
     // outermost first.
-    const TableGroupCell* groupRows[4] = {};
-    int groupRowLens[4] = {};
-    int nGroupHeaders = 0;
+    ArenaVec<TableGroupHeader> groupHeaders;
     // The height the body scrolls inside. 0 leaves every row built, which is
     // what a table small enough not to need a viewport wants.
     float h = 0;

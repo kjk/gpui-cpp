@@ -391,6 +391,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     // Without a root the icons fall back to the built-in strokes, which
     // only cover part of the set — the sort chevrons in the process
     // table's head were among the ones that drew nothing.

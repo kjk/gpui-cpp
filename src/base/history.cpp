@@ -3,17 +3,26 @@
 namespace gpui {
 
 void History::Push(Str s) {
-    if (n < 32) {
-        cursor++;
-        n = cursor + 1;
-        items[cursor] = s;
+    // A new edit after undo drops the redo tail.
+    if (cursor + 1 < items.len) {
+        items.len = cursor + 1;
+    }
+    if (items.len >= maxItems && items.len > 0) {
+        for (int i = 1; i < items.len; i++) {
+            items[i - 1] = items[i];
+        }
+        items.len--;
+        cursor--;
+    }
+    if (items.Append(s)) {
+        cursor = items.len - 1;
     }
 }
 bool History::CanUndo() const {
     return cursor > 0;
 }
 bool History::CanRedo() const {
-    return cursor + 1 < n;
+    return cursor + 1 < items.len;
 }
 Str History::Undo() {
     if (CanUndo()) {

@@ -24,10 +24,6 @@ struct ToastEntry {
     int elapsedMs = 0;
 };
 
-// How many a stack holds. Rust's VecDeque grows; a screen's worth is the real
-// bound, and a toast past that would be off it anyway.
-const int kToastStackCap = 16;
-
 // ToastMotion::sonner(): the numbers the shadcn/Sonner toaster stacks by.
 const int kToastTransitionMs = 400;
 const int kToastExitMs = 200;
@@ -40,8 +36,10 @@ const float kToastCollapsedScaleStep = 0.05f;
 const int kToastCollapsedVisible = 3;
 
 struct ToastStackState {
-    ToastEntry entries[kToastStackCap] = {};
-    int n = 0;
+    // ToastManager::entries is a VecDeque. Persistent state uses the owning
+    // Vec rather than a frame ArenaVec, and consequently imposes no port-only
+    // limit on mounted/ending toasts.
+    Vec<ToastEntry> entries;
     // How long the in and out animations run.
     int transitionMs = kToastTransitionMs;
     int exitMs = kToastExitMs;
@@ -66,7 +64,7 @@ float ToastStackGeometry(const float* heights, int n, float peek, float gap,
                          float* expandedOffsets, float* expandedHeight);
 
 // Push a toast. `timeoutMs` of 0 means it stays until dismissed, which is
-// Rust's None. Answers false when the stack is full.
+// Rust's None. False only means allocation failed.
 bool ToastPush(ToastStackState* s, int id, int timeoutMs);
 
 // Drop one by id, wherever it is in its life.

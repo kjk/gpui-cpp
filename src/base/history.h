@@ -2,18 +2,18 @@
    (`crates/ui/src/history.rs` is a re-export of this one, not a second copy.)
 
    Rust's `History<I: HistoryItem>` is generic over the item and keeps two
-   stacks plus a version counter and a grouping interval. This is the shape the
-   tree actually uses: one array of strings and a cursor into it, which is what
-   a text field's undo needs and all it needs. */
+   stacks plus a version counter and a grouping interval. This specialization
+   keeps the string/cursor API the C++ tree uses, with Rust's default maximum
+   of 1000 rather than a fixed storage array. */
 
 #include "gpui/gpui.h"
 
 namespace gpui {
 
 struct History {
-    Str items[32] = {};
-    int n = 0;
+    Vec<Str> items;
     int cursor = -1;
+    int maxItems = 1000;
 
     void Push(Str s);
     bool CanUndo() const;

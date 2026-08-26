@@ -3,29 +3,24 @@
 namespace gpui {
 
 bool ToastPush(ToastStackState* s, int id, int timeoutMs) {
-    if (s->n >= kToastStackCap) {
-        return false;
-    }
     ToastEntry e;
     e.id = id;
     e.status = ToastStatus::Starting;
     e.hasTimeout = timeoutMs > 0;
     e.timeoutRemainingMs = timeoutMs;
     e.elapsedMs = 0;
-    s->entries[s->n] = e;
-    s->n++;
-    return true;
+    return s->entries.Append(e);
 }
 
 static void ToastEraseAt(ToastStackState* s, int i) {
-    for (int j = i; j < s->n - 1; j++) {
+    for (int j = i; j < s->entries.len - 1; j++) {
         s->entries[j] = s->entries[j + 1];
     }
-    s->n--;
+    s->entries.len--;
 }
 
 bool ToastRemove(ToastStackState* s, int id) {
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->entries.len; i++) {
         if (s->entries[i].id == id) {
             ToastEraseAt(s, i);
             return true;
@@ -36,7 +31,7 @@ bool ToastRemove(ToastStackState* s, int id) {
 
 bool ToastAdvance(ToastStackState* s, int deltaMs, bool paused) {
     bool changed = false;
-    for (int i = 0; i < s->n; i++) {
+    for (int i = 0; i < s->entries.len; i++) {
         ToastEntry* e = &s->entries[i];
         switch (e->status) {
             case ToastStatus::Starting:
@@ -67,7 +62,7 @@ bool ToastAdvance(ToastStackState* s, int deltaMs, bool paused) {
         }
     }
     int i = 0;
-    while (i < s->n) {
+    while (i < s->entries.len) {
         if (s->entries[i].status == ToastStatus::Ending &&
             s->entries[i].elapsedMs >= s->exitMs) {
             ToastEraseAt(s, i);

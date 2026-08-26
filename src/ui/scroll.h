@@ -20,9 +20,9 @@ struct Scrollable {
     float scrollX = 0;
     float h = 200;
     ScrollAxis axis = ScrollAxis::Vertical;
-    // ScrollbarMode. Always is the mode this tree defaults to; Scrolling is
-    // the other, and fades the bars out after an idle two seconds.
-    ScrollbarMode mode = ScrollbarMode::Always;
+    // No explicit mode reads the projected Base theme (Scrolling by default).
+    ScrollbarMode mode = ScrollbarMode::Scrolling;
+    bool modeSet = false;
     // Where a scrollbar press, a drag or the wheel reports the offset it
     // worked out. The view owns the offsets, so it is the one that stores
     // them.

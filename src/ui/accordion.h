@@ -48,8 +48,7 @@ struct Accordion {
     bool bordered = true;
     bool disabled = false;
     UiSize size = UiSize::Medium;
-    AccordionItem* items[8] = {};
-    int nItems = 0;
+    ArenaVec<AccordionItem*> items;
     Listener onToggle;
 
     static Accordion* New(Ctx* cx, Str id);

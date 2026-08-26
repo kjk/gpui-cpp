@@ -1,6 +1,7 @@
 #include "ui/root.h"
 #include "gpui/platform.h"
 #include "ui/window_border.h"
+#include "ui/global_state.h"
 
 namespace gpui {
 
@@ -87,6 +88,7 @@ Root* Root::UseWindowLayers(bool v) {
 }
 
 El* Root::IntoEl() {
+    UiSelectionFrameBegin(cx->app);
     const Theme& th = cx->theme();
     El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.tokens.background);
     if (child) {

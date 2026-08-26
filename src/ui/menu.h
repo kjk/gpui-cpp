@@ -1,7 +1,7 @@
 /* Themed menu — crates/ui/src/menu */
 
 #include "ui/sizing.h"
-#include "base/popup_menu.h"
+#include "ui/popup_menu.h"
 
 namespace gpui {
 
@@ -147,6 +147,11 @@ struct AppMenuBarState {
                             const HoverEvent* ev, intptr_t ix);
 };
 
+struct AppMenuBarItem {
+    Str title = {};
+    PopupMenu* menu = nullptr;
+};
+
 // on_move_left / on_move_right: both wrap, and neither does anything while no
 // menu is open.
 int AppMenuBarNextIndex(int selected, int count);
@@ -159,9 +164,7 @@ struct AppMenuBar {
     Ctx* cx = nullptr;
     Str id = {};
     Entity<AppMenuBarState> state = {};
-    Str titles[12] = {};
-    PopupMenu* menus[12] = {};
-    int n = 0;
+    ArenaVec<AppMenuBarItem> items;
 
     static AppMenuBar* New(Ctx* cx, Str id, Entity<AppMenuBarState> state);
     AppMenuBar* Menu(Str title, PopupMenu* menu);

@@ -533,9 +533,12 @@ enum class ThemeMode : uint8_t {
     Dark
 };
 
-// The two palettes in force, which is what everything paints from.
+// The immutable defaults, used to resolve a theme file and by pure logic
+// tests. Active palettes are application-owned and take an App.
 const Theme& ThemeDark();
 const Theme& ThemeLight();
+const Theme& ThemeDark(const App* app);
+const Theme& ThemeLight(const App* app);
 // ThemeColor::dark() / ::light(): the palette a theme file is resolved
 // against, before any config has been applied to it. It never changes, which
 // is what keeps two themes applied in a row from compounding.
@@ -543,17 +546,16 @@ const Theme& ThemeDefaultDark();
 const Theme& ThemeDefaultLight();
 // The last step of Theme::apply_config: the resolved palette becomes the
 // light or the dark theme. `ui/theme.h` is what produces one.
-void ThemeInstall(ThemeMode mode, const Theme& t);
+void ThemeInstall(App* app, ThemeMode mode, const Theme& t);
 // Theme::font_size and Theme::radius, which the story's Appearance menu
 // writes the way Rust writes `Theme::global_mut(cx).font_size`. The themes
-// here are shared statics rather than a per-app Global, so a change is the
-// process', not one window's. `radius_lg` follows Rust's rule: two more than
-// the radius, or nothing when the radius is nothing.
-void ThemeSetRadius(float radius);
+// `radius_lg` follows Rust's rule: two more than the radius, or nothing when
+// the radius is nothing.
+void ThemeSetRadius(App* app, float radius);
 // The root font size every element inherits from, and what an explicit size
 // is measured against: a `Font(12)` is twelve at the default 16, and grows
 // with it, which is what Rust gets for free by spelling its sizes in rems.
-float ThemeFontSize();
+float ThemeFontSize(const App* app);
 // One wheel notch, in DIPs. GPUI carries a notch as `ScrollDelta::Lines` —
 // SPI_GETWHEELSCROLLLINES lines, three by default — and turns it into pixels
 // with the line height of the text being scrolled, at the point the delta is
@@ -561,20 +563,23 @@ float ThemeFontSize();
 // so this is the window's own: the theme font size at `gpui::phi()`, which is
 // what TextStyle::line_height defaults to. Three lines of 16px text is 78
 // DIPs, and a fixed 48 was what this tree scrolled before.
-float WheelNotchPixels();
-void ThemeSetFontSize(float px);
+float WheelNotchPixels(const App* app);
+void ThemeSetFontSize(App* app, float px);
 // The theme belongs to App, the way Rust keeps it as a Global; read it with
 // cx->theme(). ThemeNow() is the paint-time fallback for code below Ctx.
 // Theme::focus_ring. The ring is painted outside the element's border, so an
 // ancestor that clips its content cuts it off; an application whose layout
 // clips heavily turns it off here and keeps the tinted border, which takes no
-// room. Like the scrollbar mode and the font size, it is one process-wide
-// setting rather than one window's Global.
-bool ThemeFocusRing();
-void ThemeSetFocusRing(bool on);
-const Theme& ThemeNow();
+// room.
+bool ThemeFocusRing(const App* app);
+void ThemeSetFocusRing(App* app, bool on);
+const Theme& ThemeNow(const App* app);
 void ThemeSet(App* app, ThemeMode mode);
-ThemeMode ThemeGet();
+ThemeMode ThemeGet(const App* app);
+// A styled layer can mirror theme changes into the unstyled layer it skins.
+// gpui only owns the callback seam; it never names either layer's types.
+using ThemeSyncFn = void (*)(App* app);
+void ThemeSetSyncFn(App* app, ThemeSyncFn fn);
 
 // ─── geometry ───────────────────────────────────────────────────────────
 //
@@ -1132,9 +1137,8 @@ enum class Overflow : uint8_t {
 // and then fades over the rest of FADE_OUT_DURATION. It needs a clock per
 // scroll area, which is keyed off `El::ScrollId` the way Rust keys its state
 // off the element id; an area with no id of its own has nowhere to keep the
-// clock and stays up. Our theme default is still Always — a story shot of a
-// scrollable page should show its bar — and the story's Appearance menu
-// offers all three.
+// clock and stays up. The theme default is Rust's Scrolling; the story's
+// Appearance menu offers all three.
 enum class ScrollbarMode : uint8_t {
     Always,
     Hover,
@@ -1182,13 +1186,13 @@ enum class ScrollbarEntrance : uint8_t {
 // in `theme/mod.rs`'s `scrollbar_motion`.
 struct ScrollbarMotion {
     // How long visibility is held after the last scroll, drag, or hover.
-    float idle = 2.f;
+    float idle = 0;
     // How long the bar takes to become fully visible.
-    float enter = 0.3f;
+    float enter = 0;
     // How long it takes to fade away once the idle hold expires.
-    float exit = 0.5f;
+    float exit = 0;
     // How long the thumb takes to reach a new width.
-    float expand = 0.3f;
+    float expand = 0;
     ScrollbarEntrance entrance = ScrollbarEntrance::Fade;
     ScrollbarEntrance thumbHoverEntrance = ScrollbarEntrance::Fade;
 };
@@ -1221,8 +1225,8 @@ float ScrollbarSlideOffset(float trackWidth, float position);
 
 // The default Theme::scrollbar_mode. An element that names its own wins, the
 // way `Scrollbar::new().mode(..)` overrides the theme's.
-ScrollbarMode ScrollbarModeNow();
-void ScrollbarModeSet(ScrollbarMode m);
+ScrollbarMode ScrollbarModeNow(const App* app);
+void ScrollbarModeSet(App* app, ScrollbarMode m);
 // Drops what the Scrolling bars remember. The app's own teardown; a caller
 // has no reason to.
 void ScrollFadeClear();
@@ -1748,6 +1752,10 @@ struct El {
     bool clickFromPath = false;
     // El::StopClick — see HitRect::stopClick.
     bool stopClick = false;
+    // The press belongs to a control with selection behavior of its own.
+    // Base's window-level text selection waits until mouse-down bubbling has
+    // finished and then consults this through GlobalState.
+    bool suppressTextSelection = false;
     Func0 onClick;
     Listener listener;
     // El::OnClickAction — dispatched from the release, beside onClick.
@@ -1846,6 +1854,18 @@ struct El {
     // unless the caller passed one.
     ScrollbarMode scrollMode = ScrollbarMode::Always;
     bool scrollModeSet = false;
+    // Base ScrollbarTheme projected by crates/ui. Plain gpui scroll boxes
+    // leave this unset and use the runtime palette fallback; a Base scrollbar
+    // carries its own layer-owned motion and paint styles.
+    ScrollbarMotion scrollMotion = {};
+    Background scrollTrack = {};
+    Background scrollTrackActive = {};
+    Background scrollThumb = {};
+    Background scrollThumbHover = {};
+    Rgba scrollTrackActiveBorder = {};
+    float scrollThumbRadius = 0;
+    bool scrollThemeSet = false;
+    bool scrollTrackActiveBorderSet = false;
     // A box that scrolls without showing a bar. In Rust the scrolling
     // container and the Scrollbar are two elements, so a container with no
     // Scrollbar beside it simply has none; the box paints its own bar here,
@@ -2055,6 +2075,7 @@ struct El {
     El* OnMouseUpOut(Listener l);
     // cx.stop_propagation() for the click this element takes.
     El* StopClick();
+    El* SuppressTextSelection();
     El* OnDrop(Str acceptKind, Listener l);
     // StyleRefinement, applied at layout time rather than as the caller
     // chains: a semantic state — selected, disabled — is meant to win over the
@@ -2231,6 +2252,7 @@ struct HitRect {
     // it. A field's clear button is the case: pressing the × must not also be
     // a press on the trigger it sits in.
     bool stopClick = false;
+    bool suppressTextSelection = false;
 };
 
 // A scrolled box the frame painted, and the scrollbar drawn down its right
@@ -2416,6 +2438,7 @@ struct InspectorState {
 };
 
 struct PaintCtx {
+    App* app = nullptr;
     PaintApp* pa = nullptr;
     PaintTarget* rt = nullptr;
     // Window::element_opacity: the Style::opacity of everything this element
@@ -4268,6 +4291,56 @@ struct EntitySub {
     Listener handler = {};
 };
 
+// App::global<T>: application-owned services and configuration shared by
+// views. Rust keys these slots by TypeId; an inline template key gives C++ the
+// same stable identity without RTTI. Values have explicit ownership and are
+// released by AppFree, so two Apps never share mutable component state.
+using AppGlobalFreeFn = void (*)(void* value);
+
+struct AppGlobalSlot {
+    const void* key = nullptr;
+    void* value = nullptr;
+    AppGlobalFreeFn freeValue = nullptr;
+};
+
+void* AppGlobalGetRaw(const App* app, const void* key);
+void AppGlobalSetRaw(App* app, const void* key, void* value,
+                     AppGlobalFreeFn freeValue);
+bool AppGlobalRemoveRaw(App* app, const void* key);
+void AppGlobalClear(App* app);
+
+template <typename T>
+const void* AppGlobalKey() {
+    static const uint8_t key = 0;
+    return &key;
+}
+
+template <typename T>
+T* AppGlobalGet(const App* app) {
+    return (T*)AppGlobalGetRaw(app, AppGlobalKey<T>());
+}
+
+template <typename T>
+void AppGlobalDelete(void* value) {
+    delete (T*)value;
+}
+
+template <typename T>
+T* AppGlobalEnsure(App* app) {
+    T* value = AppGlobalGet<T>(app);
+    if (value || !app) {
+        return value;
+    }
+    value = new T();
+    AppGlobalSetRaw(app, AppGlobalKey<T>(), value, &AppGlobalDelete<T>);
+    return value;
+}
+
+template <typename T>
+bool AppGlobalRemove(App* app) {
+    return AppGlobalRemoveRaw(app, AppGlobalKey<T>());
+}
+
 struct App {
     PaintApp* paint = nullptr;
     ThemeMode themeMode = ThemeMode::Light;
@@ -4281,6 +4354,8 @@ struct App {
     // cx.observe: the same for the untyped channel, where `emitter` is the
     // entity being watched.
     Vec<EntitySub> observers;
+    // Theme, registries and behavior defaults owned by this application.
+    Vec<AppGlobalSlot> globals;
     int nextSubId = 1;
     int exitCode = 0;
 
@@ -5181,6 +5256,11 @@ void AppSetMenus(App* app, const MenuDef* menus, int n);
 // numbering is the contract between the two halves — the selectable rows in
 // preorder, from 1 — so it is worth being able to ask.
 bool AppMenuRowForId(int id, uint32_t* action, intptr_t* arg);
+bool AppMenuRowForId(const App* app, int id, uint32_t* action,
+                     intptr_t* arg);
+// Drops the menu model owned by this App. AppFree calls it before globals are
+// destroyed so the platform callback cannot retain a stale App pointer.
+void AppMenuClear(App* app);
 
 // window.activate_window() / cx.activate(true): bring this window forward
 // and the application with it, restoring it if it was minimized. What a

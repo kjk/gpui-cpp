@@ -343,10 +343,8 @@ void DataTable::Dump(Vec<Str>* heads, Vec<Str>* cells) {
     DumpRange(0, nRows, heads, cells);
 }
 DataTable* DataTable::GroupHeader(const TableGroupCell* cells, int n) {
-    if (nGroupHeaders < 4 && cells && n > 0) {
-        groupRows[nGroupHeaders] = cells;
-        groupRowLens[nGroupHeaders] = n;
-        nGroupHeaders++;
+    if (cells && n > 0) {
+        groupHeaders.Append(a, TableGroupHeader{cells, n});
     }
     return this;
 }
@@ -659,7 +657,7 @@ El* DataTable::BuildEl() {
         return e;
     };
 
-    for (int g = 0; g < nGroupHeaders; g++) {
+    for (int g = 0; g < groupHeaders.len; g++) {
         // Every head row is one table row tall — state.rs renders the group
         // bands and the leaf heads through the same `h(table_row_height())`,
         // which is what makes the head block a whole number of rows.
@@ -674,14 +672,14 @@ El* DataTable::BuildEl() {
         El* gs = Div(a)->FlexRow()->Shrink0();
         gsWrap->Child(gs);
         int col = 0;
-        const TableGroupCell* cells = groupRows[g];
-        for (int i = 0; i < groupRowLens[g]; i++) {
+        const TableGroupCell* cells = groupHeaders[g].cells;
+        for (int i = 0; i < groupHeaders[g].n; i++) {
             int span = cells[i].span;
             float w = 0;
             for (int k = 0; k < span && col + k < nColumns; k++) {
                 w += ColWidth(s, TableColAt(s, col + k));
             }
-            bool last = i == groupRowLens[g] - 1;
+            bool last = i == groupHeaders[g].n - 1;
             // A band that ends where the pinned columns do belongs to that
             // pane; one that straddles the seam rides with the scrolling
             // side, which is where most of it is.
@@ -873,9 +871,9 @@ El* DataTable::BuildEl() {
                 s->mode == TableSelectionMode::Row) {
                 // state.rs paints the selected row the same way a list item
                 // does, off the table's own pair of colors.
-                ListActiveStyle sel = ListActiveStyleOf(th.tokens.tableActive,
-                                                        th.tableActiveBorder,
-                                                        th.tokens.accent, true);
+                ListActiveStyle sel = ListActiveStyleOf(
+                    ListSettingsNow(cx->app), th.tokens.tableActive,
+                    th.tableActiveBorder, th.tokens.accent, true);
                 row->Bg(sel.bg);
                 if (sel.hasBorder) {
                     row->Child(ListActiveOverlay(a, sel.border, 0));
@@ -916,9 +914,9 @@ El* DataTable::BuildEl() {
             }
             if (s && s->mode == TableSelectionMode::Cell &&
                 s->selectedCellRow == r && s->selectedCellCol == c) {
-                ListActiveStyle sel = ListActiveStyleOf(th.tokens.tableActive,
-                                                        th.tableActiveBorder,
-                                                        th.tokens.accent, true);
+                ListActiveStyle sel = ListActiveStyleOf(
+                    ListSettingsNow(cx->app), th.tokens.tableActive,
+                    th.tableActiveBorder, th.tokens.accent, true);
                 td->Bg(sel.bg);
                 if (sel.hasBorder) {
                     td->Child(ListActiveOverlay(a, sel.border, 0));

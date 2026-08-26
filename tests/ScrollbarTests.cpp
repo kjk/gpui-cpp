@@ -180,6 +180,9 @@ static void MotionlessSnaps() {
 // The mode decides the choreography: hover mode slides its thumb in, the
 // other two fade in place.
 static void HoverModeIsTheOneThatSlides() {
+    ScrollbarMotion bare;
+    utassert(bare.idle == 0 && bare.enter == 0 && bare.exit == 0 &&
+             bare.expand == 0);
     utassert(ScrollbarMotionFor(ScrollbarMode::Hover).thumbHoverEntrance ==
              ScrollbarEntrance::SlideAndFade);
     utassert(ScrollbarMotionFor(ScrollbarMode::Scrolling).thumbHoverEntrance ==

@@ -83,7 +83,7 @@ static void PaintStroke(PaintCtx* ctx, const Stroke& s, const Bounds& b) {
 
 static void PaintCanvas(PaintCtx* ctx, El* e, void* user) {
     auto* self = (BrushApp*)user;
-    const Theme& th = ThemeNow();
+    const Theme& th = ThemeNow(ctx->app);
     Bounds b = e->Bounds();
     if (self->showGrid) {
         Rgba grid = RgbaOpacity(th.border, 0.2f);
@@ -305,6 +305,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("brush"));
     Entity<BrushApp> view = EntityNew<BrushApp>(app);

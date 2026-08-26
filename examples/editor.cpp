@@ -970,26 +970,26 @@ static void OnSwitchThemeModeAction(EditorApp*, Ctx* cx,
 }
 
 static void OnSelectFontAction(EditorApp*, Ctx* cx, const ActionEvent* ev) {
-    ThemeSetFontSize((float)ev->arg);
+    ThemeSetFontSize(cx->app, (float)ev->arg);
     Notify(cx);
 }
 
 static void OnSelectRadiusAction(EditorApp*, Ctx* cx, const ActionEvent* ev) {
-    ThemeSetRadius((float)ev->arg);
+    ThemeSetRadius(cx->app, (float)ev->arg);
     Notify(cx);
 }
 
 static void OnSelectScrollbarModeAction(EditorApp*, Ctx* cx,
                                         const ActionEvent* ev) {
-    ScrollbarModeSet((ScrollbarMode)(int)ev->arg);
+    ScrollbarModeSet(cx->app, (ScrollbarMode)(int)ev->arg);
     Notify(cx);
 }
 
 static void OnToggleListActiveHighlightAction(EditorApp*, Ctx* cx,
                                               const ActionEvent*) {
-    ListSettings s = ListSettingsNow();
+    ListSettings s = ListSettingsNow(cx->app);
     s.activeHighlight = !s.activeHighlight;
-    ListSettingsSet(s);
+    ListSettingsSet(cx->app, s);
     Notify(cx);
 }
 
@@ -1061,7 +1061,7 @@ static int EditorBuildMenus(Ctx* cx, MenuDef* out, int cap) {
     if (cap < kEditorMenus) {
         return 0;
     }
-    bool dark = ThemeGet() == ThemeMode::Dark;
+    bool dark = ThemeGet(cx->app) == ThemeMode::Dark;
     MenuRow* appearance = EditorRows(cx, 2);
     appearance[0].label = StrL("Light");
     appearance[0].action = ActSwitchThemeMode();
@@ -1266,16 +1266,16 @@ static const ApRow kAppearance[] = {
 static const int kAppearanceRows = (int)(sizeof(kAppearance) / sizeof(ApRow));
 
 // menu_with_check: which row is the one in force.
-static bool ApChecked(const EditorApp* self, const ApRow& r) {
+static bool ApChecked(const EditorApp* self, Ctx* cx, const ApRow& r) {
     switch (r.kind) {
         case ApKind::Font:
-            return ThemeFontSize() == r.value;
+            return ThemeFontSize(cx->app) == r.value;
         case ApKind::Radius:
-            return ThemeNow().radius == r.value;
+            return ThemeNow(cx->app).radius == r.value;
         case ApKind::Scroll:
-            return ScrollbarModeNow() == (ScrollbarMode)(int)r.value;
+            return ScrollbarModeNow(cx->app) == (ScrollbarMode)(int)r.value;
         case ApKind::ListHighlight:
-            return ListSettingsNow().activeHighlight;
+            return ListSettingsNow(cx->app).activeHighlight;
         case ApKind::Fps:
             return self->fpsMonitor;
         case ApKind::MenuBar:
@@ -1322,7 +1322,7 @@ static El* EditorAppearanceMenu(EditorApp* self, Ctx* cx) {
             default:
                 menu->MenuWithAction(Str(r.label), ApAction(r.kind),
                                      (intptr_t)r.value);
-                menu->Checked(ApChecked(self, r));
+                menu->Checked(ApChecked(self, cx, r));
                 break;
         }
     }
@@ -1541,6 +1541,7 @@ int GpuiMain(int argc, char** argv) {
     (void)argc;
     (void)argv;
     App* app = AppNew();
+    component::Init(app);
     AssetsClear();
     AssetsAddDefaultRoots(StrL("editor"));
     Entity<EditorApp> view = EntityNew<EditorApp>(app);

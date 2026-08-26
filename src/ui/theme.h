@@ -98,17 +98,22 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base);
 
 // The default themes, from the embedded `default-theme.json`. Idempotent, and
 // every other entry point calls it, so an application never has to.
-void ThemeRegistryInit();
+void ThemeRegistryInit(App* app);
+
+// Theme::sync_base: replace Base's application-owned theme with the active
+// styled projection. Component initialization installs this as the callback
+// for every public theme mutation.
+void ThemeSyncBase(App* app);
 
 // load_themes_from_str: every theme in a ThemeSet document joins the table
 // under its own name. A name already taken is skipped, the way Rust's is.
 // Returns how many were added.
-int ThemeRegistryLoadStr(Str json);
+int ThemeRegistryLoadStr(App* app, Str json);
 
 // Rust's `reload()` over its `themes_dir`: every `*.json` in `dir`, with an
 // unparseable one skipped rather than fatal. Returns how many themes were
 // added. A relative path is resolved against the asset roots.
-int ThemeRegistryLoadDir(Str dir);
+int ThemeRegistryLoadDir(App* app, Str dir);
 
 // `Theme::apply_semantic_config_str`: a theme written in the semantic
 // vocabulary — `{"tokens": {"colors": {..}, "radius": {..}, ..}}` — resolved
@@ -116,7 +121,7 @@ int ThemeRegistryLoadDir(Str dir);
 // optional and what a document leaves out stays as it was. False for a
 // document that is not one. `out` takes the resolved set, which is what Rust
 // hands back for application-owned UI to read.
-bool ThemeApplySemanticConfigStr(ThemeMode mode, Str json,
+bool ThemeApplySemanticConfigStr(App* app, ThemeMode mode, Str json,
                                  SemanticThemeTokens* out = nullptr);
 // The resolve half on its own, over tokens the caller already has: what
 // `SemanticThemeConfig::apply_to` does. Exposed for the tests, which drive it
@@ -125,11 +130,11 @@ bool ThemeSemanticConfigApply(const JsonValue* doc, SemanticThemeTokens* io);
 
 // sorted_themes: the defaults first, then light before dark, then by name
 // folded to lower case.
-int ThemeRegistryCount();
-const ThemeConfig* ThemeRegistryAt(int ix);
-const ThemeConfig* ThemeRegistryFind(Str name);
+int ThemeRegistryCount(const App* app);
+const ThemeConfig* ThemeRegistryAt(const App* app, int ix);
+const ThemeConfig* ThemeRegistryFind(const App* app, Str name);
 // The name of the theme installed for each mode, which is what a picker ticks.
-Str ThemeRegistryActive(ThemeMode mode);
+Str ThemeRegistryActive(const App* app, ThemeMode mode);
 
 // Theme::apply_config: the config is resolved against its mode's default
 // palette and becomes the light or the dark theme. Switching to that mode
@@ -140,6 +145,6 @@ bool ThemeRegistryApply(App* app, Str name);
 // Puts both modes back on the palettes the tree was built with.
 void ThemeRegistryReset(App* app);
 
-void ThemeRegistryFree();
+void ThemeRegistryFree(App* app);
 
 } // namespace gpui

@@ -1,7 +1,7 @@
 /* Themed list — crates/ui/src/list */
 
 #include "ui/sizing.h"
-#include "base/list.h"
+#include "base/list.h" // behavior shared while ui/list extraction completes
 
 namespace gpui {
 

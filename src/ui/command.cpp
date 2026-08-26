@@ -623,17 +623,19 @@ Command* Command::OnCancel(Listener fn) {
     return this;
 }
 
-// What a row is built against. The virtual list's row builder takes an index
-// and the frame's Ctx and nothing else — Rust's is a closure over the view —
-// so the palette being rendered is put here for the length of the call that
-// builds its rows, which is inside `IntoEl` and never nested.
-static CommandState* gRowState = nullptr;
-static Entity<CommandState> gRowEntity = {};
+// What Rust's row-builder closure captures. It is frame-owned and carries an
+// Entity handle rather than the state itself, so two nested or concurrent
+// window renders cannot overwrite each other's command palette.
+struct CommandRowContext {
+    Entity<CommandState> state = {};
+};
 
-static El* CommandRowEl(Ctx* cx, int rowIx) {
+static El* CommandRowEl(void* user, Ctx* cx, int rowIx) {
     Arena* a = cx->a;
     const Theme& th = cx->theme();
-    CommandState* s = gRowState;
+    CommandRowContext* rowCx = (CommandRowContext*)user;
+    Entity<CommandState> entity = rowCx ? rowCx->state : Entity<CommandState>{};
+    CommandState* s = entity.Get(cx);
     if (!s || rowIx < 0 || rowIx >= s->rows.len) {
         return Div(a);
     }
@@ -697,8 +699,8 @@ static El* CommandRowEl(Ctx* cx, int rowIx) {
         }
     }
     if (!disabled) {
-        Listener click = ListenTo(gRowEntity, &CommandState::OnRowClick, 0);
-        Listener hover = ListenTo(gRowEntity, &CommandState::OnRowHover, 0);
+        Listener click = ListenTo(entity, &CommandState::OnRowClick, 0);
+        Listener hover = ListenTo(entity, &CommandState::OnRowHover, 0);
         line->HoverBg(th.tokens.accent);
         BindClick(line, StrDup(cx->a, fmt("row-%d", rowIx)),
                   ListenerArg(click, matchIx));
@@ -781,8 +783,8 @@ El* Command::IntoEl() {
                                             ScrollStrategy::Top);
             s->pendingScroll = -1;
         }
-        gRowState = s;
-        gRowEntity = state;
+        CommandRowContext* rowCx = ArenaNew<CommandRowContext>(a);
+        rowCx->state = state;
         El* list = VirtualList::New(cx, s->rows.len)
                        ->Id(StrL("list"))
                        ->Sizes(s->rowSizes.els)
@@ -790,10 +792,8 @@ El* Command::IntoEl() {
                        ->Handle(&s->scroll)
                        ->Axis(ScrollAxis::Vertical)
                        ->Pad(4)
-                       ->Row(CommandRowEl)
+                       ->Row(CommandRowEl, rowCx)
                        ->IntoEl();
-        gRowState = nullptr;
-        gRowEntity = {};
         listBox->Child(list);
     }
     box->Child(listBox);

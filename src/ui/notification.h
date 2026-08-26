@@ -75,9 +75,8 @@ struct NotificationItem {
 // and which corner they stack in. The lifecycle is the toast stack's, so a
 // notification is a toast that happens to look like one.
 struct NotificationListState {
-    ToastStackState stack = {};
-    NotificationItem items[kToastStackCap] = {};
-    int n = 0;
+    ToastStackState stack;
+    Vec<NotificationItem> items;
     int nextId = 1;
     NotificationAnchor placement = NotificationAnchor::TopRight;
     float width = kNotificationWidth;
@@ -163,7 +162,7 @@ Str NotificationSystemTag(char* buf, int cap, int id);
 bool NotificationTagId(Str tag, int* outId);
 // notification::init: install the app-global response handler. Idempotent,
 // and called by the first system push.
-void NotificationInitSystem();
+void NotificationInitSystem(App* app);
 // The registry, which the push fills in and a response empties.
 void NotificationSystemInsert(const NotificationSystemEntry& e);
 // Retract the system notification for `id`, but only if it was posted from
@@ -174,6 +173,7 @@ void NotificationSystemDismiss(int id, Window* win);
 void NotificationSystemDismissAll(Window* win);
 const NotificationSystemEntry* NotificationSystemFind(int id, Window* win);
 int NotificationSystemCount();
+int NotificationSystemCount(const App* app);
 // What the platform calls with the tag of the notification the user clicked.
 void NotificationSystemResponse(Str tag);
 

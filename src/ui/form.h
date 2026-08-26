@@ -38,8 +38,7 @@ struct FormField {
 struct Form {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    FormField fields[12] = {};
-    int n = 0;
+    ArenaVec<FormField> fields;
     bool horizontal = false;
     int columns = 1;
     float labelWidth = 0; // 0: 140, or 100 in a multi-column form

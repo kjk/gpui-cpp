@@ -53,14 +53,14 @@ struct CancelBound {
     uint32_t context = 0;
     uint32_t generation = 0;
 };
-static const int kMaxCancelContexts = 8;
-static CancelBound gCancelBound[kMaxCancelContexts];
-static int gNCancelBound = 0;
+// The keymap is process-owned, so this registry is too. Rust's key context
+// table has no arbitrary ceiling; neither does the port's.
+static Vec<CancelBound> gCancelBound;
 
 void CancelInitKeys(const char* context) {
     uint32_t id = KeyContextOf(Str(context));
     uint32_t gen = KeymapGeneration();
-    for (int i = 0; i < gNCancelBound; i++) {
+    for (int i = 0; i < gCancelBound.len; i++) {
         if (gCancelBound[i].context != id) {
             continue;
         }
@@ -72,12 +72,8 @@ void CancelInitKeys(const char* context) {
         KeymapBind(&b, 1);
         return;
     }
-    if (gNCancelBound >= kMaxCancelContexts) {
-        return;
-    }
-    gCancelBound[gNCancelBound].context = id;
-    gCancelBound[gNCancelBound].generation = gen;
-    gNCancelBound++;
+    CancelBound bound = {id, gen};
+    gCancelBound.Append(bound);
     KeyBinding b = {"escape", action::Cancel(), context};
     KeymapBind(&b, 1);
 }

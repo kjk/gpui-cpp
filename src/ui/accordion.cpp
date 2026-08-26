@@ -141,8 +141,8 @@ Accordion* Accordion::WithSize(UiSize s) {
     return this;
 }
 Accordion* Accordion::Item(AccordionItem* it) {
-    if (it && nItems < 8) {
-        items[nItems++] = it;
+    if (it) {
+        items.Append(a, it);
     }
     return this;
 }
@@ -166,7 +166,7 @@ El* Accordion::IntoEl() {
     float font = AccordionFontPx(size);
     float padY = 0, padX = 0;
     AccordionPad(size, &padY, &padX);
-    for (int i = 0; i < nItems; i++) {
+    for (int i = 0; i < items.len; i++) {
         // The item's own name, on the stack while the item is built: the two
         // transitions below are named among the item's parts rather than
         // spelling the group and the row out again.
@@ -251,7 +251,7 @@ El* Accordion::IntoEl() {
         // The separator belongs to the item, so it lands under the panel and
         // not between the trigger and its body.
         El* itEl = it->IntoEl()->Font(font);
-        if (i + 1 < nItems) {
+        if (i + 1 < items.len) {
             itEl->BorderB(1, th.border);
         }
         root->Child(itEl);

@@ -1,4 +1,5 @@
 #include "base/resizable.h"
+#include "base/theme.h"
 
 namespace gpui {
 
@@ -120,14 +121,14 @@ void ResizableState::OnHandleDrag(ResizableState* self, Ctx* cx,
     // given or taken space, so the arithmetic sees the panels that are drawn
     // and nothing else. Rust leaves the hidden slot in its array and lets its
     // number drift; the sizes are compacted here and written back instead.
-    const int kMaxPanels = 64;
-    float sizes[kMaxPanels] = {};
-    float mins[kMaxPanels] = {};
-    float maxs[kMaxPanels] = {};
-    int back[kMaxPanels] = {};
+    int cap = self->sizes.len;
+    float* sizes = (float*)Alloc(cx->a, (int)sizeof(float) * cap);
+    float* mins = (float*)Alloc(cx->a, (int)sizeof(float) * cap);
+    float* maxs = (float*)Alloc(cx->a, (int)sizeof(float) * cap);
+    int* back = (int*)Alloc(cx->a, (int)sizeof(int) * cap);
     int n = 0;
     int at = -1;
-    for (int i = 0; i < self->sizes.len && n < kMaxPanels; i++) {
+    for (int i = 0; i < self->sizes.len; i++) {
         if (i < self->shown.len && !self->shown[i]) {
             continue;
         }
@@ -184,6 +185,10 @@ Resizable* Resizable::New(Ctx* cx, Str id, Entity<ResizableState> state,
     r->a = a;
     r->cx = cx;
     r->id = id;
+    if (const BaseTheme* theme = BaseThemeGlobal(cx->app)) {
+        r->handleColor = theme->resizable.handle;
+        r->handleDragColor = theme->resizable.activeHandle;
+    }
     // `self.state.unwrap_or(window.use_keyed_state(self.id, .., ResizableState
     // ::default()))`: a group only needs the caller to hold its state when the
     // caller means to drive it -- the programmatic story resizes panels from

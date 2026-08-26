@@ -7,6 +7,41 @@
 
 namespace gpui {
 
+void ThemeSyncBase(App* app) {
+    if (!app) {
+        return;
+    }
+    const Theme& ui = ThemeNow(app);
+    BaseTheme base;
+    base.tokens = ThemeSemanticTokens(ui, ThemeFontSize(app));
+    base.scrollbar.mode = ScrollbarModeNow(app);
+    base.scrollbar.motion = ScrollbarMotionFor(base.scrollbar.mode);
+
+    ScrollbarStyles& styles = base.scrollbar.styles;
+    styles.track.background = Background(ui.scrollbarBg);
+    styles.track.hasBackground = true;
+    styles.trackHover.background = Background(ui.scrollbarBg);
+    styles.trackHover.hasBackground = true;
+    styles.trackActive.background = Background(ui.scrollbarBg);
+    styles.trackActive.border = ui.border;
+    styles.trackActive.hasBackground = true;
+    styles.trackActive.hasBorder = true;
+
+    styles.thumb.background = ui.tokens.scrollbarThumb;
+    styles.thumb.radius = ui.radius;
+    styles.thumb.hasBackground = true;
+    styles.thumb.hasRadius = true;
+    styles.thumbHover.background = ui.tokens.scrollbarThumbHover;
+    styles.thumbHover.radius = ui.radius;
+    styles.thumbHover.hasBackground = true;
+    styles.thumbHover.hasRadius = true;
+    styles.thumbActive = styles.thumbHover;
+
+    base.resizable.handle = ui.border;
+    base.resizable.activeHandle = ui.dragBorder;
+    BaseThemeSet(app, base);
+}
+
 #if GPUI_OS_WINDOWS
 static const char kSep = '\\';
 #else
@@ -931,18 +966,27 @@ void ThemeConfigResolve(Theme* out, const ThemeConfig* cfg, const Theme& base) {
 
 // ─── the registry — crates/ui/src/theme/registry.rs ──────────────────────
 
-// The documents and the strings the configs point into. One arena for the
-// lot, freed together, since a theme is never dropped on its own.
-static Arena* gArena = nullptr;
-static Vec<ThemeConfig> gThemes;
-static bool gInited = false;
-static Str gActive[2] = {};
-// The directories LoadDir has already read, so reading one twice is free.
-// Callers treat LoadDir as "make sure these themes are in the registry" and
-// one of them — the story's app menu — says it on every frame; without this
-// each of those calls re-read and re-parsed every file in the directory into
-// gArena, which nothing ever hands back.
-static Vec<Str> gLoadedDirs;
+// The documents and strings configs point into. Rust's ThemeRegistry is an
+// App Global; this has the same lifetime and isolates loaded/active themes
+// between applications.
+struct ThemeRegistryState {
+    Arena* arena = nullptr;
+    Vec<ThemeConfig> themes;
+    Vec<Str> loadedDirs;
+    Str active[2] = {};
+    bool initialized = false;
+
+    ~ThemeRegistryState() {
+        themes.Reset();
+        loadedDirs.Reset();
+        if (arena) {
+            ArenaDelete(arena);
+            arena = nullptr;
+        }
+    }
+};
+
+static ThemeRegistryState* RegistryOf(const App* app);
 
 static ThemeMode ParseMode(Str s) {
     return StrEqI(s, StrL("dark")) ? ThemeMode::Dark : ThemeMode::Light;
@@ -960,15 +1004,15 @@ static bool SortsBefore(const ThemeConfig& a, const ThemeConfig& b) {
     return StrCmpI(a.name.s ? a.name.s : "", b.name.s ? b.name.s : "") < 0;
 }
 
-static void InsertSorted(const ThemeConfig& cfg) {
-    int at = gThemes.len;
-    for (int i = 0; i < gThemes.len; i++) {
-        if (SortsBefore(cfg, gThemes[i])) {
+static void InsertSorted(ThemeRegistryState* state, const ThemeConfig& cfg) {
+    int at = state->themes.len;
+    for (int i = 0; i < state->themes.len; i++) {
+        if (SortsBefore(cfg, state->themes[i])) {
             at = i;
             break;
         }
     }
-    gThemes.InsertAt(at, cfg);
+    state->themes.InsertAt(at, cfg);
 }
 
 // A name is a `Str` into the arena, and `StrSame` wants a null terminator
@@ -986,23 +1030,23 @@ static float JsonFloatOr(const JsonValue* v, const char* key, float fallback) {
     return (float)m->num;
 }
 
-int ThemeRegistryLoadStr(Str json) {
-    ThemeRegistryInit();
-    if (!gArena || !json.s || json.len <= 0) {
+int ThemeRegistryLoadStr(App* app, Str json) {
+    ThemeRegistryState* state = RegistryOf(app);
+    if (!state || !state->arena || !json.s || json.len <= 0) {
         return 0;
     }
     // What a theme keeps — its name, its colors object — points into the
     // document, so an accepted theme pins the parse. A document that adds
     // nothing pins nothing, and the arena goes back to where it was.
-    uint64_t mark = ArenaUsed(gArena);
-    JsonValue* doc = JsonParse(gArena, json);
+    uint64_t mark = ArenaUsed(state->arena);
+    JsonValue* doc = JsonParse(state->arena, json);
     if (!doc) {
-        gArena->PopTo(mark);
+        state->arena->PopTo(mark);
         return 0;
     }
     const JsonValue* themes = JsonGet(doc, "themes");
     if (!themes || themes->kind != JsonKind::Array) {
-        gArena->PopTo(mark);
+        state->arena->PopTo(mark);
         return 0;
     }
     Str setAuthor = JsonString(JsonGet(doc, "author"));
@@ -1014,7 +1058,7 @@ int ThemeRegistryLoadStr(Str json) {
         }
         ThemeConfig cfg;
         cfg.name = JsonString(JsonGet(t, "name"));
-        if (cfg.name.len <= 0 || ThemeRegistryFind(cfg.name)) {
+        if (cfg.name.len <= 0 || ThemeRegistryFind(app, cfg.name)) {
             continue;
         }
         cfg.author = setAuthor;
@@ -1025,30 +1069,35 @@ int ThemeRegistryLoadStr(Str json) {
         cfg.fontSize = JsonFloatOr(t, "font.size", 0);
         cfg.radius = JsonFloatOr(t, "radius", -1);
         cfg.radiusLg = JsonFloatOr(t, "radius.lg", -1);
-        InsertSorted(cfg);
+        InsertSorted(state, cfg);
         added++;
     }
     if (added == 0) {
-        gArena->PopTo(mark);
+        state->arena->PopTo(mark);
     }
     return added;
 }
 
-void ThemeRegistryInit() {
-    if (gInited) {
-        return;
+static ThemeRegistryState* RegistryOf(const App* app) {
+    ThemeRegistryState* state = AppGlobalEnsure<ThemeRegistryState>((App*)app);
+    if (!state || state->initialized) {
+        return state;
     }
-    gInited = true;
-    gArena = ArenaNew();
-    AppOnShutdown(ThemeRegistryFree);
+    state->initialized = true;
+    state->arena = ArenaNew();
     // The two the tree was built with are what everything else resolves
     // against, so they go in first and stay first.
-    ThemeRegistryLoadStr(Str(kDefaultThemeJson));
-    for (int i = 0; i < gThemes.len; i++) {
-        if (gThemes[i].isDefault) {
-            gActive[(int)gThemes[i].mode] = gThemes[i].name;
+    ThemeRegistryLoadStr((App*)app, Str(kDefaultThemeJson));
+    for (int i = 0; i < state->themes.len; i++) {
+        if (state->themes[i].isDefault) {
+            state->active[(int)state->themes[i].mode] = state->themes[i].name;
         }
     }
+    return state;
+}
+
+void ThemeRegistryInit(App* app) {
+    (void)RegistryOf(app);
 }
 
 // ─── a theme written as semantic tokens ──────────────────────────────────
@@ -1168,40 +1217,45 @@ bool ThemeSemanticConfigApply(const JsonValue* doc, SemanticThemeTokens* io) {
     return true;
 }
 
-bool ThemeApplySemanticConfigStr(ThemeMode mode, Str json,
+bool ThemeApplySemanticConfigStr(App* app, ThemeMode mode, Str json,
                                  SemanticThemeTokens* out) {
     if (!json.s || json.len <= 0) {
         return false;
     }
-    ThemeRegistryInit();
+    ThemeRegistryState* registry = RegistryOf(app);
     // The document is read and thrown away: nothing a semantic config holds
     // outlives the colours it is turned into.
     Arena* a = ArenaNew();
     JsonValue* doc = JsonParse(a, json);
-    Theme t = mode == ThemeMode::Dark ? ThemeDark() : ThemeLight();
-    SemanticThemeTokens tokens = ThemeSemanticTokens(t);
+    Theme t = mode == ThemeMode::Dark ? ThemeDark(app) : ThemeLight(app);
+    SemanticThemeTokens tokens = ThemeSemanticTokens(t, ThemeFontSize(app));
     bool ok = doc && ThemeSemanticConfigApply(doc, &tokens);
     // The two font families are the only strings a token set keeps, and they
     // point into the document. They move to the registry's own arena — where
     // every theme's name already lives — so the answer outlives the parse.
-    if (ok && gArena) {
-        tokens.typography.sans = StrDup(gArena, tokens.typography.sans);
-        tokens.typography.mono = StrDup(gArena, tokens.typography.mono);
+    if (ok && registry && registry->arena) {
+        tokens.typography.sans =
+            StrDup(registry->arena, tokens.typography.sans);
+        tokens.typography.mono =
+            StrDup(registry->arena, tokens.typography.mono);
     }
     ArenaDelete(a);
     if (!ok) {
         return false;
     }
     ThemeApplySemanticTokens(&t, tokens);
-    ThemeInstall(mode, t);
+    ThemeInstall(app, mode, t);
     if (out) {
         *out = tokens;
     }
     return true;
 }
 
-int ThemeRegistryLoadDir(Str dir) {
-    ThemeRegistryInit();
+int ThemeRegistryLoadDir(App* app, Str dir) {
+    ThemeRegistryState* state = RegistryOf(app);
+    if (!state || !state->arena) {
+        return 0;
+    }
     char path[kMaxPath];
     int n = dir.len < kMaxPath - 1 ? dir.len : kMaxPath - 1;
     memcpy(path, dir.s ? dir.s : "", (size_t)n);
@@ -1216,12 +1270,12 @@ int ThemeRegistryLoadDir(Str dir) {
     // Already read once. A theme is never dropped, so a second pass over the
     // same directory can only find what is in the registry already.
     Str dirKey = Str(path);
-    for (int i = 0; i < gLoadedDirs.len; i++) {
-        if (SameName(gLoadedDirs[i], dirKey)) {
+    for (int i = 0; i < state->loadedDirs.len; i++) {
+        if (SameName(state->loadedDirs[i], dirKey)) {
             return 0;
         }
     }
-    gLoadedDirs.Append(StrDup(gArena, dirKey));
+    state->loadedDirs.Append(StrDup(state->arena, dirKey));
     // Rust reads the whole directory; a hundred entries is more themes than
     // anyone ships and the listing is a fixed buffer either way.
     const int kMaxEntries = 128;
@@ -1251,7 +1305,7 @@ int ThemeRegistryLoadDir(Str dir) {
         if (text.s) {
             // An unparseable file is skipped rather than fatal, the way
             // Rust's `reload()` logs and carries on.
-            added += ThemeRegistryLoadStr(text);
+            added += ThemeRegistryLoadStr(app, text);
             StrFree(text);
         }
     }
@@ -1259,46 +1313,50 @@ int ThemeRegistryLoadDir(Str dir) {
     return added;
 }
 
-int ThemeRegistryCount() {
-    ThemeRegistryInit();
-    return gThemes.len;
+int ThemeRegistryCount(const App* app) {
+    ThemeRegistryState* state = RegistryOf(app);
+    return state ? state->themes.len : 0;
 }
 
-const ThemeConfig* ThemeRegistryAt(int ix) {
-    ThemeRegistryInit();
-    if (ix < 0 || ix >= gThemes.len) {
+const ThemeConfig* ThemeRegistryAt(const App* app, int ix) {
+    ThemeRegistryState* state = RegistryOf(app);
+    if (!state || ix < 0 || ix >= state->themes.len) {
         return nullptr;
     }
-    return &gThemes[ix];
+    return &state->themes[ix];
 }
 
-const ThemeConfig* ThemeRegistryFind(Str name) {
-    for (int i = 0; i < gThemes.len; i++) {
-        if (SameName(gThemes[i].name, name)) {
-            return &gThemes[i];
+const ThemeConfig* ThemeRegistryFind(const App* app, Str name) {
+    ThemeRegistryState* state = RegistryOf(app);
+    if (!state) {
+        return nullptr;
+    }
+    for (int i = 0; i < state->themes.len; i++) {
+        if (SameName(state->themes[i].name, name)) {
+            return &state->themes[i];
         }
     }
     return nullptr;
 }
 
-Str ThemeRegistryActive(ThemeMode mode) {
-    ThemeRegistryInit();
-    return gActive[(int)mode];
+Str ThemeRegistryActive(const App* app, ThemeMode mode) {
+    ThemeRegistryState* state = RegistryOf(app);
+    return state ? state->active[(int)mode] : Str{};
 }
 
 bool ThemeRegistryApply(App* app, const ThemeConfig* cfg) {
-    ThemeRegistryInit();
-    if (!cfg) {
+    ThemeRegistryState* state = RegistryOf(app);
+    if (!state || !cfg) {
         return false;
     }
     bool dark = cfg->mode == ThemeMode::Dark;
     Theme t;
     ThemeConfigResolve(&t, cfg,
                        dark ? ThemeDefaultDark() : ThemeDefaultLight());
-    ThemeInstall(cfg->mode, t);
-    gActive[(int)cfg->mode] = cfg->name;
+    ThemeInstall(app, cfg->mode, t);
+    state->active[(int)cfg->mode] = cfg->name;
     if (cfg->fontSize > 0) {
-        ThemeSetFontSize(cfg->fontSize);
+        ThemeSetFontSize(app, cfg->fontSize);
     }
     if (app) {
         AppRefreshWindows(app);
@@ -1307,16 +1365,19 @@ bool ThemeRegistryApply(App* app, const ThemeConfig* cfg) {
 }
 
 bool ThemeRegistryApply(App* app, Str name) {
-    return ThemeRegistryApply(app, ThemeRegistryFind(name));
+    return ThemeRegistryApply(app, ThemeRegistryFind(app, name));
 }
 
 void ThemeRegistryReset(App* app) {
-    ThemeRegistryInit();
-    ThemeInstall(ThemeMode::Light, ThemeDefaultLight());
-    ThemeInstall(ThemeMode::Dark, ThemeDefaultDark());
-    for (int i = 0; i < gThemes.len; i++) {
-        if (gThemes[i].isDefault) {
-            gActive[(int)gThemes[i].mode] = gThemes[i].name;
+    ThemeRegistryState* state = RegistryOf(app);
+    if (!state) {
+        return;
+    }
+    ThemeInstall(app, ThemeMode::Light, ThemeDefaultLight());
+    ThemeInstall(app, ThemeMode::Dark, ThemeDefaultDark());
+    for (int i = 0; i < state->themes.len; i++) {
+        if (state->themes[i].isDefault) {
+            state->active[(int)state->themes[i].mode] = state->themes[i].name;
         }
     }
     if (app) {
@@ -1324,16 +1385,8 @@ void ThemeRegistryReset(App* app) {
     }
 }
 
-void ThemeRegistryFree() {
-    gThemes.Reset();
-    gLoadedDirs.Reset();
-    if (gArena) {
-        ArenaDelete(gArena);
-        gArena = nullptr;
-    }
-    gActive[0] = {};
-    gActive[1] = {};
-    gInited = false;
+void ThemeRegistryFree(App* app) {
+    AppGlobalRemove<ThemeRegistryState>(app);
 }
 
 } // namespace gpui

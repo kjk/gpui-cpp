@@ -54,8 +54,7 @@ struct Avatar {
 struct AvatarGroup {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    Avatar* avatars[16] = {};
-    int n = 0;
+    ArenaVec<Avatar*> avatars;
     UiSize size = UiSize::Medium;
     int limit = 3;
     bool ellipsis = false;

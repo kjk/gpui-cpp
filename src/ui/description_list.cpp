@@ -17,20 +17,18 @@ DescriptionList* DescriptionList::Item(Str label, Str value, int span) {
 }
 
 DescriptionList* DescriptionList::ItemEl(Str label, El* value, int span) {
-    if (n < 16) {
-        items[n].label = label;
-        items[n].value = value;
-        items[n].span = span < 1 ? 1 : span;
-        n++;
-    }
+    DescriptionItem item = {};
+    item.label = label;
+    item.value = value;
+    item.span = span < 1 ? 1 : span;
+    items.Append(a, item);
     return this;
 }
 
 DescriptionList* DescriptionList::Separator() {
-    if (n < 16) {
-        items[n].separator = true;
-        n++;
-    }
+    DescriptionItem item = {};
+    item.separator = true;
+    items.Append(a, item);
     return this;
 }
 
@@ -81,10 +79,10 @@ El* DescriptionList::IntoEl() {
     // Pack the items into rows of `columns`, spans included; a separator ends
     // the row it lands in.
     int i = 0;
-    while (i < n) {
+    while (i < items.len) {
         int used = 0;
         int count = 0;
-        while (i < n && used < columns) {
+        while (i < items.len && used < columns) {
             if (items[i].separator) {
                 i++;
                 break;
@@ -101,7 +99,7 @@ El* DescriptionList::IntoEl() {
         }
         int first = i - count;
         El* row = Div(a)->FlexRow()->W(kFill);
-        bool last = i >= n;
+        bool last = i >= items.len;
         if (bordered && !last) {
             row->BorderB(1, th.border);
         }
