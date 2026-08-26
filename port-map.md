@@ -97,6 +97,10 @@ The important non-mechanical mappings are encoded in the audit:
   retained animation closure. It applies every upstream slide, fade and size
   effect to a freshly built element from keyed one-shot state, and keeps the
   deprecated `Transition` alias.
+- Base `Popup` now imports the runtime's complete `gpui::Anchor` vocabulary,
+  preserves Rust's first-frame trigger capture, exact corner arithmetic,
+  eight-pixel viewport margin and deferred popup layer. Dropdowns remain on
+  the distinct side-placement path that may flip.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -127,10 +131,13 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 359 declaration spellings still reported in partial modules,
+  2. Review the 358 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.
+     Base Popover was deliberately moved back to partial during the Popup
+     review: it now composes Popup and owns deferred registration, but still
+     needs Rust's outside-dismiss subscription and full open-change callback.
 
   The theme layering item is complete: `src/ui/theme.h` owns the component
   palette, `src/base/theme.h` owns Base's semantic/behavior theme, and GPUI

@@ -2,6 +2,10 @@
 
 namespace gpui {
 
+struct PopupAnchorState {
+    bool captured = false;
+};
+
 Point PopupResolvedCorner(PopupAnchor anchor, Bounds b) {
     switch (anchor) {
         case PopupAnchor::TopLeft:
@@ -11,11 +15,11 @@ Point PopupResolvedCorner(PopupAnchor anchor, Bounds b) {
         case PopupAnchor::TopRight:
             return {b.Right(), b.y};
         case PopupAnchor::BottomLeft:
-            return {b.x, b.Bottom()};
+            return {b.x, b.y - b.h};
         case PopupAnchor::BottomCenter:
-            return {b.CenterX(), b.Bottom()};
+            return {b.CenterX(), b.y - b.h};
         case PopupAnchor::BottomRight:
-            return {b.Right(), b.Bottom()};
+            return {b.Right(), b.y - b.h};
         default:
             // LeftCenter and RightCenter: Rust hands back the origin, since a
             // popup anchored sideways is placed by the positioner instead.
@@ -23,47 +27,30 @@ Point PopupResolvedCorner(PopupAnchor anchor, Bounds b) {
     }
 }
 
-El* PopupPlaceContent(El* content, PopupAnchor anchor, float gap) {
+El* PopupPlaceContent(El* content, PopupAnchor anchor, float offsetY) {
     if (!content) {
         return content;
     }
-    switch (anchor) {
-        case PopupAnchor::BottomLeft:
-        case PopupAnchor::BottomCenter:
-        case PopupAnchor::BottomRight:
-            content->AnchorAbove(gap);
-            break;
-        default:
-            content->AnchorBelow(gap);
-            break;
-    }
-    // No flip. `Popup::render` places its content with `Positioner::corner`,
-    // which clamps into the window and never takes the other side -- an
-    // anchor names a corner of the trigger, and a popup that jumped to the
-    // opposite one would not be at the corner it was asked for. The
-    // dropdowns are the ones that flip, and they say so themselves:
-    // `dropdown_positioner` in ui/popover.rs is `Positioner::side`, and it is
-    // reached by Select, Combobox and DatePicker alone.
-    switch (anchor) {
-        case PopupAnchor::TopRight:
-        case PopupAnchor::BottomRight:
-            content->Right(0);
-            break;
-        case PopupAnchor::TopCenter:
-        case PopupAnchor::BottomCenter:
-            content->AnchorCenterX();
-            break;
-        default:
-            content->Left(0);
-            break;
-    }
-    return content->Fixed();
+    // Positioner::corner with Popup's own 8 px viewport margin. The runtime
+    // can measure the trigger and child in one layout pass, so it does not
+    // need Rust's first-frame prepaint capture; the resulting bounds are the
+    // same. Deferred is the structural equivalent of with_priority(100).
+    return content
+        ->AnchorCorner(anchor, kPopupWindowMargin, offsetY)
+        ->Deferred();
 }
 
 Popup* Popup::New(Ctx* cx, Str id, El* trigger, PopupAnchor anchor) {
     Arena* a = cx->a;
     Popup* p = ArenaNew<Popup>(a);
     p->anchor = anchor;
+    PopupAnchorState* state =
+        ElementState<PopupAnchorState>(cx, id, StrL("PopupAnchorState"));
+    p->contentReady = state && state->captured;
+    if (state && !state->captured) {
+        state->captured = true;
+        WindowRequestAnimationFrame(cx->win);
+    }
     // Root sizes to the trigger only. Content is an overlay (Rust Positioner).
     p->root = Div(a)->Id(id);
     if (trigger) {
@@ -83,14 +70,13 @@ Popup* Popup::AnchorRight(bool on) {
 }
 
 Popup* Popup::Content(El* content) {
-    if (!content) {
+    if (!content || !contentReady) {
         return this;
     }
-    // Sit under the trigger. In-flow content would grow the centered
-    // showcase page and jump the trigger; overlaying covers it so a second
-    // click cannot dismiss.
+    // Positioner::corner is out of flow and deferred; in-flow content would
+    // grow its trigger's page and paint below later siblings.
     if (!content->style.absolute) {
-        PopupPlaceContent(content, anchor, 4);
+        PopupPlaceContent(content, anchor);
     }
     root->Child(content);
     return this;

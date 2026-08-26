@@ -1679,6 +1679,16 @@ El* El::AnchorCenterX() {
     style.anchorCenterX = true;
     return this;
 }
+
+El* El::AnchorCorner(Anchor anchor, float margin, float offsetY) {
+    style.absolute = true;
+    style.fixed = true;
+    style.anchorCorner = true;
+    style.anchor = anchor;
+    style.anchorMargin = margin > 0 ? margin : 0;
+    style.anchorGap = offsetY;
+    return this;
+}
 El* El::Top(float v) {
     style.absTop = v;
     return this;
@@ -3315,7 +3325,8 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
     for (El* c = e->first; c; c = c->next) {
         PlaceAnchored(c, viewW, viewH);
         const Style& s = c->style;
-        bool anchored = s.anchorBelow || s.anchorAbove || s.anchorCenterX;
+        bool anchored = s.anchorBelow || s.anchorAbove || s.anchorCenterX ||
+                        s.anchorCorner;
         if (!anchored && (c->style.fixed || !c->style.absolute)) {
             continue;
         }
@@ -3357,8 +3368,8 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
             // neither does. The clamp below is what runs afterwards either
             // way, which is the order positioner.rs places and then clamps in.
             float roomBelow =
-                viewH - (e->y + e->h) - s.anchorGap - kPopupMargin;
-            float roomAbove = e->y - s.anchorGap - kPopupMargin;
+                viewH - (e->y + e->h) - s.anchorGap - s.anchorMargin;
+            float roomAbove = e->y - s.anchorGap - s.anchorMargin;
             float want = below ? roomBelow : roomAbove;
             float other = below ? roomAbove : roomBelow;
             if (want < c->h) {
@@ -3372,12 +3383,55 @@ static void PlaceAnchored(El* e, float viewW, float viewH) {
         if (s.anchorCenterX) {
             ax = e->x + (e->w - c->w) * 0.5f;
         }
+        if (s.anchorCorner) {
+            // popup.rs::resolved_corner followed by
+            // Bounds::from_anchor_and_size. Bottom anchors deliberately move
+            // the point one trigger height above its origin; this unusual
+            // arithmetic is pinned by upstream's own test.
+            Point at = {e->x, e->y};
+            switch (s.anchor) {
+                case Anchor::TopCenter:
+                case Anchor::BottomCenter:
+                    at.x = e->x + e->w * 0.5f;
+                    break;
+                case Anchor::TopRight:
+                case Anchor::BottomRight:
+                    at.x = e->x + e->w;
+                    break;
+                default:
+                    break;
+            }
+            if (s.anchor == Anchor::BottomLeft ||
+                s.anchor == Anchor::BottomCenter ||
+                s.anchor == Anchor::BottomRight) {
+                at.y = e->y - e->h;
+            }
+            ax = at.x;
+            ay = at.y;
+            if (s.anchor == Anchor::TopCenter ||
+                s.anchor == Anchor::BottomCenter) {
+                ax -= c->w * 0.5f;
+            } else if (s.anchor == Anchor::TopRight ||
+                       s.anchor == Anchor::BottomRight ||
+                       s.anchor == Anchor::RightCenter) {
+                ax -= c->w;
+            }
+            if (s.anchor == Anchor::BottomLeft ||
+                s.anchor == Anchor::BottomCenter ||
+                s.anchor == Anchor::BottomRight) {
+                ay -= c->h;
+            } else if (s.anchor == Anchor::LeftCenter ||
+                       s.anchor == Anchor::RightCenter) {
+                ay -= c->h * 0.5f;
+            }
+            ay += s.anchorGap;
+        }
         // positioner.rs `clamp`: whatever the corner worked out, the popup is
         // then pulled back inside the viewport with WINDOW_MARGIN to spare.
         // It never flips — that is the side strategy's job — so a popup with
         // nowhere to go simply sits against the edge.
         if (anchored && viewW > 0 && viewH > 0) {
-            float m = kPopupMargin;
+            float m = s.anchorMargin;
             if (ax + c->w > viewW - m) {
                 ax = viewW - m - c->w;
             }

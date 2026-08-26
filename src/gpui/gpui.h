@@ -1104,6 +1104,19 @@ struct Corners {
     bool IsUniform() const { return tl == tr && tr == br && br == bl; }
 };
 
+// gpui::Anchor. Base's Popup and Positioner import this runtime vocabulary in
+// Rust; keeping it here avoids each component inventing a near-copy.
+enum class Anchor : uint8_t {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+    LeftCenter,
+    RightCenter
+};
+
 struct Style {
     Display display = Display::Block;
     FlexDir dir = FlexDir::Row;
@@ -1205,7 +1218,12 @@ struct Style {
     bool anchorBelow = false;   // absolute, just under the parent box
     bool anchorAbove = false;   // absolute, just over it
     bool anchorCenterX = false; // absolute, centered on the parent box
+    // Positioner::corner: `anchor`'s point on this element is placed at the
+    // matching point derived from its parent, then clamped without flipping.
+    bool anchorCorner = false;
+    Anchor anchor = Anchor::TopLeft;
     float anchorGap = 0;
+    float anchorMargin = 4;
     float absTop = kAuto, absLeft = kAuto, absBottom = kAuto, absRight = kAuto;
     // left(relative(f)) / right(relative(f)): the offset is that fraction of
     // the parent's width, added to the pixel one. A stepper's connector needs
@@ -1921,6 +1939,7 @@ struct El {
     El* AnchorFlip(bool on = true);
     El* AnchorAbove(float gap = 0);
     El* AnchorCenterX();
+    El* AnchorCorner(Anchor anchor, float margin = 4, float offsetY = 0);
     El* Top(float v);
     El* Left(float v);
     El* Bottom(float v);

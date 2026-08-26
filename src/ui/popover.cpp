@@ -32,7 +32,16 @@ El* DropdownPlaceContent(El* content, float gap) {
     if (!content) {
         return content;
     }
-    return PopupPlaceContent(content, PopupAnchor::TopLeft, gap)->AnchorFlip();
+    // dropdown_positioner is the side strategy, not Popup's corner strategy:
+    // it opens below with Start alignment, flips if needed, and keeps the
+    // same 8 px viewport margin.
+    content->AnchorBelow(gap)
+        ->Left(0)
+        ->Fixed()
+        ->Deferred()
+        ->AnchorFlip();
+    content->style.anchorMargin = kPopupWindowMargin;
+    return content;
 }
 
 Popover* Popover::New(Ctx* cx) {

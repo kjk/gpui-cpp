@@ -6733,3 +6733,50 @@ the POD-friendly C++ `History<I>` requires that convention directly on `I`.
 With animation implemented and history accounted for, the audit is 60 full,
 61 partial, 8 adapters and 2 exclusions; 359 declaration spellings remain for
 review in partial modules. MSVC release passes 19,042 checks.
+
+## Popup uses GPUI's anchor vocabulary and exact deferred lifecycle
+
+The declaration review of Base Popup exposed three behavioral contradictions
+behind one missing constant. `PopupResolvedCorner` claimed Bottom anchors used
+the trigger's bottom edge and its tests expected `origin.y + height`; the
+pinned Rust implementation and test both require `origin.y - height`. Popup
+content was described as deferred but never set the runtime's deferred flag,
+and every anchored surface was clamped with Positioner's four-pixel default
+although `popup.rs` specifies an eight-pixel window margin.
+
+`gpui::Anchor` is now a runtime enum with all eight upstream variants. Base's
+older `PopupAnchor` spelling is a compatibility alias, while Positioner and
+Popup consume the canonical type. The layout's new corner path performs
+`Popup::resolved_corner` followed by `Bounds::from_anchor_and_size`, supports
+the center and side anchors as well as the four corners, clamps with the
+element's requested margin, never flips, and defers paint to the popup layer.
+The separately named dropdown path still uses side placement, Start alignment,
+an eight-pixel margin and flip-on-overflow behavior.
+
+Popup also has a window-keyed capture bit. Its first build schedules one
+animation frame and withholds content; the next build admits the deferred
+content, matching the observable lifecycle of Rust's prepaint bounds capture.
+C++ does not retain the captured bounds because the shared layout pass can
+place the trigger and popup from current-frame geometry, so that runtime seam
+is documented where it differs rather than emulating stale coordinates.
+
+The tests now pin the upstream Bottom arithmetic, all eight Positioner anchor
+forms, actual laid-out Popup bounds, the exact public priority and window
+margin, deferred/fixed state, and first-frame suppression. Base Popup is full
+in the structural ledger.
+
+Following the dependency one level up found that Base Popover had been called
+full too early. Its C++ builder positioned content directly and therefore
+bypassed Popup's first-frame capture, while the four mapped upstream lifecycle
+tests had no deferred-registration assertions in their destination suite.
+Popover now stores its trigger and content and composes `Popup::New` in
+`IntoEl`, so the canonical capture and corner path is shared. Controlled and
+uncontrolled open state register their own generational state entity with the
+Base global; closing removes it, and dropping an open state is swept as soon
+as the handle goes stale. Regression coverage pins all three transitions.
+Popover is explicitly partial again because the full on-open callback and
+Rust's per-state outside-dismiss subscription remain narrower here.
+
+The resulting honest audit is 60 full, 61 partial, 8 adapters and 2 exclusions
+with 358 unresolved declaration spellings. MSVC release passes 19,064 checks,
+and the showcase and story targets build in release.

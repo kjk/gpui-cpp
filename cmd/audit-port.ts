@@ -58,7 +58,7 @@ const partialBase = new Set([
   "macos_accessibility",
   "motion",
   "number_input",
-  "popup",
+  "popover",
   "positioner",
   "radio",
   "resizable",
@@ -117,6 +117,8 @@ const partialReasons: Record<string, string> = {
   "base/global_state": "the App global carries selection/popover state; entity-stack coverage remains partial",
   "base/input":
     "synchronous function-pointer providers and a flat text buffer replace Rust tasks, trait objects and Rope",
+  "base/popover":
+    "Popup composition and deferred registration are ported; outside-dismiss subscription and the full on-open callback surface remain narrower",
   "base/macos_accessibility":
     "the portable semantic tree exists; only the native macOS hit-test forwarding seam is connected",
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
@@ -340,6 +342,9 @@ const declarationMappings: Record<string, DeclarationMapping> = {
   "base/history.rs::trait HistoryItem": {
     collapse:
       "C++ History<I> requires Version, SetVersion and operator== directly on its POD-friendly item type",
+  },
+  "base/popup.rs::const POPUP_PRIORITY": {
+    spellings: ["kPopupPriority"],
   },
   "base/select.rs::fn init": { spellings: ["SelectInitKeys"] },
   "ui/lib.rs::fn init": { spellings: ["Init"] },

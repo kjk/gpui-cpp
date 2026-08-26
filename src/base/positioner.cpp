@@ -129,11 +129,19 @@ Positioned PositionCorner(Anchor anchor, Point at, Size popup, Size view,
                           float margin) {
     // Bounds::from_anchor_and_size.
     Bounds b = BoundsAt(at, popup);
-    if (anchor == Anchor::TopRight || anchor == Anchor::BottomRight) {
+    if (anchor == Anchor::TopCenter || anchor == Anchor::BottomCenter) {
+        b.x = at.x - popup.w * 0.5f;
+    } else if (anchor == Anchor::TopRight ||
+               anchor == Anchor::BottomRight ||
+               anchor == Anchor::RightCenter) {
         b.x = at.x - popup.w;
     }
-    if (anchor == Anchor::BottomLeft || anchor == Anchor::BottomRight) {
+    if (anchor == Anchor::BottomLeft || anchor == Anchor::BottomCenter ||
+        anchor == Anchor::BottomRight) {
         b.y = at.y - popup.h;
+    } else if (anchor == Anchor::LeftCenter ||
+               anchor == Anchor::RightCenter) {
+        b.y = at.y - popup.h * 0.5f;
     }
     Positioned out;
     out.bounds = ClampToViewport(b, view, margin);

@@ -4,39 +4,33 @@
 
 namespace gpui {
 
-// Which corner of the trigger the content hangs off. GPUI's Anchor, whole:
-// the two centre-of-side entries exist in the enum but resolve to the origin,
-// because a popup that anchors sideways is positioned by the positioner
-// rather than by a corner.
-enum class PopupAnchor : uint8_t {
-    TopLeft,
-    TopCenter,
-    TopRight,
-    BottomLeft,
-    BottomCenter,
-    BottomRight,
-    LeftCenter,
-    RightCenter
-};
+// Rust imports gpui::Anchor directly. Keep the older port spelling as an
+// alias so existing examples do not need a flag-day rename.
+using PopupAnchor = Anchor;
 
-// resolved_corner: the point on the trigger the content is placed against.
-// The bottom anchors take the trigger's bottom edge, so content hanging below
-// starts where the trigger ends rather than where it began.
+// popup.rs's two concrete overlay constants. Deferred priorities are mapped
+// to the runtime's paint layers, but the public value remains available for
+// components that compare or forward it.
+constexpr int kPopupPriority = 100;
+constexpr float kPopupWindowMargin = 8.f;
+
+// resolved_corner: the exact point popup.rs feeds Positioner::corner. Top
+// anchors use the trigger origin; Bottom anchors subtract its height.
 Point PopupResolvedCorner(PopupAnchor anchor, Bounds triggerBounds);
 
-// Where a popup's content hangs off its trigger, as the insets PlaceAnchored
-// reads: the Top anchors put it under the trigger and the Bottom ones over
-// it, and the second half of the name is the edge the two line up on. Every
-// anchored surface — the Popup, the Popover, the HoverCard — goes through
-// this so the six corners cannot drift apart between them. `Fixed` is what
-// makes the content lay out against the window the way Rust's Positioner
-// does, rather than inside the trigger.
-El* PopupPlaceContent(El* content, PopupAnchor anchor, float gap);
+// Place `anchor`'s point on content at PopupResolvedCorner(anchor, trigger),
+// clamp it eight pixels inside the window, and defer its paint. Every Popup-
+// backed surface goes through this so the eight anchors cannot drift apart.
+El* PopupPlaceContent(El* content, PopupAnchor anchor, float offsetY = 0);
 
 struct Popup {
     El* root = nullptr;
     // Where the content hangs. Rust defaults to TopLeft, and so does this.
     PopupAnchor anchor = PopupAnchor::TopLeft;
+    // Rust withholds deferred content until the trigger's first prepaint has
+    // captured bounds. This runtime can place from live layout, but keeps the
+    // same first-frame visibility contract.
+    bool contentReady = false;
 
     static Popup* New(Ctx* cx, Str id, El* trigger,
                       PopupAnchor anchor = PopupAnchor::TopLeft);

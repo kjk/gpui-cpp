@@ -11,7 +11,9 @@ bool PopoverIsOpen(Ctx* cx, Entity<PopoverState> state) {
 void PopoverSetOpen(Ctx* cx, Entity<PopoverState> state, bool open) {
     PopoverState* s = state.Get(cx);
     if (s) {
+        s->self = state.id;
         s->open = open;
+        BaseDeferredPopoverSet(cx->app, state.id, open);
     }
 }
 
@@ -38,7 +40,8 @@ void PopoverSetOpenFocused(PopoverState* s, Ctx* cx, bool open) {
         s->previousFocus = {};
     }
     s->open = open;
-    BaseDeferredPopoverSet(cx->app, cx->self, open);
+    BaseDeferredPopoverSet(cx->app,
+                           s->self.IsValid() ? s->self : cx->self, open);
 }
 
 // toggle_open, off the trigger's press. Rust stops propagation here so the
@@ -67,9 +70,9 @@ Popover* Popover::New(Ctx* cx, Str id, Entity<PopoverState> state,
     Popover* p = ArenaNew<Popover>(a);
     p->a = a;
     p->cx = cx;
+    p->id = id;
     p->state = state;
     p->button = button;
-    p->root = Div(a)->Id(id);
     // The popover's own focus handle. Rust hangs it off the content, not off
     // the trigger's container, so opening moves focus into what came up and
     // Tab from the trigger still walks the page.
@@ -79,6 +82,10 @@ Popover* Popover::New(Ctx* cx, Str id, Entity<PopoverState> state,
     // the old `HashClickId(id) * 31 + 1` existed only to stay clear of the
     // click id that same name produced.
     if (PopoverState* st = state.Get(cx)) {
+        st->self = state.id;
+        if (st->open) {
+            BaseDeferredPopoverSet(cx->app, state.id, true);
+        }
         if (!st->focus.IsValid()) {
             st->focus = FocusHandleNew(cx);
         }
@@ -94,17 +101,17 @@ Popover* Popover::TrackedFocus(FocusHandle tracked) {
     return this;
 }
 
-Popover* Popover::Trigger(El* trigger) {
-    if (!trigger) {
+Popover* Popover::Trigger(El* e) {
+    if (!e) {
         return this;
     }
     if (state.IsValid()) {
         // A press, not a click: Rust hangs the toggle off on_mouse_down so the
         // popover is up before the button comes back. The handler reads the
         // event's own button, since one element hears every press it is over.
-        trigger->OnMouseDown(ListenTo(state, &PopoverToggle, (intptr_t)button));
+        e->OnMouseDown(ListenTo(state, &PopoverToggle, (intptr_t)button));
     }
-    root->Child(trigger);
+    trigger = e;
     return this;
 }
 
@@ -113,27 +120,28 @@ Popover* Popover::Anchor(PopupAnchor v) {
     return this;
 }
 
-Popover* Popover::Content(El* content) {
-    if (content) {
+Popover* Popover::Content(El* e) {
+    if (e) {
         // What `Popup` does with it, because Rust's Popover *is* a Popup:
-        // `Popup::new(id, trigger).content(..)`. Four pixels under the
-        // trigger — the `top_1` on `render_popover_content` — and deferred,
-        // so it draws over whatever follows the trigger in the tree and is
-        // not cut by an ancestor's overflow. The port had it absolute at a
-        // hard-coded `top: 28`, in flow, and so clipped by the section it
-        // was in and mispositioned under any trigger that was not 28 tall.
-        // Where it hangs, which is what `Positioner::corner` works out.
-        content->Role(AccessibilityRole::Dialog);
-        PopupPlaceContent(content, anchor, 4);
+        // `Popup::new(id, trigger).content(..)`. The exact requested corner
+        // is deferred, so it draws over later siblings and is not clipped by
+        // an ancestor's overflow. The styled UI layer supplies its own
+        // top_1/bottom_1 visual offset.
+        e->Role(AccessibilityRole::Dialog);
         // track_focus, not focus_ring_style: the surface takes focus and
         // does not draw a ring around itself for it.
-        content->TrackFocus(focus)->FocusRing(false);
-        root->Child(content);
+        e->TrackFocus(focus)->FocusRing(false);
+        content = e;
     }
     return this;
 }
 
 El* Popover::IntoEl() {
-    return root;
+    if (!trigger) {
+        return Div(a)->Id(StrL("empty"));
+    }
+    // popover.rs builds Popup::new(id, trigger).anchor(anchor), rather than
+    // duplicating its capture and positioning lifecycle.
+    return Popup::New(cx, id, trigger, anchor)->Content(content)->IntoEl();
 }
 } // namespace gpui

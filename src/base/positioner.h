@@ -17,15 +17,6 @@ enum class PopupAlign : uint8_t {
     End
 };
 
-// The corner of the popup that lands on the requested position. GPUI's
-// `anchored` corner behavior, which clamps but never flips.
-enum class Anchor : uint8_t {
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight
-};
-
 // Where the popup ended up, and the side it took. `hasPlacement` is false for
 // corner positioning, which has no notion of a side.
 struct Positioned {

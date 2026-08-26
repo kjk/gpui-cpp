@@ -14,6 +14,10 @@ namespace gpui {
 // unhandled-click slot, so that half is still the caller's: it wires
 // PopoverDismiss to whatever reports the press that landed elsewhere.
 struct PopoverState {
+    // The Entity<PopoverState> that owns this state. Rust's Context<Self>
+    // supplies it when deferred context is registered; C++ keeps it here for
+    // calls that enter through a parent view.
+    EntityId self = {};
     bool open = false;
     // Whether default_open has been applied yet. Rust passes it to
     // PopoverState::new, which only runs the first time the key is seen.
@@ -52,13 +56,13 @@ void PopoverDismiss(PopoverState* self, Ctx* cx, const ClickEvent* ev);
 struct Popover {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
-    El* root = nullptr;
+    Str id = {};
+    El* trigger = nullptr;
+    El* content = nullptr;
     Entity<PopoverState> state = {};
     FocusHandle focus = {};
     MouseButton button = MouseButton::Left;
-    // Popover::anchor, which is the corner of the trigger the content hangs
-    // off — Top* below it, Bottom* above it, and Left/Center/Right the edge
-    // the two line up on.
+    // Popover::anchor, the gpui::Anchor Popup resolves.
     PopupAnchor anchor = PopupAnchor::TopLeft;
 
     static Popover* New(Ctx* cx, Str id, Entity<PopoverState> state = {},

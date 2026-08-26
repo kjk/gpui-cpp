@@ -80,6 +80,18 @@ static void CornerPositioningPlacesTheNamedCornerAndNeverReportsASide() {
     utassertnear(p.bounds.y, 100.f);
 }
 
+static void CornerPositioningSupportsGpuisWholeAnchorVocabulary() {
+    Positioned center = PositionCorner(Anchor::BottomCenter, {100, 100},
+                                       {40, 30}, {kViewW, kViewH}, kMargin);
+    utassertnear(center.bounds.x, 80.f);
+    utassertnear(center.bounds.y, 70.f);
+
+    Positioned side = PositionCorner(Anchor::RightCenter, {100, 100},
+                                     {40, 30}, {kViewW, kViewH}, kMargin);
+    utassertnear(side.bounds.x, 60.f);
+    utassertnear(side.bounds.y, 85.f);
+}
+
 static void CornerPositioningClampsButDoesNotFlip() {
     Positioned p = PositionCorner(Anchor::TopLeft, {480, 390}, {40, 30},
                                   {kViewW, kViewH}, kMargin);
@@ -183,6 +195,7 @@ void TestPositioner() {
     AlignmentSelectsTheLeadingCenterOrTrailingEdge();
     SideOffsetAddsAGapBetweenTriggerAndPopup();
     CornerPositioningPlacesTheNamedCornerAndNeverReportsASide();
+    CornerPositioningSupportsGpuisWholeAnchorVocabulary();
     CornerPositioningClampsButDoesNotFlip();
 
     TestSuite("positioner/tooltip");
