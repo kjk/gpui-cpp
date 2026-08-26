@@ -944,7 +944,6 @@ void DockState::OnResizeDrag(DockState* self, Ctx* cx,
         return;
     }
     self->resizing = true;
-    self->resizingHandle = ev->drag.ix;
     int node = DockUnpackNode(ev->drag.ix);
     // A node index past the end of the tree is one of the three Docks, which
     // resize against the whole area rather than against a split's children.
@@ -977,7 +976,6 @@ void DockState::OnResizeEnd(DockState* self, Ctx* cx, const MouseUpEvent*) {
         return;
     }
     self->resizing = false;
-    self->resizingHandle = -1;
     self->resizingSide = DockPlacement::Center;
     DockEmit(self, cx);
 }

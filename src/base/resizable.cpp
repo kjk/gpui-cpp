@@ -199,6 +199,32 @@ Resizable* Resizable::H(float v) {
     height = v;
     return this;
 }
+void ResizeHandleState::OnDown(ResizeHandleState* self, Ctx* cx,
+                               const MouseDownEvent* ev) {
+    // `if bounds.contains(&ev.position)`: the listener is the element's, so
+    // being called is already the answer to that.
+    self->active = true;
+    if (self->nextDown.IsValid()) {
+        ListenerCall(cx->app, cx->win, self->nextDown, ev);
+    }
+    Notify(cx);
+}
+
+void ResizeHandleState::OnUp(ResizeHandleState* self, Ctx* cx,
+                             const MouseUpEvent* ev) {
+    // Any release ends it, whether or not it landed on the handle.
+    self->active = false;
+    if (self->nextUp.IsValid()) {
+        ListenerCall(cx->app, cx->win, self->nextUp, ev);
+    }
+    Notify(cx);
+}
+
+Entity<ResizeHandleState> ResizeHandleStateFor(Ctx* cx, Str name) {
+    return ElementStateEntity<ResizeHandleState>(
+        cx, name, StrL("gpui::ResizeHandleState"));
+}
+
 Resizable* Resizable::HandleColors(Rgba rest, Rgba dragging) {
     handleColor = rest;
     handleDragColor = dragging;
@@ -237,6 +263,10 @@ Resizable* Resizable::Visible(bool v) {
 El* Resizable::IntoEl() {
     ResizableState* s = state.Get(cx);
     bool horiz = !s || AxisIsHorizontal(s->axis);
+    // The group's name, on the stack while its panels and handles are built.
+    // Nesting one group inside another is the ordinary case here, and without
+    // this both groups' `resizable-handle-0` would be one element state.
+    IdScope scope(cx, id);
     El* root = Div(a)->Id(id)->W(width)->H(height);
     root->FlexRow();
     if (!horiz) {
@@ -381,19 +411,30 @@ El* Resizable::IntoEl() {
             hasNext = hasNext || shown[j];
         }
         if (hasNext) {
-            bool active = s->dragging == i;
+            // Whether this handle is the one being dragged is the handle's
+            // own state, kept where Rust keeps it: `with_element_state` under
+            // the handle's name. The group's `dragging` is what the resize
+            // arithmetic needs, which is a different question.
+            Str hid = StrDup(a, fmt("resizable-handle-%d", i));
+            Entity<ResizeHandleState> hs = ResizeHandleStateFor(cx, hid);
+            ResizeHandleState* h = hs.Get(cx);
+            bool active = h && h->active;
+            if (h) {
+                h->nextDown = ListenerArg(down, i);
+                h->nextUp = up;
+            }
             El* line = Div(a)->Bg(active ? handleDragColor : handleColor);
             El* handle =
                 Div(a)
                     ->Absolute()
                     // `resize_handle(("resizable-handle", ix), axis)`, drawn
                     // from inside the panel it follows.
-                    ->PathClick(StrDup(a, fmt("resizable-handle-%d", i)))
-                    ->OnMouseDown(ListenerArg(down, i))
+                    ->PathClick(hid)
+                    ->OnMouseDown(ListenTo(hs, &ResizeHandleState::OnDown))
                     ->OnDrag(kResizeDrag, i)
                     ->OnDragMove(drag)
-                    ->OnMouseUp(up)
-                    ->OnMouseUpOut(up);
+                    ->OnMouseUp(ListenTo(hs, &ResizeHandleState::OnUp))
+                    ->OnMouseUpOut(ListenTo(hs, &ResizeHandleState::OnUp));
             // Placed by its leading edge rather than its trailing one: the
             // panel's own size is what the boundary is, and an offset from
             // the near edge is the one an absolute box takes everywhere here.

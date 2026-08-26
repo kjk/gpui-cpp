@@ -33,6 +33,30 @@ void ResizableAdjustToContainer(float* sizes, int n, float containerSize);
 const float kResizeHandleSize = 1.f;
 const float kResizeHandlePadding = 4.f;
 
+// ResizeHandleState. Rust's resize handle is an Element of its own and keeps
+// this in `window.with_element_state`: one flag, set from the press inside
+// its bounds and cleared by any release. It is the handle's own and not the
+// group's, which is why a handle does not have to be told which of the
+// group's boundaries it is in order to know whether it is the one being
+// dragged.
+struct ResizeHandleState {
+    bool active = false;
+    // GPUI's `window.on_mouse_event` registers a listener; the port's element
+    // carries one per event, and the handle's own answer is not the only one
+    // the press has to reach. So the group's goes through here, which is what
+    // Rust's closure does anyway once it has set the flag.
+    Listener nextDown;
+    Listener nextUp;
+
+    static void OnDown(ResizeHandleState* self, Ctx* cx,
+                       const MouseDownEvent* ev);
+    static void OnUp(ResizeHandleState* self, Ctx* cx, const MouseUpEvent* ev);
+};
+
+// `with_element_state` for one handle, named among the parts of whatever it
+// is being built inside.
+Entity<ResizeHandleState> ResizeHandleStateFor(Ctx* cx, Str name);
+
 // ResizableState. Rust keeps the sizes, the per-panel range and the axis on
 // the state and re-derives a panel's size from it every frame; so does this.
 // The panels are declared by the caller each frame, which is what fills the

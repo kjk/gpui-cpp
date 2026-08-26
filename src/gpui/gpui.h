@@ -4766,6 +4766,23 @@ Entity<T> KeyedEntity(Ctx* cx, uint32_t key) {
     return e;
 }
 
+// window.with_element_state(global_id, ..): state that belongs to one element
+// rather than to the view that built it. The key is the element's name folded
+// into the stack of ids above it — which is what a GlobalElementId is — so
+// the same local name under two widgets is two states. `kind` is the state's
+// own name, since a key remembers a slot and not what was put in it.
+template <typename T>
+T* ElementState(Ctx* cx, Str name, Str kind) {
+    return KeyedState<T>(cx, KeyedKey(KeyedName(cx, name), HashClickId(kind)));
+}
+
+// The same, as an entity — for state a listener has to be bound to, which is
+// what an element that answers its own presses needs.
+template <typename T>
+Entity<T> ElementStateEntity(Ctx* cx, Str name, Str kind) {
+    return KeyedEntity<T>(cx, KeyedKey(KeyedName(cx, name), HashClickId(kind)));
+}
+
 // Window-level subscriptions. GPUI spells these window.on_key_down and
 // cx.spawn + Timer::after; here each one is a Listener bound to a view.
 void WindowOnKey(Window* win, Listener l);

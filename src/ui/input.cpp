@@ -754,8 +754,8 @@ El* SearchPanel::IntoEl() {
     const Theme& th = cx->theme();
     // The state is the window's, keyed by the bar's id, so two editors on one
     // page each get their own.
-    Entity<SearchPanelState> ent = KeyedEntity<SearchPanelState>(
-        cx, KeyedKey(KeyedName(cx, id), HashClickId(StrL("search-panel"))));
+    Entity<SearchPanelState> ent =
+        ElementStateEntity<SearchPanelState>(cx, id, StrL("search-panel"));
     SearchPanelState* st = ent.Get(cx);
     if (!st || !target) {
         return Div(a);

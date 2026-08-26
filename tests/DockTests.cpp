@@ -593,9 +593,20 @@ static void TwoAreasHaveTwoSplitHandles() {
         utassert(hL->clickId != 0 && hR->clickId != 0);
         utassert(hL->clickId != hR->clickId);
     }
-    // A handle knows it is not the one being dragged without asking the
-    // window what it pressed: nothing is.
-    utassert(one.Get(&cx)->resizingHandle == -1);
+    // A handle knows whether it is the one being dragged from its own
+    // element state, which is keyed the way `with_element_state` is -- so
+    // the same handle in two areas is two states, and neither is the area's.
+    Entity<ResizeHandleState> hsL, hsR;
+    {
+        IdScope area(&cx, StrL("left"));
+        hsL = ResizeHandleStateFor(&cx, Str(name));
+    }
+    {
+        IdScope area(&cx, StrL("right"));
+        hsR = ResizeHandleStateFor(&cx, Str(name));
+    }
+    utassert(hsL.id != hsR.id);
+    utassert(hsL.Get(&cx) && !hsL.Get(&cx)->active);
 
     WindowKeyedFree(win);
     ArenaDelete(arena);

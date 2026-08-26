@@ -288,19 +288,28 @@ El* SplitHandle(const AreaCtx& ac, int node, int ix, Axis axis) {
     } else {
         e->H(kDockHandleW)->W(kFill)->Cursor(CursorKind::RowResize);
     }
-    BindId(e, DockElId(cx, "split", node, ix));
+    Str hid = DockElId(cx, "split", node, ix);
+    BindId(e, hid);
     // `.group("handle")`: what the line inside asks about is the pointer
     // being in the grab area around it, not the line being the hovered
     // element -- the two differ by the four DIPs of padding either side.
     e->Group();
+    // Whether this is the handle being dragged is the handle's own state,
+    // kept where Rust keeps it. The group's resize listener goes through it,
+    // since the port's element carries one listener per event.
+    Entity<ResizeHandleState> hs = ResizeHandleStateFor(cx, hid);
+    ResizeHandleState* hst = hs.Get(cx);
+    if (hst) {
+        hst->nextUp = ListenTo(ac.state, &DockState::OnResizeEnd);
+    }
     e->OnDrag(kDockResizeDrag, (int)DockPack(node, ix));
     e->OnDragMove(ListenTo(ac.state, &DockState::OnResizeDrag));
-    e->OnMouseUpOut(ListenTo(ac.state, &DockState::OnResizeEnd));
-    e->OnMouseUp(ListenTo(ac.state, &DockState::OnResizeEnd));
+    e->OnMouseDown(ListenTo(hs, &ResizeHandleState::OnDown));
+    e->OnMouseUpOut(ListenTo(hs, &ResizeHandleState::OnUp));
+    e->OnMouseUp(ListenTo(hs, &ResizeHandleState::OnUp));
     DockHandleCtx h;
     h.axis = axis;
-    h.active =
-        ac.s->resizing && ac.s->resizingHandle == (int)DockPack(node, ix);
+    h.active = hst && hst->active;
     if (ac.r->splitHandle) {
         if (El* paint = ac.r->splitHandle(cx, ac.r->data, &h)) {
             e->Child(paint);

@@ -127,9 +127,8 @@ El* Pagination::IntoEl() {
                     menu->MenuWithCheck(StrDup(a, fmt("%d", p)), p == page);
                 }
                 Entity<PaginationMenuState> ment =
-                    KeyedEntity<PaginationMenuState>(
-                        cx, KeyedKey(KeyedName(cx, menuId),
-                                     HashClickId(StrL("pagination-menu"))));
+                    ElementStateEntity<PaginationMenuState>(
+                        cx, menuId, StrL("pagination-menu"));
                 if (PaginationMenuState* ms = ment.Get(cx)) {
                     ms->firstPage = items[i].from;
                     ms->onChange = onChange;

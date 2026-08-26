@@ -203,13 +203,6 @@ struct DockState {
     // The side being resized, and the split handle being dragged.
     DockPlacement resizingSide = DockPlacement::Center;
     bool resizing = false;
-    // Which handle. Rust keeps `ResizeHandleState { active }` on the handle
-    // itself and sets it from the press; the handle here has no state of its
-    // own, so the one being dragged is named on the area's. Either way the
-    // handle does not have to look itself up in the window while the frame
-    // is being built -- which it could not do, since a folded id does not
-    // exist until the tree does.
-    int resizingHandle = -1;
 
     Listener onEvent;
 

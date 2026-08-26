@@ -88,9 +88,8 @@ void CancelBindKeys(Ctx* cx, El* root, const char* context, Str name,
         return;
     }
     CancelInitKeys(context);
-    Entity<CancelKeys> keys = KeyedEntity<CancelKeys>(
-        cx, KeyedKey(KeyedName(cx, name),
-                     (uint32_t)HashClickId(StrL("gpui::CancelKeys"))));
+    Entity<CancelKeys> keys =
+        ElementStateEntity<CancelKeys>(cx, name, StrL("gpui::CancelKeys"));
     if (CancelKeys* k = keys.Get(cx)) {
         k->onCancel = onCancel;
     }

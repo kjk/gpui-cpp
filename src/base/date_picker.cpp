@@ -189,9 +189,8 @@ void DatePickerBindKeys(Ctx* cx, El* root, Str name, Listener onToggle,
         return;
     }
     DatePickerInitKeys();
-    Entity<DatePickerKeys> keys = KeyedEntity<DatePickerKeys>(
-        cx, KeyedKey(KeyedName(cx, name),
-                     (uint32_t)HashClickId(StrL("gpui::DatePickerKeys"))));
+    Entity<DatePickerKeys> keys = ElementStateEntity<DatePickerKeys>(
+        cx, name, StrL("gpui::DatePickerKeys"));
     if (DatePickerKeys* k = keys.Get(cx)) {
         k->onToggle = onToggle;
         k->onClear = onClear;
