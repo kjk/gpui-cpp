@@ -209,13 +209,28 @@ struct CandlestickChart {
     El* IntoEl();
 };
 
+// The label of one radar dimension. Text is painted by the plot and inherits
+// LabelColor; an element is measured at its natural size and styles itself.
+// This is RadarLabel in radar_chart.rs, represented as a POD tag because a
+// frame element cannot be retained behind a variant or trait object here.
+struct RadarLabel {
+    enum class Kind : uint8_t { Text, Element };
+
+    Kind kind = Kind::Text;
+    Str text = {};
+    El* element = nullptr;
+
+    static RadarLabel Text(Str text);
+    static RadarLabel Element(El* element);
+};
+
 // RadarChart: one value per axis, plotted on rings around a centre.
 struct RadarChart {
     Arena* a = nullptr;
     Ctx* cx = nullptr;
     const float* values = nullptr;
     int n = 0;
-    const char* const* labels = nullptr;
+    const RadarLabel* labels = nullptr;
     Rgba stroke = {};
     Rgba fill = {};
     float domainMin = 0;
@@ -226,11 +241,17 @@ struct RadarChart {
     bool dot = false;
     float outerRadius = 0;
     int gridLevels = 4;
+    float labelGap = 10;
+    Rgba labelColor = {};
+    bool hasLabelColor = false;
 
     static RadarChart* New(Ctx* cx, const float* values, int n);
     RadarChart* Stroke(Rgba c);
     RadarChart* Fill(Rgba c);
     RadarChart* Labels(const char* const* l);
+    RadarChart* Labels(const RadarLabel* l);
+    RadarChart* LabelColor(Rgba c);
+    RadarChart* LabelGap(float v);
     RadarChart* Domain(float lo, float hi);
     RadarChart* Overlay(bool v = true);
     RadarChart* Dot(bool v = true);
@@ -254,6 +275,20 @@ const float kSankeyChartLabelGap = 6;
 const float kSankeyMaxLabelWidthRatio = 0.2f;
 const float kSankeyMaxLabelMarginRatio = 0.6f;
 
+// A styled line of a Sankey node label. An unset colour uses foreground and
+// an unset font size uses the plot's 10-DIP text size.
+struct SankeyLabel {
+    Str text = {};
+    Rgba color = {};
+    float fontSize = 0;
+    bool hasColor = false;
+
+    static SankeyLabel New(Str text);
+    SankeyLabel Color(Rgba color) const;
+    SankeyLabel FontSize(float fontSize) const;
+    float LineHeight() const;
+};
+
 struct SankeyChartNode {
     Str label = {};
     // The value shown above the name, when the caller asked for one.
@@ -264,6 +299,11 @@ struct SankeyChartNode {
     Rgba noteColor = {};
     Rgba color = {};
     bool hasColor = false;
+    // labels(..) wins over value_label/node_label in Rust. Once CustomLabel
+    // is called this arbitrary line list likewise replaces the convenience
+    // value/note/name triple above.
+    ArenaVec<SankeyLabel> labels;
+    bool hasCustomLabels = false;
 };
 
 struct SankeyChart {
@@ -293,6 +333,8 @@ struct SankeyChart {
     // The value and the note of the node just added.
     SankeyChart* NodeValue(Str text);
     SankeyChart* NodeNote(Str text, Rgba color);
+    SankeyChart* CustomLabel(SankeyLabel label);
+    SankeyChart* CustomLabels(const SankeyLabel* labels, int n);
     SankeyChart* Link(int source, int target, double value);
     SankeyChart* NodeWidth(float v);
     SankeyChart* NodePadding(float v);

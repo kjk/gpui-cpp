@@ -154,6 +154,10 @@ The important non-mechanical mappings are encoded in the audit:
 - UI Sizing's `UiSize` is the POD payload projection of Rust `Size`, including
   custom pixels, parsing, stepping and inverted min/max semantics; every
   `StyleSized` transform is available as an exact free `El` refinement.
+- UI Chart exposes the pinned `RadarLabel` text/element variant and positions
+  naturally measured element labels from the laid-out plot bounds. Sankey
+  labels are arbitrary styled line lists through the pinned `SankeyLabel`
+  value, including per-line color, font size and variable line height.
 - text-selection suppression and notification visibility now follow the Rust
   event/lifecycle order instead of merely matching a static rendering.
 - the runtime builds a semantic tree after layout, skipping visual-only boxes
@@ -184,7 +188,7 @@ The important non-mechanical mappings are encoded in the audit:
      patterns. Windows already has the core fragment/action and table export;
      this remaining work is in GPUI platform adapters and does not change
      Base/UI semantics.
-  2. Review the 332 declaration spellings still reported in partial modules,
+  2. Review the 330 declaration spellings still reported in partial modules,
      adding explicit mappings where Rust traits or snake_case functions
      project into C++ builders, recording private-submodule collapses, and
      implementing the genuine omissions before promoting a module to full.

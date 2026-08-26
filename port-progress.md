@@ -7199,3 +7199,36 @@ custom stepping and every style projection. UI Sizing is full: the audit moves
 to 75 full, 46 partial, 8 adapters and 2 exclusions with 332 unresolved
 spellings. MSVC and clang-cl release pass 19,557 checks, and all 26 release
 targets build.
+
+## Chart labels retain their pinned variants and styled line lists
+
+The chart painters were behaviorally broad but still erased both public label
+types left in the Rust module. Radar accepted only a borrowed `const char*`
+array, so the story reproduced `RadarLabel::Element` with card-size-specific
+absolute coordinates. Sankey exposed a fixed value/note/name triple, so its
+`labels` result could neither contain an arbitrary number of lines nor choose
+a font size per line.
+
+`RadarLabel` is now the pinned text/element tagged value. Plain string arrays
+are converted into it for compatibility; typed arrays can mix text with any
+frame element. The chart lets Taffy measure each element at its natural size,
+then its pre-child paint phase places the whole laid-out subtree by Rust's
+exact radial origin formula. Text and element labels therefore share the same
+radius/gap anchor, while only text observes `LabelColor`. The label gap and
+color builders are public, and grid levels clamp to one as upstream does. The
+radar-dots story now gives its badge columns to the chart instead of assuming
+one particular card size.
+
+`SankeyLabel` retains text plus optional color and font size, including the
+source's `font_size + TEXT_GAP` line height. A node can carry any number of
+these lines; once supplied, they take precedence over the compatibility
+value/note/name builders just as Rust's `labels` closure takes precedence over
+`value_label` and `node_label`. Margin measurement, the middle-column top
+band, vertical centering and painting all use each line's actual font size and
+height. The TSLA story now constructs the source's custom three-line label
+list directly.
+
+The upstream label-value tests and builder/lifetime projections are covered,
+including 40 Sankey lines. UI Chart is full: the audit moves to 76 full, 45
+partial, 8 adapters and 2 exclusions with 330 unresolved spellings. MSVC
+release passes 19,591 checks, and the release story build passes.

@@ -131,3 +131,4 @@ void TestDescriptionList();
 void TestLabel();
 void TestGroupBox();
 void TestSizing();
+void TestChart();

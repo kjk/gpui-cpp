@@ -150,20 +150,9 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
     radarRow->Child(ChartCard(cx, "Radar Chart - Multiple", radarMulti, true));
     // Radar Chart - Dots: an element label — the month over a grade badge —
     // so the ring pulls in to outer_radius(64.) to leave it room.
-    El* radarDots = Div(a)->W(kFill)->H(kFill);
-    radarDots
-        ->Child(component::RadarChart::New(cx, kRadarDesktop, kRadarDeviceCount)
-                    ->Stroke(th.chart2)
-                    ->Fill(RgbaOpacity(th.chart2, 0.3f))
-                    ->Dot()
-                    ->OuterRadius(64)
-                    ->IntoEl()
-                    ->W(kFill)
-                    ->H(kFill));
-    // The badges ride over the ring, one per axis, where a text label would
-    // have gone.
+    component::RadarLabel* radarLabels = (component::RadarLabel*)Alloc(
+        a, sizeof(component::RadarLabel) * kRadarDeviceCount);
     for (int i = 0; i < kRadarDeviceCount; i++) {
-        float ang = -1.5707963f + 6.2831853f * (float)i / kRadarDeviceCount;
         const char* grade = kRadarDesktop[i] >= 250.f   ? "A"
                             : kRadarDesktop[i] >= 200.f ? "B"
                                                         : "C";
@@ -180,17 +169,18 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
                          ->Child(StoryTxt(cx, Str(grade), 14, th.chart2)
                                      ->Semibold()
                                      ->LineHeight(1.f)));
-        // The card's body is 368 x 268 or so; the ring is centred in it, and
-        // a badge sits just outside the 64px radius.
-        radarDots->Child(Div(a)
-                             ->Absolute()
-                             ->Left(154.f + 82.f * cosf(ang) - 40.f)
-                             ->Top(120.f + 82.f * sinf(ang) - 20.f)
-                             ->W(80)
-                             ->FlexRow()
-                             ->JustifyCenter()
-                             ->Child(badge));
+        radarLabels[i] = component::RadarLabel::Element(badge);
     }
+    El* radarDots =
+        component::RadarChart::New(cx, kRadarDesktop, kRadarDeviceCount)
+            ->Labels(radarLabels)
+            ->Stroke(th.chart2)
+            ->Fill(RgbaOpacity(th.chart2, 0.3f))
+            ->Dot()
+            ->OuterRadius(64)
+            ->IntoEl()
+            ->W(kFill)
+            ->H(kFill);
     radarRow->Child(ChartCard(cx, "Radar Chart - Dots", radarDots, true));
     // Radar Chart - Lines Only: max_value(400) and no fill under the ring.
     radarRow->Child(ChartCard(
@@ -546,16 +536,25 @@ El* ChartStory::Render(ChartStory*, Ctx* cx) {
         for (int i = 0; i < kTslaNodeCount; i++) {
             const TslaNode& node = kTslaNodes[st][i];
             sk->NodeColored(Str(node.name), node.color);
-            sk->NodeValue(StoryFmt(cx, "$%.2fB", node.value / 1000000000.0));
             // The first statement's labels carry the year-over-year change
             // between the value and the name; the second keeps the two
             // default lines.
-            if (st == 0 && node.growth != kTslaNoGrowth) {
-                bool up = node.growth >= 0;
-                sk->NodeNote(StoryFmt(cx, "%s %+.2f%%",
-                                      up ? "\xE2\x96\xB2" : "\xE2\x96\xBC",
-                                      (double)node.growth),
-                             up ? th.success : th.danger);
+            Str value = StoryFmt(cx, "$%.2fB", node.value / 1000000000.0);
+            if (st == 0) {
+                sk->CustomLabel(component::SankeyLabel::New(value));
+                if (node.growth != kTslaNoGrowth) {
+                    bool up = node.growth >= 0;
+                    sk->CustomLabel(component::SankeyLabel::New(
+                                        StoryFmt(cx, "%s %+.2f%%",
+                                                 up ? "\xE2\x96\xB2"
+                                                    : "\xE2\x96\xBC",
+                                                 (double)node.growth))
+                                        .Color(up ? th.success : th.danger));
+                }
+                sk->CustomLabel(component::SankeyLabel::New(Str(node.name))
+                                    .Color(th.mutedFg));
+            } else {
+                sk->NodeValue(value);
             }
         }
         for (int i = 0; i < kTslaLinkCount; i++) {

@@ -71,7 +71,6 @@ const partialBase = new Set([
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
 const partialUi = new Set([
   "button",
-  "chart",
   "combobox",
   "dialog",
   "dock",
@@ -266,7 +265,7 @@ const testTargets: Record<string, string[]> = {
   "ui/accordion": ["tests/AccessibilityTests.cpp"],
   "ui/avatar": ["tests/AvatarTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/button": ["tests/ButtonGroupTests.cpp", "tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
-  "ui/chart": ["tests/BuilderCapacityTests.cpp", "tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
+  "ui/chart": ["tests/ChartTests.cpp", "tests/BuilderCapacityTests.cpp", "tests/ScaleTests.cpp", "tests/SankeyTests.cpp"],
   "ui/checkbox": ["tests/ClickTests.cpp", "tests/AccessibilityTests.cpp"],
   "ui/collapsible": ["tests/AccessibilityTests.cpp"],
   "ui/combobox": ["tests/SelectTests.cpp", "tests/SearchableListTests.cpp"],

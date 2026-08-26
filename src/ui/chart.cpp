@@ -319,6 +319,88 @@ El* CandlestickChart::IntoEl() {
     return e;
 }
 
+RadarLabel RadarLabel::Text(Str text) {
+    RadarLabel label;
+    label.kind = Kind::Text;
+    label.text = text;
+    return label;
+}
+
+RadarLabel RadarLabel::Element(El* element) {
+    RadarLabel label;
+    label.kind = Kind::Element;
+    label.element = element;
+    return label;
+}
+
+// Move an already laid-out label the way AnyElement::prepaint_at does in
+// Rust. Descendant positions are absolute in this runtime, so the whole
+// subtree follows the label root.
+static void MoveRadarLabel(El* e, float x, float y) {
+    if (!e) {
+        return;
+    }
+    float dx = x - e->x;
+    float dy = y - e->y;
+    e->x = x;
+    e->y = y;
+    ArenaVec<El*> pending;
+    for (El* child = e->first; child; child = child->next) {
+        pending.Append(GetTempArena(), child);
+    }
+    for (int i = 0; i < pending.len; i++) {
+        El* child = pending[i];
+        child->x += dx;
+        child->y += dy;
+        for (El* nested = child->first; nested; nested = nested->next) {
+            pending.Append(GetTempArena(), nested);
+        }
+    }
+}
+
+static void PaintRadarLabels(PaintCtx* ctx, El* e, void* user) {
+    auto* c = (RadarChart*)user;
+    if (!c || !c->labels || c->n < 3 || c->overlay) {
+        return;
+    }
+    float radius = c->outerRadius > 0 ? c->outerRadius : e->h * 0.4f;
+    float labelRadius = radius + c->labelGap;
+    float centerX = e->x + e->w * 0.5f;
+    float centerY = e->y + e->h * 0.5f;
+    Rgba color = c->hasLabelColor ? c->labelColor
+                                  : ThemeNow(ctx->app).mutedFg;
+    for (int i = 0; i < c->n; i++) {
+        float angle = -1.5707963f + 6.2831853f * (float)i / (float)c->n;
+        float dx = cosf(angle);
+        float dy = sinf(angle);
+        float anchorX = centerX + labelRadius * dx;
+        float anchorY = centerY + labelRadius * dy;
+        const RadarLabel& label = c->labels[i];
+        if (label.kind == RadarLabel::Kind::Element) {
+            El* child = label.element;
+            if (child) {
+                MoveRadarLabel(child,
+                               anchorX + (dx - 1.f) * child->w * 0.5f,
+                               anchorY + (dy - 1.f) * child->h * 0.5f);
+            }
+            continue;
+        }
+        if (!label.text.s) {
+            continue;
+        }
+        float textW = MeasureText(ctx, label.text, kPlotTextSize, 0).w;
+        float textX = anchorX;
+        if (dx < -1e-3f) {
+            textX -= textW;
+        } else if (dx <= 1e-3f) {
+            textX -= textW * 0.5f;
+        }
+        DrawTextAt(ctx, label.text, textX, anchorY - kPlotTextSize * 0.5f,
+                   textW, kPlotTextSize + kPlotTextGap, kPlotTextSize, color,
+                   false);
+    }
+}
+
 RadarChart* RadarChart::New(Ctx* cx, const float* values, int n) {
     Arena* a = cx->a;
     RadarChart* c = ArenaNew<RadarChart>(a);
@@ -339,7 +421,29 @@ RadarChart* RadarChart::Fill(Rgba c) {
     return this;
 }
 RadarChart* RadarChart::Labels(const char* const* l) {
+    if (!l || n <= 0) {
+        labels = nullptr;
+        return this;
+    }
+    RadarLabel* converted =
+        (RadarLabel*)Alloc(a, (int)sizeof(RadarLabel) * n);
+    for (int i = 0; i < n; i++) {
+        converted[i] = RadarLabel::Text(Str(l[i]));
+    }
+    labels = converted;
+    return this;
+}
+RadarChart* RadarChart::Labels(const RadarLabel* l) {
     labels = l;
+    return this;
+}
+RadarChart* RadarChart::LabelColor(Rgba c) {
+    labelColor = c;
+    hasLabelColor = true;
+    return this;
+}
+RadarChart* RadarChart::LabelGap(float v) {
+    labelGap = v;
     return this;
 }
 RadarChart* RadarChart::Domain(float lo, float hi) {
@@ -360,20 +464,29 @@ RadarChart* RadarChart::OuterRadius(float v) {
     return this;
 }
 RadarChart* RadarChart::GridLevels(int v) {
-    gridLevels = v;
+    gridLevels = v > 1 ? v : 1;
     return this;
 }
 El* RadarChart::IntoEl() {
     Rgba none = {0, 0, 0, 0};
     El* e = ChartEl(a, values, n, stroke, fill, none, 1);
     e->chart.kind = ChartKind::Radar;
-    e->chart.labels = labels;
     e->chart.overlay = overlay;
     e->chart.dot = dot;
     e->chart.radarRadius = outerRadius;
     e->chart.gridLevels = gridLevels;
     e->chart.domainMin = domainMin;
     e->chart.domainMax = domainMax;
+    if (labels) {
+        e->customPaint = PaintRadarLabels;
+        e->customUser = this;
+        for (int i = 0; i < n; i++) {
+            if (labels[i].kind == RadarLabel::Kind::Element &&
+                labels[i].element) {
+                e->Child(labels[i].element->Absolute());
+            }
+        }
+    }
     return e;
 }
 
@@ -586,6 +699,65 @@ El* PieChart::IntoEl() {
 
 // ─── SankeyChart ─────────────────────────────────────────────────────────
 
+SankeyLabel SankeyLabel::New(Str text) {
+    SankeyLabel label;
+    label.text = text;
+    return label;
+}
+
+SankeyLabel SankeyLabel::Color(Rgba value) const {
+    SankeyLabel label = *this;
+    label.color = value;
+    label.hasColor = true;
+    return label;
+}
+
+SankeyLabel SankeyLabel::FontSize(float value) const {
+    SankeyLabel label = *this;
+    label.fontSize = value;
+    return label;
+}
+
+float SankeyLabel::LineHeight() const {
+    return (fontSize > 0 ? fontSize : kPlotTextSize) + kPlotTextGap;
+}
+
+static int SankeyNodeLineCount(const SankeyChartNode& node, Str value) {
+    if (node.hasCustomLabels) {
+        return node.labels.len;
+    }
+    return (value.s ? 1 : 0) + (node.note.s ? 1 : 0) +
+           (node.label.s ? 1 : 0);
+}
+
+static SankeyLabel SankeyNodeLine(const SankeyChartNode& node, Str value,
+                                  int ix, const Theme& th) {
+    if (node.hasCustomLabels) {
+        return node.labels[ix];
+    }
+    if (value.s) {
+        if (ix-- == 0) {
+            return SankeyLabel::New(value);
+        }
+    }
+    if (node.note.s) {
+        if (ix-- == 0) {
+            return SankeyLabel::New(node.note).Color(node.noteColor);
+        }
+    }
+    return SankeyLabel::New(node.label).Color(th.mutedFg);
+}
+
+static float SankeyNodeBlockHeight(const SankeyChartNode& node, Str value,
+                                   const Theme& th) {
+    float height = 0;
+    int n = SankeyNodeLineCount(node, value);
+    for (int i = 0; i < n; i++) {
+        height += SankeyNodeLine(node, value, i, th).LineHeight();
+    }
+    return height;
+}
+
 void SankeyChartThroughput(const SankeyLink* links, int nLinks, double* out,
                            int n) {
     // The two sides are added up separately and the larger wins, the same way
@@ -638,6 +810,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     if (width <= 0 || height <= 0) {
         return;
     }
+    const Theme& th = ThemeNow(ctx->app);
 
     Sankey gen;
     gen.nodeWidth = c->nodeWidth;
@@ -675,7 +848,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     nodeIx = -1;
     for (const SankeyChartNode& node : c->nodes) {
         nodeIx++;
-        if (node.label.s || values[nodeIx].s) {
+        if (SankeyNodeLineCount(node, values[nodeIx]) > 0) {
             hasLabels = true;
         }
     }
@@ -693,12 +866,12 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
                 continue;
             }
             float labelW = 0;
-            Str lines[3] = {values[i], node.note, node.label};
-            for (int k = 0; k < 3; k++) {
-                if (!lines[k].s) {
-                    continue;
-                }
-                Size sz = MeasureText(ctx, lines[k], kPlotTextSize, 0);
+            int lineCount = SankeyNodeLineCount(node, values[i]);
+            for (int k = 0; k < lineCount; k++) {
+                SankeyLabel line = SankeyNodeLine(node, values[i], k, th);
+                float fontSize = line.fontSize > 0 ? line.fontSize
+                                                   : kPlotTextSize;
+                Size sz = MeasureText(ctx, line.text, fontSize, 0);
                 if (sz.w > labelW) {
                     labelW = sz.w;
                 }
@@ -716,7 +889,6 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     }
     // A middle column's labels sit above its nodes, so the top band is
     // reserved for the tallest of those blocks.
-    float lineH = kPlotTextSize + kPlotTextGap;
     float top = 0;
     if (hasLabels && layers > 2) {
         nodeIx = -1;
@@ -726,13 +898,7 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
             if (layer == 0 || layer + 1 == layers) {
                 continue;
             }
-            float block = 0;
-            if (values[i].s) {
-                block += lineH;
-            }
-            if (node.label.s) {
-                block += lineH;
-            }
+            float block = SankeyNodeBlockHeight(node, values[i], th);
             if (block > 0 && block + kPlotTextGap > top) {
                 top = block + kPlotTextGap;
             }
@@ -754,7 +920,6 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     SankeyLayoutFrom(&gen, &g);
 
     // chart_1..chart_5 in Rust: the palette a node falls back to, by index.
-    const Theme& th = ThemeNow(ctx->app);
     Rgba palette[5] = {th.blue, th.green, th.yellow, th.magenta, th.cyan};
     Rgba* colors = (Rgba*)Alloc(ta, (int)sizeof(Rgba) * nNodes);
     nodeIx = -1;
@@ -814,16 +979,10 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
     }
     for (int i = 0; i < g.nodes.len; i++) {
         const SankeyNodeLayout& node = g.nodes[i];
-        Str lines[3] = {values[node.index], c->nodes[node.index].note,
-                        c->nodes[node.index].label};
-        Rgba lineColors[3] = {th.foreground, c->nodes[node.index].noteColor,
-                              th.mutedFg};
-        float block = 0;
-        for (int k = 0; k < 3; k++) {
-            if (lines[k].s) {
-                block += lineH;
-            }
-        }
+        const SankeyChartNode& chartNode = c->nodes[node.index];
+        Str value = values[node.index];
+        int lineCount = SankeyNodeLineCount(chartNode, value);
+        float block = SankeyNodeBlockHeight(chartNode, value, th);
         if (block <= 0) {
             continue;
         }
@@ -865,13 +1024,13 @@ static void PaintSankey(PaintCtx* ctx, El* e, void* user) {
         } else {
             y = node.y0 - block - kPlotTextGap;
         }
-        for (int k = 0; k < 3; k++) {
-            if (!lines[k].s) {
-                continue;
-            }
-            SankeyLabelLine(ctx, lines[k], e->x + x, e->y + y, maxW,
-                            kPlotTextSize, lineColors[k], align);
-            y += lineH;
+        for (int k = 0; k < lineCount; k++) {
+            SankeyLabel line = SankeyNodeLine(chartNode, value, k, th);
+            float fontSize = line.fontSize > 0 ? line.fontSize : kPlotTextSize;
+            Rgba lineColor = line.hasColor ? line.color : th.foreground;
+            SankeyLabelLine(ctx, line.text, e->x + x, e->y + y, maxW,
+                            fontSize, lineColor, align);
+            y += line.LineHeight();
         }
     }
 }
@@ -899,6 +1058,25 @@ SankeyChart* SankeyChart::NodeNote(Str text, Rgba color) {
     if (nodes.len > 0) {
         nodes[nodes.len - 1].note = text;
         nodes[nodes.len - 1].noteColor = color;
+    }
+    return this;
+}
+SankeyChart* SankeyChart::CustomLabel(SankeyLabel label) {
+    if (nodes.len > 0) {
+        SankeyChartNode& node = nodes[nodes.len - 1];
+        node.hasCustomLabels = true;
+        node.labels.Append(a, label);
+    }
+    return this;
+}
+SankeyChart* SankeyChart::CustomLabels(const SankeyLabel* labels, int n) {
+    if (nodes.len <= 0) {
+        return this;
+    }
+    SankeyChartNode& node = nodes[nodes.len - 1];
+    node.hasCustomLabels = true;
+    for (int i = 0; labels && i < n; i++) {
+        node.labels.Append(a, labels[i]);
     }
     return this;
 }
