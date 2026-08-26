@@ -422,7 +422,7 @@ static component::Select* Sel(SelectStory* self, Ctx* cx, int which,
 
 El* SelectStory::Render(SelectStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         InputSetPlaceholder(&self->phone, StrL("Your phone number"));

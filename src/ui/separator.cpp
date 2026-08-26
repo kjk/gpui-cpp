@@ -38,7 +38,7 @@ Separator* Separator::Color(Rgba c) {
 }
 
 El* Separator::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Rgba c = hasColor ? color : th.border;
     El* root = Div(a)->ItemsCenter()->JustifyCenter()->Shrink0();
     if (vertical) {

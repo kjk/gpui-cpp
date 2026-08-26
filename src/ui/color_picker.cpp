@@ -84,7 +84,7 @@ static El* Swatch(Ctx* cx, Entity<ColorPickerState> st, Str id, uint32_t hex) {
 static El* PalettePanel(Ctx* cx, Entity<ColorPickerState> st,
                         const uint32_t* featured, int nFeatured) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The twelve the theme names, when the caller did not bring its own.
     uint32_t owned[12] = {
         HexOf(th.red),       HexOf(th.redLight),    HexOf(th.blue),
@@ -157,7 +157,7 @@ static uint32_t LightnessAt(float t, float h) {
 static El* SliderRow(Ctx* cx, Entity<ColorPickerState> st, Str label, El* track,
                      int slot, Str value) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Rgba labelColor = RgbaOpacity(th.foreground, 0.7f);
     ColorPickerState* s = st.Get(cx);
     El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
@@ -216,7 +216,7 @@ static El* SliderPanel(Ctx* cx, Entity<ColorPickerState> st) {
 // ─── the whole thing ──────────────────────────────────────────────────────
 
 El* ColorPicker::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Entity<ColorPickerState> st = ColorPickerStateFor(cx, id);
     ColorPickerState* s = st.Get(cx);
     if (!s) {

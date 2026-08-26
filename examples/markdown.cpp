@@ -85,7 +85,7 @@ static int FindFrom(Str hay, Str needle, int from) {
 // The provider's job, without the provider: every marker word in the text,
 // as a decoration in the colour its token type paints.
 static int FindMarkers(Ctx* cx, Str text, TextSpan* out, int cap) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     ThemeMode mode = ThemeGet(cx->app);
     int n = 0;
     for (int i = 0; i < kMarkerCount && n < cap; i++) {
@@ -197,7 +197,7 @@ static bool TickerParse(Ctx* cx, component::MdNode* n, Str text, void*,
 
 static El* TickerRender(Ctx* cx, const component::MdPluginNode* node, void*) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const auto* q = (const TickerQuote*)node->data;
     bool up = q->change >= 0.f;
     Rgba trend = up ? th.green : th.red;
@@ -339,7 +339,7 @@ struct FollowState {
 
 static El* UserCardRender(Ctx* cx, const component::MdPluginNode* node, void*) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const auto* u = (const UserCardDef*)node->data;
     Str id = node->text;
     Entity<FollowState> follow = KeyedEntity<FollowState>(
@@ -772,7 +772,7 @@ static bool MathParse(Ctx* cx, component::MdNode* n, Str text, void*,
 // render_math_text: the formula italic, a size up when it is a block of its
 // own, and the line height GPUI gives each case.
 static El* MathFormula(Ctx* cx, Str source, bool inlineMath, float fontSize) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     float size = inlineMath
                      ? (fontSize > 10.f ? fontSize : 10.f)
                      : (fontSize * 1.18f > 12.f ? fontSize * 1.18f : 12.f);
@@ -933,7 +933,7 @@ static El* TableActions(Ctx* cx, void* data,
                         const component::TableData* table) {
     (void)data;
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyEnd()->ItemsCenter()->Gap(4);
     row->Child(
         TextEl(a, StrDup(a, fmt("%d × %d", table->rowCount, table->cols)))
@@ -948,7 +948,7 @@ static El* TableActions(Ctx* cx, void* data,
 
 El* MarkdownApp::Render(MarkdownApp* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
     }

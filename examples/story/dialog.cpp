@@ -166,13 +166,13 @@ static El* DialogTitleText(Ctx* cx, Str text, Rgba color) {
 }
 
 static El* DialogDescriptionText(Ctx* cx, Str text) {
-    return StoryTxt(cx, text, 14, cx->theme().mutedFg)->Wrap()->W(kFill);
+    return StoryTxt(cx, text, 14, ThemeNow(cx->app).mutedFg)->Wrap()->W(kFill);
 }
 
 static El* DialogHeader(Ctx* cx, Str title, Str description) {
     El* header = Div(cx->a)->FlexCol()->W(kFill)->Gap(8);
     if (title.len > 0) {
-        header->Child(DialogTitleText(cx, title, cx->theme().foreground));
+        header->Child(DialogTitleText(cx, title, ThemeNow(cx->app).foreground));
     }
     if (description.len > 0) {
         header->Child(DialogDescriptionText(cx, description));
@@ -206,7 +206,7 @@ static void AddDialog(El* section, component::Dialog* dialog, Ctx* cx) {
 }
 
 static El* DialogTableCell(Ctx* cx, void*, int row, int col) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     switch (col) {
         case 0:
             return StoryTxt(cx, StoryFmt(cx, "%d", row), 16, th.foreground)
@@ -230,7 +230,7 @@ static El* DialogTableCell(Ctx* cx, void*, int row, int col) {
 // render_basic_dialog
 static El* RenderBasicDialog(DialogStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section = StorySection(cx, "Default",
                                "Compose form controls and footer actions.");
     StorySectionAdd(section, StoryDialogTrigger(cx, DlgDefault, "show-dialog",
@@ -325,7 +325,7 @@ static El* RenderBasicDialog(DialogStory* self, Ctx* cx) {
 // render_focus_return_check
 static El* RenderFocusReturnCheck(DialogStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->W(kFill)->JustifyCenter();
     El* card = Div(a)
                    ->FlexCol()
@@ -376,7 +376,7 @@ static El* RenderDialogWithoutTitle(DialogStory* self, Ctx* cx) {
         StoryTxt(cx,
                  StrL("This is a dialog without title, you can use it "
                       "when the title is not necessary."),
-                 16, cx->theme().foreground)
+                 16, ThemeNow(cx->app).foreground)
             ->Wrap()
             ->W(kFill));
     component::Dialog* dialog = NewOpenDialog(self, cx)
@@ -391,7 +391,7 @@ static El* RenderDialogWithoutTitle(DialogStory* self, Ctx* cx) {
 // render_custom_buttons
 static El* RenderCustomButtons(DialogStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section = StorySection(cx, "Custom actions",
                                "Replace the default footer actions.");
     StorySectionAdd(section,
@@ -441,7 +441,7 @@ static El* RenderCustomButtons(DialogStory* self, Ctx* cx) {
 // render_scrollable_dialog
 static El* RenderScrollableDialog(DialogStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section = StorySection(cx, "Scrollable",
                                "Keep long content inside a fixed dialog size.");
     StorySectionAdd(section,
@@ -500,7 +500,7 @@ static El* RenderTableInDialog(DialogStory* self, Ctx* cx) {
         {StrL("Status"), 100, false, false, true},
     };
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section =
         StorySection(cx, "Data table", "Embed a full interactive component.");
     StorySectionAdd(section, StoryDialogTrigger(cx, DlgTable, "table-dialog",
@@ -547,7 +547,7 @@ static El* RenderTableInDialog(DialogStory* self, Ctx* cx) {
 
 // render_custom_paddings
 static El* RenderCustomPaddings(DialogStory* self, Ctx* cx) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section =
         StorySection(cx, "Padding", "Control spacing around dialog content.");
     StorySectionAdd(section,
@@ -574,7 +574,7 @@ static El* RenderCustomPaddings(DialogStory* self, Ctx* cx) {
 
 // render_custom_style
 static El* RenderCustomStyle(DialogStory* self, Ctx* cx) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section = StorySection(cx, "Custom style",
                                "Customize color, radius, and foreground.");
     StorySectionAdd(section,
@@ -601,7 +601,7 @@ static El* RenderCustomStyle(DialogStory* self, Ctx* cx) {
 // render_dialog_with_content
 static El* RenderDialogWithContent(DialogStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section = StorySection(cx, "Custom content",
                                "Compose header, body, and footer explicitly.");
     StorySectionAdd(
@@ -640,7 +640,7 @@ static El* RenderDialogWithContent(DialogStory* self, Ctx* cx) {
 // render_textview_dialog
 static El* RenderTextViewDialog(DialogStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* section =
         StorySection(cx, "Selectable text", "Embed selectable rich text.");
     StorySectionAdd(section,

@@ -13,7 +13,7 @@ static El* IconSection(Ctx* cx, const char* title, const char* desc) {
 
 El* IconStory::Render(IconStory*, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->ItemsCenter()->Gap(24)->W(kFill);
 
     // The icons are children of the section itself, which wraps them at

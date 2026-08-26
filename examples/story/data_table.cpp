@@ -588,7 +588,7 @@ static DtCellVal DtValueFor(Ctx* cx, const Stock& s, int row, int col) {
 // render_td: the delegate's cell, which the table places and styles.
 static El* DtCellFor(Ctx* cx, void* data, int row, int col) {
     DataTableStory* self = (DataTableStory*)data;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The Rust story generates a row per index; ours repeats the fixed set,
     // so a table of five thousand rows is five thousand rows to scroll.
     const int nStocks = (int)(sizeof(kStocks) / sizeof(kStocks[0]));
@@ -710,7 +710,7 @@ static Str DtCellText(Ctx* cx, void* data, int row, int col) {
 
 El* DataTableStory::Render(DataTableStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Listener openMenu = Listen(cx, &DtMenuOpen);
     Listener act = Listen(cx, &DtMenuAct);
     if (!self->seeded) {

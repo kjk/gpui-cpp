@@ -43,7 +43,7 @@ Progress* Progress::Id(Str v) {
 }
 
 El* Progress::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* indicator = gpui::ProgressIndicator::New(cx)
                         ->H(h)
                         ->Radius(th.radiusFull)
@@ -190,7 +190,7 @@ El* ProgressCircle::IntoEl() {
     if (showLabel && size >= 28) {
         e->Child(TextEl(a, StrDup(a, fmt("%.0f%%", value)))
                      ->Font(size * 0.22f)
-                     ->Fg(hasColor ? color : cx->theme().foreground));
+                     ->Fg(hasColor ? color : ThemeNow(cx->app).foreground));
     }
     return e;
 }

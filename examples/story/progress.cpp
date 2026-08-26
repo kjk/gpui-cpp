@@ -80,7 +80,7 @@ static void ProgMenuAct(ProgressStory* self, Ctx* cx, const ClickEvent*,
 
 El* ProgressStory::Render(ProgressStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     Listener openMenu = Listen(cx, &ProgMenuOpen);
     Listener act = Listen(cx, &ProgMenuAct);

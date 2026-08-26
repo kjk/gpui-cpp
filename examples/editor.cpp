@@ -1170,7 +1170,7 @@ static component::PopupMenu* EditorPopupMenu(Ctx* cx, Str id,
 
 static El* EditorTitleMenuItem(Ctx* cx, Str label, bool semibold) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* text = TextEl(a, label)->Font(14)->Fg(th.foreground);
     if (semibold) {
         text->Semibold();
@@ -1348,7 +1348,7 @@ static El* EditorAppearanceMenu(EditorApp* self, Ctx* cx) {
 static El* EditorTitleBar(EditorApp* self, Ctx* cx, const MenuDef* defs,
                           int nDefs) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* menus = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
     if (self->appMenuBar) {
         menus->Child(EditorMenuBar(cx, defs, nDefs));
@@ -1396,7 +1396,7 @@ static El* EditorTitleBar(EditorApp* self, Ctx* cx, const MenuDef* defs,
 
 El* EditorApp::Render(EditorApp* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->tree = EntityNewState<TreeState>(cx->app);

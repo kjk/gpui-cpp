@@ -4,10 +4,8 @@
  * scales, named without a component in sight — no `button`, no `table`,
  * no `sidebar`. Rust keeps them on `gpui_base::Theme` and the `crates/ui`
  * theme projects them out of its own palette every time it is applied;
- * the same pair of functions is below.
- *
- * `ThemeTokens` in `gpui/gpui.h` is a different set with a confusingly
- * similar name: it is the ui layer's own, and it carries gradients. */
+ * the conversion functions live in `ui/theme.h`, keeping this layer unaware
+ * of the component palette and its gradient-bearing ThemeTokens. */
 
 #include "gpui/gpui.h"
 
@@ -103,14 +101,5 @@ struct SemanticThemeTokens {
     SemanticTypographyTokens typography = {};
     SemanticShadowTokens shadow = {};
 };
-
-// Theme::semantic_tokens: the roles this palette comes to. `sm` is half the
-// radius and `xl` twice it, which is what `radius_tokens` says.
-SemanticThemeTokens ThemeSemanticTokens(const Theme& t,
-                                        float fontSize = 16.f);
-// Theme::apply_semantic_tokens: the other way, for a theme written as tokens
-// rather than as the legacy key list. Only what the legacy palette can hold
-// comes back — the spacing scale and the text roles have nowhere to go.
-void ThemeApplySemanticTokens(Theme* t, const SemanticThemeTokens& tokens);
 
 } // namespace gpui

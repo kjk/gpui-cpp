@@ -26,7 +26,7 @@ static El* BadgeSection(Ctx* cx, const char* title, float w) {
 
 El* BadgeStory::Render(BadgeStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     UiSize size = self->toolbar.size;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));

@@ -87,7 +87,7 @@ WindowBorder* WindowBorder::Tiling(WindowTiling v) {
 }
 
 El* WindowBorder::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // A window tiled on every side keeps its platform inset but draws no
     // shadow: there is nothing for one to fall on.
     float visualShadow = tiling.AllTiled() ? 0.f : shadowSize;

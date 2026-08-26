@@ -51,7 +51,7 @@ static float ModeColumnWidth(int mode) {
 El* MdApp::Render(MdApp* app, Ctx* cx) {
     Arena* frame = cx->a;
 
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* bar = Div(frame)
                   ->FlexRow()
                   ->Pad(8)

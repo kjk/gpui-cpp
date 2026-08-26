@@ -308,7 +308,7 @@ static void InitializeStory(DatePickerStory* self) {
 El* DatePickerStory::Render(DatePickerStory* self, Ctx* cx) {
     InitializeStory(self);
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     for (int i = 0; i < 4; i++) {
         gRangePresets[i].arg = DpDateRange * 16 + i;
     }

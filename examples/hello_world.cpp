@@ -9,7 +9,7 @@ struct Example {
     }
 
     static El* Render(Example*, Ctx* cx) {
-        const Theme& th = cx->theme();
+        const Theme& th = ThemeNow(cx->app);
         return Div(cx->a)
             ->FlexCol()
             ->SizeFull()

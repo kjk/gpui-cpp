@@ -73,7 +73,7 @@ static void FocusNum(NumberInputStory* self, Ctx* cx, const ClickEvent*,
 
 El* NumberInputStory::Render(NumberInputStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         struct {

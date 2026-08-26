@@ -70,7 +70,7 @@ static bool LabelEqI(const char* a, const char* b, int n) {
 // both sides before searching.
 static El* LabelHighlighted(Arena* a, Ctx* cx, Str text, Str needle,
                             bool prefix, Rgba fg, float font, bool semibold) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->ItemsCenter();
     auto piece = [&](int from, int to, bool hit) {
         if (to <= from) {
@@ -110,7 +110,7 @@ static El* LabelHighlighted(Arena* a, Ctx* cx, Str text, Str needle,
 }
 
 El* Label::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Str shown = text;
     if (masked && text.len > 0) {
         char buf[64];

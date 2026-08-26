@@ -11,7 +11,7 @@ struct Example {
 
     static El* Render(Example*, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = cx->theme();
+        const Theme& th = ThemeNow(cx->app);
         // One child, the full-width justify-between row Rust puts in the bar.
         El* bar =
             component::TitleBar::New(cx)

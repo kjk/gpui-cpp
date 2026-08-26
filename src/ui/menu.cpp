@@ -183,7 +183,7 @@ static void OnPopupLinkClick(PopupMenuState* state, Ctx* cx, const ClickEvent*,
 }
 
 El* PopupMenu::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     PopupMenuState* s = state.Get(cx);
     int selected = s ? s->selected : -1;
     int openSubmenu = s ? s->openSubmenu : -1;
@@ -583,7 +583,7 @@ AppMenuBar* AppMenuBar::Menu(Str title, PopupMenu* menu) {
 }
 
 El* AppMenuBar::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     AppMenuBarState* s = state.Get(cx);
     // The bar carries the name, so a title is `0`, `1`, `2` inside it.
     IdScope scope(cx, id);

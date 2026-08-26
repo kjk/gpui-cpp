@@ -79,7 +79,7 @@ static void MenuPicked(DialogApp* app, Ctx* cx, const ClickEvent*,
 // The header both overlays share: the title, and the close button opposite.
 static El* OverlayHeader(Ctx* cx, Str title) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
     row->Child(TextEl(a, title)->Font(15)->Semibold()->Fg(th.foreground));
     row->Child(Div(a)
@@ -98,7 +98,7 @@ static El* OverlayHeader(Ctx* cx, Str title) {
 El* DialogApp::Render(DialogApp* app, Ctx* cx) {
     Arena* frame = cx->a;
     WinSize size = WindowSize(cx->win);
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
 
     El* bar = Div(frame)
                   ->FlexRow()

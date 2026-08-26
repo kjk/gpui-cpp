@@ -632,7 +632,7 @@ struct CommandRowContext {
 
 static El* CommandRowEl(void* user, Ctx* cx, int rowIx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     CommandRowContext* rowCx = (CommandRowContext*)user;
     Entity<CommandState> entity = rowCx ? rowCx->state : Entity<CommandState>{};
     CommandState* s = entity.Get(cx);
@@ -711,13 +711,13 @@ static El* CommandRowEl(void* user, Ctx* cx, int rowIx) {
 
 static El* DefaultEmpty(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)->W(kFill)->PadY(24)->ItemsCenter()->JustifyCenter()->Child(
         TextEl(a, Tr("Command.empty"))->Font(14)->Fg(th.mutedFg));
 }
 
 El* Command::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     CommandState* s = state.Get(cx);
     El* box = Div(a)->FlexCol()->W(w)->ClipY()->Bg(th.tokens.popover);
     if (bordered) {

@@ -77,7 +77,7 @@ El* Alert::IntoEl() {
     if (!visible) {
         return Div(a);
     }
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Rgba fg = th.foreground, bg = th.background, bd = th.border;
     switch (variant) {
         case AlertVariant::Info:

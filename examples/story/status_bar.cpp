@@ -33,12 +33,12 @@ static El* CountEl(Ctx* cx, IconName n, Rgba fg, Str text) {
         ->ItemsCenter()
         ->Gap(4)
         ->Child(IconEl(a, n, 12)->Fg(fg))
-        ->Child(StoryTxt(cx, text, 12, cx->theme().mutedFg));
+        ->Child(StoryTxt(cx, text, 12, ThemeNow(cx->app).mutedFg));
 }
 
 El* StatusBarStory::Render(StatusBarStory*, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->ItemsCenter()->Gap(24)->W(kFill);
 
     // Every section is .w(px(760.)), which is wider than the pane and so

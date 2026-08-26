@@ -59,7 +59,7 @@ static void NoOp(TextareaStory*, Ctx*, const ClickEvent*) {}
 
 El* TextareaStory::Render(TextareaStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         InputState* all[] = {&self->notes, &self->noWrap, &self->autoGrow,

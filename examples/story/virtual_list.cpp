@@ -110,7 +110,7 @@ static int gVlColumns = 7;
 
 static El* VlRow(Ctx* cx, int ix) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->Gap(4)->ItemsCenter()->H(kRowH);
     for (int c = 0; c < gVlColumns; c++) {
         Str label =
@@ -134,7 +134,7 @@ static El* VlRow(Ctx* cx, int ix) {
 El* VirtualListStory::Render(VirtualListStory* self, Ctx* cx) {
     WinSize win = WindowSize(cx->win);
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Listener openMenu = Listen(cx, &VlMenuOpen);
     Listener act = Listen(cx, &VlMenuAct);
     Listener scrollTo = Listen(cx, &VlScrollTo);

@@ -67,7 +67,7 @@ static void PickDataset(ScrollbarStory* self, Ctx* cx, const ClickEvent*,
 El* ScrollbarStory::Render(ScrollbarStory* self, Ctx* cx) {
     WinSize win = WindowSize(cx->win);
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->Gap(16)->W(kFill);
 
     // story_toolbar_group() with the dataset dropdown.

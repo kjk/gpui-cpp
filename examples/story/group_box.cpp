@@ -38,7 +38,7 @@ static void PickTheme(GroupBoxStory* self, Ctx* cx, const ClickEvent*,
 // A row of text with a switch pushed to the far edge.
 static El* SwitchRow(Ctx* cx, Str label, Str id, bool on, Listener onClick) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->W(kFill)->ItemsCenter()->JustifyBetween();
     row->Child(StoryTxt(cx, label, 16, th.foreground));
     row->Child(component::Switch::New(cx, id)
@@ -143,7 +143,7 @@ El* GroupBoxStory::Render(GroupBoxStory* self, Ctx* cx) {
              ->Outline()
              ->TitleSemibold()
              ->TitlePadX(12)
-             ->ContentBg(cx->theme().groupBox)
+             ->ContentBg(ThemeNow(cx->app).groupBox)
              ->ContentRadius(12)
              ->ContentPad(16)
              ->ContentBorder(2)

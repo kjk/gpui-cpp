@@ -619,7 +619,7 @@ El* NotificationList::IntoEl() {
 }
 
 El* Notification::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // Notification's own box, not an Alert: border_1 in theme.border on the
     // popover surface, radius_lg, shadow_md, py_3p5 px_4 gap_3. Nothing here
     // is tinted by the kind — only the icon is.

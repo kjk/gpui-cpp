@@ -122,7 +122,7 @@ void TilesStory::OnRedo(TilesStory* self, Ctx* cx, const ClickEvent*) {
 
 El* TilesStory::Render(TilesStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->tiles = EntityNewState<TilesState>(cx->app);

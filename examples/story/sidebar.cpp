@@ -114,7 +114,7 @@ static const component::SidebarCollapsible kCollapsibles[3] = {
 
 El* SidebarStory::Render(SidebarStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Listener pick = Listen(cx, &SidebarPick);
     Listener pickSub = Listen(cx, &SidebarPickSub);
     component::SidebarCollapsible collapsible =

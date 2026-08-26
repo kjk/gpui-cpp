@@ -38,7 +38,7 @@ ListItem* ListItem::Style(const StateStyle& s) {
 }
 
 El* ListItem::IntoEl(Str id, Listener onClick, Listener onMouseDown) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)
                   ->FlexRow()
                   ->W(kFill)
@@ -193,7 +193,7 @@ El* ListLoadingView(Ctx* cx, float h) {
 // list would have filled.
 static El* DefaultEmpty(Ctx* cx, float h) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->FlexCol()
         ->W(kFill)
@@ -205,7 +205,7 @@ static El* DefaultEmpty(Ctx* cx, float h) {
 }
 
 El* List::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     ListState* s = state.Get(cx);
     if (s) {
         s->self = state.id;

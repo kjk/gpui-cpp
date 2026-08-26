@@ -89,7 +89,7 @@ Root* Root::UseWindowLayers(bool v) {
 
 El* Root::IntoEl() {
     UiSelectionFrameBegin(cx->app);
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* e = Div(a)->FlexCol()->SizeFull()->Bg(th.tokens.background);
     if (child) {
         e->Child(child);

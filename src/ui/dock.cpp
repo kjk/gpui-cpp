@@ -8,7 +8,7 @@ namespace component {
 
 El* DockInvalidPanelRender(Ctx* cx, void* data) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     auto* info = (DockInvalidPanel*)data;
     Str name = info ? info->name : StrL("");
     // my_6, centred, muted: Rust's sentence, with the name it was asked for.
@@ -47,7 +47,7 @@ DockArea* DockArea::New(Ctx* cx, Str id, Entity<DockState> state) {
 static El* ToggleButton(const DockTabGroup* g, DockPlacement p, IconName icon) {
     Ctx* cx = g->cx;
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return DockBindToggle(g, p,
                           Div(a)
                               ->Pad(4)
@@ -93,7 +93,7 @@ static bool HasLeadingToggles(const DockTabGroup* g) {
 static El* RenderTools(const DockTabGroup* g) {
     Ctx* cx = g->cx;
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     DockState* s = g->state.Get(cx);
     El* row = Div(a)->FlexRow()->ItemsCenter()->Shrink0()->Gap(4);
     int activeIx = DockGroupActiveIx(g);
@@ -158,7 +158,7 @@ static El* RenderTools(const DockTabGroup* g) {
 static El* RenderTitleRow(const DockTabGroup* g) {
     Ctx* cx = g->cx;
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     int activeIx = DockGroupActiveIx(g);
     const DockPanelDef* def = DockGroupPanel(g, activeIx);
     if (!def) {
@@ -203,7 +203,7 @@ static El* RenderTitleRow(const DockTabGroup* g) {
 // lone panel gets.
 static El* SkinTabBar(Ctx* cx, void*, const DockTabGroup* g) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     DockState* s = g->state.Get(cx);
     int activeIx = DockGroupActiveIx(g);
 
@@ -311,11 +311,11 @@ static El* SkinTabBar(Ctx* cx, void*, const DockTabGroup* g) {
 }
 
 static El* SkinFrame(Ctx* cx, void*) {
-    return Div(cx->a)->Bg(cx->theme().tokens.background);
+    return Div(cx->a)->Bg(ThemeNow(cx->app).tokens.background);
 }
 
 static El* SkinTabContent(Ctx* cx, void*, const DockTabGroup*) {
-    return Div(cx->a)->ClipY()->Bg(cx->theme().tokens.background);
+    return Div(cx->a)->ClipY()->Bg(ThemeNow(cx->app).tokens.background);
 }
 
 // render_split_handle: base keeps the four-DIP grab, the cursor and the drag;
@@ -324,9 +324,9 @@ static El* SkinSplitHandle(Ctx* cx, void*, const DockHandleCtx* h) {
     // `div().bg(bg_color).group_hover("handle", |this| this.bg(bg_color))`:
     // the drag colours the line, and so does the pointer being anywhere in
     // the grab area around it -- which is the group base put on the handle.
-    El* e = Div(cx->a)->SizeFull()->GroupHoverBg(cx->theme().border);
+    El* e = Div(cx->a)->SizeFull()->GroupHoverBg(ThemeNow(cx->app).border);
     if (h->active) {
-        e->Bg(cx->theme().border);
+        e->Bg(ThemeNow(cx->app).border);
     }
     return e;
 }
@@ -336,7 +336,7 @@ static El* SkinSplitHandle(Ctx* cx, void*, const DockHandleCtx* h) {
 // so there is still something to click to open it again.
 static El* SkinDock(Ctx* cx, void*, const DockCtx* d, El* content) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (d->placement == DockPlacement::Bottom) {
         float h = d->open ? d->size : kDockCollapsedH;
         El* dock =
@@ -368,14 +368,14 @@ static El* SkinDock(Ctx* cx, void*, const DockCtx* d, El* content) {
 }
 
 static El* SkinDropIndicator(Ctx* cx, void*, Bounds) {
-    return Div(cx->a)->Bg(BackgroundOpacity(cx->theme().tokens.primary, 0.2f));
+    return Div(cx->a)->Bg(BackgroundOpacity(ThemeNow(cx->app).tokens.primary, 0.2f));
 }
 
 // TabPanel::render_drag_panel: w_24, py_1, px_3, a border, the active tab's
 // surface, and 0.75 of the opacity. Base puts it under the pointer.
 static El* SkinDragPreview(Ctx* cx, void*, const DockPanelDef* def) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->W(kDockDragPreviewW)
         ->PadY(4)

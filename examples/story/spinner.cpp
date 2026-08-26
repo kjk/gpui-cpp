@@ -17,7 +17,7 @@ static El* SpinnerSection(Ctx* cx, const char* title, const char* desc) {
 
 El* SpinnerStory::Render(SpinnerStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     UiSize size = self->toolbar.size;
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));

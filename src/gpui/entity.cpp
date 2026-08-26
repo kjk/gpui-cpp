@@ -178,14 +178,6 @@ El* EntityRender(App* app, Window* win, Arena* a, EntityId id) {
     return s.render(s.ptr, &cx);
 }
 
-const Theme& Ctx::theme() const {
-    return ThemeNow(app);
-}
-
-ThemeMode Ctx::themeMode() const {
-    return ThemeGet(app);
-}
-
 void NotifyApp(App* app) {
     if (!app) {
         return;

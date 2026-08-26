@@ -86,7 +86,7 @@ El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
     El* custom = StorySection(cx, "Custom content",
                               "Build tooltip content with an action hint.");
     StorySectionAdd(custom,
-                    StoryTxt(cx, StrL("Hover me"), 14, cx->theme().foreground)
+                    StoryTxt(cx, StrL("Hover me"), 14, ThemeNow(cx->app).foreground)
                         ->Tip(StrL("This is a default tooltip style "
                                    "by GPUI.")));
     page->Child(custom);
@@ -95,7 +95,7 @@ El* TooltipStory::Render(TooltipStory* self, Ctx* cx) {
                            "Dismiss cleanly when the trigger leaves the view.");
     if (self->tipRemoved) {
         StorySectionAdd(rem, StoryTxt(cx, StrL("Trigger removed"), 13,
-                                      cx->theme().mutedFg));
+                                      ThemeNow(cx->app).mutedFg));
     } else {
         StorySectionAdd(
             rem,

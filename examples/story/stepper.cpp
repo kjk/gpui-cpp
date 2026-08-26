@@ -50,7 +50,7 @@ static void StepperAct(StepperStory* self, Ctx* cx, const ClickEvent*,
 // The label under a step, and the description under that.
 static El* StepText(Ctx* cx, Str title, const char* desc, bool center) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* col = Div(a)->FlexCol();
     if (center) {
         col->ItemsCenter();

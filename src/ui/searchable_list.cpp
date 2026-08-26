@@ -226,7 +226,7 @@ SearchableList* SearchableList::CheckIcon(IconName n) {
 }
 
 El* SearchableList::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     SearchableListState* s = state.Get(cx);
     El* box = Div(a)
                   ->Id(id)

@@ -39,7 +39,7 @@ struct PopoverStory {
 static component::ListItem* PopListItem(Ctx* cx, void*, int, int row, int) {
     return component::ListItem::New(
         cx,
-        StoryTxt(cx, StoryFmt(cx, "Item %d", row), 14, cx->theme().foreground));
+        StoryTxt(cx, StoryFmt(cx, "Item %d", row), 14, ThemeNow(cx->app).foreground));
 }
 
 // Kbd::format, as menu.cpp spells it: the platform's own shortcut text.
@@ -91,7 +91,7 @@ static void FocusFormInput(PopoverStory* self, Ctx* cx, const ClickEvent*) {
 // The popover surface: p_3 over the background, bordered and rounded.
 static El* PopCard(Ctx* cx, float maxW) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* card = Div(a)
                    ->FlexCol()
                    ->Gap(8)
@@ -106,7 +106,7 @@ static El* PopCard(Ctx* cx, float maxW) {
 }
 
 static El* PopText(Ctx* cx, const char* s) {
-    return StoryTxt(cx, Str(s), 14, cx->theme().foreground)->Wrap();
+    return StoryTxt(cx, Str(s), 14, ThemeNow(cx->app).foreground)->Wrap();
 }
 
 static El* PopTrigger(PopoverStory*, Ctx* cx, int which, const char* id,
@@ -120,7 +120,7 @@ static El* PopTrigger(PopoverStory*, Ctx* cx, int which, const char* id,
 
 El* PopoverStory::Render(PopoverStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->list.IsValid()) {
         self->list = EntityNewState<ListState>(cx->app);
     }

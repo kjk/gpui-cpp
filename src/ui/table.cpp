@@ -97,7 +97,7 @@ TableRow* TableRow::Child(TableCellEl* c) {
 }
 
 El* TableRow::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Str rowId = StrDup(a, fmt("row-%d", ix));
     El* row = gpui::TableRow::New(cx, rowId)->W(kFill)->FlexRow();
     if (hasBg) {
@@ -142,7 +142,7 @@ TableGroup* TableGroup::Child(TableRow* r) {
 }
 
 El* TableGroup::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* g = nullptr;
     if (kind == TableGroupKind::Header) {
         g = gpui::TableHeader::New(cx, StrDup(a, fmt("header-%d", ix)))
@@ -227,7 +227,7 @@ Table* Table::Child(TableCaption* c) {
 }
 
 El* Table::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* t = gpui::Table::New(cx, id)->FlexCol()->W(kFill)->ClipY()->ClipX()->Bg(
         th.tokens.tableBg);
     if (bordered) {
@@ -387,7 +387,7 @@ float DataTable::ColWidth(const TableState* s, int col) const {
 // place — and that is what lets the drag work out where the column starts.
 static El* ResizeHandle(Ctx* cx, Str id, int col, Entity<TableState> state) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     TableState* s = state.Get(cx);
     bool on = s && s->resizingCol == col;
     // Nothing sets a height: a flex row stretches its children, so the handle
@@ -435,7 +435,7 @@ static int FixedColCount(const DataTable* t, const TableState* s) {
 // it, so it follows them when one is dragged wider.
 static El* GroupBand(Ctx* cx, Str label, float w, bool last) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* e = Div(a)->FlexRow()->W(w)->Shrink0()->JustifyCenter()->ItemsCenter();
     if (!last) {
         e->BorderR(1, th.border);
@@ -460,7 +460,7 @@ DataTable* DataTable::ContextMenu(PopupMenu* (*fn)(Ctx*, void*, int,
 // does not jump when the rows arrive.
 static El* LoadingRow(Ctx* cx, UiSize size, bool header) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Edges pad = UiTableCellPadding(size);
     float rowH = UiTableRowHeight(size);
     float barH = rowH * 0.5f;
@@ -569,7 +569,7 @@ El* DataTable::IntoEl() {
 static El* RowHeaderCell(Ctx* cx, Entity<TableState> state, int row,
                          bool head) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* e = Div(a)
                 ->W(12)
                 ->H(kFill)
@@ -589,7 +589,7 @@ static El* RowHeaderCell(Ctx* cx, Entity<TableState> state, int row,
 }
 
 El* DataTable::BuildEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     TableState* s = state.Get(cx);
     if (s) {
         s->self = state.id;

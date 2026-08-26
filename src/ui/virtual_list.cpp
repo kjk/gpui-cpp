@@ -80,7 +80,7 @@ static El* ThemedDefaultRow(void* user, Ctx* cx, int ix) {
     return Div(a)->H(h)->PadX(8)->ItemsCenter()->Child(
         TextEl(a, StrDup(a, fmt("Item %d", ix)))
             ->Font(12)
-            ->Fg(cx->theme().foreground));
+            ->Fg(ThemeNow(cx->app).foreground));
 }
 
 // The caller's row builder takes no user pointer, so it is carried through

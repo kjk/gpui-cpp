@@ -30,7 +30,7 @@ STORY_CHECK_HANDLER(5)
 
 // The muted supporting line under a label.
 static El* CheckHint(Ctx* cx, Str s) {
-    return TextEl(cx->a, s)->Font(12)->Fg(cx->theme().mutedFg)->Wrap();
+    return TextEl(cx->a, s)->Font(12)->Fg(ThemeNow(cx->app).mutedFg)->Wrap();
 }
 
 El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
@@ -117,7 +117,7 @@ El* CheckboxStory::Render(CheckboxStory* self, Ctx* cx) {
                              "before continuing."))
                     ->Font(12)
                     ->IntoEl()
-                    ->Fg(cx->theme().mutedFg);
+                    ->Fg(ThemeNow(cx->app).mutedFg);
     StorySectionAdd(labs, component::Checkbox::New(cx, StrL("markdown"))
                               ->WithSize(size)
                               ->W(320)

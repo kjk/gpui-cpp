@@ -48,7 +48,7 @@ static void FocusMultiQuery(SearchableListStory* self, Ctx* cx,
 
 static El* SelectionLine(Ctx* cx, component::SearchableListState* s) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->Gap(8)->ItemsCenter()->FlexWrap();
     if (!s || s->selected.len == 0) {
         row->Child(StoryTxt(cx, StrL("Nothing selected."), 14, th.mutedFg));

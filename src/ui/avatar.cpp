@@ -136,7 +136,7 @@ Avatar* Avatar::Src(Str url) {
 }
 
 El* Avatar::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // `rounded_full_style`: as round as the box goes, unless the theme squares
     // its corners — an avatar that stayed a circle in a square-cornered UI is
     // exactly what Theme::radius_full was added for.

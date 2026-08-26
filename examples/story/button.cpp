@@ -95,7 +95,7 @@ struct BtnVarSpec {
 
 El* ButtonStory::Render(ButtonStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     UiSize size = self->toolbar.size;
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 

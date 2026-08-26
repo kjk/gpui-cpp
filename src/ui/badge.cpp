@@ -46,7 +46,7 @@ Badge* Badge::Child(El* c) {
 }
 
 El* Badge::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // A number badge with nothing to say is not drawn; a dot or an icon is
     // always there.
     bool visible = kind != BadgeKind::Number || count > 0;

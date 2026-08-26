@@ -4,7 +4,7 @@ using namespace gpui;
 
 static El* Chip(Ctx* cx, Str s) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->Radius(6)
         ->Border(1, th.border)
@@ -20,7 +20,7 @@ struct Example {
 
 El* Example::Render(Example*, Ctx* cx) {
     Arena* frame = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(frame)
         ->FlexCol()
         ->SizeFull()

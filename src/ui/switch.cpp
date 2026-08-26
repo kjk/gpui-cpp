@@ -46,7 +46,7 @@ Switch* Switch::OnClick(Listener fn) {
 }
 
 El* Switch::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Background on = hasColor ? Background(color) : th.tokens.primary;
     float trackW = 36;
     float trackH = 20;

@@ -3,6 +3,7 @@
 
 #include "gpui/gpui.h"
 #include "base/lib.h"
+#include "ui/theme.h"
 
 namespace gpui {
 

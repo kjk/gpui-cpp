@@ -13,7 +13,7 @@ struct Example {
 
 El* Example::Render(Example*, Ctx* cx) {
     Arena* frame = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Listener onBtn = Listen(cx, &Example::OnBtn);
 
     // The click id doubles as the focus id, so buttons keep theirs.

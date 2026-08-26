@@ -6537,3 +6537,26 @@ silently changing `push`.
 The tests port the upstream tab-index cases and add deterministic explicit and
 timed grouping, ignore/clear and default-retention coverage. `base/history`
 is now classified full rather than partial by the structural audit.
+
+## Component Theme no longer leaks into the runtime or Base
+
+The large legacy palette and its gradient-bearing `ThemeTokens` have moved
+from `src/gpui/gpui.h` to `src/ui/theme.h`, together with the application-owned
+light/dark state, registry-facing mutation API and conversion to Base semantic
+tokens. `src/base/theme_tokens` now defines only Base's role vocabulary; it no
+longer declares or implements functions taking the component `Theme`.
+
+GPUI consumes a deliberately narrow `RuntimeStyle` projection: canvas/default
+text, chart fallback colors, focus ring, tooltip, progress and scrollbar paint,
+plus font/radius/behavior values and compatibility colors for the old
+arena-only `ButtonEl`. Every component theme change updates that projection and
+the separate `BaseTheme` global. `Ctx` therefore no longer exposes a
+component-specific `theme()` or `themeMode()` method; UI code reads its own
+global with `ThemeNow(cx->app)` / `ThemeGet(cx->app)`, matching the upstream
+`ActiveTheme for App` ownership boundary.
+
+The audit now rejects a component `Theme` definition in `gpui/gpui.h`, direct
+palette reads from core GPUI sources, and a Base declaration that converts
+from the UI palette. `base/theme` is classified full; `ui/theme` remains
+partial only for its real remaining gaps (filesystem watch/reload and richer
+highlight/list/sheet settings), not for cross-layer ownership.

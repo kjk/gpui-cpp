@@ -54,7 +54,7 @@ DescriptionList* DescriptionList::WithSize(UiSize s) {
 }
 
 El* DescriptionList::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // Medium: px 8 / py 4 inside a bordered box; unbordered drops the padding
     // and spaces the rows by the base gap instead.
     float padX = 8, padY = 4;

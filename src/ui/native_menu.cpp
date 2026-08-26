@@ -145,7 +145,7 @@ bool NativeMenu::Show(float x, float y) {
     }
     int nextId = 1;
     PlatMenuItem* plat = ToPlat(a, this, &nextId);
-    bool dark = cx->themeMode() == ThemeMode::Dark;
+    bool dark = ThemeGet(cx->app) == ThemeMode::Dark;
     // The OS runs its own tracking loop, so this comes back once the menu is
     // gone and the answer is in hand.
     int chosen = PlatShowMenu(cx->win, plat, items.len, x, y, dark);

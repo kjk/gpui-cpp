@@ -220,14 +220,14 @@ static void FocusQuery(ComboboxStory* self, Ctx* cx, const ClickEvent*) {
 // Caret::new(trigger.size()), which every custom trigger ends with.
 static El* ComboCaret(Ctx* cx) {
     return IconEl(cx->a, IconName::ChevronDown, 16)
-        ->Fg(cx->theme().mutedFg)
+        ->Fg(ThemeNow(cx->app).mutedFg)
         ->Shrink0();
 }
 
 // A bordered chip, which the badge and overflow triggers are both made of.
 static El* ComboChip(Ctx* cx, Str label, Rgba fg) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->FlexRow()
         ->ItemsCenter()
@@ -243,7 +243,7 @@ static El* ComboChip(Ctx* cx, Str label, Rgba fg) {
 // Select to draw its own title and caret.
 static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const ComboSpec& spec = kSpecs[i];
     if (spec.trigger == ComboTrigger::Default) {
         return nullptr;
@@ -383,7 +383,7 @@ static El* ComboTriggerEl(ComboboxStory* self, Ctx* cx, int i) {
 
 El* ComboboxStory::Render(ComboboxStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         InputSetPlaceholder(&self->query, StrL("Search…"));

@@ -115,7 +115,7 @@ static void LoadDir(TreeState* s, const char* path, int parent, int depth) {
 
 El* TreeStory::Render(TreeStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->loaded) {
         self->loaded = true;
         self->tree = EntityNewState<TreeState>(cx->app);

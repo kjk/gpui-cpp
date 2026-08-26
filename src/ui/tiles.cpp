@@ -70,7 +70,7 @@ static El* ResizeHandle(Ctx* cx, Entity<TilesState> st, int ix, int panel,
 }
 
 El* Tiles::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     TilesState* s = state.Get(cx);
     // The area names itself, so the drag bar and the resize strips on every
     // tile in it are named by the panel they belong to and nothing more.

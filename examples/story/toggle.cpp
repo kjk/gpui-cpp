@@ -26,7 +26,7 @@ static void OnToggle(ToggleStory* self, Ctx* cx, const ClickEvent*,
 static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
                       IconName icon, bool on, bool outline, int seg = -1) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The toggle takes the press itself; the page still needs to know which
     // chip it was, so the slot rides on the listener the way Rust captures it
     // in the closure.
@@ -67,7 +67,7 @@ static El* ToggleChip(Ctx* cx, Listener onToggle, int slot, const char* label,
 
 El* ToggleStory::Render(ToggleStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Listener onToggle = Listen(cx, &OnToggle);
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill);
     page->Child(StoryToolbar(cx, self));

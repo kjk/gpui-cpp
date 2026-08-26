@@ -43,7 +43,7 @@ Radio* Radio::OnClick(Listener fn) {
 }
 
 El* Radio::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // A checked radio is a filled circle with the same check a checkbox
     // carries, not a dot: primary fill and border, white tick.
     float box = size == UiSize::Small    ? 14.f

@@ -990,7 +990,7 @@ El* TextView::ImageRun(MdRun* r, float font, Rgba color, bool inFlow) {
 // element that carries it — node.rs 1390 builds the same HighlightStyle.
 El* TextView::Word(Str w, float font, Rgba color, uint8_t marks, int weight,
                    Str href) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Rgba c = color;
     if (marks & MdLink) {
         // node.rs: `highlight.color = Some(cx.theme().link)`. The token falls
@@ -1359,7 +1359,7 @@ El* TextView::TableActionsRow(MdNode* n, int nCols, const uint8_t* colAlign) {
 }
 
 El* TextView::CodeBlock(MdNode* n) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // code_block.selected_source wraps the selected code in a fence carrying
     // the block's language, so it round-trips as Markdown rather than pasting
     // as bare text. The opening fence ends its own line, so the prefix the
@@ -1425,8 +1425,8 @@ El* TextView::CodeBlock(MdNode* n) {
 // themselves and every element in them is the same mono face at the same
 // size, which keeps the lines from setting their own leading.
 El* TextView::CodeLines(Str code, SyntaxLang lang) {
-    const Theme& th = cx->theme();
-    ThemeMode mode = cx->themeMode();
+    const Theme& th = ThemeNow(cx->app);
+    ThemeMode mode = ThemeGet(cx->app);
     El* col = Div(a)->FlexCol()->W(kFill);
     float lineH = codeFont * kLineHeight;
     El* row = Div(a)->FlexRow()->H(lineH);
@@ -1517,7 +1517,7 @@ El* TextView::ScrollTable(MdNode* n) {
     const float kWrapMin = 160.f;
     const float kWrapMax = 480.f;
 
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     PaintCtx* paint = cx->win ? &cx->win->paint : nullptr;
     int rows = 0;
     int nCols = 0;
@@ -1653,7 +1653,7 @@ El* TextView::Table(MdNode* n) {
         // node.rs MAX_LENGTH: one long cell must not starve the rest.
         kMaxLen = 150
     };
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     int rows = 0;
     int nCols = 0;
     TableDimensions(n, &rows, &nCols);
@@ -1787,7 +1787,7 @@ El* TextView::Item(MdNode* n, Str marker, int depth) {
     srcLinePre = savedPre;
     El* row = Div(a)->FlexRow()->W(kFill)->ItemsStart();
     if (n->hasCheck) {
-        const Theme& th = cx->theme();
+        const Theme& th = ThemeNow(cx->app);
         row->Child(TaskBox(a, th, th.radius * 0.5f, n->checked));
     } else if (marker.len > 0) {
         // list_item_prefix is a plain string child: it takes the color the
@@ -1856,7 +1856,7 @@ El* TextView::PluginBlock(MdNode* n) {
 }
 
 El* TextView::Block(MdNode* n, int depth, bool inList, bool isLast) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // A plugin's block stands in for whatever markdown made of it, and takes
     // the paragraph gap the block it replaced would have carried.
     if (El* claimed = PluginBlock(n)) {

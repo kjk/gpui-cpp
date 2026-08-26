@@ -179,7 +179,7 @@ El* Select::IntoEl() {
     // around what it builds — the open transition below, and the popover's
     // state under it.
     IdScope scope(cx, id);
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     SearchableListState* s = state.Get(cx);
     // input_size / input_text_size, by size.
     float h = 32, padX = 10, font = 14, caret = 16;

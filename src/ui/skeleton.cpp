@@ -32,7 +32,7 @@ Skeleton* Skeleton::H(float v) {
 }
 
 El* Skeleton::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Background bg = th.tokens.skeleton;
     if (secondary) {
         bg = BackgroundOpacity(bg, 0.5f);

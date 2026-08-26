@@ -95,7 +95,7 @@ static const float kInputGap = 6;
 static const float kInputTextSize = 14;
 
 El* Input::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // Rust's Input is the field and nothing else — `.flex().size_full()` — and
     // a label above it is the caller's own div. `Input::Label` is this tree's
     // addition, so the column only exists when one was asked for, and it is
@@ -246,7 +246,7 @@ Textarea* Textarea::OnFocus(Listener fn) {
 }
 
 El* Textarea::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool focused = state && state->focused;
     InputEditorStyle editor;
     editor.foreground = th.foreground;
@@ -365,7 +365,7 @@ NumberInput* NumberInput::OnDec(Listener fn) {
     return this;
 }
 El* NumberInput::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     float h = 32, btn = 32, font = 14;
     if (size == UiSize::Large) {
         h = 44;
@@ -512,7 +512,7 @@ OtpInput* OtpInput::OnFocus(Listener fn) {
 }
 
 El* OtpInput::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     float cell = 32, text = 16;
     if (cellPx > 0) {
         cell = cellPx;
@@ -751,7 +751,7 @@ SearchPanel* SearchPanel::New(Ctx* cx, Str id, InputState* target) {
 }
 
 El* SearchPanel::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The state is the window's, keyed by the bar's id, so two editors on one
     // page each get their own.
     Entity<SearchPanelState> ent =

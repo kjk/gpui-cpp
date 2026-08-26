@@ -39,7 +39,7 @@ static void ToggleMask(LabelStory* self, Ctx* cx, const ClickEvent*) {
 
 El* LabelStory::Render(LabelStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->W(kFill)->ItemsCenter()->Gap(24);
     StoryToolbarOpt opts[1] = {{"Prefix Match", self->prefix, LabelActPrefix}};
     page->Child(

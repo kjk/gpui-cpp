@@ -154,7 +154,7 @@ static component::PopupMenu* OtherLinksMenu(MenuStory* self, Ctx* cx) {
 
 static component::PopupMenu* PopupStoryMenu(MenuStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool checked = self->checkSide != CheckSideState::None;
     component::PopupMenu* menu =
         component::PopupMenu::New(cx, StrL("popup-menu-main"))
@@ -375,7 +375,7 @@ static component::PopupMenu* OtherContextMenu(MenuStory*, Ctx* cx, int area) {
 static El* ContextArea(Ctx* cx, Str id, Str title, Str hint,
                        component::PopupMenu* menu) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* box = Div(a)
                   ->W(kFill)
                   ->Pad(16)
@@ -466,7 +466,7 @@ void MenuStory::OnKey(MenuStory* self, Ctx* cx, const KeyEvent* ev) {
 
 El* MenuStory::Render(MenuStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->SizeFull()->MinH(400)->ItemsCenter()->Gap(24);
 
     El* popupSection = StorySection(

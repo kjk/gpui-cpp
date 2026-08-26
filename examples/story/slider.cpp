@@ -65,7 +65,7 @@ static Str ColorHex(Ctx* cx, Rgba c) {
 static El* SliderCard(Ctx* cx, const char* label, const char* value, El* slider,
                       bool filled) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* card = Div(a)->FlexCol()->W(360)->Gap(16);
     if (filled) {
         card->Pad(16)->Radius(th.radiusLg)->Bg(RgbaOpacity(th.muted, 0.4f));
@@ -82,7 +82,7 @@ static El* SliderCard(Ctx* cx, const char* label, const char* value, El* slider,
 
 El* SliderStory::Render(SliderStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->Gap(12)->W(kFill)->ItemsCenter();
     StoryToolbarOpt opts[1] = {{"Disabled", self->disabled, SliderActDisabled}};
     page->Child(

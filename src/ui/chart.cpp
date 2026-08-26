@@ -12,8 +12,8 @@ AreaChart* AreaChart::New(Ctx* cx, const float* ys, int n) {
     c->cx = cx;
     c->ys = ys;
     c->n = n;
-    c->stroke = cx->theme().blue;
-    c->fill = RgbaOpacity(cx->theme().blue, 0.25f);
+    c->stroke = ThemeNow(cx->app).blue;
+    c->fill = RgbaOpacity(ThemeNow(cx->app).blue, 0.25f);
     return c;
 }
 AreaChart* AreaChart::Stroke(Rgba c) {
@@ -105,7 +105,7 @@ LineChart* LineChart::New(Ctx* cx, const float* ys, int n) {
     c->cx = cx;
     c->ys = ys;
     c->n = n;
-    c->stroke = cx->theme().blue;
+    c->stroke = ThemeNow(cx->app).blue;
     return c;
 }
 LineChart* LineChart::Stroke(Rgba c) {
@@ -163,7 +163,7 @@ BarChart* BarChart::New(Ctx* cx, const float* ys, int n) {
     c->cx = cx;
     c->ys = ys;
     c->n = n;
-    c->fill = cx->theme().primary;
+    c->fill = ThemeNow(cx->app).primary;
     return c;
 }
 BarChart* BarChart::Fill(Rgba c) {
@@ -278,8 +278,8 @@ CandlestickChart* CandlestickChart::New(Ctx* cx, const float* opens,
     c->lows = lows;
     c->closes = closes;
     c->n = n;
-    c->up = cx->theme().green;
-    c->down = cx->theme().red;
+    c->up = ThemeNow(cx->app).green;
+    c->down = ThemeNow(cx->app).red;
     return c;
 }
 CandlestickChart* CandlestickChart::Colors(Rgba u, Rgba d) {
@@ -326,8 +326,8 @@ RadarChart* RadarChart::New(Ctx* cx, const float* values, int n) {
     c->cx = cx;
     c->values = values;
     c->n = n;
-    c->stroke = cx->theme().blue;
-    c->fill = RgbaOpacity(cx->theme().blue, 0.3f);
+    c->stroke = ThemeNow(cx->app).blue;
+    c->fill = RgbaOpacity(ThemeNow(cx->app).blue, 0.3f);
     return c;
 }
 RadarChart* RadarChart::Stroke(Rgba c) {

@@ -50,7 +50,7 @@ static void SetActive(SidebarApp* app, Ctx* cx, const ClickEvent*,
 
 El* SidebarApp::Render(SidebarApp* app, Ctx* cx) {
     Arena* frame = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool collapsed = app->collapsed;
     bool iconCollapsed =
         collapsed && kModes[app->mode] == component::SidebarCollapsible::Icon;

@@ -204,7 +204,7 @@ static void OnScroll(StreamApp* self, Ctx* cx, const ScrollEvent* ev) {
 
 El* StreamApp::Render(StreamApp* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
 
     El* bar = Div(a)->FlexRow()->W(kFill)->Child(
         component::Button::New(cx, StrL("replay"))

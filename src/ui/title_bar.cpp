@@ -11,7 +11,7 @@ namespace component {
 // it — so the click id here is identity only, the way El::Click always is.
 static El* ControlIcon(Ctx* cx, IconName icon, int clickId) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool isClose = clickId == ClickWinClose;
     // The icon takes the theme foreground it would default to anyway, so the
     // cell's hover color is the one that reaches it. Close needs that half:
@@ -57,7 +57,7 @@ static El* WindowControls(Ctx* cx) {
 
 TitleBar* TitleBar::New(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     TitleBar* t = ArenaNew<TitleBar>(a);
     t->a = a;
     t->cx = cx;

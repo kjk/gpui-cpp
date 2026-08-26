@@ -61,10 +61,10 @@ static const component::CommandItem kPopular[] = {
 // it is, which is the same thing said in the other direction.
 static El* CompactRow(Ctx* cx, const component::CommandItem*) {
     return Div(cx->a)->FlexRow()->W(kFill)->Child(
-        StoryTxt(cx, StrL("Compact custom row"), 14, cx->theme().foreground));
+        StoryTxt(cx, StrL("Compact custom row"), 14, ThemeNow(cx->app).foreground));
 }
 static El* ExpandedRow(Ctx* cx, const component::CommandItem*) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(cx->a)
         ->FlexCol()
         ->W(kFill)
@@ -107,7 +107,7 @@ void CommandStory::OnQuery(CommandStory* self, Ctx* cx,
 
 El* CommandStory::Render(CommandStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->palette = EntityNewState<component::CommandState>(cx->app);

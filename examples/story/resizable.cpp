@@ -53,12 +53,12 @@ static void SetPanelSize(ResizableStory* self, Ctx* cx, const ClickEvent*,
 static El* PanelBox(Ctx* cx, const char* text) {
     Arena* a = cx->a;
     return Div(a)->W(kFill)->H(kFill)->Pad(16)->Child(
-        StoryTxt(cx, Str(text), 16, cx->theme().foreground)->Wrap());
+        StoryTxt(cx, Str(text), 16, ThemeNow(cx->app).foreground)->Wrap());
 }
 
 static El* Frame(Ctx* cx, float h) {
     Arena* a = cx->a;
-    return Div(a)->FlexCol()->W(kFill)->H(h)->Border(1, cx->theme().border);
+    return Div(a)->FlexCol()->W(kFill)->H(h)->Border(1, ThemeNow(cx->app).border);
 }
 
 El* ResizableStory::Render(ResizableStory* self, Ctx* cx) {

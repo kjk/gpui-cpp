@@ -93,7 +93,7 @@ static void ConfirmGoTo(LargeTextApp* self, Ctx* cx, const ClickEvent* ev) {
 
 El* LargeTextApp::Render(LargeTextApp* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The dialog's field takes the keyboard while it is up; the document has
     // it the rest of the time.
     cx->win->input = self->dialogOpen ? &self->goToLine : &self->editor;

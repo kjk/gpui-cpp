@@ -424,7 +424,7 @@ static El* TabMenuButton(Tabs* tabs, const Theme&, float) {
 }
 
 El* Tabs::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     float h = TabHeight(variant, size);
     float innerH = TabInnerHeight(variant, size);
     float padX = TabPadX(variant, size);

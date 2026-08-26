@@ -6,7 +6,7 @@ struct ImageStory {
 
 El* ImageStory::Render(ImageStory*, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
 
     El* remote = StorySection(cx, "Remote SVG",

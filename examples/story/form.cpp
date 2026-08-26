@@ -63,7 +63,7 @@ static void TogglePrefix(FormStory* self, Ctx* cx, const ClickEvent*) {
 
 El* FormStory::Render(FormStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->namePrefix =

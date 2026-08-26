@@ -125,7 +125,7 @@ static El* ThemedCalendarItem(void* user, Ctx* cx, El* item,
                               const CalendarItemState& st) {
     Calendar* self = (Calendar*)user;
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // t!("Calendar.week.N"): the heads are the locale's, so a calendar in
     // Chinese reads 日 一 二 rather than Su Mo Tu.
     static const char* weekdays[] = {"Calendar.week.0", "Calendar.week.1",
@@ -246,7 +246,7 @@ static El* ThemedCalendarItem(void* user, Ctx* cx, El* item,
 }
 
 El* Calendar::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // date_picker.rs sizes the calendar in its popup itself — 196 / 224 / 280
     // a month — because that one is built `border_0().rounded_none().p_0()`
     // and so has none of the padding the panel width above counts in. The
@@ -428,7 +428,7 @@ static Str FormatDate(Arena* a, DateFormat f, int y, int m, int d) {
 }
 
 El* DatePicker::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool hasDate = day > 0;
     bool rangeMode = range || year2 > 0;
     bool complete = hasDate && (!rangeMode || day2 > 0);

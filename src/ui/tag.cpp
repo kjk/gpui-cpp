@@ -58,7 +58,7 @@ Tag* Tag::Custom(Rgba bg, Rgba fg, Rgba border) {
 }
 
 El* Tag::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // TagVariant::fg takes `outline`: an outlined tag draws in the variant's
     // own colour rather than the colour that reads over it — except the
     // secondary one, whose border is too pale to write with.

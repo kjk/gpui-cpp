@@ -149,9 +149,9 @@ Button* Button::OnClick(Listener l) {
 }
 
 El* Button::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const Rgba clear = Rgba8(0, 0, 0, 0);
-    const bool dark = cx->themeMode() == ThemeMode::Dark;
+    const bool dark = ThemeGet(cx->app) == ThemeMode::Dark;
     // ButtonVariant::bg_color / hovered / active / border_color / text_color,
     // in button.rs. Every fill a variant paints is a *token* there —
     // `tokens.button_primary_hover` and not a mix computed at the call — so
@@ -613,7 +613,7 @@ static UiSize DropdownSize(const DropdownButton& d) {
 }
 
 El* DropdownButton::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     ButtonVariant v = DropdownVariant(*this);
     UiSize sz = DropdownSize(*this);
     // An inner selected state is the split's, rather than being cleared by the
@@ -729,7 +729,7 @@ ButtonGroup* ButtonGroup::OnClick(Listener l) {
 }
 
 El* ButtonGroup::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The selection the group would report, which each child's click turns
     // into: its own index toggled in, or replacing the lot when single.
     intptr_t selected = 0;

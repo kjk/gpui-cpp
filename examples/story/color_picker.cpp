@@ -20,7 +20,7 @@ static void SetColor(ColorPickerStory* self, Ctx* cx, const ClickEvent*,
 
 El* ColorPickerStory::Render(ColorPickerStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // Seeded with indigo_500, the way the Rust story seeds its state.
     Entity<ColorPickerState> st =
         component::ColorPickerStateFor(cx, StrL("accent-color"));

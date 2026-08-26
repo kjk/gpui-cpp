@@ -10,7 +10,6 @@ void Init(App* app) {
     ThemeRegistryInit(app);
     UiGlobalStateInit(app);
     BaseInit(app);
-    ThemeSetSyncFn(app, &ThemeSyncBase);
     ThemeSyncBase(app);
 
     DatePickerInitKeys();

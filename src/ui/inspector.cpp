@@ -278,7 +278,7 @@ void InspectorEditor::OnFocus(InspectorEditor* self, Ctx* cx,
 
 static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // An element with no click id cannot be found again next frame, so there
     // is nothing an override could be keyed on.
     if (p.id == 0) {
@@ -352,7 +352,7 @@ static El* StyleEditor(Ctx* cx, const InspectorPick& p) {
 }
 
 El* Inspector::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const InspectorState* st = WindowInspector(cx);
     if (!st || !st->on) {
         return nullptr;

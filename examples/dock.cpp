@@ -72,7 +72,7 @@ struct DockApp {
 
 static El* RenderPanel(Ctx* cx, void* data) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const auto* d = (const DockPanelData*)data;
     El* box = Div(a)->FlexCol()->Gap(8)->Pad(12)->W(kFill);
     box->Child(TextEl(a, Str(d->title))->Font(14)->Fg(th.foreground));
@@ -323,7 +323,7 @@ static void OnMenuItem(DockApp* self, Ctx* cx, const ClickEvent*, intptr_t ix) {
 
 El* DockApp::Render(DockApp* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->dock = EntityNewState<DockState>(cx->app);

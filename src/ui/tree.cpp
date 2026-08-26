@@ -27,7 +27,7 @@ Tree* Tree::Icons(bool v) {
 // and Folder for a shut one.
 static El* TreeRow(void* user, Ctx* cx, int entryIx) {
     Tree* self = (Tree*)user;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     TreeState* s = self->state.Get(cx);
     const TreeItem* it = s ? TreeEntryItem(s, entryIx) : nullptr;
     if (!it) {

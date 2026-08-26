@@ -52,8 +52,8 @@ static int HighlightSpans(Ctx* cx, Str text, SyntaxLang lang, TextSpan* out,
     if (lang == SyntaxLangNone || !text.s) {
         return 0;
     }
-    const Theme& th = cx->theme();
-    ThemeMode mode = cx->themeMode();
+    const Theme& th = ThemeNow(cx->app);
+    ThemeMode mode = ThemeGet(cx->app);
     SyntaxLexer lx;
     SyntaxLexStart(&lx, lang, text);
     int n = 0;
@@ -101,8 +101,8 @@ static bool SemanticTokColor(Ctx* cx, Str name, Rgba* out) {
         {"boolean", SyntaxTok::Boolean},   {"comment", SyntaxTok::Comment},
         {"tag", SyntaxTok::Tag},           {"attribute", SyntaxTok::Attribute},
     };
-    const Theme& th = cx->theme();
-    ThemeMode mode = cx->themeMode();
+    const Theme& th = ThemeNow(cx->app);
+    ThemeMode mode = ThemeGet(cx->app);
     Str head = name;
     for (int pass = 0; pass < 2; pass++) {
         for (const auto& row : kMap) {
@@ -304,7 +304,7 @@ static int FoldCandidates(Str text, SyntaxLang lang, FoldRange* out, int cap) {
 }
 
 El* Highlighter::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (state) {
         state->searchable = searchable;
     }

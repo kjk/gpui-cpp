@@ -73,14 +73,15 @@ The important non-mechanical mappings are encoded in the audit:
 
 ## Next fidelity order
 
-1. Add a runtime accessibility tree (role, name/value, checked/expanded state,
-   actions and per-platform export), then clear the role-driven partial set.
-2. Decouple the large component `Theme` palette from `gpui/gpui.h`; the
-   runtime should consume a narrow paint/style interface while Base and UI own
-   their respective theme types.
-3. Extend `cmd/audit-port.ts` below module granularity: inventory every
-   upstream `pub use` and test, requiring `full`, `adapter` or `excluded` plus
-   a C++ symbol/test destination.
+  1. Add a runtime accessibility tree (role, name/value, checked/expanded state,
+     actions and per-platform export), then clear the role-driven partial set.
+  2. Extend `cmd/audit-port.ts` below module granularity: inventory every
+     upstream `pub use` and test, requiring `full`, `adapter` or `excluded` plus
+     a C++ symbol/test destination.
+
+  The theme layering item is complete: `src/ui/theme.h` owns the component
+  palette, `src/base/theme.h` owns Base's semantic/behavior theme, and GPUI
+  consumes only the projected `RuntimeStyle` fields its renderer needs.
 
 `port-progress.md` remains the detailed behavioral log until item 3 makes the
 ledger symbol-complete.

@@ -1,8 +1,8 @@
 /* Base Theme — crates/base/src/theme.rs
 
-   The themed component palette is still being extracted from gpui::Theme.
    This is the application-owned Base global Rust exposes: semantic tokens
-   plus behavior defaults projected by the UI layer. */
+   plus behavior defaults projected by the UI layer. It has no dependency on
+   the component palette. */
 
 #include "base/theme_tokens.h"
 

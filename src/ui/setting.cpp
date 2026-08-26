@@ -562,7 +562,7 @@ static FieldEl RenderField(Ctx* cx, Settings* s, const SettingItem& it, Str id,
 static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
                       bool first, bool pageResettable, bool* anyDirty) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The row is what names the item, so the control on it and the reset
     // button beside it are named by their place on the row rather than by the
     // item's id spelled into each.
@@ -612,7 +612,7 @@ static El* RenderItem(Ctx* cx, Settings* s, const SettingItem& it, Str id,
 }
 
 El* Settings::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     SettingsState* st = state.Get(cx);
     Str query = st ? InputValue(&st->search) : Str{};
     // The bindings are this frame's, in the order the fields paint. The

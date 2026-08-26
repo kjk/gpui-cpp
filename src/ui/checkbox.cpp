@@ -60,7 +60,7 @@ Checkbox* Checkbox::OnClick(Listener fn) {
 }
 
 El* Checkbox::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     float box = size == UiSize::Small ? 14.f : 16.f;
     // An unchecked box carries the input border, a checked one the primary
     // color, and a disabled one either at half strength.

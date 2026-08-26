@@ -45,7 +45,7 @@ const partialBase = new Set([
   "date_picker", "dialog", "global_state", "input", "link",
   "macos_accessibility", "number_input", "pagination", "popover", "progress",
   "radio", "radio_group", "scrollbar", "select", "slider", "styled",
-  "switch", "table", "tabs", "text_selection", "theme", "toast", "toggle",
+  "switch", "table", "tabs", "text_selection", "toast", "toggle",
   "toggle_group", "tooltip",
 ]);
 const adapterBase = new Set(["component_traits", "element_ext", "event", "measure"]);
@@ -64,11 +64,10 @@ const partialReasons: Record<string, string> = {
   "base/scrollbar": "the renderer-backed element does not expose every Rust style override",
   "base/styled": "StyleRefinement is represented by the runtime El builder surface",
   "base/text_selection": "selection is window-owned rather than a GPUI entity graph",
-  "base/theme": "the projected Base theme is complete; the UI palette still lives in gpui runtime",
   "ui/global_state": "selection ordering/stack state is present; text-view state remains split",
   "ui/inspector": "the inspector is intentionally smaller than GPUI's debug inspector",
   "ui/text": "a dependency-free HTML vocabulary replaces html5ever and advanced highlighting remains scanner-backed",
-  "ui/theme": "registry/projection are app-owned; the large palette type still lives in gpui runtime",
+  "ui/theme": "filesystem watch/reload and the richer highlight/list/sheet settings remain smaller than Rust",
 };
 
 const adapterReasons: Record<string, string> = {
@@ -213,6 +212,28 @@ const pinAt = runText.indexOf("export const gpuiComponent");
 const pinText = pinAt >= 0 ? runText.slice(pinAt, pinAt + 500) : "";
 if (!pinText.includes(pinnedGpuiComponent)) {
   errors.push(`ledger pin ${pinnedGpuiComponent} differs from cmd/run.ts`);
+}
+
+// Layering invariant: GPUI owns only the small style record its renderer
+// consumes; the component palette and its Base conversion live under ui.
+const gpuiHeader = readFileSync(join(root, "src/gpui/gpui.h"), "utf8");
+const gpuiSources = ["src/gpui/gpui.cpp", "src/gpui/entity.cpp", "src/gpui/window_common.cpp"]
+  .map((path) => readFileSync(join(root, path), "utf8"))
+  .join("\n");
+const uiThemeHeader = readFileSync(join(root, "src/ui/theme.h"), "utf8");
+const baseThemeTokens = readFileSync(join(root, "src/base/theme_tokens.h"), "utf8");
+if (/\bstruct\s+Theme(?:Tokens)?\b/.test(gpuiHeader)) {
+  errors.push("theme layering: component Theme type leaked into gpui/gpui.h");
+}
+if (/\bTheme(?:Now|Light|Dark|Install|SemanticTokens)\s*\(/.test(gpuiSources)) {
+  errors.push("theme layering: GPUI runtime reads the component palette directly");
+}
+if (!/\bstruct\s+Theme\b/.test(uiThemeHeader) ||
+    !/\bstruct\s+ThemeTokens\b/.test(uiThemeHeader)) {
+  errors.push("theme layering: ui/theme.h does not own both component theme types");
+}
+if (/\bThemeSemanticTokens\s*\(/.test(baseThemeTokens)) {
+  errors.push("theme layering: Base declares a conversion from the component palette");
 }
 
 const counts = (status: Status) => entries.filter((e) => e.status === status).length;

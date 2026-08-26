@@ -136,7 +136,7 @@ static void FocusSearch(ListStory* self, Ctx* cx, const ClickEvent*) {
 // halves of the delegate, over the story's own data.
 static El* SectionHeader(Ctx* cx, void*, int section) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const QuoteSection& s = kSections[section];
     // `h_flex().pb_1().px_2().gap_2()`: the padding is below the header, not
     // above it. It only started to show once the list measured a header
@@ -151,7 +151,7 @@ static El* SectionHeader(Ctx* cx, void*, int section) {
 
 static El* SectionFooter(Ctx* cx, void*, int section) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // `div().pt_1().pb_5().px_2()`: the twenty below the footer is the gap
     // between one section and the next, and it belongs to the footer rather
     // than to the header under it.
@@ -164,7 +164,7 @@ static El* SectionFooter(Ctx* cx, void*, int section) {
 static component::ListItem* RenderQuote(Ctx* cx, void* data, int section,
                                         int row, int entry) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     ListStory* self = (ListStory*)data;
     const ListQuote& r = kSections[section].rows[row];
     El* line =

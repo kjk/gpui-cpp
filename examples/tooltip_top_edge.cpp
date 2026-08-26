@@ -9,7 +9,7 @@ using namespace gpui;
 struct Example {
     static El* Render(Example*, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = cx->theme();
+        const Theme& th = ThemeNow(cx->app);
         El* btn = ButtonEl(a, 1, StrL("Hover for tooltip"), BtnKind::Primary);
         btn->Tip(StrL(
             "This tooltip should appear below the trigger near the top edge."));

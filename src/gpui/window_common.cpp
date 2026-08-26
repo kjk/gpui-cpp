@@ -365,7 +365,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     IdsCollect(root);
 
     win->paint.app = win->app;
-    const Theme& th = ThemeNow(win->app);
+    const RuntimeStyle& th = RuntimeStyleNow(win->app);
     CanvasClear(&win->paint, th.background);
     gFrameLayoutSecs = 0;
     gFramePaintSecs = 0;
@@ -375,7 +375,7 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
             win->layout = LayoutCacheNew();
         }
         LayoutEl(&win->paint, root, 0, 0, dipW, dipH,
-                 ThemeFontSize(win->app),
+                 th.fontSize,
                  th.foreground, win->layout);
         FocusCollect(win, root);
         // A dialog that has just opened takes focus into itself, which is what
@@ -404,16 +404,18 @@ void WindowDrawFrame(Window* win, void* native, int pxW, int pxH, float dipW,
     // picked: GPUI paints the same two highlights over everything.
     win->paint.paintLayer = kPaintLayerInspector;
     if (win->inspector.on) {
-        const Theme& ith = ThemeNow(win->app);
+        const RuntimeStyle& ith = RuntimeStyleNow(win->app);
         if ((win->inspector.picking || win->inspector.pending) &&
             win->paint.pickHit) {
             Bounds b = win->paint.pick.bounds;
             FillRound(&win->paint, b.x, b.y, b.w, b.h, 0,
-                      RgbaOpacity(ith.blue, 0.2f));
-            DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1, ith.blue);
+                      RgbaOpacity(ith.inspectorAccent, 0.2f));
+            DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1,
+                            ith.inspectorAccent);
         } else if (win->inspector.hasPick) {
             Bounds b = win->inspector.pick.bounds;
-            DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1, ith.blue);
+            DrawRoundStroke(&win->paint, b.x, b.y, b.w, b.h, 0, 1,
+                            ith.inspectorAccent);
         }
     }
 
@@ -2623,7 +2625,7 @@ void AppMenuChosen(int id) {
 static const float kWheelScrollLines = 3.f;
 
 float WheelNotchPixels(const App* app) {
-    return kWheelScrollLines * ThemeFontSize(app) * kLineHeight;
+    return kWheelScrollLines * RuntimeStyleNow(app).fontSize * kLineHeight;
 }
 
 } // namespace gpui

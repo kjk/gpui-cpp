@@ -208,7 +208,7 @@ static El* Section(Ctx* cx, Str title, El* content) {
 
 El* BrushApp::Render(BrushApp* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Listener onSlider = Listen(cx, &OnSlider);
 
     El* left = Div(a)->FlexCol()->Gap(16)->Flex1();

@@ -115,7 +115,7 @@ static void OnLink(RichApp* self, Ctx* cx, const ClickEvent*, intptr_t href) {
 
 El* RichApp::Render(RichApp* self, Ctx* cx) {
     Arena* frame = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
 
     El* bar =
         Div(frame)

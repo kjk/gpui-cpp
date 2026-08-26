@@ -61,13 +61,13 @@ static El* Chevron(Ctx* cx, bool open) {
     Arena* a = cx->a;
     return IconEl(a, open ? IconName::ChevronDown : IconName::ChevronRight,
                   UiIconPx(UiSize::XSmall))
-        ->Fg(cx->theme().mutedFg);
+        ->Fg(ThemeNow(cx->app).mutedFg);
 }
 
 // panel_row(): a bordered row that frames a piece of summary content.
 static El* PanelRow(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->FlexRow()
         ->W(kFill)
@@ -84,7 +84,7 @@ static El* PanelRow(Ctx* cx) {
 // the folder rows carry.
 static El* FileRow(Ctx* cx, Str name) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->FlexRow()
         ->H(28)
@@ -103,7 +103,7 @@ static El* FileRow(Ctx* cx, Str name) {
 // A branch: the chevron, an open or closed folder, and the name.
 static El* FolderRow(CollapsibleStory* self, Ctx* cx, int key, Str name) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool open = self->open[key];
     return Div(a)
         ->FlexRow()
@@ -132,7 +132,7 @@ static El* CollSection(Ctx* cx, const char* title, const char* desc) {
 
 El* CollapsibleStory::Render(CollapsibleStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->open[CollSettings] = true;

@@ -14,7 +14,7 @@ Tooltip* Tooltip::New(Ctx* cx, Str text) {
 }
 
 El* Tooltip::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return gpui::Tooltip::New(cx, StrL("tooltip"))
         ->PadX(8)
         ->H(28)

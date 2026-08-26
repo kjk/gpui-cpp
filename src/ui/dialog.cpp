@@ -157,7 +157,7 @@ Dialog* Dialog::OnOk(Listener fn) {
 // DialogHeader: the icon, title and description, centered as a group once
 // there is an icon above them.
 El* Dialog::Header() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* head = Div(a)->FlexCol()->W(kFill)->Pad(16)->Gap(8);
     El* ic = nullptr;
     if (icon != IconName::None) {
@@ -205,7 +205,7 @@ Str Dialog::LayerId(Str base) const {
 
 // DialogFooter: the action row, or whatever the caller put in its place.
 El* Dialog::Actions() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->W(kFill)->Pad(16)->Gap(8);
     if (footerVertical) {
         row->FlexCol();
@@ -273,7 +273,7 @@ El* Dialog::IntoEl(WinSize size) {
     if (!open) {
         return Div(a);
     }
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The parts carry the padding, so a footer that tints or rules itself
     // reaches the panel's edges (AlertDialog::p_0 in the Rust story).
     El* panel = Div(a)

@@ -97,7 +97,7 @@ static El* FallbackMenu(Ctx* cx, NativeMenuStory* self, int which) {
 static El* NativeTrigger(Ctx* cx, NativeMenuStory* self, const char* label,
                          int which) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* wrap = Div(a)->W(kFill);
     El* box = Div(a)
                   ->FlexRow()

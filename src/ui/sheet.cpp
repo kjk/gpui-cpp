@@ -60,7 +60,7 @@ El* Sheet::IntoEl(WinSize win) {
     if (!open) {
         return Div(a);
     }
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool horizontal =
         placement == SheetPlacement::Left || placement == SheetPlacement::Right;
     // The surface carries no padding of its own: the title bar, the body and

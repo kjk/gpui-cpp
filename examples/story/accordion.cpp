@@ -41,7 +41,7 @@ static component::AccordionItem* SettingsItem(Ctx* cx, IconName icon,
                                               const char* title, Str tag,
                                               const char* body, bool open) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     Rgba iconBg = RgbaOpacity(th.secondary, 0.5f);
     El* head = Div(a)->FlexRow()->Gap(8)->ItemsCenter();
     head->Child(
@@ -84,7 +84,7 @@ static component::AccordionItem* SettingsItem(Ctx* cx, IconName icon,
 
 El* AccordionStory::Render(AccordionStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill)->ItemsCenter();
     page->Child(StoryToolbarWithOptions(cx, self));
 

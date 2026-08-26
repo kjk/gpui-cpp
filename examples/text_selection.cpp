@@ -101,7 +101,7 @@ static El* Bubble(Ctx* cx, int ix, const Theme& th) {
 El* SelApp::Render(SelApp* app, Ctx* cx) {
     Arena* frame = cx->a;
 
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* col = Div(frame)->FlexCol()->SizeFull()->Pad(16)->Gap(12)->Bg(
         th.tokens.background);
     for (int i = 0; i < kNMsgs; i++) {

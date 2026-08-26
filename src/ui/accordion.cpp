@@ -152,7 +152,7 @@ Accordion* Accordion::OnToggle(Listener fn) {
 }
 
 El* Accordion::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // Items paint tokens.accordion (= background); bordered turns the group
     // into one rounded card instead of a stack of separators.
     El* root = gpui::Accordion::New(cx, id)->FlexCol()->W(kFill)->Bg(

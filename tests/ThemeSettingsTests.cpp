@@ -127,6 +127,37 @@ static void StyledThemeChangesProjectIntoBase() {
     AppGlobalClear(&second);
 }
 
+// The renderer sees only the narrow projection. Component-only table, list,
+// sidebar and button families never enter src/gpui's style state.
+static void StyledThemeChangesProjectIntoTheRuntimeSeam() {
+    App app;
+    component::Init(&app);
+    ThemeSet(&app, ThemeMode::Dark);
+    ThemeSetRadius(&app, 9);
+    ThemeSetFontSize(&app, 18);
+    ThemeSetFocusRing(&app, false);
+    ScrollbarModeSet(&app, ScrollbarMode::Hover);
+
+    const Theme& theme = ThemeNow(&app);
+    const RuntimeStyle& runtime = RuntimeStyleNow(&app);
+    utassert(SameColor(runtime.background, theme.background));
+    utassert(SameColor(runtime.foreground, theme.foreground));
+    utassert(SameColor(runtime.mutedForeground, theme.mutedFg));
+    utassert(SameColor(runtime.border, theme.border));
+    utassert(SameColor(runtime.ring, theme.ring));
+    utassert(SameColor(runtime.popover, theme.popover));
+    utassert(SameColor(runtime.popoverForeground, theme.popoverFg));
+    utassert(runtime.progress.gradient == theme.tokens.progress.gradient);
+    utassert(runtime.scrollbarThumb.gradient ==
+             theme.tokens.scrollbarThumb.gradient);
+    utassertnear(runtime.radius, 9.f);
+    utassertnear(runtime.fontSize, 18.f);
+    utassert(runtime.scrollbarMode == ScrollbarMode::Hover);
+    utassert(!runtime.focusRing);
+
+    AppGlobalClear(&app);
+}
+
 // FocusableExt::focus_ring, which carries state and nothing else: the
 // element remembers the answer, and the paint is what reads it.
 static void AControlCanDeclineTheFocusAppearance() {
@@ -150,4 +181,5 @@ void TestThemeSettings() {
     TheScrollbarModeIsTheThemesUntilAnElementSaysOtherwise();
     ThemeSettingsAreIsolatedPerApplication();
     StyledThemeChangesProjectIntoBase();
+    StyledThemeChangesProjectIntoTheRuntimeSeam();
 }

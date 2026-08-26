@@ -109,7 +109,7 @@ static void ToggleReadOnly(EditorStory* self, Ctx* cx, const ClickEvent*) {
 
 El* EditorStory::Render(EditorStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         self->code.kind = InputKind::Editor;

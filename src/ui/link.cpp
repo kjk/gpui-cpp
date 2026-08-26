@@ -31,7 +31,7 @@ Link* Link::OnOpen(Listener fn) {
 }
 
 El* Link::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // gpui_base::Link owns identity, focus and activation; the href is this
     // layer's, which is where Rust's injected open strategy would read it.
     El* e = gpui::Link::New(cx, id, disabled, onOpen);

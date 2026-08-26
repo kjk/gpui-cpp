@@ -22,7 +22,7 @@ BreadcrumbItem* BreadcrumbItem::OnClick(Listener fn) {
 }
 
 El* BreadcrumbItem::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The last level is where you are, so it gets the foreground; a disabled
     // one stays muted whatever its position.
     bool lit = isLast && !disabled;
@@ -55,7 +55,7 @@ Breadcrumb* Breadcrumb::Child(Str label) {
 }
 
 El* Breadcrumb::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(6);
     for (int i = 0; i < items.len; i++) {
         if (i) {

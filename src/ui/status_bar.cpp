@@ -15,7 +15,7 @@ StatusBar* StatusBar::New(Ctx* cx) {
 // A plain string is `impl IntoElement` in Rust and the commonest item on a
 // bar; it takes the bar's own text style, so it is a bare TextEl here.
 static El* BarText(Ctx* cx, Str s) {
-    return TextEl(cx->a, s)->Font(12)->Fg(cx->theme().mutedFg);
+    return TextEl(cx->a, s)->Font(12)->Fg(ThemeNow(cx->app).mutedFg);
 }
 
 StatusBar* StatusBar::Left(El* e) {
@@ -41,7 +41,7 @@ StatusBar* StatusBar::Right(Str s) {
 }
 
 El* StatusBar::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // `region()`: h_flex().overflow_hidden().items_center().gap_2().
     auto region = [&]() {
         return Div(a)->FlexRow()->ClipX()->ClipY()->ItemsCenter()->Gap(8);

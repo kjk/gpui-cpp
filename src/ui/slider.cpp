@@ -56,7 +56,7 @@ Slider* Slider::Bg(Rgba c) {
 }
 
 El* Slider::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The percentages the state already worked out from the value; a
     // single-value slider pins the low end at 0.
     float low = state ? Clamp01f(state->pctLo) : 0.f;

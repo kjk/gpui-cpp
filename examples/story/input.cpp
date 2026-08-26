@@ -142,7 +142,7 @@ static component::Input* Field(InputStory* self, Ctx* cx, int slot,
 // its field is centered rather than pinned to the field's left edge.
 El* InputStory::Render(InputStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         for (size_t i = 0; i < sizeof(kSeeds) / sizeof(kSeeds[0]); i++) {

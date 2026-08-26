@@ -240,7 +240,7 @@ El* StoryTxt(Ctx* cx, Str s, float px, Rgba c) {
 
 El* StorySection(Ctx* cx, const char* title, const char* desc) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // Rust StorySection is an outline GroupBox: title sits above a bordered
     // content pane that centers its children (crates/story/src/lib.rs).
     // mb_6 on the GroupBox: every section carries its own bottom margin, on
@@ -350,7 +350,7 @@ static const char* StorySizeName(UiSize s) {
 // group, drawing the stroke and costing no layout.
 static El* ToolbarGroup(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->FlexRow()
         ->ItemsStart()
@@ -361,7 +361,7 @@ static El* ToolbarGroup(Ctx* cx) {
 
 static El* ToolbarSep(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)->W(1)->H(24)->Shrink0()->Bg(th.border);
 }
 
@@ -370,7 +370,7 @@ static El* ToolbarSep(Ctx* cx) {
 // cover the stroke that straddles the group's edge.
 static El* ToolbarDropBtn(Ctx* cx, Str label) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->H(24)
         ->PadX(8)
@@ -391,7 +391,7 @@ static El* ToolbarDropBtn(Ctx* cx, Str label) {
 static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
                            bool on, bool gutter) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)
                   ->H(26)
                   ->MinW(120)
@@ -420,7 +420,7 @@ static El* ToolbarCheckRow(Ctx* cx, Listener onAct, int act, const char* label,
 // PopupMenu::separator.
 static El* ToolbarMenuSep(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // No width of its own: `align: stretch` is what makes it as wide as the
     // menu, where `W(kFill)` would make it as wide as whatever the menu is
     // floating over — and take the menu with it.
@@ -429,7 +429,7 @@ static El* ToolbarMenuSep(Ctx* cx) {
 
 static El* ToolbarMenu(Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->FlexCol()
         ->Pad(4)
@@ -619,7 +619,7 @@ El* StoryToolbarDropdown(Ctx* cx, Str id, Str label, bool open, Listener onOpen,
 
 El* StoryComingSoon(Ctx* cx, int story) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const StoryInfo* m = StoryMeta(story);
     return Div(a)
         ->FlexCol()
@@ -677,7 +677,7 @@ static void OnPaneScroll(StoryApp* app, Ctx* cx, const ScrollEvent* ev) {
 
 static El* SidebarList(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* list = Div(a)->FlexCol()->Gap(2)->Pad(8);
     const char* q = InputCStr(&app->search);
     for (int i = 0; i < StoryCount; i++) {
@@ -719,7 +719,7 @@ static El* SidebarList(StoryApp* app, Ctx* cx) {
 // that one, and it draws at the base's own 12px rather than at input_text_size.
 static El* SearchBox(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* box = Div(a)
                   ->H(36)
                   ->W(kFill)
@@ -759,7 +759,7 @@ static float SidebarWidth(Ctx* cx) {
 
 static El* Sidebar(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     float w = app->collapsed ? 56.f : SidebarWidth(cx);
     // Rust puts this sidebar in a `resizable_panel()`, whose width is not up
     // for negotiation with the pane beside it. A plain flex item is, so it
@@ -809,7 +809,7 @@ static El* Sidebar(StoryApp* app, Ctx* cx) {
 
 static El* Header(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
         ->W(kFill)
@@ -830,7 +830,7 @@ static El* Header(StoryApp* app, Ctx* cx) {
 // the window drag region.
 static El* StoryTitleMenuItem(Ctx* cx, Str label, bool semibold) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* text = StoryTxt(cx, label, 14, th.foreground);
     if (semibold) {
         text->Semibold();
@@ -1082,7 +1082,7 @@ struct AboutDialog {
 
     static El* Render(AboutDialog*, Ctx* cx) {
         Arena* a = cx->a;
-        const Theme& th = cx->theme();
+        const Theme& th = ThemeNow(cx->app);
         El* body = Div(a)->FlexCol()->Gap(8)->W(kFill);
         body->Child(
             StoryTxt(cx,
@@ -1592,7 +1592,7 @@ static El* StoryMenuBar(Ctx* cx, const MenuDef* menus, int n) {
 static El* StoryTitleBar(StoryApp* app, Ctx* cx, const MenuDef* defs,
                          int nDefs) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
 
     El* menus = Div(a)->FlexRow()->H(kFill)->ItemsCenter();
     if (app->appMenuBar) {
@@ -1642,7 +1642,7 @@ static El* StoryTitleBar(StoryApp* app, Ctx* cx, const MenuDef* defs,
 
 static El* Footer(StoryApp* app, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const StoryInfo* m = StoryMeta(app->story);
     return Div(a)
         ->W(kFill)
@@ -1696,7 +1696,7 @@ El* StoryApp::Render(StoryApp* app, Ctx* cx) {
     if (app->search.focused) {
         cx->win->input = &app->search;
     }
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!app->seeded) {
         app->seeded = true;
     }

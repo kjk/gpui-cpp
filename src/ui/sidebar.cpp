@@ -84,7 +84,7 @@ SidebarMenuItem* SidebarMenuItem::OnClick(Listener fn) {
 }
 
 El* SidebarMenuItem::IntoEl(Str id) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     bool isSubmenu = children.len > 0;
     Entity<SidebarMenuState> st = {};
     bool isOpen = false;
@@ -235,7 +235,7 @@ SidebarGroup* SidebarGroup::Child(SidebarMenu* menu) {
 }
 
 El* SidebarGroup::IntoEl(Str id) {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     IdScope scope(cx, id);
     El* col = Div(a)->Id(id)->FlexCol()->W(kFill);
     if (!collapsed && label.s) {
@@ -261,7 +261,7 @@ El* SidebarGroup::IntoEl(Str id) {
 static El* SidebarBand(Ctx* cx, El* child, bool selected, Listener onClick,
                        Str id) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* row = Div(a)
                   ->FlexRow()
                   ->W(kFill)
@@ -406,7 +406,7 @@ SidebarLayout SidebarLayoutFor(SidebarCollapsible collapsible, bool collapsed,
 }
 
 El* Sidebar::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // SidebarLayout::new says what the mode and the flag come to: the width
     // the wrapper takes, which rendering the rows use, and which end the
     // content is pinned to.

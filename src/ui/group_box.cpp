@@ -56,7 +56,7 @@ GroupBox* GroupBox::ContentBorder(float px) {
 }
 
 El* GroupBox::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The title sits outside the surface: only the content container takes
     // the fill, the border and the padding. Normal has none of the three, so
     // it spaces title and content further apart (gap_4 against gap_3).

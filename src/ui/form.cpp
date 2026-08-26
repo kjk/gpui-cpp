@@ -93,7 +93,7 @@ Form* Form::LabelWidth(float w) {
 }
 
 El* Form::IntoEl() {
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // The gap comes from the size: eight at Large, four otherwise, and a
     // vertical field halves it between the label and the control.
     const float kGap = 8;

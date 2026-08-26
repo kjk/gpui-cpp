@@ -213,7 +213,7 @@ static bool StrHasI(Str hay, Str needle) {
 
 El* ThemeColorsStory::Render(ThemeColorsStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         FillThemeItems(self, cx->app);

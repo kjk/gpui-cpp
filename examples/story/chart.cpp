@@ -13,7 +13,7 @@ struct ChartStory {
 // two lines of commentary.
 static El* ChartCard(Ctx* cx, const char* title, El* chart, bool center) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* card = Div(a)
                    ->FlexCol()
                    // flex_1. In Rust a wrapping row breaks its lines on each
@@ -64,7 +64,7 @@ static El* ChartRow(Ctx* cx) {
 
 El* ChartStory::Render(ChartStory*, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     // `let color = cx.theme().chart_3`, which every pie and mixed bar tints
     // by its own alpha.
     Rgba color = th.chart3;

@@ -9,7 +9,7 @@ El* PopoverSurface(Ctx* cx, El* e) {
     if (!e) {
         return e;
     }
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return e->Bg(th.tokens.popover)->Border(1, th.border)->Radius(th.radius);
 }
 

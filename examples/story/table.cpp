@@ -45,17 +45,17 @@ static El* StatusTag(Ctx* cx, const char* status) {
 // colour is not inherited here, so each run names its own.
 static component::TableCellEl* TextHead(Ctx* cx, const char* text) {
     return component::TableHead::New(cx)
-        ->Child(StoryTxt(cx, Str(text), 14, cx->theme().tableHeadFg));
+        ->Child(StoryTxt(cx, Str(text), 14, ThemeNow(cx->app).tableHeadFg));
 }
 
 static component::TableCellEl* TextCell(Ctx* cx, const char* text) {
     return component::TableCell::New(cx)
-        ->Child(StoryTxt(cx, Str(text), 14, cx->theme().foreground));
+        ->Child(StoryTxt(cx, Str(text), 14, ThemeNow(cx->app).foreground));
 }
 
 El* TableStory::Render(TableStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     UiSize size = self->toolbar.size;
     const int nInvoices = (int)(sizeof(kInvoices) / sizeof(kInvoices[0]));
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);

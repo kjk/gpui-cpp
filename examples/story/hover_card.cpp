@@ -20,7 +20,7 @@ static El* Trig(El* e, Str id) {
 // The Default card: a heading over a muted line, 450 wide.
 static El* Card(Ctx* cx, const char* title, const char* body) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* card = Div(a)
                    ->W(450)
                    ->Pad(12)
@@ -37,7 +37,7 @@ static El* Card(Ctx* cx, const char* title, const char* body) {
 // The Position cards carry no heading in Rust, just the one line.
 static El* PlainCard(Ctx* cx, Str body) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     return Div(a)
         ->Pad(12)
         ->Border(1, th.border)
@@ -48,7 +48,7 @@ static El* PlainCard(Ctx* cx, Str body) {
 
 El* HoverCardStory::Render(HoverCardStory*, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     El* page = Div(a)->FlexCol()->Gap(24)->W(kFill);
 
     El* def = StorySection(

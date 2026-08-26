@@ -56,7 +56,7 @@ struct DockStory {
 
 static El* RenderPanel(Ctx* cx, void* data) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const DockPanelData* d = (const DockPanelData*)data;
     El* box = Div(a)->FlexCol()->Gap(8)->Pad(12)->W(kFill);
     box->Child(StoryTxt(cx, Str(d->title), 14, th.foreground));
@@ -69,7 +69,7 @@ static El* RenderPanel(Ctx* cx, void* data) {
 // the bar leaves room for one.
 static El* RenderPanelSuffix(Ctx* cx, void* data) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     const DockPanelData* d = (const DockPanelData*)data;
     El* row = Div(a)->FlexRow()->ItemsCenter()->Gap(2)->PadX(4);
     row->Child(IconEl(a, IconName::Info, 14)->Fg(th.mutedFg));
@@ -223,7 +223,7 @@ void DockStory::OnLoadStale(DockStory* self, Ctx* cx, const ClickEvent*) {
 
 El* DockStory::Render(DockStory* self, Ctx* cx) {
     Arena* a = cx->a;
-    const Theme& th = cx->theme();
+    const Theme& th = ThemeNow(cx->app);
     if (!self->seeded) {
         self->seeded = true;
         Seed(self, cx);

@@ -348,718 +348,21 @@ Str RgbaToHex(Arena* a, Rgba c, bool upper) {
                            : fmt("#%02x%02x%02x", p.r, p.g, p.b));
 }
 
-void ThemeTokensReset(Theme* t) {
-    if (!t) {
-        return;
-    }
-    if (!t->tokens.background.gradient) {
-        t->tokens.background = t->background;
-    }
-    if (!t->tokens.titleBar.gradient) {
-        t->tokens.titleBar = t->titleBar;
-    }
-    if (!t->tokens.statusBar.gradient) {
-        t->tokens.statusBar = t->statusBar;
-    }
-    if (!t->tokens.tabBar.gradient) {
-        t->tokens.tabBar = t->tabBar;
-    }
-    if (!t->tokens.tabActiveBg.gradient) {
-        t->tokens.tabActiveBg = t->tabActiveBg;
-    }
-    if (!t->tokens.primary.gradient) {
-        t->tokens.primary = t->primary;
-    }
-    if (!t->tokens.secondary.gradient) {
-        t->tokens.secondary = t->secondary;
-    }
-    if (!t->tokens.accent.gradient) {
-        t->tokens.accent = t->accent;
-    }
-    if (!t->tokens.muted.gradient) {
-        t->tokens.muted = t->muted;
-    }
-    if (!t->tokens.danger.gradient) {
-        t->tokens.danger = t->danger;
-    }
-    if (!t->tokens.info.gradient) {
-        t->tokens.info = t->info;
-    }
-    if (!t->tokens.success.gradient) {
-        t->tokens.success = t->success;
-    }
-    if (!t->tokens.warning.gradient) {
-        t->tokens.warning = t->warning;
-    }
-    if (!t->tokens.progress.gradient) {
-        t->tokens.progress = t->progress;
-    }
-    if (!t->tokens.popover.gradient) {
-        t->tokens.popover = t->popover;
-    }
-    if (!t->tokens.scrollbarThumb.gradient) {
-        t->tokens.scrollbarThumb = t->scrollbarThumb;
-    }
-    if (!t->tokens.scrollbarThumbHover.gradient) {
-        t->tokens.scrollbarThumbHover = t->scrollbarThumbHover;
-    }
-    if (!t->tokens.skeleton.gradient) {
-        t->tokens.skeleton = t->skeleton;
-    }
-    if (!t->tokens.selection.gradient) {
-        t->tokens.selection = t->selection;
-    }
-    if (!t->tokens.listActive.gradient) {
-        t->tokens.listActive = t->listActive;
-    }
-    if (!t->tokens.tableBg.gradient) {
-        t->tokens.tableBg = t->tableBg;
-    }
-    if (!t->tokens.tableActive.gradient) {
-        t->tokens.tableActive = t->tableActive;
-    }
-    if (!t->tokens.tableEven.gradient) {
-        t->tokens.tableEven = t->tableEven;
-    }
-    if (!t->tokens.tableHead.gradient) {
-        t->tokens.tableHead = t->tableHead;
-    }
-    if (!t->tokens.tableFoot.gradient) {
-        t->tokens.tableFoot = t->tableFoot;
-    }
-    if (!t->tokens.sidebarAccent.gradient) {
-        t->tokens.sidebarAccent = t->sidebarAccent;
-    }
-    if (!t->tokens.sidebarPrimary.gradient) {
-        t->tokens.sidebarPrimary = t->sidebarPrimary;
-    }
-    if (!t->tokens.overlay.gradient) {
-        t->tokens.overlay = t->overlay;
-    }
-    if (!t->tokens.switchThumb.gradient) {
-        t->tokens.switchThumb = t->switchThumb;
-    }
-    if (!t->tokens.sliderThumb.gradient) {
-        t->tokens.sliderThumb = t->sliderThumb;
-    }
-    if (!t->tokens.button.gradient) {
-        t->tokens.button = t->button;
-    }
-    if (!t->tokens.buttonHover.gradient) {
-        t->tokens.buttonHover = t->buttonHover;
-    }
-    if (!t->tokens.buttonActive.gradient) {
-        t->tokens.buttonActive = t->buttonActive;
-    }
-    if (!t->tokens.primaryHover.gradient) {
-        t->tokens.primaryHover = t->primaryHover;
-    }
-    if (!t->tokens.primaryActive.gradient) {
-        t->tokens.primaryActive = t->primaryActive;
-    }
-    if (!t->tokens.buttonPrimary.gradient) {
-        t->tokens.buttonPrimary = t->buttonPrimary;
-    }
-    if (!t->tokens.buttonPrimaryHover.gradient) {
-        t->tokens.buttonPrimaryHover = t->buttonPrimaryHover;
-    }
-    if (!t->tokens.buttonPrimaryActive.gradient) {
-        t->tokens.buttonPrimaryActive = t->buttonPrimaryActive;
-    }
-    if (!t->tokens.secondaryHover.gradient) {
-        t->tokens.secondaryHover = t->secondaryHover;
-    }
-    if (!t->tokens.secondaryActive.gradient) {
-        t->tokens.secondaryActive = t->secondaryActive;
-    }
-    if (!t->tokens.buttonSecondary.gradient) {
-        t->tokens.buttonSecondary = t->buttonSecondary;
-    }
-    if (!t->tokens.buttonSecondaryHover.gradient) {
-        t->tokens.buttonSecondaryHover = t->buttonSecondaryHover;
-    }
-    if (!t->tokens.buttonSecondaryActive.gradient) {
-        t->tokens.buttonSecondaryActive = t->buttonSecondaryActive;
-    }
-    if (!t->tokens.successHover.gradient) {
-        t->tokens.successHover = t->successHover;
-    }
-    if (!t->tokens.successActive.gradient) {
-        t->tokens.successActive = t->successActive;
-    }
-    if (!t->tokens.buttonSuccess.gradient) {
-        t->tokens.buttonSuccess = t->buttonSuccess;
-    }
-    if (!t->tokens.buttonSuccessHover.gradient) {
-        t->tokens.buttonSuccessHover = t->buttonSuccessHover;
-    }
-    if (!t->tokens.buttonSuccessActive.gradient) {
-        t->tokens.buttonSuccessActive = t->buttonSuccessActive;
-    }
-    if (!t->tokens.infoHover.gradient) {
-        t->tokens.infoHover = t->infoHover;
-    }
-    if (!t->tokens.infoActive.gradient) {
-        t->tokens.infoActive = t->infoActive;
-    }
-    if (!t->tokens.buttonInfo.gradient) {
-        t->tokens.buttonInfo = t->buttonInfo;
-    }
-    if (!t->tokens.buttonInfoHover.gradient) {
-        t->tokens.buttonInfoHover = t->buttonInfoHover;
-    }
-    if (!t->tokens.buttonInfoActive.gradient) {
-        t->tokens.buttonInfoActive = t->buttonInfoActive;
-    }
-    if (!t->tokens.warningHover.gradient) {
-        t->tokens.warningHover = t->warningHover;
-    }
-    if (!t->tokens.warningActive.gradient) {
-        t->tokens.warningActive = t->warningActive;
-    }
-    if (!t->tokens.buttonWarning.gradient) {
-        t->tokens.buttonWarning = t->buttonWarning;
-    }
-    if (!t->tokens.buttonWarningHover.gradient) {
-        t->tokens.buttonWarningHover = t->buttonWarningHover;
-    }
-    if (!t->tokens.buttonWarningActive.gradient) {
-        t->tokens.buttonWarningActive = t->buttonWarningActive;
-    }
-    if (!t->tokens.dangerHover.gradient) {
-        t->tokens.dangerHover = t->dangerHover;
-    }
-    if (!t->tokens.dangerActive.gradient) {
-        t->tokens.dangerActive = t->dangerActive;
-    }
-    if (!t->tokens.buttonDanger.gradient) {
-        t->tokens.buttonDanger = t->buttonDanger;
-    }
-    if (!t->tokens.buttonDangerHover.gradient) {
-        t->tokens.buttonDangerHover = t->buttonDangerHover;
-    }
-    if (!t->tokens.buttonDangerActive.gradient) {
-        t->tokens.buttonDangerActive = t->buttonDangerActive;
-    }
-    if (!t->tokens.accordion.gradient) {
-        t->tokens.accordion = t->accordion;
-    }
-    if (!t->tokens.dropTarget.gradient) {
-        t->tokens.dropTarget = t->dropTarget;
-    }
-    if (!t->tokens.list.gradient) {
-        t->tokens.list = t->list;
-    }
-    if (!t->tokens.listEven.gradient) {
-        t->tokens.listEven = t->listEven;
-    }
-    if (!t->tokens.listHead.gradient) {
-        t->tokens.listHead = t->listHead;
-    }
-    if (!t->tokens.listHover.gradient) {
-        t->tokens.listHover = t->listHover;
-    }
-    if (!t->tokens.sliderBar.gradient) {
-        t->tokens.sliderBar = t->sliderBar;
-    }
-    if (!t->tokens.switchBg.gradient) {
-        t->tokens.switchBg = t->switchBg;
-    }
-    if (!t->tokens.tab.gradient) {
-        t->tokens.tab = t->tab;
-    }
-    if (!t->tokens.tabBarSegmented.gradient) {
-        t->tokens.tabBarSegmented = t->tabBarSegmented;
-    }
-    if (!t->tokens.tableHover.gradient) {
-        t->tokens.tableHover = t->tableHover;
-    }
-    if (!t->tokens.tiles.gradient) {
-        t->tokens.tiles = t->tiles;
-    }
-    if (!t->tokens.scrollbarBg.gradient) {
-        t->tokens.scrollbarBg = t->scrollbarBg;
-    }
-    if (!t->tokens.sidebar.gradient) {
-        t->tokens.sidebar = t->sidebar;
-    }
-    if (!t->tokens.groupBox.gradient) {
-        t->tokens.groupBox = t->groupBox;
-    }
-    if (!t->tokens.descListLabel.gradient) {
-        t->tokens.descListLabel = t->descListLabel;
-    }
-}
-
-// ThemeFillDerived — the half of schema.rs's chain that is arithmetic rather
-// than a key. Every expression here is the `fallback =` of the
-// `apply_color!` / `apply_background_color!` with the same name, in the same
-// order, so a palette in code and a theme file that names nothing land on the
-// same numbers.
-void ThemeFillDerived(Theme* t, bool dark) {
-    if (!t) {
-        return;
-    }
-    // The two constants the button and hover fallbacks are written against.
-    const float activeDarken = dark ? 0.2f : 0.1f;
-    const float hoverOpacity = 0.9f;
-    const Rgba clear = RgbaTransparent();
-    auto set = [](Rgba* flat, Background* tok, Rgba c) {
-        *flat = c;
-        *tok = c;
-    };
-
-    // Button. The plain one sits on the input border mixed toward
-    // transparent in dark and on the window background in light.
-    set(&t->button, &t->tokens.button,
-        dark ? RgbaMixOklab(t->inputBorder, clear, 0.3f) : t->background);
-    t->buttonFg = t->foreground;
-    set(&t->buttonHover, &t->tokens.buttonHover,
-        RgbaMixOklab(t->inputBorder, clear, 0.5f));
-    set(&t->buttonActive, &t->tokens.buttonActive,
-        RgbaMixOklab(t->inputBorder, clear, 0.7f));
-
-    set(&t->buttonPrimary, &t->tokens.buttonPrimary, t->primary);
-    t->buttonPrimaryFg = t->primaryFg;
-    set(&t->buttonPrimaryHover, &t->tokens.buttonPrimaryHover, t->primaryHover);
-    set(&t->buttonPrimaryActive, &t->tokens.buttonPrimaryActive,
-        t->primaryActive);
-
-    set(&t->buttonSecondary, &t->tokens.buttonSecondary, t->secondary);
-    t->buttonSecondaryFg = t->secondaryFg;
-    set(&t->buttonSecondaryHover, &t->tokens.buttonSecondaryHover,
-        t->secondaryHover);
-    set(&t->buttonSecondaryActive, &t->tokens.buttonSecondaryActive,
-        t->secondaryActive);
-
-    // The four semantic surfaces: a hover blended over the window, an active
-    // one darkened, and a button family mixed toward transparent.
-    set(&t->successHover, &t->tokens.successHover,
-        RgbaBlend(t->background, RgbaOpacity(t->success, hoverOpacity)));
-    set(&t->successActive, &t->tokens.successActive,
-        RgbaDarken(t->success, activeDarken));
-    set(&t->buttonSuccess, &t->tokens.buttonSuccess,
-        RgbaMixOklab(t->success, clear, 0.2f));
-    t->buttonSuccessFg = t->success;
-    set(&t->buttonSuccessHover, &t->tokens.buttonSuccessHover,
-        RgbaMixOklab(t->success, clear, 0.3f));
-    set(&t->buttonSuccessActive, &t->tokens.buttonSuccessActive,
-        RgbaMixOklab(t->success, clear, 0.4f));
-
-    set(&t->infoHover, &t->tokens.infoHover,
-        RgbaBlend(t->background, RgbaOpacity(t->info, hoverOpacity)));
-    set(&t->infoActive, &t->tokens.infoActive,
-        RgbaDarken(t->info, activeDarken));
-    set(&t->buttonInfo, &t->tokens.buttonInfo,
-        RgbaMixOklab(t->info, clear, 0.2f));
-    t->buttonInfoFg = t->info;
-    set(&t->buttonInfoHover, &t->tokens.buttonInfoHover,
-        RgbaMixOklab(t->info, clear, 0.3f));
-    set(&t->buttonInfoActive, &t->tokens.buttonInfoActive,
-        RgbaMixOklab(t->info, clear, 0.4f));
-
-    set(&t->warningHover, &t->tokens.warningHover,
-        RgbaBlend(t->background, RgbaOpacity(t->warning, hoverOpacity)));
-    // The one that is not a plain darken: warning's active is blended over
-    // the window as well, which is what schema.rs writes.
-    set(&t->warningActive, &t->tokens.warningActive,
-        RgbaBlend(t->background, RgbaDarken(t->warning, activeDarken)));
-    set(&t->buttonWarning, &t->tokens.buttonWarning,
-        RgbaMixOklab(t->warning, clear, 0.2f));
-    t->buttonWarningFg = t->warning;
-    set(&t->buttonWarningHover, &t->tokens.buttonWarningHover,
-        RgbaMixOklab(t->warning, clear, 0.3f));
-    set(&t->buttonWarningActive, &t->tokens.buttonWarningActive,
-        RgbaMixOklab(t->warning, clear, 0.4f));
-
-    set(&t->dangerActive, &t->tokens.dangerActive,
-        RgbaDarken(t->danger, activeDarken));
-    set(&t->dangerHover, &t->tokens.dangerHover,
-        RgbaBlend(t->background, RgbaOpacity(t->danger, hoverOpacity)));
-    set(&t->buttonDanger, &t->tokens.buttonDanger,
-        RgbaMixOklab(t->danger, clear, 0.2f));
-    t->buttonDangerFg = t->danger;
-    set(&t->buttonDangerHover, &t->tokens.buttonDangerHover,
-        RgbaMixOklab(t->danger, clear, 0.3f));
-    set(&t->buttonDangerActive, &t->tokens.buttonDangerActive,
-        RgbaMixOklab(t->danger, clear, 0.4f));
-
-    set(&t->accordion, &t->tokens.accordion, t->background);
-    set(&t->dropTarget, &t->tokens.dropTarget, RgbaOpacity(t->primary, 0.2f));
-    t->link = t->primary;
-    t->linkActive = t->link;
-    t->linkHover = t->link;
-    set(&t->list, &t->tokens.list, t->background);
-    set(&t->listEven, &t->tokens.listEven, t->list);
-    set(&t->listHead, &t->tokens.listHead, t->list);
-    set(&t->listHover, &t->tokens.listHover, RgbaOpacity(t->accent, 0.6f));
-    set(&t->tableHover, &t->tokens.tableHover, t->listHover);
-    set(&t->sliderBar, &t->tokens.sliderBar, t->primary);
-    set(&t->switchBg, &t->tokens.switchBg, t->secondaryActive);
-    set(&t->tab, &t->tokens.tab, t->background);
-    set(&t->tabBarSegmented, &t->tokens.tabBarSegmented, t->secondary);
-    set(&t->tiles, &t->tokens.tiles, t->background);
-    t->windowBorder = t->border;
-}
-
-const Theme& ThemeDefaultDark() {
-    static Theme t;
-    static bool init = false;
-    if (!init) {
-        t.background = Rgb(0x0a, 0x0a, 0x0a);
-        t.foreground = Rgb(0xfa, 0xfa, 0xfa);
-        t.border = Rgb(0x26, 0x26, 0x26);
-        t.mutedFg = Rgb(0xa3, 0xa3, 0xa3);
-        t.inputBorder = Rgb(0x2f, 0x2f, 0x2f);
-        t.inputBg = Rgba8(0x2f, 0x2f, 0x2f, 0x4c);
-        t.ring = Rgb(0x73, 0x73, 0x73);
-        t.caret = Rgb(0xfa, 0xfa, 0xfa);
-        t.selection = Rgba8(0x1d, 0x4e, 0xd8, 0x4c);
-        t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
-        t.titleBar = Rgb(0x17, 0x17, 0x17);
-        t.titleBarBorder = Rgb(0x26, 0x26, 0x26);
-        t.statusBarBorder = Rgb(0x26, 0x26, 0x26);
-        t.tabBar = Rgb(0x17, 0x17, 0x17);
-        t.tabActiveBg = Rgb(0x0a, 0x0a, 0x0a);
-        t.tabActiveFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.tabFg = Rgb(0xd4, 0xd4, 0xd4);
-        t.tableBg = Rgb(0x0a, 0x0a, 0x0a);
-        t.tableHead = Rgba8(0x17, 0x17, 0x17, 0x66);
-        t.tableHeadFg = Rgb(0x52, 0x52, 0x52);
-        // table.foot has no entry of its own, so it takes list.head's
-        // surface and muted_foreground, as schema.rs falls back.
-        t.tableFoot = Rgba8(0x17, 0x17, 0x17, 0x66);
-        t.tableFootFg = t.mutedFg;
-        t.tableRowBorder = Rgba8(0x26, 0x26, 0x26, 0xb3);
-        t.tableEven = Rgba8(0x17, 0x17, 0x17, 0x66);
-        // default-theme.json dark: list.active.background #1e40af33,
-        // list.active.border #1d4ed8. table.active has no entry of its own, so
-        // it falls back to the list pair.
-        t.listActive = Rgba8(0x1e, 0x40, 0xaf, 0x33);
-        t.listActiveBorder = Rgb(0x1d, 0x4e, 0xd8);
-        t.tableActive = t.listActive;
-        t.tableActiveBorder = t.listActiveBorder;
-        t.progress = Rgb(0xf5, 0xf5, 0xf5);
-        t.red = Rgb(0xf8, 0x71, 0x71);
-        t.green = Rgb(0x4a, 0xde, 0x80);
-        t.blue = Rgb(0x60, 0xa5, 0xfa);
-        t.yellow = Rgb(0xfa, 0xcc, 0x15);
-        t.cyan = Rgb(0x22, 0xd3, 0xee);
-        t.magenta = Rgb(0xc0, 0x84, 0xfc);
-        // base.<hue>.light, one scale step lighter than the base in the
-        // dark theme and one step lighter than the 600 in the light one.
-        t.redLight = Rgb(0xfc, 0xa5, 0xa5);
-        t.greenLight = Rgb(0x86, 0xef, 0xac);
-        t.blueLight = Rgb(0x93, 0xc5, 0xfd);
-        t.yellowLight = Rgb(0xfd, 0xe0, 0x47);
-        t.cyanLight = Rgb(0x67, 0xe8, 0xf9);
-        t.magentaLight = Rgb(0xd8, 0xb4, 0xfe);
-        t.chart1 = Rgb(0x93, 0xc5, 0xfd);
-        t.chart2 = Rgb(0x3b, 0x82, 0xf6);
-        t.chart3 = Rgb(0x25, 0x63, 0xeb);
-        t.chart4 = Rgb(0x1d, 0x4e, 0xd8);
-        t.chart5 = Rgb(0x1e, 0x40, 0xaf);
-        t.chartBullish = Rgb(0x16, 0xa3, 0x4a);
-        t.chartBearish = Rgb(0xdc, 0x26, 0x26);
-        t.danger = Rgb(0xf8, 0x71, 0x71);
-        t.dangerFg = Rgb(0xdc, 0x26, 0x26);
-        t.secondaryHover = Rgb(0x29, 0x29, 0x29);
-        t.secondaryActive = Rgb(0x21, 0x21, 0x21);
-        t.secondaryFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.secondary = Rgb(0x26, 0x26, 0x26);
-        t.muted = Rgb(0x26, 0x26, 0x26);
-        t.accent = Rgb(0x26, 0x26, 0x26);
-        t.accentFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.primary = Rgb(0xfa, 0xfa, 0xfa);
-        t.primaryFg = Rgb(0x17, 0x17, 0x17);
-        t.primaryHover = Rgb(0xf5, 0xf5, 0xf5);
-        t.primaryActive = Rgb(0xe5, 0xe5, 0xe5);
-        t.sidebar = Rgb(0x0a, 0x0a, 0x0a);
-        t.sidebarFg = Rgb(0xf5, 0xf5, 0xf5);
-        t.sidebarPrimary = Rgb(0xf5, 0xf5, 0xf5);
-        t.sidebarPrimaryFg = Rgb(0x0a, 0x0a, 0x0a);
-        t.sidebarAccent = Rgb(0x26, 0x26, 0x26);
-        t.sidebarAccentFg = Rgb(0xf5, 0xf5, 0xf5);
-        t.sidebarBorder = Rgb(0x26, 0x26, 0x26);
-        t.popover = Rgb(0x0a, 0x0a, 0x0a);
-        t.popoverFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.scrollbarThumb = Rgba8(0x52, 0x52, 0x52, 0xe6);
-        t.scrollbarThumbHover = Rgb(0x52, 0x52, 0x52);
-        t.scrollbarBg = Rgba8(0x17, 0x17, 0x17, 0x00);
-        t.info = Rgb(0x22, 0xd3, 0xee);
-        t.infoFg = Rgb(0x08, 0x91, 0xb2);
-        t.success = Rgb(0x4a, 0xde, 0x80);
-        t.successFg = Rgb(0x16, 0xa3, 0x4a);
-        t.warning = Rgb(0xfa, 0xcc, 0x15);
-        t.warningFg = Rgb(0xca, 0x8a, 0x04);
-        t.skeleton = Rgb(0x17, 0x17, 0x17);
-        t.overlay = Rgba8(0, 0, 0, 0x33);
-        t.groupBox = Rgb(0x0a, 0x0a, 0x0a);
-        t.groupBoxFg = Rgb(0xfa, 0xfa, 0xfa);
-        // description_list.label.background: the window background with the
-        // border at 20% over it, which is what schema.rs falls back to. The
-        // key default-theme.json spells is not the one the schema reads.
-        t.descListLabel = Rgb(0x0f, 0x0f, 0x0f);
-        // description_list.label.foreground falls back to muted_foreground,
-        // not to the foreground: a label reads as a caption beside its value.
-        t.descListLabelFg = Rgb(0xa3, 0xa3, 0xa3);
-        t.radius = 6;
-        t.radiusLg = 8;
-        t.radiusFull = kRadiusFull;
-        // The three that only exist so a theme can spell them as gradients,
-        // on the fallbacks schema.rs gives them.
-        t.statusBar = t.titleBar;
-        t.switchThumb = t.background;
-        t.sliderThumb = t.background;
-        ThemeFillDerived(&t, true);
-        ThemeTokensReset(&t);
-        init = true;
-    }
-    return t;
-}
-
-const Theme& ThemeDefaultLight() {
-    static Theme t;
-    static bool init = false;
-    if (!init) {
-        t.background = Rgb(0xff, 0xff, 0xff);
-        t.foreground = Rgb(0x0a, 0x0a, 0x0a);
-        t.border = Rgb(0xe5, 0xe5, 0xe5);
-        t.mutedFg = Rgb(0x73, 0x73, 0x73);
-        t.inputBorder = Rgb(0xe5, 0xe5, 0xe5);
-        t.inputBg = Rgb(0xff, 0xff, 0xff);
-        t.ring = Rgb(0xa3, 0xa3, 0xa3);
-        t.caret = Rgb(0x0a, 0x0a, 0x0a);
-        t.selection = Rgba8(0x55, 0xa0, 0xfc, 0x4c);
-        t.dragBorder = Rgb(0x3b, 0x82, 0xf6);
-        t.titleBar = Rgb(0xf8, 0xf8, 0xf8);
-        t.titleBarBorder = Rgb(0xe5, 0xe5, 0xe5);
-        t.statusBarBorder = Rgb(0xe5, 0xe5, 0xe5);
-        t.tabBar = Rgb(0xf5, 0xf5, 0xf5);
-        t.tabActiveBg = Rgb(0xff, 0xff, 0xff);
-        t.tabActiveFg = Rgb(0x17, 0x17, 0x17);
-        t.tabFg = Rgb(0x40, 0x40, 0x40);
-        t.tableBg = Rgb(0xff, 0xff, 0xff);
-        t.tableHead = Rgb(0xfa, 0xfa, 0xfa);
-        t.tableHeadFg = Rgb(0x73, 0x73, 0x73);
-        t.tableFoot = Rgb(0xfa, 0xfa, 0xfa);
-        t.tableFootFg = t.mutedFg;
-        t.tableRowBorder = Rgba8(0xe5, 0xe5, 0xe5, 0xb3);
-        t.tableEven = Rgb(0xfa, 0xfa, 0xfa);
-        // default-theme.json light: the same blue for the list and the table.
-        t.listActive = Rgba8(0xbf, 0xdb, 0xfe, 0x33);
-        t.listActiveBorder = Rgb(0x60, 0xa5, 0xfa);
-        t.tableActive = t.listActive;
-        t.tableActiveBorder = t.listActiveBorder;
-        t.progress = Rgb(0x17, 0x17, 0x17);
-        t.red = Rgb(0xdc, 0x26, 0x26);
-        t.green = Rgb(0x16, 0xa3, 0x4a);
-        t.blue = Rgb(0x25, 0x63, 0xeb);
-        t.yellow = Rgb(0xca, 0x8a, 0x04);
-        t.cyan = Rgb(0x08, 0x91, 0xb2);
-        t.magenta = Rgb(0x93, 0x33, 0xea);
-        t.redLight = Rgb(0xf8, 0x71, 0x71);
-        t.greenLight = Rgb(0x4a, 0xde, 0x80);
-        t.blueLight = Rgb(0x60, 0xa5, 0xfa);
-        t.yellowLight = Rgb(0xfa, 0xcc, 0x15);
-        t.cyanLight = Rgb(0x22, 0xd3, 0xee);
-        t.magentaLight = Rgb(0xc0, 0x84, 0xfc);
-        t.chart1 = Rgb(0x93, 0xc5, 0xfd);
-        t.chart2 = Rgb(0x3b, 0x82, 0xf6);
-        t.chart3 = Rgb(0x25, 0x63, 0xeb);
-        t.chart4 = Rgb(0x1d, 0x4e, 0xd8);
-        t.chart5 = Rgb(0x1e, 0x40, 0xaf);
-        t.chartBullish = Rgb(0x16, 0xa3, 0x4a);
-        t.chartBearish = Rgb(0xdc, 0x26, 0x26);
-        t.danger = Rgb(0xef, 0x44, 0x44);
-        t.dangerFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.secondaryHover = Rgb(0xe5, 0xe5, 0xe5);
-        t.secondaryActive = Rgb(0xd4, 0xd4, 0xd4);
-        t.secondaryFg = Rgb(0x17, 0x17, 0x17);
-        t.secondary = Rgb(0xe5, 0xe5, 0xe5);
-        t.muted = Rgb(0xf5, 0xf5, 0xf5);
-        t.accent = Rgb(0xf5, 0xf5, 0xf5);
-        t.accentFg = Rgb(0x17, 0x17, 0x17);
-        t.primary = Rgb(0x17, 0x17, 0x17);
-        t.primaryFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.primaryHover = Rgb(0x26, 0x26, 0x26);
-        t.primaryActive = Rgb(0x0a, 0x0a, 0x0a);
-        t.sidebar = Rgb(0xfa, 0xfa, 0xfa);
-        t.sidebarFg = Rgb(0x17, 0x17, 0x17);
-        t.sidebarPrimary = Rgb(0x17, 0x17, 0x17);
-        t.sidebarPrimaryFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.sidebarAccent = Rgb(0xe5, 0xe5, 0xe5);
-        t.sidebarAccentFg = Rgb(0x17, 0x17, 0x17);
-        t.sidebarBorder = Rgb(0xe5, 0xe5, 0xe5);
-        t.popover = Rgb(0xff, 0xff, 0xff);
-        t.popoverFg = Rgb(0x0a, 0x0a, 0x0a);
-        t.scrollbarThumb = Rgba8(0xa3, 0xa3, 0xa3, 0xe6);
-        t.scrollbarThumbHover = Rgb(0xa3, 0xa3, 0xa3);
-        t.scrollbarBg = Rgba8(0xfa, 0xfa, 0xfa, 0x00);
-        t.info = Rgb(0x06, 0xb6, 0xd4);
-        t.infoFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.success = Rgb(0x22, 0xc5, 0x5e);
-        t.successFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.warning = Rgb(0xea, 0xb3, 0x08);
-        t.warningFg = Rgb(0xfa, 0xfa, 0xfa);
-        t.skeleton = Rgb(0xf5, 0xf5, 0xf5);
-        t.overlay = Rgba8(0, 0, 0, 0x0d);
-        t.groupBox = Rgb(0xf5, 0xf5, 0xf5);
-        t.groupBoxFg = Rgb(0x17, 0x17, 0x17);
-        t.descListLabel = Rgb(0xf9, 0xf9, 0xf9);
-        t.descListLabelFg = Rgb(0x73, 0x73, 0x73);
-        t.radius = 6;
-        t.radiusLg = 8;
-        t.radiusFull = kRadiusFull;
-        // The three that only exist so a theme can spell them as gradients,
-        // on the fallbacks schema.rs gives them.
-        t.statusBar = t.titleBar;
-        t.switchThumb = t.background;
-        t.sliderThumb = t.background;
-        ThemeFillDerived(&t, false);
-        ThemeTokensReset(&t);
-        init = true;
-    }
-    return t;
-}
-
-// Pure callers and theme resolution read the immutable defaults.
-const Theme& ThemeLight() {
-    return ThemeDefaultLight();
-}
-
-const Theme& ThemeDark() {
-    return ThemeDefaultDark();
-}
-
-// theme/mod.rs: radius 6, radius_lg 8, font_size 16.
-static const float kDefaultFontSize = 16.f;
-
-struct AppThemeState {
-    Theme active[2] = {};
-    float fontSize = kDefaultFontSize;
-    ScrollbarMode scrollbarMode = ScrollbarMode::Scrolling;
-    bool focusRing = true;
-    ThemeSyncFn sync = nullptr;
-    bool initialized = false;
+struct RuntimeStyleState {
+    RuntimeStyle style = {};
 };
 
-static void ThemeDidChange(App* app, AppThemeState* state) {
-    if (state && state->sync) {
-        state->sync(app);
-    }
+const RuntimeStyle& RuntimeStyleNow(const App* app) {
+    static const RuntimeStyle fallback = {};
+    RuntimeStyleState* state = AppGlobalEnsure<RuntimeStyleState>((App*)app);
+    return state ? state->style : fallback;
 }
 
-static AppThemeState* ThemeStateOf(const App* app) {
-    AppThemeState* state = AppGlobalEnsure<AppThemeState>((App*)app);
-    if (state && !state->initialized) {
-        state->active[(int)ThemeMode::Light] = ThemeDefaultLight();
-        state->active[(int)ThemeMode::Dark] = ThemeDefaultDark();
-        state->initialized = true;
-    }
-    return state;
-}
-
-const Theme& ThemeLight(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->active[(int)ThemeMode::Light] : ThemeDefaultLight();
-}
-
-const Theme& ThemeDark(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->active[(int)ThemeMode::Dark] : ThemeDefaultDark();
-}
-
-void ThemeInstall(App* app, ThemeMode mode, const Theme& t) {
-    AppThemeState* state = ThemeStateOf(app);
+void RuntimeStyleInstall(App* app, const RuntimeStyle& style) {
+    RuntimeStyleState* state = AppGlobalEnsure<RuntimeStyleState>(app);
     if (state) {
-        state->active[(int)mode] = t;
-        ThemeDidChange(app, state);
+        state->style = style;
     }
-}
-
-void ThemeSetRadius(App* app, float radius) {
-    AppThemeState* state = ThemeStateOf(app);
-    if (!state) {
-        return;
-    }
-    for (int i = 0; i < 2; i++) {
-        Theme* t = &state->active[i];
-        t->radius = radius;
-        t->radiusLg = radius > 0 ? radius + 2 : 0;
-        // `radius_full` goes with it: a theme that squares its corners squares
-        // the avatars and the slider thumbs too, rather than leaving a scatter
-        // of permanently round elements behind.
-        t->radiusFull = radius > 0 ? kRadiusFull : 0;
-    }
-    ThemeDidChange(app, state);
-}
-
-float ThemeFontSize(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->fontSize : kDefaultFontSize;
-}
-
-void ThemeSetFontSize(App* app, float px) {
-    AppThemeState* state = ThemeStateOf(app);
-    if (state) {
-        state->fontSize = px > 0 ? px : kDefaultFontSize;
-        ThemeDidChange(app, state);
-    }
-}
-
-// What an explicit `Font(12)` is multiplied by. Rust says its sizes in rems,
-// so they all follow `Theme::font_size`; these are in DIPs, so the base is
-// what they are measured against.
-static float ThemeFontScale(const App* app) {
-    return ThemeFontSize(app) / kDefaultFontSize;
-}
-
-bool ThemeFocusRing(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->focusRing : true;
-}
-
-void ThemeSetFocusRing(App* app, bool on) {
-    AppThemeState* state = ThemeStateOf(app);
-    if (state) {
-        state->focusRing = on;
-    }
-}
-
-ScrollbarMode ScrollbarModeNow(const App* app) {
-    AppThemeState* state = ThemeStateOf(app);
-    return state ? state->scrollbarMode : ScrollbarMode::Always;
-}
-
-void ScrollbarModeSet(App* app, ScrollbarMode m) {
-    AppThemeState* state = ThemeStateOf(app);
-    if (state) {
-        state->scrollbarMode = m;
-        ThemeDidChange(app, state);
-    }
-}
-
-void ThemeSet(App* app, ThemeMode mode) {
-    if (app) {
-        app->themeMode = mode;
-        ThemeDidChange(app, ThemeStateOf(app));
-    }
-}
-
-ThemeMode ThemeGet(const App* app) {
-    return app ? app->themeMode : ThemeMode::Light;
-}
-
-void ThemeSetSyncFn(App* app, ThemeSyncFn fn) {
-    AppThemeState* state = ThemeStateOf(app);
-    if (state) {
-        state->sync = fn;
-    }
-}
-
-const Theme& ThemeNow(const App* app) {
-    return ThemeGet(app) == ThemeMode::Dark ? ThemeDark(app) : ThemeLight(app);
 }
 
 // ─── element builders ─────────────────────────────────────────────────────
@@ -1108,10 +411,9 @@ El* ButtonEl(Arena* a, int clickId, Str label, BtnKind kind) {
 }
 
 El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected) {
-    // Legacy arena-only helper: themed components take Ctx and therefore the
-    // App-owned active theme. With no App in hand this resolves against the
-    // immutable light default rather than mutable process state.
-    const Theme& th = ThemeLight();
+    // Legacy arena-only helper: without an App it uses the runtime's neutral
+    // light defaults. The component Button has the full active palette.
+    const RuntimeStyle& th = RuntimeStyleNow(nullptr);
     El* b = Div(a)
                 ->ItemsCenter()
                 ->JustifyCenter()
@@ -1121,19 +423,20 @@ El* ButtonSmall(Arena* a, int clickId, Str label, BtnKind kind, bool selected) {
     if (kind == BtnKind::Primary) {
         b->PadX(16)
             ->PadY(8)
-            ->Bg(th.tokens.primary)
-            ->HoverBg(RgbaMix(th.primary, th.foreground, 0.85f));
-        b->Child(TextEl(a, label)->Font(14)->Fg(th.primaryFg));
+            ->Bg(th.legacyPrimary)
+            ->HoverBg(th.legacyPrimaryHover);
+        b->Child(TextEl(a, label)->Font(14)->Fg(th.legacyPrimaryForeground));
     } else if (kind == BtnKind::Outline) {
-        b->PadX(16)->PadY(8)->Border(1, th.border)->HoverBg(th.tokens.muted);
+        b->PadX(16)->PadY(8)->Border(1, th.border)->HoverBg(th.legacyMuted);
         b->Child(TextEl(a, label)->Font(14)->Fg(th.foreground));
     } else {
         b->PadX(12)
             ->PadY(6)
-            ->Bg(selected ? th.secondaryActive : th.secondary)
-            ->HoverBg(th.secondaryHover);
-        b->Child(
-            TextEl(a, label)->Font(selected ? 13.f : 14.f)->Fg(th.secondaryFg));
+            ->Bg(selected ? th.legacySecondaryActive : th.legacySecondary)
+            ->HoverBg(th.legacySecondaryHover);
+        b->Child(TextEl(a, label)
+                     ->Font(selected ? 13.f : 14.f)
+                     ->Fg(th.legacySecondaryForeground));
     }
     return b;
 }
@@ -1446,19 +749,20 @@ El* El::ClipX() {
 // The bar an element shows: its own when it named one, the theme's default
 // otherwise.
 static ScrollbarMode ElScrollMode(const El* e, const App* app) {
-    return e->scrollModeSet ? e->scrollMode : ScrollbarModeNow(app);
+    return e->scrollModeSet ? e->scrollMode
+                            : RuntimeStyleNow(app).scrollbarMode;
 }
 
 // The thumb's colour: `thumb_hover` under the pointer or in a drag, `thumb`
 // otherwise, faded by however far through the Scrolling fade the bar is.
-static Background ScrollbarThumbBg(const Theme& th, bool hot, float alpha) {
-    Background c =
-        hot ? th.tokens.scrollbarThumbHover : th.tokens.scrollbarThumb;
+static Background ScrollbarThumbBg(const RuntimeStyle& th, bool hot,
+                                    float alpha) {
+    Background c = hot ? th.scrollbarThumbHover : th.scrollbarThumb;
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
-static Background ScrollbarThumbBg(const El* e, const Theme& th, bool hot,
-                                    float alpha) {
+static Background ScrollbarThumbBg(const El* e, const RuntimeStyle& th,
+                                   bool hot, float alpha) {
     if (!e->scrollThemeSet) {
         return ScrollbarThumbBg(th, hot, alpha);
     }
@@ -1468,13 +772,13 @@ static Background ScrollbarThumbBg(const El* e, const Theme& th, bool hot,
 
 // The track behind it — `scrollbar.background`, which both default themes
 // leave transparent.
-static Background ScrollbarBarBg(const Theme& th, float alpha) {
-    Background c = Background(th.scrollbarBg);
+static Background ScrollbarBarBg(const RuntimeStyle& th, float alpha) {
+    Background c = th.scrollbarTrack;
     return alpha >= 1.f ? c : BackgroundOpacity(c, alpha);
 }
 
-static Background ScrollbarBarBg(const El* e, const Theme& th, bool active,
-                                  float alpha) {
+static Background ScrollbarBarBg(const El* e, const RuntimeStyle& th,
+                                 bool active, float alpha) {
     if (!e->scrollThemeSet) {
         return ScrollbarBarBg(th, alpha);
     }
@@ -1483,12 +787,12 @@ static Background ScrollbarBarBg(const El* e, const Theme& th, bool active,
 }
 
 // clamp_thumb_radius: the theme's radius, never more than half the thumb.
-static float ThumbRadius(const Theme& th, float thumbW) {
+static float ThumbRadius(const RuntimeStyle& th, float thumbW) {
     float r = th.radius;
     return r > thumbW * 0.5f ? thumbW * 0.5f : r;
 }
 
-static float ThumbRadius(const El* e, const Theme& th, float thumbW) {
+static float ThumbRadius(const El* e, const RuntimeStyle& th, float thumbW) {
     if (!e->scrollThemeSet) {
         return ThumbRadius(th, thumbW);
     }
@@ -3545,9 +2849,11 @@ static void PrepareEl(PaintCtx* ctx, El* e, float inheritFont, Rgba inheritFg) {
     // An explicit size is in DIPs at the default font size and scales with
     // it; an inherited one has been scaled already, by the root or by
     // whichever ancestor set it.
-    float font = e->style.fontSize > 0
-                     ? e->style.fontSize * ThemeFontScale(ctx ? ctx->app : nullptr)
-                                       : inheritFont;
+    float font =
+        e->style.fontSize > 0
+            ? e->style.fontSize *
+                  (RuntimeStyleNow(ctx ? ctx->app : nullptr).fontSize / 16.f)
+            : inheritFont;
     Rgba fg = e->style.hasColor ? e->style.color : inheritFg;
     // Like HoverBg, this needs a click id of its own: without one the element
     // would match hoverId 0, which means nothing is hovered.
@@ -4428,7 +3734,7 @@ const float kBarRowValueGap = 36.f;
 // written at its growing end.
 static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
                     float bw, float x, float y, float w, float plotH, float lo,
-                    float hi, const Theme& th) {
+                    float hi, const RuntimeStyle& th) {
     float t = hi > lo ? (c.ys[i] - lo) / (hi - lo) : 0.f;
     t = t < 0 ? 0 : (t > 1 ? 1 : t);
     // Where zero sits along the value axis. Bars grow from here rather than
@@ -4546,11 +3852,13 @@ static void DrawBar(PaintCtx* ctx, const ChartSeries& c, int i, float bx,
     Str text = fmt("%.0f", (double)c.ys[i]);
     if (horizontal) {
         float tx = c.barAlign == BarAlign::Left ? rx + rw + 4 : rx - 34;
-        DrawTextAt(ctx, text, tx, ry + rh * 0.5f - 7.f, 30, 14, 10, th.mutedFg,
+        DrawTextAt(ctx, text, tx, ry + rh * 0.5f - 7.f, 30, 14, 10,
+                   th.mutedForeground,
                    c.barAlign != BarAlign::Left);
     } else {
         float ty = c.barAlign == BarAlign::Top ? ry + rh + 2 : ry - 14.f;
-        DrawTextAt(ctx, text, rx + rw * 0.5f - 20.f, ty, 40, 14, 10, th.mutedFg,
+        DrawTextAt(ctx, text, rx + rw * 0.5f - 20.f, ty, 40, 14, 10,
+                   th.mutedForeground,
                    true);
     }
 }
@@ -4626,7 +3934,7 @@ static void PaintTextSpans(PaintCtx* ctx, El* e, float font, Rgba base) {
 }
 
 static void DrawChart(PaintCtx* ctx, El* e) {
-    const Theme& th = ThemeNow(ctx->app);
+    const RuntimeStyle& th = RuntimeStyleNow(ctx->app);
     float x = e->x;
     float y = e->y;
     float w = e->w;
@@ -4767,7 +4075,8 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                 } else if (dx <= 1e-3f) {
                     tx = px - tw * 0.5f;
                 }
-                DrawTextAt(ctx, label, tx, py - 5.f, tw, 14, 10, th.mutedFg,
+                DrawTextAt(ctx, label, tx, py - 5.f, tw, 14, 10,
+                           th.mutedForeground,
                            false);
             }
         }
@@ -4813,13 +4122,13 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                 float ty = y + plotH * f - 6.f;
                 if (valueAxisSide) {
                     DrawTextAt(ctx, label, x - 4.f - tw, ty, tw, 12, 10,
-                               th.mutedFg, false);
+                               th.mutedForeground, false);
                 } else {
                     // A row chart's value axis runs along the bottom, so its
                     // labels go under the plot rather than beside it.
                     float tx = x + w * f - tw * 0.5f;
                     DrawTextAt(ctx, label, tx, y + plotH + 2.f, tw, 12, 10,
-                               th.mutedFg, false);
+                               th.mutedForeground, false);
                 }
             }
         }
@@ -5019,11 +4328,11 @@ static void DrawChart(PaintCtx* ctx, El* e) {
         DrawTextAt(ctx, title, x + at.x + 8, y + at.y + 4, boxW, titleSz.h, 11,
                    th.foreground, false);
         DrawTextAt(ctx, value, x + at.x + 8, y + at.y + 6 + titleSz.h, boxW,
-                   valueSz.h, 11, th.mutedFg, false);
+                   valueSz.h, 11, th.mutedForeground, false);
         float lineY = y + at.y + 6 + titleSz.h + valueSz.h;
         for (int k = 0; k < nExtra; k++) {
             DrawTextAt(ctx, extra[k], x + at.x + 8, lineY, boxW, valueSz.h, 11,
-                       th.mutedFg, false);
+                       th.mutedForeground, false);
             lineY += valueSz.h;
         }
     }
@@ -5088,7 +4397,8 @@ static void DrawChart(PaintCtx* ctx, El* e) {
                                 : tick - ls.w * 0.5f;
             lw = ls.w;
         }
-        DrawTextAt(ctx, label, lx, ly, lw, 16, 10, th.mutedFg, centered);
+        DrawTextAt(ctx, label, lx, ly, lw, 16, 10, th.mutedForeground,
+                   centered);
     }
 }
 
@@ -5340,7 +4650,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
     bool focused = e->style.focusId && e->style.focusId == ctx->focusId &&
                    e->style.focusRing;
     if (focused) {
-        e->style.borderColor = ThemeNow(ctx->app).ring;
+        e->style.borderColor = RuntimeStyleNow(ctx->app).ring;
     }
 
     BoxFill fill = BoxFillFor(e->style.hasActiveBg, e->style.hasHoverBg,
@@ -5471,7 +4781,8 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             e->input->lastFont = font;
         }
         Rgba c =
-            e->style.hasColor ? e->style.color : ThemeNow(ctx->app).foreground;
+            e->style.hasColor ? e->style.color
+                              : RuntimeStyleNow(ctx->app).foreground;
         int lo = e->selLo;
         int hi = e->selHi;
         if (e->selectable && e->text.s) {
@@ -5598,7 +4909,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
             ImageDraw(ctx, img, e->Bounds(), e->style.radius);
         } else if (SvgDrawOps(ctx, ops, opsLen, e->x, e->y, e->w, e->h,
                               e->style.hasColor ? e->style.color
-                                                : ThemeNow(ctx->app).foreground,
+                                                : RuntimeStyleNow(ctx->app).foreground,
                               0)) {
             // An SVG is not a bitmap for any of the three backends to decode;
             // it is the vector the icon renderer already walks, and a picture
@@ -5611,15 +4922,17 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                 e->laidFont > 0
                     ? e->laidFont
                     : (e->style.fontSize > 0 ? e->style.fontSize : 14.f);
-            Rgba c = e->style.hasColor ? e->style.color
-                                       : ThemeNow(ctx->app).mutedFg;
+            Rgba c = e->style.hasColor
+                         ? e->style.color
+                         : RuntimeStyleNow(ctx->app).mutedForeground;
             DrawTextAt(ctx, e->text, e->x, e->y, e->w, e->h, font, c, false,
                        e->style.wrap, e->laidMaxW, ElTextWeight(e),
                        e->style.lineHeight);
         }
     } else if (e->kind == ElKind::Icon) {
         Rgba c =
-            e->style.hasColor ? e->style.color : ThemeNow(ctx->app).foreground;
+            e->style.hasColor ? e->style.color
+                              : RuntimeStyleNow(ctx->app).foreground;
         float s = e->w > 0 ? e->w : 16;
         // Every lucide icon is compiled in as draw-op bytecode
         // (asset_icons.cpp), so this reads no file; an application's own
@@ -5628,14 +4941,14 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         Str path = e->iconPath.s ? e->iconPath : IconNamePath(e->icon);
         SvgDraw(ctx, path, e->x, e->y, s, c, e->style.rotate);
     } else if (e->kind == ElKind::Progress) {
-        const Theme& th = ThemeNow(ctx->app);
-        Background track = BackgroundOpacity(th.tokens.progress, 0.2f);
+        const RuntimeStyle& th = RuntimeStyleNow(ctx->app);
+        Background track = BackgroundOpacity(th.progress, 0.2f);
         FillBackground(ctx, e->x, e->y, e->w, e->h, e->style.radius, nullptr,
                        track);
         float fw = e->w * (e->progress / 100.f);
         if (fw > 0) {
             FillBackground(ctx, e->x, e->y, fw, e->h, e->style.radius, nullptr,
-                           th.tokens.progress);
+                           th.progress);
         }
     } else if (e->kind == ElKind::Chart) {
         DrawChart(ctx, e);
@@ -5736,7 +5049,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                          : nullptr;
     // The thumb's radius is `theme.radius`, clamped to half the thumb — a
     // wider thumb rounds more, which is what `clamp_thumb_radius` says.
-    const Theme& barTheme = ThemeNow(ctx->app);
+    const RuntimeStyle& barTheme = RuntimeStyleNow(ctx->app);
     if (barVisible && !e->noScrollbarY &&
         e->style.overflowY == Overflow::Scroll && e->contentH > e->h + 1.f &&
         e->h > 0) {
@@ -5799,7 +5112,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
                        ScrollbarThumbBg(e, barTheme, onThumb, barAlpha));
     }
 
-    if (focused && ThemeFocusRing(ctx->app)) {
+    if (focused && RuntimeStyleNow(ctx->app).focusRing) {
         // The other half of focus_ring_style: FOCUS_RING_WIDTH of the ring
         // colour at FOCUS_RING_OPACITY, in the three DIPs immediately outside
         // the element's border, with the corners widened to match. Rust hangs
@@ -5811,7 +5124,7 @@ static void PaintElNodeInner(PaintCtx* ctx, El* e, bool skipOverlay) {
         Bounds ring = e->Bounds().Inset(-kFocusRingWidth);
         DrawRoundStroke(ctx, ring.x, ring.y, ring.w, ring.h,
                         e->style.radius + kFocusRingWidth, kFocusRingWidth,
-                        RgbaOpacity(ThemeNow(ctx->app).ring,
+                        RgbaOpacity(RuntimeStyleNow(ctx->app).ring,
                                     kFocusRingOpacity));
     }
 }
@@ -5823,7 +5136,7 @@ void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
     if (!tip || !tip->visible || !tip->text.s) {
         return;
     }
-    const Theme& th = ThemeNow(ctx->app);
+    const RuntimeStyle& th = RuntimeStyleNow(ctx->app);
     // tooltip.rs: the popover surface with the theme border round it, not a
     // dark plate — `bg(tokens.popover).text_color(popover_foreground)
     // .border_1().border_color(border).rounded(6).py_0p5().px_2().text_sm()`.
@@ -5840,12 +5153,12 @@ void TooltipPaint(PaintCtx* ctx, const TooltipOverlay* tip) {
         {ctx->viewW, ctx->viewH}, kPopupMargin, nullptr, PopupAlign::Center,
         10.f);
     FillRound(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
-              th.background);
+              th.popover);
     DrawRoundStroke(ctx, at.bounds.x, at.bounds.y, at.bounds.w, at.bounds.h, 6,
                     kBorder, th.border);
     DrawTextAt(ctx, tip->text, at.bounds.x + kPadX + kBorder,
-               at.bounds.y + kPadY + kBorder, sz.w + 4, sz.h, 14, th.foreground,
-               false);
+               at.bounds.y + kPadY + kBorder, sz.w + 4, sz.h, 14,
+               th.popoverForeground, false);
 }
 
 const HitRect* HitTestRect(PaintCtx* ctx, float x, float y) {
